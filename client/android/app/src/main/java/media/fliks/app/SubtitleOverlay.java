@@ -2,6 +2,7 @@ package media.fliks.app;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.SurfaceView;
 import android.view.View;
@@ -49,8 +50,16 @@ class SubtitleOverlay {
         webViewParent.addView(subtitleView, 1, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
-        subtitleView.addOnLayoutChangeListener(
-                (v, l, t, r, b, ol, ot, or_, ob) -> applyBottomMargin());
+        subtitleView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or_, ob) -> {
+            applyTextSize();
+            applyBottomMargin();
+        });
+        // The picture only gets its height once the video's aspect is known, and
+        // it changes again on rotation — the cue size follows it.
+        if (surfaceView != null) {
+            surfaceView.addOnLayoutChangeListener(
+                    (v, l, t, r, b, ol, ot, or_, ob) -> applyTextSize());
+        }
 
         // Added to `wrapper` (a FrameLayout we own) so the gravity-bearing
         // FrameLayout.LayoutParams cast stays valid regardless of the host
@@ -80,19 +89,35 @@ class SubtitleOverlay {
         renderImageCue(null);
     }
 
-    /** Text height as a fraction of the view, matching the iOS overlay and the
-     *  browser's `vh` cues: a fixed sp size reads half as tall on a tablet. */
+    /** Text height as a fraction of the video, not of the view: the view spans the
+     *  whole screen, which in portrait is mostly letterbox. */
     private static final float TEXT_SIZE_FRACTION = 0.035f;
 
-    /** The lift translates the whole view instead of padding it: padding shrinks
-     *  the canvas the fractional text size is measured against, so the cues used
-     *  to shrink whenever the controls raised them. */
+    /** Floor under the fraction: a phone's picture is ~200dp tall in portrait and
+     *  ~360dp in landscape, too short for the fraction alone to stay readable. */
+    private static final float MIN_TEXT_SIZE_SP = 18f;
+
+    private float fontScale = 1f;
+
+    /** The lift translates the whole view rather than padding it, so the cue
+     *  layout is untouched and only its position moves. */
     void applyStyle(CaptionStyleCompat style, float fontScale, float bottomMarginFraction) {
         if (subtitleView == null) return;
         subtitleView.setStyle(style);
-        subtitleView.setFractionalTextSize(TEXT_SIZE_FRACTION * fontScale, true);
+        this.fontScale = fontScale;
         bottomMargin = bottomMarginFraction;
+        applyTextSize();
         applyBottomMargin();
+    }
+
+    private void applyTextSize() {
+        if (subtitleView == null) return;
+        float minPx = TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_SP, MIN_TEXT_SIZE_SP * fontScale,
+                subtitleView.getResources().getDisplayMetrics());
+        int videoH = surfaceView != null ? surfaceView.getHeight() : 0;
+        subtitleView.setFixedTextSize(TypedValue.COMPLEX_UNIT_PX,
+                Math.max(videoH * TEXT_SIZE_FRACTION * fontScale, minPx));
     }
 
     private void applyBottomMargin() {
