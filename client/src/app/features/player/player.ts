@@ -1210,6 +1210,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         const local = this.offlineSync.resumePositionFor(this.mediaId, this.episodeId);
         if (local && local.positionSeconds > 10) startTime = local.positionSeconds;
       }
+      this.pendingStartTime = startTime ?? 0;
 
       // Set MediaSession metadata
       if ('mediaSession' in navigator) {
@@ -2153,6 +2154,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // until `awaitSeekUnlock` lets the engine resume driving it.
       this.state.seekLocked.set(true);
       this.state.currentTime.set(t);
+      // A seek to 0 is the user's, not an unsettled load.
+      this.pendingStartTime = 0;
       this.lastSeekAt = Date.now();
       if (this.desktopFarSeekNeedsReload(t)) void this.seekByReload(t);
       else void this.awaitSeekUnlock(t);
@@ -2616,6 +2619,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           startTime = playbackState.positionSeconds;
         }
       }
+      this.pendingStartTime = startTime ?? 0;
 
       // Audio preference for the new file (UI/state; the backend picks the
       // default during playback-info negotiation).
@@ -4643,6 +4647,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return this.engine?.getVariantTracks()?.find((t: any) => t.active) ?? null;
   }
 
+  /** Where the load in flight is seeking to; see {@link savePosition}. */
+  private pendingStartTime = 0;
+
   /** Wall-clock timestamp (ms) of the last PUT to /state. Used to dedup
    *  the cluster of saves that fire on exit (onBack, ngOnDestroy, the
    *  savePosition interval and the 'seeked' event all hit savePosition
@@ -4709,6 +4716,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       console.warn('[player] savePosition: neither cast nor engine is live, skipping');
       return;
     }
+
+    // The clock reads 0 until the load's seek to the resume point lands, and the
+    // first frame can render before it does, so report where the load is headed
+    // rather than that 0. Any true reading retires the substitute.
+    if (pos > 0) this.pendingStartTime = 0;
+    else if (this.pendingStartTime > 0) pos = this.pendingStartTime;
 
     // Heartbeat even at position 0 — a player paused at the very start is
     // still live and the backend refreshes the LiveSession TTL off this PUT.

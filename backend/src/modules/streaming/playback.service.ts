@@ -67,8 +67,8 @@ const RESUME_FROM_START_UNDER_SECONDS = 10;
 
 /**
  * Minimum watched position before a media enters the watch history
- * (`playedAt` stamp). Keeps an accidental click that's closed within a few
- * seconds out of the history — only a real watch (≥ 5 s) records.
+ * (`playedAt` stamp) or continue-watching. Keeps an accidental click that's
+ * closed within a few seconds out of both — only a real watch (≥ 5 s) records.
  */
 const HISTORY_MIN_WATCH_SECONDS = 5;
 
@@ -340,7 +340,7 @@ export class PlaybackService {
        WHERE ps."userId" = $1
          AND ps.completed = false
          AND ps."hiddenFromContinueWatching" = false
-         AND ps."positionSeconds" > 0
+         AND ps."positionSeconds" >= ${HISTORY_MIN_WATCH_SECONDS}
          AND m.type = 'movie'${libFilter}
        ORDER BY ps."lastPlayedAt" DESC`,
       params,
@@ -386,7 +386,8 @@ export class PlaybackService {
                ps."positionSeconds", ps."durationSeconds"
         FROM playback_states ps
         WHERE ps."userId" = $1
-          AND ps.completed = false AND ps."positionSeconds" > 0 AND ps."episodeId" IS NOT NULL
+          AND ps.completed = false AND ps."positionSeconds" >= ${HISTORY_MIN_WATCH_SECONDS}
+          AND ps."episodeId" IS NOT NULL
         ORDER BY ps."mediaId", ps."lastPlayedAt" DESC
       ),
       next_ep AS (

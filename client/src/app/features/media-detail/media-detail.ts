@@ -957,9 +957,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     // Only a back navigation earns the memorized offset. Opening a title from
     // anywhere else — a home card, a similar-movies card that swaps the page
     // under itself — starts at the top, whether or not it was read before.
-    const nav =
-      this.router.getCurrentNavigation() ?? untracked(this.router.lastSuccessfulNavigation);
-    const wentBack = nav?.trigger === 'popstate';
+    // Not the router trigger: Android's back gesture routes through
+    // `goBack()`, an imperative navigation the trigger reports as a fresh open.
+    const wentBack = untracked(() => this.navbarService.navigatedBack());
     this.scrollMemory.activate(this.scrollKey());
     if (!Number.isFinite(id) || id < 1) {
       this.loading.set(false);
