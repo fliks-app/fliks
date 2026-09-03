@@ -147,12 +147,17 @@ export class CastPlaybackTarget implements PlaybackTarget {
     });
   }
 
+  /** Stop the media but stay on the device: the session outlives it, and the
+   *  top-bar chip is how you come back to it. */
   stopPlayback(): void {
-    this.disconnect();
+    this.cast.stop();
+    this.cp.clear();
+    this.cp.expanded.set(false);
   }
 
+  /** Leave the device. Ends the Cast session, which stops the receiver with it. */
   disconnect(): void {
-    this.cast.stop();
+    this.cast.disconnect();
     this.cp.clear();
     this.cp.expanded.set(false);
   }

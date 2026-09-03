@@ -2443,6 +2443,7 @@
     "empty_state": "No devices found on your network.",
     "searching": "Searching for devices…",
     "chromecast_row": "Chromecast…",
+    "disconnect_row": "Disconnect",
     "owned_by": "{{username}}'s device",
     "error_cast_select_failed": "Couldn't connect to that Chromecast device.",
     "error_command_failed": "Couldn't reach that device.",

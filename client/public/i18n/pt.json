@@ -2416,6 +2416,7 @@
     "empty_state": "Nenhum dispositivo encontrado na rede.",
     "searching": "A procurar dispositivos…",
     "chromecast_row": "Chromecast…",
+    "disconnect_row": "Desconectar",
     "owned_by": "Dispositivo de {{username}}",
     "error_cast_select_failed": "Não foi possível ligar a esse Chromecast.",
     "error_command_failed": "Não foi possível contactar esse dispositivo.",

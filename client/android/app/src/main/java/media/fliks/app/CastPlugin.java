@@ -15,6 +15,7 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.google.android.gms.cast.CastDevice;
 import com.google.android.gms.cast.CastMediaControlIntent;
 import com.google.android.gms.cast.MediaInfo;
 import com.google.android.gms.cast.MediaLoadRequestData;
@@ -325,14 +326,23 @@ public class CastPlugin extends Plugin {
         runOnMainThread(() -> {
             MediaRouteSelector selector = buildCastSelector();
             MediaRouter router = MediaRouter.getInstance(getContext());
+            // Which row the caller is already casting to: the selected route, and
+            // only while a session actually stands behind it.
+            String connectedId = castSession != null && castSession.isConnected()
+                ? router.getSelectedRoute().getId()
+                : null;
             JSArray devices = new JSArray();
             for (MediaRouter.RouteInfo route : router.getRoutes()) {
                 if (route.isDefaultOrBluetooth() || !route.matchesSelector(selector)) continue;
                 JSObject device = new JSObject();
                 device.put("id", route.getId());
                 device.put("name", route.getName());
-                String modelName = route.getDescription();
+                // The device's model, not route.getDescription(): that one turns into
+                // the name of whatever receiver is running, so the row read "Fliks".
+                CastDevice castDevice = CastDevice.getFromBundle(route.getExtras());
+                String modelName = castDevice != null ? castDevice.getModelName() : null;
                 if (modelName != null) device.put("modelName", modelName);
+                device.put("connected", route.getId().equals(connectedId));
                 devices.put(device);
             }
             Log.d(TAG, "getCastDevices: " + devices.length() + " cast route(s) of "

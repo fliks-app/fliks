@@ -12,6 +12,7 @@ import {
 } from '@lucide/angular';
 import { DropdownMenuComponent } from '../components/dropdown-menu';
 import { CastService } from '../../core/services/cast.service';
+import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
 import { RemoteService, RemoteTarget } from '../../core/services/remote.service';
 import { ToastService } from '../../core/services/toast.service';
 import { remoteOverlayOpen } from '../../core/services/remote-playback-target';
@@ -25,6 +26,8 @@ interface PickerRow {
   icon: 'tv' | 'tablet' | 'phone' | 'monitor' | 'cast';
   label: string;
   subtitle: string | null;
+  /** Casting to this row already: pressing it leaves the device instead. */
+  connected?: boolean;
 }
 
 /**
@@ -47,6 +50,7 @@ interface PickerRow {
 export class RemotePickerComponent {
   protected readonly remote = inject(RemoteService);
   protected readonly castService = inject(CastService);
+  private readonly castTarget = inject(CastPlaybackTarget);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
 
@@ -61,16 +65,29 @@ export class RemotePickerComponent {
   protected readonly pickerRows: Signal<PickerRow[]> = computed(() => {
     const rows: PickerRow[] = [];
     if (!this.isNative) {
+      const connected = this.castService.isConnected();
       rows.push({
         kind: 'cast-web',
         id: 'web-chromecast',
         icon: 'cast',
         label: this.translate.instant('remote.chromecast_row'),
-        subtitle: null,
+        subtitle: connected ? this.translate.instant('remote.disconnect_row') : null,
+        connected,
       });
     }
     for (const d of this.castService.castDevices()) {
-      rows.push({ kind: 'cast', id: d.id, icon: 'cast', label: d.name, subtitle: d.modelName ?? null });
+      rows.push({
+        kind: 'cast',
+        id: d.id,
+        icon: 'cast',
+        label: d.name,
+        // The device's own model name is what the row says until we are on it;
+        // then the row's only remaining action is to leave, so it says that.
+        subtitle: d.connected
+          ? this.translate.instant('remote.disconnect_row')
+          : (d.modelName ?? null),
+        connected: d.connected,
+      });
     }
     for (const t of this.remote.targets()) {
       rows.push({
@@ -103,7 +120,18 @@ export class RemotePickerComponent {
   }
 
   selectRow(row: PickerRow): void {
+    // Pressing the device already being cast to is the only way out of a Cast
+    // session: the control card can stop the media but never leaves the device.
+    if (row.connected) {
+      this.castTarget.disconnect();
+      return;
+    }
     this.setLastUsed(row.id);
+    if (row.kind === 'cast' || row.kind === 'cast-web') {
+      // One destination at a time, the same rule `selectTarget` applies the
+      // other way round.
+      this.remote.selectTarget(null);
+    }
     if (row.kind === 'cast') {
       void this.selectCastDevice(row.id);
     } else if (row.kind === 'cast-web') {

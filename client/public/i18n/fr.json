@@ -2443,6 +2443,7 @@
     "empty_state": "Aucun appareil trouvé sur votre réseau.",
     "searching": "Recherche d'appareils…",
     "chromecast_row": "Chromecast…",
+    "disconnect_row": "Se déconnecter",
     "owned_by": "Appareil de {{username}}",
     "error_cast_select_failed": "Impossible de se connecter à ce Chromecast.",
     "error_command_failed": "Impossible de joindre cet appareil.",
