@@ -100,6 +100,8 @@ interface NativeCastPlugin {
 
 const NativeCast = registerPlugin<NativeCastPlugin>('NativeCast');
 const CAST_APP_ID = environment.castAppId;
+/** Ceiling on a connect attempt: a cold receiver launch is ~2 s on a Chromecast. */
+const CONNECT_TIMEOUT_MS = 30_000;
 
 /** Collapse a rapid seek burst (scrubbing / repeated ±10 taps) into a leading
  *  dispatch plus one trailing dispatch, so the Cast receiver's Shaka isn't hit
@@ -118,8 +120,12 @@ const CAST_SEEK_CONVERGE_TOL = 1.5;
 export class CastService implements OnDestroy {
   readonly isAvailable = signal(false);
   readonly isConnected = signal(false);
-  /** True while waiting for the Cast session to establish. */
+  /** True while waiting for the Cast session to establish. Written only through
+   *  {@link beginConnecting} / {@link endConnecting}: the trigger it drives is
+   *  disabled while it is set, so a connect whose outcome never arrives would
+   *  wedge the picker until the app restarts. */
   readonly connecting = signal(false);
+  private connectTimeout: ReturnType<typeof setTimeout> | null = null;
   readonly currentTime = signal(0);
   readonly duration = signal(0);
   readonly isPaused = signal(true);
@@ -178,6 +184,7 @@ export class CastService implements OnDestroy {
 
   ngOnDestroy() {
     this.clearSeekCoalescing();
+    this.endConnecting();
   }
 
   // ---------------------------------------------------------------------------
@@ -194,13 +201,13 @@ export class CastService implements OnDestroy {
       window.addEventListener('castStateChanged', ((e: CustomEvent) => {
         const connected = e.detail?.connected ?? false;
         this.isConnected.set(connected);
-        if (connected) this.connecting.set(false);
+        if (connected) this.endConnecting();
         else this.buffering.set(false);
       }) as EventListener);
 
       // Picker dismissed without selecting a device
       window.addEventListener('castPickerDismissed', () => {
-        this.connecting.set(false);
+        this.endConnecting();
       });
 
       window.addEventListener('castMediaUpdate', ((e: CustomEvent) => {
@@ -303,7 +310,7 @@ export class CastService implements OnDestroy {
   private onWebConnectionChanged() {
     const connected = this.remotePlayer?.isConnected ?? false;
     this.isConnected.set(connected);
-    this.connecting.set(false);
+    this.endConnecting();
     if (!connected) this.buffering.set(false);
     this.session = connected
       ? cast.framework.CastContext.getInstance().getCurrentSession()
@@ -390,13 +397,32 @@ export class CastService implements OnDestroy {
   // ---------------------------------------------------------------------------
 
   requestSession() {
-    this.connecting.set(true);
+    this.beginConnecting();
     if (this.isNative) {
       // The plugin resolves immediately; castStateChanged fires on connect OR dismiss.
-      NativeCast.requestSession().catch(() => this.connecting.set(false));
+      NativeCast.requestSession().catch(() => this.endConnecting());
     } else {
-      cast.framework.CastContext.getInstance().requestSession().catch(() => this.connecting.set(false));
+      cast.framework.CastContext.getInstance().requestSession().catch(() => this.endConnecting());
     }
+  }
+
+  /** A connect attempt whose outcome is an event, not the call's own return: the
+   *  deadline is the last resort for one that never reports either way. */
+  private beginConnecting(): void {
+    this.connecting.set(true);
+    if (this.connectTimeout) clearTimeout(this.connectTimeout);
+    this.connectTimeout = setTimeout(() => {
+      console.warn('[cast] no session outcome within the connect deadline');
+      this.endConnecting();
+    }, CONNECT_TIMEOUT_MS);
+  }
+
+  private endConnecting(): void {
+    if (this.connectTimeout) {
+      clearTimeout(this.connectTimeout);
+      this.connectTimeout = null;
+    }
+    this.connecting.set(false);
   }
 
   /** List Cast devices visible to native discovery. Web has no enumeration
@@ -419,11 +445,11 @@ export class CastService implements OnDestroy {
    *  route disappeared between listing and selection; the caller (the
    *  picker) surfaces that as a toast rather than looking stuck. */
   async selectCastDevice(id: string): Promise<void> {
-    this.connecting.set(true);
+    this.beginConnecting();
     try {
       await NativeCast.selectCastDevice({ id });
     } catch (err) {
-      this.connecting.set(false);
+      this.endConnecting();
       throw err;
     }
   }
