@@ -21,11 +21,9 @@ import { ConfigService } from '@nestjs/config';
 import { SubtitleSchedulerService } from './subtitle-scheduler.service';
 import { EventsService } from './events.service';
 import { MediaFile } from '../media/entities/media-file.entity';
-import {
-  ThumbnailService,
-  buildSpriteLabel,
-} from '../streaming/thumbnail.service';
+import { ThumbnailService } from '../streaming/thumbnail.service';
 import { MarkersService } from '../markers/markers.service';
+import { PostImportService } from './post-import.service';
 import { CORE_TRIGGER_ONLY_JOB_NAMES, CoreSchedulerJobName, PLUGIN_SOURCE_REFRESH_CRON } from '../../common/constants/core-scheduler-jobs';
 import { PluginJobsService } from '../plugins/plugin-jobs.service';
 import { ScheduledJobRegistry } from './scheduled-job-registry.service';
@@ -60,6 +58,7 @@ export class SchedulerService implements OnModuleInit {
     private readonly jobRegistry: ScheduledJobRegistry,
     private readonly catalogClient: PluginCatalogClientService,
     private readonly pluginAutoUpdate: PluginAutoUpdateService,
+    private readonly postImport: PostImportService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -426,36 +425,7 @@ export class SchedulerService implements OnModuleInit {
 
       const promises = batch.map(async ({ id }) => {
         try {
-          const file = await this.mediaFileRepo.findOne({
-            where: { id },
-            relations: ['media'],
-          });
-          if (!file?.media) return null;
-
-          let label = file.media.title;
-          if (file.episodeId) {
-            const ep = await this.episodeRepo.findOne({
-              where: { id: file.episodeId },
-              relations: ['season'],
-            });
-            if (ep) {
-              label = buildSpriteLabel(
-                { title: ep.title ?? '' },
-                {
-                  seasonNumber: ep.season.seasonNumber,
-                  episodeNumber: ep.episodeNumber,
-                  title: ep.title,
-                },
-              );
-            }
-          }
-
-          return this.thumbnailService.generateForFile(
-            file,
-            file.media,
-            label,
-            { force, skipTracking: true },
-          );
+          return await this.postImport.generateSprite(id, force);
         } catch (e) {
           this.log.warn(
             `${commandName}: failed for file ${id}: ${(e as Error).message}`,

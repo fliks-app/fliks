@@ -14,6 +14,8 @@ import { BaseEntity } from '../../../common/entities/base.entity';
  *   naming_season_folder_format — e.g. "Season {season:00}"
  *   companion_file_extensions — comma-separated list, e.g. ".nfo,.srt,.jpg"
  *   search_missing_auto   — "true" | "false"
+ *   markers_auto_detect_on_import — "true" | "false" (intro/outro detection after an import)
+ *   sprites_auto_generate_on_import — "true" | "false" (seek sprites after an import)
  *   rss_sync_interval     — minutes, e.g. "15"
  *   streaming_auto_quality_mode — "directplay" | "abr" (how "Auto" quality resolves)
  *   subtitle_translation_enabled — "true" | "false" (machine translation)

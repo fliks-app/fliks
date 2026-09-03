@@ -3,12 +3,9 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-  OnModuleDestroy,
-  OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Subscription } from 'rxjs';
 import { EpisodeMarker, MarkerType } from './entities/episode-marker.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { Season } from '../media/entities/season.entity';
@@ -20,9 +17,8 @@ import { CreateMarkerDto } from './dto/create-marker.dto';
 import { UpdateMarkerDto } from './dto/update-marker.dto';
 
 @Injectable()
-export class MarkersService implements OnModuleInit, OnModuleDestroy {
+export class MarkersService {
   private readonly log = new Logger(MarkersService.name);
-  private rescanSub?: Subscription;
   /** Seasons currently being processed — guards against duplicate enqueues. */
   private readonly inFlight = new Set<number>();
 
@@ -39,23 +35,6 @@ export class MarkersService implements OnModuleInit, OnModuleDestroy {
     private readonly settings: SettingsService,
     private readonly detector: IntroDetectionService,
   ) {}
-
-  onModuleInit() {
-    // Auto-detect intros after a series rescan brings in new episode files.
-    this.rescanSub = this.events.subscribe((event) => {
-      if (event.type !== 'rescan.completed') return;
-      if (event.added <= 0) return;
-      void this.maybeAutoDetect(event.mediaId).catch((err) =>
-        this.log.warn(
-          `auto intro detection failed for media #${event.mediaId}: ${(err as Error).message}`,
-        ),
-      );
-    });
-  }
-
-  onModuleDestroy() {
-    this.rescanSub?.unsubscribe();
-  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Reads
@@ -186,49 +165,42 @@ export class MarkersService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Return the list of seasons eligible for automatic marker detection
-   * (non-special, belonging to a series). When `onlyMissing` is true, returns
-   * only seasons with at least one episode lacking an intro OR outro marker.
+   * Seasons eligible for automatic marker detection (non-special, belonging
+   * to a series). `onlyMissing` keeps those with at least one unscanned
+   * episode on disk; `mediaId` narrows the sweep to a single title.
    */
   async listSeasonsForScan(
     onlyMissing: boolean,
+    mediaId?: number,
   ): Promise<
     { id: number; mediaId: number; seasonNumber: number; mediaTitle: string }[]
   > {
-    if (!onlyMissing) {
-      const rows: {
-        id: number;
-        mediaId: number;
-        seasonNumber: number;
-        mediaTitle: string;
-      }[] = await this.seasonRepo.query(`
-        SELECT s.id, s."mediaId", s."seasonNumber", m.title AS "mediaTitle"
-        FROM seasons s
-        JOIN media m ON m.id = s."mediaId"
-        WHERE s."seasonNumber" > 0 AND m.type = 'series'
-        ORDER BY m.title ASC, s."seasonNumber" ASC
-      `);
-      return rows;
+    const clauses = [`s."seasonNumber" > 0`, `m.type = 'series'`];
+    const params: unknown[] = [];
+    if (mediaId != null) {
+      params.push(mediaId);
+      clauses.push(`s."mediaId" = $${params.length}`);
     }
-    const rows: {
-      id: number;
-      mediaId: number;
-      seasonNumber: number;
-      mediaTitle: string;
-    }[] = await this.seasonRepo.query(`
-      SELECT s.id, s."mediaId", s."seasonNumber", m.title AS "mediaTitle"
-      FROM seasons s
-      JOIN media m ON m.id = s."mediaId"
-      WHERE s."seasonNumber" > 0 AND m.type = 'series'
-        AND EXISTS (
+    if (onlyMissing) {
+      clauses.push(`EXISTS (
           SELECT 1 FROM episodes e
           WHERE e."seasonId" = s.id
             AND e."hasFile" = true
             AND e."markersScannedAt" IS NULL
-        )
+        )`);
+    }
+    return this.seasonRepo.query(
+      `
+      SELECT s.id, s."mediaId", s."seasonNumber", m.title AS "mediaTitle"
+      FROM seasons s
+      JOIN media m ON m.id = s."mediaId"
+      WHERE ${clauses.join(' AND ')}
       ORDER BY m.title ASC, s."seasonNumber" ASC
-    `);
-    return rows;
+    `,
+      params,
+    ) as Promise<
+      { id: number; mediaId: number; seasonNumber: number; mediaTitle: string }[]
+    >;
   }
 
   /**
@@ -366,16 +338,16 @@ export class MarkersService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async maybeAutoDetect(mediaId: number): Promise<void> {
+  /**
+   * Detect markers for the seasons of `mediaId` that still hold an unscanned
+   * episode. Enqueued as commands so the run shows up in the task list.
+   */
+  async autoDetectMissing(mediaId: number): Promise<void> {
     const enabled =
-      (await this.settings.get('enableAutoIntroDetection')) ?? 'true';
+      (await this.settings.get('markers_auto_detect_on_import')) ?? 'true';
     if (enabled !== 'true') return;
-    // Only series have seasons; movies skipped naturally because findOne
-    // below returns no seasons.
-    const seasons = await this.seasonRepo.find({
-      where: { media: { id: mediaId } },
-    });
-    for (const s of seasons.filter((x) => x.seasonNumber > 0)) {
+    const seasons = await this.listSeasonsForScan(true, mediaId);
+    for (const s of seasons) {
       try {
         await this.detectSeason(s.id, 'auto');
       } catch (err) {

@@ -217,6 +217,19 @@ export class ThumbnailService {
     }
   }
 
+  /** Drop a file's sprite + metadata. Nothing regenerates them from an id
+   *  that no longer exists, so a removed file would leak its sheet forever. */
+  async deleteForFile(mediaFileId: number): Promise<void> {
+    const dir = path.join(baseDir(), String(mediaFileId));
+    try {
+      await fsp.rm(dir, { recursive: true, force: true });
+    } catch (err) {
+      this.log.warn(
+        `Sprite cleanup failed for file #${mediaFileId}: ${(err as Error).message}`,
+      );
+    }
+  }
+
   private processQueue(): void {
     while (this.running < SPRITE_CONCURRENCY && this.queue.length > 0) {
       const item = this.queue.shift()!;

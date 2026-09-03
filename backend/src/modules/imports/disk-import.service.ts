@@ -546,6 +546,14 @@ export class DiskImportService {
           );
         }
       }
+      // The reorganize branch above emits this from LibraryIngestService.
+      if (linked > 0) {
+        this.events.emitDomain({
+          type: 'media.files.imported',
+          mediaId: media.id,
+          source: 'disk',
+        });
+      }
     }
 
     // Backfill metadata for any season/episode slot invented while linking.

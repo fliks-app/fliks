@@ -127,6 +127,19 @@
           <span class="label-text">{{ 'settings.general.auto_detect_markers_on_import' | translate }}</span>
         </label>
 
+        <label class="label cursor-pointer justify-start gap-3 max-w-max">
+          <input
+            type="checkbox"
+            class="toggle toggle-sm"
+            [ngModel]="autoGenerateSpritesOnImport() === 'true'"
+            (ngModelChange)="autoGenerateSpritesOnImport.set($event ? 'true' : 'false')"
+          />
+          <span class="label-text">{{ 'settings.general.auto_generate_sprites_on_import' | translate }}</span>
+        </label>
+        <div class="label -mt-2">
+          <span class="label-text-alt text-base-content/50">{{ 'settings.general.auto_generate_sprites_on_import_hint' | translate }}</span>
+        </div>
+
         <label class="form-control w-full">
           <div class="label">
             <span class="label-text">{{ 'settings.general.companion_extensions' | translate }}</span>
@@ -142,28 +155,6 @@
         <div class="card-actions justify-end">
           <button type="button" class="btn btn-primary" (click)="saveAutomation()" [disabled]="savingAutomation()">
             @if (savingAutomation()) { <span class="loading loading-spinner loading-sm"></span> }
-            {{ 'common.save' | translate }}
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Post-import -->
-    <div class="card bg-base-100 border border-base-200">
-      <div class="card-body gap-5">
-        <h2 class="card-title text-base">{{ 'settings.general.section_post_import' | translate }}</h2>
-
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'settings.general.post_import_script' | translate }}</span>
-          <input type="text" class="input input-bordered input-sm w-full"
-            [ngModel]="postImportScript()" (ngModelChange)="postImportScript.set($event)"
-            [placeholder]="'settings.general.post_import_script_hint' | translate" />
-          <span class="label-text-alt text-base-content/50">{{ 'settings.general.post_import_script_vars' | translate }}</span>
-        </label>
-
-        <div class="card-actions justify-end">
-          <button type="button" class="btn btn-primary" (click)="savePostImport()" [disabled]="savingPostImport()">
-            @if (savingPostImport()) { <span class="loading loading-spinner loading-sm"></span> }
             {{ 'common.save' | translate }}
           </button>
         </div>

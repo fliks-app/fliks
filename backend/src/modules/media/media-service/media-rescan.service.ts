@@ -499,6 +499,7 @@ export class MediaRescanService {
         const episodeId = dbFile.episodeId;
         try {
           await this.mediaFileRepo.remove(dbFile);
+          void this.thumbnailService.deleteForFile(dbFile.id);
           removed++;
           this.log.log(
             `Rescan: removed missing file "${normPath}" for media #${mediaId}`,

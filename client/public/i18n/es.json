@@ -1587,16 +1587,14 @@
       "metadata_region_hint": "Región utilizada para las fechas de estreno y los próximos estrenos. Puede sobrescribirse por biblioteca.",
       "section_automation": "Automatización",
       "auto_detect_markers_on_import": "Detectar las intros / créditos al importar las series",
+      "auto_generate_sprites_on_import": "Generar las miniaturas de navegación al importar",
+      "auto_generate_sprites_on_import_hint": "Una pasada de decodificación por archivo. Desactívalo en un servidor de baja potencia y lanza la tarea manualmente.",
       "saved": "Ajustes guardados.",
       "save_error": "No se puede guardar.",
       "load_error": "No se pueden cargar los ajustes.",
       "no_default": "Ninguno (selección manual)",
       "companion_extensions": "Extensiones de los archivos complementarios",
-      "companion_extensions_hint": "Extensiones copiadas con el archivo de vídeo (separadas por comas).",
-      "section_post_import": "Post-importación",
-      "post_import_script": "Script post-importación",
-      "post_import_script_hint": "/path/to/script.sh",
-      "post_import_script_vars": "Variables: FLIKS_MEDIA_TITLE, FLIKS_MEDIA_ID, FLIKS_MEDIA_TYPE, FLIKS_QUALITY, FLIKS_FILE_COUNT, FLIKS_SOURCE_TITLE"
+      "companion_extensions_hint": "Extensiones copiadas con el archivo de vídeo (separadas por comas)."
     },
     "quality_profiles": {
       "title": "Perfiles de calidad",

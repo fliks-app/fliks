@@ -19,6 +19,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { MediaModule } from '../media/media.module';
 import { AuthModule } from '../auth/auth.module';
 import { SubtitleSchedulerService } from './subtitle-scheduler.service';
+import { PostImportService } from './post-import.service';
 import { SubtitlesModule } from '../subtitles/subtitles.module';
 import { SettingsModule } from '../settings/settings.module';
 import { MediaServersModule } from '../media-servers/media-servers.module';
@@ -63,6 +64,7 @@ import { ScheduledJobRegistryModule } from './scheduled-job-registry.module';
     BackupService,
     UpdateCheckService,
     SubtitleSchedulerService,
+    PostImportService,
   ],
   exports: [
     SchedulerService,
