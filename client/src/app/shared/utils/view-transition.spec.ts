@@ -1,6 +1,8 @@
 import {
   clearPosterStamps,
   clearStalePosterStamps,
+  enteringPosterPage,
+  leavingPosterPage,
   markViewTransition,
   stampPoster,
   viewTransitionRunning,
@@ -66,6 +68,27 @@ describe('view-transition poster stamps', () => {
     clearPosterStamps();
 
     expect(card.style.viewTransitionName).toBe('');
+  });
+
+  describe('enteringPosterPage', () => {
+    function route(path: string) {
+      return { routeConfig: null, firstChild: { routeConfig: { path }, firstChild: null } };
+    }
+
+    it('marks the way back for its own animation', () => {
+      expect(leavingPosterPage(route('movies/:id'), route(''))).toBe(true);
+      expect(leavingPosterPage(route(''), route('movies/:id'))).toBe(false);
+      // Detail to detail stays on a poster on both sides.
+      expect(leavingPosterPage(route('movies/:id'), route('series/:id'))).toBe(false);
+    });
+
+    it('holds on the way in and not on the way back', () => {
+      // The tuned crop and easing only suit the card growing into the poster.
+      expect(enteringPosterPage(route(''), route('movies/:id'))).toBe(true);
+      expect(enteringPosterPage(route('movies/:id'), route(''))).toBe(false);
+      // Detail to detail keeps both sides on a poster: nothing to reshape.
+      expect(enteringPosterPage(route('movies/:id'), route('series/:id'))).toBe(false);
+    });
   });
 
   describe('clearStalePosterStamps', () => {

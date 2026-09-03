@@ -43,6 +43,8 @@ import { PluginI18nService } from './core/plugin-ui/plugin-i18n.service';
 import { ImageCacheService } from './core/services/image-cache.service';
 import {
   clearStalePosterStamps,
+  enteringPosterPage,
+  leavingPosterPage,
   leafRoutePath,
   markViewTransition,
 } from './shared/utils/view-transition';
@@ -70,6 +72,8 @@ export function loadPersistedState(): Promise<unknown> {
 const EPISODE_PATH = 'series/:id/episode/:episodeId';
 const WATCH_PATH = 'watch/:mediaFileId';
 const PLAYER_CLOSE_CLASS = 'vt-player-close';
+const POSTER_IN_CLASS = 'vt-poster-in';
+const POSTER_OUT_CLASS = 'vt-poster-out';
 const NATIVE_PLAYER_CLASS = 'native-player-active';
 const IS_TV = detectDevice().formFactor === 'tv';
 
@@ -131,6 +135,17 @@ export const appConfig: ApplicationConfig = {
                   const root = document.documentElement;
                   root.classList.add(PLAYER_CLOSE_CLASS);
                   const done = () => root.classList.remove(PLAYER_CLOSE_CLASS);
+                  void transition.finished.then(done, done);
+                }
+                // The morph is tuned per direction: the box grows into a
+                // poster one way and collapses onto a card the other.
+                const posterTrip =
+                  (leavingPosterPage(from, to) && POSTER_OUT_CLASS) ||
+                  (enteringPosterPage(from, to) && POSTER_IN_CLASS);
+                if (posterTrip) {
+                  const root = document.documentElement;
+                  root.classList.add(posterTrip);
+                  const done = () => root.classList.remove(posterTrip);
                   void transition.finished.then(done, done);
                 }
                 markViewTransition(transition);
