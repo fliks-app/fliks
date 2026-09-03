@@ -55,6 +55,16 @@ export function leafRoutePath(root: RouteNode): string | undefined {
   return leaf.routeConfig?.path;
 }
 
+/** A card opening the page that carries the other half of its morph. */
+export function enteringPosterPage(from: RouteNode, to: RouteNode): boolean {
+  return POSTER_ROUTES.has(leafRoutePath(to)) && !POSTER_ROUTES.has(leafRoutePath(from));
+}
+
+/** The way back: the page that owns the hero returns to a list of cards. */
+export function leavingPosterPage(from: RouteNode, to: RouteNode): boolean {
+  return POSTER_ROUTES.has(leafRoutePath(from)) && !POSTER_ROUTES.has(leafRoutePath(to));
+}
+
 /**
  * Drop a stamp left over from an earlier card click when neither side of the
  * navigation has a poster to pair with: the lone img would be snapshotted out of

@@ -1179,6 +1179,55 @@ body.tablet [data-touch-only] {
   animation: none;
 }
 
+/* Only the two halves of the poster morph take part in the flip below. The
+   class rides along with the name (it means nothing without one), so the card's
+   badges and the page-wide snapshot keep their own animations — a `*` selector
+   outranked them and flipped the progress bar with the artwork. */
+app-media-card img,
+app-media-info-header img {
+  view-transition-class: poster;
+}
+
+/* A card and a media page hold different pictures in different aspects — a
+   16:9 still against a 2:3 poster. The travelling box carries the whole change:
+   it interpolates from one rect to the other while the picture fills it,
+   cropping as the shape turns. Neither picture carries a transform of its own:
+   two of them on their own curves is what showed as a double image. */
+html.vt-poster-in::view-transition-group(.poster),
+html.vt-poster-out::view-transition-group(.poster) {
+  animation-duration: 300ms;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+/* Coming back, the box lands on the card first. Held to the poster's size any
+   longer, the still shows larger than the card it is landing on. */
+html.vt-poster-out::view-transition-group(.poster) {
+  animation-duration: 180ms;
+  animation-timing-function: cubic-bezier(0, 0.8, 0.2, 1);
+}
+/* Rounded to whatever it is landing on — the card's `rounded-lg` on the way
+   back, the page poster's `rounded-xl` on the way in — or the square corners of
+   the picture show past the destination's own. */
+html.vt-poster-out::view-transition-group(.poster),
+html.vt-poster-out::view-transition-image-pair(.poster) {
+  clip-path: inset(0 round 0.5rem);
+}
+html.vt-poster-in::view-transition-group(.poster),
+html.vt-poster-in::view-transition-image-pair(.poster) {
+  clip-path: inset(0 round 0.75rem);
+}
+/* Both pictures fill that same box and neither carries a transform of its own,
+   so they hold the same position and shape from the first frame to the last and
+   change shape together — a dissolve between two croppings of the same frame,
+   not two pictures sliding past each other. The UA's additive cross-fade is
+   kept: it is the one that never dips in the middle. */
+html.vt-poster-in::view-transition-old(.poster),
+html.vt-poster-in::view-transition-new(.poster),
+html.vt-poster-out::view-transition-old(.poster),
+html.vt-poster-out::view-transition-new(.poster) {
+  /* Crop rather than the UA's fill: the picture does not fit both boxes. */
+  object-fit: cover;
+}
+
 /* Force the hero (poster) morph above root. The default pseudo-tree order
    should put named groups above root, but with `animation: none` on root
    the old/new pair stays fully opaque for the whole transition and on some
@@ -1194,20 +1243,20 @@ body.tablet [data-touch-only] {
 /* The card's own badges and progress bar ride above the poster that morphs
    onto them (z-index 1): captured inside the root snapshot they stayed hidden
    under it for the whole animation. Nothing pairs with them on the detail side,
-   so the arriving copy skips the entry fade and the leaving one is quick. */
+   so the arriving copy is there from the first frame, and the leaving one goes
+   with the card it belongs to rather than hanging over the page. */
 ::view-transition-group(media-card-overlay) {
   z-index: 2;
+  /* Captured out of the figure that rounds it, so the progress bar arrives with
+     square ends unless the snapshot carries the card's own radius. */
+  clip-path: inset(0 round 0.5rem);
 }
 ::view-transition-new(media-card-overlay) {
   animation: none;
 }
 ::view-transition-old(media-card-overlay) {
-  animation: card-overlay-out 120ms linear both;
-}
-@keyframes card-overlay-out {
-  to {
-    opacity: 0;
-  }
+  animation: none;
+  opacity: 0;
 }
 
 /* Closing the player: the only navigation that opts the root pair back in.
