@@ -358,6 +358,17 @@ public class CastPlugin extends Plugin {
                 call.reject("No matching Cast device");
                 return;
             }
+            // Selecting the route that is already selected transitions nothing, so no
+            // session callback ever comes: say what the state is instead of leaving the
+            // caller waiting on an event that cannot arrive.
+            if (id.equals(router.getSelectedRoute().getId())) {
+                boolean connected = castSession != null && castSession.isConnected();
+                Log.d(TAG, "selectCastDevice: already the selected route, connected=" + connected);
+                notifyJS("connected", connected);
+                if (!connected) notifyPickerDismissed();
+                call.resolve();
+                return;
+            }
             // Result surfaces via the existing SessionManagerListener (onSessionStarted / onSessionStartFailed).
             router.selectRoute(target);
             call.resolve();
