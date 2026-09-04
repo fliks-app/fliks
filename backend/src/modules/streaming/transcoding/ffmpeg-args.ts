@@ -74,6 +74,7 @@ function hlsMuxerArgs(o: {
   useTs: boolean;
   hlsTime: string;
   startSegment: number;
+  seekSeconds: number;
   segType: string;
   initFilename: string;
   varStreamMap?: string;
@@ -82,6 +83,13 @@ function hlsMuxerArgs(o: {
 }): string[] {
   return [
     ...(o.useTs ? [] : ['-movflags', '+cmaf']),
+    // The muxer restarts its output timeline near zero on every run, so a
+    // seeked run's segments contradict the playlist that places them at
+    // `index · realSeg`. fMP4 is re-anchored on serve by `rewriteSegmentTfdt`;
+    // MPEG-TS carries no `tfdt` to rewrite, so the offset is applied here.
+    ...(o.useTs && o.seekSeconds > 0
+      ? ['-output_ts_offset', String(o.seekSeconds)]
+      : []),
     '-f',
     'hls',
     '-hls_time',
@@ -453,6 +461,10 @@ function buildAudioAndMuxerArgs(opts: {
     outputDir,
   } = opts;
   const args: string[] = [];
+  // Content time this run starts at, matching the playlist's placement of
+  // `seg-startSegment`. Equals `segmentIndexToSeconds`, which is exactly
+  // `startSegment · realSeg`.
+  const runStartSeconds = startSegment > 0 ? startSegment * realSeg : 0;
 
   // Use var_stream_map whenever the caller asked for the EXT-X-MEDIA
   // layout (`videoOnly + audioStreams[]`), even for a SINGLE audio
@@ -498,6 +510,7 @@ function buildAudioAndMuxerArgs(opts: {
         useTs,
         hlsTime: String(realSeg),
         startSegment,
+        seekSeconds: runStartSeconds,
         segType,
         initFilename: 'init_%v.mp4',
         varStreamMap: varParts.join(' '),
@@ -536,6 +549,7 @@ function buildAudioAndMuxerArgs(opts: {
       useTs,
       hlsTime: String(segmentDuration),
       startSegment,
+      seekSeconds: runStartSeconds,
       segType,
       initFilename: 'init.mp4',
       segmentFilename: ffOutPath(outputDir, `seg-%04d.${segExt}`),
@@ -1235,6 +1249,7 @@ export function buildAudioOnlyFfmpegArgs(
       useTs,
       hlsTime: String(realSeg),
       startSegment,
+      seekSeconds,
       segType,
       initFilename: 'init.mp4',
       segmentFilename: ffOutPath(outputDir, `seg-%04d.${segExt}`),
@@ -1390,6 +1405,7 @@ export function buildRemuxArgs(
       useTs: false,
       hlsTime: String(segmentDuration),
       startSegment,
+      seekSeconds: 0,
       segType: 'fmp4',
       initFilename: 'init.mp4',
       segmentFilename: ffOutPath(outputDir, 'seg-%04d.m4s'),
