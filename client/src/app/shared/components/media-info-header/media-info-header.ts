@@ -482,7 +482,7 @@ export class MediaInfoHeaderComponent {
       episodeId: resumeEpId ?? this.episodeId(),
       title: this.title(),
       episodeTitle: this.resumeEpisodeLabel() ?? this.episodeLabel() ?? undefined,
-      fanartUrl: this.posterUrl() ?? this.fanartUrl() ?? null,
+      fanartUrl: this.fanartUrl() ?? this.posterUrl() ?? null,
       streamInfo: file?.streamInfo,
     }, fromStart);
   }

@@ -48,6 +48,7 @@ import {
   leafRoutePath,
   markViewTransition,
   stampChromeInsets,
+  WATCH_PATH,
 } from './shared/utils/view-transition';
 
 /** Read the persisted server URL, sessions and credentials before bootstrap:
@@ -71,7 +72,6 @@ export function loadPersistedState(): Promise<unknown> {
 }
 
 const EPISODE_PATH = 'series/:id/episode/:episodeId';
-const WATCH_PATH = 'watch/:mediaFileId';
 const PLAYER_CLOSE_CLASS = 'vt-player-close';
 const POSTER_IN_CLASS = 'vt-poster-in';
 const POSTER_OUT_CLASS = 'vt-poster-out';

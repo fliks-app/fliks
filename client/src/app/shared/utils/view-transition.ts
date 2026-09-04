@@ -48,6 +48,10 @@ const POSTER_ROUTES = new Set<string | undefined>([
   'series/:id/episode/:episodeId',
 ]);
 
+/** The player pairs with nothing — it has no poster, and its own close animation
+ *  owns the swap — so neither poster trip may claim a trip to or from it. */
+export const WATCH_PATH = 'watch/:mediaFileId';
+
 /** Router hands the transition hook the ROOT snapshots, whose routeConfig is null. */
 export function leafRoutePath(root: RouteNode): string | undefined {
   let leaf = root;
@@ -57,12 +61,20 @@ export function leafRoutePath(root: RouteNode): string | undefined {
 
 /** A card opening the page that carries the other half of its morph. */
 export function enteringPosterPage(from: RouteNode, to: RouteNode): boolean {
-  return POSTER_ROUTES.has(leafRoutePath(to)) && !POSTER_ROUTES.has(leafRoutePath(from));
+  return (
+    POSTER_ROUTES.has(leafRoutePath(to)) &&
+    !POSTER_ROUTES.has(leafRoutePath(from)) &&
+    leafRoutePath(from) !== WATCH_PATH
+  );
 }
 
 /** The way back: the page that owns the hero returns to a list of cards. */
 export function leavingPosterPage(from: RouteNode, to: RouteNode): boolean {
-  return POSTER_ROUTES.has(leafRoutePath(from)) && !POSTER_ROUTES.has(leafRoutePath(to));
+  return (
+    POSTER_ROUTES.has(leafRoutePath(from)) &&
+    !POSTER_ROUTES.has(leafRoutePath(to)) &&
+    leafRoutePath(to) !== WATCH_PATH
+  );
 }
 
 /**
@@ -71,7 +83,11 @@ export function leavingPosterPage(from: RouteNode, to: RouteNode): boolean {
  * the figure that rounds it and animate on its own.
  */
 export function clearStalePosterStamps(from: RouteNode, to: RouteNode): void {
-  if (POSTER_ROUTES.has(leafRoutePath(from)) || POSTER_ROUTES.has(leafRoutePath(to))) return;
+  const player =
+    leafRoutePath(from) === WATCH_PATH || leafRoutePath(to) === WATCH_PATH;
+  const pairs =
+    POSTER_ROUTES.has(leafRoutePath(from)) || POSTER_ROUTES.has(leafRoutePath(to));
+  if (!player && pairs) return;
   clearPosterStamps();
 }
 
