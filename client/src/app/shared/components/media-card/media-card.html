@@ -57,7 +57,7 @@
     <!-- Badges, progress and hover affordances. Grouped so a single
          view-transition-name lifts them above the poster that morphs onto
          this card, which would otherwise hide them for the whole animation. -->
-    <div #cardOverlay data-card-overlay class="absolute inset-0 pointer-events-none">
+    <div #cardOverlay data-card-overlay class="absolute inset-0 z-10 pointer-events-none">
 
     <!-- Rating badge (bottom-left, portrait only) -->
     @if (_rating() > 0 && aspect() === 'portrait') {

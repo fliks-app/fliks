@@ -714,15 +714,6 @@ body.tv app-media-card p {
   opacity: 0.5;
 }
 
-/* Media-card simplification on TV: the card is a single focus target. The
-   internal hover overlay (play button, dismiss, etc.) is replaced by the
-   contextual actions panel, so we hide them entirely. The watched toggle stays
-   visible since it also acts as a status indicator. */
-body.tv app-media-card figure > .group-hover\:opacity-100,
-body.tv app-media-card figure > .absolute.inset-0,
-body.tv app-media-card .opacity-0.group-hover\:opacity-100 {
-  display: none !important;
-}
 /* Card focus — Lumen "lit-from-within" ring inspired by
    mediaplatform-hub/frontend-tv: 2 px spacer in the surface colour,
    4 px primary ring outside that, plus a soft primary glow and a
@@ -801,8 +792,9 @@ html.nav-back .card-img-reveal {
   animation-duration: 0s;
 }
 
-/* One promotion source fewer, and the reveal stays (the art is still hidden
-   until it has decoded — only the 200 ms tween goes). */
+/* The opacity animation promotes the img to its own layer, and this WebView then
+   drops the figure's radius clip for everything painted after it — the bottom
+   edge squares off for the length of the fade. */
 body.tv app-media-card figure img,
 body.tv .mosaic-art img {
   transition: none !important;
