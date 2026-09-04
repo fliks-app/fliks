@@ -80,6 +80,9 @@ describe('view-transition poster stamps', () => {
       expect(leavingPosterPage(route(''), route('movies/:id'))).toBe(false);
       // Detail to detail stays on a poster on both sides.
       expect(leavingPosterPage(route('movies/:id'), route('series/:id'))).toBe(false);
+      // Opening the player is not a return to a list of cards: the hero would
+      // find no partner there and animate alone over the backdrop.
+      expect(leavingPosterPage(route('movies/:id'), route('watch/:mediaFileId'))).toBe(false);
     });
 
     it('holds on the way in and not on the way back', () => {
@@ -88,6 +91,8 @@ describe('view-transition poster stamps', () => {
       expect(enteringPosterPage(route('movies/:id'), route(''))).toBe(false);
       // Detail to detail keeps both sides on a poster: nothing to reshape.
       expect(enteringPosterPage(route('movies/:id'), route('series/:id'))).toBe(false);
+      // Closing the player back onto the detail page: its own shrink owns that.
+      expect(enteringPosterPage(route('watch/:mediaFileId'), route('movies/:id'))).toBe(false);
     });
   });
 
@@ -108,6 +113,18 @@ describe('view-transition poster stamps', () => {
       // Back navigation: the morph reads the stamp on the re-attached card.
       clearStalePosterStamps(route('series/:id'), route(''));
       expect(card.style.viewTransitionName).toBe('media-poster-7');
+    });
+
+    it('drops the stamp when the player is on either side', () => {
+      const card = img();
+      stampPoster(card, 7);
+
+      clearStalePosterStamps(route('movies/:id'), route('watch/:mediaFileId'));
+      expect(card.style.viewTransitionName).toBe('');
+
+      stampPoster(card, 7);
+      clearStalePosterStamps(route('watch/:mediaFileId'), route('movies/:id'));
+      expect(card.style.viewTransitionName).toBe('');
     });
 
     it('drops a stamp left over from an earlier detail visit', () => {
