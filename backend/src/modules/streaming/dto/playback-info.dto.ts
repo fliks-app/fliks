@@ -103,6 +103,11 @@ export interface PlaybackInfoResponse {
   /** Output container format */
   outputContainer: string;
 
+  /** Rung this session locked in, as one of the {@link qualities} ids —
+   *  `'original'` on the copy paths, `'auto'` when nothing is pinned. The
+   *  player adopts it so its selector always names what is actually served. */
+  quality: string;
+
   /** Hardware acceleration type used for transcoding */
   hwAccel: string;
 
