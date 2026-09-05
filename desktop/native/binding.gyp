@@ -4,8 +4,9 @@
   #   - linux → fliks_compositor: SDL2/GLES/EGL self-compositor (pkg-config).
   #     Its `<!@(pkg-config sdl2 …)` would FAIL at gyp time on macOS, hence the
   #     condition gate rather than a per-target no-op.
-  #   - mac   → fliks_player_mac: in-process libmpv embedded in a CAOpenGLLayer
-  #     on the Electron videoWin's NSView (Cocoa/QuartzCore/OpenGL frameworks).
+  #   - mac   → fliks_player_mac: in-process libmpv rendering offscreen via GL
+  #     into an IOSurface, blit-copied by Metal into a CAMetalLayer on the
+  #     Electron videoWin's NSView (Cocoa/QuartzCore/OpenGL/Metal/IOSurface).
   # Windows ships no addon (it embeds an mpv subprocess via --wid).
   "targets": [],
   "conditions": [
@@ -47,6 +48,8 @@
             "-framework Cocoa",
             "-framework QuartzCore",
             "-framework OpenGL",
+            "-framework Metal",
+            "-framework IOSurface",
             "-framework CoreVideo",
             "-framework CoreFoundation",
             "-ldl"
