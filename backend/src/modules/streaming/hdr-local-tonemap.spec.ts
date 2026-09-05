@@ -1,10 +1,13 @@
 import { StreamBuilderService } from './stream-builder.service';
 import type { DeviceProfileDto } from './dto/device-profile.dto';
 
-const svc = () =>
+const svc = (autoCrop = false) =>
   new StreamBuilderService(
     { getDetectedHwAccel: () => 'none' } as never,
-    { getAutoCropEnabled: () => false, getTonemapAlgo: () => 'auto' } as never,
+    {
+      getAutoCropEnabled: () => autoCrop,
+      getTonemapAlgo: () => 'auto',
+    } as never,
   );
 
 // Desktop shell on an SDR panel: decodes HEVC Main 10, no HDR display.
@@ -56,6 +59,7 @@ const resolved = () =>
             hdrFormat: 'HDR10',
             colorTransfer: 'smpte2084',
             colorPrimaries: 'bt2020',
+            crop: '1920:800:0:140',
           },
         ],
         audio: [{ codec: 'aac', channels: 2, bitRate: 128_000 }],
@@ -80,8 +84,24 @@ describe('StreamBuilderService — client-side HDR tone-mapping', () => {
     expect(r.response.clientTonemap).toBe(true);
   });
 
-  it('keeps the transcode ladder SDR when a lower rung forces a re-encode', () => {
-    const r = svc().evaluate(resolved(), localTonemapClient, 'tok', undefined, '720p');
+  it('keeps HDR through a lower rung instead of tone-mapping server-side', () => {
+    const r = svc().evaluate(resolved(), localTonemapClient, 'tok', undefined, '720p-hdr');
+    expect(r.response.playMethod).toBe('Transcode');
+    expect(r.videoVariant?.hdr).toBe('HDR10');
+    expect(r.response.tonemapping).toBe(false);
+    expect(r.response.clientTonemap).toBe(true);
+  });
+
+  it('keeps HDR through a crop-forced transcode', () => {
+    const r = svc(true).evaluate(resolved(), localTonemapClient, 'tok');
+    expect(r.response.playMethod).toBe('Transcode');
+    expect(r.videoVariant?.hdr).toBe('HDR10');
+    expect(r.response.tonemapping).toBe(false);
+    expect(r.response.clientTonemap).toBe(true);
+  });
+
+  it('still tone-maps a crop-forced transcode for a plain SDR client', () => {
+    const r = svc(true).evaluate(resolved(), sdrClient, 'tok');
     expect(r.response.playMethod).toBe('Transcode');
     expect(r.videoVariant?.hdr).toBeNull();
     expect(r.response.tonemapping).toBe(true);
