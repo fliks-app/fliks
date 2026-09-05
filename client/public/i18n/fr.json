@@ -550,6 +550,12 @@
       "preview_error": "Impossible de récupérer les dossiers racines distants."
     }
   },
+  "import_progress": {
+    "scanning": "Analyse du dossier…",
+    "importing": "Import des médias en cours…",
+    "enriching": "Finalisation des médias…",
+    "count": "{{current}}/{{total}}"
+  },
   "dashboard": {
     "title": "Tableau de bord",
     "subtitle": "Vue d'ensemble de la bibliothèque.",

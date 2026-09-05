@@ -545,6 +545,12 @@
       "preview_error": "No se pueden recuperar las carpetas raíz remotas."
     }
   },
+  "import_progress": {
+    "scanning": "Escaneando la carpeta…",
+    "importing": "Importando los medios…",
+    "enriching": "Finalizando los medios…",
+    "count": "{{current}}/{{total}}"
+  },
   "dashboard": {
     "title": "Panel de control",
     "subtitle": "Visión general de la biblioteca.",

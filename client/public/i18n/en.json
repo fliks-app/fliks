@@ -550,6 +550,12 @@
       "preview_error": "Unable to fetch the remote root folders."
     }
   },
+  "import_progress": {
+    "scanning": "Scanning the folder…",
+    "importing": "Importing your media…",
+    "enriching": "Finalizing your media…",
+    "count": "{{current}}/{{total}}"
+  },
   "dashboard": {
     "title": "Dashboard",
     "subtitle": "Library overview.",

@@ -545,6 +545,12 @@
       "preview_error": "Impossibile recuperare le cartelle radice remote."
     }
   },
+  "import_progress": {
+    "scanning": "Scansione della cartella…",
+    "importing": "Importazione dei contenuti…",
+    "enriching": "Finalizzazione dei contenuti…",
+    "count": "{{current}}/{{total}}"
+  },
   "dashboard": {
     "title": "Bacheca",
     "subtitle": "Panoramica della libreria.",

@@ -545,6 +545,12 @@
       "preview_error": "Die entfernten Stammordner konnten nicht abgerufen werden."
     }
   },
+  "import_progress": {
+    "scanning": "Ordner wird gescannt…",
+    "importing": "Medien werden importiert…",
+    "enriching": "Medien werden fertiggestellt…",
+    "count": "{{current}}/{{total}}"
+  },
   "dashboard": {
     "title": "Dashboard",
     "subtitle": "Überblick über die Bibliothek.",

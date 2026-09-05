@@ -1,0 +1,16 @@
+@if (active(); as a) {
+  <div class="alert flex-col items-stretch gap-2 py-2.5 px-4 bg-base-200 border border-base-300 animate-[fade-in_240ms_ease-out]">
+    <div class="flex items-center justify-between gap-3 text-sm">
+      <span class="font-medium truncate">
+        {{ a.labelKey | translate }}
+        @if (a.progress.message) {
+          <span class="text-base-content/60 font-normal"> · {{ a.progress.message }}</span>
+        }
+      </span>
+      <span class="text-xs text-base-content/60 shrink-0">
+        {{ 'import_progress.count' | translate: { current: a.progress.current, total: a.progress.total } }}
+      </span>
+    </div>
+    <app-progress-bar [percent]="percent()" />
+  </div>
+}

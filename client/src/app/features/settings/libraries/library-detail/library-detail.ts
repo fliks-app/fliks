@@ -17,10 +17,18 @@ import {
 } from '../../../../core/services/api/profiles.service';
 import { ConfirmationService } from '../../../../core/services/confirmation.service';
 import { LibraryDetailState } from './library-detail.state';
+import { ImportProgressBannerComponent } from '../../../../shared/components/import-progress-banner/import-progress-banner';
 
 @Component({
   selector: 'app-library-detail',
-  imports: [LucideChevronLeft, TranslateModule, RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [
+    LucideChevronLeft,
+    TranslateModule,
+    RouterLink,
+    RouterLinkActive,
+    RouterOutlet,
+    ImportProgressBannerComponent,
+  ],
   providers: [LibraryDetailState],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './library-detail.html',

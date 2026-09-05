@@ -545,6 +545,12 @@
       "preview_error": "Não foi possível obter as pastas raiz remotas."
     }
   },
+  "import_progress": {
+    "scanning": "A analisar a pasta…",
+    "importing": "A importar os conteúdos…",
+    "enriching": "A finalizar os conteúdos…",
+    "count": "{{current}}/{{total}}"
+  },
   "dashboard": {
     "title": "Painel",
     "subtitle": "Vista geral da biblioteca.",
