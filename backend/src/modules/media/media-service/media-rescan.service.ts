@@ -246,7 +246,7 @@ export class MediaRescanService {
    * Caller must have already persisted `file.streamInfo` from a fresh
    * ffprobe of `absPath`. Best-effort: failures are logged but don't throw.
    * `streamInfo` is a JSONB blob, so both steps mutate `file` in memory and
-   * only this method saves — one write instead of three.
+   * only this method saves: one write instead of three.
    */
   async finalizeImportedFile(
     file: MediaFile,
@@ -261,7 +261,7 @@ export class MediaRescanService {
 
   /**
    * Compute the OpenSubtitles movie hash and set it on `file` (unsaved) so
-   * subsequent subtitle searches can do a hash-based lookup — the central
+   * subsequent subtitle searches can do a hash-based lookup, the central
    * scorer awards near-max credit when the provider confirms a hash match.
    * Best-effort: small or unreadable files leave nulls.
    */
@@ -283,7 +283,7 @@ export class MediaRescanService {
 
   /**
    * Re-runs ffmpeg `cropdetect` and sets the result on `file.streamInfo`
-   * (unsaved) — caller persists. No-op when the file has no video stream.
+   * (unsaved), caller persists. No-op when the file has no video stream.
    * Best-effort: ffmpeg failures are logged and the row is left unchanged.
    * The crop value is cleared when detection returns nothing so a re-encoded
    * file that lost its letterbox doesn't keep stale crop data.

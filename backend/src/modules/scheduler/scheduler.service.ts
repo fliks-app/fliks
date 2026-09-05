@@ -125,7 +125,7 @@ export class SchedulerService implements OnModuleInit {
     );
   }
 
-  /** Internal housekeeping, not in `SCHEDULERS` — nothing to trigger or list for it. */
+  /** Internal housekeeping, not in `SCHEDULERS`, nothing to trigger or list for it. */
   @Cron(CronExpression.EVERY_DAY_AT_3AM)
   async pruneOldCommands(): Promise<void> {
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -409,7 +409,7 @@ export class SchedulerService implements OnModuleInit {
     );
   }
 
-  /** A year-old-plus movie or an ended/cancelled series is "settled" — cheap to
+  /** A year-old-plus movie or an ended/cancelled series is "settled": cheap to
    *  believe unchanged, so it's only worth re-hitting the provider weekly. */
   private isMetadataDue(media: Media, now: Date): boolean {
     const settled =

@@ -17,7 +17,7 @@ export interface PostImportTask {
 }
 
 /** FIFO queue for post-import enrichment (crop, osdb hash, subtitle cache +
- *  search) — bounds ffmpeg concurrency so a library batch can't pile up. */
+ *  search), bounds ffmpeg concurrency so a library batch can't pile up. */
 @Injectable()
 export class PostImportQueueService {
   private readonly logger = new Logger(PostImportQueueService.name);
@@ -74,31 +74,45 @@ export class PostImportQueueService {
       const task = this.tasks.shift();
       if (!task) break;
       this.active++;
-      void this.process(task).finally(() => {
-        this.active--;
-        this.queued.delete(task.mediaFileId);
-        this.waveDone++;
-        if (this.active === 0 && this.tasks.length === 0) {
-          this.label = '';
-          this.emitProgress();
-          this.waveTotal = 0;
-          this.waveDone = 0;
-          const waiters = this.idleWaiters;
-          this.idleWaiters = [];
-          waiters.forEach((resolve) => resolve());
-        } else {
-          this.emitProgress();
-          this.pump();
-        }
-      });
+      void this.process(task)
+        .catch((e) => {
+          this.logger.error(
+            `PostImport: unexpected failure for file #${task.mediaFileId}, ${(e as Error).message}`,
+          );
+        })
+        .finally(() => {
+          this.active--;
+          this.queued.delete(task.mediaFileId);
+          this.waveDone++;
+          if (this.active === 0 && this.tasks.length === 0) {
+            this.label = '';
+            this.emitProgress();
+            this.waveTotal = 0;
+            this.waveDone = 0;
+            const waiters = this.idleWaiters;
+            this.idleWaiters = [];
+            waiters.forEach((resolve) => resolve());
+          } else {
+            this.emitProgress();
+            this.pump();
+          }
+        });
     }
   }
 
   private async process({ mediaFileId }: PostImportTask): Promise<void> {
-    const file = await this.fileRepo.findOne({
-      where: { id: mediaFileId },
-      relations: ['media'],
-    });
+    let file: MediaFile | null;
+    try {
+      file = await this.fileRepo.findOne({
+        where: { id: mediaFileId },
+        relations: ['media'],
+      });
+    } catch (e) {
+      this.logger.error(
+        `PostImport: failed to load file #${mediaFileId}, ${(e as Error).message}`,
+      );
+      return;
+    }
     const normPath = file?.relativePath?.replace(/\\/g, '/');
     if (!file?.media?.path || !normPath) {
       this.logger.warn(
@@ -114,7 +128,7 @@ export class PostImportQueueService {
       await this.mediaRescan.finalizeImportedFile(file, absPath, file.media);
     } catch (e) {
       this.logger.warn(
-        `PostImport: enrichment failed for file #${mediaFileId} — ${(e as Error).message}`,
+        `PostImport: enrichment failed for file #${mediaFileId}, ${(e as Error).message}`,
       );
     }
     try {
@@ -125,7 +139,7 @@ export class PostImportQueueService {
       );
     } catch (e) {
       this.logger.warn(
-        `PostImport: subtitle pipeline failed for file #${mediaFileId} — ${(e as Error).message}`,
+        `PostImport: subtitle pipeline failed for file #${mediaFileId}, ${(e as Error).message}`,
       );
     }
   }

@@ -35,6 +35,10 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
   /** An import wave lands file by file — wait for it to settle so a season
    *  pack costs one marker scan instead of one per episode. */
   static readonly SETTLE_MS = 60_000;
+  /** Ceiling on waiting for the (global, shared) enrichment queue to idle: a
+   *  steady trickle of downloads could otherwise keep it busy forever and
+   *  sprites/markers would never run. */
+  static readonly QUEUE_IDLE_CEILING_MS = 5 * 60_000;
   private readonly pending = new Map<number, NodeJS.Timeout>();
 
   constructor(
@@ -86,7 +90,12 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
   /** Sprites first: they are per-file and cheap next to a season-wide
    *  fingerprint pass, and both compete for the same ffmpeg budget as import. */
   private async run(mediaId: number): Promise<void> {
-    await this.postImportQueue.whenIdle();
+    let ceilingTimer!: NodeJS.Timeout;
+    const ceiling = new Promise<void>((resolve) => {
+      ceilingTimer = setTimeout(resolve, PostImportService.QUEUE_IDLE_CEILING_MS);
+    });
+    await Promise.race([this.postImportQueue.whenIdle(), ceiling]);
+    clearTimeout(ceilingTimer);
     if (await this.enabled('sprites_auto_generate_on_import')) {
       try {
         const generated = await this.generateMissingSprites(mediaId);
