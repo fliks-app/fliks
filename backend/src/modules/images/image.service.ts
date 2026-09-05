@@ -4,7 +4,7 @@ import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import sharp from 'sharp';
-import { getImagesDir } from '../../common/constants/paths';
+import { getDataDir } from '../../common/constants/paths';
 
 // libvips defaults to one worker thread per core plus a decoded-image cache,
 // pure overhead for one-shot resizes on a low-core, low-RAM box.
@@ -110,7 +110,7 @@ function sizeTokenWidth(token: string): number | null {
 @Injectable()
 export class ImageService {
   private readonly logger = new Logger(ImageService.name);
-  private readonly baseDir = getImagesDir();
+  private readonly baseDir = getDataDir();
   /** Keyed by `type/id/variant`. Lets a second concurrent call for the same
    *  target join the first instead of racing it: two overlapping calls with
    *  different URLs would otherwise interleave writes and leave the sidecar

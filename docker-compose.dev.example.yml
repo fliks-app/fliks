@@ -39,7 +39,7 @@ services:
       # Throwaway cache, container-only: /src is root-owned in the image, so the
       # non-root user it runs as needs a path it can actually write.
       FLIKS_TRANSCODE_DIR: /tmp/transcode
-      FLIKS_IMAGES_DIR: /src/images
+      FLIKS_DATA_DIR: /src/data
     ports:
       - '3000:3000'
     # Keeps the host's own node_modules out of the container.
@@ -49,7 +49,7 @@ services:
       - ./backend:/src/backend
       - ./.dev/downloads:/downloads
       - ./.dev/medias:/medias
-      - ./.dev/images:/src/images
+      - ./.dev/data:/src/data
 
   client:
     build:

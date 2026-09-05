@@ -28,7 +28,7 @@ services:
     # Uncomment if your platform pins the container user (TrueNAS catalog uid
     # 568, unraid 99:100, Kubernetes runAsNonRoot, OpenShift arbitrary uid).
     # Any uid works as long as gid 0 is in the group list — the image's
-    # /app/conf, /app/images and /app/transcode are group-writable by root.
+    # /app/conf, /app/data and /app/transcode are group-writable by root.
     # user: '568:568'
     # group_add: ['0']
     # mDNS doesn't cross a bridge network, so Chromecast auto-discovery needs
@@ -90,8 +90,9 @@ services:
       - /path/to/download/folder:/downloads
       # JWT key: lose it and everyone is logged out.
       - fliks_conf:/app/conf
-      # Posters, fanart, seek-preview sprites, extracted subtitle cache.
-      - fliks_images:/app/images
+      # Artwork, seek-preview sprites, extracted subtitle cache and uploaded
+      # avatars. Not disposable: the avatars can't be re-fetched.
+      - fliks_data:/app/data
       # HLS segment cache, paired with FLIKS_TRANSCODE_DIR above. Drop both to
       # leave it in /tmp.
       - fliks_transcode:/app/transcode
@@ -114,5 +115,5 @@ services:
 volumes:
   fliks_pgdata:
   fliks_conf:
-  fliks_images:
+  fliks_data:
   fliks_transcode:

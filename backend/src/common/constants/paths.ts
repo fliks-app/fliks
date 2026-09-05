@@ -1,5 +1,7 @@
+import { existsSync } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { Logger } from '@nestjs/common';
 import { resolveWritableDir } from './writable-dir';
 
 /** Base directory for transient transcode/thumbnail data.
@@ -13,23 +15,48 @@ export const TRANSCODE_DIR =
       ? path.join(os.tmpdir(), 'fliks-transcode')
       : '/tmp/transcode';
 
-let cachedImagesDir: string | null = null;
+let cachedDataDir: string | null = null;
+
+/** Picked before the write probe so a legacy mount is honoured rather than
+ *  shadowed by an empty default. */
+function intendedDataDir(): string {
+  const override = process.env.FLIKS_DATA_DIR?.trim();
+  if (override) return override;
+  const legacyOverride = process.env.FLIKS_IMAGES_DIR?.trim();
+  if (legacyOverride) {
+    new Logger('DataDir').warn(
+      'FLIKS_IMAGES_DIR is deprecated — rename it to FLIKS_DATA_DIR (same value)',
+    );
+    return legacyOverride;
+  }
+  // The image no longer creates `images/`, so its presence means a volume is
+  // still mounted there: keep writing to it instead of starting an empty tree.
+  const legacyDir = path.join(process.cwd(), 'images');
+  if (existsSync(legacyDir)) {
+    new Logger('DataDir').warn(
+      `Using the legacy data directory "${legacyDir}" — remount it at ` +
+        `"${path.join(process.cwd(), 'data')}" (or set FLIKS_DATA_DIR) when convenient`,
+    );
+    return legacyDir;
+  }
+  return path.join(process.cwd(), 'data');
+}
 
 /**
- * Posters, fanart and seek-preview sprites. `FLIKS_IMAGES_DIR` overrides;
- * falls back to a temp dir (wiped on restart) if `/app/images` isn't
- * writable at the container's uid. Resolved and probed once, on first call.
+ * Artwork, seek-preview sprites, the extracted-subtitle cache and uploaded user
+ * avatars. `FLIKS_DATA_DIR` overrides; falls back to a temp dir (wiped on
+ * restart) if it isn't writable at the container's uid. Probed once, on first
+ * call. Not a cache: the avatars in here cannot be re-fetched.
  */
-export function getImagesDir(): string {
-  if (cachedImagesDir) return cachedImagesDir;
-  const override = process.env.FLIKS_IMAGES_DIR?.trim();
-  cachedImagesDir = resolveWritableDir(
-    [override || path.join(process.cwd(), 'images'), path.join(os.tmpdir(), 'fliks-images')],
-    'Cannot write to the images directory — posters, fanart and seek-preview ' +
-      'sprites will not survive a restart. Set FLIKS_IMAGES_DIR, or mount ' +
-      '/app/images writable for this container user.',
+export function getDataDir(): string {
+  if (cachedDataDir) return cachedDataDir;
+  cachedDataDir = resolveWritableDir(
+    [intendedDataDir(), path.join(os.tmpdir(), 'fliks-data')],
+    'Cannot write to the data directory — artwork, sprites and uploaded ' +
+      'avatars will not survive a restart. Set FLIKS_DATA_DIR, or mount ' +
+      '/app/data writable for this container user.',
   );
-  return cachedImagesDir;
+  return cachedDataDir;
 }
 
 let cachedPluginsRuntimeDir: string | null = null;

@@ -6,7 +6,7 @@ import { promisify } from 'util';
 import { existsSync } from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
-import { getImagesDir } from '../../common/constants/paths';
+import { getDataDir } from '../../common/constants/paths';
 import { EventsService } from '../scheduler/events.service';
 import { ActivityRegistryService } from '../scheduler/activity-registry.service';
 import { Command } from '../scheduler/entities/command.entity';
@@ -42,8 +42,8 @@ export interface SpriteMetadata {
   count: number;
 }
 
-const baseDir = () => path.join(getImagesDir(), 'thumbnails');
-const framesTmpDir = () => path.join(getImagesDir(), 'thumbnails-tmp');
+const baseDir = () => path.join(getDataDir(), 'thumbnails');
+const framesTmpDir = () => path.join(getDataDir(), 'thumbnails-tmp');
 
 const COLUMNS = 10;
 const THUMB_WIDTH = 240;
