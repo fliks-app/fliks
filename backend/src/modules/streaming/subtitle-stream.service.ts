@@ -28,12 +28,16 @@ import { resolveSubtitleAbsolutePath } from '../subtitles/subtitle-path.util';
 import { normalizeLanguageCode } from '../../common/constants/app-languages';
 import type { SubtitleRenditionMeta } from './transcoding/types';
 import { withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
+import { getImagesDir } from '../../common/constants/paths';
 import {
   formatMediaProgressSubject,
   type MediaProgressSubject,
 } from '../../common/utils/media-progress-subject.util';
 
 const execFileAsync = promisify(execFile);
+
+/** getImagesDir() probes the filesystem on its first call — keep this lazy. */
+const subsDir = () => path.join(getImagesDir(), 'subs');
 
 /**
  * Global cap on concurrent warmup extractions — a full library refresh can
@@ -50,7 +54,6 @@ const EXTRACT_TIMEOUT_MS = 15 * 60_000;
 
 interface WarmupTask {
   absolutePath: string;
-  mediaRoot: string;
   mediaFileId: number;
   /**
    * All subtitle stream indices to extract in a single FFmpeg invocation.
@@ -260,13 +263,7 @@ export class SubtitleStreamService {
     }
 
     const resolved = await this.streamingService.resolveFile(mediaFileId, user);
-    const mediaRoot = resolved.media.path;
-    if (!mediaRoot) {
-      throw new NotFoundException(
-        `Media file #${mediaFileId} has no media root — cannot cache subtitle`,
-      );
-    }
-    const cachePath = this.cachePathFor(mediaRoot, mediaFileId, streamIndex);
+    const cachePath = this.cachePathFor(mediaFileId, streamIndex);
     if (fsSync.existsSync(cachePath)) {
       return fsSync.createReadStream(cachePath);
     }
@@ -285,15 +282,11 @@ export class SubtitleStreamService {
       ) ?? [];
     const uncachedIndices = textSubs
       .map((s) => s.streamIndex)
-      .filter(
-        (idx) =>
-          !fsSync.existsSync(this.cachePathFor(mediaRoot, mediaFileId, idx)),
-      );
+      .filter((idx) => !fsSync.existsSync(this.cachePathFor(mediaFileId, idx)));
 
     if (uncachedIndices.length > 1 && uncachedIndices.includes(streamIndex)) {
       await this.extractBatchDeduped(
         resolved.absolutePath,
-        mediaRoot,
         mediaFileId,
         uncachedIndices,
         false,
@@ -301,7 +294,6 @@ export class SubtitleStreamService {
     } else {
       await this.extractDeduped(
         resolved.absolutePath,
-        mediaRoot,
         mediaFileId,
         streamIndex,
         false,
@@ -325,13 +317,11 @@ export class SubtitleStreamService {
    */
   async warmupCache(
     absolutePath: string,
-    mediaRoot: string | null | undefined,
     mediaFileId: number,
     subtitles: { streamIndex: number; isImageBased: boolean }[] | undefined,
     subject: MediaProgressSubject,
     trigger: 'import' | 'playback' = 'import',
   ): Promise<void> {
-    if (!mediaRoot) return;
     if (!subtitles?.length) return;
     const mode = (await this.streamingSettings.get()).subtitlePrewarm;
     if (mode === 'off' || (mode === 'playback' && trigger === 'import')) return;
@@ -346,10 +336,7 @@ export class SubtitleStreamService {
 
     // Skip subs whose cache file is already on disk.
     const pending = textSubs.filter(
-      (s) =>
-        !fsSync.existsSync(
-          this.cachePathFor(mediaRoot, mediaFileId, s.streamIndex),
-        ),
+      (s) => !fsSync.existsSync(this.cachePathFor(mediaFileId, s.streamIndex)),
     );
     if (!pending.length) return;
 
@@ -395,7 +382,6 @@ export class SubtitleStreamService {
     // One task per file (multi-output ffmpeg) instead of one per stream.
     this.warmupQueue.push({
       absolutePath,
-      mediaRoot,
       mediaFileId,
       streamIndices: pending.map((s) => s.streamIndex),
       batch,
@@ -457,22 +443,12 @@ export class SubtitleStreamService {
   }
 
   /**
-   * Delete a single media file's subtitle cache subdirectory
-   * (`.cache/subs/<mediaFileId>/`) — called when one file is re-probed so
-   * the upcoming warmup regenerates its VTTs from the fresh streamInfo.
-   * Leaves the rest of `.cache/` (other files, other features) untouched.
+   * Delete a single media file's subtitle cache subdirectory — called when a
+   * file is re-probed or removed so a later warmup regenerates its VTTs from
+   * fresh streamInfo, or so nothing lingers once the file is gone.
    */
-  async clearMediaFileSubtitleCache(
-    mediaRoot: string | null | undefined,
-    mediaFileId: number,
-  ): Promise<void> {
-    if (!mediaRoot) return;
-    const cacheDir = path.join(
-      mediaRoot,
-      '.cache',
-      'subs',
-      String(mediaFileId),
-    );
+  async clearMediaFileSubtitleCache(mediaFileId: number): Promise<void> {
+    const cacheDir = this.cacheDirFor(mediaFileId);
     try {
       await fs.rm(cacheDir, { recursive: true, force: true });
     } catch (err) {
@@ -499,8 +475,7 @@ export class SubtitleStreamService {
    * if the batch fails (one corrupt sub shouldn't kill the others).
    */
   private async runWarmupTask(task: WarmupTask): Promise<void> {
-    const { absolutePath, mediaRoot, mediaFileId, streamIndices, batch, trigger } =
-      task;
+    const { absolutePath, mediaFileId, streamIndices, batch, trigger } = task;
     // Only an import-time warmup competes for the shared ffmpeg slot pool; a
     // playback-triggered one must extract immediately, same as a live cache miss.
     const background = trigger === 'import';
@@ -517,7 +492,6 @@ export class SubtitleStreamService {
       try {
         await this.extractBatchDeduped(
           absolutePath,
-          mediaRoot,
           mediaFileId,
           streamIndices,
           background,
@@ -534,7 +508,6 @@ export class SubtitleStreamService {
           try {
             await this.extractDeduped(
               absolutePath,
-              mediaRoot,
               mediaFileId,
               idx,
               background,
@@ -584,7 +557,6 @@ export class SubtitleStreamService {
 
   private extractDeduped(
     absolutePath: string,
-    mediaRoot: string,
     mediaFileId: number,
     streamIndex: number,
     background: boolean,
@@ -594,14 +566,11 @@ export class SubtitleStreamService {
     if (inflight) return inflight;
     // Also re-check the file — it may have been written between the
     // queue push and the actual dequeue.
-    if (
-      fsSync.existsSync(this.cachePathFor(mediaRoot, mediaFileId, streamIndex))
-    ) {
+    if (fsSync.existsSync(this.cachePathFor(mediaFileId, streamIndex))) {
       return Promise.resolve();
     }
     const promise = this.extractToCache(
       absolutePath,
-      mediaRoot,
       mediaFileId,
       streamIndex,
       background,
@@ -622,7 +591,6 @@ export class SubtitleStreamService {
    */
   private async extractBatchDeduped(
     absolutePath: string,
-    mediaRoot: string,
     mediaFileId: number,
     streamIndices: number[],
     background: boolean,
@@ -637,9 +605,7 @@ export class SubtitleStreamService {
       const existing = this.inflight.get(key);
       if (existing) {
         joinPromises.push(existing);
-      } else if (
-        fsSync.existsSync(this.cachePathFor(mediaRoot, mediaFileId, idx))
-      ) {
+      } else if (fsSync.existsSync(this.cachePathFor(mediaFileId, idx))) {
         // Already on disk — nothing to do for this index.
       } else {
         ownIndices.push(idx);
@@ -654,7 +620,6 @@ export class SubtitleStreamService {
 
     const sharedPromise = this.extractBatchToCache(
       absolutePath,
-      mediaRoot,
       mediaFileId,
       ownIndices,
       background,
@@ -675,22 +640,16 @@ export class SubtitleStreamService {
   }
 
   /**
-   * Cache path: `<media.path>/.cache/subs/<mediaFileId>/emb-<streamIndex>.vtt`.
-   * Living alongside the media means the cache survives server restarts and
-   * gets wiped naturally when the user deletes the media folder.
+   * Cache path: `<imagesDir>/subs/<mediaFileId>/emb-<streamIndex>.vtt`. The
+   * managed images volume (not the library mount) survives library moves and
+   * still works when the library is mounted read-only.
    */
-  private cachePathFor(
-    mediaRoot: string,
-    mediaFileId: number,
-    streamIndex: number,
-  ): string {
-    return path.join(
-      mediaRoot,
-      '.cache',
-      'subs',
-      String(mediaFileId),
-      `emb-${streamIndex}.vtt`,
-    );
+  private cacheDirFor(mediaFileId: number): string {
+    return path.join(subsDir(), String(mediaFileId));
+  }
+
+  private cachePathFor(mediaFileId: number, streamIndex: number): string {
+    return path.join(this.cacheDirFor(mediaFileId), `emb-${streamIndex}.vtt`);
   }
 
   /**
@@ -702,19 +661,15 @@ export class SubtitleStreamService {
    */
   private async extractBatchToCache(
     absolutePath: string,
-    mediaRoot: string,
     mediaFileId: number,
     streamIndices: number[],
     background: boolean,
   ): Promise<void> {
     if (!streamIndices.length) return;
-    const cacheDir = path.dirname(
-      this.cachePathFor(mediaRoot, mediaFileId, streamIndices[0]),
-    );
-    await fs.mkdir(cacheDir, { recursive: true });
+    await fs.mkdir(this.cacheDirFor(mediaFileId), { recursive: true });
 
     const outputs = streamIndices.map((idx) => {
-      const final = this.cachePathFor(mediaRoot, mediaFileId, idx);
+      const final = this.cachePathFor(mediaFileId, idx);
       return { idx, final, tmp: `${final}.tmp` };
     });
 
@@ -800,12 +755,11 @@ export class SubtitleStreamService {
 
   private async extractToCache(
     absolutePath: string,
-    mediaRoot: string,
     mediaFileId: number,
     streamIndex: number,
     background: boolean,
   ): Promise<void> {
-    const cachePath = this.cachePathFor(mediaRoot, mediaFileId, streamIndex);
+    const cachePath = this.cachePathFor(mediaFileId, streamIndex);
     const tmpPath = `${cachePath}.tmp`;
     await fs.mkdir(path.dirname(cachePath), { recursive: true });
     const runFfmpeg = () =>

@@ -4,14 +4,9 @@ import * as path from 'path';
 /**
  * Per-media on-disk cache convention.
  *
- * `.cache/` lives at the root of every media folder and is shared between
- * features:
- *   - `.cache/subs/<mediaFileId>/emb-<streamIndex>.vtt`  (SubtitleStreamService)
- *   - future: `.cache/sprite/...`, `.cache/trickplay/...`, etc.
- *
- * The whole `.cache/` tree is disposable — it's wiped on a full rescan
- * (`clearMediaCache`) and recreated on demand. Any new feature that wants
- * cheap persistence across restarts should land here.
+ * `.cache/` at a media root is only ever removed, never written: a library can
+ * be mounted read-only or moved without the app, so cached artefacts live in the
+ * managed images volume instead.
  */
 
 /** Absolute path to the `.cache/` directory at the media root. */

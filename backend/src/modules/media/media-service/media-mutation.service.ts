@@ -27,6 +27,7 @@ import { RequestLifecycleService } from '../../requests/request-lifecycle.servic
 import { MediaQueryService } from './media-query.service';
 import { MediaMetadataService } from './media-metadata.service';
 import { ThumbnailService } from '../../streaming/thumbnail.service';
+import { SubtitleStreamService } from '../../streaming/subtitle-stream.service';
 
 @Injectable()
 export class MediaMutationService {
@@ -51,6 +52,7 @@ export class MediaMutationService {
     private readonly requestLifecycle: RequestLifecycleService,
     private readonly events: EventsService,
     private readonly thumbnails: ThumbnailService,
+    private readonly subtitleStream: SubtitleStreamService,
   ) {}
 
   async update(id: number, dto: UpdateMediaDto): Promise<Media> {
@@ -222,7 +224,10 @@ export class MediaMutationService {
     const fileIds = (media.files ?? []).map((f) => f.id);
     await this.requestLifecycle.onMediaRemoved(media);
     await this.mediaRepo.remove(media);
-    for (const fileId of fileIds) void this.thumbnails.deleteForFile(fileId);
+    for (const fileId of fileIds) {
+      void this.thumbnails.deleteForFile(fileId);
+      void this.subtitleStream.clearMediaFileSubtitleCache(fileId);
+    }
     this.events.emitDomain({
       type: 'media.removed',
       mediaId: id,
@@ -352,6 +357,7 @@ export class MediaMutationService {
     const episodeId = file.episodeId;
     await this.mediaFileRepo.remove(file);
     void this.thumbnails.deleteForFile(file.id);
+    void this.subtitleStream.clearMediaFileSubtitleCache(file.id);
     if (episodeId != null) {
       const remaining = await this.mediaFileRepo.count({
         where: { episode: { id: episodeId } },

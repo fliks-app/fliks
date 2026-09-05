@@ -24,7 +24,7 @@ const SUBS = [
 ];
 
 const warm = (svc: SubtitleStreamService, trigger: 'import' | 'playback') =>
-  svc.warmupCache('/m/s01e01.mkv', '/m', 1, SUBS, { title: 'Ep' }, trigger);
+  svc.warmupCache('/m/s01e01.mkv', 1, SUBS, { title: 'Ep' }, trigger);
 
 describe('subtitle prewarm', () => {
   it.each([
@@ -42,13 +42,13 @@ describe('subtitle prewarm', () => {
 
   it('defaults to the import trigger, so a caller that forgets stays gated', async () => {
     const { svc, queued } = makeService('playback');
-    await svc.warmupCache('/m/s01e01.mkv', '/m', 1, SUBS, { title: 'Ep' });
+    await svc.warmupCache('/m/s01e01.mkv', 1, SUBS, { title: 'Ep' });
     expect(queued).not.toHaveBeenCalled();
   });
 
   it('never queues image-based tracks: they burn in, they have no VTT form', async () => {
     const { svc, queued } = makeService('import');
-    await svc.warmupCache('/m/s01e01.mkv', '/m', 1, [SUBS[1]], { title: 'Ep' }, 'import');
+    await svc.warmupCache('/m/s01e01.mkv', 1, [SUBS[1]], { title: 'Ep' }, 'import');
     expect(queued).not.toHaveBeenCalled();
   });
 });

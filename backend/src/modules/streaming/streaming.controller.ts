@@ -728,7 +728,6 @@ export class StreamingController {
     void this.subtitleStreamService
       .warmupCache(
         resolved.absolutePath,
-        resolved.media.path,
         mediaFileId,
         resolved.mediaFile.streamInfo?.subtitles,
         {
