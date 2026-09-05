@@ -60,6 +60,7 @@ export class EmbeddedSubtitleService {
         where: {
           mediaFile: { id: mediaFileId },
           providerType: SubtitleProviderType.OCR,
+          status: SubtitleStatus.DOWNLOADED,
         },
       });
       skipIndices = new Set(

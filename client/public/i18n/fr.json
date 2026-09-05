@@ -1130,7 +1130,8 @@
     "metadata_group": "Métadonnées",
     "advanced_group": "Avancé",
     "add_to_list": "Ajouter à une liste",
-    "unlike": "Je n’aime plus"
+    "unlike": "Je n’aime plus",
+    "subtitle_failed": "Échec"
   },
   "requests": {
     "title": "Demandes",
@@ -2210,6 +2211,8 @@
       "subtitle": "Configuration de la recherche et du téléchargement automatique de sous-titres.",
       "section_search": "Recherche",
       "auto_search": "Recherche automatique de sous-titres",
+      "burn_in_covers": "Une piste image compte comme sous-titre présent",
+      "burn_in_covers_hint": "Une piste image (PGS, VobSub) dans une langue du profil suffit à considérer cette langue comme couverte : ni téléchargement ni OCR ne seront lancés pour elle. La lecture passe alors par la gravure, qui impose un réencodage complet à chaque session et interdit le direct play.",
       "search_interval": "Intervalle de recherche (minutes)",
       "search_interval_hint": "Fréquence de recherche des sous-titres manquants (défaut : 360 = 6h).",
       "min_score": "Score minimum",
@@ -2224,8 +2227,8 @@
       "encode_utf8": "Ré-encoder en UTF-8 après téléchargement",
       "section_cleaning": "Nettoyage",
       "remove_hi_tags": "Supprimer les tags HI ([musique], (soupir), ♪, etc.)",
-      "ocr_burn_in_auto": "Convertir automatiquement les sous-titres image en texte (OCR) à l'import",
-      "ocr_burn_in_auto_hint": "Dès l'import, les sous-titres image sont extraits et convertis en texte par OCR, puis servis comme des sous-titres normaux. L'OCR est gourmand et s'exécute en arrière-plan.",
+      "ocr_burn_in_auto": "Préférer l'OCR des pistes image embarquées à un téléchargement",
+      "ocr_burn_in_auto_hint": "Quand une langue du profil manque et qu'une piste image (PGS, VobSub) existe dans cette langue, elle est convertie en texte par OCR au lieu de télécharger un sous-titre. S'applique aux recherches de manquants, automatiques comme manuelles. L'OCR est gourmand et tourne en arrière-plan ; s'il échoue, la langue repart chez les fournisseurs.",
       "ocr_delete_source": "Supprimer le sous-titre image une fois extrait",
       "ocr_delete_source_hint": "Après une conversion OCR réussie, supprime la piste image source. Note : un sous-titre embarqué est dans le conteneur — il sera ré-détecté à la prochaine analyse du fichier.",
       "custom_exclusions": "Exclusions personnalisées (regex)",
@@ -2247,7 +2250,8 @@
       "col_language": "Langue",
       "search_one": "Rechercher ce sous-titre",
       "search_one_ok": "Sous-titre {{lang}} téléchargé pour « {{title}} »",
-      "search_one_none": "Aucun sous-titre {{lang}} trouvé avec un score suffisant"
+      "search_one_none": "Aucun sous-titre {{lang}} trouvé avec un score suffisant",
+      "forced": "Forcé"
     },
     "plugins": {
       "title": "Plugins",

@@ -17,7 +17,10 @@ describe('SubtitleSchedulerService.upgradeSubtitles — walking a shrinking set'
 
   /** Query-builder stub that re-filters a live table per batch, honouring
    *  whichever cursor the service uses: `andWhere(sf.id > :lastId)` or `skip()`. */
-  function fakeSubtitleRepo(table: { id: number; score: number }[]) {
+  function fakeSubtitleRepo(
+    table: { id: number; score: number }[],
+    profileItem: Record<string, unknown> = { isoCode: 'fr', name: 'French' },
+  ) {
     const seen: number[] = [];
     const createQueryBuilder = () => {
       let lastId = 0;
@@ -51,7 +54,7 @@ describe('SubtitleSchedulerService.upgradeSubtitles — walking a shrinking set'
             media: {
               title: 'T',
               tmdbId: 1,
-              languageProfile: { subtitleLanguages: [{ isoCode: 'fr', name: 'French' }] },
+              languageProfile: { subtitleLanguages: [profileItem] },
             },
             mediaFile: { id: 500 + r.id, relativePath: 'a/b.mkv' },
           }));
@@ -77,8 +80,11 @@ describe('SubtitleSchedulerService.upgradeSubtitles — walking a shrinking set'
     };
   }
 
-  function makeService(table: { id: number; score: number }[]) {
-    const { seen, repo } = fakeSubtitleRepo(table);
+  function makeService(
+    table: { id: number; score: number }[],
+    profileItem?: Record<string, unknown>,
+  ) {
+    const { seen, repo } = fakeSubtitleRepo(table, profileItem);
     const service = new SubtitleSchedulerService(
       {} as never,
       {} as never,
@@ -115,6 +121,23 @@ describe('SubtitleSchedulerService.upgradeSubtitles — walking a shrinking set'
     expect([...seen].sort((a, b) => a - b)).toEqual(live.map((r) => r.id));
     expect(new Set(seen).size).toBe(seen.length);
     expect(live.every((r) => r.score === 99)).toBe(true);
+  });
+
+  it('VERDICT: never replaces a full subtitle with a forced-only candidate', async () => {
+    // rows carry forced=false; the profile asks for a forced track, so no
+    // profile item matches and `upgradeSubtitle` — which deletes the file on
+    // disk — must never run.
+    const table = [{ id: 1, score: 10 }];
+    const { service } = makeService(table, {
+      isoCode: 'fr',
+      name: 'French',
+      forced: true,
+      hi: false,
+    });
+
+    await service.upgradeSubtitles();
+
+    expect(table[0].score).toBe(10);
   });
 
   it('terminates when nothing is eligible', async () => {

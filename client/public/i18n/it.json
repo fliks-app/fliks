@@ -1122,7 +1122,8 @@
     "metadata_group": "Metadati",
     "advanced_group": "Avanzate",
     "add_to_list": "Aggiungi a un elenco",
-    "unlike": "Non mi piace più"
+    "unlike": "Non mi piace più",
+    "subtitle_failed": "Non riuscito"
   },
   "requests": {
     "title": "Richieste",
@@ -2183,6 +2184,8 @@
       "subtitle": "Configurazione della ricerca e del download automatico di sottotitoli.",
       "section_search": "Ricerca",
       "auto_search": "Ricerca automatica di sottotitoli",
+      "burn_in_covers": "Una traccia immagine conta come sottotitolo presente",
+      "burn_in_covers_hint": "Una traccia immagine (PGS, VobSub) in una lingua del profilo basta a considerare quella lingua coperta: non verrà avviato alcun download né OCR. La riproduzione passa allora dall'impressione, che impone una ricodifica completa a ogni sessione e impedisce il direct play.",
       "search_interval": "Intervallo di ricerca (minuti)",
       "search_interval_hint": "Frequenza di ricerca dei sottotitoli mancanti (predefinito: 360 = 6h).",
       "min_score": "Punteggio minimo",
@@ -2197,8 +2200,8 @@
       "encode_utf8": "Ri-codifica in UTF-8 dopo il download",
       "section_cleaning": "Pulizia",
       "remove_hi_tags": "Rimuovi i tag HI ([musica], (sospiro), ♪, ecc.)",
-      "ocr_burn_in_auto": "Converti automaticamente i sottotitoli immagine in testo (OCR) all'import",
-      "ocr_burn_in_auto_hint": "Fin dall'import, i sottotitoli immagine vengono estratti e convertiti in testo tramite OCR, poi serviti come sottotitoli normali. L'OCR è oneroso e viene eseguito in background.",
+      "ocr_burn_in_auto": "Preferire l'OCR delle tracce immagine incorporate a un download",
+      "ocr_burn_in_auto_hint": "Quando manca una lingua del profilo ed esiste una traccia immagine (PGS, VobSub) in quella lingua, viene convertita in testo tramite OCR invece di scaricare un sottotitolo. Si applica alle ricerche di sottotitoli mancanti, automatiche e manuali. L'OCR è pesante per la CPU e viene eseguito in background; se fallisce, la lingua torna ai provider.",
       "ocr_delete_source": "Elimina il sottotitolo immagine una volta estratto",
       "ocr_delete_source_hint": "Dopo una conversione OCR riuscita, elimina la traccia immagine di origine. Nota: un sottotitolo incorporato è nel container — verrà ri-rilevato alla prossima analisi del file.",
       "custom_exclusions": "Esclusioni personalizzate (regex)",
@@ -2220,7 +2223,8 @@
       "col_language": "Lingua",
       "search_one": "Cerca questo sottotitolo",
       "search_one_ok": "Sottotitolo {{lang}} scaricato per « {{title}} »",
-      "search_one_none": "Nessun sottotitolo {{lang}} trovato con un punteggio sufficiente"
+      "search_one_none": "Nessun sottotitolo {{lang}} trovato con un punteggio sufficiente",
+      "forced": "Forzato"
     },
     "plugins": {
       "title": "Plugins",

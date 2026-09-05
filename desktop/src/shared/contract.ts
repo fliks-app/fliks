@@ -245,3 +245,112 @@ export interface FliksDesktopApi {
   getSystemInfo(): Promise<DesktopSystemInfo>;
   on(handler: (event: DesktopEvent) => void): () => void;
 }
+
+// ── Chromecast ──
+// App-level like downloads. The method surface mirrors the mobile `NativeCast`
+// Capacitor plugin so the Angular `CastService` treats this bridge as one more
+// native sender; the preload re-emits the events under the same window event
+// names the plugin uses.
+
+export interface DesktopCastDevice {
+  id: string;
+  name: string;
+  modelName?: string;
+  /** True for the device this sender is casting to, so the picker offers to leave it. */
+  connected?: boolean;
+}
+
+/** Cast wire format for subtitle styling — built client-side from the user's
+ *  presets and forwarded to the receiver verbatim. */
+export interface DesktopCastTextTrackStyle {
+  fontGenericFamily: string;
+  fontScale: number;
+  foregroundColor: string;
+  backgroundColor: string;
+  edgeType: string;
+  edgeColor: string;
+}
+
+export interface DesktopCastLoadOptions {
+  url: string;
+  contentType: string;
+  title: string;
+  subtitle: string;
+  posterUrl: string;
+  currentTime: number;
+  autoplay: boolean;
+  subtitles: { url: string; language: string; label: string }[];
+  activeSubtitleTrackId: number;
+  /** Forwarded to the Fliks receiver; must stay free of secrets — the CAF debug
+   *  overlay logs it in plain text. */
+  customData?: Record<string, unknown>;
+  castTextTrackStyle?: DesktopCastTextTrackStyle;
+}
+
+export interface DesktopCastMediaUpdate {
+  currentTime?: number;
+  duration?: number;
+  isPaused?: boolean;
+  buffering?: boolean;
+  volume?: number;
+  muted?: boolean;
+}
+
+/** main → renderer, sent on the single CAST_IPC.event channel. `name` and
+ *  `detail` are the window CustomEvent the mobile NativeCast plugin emits, so
+ *  the client re-dispatches them verbatim and shares one listener set.
+ *  `castError` carries the playhead a recovery reload resumes from. */
+export interface DesktopCastEvent {
+  name:
+    | 'castAvailabilityChanged'
+    | 'castDevicesChanged'
+    | 'castStateChanged'
+    | 'castPickerDismissed'
+    | 'castMediaUpdate'
+    | 'castError';
+  detail: DesktopCastMediaUpdate & {
+    available?: boolean;
+    connected?: boolean;
+    position?: number;
+  };
+}
+
+export const CAST_IPC = {
+  initialize: 'cast:initialize',
+  isConnected: 'cast:isConnected',
+  requestSession: 'cast:requestSession',
+  getDevices: 'cast:getDevices',
+  selectDevice: 'cast:selectDevice',
+  load: 'cast:load',
+  play: 'cast:play',
+  pause: 'cast:pause',
+  seek: 'cast:seek',
+  stop: 'cast:stop',
+  disconnect: 'cast:disconnect',
+  setVolume: 'cast:setVolume',
+  setMuted: 'cast:setMuted',
+  setActiveSubtitle: 'cast:setActiveSubtitle',
+  setActiveAudioLanguage: 'cast:setActiveAudioLanguage',
+  /** main → renderer (discriminated by DesktopCastEvent.type). */
+  event: 'cast:event',
+} as const;
+
+/** Exposed on `window.fliksCast` by the preload bridge. */
+export interface FliksCastApi {
+  initialize(opts: { appId: string }): Promise<{ available: boolean }>;
+  isConnected(): Promise<{ connected: boolean }>;
+  requestSession(): Promise<void>;
+  getCastDevices(): Promise<{ devices: DesktopCastDevice[] }>;
+  selectCastDevice(opts: { id: string }): Promise<void>;
+  loadMedia(opts: DesktopCastLoadOptions): Promise<void>;
+  play(): Promise<void>;
+  pause(): Promise<void>;
+  seek(opts: { time: number }): Promise<void>;
+  stop(): Promise<void>;
+  disconnect(): Promise<void>;
+  setActiveSubtitle(opts: { trackId: number }): Promise<void>;
+  setActiveAudioLanguage(opts: { language: string; name: string }): Promise<{ success: boolean }>;
+  setVolume(opts: { level: number }): Promise<void>;
+  setMuted(opts: { muted: boolean }): Promise<void>;
+  on(handler: (event: DesktopCastEvent) => void): () => void;
+}

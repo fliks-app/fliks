@@ -1130,7 +1130,8 @@
     "metadata_group": "Metadata",
     "advanced_group": "Advanced",
     "add_to_list": "Add to list",
-    "unlike": "Unlike"
+    "unlike": "Unlike",
+    "subtitle_failed": "Failed"
   },
   "requests": {
     "title": "Requests",
@@ -2210,6 +2211,8 @@
       "subtitle": "Configuration of automatic subtitle search and download.",
       "section_search": "Search",
       "auto_search": "Automatic subtitle search",
+      "burn_in_covers": "An image track counts as a present subtitle",
+      "burn_in_covers_hint": "An image track (PGS, VobSub) in a profile language is enough for that language to count as covered: no download or OCR runs for it. Playback then goes through burn-in, which forces a full re-encode on every session and rules out direct play.",
       "search_interval": "Search interval (minutes)",
       "search_interval_hint": "How often missing subtitles are searched for (default: 360 = 6h).",
       "min_score": "Minimum score",
@@ -2224,8 +2227,8 @@
       "encode_utf8": "Re-encode to UTF-8 after download",
       "section_cleaning": "Cleaning",
       "remove_hi_tags": "Remove HI tags ([music], (sigh), ♪, etc.)",
-      "ocr_burn_in_auto": "Automatically convert image subtitles to text (OCR) on import",
-      "ocr_burn_in_auto_hint": "On import, image subtitles are extracted and converted to text by OCR, then served as normal subtitles. OCR is resource-intensive and runs in the background.",
+      "ocr_burn_in_auto": "Prefer OCR of embedded image tracks over a download",
+      "ocr_burn_in_auto_hint": "When a profile language is missing and an image track (PGS, VobSub) exists in that language, it is converted to text by OCR instead of downloading a subtitle. Applies to missing-subtitle searches, automatic and manual. OCR is CPU-heavy and runs in the background; if it fails, the language falls back to the providers.",
       "ocr_delete_source": "Delete the image subtitle once extracted",
       "ocr_delete_source_hint": "After a successful OCR conversion, deletes the source image track. Note: an embedded subtitle is inside the container — it will be re-detected at the next file scan.",
       "custom_exclusions": "Custom exclusions (regex)",
@@ -2247,7 +2250,8 @@
       "col_language": "Language",
       "search_one": "Search for this subtitle",
       "search_one_ok": "{{lang}} subtitle downloaded for \"{{title}}\"",
-      "search_one_none": "No {{lang}} subtitle found with a sufficient score"
+      "search_one_none": "No {{lang}} subtitle found with a sufficient score",
+      "forced": "Forced"
     },
     "plugins": {
       "title": "Plugins",

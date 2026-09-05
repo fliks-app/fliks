@@ -16,10 +16,10 @@ import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { SubtitleProviderType } from '../../common/enums/subtitle-provider-type.enum';
 import {
-  hasServableTextSub,
   IMAGE_BASED_SUBTITLE_CODECS,
 } from '../../common/constants/subtitle-codecs';
 import { SubtitleProviderService } from './subtitle-provider.service';
+import { SettingsService } from '../settings/settings.service';
 import { SubtitlesService } from './subtitles.service';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
@@ -53,6 +53,7 @@ export class SubtitleActivityController {
     private readonly mediaFileRepo: Repository<MediaFile>,
     private readonly providerService: SubtitleProviderService,
     private readonly subtitlesService: SubtitlesService,
+    private readonly settings: SettingsService,
   ) {}
 
   @Get('history')
@@ -209,15 +210,20 @@ export class SubtitleActivityController {
    * thousands of sequential round trips holding a pool connection, which is why
    * the page hung and took the rest of the server with it.
    *
-   * The `NOT EXISTS` mirrors `hasServableTextSub`: an image codec never
-   * satisfies a language (it is burn-in/OCR material) and a FAILED row never
-   * counts. A NULL codec or status is servable, hence the COALESCE.
+   * The `NOT EXISTS` mirrors `hasCoveringSub` — it has to, since the set has
+   * to be computed in one statement: a FAILED row never counts, the flags must
+   * match (forced exactly, HI only under `require`/`forbid`), and an image
+   * codec satisfies a language only when burn-in is accepted, which is what
+   * the empty `$1` expresses. A NULL codec or status is servable, hence the
+   * COALESCE.
    */
   @Get('missing')
   @CheckPolicies((ability) => ability.can(Action.Read, SubtitleFile))
   async missing(@Query('page') page?: string, @Query('limit') limit?: string) {
     const take = Math.min(Math.max(Number(limit) || 50, 1), 500);
     const skip = (Math.max(Number(page) || 1, 1) - 1) * take;
+    const burnInCovers =
+      (await this.settings.get('subtitle_burn_in_covers_language')) === 'true';
 
     const rows = await this.mediaFileRepo.query(
       `
@@ -225,13 +231,19 @@ export class SubtitleActivityController {
         SELECT m.id            AS media_id,
                m.title         AS media_title,
                m.type::text    AS media_type,
-               lang->>'isoCode' AS language
+               lang->>'isoCode' AS language,
+               COALESCE((lang->>'forced')::boolean, false) AS forced,
+               COALESCE(
+                 lang->>'hearingImpaired',
+                 CASE WHEN COALESCE((lang->>'hi')::boolean, false)
+                      THEN 'prefer' ELSE 'avoid' END
+               ) AS hi_mode
         FROM media m
         JOIN language_profiles lp ON lp.id = m."languageProfileId"
         CROSS JOIN LATERAL jsonb_array_elements(lp."subtitleLanguages") AS lang
         WHERE m.monitored = true
       )
-      SELECT r.media_id, r.media_title, r.media_type, r.language,
+      SELECT r.media_id, r.media_title, r.media_type, r.language, r.forced,
              f.id AS file_id, f."relativePath", f."episodeId",
              s."seasonNumber", e."episodeNumber",
              COUNT(*) OVER () AS total
@@ -243,18 +255,21 @@ export class SubtitleActivityController {
         SELECT 1 FROM subtitle_files sf
         WHERE sf."mediaFileId" = f.id
           AND sf.language = r.language
+          AND sf.forced = r.forced
+          AND (r.hi_mode <> 'require' OR sf."hearingImpaired" = true)
+          AND (r.hi_mode <> 'forbid'  OR sf."hearingImpaired" = false)
           AND COALESCE(sf.codec, '') <> ALL ($1::text[])
           AND COALESCE(sf.status::text, '') <> 'failed'
       )
-      ORDER BY r.media_title, f.id, r.language
+      ORDER BY r.media_title, f.id, r.language, r.forced
       LIMIT $2 OFFSET $3
       `,
-      [[...IMAGE_BASED_SUBTITLE_CODECS], take, skip],
+      [burnInCovers ? [] : [...IMAGE_BASED_SUBTITLE_CODECS], take, skip],
     );
 
     return {
       total: Number(rows[0]?.total ?? 0),
-      data: (rows as Record<string, string | number | null>[]).map((r) => ({
+      data: (rows as Record<string, string | number | boolean | null>[]).map((r) => ({
         mediaId: Number(r.media_id),
         mediaTitle: String(r.media_title),
         mediaType: String(r.media_type),
@@ -266,6 +281,7 @@ export class SubtitleActivityController {
             ? null
             : `S${String(r.seasonNumber).padStart(2, '0')}E${String(r.episodeNumber).padStart(2, '0')}`,
         language: String(r.language),
+        forced: r.forced === true || r.forced === 'true',
       })),
     };
   }

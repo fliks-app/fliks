@@ -9,6 +9,7 @@ import { installCorsBypass } from './cors';
 import { appendLog, redactQuery } from './log-file';
 import { setupUpdater } from './updater';
 import { registerDownloadIpc } from './download';
+import { registerCastIpc } from './cast';
 import { setPlaybackKeepAwake, keepAwakeForState } from './power';
 import { IPC, type DesktopEvent, type DesktopSubtitleStyle } from '../shared/contract';
 import { mpvSubtitleProps } from './mpv/subtitle-style';
@@ -258,6 +259,11 @@ app.whenReady().then(async () => {
   // Offline downloads (renderer→main fetch-to-disk). Registered on every
   // platform path so the desktop download UI works regardless of playback backend.
   registerDownloadIpc();
+
+  // Chromecast sender (mDNS discovery + CASTV2). Electron carries no Cast SDK —
+  // the web sender's cast_sender.js needs Chrome's media router — so the
+  // protocol is spoken from the main process. Registered on every platform path.
+  registerCastIpc();
 
   const dir = webDir();
   const haveApp = fs.existsSync(path.join(dir, 'index.html'));

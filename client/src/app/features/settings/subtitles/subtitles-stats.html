@@ -62,7 +62,7 @@
               </tr>
             </thead>
             <tbody>
-              @for (row of missing(); track row.fileId + row.language) {
+              @for (row of missing(); track row.fileId + row.language + row.forced) {
                 <tr>
                   <td>
                     @if (row.episodeId) {
@@ -78,7 +78,12 @@
                     }
                   </td>
                   <td class="text-sm text-base-content/60 max-w-48 truncate" [title]="row.fileName">{{ row.fileName }}</td>
-                  <td><span class="badge badge-sm badge-outline">{{ row.language }}</span></td>
+                  <td>
+                    <span class="badge badge-sm badge-outline">{{ row.language }}</span>
+                    @if (row.forced) {
+                      <span class="badge badge-sm badge-ghost ms-1">{{ 'settings.subtitles.forced' | translate }}</span>
+                    }
+                  </td>
                   <td>
                     <button
                       type="button"

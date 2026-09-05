@@ -8,12 +8,25 @@
       <div class="card-body gap-5">
         <h2 class="card-title text-base">{{ 'settings.subtitles.section_search' | translate }}</h2>
 
-        <label class="label cursor-pointer justify-start gap-3 max-w-max">
-          <input type="checkbox" class="toggle toggle-sm"
-            [ngModel]="autoSearch() === 'true'"
-            (ngModelChange)="autoSearch.set($event ? 'true' : 'false')" />
-          <span class="label-text">{{ 'settings.subtitles.auto_search' | translate }}</span>
-        </label>
+        <app-toggle-field
+          [value]="autoSearch() === 'true'"
+          (valueChange)="autoSearch.set($event ? 'true' : 'false')"
+          [label]="'settings.subtitles.auto_search' | translate"
+          toggleClass="toggle-sm toggle-primary" />
+
+        <app-toggle-field
+          [value]="burnInCovers() === 'true'"
+          (valueChange)="burnInCovers.set($event ? 'true' : 'false')"
+          [label]="'settings.subtitles.burn_in_covers' | translate"
+          [hint]="'settings.subtitles.burn_in_covers_hint' | translate"
+          toggleClass="toggle-sm toggle-primary" />
+
+        <app-toggle-field
+          [value]="ocrBurnInAuto() === 'true'"
+          (valueChange)="ocrBurnInAuto.set($event ? 'true' : 'false')"
+          [label]="'settings.subtitles.ocr_burn_in_auto' | translate"
+          [hint]="'settings.subtitles.ocr_burn_in_auto_hint' | translate"
+          toggleClass="toggle-sm toggle-primary" />
 
         <label class="form-control w-full max-w-xs">
           <div class="label">
@@ -65,45 +78,33 @@
         <div class="divider my-0"></div>
         <h2 class="card-title text-base">{{ 'settings.subtitles.section_post_processing' | translate }}</h2>
 
-        <label class="label cursor-pointer justify-start gap-3 max-w-max">
-          <input type="checkbox" class="toggle toggle-sm"
-            [ngModel]="autoSync() === 'true'"
-            (ngModelChange)="autoSync.set($event ? 'true' : 'false')" />
-          <span class="label-text">{{ 'settings.subtitles.auto_sync' | translate }}</span>
-        </label>
+        <app-toggle-field
+          [value]="autoSync() === 'true'"
+          (valueChange)="autoSync.set($event ? 'true' : 'false')"
+          [label]="'settings.subtitles.auto_sync' | translate"
+          toggleClass="toggle-sm toggle-primary" />
 
-        <label class="label cursor-pointer justify-start gap-3 max-w-max">
-          <input type="checkbox" class="toggle toggle-sm"
-            [ngModel]="encodeUtf8() === 'true'"
-            (ngModelChange)="encodeUtf8.set($event ? 'true' : 'false')" />
-          <span class="label-text">{{ 'settings.subtitles.encode_utf8' | translate }}</span>
-        </label>
+        <app-toggle-field
+          [value]="encodeUtf8() === 'true'"
+          (valueChange)="encodeUtf8.set($event ? 'true' : 'false')"
+          [label]="'settings.subtitles.encode_utf8' | translate"
+          toggleClass="toggle-sm toggle-primary" />
 
         <div class="divider my-0"></div>
         <h2 class="card-title text-base">{{ 'settings.subtitles.section_cleaning' | translate }}</h2>
 
-        <label class="label cursor-pointer justify-start gap-3 max-w-max">
-          <input type="checkbox" class="toggle toggle-sm"
-            [ngModel]="removeHiTags() === 'true'"
-            (ngModelChange)="removeHiTags.set($event ? 'true' : 'false')" />
-          <span class="label-text">{{ 'settings.subtitles.remove_hi_tags' | translate }}</span>
-        </label>
+        <app-toggle-field
+          [value]="removeHiTags() === 'true'"
+          (valueChange)="removeHiTags.set($event ? 'true' : 'false')"
+          [label]="'settings.subtitles.remove_hi_tags' | translate"
+          toggleClass="toggle-sm toggle-primary" />
 
-        <label class="label cursor-pointer justify-start gap-3 max-w-max">
-          <input type="checkbox" class="toggle toggle-sm"
-            [ngModel]="ocrBurnInAuto() === 'true'"
-            (ngModelChange)="ocrBurnInAuto.set($event ? 'true' : 'false')" />
-          <span class="label-text">{{ 'settings.subtitles.ocr_burn_in_auto' | translate }}</span>
-        </label>
-        <p class="text-xs text-base-content/50 -mt-1 max-w-lg">{{ 'settings.subtitles.ocr_burn_in_auto_hint' | translate }}</p>
-
-        <label class="label cursor-pointer justify-start gap-3 max-w-max">
-          <input type="checkbox" class="toggle toggle-sm"
-            [ngModel]="deleteBurnInSource() === 'true'"
-            (ngModelChange)="deleteBurnInSource.set($event ? 'true' : 'false')" />
-          <span class="label-text">{{ 'settings.subtitles.ocr_delete_source' | translate }}</span>
-        </label>
-        <p class="text-xs text-base-content/50 -mt-1 max-w-lg">{{ 'settings.subtitles.ocr_delete_source_hint' | translate }}</p>
+        <app-toggle-field
+          [value]="deleteBurnInSource() === 'true'"
+          (valueChange)="deleteBurnInSource.set($event ? 'true' : 'false')"
+          [label]="'settings.subtitles.ocr_delete_source' | translate"
+          [hint]="'settings.subtitles.ocr_delete_source_hint' | translate"
+          toggleClass="toggle-sm toggle-primary" />
 
         <label class="form-control w-full max-w-lg">
           <div class="label">

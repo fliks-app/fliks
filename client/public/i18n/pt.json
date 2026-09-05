@@ -1122,7 +1122,8 @@
     "metadata_group": "Metadados",
     "advanced_group": "Avançado",
     "add_to_list": "Adicionar a uma lista",
-    "unlike": "Já não gosto"
+    "unlike": "Já não gosto",
+    "subtitle_failed": "Falhou"
   },
   "requests": {
     "title": "Pedidos",
@@ -2183,6 +2184,8 @@
       "subtitle": "Configuração da pesquisa e da transferência automática de legendas.",
       "section_search": "Pesquisa",
       "auto_search": "Pesquisa automática de legendas",
+      "burn_in_covers": "Uma faixa de imagem conta como legenda presente",
+      "burn_in_covers_hint": "Uma faixa de imagem (PGS, VobSub) num idioma do perfil basta para considerar esse idioma coberto: não será iniciada qualquer transferência nem OCR. A reprodução passa então pela gravação, que impõe uma recodificação completa em cada sessão e impede o direct play.",
       "search_interval": "Intervalo de pesquisa (minutos)",
       "search_interval_hint": "Frequência de pesquisa das legendas em falta (predefinição: 360 = 6h).",
       "min_score": "Pontuação mínima",
@@ -2197,8 +2200,8 @@
       "encode_utf8": "Recodificar em UTF-8 após a transferência",
       "section_cleaning": "Limpeza",
       "remove_hi_tags": "Remover as tags HI ([música], (suspiro), ♪, etc.)",
-      "ocr_burn_in_auto": "Converter automaticamente as legendas de imagem em texto (OCR) na importação",
-      "ocr_burn_in_auto_hint": "Logo na importação, as legendas de imagem são extraídas e convertidas em texto por OCR, e depois servidas como legendas normais. O OCR é exigente e é executado em segundo plano.",
+      "ocr_burn_in_auto": "Preferir o OCR das faixas de imagem incorporadas a uma transferência",
+      "ocr_burn_in_auto_hint": "Quando falta um idioma do perfil e existe uma faixa de imagem (PGS, VobSub) nesse idioma, ela é convertida em texto por OCR em vez de transferir uma legenda. Aplica-se às pesquisas de legendas em falta, automáticas e manuais. O OCR consome muita CPU e corre em segundo plano; se falhar, o idioma volta aos fornecedores.",
       "ocr_delete_source": "Eliminar a legenda de imagem depois de extraída",
       "ocr_delete_source_hint": "Após uma conversão OCR bem-sucedida, elimina a faixa de imagem de origem. Nota: uma legenda embutida está no contentor — será redetetada na próxima análise do ficheiro.",
       "custom_exclusions": "Exclusões personalizadas (regex)",
@@ -2220,7 +2223,8 @@
       "col_language": "Idioma",
       "search_one": "Procurar esta legenda",
       "search_one_ok": "Legenda {{lang}} transferida para «{{title}}»",
-      "search_one_none": "Nenhuma legenda {{lang}} encontrada com pontuação suficiente"
+      "search_one_none": "Nenhuma legenda {{lang}} encontrada com pontuação suficiente",
+      "forced": "Forçado"
     },
     "plugins": {
       "title": "Plugins",

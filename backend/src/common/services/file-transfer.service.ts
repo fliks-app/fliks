@@ -141,9 +141,10 @@ export class FileTransferService {
       const stem = path.basename(entry.name, path.extname(entry.name));
       if (!stem.toLowerCase().startsWith(srcBase)) continue;
 
-      // Preserve trailing language hint: "name.en.srt" / "name.en.forced.srt"
-      // → keep the ".en[.forced]" suffix on top of newBaseName.
-      const langMatch = stem.match(/\.([a-z]{2,3}(?:\.[a-z]+)?)$/i);
+      // Preserve the whole trailing hint: "name.en.hi.forced.srt" → keep
+      // ".en.hi.forced". Dropping a flag makes the rescan re-read the name
+      // wrong ("hi" then parses as Hindi, not hearing-impaired).
+      const langMatch = stem.match(/\.([a-z]{2,3}(?:\.[a-z]+){0,2})$/i);
       const destName = langMatch
         ? `${opts.newBaseName}.${langMatch[1]}${ext}`
         : `${opts.newBaseName}${ext}`;

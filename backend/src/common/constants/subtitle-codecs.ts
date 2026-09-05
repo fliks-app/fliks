@@ -1,4 +1,10 @@
 import { SubtitleStatus } from '../enums';
+import {
+  SubtitleFlagsProbe,
+  SubtitleLanguageItem,
+  matchesRequestedFlags,
+  requestFlagsOf,
+} from './subtitle-flags';
 
 /**
  * Bitmap subtitle codecs. These carry rendered images rather than text, so
@@ -34,25 +40,40 @@ export function isOcrSupportedSubtitleCodec(codec: string | null | undefined): b
 }
 
 /** Minimal subtitle shape needed to decide whether a language is covered. */
-export interface ServableSubProbe {
+export interface ServableSubProbe extends SubtitleFlagsProbe {
   language: string;
   codec?: string | null;
   status?: SubtitleStatus | null;
 }
 
+export interface CoverageOptions {
+  /** Count an image track as covering the language. It is only playable via
+   *  burn-in, which forces a transcode on every session — off by default,
+   *  behind `subtitle_burn_in_covers_language`. */
+  imageTracksCount?: boolean;
+}
+
 /**
- * A profile language is satisfied only by a servable TEXT subtitle: an
- * image-based track is burn-in/OCR material, and a FAILED row never counts.
- * Shared so the post-import, missing-search and missing-list paths agree.
+ * A profile language item is satisfied only by a servable subtitle carrying
+ * the flags it asks for: a FAILED row never counts, a forced track never
+ * covers a full-subtitle request (nor the reverse), and an image track counts
+ * only when the caller accepts burn-in. Shared so the post-import,
+ * missing-search and missing-list paths agree.
  */
-export function hasServableTextSub(
+export function hasCoveringSub(
   subs: ServableSubProbe[],
-  isoCode: string,
+  item: SubtitleLanguageItem,
+  opts: CoverageOptions = {},
 ): boolean {
+  // Only `forced` decides coverage. The HI mode picks what to fetch, and a
+  // stored row can legitimately carry the opposite flag — cleaning the HI cues
+  // clears it — so enforcing it here would re-fetch the language forever.
+  const req = { forced: !!item.forced };
   return subs.some(
     (s) =>
-      s.language === isoCode &&
-      !isImageBasedSubtitleCodec(s.codec) &&
+      s.language === item.isoCode &&
+      matchesRequestedFlags(s, req) &&
+      (opts.imageTracksCount || !isImageBasedSubtitleCodec(s.codec)) &&
       s.status !== SubtitleStatus.FAILED,
   );
 }

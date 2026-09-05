@@ -1122,7 +1122,8 @@
     "metadata_group": "Metadatos",
     "advanced_group": "Avanzado",
     "add_to_list": "Añadir a una lista",
-    "unlike": "Ya no me gusta"
+    "unlike": "Ya no me gusta",
+    "subtitle_failed": "Error"
   },
   "requests": {
     "title": "Solicitudes",
@@ -2183,6 +2184,8 @@
       "subtitle": "Configuración de la búsqueda y la descarga automática de subtítulos.",
       "section_search": "Búsqueda",
       "auto_search": "Búsqueda automática de subtítulos",
+      "burn_in_covers": "Una pista de imagen cuenta como subtítulo presente",
+      "burn_in_covers_hint": "Una pista de imagen (PGS, VobSub) en un idioma del perfil basta para considerar ese idioma cubierto: no se lanzará ninguna descarga ni OCR. La reproducción pasa entonces por el incrustado, que obliga a recodificar por completo en cada sesión e impide la reproducción directa.",
       "search_interval": "Intervalo de búsqueda (minutos)",
       "search_interval_hint": "Frecuencia de búsqueda de los subtítulos faltantes (por defecto: 360 = 6h).",
       "min_score": "Puntuación mínima",
@@ -2197,8 +2200,8 @@
       "encode_utf8": "Recodificar a UTF-8 tras la descarga",
       "section_cleaning": "Limpieza",
       "remove_hi_tags": "Eliminar las etiquetas HI ([música], (suspiro), ♪, etc.)",
-      "ocr_burn_in_auto": "Convertir automáticamente los subtítulos de imagen a texto (OCR) al importar",
-      "ocr_burn_in_auto_hint": "Al importar, los subtítulos de imagen se extraen y convierten a texto por OCR, y luego se sirven como subtítulos normales. El OCR consume muchos recursos y se ejecuta en segundo plano.",
+      "ocr_burn_in_auto": "Preferir el OCR de las pistas de imagen incrustadas a una descarga",
+      "ocr_burn_in_auto_hint": "Cuando falta un idioma del perfil y existe una pista de imagen (PGS, VobSub) en ese idioma, se convierte a texto por OCR en lugar de descargar un subtítulo. Se aplica a las búsquedas de subtítulos faltantes, automáticas y manuales. El OCR consume mucha CPU y se ejecuta en segundo plano; si falla, el idioma vuelve a los proveedores.",
       "ocr_delete_source": "Eliminar el subtítulo de imagen una vez extraído",
       "ocr_delete_source_hint": "Tras una conversión OCR correcta, elimina la pista de imagen de origen. Nota: un subtítulo incrustado está en el contenedor — se volverá a detectar en el próximo análisis del archivo.",
       "custom_exclusions": "Exclusiones personalizadas (regex)",
@@ -2220,7 +2223,8 @@
       "col_language": "Idioma",
       "search_one": "Buscar este subtítulo",
       "search_one_ok": "Subtítulo {{lang}} descargado para «{{title}}»",
-      "search_one_none": "No se encontró ningún subtítulo {{lang}} con una puntuación suficiente"
+      "search_one_none": "No se encontró ningún subtítulo {{lang}} con una puntuación suficiente",
+      "forced": "Forzado"
     },
     "plugins": {
       "title": "Plugins",

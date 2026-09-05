@@ -3,6 +3,7 @@ import {
   IPC,
   UPDATE_IPC,
   DOWNLOAD_IPC,
+  CAST_IPC,
   type DesktopDownloadRequest,
   type DesktopDownloadStatus,
   type DesktopEvent,
@@ -12,6 +13,9 @@ import {
   type DesktopUpdateStatus,
   type FliksDesktopApi,
   type FliksDownloaderApi,
+  type DesktopCastEvent,
+  type DesktopCastLoadOptions,
+  type FliksCastApi,
   type FliksUpdaterApi,
 } from '../shared/contract';
 
@@ -86,3 +90,35 @@ const downloader: FliksDownloaderApi = {
 };
 
 contextBridge.exposeInMainWorld('fliksDownloader', downloader);
+
+// Exposes the Chromecast sender on `window.fliksCast`. The Angular CastService
+// consumes this exactly as it consumes the Capacitor NativeCast plugin: it
+// re-dispatches each forwarded event as the window CustomEvent the plugin
+// emits. contextIsolation keeps preload-world objects out of the page, so the
+// events travel through contextBridge rather than a window dispatch here.
+const cast: FliksCastApi = {
+  initialize: (opts: { appId: string }) => ipcRenderer.invoke(CAST_IPC.initialize, opts.appId),
+  isConnected: () => ipcRenderer.invoke(CAST_IPC.isConnected),
+  requestSession: () => ipcRenderer.invoke(CAST_IPC.requestSession),
+  getCastDevices: async () => ({ devices: await ipcRenderer.invoke(CAST_IPC.getDevices) }),
+  selectCastDevice: (opts: { id: string }) => ipcRenderer.invoke(CAST_IPC.selectDevice, opts.id),
+  loadMedia: (opts: DesktopCastLoadOptions) => ipcRenderer.invoke(CAST_IPC.load, opts),
+  play: () => ipcRenderer.invoke(CAST_IPC.play),
+  pause: () => ipcRenderer.invoke(CAST_IPC.pause),
+  seek: (opts: { time: number }) => ipcRenderer.invoke(CAST_IPC.seek, opts.time),
+  stop: () => ipcRenderer.invoke(CAST_IPC.stop),
+  disconnect: () => ipcRenderer.invoke(CAST_IPC.disconnect),
+  setVolume: (opts: { level: number }) => ipcRenderer.invoke(CAST_IPC.setVolume, opts.level),
+  setMuted: (opts: { muted: boolean }) => ipcRenderer.invoke(CAST_IPC.setMuted, opts.muted),
+  setActiveSubtitle: (opts: { trackId: number }) =>
+    ipcRenderer.invoke(CAST_IPC.setActiveSubtitle, opts.trackId),
+  setActiveAudioLanguage: (opts: { language: string; name: string }) =>
+    ipcRenderer.invoke(CAST_IPC.setActiveAudioLanguage, opts.language, opts.name),
+  on: (handler: (event: DesktopCastEvent) => void) => {
+    const listener = (_e: unknown, event: DesktopCastEvent) => handler(event);
+    ipcRenderer.on(CAST_IPC.event, listener);
+    return () => ipcRenderer.removeListener(CAST_IPC.event, listener);
+  },
+};
+
+contextBridge.exposeInMainWorld('fliksCast', cast);

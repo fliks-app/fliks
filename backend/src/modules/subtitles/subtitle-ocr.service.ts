@@ -3,6 +3,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -28,6 +29,8 @@ const execFileAsync = promisify(execFile);
 // pgsrip/subtile-ocr batch the whole track through Tesseract in one call —
 // a dense 2h+ track can take past 10 minutes, so this needs real headroom.
 const OCR_TOOL_TIMEOUT_MS = 1_800_000;
+// Demuxing a bitmap track out of a 40 GB remux on a NAS is minutes, not seconds.
+const EXTRACT_TIMEOUT_MS = 900_000;
 
 /** execFile's `timeout` option kills the child but throws the same generic
  *  "Command failed" message as a real crash — call this out explicitly so
@@ -72,7 +75,7 @@ const TESSERACT_LANG: Record<string, string> = {
  * SSE event the subtitle modal already reloads on.
  */
 @Injectable()
-export class SubtitleOcrService {
+export class SubtitleOcrService implements OnModuleInit {
   private readonly log = new Logger(SubtitleOcrService.name);
   private readonly tmpDir = '/tmp/fliks-ocr';
 
@@ -81,6 +84,16 @@ export class SubtitleOcrService {
   // number of heavy runs actually executing in parallel bounded.
   private ocrActive = 0;
   private readonly ocrWaiters: Array<() => void> = [];
+
+  /** No run survives a restart, so any PROCESSING row is a corpse: it would
+   *  otherwise cover its language forever and hide its own actions. */
+  async onModuleInit(): Promise<void> {
+    const { affected } = await this.repo.update(
+      { providerType: SubtitleProviderType.OCR, status: SubtitleStatus.PROCESSING },
+      { status: SubtitleStatus.FAILED },
+    );
+    if (affected) this.log.warn(`Marked ${affected} interrupted OCR run(s) as failed`);
+  }
 
   constructor(
     @InjectRepository(SubtitleFile)
@@ -269,10 +282,11 @@ export class SubtitleOcrService {
         error: String(err),
         automatic,
       });
-      // Leave nothing behind: drop the PROCESSING placeholder so a failed run
-      // never lingers in the subtitle list (temp artefacts are already removed
-      // by extractAndOcr's finally).
-      await this.repo.delete(placeholderId);
+      // The row stays as FAILED: it's what tells the auto pass this track was
+      // already tried, so the language falls through to the providers instead
+      // of re-running a 30-minute OCR on every scheduled sweep. Deleting it
+      // re-arms the automatic retry.
+      await this.repo.update(placeholderId, { status: SubtitleStatus.FAILED });
     }
   }
 
@@ -298,7 +312,7 @@ export class SubtitleOcrService {
         const sup = `${base}.${ietf}.sup`;
         await execFileOrTimeout('ffmpeg', [
           '-y', '-i', videoPath, '-map', `0:${streamIndex}`, '-c:s', 'copy', sup,
-        ], { timeout: 120_000 });
+        ], { timeout: EXTRACT_TIMEOUT_MS });
         const { stdout, stderr } = await execFileOrTimeout(
           'pgsrip',
           ['--language', ietf, sup],
@@ -326,7 +340,7 @@ export class SubtitleOcrService {
         try {
           await execFileOrTimeout('mkvextract', [
             'tracks', videoPath, `${streamIndex}:${base}.idx`,
-          ], { timeout: 120_000 });
+          ], { timeout: EXTRACT_TIMEOUT_MS });
         } catch (err) {
           // mkvextract exits non-zero on warnings too; only fatal when the
           // VobSub pair it should have written is missing.
