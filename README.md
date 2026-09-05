@@ -237,6 +237,31 @@ Intel QSV and VAAPI work out of the box once you uncomment the
 `nvidia-container-toolkit` on the host and a slightly different Compose
 snippet — the example Compose carries both, commented.
 
+### The data volume was renamed
+
+The volume that holds artwork, seek-preview sprites, extracted subtitles
+and uploaded avatars is now `/app/data` (`fliks_data`), not `/app/images`.
+It was never only images, and it is not a cache: the avatars in it cannot
+be re-fetched.
+
+**Existing installs need no change.** `FLIKS_IMAGES_DIR` still works, and
+a volume still mounted at `/app/images` is detected and used as-is — the
+boot log names it once so you know you are on the old path.
+
+To move onto the new name, copy before removing anything:
+
+```bash
+docker compose down
+docker volume create fliks_data
+docker run --rm -v fliks_images:/from -v fliks_data:/to alpine sh -c 'cp -a /from/. /to/'
+# in your Compose file: `- fliks_data:/app/data` replaces `- fliks_images:/app/images`
+docker compose up -d
+docker volume rm fliks_images   # only once the boot log stops naming the old path
+```
+
+With a bind mount instead of a named volume, `mv` the host directory and
+update the left side of the mapping.
+
 ### Update checks
 
 Fliks asks the **public GitHub releases API** whether a newer version
