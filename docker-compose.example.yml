@@ -35,6 +35,10 @@ services:
     # `network_mode: host` — then drop `ports:` and set DB_HOST to 127.0.0.1.
     ports:
       - '4848:4848'
+    # Set this on a small box. Node reads the cgroup limit and sizes its heap
+    # from it; with none it assumes the whole host and reserves ~4 GB, leaving
+    # nothing for the ffmpeg processes a scan runs alongside.
+    # mem_limit: 4g
     environment:
       PORT: 4848
       DB_HOST: postgres

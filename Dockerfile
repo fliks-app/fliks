@@ -130,9 +130,6 @@ COPY --from=backend-build /app/dist ./dist
 # Copy built client into a static folder served by the backend
 COPY --from=client-build /app/dist/client/browser ./client
 
-COPY docker/entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
-
 ENV NODE_ENV=production
 ENV SERVE_STATIC_PATH=/app/client
 
@@ -159,4 +156,4 @@ EXPOSE 4848
 HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=3 \
   CMD node -e "require('http').get('http://localhost:'+(process.env.PORT||4848)+'/api/system/liveness',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
-CMD ["/app/entrypoint.sh"]
+CMD ["node", "dist/main"]
