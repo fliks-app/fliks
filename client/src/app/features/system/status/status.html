@@ -54,15 +54,16 @@
         </thead>
         <tbody>
           @for (item of activity(); track item.id) {
-            <tr>
-              <td class="font-medium">
+            <tr [class.bg-base-200]="!item.subject">
+              <!-- A parent row carries no media of its own, so its label takes that column too. -->
+              <td class="font-medium" [attr.colspan]="item.subject ? null : 2">
                 {{ commandLabelKey(item.type) | translate }}
                 @if (item.status === 'pending') {
                   <span class="badge badge-ghost badge-sm whitespace-nowrap ml-1.5">{{ 'system.status_pending' | translate }}</span>
                 }
               </td>
-              <td>
-                @if (item.subject) {
+              @if (item.subject) {
+                <td>
                   @if (mediaRouterLink(item.subject); as link) {
                     <a [routerLink]="link" class="link link-hover block truncate max-w-64">{{ item.subject.title }}</a>
                   } @else {
@@ -77,8 +78,8 @@
                       }
                     </div>
                   }
-                }
-              </td>
+                </td>
+              }
               <td class="w-64">
                 @if (item.status === 'running') {
                   <div class="flex items-center gap-2">
