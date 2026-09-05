@@ -1,4 +1,11 @@
-import { Entity, Column, ManyToOne, JoinColumn, RelationId } from 'typeorm';
+import {
+  Entity,
+  Column,
+  Index,
+  ManyToOne,
+  JoinColumn,
+  RelationId,
+} from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { SubtitleProviderType, SubtitleStatus } from '../../../common/enums';
 import { Media } from '../../media/entities/media.entity';
@@ -8,6 +15,8 @@ import { TranslationProvider } from './translation-provider.entity';
 import { normalizeLanguageCode } from '../../../common/constants/app-languages';
 
 @Entity('subtitle_files')
+@Index('IDX_subtitle_files_mediaId', ['media'])
+@Index('IDX_subtitle_files_mediaFileId', ['mediaFile'])
 export class SubtitleFile extends BaseEntity {
   @ManyToOne(() => Media, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'mediaId' })
