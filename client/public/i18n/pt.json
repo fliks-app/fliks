@@ -107,6 +107,7 @@
     "stats_dropped_frames": "Imagens perdidas:",
     "stats_crop": "Recorte:",
     "stats_tonemapping": "Mapeamento tonal:",
+    "stats_tonemapping_client": "Local (cliente)",
     "stats_reasons": "Motivos:",
     "stats_sample_rate": "Frequência de amostragem",
     "transcode_reason": {
@@ -1246,6 +1247,7 @@
     "streams_audio_transcode": "Transcodificação ({{codec}})",
     "streams_audio_transcode_with_bitrate": "Transcodificação ({{codec}}, {{kbps}} kbps)",
     "streams_video_direct": "Reprodução direta",
+    "streams_video_client_tonemap": "HDR → SDR (mapeamento tonal no cliente)",
     "streams_video_transcode": "Transcodificação ({{hw}})",
     "stream_message_btn": "Enviar uma mensagem",
     "stream_message_title": "Enviar uma mensagem",

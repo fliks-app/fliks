@@ -69,6 +69,7 @@ describe('StreamBuilderService — client-side HDR tone-mapping', () => {
     const r = svc().evaluate(resolved(), sdrClient, 'tok');
     expect(r.response.playMethod).toBe('Transcode');
     expect(r.response.tonemapping).toBe(true);
+    expect(r.response.clientTonemap).toBeFalsy();
   });
 
   it('DirectPlays HDR for a client that tone-maps locally', () => {
@@ -76,6 +77,7 @@ describe('StreamBuilderService — client-side HDR tone-mapping', () => {
     expect(r.response.playMethod).toBe('DirectPlay');
     expect(r.response.videoCopyStream).toBe(true);
     expect(r.response.tonemapping).toBe(false);
+    expect(r.response.clientTonemap).toBe(true);
   });
 
   it('keeps the transcode ladder SDR when a lower rung forces a re-encode', () => {

@@ -29,6 +29,9 @@ export interface PlaybackInfoResponse {
   outputContainer: string;
   hwAccel: string;
   tonemapping: boolean;
+  /** HDR copied through and tone-mapped by this client (desktop mpv on an SDR
+   *  display), so no server-side tone-map ran. */
+  clientTonemap?: boolean;
   /** Tone-map mechanism the backend actually runs: a HW path
    *  (`'vaapi'` / `'opencl'` / `'qsv'`) on QSV/VAAPI encoders, or
    *  `'cpu'` for the CPU chain (NVENC / libx26x / VideoToolbox

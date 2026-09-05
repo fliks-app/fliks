@@ -128,6 +128,8 @@ export interface LiveSession {
   supportsAbr: boolean;
   videoVariant: CodecVariant | null;
   tonemapping: boolean;
+  /** HDR copied through to a client that tone-maps it locally. */
+  clientTonemap: boolean;
   transcodeReasons: TranscodeReason[];
   burnIn: BurnInSubtitle | null;
   encoderPreset: string;
@@ -185,6 +187,7 @@ export interface CreateLiveSessionInput {
   supportsAbr?: boolean;
   videoVariant?: CodecVariant | null;
   tonemapping?: boolean;
+  clientTonemap?: boolean;
   transcodeReasons?: TranscodeReason[];
   burnIn?: BurnInSubtitle | null;
   encoderPreset?: string;
@@ -300,6 +303,7 @@ export function buildLiveSession(
       supportsAbr: input.supportsAbr ?? true,
       videoVariant: input.videoVariant ?? null,
       tonemapping: input.tonemapping ?? false,
+      clientTonemap: input.clientTonemap ?? false,
       transcodeReasons: input.transcodeReasons ?? [],
       burnIn: input.burnIn ?? null,
       encoderPreset: input.encoderPreset ?? 'faster',

@@ -112,6 +112,7 @@
     "stats_dropped_frames": "Dropped frames:",
     "stats_crop": "Crop:",
     "stats_tonemapping": "Tone mapping:",
+    "stats_tonemapping_client": "Local (client)",
     "stats_reasons": "Reasons:",
     "stats_sample_rate": "Sample rate",
     "transcode_reason": {
@@ -1254,6 +1255,7 @@
     "streams_audio_transcode": "Transcoding ({{codec}})",
     "streams_audio_transcode_with_bitrate": "Transcoding ({{codec}}, {{kbps}} kbps)",
     "streams_video_direct": "Direct Play",
+    "streams_video_client_tonemap": "HDR → SDR (client-side tone mapping)",
     "streams_video_transcode": "Transcoding ({{hw}})",
     "stream_message_btn": "Send a message",
     "stream_message_title": "Send a message",

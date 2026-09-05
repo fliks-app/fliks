@@ -109,6 +109,10 @@ export interface PlaybackInfoResponse {
   /** Whether HDR→SDR tone mapping is being applied */
   tonemapping: boolean;
 
+  /** The HDR stream is copied and the SDR client tone-maps it itself (desktop
+   *  mpv), so no server-side tone-map ran. */
+  clientTonemap?: boolean;
+
   /** Tone-map mechanism the session actually runs. `'vaapi'` / `'opencl'`
    *  / `'qsv'` for QSV/VAAPI encoders (after `auto` resolution + boot
    *  probe); `'videotoolbox'` for the macOS `scale_vt` Metal path; `'cpu'`

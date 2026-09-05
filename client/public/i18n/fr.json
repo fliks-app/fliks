@@ -112,6 +112,7 @@
     "stats_dropped_frames": "Images perdues :",
     "stats_crop": "Recadrage :",
     "stats_tonemapping": "Mappage tonal :",
+    "stats_tonemapping_client": "Local (client)",
     "stats_reasons": "Raisons :",
     "stats_sample_rate": "Fréquence d'échantillonnage",
     "transcode_reason": {
@@ -1254,6 +1255,7 @@
     "streams_audio_transcode": "Transcodage ({{codec}})",
     "streams_audio_transcode_with_bitrate": "Transcodage ({{codec}}, {{kbps}} kbps)",
     "streams_video_direct": "Lecture directe",
+    "streams_video_client_tonemap": "HDR → SDR (mappage tonal côté client)",
     "streams_video_transcode": "Transcodage ({{hw}})",
     "stream_message_btn": "Envoyer un message",
     "stream_message_title": "Envoyer un message",

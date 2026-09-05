@@ -962,12 +962,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const tonemapAlgoLabel = pi?.tonemapAlgo
       ? `${tonemapLabel[pi.tonemapAlgo] ?? pi.tonemapAlgo}${curve}`
       : '';
-    const tonemapping =
-      pi?.tonemapping && tonemapAlgoLabel
-        ? tonemapAlgoLabel
-        : pi?.tonemapping
-          ? 'enabled'
-          : '';
+    const tonemapping = pi?.tonemapping
+      ? tonemapAlgoLabel || 'enabled'
+      : pi?.clientTonemap
+        ? this.translate.instant('player.stats_tonemapping_client')
+        : '';
 
     // Split transcode-reason flags by what they actually re-encode so
     // each section's "Reasons" line only shows what's relevant to it.

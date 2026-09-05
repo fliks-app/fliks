@@ -46,6 +46,8 @@ export interface ActiveStream {
    *  but audio bitstream verbatim; `'transcode'` = ffmpeg re-encoded. */
   audioMode: 'direct' | 'copy' | 'transcode';
   transcodePercent: number | null;
+  /** HDR served untouched to a client that tone-maps it to its SDR display. */
+  clientTonemap: boolean;
   videoReasons: string[];
   audioReasons: string[];
   containerReasons: string[];
