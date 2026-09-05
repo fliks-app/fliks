@@ -690,15 +690,27 @@ export class ThumbnailService {
           proc.stderr?.on('data', (chunk: Buffer) => {
             if (stderr.length < 16 * 1024) stderr += chunk.toString();
           });
+          let killed = false;
+          const killTimer = setTimeout(() => {
+            killed = true;
+            try {
+              proc.kill('SIGKILL');
+            } catch {
+              /* ignore */
+            }
+          }, 30_000);
           proc.on('close', (code) => {
+            clearTimeout(killTimer);
             if (code === 0) return resolve();
+            const reason = killed ? 'timeout (30s)' : `code ${code}`;
             const err = new Error(
-              `ffmpeg tile exited with code ${code}`,
+              `ffmpeg tile exited with ${reason}`,
             ) as Error & { stderr: string };
             err.stderr = stderr;
             reject(err);
           });
           proc.on('error', (err) => {
+            clearTimeout(killTimer);
             const e = err as Error & { stderr?: string };
             e.stderr = stderr;
             reject(e);

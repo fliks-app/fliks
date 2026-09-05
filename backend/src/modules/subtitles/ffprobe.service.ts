@@ -802,9 +802,9 @@ export class FfprobeService {
   ): Promise<{ failed: boolean; sample: CropSample }> {
     const decode = hw
       ? (cropHwDecodeArgs() ?? [])
-      : // The global slot pool supplies the parallelism now; more per-process
-        // threads here would only oversubscribe the cores.
-        ['-threads', '1'];
+      : // 2 decoder threads: a single-threaded software decode of a 4K sample
+        // can run past the 30s exec timeout on a weak CPU.
+        ['-threads', '2'];
     const ffmpegArgs = [
       ...decode,
       '-ss',

@@ -847,7 +847,7 @@ export class IntroDetectionService {
     startSec: number,
     lengthSec: number,
   ): Promise<Fingerprint> {
-    // ffmpeg and fpcalc form one pipeline — held under a single slot so the
+    // ffmpeg and fpcalc form one pipeline, held under a single slot so the
     // pair counts once against the budget, not twice.
     return withFfmpegSlot(() =>
       this.runFingerprintWindow(absPath, startSec, lengthSec),
