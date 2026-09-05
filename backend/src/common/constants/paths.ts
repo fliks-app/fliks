@@ -43,20 +43,40 @@ function intendedDataDir(): string {
 }
 
 /**
- * Artwork, seek-preview sprites, the extracted-subtitle cache and uploaded user
- * avatars. `FLIKS_DATA_DIR` overrides; falls back to a temp dir (wiped on
- * restart) if it isn't writable at the container's uid. Probed once, on first
- * call. Not a cache: the avatars in here cannot be re-fetched.
+ * Artwork and uploaded user avatars. `FLIKS_DATA_DIR` overrides; falls back to
+ * a temp dir (wiped on restart) if it isn't writable at the container's uid.
+ * Probed once, on first call. Not a cache: the avatars in here cannot be
+ * re-fetched.
  */
 export function getDataDir(): string {
   if (cachedDataDir) return cachedDataDir;
   cachedDataDir = resolveWritableDir(
     [intendedDataDir(), path.join(os.tmpdir(), 'fliks-data')],
-    'Cannot write to the data directory — artwork, sprites and uploaded ' +
+    'Cannot write to the data directory — artwork and uploaded ' +
       'avatars will not survive a restart. Set FLIKS_DATA_DIR, or mount ' +
       '/app/data writable for this container user.',
   );
   return cachedDataDir;
+}
+
+let cachedCacheDir: string | null = null;
+
+/**
+ * Extracted-subtitle VTTs and seek-preview sprites. Everything here is
+ * regenerable and safe to delete. `FLIKS_CACHE_DIR` overrides; otherwise
+ * `<dataDir>/cache`. Probed once, on first call.
+ */
+export function getCacheDir(): string {
+  if (cachedCacheDir) return cachedCacheDir;
+  const override = process.env.FLIKS_CACHE_DIR?.trim();
+  const preferred = override || path.join(getDataDir(), 'cache');
+  cachedCacheDir = resolveWritableDir(
+    [preferred, path.join(os.tmpdir(), 'fliks-cache')],
+    'Cannot write to the cache directory, extracted subtitles and ' +
+      'seek-preview sprites will be regenerated on every restart. Set ' +
+      'FLIKS_CACHE_DIR to a writable path.',
+  );
+  return cachedCacheDir;
 }
 
 let cachedPluginsRuntimeDir: string | null = null;
