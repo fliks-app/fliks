@@ -16,7 +16,7 @@ describe('ImageService.downloadAndStore caching', () => {
 
   beforeAll(async () => {
     dir = mkdtempSync(join(tmpdir(), 'fliks-image-test-'));
-    process.env.FLIKS_IMAGES_DIR = dir;
+    process.env.FLIKS_DATA_DIR = dir;
     service = new ImageService();
 
     // A real decodable JPEG, sharp must actually resize it for the

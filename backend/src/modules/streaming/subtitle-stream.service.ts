@@ -28,7 +28,7 @@ import { resolveSubtitleAbsolutePath } from '../subtitles/subtitle-path.util';
 import { normalizeLanguageCode } from '../../common/constants/app-languages';
 import type { SubtitleRenditionMeta } from './transcoding/types';
 import { withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
-import { getImagesDir } from '../../common/constants/paths';
+import { getDataDir } from '../../common/constants/paths';
 import {
   formatMediaProgressSubject,
   type MediaProgressSubject,
@@ -36,8 +36,8 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-/** getImagesDir() probes the filesystem on its first call — keep this lazy. */
-const subsDir = () => path.join(getImagesDir(), 'subs');
+/** getDataDir() probes the filesystem on its first call — keep this lazy. */
+const subsDir = () => path.join(getDataDir(), 'subs');
 
 /**
  * Global cap on concurrent warmup extractions — a full library refresh can

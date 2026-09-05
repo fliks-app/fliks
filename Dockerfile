@@ -144,10 +144,10 @@ ENV TVDB_API_KEY=${TVDB_API_KEY}
 
 # Persistent dirs, group=root + g=u: writable by root, by an arbitrary uid
 # with gid 0, or via `--user <uid> --group-add 0` — no USER directive needed.
-RUN mkdir -p /app/conf /app/images /app/transcode \
- && chgrp -R 0 /app/conf /app/images /app/transcode \
- && chmod -R g=u /app/conf /app/images /app/transcode
-VOLUME /app/conf /app/images /app/transcode
+RUN mkdir -p /app/conf /app/data /app/transcode \
+ && chgrp -R 0 /app/conf /app/data /app/transcode \
+ && chmod -R g=u /app/conf /app/data /app/transcode
+VOLUME /app/conf /app/data /app/transcode
 
 EXPOSE 4848
 

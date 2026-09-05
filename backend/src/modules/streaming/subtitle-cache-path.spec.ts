@@ -23,7 +23,7 @@ describe('subtitle cache path', () => {
 
   function loadSvc(): Svc {
     jest.resetModules();
-    process.env = { ...OLD_ENV, FLIKS_IMAGES_DIR: dir };
+    process.env = { ...OLD_ENV, FLIKS_DATA_DIR: dir };
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { SubtitleStreamService } = require('./subtitle-stream.service');
     return new SubtitleStreamService(
