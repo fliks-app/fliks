@@ -1936,7 +1936,7 @@
       "media_type": "Tipo",
       "scan_folder": "Analizar la carpeta",
       "scan_required": "Analiza la carpeta para revisar los medios encontrados antes de crear la biblioteca.",
-      "scan_importing": "Importando {{done}}/{{total}} medios…",
+      "scan_preparing": "Preparando {{done}}/{{total}} medios…",
       "scan_queued": "Importación de {{count}} medios iniciada en segundo plano.",
       "scan_title": "Análisis de la carpeta",
       "scan_scanning": "Análisis de los archivos en curso…",

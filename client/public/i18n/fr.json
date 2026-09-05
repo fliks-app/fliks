@@ -1953,7 +1953,7 @@
       "media_type": "Type",
       "scan_folder": "Analyser le dossier",
       "scan_required": "Analysez le dossier pour vérifier les médias trouvés avant de créer la bibliothèque.",
-      "scan_importing": "Import de {{done}}/{{total}} médias…",
+      "scan_preparing": "Préparation de {{done}}/{{total}} médias…",
       "scan_queued": "Import de {{count}} médias lancé en arrière-plan.",
       "scan_title": "Analyse du dossier",
       "scan_scanning": "Analyse des fichiers en cours…",

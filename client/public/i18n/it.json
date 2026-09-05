@@ -1936,7 +1936,7 @@
       "media_type": "Tipo",
       "scan_folder": "Analizza la cartella",
       "scan_required": "Analizza la cartella per verificare i file multimediali trovati prima di creare la libreria.",
-      "scan_importing": "Importazione di {{done}}/{{total}} file multimediali…",
+      "scan_preparing": "Preparazione di {{done}}/{{total}} file multimediali…",
       "scan_queued": "Importazione di {{count}} file multimediali avviata in background.",
       "scan_title": "Analisi della cartella",
       "scan_scanning": "Analisi dei file in corso…",

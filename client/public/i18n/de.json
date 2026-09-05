@@ -1936,7 +1936,7 @@
       "media_type": "Typ",
       "scan_folder": "Ordner scannen",
       "scan_required": "Scannen Sie den Ordner, um die gefundenen Medien vor dem Erstellen der Bibliothek zu prüfen.",
-      "scan_importing": "{{done}}/{{total}} Medien werden importiert…",
+      "scan_preparing": "{{done}}/{{total}} Medien werden vorbereitet…",
       "scan_queued": "Import von {{count}} Medien im Hintergrund gestartet.",
       "scan_title": "Ordner-Scan",
       "scan_scanning": "Dateien werden gescannt…",
