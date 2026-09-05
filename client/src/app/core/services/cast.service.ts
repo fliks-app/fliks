@@ -127,6 +127,8 @@ const CAST_SEEK_CONVERGE_TOL = 1.5;
 
 @Injectable({ providedIn: 'root' })
 export class CastService implements OnDestroy {
+  /** A receiver is reachable right now, not merely "the SDK loaded": the Cast
+   *  entry points are hidden when nothing can be cast to. */
   readonly isAvailable = signal(false);
   readonly isConnected = signal(false);
   /** True while waiting for the Cast session to establish. Written only through
@@ -174,6 +176,7 @@ export class CastService implements OnDestroy {
   private errorListenerSessionId: string | null = null;
 
   // Web-only
+  private webCastReady = false;
   private session: any = null;
   private remotePlayer: any = null;
   private remotePlayerController: any = null;
@@ -245,8 +248,7 @@ export class CastService implements OnDestroy {
       }) as EventListener);
 
       // No payload: a plain refetch signal, fired alongside
-      // castAvailabilityChanged on iOS. Refetching on every availability
-      // change too is harmless.
+      // castAvailabilityChanged whenever the route list moves.
       window.addEventListener('castDevicesChanged', () => void this.getCastDevices());
     } catch (e) {
       console.warn('NativeCast.initialize failed', e);
@@ -266,18 +268,24 @@ export class CastService implements OnDestroy {
     const pollTimer = setInterval(() => {
       if (w.cast?.framework) {
         clearInterval(pollTimer);
-        if (!this.isAvailable()) this.initWebCast();
+        this.initWebCast();
       }
     }, 1000);
     setTimeout(() => clearInterval(pollTimer), 15000);
   }
 
   private initWebCast() {
+    if (this.webCastReady) return;
     try {
-      cast.framework.CastContext.getInstance().setOptions({
+      const context = cast.framework.CastContext.getInstance();
+      context.setOptions({
         receiverApplicationId: CAST_APP_ID,
         autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
       });
+      context.addEventListener(
+        cast.framework.CastContextEventType.CAST_STATE_CHANGED,
+        (e: { castState: string }) => this.applyWebCastState(e.castState),
+      );
       this.remotePlayer = new cast.framework.RemotePlayer();
       this.remotePlayerController = new cast.framework.RemotePlayerController(this.remotePlayer);
 
@@ -313,10 +321,20 @@ export class CastService implements OnDestroy {
         cast.framework.RemotePlayerEventType.IS_MUTED_CHANGED,
         () => this.muted.set(this.remotePlayer.isMuted ?? false),
       );
-      this.isAvailable.set(true);
-    } catch {
+      this.webCastReady = true;
+      this.applyWebCastState(context.getCastState());
+    } catch (e) {
+      console.warn('Cast framework init failed', e);
       this.isAvailable.set(false);
     }
+  }
+
+  /** NO_DEVICES_AVAILABLE is the only state that means "nothing to cast to";
+   *  NOT_CONNECTED already implies a receiver was discovered. */
+  private applyWebCastState(state: string) {
+    this.isAvailable.set(
+      state !== cast.framework.CastState.NO_DEVICES_AVAILABLE,
+    );
   }
 
   private onWebConnectionChanged() {

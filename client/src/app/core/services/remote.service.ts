@@ -75,6 +75,9 @@ const SLOW_ACK_ACTIONS: ReadonlySet<RemoteAction> = new Set<RemoteAction>([
 /** Matches the Cast sender's window so a drag emits a handful of POSTs, not one per input event. */
 const DISPATCH_COALESCE_MS = 220;
 const SELECTED_TARGET_KEY = 'fliks.remote.target';
+/** How long a freshly selected target is assumed to maybe be playing, before
+ *  its silence is taken as "idle". */
+const FIRST_REPORT_GRACE_MS = 12_000;
 
 /**
  * Both halves of the remote-control protocol.
@@ -219,7 +222,7 @@ export class RemoteService {
    *  neither source can rule out playback for one cadence. */
   readonly awaitingFirstReport = computed(() => {
     if (!this.selectedTargetId() || this.reportedState()) return false;
-    return this.wallClock() - this.observingSince < 12_000;
+    return this.wallClock() - this.observingSince < FIRST_REPORT_GRACE_MS;
   });
 
   /** Hold the level the user just set until the target confirms it, so the
@@ -264,17 +267,18 @@ export class RemoteService {
       untracked(() => this.ingestState());
     });
 
-    effect(() => {
-      this.reportedState();
-      this.selectedTargetId();
-      untracked(() => this.syncTicker());
-    });
-
+    // Before the ticker's: the grace window it measures starts here.
     effect(() => {
       const id = this.selectedTargetId();
       untracked(() => {
         this.observingSince = id ? Date.now() : 0;
       });
+    });
+
+    effect(() => {
+      this.reportedState();
+      this.selectedTargetId();
+      untracked(() => this.syncTicker());
     });
 
     // A reconnect remints the connection id, so a list built from live
@@ -543,14 +547,21 @@ export class RemoteService {
 
   /** Interpolate only while something is actually playing: a paused, idle or
    *  offline target has nothing to advance, and a spare timer would just wake
-   *  the app. The second clause only covers the `awaitingFirstReport` window,
-   *  before the target's first report says whether it is even playing. */
+   *  the app. The second clause covers only the grace window, before the
+   *  target's first report says whether it is even playing. */
   private syncTicker(): void {
     const playing =
       this.reportedState()?.state === 'playing' ||
-      (this.selectedTargetId() !== null && !this.reportedState());
+      (this.selectedTargetId() !== null &&
+        !this.reportedState() &&
+        Date.now() - this.observingSince < FIRST_REPORT_GRACE_MS);
     if (playing && this.tickHandle === null) {
-      this.tickHandle = setInterval(() => this.wallClock.set(Date.now()), 500);
+      // Nothing re-runs the owning effect while the target stays silent, so the
+      // tick re-checks itself out of the grace window.
+      this.tickHandle = setInterval(() => {
+        this.wallClock.set(Date.now());
+        if (!this.reportedState()) this.syncTicker();
+      }, 500);
     } else if (!playing && this.tickHandle !== null) {
       clearInterval(this.tickHandle);
       this.tickHandle = null;

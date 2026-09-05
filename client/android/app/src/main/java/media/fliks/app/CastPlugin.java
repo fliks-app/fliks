@@ -143,15 +143,15 @@ public class CastPlugin extends Plugin {
     private final MediaRouter.Callback routeCallback = new MediaRouter.Callback() {
         @Override
         public void onRouteAdded(MediaRouter router, MediaRouter.RouteInfo route) {
-            notifyCastDevicesChanged();
+            notifyRoutesChanged();
         }
         @Override
         public void onRouteChanged(MediaRouter router, MediaRouter.RouteInfo route) {
-            notifyCastDevicesChanged();
+            notifyRoutesChanged();
         }
         @Override
         public void onRouteRemoved(MediaRouter router, MediaRouter.RouteInfo route) {
-            notifyCastDevicesChanged();
+            notifyRoutesChanged();
         }
     };
 
@@ -182,11 +182,24 @@ public class CastPlugin extends Plugin {
         );
     }
 
-    private void notifyCastDevicesChanged() {
-        String js = "window.dispatchEvent(new CustomEvent('castDevicesChanged'));";
+    private void notifyRoutesChanged() {
+        boolean available = hasCastRoute();
+        String js = "window.dispatchEvent(new CustomEvent('castDevicesChanged'));"
+            + "window.dispatchEvent(new CustomEvent('castAvailabilityChanged', { detail: { available: "
+            + available + " } }));";
         getBridge().getWebView().post(() ->
             getBridge().getWebView().evaluateJavascript(js, null)
         );
+    }
+
+    /** Whether any receiver is reachable right now. Drives the Cast entry
+     *  points, which stay hidden while nothing can be cast to. */
+    private boolean hasCastRoute() {
+        MediaRouteSelector selector = buildCastSelector();
+        for (MediaRouter.RouteInfo route : MediaRouter.getInstance(getContext()).getRoutes()) {
+            if (!route.isDefaultOrBluetooth() && route.matchesSelector(selector)) return true;
+        }
+        return false;
     }
 
     private void notifyJSTime(double time, double duration, boolean paused, boolean buffering,
@@ -221,18 +234,14 @@ public class CastPlugin extends Plugin {
 
                 // Check if already connected
                 castSession = sessionManager.getCurrentCastSession();
-                call.resolve(new JSObject().put("available", true));
+                // Discovery has only just started, so this is usually false; the
+                // route callback raises it as soon as a receiver answers.
+                call.resolve(new JSObject().put("available", hasCastRoute()));
             } catch (Exception e) {
                 Log.e(TAG, "Cast init failed", e);
                 call.resolve(new JSObject().put("available", false));
             }
         });
-    }
-
-    @PluginMethod()
-    public void isAvailable(PluginCall call) {
-        boolean available = castContext != null;
-        call.resolve(new JSObject().put("available", available));
     }
 
     @PluginMethod()
