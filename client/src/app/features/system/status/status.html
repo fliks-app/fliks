@@ -58,7 +58,7 @@
               <td class="font-medium">
                 {{ commandLabelKey(item.type) | translate }}
                 @if (item.status === 'pending') {
-                  <span class="badge badge-ghost badge-sm ml-1.5">{{ 'system.status_pending' | translate }}</span>
+                  <span class="badge badge-ghost badge-sm whitespace-nowrap ml-1.5">{{ 'system.status_pending' | translate }}</span>
                 }
               </td>
               <td>
@@ -85,7 +85,7 @@
                     @if ((item.total ?? 0) > 1) {
                       <span class="text-xs text-base-content/50 tabular-nums whitespace-nowrap">{{ item.current ?? 0 }}/{{ item.total }}</span>
                     }
-                    <progress class="progress progress-primary flex-1" [value]="item.current ?? 0" [max]="item.total || 1"></progress>
+                    <progress class="progress progress-primary flex-1 min-w-32" [value]="item.current ?? 0" [max]="item.total || 1"></progress>
                     <span class="text-xs text-base-content/60 tabular-nums w-10 text-right">{{ activityPercent(item) }}%</span>
                   </div>
                 }
@@ -95,7 +95,7 @@
               <tr class="text-sm text-base-content/60">
                 <td>
                   @if (child.status === 'pending') {
-                    <span class="badge badge-ghost badge-sm">{{ 'system.status_pending' | translate }}</span>
+                    <span class="badge badge-ghost badge-sm whitespace-nowrap">{{ 'system.status_pending' | translate }}</span>
                   }
                 </td>
                 <td class="pl-6">
@@ -116,10 +116,10 @@
                     }
                   }
                 </td>
-                <td class="w-48">
+                <td class="w-64">
                   @if (child.status === 'running') {
                     <div class="flex items-center gap-2">
-                      <progress class="progress progress-primary progress-xs flex-1" [value]="child.current ?? 0" [max]="child.total || 1"></progress>
+                      <progress class="progress progress-primary progress-xs flex-1 min-w-32" [value]="child.current ?? 0" [max]="child.total || 1"></progress>
                       <span class="text-xs tabular-nums w-10 text-right">{{ activityPercent(child) }}%</span>
                     </div>
                   }
