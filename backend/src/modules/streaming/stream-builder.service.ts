@@ -245,10 +245,12 @@ export class StreamBuilderService {
     // depth, which tryDirectPlay already validated via codecConditions
     // (videoConditionsMet covers the per-codec maxBitDepth). Decoupled from
     // the source codec on purpose: AV1, VP9 and HEVC 10-bit HDR all qualify.
+    // A client that tone-maps HDR itself (desktop mpv on an SDR display) also
+    // takes the bitstream verbatim — it just renders it in SDR.
     const clientCanPresentHdr =
       isSourceHdr &&
       !dvP5 &&
-      clientSupportsHdr &&
+      (clientSupportsHdr || profile.tonemapsHdrLocally === true) &&
       directPlayResult.videoSupported &&
       directPlayResult.videoConditionsMet;
 

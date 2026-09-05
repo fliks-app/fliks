@@ -88,6 +88,9 @@ export interface DeviceProfile {
    *  Falls back to maxAudioChannels per codec on the backend. */
   audioChannelsByCodec?: Record<string, number>;
   supportsHdr: boolean;
+  /** mpv tone-maps HDR to this SDR display itself, so the backend copies the
+   *  HDR bitstream instead of re-encoding it. Desktop shell only. */
+  tonemapsHdrLocally?: boolean;
   /** Client can present single-layer Dolby Vision (P5 / 8.x) directly, so the
    *  backend DirectPlays the original container untouched instead of tonemapping
    *  P5 to SDR. iOS/Android report it from the native probe (DV HW decoder / DV
@@ -508,6 +511,14 @@ export class BrowserDeviceProfileService {
       supportsHdr = hdrDisplay && has10bitCodec;
     }
 
+    // mpv tone-maps HDR down to an SDR display on its own (Windows vo=gpu,
+    // macOS layer when the screen has no EDR headroom) — the Linux x11
+    // software VO does not, so it keeps the server-side tonemap.
+    const tonemapsHdrLocally =
+      !supportsHdr &&
+      this.device.isDesktopNative() &&
+      /Windows|Mac OS X/.test(navigator.userAgent);
+
     // Dolby Vision passthrough capability, gated under supportsHdr (DV ⊆ HDR, so
     // it never outlives HDR and the forceDisableHdr override stays consistent).
     // iOS/Android report it from the native probe (DV HW decoder / DV panel
@@ -541,6 +552,7 @@ export class BrowserDeviceProfileService {
       maxAudioChannels,
       audioChannelsByCodec: this.nativeAudio?.channelsByCodec,
       supportsHdr,
+      tonemapsHdrLocally,
       supportsDolbyVision,
       deviceType: Capacitor.isNativePlatform() ? 'mobile' : 'desktop',
       deviceName: getDeviceName(),
