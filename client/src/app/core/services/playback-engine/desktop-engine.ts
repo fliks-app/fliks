@@ -59,6 +59,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   /** Preferred audio language (from configure()); passed to mpv as `alang` at
    *  load so it auto-picks the matching rendition on every reconfig. */
   private _preferredAudioLanguage?: string;
+  private _videoCrop?: string;
 
   private _subtitleStyle: {
     fontScale: number;
@@ -111,6 +112,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
       startTime,
       headers,
       audioLanguage: this._preferredAudioLanguage,
+      videoCrop: this._videoCrop,
     });
     if (this._subtitleStyle) {
       await this.bridge.setSubtitleStyle(this._subtitleStyle);
@@ -332,6 +334,12 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     // preferredAudioLanguage).
     if (config && typeof config.preferredAudioLanguage === 'string') {
       this._preferredAudioLanguage = config.preferredAudioLanguage || undefined;
+    }
+    // Black-bar crop: mpv cuts it at the VO for free, so the backend copies the
+    // bitstream instead of re-encoding. Held here and re-applied on every load,
+    // like the subtitle style and fill-screen above.
+    if (config && 'videoCrop' in config) {
+      this._videoCrop = config.videoCrop || undefined;
     }
   }
 

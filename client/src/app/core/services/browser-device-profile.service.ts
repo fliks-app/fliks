@@ -91,6 +91,9 @@ export interface DeviceProfile {
   /** mpv tone-maps HDR to this SDR display itself, so the backend copies the
    *  HDR bitstream instead of re-encoding it. Desktop shell only. */
   tonemapsHdrLocally?: boolean;
+  /** mpv crops the detected black bars at its video output, so a crop alone
+   *  no longer costs a server-side re-encode. Desktop shell only. */
+  cropsBlackBarsLocally?: boolean;
   /** Client can present single-layer Dolby Vision (P5 / 8.x) directly, so the
    *  backend DirectPlays the original container untouched instead of tonemapping
    *  P5 to SDR. iOS/Android report it from the native probe (DV HW decoder / DV
@@ -511,13 +514,17 @@ export class BrowserDeviceProfileService {
       supportsHdr = hdrDisplay && has10bitCodec;
     }
 
-    // mpv tone-maps HDR down to an SDR display on its own (Windows vo=gpu,
-    // macOS layer when the screen has no EDR headroom) — the Linux x11
-    // software VO does not, so it keeps the server-side tonemap.
-    const tonemapsHdrLocally =
-      !supportsHdr &&
-      this.device.isDesktopNative() &&
-      /Windows|Mac OS X/.test(navigator.userAgent);
+    // Backends whose mpv renders through a real video output: Windows vo=gpu
+    // and the macOS layer. The Linux shell draws through the x11 software VO,
+    // which neither tone-maps nor crops, so it stays on the server-side paths.
+    const mpvVideoOutput =
+      this.device.isDesktopNative() && /Windows|Mac OS X/.test(navigator.userAgent);
+    // mpv tone-maps HDR down to an SDR display on its own (the macOS layer does
+    // it whenever the screen has no EDR headroom).
+    const tonemapsHdrLocally = mpvVideoOutput && !supportsHdr;
+    // `video-crop` cuts the bars at the VO — free, and hwdec-safe unlike a
+    // lavfi crop.
+    const cropsBlackBarsLocally = mpvVideoOutput;
 
     // Dolby Vision passthrough capability, gated under supportsHdr (DV ⊆ HDR, so
     // it never outlives HDR and the forceDisableHdr override stays consistent).
@@ -553,6 +560,7 @@ export class BrowserDeviceProfileService {
       audioChannelsByCodec: this.nativeAudio?.channelsByCodec,
       supportsHdr,
       tonemapsHdrLocally,
+      cropsBlackBarsLocally,
       supportsDolbyVision,
       deviceType: Capacitor.isNativePlatform() ? 'mobile' : 'desktop',
       deviceName: getDeviceName(),

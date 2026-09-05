@@ -26,6 +26,9 @@ export interface DesktopLoadOptions {
   /** Preferred audio language (mpv `alang`) so the player keeps the chosen
    *  language across seeks/reloads instead of reverting to the manifest default. */
   audioLanguage?: string;
+  /** Black-bar rectangle in mpv `video-crop` syntax (`WxH+x+y`); the VO crops
+   *  after decode, keeping hardware decoding. Absent clears any previous crop. */
+  videoCrop?: string;
 }
 
 export interface DesktopSubtitleStyle {

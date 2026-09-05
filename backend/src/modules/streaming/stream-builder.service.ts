@@ -223,6 +223,11 @@ export class StreamBuilderService {
     // Cropping black bars forces a re-encode. When the admin disables auto-crop
     // (low-power servers), keep the bars and let the source Direct Play / remux.
     const needsCrop = !!source.crop;
+    // …unless the client crops at its own video output, which costs nothing and
+    // keeps the bitstream copyable. A session that re-encodes for another reason
+    // still crops server-side — fewer pixels to encode — and the client leaves
+    // it alone, keyed off `videoCopyStream`.
+    const clientCropsBlackBars = profile.cropsBlackBarsLocally === true;
 
     const reasons: TranscodeReason[] = [];
 
@@ -300,7 +305,7 @@ export class StreamBuilderService {
     }
 
     // Crop (black bar removal) forces transcode
-    if (needsCrop) {
+    if (needsCrop && !clientCropsBlackBars) {
       if (directPlayResult.canDirectPlay)
         directPlayResult.canDirectPlay = false;
       reasons.push({
@@ -364,7 +369,7 @@ export class StreamBuilderService {
       directPlayResult.videoConditionsMet &&
       ((!isSourceHdr && !dvP5) || clientCanPresentDynamicRange) &&
       !needsBurnIn &&
-      !needsCrop;
+      (!needsCrop || clientCropsBlackBars);
 
     if (profile.supportsDirectPlay === false && directPlayResult.canDirectPlay) {
       directPlayResult.canDirectPlay = false;

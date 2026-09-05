@@ -29,6 +29,10 @@ export interface DesktopLoadOptions {
    *  the macOS in-process backend and the Windows subprocess consume it; the
    *  Linux compositor backend does not. */
   audioLanguage?: string;
+  /** Black-bar rectangle in mpv `video-crop` syntax (`WxH+x+y`). The VO crops
+   *  after decode — free, and unlike a lavfi crop it keeps hwdec. Empty/absent
+   *  clears a previous file's crop. */
+  videoCrop?: string;
 }
 
 export interface DesktopSubtitleStyle {

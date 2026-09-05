@@ -97,6 +97,16 @@ export class DeviceProfileDto {
   tonemapsHdrLocally?: boolean;
 
   /**
+   * Client crops the detected black bars at its own video output (mpv
+   * `video-crop`, free and hwdec-safe), so a crop alone no longer demotes a
+   * copy path to a re-encode. Only the copy paths hand the rectangle over: a
+   * session that re-encodes for any other reason still crops server-side.
+   */
+  @IsBoolean()
+  @IsOptional()
+  cropsBlackBarsLocally?: boolean;
+
+  /**
    * Client can present single-layer Dolby Vision (Profile 5 / 8.x) directly:
    * both a DV decoder and a DV panel confirmed on the device. The backend then
    * DirectPlays the original container untouched so the RPU rides through.

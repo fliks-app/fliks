@@ -1377,6 +1377,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             if (preferredAudioLang) {
               this.engine!.configure({ preferredAudioLanguage: preferredAudioLang });
             }
+            this.applyVideoCrop();
           }
 
           // Capacitor native players preload sidecar subs into the MediaItem for
@@ -2619,6 +2620,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.state.hwAccel.set(pi.hwAccel);
       this.qualityManager.buildQualityOptions(pi);
       this.qualityManager.adoptNegotiatedQuality(pi.quality);
+      this.applyVideoCrop();
 
       const { url, mimeType } = this.buildPlayUrl({ startTime });
       await this.engine.load(url, startTime, mimeType);
@@ -4416,6 +4418,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.statsVisible.set(false);
   }
 
+  /** Push the black-bar rectangle onto the desktop engine. The server only
+   *  crops when it re-encodes, so the client crops exactly on the copy paths —
+   *  `videoCopyStream` tells the two apart and keeps them from stacking. */
+  private applyVideoCrop(): void {
+    if (!this.isDesktopNative) return;
+    const c = this.playbackInfo?.videoCopyStream
+      ? this.playbackInfo.source?.crop
+      : undefined;
+    this.engine?.configure({
+      videoCrop: c ? `${c.width}x${c.height}+${c.x}+${c.y}` : null,
+    });
+  }
+
   async onSelectQualityById(id: string) {
     const option = this.availableQualities().find(q => q.id === id);
     if (!option) return;
@@ -4564,6 +4579,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.state.hwAccel.set(pi.hwAccel);
       this.qualityManager.buildQualityOptions(pi);
       this.qualityManager.adoptNegotiatedQuality(pi.quality);
+      this.applyVideoCrop();
 
       const mode = this.playbackMode();
       // Refresh the near-expiry stream token before rebuilding the play URL:
