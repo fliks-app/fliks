@@ -11,12 +11,13 @@ const PHASE_LABEL_KEY: Record<ImportPhase, string> = {
   scan: 'import_progress.scanning',
 };
 
-/** Furthest-along phase first: when a library import is in flight, more than one
- *  of these keys can be active at once (e.g. enrichment of the first files while
- *  later folders are still being imported), and only one bar should show. */
+/** Outermost loop first: several of these keys are live at once during a library
+ *  import (enrichment of the first files runs while later folders are still being
+ *  imported), and only one bar shows. OrphanImport wins because it counts the
+ *  batch the user is waiting on; it retires and falls through to the enrich tail. */
 const PHASES: { command: string; phase: ImportPhase }[] = [
-  { command: 'PostImportEnrich', phase: 'enrich' },
   { command: 'OrphanImport', phase: 'import' },
+  { command: 'PostImportEnrich', phase: 'enrich' },
   { command: 'OrphanScan', phase: 'scan' },
 ];
 

@@ -88,7 +88,8 @@ export class OrphanScanPanelComponent {
   readonly scanProgress = computed(() => this.sse.activeProgress().get('OrphanScan') ?? null);
 
   readonly page = signal(1);
-  /** Groups imported so far / to import, for the creation wizard's progress. */
+  /** Groups matched and queued so far; the import itself runs server-side and is
+   *  reported by the library page's banner. */
   readonly imported = signal(0);
   readonly importTotal = signal(0);
   readonly autoImporting = signal(false);
