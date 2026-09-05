@@ -82,9 +82,12 @@ const TAB_NONCE_KEY = 'fliks.remote.tabNonce';
  *  alone (no `episodeNumber`) describes a whole-season task. */
 export interface MediaProgressSubject {
   title: string;
+  mediaId?: number;
+  mediaType?: string;
   seasonNumber?: number;
   episodeNumber?: number;
   episodeTitle?: string;
+  episodeId?: number;
 }
 
 export interface TaskProgress {

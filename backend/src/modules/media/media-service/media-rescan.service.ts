@@ -325,6 +325,7 @@ export class MediaRescanService {
       media,
       ep
         ? {
+            id: ep.id,
             seasonNumber: ep.season?.seasonNumber,
             episodeNumber: ep.episodeNumber,
             title: ep.title,
@@ -569,6 +570,7 @@ export class MediaRescanService {
       // parsed/linked (exact season/episode numbers, no extra query); otherwise fall
       // back to the `files.episode.season` relation preloaded above.
       let epForProgress: {
+        id?: number | null;
         seasonNumber?: number | null;
         episodeNumber?: number | null;
         title?: string | null;
@@ -591,6 +593,7 @@ export class MediaRescanService {
             if (ep) {
               dbFile.episode = ep;
               epForProgress = {
+                id: ep.id,
                 seasonNumber: epNums.season,
                 episodeNumber: epNums.episode,
                 title: ep.title,
@@ -620,6 +623,7 @@ export class MediaRescanService {
           if (special) {
             dbFile.episode = special;
             epForProgress = {
+              id: special.id,
               seasonNumber: 0,
               episodeNumber: special.episodeNumber,
               title: special.title,
@@ -643,6 +647,7 @@ export class MediaRescanService {
         }
         if (!epForProgress && dbFile.episode) {
           epForProgress = {
+            id: dbFile.episode.id,
             seasonNumber: dbFile.episode.season?.seasonNumber,
             episodeNumber: dbFile.episode.episodeNumber,
             title: dbFile.episode.title,
@@ -725,6 +730,7 @@ export class MediaRescanService {
       // Try to match episode for series — create season/episode on the fly if missing
       let episodeId: number | undefined;
       let epForProgress: {
+        id?: number | null;
         seasonNumber?: number | null;
         episodeNumber?: number | null;
         title?: string | null;
@@ -742,6 +748,7 @@ export class MediaRescanService {
             episodeId = ep?.id;
             if (ep) {
               epForProgress = {
+                id: ep.id,
                 seasonNumber: epNums.season,
                 episodeNumber: epNums.episode,
                 title: ep.title,
@@ -758,6 +765,7 @@ export class MediaRescanService {
           if (special) {
             episodeId = special.id;
             epForProgress = {
+              id: special.id,
               seasonNumber: 0,
               episodeNumber: special.episodeNumber,
               title: special.title,

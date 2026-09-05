@@ -31,7 +31,7 @@ import { User } from '../users/entities/user.entity';
 import { BackupService } from './backup.service';
 import { LogBufferService } from './log-buffer.service';
 import { EventsService } from './events.service';
-import { ActivityRegistryService, type ActivityEntry } from './activity-registry.service';
+import { ActivityRegistryService, type ActivityRow } from './activity-registry.service';
 import { UpdateCheckService, type UpdateStatus } from './update-check.service';
 import { Observable } from 'rxjs';
 import {
@@ -290,7 +290,7 @@ export class SystemController {
   activity(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
-  ): { data: ActivityEntry[]; total: number } {
+  ): { data: ActivityRow[]; total: number; dropped: number } {
     const parsedPage = page ? Number.parseInt(page, 10) : 1;
     const parsedLimit = limit ? Number.parseInt(limit, 10) : 25;
     return this.activityRegistry.list(

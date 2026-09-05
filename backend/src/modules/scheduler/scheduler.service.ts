@@ -469,20 +469,20 @@ export class SchedulerService implements OnModuleInit {
       `${commandName}: ${fileIds.length} to generate (${allIds.length - fileIds.length} already exist, ${allIds.length} total)`,
     );
 
-    let generated = 0;
-    try {
-      // Process in batches of BATCH: each file is queued into ThumbnailService
-      // which limits FFmpeg concurrency internally (SPRITE_CONCURRENCY).
-      for (let i = 0; i < fileIds.length; i += BATCH) {
-        const batch = fileIds.slice(i, i + BATCH);
-        // Resolve a title for the progress row from this batch alone (one small join for
-        // BATCH ids), never from the whole library: the file list above stays id-only.
-        const sample = await this.mediaFileRepo.findOne({
-          where: { id: In(batch.map(({ id }) => id)) },
+    // Scalar columns only, never a whole Media/MediaFile: their JSONB streamInfo must
+    // not come along. Chunked because TypeORM expands `In` into one bind parameter per
+    // id and Postgres caps a statement at 65535 of them.
+    const ID_CHUNK = 1000;
+    const subjectRows: MediaFile[] = [];
+    for (let i = 0; i < fileIds.length; i += ID_CHUNK) {
+      const slice = fileIds.slice(i, i + ID_CHUNK).map(({ id }) => id);
+      subjectRows.push(
+        ...(await this.mediaFileRepo.find({
+          where: { id: In(slice) },
           relations: ['media', 'episode', 'episode.season'],
           select: {
             id: true,
-            media: { title: true },
+            media: { id: true, type: true, title: true },
             episode: {
               id: true,
               episodeNumber: true,
@@ -490,19 +490,43 @@ export class SchedulerService implements OnModuleInit {
               season: { seasonNumber: true },
             },
           },
-        });
-        const subject = sample?.media
-          ? buildMediaProgressSubject(
-              sample.media,
-              sample.episode
-                ? {
-                    seasonNumber: sample.episode.season?.seasonNumber,
-                    episodeNumber: sample.episode.episodeNumber,
-                    title: sample.episode.title,
-                  }
-                : null,
-            )
-          : undefined;
+        })),
+      );
+    }
+    const subjectByFileId = new Map<number, ReturnType<typeof buildMediaProgressSubject>>();
+    for (const row of subjectRows) {
+      if (!row.media) continue;
+      subjectByFileId.set(
+        row.id,
+        buildMediaProgressSubject(
+          row.media,
+          row.episode
+            ? {
+                id: row.episode.id,
+                seasonNumber: row.episode.season?.seasonNumber,
+                episodeNumber: row.episode.episodeNumber,
+                title: row.episode.title,
+              }
+            : null,
+        ),
+      );
+    }
+    for (const { id } of fileIds) {
+      this.activityRegistry.upsertPending(
+        `GenerateSprite:${id}`,
+        'GenerateSprite',
+        subjectByFileId.get(id),
+        commandName,
+      );
+    }
+
+    let generated = 0;
+    try {
+      // Process in batches of BATCH: each file is queued into ThumbnailService
+      // which limits FFmpeg concurrency internally (SPRITE_CONCURRENCY).
+      for (let i = 0; i < fileIds.length; i += BATCH) {
+        const batch = fileIds.slice(i, i + BATCH);
+        const subject = subjectByFileId.get(batch[0].id);
         this.eventsService.emit({
           type: 'task.progress',
           command: commandName,
@@ -527,6 +551,10 @@ export class SchedulerService implements OnModuleInit {
               `${commandName}: failed for file ${id}: ${(e as Error).message}`,
             );
             return null;
+          } finally {
+            // Belt-and-suspenders: covers the rare path where generation never runs
+            // (already cached, already in flight) and so never removes its own row.
+            this.activityRegistry.remove(`GenerateSprite:${id}`);
           }
         });
 
@@ -552,15 +580,33 @@ export class SchedulerService implements OnModuleInit {
     const name = onlyMissing ? 'DetectMissingMarkers' : 'DetectMarkers';
     const seasons = await this.markers.listSeasonsForScan(onlyMissing);
     this.log.log(`${name}: started — ${seasons.length} season(s) to scan`);
+
+    // Every season subject is built from `seasons` alone (no extra query) so the
+    // whole backlog can be pre-registered as pending up front.
+    const subjectBySeasonId = new Map(
+      seasons.map((s) => [
+        s.id,
+        buildMediaProgressSubject(
+          { id: s.mediaId, title: s.mediaTitle, type: MediaType.SERIES },
+          { seasonNumber: s.seasonNumber },
+        ),
+      ]),
+    );
+    for (const s of seasons) {
+      this.activityRegistry.upsertPending(
+        `IntroDetection:${s.id}`,
+        'IntroDetection',
+        subjectBySeasonId.get(s.id),
+        name,
+      );
+    }
+
     let detected = 0;
     let skipped = 0;
     try {
       for (let i = 0; i < seasons.length; i++) {
         const s = seasons[i];
-        const subject = buildMediaProgressSubject(
-          { title: s.mediaTitle },
-          { seasonNumber: s.seasonNumber },
-        );
+        const subject = subjectBySeasonId.get(s.id)!;
         this.eventsService.emit({
           type: 'task.progress',
           command: name,
@@ -571,7 +617,7 @@ export class SchedulerService implements OnModuleInit {
         });
         this.activityRegistry.upsertRunning(name, name, subject, i, seasons.length);
         try {
-          const r = await this.markers.runDetectionInline(s.id);
+          const r = await this.markers.runDetectionInline(s.id, subject);
           detected += r.introsDetected + r.outrosDetected;
         } catch (e) {
           skipped++;
@@ -600,16 +646,28 @@ export class SchedulerService implements OnModuleInit {
 
   /** Shared rescan loop — skip subtitle warmup to avoid queue flooding. */
   private async rescanMediaList(
-    mediaList: { id: number; title: string }[],
+    mediaList: { id: number; title: string; type?: string }[],
     commandName: string,
   ): Promise<void> {
     this.log.log(`${commandName}: started — ${mediaList.length} media to scan`);
+    // Already has the whole list in hand, so pre-register every media as pending
+    // so the backlog shows up immediately instead of only the one being scanned.
+    for (const media of mediaList) {
+      this.activityRegistry.upsertPending(
+        `${commandName}:${media.id}`,
+        commandName,
+        buildMediaProgressSubject(media),
+        commandName,
+      );
+    }
+
     let totalUpdated = 0;
     let skipped = 0;
     try {
       for (let i = 0; i < mediaList.length; i++) {
         const media = mediaList[i];
         const subject = buildMediaProgressSubject(media);
+        const childId = `${commandName}:${media.id}`;
         this.eventsService.emit({
           type: 'task.progress',
           command: commandName,
@@ -625,6 +683,7 @@ export class SchedulerService implements OnModuleInit {
           i,
           mediaList.length,
         );
+        this.activityRegistry.upsertRunning(childId, commandName, subject);
         try {
           const result = await this.mediaService.rescanFiles(media.id, {
             skipWarmup: true,
@@ -635,6 +694,8 @@ export class SchedulerService implements OnModuleInit {
           this.log.warn(
             `${commandName}: skipped "${media.title}": ${(e as Error).message}`,
           );
+        } finally {
+          this.activityRegistry.remove(childId);
         }
         await yieldLoop();
       }
@@ -661,7 +722,7 @@ export class SchedulerService implements OnModuleInit {
   }
 
   private async doRescanAll(): Promise<void> {
-    const allMedia = await this.mediaRepo.find({ select: ['id', 'title'] });
+    const allMedia = await this.mediaRepo.find({ select: ['id', 'title', 'type'] });
     await this.rescanMediaList(allMedia, 'RescanAll');
   }
 

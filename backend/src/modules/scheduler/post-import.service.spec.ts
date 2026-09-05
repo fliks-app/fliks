@@ -43,6 +43,11 @@ function harness() {
   const markers = { autoDetectMissing: jest.fn().mockResolvedValue(undefined) };
   const settings = { get: jest.fn().mockResolvedValue(null) };
   const postImportQueue = { whenIdle: jest.fn().mockResolvedValue(undefined) };
+  const activityRegistry = {
+    upsertPending: jest.fn(),
+    upsertRunning: jest.fn(),
+    remove: jest.fn(),
+  };
   const service = new PostImportService(
     mediaFileRepo as never,
     episodeRepo as never,
@@ -51,6 +56,7 @@ function harness() {
     markers as never,
     settings as never,
     postImportQueue as never,
+    activityRegistry as never,
   );
   service.onModuleInit();
   return {
@@ -63,6 +69,7 @@ function harness() {
     markers,
     settings,
     postImportQueue,
+    activityRegistry,
   };
 }
 

@@ -63,9 +63,19 @@
               </td>
               <td>
                 @if (item.subject) {
-                  <div class="truncate max-w-64">{{ item.subject.title }}</div>
+                  @if (mediaRouterLink(item.subject); as link) {
+                    <a [routerLink]="link" class="link link-hover block truncate max-w-64">{{ item.subject.title }}</a>
+                  } @else {
+                    <div class="truncate max-w-64">{{ item.subject.title }}</div>
+                  }
                   @if (episodeLine(item.subject); as episode) {
-                    <div class="text-sm text-base-content/50 truncate max-w-64">{{ episode }}</div>
+                    <div class="text-sm text-base-content/50 truncate max-w-64">
+                      @if (episodeRouterLink(item.subject); as epLink) {
+                        <a [routerLink]="epLink" class="link link-hover">{{ episode }}</a>
+                      } @else {
+                        {{ episode }}
+                      }
+                    </div>
                   }
                 }
               </td>
@@ -78,10 +88,54 @@
                 }
               </td>
             </tr>
+            @for (child of visibleChildren(item); track child.id) {
+              <tr class="text-sm text-base-content/60">
+                <td>
+                  @if (child.status === 'pending') {
+                    <span class="badge badge-ghost badge-sm">{{ 'system.status_pending' | translate }}</span>
+                  }
+                </td>
+                <td class="pl-6">
+                  @if (child.subject) {
+                    @if (mediaRouterLink(child.subject); as link) {
+                      <a [routerLink]="link" class="link link-hover block truncate max-w-64">{{ child.subject.title }}</a>
+                    } @else {
+                      <div class="truncate max-w-64">{{ child.subject.title }}</div>
+                    }
+                    @if (episodeLine(child.subject); as episode) {
+                      <div class="text-base-content/50 truncate max-w-64">
+                        @if (episodeRouterLink(child.subject); as epLink) {
+                          <a [routerLink]="epLink" class="link link-hover">{{ episode }}</a>
+                        } @else {
+                          {{ episode }}
+                        }
+                      </div>
+                    }
+                  }
+                </td>
+                <td class="w-48">
+                  @if (child.status === 'running') {
+                    <div class="flex items-center gap-2">
+                      <progress class="progress progress-primary progress-xs flex-1" [value]="child.current ?? 0" [max]="child.total || 1"></progress>
+                      <span class="text-xs tabular-nums w-10 text-right">{{ activityPercent(child) }}%</span>
+                    </div>
+                  }
+                </td>
+              </tr>
+            }
+            @if (hiddenChildrenCount(item); as hidden) {
+              <tr class="text-sm text-base-content/50">
+                <td></td>
+                <td class="pl-6" colspan="2">{{ 'system.activity_more_children' | translate: { count: hidden } }}</td>
+              </tr>
+            }
           }
         </tbody>
       </table>
     </div>
+    @if (activityDropped() > 0) {
+      <p class="text-xs text-warning mt-2">{{ 'system.activity_dropped' | translate: { count: activityDropped() } }}</p>
+    }
     @if (activityTotalPages > 1) {
       <app-pagination
         class="mt-3"

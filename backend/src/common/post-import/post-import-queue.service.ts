@@ -17,6 +17,10 @@ const ENRICH_CONCURRENCY = 1;
 
 /** SSE task key the client's import banner reads. */
 export const POST_IMPORT_PROGRESS = 'PostImportEnrich';
+/** Synthetic parent grouping the whole enrichment wave: the file being worked on
+ *  plus whatever is still queued behind it, so an import shows one nested row
+ *  instead of N flat ones. Exists only while the queue is non-empty. */
+const QUEUE_PARENT_ID = 'PostImportEnrichQueue';
 
 export interface PostImportTask {
   mediaFileId: number;
@@ -61,6 +65,8 @@ export class PostImportQueueService {
     this.activityRegistry.upsertPending(
       `PostImportEnrich:${task.mediaFileId}`,
       'PostImportEnrich',
+      undefined,
+      QUEUE_PARENT_ID,
     );
     this.pump();
   }
@@ -74,6 +80,17 @@ export class PostImportQueueService {
       message: this.subject ? formatMediaProgressSubject(this.subject) : '',
       subject: this.subject ?? undefined,
     });
+    // The parent only exists while the wave is live, removed on drain below,
+    // never re-created here once that has happened.
+    if (this.pendingCount > 0) {
+      this.activityRegistry.upsertRunning(
+        QUEUE_PARENT_ID,
+        'PostImportEnrichQueue',
+        this.subject ?? undefined,
+        this.waveDone,
+        this.waveTotal,
+      );
+    }
   }
 
   whenIdle(): Promise<void> {
@@ -100,6 +117,7 @@ export class PostImportQueueService {
           if (this.active === 0 && this.tasks.length === 0) {
             this.subject = null;
             this.emitProgress();
+            this.activityRegistry.remove(QUEUE_PARENT_ID);
             this.waveTotal = 0;
             this.waveDone = 0;
             const waiters = this.idleWaiters;
@@ -139,6 +157,7 @@ export class PostImportQueueService {
       file.media,
       ep
         ? {
+            id: ep.id,
             seasonNumber: ep.season?.seasonNumber,
             episodeNumber: ep.episodeNumber,
             title: ep.title,

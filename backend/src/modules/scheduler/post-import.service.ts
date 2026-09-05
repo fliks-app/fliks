@@ -20,6 +20,7 @@ import {
 import { MarkersService } from '../markers/markers.service';
 import { SettingsService } from '../settings/settings.service';
 import { PostImportQueueService } from '../../common/post-import/post-import-queue.service';
+import { ActivityRegistryService } from './activity-registry.service';
 import {
   buildMediaProgressSubject,
   formatMediaProgressSubject,
@@ -55,6 +56,7 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
     private readonly settings: SettingsService,
     @Inject(forwardRef(() => PostImportQueueService))
     private readonly postImportQueue: PostImportQueueService,
+    private readonly activityRegistry: ActivityRegistryService,
   ) {}
 
   onModuleInit(): void {
@@ -150,7 +152,7 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
       relations: ['media', 'episode', 'episode.season'],
       select: {
         id: true,
-        media: { title: true },
+        media: { id: true, type: true, title: true },
         episode: {
           id: true,
           episodeNumber: true,
@@ -168,6 +170,7 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
             f.media,
             f.episode
               ? {
+                  id: f.episode.id,
                   seasonNumber: f.episode.season?.seasonNumber,
                   episodeNumber: f.episode.episodeNumber,
                   title: f.episode.title,
@@ -181,26 +184,50 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
     );
 
     const command = `GenerateMissingSprites:${mediaId}`;
+    const wholeMediaSubject = rows.find((r) => r.media)?.media
+      ? buildMediaProgressSubject(rows.find((r) => r.media)!.media)
+      : undefined;
+    this.activityRegistry.upsertRunning(command, 'GenerateMissingSprites', wholeMediaSubject, 0, missing.length);
+    for (const { id } of missing) {
+      this.activityRegistry.upsertPending(
+        `GenerateSprite:${id}`,
+        'GenerateSprite',
+        subjectById.get(id),
+        command,
+      );
+    }
+
     let generated = 0;
-    for (const [index, { id }] of missing.entries()) {
-      const subject = subjectById.get(id);
+    try {
+      for (const [index, { id }] of missing.entries()) {
+        const subject = subjectById.get(id);
+        this.events.emit({
+          type: 'task.progress',
+          command,
+          current: index,
+          total: missing.length,
+          message: subject ? formatMediaProgressSubject(subject) : command,
+          subject,
+        });
+        this.activityRegistry.upsertRunning(command, 'GenerateMissingSprites', subject ?? wholeMediaSubject, index, missing.length);
+        try {
+          if (await this.generateSprite(id, false)) generated++;
+        } finally {
+          // Belt-and-suspenders: covers the rare path where generation never runs
+          // (already cached, already in flight) and so never removes its own row.
+          this.activityRegistry.remove(`GenerateSprite:${id}`);
+        }
+      }
       this.events.emit({
         type: 'task.progress',
         command,
-        current: index,
+        current: missing.length,
         total: missing.length,
-        message: subject ? formatMediaProgressSubject(subject) : command,
-        subject,
+        message: command,
       });
-      if (await this.generateSprite(id, false)) generated++;
+    } finally {
+      this.activityRegistry.remove(command);
     }
-    this.events.emit({
-      type: 'task.progress',
-      command,
-      current: missing.length,
-      total: missing.length,
-      message: command,
-    });
     return generated;
   }
 
@@ -226,6 +253,7 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
       });
       if (ep) {
         subject = buildMediaProgressSubject(file.media, {
+          id: ep.id,
           seasonNumber: ep.season?.seasonNumber,
           episodeNumber: ep.episodeNumber,
           title: ep.title,

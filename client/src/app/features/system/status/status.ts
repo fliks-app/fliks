@@ -3,6 +3,7 @@ import {
 } from '@angular/core';
 import { DecimalPipe, NgClass } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
+import { RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { LucideTrash2 } from '@lucide/angular';
@@ -26,10 +27,17 @@ interface ActivityEntry {
   current?: number;
   total?: number;
 }
+/** A top-level row, its nested children (if any) travelling inline. */
+interface ActivityRow extends ActivityEntry {
+  children?: ActivityEntry[];
+}
+/** A parent's queued backlog can run into the hundreds during a big import,
+ *  render only this many children and fold the rest into a "N more" line. */
+const MAX_VISIBLE_CHILDREN = 5;
 
 @Component({
   selector: 'app-system-status',
-  imports: [TranslateModule, LocaleDatePipe, DecimalPipe, NgClass, LucideTrash2, PaginationComponent, DropdownMenuComponent],
+  imports: [TranslateModule, LocaleDatePipe, DecimalPipe, NgClass, RouterLink, LucideTrash2, PaginationComponent, DropdownMenuComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './status.html',
 })
@@ -51,9 +59,14 @@ export class SystemStatusComponent implements OnInit, OnDestroy {
 
   readonly registeredJobs = signal<SchedulerJob[]>([]);
 
-  readonly activity = signal<ActivityEntry[]>([]);
+  readonly activity = signal<ActivityRow[]>([]);
   readonly activityTotal = signal(0);
   readonly activityPage = signal(1);
+  /** Cumulative count of registrations the backend's activity registry had to
+   *  drop because it was at capacity (near-impossible in practice), surfaced
+   *  rather than left as a silently missing row. */
+  readonly activityDropped = signal(0);
+  readonly maxVisibleChildren = MAX_VISIBLE_CHILDREN;
   /** Throttles the SSE-triggered refetch to roughly once a second: a library import
    *  can ping `activity.changed` many times a second, and a fetch per ping would just
    *  move the flood from the wire to the API. */
@@ -113,6 +126,7 @@ export class SystemStatusComponent implements OnInit, OnDestroy {
     { name: 'GenerateSprite', label: 'system.cmd_generate_sprite' },
     { name: 'WarmupSubtitles', label: 'system.cmd_warmup_subtitles' },
     { name: 'PostImportEnrich', label: 'system.cmd_post_import_enrich' },
+    { name: 'PostImportEnrichQueue', label: 'system.cmd_post_import_enrich_queue' },
   ]);
 
   constructor() {
@@ -160,7 +174,7 @@ export class SystemStatusComponent implements OnInit, OnDestroy {
   async loadActivity(page = this.activityPage()): Promise<void> {
     try {
       const res = await firstValueFrom(
-        this.http.get<{ data: ActivityEntry[]; total: number }>('/api/system/activity', {
+        this.http.get<{ data: ActivityRow[]; total: number; dropped: number }>('/api/system/activity', {
           params: { page: String(page), limit: '25' },
         }),
       );
@@ -170,6 +184,7 @@ export class SystemStatusComponent implements OnInit, OnDestroy {
       this.activityPage.set(page);
       this.activity.set(res.data);
       this.activityTotal.set(res.total);
+      this.activityDropped.set(res.dropped);
     } catch {
       // handled by global interceptor
     }
@@ -209,6 +224,28 @@ export class SystemStatusComponent implements OnInit, OnDestroy {
       ? `${season}E${String(subject.episodeNumber).padStart(2, '0')}`
       : season;
     return subject.episodeTitle ? `${code} · ${subject.episodeTitle}` : code;
+  }
+
+  /** `null` when the subject carries no media id: the title then renders as
+   *  plain text instead of a link a producer can't actually resolve. */
+  mediaRouterLink(subject: MediaProgressSubject): unknown[] | null {
+    if (subject.mediaId == null) return null;
+    return ['/' + (subject.mediaType === 'series' ? 'series' : 'movies'), subject.mediaId];
+  }
+
+  /** `null` when there's no episode id to link to (a season-level row, or a
+   *  producer that didn't have one cheaply in hand). */
+  episodeRouterLink(subject: MediaProgressSubject): unknown[] | null {
+    if (subject.mediaId == null || subject.episodeId == null) return null;
+    return ['/series', subject.mediaId, 'episode', subject.episodeId];
+  }
+
+  visibleChildren(item: ActivityRow): ActivityEntry[] {
+    return item.children?.slice(0, MAX_VISIBLE_CHILDREN) ?? [];
+  }
+
+  hiddenChildrenCount(item: ActivityRow): number {
+    return Math.max(0, (item.children?.length ?? 0) - MAX_VISIBLE_CHILDREN);
   }
 
   async loadCommands(page = 1) {

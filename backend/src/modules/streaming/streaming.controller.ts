@@ -731,7 +731,11 @@ export class StreamingController {
         resolved.media.path,
         mediaFileId,
         resolved.mediaFile.streamInfo?.subtitles,
-        { title: resolved.media.title },
+        {
+          title: resolved.media.title,
+          mediaId: resolved.media.id,
+          mediaType: resolved.media.type,
+        },
         'playback',
       )
       .catch(() => {

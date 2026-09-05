@@ -7,6 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EpisodeMarker, MarkerType } from './entities/episode-marker.entity';
+import { MediaType } from '../../common/enums';
 import { Episode } from '../media/entities/episode.entity';
 import { Season } from '../media/entities/season.entity';
 import { Command } from '../scheduler/entities/command.entity';
@@ -16,7 +17,10 @@ import { SettingsService } from '../settings/settings.service';
 import { IntroDetectionService } from './intro-detection.service';
 import { CreateMarkerDto } from './dto/create-marker.dto';
 import { UpdateMarkerDto } from './dto/update-marker.dto';
-import { buildMediaProgressSubject } from '../../common/utils/media-progress-subject.util';
+import {
+  buildMediaProgressSubject,
+  type MediaProgressSubject,
+} from '../../common/utils/media-progress-subject.util';
 
 @Injectable()
 export class MarkersService {
@@ -213,19 +217,32 @@ export class MarkersService {
   /**
    * Run intro + outro detection for a single season inline (no Command row,
    * no per-season SSE noise). Intended for bulk operations triggered from
-   * the admin system page.
+   * the admin system page. `subject` is the same one the caller pre-registered
+   * this season's `IntroDetection:<seasonId>` activity row under, passing it
+   * again here just flips that row to running and ticks its progress.
    */
   async runDetectionInline(
     seasonId: number,
+    subject?: MediaProgressSubject,
   ): Promise<{ introsDetected: number; outrosDetected: number }> {
+    const activityId = `IntroDetection:${seasonId}`;
     if (this.inFlight.has(seasonId)) {
+      // Already running elsewhere (e.g. an auto-detect racing this bulk pass): clear
+      // the pre-registered pending row rather than leaving it stuck forever.
+      if (subject) this.activityRegistry.remove(activityId);
       return { introsDetected: 0, outrosDetected: 0 };
     }
     this.inFlight.add(seasonId);
+    if (subject) this.activityRegistry.upsertRunning(activityId, 'IntroDetection', subject, 0, 1);
+    const onProgress = subject
+      ? (current: number, total: number) =>
+          this.activityRegistry.upsertRunning(activityId, 'IntroDetection', subject, current, total)
+      : undefined;
     try {
-      return await this.detectIntrosAndOutros(seasonId);
+      return await this.detectIntrosAndOutros(seasonId, onProgress);
     } finally {
       this.inFlight.delete(seasonId);
+      if (subject) this.activityRegistry.remove(activityId);
     }
   }
 
@@ -303,7 +320,7 @@ export class MarkersService {
     // Season-wide subject: detection scans every episode of the season, so the
     // per-tick `message` (fingerprint phase text) stays free-form.
     const subject = buildMediaProgressSubject(
-      { title: mediaTitle },
+      { id: mediaId, title: mediaTitle, type: MediaType.SERIES },
       { seasonNumber },
     );
     const activityId = `IntroDetection:${seasonId}`;
