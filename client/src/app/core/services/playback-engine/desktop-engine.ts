@@ -84,6 +84,9 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   async destroy(): Promise<void> {
     this.dead = true;
     this._initialized = false;
+    // The compositor window is the app window: leave fullscreen with the
+    // player, whatever route change tore it down.
+    if (this._fullscreen) await this.setFullscreen(false);
     this.unsubscribe?.();
     this.unsubscribe = null;
     this._activeTrackId = null;
