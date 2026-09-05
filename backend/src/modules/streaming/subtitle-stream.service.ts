@@ -56,6 +56,8 @@ interface WarmupTask {
   streamIndices: number[];
   /** Tracks the Command row + remaining task count for this media file. */
   batch: WarmupBatch;
+  /** What queued this batch: decides whether it waits on the ffmpeg slot pool. */
+  trigger: 'import' | 'playback';
 }
 
 interface WarmupBatch {
@@ -386,6 +388,7 @@ export class SubtitleStreamService {
       mediaFileId,
       streamIndices: pending.map((s) => s.streamIndex),
       batch,
+      trigger,
     });
     // Emit initial progress=0 so the UI bar appears immediately at queue time,
     // not only after the first extraction finishes.
@@ -483,7 +486,11 @@ export class SubtitleStreamService {
    * if the batch fails (one corrupt sub shouldn't kill the others).
    */
   private async runWarmupTask(task: WarmupTask): Promise<void> {
-    const { absolutePath, mediaRoot, mediaFileId, streamIndices, batch } = task;
+    const { absolutePath, mediaRoot, mediaFileId, streamIndices, batch, trigger } =
+      task;
+    // Only an import-time warmup competes for the shared ffmpeg slot pool; a
+    // playback-triggered one must extract immediately, same as a live cache miss.
+    const background = trigger === 'import';
 
     try {
       await this.extractBatchDeduped(
@@ -491,7 +498,7 @@ export class SubtitleStreamService {
         mediaRoot,
         mediaFileId,
         streamIndices,
-        true,
+        background,
       );
       batch.remaining = 0;
     } catch (err) {
@@ -508,7 +515,7 @@ export class SubtitleStreamService {
             mediaRoot,
             mediaFileId,
             idx,
-            true,
+            background,
           );
         } catch (e) {
           batch.failed++;
