@@ -15,14 +15,6 @@ export function computeMediaBarStatus(m: Media): BarStatus {
   return 'missing-unmonitored';
 }
 
-/** Compute the bar fill percentage for a media item. */
-export function computeMediaBarPercent(m: Media): number {
-  if (m.type === 'series' && m.episodeStats) {
-    const { totalEpisodes, downloadedEpisodes } = m.episodeStats;
-    return totalEpisodes > 0 ? (downloadedEpisodes / totalEpisodes) * 100 : 0;
-  }
-  return 100;
-}
 
 function isMediaReleased(m: Media): boolean {
   if (m.type === 'series') {

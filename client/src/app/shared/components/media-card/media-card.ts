@@ -5,7 +5,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { Media } from '../../../core/services/api/media.service';
-import { computeMediaBarStatus, computeMediaBarPercent } from '../../utils/media-status.util';
+import { computeMediaBarStatus } from '../../utils/media-status.util';
 import { MediaService } from '../../../core/services/api/media.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { IdentifyModalService } from '../../../core/services/identify-modal.service';
@@ -77,7 +77,7 @@ export class MediaCardComponent {
    */
   protected readonly innerTabindex = -1;
 
-  // Data source (auto-derives imageUrl, title, rating, link, playable, barStatus, barPercent)
+  // Data source (auto-derives imageUrl, title, rating, link, playable, status badge)
   readonly media = input<Media | null>(null);
 
   // Layout
@@ -130,10 +130,7 @@ export class MediaCardComponent {
   // Progress
   readonly progressPercent = input(0);
 
-  // Status bar (override media-derived barStatus/barPercent)
-  readonly barStatus = input<BarStatus | null>(null);
-  readonly barPercent = input(100);
-  /** Hide the colored status bar entirely. */
+  /** Suppress the media-derived status badge (top-left of the poster). */
   readonly hideStatusBar = input(false);
   /** Drop the title / subtitle block, for callers that render the caption
    *  themselves beside the tile rather than under it. */
@@ -366,13 +363,8 @@ export class MediaCardComponent {
   });
   protected readonly _barStatus = computed((): BarStatus | null => {
     if (this.hideStatusBar()) return null;
-    if (this.barStatus()) return this.barStatus();
     const m = this.media();
     return m ? computeMediaBarStatus(m) : null;
-  });
-  protected readonly _barPercent = computed(() => {
-    if (!this.barStatus() && this.media()) return computeMediaBarPercent(this.media()!);
-    return this.barPercent();
   });
 
   protected onCardClick() {
