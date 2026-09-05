@@ -88,6 +88,15 @@ export class DeviceProfileDto {
   supportsHdr?: boolean;
 
   /**
+   * Client decodes HDR and tone-maps it to its SDR display itself (desktop mpv),
+   * so the HDR bitstream is copied instead of re-encoded. {@link supportsHdr}
+   * stays false: any transcode the session still needs outputs SDR.
+   */
+  @IsBoolean()
+  @IsOptional()
+  tonemapsHdrLocally?: boolean;
+
+  /**
    * Client can present single-layer Dolby Vision (Profile 5 / 8.x) directly:
    * both a DV decoder and a DV panel confirmed on the device. The backend then
    * DirectPlays the original container untouched so the RPU rides through.
