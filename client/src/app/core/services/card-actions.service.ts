@@ -59,8 +59,11 @@ export interface CardAction {
  *   • `button` — dropdown's right edge aligns with the anchor's right edge,
  *     drops just below it. Used by the desktop `⋯` button so the menu appears
  *     under the button and overlays the card body.
+ *   • `card-top` — dropdown overlays the anchor, its top and right edges flush
+ *     with the anchor's. Anchor the card figure so a trigger at the card's
+ *     bottom still opens the menu from the card's top.
  */
-export type CardActionsPlacement = 'card' | 'button';
+export type CardActionsPlacement = 'card' | 'button' | 'card-top';
 
 @Injectable({ providedIn: 'root' })
 export class CardActionsService {

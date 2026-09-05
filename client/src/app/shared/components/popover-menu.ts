@@ -103,7 +103,8 @@ export class PopoverMenuComponent {
   readonly anchor = input<HTMLElement | null>(null);
   /** Where the dropdown opens relative to the anchor. `*-center` centers it
    *  under the anchor; `right-start` / `left-start` are side flyouts (used for
-   *  submenus) that open beside the anchor. */
+   *  submenus) that open beside the anchor; `start-end` overlays the anchor,
+   *  top and right edges aligned with it. */
   readonly placement = input<
     | 'bottom-end'
     | 'bottom-start'
@@ -112,6 +113,7 @@ export class PopoverMenuComponent {
     | 'top-start'
     | 'right-start'
     | 'left-start'
+    | 'start-end'
   >('bottom-end');
   /** Dropdown width in px (the sheet ignores it). */
   readonly width = input(240);
@@ -279,6 +281,27 @@ export class PopoverMenuComponent {
       const top = Math.min(
         Math.max(GUTTER, r.top),
         Math.max(GUTTER, viewportH - MIN_HEIGHT - GUTTER),
+      );
+      return {
+        top,
+        bottom: null as number | null,
+        left,
+        width: WIDTH,
+        maxHeight: Math.max(MIN_HEIGHT, viewportH - top - GUTTER),
+      };
+    }
+
+    // Overlay drop: top edge just under the anchor's top, right edges flush,
+    // so a trigger low in the anchor still opens the menu from its top.
+    if (placement === 'start-end') {
+      const INSET = 10;
+      const top = Math.min(
+        Math.max(GUTTER, r.top + INSET),
+        Math.max(GUTTER, viewportH - MIN_HEIGHT - GUTTER),
+      );
+      const left = Math.min(
+        Math.max(GUTTER, r.right - WIDTH),
+        Math.max(GUTTER, viewportW - WIDTH - GUTTER),
       );
       return {
         top,
