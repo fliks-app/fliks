@@ -22,11 +22,30 @@ interface OpenSubtitlesSettings {
   password: string;
 }
 
+/** The factory builds a provider per call, so an instance field meant a login
+ *  before every search and every download. Tokens last ~24h; keyed by the
+ *  credentials that obtained them. */
+const tokenCache = new Map<string, { token: string; expiresAt: number }>();
+const TOKEN_TTL_MS = 23 * 60 * 60 * 1000;
+
 export class OpenSubtitlesProvider implements SubtitleProviderInterface {
   private readonly logger = new Logger(OpenSubtitlesProvider.name);
-  private token: string | null = null;
 
   constructor(private readonly settings: OpenSubtitlesSettings) {}
+
+  private get tokenKey(): string {
+    return `${this.apiKey}:${this.settings.username}`;
+  }
+
+  private get token(): string | null {
+    const hit = tokenCache.get(this.tokenKey);
+    if (!hit) return null;
+    if (hit.expiresAt <= Date.now()) {
+      tokenCache.delete(this.tokenKey);
+      return null;
+    }
+    return hit.token;
+  }
 
   private get apiKey(): string {
     return this.settings.apiKey?.trim() || DEFAULT_API_KEY;
@@ -139,7 +158,15 @@ export class OpenSubtitlesProvider implements SubtitleProviderInterface {
       markRateLimited(PROVIDER_TYPE, null, 3600); // 1h backoff when quota 0
     }
 
-    const fileRes = await fetch(body.link);
+    // Their CDN hosts can't be enumerated safely, so no allowlist — but the
+    // scheme is ours to insist on, and the host is worth a log line.
+    const link = new URL(body.link);
+    if (link.protocol !== 'https:') {
+      throw new Error(`OpenSubtitles returned a non-https link (${link.protocol})`);
+    }
+    const fileRes = await fetch(link, {
+      signal: AbortSignal.timeout(60_000),
+    });
     if (!fileRes.ok)
       throw new Error(`Failed to fetch subtitle file: ${fileRes.status}`);
     return Buffer.from(await fileRes.arrayBuffer());
@@ -195,7 +222,10 @@ export class OpenSubtitlesProvider implements SubtitleProviderInterface {
 
     if (res.ok) {
       const body = (await res.json()) as { token: string };
-      this.token = body.token;
+      tokenCache.set(this.tokenKey, {
+        token: body.token,
+        expiresAt: Date.now() + TOKEN_TTL_MS,
+      });
       this.logger.log('OpenSubtitles: authenticated successfully');
     } else {
       const body = await res.text().catch(() => '');

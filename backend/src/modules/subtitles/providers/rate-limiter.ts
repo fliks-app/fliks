@@ -229,6 +229,9 @@ export function getAllCooldowns(): {
  *  - Returns null in any skip case (caller should treat as empty
  *    results — providers' contract is best-effort).
  */
+/** Undici defaults to 300s. A stalled provider must not hold a pass. */
+const PROVIDER_FETCH_TIMEOUT_MS = 30_000;
+
 export async function rateLimitedFetch(
   providerType: string,
   url: string,
@@ -243,7 +246,10 @@ export async function rateLimitedFetch(
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     let res: Response;
     try {
-      res = await fetch(url, init);
+      res = await fetch(url, {
+        signal: AbortSignal.timeout(PROVIDER_FETCH_TIMEOUT_MS),
+        ...init,
+      });
     } catch (err) {
       // Network error (DNS, TLS, ECONNRESET, timeout, …). Don't retry
       // here — let the breaker decide if subsequent calls should be

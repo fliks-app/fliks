@@ -133,16 +133,16 @@
                 />
                 <span class="text-sm flex-1">{{ l.name }}</span>
                 <span class="text-sm text-base-content/50 font-mono mr-2">{{ l.isoCode }}</span>
+                <label class="flex items-center gap-1 text-xs">
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-xs"
+                    [checked]="isSubForced(l.isoCode)"
+                    (change)="toggleSubForced(l.isoCode, $event)"
+                  />
+                  {{ 'settings.language_profiles.forced_label' | translate }}
+                </label>
                 @if (isSubtitleSelected(l.isoCode)) {
-                  <label class="flex items-center gap-1 text-xs">
-                    <input
-                      type="checkbox"
-                      class="checkbox checkbox-xs"
-                      [checked]="isSubForced(l.isoCode)"
-                      (change)="toggleSubForced(l.isoCode, $event)"
-                    />
-                    Forced
-                  </label>
                   <label class="flex items-center gap-1 text-xs">
                     <span>{{ 'settings.language_profiles.hi_label' | translate }}</span>
                     <select

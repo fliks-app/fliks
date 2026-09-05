@@ -1685,14 +1685,15 @@
       "audio_languages": "Idiomas de áudio aceites",
       "audio_languages_hint": "Vazio = todos os idiomas aceites. Marque para filtrar as releases por idioma de áudio.",
       "subtitle_languages": "Idiomas de legendas",
-      "subtitle_languages_hint": "Legendas a transferir automaticamente. Marque Forced ou HI por idioma.",
+      "subtitle_languages_hint": "Marque o idioma para a legenda completa e “Forçado” para uma faixa de diálogos estrangeiros. São independentes: uma legenda forçada nunca substitui a completa.",
       "save": "Guardar",
       "cancel": "Cancelar",
       "load_error": "Não foi possível carregar os perfis de idioma.",
       "save_error": "Não foi possível guardar.",
       "delete_error": "Não foi possível eliminar.",
       "empty": "Nenhum perfil de idioma.",
-      "name_required": "O nome do perfil é obrigatório."
+      "name_required": "O nome do perfil é obrigatório.",
+      "forced_label": "Forçado"
     },
     "custom_formats": {
       "title": "Formatos personalizados",

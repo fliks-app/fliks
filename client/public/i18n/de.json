@@ -1685,14 +1685,15 @@
       "audio_languages": "Akzeptierte Audiosprachen",
       "audio_languages_hint": "Leer = alle Sprachen akzeptiert. Ankreuzen, um Releases nach Audiosprache zu filtern.",
       "subtitle_languages": "Untertitelsprachen",
-      "subtitle_languages_hint": "Automatisch herunterzuladende Untertitel. Kreuzen Sie Forced oder HI pro Sprache an.",
+      "subtitle_languages_hint": "Die Sprache für den vollständigen Untertitel ankreuzen, „Erzwungen“ für eine Spur mit fremdsprachigen Dialogen. Beide sind unabhängig: ein erzwungener Untertitel ersetzt nie den vollständigen.",
       "save": "Speichern",
       "cancel": "Abbrechen",
       "load_error": "Die Sprachprofile konnten nicht geladen werden.",
       "save_error": "Speichern nicht möglich.",
       "delete_error": "Löschen nicht möglich.",
       "empty": "Kein Sprachprofil.",
-      "name_required": "Der Profilname ist erforderlich."
+      "name_required": "Der Profilname ist erforderlich.",
+      "forced_label": "Erzwungen"
     },
     "custom_formats": {
       "title": "Benutzerdefinierte Formate",

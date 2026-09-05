@@ -36,6 +36,10 @@ interface SubEntry {
 
 const HI_MODES: HearingImpairedMode[] = ['prefer', 'avoid', 'require', 'forbid'];
 
+/** A language is requested twice at most: once full, once forced. */
+const subKey = (isoCode: string, forced: boolean) =>
+  `${isoCode}|${forced ? 'forced' : 'full'}`;
+
 @Component({
   selector: 'app-language-profiles',
   imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslateModule],
@@ -107,7 +111,7 @@ export class LanguageProfilesComponent implements OnInit {
     this.audioIsoCodes.set(new Set(p.audioLanguages.map((l) => l.isoCode)));
     const subs = new Map<string, SubEntry>();
     for (const s of p.subtitleLanguages) {
-      subs.set(s.isoCode, {
+      subs.set(subKey(s.isoCode, s.forced), {
         forced: s.forced,
         hi: s.hi,
         hearingImpaired: s.hearingImpaired ?? (s.hi ? 'prefer' : 'avoid'),
@@ -134,42 +138,52 @@ export class LanguageProfilesComponent implements OnInit {
   }
 
   isSubtitleSelected(isoCode: string): boolean {
-    return this.subtitleEntries().has(isoCode);
+    return this.subtitleEntries().has(subKey(isoCode, false));
   }
 
   toggleSubtitle(isoCode: string, ev: Event) {
-    const checked = (ev.target as HTMLInputElement).checked;
-    const next = new Map(this.subtitleEntries());
-    if (checked) next.set(isoCode, { forced: false, hi: false, hearingImpaired: 'avoid' });
-    else next.delete(isoCode);
-    this.subtitleEntries.set(next);
+    this.setSubEntry(isoCode, false, (ev.target as HTMLInputElement).checked);
   }
 
+  /** Independent of the full one: a forced track only carries foreign dialogue
+   *  and never stands in for the complete subtitle. */
   isSubForced(isoCode: string): boolean {
-    return this.subtitleEntries().get(isoCode)?.forced ?? false;
-  }
-
-  subHiMode(isoCode: string): HearingImpairedMode {
-    return this.subtitleEntries().get(isoCode)?.hearingImpaired ?? 'avoid';
+    return this.subtitleEntries().has(subKey(isoCode, true));
   }
 
   toggleSubForced(isoCode: string, ev: Event) {
-    const checked = (ev.target as HTMLInputElement).checked;
+    this.setSubEntry(isoCode, true, (ev.target as HTMLInputElement).checked);
+  }
+
+  private setSubEntry(isoCode: string, forced: boolean, wanted: boolean) {
     const next = new Map(this.subtitleEntries());
-    const entry = next.get(isoCode);
-    if (entry) {
-      next.set(isoCode, { ...entry, forced: checked });
-      this.subtitleEntries.set(next);
+    if (wanted) {
+      next.set(subKey(isoCode, forced), {
+        forced,
+        hi: false,
+        hearingImpaired: 'avoid',
+      });
+    } else {
+      next.delete(subKey(isoCode, forced));
     }
+    this.subtitleEntries.set(next);
+  }
+
+  subHiMode(isoCode: string): HearingImpairedMode {
+    return (
+      this.subtitleEntries().get(subKey(isoCode, false))?.hearingImpaired ??
+      'avoid'
+    );
   }
 
   /** Set the HI preference; keep the compact `hi` boolean in sync too, since
    *  `resolveHearingImpairedMode` reads it as the stored form. */
   setSubHiMode(isoCode: string, mode: HearingImpairedMode) {
     const next = new Map(this.subtitleEntries());
-    const entry = next.get(isoCode);
+    const key = subKey(isoCode, false);
+    const entry = next.get(key);
     if (entry) {
-      next.set(isoCode, {
+      next.set(key, {
         ...entry,
         hearingImpaired: mode,
         hi: mode === 'prefer' || mode === 'require',
@@ -186,8 +200,8 @@ export class LanguageProfilesComponent implements OnInit {
       if (def) audioLanguages.push({ isoCode: def.isoCode, name: def.name });
     }
     const subtitleLanguages: SubtitleLanguageItem[] = [];
-    for (const [iso, opts] of this.subtitleEntries()) {
-      const def = defs.find((d) => d.isoCode === iso);
+    for (const [key, opts] of this.subtitleEntries()) {
+      const def = defs.find((d) => d.isoCode === key.split('|')[0]);
       if (def)
         subtitleLanguages.push({
           isoCode: def.isoCode,
