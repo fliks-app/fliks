@@ -410,7 +410,8 @@ export class TmdbProvider implements IMetadataProvider {
   }
 
   /**
-   * Saisons + nombre d'épisodes (un seul appel API), pour import bibliothèque sans N requêtes /season.
+   * Seasons + episode counts in one API call, so a library import does not fan
+   * out into N /season requests.
    */
   async getTvSeasonStubs(
     externalId: string,

@@ -429,7 +429,7 @@ export class DiskImportService {
     const library = await this.libraries.requirePathFor(dto.libraryId);
     if (!library.mediaTypes?.includes(dto.type)) {
       throw new BadRequestException(
-        `La bibliothèque "${library.name}" n'accepte pas ${dto.type}`,
+        `Library "${library.name}" does not accept ${dto.type}`,
       );
     }
 
@@ -479,7 +479,7 @@ export class DiskImportService {
     }
     if (media.library && media.library.id !== dto.libraryId) {
       throw new BadRequestException(
-        `Ce média est déjà rattaché à une autre bibliothèque ("${media.library.name}")`,
+        `Media already belongs to another library ("${media.library.name}")`,
       );
     }
 
@@ -702,7 +702,7 @@ export class DiskImportService {
         );
         if (!library.mediaTypes?.includes(media.type as MediaType)) {
           errors.push(
-            `${path.basename(entry.filePath)}: la bibliothèque "${library.name}" n'accepte pas ${media.type}`,
+            `${path.basename(entry.filePath)}: library "${library.name}" does not accept ${media.type}`,
           );
           continue;
         }
