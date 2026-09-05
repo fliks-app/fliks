@@ -125,7 +125,7 @@ function createHarness(opts: {
     return buildPi(mediaFileId);
   });
   const getPlaybackState = vi.fn(async () => null);
-  const stopSessions = vi.fn(async () => ({}));
+  const stopSession = vi.fn(async () => ({}));
   const updatePlaybackState = vi.fn(async () => ({}));
   const getStreamUrl = vi.fn((id: number, sid?: string) => `stream://${id}?sid=${sid}`);
   const getHlsUrl = vi.fn(
@@ -136,11 +136,11 @@ function createHarness(opts: {
   const streamingApi = {
     getPlaybackInfo,
     getPlaybackState,
-    stopSessions,
+    stopSession,
     updatePlaybackState,
     getStreamUrl,
     getHlsUrl,
-    getStopSessionsUrl: vi.fn(() => 'stop://x'),
+    getStopSessionUrl: vi.fn(() => 'stop://x'),
     getThumbnailMetadataUrl: vi.fn(() => ''),
     getThumbnailSpriteUrl: vi.fn(() => ''),
     getSubtitleUrl: vi.fn(() => ''),
@@ -307,7 +307,7 @@ describe('PlayerComponent pre-roll', () => {
 
     expect(h.component.preRollActive()).toBe(true);
     expect(h.component.mediaFileId).toBe(TRAILER_FILE_ID);
-    expect(h.streamingApi.stopSessions).toHaveBeenCalledWith(MAIN_FILE_ID, `sid-${MAIN_FILE_ID}`);
+    expect(h.streamingApi.stopSession).toHaveBeenCalledWith(`sid-${MAIN_FILE_ID}`);
 
     // preRollAdvanceEffect is what calls advancePreRoll() once state.ended()
     // latches — exercised directly here because Angular's only TestBed hook
@@ -342,7 +342,7 @@ describe('PlayerComponent pre-roll', () => {
 
     expect(h.component.preRollActive()).toBe(false);
     expect(h.component.mediaFileId).toBe(MAIN_FILE_ID);
-    expect(h.streamingApi.stopSessions).not.toHaveBeenCalled();
+    expect(h.streamingApi.stopSession).not.toHaveBeenCalled();
   });
 
   /** Closing before the seek to the resume point lands must not write the

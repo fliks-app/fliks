@@ -375,15 +375,12 @@ export class CastPlayerService {
       clearTimeout(this.disconnectGrace);
       this.disconnectGrace = null;
     }
-    const mfId = this.mediaFileId();
     const castSid = this.liveSessionId();
     this.saveCastPosition(); // Save final position before clearing
     this.stopPositionSaving();
-    if (mfId) {
-      // Sid-scoped kill so a sender that's still watching locally on a
-      // different profile isn't torn down by the cast stop.
-      this.streamingApi.stopSessions(mfId, castSid ?? undefined).catch(() => {});
-    }
+    // Sid-scoped kill so a sender that's still watching locally on a
+    // different profile isn't torn down by the cast stop.
+    if (castSid) this.streamingApi.stopSession(castSid).catch(() => {});
     this.liveSessionId.set(null);
     this.hasMedia.set(false);
     this.expanded.set(false);
@@ -466,7 +463,8 @@ export class CastPlayerService {
 
     // Scope the stop to the Cast session's own sid so a concurrent local
     // session on the same file (another profile/device) is not torn down too.
-    await this.streamingApi.stopSessions(mfId, this.liveSessionId() ?? undefined).catch(() => {});
+    const castSid = this.liveSessionId();
+    if (castSid) await this.streamingApi.stopSession(castSid).catch(() => {});
 
     const currentPos = positionOverride ?? this.cast.currentTime();
     const audioIdx = this.activeAudioStreamIndex

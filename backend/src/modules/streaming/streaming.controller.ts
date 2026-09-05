@@ -768,8 +768,6 @@ export class StreamingController {
       pickAudioLayout(sourceAudioCount, effectiveUseTs ? 'ts' : 'fmp4') ===
       'var-stream-map';
 
-    // File-scoped + global tracker state (kept in the tracker because
-    // these don't vary per playback session).
     this.activeStreamTracker.setSegmentDuration(ss.segmentDuration);
     this.activeStreamTracker.setQsvOptions({ lowPower: ss.qsvLowPower });
     this.activeStreamTracker.setTonemapAlgo(ss.tonemapAlgo);
@@ -777,17 +775,6 @@ export class StreamingController {
     // Pin HW transcoding to the admin-selected GPU (multi-GPU hosts); 'auto'
     // clears the override and falls back to the env / detected default.
     setSelectedRenderNode(ss.gpuRenderNode);
-    this.activeStreamTracker.setDeviceName(
-      userId,
-      mediaFileId,
-      deviceProfile.deviceName ?? '',
-    );
-    const sv = resolved.mediaFile.streamInfo?.video?.[0];
-    this.activeStreamTracker.setSourceDimensions(
-      mediaFileId,
-      sv?.width ?? 0,
-      sv?.height ?? 0,
-    );
 
     // Different device profiles (codec / mux / audio layout) hash to
     // different session-map keys, so multi-device playback of the same
@@ -1127,16 +1114,6 @@ export class StreamingController {
     }
 
     this.liveSessions.stop(sessionId);
-    // Release this (user, file)'s cached device name only when no sibling
-    // session remains — multi-device viewers share the same user+file pair.
-    if (live?.userId != null) {
-      const remainingForFile = [...this.liveSessions.list()].filter(
-        (s) => s.userId === live.userId && s.mediaFileId === live.mediaFileId,
-      );
-      if (remainingForFile.length === 0) {
-        this.activeStreamTracker.unregister(live.userId, live.mediaFileId);
-      }
-    }
     if (!live || !live.profileHash) return;
     // Only kill the underlying ffmpeg job(s) when no other live
     // session is still referencing this (user, file, profileHash) —
@@ -1754,10 +1731,9 @@ export class StreamingController {
       ctx.spawnReason = 'seg-race';
       const live = this.sessionRouter.findRequestSession(req, mediaFileId);
       const deviceType = live?.deviceType ?? 'desktop';
-      const sourceW =
-        this.activeStreamTracker.getSourceWidth(mediaFileId) || 1920;
-      const sourceH =
-        this.activeStreamTracker.getSourceHeight(mediaFileId) || 1080;
+      const sv = resolved.mediaFile.streamInfo?.video?.[0];
+      const sourceW = sv?.width || 1920;
+      const sourceH = sv?.height || 1080;
       const profiles = this.transcodingService.getAvailableProfiles(
         sourceW,
         sourceH,
@@ -2384,43 +2360,6 @@ export class StreamingController {
         skipTimelineRewrite: quality === 'remux',
       },
     );
-  }
-
-  // ---------------------------------------------------------------------------
-  // Session cleanup
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Deprecated bulk stop: tears down every session this user has on a
-   * media file. Superseded by the sid-scoped `DELETE /sessions/:sid`,
-   * which stops exactly the device that asked. Kept only for clients
-   * that predate sid routing; the warning log lets us confirm zero hits
-   * before removal.
-   */
-  @Delete(':mediaFileId/sessions')
-  async stopSessions(
-    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
-    @Req() req: Request,
-  ) {
-    const user = req.user;
-    this.log.warn(
-      `[deprecated] DELETE /:mediaFileId/sessions called (mediaFileId=${mediaFileId}, userId=${user?.id ?? 'anon'}); use sid-scoped DELETE /sessions/:sid`,
-    );
-    await this.transcodingService.killSession(mediaFileId, user?.id);
-    if (user) {
-      this.activeStreamTracker.unregister(user.id, mediaFileId);
-    }
-    // Drop any live-session entries for this (user, file) so the
-    // dashboard stops surfacing the row immediately instead of waiting
-    // for the heartbeat ttl. Multi-device clean-up: we only touch
-    // sessions that match `user.id`, leaving other devices alive.
-    const userId = user?.id ?? null;
-    for (const s of this.liveSessions.list()) {
-      if (s.mediaFileId === mediaFileId && s.userId === userId) {
-        this.liveSessions.stop(s.sessionId);
-      }
-    }
-    return { ok: true };
   }
 
   // ---------------------------------------------------------------------------

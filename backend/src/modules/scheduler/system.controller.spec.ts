@@ -51,9 +51,6 @@ describe('SystemController.activeStreams recency filter', () => {
     const liveSessions = {
       list: jest.fn().mockReturnValue(snapshots),
     };
-    const activeStreamTracker = {
-      getDeviceName: jest.fn().mockReturnValue(null),
-    };
     const playbackService = {
       getState: jest.fn().mockResolvedValue(null),
     };
@@ -71,7 +68,6 @@ describe('SystemController.activeStreams recency filter', () => {
       {} as never, // activityRegistry
       transcodingService as never,
       {} as never, // transcodeCache
-      activeStreamTracker as never,
       liveSessions as never,
       playbackService as never,
       mediaFileRepo as never,
@@ -149,7 +145,6 @@ describe('SystemController.sendPlayerCommand', () => {
       ]),
       listForJob: jest.fn().mockReturnValue([]),
     };
-    const activeStreamTracker = { unregister: jest.fn() };
     const transcodingService = {
       getActiveSessions: jest.fn().mockReturnValue([]),
       killSessionsForJob: jest.fn(),
@@ -165,7 +160,6 @@ describe('SystemController.sendPlayerCommand', () => {
       {} as never, // activityRegistry
       transcodingService as never,
       {} as never,
-      activeStreamTracker as never,
       liveSessions as never,
       {} as never,
       {} as never,
@@ -178,7 +172,6 @@ describe('SystemController.sendPlayerCommand', () => {
       controller,
       eventsService,
       liveSessions,
-      activeStreamTracker,
       transcodingService,
     };
   }
@@ -219,13 +212,12 @@ describe('SystemController.sendPlayerCommand', () => {
   });
 
   it('stops only the targeted live session and keeps sibling viewers', () => {
-    const { controller, liveSessions, activeStreamTracker, transcodingService } =
+    const { controller, liveSessions, transcodingService } =
       makeCommandController();
 
     controller.sendPlayerCommand('linux-sid', { action: 'stop' });
 
     expect(liveSessions.stop).toHaveBeenCalledWith('linux-sid');
-    expect(activeStreamTracker.unregister).not.toHaveBeenCalled();
     expect(transcodingService.killSessionsForJob).not.toHaveBeenCalled();
   });
 });
@@ -235,7 +227,6 @@ describe('SystemController.restart', () => {
 
   function makeController() {
     return new SystemController(
-      {} as never,
       {} as never,
       {} as never,
       {} as never,

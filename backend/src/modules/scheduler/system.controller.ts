@@ -43,7 +43,6 @@ import {
   getHdrLadderForDevice,
   parseBitrateToBps,
 } from '../streaming/transcoding';
-import { ActiveStreamTracker } from '../streaming/active-stream-tracker.service';
 import {
   type LiveSessionSnapshot,
   LiveSessionRegistry,
@@ -209,7 +208,6 @@ export class SystemController {
     private readonly activityRegistry: ActivityRegistryService,
     private readonly transcodingService: TranscodingService,
     private readonly transcodeCache: TranscodeCacheService,
-    private readonly activeStreamTracker: ActiveStreamTracker,
     private readonly liveSessions: LiveSessionRegistry,
     private readonly playbackService: PlaybackService,
     @InjectRepository(MediaFile)
@@ -494,14 +492,7 @@ export class SystemController {
         hwAccelVal,
         startedAt: session.startedAt.toISOString(),
         lastActivity: session.lastBeat.toISOString(),
-        deviceLabel:
-          session.deviceLabel ??
-          (session.userId != null
-            ? this.activeStreamTracker.getDeviceName(
-                session.userId,
-                session.mediaFileId,
-              )
-            : null),
+        deviceLabel: session.deviceLabel,
         systemName: session.systemName,
         appVersion: session.appVersion,
         transcodeSession: ts,
@@ -771,19 +762,7 @@ export class SystemController {
 
     if (body.action === 'stop') {
       this.liveSessions.stop(sessionId);
-      if (target.isDirectPlay) {
-        const remainingForFile = [...this.liveSessions.list()].filter(
-          (s) =>
-            s.userId === target.userId &&
-            s.mediaFileId === target.mediaFileId,
-        );
-        if (remainingForFile.length === 0) {
-          this.activeStreamTracker.unregister(
-            target.userId,
-            target.mediaFileId,
-          );
-        }
-      } else if (target.profileHash) {
+      if (!target.isDirectPlay && target.profileHash) {
         const remaining = this.liveSessions.listForJob(
           target.userId,
           target.mediaFileId,

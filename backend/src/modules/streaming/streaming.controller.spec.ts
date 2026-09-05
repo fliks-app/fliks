@@ -111,9 +111,6 @@ describe('StreamingController.stopLiveSession', () => {
       list: jest.fn().mockReturnValue([]),
       listForJob: jest.fn().mockReturnValue([]),
     };
-    const activeStreamTracker = {
-      unregister: jest.fn(),
-    };
     const transcodingService = {
       killSessionsForJob: jest.fn(),
     };
@@ -132,7 +129,7 @@ describe('StreamingController.stopLiveSession', () => {
       {} as never, // subtitleStreamService
       transcodingService as never,
       {} as never, // streamBuilder
-      activeStreamTracker as never,
+      {} as never, // activeStreamTracker
       {} as never, // subtitleBurnIn
       {} as never, // thumbnailService
       {} as never, // playbackService
@@ -150,7 +147,6 @@ describe('StreamingController.stopLiveSession', () => {
     return {
       controller,
       liveSessions,
-      activeStreamTracker,
       transcodingService,
       events,
       caslAbilityFactory,
@@ -171,28 +167,22 @@ describe('StreamingController.stopLiveSession', () => {
     };
   }
 
-  it('unregisters the now-watching row for a DirectPlay sid (null profileHash)', () => {
+  it('stops a DirectPlay sid (null profileHash) without touching ffmpeg', () => {
     const live = makeLive({ profileHash: null, userId: 7, mediaFileId: 42 });
-    const { controller, liveSessions, activeStreamTracker, transcodingService } =
-      makeController(live);
+    const { controller, liveSessions, transcodingService } = makeController(live);
 
     controller.stopLiveSession('sid-1', owner);
 
     expect(liveSessions.stop).toHaveBeenCalledWith('sid-1');
-    // DirectPlay has no profileHash, so the ffmpeg-kill path is skipped —
-    // the tracker row must still be cleared immediately.
-    expect(activeStreamTracker.unregister).toHaveBeenCalledWith(7, 42);
     expect(transcodingService.killSessionsForJob).not.toHaveBeenCalled();
   });
 
-  it('also unregisters for a transcode sid, then walks the ffmpeg-kill path', () => {
+  it('walks the ffmpeg-kill path for a transcode sid', () => {
     const live = makeLive({ profileHash: 'abc123', userId: 7, mediaFileId: 42 });
-    const { controller, activeStreamTracker, liveSessions, transcodingService } =
-      makeController(live);
+    const { controller, liveSessions, transcodingService } = makeController(live);
 
     controller.stopLiveSession('sid-1', owner);
 
-    expect(activeStreamTracker.unregister).toHaveBeenCalledWith(7, 42);
     expect(liveSessions.listForJob).toHaveBeenCalledWith(7, 42, 'abc123');
     // No other live session references the job → reap every ffmpeg variant.
     expect(transcodingService.killSessionsForJob).toHaveBeenCalledWith(
@@ -203,36 +193,13 @@ describe('StreamingController.stopLiveSession', () => {
   });
 
   it('is a no-op on an unknown sid', () => {
-    const { controller, activeStreamTracker, liveSessions, events } =
-      makeController(null);
+    const { controller, liveSessions, events } = makeController(null);
 
     controller.stopLiveSession('missing', owner);
 
     expect(liveSessions.stop).toHaveBeenCalledWith('missing');
-    expect(activeStreamTracker.unregister).not.toHaveBeenCalled();
     // Nobody to notify: there's no live entry to read a userId off.
     expect(events.emitToUser).not.toHaveBeenCalled();
-  });
-
-  it('skips unregister when another live session remains on the same file', () => {
-    const live = makeLive({ profileHash: null, userId: 7, mediaFileId: 42 });
-    const { controller, liveSessions, activeStreamTracker } = makeController(live);
-    liveSessions.list.mockReturnValue([
-      { sessionId: 'sid-2', userId: 7, mediaFileId: 42 },
-    ]);
-
-    controller.stopLiveSession('sid-1', owner);
-
-    expect(activeStreamTracker.unregister).not.toHaveBeenCalled();
-  });
-
-  it('does not unregister when the session has no userId', () => {
-    const live = makeLive({ profileHash: null, userId: null, mediaFileId: 42 });
-    const { controller, activeStreamTracker } = makeController(live);
-
-    controller.stopLiveSession('sid-1', owner);
-
-    expect(activeStreamTracker.unregister).not.toHaveBeenCalled();
   });
 
   it('lets the owner stop their own session and notifies their other devices', () => {
