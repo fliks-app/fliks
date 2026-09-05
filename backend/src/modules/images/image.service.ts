@@ -6,7 +6,7 @@ import * as path from 'path';
 import sharp from 'sharp';
 import { getImagesDir } from '../../common/constants/paths';
 
-// libvips defaults to one worker thread per core plus a decoded-image cache —
+// libvips defaults to one worker thread per core plus a decoded-image cache,
 // pure overhead for one-shot resizes on a low-core, low-RAM box.
 sharp.concurrency(1);
 sharp.cache(false);
@@ -111,6 +111,11 @@ function sizeTokenWidth(token: string): number | null {
 export class ImageService {
   private readonly logger = new Logger(ImageService.name);
   private readonly baseDir = getImagesDir();
+  /** Keyed by `type/id/variant`. Lets a second concurrent call for the same
+   *  target join the first instead of racing it: two overlapping calls with
+   *  different URLs would otherwise interleave writes and leave the sidecar
+   *  and the bytes on disk permanently disagreeing. */
+  private readonly inflight = new Map<string, Promise<string | null>>();
 
   /**
    * Download an image from a remote URL and store it locally, generating the
@@ -123,6 +128,24 @@ export class ImageService {
    * `full` download fails (smaller variants are best-effort, never fatal).
    */
   async downloadAndStore(
+    remoteUrl: string,
+    type: ImageType,
+    id: number | string,
+    variant?: MediaImageVariant,
+  ): Promise<string | null> {
+    const key = `${type}/${id}/${variant ?? 'default'}`;
+    const existing = this.inflight.get(key);
+    if (existing) return existing;
+    const promise = this.doDownloadAndStore(remoteUrl, type, id, variant).finally(
+      () => {
+        if (this.inflight.get(key) === promise) this.inflight.delete(key);
+      },
+    );
+    this.inflight.set(key, promise);
+    return promise;
+  }
+
+  private async doDownloadAndStore(
     remoteUrl: string,
     type: ImageType,
     id: number | string,
@@ -168,14 +191,14 @@ export class ImageService {
           timeout: 15000,
         });
         buffer = Buffer.from(res.data);
-        await fs.promises.writeFile(fullDest, buffer);
+        await this.writeFileAtomic(fullDest, buffer);
       } catch (err) {
         this.logger.warn(`Failed to download image ${remoteUrl}: ${err.message}`);
         return null;
       }
 
       // Derive the smaller variants by resizing the downloaded full locally, so
-      // every provider yields the full size pipeline — not just TMDB, whose CDN
+      // every provider yields the full size pipeline, not just TMDB, whose CDN
       // exposes per-size URLs. Best-effort per variant: the full is already saved.
       const asPng = variant === 'logo';
       await Promise.all(
@@ -188,7 +211,10 @@ export class ImageService {
             const out = await (
               asPng ? resized.png() : resized.jpeg({ quality: 90 })
             ).toBuffer();
-            await fs.promises.writeFile(this.getDiskPath(type, id, variant, size), out);
+            await this.writeFileAtomic(
+              this.getDiskPath(type, id, variant, size),
+              out,
+            );
           } catch (err) {
             this.logger.warn(
               `Failed to resize ${size} variant for ${type}/${id}: ${err.message}`,
@@ -202,11 +228,25 @@ export class ImageService {
       // Stamping the content makes the URL move exactly when the image does.
       const hash = createHash('sha1').update(buffer).digest('hex').slice(0, 8);
       // Holds the hash so a later cache hit returns the same `?v=` without the bytes.
-      await fs.promises.writeFile(srcPath, JSON.stringify({ url: remoteUrl, hash }));
+      await this.writeFileAtomic(
+        srcPath,
+        JSON.stringify({ url: remoteUrl, hash }),
+      );
       return `${this.getApiPath(type, id, variant)}?v=${hash}`;
     } finally {
       release();
     }
+  }
+
+  /** Write to a temp path then rename, so a crash mid-write can never leave a
+   *  torn file at `dest`. */
+  private async writeFileAtomic(
+    dest: string,
+    data: Buffer | string,
+  ): Promise<void> {
+    const tmp = `${dest}.tmp`;
+    await fs.promises.writeFile(tmp, data);
+    await fs.promises.rename(tmp, dest);
   }
 
   /** Cached result if `remoteUrl` matches the sidecar and every expected file
@@ -269,7 +309,7 @@ export class ImageService {
     try {
       fs.unlinkSync(this.getSrcPath(type, id, undefined));
     } catch {
-      // sidecar doesn't exist — ignore
+      // sidecar doesn't exist, ignore
     }
   }
 

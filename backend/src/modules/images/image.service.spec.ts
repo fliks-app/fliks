@@ -1,6 +1,7 @@
-import { mkdtempSync, rmSync } from 'fs';
+import { mkdtempSync, rmSync, promises as fsp } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { join, extname } from 'path';
+import { createHash } from 'crypto';
 import axios from 'axios';
 import sharp from 'sharp';
 import { ImageService } from './image.service';
@@ -18,7 +19,7 @@ describe('ImageService.downloadAndStore caching', () => {
     process.env.FLIKS_IMAGES_DIR = dir;
     service = new ImageService();
 
-    // A real decodable JPEG — sharp must actually resize it for the
+    // A real decodable JPEG, sharp must actually resize it for the
     // sized-variant files the cache check looks for to exist.
     fixture = await sharp({
       create: { width: 10, height: 10, channels: 3, background: { r: 255, g: 0, b: 0 } },
@@ -79,5 +80,40 @@ describe('ImageService.downloadAndStore caching', () => {
 
     await service.downloadAndStore(url, 'person', 4);
     expect(mockedAxios.get).toHaveBeenCalledTimes(2);
+  });
+
+  it('serializes two concurrent calls for the same target so the bytes and sidecar agree', async () => {
+    const urlA = 'https://image.tmdb.org/t/p/original/race-a.jpg';
+    const urlB = 'https://image.tmdb.org/t/p/original/race-b.jpg';
+    const bufferB = await sharp({
+      create: { width: 10, height: 10, channels: 3, background: { r: 0, g: 0, b: 255 } },
+    })
+      .jpeg()
+      .toBuffer();
+
+    mockedAxios.get.mockImplementation(async (url: unknown) => {
+      await new Promise((r) => setTimeout(r, 5));
+      return { data: String(url).includes('race-a') ? fixture : bufferB };
+    });
+
+    const [resultA, resultB] = await Promise.all([
+      service.downloadAndStore(urlA, 'person', 5),
+      service.downloadAndStore(urlB, 'person', 5),
+    ]);
+
+    // The second call joined the first instead of racing it: one download only.
+    expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+    expect(resultA).toBe(resultB);
+
+    const fullPath = service.getDiskPath('person', 5);
+    const srcPath = fullPath.slice(0, -extname(fullPath).length) + '.src.json';
+    const meta = JSON.parse(await fsp.readFile(srcPath, 'utf8')) as {
+      url: string;
+      hash: string;
+    };
+    const bytesOnDisk = await fsp.readFile(fullPath);
+    const hash = createHash('sha1').update(bytesOnDisk).digest('hex').slice(0, 8);
+    expect(meta.hash).toBe(hash);
+    expect([urlA, urlB]).toContain(meta.url);
   });
 });
