@@ -16,7 +16,7 @@ import { Media } from '../media/entities/media.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { TmdbProvider } from '../metadata-providers/providers/tmdb.provider';
 import { MediaService } from '../media/media.service';
-import { MediaType } from '../../common/enums';
+import { MediaType, MediaStatus } from '../../common/enums';
 import { ConfigService } from '@nestjs/config';
 import { SubtitleSchedulerService } from './subtitle-scheduler.service';
 import { EventsService } from './events.service';
@@ -122,6 +122,20 @@ export class SchedulerService implements OnModuleInit {
   async refreshMetadata(): Promise<void> {
     return this.runCommand('RefreshMetadata', 'scheduled', () =>
       this.doRefreshMetadata(),
+    );
+  }
+
+  /** Internal housekeeping, not in `SCHEDULERS` — nothing to trigger or list for it. */
+  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  async pruneOldCommands(): Promise<void> {
+    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const result = await this.commandRepo
+      .createQueryBuilder()
+      .delete()
+      .where('"createdAt" < :cutoff', { cutoff })
+      .execute();
+    this.log.log(
+      `PruneOldCommands: deleted ${result.affected ?? 0} command(s) older than 30 days`,
     );
   }
 
@@ -349,22 +363,25 @@ export class SchedulerService implements OnModuleInit {
     }
 
     const allMedia = await this.mediaRepo.find();
+    const now = new Date();
+    const dueMedia = allMedia.filter((m) => this.isMetadataDue(m, now));
+    const skipped = allMedia.length - dueMedia.length;
     this.log.log(
-      `RefreshMetadata: starting refresh for ${allMedia.length} media`,
+      `RefreshMetadata: starting refresh for ${dueMedia.length}/${allMedia.length} media (${skipped} settled title(s) skipped)`,
     );
     let updated = 0;
 
-    for (let i = 0; i < allMedia.length; i++) {
-      const media = allMedia[i];
+    for (let i = 0; i < dueMedia.length; i++) {
+      const media = dueMedia[i];
       this.eventsService.emit({
         type: 'task.progress',
         command: 'RefreshMetadata',
         current: i,
-        total: allMedia.length,
+        total: dueMedia.length,
         message: media.title,
       });
       this.log.log(
-        `RefreshMetadata: refreshing "${media.title}" (${i + 1}/${allMedia.length})`,
+        `RefreshMetadata: refreshing "${media.title}" (${i + 1}/${dueMedia.length})`,
       );
       try {
         await this.mediaService.refreshMetadata(media.id);
@@ -377,19 +394,42 @@ export class SchedulerService implements OnModuleInit {
       await yieldLoop();
     }
 
-    if (allMedia.length > 0) {
+    if (dueMedia.length > 0) {
       this.eventsService.emit({
         type: 'task.progress',
         command: 'RefreshMetadata',
-        current: allMedia.length,
-        total: allMedia.length,
+        current: dueMedia.length,
+        total: dueMedia.length,
         message: 'RefreshMetadata',
       });
     }
 
     this.log.log(
-      `RefreshMetadata: updated ${updated}/${allMedia.length} titles`,
+      `RefreshMetadata: updated ${updated}/${dueMedia.length} titles (${skipped} skipped)`,
     );
+  }
+
+  /** A year-old-plus movie or an ended/cancelled series is "settled" — cheap to
+   *  believe unchanged, so it's only worth re-hitting the provider weekly. */
+  private isMetadataDue(media: Media, now: Date): boolean {
+    const settled =
+      media.type === MediaType.MOVIE
+        ? this.releasedOverAYearAgo(media, now)
+        : media.status === MediaStatus.ENDED;
+    if (!settled) return true;
+    if (!media.metadataRefreshedAt) return true;
+    const ageMs = now.getTime() - media.metadataRefreshedAt.getTime();
+    return ageMs >= 7 * 24 * 60 * 60 * 1000;
+  }
+
+  private releasedOverAYearAgo(media: Media, now: Date): boolean {
+    const releaseDate = media.releaseDate
+      ? new Date(media.releaseDate)
+      : media.year
+        ? new Date(media.year, 0, 1)
+        : null;
+    if (!releaseDate || Number.isNaN(releaseDate.getTime())) return false;
+    return now.getTime() - releaseDate.getTime() > 365 * 24 * 60 * 60 * 1000;
   }
 
   private async doGenerateSprites(force: boolean): Promise<void> {
