@@ -69,7 +69,7 @@ export class SupersubtitlesProvider implements SubtitleProviderInterface {
     if (isRateLimited(PROVIDER_TYPE)) {
       throw new Error('Supersubtitles is rate-limited, try again later');
     }
-    const url = `${BASE_URL}/index.php?action=letolt&felirat=${result.providerFileId}`;
+    const url = `${BASE_URL}/index.php?action=letolt&felirat=${encodeURIComponent(result.providerFileId)}`;
     const res = await rateLimitedFetch(PROVIDER_TYPE, url, {
       headers: this.headers,
     });

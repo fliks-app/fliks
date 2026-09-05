@@ -8,6 +8,7 @@ import {
 } from './subtitle-provider.interface';
 import { extractSubtitleFromZip } from './zip-utils';
 import { isRateLimited, rateLimitedFetch } from './rate-limiter';
+import { providerUrl } from './provider-url';
 
 const PROVIDER_TYPE = 'yify';
 const BASE_URL = 'https://yifysubtitles.ch';
@@ -83,7 +84,7 @@ export class YifyProvider implements SubtitleProviderInterface {
       throw new Error('YIFY is rate-limited, try again later');
     }
     // providerFileId stores the subtitle page path (e.g. /subtitles/...)
-    const pageUrl = `${BASE_URL}${result.providerFileId}`;
+    const pageUrl = providerUrl(BASE_URL, result.providerFileId);
     const pageRes = await rateLimitedFetch(PROVIDER_TYPE, pageUrl, {
       headers: { 'User-Agent': USER_AGENT },
     });
@@ -97,7 +98,8 @@ export class YifyProvider implements SubtitleProviderInterface {
     if (!dlMatch)
       throw new Error('YIFY: download link not found on subtitle page');
 
-    const dlUrl = `${BASE_URL}${dlMatch[1]}`;
+    // scraped out of the page body, so it gets the same treatment
+    const dlUrl = providerUrl(BASE_URL, dlMatch[1]);
     const dlRes = await rateLimitedFetch(PROVIDER_TYPE, dlUrl, {
       headers: { 'User-Agent': USER_AGENT },
     });

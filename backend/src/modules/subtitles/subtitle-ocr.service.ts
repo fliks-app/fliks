@@ -18,6 +18,7 @@ import { SettingsService } from '../settings/settings.service';
 import { EventsService } from '../scheduler/events.service';
 import { cleanSubtitle } from './subtitle-cleaner';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
+import { assertSafeLangSuffix } from './subtitle-path.util';
 import {
   isImageBasedSubtitleCodec,
   isOcrSupportedSubtitleCodec,
@@ -235,6 +236,7 @@ export class SubtitleOcrService implements OnModuleInit {
         : hearingImpaired
           ? `${source.language}.hi`
           : source.language;
+      assertSafeLangSuffix(langSuffix);
       let outPath = path.join(parsed.dir, `${parsed.name}.${langSuffix}.ocr.srt`);
       let counter = 0;
       while (await this.exists(outPath)) {

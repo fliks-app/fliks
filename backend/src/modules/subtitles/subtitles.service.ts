@@ -32,6 +32,7 @@ import * as postProcess from './subtitle-post-processor';
 import { SettingsService } from '../settings/settings.service';
 import { resolveSubtitleAbsolutePath } from './subtitle-path.util';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
+import { assertSafeLangSuffix } from './subtitle-path.util';
 import {
   APP_LANGUAGES,
   ISO_639_2_TO_1,
@@ -232,26 +233,9 @@ export class SubtitlesService {
     ext: string,
     buffer: Buffer,
   ): Promise<string> {
-    const parsed = path.parse(absolutePath);
-    let subtitlePath = path.join(parsed.dir, `${parsed.name}.${langSuffix}${ext}`);
-
-    let counter = 0;
-    while (
-      await fs.access(subtitlePath).then(
-        () => true,
-        () => false,
-      )
-    ) {
-      counter++;
-      subtitlePath = path.join(
-        parsed.dir,
-        `${parsed.name}.${langSuffix}-${counter}${ext}`,
-      );
-    }
-
-    await fs.mkdir(parsed.dir, { recursive: true });
-    await fs.writeFile(subtitlePath, buffer);
-    this.logger.log(`Subtitle saved: ${subtitlePath}`);
+    // Resolve and validate the target BEFORE writing: checking afterwards
+    // rejects the request but the file is already on disk.
+    assertSafeLangSuffix(langSuffix);
 
     const media = await this.mediaRepo.findOne({
       where: { id: mediaId },
@@ -262,6 +246,23 @@ export class SubtitlesService {
         'Assign a root folder to this media before adding subtitles',
       );
     }
+
+    const parsed = path.parse(absolutePath);
+    const candidate = (suffix: string) =>
+      path.join(parsed.dir, `${parsed.name}.${suffix}${ext}`);
+
+    let subtitlePath = candidate(langSuffix);
+    let counter = 0;
+    while (
+      await fs.access(subtitlePath).then(
+        () => true,
+        () => false,
+      )
+    ) {
+      counter++;
+      subtitlePath = candidate(`${langSuffix}-${counter}`);
+    }
+
     const relativePath = relativePathUnderMediaRoot(media.path, subtitlePath);
     if (!relativePath) {
       this.logger.error(
@@ -271,7 +272,24 @@ export class SubtitlesService {
         'Subtitle file would be outside the media folder; check root folder configuration',
       );
     }
+
+    await fs.mkdir(parsed.dir, { recursive: true });
+    await fs.writeFile(subtitlePath, buffer);
+    this.logger.log(`Subtitle saved: ${subtitlePath}`);
     return relativePath;
+  }
+
+  /** A subtitle row is addressed as `/media/:mediaId/subtitles/:id`, but every
+   *  service method loads it by id alone — bind the two or a user with access
+   *  to one media can act on any other's subtitles. */
+  async assertBelongsToMedia(subtitleId: number, mediaId: number): Promise<void> {
+    const sub = await this.repo.findOne({
+      where: { id: subtitleId },
+      select: { id: true, mediaId: true },
+    });
+    if (!sub || sub.mediaId !== mediaId) {
+      throw new NotFoundException(`Subtitle #${subtitleId} not found`);
+    }
   }
 
   async downloadSubtitle(

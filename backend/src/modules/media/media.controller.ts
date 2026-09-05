@@ -75,6 +75,17 @@ export class MediaController {
     await this.mediaService.assertAccessible(id, accessible);
   }
 
+  /** The media guard above only clears `:id`. Every subtitle service method
+   *  loads its row by id alone, so the two ids have to be bound as well. */
+  private async assertSubtitleAccessible(
+    mediaId: number,
+    subtitleId: number,
+    user: User,
+  ): Promise<void> {
+    await this.assertMediaAccessible(mediaId, user);
+    await this.subtitlesService.assertBelongsToMedia(subtitleId, mediaId);
+  }
+
   @Post('import/tmdb')
   @CheckPolicies((ability) => ability.can(Action.Create, Media))
   importFromTmdb(@Body() dto: ImportTmdbDto, @CurrentUser() user: User) {
@@ -568,7 +579,7 @@ export class MediaController {
     @CurrentUser() user: User,
     @Body() body: { language?: string },
   ) {
-    await this.assertMediaAccessible(id, user);
+    await this.assertSubtitleAccessible(id, subtitleId, user);
     return this.subtitleOcr.ocrSubtitle(subtitleId, body.language);
   }
 
@@ -580,7 +591,7 @@ export class MediaController {
     @CurrentUser() user: User,
     @Body() body: { targetLanguage: string; providerId?: number },
   ) {
-    await this.assertMediaAccessible(id, user);
+    await this.assertSubtitleAccessible(id, subtitleId, user);
     return this.subtitleTranslation.translateSubtitle(
       subtitleId,
       body.targetLanguage,
@@ -596,7 +607,7 @@ export class MediaController {
     @CurrentUser() user: User,
     @Body() body: { language: string },
   ) {
-    await this.assertMediaAccessible(id, user);
+    await this.assertSubtitleAccessible(id, subtitleId, user);
     return this.subtitlesService.setLanguage(subtitleId, body.language);
   }
 
@@ -607,7 +618,7 @@ export class MediaController {
     @Param('subtitleId', ParseIntPipe) subtitleId: number,
     @CurrentUser() user: User,
   ) {
-    await this.assertMediaAccessible(id, user);
+    await this.assertSubtitleAccessible(id, subtitleId, user);
     return this.subtitlesService.validateSubtitle(subtitleId);
   }
 
@@ -664,7 +675,7 @@ export class MediaController {
     @Param('subtitleId', ParseIntPipe) subtitleId: number,
     @CurrentUser() user: User,
   ) {
-    await this.assertMediaAccessible(id, user);
+    await this.assertSubtitleAccessible(id, subtitleId, user);
     return this.subtitlesService.deleteSubtitle(subtitleId);
   }
 
@@ -682,7 +693,7 @@ export class MediaController {
       goldenSectionSearch?: boolean;
     },
   ) {
-    await this.assertMediaAccessible(id, user);
+    await this.assertSubtitleAccessible(id, subtitleId, user);
     return this.subtitleSync.enqueueSyncSubtitle(subtitleId, body ?? {});
   }
 
@@ -717,7 +728,7 @@ export class MediaController {
     @CurrentUser() user: User,
     @Body() body: { action: string; params?: Record<string, unknown> },
   ) {
-    await this.assertMediaAccessible(id, user);
+    await this.assertSubtitleAccessible(id, subtitleId, user);
     return this.subtitlesService.applyPostProcessing(
       subtitleId,
       body.action,
@@ -733,7 +744,7 @@ export class MediaController {
     @CurrentUser() user: User,
     @Body() body: { searchResult: any },
   ) {
-    await this.assertMediaAccessible(id, user);
+    await this.assertSubtitleAccessible(id, subtitleId, user);
     return this.subtitlesService.upgradeSubtitle(subtitleId, body.searchResult);
   }
 
