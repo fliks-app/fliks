@@ -69,11 +69,25 @@ interface NativeCastLoadOpts {
   currentTime: number;
   subtitles: { url: string; language: string; label: string }[];
   activeSubtitleTrackId: number;
+  autoplay: boolean;
   customData?: Record<string, unknown>;
   /** Optional — when present, native plugin builds the platform's
    *  text-track-style equivalent (TextTrackStyle on Android, GCKMedia-
    *  TextTrackStyle on iOS) and attaches to MediaInformation. */
   textTrackStyle?: CastSubtitleStyle;
+  /** The same styling already in Cast wire form. The desktop bridge talks the
+   *  protocol directly and has no platform type to map the presets onto. */
+  castTextTrackStyle?: CastTextTrackStyle;
+}
+
+/** `TextTrackStyle` as the Cast protocol carries it. */
+export interface CastTextTrackStyle {
+  fontGenericFamily: string;
+  fontScale: number;
+  foregroundColor: string;
+  backgroundColor: string;
+  edgeType: string;
+  edgeColor: string;
 }
 
 interface NativeCastPlugin {
@@ -107,7 +121,18 @@ export interface CastDevice {
   connected?: boolean;
 }
 
-const NativeCast = registerPlugin<NativeCastPlugin>('NativeCast');
+/** The Electron main process exposes the very same surface as the Capacitor
+ *  plugin (see `desktop/src/shared/contract.ts`), plus an event subscription:
+ *  contextIsolation keeps preload-world objects out of the page, so the desktop
+ *  events arrive here and get re-dispatched as the window events the plugin
+ *  fires natively. */
+interface DesktopCastBridge extends NativeCastPlugin {
+  on(handler: (event: { name: string; detail: unknown }) => void): () => void;
+}
+
+const DesktopCast = (globalThis as { fliksCast?: DesktopCastBridge }).fliksCast;
+const CastBridge: NativeCastPlugin =
+  DesktopCast ?? registerPlugin<NativeCastPlugin>('NativeCast');
 const CAST_APP_ID = environment.castAppId;
 /** Ceiling on a connect attempt: a cold receiver launch is ~2 s on a Chromecast. */
 const CONNECT_TIMEOUT_MS = 30_000;
@@ -167,7 +192,15 @@ export class CastService implements OnDestroy {
    *  custom error message; consumed by CastPlayerService to reload. */
   readonly playbackError$ = new Subject<{ position?: number }>();
 
-  private readonly isNative = Capacitor.isNativePlatform();
+  /** Whether a native-process Cast sender backs this client — the Capacitor
+   *  plugin on mobile, the Electron main process on desktop. Without one we are
+   *  in a browser and drive the Cast Web SDK instead. */
+  private readonly hasCastBridge = Capacitor.isNativePlatform() || !!DesktopCast;
+
+  /** True when the backing sender enumerates devices itself, so the picker
+   *  lists them instead of offering the single row that opens the browser's
+   *  own Cast dialog. */
+  readonly enumerates = this.hasCastBridge;
   private readonly castSettings = inject(CastSettingsService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
@@ -182,7 +215,10 @@ export class CastService implements OnDestroy {
   private remotePlayerController: any = null;
 
   constructor() {
-    if (this.isNative) {
+    DesktopCast?.on((event) =>
+      window.dispatchEvent(new CustomEvent(event.name, { detail: event.detail })),
+    );
+    if (this.hasCastBridge) {
       this.initNative();
     } else {
       this.initWeb();
@@ -205,7 +241,7 @@ export class CastService implements OnDestroy {
 
   private async initNative() {
     try {
-      const { available } = await NativeCast.initialize({ appId: CAST_APP_ID });
+      const { available } = await CastBridge.initialize({ appId: CAST_APP_ID });
       this.isAvailable.set(available);
       if (available) void this.getCastDevices();
 
@@ -251,7 +287,7 @@ export class CastService implements OnDestroy {
       // castAvailabilityChanged whenever the route list moves.
       window.addEventListener('castDevicesChanged', () => void this.getCastDevices());
     } catch (e) {
-      console.warn('NativeCast.initialize failed', e);
+      console.warn('CastBridge.initialize failed', e);
       this.isAvailable.set(false);
     }
   }
@@ -428,9 +464,9 @@ export class CastService implements OnDestroy {
 
   requestSession() {
     this.beginConnecting();
-    if (this.isNative) {
+    if (this.hasCastBridge) {
       // The plugin resolves immediately; castStateChanged fires on connect OR dismiss.
-      NativeCast.requestSession().catch(() => this.endConnecting());
+      CastBridge.requestSession().catch(() => this.endConnecting());
     } else {
       cast.framework.CastContext.getInstance().requestSession().catch(() => this.endConnecting());
     }
@@ -459,13 +495,13 @@ export class CastService implements OnDestroy {
    *  API, so this always resolves empty: the picker shows a single row that
    *  falls back to `requestSession()` there instead. */
   async getCastDevices(): Promise<CastDevice[]> {
-    if (!this.isNative) return [];
+    if (!this.hasCastBridge) return [];
     try {
-      const { devices } = await NativeCast.getCastDevices();
+      const { devices } = await CastBridge.getCastDevices();
       this.castDevices.set(devices);
       return devices;
     } catch (err) {
-      console.warn('NativeCast.getCastDevices failed', err);
+      console.warn('CastBridge.getCastDevices failed', err);
       this.castDevices.set([]);
       return [];
     }
@@ -477,7 +513,7 @@ export class CastService implements OnDestroy {
   async selectCastDevice(id: string): Promise<void> {
     this.beginConnecting();
     try {
-      await NativeCast.selectCastDevice({ id });
+      await CastBridge.selectCastDevice({ id });
     } catch (err) {
       this.endConnecting();
       throw err;
@@ -502,9 +538,9 @@ export class CastService implements OnDestroy {
 
     const subtitleStyle = this.castSettings.get().subtitleStyle;
 
-    if (this.isNative) {
+    if (this.hasCastBridge) {
       try {
-        await NativeCast.loadMedia({
+        await CastBridge.loadMedia({
           url: info.url,
           contentType: info.contentType,
           title: info.title,
@@ -513,11 +549,13 @@ export class CastService implements OnDestroy {
           currentTime: info.currentTime ?? 0,
           subtitles: info.subtitles ?? [],
           activeSubtitleTrackId: info.activeSubtitleTrackId ?? 0,
+          autoplay: info.autoplay ?? true,
           customData,
           textTrackStyle: subtitleStyle,
+          castTextTrackStyle: buildCastTextTrackStyle(subtitleStyle),
         });
       } catch (err) {
-        console.error('NativeCast.loadMedia failed:', err);
+        console.error('CastBridge.loadMedia failed:', err);
       }
       this.isPaused.set(false);
       this.mediaTitle.set(info.title);
@@ -575,21 +613,21 @@ export class CastService implements OnDestroy {
   }
 
   play() {
-    if (this.isNative) { NativeCast.play(); this.isPaused.set(false); return; }
+    if (this.hasCastBridge) { CastBridge.play(); this.isPaused.set(false); return; }
     if (!this.remotePlayerController) return;
     this.isPaused.set(false);
     if (this.remotePlayer?.isPaused) this.remotePlayerController.playOrPause();
   }
 
   pause() {
-    if (this.isNative) { NativeCast.pause(); this.isPaused.set(true); return; }
+    if (this.hasCastBridge) { CastBridge.pause(); this.isPaused.set(true); return; }
     if (!this.remotePlayerController) return;
     this.isPaused.set(true);
     if (!this.remotePlayer?.isPaused) this.remotePlayerController.playOrPause();
   }
 
   togglePlayPause() {
-    if (this.isNative) {
+    if (this.hasCastBridge) {
       if (this.isPaused()) this.play(); else this.pause();
       return;
     }
@@ -605,7 +643,7 @@ export class CastService implements OnDestroy {
     const v = Math.min(1, Math.max(0, level));
     this.volume.set(v);
     if (v > 0 && this.muted()) this.setMuted(false);
-    if (this.isNative) { NativeCast.setVolume({ level: v }).catch(() => {}); return; }
+    if (this.hasCastBridge) { CastBridge.setVolume({ level: v }).catch(() => {}); return; }
     if (!this.remotePlayer || !this.remotePlayerController) return;
     this.remotePlayer.volumeLevel = v;
     this.remotePlayerController.setVolumeLevel();
@@ -613,7 +651,7 @@ export class CastService implements OnDestroy {
 
   setMuted(muted: boolean) {
     this.muted.set(muted);
-    if (this.isNative) { NativeCast.setMuted({ muted }).catch(() => {}); return; }
+    if (this.hasCastBridge) { CastBridge.setMuted({ muted }).catch(() => {}); return; }
     if (!this.remotePlayer || !this.remotePlayerController) return;
     // muteOrUnmute() toggles receiver-side, so only fire it when the receiver's
     // current state differs from the target — avoids a double-toggle no-op.
@@ -668,7 +706,7 @@ export class CastService implements OnDestroy {
   private dispatchSeek(time: number) {
     this.lastDispatchedSeekTarget = time;
     this.seekSettleUntil = Date.now() + CAST_SEEK_SETTLE_MS;
-    if (this.isNative) { NativeCast.seek({ time }); return; }
+    if (this.hasCastBridge) { CastBridge.seek({ time }); return; }
     if (!this.remotePlayer) return;
     this.remotePlayer.currentTime = time;
     this.remotePlayerController?.seek();
@@ -699,12 +737,12 @@ export class CastService implements OnDestroy {
   }
 
   stop() {
-    if (this.isNative) { NativeCast.stop(); return; }
+    if (this.hasCastBridge) { CastBridge.stop(); return; }
     this.remotePlayerController?.stop();
   }
 
   disconnect() {
-    if (this.isNative) { NativeCast.disconnect(); }
+    if (this.hasCastBridge) { CastBridge.disconnect(); }
     else { cast.framework.CastContext.getInstance().endCurrentSession(true); }
     this.isConnected.set(false);
     this.session = null;
@@ -713,8 +751,8 @@ export class CastService implements OnDestroy {
   }
 
   setActiveSubtitle(trackId: number) {
-    if (this.isNative) {
-      NativeCast.setActiveSubtitle({ trackId });
+    if (this.hasCastBridge) {
+      CastBridge.setActiveSubtitle({ trackId });
       return;
     }
     this.applyActiveTracks({ textId: trackId > 0 ? trackId : null });
@@ -731,9 +769,9 @@ export class CastService implements OnDestroy {
    * to a full ffmpeg-restart reload in that case.
    */
   async setActiveAudioLanguage(language: string, name: string): Promise<boolean> {
-    if (this.isNative) {
+    if (this.hasCastBridge) {
       try {
-        const { success } = await NativeCast.setActiveAudioLanguage({ language, name });
+        const { success } = await CastBridge.setActiveAudioLanguage({ language, name });
         return success;
       } catch {
         return false;
@@ -796,16 +834,26 @@ export class CastService implements OnDestroy {
    *  `TextTrackStyle`. Native plugins replicate this mapping for parity
    *  so the receiver sees identical Cast values regardless of sender. */
   private buildWebTextTrackStyle(s: CastSubtitleStyle) {
+    const wire = buildCastTextTrackStyle(s);
     const style = new chrome.cast.media.TextTrackStyle();
-    style.fontGenericFamily = chrome.cast.media.TextTrackFontGenericFamily.SANS_SERIF;
-    style.fontScale = SUB_SIZE_SCALE[s.size] ?? SUB_SIZE_SCALE['normal'];
-    style.foregroundColor = SUB_FG_COLOR[s.color] ?? SUB_FG_COLOR['white'];
-    style.backgroundColor = SUB_BG_COLOR[s.background] ?? SUB_BG_COLOR['transparent'];
-    const shadow = SUB_SHADOW[s.shadow] ?? SUB_SHADOW['drop'];
-    style.edgeType = chrome.cast.media.TextTrackEdgeType[shadow.edge];
-    style.edgeColor = shadow.color;
+    Object.assign(style, wire);
+    // The SDK's own enum member rather than its name, in case the two ever
+    // diverge; every other field is a plain string or number either way.
+    style.edgeType = chrome.cast.media.TextTrackEdgeType[wire.edgeType];
     return style;
   }
+}
+
+function buildCastTextTrackStyle(s: CastSubtitleStyle): CastTextTrackStyle {
+  const shadow = SUB_SHADOW[s.shadow] ?? SUB_SHADOW['drop'];
+  return {
+    fontGenericFamily: 'SANS_SERIF',
+    fontScale: SUB_SIZE_SCALE[s.size] ?? SUB_SIZE_SCALE['normal'],
+    foregroundColor: SUB_FG_COLOR[s.color] ?? SUB_FG_COLOR['white'],
+    backgroundColor: SUB_BG_COLOR[s.background] ?? SUB_BG_COLOR['transparent'],
+    edgeType: shadow.edge,
+    edgeColor: shadow.color,
+  };
 }
 
 // Cast Web SDK wire format mappings. The size-scale table is

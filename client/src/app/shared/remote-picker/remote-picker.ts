@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, Signal, computed, inject, signal } from '@angular/core';
-import { Capacitor } from '@capacitor/core';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { RouterLink } from '@angular/router';
 import {
@@ -54,17 +53,20 @@ export class RemotePickerComponent {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
 
-  protected readonly isNative = Capacitor.isNativePlatform();
+  /** Whether the Cast backend lists devices itself (mobile plugin, desktop
+   *  bridge) — a browser has no enumeration API and delegates to its own
+   *  dialog through the single `cast-web` row. */
+  protected readonly enumerates = this.castService.enumerates;
 
   private readonly lastUsedId = signal<string | null>(this.readLastUsed());
 
   protected readonly castSearching = computed(
-    () => this.isNative && this.castService.isAvailable() && this.castService.castDevices().length === 0,
+    () => this.enumerates && this.castService.isAvailable() && this.castService.castDevices().length === 0,
   );
 
   protected readonly pickerRows: Signal<PickerRow[]> = computed(() => {
     const rows: PickerRow[] = [];
-    if (!this.isNative) {
+    if (!this.enumerates) {
       const connected = this.castService.isConnected();
       rows.push({
         kind: 'cast-web',
@@ -114,7 +116,7 @@ export class RemotePickerComponent {
    *  on close is harmless. */
   protected onTriggerPress(): void {
     void this.remote.refreshTargets();
-    if (this.isNative) void this.castService.getCastDevices();
+    if (this.enumerates) void this.castService.getCastDevices();
   }
 
   selectRow(row: PickerRow): void {
