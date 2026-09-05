@@ -39,6 +39,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <iterator>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -438,6 +439,45 @@ void ReconfigureColorForCurrentVideo() {
   dispatch_async(dispatch_get_main_queue(), ^{ ApplyLayerColorConfig(clsInt); });
 }
 
+// mpv documents the video-params enum values as subject to change, and the
+// vendored libmpv tracks whatever version Homebrew serves (vendor-libmpv-mac.sh
+// pins nothing). A rename degrades silently — an unrecognised gamma classifies as
+// CC_SDR_709, so HDR would play tone-mapped with no error — so check the names
+// ReconfigureColorForCurrentVideo compares against once at startup. mpv's own
+// choice lists come from the same tables that format video-params.
+void VerifyColorEnums() {
+  if (!g_state.mpv) return;
+  if (char* ver = M::get_property_string(g_state.mpv, "mpv-version")) {
+    fprintf(stderr, "[player-mac] libmpv version: %s\n", ver);
+    M::mpv_free(ver);
+  }
+  const struct {
+    const char* prop;
+    const char* expected[4];
+  } kChecks[] = {
+      {"option-info/target-trc/choices", {"pq", "hlg"}},
+      {"option-info/target-prim/choices", {"display-p3", "dci-p3", "bt.2020"}},
+  };
+  for (const auto& check : kChecks) {
+    char* raw = M::get_property_string(g_state.mpv, check.prop);
+    if (!raw) {
+      fprintf(stderr, "[player-mac] color: cannot read %s\n", check.prop);
+      continue;
+    }
+    const std::string csv = std::string(",") + raw + ",";
+    M::mpv_free(raw);
+    for (const char* const* name = check.expected; name < std::end(check.expected) && *name;
+         ++name) {
+      if (csv.find(std::string(",") + *name + ",") == std::string::npos) {
+        fprintf(stderr,
+                "[player-mac] color: libmpv no longer knows '%s' in %s — content "
+                "classification will fall back to SDR-709\n",
+                *name, check.prop);
+      }
+    }
+  }
+}
+
 // Emit the UI playback state from the cached pause + core-idle flags. core-idle
 // (mpv not rendering frames) distinguishes "buffering/loading" from "playing"
 // while NOT user-paused — it is the authoritative signal for the loading spinner
@@ -615,6 +655,7 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
   // (MPV_STREAM_OPTIONS in src/shared/mpv-stream-options.ts) — one source of
   // truth shared with the Linux + Windows backends.
   if (M::initialize(g_state.mpv) < 0) fprintf(stderr, "[player-mac] mpv_initialize failed\n");
+  VerifyColorEnums();
   // time-pos is read on demand by the event thread's position heartbeat (see
   // EventThreadMain), so it is deliberately NOT observed — observing it would
   // wake the loop on every frame for no gain.
