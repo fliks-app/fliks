@@ -48,6 +48,7 @@ function makeService(nfo: NfoMetadataService) {
     null as never, // postImportQueue
     null as never, // mediaServers
     { emit: jest.fn() } as never,
+    { upsertPending: jest.fn(), upsertRunning: jest.fn(), remove: jest.fn() } as never,
   );
 }
 
