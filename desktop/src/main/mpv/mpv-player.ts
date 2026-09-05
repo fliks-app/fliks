@@ -119,8 +119,8 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
    *  verify, HTTP status, unsupported codec) is in these log lines, so we
    *  buffer them and attach them to the error event. */
   private errorLog: string[] = [];
-  /** Set when a buffered error/fatal log line is mpv's own libcurl/TLS failure
-   *  signature — log prefix exactly `curl`/`tls`, or a "Failed to open"
+  /** Set when a buffered error/fatal log line carries mpv's own transport
+   *  failure signature — log prefix exactly `curl`/`tls`, or a "Failed to open"
    *  message. Reset alongside `errorLog`. Deliberately strict: a bare `stream`
    *  prefix or any other line must not set this, or a genuine decode failure
    *  (e.g. Dolby Vision) would misreport as a transport fault. */
@@ -394,7 +394,7 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
    *  the single place the three error-emitting sites read `errorLog` and
    *  `sawTransportError`, so the transport classification can't drift between
    *  them. `code` follows MediaError semantics: 2 (MEDIA_ERR_NETWORK) when
-   *  this attempt's buffered log matched mpv's own TLS/libcurl signature,
+   *  this attempt's buffered log matched mpv's own transport signature,
    *  else -1 (no MediaError equivalent — decode/format/unknown). */
   private errorPayload(message: string): { code: number; message: string; detail?: string } {
     return {

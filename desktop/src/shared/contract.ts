@@ -77,7 +77,7 @@ export type DesktopEvent =
       type: 'error';
       /** `code` follows MediaError semantics where applicable: 2
        *  (MEDIA_ERR_NETWORK) marks a transport-level failure (mpv's own
-       *  TLS/libcurl signature — see `MpvPlayer.errorPayload`), so the client
+       *  transport signature — see `MpvPlayer.errorPayload`), so the client
        *  classifies it as network/abort instead of blaming the decode path
        *  (e.g. Dolby Vision). Any other value carries no MediaError meaning. */
       payload: { code: number; message: string; detail?: string };
