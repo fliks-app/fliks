@@ -30,6 +30,7 @@ import {
 } from './dto/orphan-scan.dto';
 import { NfoMetadataService } from './nfo-metadata.service';
 import { EventsService } from '../scheduler/events.service';
+import { ActivityRegistryService } from '../scheduler/activity-registry.service';
 import { mapWithConcurrency } from '../../common/utils/concurrency';
 import { MediaService } from '../media/media.service';
 import { MediaMetadataService } from '../media/media-service/media-metadata.service';
@@ -136,6 +137,7 @@ export class DiskImportService {
     private readonly postImportQueue: PostImportQueueService,
     private readonly mediaServers: MediaServersService,
     private readonly events: EventsService,
+    private readonly activityRegistry: ActivityRegistryService,
   ) {}
 
   /**
@@ -348,25 +350,59 @@ export class DiskImportService {
     let linked = 0;
     let failed = 0;
     let index = 0;
+    const activityId = (item: RelinkOrphansDto) =>
+      `${ORPHAN_IMPORT_PROGRESS}:${item.type}:${item.folderName}`;
+    // The whole backlog up front: this loop runs for hours on a large series, and
+    // the queued groups are the part the user can't otherwise see.
     for (const item of items) {
-      this.events.emit({
-        type: 'task.progress',
-        command: ORPHAN_IMPORT_PROGRESS,
-        current: index++,
-        total: items.length,
-        message: item.folderName,
-      });
-      try {
-        const res = await this.relinkOrphans(item, userId);
-        if (res.created) created++;
-        linked += res.linked;
-        if (res.linked === 0) failed++;
-      } catch (e) {
-        failed++;
-        this.logger.warn(
-          `Orphan batch: "${item.folderName}" failed — ${(e as Error).message}`,
+      this.activityRegistry.upsertPending(
+        activityId(item),
+        ORPHAN_IMPORT_PROGRESS,
+        { title: item.folderName },
+        ORPHAN_IMPORT_PROGRESS,
+      );
+    }
+    try {
+      for (const item of items) {
+        this.events.emit({
+          type: 'task.progress',
+          command: ORPHAN_IMPORT_PROGRESS,
+          current: index++,
+          total: items.length,
+          message: item.folderName,
+        });
+        this.activityRegistry.upsertRunning(
+          ORPHAN_IMPORT_PROGRESS,
+          ORPHAN_IMPORT_PROGRESS,
+          { title: item.folderName },
+          index,
+          items.length,
         );
+        this.activityRegistry.upsertRunning(
+          activityId(item),
+          ORPHAN_IMPORT_PROGRESS,
+          { title: item.folderName },
+          undefined,
+          undefined,
+          ORPHAN_IMPORT_PROGRESS,
+        );
+        try {
+          const res = await this.relinkOrphans(item, userId);
+          if (res.created) created++;
+          linked += res.linked;
+          if (res.linked === 0) failed++;
+        } catch (e) {
+          failed++;
+          this.logger.warn(
+            `Orphan batch: "${item.folderName}" failed — ${(e as Error).message}`,
+          );
+        } finally {
+          this.activityRegistry.remove(activityId(item));
+        }
       }
+    } finally {
+      for (const item of items) this.activityRegistry.remove(activityId(item));
+      this.activityRegistry.remove(ORPHAN_IMPORT_PROGRESS);
     }
     this.events.emit({
       type: 'task.progress',

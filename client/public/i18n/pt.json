@@ -1291,6 +1291,7 @@
     "cmd_warmup_subtitles": "Extrair as legendas",
     "cmd_post_import_enrich": "Finalizar a importação",
     "cmd_post_import_enrich_queue": "Finalizando importações",
+    "cmd_orphan_import": "Importar medias detetadas",
     "cmd_subtitle_search": "Procurar as legendas em falta",
     "cmd_subtitle_upgrade": "Melhorar a qualidade das legendas",
     "cmd_group_media": "Medias",

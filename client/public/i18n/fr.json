@@ -1299,6 +1299,7 @@
     "cmd_warmup_subtitles": "Extraire les sous-titres",
     "cmd_post_import_enrich": "Finaliser l'import",
     "cmd_post_import_enrich_queue": "Finalisation des imports",
+    "cmd_orphan_import": "Import des médias détectés",
     "cmd_subtitle_search": "Rechercher les sous-titres manquants",
     "cmd_subtitle_upgrade": "Améliorer la qualité des sous-titres",
     "cmd_group_media": "Médias",

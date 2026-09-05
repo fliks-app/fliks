@@ -127,6 +127,7 @@ export class SystemStatusComponent implements OnInit, OnDestroy {
     { name: 'WarmupSubtitles', label: 'system.cmd_warmup_subtitles' },
     { name: 'PostImportEnrich', label: 'system.cmd_post_import_enrich' },
     { name: 'PostImportEnrichQueue', label: 'system.cmd_post_import_enrich_queue' },
+    { name: 'OrphanImport', label: 'system.cmd_orphan_import' },
   ]);
 
   constructor() {
