@@ -49,6 +49,10 @@ services:
       # Without this the segment cache lands in /tmp, which is tmpfs on many
       # hosts — and its LRU cap defaults to 20 GB.
       FLIKS_TRANSCODE_DIR: /app/transcode
+      # Extracted subtitles and seek-preview sprites. Regenerable, safe to
+      # delete. Defaults to cache/ inside /app/data; point it elsewhere to keep
+      # it out of your data backups.
+      # FLIKS_CACHE_DIR: /app/data/cache
       # TZ: Europe/Paris
 
       # ---- Access (optional) ----
@@ -90,8 +94,8 @@ services:
       - /path/to/download/folder:/downloads
       # JWT key: lose it and everyone is logged out.
       - fliks_conf:/app/conf
-      # Artwork, seek-preview sprites, extracted subtitle cache and uploaded
-      # avatars. Not disposable: the avatars can't be re-fetched.
+      # Artwork and uploaded avatars, plus the cache/ subfolder (see
+      # FLIKS_CACHE_DIR). Not disposable: the avatars can't be re-fetched.
       - fliks_data:/app/data
       # HLS segment cache, paired with FLIKS_TRANSCODE_DIR above. Drop both to
       # leave it in /tmp.

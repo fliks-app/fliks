@@ -94,3 +94,36 @@ describe('getDataDir', () => {
     expect(load({ FLIKS_DATA_DIR: dir, FLIKS_IMAGES_DIR: path.join(cwd, 'loses') })).toBe(dir);
   });
 });
+
+describe('getCacheDir', () => {
+  const OLD_ENV = process.env;
+  let cwd: string;
+  let cwdSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.resetModules();
+    cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'fliks-cachedir-'));
+    cwdSpy = jest.spyOn(process, 'cwd').mockReturnValue(cwd);
+  });
+
+  afterEach(() => {
+    process.env = OLD_ENV;
+    cwdSpy.mockRestore();
+    fs.rmSync(cwd, { recursive: true, force: true });
+    jest.resetModules();
+  });
+
+  function load(env: Record<string, string | undefined> = {}): string {
+    process.env = { ...OLD_ENV, ...env };
+    return (require('./paths') as typeof import('./paths')).getCacheDir();
+  }
+
+  it('defaults to cache/ under the data directory', () => {
+    expect(load()).toBe(path.join(cwd, 'data', 'cache'));
+  });
+
+  it('honours FLIKS_CACHE_DIR', () => {
+    const dir = path.join(cwd, 'elsewhere');
+    expect(load({ FLIKS_CACHE_DIR: dir })).toBe(dir);
+  });
+});

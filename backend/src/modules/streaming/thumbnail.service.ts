@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { execFile, spawn, type ChildProcess } from 'child_process';
@@ -6,7 +6,7 @@ import { promisify } from 'util';
 import { existsSync } from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
-import { getDataDir } from '../../common/constants/paths';
+import { getCacheDir, getDataDir } from '../../common/constants/paths';
 import { EventsService } from '../scheduler/events.service';
 import { ActivityRegistryService } from '../scheduler/activity-registry.service';
 import { Command } from '../scheduler/entities/command.entity';
@@ -42,8 +42,8 @@ export interface SpriteMetadata {
   count: number;
 }
 
-const baseDir = () => path.join(getDataDir(), 'thumbnails');
-const framesTmpDir = () => path.join(getDataDir(), 'thumbnails-tmp');
+const baseDir = () => path.join(getCacheDir(), 'thumbnails');
+const framesTmpDir = () => path.join(getCacheDir(), 'thumbnails-tmp');
 
 const COLUMNS = 10;
 const THUMB_WIDTH = 240;
@@ -62,7 +62,7 @@ interface QueueItem {
 }
 
 @Injectable()
-export class ThumbnailService {
+export class ThumbnailService implements OnModuleInit {
   private readonly log = new Logger(ThumbnailService.name);
   private readonly generating = new Map<
     number,
@@ -81,6 +81,17 @@ export class ThumbnailService {
     this.log.log(
       `Thumbnail extraction backends: ${describeBackends()} (FFMPEG_SLOTS=${FFMPEG_SLOTS}, SPRITE_CONCURRENCY=${SPRITE_CONCURRENCY})`,
     );
+  }
+
+  /** Sprites used to sit directly in the data dir, next to the avatars. */
+  async onModuleInit(): Promise<void> {
+    if (getCacheDir() === getDataDir()) return;
+    for (const name of ['thumbnails', 'thumbnails-tmp']) {
+      const legacyDir = path.join(getDataDir(), name);
+      await fsp.rm(legacyDir, { recursive: true, force: true }).catch((err) => {
+        this.log.warn(`Failed to remove legacy dir "${legacyDir}": ${err}`);
+      });
+    }
   }
 
   /** Pick the frame extractor, forcing the CPU path while a live transcode is

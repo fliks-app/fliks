@@ -36,10 +36,10 @@ describe('subtitle cache path', () => {
     ) as unknown as Svc;
   }
 
-  it('resolves under the images volume, not the media folder', () => {
+  it('resolves under the cache directory', () => {
     const svc = loadSvc();
     expect(svc.cachePathFor(7, 2)).toBe(
-      path.join(dir, 'subs', '7', 'emb-2.vtt'),
+      path.join(dir, 'cache', 'subs', '7', 'emb-2.vtt'),
     );
   });
 

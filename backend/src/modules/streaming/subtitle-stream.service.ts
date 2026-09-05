@@ -3,6 +3,7 @@ import {
   Logger,
   BadRequestException,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -28,7 +29,7 @@ import { resolveSubtitleAbsolutePath } from '../subtitles/subtitle-path.util';
 import { normalizeLanguageCode } from '../../common/constants/app-languages';
 import type { SubtitleRenditionMeta } from './transcoding/types';
 import { withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
-import { getDataDir } from '../../common/constants/paths';
+import { getCacheDir, getDataDir } from '../../common/constants/paths';
 import {
   formatMediaProgressSubject,
   type MediaProgressSubject,
@@ -36,8 +37,8 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-/** getDataDir() probes the filesystem on its first call — keep this lazy. */
-const subsDir = () => path.join(getDataDir(), 'subs');
+/** getCacheDir() probes the filesystem on its first call, keep this lazy. */
+const subsDir = () => path.join(getCacheDir(), 'subs');
 
 /**
  * Global cap on concurrent warmup extractions — a full library refresh can
@@ -78,7 +79,7 @@ interface WarmupBatch {
 }
 
 @Injectable()
-export class SubtitleStreamService {
+export class SubtitleStreamService implements OnModuleInit {
   private readonly log = new Logger(SubtitleStreamService.name);
   private readonly warmupQueue: WarmupTask[] = [];
   private warmupRunning = 0;
@@ -107,6 +108,15 @@ export class SubtitleStreamService {
     private readonly streamingSettings: StreamingSettingsCache,
     private readonly activityRegistry: ActivityRegistryService,
   ) {}
+
+  /** Subs used to sit directly in the data dir, next to the avatars. */
+  async onModuleInit(): Promise<void> {
+    if (getCacheDir() === getDataDir()) return;
+    const legacyDir = path.join(getDataDir(), 'subs');
+    await fs.rm(legacyDir, { recursive: true, force: true }).catch((err) => {
+      this.log.warn(`Failed to remove legacy subs dir "${legacyDir}": ${err}`);
+    });
+  }
 
   /** ACL is checked on the subtitle's OWN media, so a foreign id can't be read
    *  via another mediaFileId (IDOR); realpath blocks symlink escapes. */
@@ -640,8 +650,8 @@ export class SubtitleStreamService {
   }
 
   /**
-   * Cache path: `<imagesDir>/subs/<mediaFileId>/emb-<streamIndex>.vtt`. The
-   * managed images volume (not the library mount) survives library moves and
+   * Cache path: `<cacheDir>/subs/<mediaFileId>/emb-<streamIndex>.vtt`. The
+   * managed cache directory (not the library mount) survives library moves and
    * still works when the library is mounted read-only.
    */
   private cacheDirFor(mediaFileId: number): string {

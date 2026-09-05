@@ -262,6 +262,15 @@ docker volume rm fliks_images   # only once the boot log stops naming the old pa
 With a bind mount instead of a named volume, `mv` the host directory and
 update the left side of the mapping.
 
+### Cache directory
+
+`FLIKS_CACHE_DIR` sets where regenerable content lives: extracted subtitles
+and seek-preview sprites. It defaults to `cache/` inside the data directory,
+so no action is needed unless you want it elsewhere, for example to exclude it
+from backups. Everything under it is safe to delete, it is rebuilt on demand.
+On first boot after upgrading, the old `subs/` and `thumbnails*/` folders that
+used to sit directly in the data directory are removed automatically.
+
 ### Update checks
 
 Fliks asks the **public GitHub releases API** whether a newer version
