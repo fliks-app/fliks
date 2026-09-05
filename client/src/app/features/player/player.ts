@@ -1523,7 +1523,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         await this.engine!.unload();
         const startPos = resumeTime ?? this.engine!.currentTime;
         await this.startCastFromPlayer(startPos);
-      } else if (!this.isNativeEngine()) {
+      } else if (!this.isNativeEngine() || this.isDesktopNative) {
         this.engine!.play().catch(() => {
           // No user gesture on a device started remotely: the browser refuses
           // autoplay. Reported, not just logged: a controller otherwise shows a
