@@ -194,9 +194,10 @@ pkill -x electron        # NOT  pkill -f .../desktop
   there, not a bug. **macOS** attempts EDR passthrough for PQ/HLG on displays with
   headroom and falls back to SDR tonemap otherwise.
 - **Resume into a transcode** (seek to a high segment): the backend produces
-  seg-0/init a beat after the playlist. mpv's ffmpeg HLS demuxer is configured to
-  **reconnect on HTTP 4xx/5xx** (`demuxer-lavf-o` in `addon.cc`) so it retries
-  like Shaka instead of aborting on the first 404/503.
+  seg-0/init a beat after the playlist. mpv is configured to **reconnect on HTTP
+  4xx/5xx** (`demuxer-lavf-o` for the hls manifest, `stream-lavf-o` for every
+  other open, both in `shared/mpv-stream-options.ts`) so it retries like Shaka
+  instead of aborting on the first 404/503.
 - `isNative` is true for Electron (the UA matches `\bElectron\/`), so the desktop
   resolves to the `DESKTOP` engine kind (`client/.../engine-traits.ts`), which
   sets `probesSegZero: true` (Shaka-like: backend pre-spawns the seg-0 companion).
