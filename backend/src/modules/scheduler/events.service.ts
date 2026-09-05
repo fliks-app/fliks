@@ -3,6 +3,7 @@ import { Subject, Observable, Subscription } from 'rxjs';
 import { randomUUID } from 'crypto';
 import { DownloadProgressState } from '../../common/constants/download-progress-state';
 import { DownloadProgressCacheService } from './download-progress-cache.service';
+import type { MediaProgressSubject } from '../../common/utils/media-progress-subject.util';
 
 export type SseEvent =
   | {
@@ -11,6 +12,11 @@ export type SseEvent =
       current: number;
       total: number;
       message: string;
+      /** Present when the task's subject is a media: lets the client show the
+       *  series/movie title and episode identity as separate fields instead of
+       *  parsing `message`. Absent for a subject with no media behind it (an
+       *  orphan-scan path, for instance): `message` alone carries it then. */
+      subject?: MediaProgressSubject;
     }
   | {
       type: 'subtitle.synced';
@@ -100,6 +106,9 @@ export type SseEvent =
     }
   | { type: 'stalled.removed'; title: string }
   | { type: 'queue.updated' }
+  // Payload-free: the System page's Activity table refetches
+  // `GET /api/system/activity` on receipt rather than trusting a pushed list.
+  | { type: 'activity.changed' }
   | { type: 'command.started'; name: string }
   | { type: 'command.completed'; name: string; status: string }
   | { type: 'rescan.started'; mediaId: number; title: string }

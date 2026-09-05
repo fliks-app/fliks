@@ -8,6 +8,7 @@ import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { getImagesDir } from '../../common/constants/paths';
 import { EventsService } from '../scheduler/events.service';
+import { ActivityRegistryService } from '../scheduler/activity-registry.service';
 import { Command } from '../scheduler/entities/command.entity';
 import {
   describeBackends,
@@ -16,6 +17,12 @@ import {
   type CropArea,
 } from './thumbnail-extractors';
 import { TranscodingService } from './transcoding';
+import { FFMPEG_SLOTS, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
+import {
+  buildMediaProgressSubject,
+  formatMediaProgressSubject,
+  type MediaProgressSubject,
+} from '../../common/utils/media-progress-subject.util';
 
 const execFileAsync = promisify(execFile);
 
@@ -38,35 +45,6 @@ export interface SpriteMetadata {
 const baseDir = () => path.join(getImagesDir(), 'thumbnails');
 const framesTmpDir = () => path.join(getImagesDir(), 'thumbnails-tmp');
 
-/** Concurrent ffmpeg `-ss` seeks per sprite. HW decode saturates much
- *  earlier than the CPU pool — the GPU's decoder-session count caps useful
- *  parallelism around 4. SW path keeps the previous 8-wide setting. */
-const SEEK_CONCURRENCY = HWACCEL_AVAILABLE ? 4 : 8;
-
-/**
- * Build a human-readable label for a sprite: "S01E03 — Episode Title" for a
- * series episode, media title otherwise. Exported so call sites can compute
- * labels upfront (bulk ops) or per-file.
- */
-export function buildSpriteLabel(
-  media: { title: string },
-  episode?: {
-    seasonNumber?: number | null;
-    episodeNumber?: number | null;
-    title?: string | null;
-  } | null,
-): string {
-  if (
-    !episode ||
-    episode.seasonNumber == null ||
-    episode.episodeNumber == null
-  ) {
-    return media.title;
-  }
-  const sn = String(episode.seasonNumber).padStart(2, '0');
-  const en = String(episode.episodeNumber).padStart(2, '0');
-  return `S${sn}E${en} — ${episode.title ?? media.title}`;
-}
 const COLUMNS = 10;
 const THUMB_WIDTH = 240;
 
@@ -77,7 +55,7 @@ interface QueueItem {
   mediaFileId: number;
   absolutePath: string;
   durationSeconds: number;
-  mediaTitle?: string;
+  subject: MediaProgressSubject;
   skipTracking?: boolean;
   crop?: CropArea;
   resolve: (meta: SpriteMetadata | null) => void;
@@ -98,9 +76,10 @@ export class ThumbnailService {
     @InjectRepository(Command)
     private readonly commandRepo: Repository<Command>,
     private readonly transcoding: TranscodingService,
+    private readonly activityRegistry: ActivityRegistryService,
   ) {
     this.log.log(
-      `Thumbnail extraction backends: ${describeBackends()} (SEEK_CONCURRENCY=${SEEK_CONCURRENCY}, SPRITE_CONCURRENCY=${SPRITE_CONCURRENCY})`,
+      `Thumbnail extraction backends: ${describeBackends()} (FFMPEG_SLOTS=${FFMPEG_SLOTS}, SPRITE_CONCURRENCY=${SPRITE_CONCURRENCY})`,
     );
   }
 
@@ -131,7 +110,7 @@ export class ThumbnailService {
       } | null;
     },
     media: { path: string | null; title: string },
-    label: string,
+    subject: MediaProgressSubject,
     options: { force?: boolean; skipTracking?: boolean } = {},
   ): Promise<SpriteMetadata | null> {
     const dur = file.streamInfo?.durationSeconds;
@@ -144,7 +123,7 @@ export class ThumbnailService {
       file.id,
       absPath,
       dur,
-      label,
+      subject,
       options.force ?? false,
       options.skipTracking ?? false,
       file.streamInfo?.video?.[0]?.crop,
@@ -155,7 +134,7 @@ export class ThumbnailService {
     mediaFileId: number,
     absolutePath: string,
     durationSeconds: number,
-    mediaTitle?: string,
+    subject: MediaProgressSubject,
     force = false,
     skipTracking = false,
     crop?: CropArea,
@@ -175,12 +154,17 @@ export class ThumbnailService {
       return this.generating.get(mediaFileId)!;
     }
 
+    this.activityRegistry.upsertPending(
+      `GenerateSprite:${mediaFileId}`,
+      'GenerateSprite',
+      subject,
+    );
     const promise = new Promise<SpriteMetadata | null>((resolve) => {
       this.queue.push({
         mediaFileId,
         absolutePath,
         durationSeconds,
-        mediaTitle,
+        subject,
         skipTracking,
         crop,
         resolve,
@@ -238,7 +222,7 @@ export class ThumbnailService {
         item.mediaFileId,
         item.absolutePath,
         item.durationSeconds,
-        item.mediaTitle,
+        item.subject,
         item.skipTracking,
         item.crop,
       )
@@ -247,7 +231,7 @@ export class ThumbnailService {
           // Don't let unexpected failures stay silent — log stack then
           // resolve null so callers don't hang.
           this.log.error(
-            `Sprite generation crashed (file #${item.mediaFileId}, "${item.mediaTitle ?? ''}"): ${(err as Error).message}`,
+            `Sprite generation crashed (file #${item.mediaFileId}, "${item.subject.title}"): ${(err as Error).message}`,
             err instanceof Error ? err.stack : err,
           );
           item.resolve(null);
@@ -263,7 +247,7 @@ export class ThumbnailService {
     mediaFileId: number,
     absolutePath: string,
     durationSeconds: number,
-    mediaTitle?: string,
+    subject: MediaProgressSubject,
     skipTracking = false,
     crop?: CropArea,
   ): Promise<SpriteMetadata | null> {
@@ -273,9 +257,10 @@ export class ThumbnailService {
     const interval = this.pickInterval(durationSeconds);
     const count = Math.ceil(durationSeconds / interval);
     const rows = Math.ceil(count / COLUMNS);
-    const label = mediaTitle ?? `file #${mediaFileId}`;
+    const label = formatMediaProgressSubject(subject);
     const total = Math.round(durationSeconds);
     const progressKey = `GenerateSprite:${mediaFileId}`;
+    this.activityRegistry.upsertRunning(progressKey, 'GenerateSprite', subject, 0, total);
     const t0 = Date.now();
 
     // Source file size + concurrent sprite jobs: useful to correlate slow
@@ -295,7 +280,7 @@ export class ThumbnailService {
     // exactly what ffmpeg sees per frame.
     const decode = this.chooseExtractor(crop).describe();
     this.log.log(
-      `Sprite START for "${label}" (file #${mediaFileId}): ${count} thumbs @ ${interval}s interval, workers=${SEEK_CONCURRENCY}, decode=${decode}, otherSprites=${otherRunning}, queued=${this.queue.length}, srcSize=${srcSizeMb ?? '?'}MB, crop=${
+      `Sprite START for "${label}" (file #${mediaFileId}): ${count} thumbs @ ${interval}s interval, workers=${FFMPEG_SLOTS}, decode=${decode}, otherSprites=${otherRunning}, queued=${this.queue.length}, srcSize=${srcSizeMb ?? '?'}MB, crop=${
         crop ? `${crop.width}x${crop.height}+${crop.x},${crop.y}` : 'none'
       }, src=${absolutePath}`,
     );
@@ -331,6 +316,7 @@ export class ThumbnailService {
       current: 0,
       total,
       message: label,
+      subject,
     });
 
     // Global 10-minute timeout for the entire sprite (extraction + tiling).
@@ -358,6 +344,7 @@ export class ThumbnailService {
             count,
             total,
             label,
+            subject,
             progressKey,
             crop,
           );
@@ -453,7 +440,9 @@ export class ThumbnailService {
         current: total,
         total,
         message: label,
+        subject,
       });
+      this.activityRegistry.remove(progressKey);
       // Cleanup tmp frames (fire-and-forget).
       fsp
         .rm(path.join(framesTmpDir(), String(mediaFileId)), {
@@ -477,6 +466,7 @@ export class ThumbnailService {
     count: number,
     totalSeconds: number,
     label: string,
+    subject: MediaProgressSubject,
     progressKey: string,
     crop?: CropArea,
   ): Promise<void> {
@@ -532,12 +522,20 @@ export class ThumbnailService {
             current: Math.round(current),
             total: totalSeconds,
             message: label,
+            subject,
           });
+          this.activityRegistry.upsertRunning(
+            progressKey,
+            'GenerateSprite',
+            subject,
+            Math.round(current),
+            totalSeconds,
+          );
         }
       }
     };
 
-    const workers = Math.min(SEEK_CONCURRENCY, count);
+    const workers = Math.min(FFMPEG_SLOTS, count);
     await Promise.all(Array.from({ length: workers }, () => runOne()));
 
     const wallMs = Date.now() - extractStart;
@@ -623,42 +621,45 @@ export class ThumbnailService {
     outputPath: string,
     crop?: CropArea,
   ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const args = this.chooseExtractor(crop).buildArgs({
-        inputPath,
-        seekSeconds,
-        outputPath,
-        crop,
-        thumbWidth: THUMB_WIDTH,
-      });
-      const proc = spawnLowPriority('ffmpeg', args);
-      let stderr = '';
-      proc.stderr?.on('data', (chunk: Buffer) => {
-        if (stderr.length < 4096) stderr += chunk.toString();
-      });
-      let killed = false;
-      const killTimer = setTimeout(() => {
-        killed = true;
-        try {
-          proc.kill('SIGKILL');
-        } catch {
-          /* ignore */
-        }
-      }, 30_000);
-      proc.on('close', (code) => {
-        clearTimeout(killTimer);
-        if (code === 0) return resolve();
-        const reason = killed ? 'timeout (60s)' : `code ${code}`;
-        const err = new Error(
-          `ffmpeg -ss exited with ${reason}: ${stderr.trim().split('\n').slice(-2).join(' ')}`,
-        );
-        reject(err);
-      });
-      proc.on('error', (err) => {
-        clearTimeout(killTimer);
-        reject(err);
-      });
-    });
+    return withFfmpegSlot(
+      () =>
+        new Promise((resolve, reject) => {
+          const args = this.chooseExtractor(crop).buildArgs({
+            inputPath,
+            seekSeconds,
+            outputPath,
+            crop,
+            thumbWidth: THUMB_WIDTH,
+          });
+          const proc = spawnLowPriority('ffmpeg', args);
+          let stderr = '';
+          proc.stderr?.on('data', (chunk: Buffer) => {
+            if (stderr.length < 4096) stderr += chunk.toString();
+          });
+          let killed = false;
+          const killTimer = setTimeout(() => {
+            killed = true;
+            try {
+              proc.kill('SIGKILL');
+            } catch {
+              /* ignore */
+            }
+          }, 30_000);
+          proc.on('close', (code) => {
+            clearTimeout(killTimer);
+            if (code === 0) return resolve();
+            const reason = killed ? 'timeout (60s)' : `code ${code}`;
+            const err = new Error(
+              `ffmpeg -ss exited with ${reason}: ${stderr.trim().split('\n').slice(-2).join(' ')}`,
+            );
+            reject(err);
+          });
+          proc.on('error', (err) => {
+            clearTimeout(killTimer);
+            reject(err);
+          });
+        }),
+    );
   }
 
   /** Tile the extracted individual frames into a single sprite JPEG. */
@@ -667,42 +668,57 @@ export class ThumbnailService {
     spritePath: string,
     rows: number,
   ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const args = [
-        '-nostdin',
-        '-hide_banner',
-        '-loglevel',
-        'error',
-        '-start_number',
-        '1',
-        '-i',
-        path.join(framesDir, 'frame-%04d.jpg'),
-        '-vf',
-        `tile=${COLUMNS}x${rows}`,
-        '-q:v',
-        '5',
-        '-y',
-        spritePath,
-      ];
-      const proc = spawnLowPriority('ffmpeg', args);
-      let stderr = '';
-      proc.stderr?.on('data', (chunk: Buffer) => {
-        if (stderr.length < 16 * 1024) stderr += chunk.toString();
-      });
-      proc.on('close', (code) => {
-        if (code === 0) return resolve();
-        const err = new Error(
-          `ffmpeg tile exited with code ${code}`,
-        ) as Error & { stderr: string };
-        err.stderr = stderr;
-        reject(err);
-      });
-      proc.on('error', (err) => {
-        const e = err as Error & { stderr?: string };
-        e.stderr = stderr;
-        reject(e);
-      });
-    });
+    return withFfmpegSlot(
+      () =>
+        new Promise((resolve, reject) => {
+          const args = [
+            '-nostdin',
+            '-hide_banner',
+            '-loglevel',
+            'error',
+            '-start_number',
+            '1',
+            '-i',
+            path.join(framesDir, 'frame-%04d.jpg'),
+            '-vf',
+            `tile=${COLUMNS}x${rows}`,
+            '-q:v',
+            '5',
+            '-y',
+            spritePath,
+          ];
+          const proc = spawnLowPriority('ffmpeg', args);
+          let stderr = '';
+          proc.stderr?.on('data', (chunk: Buffer) => {
+            if (stderr.length < 16 * 1024) stderr += chunk.toString();
+          });
+          let killed = false;
+          const killTimer = setTimeout(() => {
+            killed = true;
+            try {
+              proc.kill('SIGKILL');
+            } catch {
+              /* ignore */
+            }
+          }, 30_000);
+          proc.on('close', (code) => {
+            clearTimeout(killTimer);
+            if (code === 0) return resolve();
+            const reason = killed ? 'timeout (30s)' : `code ${code}`;
+            const err = new Error(
+              `ffmpeg tile exited with ${reason}`,
+            ) as Error & { stderr: string };
+            err.stderr = stderr;
+            reject(err);
+          });
+          proc.on('error', (err) => {
+            clearTimeout(killTimer);
+            const e = err as Error & { stderr?: string };
+            e.stderr = stderr;
+            reject(e);
+          });
+        }),
+    );
   }
 
   /** Indent every line by 4 spaces — for nicer log formatting. */

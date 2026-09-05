@@ -1,6 +1,13 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Subscription } from 'rxjs';
 import { existsSync } from 'fs';
 import { MediaFile } from '../media/entities/media-file.entity';
@@ -8,11 +15,16 @@ import { Episode } from '../media/entities/episode.entity';
 import { EventsService } from './events.service';
 import {
   ThumbnailService,
-  buildSpriteLabel,
   type SpriteMetadata,
 } from '../streaming/thumbnail.service';
 import { MarkersService } from '../markers/markers.service';
 import { SettingsService } from '../settings/settings.service';
+import { PostImportQueueService } from '../../common/post-import/post-import-queue.service';
+import { ActivityRegistryService } from './activity-registry.service';
+import {
+  buildMediaProgressSubject,
+  formatMediaProgressSubject,
+} from '../../common/utils/media-progress-subject.util';
 
 /**
  * Derived artefacts every newly landed file needs before playback: seek
@@ -27,6 +39,10 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
   /** An import wave lands file by file — wait for it to settle so a season
    *  pack costs one marker scan instead of one per episode. */
   static readonly SETTLE_MS = 60_000;
+  /** Ceiling on waiting for the (global, shared) enrichment queue to idle: a
+   *  steady trickle of downloads could otherwise keep it busy forever and
+   *  sprites/markers would never run. */
+  static readonly QUEUE_IDLE_CEILING_MS = 5 * 60_000;
   private readonly pending = new Map<number, NodeJS.Timeout>();
 
   constructor(
@@ -38,6 +54,9 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
     private readonly thumbnails: ThumbnailService,
     private readonly markers: MarkersService,
     private readonly settings: SettingsService,
+    @Inject(forwardRef(() => PostImportQueueService))
+    private readonly postImportQueue: PostImportQueueService,
+    private readonly activityRegistry: ActivityRegistryService,
   ) {}
 
   onModuleInit(): void {
@@ -74,8 +93,14 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Sprites first: they are per-file and cheap next to a season-wide
-   *  fingerprint pass, and both compete for the same ffmpeg budget. */
+   *  fingerprint pass, and both compete for the same ffmpeg budget as import. */
   private async run(mediaId: number): Promise<void> {
+    let ceilingTimer!: NodeJS.Timeout;
+    const ceiling = new Promise<void>((resolve) => {
+      ceilingTimer = setTimeout(resolve, PostImportService.QUEUE_IDLE_CEILING_MS);
+    });
+    await Promise.race([this.postImportQueue.whenIdle(), ceiling]);
+    clearTimeout(ceilingTimer);
     if (await this.enabled('sprites_auto_generate_on_import')) {
       try {
         const generated = await this.generateMissingSprites(mediaId);
@@ -118,30 +143,96 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
     );
     if (!missing.length) return 0;
 
+    // Only ids were loaded above to keep a big import off the heap, so resolve titles for
+    // the whole missing batch in one extra join (not one query per file) so the progress
+    // row can still name a series + episode instead of a bare file id.
+    const t0 = Date.now();
+    const rows = await this.mediaFileRepo.find({
+      where: { id: In(missing.map(({ id }) => id)) },
+      relations: ['media', 'episode', 'episode.season'],
+      select: {
+        id: true,
+        media: { id: true, type: true, title: true },
+        episode: {
+          id: true,
+          episodeNumber: true,
+          title: true,
+          season: { seasonNumber: true },
+        },
+      },
+    });
+    const subjectById = new Map(
+      rows
+        .filter((f) => f.media)
+        .map((f) => [
+          f.id,
+          buildMediaProgressSubject(
+            f.media,
+            f.episode
+              ? {
+                  id: f.episode.id,
+                  seasonNumber: f.episode.season?.seasonNumber,
+                  episodeNumber: f.episode.episodeNumber,
+                  title: f.episode.title,
+                }
+              : null,
+          ),
+        ]),
+    );
+    this.log.debug?.(
+      `generateMissingSprites[media #${mediaId}]: resolved ${rows.length} title(s) for progress in ${Date.now() - t0}ms`,
+    );
+
     const command = `GenerateMissingSprites:${mediaId}`;
+    const wholeMediaSubject = rows.find((r) => r.media)?.media
+      ? buildMediaProgressSubject(rows.find((r) => r.media)!.media)
+      : undefined;
+    this.activityRegistry.upsertRunning(command, 'GenerateMissingSprites', undefined, 0, missing.length);
+    for (const { id } of missing) {
+      this.activityRegistry.upsertPending(
+        `GenerateSprite:${id}`,
+        'GenerateSprite',
+        subjectById.get(id),
+        command,
+      );
+    }
+
     let generated = 0;
-    for (const [index, { id }] of missing.entries()) {
+    try {
+      for (const [index, { id }] of missing.entries()) {
+        const subject = subjectById.get(id);
+        this.events.emit({
+          type: 'task.progress',
+          command,
+          current: index,
+          total: missing.length,
+          message: subject ? formatMediaProgressSubject(subject) : command,
+          subject,
+        });
+        this.activityRegistry.upsertRunning(command, 'GenerateMissingSprites', undefined, index, missing.length);
+        try {
+          if (await this.generateSprite(id, false)) generated++;
+        } finally {
+          // Belt-and-suspenders: covers the rare path where generation never runs
+          // (already cached, already in flight) and so never removes its own row.
+          this.activityRegistry.remove(`GenerateSprite:${id}`);
+        }
+      }
       this.events.emit({
         type: 'task.progress',
         command,
-        current: index,
+        current: missing.length,
         total: missing.length,
-        message: `#${id}`,
+        message: command,
       });
-      if (await this.generateSprite(id, false)) generated++;
+    } finally {
+      this.activityRegistry.remove(command);
     }
-    this.events.emit({
-      type: 'task.progress',
-      command,
-      current: missing.length,
-      total: missing.length,
-      message: command,
-    });
     return generated;
   }
 
   /**
-   * Resolve the file's absolute path + sprite label from its own rows and
+   * Resolve the file's absolute path + progress subject from its own rows and
    * queue generation. Shared with the bulk scheduler commands.
    */
   async generateSprite(
@@ -154,21 +245,22 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
     });
     if (!file?.media) return null;
 
-    let label = file.media.title;
+    let subject = buildMediaProgressSubject(file.media);
     if (file.episodeId) {
       const ep = await this.episodeRepo.findOne({
         where: { id: file.episodeId },
         relations: ['season'],
       });
       if (ep) {
-        label = buildSpriteLabel(file.media, {
+        subject = buildMediaProgressSubject(file.media, {
+          id: ep.id,
           seasonNumber: ep.season?.seasonNumber,
           episodeNumber: ep.episodeNumber,
           title: ep.title,
         });
       }
     }
-    return this.thumbnails.generateForFile(file, file.media, label, {
+    return this.thumbnails.generateForFile(file, file.media, subject, {
       force,
       skipTracking: true,
     });

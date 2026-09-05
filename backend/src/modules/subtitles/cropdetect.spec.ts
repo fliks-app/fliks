@@ -11,9 +11,14 @@ type Cb = (err: Error | null, out: { stdout: string; stderr: string }) => void;
 const execFileMock = execFile as unknown as jest.Mock;
 const existsSyncMock = existsSync as unknown as jest.Mock;
 
-/** Every ffmpeg invocation the service made, as one argv array each. */
+/** Every ffmpeg invocation the service made, as one argv array each, with the
+ *  linux `ionice -c3 nice -n19` wrapper stripped (asserted separately below). */
 const calls = (): string[][] =>
-  execFileMock.mock.calls.map((c) => c[1] as string[]);
+  execFileMock.mock.calls.map((c) => {
+    const argv = c[1] as string[];
+    const ffmpeg = argv.indexOf('ffmpeg');
+    return ffmpeg === -1 ? argv : argv.slice(ffmpeg + 1);
+  });
 
 function reply(stderr: string) {
   execFileMock.mockImplementation((_cmd, _args, _opts, cb: Cb) =>
@@ -63,6 +68,18 @@ describe('cropdetect', () => {
       ]);
       expect(argv[argv.indexOf('-vf') + 1]).toContain('hwdownload,format=nv12');
       expect(argv).not.toContain('-threads');
+    }
+  });
+
+  it('runs the probe at idle I/O and CPU priority on linux', async () => {
+    if (process.platform !== 'linux') return;
+    existsSyncMock.mockReturnValue(false);
+    reply('crop=1920:800:0:140');
+    await detect();
+
+    for (const [cmd, argv] of execFileMock.mock.calls as [string, string[]][]) {
+      expect(cmd).toBe('ionice');
+      expect(argv.slice(0, 4)).toEqual(['-c3', 'nice', '-n19', 'ffmpeg']);
     }
   });
 

@@ -10,6 +10,7 @@ import { Media } from '../media/entities/media.entity';
 import { Season } from '../media/entities/season.entity';
 import { EpisodeMarker } from './entities/episode-marker.entity';
 import { SettingsService } from '../settings/settings.service';
+import { FFMPEG_SLOTS, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
 
 const execFileAsync = promisify(execFile);
 
@@ -246,7 +247,7 @@ export class IntroDetectionService {
     // Fingerprint every remaining episode (+ the reference peer so we can
     // use its intro audio as a template search pattern).
     const fingerprints = new Map<number, Fingerprint>();
-    const concurrency = 4;
+    const concurrency = FFMPEG_SLOTS;
     let processed = 0;
     const toFingerprint = referencePeer
       ? [...needsFingerprint, referencePeer.episode]
@@ -630,7 +631,7 @@ export class IntroDetectionService {
     const toFingerprint = referencePeer
       ? [...needsFingerprint, referencePeer.episode]
       : needsFingerprint;
-    const concurrency = 4;
+    const concurrency = FFMPEG_SLOTS;
     let processed = 0;
     onProgress?.(
       0,
@@ -814,10 +815,16 @@ export class IntroDetectionService {
     absPath: string,
     maxSeconds: number,
   ): Promise<Fingerprint> {
-    const { stdout } = await execFileAsync(
-      'fpcalc',
-      ['-raw', '-length', String(maxSeconds), absPath],
-      { timeout: 180_000, maxBuffer: 16 * 1024 * 1024 },
+    const fpcalcArgs = ['-raw', '-length', String(maxSeconds), absPath];
+    const [cmd, args] =
+      process.platform === 'linux'
+        ? ['ionice', ['-c3', 'nice', '-n19', 'fpcalc', ...fpcalcArgs]]
+        : ['fpcalc', fpcalcArgs];
+    const { stdout } = await withFfmpegSlot(() =>
+      execFileAsync(cmd, args, {
+        timeout: 180_000,
+        maxBuffer: 16 * 1024 * 1024,
+      }),
     );
     const durMatch = stdout.match(/DURATION=([\d.]+)/);
     const fpMatch = stdout.match(/FINGERPRINT=([\d,\-]+)/);
@@ -836,6 +843,18 @@ export class IntroDetectionService {
    * expose a `-start` flag, so we use ffmpeg's `-ss` seek.
    */
   private fingerprintWindow(
+    absPath: string,
+    startSec: number,
+    lengthSec: number,
+  ): Promise<Fingerprint> {
+    // ffmpeg and fpcalc form one pipeline, held under a single slot so the
+    // pair counts once against the budget, not twice.
+    return withFfmpegSlot(() =>
+      this.runFingerprintWindow(absPath, startSec, lengthSec),
+    );
+  }
+
+  private runFingerprintWindow(
     absPath: string,
     startSec: number,
     lengthSec: number,

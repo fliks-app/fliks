@@ -42,6 +42,7 @@ import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
 import { LucideSearch, LucideSlidersHorizontal, LucideArrowUp, LucideArrowDown, LucideX, LucideFilm } from '@lucide/angular';
 import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
 import { CardSkeletonComponent } from '../../shared/components/card-skeleton';
+import { ImportProgressBannerComponent } from '../../shared/components/import-progress-banner/import-progress-banner';
 import { NgTemplateOutlet } from '@angular/common';
 import { itemArtwork } from '../../shared/utils/media-artwork.util';
 import { PlayableMediaService } from '../../core/services/playable-media.service';
@@ -96,6 +97,7 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
     CdkVirtualForOf,
     CdkVirtualScrollableWindow,
     CardSkeletonComponent,
+    ImportProgressBannerComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './library.html',

@@ -42,6 +42,12 @@ function harness() {
   };
   const markers = { autoDetectMissing: jest.fn().mockResolvedValue(undefined) };
   const settings = { get: jest.fn().mockResolvedValue(null) };
+  const postImportQueue = { whenIdle: jest.fn().mockResolvedValue(undefined) };
+  const activityRegistry = {
+    upsertPending: jest.fn(),
+    upsertRunning: jest.fn(),
+    remove: jest.fn(),
+  };
   const service = new PostImportService(
     mediaFileRepo as never,
     episodeRepo as never,
@@ -49,9 +55,22 @@ function harness() {
     thumbnails as never,
     markers as never,
     settings as never,
+    postImportQueue as never,
+    activityRegistry as never,
   );
   service.onModuleInit();
-  return { service, domain, sse, events, mediaFileRepo, thumbnails, markers, settings };
+  return {
+    service,
+    domain,
+    sse,
+    events,
+    mediaFileRepo,
+    thumbnails,
+    markers,
+    settings,
+    postImportQueue,
+    activityRegistry,
+  };
 }
 
 describe('PostImportService', () => {
@@ -98,7 +117,9 @@ describe('PostImportService', () => {
     jest.advanceTimersByTime(PostImportService.SETTLE_MS);
     await settle();
 
-    expect(h.mediaFileRepo.find).toHaveBeenCalledTimes(1);
+    // One pass = 2 `find` calls: the ids-only load, then one batch join that
+    // resolves progress titles for the whole missing list (never per file).
+    expect(h.mediaFileRepo.find).toHaveBeenCalledTimes(2);
     expect(h.markers.autoDetectMissing).toHaveBeenCalledTimes(1);
     h.service.onModuleDestroy();
   });

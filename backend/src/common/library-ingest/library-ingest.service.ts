@@ -1,4 +1,4 @@
-import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as fs from 'fs';
@@ -10,8 +10,7 @@ import { Season } from '../../modules/media/entities/season.entity';
 import { MediaType } from '../enums';
 import { relativePathUnderMediaRoot } from '../utils/media-path.util';
 import { NamingService } from '../../modules/scheduler/naming.service';
-import { SubtitleSchedulerService } from '../../modules/scheduler/subtitle-scheduler.service';
-import { MediaService } from '../../modules/media/media.service';
+import { PostImportQueueService } from '../post-import/post-import-queue.service';
 import { FileTransferService, TransferMethod } from '../services/file-transfer.service';
 import { FfprobeService } from '../../modules/subtitles/ffprobe.service';
 import { EventsService } from '../../modules/scheduler/events.service';
@@ -71,10 +70,7 @@ export class LibraryIngestService {
     private readonly seasonRepo: Repository<Season>,
     private readonly naming: NamingService,
     private readonly fileTransfer: FileTransferService,
-    @Inject(forwardRef(() => MediaService))
-    private readonly mediaService: MediaService,
-    @Inject(forwardRef(() => SubtitleSchedulerService))
-    private readonly subtitleScheduler: SubtitleSchedulerService,
+    private readonly postImportQueue: PostImportQueueService,
     private readonly ffprobe: FfprobeService,
     private readonly events: EventsService,
   ) {}
@@ -370,31 +366,11 @@ export class LibraryIngestService {
       });
     }
 
-    // Per-file post-import work: cropdetect + embedded-subtitle cache warmup
-    // via finalizeImportedFile, then the external-subtitle search. Sequential
-    // to avoid hammering ffmpeg and the subtitle provider rate limits.
-    void (async () => {
-      for (const { file, episodeId, destPath } of imported) {
-        try {
-          await this.mediaService.finalizeImportedFile(file, destPath, media);
-        } catch (e) {
-          this.logger.warn(
-            `Ingest[${req.sourceLabel}]: post-import enrichment failed — ${(e as Error).message}`,
-          );
-        }
-        try {
-          await this.subtitleScheduler.onMediaFileImported(
-            media.id,
-            file.id,
-            episodeId,
-          );
-        } catch (e) {
-          this.logger.warn(
-            `Ingest[${req.sourceLabel}]: post-import subtitle pipeline failed — ${(e as Error).message}`,
-          );
-        }
-      }
-    })();
+    // Serialised on the shared post-import queue so a season pack can't
+    // pile up ffmpeg processes.
+    for (const { file } of imported) {
+      this.postImportQueue.enqueue({ mediaFileId: file.id });
+    }
 
     return {
       imported: imported.map(({ file, episodeId, seasonId, sourcePath }) => ({

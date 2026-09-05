@@ -16,7 +16,7 @@ import { Media } from '../media/entities/media.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { TmdbProvider } from '../metadata-providers/providers/tmdb.provider';
 import { MediaService } from '../media/media.service';
-import { MediaType } from '../../common/enums';
+import { MediaType, MediaStatus } from '../../common/enums';
 import { ConfigService } from '@nestjs/config';
 import { SubtitleSchedulerService } from './subtitle-scheduler.service';
 import { EventsService } from './events.service';
@@ -30,6 +30,11 @@ import { ScheduledJobRegistry } from './scheduled-job-registry.service';
 import { PluginCatalogClientService } from '../plugins/plugin-catalog-client.service';
 import { PluginAutoUpdateService } from '../plugins/plugin-auto-update.service';
 import { runAuditedCommand } from './command-audit.util';
+import { ActivityRegistryService } from './activity-registry.service';
+import {
+  buildMediaProgressSubject,
+  formatMediaProgressSubject,
+} from '../../common/utils/media-progress-subject.util';
 
 /** Yield the event loop so HTTP requests aren't starved by bulk tasks. */
 const yieldLoop = () => new Promise<void>((r) => setTimeout(r, 50));
@@ -59,6 +64,7 @@ export class SchedulerService implements OnModuleInit {
     private readonly catalogClient: PluginCatalogClientService,
     private readonly pluginAutoUpdate: PluginAutoUpdateService,
     private readonly postImport: PostImportService,
+    private readonly activityRegistry: ActivityRegistryService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -122,6 +128,20 @@ export class SchedulerService implements OnModuleInit {
   async refreshMetadata(): Promise<void> {
     return this.runCommand('RefreshMetadata', 'scheduled', () =>
       this.doRefreshMetadata(),
+    );
+  }
+
+  /** Internal housekeeping, not in `SCHEDULERS`, nothing to trigger or list for it. */
+  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  async pruneOldCommands(): Promise<void> {
+    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const result = await this.commandRepo
+      .createQueryBuilder()
+      .delete()
+      .where('"createdAt" < :cutoff', { cutoff })
+      .execute();
+    this.log.log(
+      `PruneOldCommands: deleted ${result.affected ?? 0} command(s) older than 30 days`,
     );
   }
 
@@ -349,47 +369,86 @@ export class SchedulerService implements OnModuleInit {
     }
 
     const allMedia = await this.mediaRepo.find();
+    const now = new Date();
+    const dueMedia = allMedia.filter((m) => this.isMetadataDue(m, now));
+    const skipped = allMedia.length - dueMedia.length;
     this.log.log(
-      `RefreshMetadata: starting refresh for ${allMedia.length} media`,
+      `RefreshMetadata: starting refresh for ${dueMedia.length}/${allMedia.length} media (${skipped} settled title(s) skipped)`,
     );
     let updated = 0;
 
-    for (let i = 0; i < allMedia.length; i++) {
-      const media = allMedia[i];
-      this.eventsService.emit({
-        type: 'task.progress',
-        command: 'RefreshMetadata',
-        current: i,
-        total: allMedia.length,
-        message: media.title,
-      });
-      this.log.log(
-        `RefreshMetadata: refreshing "${media.title}" (${i + 1}/${allMedia.length})`,
-      );
-      try {
-        await this.mediaService.refreshMetadata(media.id);
-        updated++;
-      } catch (e) {
-        this.log.warn(
-          `RefreshMetadata: failed for "${media.title}": ${(e as Error).message}`,
+    try {
+      for (let i = 0; i < dueMedia.length; i++) {
+        const media = dueMedia[i];
+        const subject = buildMediaProgressSubject(media);
+        this.eventsService.emit({
+          type: 'task.progress',
+          command: 'RefreshMetadata',
+          current: i,
+          total: dueMedia.length,
+          message: media.title,
+          subject,
+        });
+        this.activityRegistry.upsertRunning(
+          'RefreshMetadata',
+          'RefreshMetadata',
+          subject,
+          i,
+          dueMedia.length,
         );
+        this.log.log(
+          `RefreshMetadata: refreshing "${media.title}" (${i + 1}/${dueMedia.length})`,
+        );
+        try {
+          await this.mediaService.refreshMetadata(media.id);
+          updated++;
+        } catch (e) {
+          this.log.warn(
+            `RefreshMetadata: failed for "${media.title}": ${(e as Error).message}`,
+          );
+        }
+        await yieldLoop();
       }
-      await yieldLoop();
-    }
 
-    if (allMedia.length > 0) {
-      this.eventsService.emit({
-        type: 'task.progress',
-        command: 'RefreshMetadata',
-        current: allMedia.length,
-        total: allMedia.length,
-        message: 'RefreshMetadata',
-      });
+      if (dueMedia.length > 0) {
+        this.eventsService.emit({
+          type: 'task.progress',
+          command: 'RefreshMetadata',
+          current: dueMedia.length,
+          total: dueMedia.length,
+          message: 'RefreshMetadata',
+        });
+      }
+    } finally {
+      this.activityRegistry.remove('RefreshMetadata');
     }
 
     this.log.log(
-      `RefreshMetadata: updated ${updated}/${allMedia.length} titles`,
+      `RefreshMetadata: updated ${updated}/${dueMedia.length} titles (${skipped} skipped)`,
     );
+  }
+
+  /** A year-old-plus movie or an ended/cancelled series is "settled": cheap to
+   *  believe unchanged, so it's only worth re-hitting the provider weekly. */
+  private isMetadataDue(media: Media, now: Date): boolean {
+    const settled =
+      media.type === MediaType.MOVIE
+        ? this.releasedOverAYearAgo(media, now)
+        : media.status === MediaStatus.ENDED;
+    if (!settled) return true;
+    if (!media.metadataRefreshedAt) return true;
+    const ageMs = now.getTime() - media.metadataRefreshedAt.getTime();
+    return ageMs >= 7 * 24 * 60 * 60 * 1000;
+  }
+
+  private releasedOverAYearAgo(media: Media, now: Date): boolean {
+    const releaseDate = media.releaseDate
+      ? new Date(media.releaseDate)
+      : media.year
+        ? new Date(media.year, 0, 1)
+        : null;
+    if (!releaseDate || Number.isNaN(releaseDate.getTime())) return false;
+    return now.getTime() - releaseDate.getTime() > 365 * 24 * 60 * 60 * 1000;
   }
 
   private async doGenerateSprites(force: boolean): Promise<void> {
@@ -410,33 +469,101 @@ export class SchedulerService implements OnModuleInit {
       `${commandName}: ${fileIds.length} to generate (${allIds.length - fileIds.length} already exist, ${allIds.length} total)`,
     );
 
+    // Scalar columns only, never a whole Media/MediaFile: their JSONB streamInfo must
+    // not come along. Chunked because TypeORM expands `In` into one bind parameter per
+    // id and Postgres caps a statement at 65535 of them.
+    const ID_CHUNK = 1000;
+    const subjectRows: MediaFile[] = [];
+    for (let i = 0; i < fileIds.length; i += ID_CHUNK) {
+      const slice = fileIds.slice(i, i + ID_CHUNK).map(({ id }) => id);
+      subjectRows.push(
+        ...(await this.mediaFileRepo.find({
+          where: { id: In(slice) },
+          relations: ['media', 'episode', 'episode.season'],
+          select: {
+            id: true,
+            media: { id: true, type: true, title: true },
+            episode: {
+              id: true,
+              episodeNumber: true,
+              title: true,
+              season: { seasonNumber: true },
+            },
+          },
+        })),
+      );
+    }
+    const subjectByFileId = new Map<number, ReturnType<typeof buildMediaProgressSubject>>();
+    for (const row of subjectRows) {
+      if (!row.media) continue;
+      subjectByFileId.set(
+        row.id,
+        buildMediaProgressSubject(
+          row.media,
+          row.episode
+            ? {
+                id: row.episode.id,
+                seasonNumber: row.episode.season?.seasonNumber,
+                episodeNumber: row.episode.episodeNumber,
+                title: row.episode.title,
+              }
+            : null,
+        ),
+      );
+    }
+    for (const { id } of fileIds) {
+      this.activityRegistry.upsertPending(
+        `GenerateSprite:${id}`,
+        'GenerateSprite',
+        subjectByFileId.get(id),
+        commandName,
+      );
+    }
+
     let generated = 0;
-    // Process in batches of BATCH — each file is queued into ThumbnailService
-    // which limits FFmpeg concurrency internally (SPRITE_CONCURRENCY).
-    for (let i = 0; i < fileIds.length; i += BATCH) {
-      const batch = fileIds.slice(i, i + BATCH);
-      this.eventsService.emit({
-        type: 'task.progress',
-        command: commandName,
-        current: i,
-        total: fileIds.length,
-        message: commandName,
-      });
+    try {
+      // Process in batches of BATCH: each file is queued into ThumbnailService
+      // which limits FFmpeg concurrency internally (SPRITE_CONCURRENCY).
+      for (let i = 0; i < fileIds.length; i += BATCH) {
+        const batch = fileIds.slice(i, i + BATCH);
+        const subject = subjectByFileId.get(batch[0].id);
+        this.eventsService.emit({
+          type: 'task.progress',
+          command: commandName,
+          current: i,
+          total: fileIds.length,
+          message: subject ? formatMediaProgressSubject(subject) : commandName,
+          subject,
+        });
+        this.activityRegistry.upsertRunning(
+          commandName,
+          commandName,
+          undefined,
+          i,
+          fileIds.length,
+        );
 
-      const promises = batch.map(async ({ id }) => {
-        try {
-          return await this.postImport.generateSprite(id, force);
-        } catch (e) {
-          this.log.warn(
-            `${commandName}: failed for file ${id}: ${(e as Error).message}`,
-          );
-          return null;
-        }
-      });
+        const promises = batch.map(async ({ id }) => {
+          try {
+            return await this.postImport.generateSprite(id, force);
+          } catch (e) {
+            this.log.warn(
+              `${commandName}: failed for file ${id}: ${(e as Error).message}`,
+            );
+            return null;
+          } finally {
+            // Belt-and-suspenders: covers the rare path where generation never runs
+            // (already cached, already in flight) and so never removes its own row.
+            this.activityRegistry.remove(`GenerateSprite:${id}`);
+          }
+        });
 
-      const results = await Promise.all(promises);
-      generated += results.filter((r) => r != null).length;
-      await yieldLoop();
+        const results = await Promise.all(promises);
+        generated += results.filter((r) => r != null).length;
+        await yieldLoop();
+      }
+    } finally {
+      this.activityRegistry.remove(commandName);
     }
 
     this.log.log(
@@ -453,36 +580,64 @@ export class SchedulerService implements OnModuleInit {
     const name = onlyMissing ? 'DetectMissingMarkers' : 'DetectMarkers';
     const seasons = await this.markers.listSeasonsForScan(onlyMissing);
     this.log.log(`${name}: started — ${seasons.length} season(s) to scan`);
+
+    // Every season subject is built from `seasons` alone (no extra query) so the
+    // whole backlog can be pre-registered as pending up front.
+    const subjectBySeasonId = new Map(
+      seasons.map((s) => [
+        s.id,
+        buildMediaProgressSubject(
+          { id: s.mediaId, title: s.mediaTitle, type: MediaType.SERIES },
+          { seasonNumber: s.seasonNumber },
+        ),
+      ]),
+    );
+    for (const s of seasons) {
+      this.activityRegistry.upsertPending(
+        `IntroDetection:${s.id}`,
+        'IntroDetection',
+        subjectBySeasonId.get(s.id),
+        name,
+      );
+    }
+
     let detected = 0;
     let skipped = 0;
-    for (let i = 0; i < seasons.length; i++) {
-      const s = seasons[i];
-      this.eventsService.emit({
-        type: 'task.progress',
-        command: name,
-        current: i,
-        total: seasons.length,
-        message: `${s.mediaTitle} S${String(s.seasonNumber).padStart(2, '0')}`,
-      });
-      try {
-        const r = await this.markers.runDetectionInline(s.id);
-        detected += r.introsDetected + r.outrosDetected;
-      } catch (e) {
-        skipped++;
-        this.log.warn(
-          `${name}: skipped "${s.mediaTitle}" S${s.seasonNumber} — ${(e as Error).message}`,
-        );
+    try {
+      for (let i = 0; i < seasons.length; i++) {
+        const s = seasons[i];
+        const subject = subjectBySeasonId.get(s.id)!;
+        this.eventsService.emit({
+          type: 'task.progress',
+          command: name,
+          current: i,
+          total: seasons.length,
+          message: formatMediaProgressSubject(subject),
+          subject,
+        });
+        this.activityRegistry.upsertRunning(name, name, undefined, i, seasons.length);
+        try {
+          const r = await this.markers.runDetectionInline(s.id, subject);
+          detected += r.introsDetected + r.outrosDetected;
+        } catch (e) {
+          skipped++;
+          this.log.warn(
+            `${name}: skipped "${s.mediaTitle}" S${s.seasonNumber}: ${(e as Error).message}`,
+          );
+        }
+        await yieldLoop();
       }
-      await yieldLoop();
-    }
-    if (seasons.length > 0) {
-      this.eventsService.emit({
-        type: 'task.progress',
-        command: name,
-        current: seasons.length,
-        total: seasons.length,
-        message: name,
-      });
+      if (seasons.length > 0) {
+        this.eventsService.emit({
+          type: 'task.progress',
+          command: name,
+          current: seasons.length,
+          total: seasons.length,
+          message: name,
+        });
+      }
+    } finally {
+      this.activityRegistry.remove(name);
     }
     this.log.log(
       `${name}: done — ${detected} marker(s) saved across ${seasons.length - skipped}/${seasons.length} season(s)`,
@@ -491,42 +646,70 @@ export class SchedulerService implements OnModuleInit {
 
   /** Shared rescan loop — skip subtitle warmup to avoid queue flooding. */
   private async rescanMediaList(
-    mediaList: { id: number; title: string }[],
+    mediaList: { id: number; title: string; type?: string }[],
     commandName: string,
   ): Promise<void> {
     this.log.log(`${commandName}: started — ${mediaList.length} media to scan`);
+    // Already has the whole list in hand, so pre-register every media as pending
+    // so the backlog shows up immediately instead of only the one being scanned.
+    for (const media of mediaList) {
+      this.activityRegistry.upsertPending(
+        `${commandName}:${media.id}`,
+        commandName,
+        buildMediaProgressSubject(media),
+        commandName,
+      );
+    }
+
     let totalUpdated = 0;
     let skipped = 0;
-    for (let i = 0; i < mediaList.length; i++) {
-      const media = mediaList[i];
-      this.eventsService.emit({
-        type: 'task.progress',
-        command: commandName,
-        current: i,
-        total: mediaList.length,
-        message: media.title,
-      });
-      try {
-        const result = await this.mediaService.rescanFiles(media.id, {
-          skipWarmup: true,
+    try {
+      for (let i = 0; i < mediaList.length; i++) {
+        const media = mediaList[i];
+        const subject = buildMediaProgressSubject(media);
+        const childId = `${commandName}:${media.id}`;
+        this.eventsService.emit({
+          type: 'task.progress',
+          command: commandName,
+          current: i,
+          total: mediaList.length,
+          message: media.title,
+          subject,
         });
-        totalUpdated += result.added + result.removed + result.updated;
-      } catch (e) {
-        skipped++;
-        this.log.warn(
-          `${commandName}: skipped "${media.title}" — ${(e as Error).message}`,
+        this.activityRegistry.upsertRunning(
+          commandName,
+          commandName,
+          undefined,
+          i,
+          mediaList.length,
         );
+        this.activityRegistry.upsertRunning(childId, commandName, subject);
+        try {
+          const result = await this.mediaService.rescanFiles(media.id, {
+            skipWarmup: true,
+          });
+          totalUpdated += result.added + result.removed + result.updated;
+        } catch (e) {
+          skipped++;
+          this.log.warn(
+            `${commandName}: skipped "${media.title}": ${(e as Error).message}`,
+          );
+        } finally {
+          this.activityRegistry.remove(childId);
+        }
+        await yieldLoop();
       }
-      await yieldLoop();
-    }
-    if (mediaList.length > 0) {
-      this.eventsService.emit({
-        type: 'task.progress',
-        command: commandName,
-        current: mediaList.length,
-        total: mediaList.length,
-        message: commandName,
-      });
+      if (mediaList.length > 0) {
+        this.eventsService.emit({
+          type: 'task.progress',
+          command: commandName,
+          current: mediaList.length,
+          total: mediaList.length,
+          message: commandName,
+        });
+      }
+    } finally {
+      this.activityRegistry.remove(commandName);
     }
     this.log.log(
       `${commandName}: scanned ${mediaList.length - skipped}/${mediaList.length} media, ${totalUpdated} change(s), ${skipped} skipped`,
@@ -539,7 +722,7 @@ export class SchedulerService implements OnModuleInit {
   }
 
   private async doRescanAll(): Promise<void> {
-    const allMedia = await this.mediaRepo.find({ select: ['id', 'title'] });
+    const allMedia = await this.mediaRepo.find({ select: ['id', 'title', 'type'] });
     await this.rescanMediaList(allMedia, 'RescanAll');
   }
 
@@ -579,33 +762,46 @@ export class SchedulerService implements OnModuleInit {
     );
 
     let updated = 0;
-    for (let i = 0; i < candidates.length; i++) {
-      const media = candidates[i];
-      this.eventsService.emit({
-        type: 'task.progress',
-        command: 'RefreshMissingMetadata',
-        current: i,
-        total: candidates.length,
-        message: media.title,
-      });
-      try {
-        await this.mediaService.refreshMetadata(media.id);
-        updated++;
-      } catch (e) {
-        this.log.warn(
-          `RefreshMissingMetadata: failed for "${media.title}": ${(e as Error).message}`,
+    try {
+      for (let i = 0; i < candidates.length; i++) {
+        const media = candidates[i];
+        const subject = buildMediaProgressSubject(media);
+        this.eventsService.emit({
+          type: 'task.progress',
+          command: 'RefreshMissingMetadata',
+          current: i,
+          total: candidates.length,
+          message: media.title,
+          subject,
+        });
+        this.activityRegistry.upsertRunning(
+          'RefreshMissingMetadata',
+          'RefreshMissingMetadata',
+          subject,
+          i,
+          candidates.length,
         );
+        try {
+          await this.mediaService.refreshMetadata(media.id);
+          updated++;
+        } catch (e) {
+          this.log.warn(
+            `RefreshMissingMetadata: failed for "${media.title}": ${(e as Error).message}`,
+          );
+        }
       }
-    }
 
-    if (candidates.length > 0) {
-      this.eventsService.emit({
-        type: 'task.progress',
-        command: 'RefreshMissingMetadata',
-        current: candidates.length,
-        total: candidates.length,
-        message: 'RefreshMissingMetadata',
-      });
+      if (candidates.length > 0) {
+        this.eventsService.emit({
+          type: 'task.progress',
+          command: 'RefreshMissingMetadata',
+          current: candidates.length,
+          total: candidates.length,
+          message: 'RefreshMissingMetadata',
+        });
+      }
+    } finally {
+      this.activityRegistry.remove('RefreshMissingMetadata');
     }
 
     this.log.log(
