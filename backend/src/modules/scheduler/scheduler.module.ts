@@ -29,6 +29,7 @@ import { MarkersModule } from '../markers/markers.module';
 import { Library } from '../libraries/entities/library.entity';
 import { PluginsModule } from '../plugins/plugins.module';
 import { ScheduledJobRegistryModule } from './scheduled-job-registry.module';
+import { LibraryIngestModule } from '../../common/library-ingest/library-ingest.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { ScheduledJobRegistryModule } from './scheduled-job-registry.module';
     // the merged job listing.
     PluginsModule,
     ScheduledJobRegistryModule,
+    forwardRef(() => LibraryIngestModule),
   ],
   controllers: [CommandsController, SystemController, LivenessController],
   providers: [

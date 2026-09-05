@@ -133,11 +133,12 @@ export class SubtitleSchedulerService {
     media: Media,
     file: MediaFile,
     opts: { minScore: number; autoSyncEnabled: boolean; encodeUtf8: boolean },
+    skipEmbeddedDetect = false,
   ): Promise<string[]> {
     if (this.filesSearching.has(file.id)) return [];
     this.filesSearching.add(file.id);
     try {
-      return await this.doSearchMissingForFile(media, file, opts);
+      return await this.doSearchMissingForFile(media, file, opts, skipEmbeddedDetect);
     } finally {
       this.filesSearching.delete(file.id);
     }
@@ -147,17 +148,20 @@ export class SubtitleSchedulerService {
     media: Media,
     file: MediaFile,
     opts: { minScore: number; autoSyncEnabled: boolean; encodeUtf8: boolean },
+    skipEmbeddedDetect = false,
   ): Promise<string[]> {
     const subtitleLangs: SubtitleLanguageItem[] =
       media.languageProfile?.subtitleLanguages ?? [];
     if (!subtitleLangs.length) return [];
 
-    // Ensure embedded subtitles are detected before checking for missing ones
-    await this.embeddedSubtitle.detectAndStore(
-      media.id,
-      file.id,
-      file.episodeId ?? undefined,
-    );
+    // Skipped when the caller (onMediaFileImported) just ran this same probe.
+    if (!skipEmbeddedDetect) {
+      await this.embeddedSubtitle.detectAndStore(
+        media.id,
+        file.id,
+        file.episodeId ?? undefined,
+      );
+    }
 
     const existingSubs = await this.subtitleFileRepo.find({
       where: { mediaFile: { id: file.id } },
@@ -543,7 +547,12 @@ export class SubtitleSchedulerService {
 
     // Same gap-filling as the scheduled pass: servable-text gate, OCR-first on
     // embedded image tracks, then providers. Keeps the post-import and periodic
-    // paths from drifting.
-    await this.searchMissingForFile(media, file, await this.resolveSearchOpts());
+    // paths from drifting. `true`: embedded subtitles were just detected above.
+    await this.searchMissingForFile(
+      media,
+      file,
+      await this.resolveSearchOpts(),
+      true,
+    );
   }
 }

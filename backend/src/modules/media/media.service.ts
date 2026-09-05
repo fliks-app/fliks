@@ -279,14 +279,6 @@ export class MediaService {
     return this.rescan.ensureSeriesEpisode(media, epNums);
   }
 
-  finalizeImportedFile(
-    file: import('./entities/media-file.entity').MediaFile,
-    absPath: string,
-    media: Media,
-  ) {
-    return this.rescan.finalizeImportedFile(file, absPath, media);
-  }
-
   // -- Request-driven lookups -------------------------------------------------
 
   /**

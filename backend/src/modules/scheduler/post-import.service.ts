@@ -1,4 +1,11 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Subscription } from 'rxjs';
@@ -13,6 +20,7 @@ import {
 } from '../streaming/thumbnail.service';
 import { MarkersService } from '../markers/markers.service';
 import { SettingsService } from '../settings/settings.service';
+import { PostImportQueueService } from '../../common/post-import/post-import-queue.service';
 
 /**
  * Derived artefacts every newly landed file needs before playback: seek
@@ -38,6 +46,8 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
     private readonly thumbnails: ThumbnailService,
     private readonly markers: MarkersService,
     private readonly settings: SettingsService,
+    @Inject(forwardRef(() => PostImportQueueService))
+    private readonly postImportQueue: PostImportQueueService,
   ) {}
 
   onModuleInit(): void {
@@ -74,8 +84,9 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Sprites first: they are per-file and cheap next to a season-wide
-   *  fingerprint pass, and both compete for the same ffmpeg budget. */
+   *  fingerprint pass, and both compete for the same ffmpeg budget as import. */
   private async run(mediaId: number): Promise<void> {
+    await this.postImportQueue.whenIdle();
     if (await this.enabled('sprites_auto_generate_on_import')) {
       try {
         const generated = await this.generateMissingSprites(mediaId);

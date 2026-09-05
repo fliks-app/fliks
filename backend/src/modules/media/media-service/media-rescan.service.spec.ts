@@ -43,6 +43,7 @@ function buildHarness() {
   const mediaServers = { dispatch: jest.fn() };
   const metadata = { refreshSeriesEpisodes: jest.fn().mockResolvedValue(undefined) };
   const log = { log: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() };
+  const postImportQueue = { enqueue: jest.fn() };
 
   const wired = service as unknown as Record<string, unknown>;
   wired.mediaRepo = mediaRepo;
@@ -58,6 +59,7 @@ function buildHarness() {
   wired.mediaServers = mediaServers;
   wired.metadata = metadata;
   wired.log = log;
+  wired.postImportQueue = postImportQueue;
 
   return {
     service,
@@ -71,6 +73,7 @@ function buildHarness() {
     mediaServers,
     metadata,
     log,
+    postImportQueue,
   };
 }
 

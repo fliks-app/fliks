@@ -34,12 +34,7 @@ function buildHarness() {
     transferCompanions: jest.fn().mockResolvedValue(undefined),
     getCompanionExts: jest.fn().mockResolvedValue(new Set<string>()),
   };
-  const mediaService = {
-    finalizeImportedFile: jest.fn().mockResolvedValue(undefined),
-  };
-  const subtitleScheduler = {
-    onMediaFileImported: jest.fn().mockResolvedValue(undefined),
-  };
+  const postImportQueue = { enqueue: jest.fn() };
   const logger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
   // Real NamingService — a stubbed `query` returning no rows means
   // `getFormats()` resolves the built-in defaults, no DB needed.
@@ -57,8 +52,7 @@ function buildHarness() {
   wired.seasonRepo = seasonRepo;
   wired.naming = naming;
   wired.fileTransfer = fileTransfer;
-  wired.mediaService = mediaService;
-  wired.subtitleScheduler = subtitleScheduler;
+  wired.postImportQueue = postImportQueue;
   wired.ffprobe = ffprobe;
   wired.logger = logger;
   wired.events = { emitDomain: jest.fn() };
@@ -70,8 +64,7 @@ function buildHarness() {
     episodeRepo,
     seasonRepo,
     fileTransfer,
-    mediaService,
-    subtitleScheduler,
+    postImportQueue,
     ffprobe,
     logger,
   };
@@ -162,7 +155,7 @@ describe('LibraryIngestService.ingest', () => {
     });
   });
 
-  it('reports success and still returns the imported file when enrichment throws', async () => {
+  it('enqueues post-import enrichment for each imported file', async () => {
     const h = buildHarness();
     const srcFile = path.join(srcDir, 'Coral.Drift.2022.mkv');
     fs.writeFileSync(srcFile, 'y'.repeat(2048));
@@ -175,9 +168,10 @@ describe('LibraryIngestService.ingest', () => {
     });
     h.mediaRepo.findOne.mockResolvedValue(media);
     h.fileRepo.findOne.mockResolvedValue(null);
-    h.mediaService.finalizeImportedFile.mockRejectedValue(
-      new Error('ffprobe crashed'),
-    );
+    h.fileRepo.save.mockImplementation(async (x: unknown) => ({
+      ...(x as object),
+      id: 42,
+    }));
 
     const req: IngestRequest = {
       mediaId: 8,
@@ -188,21 +182,9 @@ describe('LibraryIngestService.ingest', () => {
     };
 
     const result = await h.service.ingest(req);
-    // Post-import work is fire-and-forget — let it settle before asserting.
-    await new Promise((r) => setImmediate(r));
 
     expect(result.imported).toHaveLength(1);
-    expect(result.imported[0].file).toEqual({
-      media,
-      episode: null,
-      relativePath: 'Coral Drift (2022) WEBDL-720p.mkv',
-      size: 2048,
-      quality: 'WEBDL-720p',
-    });
-    expect(h.mediaService.finalizeImportedFile).toHaveBeenCalledTimes(1);
-    expect(h.logger.warn).toHaveBeenCalledWith(
-      'Ingest[Coral Drift]: post-import enrichment failed — ffprobe crashed',
-    );
+    expect(h.postImportQueue.enqueue).toHaveBeenCalledWith({ mediaFileId: 42 });
   });
 
   /**

@@ -34,10 +34,10 @@ import { mapWithConcurrency } from '../../common/utils/concurrency';
 import { MediaService } from '../media/media.service';
 import { MediaMetadataService } from '../media/media-service/media-metadata.service';
 import { NamingService } from '../scheduler/naming.service';
-import { SubtitleSchedulerService } from '../scheduler/subtitle-scheduler.service';
 import { LibrariesService } from '../libraries/libraries.service';
 import { TransferMethod } from '../../common/services/file-transfer.service';
 import { LibraryIngestService } from '../../common/library-ingest/library-ingest.service';
+import { PostImportQueueService } from '../../common/post-import/post-import-queue.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
 import { VIDEO_EXTS } from '../../common/constants/video-extensions';
 
@@ -127,14 +127,13 @@ export class DiskImportService {
     private readonly episodeRepo: Repository<Episode>,
     @Inject(forwardRef(() => MediaService))
     private readonly mediaService: MediaService,
-    @Inject(forwardRef(() => SubtitleSchedulerService))
-    private readonly subtitleScheduler: SubtitleSchedulerService,
     private readonly naming: NamingService,
     private readonly libraries: LibrariesService,
     @Inject(forwardRef(() => MediaMetadataService))
     private readonly metadata: MediaMetadataService,
     private readonly nfo: NfoMetadataService,
     private readonly libraryIngest: LibraryIngestService,
+    private readonly postImportQueue: PostImportQueueService,
     private readonly mediaServers: MediaServersService,
     private readonly events: EventsService,
   ) {}
@@ -534,17 +533,7 @@ export class DiskImportService {
         }
         linked++;
         slotCreated ||= res.created;
-        try {
-          await this.subtitleScheduler.onMediaFileImported(
-            media.id,
-            res.fileId,
-            res.episodeId ?? undefined,
-          );
-        } catch (e) {
-          this.logger.warn(
-            `Orphan relink: post-link subtitle pipeline failed — ${(e as Error).message}`,
-          );
-        }
+        this.postImportQueue.enqueue({ mediaFileId: res.fileId });
       }
       // The reorganize branch above emits this from LibraryIngestService.
       if (linked > 0) {

@@ -40,12 +40,12 @@ function makeService(nfo: NfoMetadataService) {
     null as never, // seasonRepo
     null as never, // episodeRepo
     null as never, // mediaService
-    null as never, // subtitleScheduler
     naming,
     null as never, // libraries
     null as never, // metadata
     nfo,
     null as never, // libraryIngest
+    null as never, // postImportQueue
     null as never, // mediaServers
     { emit: jest.fn() } as never,
   );

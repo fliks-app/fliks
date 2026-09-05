@@ -31,6 +31,7 @@ import { MEDIA_SERVICE } from './media-service.token';
 import { FliksSchedulerModule } from '../scheduler/scheduler.module';
 import { ImageModule } from '../images/image.module';
 import { StreamingModule } from '../streaming/streaming.module';
+import { LibraryIngestModule } from '../../common/library-ingest/library-ingest.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { StreamingModule } from '../streaming/streaming.module';
     MediaServersModule,
     forwardRef(() => FliksSchedulerModule),
     forwardRef(() => RequestsModule),
+    forwardRef(() => LibraryIngestModule),
     ImageModule,
     StreamingModule,
     LibrariesModule,
@@ -74,6 +76,7 @@ import { StreamingModule } from '../streaming/streaming.module';
     MediaService,
     MEDIA_SERVICE,
     MediaMetadataService,
+    MediaRescanService,
     AutoGrabPipelineService,
     AcquisitionCandidatesService,
   ],

@@ -3,6 +3,8 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -30,6 +32,7 @@ import {
   buildSpriteLabel,
 } from '../../streaming/thumbnail.service';
 import { MediaServersService } from '../../media-servers/media-servers.service';
+import { PostImportQueueService } from '../../../common/post-import/post-import-queue.service';
 import { MediaMetadataService } from './media-metadata.service';
 import { clearMediaCache } from '../../../common/utils/media-cache.util';
 import { relativePathUnderMediaRoot } from '../../../common/utils/media-path.util';
@@ -69,6 +72,8 @@ export class MediaRescanService {
     private readonly thumbnailService: ThumbnailService,
     private readonly mediaServers: MediaServersService,
     private readonly metadata: MediaMetadataService,
+    @Inject(forwardRef(() => PostImportQueueService))
+    private readonly postImportQueue: PostImportQueueService,
   ) {}
 
   /**
@@ -124,7 +129,7 @@ export class MediaRescanService {
       `enrichMediaFileFromDisk: enriched media file #${mediaFileId} "${normPath}"`,
     );
 
-    await this.finalizeImportedFile(saved, absPath, dbFile.media);
+    this.postImportQueue.enqueue({ mediaFileId: saved.id });
 
     void this.mediaServers.dispatch('library.rescan', {
       title: dbFile.media.title,
@@ -240,6 +245,8 @@ export class MediaRescanService {
    *
    * Caller must have already persisted `file.streamInfo` from a fresh
    * ffprobe of `absPath`. Best-effort: failures are logged but don't throw.
+   * `streamInfo` is a JSONB blob, so both steps mutate `file` in memory and
+   * only this method saves — one write instead of three.
    */
   async finalizeImportedFile(
     file: MediaFile,
@@ -248,14 +255,15 @@ export class MediaRescanService {
   ): Promise<void> {
     await this.detectAndStoreCrop(file, absPath);
     await this.computeAndStoreOsdbHash(file, absPath);
+    await this.mediaFileRepo.save(file);
     this.rebuildSubtitleCacheForFile(file, absPath, media);
   }
 
   /**
-   * Compute the OpenSubtitles movie hash for the file and persist it on
-   * the row so subsequent subtitle searches can do a hash-based lookup —
-   * the central scorer awards near-max credit when the provider confirms
-   * a hash match. Best-effort: small or unreadable files store nulls.
+   * Compute the OpenSubtitles movie hash and set it on `file` (unsaved) so
+   * subsequent subtitle searches can do a hash-based lookup — the central
+   * scorer awards near-max credit when the provider confirms a hash match.
+   * Best-effort: small or unreadable files leave nulls.
    */
   private async computeAndStoreOsdbHash(
     file: MediaFile,
@@ -265,7 +273,6 @@ export class MediaRescanService {
       const result = await computeMovieHash(absPath);
       file.osdbHash = result?.hash ?? null;
       file.osdbBytesize = result?.bytesize ?? null;
-      await this.mediaFileRepo.save(file);
     } catch (err) {
       this.log.warn(
         `computeAndStoreOsdbHash: failed for "${absPath}"`,
@@ -275,8 +282,8 @@ export class MediaRescanService {
   }
 
   /**
-   * Re-runs ffmpeg `cropdetect` for a single file and persists the result
-   * in `streamInfo.video[0].crop`. No-op when the file has no video stream.
+   * Re-runs ffmpeg `cropdetect` and sets the result on `file.streamInfo`
+   * (unsaved) — caller persists. No-op when the file has no video stream.
    * Best-effort: ffmpeg failures are logged and the row is left unchanged.
    * The crop value is cleared when detection returns nothing so a re-encoded
    * file that lost its letterbox doesn't keep stale crop data.
@@ -297,7 +304,6 @@ export class MediaRescanService {
       );
       v.crop = crop ?? undefined;
       file.streamInfo = streamInfo;
-      await this.mediaFileRepo.save(file);
     } catch (err) {
       this.log.warn(
         `detectAndStoreCrop: failed for "${absPath}"`,
@@ -371,6 +377,7 @@ export class MediaRescanService {
       }
       if (opts.crop) {
         await this.detectAndStoreCrop(file, absPath);
+        await this.mediaFileRepo.save(file);
       }
       if (opts.subtitleCache) {
         this.rebuildSubtitleCacheForFile(file, absPath, media);
