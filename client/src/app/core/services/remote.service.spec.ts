@@ -171,6 +171,23 @@ describe('RemoteService stop handling', () => {
     }
   });
 
+  it('stops ticking once a silent target leaves the grace window', () => {
+    vi.useFakeTimers();
+    try {
+      const { service } = setup();
+      TestBed.tick();
+      expect(service.awaitingFirstReport()).toBe(true);
+      const ticking = vi.getTimerCount();
+
+      vi.advanceTimersByTime(13_000);
+
+      expect(service.awaitingFirstReport()).toBe(false);
+      expect(vi.getTimerCount()).toBe(ticking - 1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('drops the previous title when a new load is sent', () => {
     const { service, remoteState } = setup();
     remoteState.set(frame({ mediaFileId: 2 }));

@@ -169,7 +169,7 @@
     (speedChange)="onSpeedChange($event)"
     (back)="onBack()"
     [pipAvailable]="pipAvailable()"
-    [castAvailable]="castService.isAvailable()"
+    [castAvailable]="castService.isAvailable() && !device.isTv()"
     [castConnected]="castService.isConnected()"
     [castConnecting]="castService.connecting()"
     (toggleCast)="onToggleCast()"
