@@ -7,11 +7,14 @@
 // self-compositor is needed.
 //
 // The Electron videoWin's content NSView (getNativeWindowHandle) hosts a
-// CAOpenGLLayer; mpv renders into that layer's framebuffer via the RENDER API
-// (vo=libmpv, MPV_RENDER_API_TYPE_OPENGL). The layer drives its own CVDisplayLink
-// (asynchronous=YES), so rendering happens off the main thread while AppKit/Core
-// Animation tree mutation stays on main (where N-API calls land). The sibling
-// uiWin (a real Electron window owned by videoWin) draws the controls above it.
+// CAMetalLayer; mpv still renders through the OpenGL render API (the only GPU
+// backend in vendored libmpv) into an offscreen FBO backed by an IOSurface. A
+// dedicated render thread owns a headless CGL context end to end: it renders
+// each frame into the IOSurface-backed FBO, then Metal blit-copies that
+// IOSurface into the layer's next drawable. This indirection is what buys
+// CAEDRMetadata (HDR10/HLG tonemapping hints), which CAOpenGLLayer can't carry.
+// The sibling uiWin (a real Electron window owned by videoWin) draws the
+// controls above it.
 //
 // libmpv is dlopen'd (self-contained build: FFmpeg static + symbols hidden, so
 // no clash with Electron's bundled libffmpeg.dylib) — mirrors the Linux addon.
@@ -26,6 +29,10 @@
 #import <QuartzCore/QuartzCore.h>
 #import <OpenGL/OpenGL.h>
 #import <OpenGL/gl3.h>
+#import <OpenGL/CGLIOSurface.h>
+#import <Metal/Metal.h>
+#import <IOSurface/IOSurface.h>
+#import <CoreVideo/CVPixelBuffer.h>
 #import <CoreFoundation/CoreFoundation.h>
 
 #include <mpv/client.h>
@@ -36,6 +43,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -120,18 +128,21 @@ std::atomic<bool> g_tsfnReady{false};
 
 struct State {
   mpv_handle* mpv = nullptr;
-  mpv_render_context* mpvGl = nullptr;
-  CGLContextObj cgl = nullptr;  // the layer's GL context, captured for teardown
-  std::mutex renderMutex;       // guards rc_render vs rc_free
+  mpv_render_context* mpvGl = nullptr;  // render-thread-confined: created, used, freed there
   std::atomic<bool> run{false};
   std::atomic<bool> paused{true};  // drives the event thread's position heartbeat
   std::atomic<bool> coreIdle{false};  // mpv not rendering frames (seek/buffer/idle)
-  std::atomic<bool> dirty{true};  // force a redraw (resize / first paint)
+  std::atomic<bool> dirty{true};  // force a redraw (resize / first paint / color change)
   // Whether the layer actually got a half-float (RGBA16F) backing. EDR/PQ/HLG
   // tagging is meaningless on an 8-bit unorm FBO (can't carry values >1.0), so
   // ApplyLayerColorConfig gates the HDR branch on this, not just display headroom.
   std::atomic<bool> hdrBacking{false};
   std::thread eventThread;
+  std::thread renderThread;
+  std::atomic<uint64_t> desiredSize{0};  // packed w<<32|h, set by UpdateLayerGeometry
+  std::mutex wakeMutex;
+  std::condition_variable wakeCv;
+  std::atomic<bool> wake{false};
   double duration = 0;
 };
 
@@ -147,134 +158,243 @@ void* GetProcGL(void*, const char* name) {
   return p;
 }
 
-void OnMpvUpdate(void*) { /* asynchronous CAOpenGLLayer polls rc_update at vsync */ }
+// mpv forbids calling its API from this callback (render.h) — just wake the
+// render thread, which does the actual rc_update/rc_render.
+void OnMpvUpdate(void*) {
+  g_state.wake.store(true);
+  g_state.wakeCv.notify_one();
+}
 
 void Emit(const std::string& json) {
   if (g_tsfnReady.load()) g_tsfn.BlockingCall(new std::string(json));
 }
 
-}  // namespace
-
-// ── the GL layer mpv renders into ────────────────────────────────────────────
-@interface MpvGLLayer : CAOpenGLLayer
-@end
-
-@implementation MpvGLLayer
-
-- (CGLPixelFormatObj)copyCGLPixelFormatForDisplayMask:(uint32_t)mask {
-  // Prefer a half-float (RGBA16F) backing so HDR/EDR content can pass through
-  // (paired with wantsExtendedDynamicRangeContent + an HDR layer colorspace).
-  // Fall back to a plain 8-bit format (SDR) where float isn't available.
-  CGLPixelFormatAttribute hdr[] = {
-      kCGLPFAOpenGLProfile, (CGLPixelFormatAttribute)kCGLOGLPVersion_3_2_Core,
-      kCGLPFAColorFloat,
-      kCGLPFAColorSize, (CGLPixelFormatAttribute)64,
-      kCGLPFADoubleBuffer,
-      kCGLPFAAccelerated,
-      kCGLPFAAllowOfflineRenderers,
-      (CGLPixelFormatAttribute)0,
-  };
-  CGLPixelFormatAttribute sdr[] = {
-      kCGLPFAOpenGLProfile, (CGLPixelFormatAttribute)kCGLOGLPVersion_3_2_Core,
-      kCGLPFADoubleBuffer,
-      kCGLPFAAccelerated,
-      kCGLPFAAllowOfflineRenderers,
-      (CGLPixelFormatAttribute)0,
-  };
-  const char* forceSdr = getenv("FLIKS_HDR");
-  bool wantHdr = !(forceSdr && std::strcmp(forceSdr, "no") == 0);
-  CGLPixelFormatObj pf = nullptr;
-  GLint n = 0;
-  if (wantHdr && CGLChoosePixelFormat(hdr, &pf, &n) == kCGLNoError && pf) {
-    g_state.hdrBacking.store(true);
-    fprintf(stderr, "[player-mac] GL pixel format: RGBA16F (HDR-capable)\n");
-    return pf;
-  }
-  g_state.hdrBacking.store(false);  // no float backing → EDR/PQ tagging would band
-  if (CGLChoosePixelFormat(sdr, &pf, &n) == kCGLNoError && pf) {
-    fprintf(stderr, "[player-mac] GL pixel format: 8-bit (SDR)\n");
-    return pf;
-  }
-  return [super copyCGLPixelFormatForDisplayMask:mask];
+// Nudge the render thread to redraw even without a fresh mpv frame (resize,
+// pause, color reconfig). Replaces CAOpenGLLayer's setNeedsDisplay, which is
+// inert on CAMetalLayer.
+void RequestRedraw() {
+  g_state.dirty.store(true);
+  g_state.wakeCv.notify_one();
 }
 
-- (BOOL)canDrawInCGLContext:(CGLContextObj)ctx
-                pixelFormat:(CGLPixelFormatObj)pf
-               forLayerTime:(CFTimeInterval)t
-                displayTime:(const CVTimeStamp*)ts {
-  // Hold renderMutex for the same reason drawInCGLContext does: this runs on the
-  // layer's CVDisplayLink thread, while Stop() frees mpvGl under the mutex on the
-  // main thread. Without the lock, rc_update could poll a handle Stop just freed
-  // (run.load() at the top races the free that happens right after it). The mpv
-  // update callback (OnMpvUpdate) is a no-op, so there is no re-entrant deadlock.
-  std::lock_guard<std::mutex> lk(g_state.renderMutex);
-  if (!g_state.run.load()) return NO;
-  if (!g_state.mpvGl) return YES;  // first draw creates the render context
-  if (g_state.dirty.load()) return YES;
-  uint64_t flags = M::rc_update(g_state.mpvGl);
-  return (flags & MPV_RENDER_UPDATE_FRAME) ? YES : NO;
-}
+// GL/IOSurface/Metal format triple chosen once in Start(), read only by the
+// render thread thereafter.
+struct PixelFormatChoice {
+  MTLPixelFormat mtlFormat = MTLPixelFormatInvalid;
+  OSType ioSurfaceFormat = 0;
+  size_t bytesPerElement = 0;
+  GLint glInternalFormat = 0;
+  GLenum glFormat = 0;
+  GLenum glType = 0;
+};
+PixelFormatChoice g_pixelFormat;
 
-- (void)drawInCGLContext:(CGLContextObj)ctx
-             pixelFormat:(CGLPixelFormatObj)pf
-            forLayerTime:(CFTimeInterval)t
-             displayTime:(const CVTimeStamp*)ts {
-  std::lock_guard<std::mutex> lk(g_state.renderMutex);
-  if (!g_state.run.load() || !g_state.mpv) return;
-  g_state.cgl = ctx;  // capture for teardown (rc_free needs a current context)
+// mpv renders into slot.fbo (an IOSurface-backed GL_TEXTURE_RECTANGLE); the
+// same IOSurface is wrapped as slot.mtl and blit-copied into the layer's
+// drawable. Ring of 2: while GL writes one slot, Metal may still be reading
+// the other slot's blit from the previous frame — a single surface would tear.
+struct SurfaceSlot {
+  IOSurfaceRef surf = nullptr;
+  GLuint tex = 0;
+  GLuint fbo = 0;
+  id<MTLTexture> mtl = nil;
+  std::atomic<bool> busy{false};  // set before commit, cleared in the completion handler
+  int width = 0;
+  int height = 0;
+};
+SurfaceSlot g_ring[2];
 
-  if (!g_state.mpvGl) {
-    mpv_opengl_init_params gl_init{};
-    gl_init.get_proc_address = GetProcGL;
-    gl_init.get_proc_address_ctx = nullptr;
-    int advanced = 1;
-    mpv_render_param params[] = {
-        {MPV_RENDER_PARAM_API_TYPE, const_cast<char*>(MPV_RENDER_API_TYPE_OPENGL)},
-        {MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &gl_init},
-        {MPV_RENDER_PARAM_ADVANCED_CONTROL, &advanced},
-        {static_cast<mpv_render_param_type>(0), nullptr},
-    };
-    int rc = M::rc_create(&g_state.mpvGl, g_state.mpv, params);
-    if (rc < 0) {
-      fprintf(stderr, "[player-mac] rc_create failed: %s\n", M::error_string(rc));
-      return;
-    }
-    M::rc_set_update_callback(g_state.mpvGl, OnMpvUpdate, &g_state);
-    fprintf(stderr, "[player-mac] mpv render context ready\n");
-  }
-
-  g_state.dirty.store(false);
-  GLint fbo = 0;
-  glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fbo);
-  CGFloat scale = self.contentsScale;
-  int w = static_cast<int>(self.bounds.size.width * scale);
-  int h = static_cast<int>(self.bounds.size.height * scale);
-  if (w <= 0 || h <= 0) return;
-
-  mpv_opengl_fbo mfbo{static_cast<int>(fbo), w, h, 0};
-  // The CAOpenGLLayer framebuffer is bottom-up (GL convention); mpv's render-API
-  // output is top-down, so flip vertically to present upright.
-  int flip = 1;
-  mpv_render_param rp[] = {
-      {MPV_RENDER_PARAM_OPENGL_FBO, &mfbo},
-      {MPV_RENDER_PARAM_FLIP_Y, &flip},
-      {static_cast<mpv_render_param_type>(0), nullptr},
-  };
-  M::rc_render(g_state.mpvGl, rp);
-  [super drawInCGLContext:ctx pixelFormat:pf forLayerTime:t displayTime:ts];
-  M::rc_report_swap(g_state.mpvGl);
-}
-
-@end
-
-namespace {
-
-MpvGLLayer* g_layer = nil;
+CAMetalLayer* g_layer = nil;
 NSView* g_view = nil;  // not owned (Electron's content view)
+id<MTLDevice> g_device = nil;
+id<MTLCommandQueue> g_queue = nil;
 id g_backingObserver = nil;
 id g_frameObserver = nil;
 id g_screenObserver = nil;        // window moved onto/off a screen
 id g_screenParamsObserver = nil;  // display config / EDR headroom changed
+
+// Render thread: owns a headless CGL context end to end (create → rc_create →
+// per-frame render → rc_free → destroy). Replaces CAOpenGLLayer's
+// CVDisplayLink-driven canDrawInCGLContext/drawInCGLContext; woken by
+// OnMpvUpdate via the wake condvar instead of vsync polling.
+void RenderThreadMain(State* s) {
+  CGLPixelFormatAttribute attrs[] = {
+      kCGLPFAOpenGLProfile, (CGLPixelFormatAttribute)kCGLOGLPVersion_3_2_Core,
+      kCGLPFAAccelerated,
+      kCGLPFAAllowOfflineRenderers,
+      (CGLPixelFormatAttribute)0,
+  };
+  CGLPixelFormatObj pf = nullptr;
+  GLint npix = 0;
+  CGLChoosePixelFormat(attrs, &pf, &npix);
+  CGLContextObj cgl = nullptr;
+  if (pf) {
+    CGLCreateContext(pf, nullptr, &cgl);
+    CGLDestroyPixelFormat(pf);
+  }
+  if (!cgl) {
+    fprintf(stderr, "[player-mac] CGLCreateContext failed\n");
+    while (s->run.load()) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    return;
+  }
+  CGLSetCurrentContext(cgl);
+
+  mpv_opengl_init_params gl_init{};
+  gl_init.get_proc_address = GetProcGL;
+  gl_init.get_proc_address_ctx = nullptr;
+  int advanced = 1;
+  mpv_render_param create_params[] = {
+      {MPV_RENDER_PARAM_API_TYPE, const_cast<char*>(MPV_RENDER_API_TYPE_OPENGL)},
+      {MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &gl_init},
+      {MPV_RENDER_PARAM_ADVANCED_CONTROL, &advanced},
+      {static_cast<mpv_render_param_type>(0), nullptr},
+  };
+  int rc = M::rc_create(&s->mpvGl, s->mpv, create_params);
+  if (rc < 0) {
+    fprintf(stderr, "[player-mac] rc_create failed: %s\n", M::error_string(rc));
+    CGLSetCurrentContext(nullptr);
+    CGLDestroyContext(cgl);
+    while (s->run.load()) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    return;
+  }
+  M::rc_set_update_callback(s->mpvGl, OnMpvUpdate, s);
+  fprintf(stderr, "[player-mac] mpv render context ready\n");
+
+  const bool hasUnifiedMemory = g_device.hasUnifiedMemory;
+  int ringW = 0, ringH = 0;
+  uint64_t frameIndex = 0;
+
+  auto waitUntilFree = [&](SurfaceSlot& slot) {
+    std::unique_lock<std::mutex> lk(s->wakeMutex);
+    s->wakeCv.wait(lk, [&] { return !slot.busy.load() || !s->run.load(); });
+  };
+  auto releaseSlot = [&](SurfaceSlot& slot) {
+    if (slot.fbo) { glDeleteFramebuffers(1, &slot.fbo); slot.fbo = 0; }
+    if (slot.tex) { glDeleteTextures(1, &slot.tex); slot.tex = 0; }
+    slot.mtl = nil;
+    if (slot.surf) { CFRelease(slot.surf); slot.surf = nullptr; }
+    slot.width = slot.height = 0;
+  };
+  auto buildSlot = [&](SurfaceSlot& slot, int w, int h) {
+    NSDictionary* props = @{
+      (id)kIOSurfaceWidth : @(w),
+      (id)kIOSurfaceHeight : @(h),
+      (id)kIOSurfaceBytesPerElement : @(g_pixelFormat.bytesPerElement),
+      (id)kIOSurfacePixelFormat : @(g_pixelFormat.ioSurfaceFormat),
+    };
+    slot.surf = IOSurfaceCreate((__bridge CFDictionaryRef)props);
+    glGenTextures(1, &slot.tex);
+    glBindTexture(GL_TEXTURE_RECTANGLE, slot.tex);
+    CGLTexImageIOSurface2D(cgl, GL_TEXTURE_RECTANGLE, g_pixelFormat.glInternalFormat, w, h,
+                           g_pixelFormat.glFormat, g_pixelFormat.glType, slot.surf, 0);
+    glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glGenFramebuffers(1, &slot.fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, slot.fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_RECTANGLE, slot.tex, 0);
+    glClearColor(0, 0, 0, 1);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    MTLTextureDescriptor* desc =
+        [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:g_pixelFormat.mtlFormat
+                                                            width:w
+                                                           height:h
+                                                        mipmapped:NO];
+    desc.usage = MTLTextureUsageShaderRead;
+    desc.storageMode = hasUnifiedMemory ? MTLStorageModeShared : MTLStorageModeManaged;
+    slot.mtl = [g_device newTextureWithDescriptor:desc iosurface:slot.surf plane:0];
+    slot.width = w;
+    slot.height = h;
+  };
+
+  while (s->run.load()) {
+    {
+      std::unique_lock<std::mutex> lk(s->wakeMutex);
+      s->wakeCv.wait_for(lk, std::chrono::milliseconds(100),
+                         [s] { return s->wake.load() || s->dirty.load() || !s->run.load(); });
+      s->wake.store(false);
+    }
+    if (!s->run.load()) break;
+
+    uint64_t flags = M::rc_update(s->mpvGl);  // ADVANCED_CONTROL: required after every callback
+    if (!(flags & MPV_RENDER_UPDATE_FRAME) && !s->dirty.load()) continue;
+    s->dirty.store(false);
+
+    const uint64_t packed = s->desiredSize.load();
+    const int w = static_cast<int>(packed >> 32);
+    const int h = static_cast<int>(packed & 0xffffffffu);
+    if (w <= 0 || h <= 0) continue;
+
+    if (w != ringW || h != ringH) {
+      glFinish();
+      for (auto& slot : g_ring) waitUntilFree(slot);
+      for (auto& slot : g_ring) releaseSlot(slot);
+      for (auto& slot : g_ring) buildSlot(slot, w, h);
+      ringW = w;
+      ringH = h;
+    }
+
+    SurfaceSlot& slot = g_ring[frameIndex++ & 1];
+    if (slot.busy.load()) waitUntilFree(slot);  // never in practice at ring size 2
+
+    mpv_opengl_fbo mfbo{static_cast<int>(slot.fbo), w, h, g_pixelFormat.glInternalFormat};
+    // No FLIP_Y: mpv's render-API output is top-down, and so is an FBO texture
+    // (unlike the CAOpenGLLayer default framebuffer, which is bottom-up). If
+    // the first SDR frame renders upside down, re-add flip=1 here.
+    mpv_render_param render_params[] = {
+        {MPV_RENDER_PARAM_OPENGL_FBO, &mfbo},
+        {static_cast<mpv_render_param_type>(0), nullptr},
+    };
+    M::rc_render(s->mpvGl, render_params);
+    glFlush();  // ensure GL's IOSurface writes are visible before the Metal blit reads it
+
+    id<CAMetalDrawable> drawable = [g_layer nextDrawable];
+    if (!drawable) {
+      s->dirty.store(true);  // retry next wake instead of dropping the frame
+      continue;
+    }
+
+    id<MTLCommandBuffer> cb = [g_queue commandBuffer];
+    id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
+    // min() guards the one-frame race where a resize lands between the GL
+    // render above and this blit (drawable and slot briefly disagree in size).
+    MTLSize copySize = MTLSizeMake(
+        std::min<NSUInteger>(slot.width, drawable.texture.width),
+        std::min<NSUInteger>(slot.height, drawable.texture.height), 1);
+    [blit copyFromTexture:slot.mtl
+               sourceSlice:0
+               sourceLevel:0
+              sourceOrigin:MTLOriginMake(0, 0, 0)
+                sourceSize:copySize
+                 toTexture:drawable.texture
+          destinationSlice:0
+          destinationLevel:0
+         destinationOrigin:MTLOriginMake(0, 0, 0)];
+    [blit endEncoding];
+    [cb presentDrawable:drawable];
+    slot.busy.store(true);
+    [cb addCompletedHandler:^(id<MTLCommandBuffer>) {
+      // Clear under wakeMutex: an unlocked store can land between waitUntilFree's
+      // predicate check and its block, losing the wakeup and stalling the loop.
+      {
+        std::lock_guard<std::mutex> lk(s->wakeMutex);
+        slot.busy.store(false);
+      }
+      s->wakeCv.notify_one();
+    }];
+    [cb commit];
+    M::rc_report_swap(s->mpvGl);
+  }
+
+  if (s->mpvGl) {
+    M::rc_free(s->mpvGl);
+    s->mpvGl = nullptr;
+  }
+  for (auto& slot : g_ring) releaseSlot(slot);
+  CGLSetCurrentContext(nullptr);
+  CGLDestroyContext(cgl);
+}
 
 // Color class derived from the decoded stream's video-params. Drives the matched
 // {mpv target, CALayer colorspace, EDR} triple in ApplyLayerColorConfig, and is
@@ -283,12 +403,30 @@ enum ContentColorClass { CC_SDR_709, CC_SDR_P3, CC_HDR_PQ, CC_HLG };
 // Last class applied, so a display change (EDR headroom differs per screen) can
 // re-evaluate the config without waiting for the next video-params event.
 std::atomic<int> g_lastColorClass{CC_SDR_709};
-// Last class the event thread dispatched a reconfig for (-1 = none yet / reset on
-// load). Guards against re-dispatching an UNCHANGED classification: mpv re-reports
-// video-params extremely often (per frame on some streams), and each dispatch runs
-// synchronous mpv + CALayer work on the AppKit main thread — a flood there stalls
-// the cursor, ipcMain handlers, and video presentation (A/V drift).
-std::atomic<int> g_lastReconfigClass{-1};
+// Last (class, mastering-peak) key the event thread dispatched a reconfig for
+// (~0 = none yet / reset on load). Guards against re-dispatching an UNCHANGED
+// classification: mpv re-reports video-params extremely often (per frame on
+// some streams), and each dispatch runs synchronous mpv + CALayer work on the
+// AppKit main thread — a flood there stalls the cursor, ipcMain handlers, and
+// video presentation (A/V drift). Keying on the peak too (not just the class)
+// re-dispatches when the mastering luminance changes under an unchanged class.
+std::atomic<uint64_t> g_lastReconfigKey{~0ull};
+
+uint32_t FloatBits(float f) {
+  uint32_t bits;
+  std::memcpy(&bits, &f, sizeof(bits));
+  return bits;
+}
+
+// HDR mastering/content-light metadata read alongside the color class, for
+// CAEDRMetadata. Only populated for CC_HDR_PQ (see ReconfigureColorForCurrentVideo).
+struct HdrMeta {
+  double maxLuma = 0;  // video-params/max-luma (mastering display peak, nits)
+  double minLuma = 0;  // video-params/min-luma
+  double maxCll = 0;   // video-params/max-cll (unused: no MDCV/CLLI byte-packing yet)
+  double maxFall = 0;  // video-params/max-fall (unused: no MDCV/CLLI byte-packing yet)
+};
+HdrMeta g_lastHdrMeta;  // main-thread only; reused when re-evaluating for a display change
 
 void UpdateLayerGeometry() {
   if (!g_layer || !g_view) return;
@@ -296,8 +434,12 @@ void UpdateLayerGeometry() {
   CGFloat scale = win ? win.backingScaleFactor : 2.0;
   g_layer.contentsScale = scale;
   g_layer.frame = g_view.bounds;
-  g_state.dirty.store(true);
-  [g_layer setNeedsDisplay];
+  CGSize drawableSize =
+      CGSizeMake(g_view.bounds.size.width * scale, g_view.bounds.size.height * scale);
+  g_layer.drawableSize = drawableSize;
+  g_state.desiredSize.store((static_cast<uint64_t>(drawableSize.width) << 32) |
+                             static_cast<uint32_t>(drawableSize.height));
+  RequestRedraw();
 }
 
 // Boot the layer into a safe SDR (BT.709 / sRGB) state that matches mpv's default
@@ -307,7 +449,7 @@ void UpdateLayerGeometry() {
 // any file loads, and independent of the content — washed out SDR: an
 // extended-linear tag on mpv's gamma-encoded pixels made the compositor skip the
 // gamma decode and blow out the midtones.
-void BootLayerColorDefaults(MpvGLLayer* layer) {
+void BootLayerColorDefaults(CAMetalLayer* layer) {
   if (@available(macOS 10.15, *)) layer.wantsExtendedDynamicRangeContent = NO;
   CGColorSpaceRef cs = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
   if (cs) {
@@ -317,18 +459,19 @@ void BootLayerColorDefaults(MpvGLLayer* layer) {
 }
 
 // Apply the color configuration for a classified content class. MUST run on the
-// main queue: it mutates CALayer state (colorspace / wantsEDR) and reads NSScreen,
-// both AppKit-main-thread only. The mpv target properties are set here as well
-// (thread-safe from any thread) so the FBO encoding and the layer tag — which must
-// describe the SAME transfer + primaries — always change together.
+// main queue: it mutates CALayer state (colorspace / wantsEDR / EDRMetadata) and
+// reads NSScreen, both AppKit-main-thread only. The mpv target properties are set
+// here as well (thread-safe from any thread) so the FBO encoding and the layer
+// tag — which must describe the SAME transfer + primaries — always change together.
 //
 // Invariant: CALayer.colorspace declares what the framebuffer pixels ALREADY are;
 // it does not convert them. So each class pairs an mpv target-trc/-prim with the
 // CGColorSpace of that exact encoding. HDR (PQ/HLG) engages EDR only when the
 // display has headroom; otherwise mpv tone-maps down to the SDR pair.
-void ApplyLayerColorConfig(int clsInt) {
+void ApplyLayerColorConfig(int clsInt, HdrMeta meta) {
   if (!g_state.run.load() || !g_layer) return;  // torn down (Stop clears g_layer)
   g_lastColorClass.store(clsInt);
+  g_lastHdrMeta = meta;
   const ContentColorClass cls = static_cast<ContentColorClass>(clsInt);
 
   // EDR needs BOTH a display with headroom AND a float backing: PQ/HLG + wantsEDR
@@ -383,16 +526,39 @@ void ApplyLayerColorConfig(int clsInt) {
     CGColorSpaceRelease(cs);
   }
 
+  // Buffer encoding context: the PQ path writes PQ-encoded fp16 in [0,1] and the
+  // layer colorspace is ITUR_2100_PQ, an ABSOLUTE transfer function (signal 1.0
+  // == 10000 nits) — hence opticalOutputScale=10000 (scale=100 is only correct
+  // for an extended-linear recipe, which would need target-trc=linear instead).
+  // Takes effect on subsequent nextDrawable calls, same one-frame lag as colorspace.
+  if (@available(macOS 10.15, *)) {
+    bool hwOk = true;
+    if (@available(macOS 13.0, *)) hwOk = CAEDRMetadata.isAvailable;
+    if (wantsEDR && hwOk && cls == CC_HDR_PQ) {
+      g_layer.EDRMetadata =
+          meta.maxLuma > 0
+              ? [CAEDRMetadata HDR10MetadataWithMinLuminance:(float)meta.minLuma
+                                                 maxLuminance:(float)meta.maxLuma
+                                           opticalOutputScale:10000.0f]
+              : [CAEDRMetadata HDR10MetadataWithDisplayInfo:nil
+                                                 contentInfo:nil
+                                          opticalOutputScale:10000.0f];
+    } else if (wantsEDR && hwOk && cls == CC_HLG) {
+      g_layer.EDRMetadata = CAEDRMetadata.HLGMetadata;
+    } else {
+      g_layer.EDRMetadata = nil;
+    }
+  }
+
   // Repaint even when paused (no fresh mpv frame) — mirrors UpdateLayerGeometry.
-  g_state.dirty.store(true);
-  [g_layer setNeedsDisplay];
+  RequestRedraw();
   static const char* kClassName[] = {"SDR-709", "SDR-P3", "HDR-PQ", "HLG"};
   const char* name = (clsInt >= 0 && clsInt <= CC_HLG) ? kClassName[clsInt] : "?";
   fprintf(stderr,
           "[player-mac] color: class=%s prim=%s trc=%s peak=%s edr=%d "
-          "headroom=%.2f hdrBacking=%d\n",
+          "headroom=%.2f hdrBacking=%d maxLuma=%.1f minLuma=%.4f\n",
           name, prim, trc, peak, static_cast<int>(wantsEDR), headroom,
-          static_cast<int>(g_state.hdrBacking.load()));
+          static_cast<int>(g_state.hdrBacking.load()), meta.maxLuma, meta.minLuma);
 }
 
 // Classify the freshly-decoded stream from mpv's video-params and hand the class
@@ -425,18 +591,33 @@ void ReconfigureColorForCurrentVideo() {
     cls = CC_SDR_709;
   }
 
+  HdrMeta meta;
+  if (cls == CC_HDR_PQ) {
+    auto readNum = [&](const char* name) -> double {
+      std::string s = readProp(name);
+      return s.empty() ? 0.0 : atof(s.c_str());
+    };
+    meta.maxLuma = readNum("video-params/max-luma");
+    meta.minLuma = readNum("video-params/min-luma");
+    meta.maxCll = readNum("video-params/max-cll");
+    meta.maxFall = readNum("video-params/max-fall");
+  }
+
   const int clsInt = static_cast<int>(cls);
-  // Reconfigure only when the classification actually changes. mpv fires
-  // video-params many times per second even for a static SDR stream; without
-  // this guard each fire posts a main-queue block doing synchronous mpv
-  // set_property + CALayer work, saturating the AppKit main thread.
-  if (clsInt == g_lastReconfigClass.exchange(clsInt)) return;
+  // Reconfigure only when the classification OR the mastering peak actually
+  // changes. mpv fires video-params many times per second even for a static
+  // stream; without this guard each fire posts a main-queue block doing
+  // synchronous mpv set_property + CALayer work, saturating the AppKit main
+  // thread.
+  const uint64_t key =
+      (static_cast<uint64_t>(clsInt) << 32) | FloatBits(static_cast<float>(meta.maxLuma));
+  if (key == g_lastReconfigKey.exchange(key)) return;
   // Log the raw mpv enum strings the classification keyed off: the vendored
   // libmpv's exact video-params values must be confirmed on device (see #605), and
   // these are the only place they surface.
-  fprintf(stderr, "[player-mac] video-params: gamma=%s primaries=%s -> class=%d\n",
-          gamma.c_str(), primaries.c_str(), clsInt);
-  dispatch_async(dispatch_get_main_queue(), ^{ ApplyLayerColorConfig(clsInt); });
+  fprintf(stderr, "[player-mac] video-params: gamma=%s primaries=%s maxLuma=%.1f -> class=%d\n",
+          gamma.c_str(), primaries.c_str(), meta.maxLuma, clsInt);
+  dispatch_async(dispatch_get_main_queue(), ^{ ApplyLayerColorConfig(clsInt, meta); });
 }
 
 // mpv documents the video-params enum values as subject to change, and the
@@ -575,7 +756,7 @@ void EventThreadMain(State* s) {
         case MPV_EVENT_PLAYBACK_RESTART:
           // Guarantee the color config is applied once per load/seek even if the
           // typed video-params leaf observe misses its initial change (the
-          // g_lastReconfigClass guard makes this a no-op when unchanged).
+          // g_lastReconfigKey guard makes this a no-op when unchanged).
           ReconfigureColorForCurrentVideo();
           emitPosition(true);  // push the fresh position right after a seek / first frame
           Emit("{\"type\":\"firstFrame\"}");
@@ -650,7 +831,7 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
   // decoded stream in ApplyLayerColorConfig, matched to the CALayer colorspace.
   // target-colorspace-hint is deliberately NOT set — it is inert on the render
   // API (it needs vo=gpu-next plus a Wayland/D3D11/winvk swapchain, none of which
-  // exist for a host-owned CAOpenGLLayer FBO).
+  // exist for a host-owned CAMetalLayer FBO).
   // Streaming/buffering/reconnect tuning is applied from TS after start
   // (MPV_STREAM_OPTIONS in src/shared/mpv-stream-options.ts) — one source of
   // truth shared with the Linux + Windows backends.
@@ -676,16 +857,45 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
       getenv("FLIKS_MPV_LOGLEVEL") ? getenv("FLIKS_MPV_LOGLEVEL") : "v");
   fprintf(stderr, "[player-mac] mpv ready (hwdec=videotoolbox)\n");
 
-  // Attach the GL layer to the videoWin's content view. N-API runs on the
+  // Attach the Metal layer to the videoWin's content view. N-API runs on the
   // AppKit main thread, so CALayer/NSView mutation here is safe.
   g_view.wantsLayer = YES;
-  g_layer = [[MpvGLLayer alloc] init];
+
+  const char* forceSdr = getenv("FLIKS_HDR");
+  const bool wantHdr = !(forceSdr && std::strcmp(forceSdr, "no") == 0);
+  g_device = MTLCreateSystemDefaultDevice();
+  if (!g_device) {
+    Napi::Error::New(env, "MTLCreateSystemDefaultDevice failed").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  g_queue = [g_device newCommandQueue];
+  if (wantHdr) {
+    g_pixelFormat = {MTLPixelFormatRGBA16Float, kCVPixelFormatType_64RGBAHalf, 8,
+                      GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT};
+    fprintf(stderr, "[player-mac] metal pixel format: RGBA16F (HDR-capable)\n");
+  } else {
+    g_pixelFormat = {MTLPixelFormatBGRA8Unorm, kCVPixelFormatType_32BGRA, 4,
+                      GL_RGBA8, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV};
+    fprintf(stderr, "[player-mac] metal pixel format: BGRA8 (SDR)\n");
+  }
+  g_state.hdrBacking.store(wantHdr);
+
+  g_layer = [CAMetalLayer layer];
+  g_layer.device = g_device;
+  g_layer.pixelFormat = g_pixelFormat.mtlFormat;
   g_layer.opaque = YES;
-  g_layer.asynchronous = YES;  // drives its own CVDisplayLink render loop
+  g_layer.framebufferOnly = NO;  // a framebufferOnly drawable rejects blit destinations
+  g_layer.backgroundColor = CGColorGetConstantColor(kCGColorBlack);
   g_layer.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
   BootLayerColorDefaults(g_layer);
   g_layer.frame = g_view.bounds;
-  g_layer.contentsScale = g_view.window ? g_view.window.backingScaleFactor : 2.0;
+  CGFloat scale = g_view.window ? g_view.window.backingScaleFactor : 2.0;
+  g_layer.contentsScale = scale;
+  CGSize drawableSize =
+      CGSizeMake(g_view.bounds.size.width * scale, g_view.bounds.size.height * scale);
+  g_layer.drawableSize = drawableSize;
+  g_state.desiredSize.store((static_cast<uint64_t>(drawableSize.width) << 32) |
+                             static_cast<uint32_t>(drawableSize.height));
   [g_view.layer addSublayer:g_layer];
 
   // Keep the layer glued to the view across resize + display (scale) changes.
@@ -705,7 +915,7 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
   //     brightness, system-HDR toggle, panel entering/leaving reference mode).
   void (^reeval)(NSNotification*) = ^(NSNotification*) {
     UpdateLayerGeometry();
-    ApplyLayerColorConfig(g_lastColorClass.load());
+    ApplyLayerColorConfig(g_lastColorClass.load(), g_lastHdrMeta);
   };
   NSNotificationCenter* nc = [NSNotificationCenter defaultCenter];
   g_backingObserver = [nc addObserverForName:NSWindowDidChangeBackingPropertiesNotification
@@ -724,6 +934,7 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
                  usingBlock:reeval];
 
   g_state.run.store(true);
+  g_state.renderThread = std::thread(RenderThreadMain, &g_state);
   g_state.eventThread = std::thread(EventThreadMain, &g_state);
   return env.Undefined();
 }
@@ -788,7 +999,7 @@ Napi::Value Load(const Napi::CallbackInfo& info) {
   g_state.paused.store(false);
   // Force the next video-params event to re-apply the color config once for the
   // new stream (its class may match the previous file's).
-  g_lastReconfigClass.store(-1);
+  g_lastReconfigKey.store(~0ull);
   if (o.Has("subtitles") && o.Get("subtitles").IsArray()) {
     Napi::Array subs = o.Get("subtitles").As<Napi::Array>();
     for (uint32_t i = 0; i < subs.Length(); i++) {
@@ -874,7 +1085,7 @@ static CGPathRef CreateBottomRoundedPath(CGRect r, CGFloat radius, BOOL bottomIs
 
 // setBottomCornerRadius(wid, radius) — clip any window's content view to a
 // square-top / rounded-bottom shape via a CAShapeLayer mask (works for the web
-// content AND the CAOpenGLLayer, which ignores an ancestor's cornerRadius). The
+// content AND the CAMetalLayer, which ignores an ancestor's cornerRadius). The
 // caller re-invokes on resize with the new bounds. N-API runs on the AppKit
 // main thread, so layer mutation here is safe.
 Napi::Value SetBottomCornerRadius(const Napi::CallbackInfo& info) {
@@ -906,14 +1117,20 @@ Napi::Value Stop(const Napi::CallbackInfo& info) {
   // run.store(false) MUST stay first: a still-queued ApplyLayerColorConfig block
   // (posted from the event thread) is only safe because it early-returns on
   // !run, and it runs on this same main thread so it can't interleave with the
-  // g_layer=nil below. mpv itself is destroyed only after eventThread.join(), so
-  // the event thread has stopped reading g_state.mpv by then.
+  // g_layer=nil below.
   g_state.run.store(false);
-  // Stop the layer's render loop before freeing the render context.
-  if (g_layer) {
-    g_layer.asynchronous = NO;
-    [g_layer removeFromSuperlayer];
+  // Wake + join the render thread BEFORE touching mpv/the layer: it does
+  // rc_free with its own CGL context current, and frees the GL/IOSurface/Metal
+  // objects itself. A render thread blocked in nextDrawable unblocks within the
+  // 1s default allowsNextDrawableTimeout, bounding this join.
+  {
+    std::lock_guard<std::mutex> lk(g_state.wakeMutex);
+    g_state.wake.store(true);
   }
+  g_state.wakeCv.notify_all();
+  if (g_state.renderThread.joinable()) g_state.renderThread.join();
+
+  if (g_layer) [g_layer removeFromSuperlayer];
   if (g_frameObserver) {
     [[NSNotificationCenter defaultCenter] removeObserver:g_frameObserver];
     g_frameObserver = nil;
@@ -932,25 +1149,14 @@ Napi::Value Stop(const Napi::CallbackInfo& info) {
   }
   if (g_state.eventThread.joinable()) g_state.eventThread.join();
   if (g_tsfnReady.exchange(false)) g_tsfn.Release();
-  {
-    std::lock_guard<std::mutex> lk(g_state.renderMutex);
-    if (g_state.mpvGl) {
-      // rc_free needs the layer's GL context current.
-      if (g_state.cgl) CGLSetCurrentContext(g_state.cgl);
-      M::rc_free(g_state.mpvGl);
-      g_state.mpvGl = nullptr;
-      if (g_state.cgl) {
-        CGLSetCurrentContext(nullptr);
-        g_state.cgl = nullptr;
-      }
-    }
-  }
   if (g_state.mpv) {
-    M::destroy(g_state.mpv);  // mpv_terminate_destroy
+    M::destroy(g_state.mpv);  // mpv_terminate_destroy — rc_free above already ran
     g_state.mpv = nullptr;
   }
   g_layer = nil;
   g_view = nil;
+  g_device = nil;
+  g_queue = nil;
   return info.Env().Undefined();
 }
 
