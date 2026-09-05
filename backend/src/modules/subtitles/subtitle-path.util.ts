@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import * as path from 'path';
 
 /**
@@ -23,4 +24,16 @@ export function resolveSubtitleAbsolutePath(
   }
 
   return absolute;
+}
+
+/**
+ * Guard the language part of a generated sidecar name. It is built from a
+ * provider-supplied or client-supplied language, and `normalizeLanguageCode`
+ * passes an unknown tag through unchanged, so a value like
+ * `x/../../../../tmp/pwn` would otherwise become a path.
+ */
+export function assertSafeLangSuffix(suffix: string): void {
+  if (!/^[a-z]{2,3}(\.(forced|hi))?$/.test(suffix)) {
+    throw new BadRequestException(`Invalid subtitle language "${suffix}"`);
+  }
 }

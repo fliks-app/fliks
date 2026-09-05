@@ -7,6 +7,7 @@ import {
   testResultFromResponse,
 } from './subtitle-provider.interface';
 import { isRateLimited, rateLimitedFetch } from './rate-limiter';
+import { providerUrl } from './provider-url';
 
 const PROVIDER_TYPE = 'subsynchro';
 const BASE_URL = 'https://www.subsynchro.com';
@@ -95,11 +96,7 @@ export class SubsynchroProvider implements SubtitleProviderInterface {
    * The download may return a ZIP archive — if so, extract the first subtitle file.
    */
   async download(result: SubtitleSearchResult): Promise<Buffer> {
-    const downloadUrl = result.providerFileId;
-    // Resolve relative URLs
-    const url = downloadUrl.startsWith('http')
-      ? downloadUrl
-      : `${BASE_URL}${downloadUrl.startsWith('/') ? '' : '/'}${downloadUrl}`;
+    const url = providerUrl(BASE_URL, result.providerFileId);
 
     if (isRateLimited(PROVIDER_TYPE)) {
       throw new Error('Subsynchro is rate-limited, try again later');

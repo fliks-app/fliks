@@ -7,6 +7,7 @@ import {
   testResultFromResponse,
 } from './subtitle-provider.interface';
 import { isRateLimited, rateLimitedFetch } from './rate-limiter';
+import { providerUrl } from './provider-url';
 
 const PROVIDER_TYPE = 'gestdown';
 const BASE_URL = 'https://api.gestdown.info';
@@ -115,7 +116,7 @@ export class GestdownProvider implements SubtitleProviderInterface {
     if (isRateLimited(PROVIDER_TYPE)) {
       throw new Error('Gestdown is rate-limited, try again later');
     }
-    const url = `${BASE_URL}${result.providerFileId}`;
+    const url = providerUrl(BASE_URL, result.providerFileId);
     const res = await rateLimitedFetch(
       PROVIDER_TYPE,
       url,

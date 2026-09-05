@@ -8,6 +8,7 @@ import {
 } from './subtitle-provider.interface';
 import { isRateLimited, rateLimitedFetch } from './rate-limiter';
 import { extractSubtitleFromZip } from './zip-utils';
+import { providerUrl } from './provider-url';
 
 const PROVIDER_TYPE = 'subdl';
 
@@ -91,8 +92,7 @@ export class SubdlProvider implements SubtitleProviderInterface {
       throw new Error('Subdl is rate-limited, try again later');
     }
 
-    // providerFileId contains the relative URL path from search results
-    const dlUrl = `https://dl.subdl.com${result.providerFileId}`;
+    const dlUrl = providerUrl('https://dl.subdl.com', result.providerFileId);
     const res = await rateLimitedFetch(PROVIDER_TYPE, dlUrl, {
       headers: { 'User-Agent': 'Fliks/1.0' },
     });

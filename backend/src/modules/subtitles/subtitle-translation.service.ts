@@ -26,6 +26,7 @@ import { TranslationProvider } from './entities/translation-provider.entity';
 import { parseSrt, serializeSrt } from './srt.util';
 import { cleanSubtitle } from './subtitle-cleaner';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
+import { assertSafeLangSuffix } from './subtitle-path.util';
 import { resolveSubtitleAbsolutePath } from './subtitle-path.util';
 import { isImageBasedSubtitleCodec } from '../../common/constants/subtitle-codecs';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
@@ -257,6 +258,7 @@ export class SubtitleTranslationService {
         : hearingImpaired
           ? `${target}.hi`
           : target;
+      assertSafeLangSuffix(langSuffix);
       let outPath = path.join(parsed.dir, `${parsed.name}.${langSuffix}.srt`);
       let counter = 0;
       while (await this.exists(outPath)) {
