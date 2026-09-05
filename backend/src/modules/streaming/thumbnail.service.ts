@@ -16,6 +16,7 @@ import {
   type CropArea,
 } from './thumbnail-extractors';
 import { TranscodingService } from './transcoding';
+import { FFMPEG_SLOTS, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
 
 const execFileAsync = promisify(execFile);
 
@@ -37,11 +38,6 @@ export interface SpriteMetadata {
 
 const baseDir = () => path.join(getImagesDir(), 'thumbnails');
 const framesTmpDir = () => path.join(getImagesDir(), 'thumbnails-tmp');
-
-/** Concurrent ffmpeg `-ss` seeks per sprite. HW decode saturates much
- *  earlier than the CPU pool — the GPU's decoder-session count caps useful
- *  parallelism around 4. SW path keeps the previous 8-wide setting. */
-const SEEK_CONCURRENCY = HWACCEL_AVAILABLE ? 4 : 8;
 
 /**
  * Build a human-readable label for a sprite: "S01E03 — Episode Title" for a
@@ -100,7 +96,7 @@ export class ThumbnailService {
     private readonly transcoding: TranscodingService,
   ) {
     this.log.log(
-      `Thumbnail extraction backends: ${describeBackends()} (SEEK_CONCURRENCY=${SEEK_CONCURRENCY}, SPRITE_CONCURRENCY=${SPRITE_CONCURRENCY})`,
+      `Thumbnail extraction backends: ${describeBackends()} (FFMPEG_SLOTS=${FFMPEG_SLOTS}, SPRITE_CONCURRENCY=${SPRITE_CONCURRENCY})`,
     );
   }
 
@@ -295,7 +291,7 @@ export class ThumbnailService {
     // exactly what ffmpeg sees per frame.
     const decode = this.chooseExtractor(crop).describe();
     this.log.log(
-      `Sprite START for "${label}" (file #${mediaFileId}): ${count} thumbs @ ${interval}s interval, workers=${SEEK_CONCURRENCY}, decode=${decode}, otherSprites=${otherRunning}, queued=${this.queue.length}, srcSize=${srcSizeMb ?? '?'}MB, crop=${
+      `Sprite START for "${label}" (file #${mediaFileId}): ${count} thumbs @ ${interval}s interval, workers=${FFMPEG_SLOTS}, decode=${decode}, otherSprites=${otherRunning}, queued=${this.queue.length}, srcSize=${srcSizeMb ?? '?'}MB, crop=${
         crop ? `${crop.width}x${crop.height}+${crop.x},${crop.y}` : 'none'
       }, src=${absolutePath}`,
     );
@@ -537,7 +533,7 @@ export class ThumbnailService {
       }
     };
 
-    const workers = Math.min(SEEK_CONCURRENCY, count);
+    const workers = Math.min(FFMPEG_SLOTS, count);
     await Promise.all(Array.from({ length: workers }, () => runOne()));
 
     const wallMs = Date.now() - extractStart;
@@ -623,42 +619,45 @@ export class ThumbnailService {
     outputPath: string,
     crop?: CropArea,
   ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const args = this.chooseExtractor(crop).buildArgs({
-        inputPath,
-        seekSeconds,
-        outputPath,
-        crop,
-        thumbWidth: THUMB_WIDTH,
-      });
-      const proc = spawnLowPriority('ffmpeg', args);
-      let stderr = '';
-      proc.stderr?.on('data', (chunk: Buffer) => {
-        if (stderr.length < 4096) stderr += chunk.toString();
-      });
-      let killed = false;
-      const killTimer = setTimeout(() => {
-        killed = true;
-        try {
-          proc.kill('SIGKILL');
-        } catch {
-          /* ignore */
-        }
-      }, 30_000);
-      proc.on('close', (code) => {
-        clearTimeout(killTimer);
-        if (code === 0) return resolve();
-        const reason = killed ? 'timeout (60s)' : `code ${code}`;
-        const err = new Error(
-          `ffmpeg -ss exited with ${reason}: ${stderr.trim().split('\n').slice(-2).join(' ')}`,
-        );
-        reject(err);
-      });
-      proc.on('error', (err) => {
-        clearTimeout(killTimer);
-        reject(err);
-      });
-    });
+    return withFfmpegSlot(
+      () =>
+        new Promise((resolve, reject) => {
+          const args = this.chooseExtractor(crop).buildArgs({
+            inputPath,
+            seekSeconds,
+            outputPath,
+            crop,
+            thumbWidth: THUMB_WIDTH,
+          });
+          const proc = spawnLowPriority('ffmpeg', args);
+          let stderr = '';
+          proc.stderr?.on('data', (chunk: Buffer) => {
+            if (stderr.length < 4096) stderr += chunk.toString();
+          });
+          let killed = false;
+          const killTimer = setTimeout(() => {
+            killed = true;
+            try {
+              proc.kill('SIGKILL');
+            } catch {
+              /* ignore */
+            }
+          }, 30_000);
+          proc.on('close', (code) => {
+            clearTimeout(killTimer);
+            if (code === 0) return resolve();
+            const reason = killed ? 'timeout (60s)' : `code ${code}`;
+            const err = new Error(
+              `ffmpeg -ss exited with ${reason}: ${stderr.trim().split('\n').slice(-2).join(' ')}`,
+            );
+            reject(err);
+          });
+          proc.on('error', (err) => {
+            clearTimeout(killTimer);
+            reject(err);
+          });
+        }),
+    );
   }
 
   /** Tile the extracted individual frames into a single sprite JPEG. */
@@ -667,42 +666,45 @@ export class ThumbnailService {
     spritePath: string,
     rows: number,
   ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const args = [
-        '-nostdin',
-        '-hide_banner',
-        '-loglevel',
-        'error',
-        '-start_number',
-        '1',
-        '-i',
-        path.join(framesDir, 'frame-%04d.jpg'),
-        '-vf',
-        `tile=${COLUMNS}x${rows}`,
-        '-q:v',
-        '5',
-        '-y',
-        spritePath,
-      ];
-      const proc = spawnLowPriority('ffmpeg', args);
-      let stderr = '';
-      proc.stderr?.on('data', (chunk: Buffer) => {
-        if (stderr.length < 16 * 1024) stderr += chunk.toString();
-      });
-      proc.on('close', (code) => {
-        if (code === 0) return resolve();
-        const err = new Error(
-          `ffmpeg tile exited with code ${code}`,
-        ) as Error & { stderr: string };
-        err.stderr = stderr;
-        reject(err);
-      });
-      proc.on('error', (err) => {
-        const e = err as Error & { stderr?: string };
-        e.stderr = stderr;
-        reject(e);
-      });
-    });
+    return withFfmpegSlot(
+      () =>
+        new Promise((resolve, reject) => {
+          const args = [
+            '-nostdin',
+            '-hide_banner',
+            '-loglevel',
+            'error',
+            '-start_number',
+            '1',
+            '-i',
+            path.join(framesDir, 'frame-%04d.jpg'),
+            '-vf',
+            `tile=${COLUMNS}x${rows}`,
+            '-q:v',
+            '5',
+            '-y',
+            spritePath,
+          ];
+          const proc = spawnLowPriority('ffmpeg', args);
+          let stderr = '';
+          proc.stderr?.on('data', (chunk: Buffer) => {
+            if (stderr.length < 16 * 1024) stderr += chunk.toString();
+          });
+          proc.on('close', (code) => {
+            if (code === 0) return resolve();
+            const err = new Error(
+              `ffmpeg tile exited with code ${code}`,
+            ) as Error & { stderr: string };
+            err.stderr = stderr;
+            reject(err);
+          });
+          proc.on('error', (err) => {
+            const e = err as Error & { stderr?: string };
+            e.stderr = stderr;
+            reject(e);
+          });
+        }),
+    );
   }
 
   /** Indent every line by 4 spaces — for nicer log formatting. */

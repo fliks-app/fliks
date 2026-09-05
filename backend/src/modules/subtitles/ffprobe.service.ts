@@ -4,20 +4,12 @@ import { promisify } from 'util';
 import * as path from 'path';
 import { inferLanguageCodeFromTitle } from '../../common/release-parsing/language.parser';
 import { isImageBasedSubtitleCodec } from '../../common/constants/subtitle-codecs';
-import { cpus } from 'os';
 import { existsSync } from 'fs';
 import { vaapiRenderNode } from '../streaming/transcoding/hw-device';
 import { mapWithConcurrency } from '../../common/utils/concurrency';
+import { FFMPEG_SLOTS, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
 
 const execFileAsync = promisify(execFile);
-
-/** Concurrent cropdetect probes per file. The software path decodes on the
- *  CPU, so six at once means ~6x the cores in decoder threads — enough on a
- *  4-thread box to starve the event loop for a whole rescan. */
-const CROP_SAMPLE_CONCURRENCY = Math.max(
-  2,
-  Math.min(6, Math.floor(cpus().length / 2)),
-);
 
 /** `format=nv12` before cropdetect is not cosmetic: cropdetect compares `limit`
  *  to raw sample values, and 10-bit black sits near 64, so the 8-bit default of
@@ -753,7 +745,7 @@ export class FfprobeService {
 
       const rest = await mapWithConcurrency(
         timestamps.slice(1),
-        CROP_SAMPLE_CONCURRENCY,
+        FFMPEG_SLOTS,
         async (ss) => (await this.cropSample(videoPath, ss, hw)).sample,
       );
       this.logger.log(
@@ -810,28 +802,31 @@ export class FfprobeService {
   ): Promise<{ failed: boolean; sample: CropSample }> {
     const decode = hw
       ? (cropHwDecodeArgs() ?? [])
-      : // Fewer decoder threads is markedly less total CPU for the same frames;
-        // the extra wall time is free on a background probe.
-        ['-threads', '2'];
+      : // The global slot pool supplies the parallelism now; more per-process
+        // threads here would only oversubscribe the cores.
+        ['-threads', '1'];
+    const ffmpegArgs = [
+      ...decode,
+      '-ss',
+      String(Math.floor(ss)),
+      '-i',
+      videoPath,
+      '-t',
+      '5',
+      '-vf',
+      hw ? `hwdownload,${CROP_FILTER}` : CROP_FILTER,
+      '-an',
+      '-f',
+      'null',
+      '-',
+    ];
+    const [cmd, args] =
+      process.platform === 'linux'
+        ? ['ionice', ['-c3', 'nice', '-n19', 'ffmpeg', ...ffmpegArgs]]
+        : ['ffmpeg', ffmpegArgs];
     try {
-      const { stderr } = await execFileAsync(
-        'ffmpeg',
-        [
-          ...decode,
-          '-ss',
-          String(Math.floor(ss)),
-          '-i',
-          videoPath,
-          '-t',
-          '5',
-          '-vf',
-          hw ? `hwdownload,${CROP_FILTER}` : CROP_FILTER,
-          '-an',
-          '-f',
-          'null',
-          '-',
-        ],
-        { timeout: 30_000 },
+      const { stderr } = await withFfmpegSlot(() =>
+        execFileAsync(cmd, args, { timeout: 30_000 }),
       );
       const lines = stderr.split('\n');
       for (let i = lines.length - 1; i >= 0; i--) {

@@ -26,6 +26,7 @@ import { Command } from '../scheduler/entities/command.entity';
 import { resolveSubtitleAbsolutePath } from '../subtitles/subtitle-path.util';
 import { normalizeLanguageCode } from '../../common/constants/app-languages';
 import type { SubtitleRenditionMeta } from './transcoding/types';
+import { withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
 
 const execFileAsync = promisify(execFile);
 
@@ -287,6 +288,7 @@ export class SubtitleStreamService {
         mediaRoot,
         mediaFileId,
         uncachedIndices,
+        false,
       );
     } else {
       await this.extractDeduped(
@@ -294,6 +296,7 @@ export class SubtitleStreamService {
         mediaRoot,
         mediaFileId,
         streamIndex,
+        false,
       );
     }
     return fsSync.createReadStream(cachePath);
@@ -488,6 +491,7 @@ export class SubtitleStreamService {
         mediaRoot,
         mediaFileId,
         streamIndices,
+        true,
       );
       batch.remaining = 0;
     } catch (err) {
@@ -499,7 +503,13 @@ export class SubtitleStreamService {
       // promise (e.g. from a concurrent live request).
       for (const idx of streamIndices) {
         try {
-          await this.extractDeduped(absolutePath, mediaRoot, mediaFileId, idx);
+          await this.extractDeduped(
+            absolutePath,
+            mediaRoot,
+            mediaFileId,
+            idx,
+            true,
+          );
         } catch (e) {
           batch.failed++;
           this.log.warn(
@@ -535,6 +545,7 @@ export class SubtitleStreamService {
     mediaRoot: string,
     mediaFileId: number,
     streamIndex: number,
+    background: boolean,
   ): Promise<void> {
     const key = `${mediaFileId}-${streamIndex}`;
     const inflight = this.inflight.get(key);
@@ -551,6 +562,7 @@ export class SubtitleStreamService {
       mediaRoot,
       mediaFileId,
       streamIndex,
+      background,
     ).finally(() => this.inflight.delete(key));
     this.inflight.set(key, promise);
     return promise;
@@ -571,6 +583,7 @@ export class SubtitleStreamService {
     mediaRoot: string,
     mediaFileId: number,
     streamIndices: number[],
+    background: boolean,
   ): Promise<void> {
     if (!streamIndices.length) return;
 
@@ -602,6 +615,7 @@ export class SubtitleStreamService {
       mediaRoot,
       mediaFileId,
       ownIndices,
+      background,
     );
     const ownKeys = ownIndices.map((idx) => `${mediaFileId}-${idx}`);
     for (const key of ownKeys) {
@@ -649,6 +663,7 @@ export class SubtitleStreamService {
     mediaRoot: string,
     mediaFileId: number,
     streamIndices: number[],
+    background: boolean,
   ): Promise<void> {
     if (!streamIndices.length) return;
     const cacheDir = path.dirname(
@@ -685,8 +700,8 @@ export class SubtitleStreamService {
       );
     }
 
-    try {
-      await new Promise<void>((resolve, reject) => {
+    const runFfmpeg = () =>
+      new Promise<void>((resolve, reject) => {
         const opts: SpawnOptions = {
           stdio: ['ignore', 'ignore', 'pipe'],
           timeout: EXTRACT_TIMEOUT_MS,
@@ -714,6 +729,12 @@ export class SubtitleStreamService {
         proc.on('error', reject);
       });
 
+    try {
+      // Warmup work waits its turn behind the global budget; a live
+      // cache-miss must not queue behind it.
+      if (background) await withFfmpegSlot(runFfmpeg);
+      else await runFfmpeg();
+
       // All outputs written, promote .tmp → final atomically.
       await Promise.all(
         outputs.map(async (out) => {
@@ -740,12 +761,13 @@ export class SubtitleStreamService {
     mediaRoot: string,
     mediaFileId: number,
     streamIndex: number,
+    background: boolean,
   ): Promise<void> {
     const cachePath = this.cachePathFor(mediaRoot, mediaFileId, streamIndex);
     const tmpPath = `${cachePath}.tmp`;
     await fs.mkdir(path.dirname(cachePath), { recursive: true });
-    try {
-      await new Promise<void>((resolve, reject) => {
+    const runFfmpeg = () =>
+      new Promise<void>((resolve, reject) => {
         const proc = spawn(
           'ffmpeg',
           [
@@ -787,6 +809,11 @@ export class SubtitleStreamService {
         });
         proc.on('error', reject);
       });
+    try {
+      // Warmup work waits its turn behind the global budget; a live
+      // cache-miss must not queue behind it.
+      if (background) await withFfmpegSlot(runFfmpeg);
+      else await runFfmpeg();
       await this.assertExtracted(tmpPath);
       await fs.rename(tmpPath, cachePath);
     } catch (err) {
