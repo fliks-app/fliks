@@ -3784,12 +3784,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   onBack() {
     this.savePosition();
-    // Desktop compositor: leaving the player drops the native (SDL) window out
-    // of fullscreen so the rest of the app isn't stuck fullscreen. Item
-    // switches route through advance(), not onBack(), so they keep it.
-    if (this.isDesktopNative && this.engine instanceof DesktopEngine && this.engine.fullscreen) {
-      this.engine.setFullscreen(false);
-    }
     // Explicit navigation rather than history.back() — nav-inside-player
     // (e.g. next-episode) leaves multiple /watch entries on the stack, and
     // router-reuse across same routes means history.back() only rewrites
