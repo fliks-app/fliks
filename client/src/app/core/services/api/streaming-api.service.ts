@@ -109,7 +109,7 @@ export interface PlaybackInfoResponse {
   preRoll?: PreRollItem[];
   /** Server-issued live-session identifier. The client embeds it in every
    *  subsequent `PUT /api/playback/media/:id/state` (heartbeat) and on
-   *  the `DELETE /api/stream/:mediaFileId/sessions` unload signal so the
+   *  the `DELETE /api/stream/sessions/:sid` unload signal so the
    *  backend can match the client back to its in-memory session record. */
   sessionId?: string;
   /** Profile hash this session's transcode cache is keyed under, or
@@ -457,36 +457,19 @@ export class StreamingApiService {
     );
   }
 
-  /** Build the URL for stopping sessions (used with fetch(keepalive) on unload).
-   *  Prefer the sid-scoped variant when a sessionId is available — the
-   *  bulk path kills every profile for the (user, file) pair, which
-   *  would tear down other devices watching the same title. */
-  getStopSessionsUrl(mediaFileId: number, sessionId?: string): string {
-    if (sessionId) {
-      const path = `/api/stream/sessions/${encodeURIComponent(sessionId)}`;
-      const base = this.serverConfig.isNative
-        ? this.serverConfig.resolveUrl(path)
-        : path;
-      const token = this.playbackToken;
-      return token ? `${base}?token=${encodeURIComponent(token)}` : base;
-    }
+  /** URL for stopping one session (used with fetch(keepalive) on unload). */
+  getStopSessionUrl(sessionId: string): string {
+    const path = `/api/stream/sessions/${encodeURIComponent(sessionId)}`;
     const base = this.serverConfig.isNative
-      ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}/sessions`)
-      : `/api/stream/${mediaFileId}/sessions`;
+      ? this.serverConfig.resolveUrl(path)
+      : path;
     const token = this.playbackToken;
     return token ? `${base}?token=${encodeURIComponent(token)}` : base;
   }
 
-  stopSessions(mediaFileId: number, sessionId?: string) {
-    if (sessionId) {
-      return firstValueFrom(
-        this.http.delete(
-          `/api/stream/sessions/${encodeURIComponent(sessionId)}`,
-        ),
-      );
-    }
+  stopSession(sessionId: string) {
     return firstValueFrom(
-      this.http.delete(`/api/stream/${mediaFileId}/sessions`),
+      this.http.delete(`/api/stream/sessions/${encodeURIComponent(sessionId)}`),
     );
   }
 

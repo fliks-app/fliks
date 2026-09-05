@@ -1723,7 +1723,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (!info) continue; // this candidate failed to negotiate — try the next
       // Only stop the main session once a pre-roll item is committed: if every
       // candidate fails, the launch is byte-identical to a plugin-free one.
-      await this.streamingApi.stopSessions(mainFileId, mainSid).catch(() => {});
+      if (mainSid) await this.streamingApi.stopSession(mainSid).catch(() => {});
       this.preRollMainFileId = mainFileId;
       this.preRollRest = rest;
       this.preRollCurrent.set(item);
@@ -2535,7 +2535,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (!this.engine || this.reloadingStream || mediaFileId === this.mediaFileId) return;
     this.reloadingStream = true;
     this.engine.resetRecoveryGuard();
-    const previousFileId = this.mediaFileId;
     const previousSessionId = this.playbackInfo?.sessionId;
     try {
       // Surface the loading backdrop (set to the new episode's still below)
@@ -2549,9 +2548,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Native engines must be stopped before a fresh load to avoid a freeze;
       // release the outgoing file's session (other devices on it stay alive).
       if (this.isNativeEngine()) await NativePlayer.stop().catch(() => {});
-      await this.streamingApi
-        .stopSessions(previousFileId, previousSessionId)
-        .catch(() => {});
+      if (previousSessionId) {
+        await this.streamingApi.stopSession(previousSessionId).catch(() => {});
+      }
 
       this.mediaFileId = mediaFileId;
       this.episodeId = episodeId;
@@ -3280,9 +3279,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // treat the re-mint as a concurrent sibling and split it onto a cold job.
       const prevSid = this.playbackInfo?.sessionId;
       if (prevSid) {
-        await this.streamingApi
-          .stopSessions(this.mediaFileId, prevSid)
-          .catch(() => {});
+        await this.streamingApi.stopSession(prevSid).catch(() => {});
       }
       if (opts.unmute) this.engine.muted = false;
       const wasPaused = opts.preservePause ? this.paused() : false;
@@ -4534,9 +4531,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       // Stop only this device's session — multi-device viewers on the
       // same file with a different profile should stay alive.
-      await this.streamingApi
-        .stopSessions(this.mediaFileId, this.playbackInfo?.sessionId)
-        .catch(() => {});
+      const currentSid = this.playbackInfo?.sessionId;
+      if (currentSid) {
+        await this.streamingApi.stopSession(currentSid).catch(() => {});
+      }
 
       const deviceProfile = this.deviceProfileService.getProfile();
       // Pass the requested rung so the backend re-decides DirectPlay vs the
@@ -4593,11 +4591,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Release this device's session on exit — DirectPlay included, so its
     // "now watching" dashboard row clears at once instead of lingering until
     // the backend idle reap (transcode/remux paths also stop their ffmpeg).
-    if (!this.mediaFileId) return;
-    const url = this.streamingApi.getStopSessionsUrl(
-      this.mediaFileId,
-      this.activeSessionId(),
-    );
+    const sid = this.activeSessionId();
+    if (!sid) return;
+    const url = this.streamingApi.getStopSessionUrl(sid);
     fetch(url, { method: 'DELETE', keepalive: true }).catch(() => {});
   }
 

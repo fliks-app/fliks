@@ -1218,22 +1218,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return session;
   }
 
-  /** Stop every ffmpeg job for this `(file, user)` pair across all
-   *  profile variants. The on-disk cache **stays** — `TranscodeCacheService`
-   *  owns its lifecycle and will evict on TTL / LRU. A subsequent fresh
-   *  play (same profile) reattaches to the existing segments instead of
-   *  retranscoding from scratch. */
-  async killSession(mediaFileId: number, userId?: number) {
-    const sessions = this.getSessionsForFileUser(mediaFileId, userId);
-    if (sessions.length === 0) return;
-    for (const s of sessions) {
-      this.log.log(`Kill session [${s.id}] (quality: ${s.quality})`);
-      this.sessions.delete(s.id);
-      s.intentionallyKilled = true;
-    }
-    await Promise.all(sessions.map((s) => this.killProcess(s.process)));
-  }
-
   /** Stop every ffmpeg variant (main / early / remux / per-audio) of one
    *  client job — the sessions sharing `baseProfileHash` for this (file,
    *  user). Scoped by hash so a second device on the same file with a
@@ -1588,7 +1572,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
    * Uses SIGKILL by default (instant) for seek restarts — ffmpeg's graceful
    * SIGTERM shutdown (write trailer, close files) is wasted work when we're
    * about to overwrite the output. SIGTERM is only used when the caller
-   * explicitly needs a clean shutdown (e.g. stopSessions on player close).
+   * explicitly needs a clean shutdown (e.g. stopSession on player close).
    */
   private killProcess(proc: ChildProcess, graceful = false): Promise<void> {
     if (proc.exitCode !== null) return Promise.resolve();
@@ -1614,7 +1598,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
    *
    *  Skips the rm when a replacement session is already registered with the
    *  same id — avoids wiping a freshly-spawned session's cache dir during a
-   *  quick close+replay cycle (stopSessions ↔ playback-info race). */
+   *  quick close+replay cycle (stopSession ↔ playback-info race). */
   private async killAndClean(
     proc: ChildProcess,
     dirPath: string,
