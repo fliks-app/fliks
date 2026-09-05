@@ -1002,6 +1002,7 @@ export class StreamingController {
       supportsAbr: deviceProfile.supportsAbr,
       videoVariant,
       tonemapping: response.tonemapping,
+      clientTonemap: response.clientTonemap ?? false,
       transcodeReasons: response.transcodeReasons,
       burnIn,
       encoderPreset: ss.qsvPreset,

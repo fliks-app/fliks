@@ -115,6 +115,11 @@
                     }
                   }
                 </div>
+                @if (s.clientTonemap) {
+                  <div class="text-base-content/50 italic">
+                    {{ 'system.streams_video_client_tonemap' | translate }}
+                  </div>
+                }
                 @for (r of s.videoReasons; track r) {
                   <div class="text-warning/80 italic">{{ r }}</div>
                 }

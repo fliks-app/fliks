@@ -114,6 +114,8 @@ export interface ActiveStreamDto {
   audioMode: 'direct' | 'copy' | 'transcode';
   /** Transcode buffer progress (0-100), null for direct play */
   transcodePercent: number | null;
+  /** HDR served untouched to a client that tone-maps it to its SDR display. */
+  clientTonemap: boolean;
   /** Reasons why transcoding is needed, split by category */
   videoReasons: string[];
   audioReasons: string[];
@@ -452,6 +454,7 @@ export class SystemController {
       systemName: string | null;
       appVersion: string | null;
       transcodeSession: TranscodeSession | undefined;
+      clientTonemap: boolean;
       audioPlan: LiveSessionSnapshot['audioPlan'];
       position: number;
       episodeId: number | null;
@@ -496,6 +499,7 @@ export class SystemController {
         systemName: session.systemName,
         appVersion: session.appVersion,
         transcodeSession: ts,
+        clientTonemap: session.clientTonemap,
         audioPlan: session.audioPlan,
         // The LiveSession keeps the playhead fresh on every heartbeat — read
         // it straight from memory instead of a per-row playback_states query.
@@ -585,6 +589,7 @@ export class SystemController {
         audioOutputBitrateBps,
         audioMode,
         transcodePercent: null as number | null, // filled below for transcode sessions
+        clientTonemap: s.clientTonemap,
         videoReasons: [] as string[],
         audioReasons: [] as string[],
         containerReasons: [] as string[],

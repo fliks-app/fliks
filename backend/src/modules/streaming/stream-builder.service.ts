@@ -264,6 +264,9 @@ export class StreamBuilderService {
       directPlayResult.videoConditionsMet;
     const clientCanPresentDynamicRange =
       clientCanPresentHdr || clientCanPresentDv;
+    // Copy path taken only because the client tone-maps on its own: the stats
+    // overlay and the admin dashboard would otherwise show no HDR step at all.
+    const clientTonemap = clientCanPresentHdr && !clientSupportsHdr;
 
     // HDR/DV the client can't present as-is forces a transcode. Flag the
     // tone-map only when the re-encode is actually SDR — when the HDR ladder
@@ -272,6 +275,9 @@ export class StreamBuilderService {
     if ((isSourceHdr || dvP5) && !clientCanPresentDynamicRange) {
       if (directPlayResult.canDirectPlay)
         directPlayResult.canDirectPlay = false;
+      this.log.log(
+        `hdrDecision[file=${resolved.mediaFile.id}] ${dvP5 ? 'Dolby Vision P5' : source.hdrFormat} → SDR: supportsHdr=${clientSupportsHdr}, tonemapsHdrLocally=${profile.tonemapsHdrLocally === true}, supportsDolbyVision=${profile.supportsDolbyVision === true}, videoSupported=${directPlayResult.videoSupported}, videoConditionsMet=${directPlayResult.videoConditionsMet}`,
+      );
       if (transcodeTonemaps) {
         reasons.push({
           flag: 'VideoHdrNotSupported',
@@ -408,6 +414,7 @@ export class StreamBuilderService {
         outputContainer: sourceContainer,
         hwAccel: 'none',
         tonemapping: false,
+        clientTonemap,
         qualities: this.buildQualityList(source, 'DirectPlay', sourceCopyable, qualityLadder, selectedVariant.codec),
         audioTracks: this.buildAudioTracks(audioStreams, profile, 'DirectPlay'),
         source,
@@ -506,6 +513,7 @@ export class StreamBuilderService {
         // hevc_qsv main10), since the field is stale for the new session.
         hwAccel: this.transcodingService.getDetectedHwAccel(),
         tonemapping: false,
+        clientTonemap,
         remuxMasterBandwidthBps: remuxBw > 0 ? remuxBw : undefined,
         transcodeBitrateByQuality,
         qualities: this.buildQualityList(source, 'DirectStream', sourceCopyable, qualityLadder, selectedVariant.codec),
