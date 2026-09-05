@@ -16,14 +16,20 @@ function makeQueue() {
   const finalize = jest.fn(async () => undefined);
   const onImported = jest.fn(async () => undefined);
   const events = { emit: jest.fn() };
+  const activityRegistry = {
+    upsertPending: jest.fn(),
+    upsertRunning: jest.fn(),
+    remove: jest.fn(),
+  };
 
   const queue = new PostImportQueueService(
     { findOne } as never,
     { finalizeImportedFile: finalize } as never,
     { onMediaFileImported: onImported } as never,
     events as never,
+    activityRegistry as never,
   );
-  return { queue, findOne, finalize, onImported, events };
+  return { queue, findOne, finalize, onImported, events, activityRegistry };
 }
 
 describe('PostImportQueueService', () => {

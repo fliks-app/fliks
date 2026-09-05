@@ -27,16 +27,14 @@ import { FfprobeService } from '../../subtitles/ffprobe.service';
 import { SubtitlesService } from '../../subtitles/subtitles.service';
 import { EmbeddedSubtitleService } from '../../subtitles/embedded-subtitle.service';
 import { SubtitleStreamService } from '../../streaming/subtitle-stream.service';
-import {
-  ThumbnailService,
-  buildSpriteLabel,
-} from '../../streaming/thumbnail.service';
+import { ThumbnailService } from '../../streaming/thumbnail.service';
 import { MediaServersService } from '../../media-servers/media-servers.service';
 import { PostImportQueueService } from '../../../common/post-import/post-import-queue.service';
 import { MediaMetadataService } from './media-metadata.service';
 import { clearMediaCache } from '../../../common/utils/media-cache.util';
 import { relativePathUnderMediaRoot } from '../../../common/utils/media-path.util';
 import { VIDEO_EXTS } from '../../../common/constants/video-extensions';
+import { buildMediaProgressSubject } from '../../../common/utils/media-progress-subject.util';
 
 type ProbeResult = Awaited<ReturnType<FfprobeService['detectMediaFileInfo']>>;
 
@@ -322,6 +320,17 @@ export class MediaRescanService {
     absPath: string,
     media: Media,
   ): void {
+    const ep = file.episode;
+    const subject = buildMediaProgressSubject(
+      media,
+      ep
+        ? {
+            seasonNumber: ep.season?.seasonNumber,
+            episodeNumber: ep.episodeNumber,
+            title: ep.title,
+          }
+        : null,
+    );
     void this.subtitleStream
       .clearMediaFileSubtitleCache(media?.path, file.id)
       .then(() =>
@@ -330,7 +339,7 @@ export class MediaRescanService {
           media?.path,
           file.id,
           file.streamInfo?.subtitles,
-          media?.title,
+          subject,
         ),
       )
       .catch((err) =>
@@ -384,7 +393,7 @@ export class MediaRescanService {
       }
       if (opts.sprites) {
         const ep = file.episode;
-        const label = buildSpriteLabel(
+        const subject = buildMediaProgressSubject(
           media,
           ep
             ? {
@@ -395,7 +404,7 @@ export class MediaRescanService {
             : null,
         );
         // Background, force=true so the existing sprite/meta gets rebuilt.
-        void this.thumbnailService.generateForFile(file, media, label, {
+        void this.thumbnailService.generateForFile(file, media, subject, {
           force: true,
         });
       }
@@ -412,9 +421,11 @@ export class MediaRescanService {
     subtitleRemovedMissing: number;
     subtitleRemovedDuplicates: number;
   }> {
+    // `files.episode.season` is loaded here (one extra join, no extra round trip) so the
+    // subtitle-warmup progress below can name the episode instead of just the series.
     const media = await this.mediaRepo.findOne({
       where: { id: mediaId },
-      relations: ['files'],
+      relations: ['files', 'files.episode', 'files.episode.season'],
     });
     if (!media) throw new NotFoundException(`Media #${mediaId} not found`);
     if (!media.path) {
@@ -554,6 +565,15 @@ export class MediaRescanService {
 
       const filename = path.basename(absPath);
 
+      // Fed to the subtitle-warmup progress below. Prefer whatever this pass just
+      // parsed/linked (exact season/episode numbers, no extra query); otherwise fall
+      // back to the `files.episode.season` relation preloaded above.
+      let epForProgress: {
+        seasonNumber?: number | null;
+        episodeNumber?: number | null;
+        title?: string | null;
+      } | null = null;
+
       // Series files: parse filename, either link a missing episodeId OR
       // patch an existing link with a newly-discovered multi-episode range
       // (e.g. "S07E11-E12.mkv" already imported as E11 gets endEpisodeNumber
@@ -570,6 +590,11 @@ export class MediaRescanService {
             if (created) metadataSlotsCreated = true;
             if (ep) {
               dbFile.episode = ep;
+              epForProgress = {
+                seasonNumber: epNums.season,
+                episodeNumber: epNums.episode,
+                title: ep.title,
+              };
               try {
                 await this.mediaFileRepo.save(dbFile);
                 await this.episodeRepo.update(ep.id, { hasFile: true });
@@ -594,6 +619,11 @@ export class MediaRescanService {
           const special = await this.matchSpecialFile(mediaId, absPath);
           if (special) {
             dbFile.episode = special;
+            epForProgress = {
+              seasonNumber: 0,
+              episodeNumber: special.episodeNumber,
+              title: special.title,
+            };
             await this.mediaFileRepo.save(dbFile);
             await this.episodeRepo.update(special.id, { hasFile: true });
             updated++;
@@ -610,6 +640,13 @@ export class MediaRescanService {
               `Rescan: set endEpisodeNumber=${epNums.episodeEnd} on S${String(epNums.season).padStart(2, '0')}E${String(epNums.episode).padStart(2, '0')} for media #${mediaId}`,
             );
           }
+        }
+        if (!epForProgress && dbFile.episode) {
+          epForProgress = {
+            seasonNumber: dbFile.episode.season?.seasonNumber,
+            episodeNumber: dbFile.episode.episodeNumber,
+            title: dbFile.episode.title,
+          };
         }
       }
 
@@ -650,7 +687,7 @@ export class MediaRescanService {
             media.path,
             dbFile.id,
             streamInfo?.subtitles,
-            media.title,
+            buildMediaProgressSubject(media, epForProgress),
           );
         }
       } catch (err) {
@@ -687,6 +724,11 @@ export class MediaRescanService {
 
       // Try to match episode for series — create season/episode on the fly if missing
       let episodeId: number | undefined;
+      let epForProgress: {
+        seasonNumber?: number | null;
+        episodeNumber?: number | null;
+        title?: string | null;
+      } | null = null;
       if (media.type === MediaType.SERIES) {
         const epNums = this.naming.parseEpisodeNumbers(filename, absPath);
         if (epNums) {
@@ -698,6 +740,13 @@ export class MediaRescanService {
             );
             if (created) metadataSlotsCreated = true;
             episodeId = ep?.id;
+            if (ep) {
+              epForProgress = {
+                seasonNumber: epNums.season,
+                episodeNumber: epNums.episode,
+                title: ep.title,
+              };
+            }
           } catch (err) {
             this.log.error(
               `Rescan[media #${mediaId}]: failed to create season/episode for new file "${filename}" — importing file without episode link`,
@@ -708,6 +757,11 @@ export class MediaRescanService {
           const special = await this.matchSpecialFile(mediaId, absPath);
           if (special) {
             episodeId = special.id;
+            epForProgress = {
+              seasonNumber: 0,
+              episodeNumber: special.episodeNumber,
+              title: special.title,
+            };
           } else {
             this.log.warn(
               `Rescan[media #${mediaId}]: series file name has no SxxEyy pattern — "${filename}" (skipped, alien file in series folder)`,
@@ -749,7 +803,7 @@ export class MediaRescanService {
             media.path,
             savedFile.id,
             probed.streamInfo.subtitles,
-            media.title,
+            buildMediaProgressSubject(media, epForProgress),
           );
         }
       } catch (err) {

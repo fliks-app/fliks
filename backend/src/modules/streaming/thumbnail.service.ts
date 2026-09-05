@@ -8,6 +8,7 @@ import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { getImagesDir } from '../../common/constants/paths';
 import { EventsService } from '../scheduler/events.service';
+import { ActivityRegistryService } from '../scheduler/activity-registry.service';
 import { Command } from '../scheduler/entities/command.entity';
 import {
   describeBackends,
@@ -17,6 +18,11 @@ import {
 } from './thumbnail-extractors';
 import { TranscodingService } from './transcoding';
 import { FFMPEG_SLOTS, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
+import {
+  buildMediaProgressSubject,
+  formatMediaProgressSubject,
+  type MediaProgressSubject,
+} from '../../common/utils/media-progress-subject.util';
 
 const execFileAsync = promisify(execFile);
 
@@ -39,30 +45,6 @@ export interface SpriteMetadata {
 const baseDir = () => path.join(getImagesDir(), 'thumbnails');
 const framesTmpDir = () => path.join(getImagesDir(), 'thumbnails-tmp');
 
-/**
- * Build a human-readable label for a sprite: "S01E03 — Episode Title" for a
- * series episode, media title otherwise. Exported so call sites can compute
- * labels upfront (bulk ops) or per-file.
- */
-export function buildSpriteLabel(
-  media: { title: string },
-  episode?: {
-    seasonNumber?: number | null;
-    episodeNumber?: number | null;
-    title?: string | null;
-  } | null,
-): string {
-  if (
-    !episode ||
-    episode.seasonNumber == null ||
-    episode.episodeNumber == null
-  ) {
-    return media.title;
-  }
-  const sn = String(episode.seasonNumber).padStart(2, '0');
-  const en = String(episode.episodeNumber).padStart(2, '0');
-  return `S${sn}E${en} — ${episode.title ?? media.title}`;
-}
 const COLUMNS = 10;
 const THUMB_WIDTH = 240;
 
@@ -73,7 +55,7 @@ interface QueueItem {
   mediaFileId: number;
   absolutePath: string;
   durationSeconds: number;
-  mediaTitle?: string;
+  subject: MediaProgressSubject;
   skipTracking?: boolean;
   crop?: CropArea;
   resolve: (meta: SpriteMetadata | null) => void;
@@ -94,6 +76,7 @@ export class ThumbnailService {
     @InjectRepository(Command)
     private readonly commandRepo: Repository<Command>,
     private readonly transcoding: TranscodingService,
+    private readonly activityRegistry: ActivityRegistryService,
   ) {
     this.log.log(
       `Thumbnail extraction backends: ${describeBackends()} (FFMPEG_SLOTS=${FFMPEG_SLOTS}, SPRITE_CONCURRENCY=${SPRITE_CONCURRENCY})`,
@@ -127,7 +110,7 @@ export class ThumbnailService {
       } | null;
     },
     media: { path: string | null; title: string },
-    label: string,
+    subject: MediaProgressSubject,
     options: { force?: boolean; skipTracking?: boolean } = {},
   ): Promise<SpriteMetadata | null> {
     const dur = file.streamInfo?.durationSeconds;
@@ -140,7 +123,7 @@ export class ThumbnailService {
       file.id,
       absPath,
       dur,
-      label,
+      subject,
       options.force ?? false,
       options.skipTracking ?? false,
       file.streamInfo?.video?.[0]?.crop,
@@ -151,7 +134,7 @@ export class ThumbnailService {
     mediaFileId: number,
     absolutePath: string,
     durationSeconds: number,
-    mediaTitle?: string,
+    subject: MediaProgressSubject,
     force = false,
     skipTracking = false,
     crop?: CropArea,
@@ -171,12 +154,17 @@ export class ThumbnailService {
       return this.generating.get(mediaFileId)!;
     }
 
+    this.activityRegistry.upsertPending(
+      `GenerateSprite:${mediaFileId}`,
+      'GenerateSprite',
+      subject,
+    );
     const promise = new Promise<SpriteMetadata | null>((resolve) => {
       this.queue.push({
         mediaFileId,
         absolutePath,
         durationSeconds,
-        mediaTitle,
+        subject,
         skipTracking,
         crop,
         resolve,
@@ -234,7 +222,7 @@ export class ThumbnailService {
         item.mediaFileId,
         item.absolutePath,
         item.durationSeconds,
-        item.mediaTitle,
+        item.subject,
         item.skipTracking,
         item.crop,
       )
@@ -243,7 +231,7 @@ export class ThumbnailService {
           // Don't let unexpected failures stay silent — log stack then
           // resolve null so callers don't hang.
           this.log.error(
-            `Sprite generation crashed (file #${item.mediaFileId}, "${item.mediaTitle ?? ''}"): ${(err as Error).message}`,
+            `Sprite generation crashed (file #${item.mediaFileId}, "${item.subject.title}"): ${(err as Error).message}`,
             err instanceof Error ? err.stack : err,
           );
           item.resolve(null);
@@ -259,7 +247,7 @@ export class ThumbnailService {
     mediaFileId: number,
     absolutePath: string,
     durationSeconds: number,
-    mediaTitle?: string,
+    subject: MediaProgressSubject,
     skipTracking = false,
     crop?: CropArea,
   ): Promise<SpriteMetadata | null> {
@@ -269,9 +257,10 @@ export class ThumbnailService {
     const interval = this.pickInterval(durationSeconds);
     const count = Math.ceil(durationSeconds / interval);
     const rows = Math.ceil(count / COLUMNS);
-    const label = mediaTitle ?? `file #${mediaFileId}`;
+    const label = formatMediaProgressSubject(subject);
     const total = Math.round(durationSeconds);
     const progressKey = `GenerateSprite:${mediaFileId}`;
+    this.activityRegistry.upsertRunning(progressKey, 'GenerateSprite', subject, 0, total);
     const t0 = Date.now();
 
     // Source file size + concurrent sprite jobs: useful to correlate slow
@@ -327,6 +316,7 @@ export class ThumbnailService {
       current: 0,
       total,
       message: label,
+      subject,
     });
 
     // Global 10-minute timeout for the entire sprite (extraction + tiling).
@@ -354,6 +344,7 @@ export class ThumbnailService {
             count,
             total,
             label,
+            subject,
             progressKey,
             crop,
           );
@@ -449,7 +440,9 @@ export class ThumbnailService {
         current: total,
         total,
         message: label,
+        subject,
       });
+      this.activityRegistry.remove(progressKey);
       // Cleanup tmp frames (fire-and-forget).
       fsp
         .rm(path.join(framesTmpDir(), String(mediaFileId)), {
@@ -473,6 +466,7 @@ export class ThumbnailService {
     count: number,
     totalSeconds: number,
     label: string,
+    subject: MediaProgressSubject,
     progressKey: string,
     crop?: CropArea,
   ): Promise<void> {
@@ -528,7 +522,15 @@ export class ThumbnailService {
             current: Math.round(current),
             total: totalSeconds,
             message: label,
+            subject,
           });
+          this.activityRegistry.upsertRunning(
+            progressKey,
+            'GenerateSprite',
+            subject,
+            Math.round(current),
+            totalSeconds,
+          );
         }
       }
     };

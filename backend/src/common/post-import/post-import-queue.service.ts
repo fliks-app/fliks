@@ -6,6 +6,12 @@ import { MediaFile } from '../../modules/media/entities/media-file.entity';
 import { MediaRescanService } from '../../modules/media/media-service/media-rescan.service';
 import { SubtitleSchedulerService } from '../../modules/scheduler/subtitle-scheduler.service';
 import { EventsService } from '../../modules/scheduler/events.service';
+import { ActivityRegistryService } from '../../modules/scheduler/activity-registry.service';
+import {
+  buildMediaProgressSubject,
+  formatMediaProgressSubject,
+  type MediaProgressSubject,
+} from '../utils/media-progress-subject.util';
 
 const ENRICH_CONCURRENCY = 1;
 
@@ -28,7 +34,7 @@ export class PostImportQueueService {
   /** Counted over one drain, so the bar spans a whole import wave. Reset on idle. */
   private waveTotal = 0;
   private waveDone = 0;
-  private label = '';
+  private subject: MediaProgressSubject | null = null;
 
   constructor(
     @InjectRepository(MediaFile)
@@ -38,6 +44,7 @@ export class PostImportQueueService {
     @Inject(forwardRef(() => SubtitleSchedulerService))
     private readonly subtitleScheduler: SubtitleSchedulerService,
     private readonly events: EventsService,
+    private readonly activityRegistry: ActivityRegistryService,
   ) {}
 
   get pendingCount(): number {
@@ -51,6 +58,10 @@ export class PostImportQueueService {
     this.tasks.push(task);
     this.waveTotal++;
     this.emitProgress();
+    this.activityRegistry.upsertPending(
+      `PostImportEnrich:${task.mediaFileId}`,
+      'PostImportEnrich',
+    );
     this.pump();
   }
 
@@ -60,7 +71,8 @@ export class PostImportQueueService {
       command: POST_IMPORT_PROGRESS,
       current: this.waveDone,
       total: this.waveTotal,
-      message: this.label,
+      message: this.subject ? formatMediaProgressSubject(this.subject) : '',
+      subject: this.subject ?? undefined,
     });
   }
 
@@ -83,9 +95,10 @@ export class PostImportQueueService {
         .finally(() => {
           this.active--;
           this.queued.delete(task.mediaFileId);
+          this.activityRegistry.remove(`PostImportEnrich:${task.mediaFileId}`);
           this.waveDone++;
           if (this.active === 0 && this.tasks.length === 0) {
-            this.label = '';
+            this.subject = null;
             this.emitProgress();
             this.waveTotal = 0;
             this.waveDone = 0;
@@ -105,7 +118,7 @@ export class PostImportQueueService {
     try {
       file = await this.fileRepo.findOne({
         where: { id: mediaFileId },
-        relations: ['media'],
+        relations: ['media', 'episode', 'episode.season'],
       });
     } catch (e) {
       this.logger.error(
@@ -121,8 +134,23 @@ export class PostImportQueueService {
       return;
     }
     const absPath = path.join(path.resolve(file.media.path), normPath);
-    this.label = file.media.title ?? '';
+    const ep = file.episode;
+    this.subject = buildMediaProgressSubject(
+      file.media,
+      ep
+        ? {
+            seasonNumber: ep.season?.seasonNumber,
+            episodeNumber: ep.episodeNumber,
+            title: ep.title,
+          }
+        : null,
+    );
     this.emitProgress();
+    this.activityRegistry.upsertRunning(
+      `PostImportEnrich:${mediaFileId}`,
+      'PostImportEnrich',
+      this.subject,
+    );
 
     try {
       await this.mediaRescan.finalizeImportedFile(file, absPath, file.media);

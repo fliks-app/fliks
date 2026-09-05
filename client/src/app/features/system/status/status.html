@@ -39,16 +39,56 @@
   </div>
 }
 
-<!-- Active task progress -->
-@if (sse.activeProgress().size > 0) {
-  <div class="space-y-2 mt-4">
-    @for (entry of sse.activeProgress() | keyvalue; track entry.key) {
-      <div class="flex items-center gap-3">
-        <span class="text-sm font-medium w-32 truncate" [title]="entry.value.command">{{ commandLabelKey(entry.value.command) | translate }}</span>
-        <progress class="progress progress-primary flex-1" [value]="entry.value.current" [max]="entry.value.total"></progress>
-        <span class="text-xs text-base-content/60 tabular-nums w-16 text-right">{{ entry.value.total > 0 ? (entry.value.current / entry.value.total * 100 | number:'1.0-0') + '%' : '0%' }}</span>
-        <span class="text-xs text-base-content/50 truncate w-52">{{ entry.value.message }}</span>
-      </div>
+<!-- Activity: running + queued tasks, live over SSE -->
+@if (activity().length > 0) {
+  <div class="mt-4">
+    <h2 class="text-lg font-semibold mb-3">{{ 'system.activity_title' | translate }}</h2>
+    <div class="overflow-x-auto rounded-lg border border-base-200">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>{{ 'system.col_command' | translate }}</th>
+            <th>{{ 'system.col_media' | translate }}</th>
+            <th>{{ 'system.col_progress' | translate }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of activity(); track item.id) {
+            <tr>
+              <td class="font-medium">
+                {{ commandLabelKey(item.type) | translate }}
+                @if (item.status === 'pending') {
+                  <span class="badge badge-ghost badge-sm ml-1.5">{{ 'system.status_pending' | translate }}</span>
+                }
+              </td>
+              <td>
+                @if (item.subject) {
+                  <div class="truncate max-w-64">{{ item.subject.title }}</div>
+                  @if (episodeLine(item.subject); as episode) {
+                    <div class="text-sm text-base-content/50 truncate max-w-64">{{ episode }}</div>
+                  }
+                }
+              </td>
+              <td class="w-48">
+                @if (item.status === 'running') {
+                  <div class="flex items-center gap-2">
+                    <progress class="progress progress-primary flex-1" [value]="item.current ?? 0" [max]="item.total || 1"></progress>
+                    <span class="text-xs text-base-content/60 tabular-nums w-10 text-right">{{ activityPercent(item) }}%</span>
+                  </div>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    @if (activityTotalPages > 1) {
+      <app-pagination
+        class="mt-3"
+        [current]="activityPage()"
+        [total]="activityTotalPages"
+        (pageChange)="loadActivity($event)"
+      />
     }
   </div>
 }

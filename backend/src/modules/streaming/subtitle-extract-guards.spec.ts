@@ -13,6 +13,7 @@ const svc = new SubtitleStreamService(
   null as never,
   null as never,
   null as never,
+  null as never,
 ) as unknown as Svc;
 
 describe('subtitle extraction guards', () => {

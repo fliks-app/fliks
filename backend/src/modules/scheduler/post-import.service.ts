@@ -7,7 +7,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Subscription } from 'rxjs';
 import { existsSync } from 'fs';
 import { MediaFile } from '../media/entities/media-file.entity';
@@ -15,12 +15,15 @@ import { Episode } from '../media/entities/episode.entity';
 import { EventsService } from './events.service';
 import {
   ThumbnailService,
-  buildSpriteLabel,
   type SpriteMetadata,
 } from '../streaming/thumbnail.service';
 import { MarkersService } from '../markers/markers.service';
 import { SettingsService } from '../settings/settings.service';
 import { PostImportQueueService } from '../../common/post-import/post-import-queue.service';
+import {
+  buildMediaProgressSubject,
+  formatMediaProgressSubject,
+} from '../../common/utils/media-progress-subject.util';
 
 /**
  * Derived artefacts every newly landed file needs before playback: seek
@@ -138,15 +141,56 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
     );
     if (!missing.length) return 0;
 
+    // Only ids were loaded above to keep a big import off the heap, so resolve titles for
+    // the whole missing batch in one extra join (not one query per file) so the progress
+    // row can still name a series + episode instead of a bare file id.
+    const t0 = Date.now();
+    const rows = await this.mediaFileRepo.find({
+      where: { id: In(missing.map(({ id }) => id)) },
+      relations: ['media', 'episode', 'episode.season'],
+      select: {
+        id: true,
+        media: { title: true },
+        episode: {
+          id: true,
+          episodeNumber: true,
+          title: true,
+          season: { seasonNumber: true },
+        },
+      },
+    });
+    const subjectById = new Map(
+      rows
+        .filter((f) => f.media)
+        .map((f) => [
+          f.id,
+          buildMediaProgressSubject(
+            f.media,
+            f.episode
+              ? {
+                  seasonNumber: f.episode.season?.seasonNumber,
+                  episodeNumber: f.episode.episodeNumber,
+                  title: f.episode.title,
+                }
+              : null,
+          ),
+        ]),
+    );
+    this.log.debug?.(
+      `generateMissingSprites[media #${mediaId}]: resolved ${rows.length} title(s) for progress in ${Date.now() - t0}ms`,
+    );
+
     const command = `GenerateMissingSprites:${mediaId}`;
     let generated = 0;
     for (const [index, { id }] of missing.entries()) {
+      const subject = subjectById.get(id);
       this.events.emit({
         type: 'task.progress',
         command,
         current: index,
         total: missing.length,
-        message: `#${id}`,
+        message: subject ? formatMediaProgressSubject(subject) : command,
+        subject,
       });
       if (await this.generateSprite(id, false)) generated++;
     }
@@ -161,7 +205,7 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Resolve the file's absolute path + sprite label from its own rows and
+   * Resolve the file's absolute path + progress subject from its own rows and
    * queue generation. Shared with the bulk scheduler commands.
    */
   async generateSprite(
@@ -174,21 +218,21 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
     });
     if (!file?.media) return null;
 
-    let label = file.media.title;
+    let subject = buildMediaProgressSubject(file.media);
     if (file.episodeId) {
       const ep = await this.episodeRepo.findOne({
         where: { id: file.episodeId },
         relations: ['season'],
       });
       if (ep) {
-        label = buildSpriteLabel(file.media, {
+        subject = buildMediaProgressSubject(file.media, {
           seasonNumber: ep.season?.seasonNumber,
           episodeNumber: ep.episodeNumber,
           title: ep.title,
         });
       }
     }
-    return this.thumbnails.generateForFile(file, file.media, label, {
+    return this.thumbnails.generateForFile(file, file.media, subject, {
       force,
       skipTracking: true,
     });

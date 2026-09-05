@@ -3,8 +3,8 @@
     <div class="flex items-center justify-between gap-3 text-sm">
       <span class="font-medium truncate">
         {{ a.labelKey | translate }}
-        @if (a.progress.message) {
-          <span class="text-base-content/60 font-normal"> · {{ a.progress.message }}</span>
+        @if (subjectLabel()) {
+          <span class="text-base-content/60 font-normal"> · {{ subjectLabel() }}</span>
         }
       </span>
       <span class="text-xs text-base-content/60 shrink-0">

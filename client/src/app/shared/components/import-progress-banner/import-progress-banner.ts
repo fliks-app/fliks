@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { TranslateModule } from '@ngx-translate/core';
-import { SseService, TaskProgress } from '../../../core/services/sse.service';
+import { SseService, TaskProgress, formatProgressSubject } from '../../../core/services/sse.service';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 
 type ImportPhase = 'enrich' | 'import' | 'scan';
@@ -46,5 +46,12 @@ export class ImportProgressBannerComponent {
     const p = this.active()?.progress;
     if (!p || !p.total) return 0;
     return Math.min(100, Math.round((p.current / p.total) * 100));
+  });
+
+  /** Series/movie + episode when the subject names one; the plain `message`
+   *  (a folder path, for instance) when it doesn't. */
+  readonly subjectLabel = computed(() => {
+    const p = this.active()?.progress;
+    return p ? formatProgressSubject(p) : '';
   });
 }

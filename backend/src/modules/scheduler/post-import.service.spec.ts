@@ -110,7 +110,9 @@ describe('PostImportService', () => {
     jest.advanceTimersByTime(PostImportService.SETTLE_MS);
     await settle();
 
-    expect(h.mediaFileRepo.find).toHaveBeenCalledTimes(1);
+    // One pass = 2 `find` calls: the ids-only load, then one batch join that
+    // resolves progress titles for the whole missing list (never per file).
+    expect(h.mediaFileRepo.find).toHaveBeenCalledTimes(2);
     expect(h.markers.autoDetectMissing).toHaveBeenCalledTimes(1);
     h.service.onModuleDestroy();
   });

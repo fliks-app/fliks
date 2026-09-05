@@ -31,6 +31,7 @@ import { User } from '../users/entities/user.entity';
 import { BackupService } from './backup.service';
 import { LogBufferService } from './log-buffer.service';
 import { EventsService } from './events.service';
+import { ActivityRegistryService, type ActivityEntry } from './activity-registry.service';
 import { UpdateCheckService, type UpdateStatus } from './update-check.service';
 import { Observable } from 'rxjs';
 import {
@@ -205,6 +206,7 @@ export class SystemController {
     private readonly backup: BackupService,
     private readonly logBuffer: LogBufferService,
     private readonly eventsService: EventsService,
+    private readonly activityRegistry: ActivityRegistryService,
     private readonly transcodingService: TranscodingService,
     private readonly transcodeCache: TranscodeCacheService,
     private readonly activeStreamTracker: ActiveStreamTracker,
@@ -278,6 +280,23 @@ export class SystemController {
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
   async update(): Promise<UpdateStatus> {
     return this.updateCheck.getStatus();
+  }
+
+  /** Running + queued work, running first: backs the System page's Activity
+   *  table. The client refetches this on an `activity.changed` ping rather than
+   *  the registry pushing rows over SSE itself. */
+  @Get('activity')
+  @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
+  activity(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ): { data: ActivityEntry[]; total: number } {
+    const parsedPage = page ? Number.parseInt(page, 10) : 1;
+    const parsedLimit = limit ? Number.parseInt(limit, 10) : 25;
+    return this.activityRegistry.list(
+      Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1,
+      Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 25,
+    );
   }
 
   private async checkDatabase(): Promise<ServiceStatus> {

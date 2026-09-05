@@ -21,12 +21,17 @@ import * as path from 'path';
 import { StreamingService } from './streaming.service';
 import { User } from '../users/entities/user.entity';
 import { EventsService } from '../scheduler/events.service';
+import { ActivityRegistryService } from '../scheduler/activity-registry.service';
 import { StreamingSettingsCache } from './streaming-settings-cache.service';
 import { Command } from '../scheduler/entities/command.entity';
 import { resolveSubtitleAbsolutePath } from '../subtitles/subtitle-path.util';
 import { normalizeLanguageCode } from '../../common/constants/app-languages';
 import type { SubtitleRenditionMeta } from './transcoding/types';
 import { withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
+import {
+  formatMediaProgressSubject,
+  type MediaProgressSubject,
+} from '../../common/utils/media-progress-subject.util';
 
 const execFileAsync = promisify(execFile);
 
@@ -63,7 +68,7 @@ interface WarmupTask {
 interface WarmupBatch {
   cmd: Command | null;
   mediaFileId: number;
-  mediaTitle: string;
+  subject: MediaProgressSubject;
   total: number;
   remaining: number;
   failed: number;
@@ -97,6 +102,7 @@ export class SubtitleStreamService {
     private readonly streamingService: StreamingService,
     private readonly eventsService: EventsService,
     private readonly streamingSettings: StreamingSettingsCache,
+    private readonly activityRegistry: ActivityRegistryService,
   ) {}
 
   /** ACL is checked on the subtitle's OWN media, so a foreign id can't be read
@@ -322,7 +328,7 @@ export class SubtitleStreamService {
     mediaRoot: string | null | undefined,
     mediaFileId: number,
     subtitles: { streamIndex: number; isImageBased: boolean }[] | undefined,
-    mediaTitle?: string,
+    subject: MediaProgressSubject,
     trigger: 'import' | 'playback' = 'import',
   ): Promise<void> {
     if (!mediaRoot) return;
@@ -349,7 +355,7 @@ export class SubtitleStreamService {
 
     // Track the batch as a Command so the admin task panel shows progress,
     // matching what GenerateSprite does.
-    const label = mediaTitle ?? `file #${mediaFileId}`;
+    const label = formatMediaProgressSubject(subject);
     const cmd = await this.commandRepo
       .save(
         this.commandRepo.create({
@@ -374,13 +380,18 @@ export class SubtitleStreamService {
     const batch: WarmupBatch = {
       cmd,
       mediaFileId,
-      mediaTitle: label,
+      subject,
       total: pending.length,
       remaining: pending.length,
       failed: 0,
     };
 
     this.activeBatches.set(mediaFileId, batch);
+    this.activityRegistry.upsertPending(
+      `WarmupSubtitles:${mediaFileId}`,
+      'WarmupSubtitles',
+      subject,
+    );
     // One task per file (multi-output ffmpeg) instead of one per stream.
     this.warmupQueue.push({
       absolutePath,
@@ -398,6 +409,7 @@ export class SubtitleStreamService {
       current: 0,
       total: pending.length,
       message: label,
+      subject,
     });
     this.log.log(
       `Queued subtitle warmup for "${label}" (${pending.length} stream(s), ` +
@@ -439,7 +451,8 @@ export class SubtitleStreamService {
       command: `WarmupSubtitles:${batch.mediaFileId}`,
       current: batch.total,
       total: batch.total,
-      message: batch.mediaTitle,
+      message: formatMediaProgressSubject(batch.subject),
+      subject: batch.subject,
     });
   }
 
@@ -491,48 +504,69 @@ export class SubtitleStreamService {
     // Only an import-time warmup competes for the shared ffmpeg slot pool; a
     // playback-triggered one must extract immediately, same as a live cache miss.
     const background = trigger === 'import';
+    const activityId = `WarmupSubtitles:${mediaFileId}`;
+    this.activityRegistry.upsertRunning(
+      activityId,
+      'WarmupSubtitles',
+      batch.subject,
+      0,
+      batch.total,
+    );
 
     try {
-      await this.extractBatchDeduped(
-        absolutePath,
-        mediaRoot,
-        mediaFileId,
-        streamIndices,
-        background,
-      );
-      batch.remaining = 0;
-    } catch (err) {
-      this.log.warn(
-        `Batch subtitle extract failed for media file #${mediaFileId}, ` +
-          `falling back to per-stream: ${err instanceof Error ? err.message : err}`,
-      );
-      // Per-stream fallback. extractDeduped honours any in-flight single-stream
-      // promise (e.g. from a concurrent live request).
-      for (const idx of streamIndices) {
-        try {
-          await this.extractDeduped(
-            absolutePath,
-            mediaRoot,
-            mediaFileId,
-            idx,
-            background,
-          );
-        } catch (e) {
-          batch.failed++;
-          this.log.warn(
-            `Subtitle warmup failed for media file #${mediaFileId} stream ${idx}: ${e instanceof Error ? e.message : e}`,
+      try {
+        await this.extractBatchDeduped(
+          absolutePath,
+          mediaRoot,
+          mediaFileId,
+          streamIndices,
+          background,
+        );
+        batch.remaining = 0;
+      } catch (err) {
+        this.log.warn(
+          `Batch subtitle extract failed for media file #${mediaFileId}, ` +
+            `falling back to per-stream: ${err instanceof Error ? err.message : err}`,
+        );
+        // Per-stream fallback. extractDeduped honours any in-flight single-stream
+        // promise (e.g. from a concurrent live request).
+        for (const idx of streamIndices) {
+          try {
+            await this.extractDeduped(
+              absolutePath,
+              mediaRoot,
+              mediaFileId,
+              idx,
+              background,
+            );
+          } catch (e) {
+            batch.failed++;
+            this.log.warn(
+              `Subtitle warmup failed for media file #${mediaFileId} stream ${idx}: ${e instanceof Error ? e.message : e}`,
+            );
+          }
+          batch.remaining = Math.max(0, batch.remaining - 1);
+          const current = batch.total - batch.remaining;
+          this.eventsService.emit({
+            type: 'task.progress',
+            command: activityId,
+            current,
+            total: batch.total,
+            message: formatMediaProgressSubject(batch.subject),
+            subject: batch.subject,
+          });
+          this.activityRegistry.upsertRunning(
+            activityId,
+            'WarmupSubtitles',
+            batch.subject,
+            current,
+            batch.total,
           );
         }
-        batch.remaining = Math.max(0, batch.remaining - 1);
-        this.eventsService.emit({
-          type: 'task.progress',
-          command: `WarmupSubtitles:${mediaFileId}`,
-          current: batch.total - batch.remaining,
-          total: batch.total,
-          message: batch.mediaTitle,
-        });
+        batch.remaining = 0;
       }
-      batch.remaining = 0;
+    } finally {
+      this.activityRegistry.remove(activityId);
     }
 
     // Final progress tick (covers the success path which jumped 0 → total
@@ -542,7 +576,8 @@ export class SubtitleStreamService {
       command: `WarmupSubtitles:${mediaFileId}`,
       current: batch.total,
       total: batch.total,
-      message: batch.mediaTitle,
+      message: formatMediaProgressSubject(batch.subject),
+      subject: batch.subject,
     });
     await this.finalizeBatch(batch);
   }

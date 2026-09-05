@@ -11,10 +11,12 @@ import { Episode } from '../media/entities/episode.entity';
 import { Season } from '../media/entities/season.entity';
 import { Command } from '../scheduler/entities/command.entity';
 import { EventsService } from '../scheduler/events.service';
+import { ActivityRegistryService } from '../scheduler/activity-registry.service';
 import { SettingsService } from '../settings/settings.service';
 import { IntroDetectionService } from './intro-detection.service';
 import { CreateMarkerDto } from './dto/create-marker.dto';
 import { UpdateMarkerDto } from './dto/update-marker.dto';
+import { buildMediaProgressSubject } from '../../common/utils/media-progress-subject.util';
 
 @Injectable()
 export class MarkersService {
@@ -32,6 +34,7 @@ export class MarkersService {
     @InjectRepository(Command)
     private readonly commandRepo: Repository<Command>,
     private readonly events: EventsService,
+    private readonly activityRegistry: ActivityRegistryService,
     private readonly settings: SettingsService,
     private readonly detector: IntroDetectionService,
   ) {}
@@ -130,7 +133,10 @@ export class MarkersService {
         `Detection already running for season #${seasonId}`,
       );
     }
-    const season = await this.seasonRepo.findOne({ where: { id: seasonId } });
+    const season = await this.seasonRepo.findOne({
+      where: { id: seasonId },
+      relations: ['media'],
+    });
     if (!season) throw new NotFoundException(`Season #${seasonId} not found`);
 
     const cmd = await this.commandRepo.save(
@@ -155,6 +161,7 @@ export class MarkersService {
       season.id,
       season.mediaId,
       season.seasonNumber,
+      season.media?.title ?? `media #${season.mediaId}`,
     ).catch((err) =>
       this.log.error(
         `IntroDetection #${cmd.id} crashed: ${(err as Error).message}`,
@@ -284,6 +291,7 @@ export class MarkersService {
     seasonId: number,
     mediaId: number,
     seasonNumber: number,
+    mediaTitle: string,
   ): Promise<void> {
     this.inFlight.add(seasonId);
     await this.commandRepo.update(cmdId, {
@@ -292,6 +300,14 @@ export class MarkersService {
     });
     this.events.emit({ type: 'command.started', name: 'IntroDetection' });
 
+    // Season-wide subject: detection scans every episode of the season, so the
+    // per-tick `message` (fingerprint phase text) stays free-form.
+    const subject = buildMediaProgressSubject(
+      { title: mediaTitle },
+      { seasonNumber },
+    );
+    const activityId = `IntroDetection:${seasonId}`;
+    this.activityRegistry.upsertRunning(activityId, 'IntroDetection', subject);
     const onProgress = (current: number, total: number, message: string) => {
       this.events.emit({
         type: 'task.progress',
@@ -299,7 +315,9 @@ export class MarkersService {
         current,
         total,
         message,
+        subject,
       });
+      this.activityRegistry.upsertRunning(activityId, 'IntroDetection', subject, current, total);
     };
 
     try {
@@ -335,6 +353,7 @@ export class MarkersService {
       });
     } finally {
       this.inFlight.delete(seasonId);
+      this.activityRegistry.remove(activityId);
     }
   }
 

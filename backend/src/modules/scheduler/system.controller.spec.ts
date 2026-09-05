@@ -68,6 +68,7 @@ describe('SystemController.activeStreams recency filter', () => {
       {} as never, // backup
       {} as never, // logBuffer
       {} as never, // eventsService
+      {} as never, // activityRegistry
       transcodingService as never,
       {} as never, // transcodeCache
       activeStreamTracker as never,
@@ -161,6 +162,7 @@ describe('SystemController.sendPlayerCommand', () => {
       {} as never,
       {} as never,
       eventsService as never,
+      {} as never, // activityRegistry
       transcodingService as never,
       {} as never,
       activeStreamTracker as never,
@@ -233,6 +235,7 @@ describe('SystemController.restart', () => {
 
   function makeController() {
     return new SystemController(
+      {} as never,
       {} as never,
       {} as never,
       {} as never,

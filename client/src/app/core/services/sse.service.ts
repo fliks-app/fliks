@@ -77,12 +77,36 @@ export interface RemoteState {
 /** `sessionStorage` key for the per-tab half of this device's target id. */
 const TAB_NONCE_KEY = 'fliks.remote.tabNonce';
 
+/** Series/movie title plus episode identity, kept as separate fields so a season
+ *  import can lay them out rather than parsing a flattened string. `seasonNumber`
+ *  alone (no `episodeNumber`) describes a whole-season task. */
+export interface MediaProgressSubject {
+  title: string;
+  seasonNumber?: number;
+  episodeNumber?: number;
+  episodeTitle?: string;
+}
+
 export interface TaskProgress {
   type: 'task.progress';
   command: string;
   current: number;
   total: number;
   message: string;
+  /** Absent for a subject with no media behind it (an orphan-scan path): `message`
+   *  alone carries it then. */
+  subject?: MediaProgressSubject;
+}
+
+/** Flat display label for a task.progress row: the series/movie title plus episode
+ *  identity when present, falling back to the plain `message` otherwise. */
+export function formatProgressSubject(progress: TaskProgress): string {
+  const s = progress.subject;
+  if (!s) return progress.message;
+  if (s.seasonNumber == null) return s.title;
+  const season = `S${String(s.seasonNumber).padStart(2, '0')}`;
+  const code = s.episodeNumber != null ? `${season}E${String(s.episodeNumber).padStart(2, '0')}` : season;
+  return s.episodeTitle ? `${s.title} · ${code} · ${s.episodeTitle}` : `${s.title} · ${code}`;
 }
 
 @Injectable({ providedIn: 'root' })
