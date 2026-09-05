@@ -12,16 +12,27 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { SettingsService } from '../settings/settings.service';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 import {
-  hasServableTextSub,
+  CoverageOptions,
+  hasCoveringSub,
   isOcrSupportedSubtitleCodec,
 } from '../../common/constants/subtitle-codecs';
+import { SubtitleLanguageItem } from '../profiles/entities/language-profile.entity';
 import {
-  SubtitleLanguageItem,
-  resolveHearingImpairedMode,
-} from '../profiles/entities/language-profile.entity';
+  matchesRequestedFlags,
+  prefersHearingImpaired,
+  requestFlagsOf,
+} from '../../common/constants/subtitle-flags';
 import { EmbeddedSubtitleService } from '../subtitles/embedded-subtitle.service';
 import { SubtitleOcrService } from '../subtitles/subtitle-ocr.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
+
+interface SearchOpts {
+  minScore: number;
+  autoSyncEnabled: boolean;
+  encodeUtf8: boolean;
+  /** Whether an image track counts as covering its language (burn-in only). */
+  burnInCovers: boolean;
+}
 
 @Injectable()
 export class SubtitleSchedulerService {
@@ -108,11 +119,7 @@ export class SubtitleSchedulerService {
   }
 
   /** Read the shared search/download settings in one place (no per-call drift). */
-  private async resolveSearchOpts(): Promise<{
-    minScore: number;
-    autoSyncEnabled: boolean;
-    encodeUtf8: boolean;
-  }> {
+  private async resolveSearchOpts(): Promise<SearchOpts> {
     // `subtitle_min_score` is read as PERCENT (0-100) of the centralised
     // scorer's max — see `subtitle-scorer.ts`.
     return {
@@ -120,6 +127,8 @@ export class SubtitleSchedulerService {
       autoSyncEnabled:
         (await this.settings.get('subtitle_auto_sync')) === 'true',
       encodeUtf8: (await this.settings.get('subtitle_encode_utf8')) !== 'false',
+      burnInCovers:
+        (await this.settings.get('subtitle_burn_in_covers_language')) === 'true',
     };
   }
 
@@ -132,7 +141,7 @@ export class SubtitleSchedulerService {
   private async searchMissingForFile(
     media: Media,
     file: MediaFile,
-    opts: { minScore: number; autoSyncEnabled: boolean; encodeUtf8: boolean },
+    opts: SearchOpts,
     skipEmbeddedDetect = false,
   ): Promise<string[]> {
     if (this.filesSearching.has(file.id)) return [];
@@ -147,7 +156,7 @@ export class SubtitleSchedulerService {
   private async doSearchMissingForFile(
     media: Media,
     file: MediaFile,
-    opts: { minScore: number; autoSyncEnabled: boolean; encodeUtf8: boolean },
+    opts: SearchOpts,
     skipEmbeddedDetect = false,
   ): Promise<string[]> {
     const subtitleLangs: SubtitleLanguageItem[] =
@@ -181,14 +190,23 @@ export class SubtitleSchedulerService {
     const downloaded: string[] = [];
 
     for (const langItem of subtitleLangs) {
-      if (hasServableTextSub(existingSubs, langItem.isoCode)) continue;
+      if (hasCoveringSub(existingSubs, langItem)) continue;
 
       // OCR-first: an embedded image track in this language is converted to
       // text in preference to a provider download — it's perfectly synced to
       // this exact file and costs no provider quota. Falls through to the
       // providers when there's no image track (or OCR is disabled).
-      if (await this.tryOcrFirst(existingSubs, langItem.isoCode)) {
+      if (await this.tryOcrFirst(existingSubs, langItem)) {
         downloaded.push(langItem.isoCode);
+        continue;
+      }
+
+      // An image track the viewer accepts burning in closes the language.
+      // Checked after OCR so a convertible track is still converted to text.
+      if (
+        opts.burnInCovers &&
+        hasCoveringSub(existingSubs, langItem, { imageTracksCount: true })
+      ) {
         continue;
       }
 
@@ -204,7 +222,7 @@ export class SubtitleSchedulerService {
           videoReleaseName,
           moviehash: file.osdbHash ?? undefined,
           moviebytesize: file.osdbBytesize ?? undefined,
-          hearingImpairedMode: resolveHearingImpairedMode(langItem),
+          ...requestFlagsOf(langItem),
         });
 
         const best = results.find((r) => r.score >= opts.minScore);
@@ -258,37 +276,47 @@ export class SubtitleSchedulerService {
 
   /**
    * OCR-first source for one wanted language. Kicks off a background OCR of an
-   * embedded image track in `isoCode` and returns true when OCR handles the
-   * language (a run started, or one is already in progress/done) so the caller
-   * skips the provider search. Returns false when OCR is disabled, no image
-   * track exists, or the run couldn't start — letting providers take over.
-   * Gated by `subtitle_ocr_burn_in_auto`. Untagged ('und') tracks are excluded
-   * since auto can't pick the OCR language; those stay to the manual flow.
+   * embedded image track matching the profile item and returns true when OCR
+   * handles it (a run started, or one is already in progress/done) so the
+   * caller skips the provider search. Returns false when OCR is disabled, no
+   * matching image track exists, or the run couldn't start — letting providers
+   * take over. Gated by `subtitle_ocr_burn_in_auto`. Untagged ('und') tracks
+   * are excluded since auto can't pick the OCR language; those stay to the
+   * manual flow.
    */
   private async tryOcrFirst(
     existingSubs: SubtitleFile[],
-    isoCode: string,
+    langItem: SubtitleLanguageItem,
   ): Promise<boolean> {
+    const isoCode = langItem.isoCode;
     if ((await this.settings.get('subtitle_ocr_burn_in_auto')) !== 'true') {
       return false;
     }
     if (!isoCode || isoCode === 'und') return false;
 
-    const alreadyHandled = existingSubs.some(
-      (s) =>
-        s.language === isoCode &&
-        s.providerType === SubtitleProviderType.OCR &&
-        s.status !== SubtitleStatus.FAILED,
-    );
-    if (alreadyHandled) return true;
+    const req = requestFlagsOf(langItem);
+    const matchesRequest = (s: SubtitleFile) =>
+      s.language === isoCode && matchesRequestedFlags(s, req);
 
-    const imageSub = existingSubs.find(
+    const ocrRuns = existingSubs.filter(
+      (s) => matchesRequest(s) && s.providerType === SubtitleProviderType.OCR,
+    );
+    if (ocrRuns.some((s) => s.status !== SubtitleStatus.FAILED)) return true;
+    // A failed run means this track can't be OCR'd — hand the language to the
+    // providers rather than burning the same CPU again on the next sweep.
+    if (ocrRuns.length) return false;
+
+    const candidates = existingSubs.filter(
       (s) =>
-        s.language === isoCode &&
+        matchesRequest(s) &&
         isOcrSupportedSubtitleCodec(s.codec) &&
         s.streamIndex != null &&
         s.status !== SubtitleStatus.FAILED,
     );
+    // `prefer`/`avoid` don't filter, they only order the remaining candidates.
+    const wantHi = prefersHearingImpaired(req);
+    const imageSub =
+      candidates.find((s) => !!s.hearingImpaired === wantHi) ?? candidates[0];
     if (!imageSub) return false;
 
     try {
@@ -372,6 +400,7 @@ export class SubtitleSchedulerService {
       const missingByFileId = await this.buildMissingLangsByFile(
         fileIds,
         lowScoreSubs,
+        { imageTracksCount: opts.burnInCovers },
       );
 
       await this.upgradeBatch(lowScoreSubs, missingByFileId, opts);
@@ -381,13 +410,15 @@ export class SubtitleSchedulerService {
   private async upgradeBatch(
     lowScoreSubs: SubtitleFile[],
     missingByFileId: Map<number, boolean>,
-    opts: { minScore: number; autoSyncEnabled: boolean; encodeUtf8: boolean },
+    opts: SearchOpts,
   ): Promise<void> {
     for (const sub of lowScoreSubs) {
-      // The profile is the contract: a language it doesn't ask for is never
-      // searched, downloaded, nor allowed to replace a file on disk.
+      // The profile is the contract: a language and flags it doesn't ask for
+      // are never searched, downloaded, nor allowed to replace a file on disk
+      // — `upgradeSubtitle` deletes the one it replaces.
       const langItem = sub.media?.languageProfile?.subtitleLanguages?.find(
-        (l) => l.isoCode === sub.language,
+        (l) =>
+          l.isoCode === sub.language && matchesRequestedFlags(sub, requestFlagsOf(l)),
       );
       if (!langItem) continue;
       if (sub.mediaFile?.id != null && missingByFileId.get(sub.mediaFile.id)) {
@@ -412,7 +443,7 @@ export class SubtitleSchedulerService {
           videoReleaseName,
           moviehash: sub.mediaFile?.osdbHash ?? undefined,
           moviebytesize: sub.mediaFile?.osdbBytesize ?? undefined,
-          hearingImpairedMode: resolveHearingImpairedMode(langItem),
+          ...requestFlagsOf(langItem),
         });
 
         // Invariant: a hash-matched sub is the perfect time sync — refuse
@@ -474,6 +505,7 @@ export class SubtitleSchedulerService {
   private async buildMissingLangsByFile(
     fileIds: number[],
     candidatesWithMedia: SubtitleFile[],
+    coverage: CoverageOptions,
   ): Promise<Map<number, boolean>> {
     const result = new Map<number, boolean>();
     if (!fileIds.length) return result;
@@ -507,6 +539,9 @@ export class SubtitleSchedulerService {
         result.set(fid, false);
         continue;
       }
+      // Language granularity on purpose: this only decides whether to defer
+      // upgrades, and a flag the providers can't supply would freeze the file
+      // for good.
       const present = new Set(
         (subsByFile.get(fid) ?? [])
           .filter((s) => s.status !== SubtitleStatus.FAILED)

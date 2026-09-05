@@ -16,6 +16,11 @@ import { MediaFile } from '../media/entities/media-file.entity';
 import { SubtitleProviderService } from './subtitle-provider.service';
 import { SubtitleProviderFactory } from './providers/subtitle-provider.factory';
 import {
+  FORCED_FLAG_TOKENS,
+  HI_FLAG_TOKENS,
+  matchesRequestedFlags,
+} from '../../common/constants/subtitle-flags';
+import {
   SubtitleSearchParams,
   SubtitleSearchResult,
 } from './providers/subtitle-provider.interface';
@@ -130,15 +135,18 @@ export class SubtitlesService {
       );
     }
 
-    // Hearing-impaired hard filter. `require` keeps only HI candidates,
-    // `forbid` drops them; `prefer` / `avoid` leave the candidate set
-    // intact and only nudge the 1-point bit in the scorer below.
+    // Flag hard filter, shared with the missing/OCR/upgrade gates: `forced`
+    // is exact both ways, `require` / `forbid` keep or drop HI candidates,
+    // `prefer` / `avoid` leave the set intact and only nudge the 1-point bit
+    // in the scorer below.
     const hiMode = params.hearingImpairedMode ?? 'avoid';
-    const hiFiltered = filtered.filter((r) => {
-      if (hiMode === 'require') return r.hearingImpaired;
-      if (hiMode === 'forbid') return !r.hearingImpaired;
-      return true;
-    });
+    const flagFiltered = filtered.filter((r) => matchesRequestedFlags(r, params));
+    const droppedForFlags = filtered.length - flagFiltered.length;
+    if (droppedForFlags > 0) {
+      this.logger.debug(
+        `Subtitle search [${params.language}]: dropped ${droppedForFlags} candidate(s) not matching forced=${!!params.forced}/hi=${hiMode}`,
+      );
+    }
 
     // Cross-provider dedup: when the same release name + language + HI
     // flag appear from two providers, keep the first occurrence (encounter
@@ -147,7 +155,7 @@ export class SubtitlesService {
     // to the `providerType:providerFileId` axis which is already unique.
     const seenReleaseKey = new Set<string>();
     const deduped: SubtitleSearchResult[] = [];
-    for (const r of hiFiltered) {
+    for (const r of flagFiltered) {
       const releaseKey = r.releaseName
         ? `${r.releaseName.toLowerCase()}|${r.language}|${r.hearingImpaired ? 'hi' : 'normal'}|${r.forced ? 'forced' : 'full'}`
         : `${r.providerType}:${r.providerFileId}`;
@@ -518,8 +526,12 @@ export class SubtitlesService {
     let removedMissing = 0;
     let removedDuplicates = 0;
 
+    // A PROCESSING row has no file yet and a FAILED one never will; both are
+    // state, not stale sidecars — removing them restarts the work they record.
     const isExternalFile = (s: SubtitleFile) =>
-      s.providerType !== SubtitleProviderType.EMBEDDED;
+      s.providerType !== SubtitleProviderType.EMBEDDED &&
+      s.status !== SubtitleStatus.PROCESSING &&
+      s.status !== SubtitleStatus.FAILED;
 
     const pickWinner = (a: SubtitleFile, b: SubtitleFile): number => {
       if (a.locked !== b.locked) return a.locked ? -1 : 1;
@@ -588,10 +600,7 @@ export class SubtitlesService {
     '.sami',
   ]);
 
-  /** Flags parsed right-to-left from the filename suffix. */
-  private static readonly FORCED_FLAGS = new Set(['forced', 'foreign']);
-  private static readonly HI_FLAGS = new Set(['hi', 'cc', 'sdh']);
-  private static readonly SKIP_FLAGS = new Set(['default']);
+  private static readonly SKIP_FLAGS = new Set(['default', 'ocr']);
 
   /** Full language names → ISO 639-1 (built from APP_LANGUAGES). */
   private static readonly LANG_NAMES: Record<string, string> =
@@ -624,16 +633,19 @@ export class SubtitlesService {
     let forced = false;
     let hearingImpaired = false;
     let hiPart: number | null = null;
+    let hiCandidate: number | null = null;
 
     // Parse right-to-left (skip the leftmost parts = video name)
     for (let i = parts.length - 1; i >= 1; i--) {
       const token = parts[i].toLowerCase();
-      if (SubtitlesService.FORCED_FLAGS.has(token)) {
+      if (FORCED_FLAG_TOKENS.has(token)) {
         forced = true;
-      } else if (SubtitlesService.HI_FLAGS.has(token)) {
-        // Ambiguity: 'hi' = Hindi if no language yet, else hearing-impaired.
+      } else if (HI_FLAG_TOKENS.has(token)) {
+        // Ambiguity: a lone 'hi' is Hindi; one followed by a language token
+        // further left (`Movie.en.hi.srt`) is the hearing-impaired flag.
         if (token === 'hi' && language === 'und') {
           language = 'hi';
+          hiCandidate = i;
         } else {
           hearingImpaired = true;
           hiPart = i;
@@ -642,6 +654,11 @@ export class SubtitlesService {
         // ignore 'default'
       } else if (this.resolveLanguageCode(token)) {
         language = this.resolveLanguageCode(token)!;
+        if (hiCandidate !== null) {
+          hearingImpaired = true;
+          hiPart = hiCandidate;
+          hiCandidate = null;
+        }
       } else {
         // Stop: this part is the video name, not a flag/lang
         break;
@@ -784,6 +801,7 @@ export class SubtitlesService {
           mediaFile: { id: matchedFile.id },
           episode: matchedFile.episodeId ? { id: matchedFile.episodeId } : null,
           language: parsed.language,
+          codec: ext === '.sup' ? 'hdmv_pgs_subtitle' : null,
           forced: parsed.forced,
           hearingImpaired: parsed.hearingImpaired,
           providerType: SubtitleProviderType.DISK,

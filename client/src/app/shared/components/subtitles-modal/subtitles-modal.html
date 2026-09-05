@@ -160,6 +160,11 @@
                           </span>
                         }
                       }
+                      @if (sub.status === 'failed') {
+                        <span class="badge badge-sm badge-error mr-1">{{
+                          'media_detail.subtitle_failed' | translate
+                        }}</span>
+                      }
                       @if (sub.forced) {
                         <span class="badge badge-sm badge-outline mr-1">F</span>
                       }

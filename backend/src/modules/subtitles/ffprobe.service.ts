@@ -4,6 +4,7 @@ import { promisify } from 'util';
 import * as path from 'path';
 import { inferLanguageCodeFromTitle } from '../../common/release-parsing/language.parser';
 import { isImageBasedSubtitleCodec } from '../../common/constants/subtitle-codecs';
+import { subtitleFlagsFromTitle } from '../../common/constants/subtitle-flags';
 import { existsSync } from 'fs';
 import { vaapiRenderNode } from '../streaming/transcoding/hw-device';
 import { mapWithConcurrency } from '../../common/utils/concurrency';
@@ -259,6 +260,21 @@ function tag(
  *  auto-pick logic downstream handles the unknown-language case by
  *  ordering / size heuristics. Both tags are read case-insensitively
  *  (see {@link tag}). */
+/** Flags of a subtitle stream. The disposition is authoritative when set;
+ *  a remux that only writes `title="Forced"` would otherwise land in the
+ *  library as a full subtitle. */
+function resolveSubtitleFlags(s: FfprobeStream): {
+  forced: boolean;
+  hearingImpaired: boolean;
+} {
+  const fromTitle = subtitleFlagsFromTitle(tag(s.tags, 'title'));
+  return {
+    forced: s.disposition?.forced === 1 || fromTitle.forced,
+    hearingImpaired:
+      s.disposition?.hearing_impaired === 1 || fromTitle.hearingImpaired,
+  };
+}
+
 function resolveStreamLanguage(s: {
   tags?: Record<string, string | undefined>;
 }): string {
@@ -367,8 +383,7 @@ export class FfprobeService {
           streamIndex: s.index,
           codec: s.codec_name ?? 'unknown',
           language: resolveStreamLanguage(s),
-          forced: s.disposition?.forced === 1,
-          hearingImpaired: s.disposition?.hearing_impaired === 1,
+          ...resolveSubtitleFlags(s),
           isImageBased: isImageBasedSubtitleCodec(s.codec_name),
         })),
       };
@@ -523,8 +538,7 @@ export class FfprobeService {
           codec: s.codec_name ?? 'unknown',
           language: resolveStreamLanguage(s),
           title: tag(s.tags, 'title'),
-          forced: s.disposition?.forced === 1,
-          hearingImpaired: s.disposition?.hearing_impaired === 1,
+          ...resolveSubtitleFlags(s),
           isImageBased: isImageBasedSubtitleCodec(s.codec_name),
         }));
 

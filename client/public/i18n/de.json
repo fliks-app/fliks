@@ -1122,7 +1122,8 @@
     "metadata_group": "Metadaten",
     "advanced_group": "Erweitert",
     "add_to_list": "Zu Liste hinzufügen",
-    "unlike": "Gefällt mir nicht mehr"
+    "unlike": "Gefällt mir nicht mehr",
+    "subtitle_failed": "Fehlgeschlagen"
   },
   "requests": {
     "title": "Anfragen",
@@ -2183,6 +2184,8 @@
       "subtitle": "Konfiguration der Suche und des automatischen Downloads von Untertiteln.",
       "section_search": "Suche",
       "auto_search": "Automatische Untertitelsuche",
+      "burn_in_covers": "Eine Bildspur zählt als vorhandener Untertitel",
+      "burn_in_covers_hint": "Eine Bildspur (PGS, VobSub) in einer Profilsprache genügt, damit diese Sprache als abgedeckt gilt: kein Download und kein OCR werden dafür gestartet. Die Wiedergabe läuft dann über das Einbrennen, was bei jeder Sitzung eine vollständige Neukodierung erzwingt und Direct Play ausschließt.",
       "search_interval": "Suchintervall (Minuten)",
       "search_interval_hint": "Häufigkeit der Suche nach fehlenden Untertiteln (Standard: 360 = 6h).",
       "min_score": "Mindest-Score",
@@ -2197,8 +2200,8 @@
       "encode_utf8": "Nach dem Download in UTF-8 neu codieren",
       "section_cleaning": "Bereinigung",
       "remove_hi_tags": "HI-Tags entfernen ([Musik], (Seufzen), ♪ usw.)",
-      "ocr_burn_in_auto": "Bild-Untertitel beim Import automatisch in Text umwandeln (OCR)",
-      "ocr_burn_in_auto_hint": "Beim Import werden Bild-Untertitel extrahiert und per OCR in Text umgewandelt, dann wie normale Untertitel bereitgestellt. OCR ist ressourcenintensiv und läuft im Hintergrund.",
+      "ocr_burn_in_auto": "OCR eingebetteter Bildspuren einem Download vorziehen",
+      "ocr_burn_in_auto_hint": "Fehlt eine Profilsprache und existiert eine Bildspur (PGS, VobSub) in dieser Sprache, wird sie per OCR in Text umgewandelt, statt einen Untertitel herunterzuladen. Gilt für die Suche nach fehlenden Untertiteln, automatisch wie manuell. OCR ist rechenintensiv und läuft im Hintergrund; schlägt sie fehl, greift die Sprache wieder auf die Anbieter zurück.",
       "ocr_delete_source": "Bild-Untertitel nach der Extraktion löschen",
       "ocr_delete_source_hint": "Nach einer erfolgreichen OCR-Konvertierung wird die Quell-Bildspur gelöscht. Hinweis: Ein eingebetteter Untertitel befindet sich im Container — er wird bei der nächsten Analyse der Datei erneut erkannt.",
       "custom_exclusions": "Benutzerdefinierte Ausschlüsse (Regex)",
@@ -2220,7 +2223,8 @@
       "col_language": "Sprache",
       "search_one": "Diesen Untertitel suchen",
       "search_one_ok": "Untertitel {{lang}} für „{{title}}“ heruntergeladen",
-      "search_one_none": "Kein Untertitel {{lang}} mit ausreichendem Score gefunden"
+      "search_one_none": "Kein Untertitel {{lang}} mit ausreichendem Score gefunden",
+      "forced": "Erzwungen"
     },
     "plugins": {
       "title": "Plugins",

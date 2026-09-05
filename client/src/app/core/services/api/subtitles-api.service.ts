@@ -318,4 +318,5 @@ export interface MissingSubtitleEntry {
   episodeId: number | null;
   episodeLabel: string | null;
   language: string;
+  forced: boolean;
 }

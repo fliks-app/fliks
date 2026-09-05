@@ -80,6 +80,25 @@ describe('FileTransferService atomic transfer', () => {
     expect(fs.readdirSync(destDir)).toEqual([]);
   });
 
+  it('companions: keeps every trailing flag, not just the first', async () => {
+    for (const name of ['Old.en.hi.forced.srt', 'Old.fr.srt', 'Old.mkv']) {
+      await fsp.writeFile(path.join(srcDir, name), 'x');
+    }
+
+    await service.transferCompanions({
+      srcDir,
+      destDir,
+      sourceBaseName: 'Old',
+      newBaseName: 'New',
+      method: 'copy',
+      allowedExts: new Set(['.srt']),
+    });
+
+    // ".hi" alone would be re-parsed as Hindi on the next library rescan
+    const landed = (await fsp.readdir(destDir)).sort();
+    expect(landed).toEqual(['New.en.hi.forced.srt', 'New.fr.srt']);
+  });
+
   it('move (cross-device fallback): lands complete content, no temp file, source removed', async () => {
     const src = path.join(srcDir, 'movie.mp4');
     const dest = path.join(destDir, 'movie.mp4');

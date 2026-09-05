@@ -9,10 +9,11 @@ import { FormsModule } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 
 @Component({
   selector: 'app-subtitles-settings',
-  imports: [FormsModule, TranslateModule],
+  imports: [FormsModule, TranslateModule, ToggleFieldComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './subtitles-settings.html',
 })
@@ -32,6 +33,7 @@ export class SubtitlesSettingsComponent implements OnInit {
   readonly autoSync = signal('false');
   readonly encodeUtf8 = signal('true');
   readonly removeHiTags = signal('false');
+  readonly burnInCovers = signal('false');
   readonly ocrBurnInAuto = signal('false');
   readonly deleteBurnInSource = signal('false');
   readonly customExclusions = signal('');
@@ -47,6 +49,7 @@ export class SubtitlesSettingsComponent implements OnInit {
       this.autoSync.set(map['subtitle_auto_sync'] ?? 'false');
       this.encodeUtf8.set(map['subtitle_encode_utf8'] ?? 'true');
       this.removeHiTags.set(map['subtitle_remove_hi_tags'] ?? 'false');
+      this.burnInCovers.set(map['subtitle_burn_in_covers_language'] ?? 'false');
       this.ocrBurnInAuto.set(map['subtitle_ocr_burn_in_auto'] ?? 'false');
       this.deleteBurnInSource.set(map['subtitle_ocr_delete_source'] ?? 'false');
       this.customExclusions.set(map['subtitle_custom_exclusions'] ?? '');
@@ -69,6 +72,7 @@ export class SubtitlesSettingsComponent implements OnInit {
         subtitle_auto_sync: this.autoSync(),
         subtitle_encode_utf8: this.encodeUtf8(),
         subtitle_remove_hi_tags: this.removeHiTags(),
+        subtitle_burn_in_covers_language: this.burnInCovers(),
         subtitle_ocr_burn_in_auto: this.ocrBurnInAuto(),
         subtitle_ocr_delete_source: this.deleteBurnInSource(),
         subtitle_custom_exclusions: this.customExclusions(),

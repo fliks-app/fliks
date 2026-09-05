@@ -19,6 +19,10 @@ export interface SubtitleSearchParams {
    *  the 1-point scorer bit; `require` / `forbid` filter candidates
    *  in the orchestrator before scoring. Default `avoid`. */
   hearingImpairedMode?: 'prefer' | 'avoid' | 'require' | 'forbid';
+  /** Whether the profile asks for a forced (foreign-dialogue-only) track.
+   *  Exact match, filtered in the orchestrator: a forced candidate can't
+   *  serve a full request, nor the reverse. Default `false`. */
+  forced?: boolean;
 }
 
 /**
