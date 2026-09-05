@@ -31,9 +31,21 @@ describe('cropdetect', () => {
   const detect = (w = 1920, h = 1080) =>
     svc.detectCrop('/m/ep.mkv', 3600, w, h);
 
+  const platformDescriptor = Object.getOwnPropertyDescriptor(
+    process,
+    'platform',
+  )!;
+  function setPlatform(value: NodeJS.Platform) {
+    Object.defineProperty(process, 'platform', { value, configurable: true });
+  }
+
   beforeEach(() => {
     execFileMock.mockReset();
     existsSyncMock.mockReset();
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', platformDescriptor);
   });
 
   it('normalises to 8-bit before cropdetect, with one limit for every source', () => {
@@ -52,7 +64,8 @@ describe('cropdetect', () => {
   });
 
   it('decodes on the GPU when a render node is there, and keeps 6 samples', async () => {
-    existsSyncMock.mockReturnValue(true);
+    setPlatform('linux');
+    existsSyncMock.mockImplementation((p: string) => p === '/dev/dri/renderD128');
     reply('crop=1920:800:0:140');
     await detect();
 
@@ -118,5 +131,66 @@ describe('cropdetect', () => {
     );
     // 1080 - 1072 = 8px total: below the 40px significance floor.
     expect(await detect()).toBeNull();
+  });
+
+  const CROP_FILTER = 'format=nv12,cropdetect=limit=24:round=16:reset=0:skip=24';
+
+  it('decodes on cuda when only /dev/nvidiactl exists (no render node)', async () => {
+    setPlatform('linux');
+    existsSyncMock.mockImplementation((p: string) => p === '/dev/nvidiactl');
+    reply('crop=1920:800:0:140');
+    await detect();
+
+    for (const argv of calls()) {
+      expect(argv.slice(0, 2)).toEqual(['-hwaccel', 'cuda']);
+      expect(argv.indexOf('-hwaccel')).toBeLessThan(argv.indexOf('-i'));
+      expect(argv[argv.indexOf('-vf') + 1]).toBe(CROP_FILTER);
+      expect(argv).not.toContain('-threads');
+    }
+  });
+
+  it('decodes on d3d11va on win32, ignoring existsSync', async () => {
+    setPlatform('win32');
+    existsSyncMock.mockReturnValue(false);
+    reply('crop=1920:800:0:140');
+    await detect();
+
+    for (const argv of calls()) {
+      expect(argv.slice(0, 2)).toEqual(['-hwaccel', 'd3d11va']);
+      expect(argv).not.toContain('-hwaccel_output_format');
+      expect(argv[argv.indexOf('-vf') + 1]).toBe(CROP_FILTER);
+    }
+  });
+
+  it('decodes on videotoolbox on darwin', async () => {
+    setPlatform('darwin');
+    existsSyncMock.mockReturnValue(false);
+    reply('crop=1920:800:0:140');
+    await detect();
+
+    for (const argv of calls()) {
+      expect(argv.slice(0, 2)).toEqual(['-hwaccel', 'videotoolbox']);
+      expect(argv).not.toContain('-hwaccel_output_format');
+      expect(argv[argv.indexOf('-vf') + 1]).toBe(CROP_FILTER);
+    }
+  });
+
+  it('falls back to software the same way on win32 (platform-agnostic fallback)', async () => {
+    setPlatform('win32');
+    existsSyncMock.mockReturnValue(false);
+    let n = 0;
+    execFileMock.mockImplementation((_cmd, _args, _opts, cb: Cb) =>
+      ++n === 1
+        ? cb(new Error('d3d11va init failed'), { stdout: '', stderr: '' })
+        : cb(null, { stdout: '', stderr: 'crop=1920:800:0:140' }),
+    );
+
+    await detect();
+    // probe + the retried first sample + the 5 remaining ones
+    expect(calls()).toHaveLength(7);
+    for (const argv of calls().slice(1)) {
+      expect(argv).not.toContain('-hwaccel');
+      expect(argv).toContain('-threads');
+    }
   });
 });

@@ -1,4 +1,5 @@
 import { existsSync } from 'fs';
+import { CudaExtractor } from './cuda.extractor';
 import { QsvExtractor } from './qsv.extractor';
 import { SwExtractor } from './sw.extractor';
 import type { CropArea, ExtractorBackend } from './types';
@@ -26,6 +27,11 @@ const HWACCEL_DEVICE: string | null = (() => {
   return null;
 })();
 
+/** The nvidia runtime injects `/dev/nvidiactl` but no `/dev/dri` node, so an
+ *  NVIDIA host never sets {@link HWACCEL_DEVICE} above. */
+const CUDA_AVAILABLE =
+  process.env.THUMB_HWACCEL_DEVICE !== 'off' && existsSync('/dev/nvidiactl');
+
 /**
  * Ordered list of available backends. The factory walks this list and
  * returns the first one whose {@link ExtractorBackend.supports} accepts
@@ -36,19 +42,23 @@ const HWACCEL_DEVICE: string | null = (() => {
  *   • VAAPI before QSV — VAAPI is markedly faster on no-crop sprites.
  *   • QSV before SW — QSV's `vpp_qsv` handles HW crop+scale.
  *   • VideoToolbox on Darwin replaces the Linux HW pair entirely.
+ *   • CUDA after VAAPI/QSV, before SW — mirrors the transcode probe order
+ *     (QSV → VAAPI → NVENC); only reached when no `/dev/dri` node exists.
  */
 const BACKENDS: ExtractorBackend[] = (() => {
   if (process.platform === 'darwin') {
     return [new VideoToolboxExtractor(), new SwExtractor()];
   }
+  const linux: ExtractorBackend[] = [];
   if (HWACCEL_DEVICE) {
-    return [
+    linux.push(
       new VaapiExtractor(HWACCEL_DEVICE),
       new QsvExtractor(HWACCEL_DEVICE),
-      new SwExtractor(),
-    ];
+    );
   }
-  return [new SwExtractor()];
+  if (CUDA_AVAILABLE) linux.push(new CudaExtractor());
+  linux.push(new SwExtractor());
+  return linux;
 })();
 
 /** Pick the highest-priority backend that can handle the given crop.

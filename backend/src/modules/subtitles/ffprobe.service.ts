@@ -26,21 +26,36 @@ type CropSample = {
   y: number;
 } | null;
 
-/** VAAPI decode args for the crop probe, or null when there is no usable
- *  render node. Covers Intel and AMD on Linux; NVIDIA (cuda) and Windows
- *  (qsv / d3d11va) need their own decode args. */
+/** HW decode args for the crop probe, or null when nothing usable is present.
+ *  Only VAAPI keeps frames on the device; the others omit
+ *  `-hwaccel_output_format` so ffmpeg auto-downloads, because `hwdownload` can
+ *  only target a surface's own sw_format and would fail on 10-bit. */
 function cropHwDecodeArgs(): string[] | null {
-  if (process.platform !== 'linux') return null;
-  const node = vaapiRenderNode();
-  if (!existsSync(node)) return null;
-  return [
-    '-hwaccel',
-    'vaapi',
-    '-hwaccel_device',
-    node,
-    '-hwaccel_output_format',
-    'vaapi',
-  ];
+  switch (process.platform) {
+    case 'linux': {
+      const node = vaapiRenderNode();
+      if (existsSync(node)) {
+        return [
+          '-hwaccel',
+          'vaapi',
+          '-hwaccel_device',
+          node,
+          '-hwaccel_output_format',
+          'vaapi',
+        ];
+      }
+      // The nvidia runtime injects /dev/nvidiactl but no /dev/dri node.
+      if (existsSync('/dev/nvidiactl')) return ['-hwaccel', 'cuda'];
+      return null;
+    }
+    case 'win32':
+      // d3d11va decodes Intel/AMD/NVIDIA alike, unlike QSV (see decoders/qsv.ts).
+      return ['-hwaccel', 'd3d11va'];
+    case 'darwin':
+      return ['-hwaccel', 'videotoolbox'];
+    default:
+      return null;
+  }
 }
 
 /** Seconds of packet timestamps sampled to measure the real frame rate. The
@@ -731,7 +746,9 @@ export class FfprobeService {
       // Whether the GPU can decode this file depends on its codec, not just on
       // the host, so the only honest check is the first sample. Software
       // produces the same nv12 pixels, so a mid-file switch stays consistent.
-      let hw = cropHwDecodeArgs() !== null;
+      const hwArgs = cropHwDecodeArgs();
+      const hwName = hwArgs ? hwArgs[1] : 'sw';
+      let hw = hwArgs !== null;
       const first = await this.cropSample(videoPath, timestamps[0], hw);
       if (hw && first.failed) {
         this.logger.log(
@@ -749,7 +766,7 @@ export class FfprobeService {
         async (ss) => (await this.cropSample(videoPath, ss, hw)).sample,
       );
       this.logger.log(
-        `cropdetect "${label}" (${originalWidth}x${originalHeight}, decode=${hw ? 'vaapi' : 'sw'})`,
+        `cropdetect "${label}" (${originalWidth}x${originalHeight}, decode=${hw ? hwName : 'sw'})`,
       );
 
       // Aggregate: pick the LARGEST crop observed (the loosest box that
@@ -800,11 +817,12 @@ export class FfprobeService {
     ss: number,
     hw: boolean,
   ): Promise<{ failed: boolean; sample: CropSample }> {
-    const decode = hw
-      ? (cropHwDecodeArgs() ?? [])
-      : // 2 decoder threads: a single-threaded software decode of a 4K sample
-        // can run past the 30s exec timeout on a weak CPU.
-        ['-threads', '2'];
+    const hwArgs = hw ? cropHwDecodeArgs() : null;
+    const decode =
+      hwArgs ??
+      // 2 decoder threads: a single-threaded software decode of a 4K sample
+      // can run past the 30s exec timeout on a weak CPU.
+      ['-threads', '2'];
     const ffmpegArgs = [
       ...decode,
       '-ss',
@@ -814,7 +832,9 @@ export class FfprobeService {
       '-t',
       '5',
       '-vf',
-      hw ? `hwdownload,${CROP_FILTER}` : CROP_FILTER,
+      hwArgs?.includes('-hwaccel_output_format')
+        ? `hwdownload,${CROP_FILTER}`
+        : CROP_FILTER,
       '-an',
       '-f',
       'null',
