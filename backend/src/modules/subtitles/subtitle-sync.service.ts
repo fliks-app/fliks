@@ -21,6 +21,12 @@ import { MediaServersService } from '../media-servers/media-servers.service';
 import { resolveSubtitleAbsolutePath } from './subtitle-path.util';
 
 const execFileAsync = promisify(execFile);
+const SYNC_TOOL_TIMEOUT_MS = 900_000;
+const SYNC_TOOL_MAX_BUFFER = 1 << 24;
+const SYNC_EXEC_OPTS = {
+  timeout: SYNC_TOOL_TIMEOUT_MS,
+  maxBuffer: SYNC_TOOL_MAX_BUFFER,
+};
 const MAX_CONCURRENT = 2;
 
 export interface SyncOptions {
@@ -233,6 +239,7 @@ export class SubtitleSyncService {
       await execFileAsync(
         'ffsubsync',
         buildFfsubsyncArgs(refPath, refStreamIndex),
+        SYNC_EXEC_OPTS,
       );
       subtitle.synced = true;
       subtitle.status = SubtitleStatus.SYNCED;
@@ -256,6 +263,7 @@ export class SubtitleSyncService {
             await execFileAsync(
               'ffsubsync',
               buildFfsubsyncArgs(refPath, firstAudio.streamIndex),
+              SYNC_EXEC_OPTS,
             );
             subtitle.synced = true;
             subtitle.status = SubtitleStatus.SYNCED;
@@ -284,7 +292,7 @@ export class SubtitleSyncService {
 
       // Fallback to alass
       try {
-        await execFileAsync('alass', [refPath, subPath, subPath]);
+        await execFileAsync('alass', [refPath, subPath, subPath], SYNC_EXEC_OPTS);
         subtitle.synced = true;
         subtitle.status = SubtitleStatus.SYNCED;
       } catch (alassErr: any) {

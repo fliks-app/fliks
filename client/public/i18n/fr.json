@@ -1702,14 +1702,15 @@
       "audio_languages": "Langues audio acceptées",
       "audio_languages_hint": "Vide = toutes les langues acceptées. Cochez pour filtrer les releases par langue audio.",
       "subtitle_languages": "Langues de sous-titres",
-      "subtitle_languages_hint": "Sous-titres à télécharger automatiquement. Cochez Forced ou HI par langue.",
+      "subtitle_languages_hint": "Cochez la langue pour le sous-titre complet, et « Forcé » pour une piste de dialogues étrangers. Les deux sont indépendants : un sous-titre forcé ne remplace jamais le complet.",
       "save": "Enregistrer",
       "cancel": "Annuler",
       "load_error": "Impossible de charger les profils de langue.",
       "save_error": "Enregistrement impossible.",
       "delete_error": "Suppression impossible.",
       "empty": "Aucun profil de langue.",
-      "name_required": "Le nom du profil est obligatoire."
+      "name_required": "Le nom du profil est obligatoire.",
+      "forced_label": "Forcé"
     },
     "custom_formats": {
       "title": "Formats personnalisés",

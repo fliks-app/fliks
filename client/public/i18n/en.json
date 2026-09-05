@@ -1702,14 +1702,15 @@
       "audio_languages": "Accepted audio languages",
       "audio_languages_hint": "Empty = all languages accepted. Check to filter releases by audio language.",
       "subtitle_languages": "Subtitle languages",
-      "subtitle_languages_hint": "Subtitles to download automatically. Check Forced or HI per language.",
+      "subtitle_languages_hint": "Tick the language for the full subtitle, and “Forced” for a foreign-dialogue track. The two are independent: a forced subtitle never stands in for the full one.",
       "save": "Save",
       "cancel": "Cancel",
       "load_error": "Unable to load the language profiles.",
       "save_error": "Unable to save.",
       "delete_error": "Unable to delete.",
       "empty": "No language profile.",
-      "name_required": "The profile name is required."
+      "name_required": "The profile name is required.",
+      "forced_label": "Forced"
     },
     "custom_formats": {
       "title": "Custom formats",
