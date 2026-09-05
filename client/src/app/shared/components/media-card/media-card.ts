@@ -258,9 +258,9 @@ export class MediaCardComponent {
 
   /**
    * Desktop affordance — opens the same contextual panel that TV's menu key
-   * and mobile's long-press use. The button itself is the anchor with
-   * placement 'button' so the dropdown drops right under the ⋯ glyph and
-   * overlays the card body, instead of stacking below the whole figure.
+   * and mobile's long-press use. The figure is the anchor with placement
+   * 'card-top' so the menu overlays the card from its top edge, even though
+   * the ⋯ glyph sits at the bottom.
    */
   protected openActions(event: Event) {
     event.stopPropagation();
@@ -269,12 +269,12 @@ export class MediaCardComponent {
     if (!button) return;
     this.cardActionsService.register({
       actions: this.cardActions(),
-      anchor: button,
+      anchor: button.closest('figure') ?? button,
       title: this._title(),
       imageUrl: this._img(),
       imageAspect: this.aspect(),
       subtitle: this._subtitle(),
-      placement: 'button',
+      placement: 'card-top',
     });
     this.cardActionsService.show();
   }

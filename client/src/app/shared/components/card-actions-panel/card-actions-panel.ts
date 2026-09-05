@@ -130,17 +130,25 @@ export class CardActionsPanelComponent {
   readonly imageAspect = this.service.imageAspect;
   readonly subtitle = this.service.subtitle;
 
-  /** `button` aligns the menu's right edge under the ⋯ trigger; `card` centres
-   *  it under the card figure. */
-  readonly placement = computed(() =>
-    this.service.placement() === 'button' ? 'bottom-end' : 'bottom-center',
-  );
+  /** `button` drops the menu under the ⋯ trigger, right edges flush;
+   *  `card-top` overlays the card from its top edge; `card` centres it under
+   *  the card figure. */
+  readonly placement = computed(() => {
+    switch (this.service.placement()) {
+      case 'button':
+        return 'bottom-end';
+      case 'card-top':
+        return 'start-end';
+      default:
+        return 'bottom-center';
+    }
+  });
   /** Compact under the ⋯ button; about the card's width under a figure. */
   readonly width = computed(() => {
     const anchor = this.service.anchor();
     // Wider than a card menu used to need: the rows now include submenu parents
     // and longer labels, and a wrapped row reads badly.
-    if (this.service.placement() === 'button' || !anchor) return 280;
+    if (this.service.placement() !== 'card' || !anchor) return 280;
     return Math.min(340, Math.max(280, anchor.getBoundingClientRect().width));
   });
 
