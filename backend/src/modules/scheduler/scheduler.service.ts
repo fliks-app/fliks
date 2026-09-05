@@ -538,7 +538,7 @@ export class SchedulerService implements OnModuleInit {
         this.activityRegistry.upsertRunning(
           commandName,
           commandName,
-          subject,
+          undefined,
           i,
           fileIds.length,
         );
@@ -615,7 +615,7 @@ export class SchedulerService implements OnModuleInit {
           message: formatMediaProgressSubject(subject),
           subject,
         });
-        this.activityRegistry.upsertRunning(name, name, subject, i, seasons.length);
+        this.activityRegistry.upsertRunning(name, name, undefined, i, seasons.length);
         try {
           const r = await this.markers.runDetectionInline(s.id, subject);
           detected += r.introsDetected + r.outrosDetected;
@@ -679,7 +679,7 @@ export class SchedulerService implements OnModuleInit {
         this.activityRegistry.upsertRunning(
           commandName,
           commandName,
-          subject,
+          undefined,
           i,
           mediaList.length,
         );

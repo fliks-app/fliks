@@ -79,9 +79,12 @@
                   }
                 }
               </td>
-              <td class="w-48">
+              <td class="w-64">
                 @if (item.status === 'running') {
                   <div class="flex items-center gap-2">
+                    @if ((item.total ?? 0) > 1) {
+                      <span class="text-xs text-base-content/50 tabular-nums whitespace-nowrap">{{ item.current ?? 0 }}/{{ item.total }}</span>
+                    }
                     <progress class="progress progress-primary flex-1" [value]="item.current ?? 0" [max]="item.total || 1"></progress>
                     <span class="text-xs text-base-content/60 tabular-nums w-10 text-right">{{ activityPercent(item) }}%</span>
                   </div>

@@ -187,7 +187,7 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
     const wholeMediaSubject = rows.find((r) => r.media)?.media
       ? buildMediaProgressSubject(rows.find((r) => r.media)!.media)
       : undefined;
-    this.activityRegistry.upsertRunning(command, 'GenerateMissingSprites', wholeMediaSubject, 0, missing.length);
+    this.activityRegistry.upsertRunning(command, 'GenerateMissingSprites', undefined, 0, missing.length);
     for (const { id } of missing) {
       this.activityRegistry.upsertPending(
         `GenerateSprite:${id}`,
@@ -209,7 +209,7 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
           message: subject ? formatMediaProgressSubject(subject) : command,
           subject,
         });
-        this.activityRegistry.upsertRunning(command, 'GenerateMissingSprites', subject ?? wholeMediaSubject, index, missing.length);
+        this.activityRegistry.upsertRunning(command, 'GenerateMissingSprites', undefined, index, missing.length);
         try {
           if (await this.generateSprite(id, false)) generated++;
         } finally {
