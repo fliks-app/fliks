@@ -86,6 +86,7 @@ describe('MediaMutationService monitoring cascade', () => {
       requestLifecycle as never,
       { emitDomain: jest.fn() } as never,
       { deleteForFile: jest.fn() } as never,
+      { clearMediaFileSubtitleCache: jest.fn() } as never,
     );
   });
 
@@ -188,6 +189,7 @@ describe('MediaMutationService remove disk cleanup', () => {
       requestLifecycle as never,
       { emitDomain: jest.fn() } as never,
       { deleteForFile: jest.fn() } as never,
+      { clearMediaFileSubtitleCache: jest.fn() } as never,
     );
   });
 

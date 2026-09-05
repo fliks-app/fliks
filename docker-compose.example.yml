@@ -90,7 +90,7 @@ services:
       - /path/to/download/folder:/downloads
       # JWT key: lose it and everyone is logged out.
       - fliks_conf:/app/conf
-      # Posters, fanart, seek-preview sprites.
+      # Posters, fanart, seek-preview sprites, extracted subtitle cache.
       - fliks_images:/app/images
       # HLS segment cache, paired with FLIKS_TRANSCODE_DIR above. Drop both to
       # leave it in /tmp.

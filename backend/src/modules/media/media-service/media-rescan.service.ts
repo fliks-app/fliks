@@ -333,11 +333,10 @@ export class MediaRescanService {
         : null,
     );
     void this.subtitleStream
-      .clearMediaFileSubtitleCache(media?.path, file.id)
+      .clearMediaFileSubtitleCache(file.id)
       .then(() =>
         this.subtitleStream.warmupCache(
           absPath,
-          media?.path,
           file.id,
           file.streamInfo?.subtitles,
           subject,
@@ -449,6 +448,11 @@ export class MediaRescanService {
         `Rescan[media #${mediaId}]: clearMediaCache failed for "${media.path}": ${err instanceof Error ? err.message : err}`,
       );
     }
+    // The subtitle cache lives outside `.cache/`, in the images volume, so it
+    // needs its own invalidation to preserve "full rescan wipes every cached VTT".
+    for (const f of media.files ?? []) {
+      void this.subtitleStream.clearMediaFileSubtitleCache(f.id);
+    }
 
     const mediaDir = path.resolve(media.path);
     if (!(await pathExists(mediaDir))) {
@@ -519,6 +523,7 @@ export class MediaRescanService {
         try {
           await this.mediaFileRepo.remove(dbFile);
           void this.thumbnailService.deleteForFile(dbFile.id);
+          void this.subtitleStream.clearMediaFileSubtitleCache(dbFile.id);
           removed++;
           this.log.log(
             `Rescan: removed missing file "${normPath}" for media #${mediaId}`,
@@ -689,7 +694,6 @@ export class MediaRescanService {
         if (!options?.skipWarmup) {
           void this.subtitleStream.warmupCache(
             absPath,
-            media.path,
             dbFile.id,
             streamInfo?.subtitles,
             buildMediaProgressSubject(media, epForProgress),
@@ -808,7 +812,6 @@ export class MediaRescanService {
         if (!options?.skipWarmup) {
           void this.subtitleStream.warmupCache(
             absPath,
-            media.path,
             savedFile.id,
             probed.streamInfo.subtitles,
             buildMediaProgressSubject(media, epForProgress),
