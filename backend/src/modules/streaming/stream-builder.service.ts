@@ -264,9 +264,11 @@ export class StreamBuilderService {
       directPlayResult.videoConditionsMet;
     const clientCanPresentDynamicRange =
       clientCanPresentHdr || clientCanPresentDv;
-    // Copy path taken only because the client tone-maps on its own: the stats
-    // overlay and the admin dashboard would otherwise show no HDR step at all.
-    const clientTonemap = clientCanPresentHdr && !clientSupportsHdr;
+    // HDR reaches an SDR client that tone-maps on its own — copied through, or
+    // re-encoded on the HDR ladder. Surfaced in the stats overlay and the admin
+    // dashboard, which would otherwise show no HDR step at all.
+    const clientTonemap =
+      (clientCanPresentHdr || useHdrLadder) && !clientSupportsHdr;
 
     // HDR/DV the client can't present as-is forces a transcode. Flag the
     // tone-map only when the re-encode is actually SDR — when the HDR ladder
@@ -645,6 +647,7 @@ export class StreamBuilderService {
       outputContainer: 'hls',
       hwAccel: effectiveHwAccel,
       tonemapping: transcodeTonemaps,
+      clientTonemap,
       transcodeBitrateByQuality,
       qualities: this.buildQualityList(source, 'Transcode', sourceCopyable, qualityLadder, selectedVariant.codec),
       audioTracks: this.buildAudioTracks(audioStreams, profile, 'Transcode'),

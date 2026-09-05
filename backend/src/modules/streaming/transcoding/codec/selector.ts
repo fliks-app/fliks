@@ -60,13 +60,17 @@ export function pickVariants(
       ? [source.codec, ...efficiencyOrder.filter((c) => c !== source.codec)]
       : efficiencyOrder;
 
-  // HDR path — only meaningful when source is HDR AND client supports
-  // an HDR display (browser caps + display gamut probe). H.264 is
+  // HDR path — only meaningful when source is HDR AND the client either has
+  // an HDR display (browser caps + gamut probe) or tone-maps HDR itself, which
+  // is cheaper and better than a tonemap filter on the encode. H.264 is
   // skipped (8-bit only). Two passes: the HW pass picks the first
   // codec with a HW HDR encoder; the CPU pass runs only when no
   // candidate codec has a HW HDR encoder — that's the CPU
   // libx265/libsvtav1 HDR path on boxes without QSV/VAAPI/NVENC.
-  if (source.hdr && profile.supportsHdr === true) {
+  if (
+    source.hdr &&
+    (profile.supportsHdr === true || profile.tonemapsHdrLocally === true)
+  ) {
     const beforeHdr = candidates.length;
     for (const codec of codecOrder) {
       if (codec === 'h264') continue;
