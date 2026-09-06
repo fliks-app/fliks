@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { SchedulerService } from './scheduler.service';
 import { PluginJobsService } from '../plugins/plugin-jobs.service';
 import { ScheduledJobRegistry } from './scheduled-job-registry.service';
+import { MediaType, MediaStatus } from '../../common/enums';
 
 function fakePluginJobs(overrides: Partial<Record<'listDeclared' | 'trigger', jest.Mock>> = {}) {
   return {
@@ -71,5 +72,95 @@ describe('SchedulerService.triggerCommand', () => {
 
     await expect(service.triggerCommand('NoSuchJob')).rejects.toThrow(BadRequestException);
     expect(pluginJobs.trigger).not.toHaveBeenCalled();
+  });
+});
+
+function makeMetadataService(
+  mediaRepo: { find: jest.Mock },
+  mediaService: { refreshMetadata: jest.Mock },
+  config: { get: jest.Mock },
+) {
+  const unused = {} as never;
+  const eventsService = { emit: jest.fn() };
+  const activityRegistry = {
+    upsertRunning: jest.fn(),
+    upsertPending: jest.fn(),
+    remove: jest.fn(),
+  };
+  return new SchedulerService(
+    unused,
+    mediaRepo as never,
+    unused,
+    unused,
+    mediaService as never,
+    config as never,
+    eventsService as never,
+    unused,
+    unused,
+    unused,
+    unused,
+    fakePluginJobs() as unknown as PluginJobsService,
+    { list: jest.fn().mockReturnValue([]) } as unknown as ScheduledJobRegistry,
+    unused,
+    unused,
+    unused,
+    activityRegistry as never,
+  );
+}
+
+function unidentifiedMedia(id: number) {
+  return {
+    id,
+    title: 'Unnamed Reel',
+    type: MediaType.MOVIE,
+    status: MediaStatus.RELEASED,
+    tmdbId: null,
+    tvdbId: null,
+    imdbId: null,
+    metadataRefreshedAt: null,
+    year: 2020,
+    releaseDate: null,
+    posterUrl: null,
+    overview: null,
+  };
+}
+
+function identifiedMedia(id: number) {
+  return {
+    ...unidentifiedMedia(id),
+    title: 'Quiet Harbour',
+    tmdbId: 42,
+  };
+}
+
+describe('SchedulerService metadata refresh jobs skip unidentified titles', () => {
+  it('doRefreshMetadata never refreshes or fails a media with no provider id', async () => {
+    const mediaRepo = {
+      find: jest.fn().mockResolvedValue([identifiedMedia(1), unidentifiedMedia(2)]),
+    };
+    const mediaService = { refreshMetadata: jest.fn().mockResolvedValue(undefined) };
+    const config = { get: jest.fn().mockReturnValue('a-key') };
+    const service = makeMetadataService(mediaRepo, mediaService, config);
+
+    await (service as unknown as { doRefreshMetadata: () => Promise<void> }).doRefreshMetadata();
+
+    expect(mediaService.refreshMetadata).toHaveBeenCalledTimes(1);
+    expect(mediaService.refreshMetadata).toHaveBeenCalledWith(1);
+  });
+
+  it('doRefreshMissingMetadata never refreshes or fails a media with no provider id', async () => {
+    const mediaRepo = {
+      find: jest.fn().mockResolvedValue([identifiedMedia(1), unidentifiedMedia(2)]),
+    };
+    const mediaService = { refreshMetadata: jest.fn().mockResolvedValue(undefined) };
+    const config = { get: jest.fn().mockReturnValue('a-key') };
+    const service = makeMetadataService(mediaRepo, mediaService, config);
+
+    await (
+      service as unknown as { doRefreshMissingMetadata: () => Promise<void> }
+    ).doRefreshMissingMetadata();
+
+    expect(mediaService.refreshMetadata).toHaveBeenCalledTimes(1);
+    expect(mediaService.refreshMetadata).toHaveBeenCalledWith(1);
   });
 });

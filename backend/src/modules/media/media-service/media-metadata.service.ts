@@ -698,6 +698,15 @@ export class MediaMetadataService {
       );
       return { provider: this.tmdb, externalId: String(media.tmdbId) };
     }
+    // imdb-only media (no tmdbId/tvdbId): cross-reference through TMDB before giving up.
+    if (media.imdbId && this.providerRegistry.isAvailable('tmdb')) {
+      const externalId = await this.resolveExternalIdForProvider(
+        media,
+        this.tmdb,
+        'tmdb',
+      );
+      if (externalId) return { provider: this.tmdb, externalId };
+    }
     throw new BadRequestException('No provider ID available for this media');
   }
 

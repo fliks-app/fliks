@@ -70,6 +70,10 @@ export class OpenSubtitlesProvider implements SubtitleProviderInterface {
     if (params.moviehash) query.set('moviehash', params.moviehash);
     if (params.imdbId) query.set('imdb_id', params.imdbId);
     if (params.tmdbId) query.set('tmdb_id', String(params.tmdbId));
+    if (!params.moviehash && !params.imdbId && !params.tmdbId) {
+      query.set('query', params.title);
+      if (params.year) query.set('year', String(params.year));
+    }
     query.set('languages', params.language);
     if (params.season != null)
       query.set('season_number', String(params.season));

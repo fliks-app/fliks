@@ -13,6 +13,7 @@ import { Repository } from 'typeorm';
 import { CronExpressionParser } from 'cron-parser';
 import { Command } from './entities/command.entity';
 import { Media } from '../media/entities/media.entity';
+import { hasProviderId } from '../media/media-identity.util';
 import { Episode } from '../media/entities/episode.entity';
 import { TmdbProvider } from '../metadata-providers/providers/tmdb.provider';
 import { MediaService } from '../media/media.service';
@@ -369,11 +370,13 @@ export class SchedulerService implements OnModuleInit {
     }
 
     const allMedia = await this.mediaRepo.find();
+    const identified = allMedia.filter((m) => hasProviderId(m));
+    const unidentifiedSkipped = allMedia.length - identified.length;
     const now = new Date();
-    const dueMedia = allMedia.filter((m) => this.isMetadataDue(m, now));
-    const skipped = allMedia.length - dueMedia.length;
+    const dueMedia = identified.filter((m) => this.isMetadataDue(m, now));
+    const skipped = identified.length - dueMedia.length;
     this.log.log(
-      `RefreshMetadata: starting refresh for ${dueMedia.length}/${allMedia.length} media (${skipped} settled title(s) skipped)`,
+      `RefreshMetadata: starting refresh for ${dueMedia.length}/${allMedia.length} media (${skipped} settled title(s) skipped, ${unidentifiedSkipped} unidentified title(s) skipped)`,
     );
     let updated = 0;
 
@@ -748,6 +751,8 @@ export class SchedulerService implements OnModuleInit {
     const allMedia = await this.mediaRepo.find({
       relations: ['seasons'],
     });
+    const identified = allMedia.filter((m) => hasProviderId(m));
+    const unidentifiedSkipped = allMedia.length - identified.length;
 
     const isIncomplete = (m: (typeof allMedia)[0]) =>
       !m.posterUrl ||
@@ -757,7 +762,7 @@ export class SchedulerService implements OnModuleInit {
     const isStaleOrNever = (m: (typeof allMedia)[0]) =>
       m.metadataRefreshedAt == null || m.metadataRefreshedAt < staleBefore;
 
-    const candidates = allMedia.filter(
+    const candidates = identified.filter(
       (m) => isIncomplete(m) || isStaleOrNever(m),
     );
 
@@ -805,7 +810,7 @@ export class SchedulerService implements OnModuleInit {
     }
 
     this.log.log(
-      `RefreshMissingMetadata: refreshed ${updated}/${candidates.length} titles (from ${allMedia.length} total)`,
+      `RefreshMissingMetadata: refreshed ${updated}/${candidates.length} titles (from ${allMedia.length} total, ${unidentifiedSkipped} unidentified title(s) skipped)`,
     );
   }
 
