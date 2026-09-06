@@ -42,6 +42,12 @@ export interface SpriteMetadata {
   count: number;
 }
 
+/** PQ / HLG sources need the tone-map chain in the extractor, or the tiles
+ *  come out washed-out grey. Gated on the transfer curve alone — the primaries
+ *  can be missing or wrong and the picture is still HDR-encoded. */
+const isHdrTransfer = (colorTransfer?: string): boolean =>
+  colorTransfer === 'smpte2084' || colorTransfer === 'arib-std-b67';
+
 const baseDir = () => path.join(getCacheDir(), 'thumbnails');
 const framesTmpDir = () => path.join(getCacheDir(), 'thumbnails-tmp');
 
@@ -58,6 +64,7 @@ interface QueueItem {
   subject: MediaProgressSubject;
   skipTracking?: boolean;
   crop?: CropArea;
+  hdr?: boolean;
   resolve: (meta: SpriteMetadata | null) => void;
 }
 
@@ -117,7 +124,7 @@ export class ThumbnailService implements OnModuleInit {
       relativePath: string;
       streamInfo?: {
         durationSeconds?: number;
-        video?: { crop?: CropArea }[];
+        video?: { crop?: CropArea; colorTransfer?: string }[];
       } | null;
     },
     media: { path: string | null; title: string },
@@ -138,6 +145,7 @@ export class ThumbnailService implements OnModuleInit {
       options.force ?? false,
       options.skipTracking ?? false,
       file.streamInfo?.video?.[0]?.crop,
+      isHdrTransfer(file.streamInfo?.video?.[0]?.colorTransfer),
     );
   }
 
@@ -149,6 +157,7 @@ export class ThumbnailService implements OnModuleInit {
     force = false,
     skipTracking = false,
     crop?: CropArea,
+    hdr = false,
   ): Promise<SpriteMetadata | null> {
     const dir = path.join(baseDir(), String(mediaFileId));
     const metaPath = path.join(dir, 'sprite.json');
@@ -178,6 +187,7 @@ export class ThumbnailService implements OnModuleInit {
         subject,
         skipTracking,
         crop,
+        hdr,
         resolve,
       });
       this.processQueue();
@@ -236,6 +246,7 @@ export class ThumbnailService implements OnModuleInit {
         item.subject,
         item.skipTracking,
         item.crop,
+        item.hdr,
       )
         .then((meta) => item.resolve(meta))
         .catch((err) => {
@@ -261,6 +272,7 @@ export class ThumbnailService implements OnModuleInit {
     subject: MediaProgressSubject,
     skipTracking = false,
     crop?: CropArea,
+    hdr = false,
   ): Promise<SpriteMetadata | null> {
     const dir = path.join(baseDir(), String(mediaFileId));
     const spritePath = path.join(dir, 'sprite.jpg');
@@ -291,7 +303,7 @@ export class ThumbnailService implements OnModuleInit {
     // exactly what ffmpeg sees per frame.
     const decode = this.chooseExtractor(crop).describe();
     this.log.log(
-      `Sprite START for "${label}" (file #${mediaFileId}): ${count} thumbs @ ${interval}s interval, workers=${FFMPEG_SLOTS}, decode=${decode}, otherSprites=${otherRunning}, queued=${this.queue.length}, srcSize=${srcSizeMb ?? '?'}MB, crop=${
+      `Sprite START for "${label}" (file #${mediaFileId}): ${count} thumbs @ ${interval}s interval, workers=${FFMPEG_SLOTS}, decode=${decode}, hdr=${hdr ? 'tonemap' : 'no'}, otherSprites=${otherRunning}, queued=${this.queue.length}, srcSize=${srcSizeMb ?? '?'}MB, crop=${
         crop ? `${crop.width}x${crop.height}+${crop.x},${crop.y}` : 'none'
       }, src=${absolutePath}`,
     );
@@ -358,6 +370,7 @@ export class ThumbnailService implements OnModuleInit {
             subject,
             progressKey,
             crop,
+            hdr,
           );
           extractMs = Date.now() - tExtract;
 
@@ -480,6 +493,7 @@ export class ThumbnailService implements OnModuleInit {
     subject: MediaProgressSubject,
     progressKey: string,
     crop?: CropArea,
+    hdr = false,
   ): Promise<void> {
     let completed = 0;
     let failed = 0;
@@ -503,7 +517,7 @@ export class ThumbnailService implements OnModuleInit {
         );
         const tFrame = Date.now();
         try {
-          await this.extractFrameAt(inputPath, timestamp, outPath, crop);
+          await this.extractFrameAt(inputPath, timestamp, outPath, crop, hdr);
           frameTimings.push({ idx, ms: Date.now() - tFrame, ts: timestamp });
           completed++;
         } catch (err) {
@@ -631,6 +645,7 @@ export class ThumbnailService implements OnModuleInit {
     seekSeconds: number,
     outputPath: string,
     crop?: CropArea,
+    hdr = false,
   ): Promise<void> {
     return withFfmpegSlot(
       () =>
@@ -641,6 +656,7 @@ export class ThumbnailService implements OnModuleInit {
             outputPath,
             crop,
             thumbWidth: THUMB_WIDTH,
+            hdr,
           });
           const proc = spawnLowPriority('ffmpeg', args);
           let stderr = '';

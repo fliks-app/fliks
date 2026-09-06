@@ -49,6 +49,26 @@ describe('CudaExtractor', () => {
     );
   });
 
+  it('hdr: 10-bit download then the CPU tone-map chain', () => {
+    const vf = vfOf(ext.buildArgs({ ...base, hdr: true }));
+    expect(vf).toContain('scale_cuda=w=240:h=-2:format=p010le');
+    expect(vf).toContain('hwdownload,format=p010le,zscale=w=240:h=-2:t=linear');
+    expect(vf).toContain('tonemap=tonemap=hable:desat=0');
+    expect(vf.endsWith('zscale=t=bt709:m=bt709:r=tv,format=yuv420p')).toBe(true);
+  });
+
+  it('hdr + crop: tone-map replaces the CPU scale, never follows it', () => {
+    const vf = vfOf(
+      ext.buildArgs({
+        ...base,
+        hdr: true,
+        crop: { width: 3840, height: 1632, x: 0, y: 264 },
+      }),
+    );
+    expect(vf).toContain('hwdownload,format=p010le,crop=3840:1632:0:264,zscale=w=240');
+    expect(vf).not.toContain('scale=240:-1');
+  });
+
   it('crop: full-frame hwdownload then CPU crop+scale', () => {
     const args = ext.buildArgs({
       ...base,

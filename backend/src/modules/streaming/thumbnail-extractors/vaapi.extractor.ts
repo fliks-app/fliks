@@ -1,3 +1,4 @@
+import { downloadPixFmt, tonemapChain } from './tonemap';
 import type { CropArea, ExtractArgs, ExtractorBackend } from './types';
 
 /**
@@ -28,7 +29,9 @@ export class VaapiExtractor implements ExtractorBackend {
     seekSeconds,
     outputPath,
     thumbWidth,
+    hdr,
   }: ExtractArgs): string[] {
+    const pix = downloadPixFmt(hdr);
     return [
       '-nostdin',
       '-hide_banner',
@@ -57,7 +60,7 @@ export class VaapiExtractor implements ExtractorBackend {
       '-frames:v',
       '1',
       '-vf',
-      `scale_vaapi=${thumbWidth}:-2:format=nv12,hwdownload,format=nv12`,
+      `scale_vaapi=${thumbWidth}:-2:format=${pix},hwdownload,format=${pix}${hdr ? `,${tonemapChain(thumbWidth)}` : ''}`,
       '-q:v',
       '5',
       '-y',

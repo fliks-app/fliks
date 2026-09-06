@@ -1,3 +1,4 @@
+import { downloadPixFmt, tonemapChain } from './tonemap';
 import type { CropArea, ExtractArgs, ExtractorBackend } from './types';
 
 /**
@@ -31,6 +32,7 @@ export class QsvExtractor implements ExtractorBackend {
     outputPath,
     crop,
     thumbWidth,
+    hdr,
   }: ExtractArgs): string[] {
     if (!crop) {
       // supports() should have routed this elsewhere, but type-narrow safely.
@@ -39,6 +41,7 @@ export class QsvExtractor implements ExtractorBackend {
     // Output height preserves the crop region's aspect ratio. Rounded to
     // an even number — required by most video filters / encoders.
     const outH = Math.round((crop.height * thumbWidth) / crop.width / 2) * 2;
+    const pix = downloadPixFmt(hdr);
     return [
       '-nostdin',
       '-hide_banner',
@@ -66,7 +69,7 @@ export class QsvExtractor implements ExtractorBackend {
       // vpp_qsv crops with cw/ch/cx/cy and scales to w/h in a single pass
       // on the GPU. We hwdownload the small output tile only.
       '-vf',
-      `vpp_qsv=w=${thumbWidth}:h=${outH}:cw=${crop.width}:ch=${crop.height}:cx=${crop.x}:cy=${crop.y}:format=nv12,hwdownload,format=nv12`,
+      `vpp_qsv=w=${thumbWidth}:h=${outH}:cw=${crop.width}:ch=${crop.height}:cx=${crop.x}:cy=${crop.y}:format=${pix},hwdownload,format=${pix}${hdr ? `,${tonemapChain(thumbWidth)}` : ''}`,
       '-q:v',
       '5',
       '-y',
