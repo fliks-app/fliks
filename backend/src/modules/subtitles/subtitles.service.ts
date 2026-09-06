@@ -78,6 +78,12 @@ export class SubtitlesService {
       }
     }
 
+    if (!params.moviehash && !params.imdbId && !params.tmdbId) {
+      this.logger.warn(
+        `Subtitle search for "${params.title}" has no hash and no provider id, title-only match`,
+      );
+    }
+
     const providers = await this.providerService.findEnabled();
     const allResults: SubtitleSearchResult[] = [];
 
