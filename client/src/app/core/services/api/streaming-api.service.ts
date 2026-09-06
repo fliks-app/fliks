@@ -45,11 +45,12 @@ export interface PlaybackInfoResponse {
     {
       videoBitrateBps: number;
       audioBitrateBps: number;
-      /** = BANDWIDTH dans master.m3u8 pour cette variante (vidéo + audio) */
+      /** = BANDWIDTH in master.m3u8 for this variant (video + audio). */
       totalBitrateBps: number;
     }
   >;
-  /** BANDWIDTH variante remux (DirectStream HLS), aligné serveur / manifeste */
+  /** BANDWIDTH of the remux variant (DirectStream HLS); server and manifest
+   *  carry the same value. */
   remuxMasterBandwidthBps?: number;
   /** Server-authoritative quality list (device-aware ladder + Original rule). */
   qualities?: {

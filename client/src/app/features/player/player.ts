@@ -977,9 +977,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // the "\u2192 HLS" line of the stream section, and it doesn't tell you
     // anything about why this codec specifically had to change.
     const allFlags = (pi?.transcodeReasons ?? []).map((r) => r.flag);
-    // Translate each flag to a human label (e.g. VideoQualityReduced → "Bitrate
-    // réduit (qualité choisie)") so the overlay explains bitrate/quality-driven
-    // transcodes, not just raw codes. Unknown flags fall back to the raw token.
+    // Translate each flag to a human label so the overlay explains
+    // bitrate/quality-driven transcodes, not just raw codes. Unknown flags fall
+    // back to the raw token.
     const reasonLabel = (flag: string) => {
       const key = `player.transcode_reason.${flag}`;
       const label = this.translate.instant(key, { codec: codecName });
