@@ -85,7 +85,7 @@ describe('orphan scan', () => {
     expect(series?.nfo?.tmdbId).toBe(4242);
 
     const movie = res.groups.find(
-      (g) => g.mediaType === MediaType.MOVIE && g.folderName === 'Quiet Harbour (2009)',
+      (g) => g.mediaType === MediaType.MOVIE && g.folderName === 'Sample Movie (2009)',
     );
     expect(movie?.files).toHaveLength(1);
     expect(movie?.guessYear).toBe(2009);

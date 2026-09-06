@@ -739,9 +739,6 @@ export class SubtitlesService {
       relations: ['files'],
     });
     if (!media?.path || !media.files?.length) return 0;
-    // A media with no folder of its own shares its "root" with every sibling
-    // root-level movie: scanning it would cross-match their sidecar subtitles.
-    if (!media.folderName) return 0;
 
     // Build a map: video basename (without ext, lowercase) → MediaFile
     const fileByBasename = new Map<string, MediaFile>();
@@ -808,7 +805,9 @@ export class SubtitlesService {
         // long as it sits in a folder with exactly one video — attach it there
         // (or the media's only file). Folders with several videos (a season
         // folder) are left to the precise name match so episodes aren't crossed.
-        if (!matchedFile) {
+        // A media with no folder of its own shares its root with every sibling
+        // root-level movie, so a lone-video-in-dir guess is not safe there.
+        if (!matchedFile && media.folderName) {
           const videosInDir = media.files.filter(
             (f) => path.dirname(path.join(media.path!, f.relativePath)) === dir,
           );

@@ -557,6 +557,13 @@ export class DiskImportService {
       }
     }
 
+    // A newly created unmatched row that failed to link any file is dead
+    // weight: for a root movie especially, an ambiguous folderName '' twin
+    // would otherwise linger and confuse the next reuse lookup.
+    if (!dto.externalId && created && linked === 0) {
+      await this.mediaRepo.delete(media.id);
+    }
+
     this.logger.log(
       `Orphan relink — media #${media.id} created=${created} linked=${linked} errors=${errors.length}`,
     );
@@ -669,20 +676,30 @@ export class DiskImportService {
       throw new BadRequestException('File outside the library root');
     }
 
-    const nfo =
-      dto.type === MediaType.SERIES
-        ? (await this.nfo.readNfoFile(path.join(artworkDir, 'tvshow.nfo'))) ??
-          (await this.nfo.readForVideoFile(sample))
-        : await this.nfo.readForVideoFile(sample);
+    // A root movie's artworkDir IS the shared library root: generic sidecar
+    // names (poster.jpg, movie.nfo, ...) there belong to no title in particular.
+    const isRootMovie = dto.folderName === '';
     const artworkBasename =
       dto.type === MediaType.SERIES
         ? undefined
         : path.basename(sample, path.extname(sample));
-    const artwork = await findLocalArtwork(artworkDir, artworkBasename);
+    const nfo =
+      dto.type === MediaType.SERIES
+        ? (await this.nfo.readNfoFile(path.join(artworkDir, 'tvshow.nfo'))) ??
+          (await this.nfo.readForVideoFile(sample))
+        : isRootMovie
+          ? await this.nfo.readNfoFile(path.join(artworkDir, `${artworkBasename}.nfo`))
+          : await this.nfo.readForVideoFile(sample);
+    const artwork = await findLocalArtwork(artworkDir, artworkBasename, {
+      basenameOnly: isRootMovie,
+    });
 
     const created = await this.mediaService.createUnmatched(
       {
-        title: dto.title?.trim() || dto.folderName,
+        title:
+          dto.title?.trim() ||
+          extractMediaTitle(path.basename(sample)).title ||
+          dto.folderName,
         year: dto.year,
         type: dto.type,
         libraryId: dto.libraryId,

@@ -26,7 +26,7 @@ const dto = (overrides: Partial<RelinkOrphansDto> = {}): RelinkOrphansDto =>
   }) as RelinkOrphansDto;
 
 function makeService() {
-  const mediaRepo = { findOne: jest.fn(), find: jest.fn(), update: jest.fn() };
+  const mediaRepo = { findOne: jest.fn(), find: jest.fn(), update: jest.fn(), delete: jest.fn() };
   const mediaService = {
     importMedia: jest.fn(),
     createUnmatched: jest.fn(),
@@ -99,6 +99,7 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
     expect(mockedFindLocalArtwork).toHaveBeenCalledWith(
       '/media/Sample Movie (2009)',
       'Sample.Movie.2009.1080p',
+      { basenameOnly: false },
     );
     expect(mediaService.createUnmatched).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -146,6 +147,7 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
     expect(mockedFindLocalArtwork).toHaveBeenCalledWith(
       '/media/Sample Show',
       undefined,
+      { basenameOnly: false },
     );
   });
 
@@ -433,5 +435,67 @@ describe('DiskImportService.relinkOrphans: movie files directly at the library r
 
     expect(mediaService.createUnmatched).not.toHaveBeenCalled();
     expect(res.mediaId).toBe(1);
+  });
+
+  it('only matches basename-prefixed artwork and reads the per-file nfo, not the shared root', async () => {
+    const { service, mediaRepo, mediaService, nfo } = makeService();
+    mediaRepo.find.mockResolvedValueOnce([]);
+    mediaRepo.findOne.mockResolvedValueOnce(unmatchedRow(3, ''));
+    mediaService.createUnmatched.mockResolvedValue({ id: 3 });
+    mediaService.linkExistingFileInPlace.mockResolvedValue({
+      fileId: 1,
+      episodeId: null,
+      created: false,
+    });
+
+    await service.relinkOrphans(rootDto(), null);
+
+    expect(nfo.readNfoFile).toHaveBeenCalledWith('/media/sample.movie.2001.1080p.nfo');
+    expect(nfo.readForVideoFile).not.toHaveBeenCalled();
+    expect(mockedFindLocalArtwork).toHaveBeenCalledWith(
+      '/media',
+      'sample.movie.2001.1080p',
+      { basenameOnly: true },
+    );
+  });
+
+  it('derives the title from the filename when the client sent none', async () => {
+    const { service, mediaRepo, mediaService } = makeService();
+    mediaRepo.find.mockResolvedValueOnce([]);
+    mediaRepo.findOne.mockResolvedValueOnce(unmatchedRow(4, ''));
+    mediaService.createUnmatched.mockResolvedValue({ id: 4 });
+    mediaService.linkExistingFileInPlace.mockResolvedValue({
+      fileId: 1,
+      episodeId: null,
+      created: false,
+    });
+
+    await service.relinkOrphans(
+      rootDto({
+        title: '',
+        files: [{ filePath: '/media/Sample.Movie.Two.2002.1080p.mkv' }],
+      }),
+      null,
+    );
+
+    expect(mediaService.createUnmatched).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Sample Movie Two' }),
+      null,
+    );
+  });
+
+  it('deletes the freshly created row when its only file fails to link', async () => {
+    const { service, mediaRepo, mediaService } = makeService();
+    mediaRepo.find.mockResolvedValueOnce([]);
+    mediaRepo.findOne.mockResolvedValueOnce(unmatchedRow(5, ''));
+    mediaService.createUnmatched.mockResolvedValue({ id: 5 });
+    mediaService.linkExistingFileInPlace.mockResolvedValue({
+      error: 'file outside the media folder',
+    });
+
+    const res = await service.relinkOrphans(rootDto(), null);
+
+    expect(res.linked).toBe(0);
+    expect(mediaRepo.delete).toHaveBeenCalledWith(5);
   });
 });

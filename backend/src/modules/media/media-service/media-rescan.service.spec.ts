@@ -267,3 +267,25 @@ describe('MediaRescanService.rescanFiles - a movie with no folder of its own', (
     expect(fs.existsSync(cacheDir)).toBe(true);
   });
 });
+
+describe('MediaRescanService.linkExistingFileInPlace - a movie with no folder of its own', () => {
+  it('refuses a file nested in a subfolder of the shared library root', async () => {
+    const h = buildHarness();
+    const media = {
+      id: 11,
+      type: MediaType.MOVIE,
+      folderName: '',
+      path: '/library/movies',
+    } as never;
+
+    const res = await h.service.linkExistingFileInPlace({
+      media,
+      absPath: '/library/movies/Some Folder/sample.movie.2001.mkv',
+    });
+
+    expect(res).toEqual({
+      error: 'a title with no folder can only own files at the library root',
+    });
+    expect(h.mediaFileRepo.findOne).not.toHaveBeenCalled();
+  });
+});

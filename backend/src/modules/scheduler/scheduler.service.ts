@@ -826,6 +826,9 @@ export class SchedulerService implements OnModuleInit {
 
     const candidates = allMedia.filter((m) => {
       if (!m.path) return false;
+      // A root-level movie with no files can never gain one here: rescanFiles
+      // never walks the shared library root to discover them.
+      if (!m.folderName && !m.files?.length) return false;
       // No files at all
       if (!m.files || m.files.length === 0) return true;
       // Series with unlinked files (missing episodeId)

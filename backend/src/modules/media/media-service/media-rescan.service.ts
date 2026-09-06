@@ -173,6 +173,9 @@ export class MediaRescanService {
     if (!relativePath) {
       return { error: 'file outside the media folder' };
     }
+    if (!media.folderName && relativePath.includes('/')) {
+      return { error: 'a title with no folder can only own files at the library root' };
+    }
 
     const existing = await this.mediaFileRepo.findOne({
       where: { media: { id: media.id }, relativePath },
