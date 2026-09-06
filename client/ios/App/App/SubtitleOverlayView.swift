@@ -141,12 +141,21 @@ final class SubtitleOverlayView: UIView {
         positionLabel()
     }
 
+    /// Text height as a fraction of the surface, shared with the DOM and
+    /// ExoPlayer renderers (subtitle-presets.ts, SubtitleOverlay.java).
+    private static let textSizeFraction: CGFloat = 0.035
+
+    /// Floor under the fraction: a phone's short side is ~390pt, too short for
+    /// the fraction alone to stay readable. Matches MIN_TEXT_SIZE_SP on Android.
+    private static let minPointSize: CGFloat = 18
+
     private func buildAttributed(_ lines: [[SubtitleRun]]) -> NSAttributedString {
         // Size to the screen's short side so captions stay the same size in
         // portrait and landscape (the short side is orientation-invariant),
         // rather than the full height (oversized in portrait) or the
         // letterboxed video band (undersized in portrait).
-        let pointSize = max(8, min(bounds.width, bounds.height) * 0.035 * style.fontScale)
+        let fitted = min(bounds.width, bounds.height) * Self.textSizeFraction * style.fontScale
+        let pointSize = max(Self.minPointSize * style.fontScale, fitted)
         let base = UIFont.systemFont(ofSize: pointSize, weight: .semibold)
         let out = NSMutableAttributedString()
         for (lineIdx, runs) in lines.enumerated() {

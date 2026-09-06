@@ -3,6 +3,7 @@ import { DeviceService } from './device.service';
 import {
   DOM_SUBTITLE_HEIGHT_FRACTION,
   NATIVE_SUBTITLE_SIZE_SCALE,
+  SUBTITLE_MIN_TEXT_PX,
 } from '../utils/subtitle-presets';
 
 
@@ -80,12 +81,13 @@ export function normalizeLang(code: string | undefined): string {
 
 // ── Subtitle appearance maps ──
 
-/** The DOM cue sizes are the native ladder in `vh`, so a preset keeps the same
- *  proportions on every surface. */
+/** The DOM cue sizes are the native ladder in `vmin` — the viewport's short
+ *  side, so a rotation doesn't resize the cues (`vh` collapsed them to ~12px
+ *  in landscape on a phone) — under the same floor the native renderers use. */
 export const SUBTITLE_SIZE_MAP: Record<string, string> = Object.fromEntries(
   Object.entries(NATIVE_SUBTITLE_SIZE_SCALE).map(([size, scale]) => [
     size,
-    `${+(scale * DOM_SUBTITLE_HEIGHT_FRACTION * 100).toFixed(2)}vh`,
+    `max(${+(scale * SUBTITLE_MIN_TEXT_PX).toFixed(2)}px, ${+(scale * DOM_SUBTITLE_HEIGHT_FRACTION * 100).toFixed(2)}vmin)`,
   ]),
 );
 
