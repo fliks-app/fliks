@@ -191,6 +191,31 @@ describe('RemoteService.sendCommand', () => {
     aliceTv.close();
   });
 
+  it('forwards a browse with its media type and claims no attribution', async () => {
+    const { service, events } = makeService();
+    const alice = fakeUser({ id: 1 });
+    const aliceTv = connect(events, 1, 'alice-tv');
+    const claim = jest.spyOn(events, 'claimAttribution');
+
+    await service.sendCommand(alice, 'alice-tv', {
+      action: 'browse',
+      mediaId: 7,
+      mediaType: 'series',
+      episodeId: 12,
+    } as RemoteCommandDto);
+
+    const cmd = aliceTv.frames.find((f) => f.type === 'remote.command');
+    expect(cmd).toMatchObject({
+      action: 'browse',
+      mediaId: 7,
+      mediaType: 'series',
+      episodeId: 12,
+    });
+    expect(claim).not.toHaveBeenCalled();
+
+    aliceTv.close();
+  });
+
   it('treats a dead connection as offline rather than reporting success', async () => {
     const { service, events } = makeService();
     const alice = fakeUser({ id: 1 });

@@ -1,7 +1,7 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { Router } from '@angular/router';
-import { Subject, firstValueFrom } from 'rxjs';
+import { NavigationEnd, Router } from '@angular/router';
+import { Subject, filter, firstValueFrom } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
 import { RemoteCommand, RemoteQualityRung, SseService } from './sse.service';
 import { ToastService } from './toast.service';
@@ -51,6 +51,7 @@ export interface RemoteTarget {
 export type RemoteCommandInput = {
   action: RemoteAction;
   mediaId?: number;
+  mediaType?: 'movie' | 'series';
   mediaFileId?: number;
   episodeId?: number;
   positionSeconds?: number;
@@ -78,6 +79,8 @@ const SELECTED_TARGET_KEY = 'fliks.remote.target';
 /** How long a freshly selected target is assumed to maybe be playing, before
  *  its silence is taken as "idle". */
 const FIRST_REPORT_GRACE_MS = 12_000;
+
+const browseKey = (c: { mediaId?: number; episodeId?: number }) => `${c.mediaId}:${c.episodeId ?? ''}`;
 
 /**
  * Both halves of the remote-control protocol.
@@ -136,6 +139,9 @@ export class RemoteService {
   private stoppedSessionId: string | null = null;
   private observingSince = 0;
   private expectedMediaFileId: number | null = null;
+  /** The detail page a browse just opened here, so mirroring it back to our
+   *  own target cannot ping-pong between two devices controlling each other. */
+  private appliedBrowseKey: string | null = null;
   private readonly reportedState = signal<RemoteNowPlaying | null>(null);
   private readonly pinnedVolume = signal<number | null>(null);
   private volumePinAt = 0;
@@ -287,6 +293,26 @@ export class RemoteService {
       if (!this.sse.connectionId()) return;
       untracked(() => void this.refreshTargets());
     });
+
+    // Mirror any detail page the controller opens onto the target. Driven off
+    // the router, not a component effect, so it fires from every entry path —
+    // a library or home grid, search, a deep link — not just an in-page reload.
+    this.router.events
+      .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
+      .subscribe((e) => this.mirrorRoute(e.urlAfterRedirects));
+  }
+
+  /** `/movies/:id`, `/series/:id` and `/series/:id/episode/:ep` are the mirrored
+   *  detail routes; anything else on the controller is its own to browse. */
+  private mirrorRoute(url: string): void {
+    if (!this.selectedTargetId()) return;
+    const m = /^\/(movies|series)\/(\d+)(?:\/episode\/(\d+))?/.exec(url.split('?')[0]);
+    if (!m) return;
+    void this.browse({
+      mediaId: Number(m[2]),
+      mediaType: m[1] === 'series' ? 'series' : 'movie',
+      episodeId: m[3] ? Number(m[3]) : undefined,
+    });
   }
 
   // ── Controllee half ──
@@ -306,13 +332,17 @@ export class RemoteService {
       void this.applyLoad(cmd);
       return;
     }
+    if (cmd.action === 'browse') {
+      void this.applyBrowse(cmd);
+      return;
+    }
     this.validated.next(cmd);
   }
 
   private isKnownAction(action: string): action is RemoteAction {
     return [
       'load', 'play', 'pause', 'playpause', 'stop',
-      'seek', 'volume', 'mute', 'next', 'audio', 'subtitle', 'quality',
+      'seek', 'volume', 'mute', 'next', 'audio', 'subtitle', 'quality', 'browse',
     ].includes(action);
   }
 
@@ -332,6 +362,50 @@ export class RemoteService {
     // work identically whether or not a player is already on screen.
     await this.router.navigateByUrl('/', { skipLocationChange: true });
     await this.router.navigate(['/watch', cmd.mediaFileId], { queryParams });
+  }
+
+  /** Never over a player: a controller browsing while the target plays must
+   *  not kick the target out of its film. */
+  private async applyBrowse(cmd: RemoteCommand): Promise<void> {
+    if (!cmd.mediaId || !cmd.mediaType) {
+      console.warn('[remote] browse without a media', cmd.cmdId);
+      return;
+    }
+    if (this.router.url.startsWith('/watch')) return;
+    this.appliedBrowseKey = browseKey(cmd);
+    const base = cmd.mediaType === 'series' ? '/series' : '/movies';
+    const path = cmd.episodeId ? [base, cmd.mediaId, 'episode', cmd.episodeId] : [base, cmd.mediaId];
+    await this.router.navigate(path);
+  }
+
+  /** Controller side of `applyBrowse`: mirror an opened detail page to the target.
+   *  Fire-and-forget: a browse sets no playback state, so a failed one must not
+   *  flip `targetOffline` or toast "not responding" the way a real command does.
+   *  A stale connection id on the target's SSE reconnect gets one re-resolve. */
+  async browse(input: Omit<RemoteCommandInput, 'action'>, retry = true): Promise<void> {
+    const targetId = this.selectedTargetId();
+    if (!targetId) return;
+    const key = browseKey(input);
+    if (key === this.appliedBrowseKey) {
+      this.appliedBrowseKey = null;
+      return;
+    }
+    try {
+      await firstValueFrom(
+        this.http.post<{ cmdId: string }>(
+          `/api/remote/${encodeURIComponent(targetId)}/command`,
+          { ...input, action: 'browse', byTargetId: this.sse.targetId() },
+        ),
+      );
+    } catch (err) {
+      if (retry && err instanceof HttpErrorResponse && err.status === 404) {
+        await this.refreshTargets();
+        if (this.targets().some((t) => t.targetId === targetId)) {
+          return this.browse(input, false);
+        }
+      }
+      console.warn('[remote] browse failed', targetId, err);
+    }
   }
 
   /** Called by the player once it has applied a command. */
@@ -422,6 +496,14 @@ export class RemoteService {
   async send(targetId: string, input: RemoteCommandInput, retry = true): Promise<void> {
     this.pendingAction.set(input.action);
     this.notePositionIntent(input);
+    // Clear the outgoing reading and name the expected file BEFORE the POST, not
+    // on its response: a warm target renders and heartbeats the new file within
+    // the round-trip, and clearing after that landed frame wiped the card back
+    // to a spinner while the target was already playing. `next` moves to another
+    // file too; a quality change keeps its file and position, so it stays valid.
+    if (input.action === 'load' || input.action === 'next') {
+      this.noteLoadSent(input.action === 'load' ? input.mediaFileId ?? null : null);
+    }
     try {
       const res = await firstValueFrom(
         this.http.post<{ cmdId: string }>(`/api/remote/${encodeURIComponent(targetId)}/command`, {
@@ -432,12 +514,6 @@ export class RemoteService {
       if (input.action === 'stop') {
         this.noteStopSent();
       } else {
-        // `next` moves the target to another file, so the reading on screen is
-        // the previous episode's until the new session reports. A quality
-        // change keeps its file and position, so its reading stays valid.
-        if (input.action === 'load' || input.action === 'next') {
-          this.noteLoadSent(input.action === 'load' ? input.mediaFileId ?? null : null);
-        }
         this.armAck(res.cmdId, input.action);
       }
     } catch (err) {
