@@ -35,6 +35,8 @@ import { NamingService } from '../../scheduler/naming.service';
 import { EventsService } from '../../scheduler/events.service';
 import { buildMediaFieldsFromTmdb } from './tmdb-mapping.util';
 import { MediaMetadataService } from './media-metadata.service';
+import { ImageService, MediaImageVariant } from '../../images/image.service';
+import type { NfoData } from '../../imports/nfo-metadata.service';
 
 @Injectable()
 export class MediaImportService {
@@ -60,6 +62,7 @@ export class MediaImportService {
     @Inject(forwardRef(() => RequestLifecycleService))
     private readonly requestLifecycle: RequestLifecycleService,
     private readonly events: EventsService,
+    private readonly imageService: ImageService,
   ) {}
 
   async importFromTmdb(
@@ -379,7 +382,8 @@ export class MediaImportService {
 
   /**
    * Create a title no metadata provider matched, straight from the orphan scan's guessed title.
-   * No provider call, no images, no cast: an Identify later fills those in.
+   * No provider call, no cast: an Identify later fills those in. `nfo`/`artwork` (both
+   * optional) fill in whatever the file itself already carries.
    */
   async createUnmatched(
     dto: {
@@ -390,6 +394,8 @@ export class MediaImportService {
       folderName: string;
       qualityProfileId?: number;
       languageProfileId?: number;
+      nfo?: NfoData;
+      artwork?: { poster?: string; fanart?: string; logo?: string };
     },
     addedByUserId: number | null = null,
   ): Promise<Media> {
@@ -402,15 +408,27 @@ export class MediaImportService {
         dto.languageProfileId,
       );
 
+    const nfo = dto.nfo;
+    // The caller already falls back to the folder name when it has no guessed
+    // title; only let the NFO title win over that guess, never over a real one.
+    const title =
+      (!dto.title || dto.title === dto.folderName) && nfo?.title
+        ? nfo.title
+        : dto.title;
+
     const row = this.mediaRepo.create({
-      title: dto.title,
-      originalTitle: dto.title,
-      year: dto.year ?? undefined,
+      title,
+      originalTitle: nfo?.originalTitle || title,
+      year: dto.year ?? nfo?.year ?? undefined,
       type: dto.type,
       status: MediaStatus.RELEASED,
       monitored: false,
       alternativeTitles: [],
-      genres: [],
+      overview: nfo?.plot,
+      genres: nfo?.genres ?? [],
+      runtime: nfo?.runtime,
+      rating: nfo?.rating,
+      releaseDate: nfo?.premiered,
       library: { id: dto.libraryId } as Library,
       folderName: dto.folderName,
       ...(qualityProfileId != null
@@ -423,6 +441,7 @@ export class MediaImportService {
     });
     const saved = await this.mediaRepo.save(row);
     await this.metadata.updateSearchVector(saved.id);
+    await this.storeLocalArtwork(saved.id, dto.artwork);
     this.events.emitDomain({
       type: 'media.imported',
       mediaId: saved.id,
@@ -433,11 +452,46 @@ export class MediaImportService {
     });
     const year = dto.year ? ` (${dto.year})` : '';
     this.log.log(
-      `Library: added unidentified ${dto.type} "${dto.title}"${year}, id=${saved.id}`,
+      `Library: added unidentified ${dto.type} "${title}"${year}, id=${saved.id}`,
     );
     const reloaded = await this.mediaRepo.findOne({ where: { id: saved.id } });
     if (!reloaded) throw new Error(`Media #${saved.id} not found after save`);
     return reloaded;
+  }
+
+  /** Best-effort: a bad or unreadable sibling image never fails the import. */
+  private async storeLocalArtwork(
+    mediaId: number,
+    artwork?: { poster?: string; fanart?: string; logo?: string },
+  ): Promise<void> {
+    if (!artwork) return;
+    const slots: [MediaImageVariant, string | undefined, keyof Media][] = [
+      ['poster', artwork.poster, 'posterUrl'],
+      ['fanart', artwork.fanart, 'fanartUrl'],
+      ['logo', artwork.logo, 'logoUrl'],
+    ];
+    const updates: Partial<Media> = {};
+    for (const [variant, absPath, field] of slots) {
+      if (!absPath) continue;
+      try {
+        const url = await this.imageService.storeFromDisk(
+          absPath,
+          'media',
+          mediaId,
+          variant,
+        );
+        if (url) (updates as Record<string, string>)[field] = url;
+      } catch (e) {
+        this.log.warn(
+          `media #${mediaId}: failed to store local ${variant}: ${
+            e instanceof Error ? e.message : e
+          }`,
+        );
+      }
+    }
+    if (Object.keys(updates).length) {
+      await this.mediaRepo.update(mediaId, updates);
+    }
   }
 
   async create(dto: CreateMediaDto): Promise<Media> {

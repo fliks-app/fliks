@@ -1,5 +1,5 @@
 import { MediaType } from '../../../common/enums';
-import { NfoIds } from '../nfo-metadata.service';
+import { NfoData } from '../nfo-metadata.service';
 
 /** One orphan video file found under a library root, with cheap hints. */
 export interface OrphanFileEntry {
@@ -24,7 +24,7 @@ export interface OrphanGroup {
   folderName: string;
   guessTitle: string | null;
   guessYear: number | null;
-  nfo: NfoIds | null;
+  nfo: NfoData | null;
   suggestedProvider: string;
   files: OrphanFileEntry[];
 }

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, promises as fsp } from 'fs';
+import { mkdtempSync, rmSync, promises as fsp, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, extname } from 'path';
 import { createHash } from 'crypto';
@@ -115,5 +115,70 @@ describe('ImageService.downloadAndStore caching', () => {
     const hash = createHash('sha1').update(bytesOnDisk).digest('hex').slice(0, 8);
     expect(meta.hash).toBe(hash);
     expect([urlA, urlB]).toContain(meta.url);
+  });
+});
+
+describe('ImageService.storeFromDisk', () => {
+  let dir: string;
+  let srcDir: string;
+  let service: ImageService;
+  let fixturePath: string;
+
+  beforeAll(async () => {
+    dir = mkdtempSync(join(tmpdir(), 'fliks-image-disk-test-'));
+    srcDir = mkdtempSync(join(tmpdir(), 'fliks-image-disk-src-'));
+    process.env.FLIKS_DATA_DIR = dir;
+    service = new ImageService();
+
+    const fixture = await sharp({
+      create: { width: 10, height: 10, channels: 3, background: { r: 0, g: 255, b: 0 } },
+    })
+      .jpeg()
+      .toBuffer();
+    fixturePath = join(srcDir, 'poster.jpg');
+    writeFileSync(fixturePath, fixture);
+  });
+
+  afterAll(() => {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(srcDir, { recursive: true, force: true });
+  });
+
+  it('writes the full image, its resized variants and the sidecar', async () => {
+    const result = await service.storeFromDisk(fixturePath, 'media', 10, 'poster');
+    expect(result).toMatch(/^\/api\/images\/media\/10\/poster\?v=[0-9a-f]{8}$/);
+
+    await fsp.access(service.getDiskPath('media', 10, 'poster', 'full'));
+    await fsp.access(service.getDiskPath('media', 10, 'poster', 'thumb'));
+    await fsp.access(service.getDiskPath('media', 10, 'poster', 'medium'));
+  });
+
+  it('is a cache hit on a second call with an unchanged file', async () => {
+    const spy = jest.spyOn(sharp.prototype as never, 'toBuffer' as never);
+    const first = await service.storeFromDisk(fixturePath, 'media', 11, 'poster');
+    spy.mockClear();
+    const second = await service.storeFromDisk(fixturePath, 'media', 11, 'poster');
+
+    expect(second).toBe(first);
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it('returns null for a path that cannot be read', async () => {
+    const result = await service.storeFromDisk(
+      join(srcDir, 'missing.jpg'),
+      'media',
+      12,
+      'poster',
+    );
+    expect(result).toBeNull();
+  });
+
+  it('returns null for a file sharp cannot decode as an image', async () => {
+    const badPath = join(srcDir, 'not-an-image.jpg');
+    writeFileSync(badPath, 'this is not image bytes');
+
+    const result = await service.storeFromDisk(badPath, 'media', 13, 'poster');
+    expect(result).toBeNull();
   });
 });

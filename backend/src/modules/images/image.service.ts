@@ -46,10 +46,8 @@ export type ImageType =
   | 'season'
   | 'request'
   | 'user';
-/** Variant of a media image. `fanart-${N}` (N≥1) addresses the extra
- *  fanarts kept for randomised page backgrounds — they share `fanart`'s
- *  size pipeline (thumb / medium / full) so frontends can request any
- *  size without an extra round-trip to the source provider. */
+/** Variant of a media image. `fanart-${N}` (N>=1) addresses the extra
+ *  fanarts kept for randomised page backgrounds, sharing `fanart`'s size pipeline. */
 export type MediaImageVariant =
   | 'poster'
   | 'fanart'
@@ -158,12 +156,7 @@ export class ImageService {
 
     const fullDest = this.getDiskPath(type, id, variant, 'full');
     const srcPath = this.getSrcPath(type, id, variant);
-    const targets = (Object.entries(sizes) as [ImageSize, string][])
-      .map(([size, token]) => ({ size, width: sizeTokenWidth(token) }))
-      .filter(
-        (t): t is { size: ImageSize; width: number } =>
-          t.size !== 'full' && t.width != null,
-      );
+    const targets = this.sizeTargets(sizes);
 
     const cached = await this.readCacheHit(
       remoteUrl,
@@ -178,8 +171,6 @@ export class ImageService {
 
     const release = await downloadSemaphore.acquire();
     try {
-      await fs.promises.mkdir(path.dirname(fullDest), { recursive: true });
-
       let buffer: Buffer;
       try {
         const fullUrl =
@@ -191,48 +182,156 @@ export class ImageService {
           timeout: 15000,
         });
         buffer = Buffer.from(res.data);
-        await this.writeFileAtomic(fullDest, buffer);
       } catch (err) {
         this.logger.warn(`Failed to download image ${remoteUrl}: ${err.message}`);
         return null;
       }
+      return await this.storeBuffer(buffer, type, id, variant, remoteUrl);
+    } finally {
+      release();
+    }
+  }
 
-      // Derive the smaller variants by resizing the downloaded full locally, so
-      // every provider yields the full size pipeline, not just TMDB, whose CDN
-      // exposes per-size URLs. Best-effort per variant: the full is already saved.
-      const asPng = variant === 'logo';
-      await Promise.all(
-        targets.map(async ({ size, width }) => {
-          try {
-            const resized = sharp(buffer).resize({
-              width,
-              withoutEnlargement: true,
-            });
-            const out = await (
-              asPng ? resized.png() : resized.jpeg({ quality: 90 })
-            ).toBuffer();
-            await this.writeFileAtomic(
-              this.getDiskPath(type, id, variant, size),
-              out,
-            );
-          } catch (err) {
-            this.logger.warn(
-              `Failed to resize ${size} variant for ${type}/${id}: ${err.message}`,
-            );
-          }
-        }),
+  /** Width targets to resize the full image down to, keyed by our logical size. */
+  private sizeTargets(
+    sizes: Partial<Record<ImageSize, string>>,
+  ): { size: ImageSize; width: number }[] {
+    return (Object.entries(sizes) as [ImageSize, string][])
+      .map(([size, token]) => ({ size, width: sizeTokenWidth(token) }))
+      .filter(
+        (t): t is { size: ImageSize; width: number } =>
+          t.size !== 'full' && t.width != null,
       );
+  }
 
-      // The path is stable across re-downloads, so a client that cached the old
-      // bytes for `max-age` would keep showing them after a re-identification.
-      // Stamping the content makes the URL move exactly when the image does.
-      const hash = createHash('sha1').update(buffer).digest('hex').slice(0, 8);
-      // Holds the hash so a later cache hit returns the same `?v=` without the bytes.
-      await this.writeFileAtomic(
-        srcPath,
-        JSON.stringify({ url: remoteUrl, hash }),
-      );
-      return `${this.getApiPath(type, id, variant)}?v=${hash}`;
+  /** Write the full image, its resized variants and the cache sidecar for (type, id,
+   *  variant); returns the local API path. `sourceKey` is the remote URL or, from
+   *  {@link storeFromDisk}, the source file's path + mtime. */
+  private async storeBuffer(
+    buffer: Buffer,
+    type: ImageType,
+    id: number | string,
+    variant: MediaImageVariant | undefined,
+    sourceKey: string,
+  ): Promise<string | null> {
+    const sizes = TMDB_SIZE_MAP[sizeMapKey(type, variant)] ?? {
+      full: 'original',
+    };
+    const targets = this.sizeTargets(sizes);
+    const fullDest = this.getDiskPath(type, id, variant, 'full');
+    const srcPath = this.getSrcPath(type, id, variant);
+
+    try {
+      await fs.promises.mkdir(path.dirname(fullDest), { recursive: true });
+      await this.writeFileAtomic(fullDest, buffer);
+    } catch (err) {
+      this.logger.warn(`Failed to write image ${type}/${id}: ${err.message}`);
+      return null;
+    }
+
+    // Derive the smaller variants by resizing the full locally, so every
+    // source yields the full size pipeline. Best-effort per variant: the
+    // full is already saved.
+    const asPng = variant === 'logo';
+    await Promise.all(
+      targets.map(async ({ size, width }) => {
+        try {
+          const resized = sharp(buffer).resize({
+            width,
+            withoutEnlargement: true,
+          });
+          const out = await (
+            asPng ? resized.png() : resized.jpeg({ quality: 90 })
+          ).toBuffer();
+          await this.writeFileAtomic(
+            this.getDiskPath(type, id, variant, size),
+            out,
+          );
+        } catch (err) {
+          this.logger.warn(
+            `Failed to resize ${size} variant for ${type}/${id}: ${err.message}`,
+          );
+        }
+      }),
+    );
+
+    // The path is stable across re-stores, so a client that cached the old
+    // bytes for `max-age` would keep showing them after a re-identification.
+    // Stamping the content makes the URL move exactly when the image does.
+    const hash = createHash('sha1').update(buffer).digest('hex').slice(0, 8);
+    // Holds the hash so a later cache hit returns the same `?v=` without the bytes.
+    await this.writeFileAtomic(
+      srcPath,
+      JSON.stringify({ url: sourceKey, hash }),
+    );
+    return `${this.getApiPath(type, id, variant)}?v=${hash}`;
+  }
+
+  /** Store an image already on disk (sibling artwork) instead of downloading it.
+   *  Returns null (with a `warn`) when the file can't be read or decoded. */
+  async storeFromDisk(
+    absPath: string,
+    type: ImageType,
+    id: number | string,
+    variant?: MediaImageVariant,
+  ): Promise<string | null> {
+    const key = `${type}/${id}/${variant ?? 'default'}`;
+    const existing = this.inflight.get(key);
+    if (existing) return existing;
+    const promise = this.doStoreFromDisk(absPath, type, id, variant).finally(
+      () => {
+        if (this.inflight.get(key) === promise) this.inflight.delete(key);
+      },
+    );
+    this.inflight.set(key, promise);
+    return promise;
+  }
+
+  private async doStoreFromDisk(
+    absPath: string,
+    type: ImageType,
+    id: number | string,
+    variant?: MediaImageVariant,
+  ): Promise<string | null> {
+    let stat: fs.Stats;
+    try {
+      stat = await fs.promises.stat(absPath);
+    } catch (err) {
+      this.logger.warn(`Failed to read local artwork ${absPath}: ${err.message}`);
+      return null;
+    }
+    const sourceKey = `file://${absPath}@${stat.mtimeMs}`;
+
+    const sizes = TMDB_SIZE_MAP[sizeMapKey(type, variant)] ?? {
+      full: 'original',
+    };
+    const cached = await this.readCacheHit(
+      sourceKey,
+      this.getSrcPath(type, id, variant),
+      this.getDiskPath(type, id, variant, 'full'),
+      this.sizeTargets(sizes),
+      type,
+      id,
+      variant,
+    );
+    if (cached) return cached;
+
+    const release = await downloadSemaphore.acquire();
+    try {
+      let buffer: Buffer;
+      try {
+        buffer = await fs.promises.readFile(absPath);
+      } catch (err) {
+        this.logger.warn(`Failed to read local artwork ${absPath}: ${err.message}`);
+        return null;
+      }
+      try {
+        await sharp(buffer).metadata();
+      } catch (err) {
+        this.logger.warn(`Local artwork is not a decodable image ${absPath}: ${err.message}`);
+        return null;
+      }
+      return await this.storeBuffer(buffer, type, id, variant, sourceKey);
     } finally {
       release();
     }
