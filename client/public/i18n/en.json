@@ -1988,7 +1988,8 @@
       "scan_unmatched_badge": "No metadata",
       "scan_unmatched_option": "No match: add as is",
       "scan_reorganize_needs_match": "Move/rename only applies to identified titles",
-      "scan_queued_unmatched": "{{count}} title(s) added without metadata, identify them from the Media tab"
+      "scan_queued_unmatched": "{{count}} title(s) added without metadata, identify them from the Media tab",
+      "scan_search_failed_count": "{{count}} folder(s) not scanned (search failed), relaunch the scan from the Media tab"
     },
     "users": {
       "title": "Users",

@@ -1971,7 +1971,8 @@
       "scan_unmatched_badge": "Sem metadados",
       "scan_unmatched_option": "Sem correspondência: adicionar tal como está",
       "scan_reorganize_needs_match": "Mover/renomear aplica-se apenas a títulos identificados",
-      "scan_queued_unmatched": "{{count}} título(s) adicionado(s) sem metadados, identifique-os no separador Media"
+      "scan_queued_unmatched": "{{count}} título(s) adicionado(s) sem metadados, identifique-os no separador Media",
+      "scan_search_failed_count": "{{count}} pasta(s) não analisada(s) (pesquisa falhou), reinicie a análise no separador Media"
     },
     "users": {
       "title": "Utilizadores",

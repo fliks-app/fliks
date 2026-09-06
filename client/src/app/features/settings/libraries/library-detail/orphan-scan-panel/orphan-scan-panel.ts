@@ -197,32 +197,44 @@ export class OrphanScanPanelComponent {
     );
   }
 
-  /**
-   * Queue every detected group for import into a library that now exists.
-   * A group the admin left untouched takes the provider's first result; a
-   * group with no pick (no match, or explicitly deselected) is added unmatched.
-   * Returns once the batch is queued: the server imports in the background.
-   */
-  async importAll(libraryId: number): Promise<{ queued: number; unmatched: number }> {
-    const pending = this.groups()
-      .map((g, i) => (g.done ? -1 : i))
-      .filter((i) => i >= 0);
-    const unsearched = pending.filter((i) => !this.groups()[i].searched);
+  /** Search every listed group not yet searched, capped at SEARCH_CONCURRENCY concurrent requests. */
+  private async searchBatched(indices: number[]) {
+    const unsearched = indices.filter((i) => !this.groups()[i].searched);
     for (let s = 0; s < unsearched.length; s += SEARCH_CONCURRENCY) {
       await Promise.all(
         unsearched.slice(s, s + SEARCH_CONCURRENCY).map((i) => this.search(i)),
       );
     }
+  }
+
+  /**
+   * Queue every detected group for import into a library that now exists.
+   * A group the admin left untouched takes the provider's first result; a
+   * group with no pick (no match, or explicitly deselected) is added unmatched.
+   * A group whose search errored is left alone (still visible with its alert)
+   * rather than queued unmatched. Returns once the batch is queued: the
+   * server imports in the background.
+   */
+  async importAll(libraryId: number): Promise<{ queued: number; unmatched: number; failed: number }> {
+    const pending = this.groups()
+      .map((g, i) => (g.done ? -1 : i))
+      .filter((i) => i >= 0);
+    await this.searchBatched(pending);
 
     const items: RelinkOrphansBody[] = [];
     let unmatched = 0;
+    let failed = 0;
     for (const i of pending) {
       const vm = this.groups()[i];
+      if (vm.error) {
+        failed++;
+        continue;
+      }
       items.push(this.relinkBody(libraryId, vm, vm.pick));
       if (!vm.pick) unmatched++;
     }
     if (items.length) await this.importsApi.relinkOrphansBatch(items);
-    return { queued: items.length, unmatched };
+    return { queued: items.length, unmatched, failed };
   }
 
   private relinkBody(
@@ -372,7 +384,9 @@ export class OrphanScanPanelComponent {
       .map((g, i) => ({ g, i }))
       .filter(({ g }) => !g.done && !g.linking)
       .map(({ i }) => i);
+    await this.searchBatched(indices);
     for (const i of indices) {
+      if (this.groups()[i].error) continue;
       await this.link(i);
     }
   }
@@ -397,6 +411,7 @@ export class OrphanScanPanelComponent {
     const vm = this.groups()[index];
     if (vm.done || vm.linking) return;
     if (!vm.searched) await this.search(index);
+    if (this.groups()[index].error) return;
     // No provider match: still add it, unmatched, rather than leave it behind.
     const best = this.bestMatch(this.groups()[index]);
     this.patch(index, { pick: best });

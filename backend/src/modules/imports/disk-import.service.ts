@@ -546,7 +546,7 @@ export class DiskImportService {
     }
 
     // Backfill metadata for any season/episode slot invented while linking.
-    // An unmatched media has no provider id to refresh from — it would just throw.
+    // An unmatched media has no provider id to refresh from, it would just throw.
     if (media.type === MediaType.SERIES && slotCreated && hasProviderId(media)) {
       try {
         await this.metadata.refreshSeriesEpisodes(media);
@@ -563,7 +563,7 @@ export class DiskImportService {
     return { mediaId: media.id, created, linked, errors };
   }
 
-  /** Today's identified path: reuse the media already holding this external id, or import it. */
+  /** Reuse the media holding this external id, or import it. */
   private async findOrImportIdentified(
     dto: RelinkOrphansDto,
     addedByUserId: number | null,
@@ -616,9 +616,8 @@ export class DiskImportService {
   }
 
   /**
-   * No external id: reuse the unmatched media already pinned to this folder
-   * (a second scan of the same title), or create one from the guessed/corrected
-   * title. Natural key is (library, type, folderName) so two scans converge.
+   * No external id: reuse the media already pinned to this folder, or create one from the
+   * guessed/corrected title. Natural key is (library, type, folderName).
    */
   private async findOrCreateUnmatched(
     dto: RelinkOrphansDto,

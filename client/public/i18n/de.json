@@ -1971,7 +1971,8 @@
       "scan_unmatched_badge": "Keine Metadaten",
       "scan_unmatched_option": "Keine Übereinstimmung: unverändert hinzufügen",
       "scan_reorganize_needs_match": "Verschieben/Umbenennen gilt nur für identifizierte Titel",
-      "scan_queued_unmatched": "{{count}} Titel ohne Metadaten hinzugefügt, identifizieren Sie sie im Tab Medien"
+      "scan_queued_unmatched": "{{count}} Titel ohne Metadaten hinzugefügt, identifizieren Sie sie im Tab Medien",
+      "scan_search_failed_count": "{{count}} Ordner nicht analysiert (Suche fehlgeschlagen), starten Sie den Scan im Tab Medien erneut"
     },
     "users": {
       "title": "Benutzer",

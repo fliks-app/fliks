@@ -1971,7 +1971,8 @@
       "scan_unmatched_badge": "Senza metadati",
       "scan_unmatched_option": "Nessuna corrispondenza: aggiungi così com'è",
       "scan_reorganize_needs_match": "Sposta/rinomina si applica solo ai titoli identificati",
-      "scan_queued_unmatched": "{{count}} titolo/i aggiunto/i senza metadati, identificali dalla scheda Media"
+      "scan_queued_unmatched": "{{count}} titolo/i aggiunto/i senza metadati, identificali dalla scheda Media",
+      "scan_search_failed_count": "{{count}} cartella/e non analizzata/e (ricerca fallita), rilancia la scansione dalla scheda Media"
     },
     "users": {
       "title": "Utenti",

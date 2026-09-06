@@ -1988,7 +1988,8 @@
       "scan_unmatched_badge": "Sans métadonnées",
       "scan_unmatched_option": "Aucune correspondance : ajouter tel quel",
       "scan_reorganize_needs_match": "Le déplacement/renommage ne s'applique qu'aux titres identifiés",
-      "scan_queued_unmatched": "{{count}} titre(s) ajouté(s) sans métadonnées, identifiez-les depuis l'onglet Médias"
+      "scan_queued_unmatched": "{{count}} titre(s) ajouté(s) sans métadonnées, identifiez-les depuis l'onglet Médias",
+      "scan_search_failed_count": "{{count}} dossier(s) non analysé(s) (recherche en erreur), relancez l'analyse depuis l'onglet Médias"
     },
     "users": {
       "title": "Utilisateurs",

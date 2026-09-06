@@ -378,9 +378,8 @@ export class MediaImportService {
   }
 
   /**
-   * Create a title no metadata provider matched, straight from the orphan scan's
-   * guessed (or admin-corrected) title. No provider call, no images, no cast:
-   * an Identify later fills those in and this row is only a placeholder until then.
+   * Create a title no metadata provider matched, straight from the orphan scan's guessed title.
+   * No provider call, no images, no cast: an Identify later fills those in.
    */
   async createUnmatched(
     dto: {

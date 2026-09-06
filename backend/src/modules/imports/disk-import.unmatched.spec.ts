@@ -63,7 +63,7 @@ const unmatchedRow = (id: number, folderName: string, type = MediaType.MOVIE) =>
   imdbId: null,
 });
 
-describe('DiskImportService.relinkOrphans — creating an unmatched title', () => {
+describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
   it('creates an unmatched media from the guessed title and links the files in place', async () => {
     const { service, mediaRepo, mediaService } = makeService();
     mediaRepo.findOne

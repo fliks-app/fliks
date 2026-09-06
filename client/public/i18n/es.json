@@ -1971,7 +1971,8 @@
       "scan_unmatched_badge": "Sin metadatos",
       "scan_unmatched_option": "Sin coincidencia: añadir tal cual",
       "scan_reorganize_needs_match": "Mover/renombrar solo se aplica a títulos identificados",
-      "scan_queued_unmatched": "{{count}} título(s) añadido(s) sin metadatos, identifíquelos desde la pestaña Medios"
+      "scan_queued_unmatched": "{{count}} título(s) añadido(s) sin metadatos, identifíquelos desde la pestaña Medios",
+      "scan_search_failed_count": "{{count}} carpeta(s) no analizada(s) (búsqueda fallida), vuelva a lanzar el análisis desde la pestaña Medios"
     },
     "users": {
       "title": "Usuarios",
