@@ -2,8 +2,10 @@ import {
   Component,
   ChangeDetectionStrategy,
   computed,
+  effect,
   inject,
   signal,
+  untracked,
   viewChild,
   OnInit,
 } from '@angular/core';
@@ -15,6 +17,7 @@ import { PaginationComponent } from '../../../../shared/components/pagination/pa
 import { ResolveUrlPipe } from '../../../../core/pipes/resolve-url.pipe';
 import { MediaService, Media } from '../../../../core/services/api/media.service';
 import { FolderPickerService } from '../../../../core/services/folder-picker.service';
+import { SseService } from '../../../../core/services/sse.service';
 import { LibraryDetailState } from './library-detail.state';
 import { OrphanScanModalComponent } from './orphan-scan-modal/orphan-scan-modal';
 
@@ -37,6 +40,7 @@ const PAGE_SIZE = 30;
 export class LibraryMediaComponent implements OnInit {
   private readonly mediaService = inject(MediaService);
   private readonly folderPicker = inject(FolderPickerService);
+  private readonly sse = inject(SseService);
   readonly state = inject(LibraryDetailState);
 
   private readonly scanModal = viewChild<OrphanScanModalComponent>('scanModal');
@@ -52,14 +56,28 @@ export class LibraryMediaComponent implements OnInit {
 
   readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / PAGE_SIZE)));
 
+  private readonly importStep = computed(
+    () => this.sse.activeProgress().get('OrphanImport')?.current ?? -1,
+  );
+
+  constructor() {
+    // Rows land while the wizard's background import runs: refresh on each group.
+    let last = this.importStep();
+    effect(() => {
+      const step = this.importStep();
+      if (step !== last) untracked(() => void this.load(true));
+      last = step;
+    });
+  }
+
   ngOnInit() {
     void this.load();
   }
 
-  async load() {
+  async load(silent = false) {
     const libraryId = this.state.libraryId();
     if (!libraryId) return;
-    this.loading.set(true);
+    if (!silent) this.loading.set(true);
     this.loadError.set(false);
     try {
       const res = await this.mediaService.getAll({

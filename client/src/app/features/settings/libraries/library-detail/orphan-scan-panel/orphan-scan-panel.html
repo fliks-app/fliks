@@ -20,13 +20,8 @@
 @if (started()) {
   @if (!scanning() && !scanError()) {
     <p class="text-sm text-base-content/60">
-      {{ 'settings.libraries.scan_orphan_count' | translate: { count: orphanCount() } }}
-    </p>
-  }
-
-  @if (importTotal() > 0) {
-    <p class="text-sm text-base-content/60">
-      {{ 'settings.libraries.scan_preparing' | translate: { done: imported(), total: importTotal() } }}
+      {{ (deferLink() ? 'settings.libraries.scan_found_count' : 'settings.libraries.scan_orphan_count')
+        | translate: { count: orphanCount() } }}
     </p>
   }
 
@@ -45,7 +40,9 @@
     } @else if (scanError()) {
       <div role="alert" class="alert alert-error">{{ scanError() }}</div>
     } @else if (groups().length === 0) {
-      <p class="text-center py-10 text-base-content/50">{{ 'settings.libraries.scan_no_orphans' | translate }}</p>
+      <p class="text-center py-10 text-base-content/50">
+        {{ (deferLink() ? 'settings.libraries.scan_no_files' : 'settings.libraries.scan_no_orphans') | translate }}
+      </p>
     } @else {
       <div class="flex flex-col gap-3">
         @for (item of pagedGroups(); track item.vm.group.groupKey) {

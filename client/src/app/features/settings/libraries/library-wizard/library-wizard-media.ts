@@ -23,7 +23,7 @@ export class LibraryWizardMediaComponent {
   private readonly folderPicker = inject(FolderPickerService);
   readonly state = inject(LibraryDetailState);
 
-  private readonly panel = viewChild<OrphanScanPanelComponent>('panel');
+  readonly scanPanel = viewChild<OrphanScanPanelComponent>('panel');
 
   private readonly scannedPath = signal('');
 
@@ -40,7 +40,7 @@ export class LibraryWizardMediaComponent {
   async scan() {
     const path = this.state.formPath().trim();
     if (!path) return;
-    await this.panel()?.scanPath(
+    await this.scanPanel()?.scanPath(
       path,
       this.state.mediaTypes() as MediaType[],
       this.state.formProvider(),
@@ -49,7 +49,7 @@ export class LibraryWizardMediaComponent {
   }
 
   /** Import every detected media into the library once it exists. */
-  async importAll(libraryId: number): Promise<number> {
-    return (await this.panel()?.importAll(libraryId)) ?? 0;
+  async importAll(libraryId: number): Promise<{ queued: number; skipped: number }> {
+    return (await this.scanPanel()?.importAll(libraryId)) ?? { queued: 0, skipped: 0 };
   }
 }
