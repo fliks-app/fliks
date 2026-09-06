@@ -1148,6 +1148,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // (instead of waiting for master.m3u8), overlapping encoder init with
       // the ~100–300ms gap before the player fetches the playlist.
       const deviceProfile = this.deviceProfileService.getProfile();
+      // The service is app-scoped: without this the request would carry the
+      // previous media's rung instead of the user's saved one.
+      this.qualityManager.restorePreference();
       const prewarmQuality = this.resolveStartQuality();
       const prewarmStartAt = resumeTime;
       const playbackInfoPromise = this.isOfflinePlayback
@@ -1280,9 +1283,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         }
         this.state.hwAccel.set(pi.hwAccel);
 
-        // Build quality options and apply saved preference BEFORE load
+        // Options + the rung the backend locked in, BEFORE load
         this.qualityManager.buildQualityOptions(pi);
-        this.qualityManager.applySavedPreference();
+        this.qualityManager.adoptNegotiatedQuality(pi.quality);
 
         const mode = this.playbackMode();
 
@@ -2615,6 +2618,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       );
       this.state.hwAccel.set(pi.hwAccel);
       this.qualityManager.buildQualityOptions(pi);
+      this.qualityManager.adoptNegotiatedQuality(pi.quality);
 
       const { url, mimeType } = this.buildPlayUrl({ startTime });
       await this.engine.load(url, startTime, mimeType);
@@ -4559,6 +4563,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       }
       this.state.hwAccel.set(pi.hwAccel);
       this.qualityManager.buildQualityOptions(pi);
+      this.qualityManager.adoptNegotiatedQuality(pi.quality);
 
       const mode = this.playbackMode();
       // Refresh the near-expiry stream token before rebuilding the play URL:

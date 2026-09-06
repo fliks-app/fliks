@@ -14,6 +14,7 @@ export {
   parseBitrateToBps,
   profileFitsSource,
   profileResolution,
+  resolveLadderRung,
   resolveSourceVideoBitrateBps,
 } from './profiles';
 export { cappedRungVideoBitrateBps } from './quality-ladder';

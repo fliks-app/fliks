@@ -52,6 +52,9 @@ export interface PlaybackInfoResponse {
   /** BANDWIDTH of the remux variant (DirectStream HLS); server and manifest
    *  carry the same value. */
   remuxMasterBandwidthBps?: number;
+  /** Rung the session locked in, as one of the `qualities` ids. Optional: an
+   *  older backend doesn't send it, and the selector then keeps its own id. */
+  quality?: string;
   /** Server-authoritative quality list (device-aware ladder + Original rule). */
   qualities?: {
     id: string;

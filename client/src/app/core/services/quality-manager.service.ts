@@ -117,49 +117,24 @@ export class QualityManagerService {
     return highestRungId(this.availableQualities());
   }
 
-  /** Default quality id for the current visible list: `auto` when present,
-   *  else the first (top) visible rung. */
-  private defaultQualityId(): string {
-    const opts = this.availableQualities();
-    return opts.some((q) => q.id === 'auto') ? 'auto' : (opts[0]?.id ?? 'auto');
+  /**
+   * Restore the persisted rung BEFORE negotiating playback, so the id we send
+   * is the id the session is created with. Applied verbatim: the backend owns
+   * the ladder and resolves a rung minted on another one
+   * (`eco-1080p` → `eco-1080p-hdr`), which no client-side guess can do.
+   */
+  restorePreference(): void {
+    this.activeQualityId.set(this.readFromStorage() ?? 'auto');
   }
 
   /**
-   * Read persisted quality preference from localStorage and apply it if valid.
-   * IDs differ across media (`'original'` for the source-rung remux/DirectPlay
-   * vs `'1080p'` for a transcode rung) — when an exact id match fails, fall
-   * back to height matching so a "1080p" saved on one show maps cleanly to
-   * the equivalent rung on another (which may carry a different id).
+   * Adopt the rung the backend reports for the session just negotiated. The
+   * selector then always names what is actually served — a request the backend
+   * could not honour never lingers as a phantom active rung, which used to
+   * swallow the next click on the rung it claimed to be on.
    */
-  applySavedPreference(): void {
-    const saved = this.readFromStorage();
-    if (!saved) {
-      this.activeQualityId.set(this.defaultQualityId());
-      return;
-    }
-    const opts = this.availableQualities();
-    const direct = opts.find((q) => q.id === saved.id);
-    if (direct) {
-      this.activeQualityId.set(direct.id);
-      return;
-    }
-    if (saved.height > 0) {
-      const exactHeight = opts.find((q) => q.height === saved.height);
-      if (exactHeight) {
-        this.activeQualityId.set(exactHeight.id);
-        return;
-      }
-      // No exact-height match — pick the largest rung still ≤ saved height
-      // (don't auto-upgrade beyond the user's intent).
-      const below = opts
-        .filter((q) => q.height > 0 && q.height <= saved.height)
-        .sort((a, b) => b.height - a.height);
-      if (below.length) {
-        this.activeQualityId.set(below[0].id);
-        return;
-      }
-    }
-    this.activeQualityId.set(this.defaultQualityId());
+  adoptNegotiatedQuality(id: string | undefined): void {
+    if (id) this.activeQualityId.set(id);
   }
 
   /**
@@ -278,7 +253,8 @@ export class QualityManagerService {
   }
 
   /**
-   * After buildQualityOptions + applySavedPreference: restore last choice with force=true.
+   * After buildQualityOptions + adoptNegotiatedQuality: re-apply the active
+   * rung to the engine with force=true.
    */
   applyQualityPreferenceAfterLoad(
     engine: PlaybackEngine | null,
@@ -291,16 +267,13 @@ export class QualityManagerService {
     this.selectQuality(option, engine, playbackMode, true);
   }
 
-  /**
-   * Persist quality preference to localStorage. Stores both id and height
-   * so a follow-up media with different id naming (e.g. `'original'` instead
-   * of `'1080p'` for the same resolution) can still match by height.
-   */
+  /** Persist the chosen rung id. Re-sent on the next negotiation, where the
+   *  backend maps it onto the ladder it serves. */
   persistPreference(option: QualityOption): void {
     try {
       localStorage.setItem(
         PLAYER_QUALITY_STORAGE_KEY,
-        JSON.stringify({ id: option.id, height: option.height }),
+        JSON.stringify({ id: option.id }),
       );
     } catch {
       /* private mode / quota */
@@ -335,13 +308,12 @@ export class QualityManagerService {
 
   // ── Private helpers ──
 
-  private readFromStorage(): { id: string; height: number } | null {
+  private readFromStorage(): string | null {
     try {
       const raw = localStorage.getItem(PLAYER_QUALITY_STORAGE_KEY);
       if (!raw) return null;
-      const parsed = JSON.parse(raw) as { id?: string; height?: number };
-      if (typeof parsed.id !== 'string') return null;
-      return { id: parsed.id, height: parsed.height ?? 0 };
+      const parsed = JSON.parse(raw) as { id?: string };
+      return typeof parsed.id === 'string' ? parsed.id : null;
     } catch {
       return null;
     }

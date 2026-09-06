@@ -15,6 +15,7 @@ import {
   getHdrLadderForDevice,
   getLadderForDevice,
   isEcoProfile,
+  resolveLadderRung,
   parseBitrateToBps,
   profileFitsSource,
   resolveSourceVideoBitrateBps,
@@ -342,7 +343,11 @@ export class StreamBuilderService {
     // to the ladder.
     const explicitRung = wantsSourceRung
       ? undefined
-      : qualityLadder.find((p) => p.name === requestedQuality);
+      : resolveLadderRung(requestedQuality as string, qualityLadder);
+    // Rung this session locks in, in `qualities` ids. The client mirrors its
+    // selector on it instead of re-deriving one from the stored preference,
+    // which cannot see which ladder the backend ended up on.
+    const negotiatedQuality = explicitRung?.name ?? 'auto';
     const explicitDownscale =
       !!explicitRung &&
       (bucketResolutionHeight(explicitRung.maxWidth, explicitRung.maxHeight) <
@@ -414,6 +419,7 @@ export class StreamBuilderService {
         outputAudioCodec: sourceAudioCodec,
         audioPlan: { mode: 'copy', codec: sourceAudioCodec },
         outputContainer: sourceContainer,
+        quality: 'original',
         hwAccel: 'none',
         tonemapping: false,
         clientTonemap,
@@ -507,6 +513,7 @@ export class StreamBuilderService {
               bitrateBps: parseBitrateToBps(ladder[0]?.audioBitrate ?? '192k'),
             },
         outputContainer: 'hls',
+        quality: 'original',
         // Report the backend's detected hwAccel even on the remux path:
         // the stats overlay binds this to the active *quality* (remux →
         // "Direct playback" / transcode rung → "Transcoding (<HW>)"). A
@@ -645,6 +652,7 @@ export class StreamBuilderService {
             bitrateBps: outputAudioBitrateBps,
           },
       outputContainer: 'hls',
+      quality: negotiatedQuality,
       hwAccel: effectiveHwAccel,
       tonemapping: transcodeTonemaps,
       clientTonemap,

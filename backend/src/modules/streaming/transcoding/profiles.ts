@@ -219,6 +219,28 @@ export function isEcoProfile(name: string): boolean {
   return name.startsWith('eco-');
 }
 
+/** Resolve a requested rung name against a ladder. A name minted on another
+ *  ladder (`eco-1080p` where this one carries `eco-1080p-hdr`) resolves to the
+ *  nearest rung of the same class — full vs `eco-` — that doesn't step UP, so
+ *  honouring a stale id never raises the bitrate the user asked to cut. */
+export function resolveLadderRung(
+  name: string,
+  ladder: TranscodeProfile[],
+): TranscodeProfile | undefined {
+  const exact = ladder.find((p) => p.name === name);
+  if (exact) return exact;
+  const tier = Number(/(\d+)p/.exec(name)?.[1] ?? 0);
+  if (!tier) return undefined;
+  const eco = isEcoProfile(name);
+  const sameClass = ladder
+    .filter((p) => isEcoProfile(p.name) === eco)
+    .sort((a, b) => b.maxHeight - a.maxHeight);
+  return (
+    sameClass.find((p) => p.maxHeight <= tier) ??
+    sameClass[sameClass.length - 1]
+  );
+}
+
 /** Unified ladder for every device: the full-quality rungs plus the
  *  low-consumption `eco-*` rungs. Desktop and mobile expose the same menu;
  *  data-conscious clients pick an eco rung (or default to it via the player
