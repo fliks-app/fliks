@@ -1,5 +1,153 @@
 # Changelog
 
+## [4.0.0](https://github.com/fliks-app/fliks/compare/v3.7.0...v4.0.0) (2026-09-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* **media:** Fliks no longer deletes the `.cache/` directories left in your library folders. Versions before this one cached extracted embedded subtitles in `<media folder>/.cache/subs/`; that cache now lives in the managed images volume, and nothing reads or writes the copies inside your library any more. They are inert and safe to keep, but no rescan will ever remove them: to reclaim the space, delete them yourself, e.g. `find /path/to/library -type d -name .cache -prune -exec rm -rf {} +`.
+* **readme:** the volume holding artwork, sprites, extracted subtitles and uploaded avatars is now `/app/data` (`fliks_data`) instead of `/app/images`. Existing installs need no change: `FLIKS_IMAGES_DIR` still works and a volume mounted at `/app/images` is detected and kept, logged once at boot. New installs and the example Compose use the new path. To move onto it, copy the volume before removing the old one — the uploaded avatars cannot be re-fetched. Recipe in README > Hosting notes > "The data volume was renamed".
+* **custom-formats:** plugins declaring `pluginApi: 0` are no longer loaded. The acquisition contract's `want` no longer carries `minRankExclusive` / `maxRankInclusive`; core reports the window as RANK_NOT_AN_UPGRADE / RANK_ABOVE_CUTOFF instead. Republish at `pluginApi: 1`.
+
+### Features
+
+* **a11y:** focus the active option when an overlay opens ([166acca](https://github.com/fliks-app/fliks/commit/166acca1475caa951c2655c043a614897046cbc2))
+* **cast-overlay:** offer the next episode on the cast and remote controls ([#1214](https://github.com/fliks-app/fliks/issues/1214)) ([efda5b5](https://github.com/fliks-app/fliks/commit/efda5b5474cfa6ae0bf8fa1df310c6f7156a76eb))
+* **cast:** leave a Chromecast from the picker, and only one destination at a time ([#1217](https://github.com/fliks-app/fliks/issues/1217)) ([e1bb570](https://github.com/fliks-app/fliks/commit/e1bb570926e69aabc4c61a6365156bfb1b6f3aac))
+* **data-table:** add row selection with batch proxy actions ([#1192](https://github.com/fliks-app/fliks/issues/1192)) ([51f3e51](https://github.com/fliks-app/fliks/commit/51f3e51c43b47b2241d09010274c8e9e3750a1fb))
+* **data-table:** let a table page report on its whole list ([#1193](https://github.com/fliks-app/fliks/issues/1193)) ([3fda3c1](https://github.com/fliks-app/fliks/commit/3fda3c10128baa35044f632ca166254e2a654f86))
+* **data-table:** move the acting row actions into a per-row menu ([#1186](https://github.com/fliks-app/fliks/issues/1186)) ([ca2596d](https://github.com/fliks-app/fliks/commit/ca2596d50e136db9ab471158a9498b9df831eaf6))
+* **desktop:** render the mac player through a CAMetalLayer ([#1248](https://github.com/fliks-app/fliks/issues/1248)) ([83ec100](https://github.com/fliks-app/fliks/commit/83ec10013123bb790c84eb798dd4179ffe6e7cef)), closes [#605](https://github.com/fliks-app/fliks/issues/605)
+* **home:** show a cached-layout skeleton while the sections load ([9f30abe](https://github.com/fliks-app/fliks/commit/9f30abe7abf948041e491a9de46f9ba5968eefbd))
+* **horizontal-scroller:** hold the rail offset across a return ([#1202](https://github.com/fliks-app/fliks/issues/1202)) ([e2ae16e](https://github.com/fliks-app/fliks/commit/e2ae16ea31a6fdac737caebd88893fcdae221d27))
+* **hw-decode:** cover nvidia, windows and macos for cropdetect and thumbnails ([#1229](https://github.com/fliks-app/fliks/issues/1229)) ([4c736e9](https://github.com/fliks-app/fliks/commit/4c736e9036d12d5f58fbfc7cee40cdd28c98cb9e)), closes [#1127](https://github.com/fliks-app/fliks/issues/1127) [#1128](https://github.com/fliks-app/fliks/issues/1128) [#1129](https://github.com/fliks-app/fliks/issues/1129)
+* **imports:** read nfo fields and sibling artwork for unidentified titles ([#1265](https://github.com/fliks-app/fliks/issues/1265)) ([e8581c0](https://github.com/fliks-app/fliks/commit/e8581c0bfb9d117f31aff3d821c48671a593004d))
+* **imports:** surface the orphan batch in the activity table ([#1231](https://github.com/fliks-app/fliks/issues/1231)) ([aa1576d](https://github.com/fliks-app/fliks/commit/aa1576de041afbc7536a967335510dc065e3bb1d)), closes [#1131](https://github.com/fliks-app/fliks/issues/1131)
+* **libraries:** add unidentified titles from the orphan scan instead of skipping them ([#1264](https://github.com/fliks-app/fliks/issues/1264)) ([f669a23](https://github.com/fliks-app/fliks/commit/f669a2330392f68ae031133bb2cdfe269a71e974))
+* **libraries:** link movie files that sit directly under the library root ([#1269](https://github.com/fliks-app/fliks/issues/1269)) ([1394316](https://github.com/fliks-app/fliks/commit/1394316a34002a3565a815e6ff5c1329fe337161))
+* **media-card:** add a like heart beside the actions button ([#1271](https://github.com/fliks-app/fliks/issues/1271)) ([6d4d757](https://github.com/fliks-app/fliks/commit/6d4d7578d8ad8a06f6e37cf49cda01d4ffc34d98))
+* **media-card:** expose like / unlike in the card context menu ([#1272](https://github.com/fliks-app/fliks/issues/1272)) ([c536552](https://github.com/fliks-app/fliks/commit/c53655296b2904b0f23079739fec7fdcc0a97230))
+* **media-card:** move the actions trigger to the bottom-right corner ([#1235](https://github.com/fliks-app/fliks/issues/1235)) ([fda3128](https://github.com/fliks-app/fliks/commit/fda3128c9d0cc1f6707ffb246cb4f92c822d603e))
+* **media-detail:** surface unidentified titles and let admins filter them ([#1267](https://github.com/fliks-app/fliks/issues/1267)) ([790237f](https://github.com/fliks-app/fliks/commit/790237f862890cf8031967d66a366a3c1a99b992))
+* **navigation:** cache the detail page and revalidate cached pages in one hook ([#1181](https://github.com/fliks-app/fliks/issues/1181)) ([7228902](https://github.com/fliks-app/fliks/commit/72289026aa17f04fa7f78b0beaf31eb38bdb06bf))
+* **player:** add a display option to sort track pickers by language ([#1204](https://github.com/fliks-app/fliks/issues/1204)) ([a9e9f69](https://github.com/fliks-app/fliks/commit/a9e9f69517005727d1d85b21e95bbec0562ef56f))
+* **player:** animate the close on the platforms without view transitions ([#1182](https://github.com/fliks-app/fliks/issues/1182)) ([38067a5](https://github.com/fliks-app/fliks/commit/38067a5e5598cd03f8de5086ab8c3054e54266df))
+* **player:** animate the player opening and closing ([#1173](https://github.com/fliks-app/fliks/issues/1173)) ([11d9610](https://github.com/fliks-app/fliks/commit/11d9610fa5119748ea30152aa4294e18302edde0))
+* **player:** drop the eco-by-default setting and clarify the quality menu ([#1177](https://github.com/fliks-app/fliks/issues/1177)) ([214b2f3](https://github.com/fliks-app/fliks/commit/214b2f3f88c6c5e537988c52d6234e08f540d949))
+* **player:** make the seek OSD chapter-aware and let a scrub accumulate ([83688c3](https://github.com/fliks-app/fliks/commit/83688c31178a03d9c508c3424489868217a7acd1))
+* **player:** raise a seek-only OSD on an arrow-key scrub ([3d73a86](https://github.com/fliks-app/fliks/commit/3d73a866a1be8e1c44ea529c0f47c48ae2ed82da))
+* **player:** step Back through menu panels and lift cues with the bar ([3b10b39](https://github.com/fliks-app/fliks/commit/3b10b39d80eb7979078e3814705911f70819caba))
+* **plugins:** gate unsigned installs on a setting, not an env var ([#1183](https://github.com/fliks-app/fliks/issues/1183)) ([0baecb2](https://github.com/fliks-app/fliks/commit/0baecb28652f894a26c82a8804dc8777f9c90294))
+* **post-import:** build sprites and markers when new files land ([#1219](https://github.com/fliks-app/fliks/issues/1219)) ([8b46207](https://github.com/fliks-app/fliks/commit/8b462079d75b6eb4113ca88140db58999c954de8))
+* **provider-list:** one toolbar the bulk actions take over ([#1189](https://github.com/fliks-app/fliks/issues/1189)) ([00036d4](https://github.com/fliks-app/fliks/commit/00036d4d6678694ddd3b3ee94e51a00c36d443c0))
+* **provider-list:** select rows and act on them together ([#1187](https://github.com/fliks-app/fliks/issues/1187)) ([0939a35](https://github.com/fliks-app/fliks/commit/0939a3577fd00f49d78fe8414b74e52fe8d5b1b2))
+* **remote:** mirror an opened detail page to the controlled device ([#1273](https://github.com/fliks-app/fliks/issues/1273)) ([21eed32](https://github.com/fliks-app/fliks/commit/21eed3231e86c5d61ee68b6e03ac6b07c4d3c756))
+* **remote:** play on and control another device ([#1161](https://github.com/fliks-app/fliks/issues/1161)) ([efd9efe](https://github.com/fliks-app/fliks/commit/efd9efe0d842acbc8fe12c2113927a0de9b84a5e))
+* **schema-form:** a multiselect field type, and the polish it needed ([#1191](https://github.com/fliks-app/fliks/issues/1191)) ([978a9bc](https://github.com/fliks-app/fliks/commit/978a9bcdd8f9579c975f2a7fc6b6f0d59eb959fc))
+* **streaming:** direct play HDR on desktop clients that tonemap locally ([#1251](https://github.com/fliks-app/fliks/issues/1251)) ([67ddd8a](https://github.com/fliks-app/fliks/commit/67ddd8afea74f02d3b99cb560f920ada3e9f13af))
+* **streaming:** keep HDR through a forced transcode for clients that tonemap locally ([#1253](https://github.com/fliks-app/fliks/issues/1253)) ([da1565b](https://github.com/fliks-app/fliks/commit/da1565b64f03156a3183c8dbd7a77910d80f5b78))
+* **streaming:** let clients that crop at their own output keep the copy path ([#1256](https://github.com/fliks-app/fliks/issues/1256)) ([6ca9e7b](https://github.com/fliks-app/fliks/commit/6ca9e7b94f15ce61eb3102d28c481fba00d5bab2)), closes [#1255](https://github.com/fliks-app/fliks/issues/1255)
+* **streaming:** serve an i-frame rendition for tizen trick play ([#1167](https://github.com/fliks-app/fliks/issues/1167)) ([e3d0c65](https://github.com/fliks-app/fliks/commit/e3d0c6515f59089796ca8050e88ffdfd77159d44))
+* **streaming:** surface client-side HDR tone-mapping in the stats and admin views ([#1252](https://github.com/fliks-app/fliks/issues/1252)) ([27ce3f0](https://github.com/fliks-app/fliks/commit/27ce3f0b0b52bbf0ccfb089d88533ee09a6f4956))
+* **tizen:** direct play MKV and read codec support from the TV ([#1174](https://github.com/fliks-app/fliks/issues/1174)) ([df9260c](https://github.com/fliks-app/fliks/commit/df9260c8c971fc3525876b7ad933f031a43e19ae))
+* **tv:** defer the on-screen keyboard until the input is activated ([4ae2af1](https://github.com/fliks-app/fliks/commit/4ae2af189f2897a17107aaa70671668da6ee3580))
+* **tv:** follow D-pad focus in horizontal scrollers ([7889ad7](https://github.com/fliks-app/fliks/commit/7889ad73c41cccc620c46255109c58fff1fee59a))
+* **tv:** pin the settings shells, style the dashboard selects, keep round things round ([#1164](https://github.com/fliks-app/fliks/issues/1164)) ([d701023](https://github.com/fliks-app/fliks/commit/d7010230efa2ca95cb9928627dca4b7a108cb09f))
+* **tv:** scale the 10-foot UI and unify page padding ([0e30da6](https://github.com/fliks-app/fliks/commit/0e30da6c6aa79bdcbb6b7fef00bc5d4383de45fe))
+* **tv:** slide the mosaic caption down on focus ([47d0a36](https://github.com/fliks-app/fliks/commit/47d0a363f947760ed210f206eb1c2b621f4d6c97))
+* **view-transition:** morph the poster between a card and a media page ([#1207](https://github.com/fliks-app/fliks/issues/1207)) ([d4b76cd](https://github.com/fliks-app/fliks/commit/d4b76cd1a8aafa2c76756a37fdfd7e397e03c373))
+
+
+### Bug Fixes
+
+* **android:** report HDR unsupported on ColorOS devices so the server tonemaps ([#1247](https://github.com/fliks-app/fliks/issues/1247)) ([501daa6](https://github.com/fliks-app/fliks/commit/501daa62199619dc2b2af7729f42ccc9d70df007)), closes [#393](https://github.com/fliks-app/fliks/issues/393)
+* **cast:** clear the connect spinner when a selection changes nothing ([#1216](https://github.com/fliks-app/fliks/issues/1216)) ([a8a6a41](https://github.com/fliks-app/fliks/commit/a8a6a41dbd4d0fe43507600837e88d10473c6549))
+* **cast:** discover Chromecast devices on Android ([#1215](https://github.com/fliks-app/fliks/issues/1215)) ([b2a8bce](https://github.com/fliks-app/fliks/commit/b2a8bceeaed409bfe5c7b2ecf09bae8ba4b63ebe))
+* **cast:** hide the cast entry points when no receiver is reachable ([#1236](https://github.com/fliks-app/fliks/issues/1236)) ([a01621b](https://github.com/fliks-app/fliks/commit/a01621bd8f0b2a146c2efcc2eabee357762f7f41))
+* **ci:** import the mac signing cert into our own keychain for the desktop build ([853dfe1](https://github.com/fliks-app/fliks/commit/853dfe174ef91762342c824ed7932d5b7da656e8))
+* **client:** keep card badges and page chrome correct across navigations ([#1206](https://github.com/fliks-app/fliks/issues/1206)) ([55a9772](https://github.com/fliks-app/fliks/commit/55a9772ded434a86bcae12ad222dc41bc1be4a80))
+* **client:** render nothing for unknown years and untitled episodes ([#1266](https://github.com/fliks-app/fliks/issues/1266)) ([a01da48](https://github.com/fliks-app/fliks/commit/a01da48a7e4a86d5f42402e3498e10672c917097))
+* **custom-formats:** repair the editor and match parsed attributes ([#1166](https://github.com/fliks-app/fliks/issues/1166)) ([7897541](https://github.com/fliks-app/fliks/commit/789754114d781c12cdbd8a86c09257f3febd10d0))
+* **desktop:** apply the reconnect policy to direct play, not just hls ([#1228](https://github.com/fliks-app/fliks/issues/1228)) ([9d1aca4](https://github.com/fliks-app/fliks/commit/9d1aca41cac93c49c200101e3e32f05e88475aa5)), closes [#1125](https://github.com/fliks-app/fliks/issues/1125)
+* **desktop:** flag a libmpv bump that renames the mac color enums ([#1245](https://github.com/fliks-app/fliks/issues/1245)) ([6012498](https://github.com/fliks-app/fliks/commit/60124985e5632a23516d8523722479e874fcc150)), closes [#605](https://github.com/fliks-app/fliks/issues/605)
+* **desktop:** leave fullscreen whenever the player is torn down ([4741da3](https://github.com/fliks-app/fliks/commit/4741da310e64100251e92aee9f8b4e6fe6202f2e))
+* **home:** stop replaying the section fade-in on every return ([c98e5fd](https://github.com/fliks-app/fliks/commit/c98e5fdd44841f8c67d05713ed637a611a1d177a))
+* **import-progress:** show the orphan batch counter instead of the enrich tail ([#1227](https://github.com/fliks-app/fliks/issues/1227)) ([0b3dd47](https://github.com/fliks-app/fliks/commit/0b3dd47e6b7a4a67869137d052e6726083711611)), closes [#1131](https://github.com/fliks-app/fliks/issues/1131)
+* **libraries:** redirect right after creation and refresh the media tab as the import lands ([9cdcb27](https://github.com/fliks-app/fliks/commit/9cdcb2736c6f16debf3c95e5ab5154d61ff47c5d))
+* **library:** stop the suggestions tab blanking itself on every return ([#1170](https://github.com/fliks-app/fliks/issues/1170)) ([4abbe76](https://github.com/fliks-app/fliks/commit/4abbe766cc2c0c7fcb119cd226b847c3875bb018))
+* **media-actions:** hide download when no file is on disk ([#1165](https://github.com/fliks-app/fliks/issues/1165)) ([e97c197](https://github.com/fliks-app/fliks/commit/e97c197ac68a25f7e69fc834e0b5571f83760b9f))
+* **media-card:** don't replay the artwork reveal on a back navigation ([#1201](https://github.com/fliks-app/fliks/issues/1201)) ([bb06003](https://github.com/fliks-app/fliks/commit/bb060035da845d19db36c2b5119490767b7eddf9))
+* **media-card:** keep the resting artwork radius for the poster morph ([#1203](https://github.com/fliks-app/fliks/issues/1203)) ([23676d8](https://github.com/fliks-app/fliks/commit/23676d8321e9afa317b9df01cfecd77b561ea58b))
+* **media-card:** lighten the hover background on the card buttons ([#1171](https://github.com/fliks-app/fliks/issues/1171)) ([85aa886](https://github.com/fliks-app/fliks/commit/85aa8867c667b036e2e01231702993b549e81b67))
+* **media-card:** replay the artwork reveal on a route restored from cache ([#1196](https://github.com/fliks-app/fliks/issues/1196)) ([ff52dc5](https://github.com/fliks-app/fliks/commit/ff52dc5ec866ee85da98efd05402bd497c0de5eb))
+* **media-card:** show the badges and progress a stale TV guard hid ([#1221](https://github.com/fliks-app/fliks/issues/1221)) ([c57456b](https://github.com/fliks-app/fliks/commit/c57456bfb4f9ab4c2c170b16c02275985fc16567))
+* **media-card:** size the artwork radius for a highlighted border ([#1200](https://github.com/fliks-app/fliks/issues/1200)) ([88d6104](https://github.com/fliks-app/fliks/commit/88d6104fc9b62a3f48064826ff55327cf01ddeec))
+* **media-card:** stop the artwork reveal replaying on the next navigation ([#1212](https://github.com/fliks-app/fliks/issues/1212)) ([48560a4](https://github.com/fliks-app/fliks/commit/48560a47d31dfd541f03d85858c492abac1e6359))
+* **media-detail:** keep the page instance when switching episode ([#1199](https://github.com/fliks-app/fliks/issues/1199)) ([188618c](https://github.com/fliks-app/fliks/commit/188618c8a7465d008325a42925743e639aa3b6b7))
+* **media-detail:** open the episode page from a card and morph its poster ([#1169](https://github.com/fliks-app/fliks/issues/1169)) ([ab57f00](https://github.com/fliks-app/fliks/commit/ab57f000c3e1cc4b15d141c31c5a8a879d24cb12))
+* **media-detail:** re-read the resume position when the cached page returns ([#1209](https://github.com/fliks-app/fliks/issues/1209)) ([282fe62](https://github.com/fliks-app/fliks/commit/282fe625bd055ecba82528efc8e688d22fb592cb))
+* **media-detail:** release the hero chrome when the cached page detaches ([#1185](https://github.com/fliks-app/fliks/issues/1185)) ([597716b](https://github.com/fliks-app/fliks/commit/597716b16a97a6fd0b5b28cbd56844b173bcf00d))
+* **media-detail:** repaint the page when an import lands ([#1220](https://github.com/fliks-app/fliks/issues/1220)) ([354c4ff](https://github.com/fliks-app/fliks/commit/354c4ff8a4ab7f9c6dcd749ad99e55fa707895da))
+* **media-detail:** resume the episode rail from where the viewer left it ([#1275](https://github.com/fliks-app/fliks/issues/1275)) ([6dca3f8](https://github.com/fliks-app/fliks/commit/6dca3f8237a5b68ed93cc32743556d4cded47d57))
+* **media-info-header:** reserve the height of the stream info row ([#1198](https://github.com/fliks-app/fliks/issues/1198)) ([73de399](https://github.com/fliks-app/fliks/commit/73de399bc0a9ae2ea35e53a5593ce44cb4b8de62))
+* **metadata:** guard subtitle search, refresh jobs and request gates for titles with no provider id ([#1263](https://github.com/fliks-app/fliks/issues/1263)) ([0e58399](https://github.com/fliks-app/fliks/commit/0e58399178a7e8def579c8ddad9655171d747769))
+* **nav:** highlight the active route in the left sidebars ([#1168](https://github.com/fliks-app/fliks/issues/1168)) ([c3fb098](https://github.com/fliks-app/fliks/commit/c3fb098f091bcdf2d3484499afeedc23903971cd))
+* **navigation:** re-enable view transitions on capacitor ([#1197](https://github.com/fliks-app/fliks/issues/1197)) ([1f8c5a9](https://github.com/fliks-app/fliks/commit/1f8c5a9297807ede0e0fbda50aa3fac9e1dd17fb))
+* **player,subtitles:** four Android playback and navigation regressions ([#1210](https://github.com/fliks-app/fliks/issues/1210)) ([c601519](https://github.com/fliks-app/fliks/commit/c6015192e03ca63915f9d13deb1bc9594c71d419))
+* **player:** drop the loading spinner when the browser refuses autoplay ([#1179](https://github.com/fliks-app/fliks/issues/1179)) ([3f7ddfe](https://github.com/fliks-app/fliks/commit/3f7ddfeb0de02f70b9fe53d15d56c54ad0cb4395))
+* **player:** floor the subtitle size, key it to the surface short side ([#1286](https://github.com/fliks-app/fliks/issues/1286)) ([55d9937](https://github.com/fliks-app/fliks/commit/55d9937c0a630e2e9773bd562c1930d71ea3caa4))
+* **player:** keep a multi-panel dropdown on the dismiss stack ([#1262](https://github.com/fliks-app/fliks/issues/1262)) ([fba9efa](https://github.com/fliks-app/fliks/commit/fba9efa742b42fc1775cfcc58e38006e17edadca))
+* **player:** keep audio selection and speed working on AVPlay ([a8cc483](https://github.com/fliks-app/fliks/commit/a8cc483143236bcda4ab06c2b4210e9389d659c8))
+* **player:** negotiate the quality rung once instead of guessing it twice ([#1254](https://github.com/fliks-app/fliks/issues/1254)) ([9f553b6](https://github.com/fliks-app/fliks/commit/9f553b62e63506c9495aaf0d0e9f33a8caf714ba))
+* **player:** open on the fanart, not the poster ([#1222](https://github.com/fliks-app/fliks/issues/1222)) ([bc3171a](https://github.com/fliks-app/fliks/commit/bc3171a4d94f2e40e9731aaf8135674652085b9e))
+* **player:** prefer the remembered hearing-impaired flag when restoring subtitles ([#1274](https://github.com/fliks-app/fliks/issues/1274)) ([6f667bd](https://github.com/fliks-app/fliks/commit/6f667bd55f57c5c3ba8ef0574f52b84a27e98edf))
+* **player:** release the screen wake lock while playback is paused ([#1213](https://github.com/fliks-app/fliks/issues/1213)) ([e777d7e](https://github.com/fliks-app/fliks/commit/e777d7e242867efb445b16231eb0fe560e432756))
+* **player:** start playback on desktop instead of via stall recovery ([#1257](https://github.com/fliks-app/fliks/issues/1257)) ([cc6b4f8](https://github.com/fliks-app/fliks/commit/cc6b4f85ad1fb4e9c668cf1b9c165ff2f5197c0e))
+* **popover-menu:** follow the anchor by frame instead of by event ([#1190](https://github.com/fliks-app/fliks/issues/1190)) ([e162664](https://github.com/fliks-app/fliks/commit/e16266470872e3b43ab12fad33eee87a27c5e166))
+* **provider-list:** keep url and credentials out of the bulk editor ([#1188](https://github.com/fliks-app/fliks/issues/1188)) ([0f92eb6](https://github.com/fliks-app/fliks/commit/0f92eb65c50dbbe5957d484f4974ceb322d3d0a8))
+* **remote-picker:** accent the cast row only while casting, and pin it on top ([#1218](https://github.com/fliks-app/fliks/issues/1218)) ([12df9d5](https://github.com/fliks-app/fliks/commit/12df9d5d1f808df473754facc180bcdf1d45d9e9))
+* **remote:** confirm a restored target is online before routing playback ([#1172](https://github.com/fliks-app/fliks/issues/1172)) ([d5c0f4b](https://github.com/fliks-app/fliks/commit/d5c0f4bca28ed18548f5a78afb32220c0fe6efc5))
+* **remote:** name the grant indexes as typeorm generates them ([#1162](https://github.com/fliks-app/fliks/issues/1162)) ([7146564](https://github.com/fliks-app/fliks/commit/714656451c5ed808c80c11176f5e3d84b9db7de1))
+* **streaming:** anchor a resumed MPEG-TS run on the playlist grid ([#1223](https://github.com/fliks-app/fliks/issues/1223)) ([b5bd3e8](https://github.com/fliks-app/fliks/commit/b5bd3e8c5dd3dd29db0a349aa7eef8018e0491cf))
+* **streaming:** serve the copied stream instead of re-encoding a remux ([#1175](https://github.com/fliks-app/fliks/issues/1175)) ([2803274](https://github.com/fliks-app/fliks/commit/280327493759cd406975aab42e324b4880bdf82b))
+* **streaming:** stop the remux dragging a subtitle rendition, copy HDR too ([#1176](https://github.com/fliks-app/fliks/issues/1176)) ([776dae1](https://github.com/fliks-app/fliks/commit/776dae1b357896790b6ff21f062f963751f38822))
+* **streaming:** tone-map HDR sources when extracting sprite tiles ([#1260](https://github.com/fliks-app/fliks/issues/1260)) ([7602cf2](https://github.com/fliks-app/fliks/commit/7602cf23d781dd0d35768c7991fd6e66bc7dbdc6))
+* **subtitles:** cache extracted vtt in the images volume, not the library ([#1230](https://github.com/fliks-app/fliks/issues/1230)) ([f8c96ad](https://github.com/fliks-app/fliks/commit/f8c96adcec4d8db432f5edce36e3967032ccd7f5)), closes [#1132](https://github.com/fliks-app/fliks/issues/1132)
+* **subtitles:** close path traversal, SSRF and IDOR on the subtitle endpoints ([#1239](https://github.com/fliks-app/fliks/issues/1239)) ([d0158e0](https://github.com/fliks-app/fliks/commit/d0158e08abb233e7664877149f5afd851a52365c))
+* **subtitles:** declare the subtitle_files media indexes on the entity ([dafd139](https://github.com/fliks-app/fliks/commit/dafd139604d221d58d7f87d1aa508bd3f03441e2))
+* **subtitles:** match forced/HI flags across the whole acquisition chain ([#1238](https://github.com/fliks-app/fliks/issues/1238)) ([4b74752](https://github.com/fliks-app/fliks/commit/4b7475270ed370e7d7b40e4410fc164dcde7860d))
+* **subtitles:** scale cue text with the surface instead of a fixed sp size ([#1205](https://github.com/fliks-app/fliks/issues/1205)) ([449c61b](https://github.com/fliks-app/fliks/commit/449c61b7915bdbc8ddcf32a82e8ce847eafa6252))
+* **tizen:** declare the containers Samsung publishes, not what the WebView says ([#1178](https://github.com/fliks-app/fliks/issues/1178)) ([f86ed41](https://github.com/fliks-app/fliks/commit/f86ed41a940bfcca1afd08231c502dcf7bd646df))
+* **tv:** Android TV layout, player close, and episode page navigation ([#1195](https://github.com/fliks-app/fliks/issues/1195)) ([b900f46](https://github.com/fliks-app/fliks/commit/b900f460ead86d416b65b6f565c01512433fd0d2))
+* **tv:** cue layer under the seek preview, and up/down opens the controls ([#1163](https://github.com/fliks-app/fliks/issues/1163)) ([42be032](https://github.com/fliks-app/fliks/commit/42be0327355878bf2144f2b90e2824a44a9866ea))
+* **tv:** keep the setup checklist off the 10-foot UI ([594bf4b](https://github.com/fliks-app/fliks/commit/594bf4b35019d402542107be7c7198bffbd66f51))
+* **tv:** repair the Samsung rendering the Chromium 85 gaps broke ([cfe74c4](https://github.com/fliks-app/fliks/commit/cfe74c46bf50c2151e85e41fab9316d91843555b))
+* **tv:** resolve the theme so alpha variants keep their alpha ([28fb8a1](https://github.com/fliks-app/fliks/commit/28fb8a15a49fb88b70de4119f192e4c89ce0c2d4))
+* **tv:** stop a focus move ghosting the neighbouring control ([2f6b11b](https://github.com/fliks-app/fliks/commit/2f6b11b45378f50e1bf6ed1bfdc96241800c8d3b))
+* **view-transition:** keep the poster morph out of the app chrome ([#1211](https://github.com/fliks-app/fliks/issues/1211)) ([f6b3112](https://github.com/fliks-app/fliks/commit/f6b3112077d612e78a16898614ba93014db6cbf7))
+
+
+### Performance Improvements
+
+* **imports:** make library import and scanning survivable on a weak CPU ([#1225](https://github.com/fliks-app/fliks/issues/1225)) ([1bba51e](https://github.com/fliks-app/fliks/commit/1bba51e49fe68b10d915b75d45736d7985f05bc5)), closes [#1131](https://github.com/fliks-app/fliks/issues/1131)
+* **library:** move the grid to cdk-virtual-scroll-viewport ([250cad8](https://github.com/fliks-app/fliks/commit/250cad8f8b96d282c86fd096273800bfb9fb0daf))
+* **subtitles:** bound the provider and sync I/O, index the hot lookups ([#1240](https://github.com/fliks-app/fliks/issues/1240)) ([faf0027](https://github.com/fliks-app/fliks/commit/faf0027c4549b616b449235a95d3db986f84cdda))
+
+
+### Reverts
+
+* drop the table page notice band ([#1194](https://github.com/fliks-app/fliks/issues/1194)) ([0a5312d](https://github.com/fliks-app/fliks/commit/0a5312ddf27f98bab62de701d3c8c8c39e78d23c))
+
+
+### Documentation
+
+* **readme:** document the data volume rename and how to move onto it ([#1234](https://github.com/fliks-app/fliks/issues/1234)) ([e57998e](https://github.com/fliks-app/fliks/commit/e57998e0b1f81df99a33d91a73c1be32bd4233ea)), closes [#1132](https://github.com/fliks-app/fliks/issues/1132)
+
+
+### Code Refactoring
+
+* **media:** stop deleting the per-media .cache directory ([#1276](https://github.com/fliks-app/fliks/issues/1276)) ([ff00180](https://github.com/fliks-app/fliks/commit/ff00180b43944b59a2b4f080927a31b70ee4508d)), closes [#1230](https://github.com/fliks-app/fliks/issues/1230)
+
 ## [3.7.0](https://github.com/fliks-app/fliks/compare/v3.6.0...v3.7.0) (2026-08-30)
 
 
