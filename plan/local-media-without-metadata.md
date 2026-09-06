@@ -1,6 +1,10 @@
 # Plan: show every file on disk, matched to a metadata provider or not
 
-Status: **planned, not started**. Written 2026-09-06.
+Status: **shipped**. Written and implemented 2026-09-06.
+
+Shipped as: #1263 (Phase 0), #1264 (Phases 1-2), #1265 (Phase 4), #1267 (Phase 3),
+#1269 (Phase 5), plus #1266 (unknown year / untitled episode rendering) and #1268 (neutral
+placeholder titles in specs). Each PR carries its dev-stack smoke test in the comments.
 
 Goal: a video file under a library root is always reachable in Fliks. A title
 that TMDB/TVDB never matched (or that the admin never bothered to match) gets a
