@@ -173,6 +173,9 @@ export class MediaRescanService {
     if (!relativePath) {
       return { error: 'file outside the media folder' };
     }
+    if (!media.folderName && relativePath.includes('/')) {
+      return { error: 'a title with no folder can only own files at the library root' };
+    }
 
     const existing = await this.mediaFileRepo.findOne({
       where: { media: { id: media.id }, relativePath },
@@ -440,13 +443,17 @@ export class MediaRescanService {
 
     // Wipe the whole per-media `.cache/` tree (subtitles + any other cached
     // artefact) — streamInfo is about to be re-read so anything derived
-    // from the old layout is stale.
-    try {
-      await clearMediaCache(media.path);
-    } catch (err) {
-      this.log.warn(
-        `Rescan[media #${mediaId}]: clearMediaCache failed for "${media.path}": ${err instanceof Error ? err.message : err}`,
-      );
+    // from the old layout is stale. Skipped for a media with no folder of its
+    // own: its `.cache/` would be the library root's, shared by every sibling
+    // root-level movie.
+    if (media.folderName) {
+      try {
+        await clearMediaCache(media.path);
+      } catch (err) {
+        this.log.warn(
+          `Rescan[media #${mediaId}]: clearMediaCache failed for "${media.path}": ${err instanceof Error ? err.message : err}`,
+        );
+      }
     }
     // The subtitle cache lives outside `.cache/`, in the images volume, so it
     // needs its own invalidation to preserve "full rescan wipes every cached VTT".
@@ -473,24 +480,38 @@ export class MediaRescanService {
       `Rescan: started — media #${mediaId} "${media.title}" root="${mediaDir}"`,
     );
 
-    // 1. Collect all video files on disk
-    const rawDiskFiles = await this.collectVideoFilesRecursive(
-      mediaDir,
-      0,
-      mediaId,
-    );
+    // 1. Collect video files on disk. A media with no folder of its own sits
+    // at the library root, shared by every sibling root-level movie: walking
+    // it would pick up their files too, so only its own known files are stat'd.
     const diskFiles: string[] = [];
     const diskRelPaths = new Set<string>();
-    for (const f of rawDiskFiles) {
-      const rel = relativePathUnderMediaRoot(mediaDir, f);
-      if (!rel) {
-        this.log.error(
-          `Rescan[media #${mediaId}]: file is outside resolved media folder — mediaDir="${mediaDir}" file="${f}"`,
-        );
-        continue;
+    if (media.folderName) {
+      const rawDiskFiles = await this.collectVideoFilesRecursive(
+        mediaDir,
+        0,
+        mediaId,
+      );
+      for (const f of rawDiskFiles) {
+        const rel = relativePathUnderMediaRoot(mediaDir, f);
+        if (!rel) {
+          this.log.error(
+            `Rescan[media #${mediaId}]: file is outside resolved media folder - mediaDir="${mediaDir}" file="${f}"`,
+          );
+          continue;
+        }
+        diskRelPaths.add(rel);
+        diskFiles.push(f);
       }
-      diskRelPaths.add(rel);
-      diskFiles.push(f);
+    } else {
+      for (const dbFile of media.files ?? []) {
+        const rel = dbFile.relativePath?.replace(/\\/g, '/');
+        if (!rel) continue;
+        const abs = path.join(mediaDir, rel);
+        if (await pathExists(abs)) {
+          diskRelPaths.add(rel);
+          diskFiles.push(abs);
+        }
+      }
     }
     this.log.log(
       `Rescan: found ${diskFiles.length} file(s) on disk, ${(media.files ?? []).length} in DB`,

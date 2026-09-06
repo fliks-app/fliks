@@ -36,7 +36,6 @@ export interface OrphanGroup {
 export interface OrphanScanResult {
   libraryPath: string;
   groups: OrphanGroup[];
-  looseFiles: OrphanFileEntry[];
   scannedFiles: number;
   orphanCount: number;
 }

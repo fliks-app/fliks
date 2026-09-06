@@ -70,4 +70,29 @@ describe('findLocalArtwork', () => {
     writeFileSync(join(dir, 'sub', 'poster.jpg'), '');
     expect(await findLocalArtwork(dir)).toEqual({});
   });
+
+  it('basenameOnly: matches the basename-prefixed poster/fanart, ignoring generic names', async () => {
+    writeFileSync(join(dir, 'Sample Movie-poster.jpg'), '');
+    writeFileSync(join(dir, 'Sample Movie-fanart.jpg'), '');
+    // A sibling root-level movie's own generic-named artwork sitting in the
+    // same shared directory must not be picked up.
+    writeFileSync(join(dir, 'poster.jpg'), '');
+    writeFileSync(join(dir, 'folder.jpg'), '');
+    writeFileSync(join(dir, 'clearlogo.png'), '');
+
+    const out = await findLocalArtwork(dir, 'Sample Movie', { basenameOnly: true });
+
+    expect(out.poster).toBe(join(dir, 'Sample Movie-poster.jpg'));
+    expect(out.fanart).toBe(join(dir, 'Sample Movie-fanart.jpg'));
+    expect(out.logo).toBeUndefined();
+  });
+
+  it('basenameOnly: matches nothing when no basename-prefixed file exists', async () => {
+    writeFileSync(join(dir, 'poster.jpg'), '');
+    writeFileSync(join(dir, 'fanart.jpg'), '');
+
+    const out = await findLocalArtwork(dir, 'Sample Movie', { basenameOnly: true });
+
+    expect(out).toEqual({});
+  });
 });

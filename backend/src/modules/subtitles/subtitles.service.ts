@@ -805,7 +805,9 @@ export class SubtitlesService {
         // long as it sits in a folder with exactly one video — attach it there
         // (or the media's only file). Folders with several videos (a season
         // folder) are left to the precise name match so episodes aren't crossed.
-        if (!matchedFile) {
+        // A media with no folder of its own shares its root with every sibling
+        // root-level movie, so a lone-video-in-dir guess is not safe there.
+        if (!matchedFile && media.folderName) {
           const videosInDir = media.files.filter(
             (f) => path.dirname(path.join(media.path!, f.relativePath)) === dir,
           );

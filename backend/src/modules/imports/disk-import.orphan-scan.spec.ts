@@ -69,12 +69,12 @@ describe('orphan scan', () => {
     await fs.rm(root, { recursive: true, force: true });
   });
 
-  it('groups episodes under one show, keeps movies per file, drops root files', async () => {
+  it('groups episodes under one show, keeps movies per file, groups a root-level movie file', async () => {
     const res = await service.previewOrphans({ path: root });
 
     expect(res.scannedFiles).toBe(6);
     expect(res.orphanCount).toBe(6);
-    expect(res.looseFiles.map((f) => f.filename)).toEqual(['stray.mkv']);
+    expect(res.groups).toHaveLength(3);
 
     const series = res.groups.find((g) => g.mediaType === MediaType.SERIES);
     expect(series?.folderName).toBe('Sample Show');
@@ -84,9 +84,17 @@ describe('orphan scan', () => {
     expect(series?.guessTitle).toBe('Sample Show');
     expect(series?.nfo?.tmdbId).toBe(4242);
 
-    const movie = res.groups.find((g) => g.mediaType === MediaType.MOVIE);
+    const movie = res.groups.find(
+      (g) => g.mediaType === MediaType.MOVIE && g.folderName === 'Sample Movie (2009)',
+    );
     expect(movie?.files).toHaveLength(1);
     expect(movie?.guessYear).toBe(2009);
+
+    // A movie file directly at the library root is its own group, folderName ''.
+    const rootMovie = res.groups.find(
+      (g) => g.mediaType === MediaType.MOVIE && g.folderName === '',
+    );
+    expect(rootMovie?.files.map((f) => f.filename)).toEqual(['stray.mkv']);
 
     // One probe per group, not per file — the probe is up to four reads.
     expect(readSpy).toHaveBeenCalledTimes(res.groups.length);
@@ -98,9 +106,26 @@ describe('orphan scan', () => {
       mediaTypes: [MediaType.MOVIE],
     });
 
-    expect(res.groups).toHaveLength(1);
-    expect(res.groups[0].mediaType).toBe(MediaType.MOVIE);
-    // The root-level file counts as an orphan too, it just isn't groupable.
+    // Both movie files (folder-based and root-level) are groupable; only the
+    // series files are filtered out for not matching the requested type.
+    expect(res.groups).toHaveLength(2);
+    expect(res.groups.every((g) => g.mediaType === MediaType.MOVIE)).toBe(true);
     expect(res.orphanCount).toBe(2);
+  });
+
+  it('a series file directly at the library root is not groupable and not counted as an orphan', async () => {
+    const seriesRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'orphan-scan-series-root-'));
+    try {
+      await fs.writeFile(
+        path.join(seriesRoot, 'Sample.Show.S01E01.1080p.mkv'),
+        'x',
+      );
+      const res = await service.previewOrphans({ path: seriesRoot });
+      expect(res.scannedFiles).toBe(1);
+      expect(res.groups).toHaveLength(0);
+      expect(res.orphanCount).toBe(0);
+    } finally {
+      await fs.rm(seriesRoot, { recursive: true, force: true });
+    }
   });
 });

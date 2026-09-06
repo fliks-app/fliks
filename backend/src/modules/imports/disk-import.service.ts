@@ -280,15 +280,12 @@ export class DiskImportService {
     // Pass 2 — group in walk order, so a group's first file is its sample.
     const groups = new Map<string, OrphanGroup>();
     const sampleFile = new Map<string, string>();
-    const looseFiles: OrphanFileEntry[] = [];
     let orphanCount = 0;
     for (const f of scanned) {
       if (!f) continue;
+      // A series file at the library root can't be grouped: a series needs a folder.
+      if (!f.folderName && f.mediaType === MediaType.SERIES) continue;
       orphanCount++;
-      if (!f.folderName) {
-        looseFiles.push(f.entry);
-        continue;
-      }
       const key =
         f.mediaType === MediaType.SERIES
           ? `series:${f.folderName}`
@@ -328,12 +325,11 @@ export class DiskImportService {
     emit(unlinked.length + 1);
 
     this.logger.log(
-      `Orphan scan finished — ${label} scanned=${allFiles.length} orphans=${orphanCount} groups=${groups.size} loose=${looseFiles.length}`,
+      `Orphan scan finished - ${label} scanned=${allFiles.length} orphans=${orphanCount} groups=${groups.size}`,
     );
     return {
       libraryPath: root,
       groups: [...groups.values()],
-      looseFiles,
       scannedFiles: allFiles.length,
       orphanCount,
     };
@@ -436,6 +432,9 @@ export class DiskImportService {
     }
     if (!dto.externalId && dto.reorganize) {
       throw new BadRequestException('Reorganize needs an identified title');
+    }
+    if (dto.folderName === '' && dto.reorganize) {
+      throw new BadRequestException('Reorganize needs a title with its own folder');
     }
 
     const { media, created } = dto.externalId
@@ -558,6 +557,13 @@ export class DiskImportService {
       }
     }
 
+    // A newly created unmatched row that failed to link any file is dead
+    // weight: for a root movie especially, an ambiguous folderName '' twin
+    // would otherwise linger and confuse the next reuse lookup.
+    if (!dto.externalId && created && linked === 0) {
+      await this.mediaRepo.delete(media.id);
+    }
+
     this.logger.log(
       `Orphan relink — media #${media.id} created=${created} linked=${linked} errors=${errors.length}`,
     );
@@ -625,18 +631,33 @@ export class DiskImportService {
     library: Library,
     addedByUserId: number | null,
   ): Promise<{ media: Media; created: boolean }> {
-    const existing = await this.mediaRepo.findOne({
-      where: {
-        library: { id: library.id },
-        type: dto.type,
-        folderName: dto.folderName,
-        tmdbId: IsNull(),
-        tvdbId: IsNull(),
-        imdbId: IsNull(),
-      },
-      relations: ['library', 'files'],
-    });
-    if (existing) return { media: existing, created: false };
+    const where = {
+      library: { id: library.id },
+      type: dto.type,
+      folderName: dto.folderName,
+      tmdbId: IsNull(),
+      tvdbId: IsNull(),
+      imdbId: IsNull(),
+    };
+    if (dto.folderName === '') {
+      // Every root-level movie shares folderName '': disambiguate reuse by its
+      // own file, or unrelated titles would collapse into the first one found.
+      const wanted = new Set(dto.files.map((f) => path.basename(f.filePath)));
+      const candidates = await this.mediaRepo.find({
+        where,
+        relations: ['library', 'files'],
+      });
+      const existing = candidates.find((m) =>
+        (m.files ?? []).some((f) => wanted.has(f.relativePath)),
+      );
+      if (existing) return { media: existing, created: false };
+    } else {
+      const existing = await this.mediaRepo.findOne({
+        where,
+        relations: ['library', 'files'],
+      });
+      if (existing) return { media: existing, created: false };
+    }
 
     const sample = path.resolve(dto.files[0].filePath);
     const artworkDir =
@@ -655,20 +676,30 @@ export class DiskImportService {
       throw new BadRequestException('File outside the library root');
     }
 
-    const nfo =
-      dto.type === MediaType.SERIES
-        ? (await this.nfo.readNfoFile(path.join(artworkDir, 'tvshow.nfo'))) ??
-          (await this.nfo.readForVideoFile(sample))
-        : await this.nfo.readForVideoFile(sample);
+    // A root movie's artworkDir IS the shared library root: generic sidecar
+    // names (poster.jpg, movie.nfo, ...) there belong to no title in particular.
+    const isRootMovie = dto.folderName === '';
     const artworkBasename =
       dto.type === MediaType.SERIES
         ? undefined
         : path.basename(sample, path.extname(sample));
-    const artwork = await findLocalArtwork(artworkDir, artworkBasename);
+    const nfo =
+      dto.type === MediaType.SERIES
+        ? (await this.nfo.readNfoFile(path.join(artworkDir, 'tvshow.nfo'))) ??
+          (await this.nfo.readForVideoFile(sample))
+        : isRootMovie
+          ? await this.nfo.readNfoFile(path.join(artworkDir, `${artworkBasename}.nfo`))
+          : await this.nfo.readForVideoFile(sample);
+    const artwork = await findLocalArtwork(artworkDir, artworkBasename, {
+      basenameOnly: isRootMovie,
+    });
 
     const created = await this.mediaService.createUnmatched(
       {
-        title: dto.title?.trim() || dto.folderName,
+        title:
+          dto.title?.trim() ||
+          extractMediaTitle(path.basename(sample)).title ||
+          dto.folderName,
         year: dto.year,
         type: dto.type,
         libraryId: dto.libraryId,

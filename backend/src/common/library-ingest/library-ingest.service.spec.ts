@@ -233,4 +233,23 @@ describe('LibraryIngestService.ingest', () => {
     expect(result.imported[0].file.relativePath).toContain('S00E02');
     expect(h.episodeRepo.update).toHaveBeenCalledWith(9002, { hasFile: true });
   });
+
+  it('refuses to place a grabbed file at the library root when the media has no folder of its own', async () => {
+    const h = buildHarness();
+    const srcFile = path.join(srcDir, 'sample.movie.2001.1080p.mkv');
+    fs.writeFileSync(srcFile, 'x');
+
+    const media = buildMovie({ id: 9, folderName: '', path: '/library/movies' });
+    h.mediaRepo.findOne.mockResolvedValue(media);
+
+    await expect(
+      h.service.ingest({
+        mediaId: 9,
+        files: [{ path: srcFile }],
+        transfer: 'copy',
+        fallbackQuality: 'WEBDL-1080p',
+        sourceLabel: 'Sample Movie',
+      }),
+    ).rejects.toThrow('has no folder of its own');
+  });
 });

@@ -1124,7 +1124,8 @@
     "add_to_list": "Zu Liste hinzufügen",
     "unlike": "Gefällt mir nicht mehr",
     "subtitle_failed": "Fehlgeschlagen",
-    "unidentified_callout": "Dieser Titel ist nicht identifiziert. Die angezeigten Informationen stammen aus der Datei."
+    "unidentified_callout": "Dieser Titel ist nicht identifiziert. Die angezeigten Informationen stammen aus der Datei.",
+    "delete_no_folder": "Dieser Titel hat keinen eigenen Ordner: Nur der Bibliothekseintrag wird entfernt, die Datei bleibt auf der Festplatte."
   },
   "requests": {
     "title": "Anfragen",
@@ -1965,7 +1966,6 @@
       "scan_linked": "{{count}} Datei(en) verknüpft",
       "scan_nothing_linked": "Keine Datei verknüpft (Duplikat bereits im Medium vorhanden).",
       "scan_error": "Scan fehlgeschlagen.",
-      "scan_loose_skipped": "{{count}} Datei(en) im Stammverzeichnis übersprungen — verschieben Sie sie in einen Unterordner, um sie zu verknüpfen.",
       "scan_files": "{{count}} Datei(en)",
       "scan_add_unmatched": "Ohne Metadaten hinzufügen",
       "scan_unmatched_badge": "Keine Metadaten",
@@ -1973,7 +1973,8 @@
       "scan_reorganize_needs_match": "Verschieben/Umbenennen gilt nur für identifizierte Titel",
       "scan_queued_unmatched": "{{count}} Titel ohne Metadaten hinzugefügt, identifizieren Sie sie im Tab Medien",
       "scan_search_failed_count": "{{count}} Ordner nicht analysiert (Suche fehlgeschlagen), starten Sie den Scan im Tab Medien erneut",
-      "media_filter_unidentified": "Nicht identifiziert"
+      "media_filter_unidentified": "Nicht identifiziert",
+      "scan_reorganize_needs_folder": "Verschieben/Umbenennen gilt nur für Titel mit eigenem Ordner"
     },
     "users": {
       "title": "Benutzer",

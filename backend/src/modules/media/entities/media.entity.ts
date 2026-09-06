@@ -103,12 +103,14 @@ export class Media extends BaseEntity {
   @Column({ nullable: true })
   folderName: string;
 
-  /** Virtual computed path: library.path + '/' + folderName */
+  /** Virtual computed path: library.path + '/' + folderName, or the bare
+   *  library root for a movie with no folder of its own. */
   @Expose()
   get path(): string | null {
-    return this.library?.path && this.folderName
+    if (!this.library?.path) return null;
+    return this.folderName
       ? nodePath.join(this.library.path, this.folderName)
-      : null;
+      : this.library.path;
   }
 
   @Column({ nullable: true })

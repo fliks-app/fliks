@@ -1132,7 +1132,8 @@
     "add_to_list": "Add to list",
     "unlike": "Unlike",
     "subtitle_failed": "Failed",
-    "unidentified_callout": "This title isn't identified. The information shown comes from the file."
+    "unidentified_callout": "This title isn't identified. The information shown comes from the file.",
+    "delete_no_folder": "This title has no folder of its own: only the library entry will be removed, the file stays on disk."
   },
   "requests": {
     "title": "Requests",
@@ -1982,7 +1983,6 @@
       "scan_linked": "{{count}} file(s) linked",
       "scan_nothing_linked": "No file linked (duplicate already present in the media).",
       "scan_error": "Scan failed.",
-      "scan_loose_skipped": "{{count}} file(s) at the root skipped — move them into a subfolder to link them.",
       "scan_files": "{{count}} file(s)",
       "scan_add_unmatched": "Add without metadata",
       "scan_unmatched_badge": "No metadata",
@@ -1990,7 +1990,8 @@
       "scan_reorganize_needs_match": "Move/rename only applies to identified titles",
       "scan_queued_unmatched": "{{count}} title(s) added without metadata, identify them from the Media tab",
       "scan_search_failed_count": "{{count}} folder(s) not scanned (search failed), relaunch the scan from the Media tab",
-      "media_filter_unidentified": "Unidentified"
+      "media_filter_unidentified": "Unidentified",
+      "scan_reorganize_needs_folder": "Move/rename only applies to titles with their own folder"
     },
     "users": {
       "title": "Users",

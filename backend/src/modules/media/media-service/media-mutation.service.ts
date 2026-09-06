@@ -247,6 +247,9 @@ export class MediaMutationService {
    * escape it (e.g. via '..'). Returns null when there is no folder to delete.
    */
   private resolveSafeMediaDir(media: Media): string | null {
+    // A media with no folder of its own has nothing on disk to delete: its
+    // `path` getter falls back to the library root.
+    if (!media.folderName) return null;
     const root = media.library?.path;
     const dir = media.path;
     if (!root || !dir) return null;
