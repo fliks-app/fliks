@@ -79,7 +79,7 @@
                   }
                 </td>
                 <td class="text-lg font-semibold">{{ item.title }}</td>
-                <td class="text-base">{{ item.year || '—' }}</td>
+                <td class="text-base">{{ item.year || '' }}</td>
                 <td class="text-base">
                   @if (item.type === 'movie') {
                     {{ 'settings.libraries.media_type_movie' | translate }}

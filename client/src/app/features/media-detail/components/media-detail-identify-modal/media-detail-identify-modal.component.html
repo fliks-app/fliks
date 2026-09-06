@@ -130,9 +130,9 @@
                   </div>
                   <span class="text-sm leading-tight line-clamp-2">{{ r.title }}</span>
                   <span class="text-xs text-base-content/50">
-                    {{ r.year ?? '—' }}
+                    @if (r.year) { {{ r.year }} }
                     @if (isTaken(r)) {
-                      · {{ 'media_detail.identify_already_in_library' | translate }}
+                      @if (r.year) { · } {{ 'media_detail.identify_already_in_library' | translate }}
                     }
                   </span>
                 </button>

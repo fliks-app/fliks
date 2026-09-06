@@ -150,7 +150,7 @@
                             }
                           </div>
                           <div class="text-xs text-base-content/50">
-                            {{ r.year || '—' }} · {{ r.provider | uppercase }}
+                            @if (r.year) { {{ r.year }} · } {{ r.provider | uppercase }}
                             @if (r.existingMediaId) {
                               · <span class="text-warning">{{ 'settings.libraries.scan_already' | translate }}</span>
                             }
