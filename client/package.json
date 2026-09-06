@@ -23,14 +23,14 @@
   },
   "packageManager": "npm@10.8.2",
   "dependencies": {
-    "@angular/cdk": "^21.2.14",
-    "@angular/common": "^21.2.22",
-    "@angular/compiler": "^21.2.22",
-    "@angular/core": "^21.2.22",
-    "@angular/forms": "^21.2.22",
-    "@angular/platform-browser": "^21.2.22",
-    "@angular/router": "^21.2.22",
-    "@angular/service-worker": "^21.2.22",
+    "@angular/cdk": "^22.1.5",
+    "@angular/common": "^22.1.5",
+    "@angular/compiler": "^22.1.5",
+    "@angular/core": "^22.1.5",
+    "@angular/forms": "^22.1.5",
+    "@angular/platform-browser": "^22.1.5",
+    "@angular/router": "^22.1.5",
+    "@angular/service-worker": "^22.1.5",
     "@capacitor/android": "^8.3.0",
     "@capacitor/app": "^8.1.0",
     "@capacitor/core": "^8.3.0",
@@ -54,9 +54,9 @@
     "tslib": "^2.3.0"
   },
   "devDependencies": {
-    "@angular/build": "^21.2.23",
-    "@angular/cli": "^21.2.23",
-    "@angular/compiler-cli": "^21.2.22",
+    "@angular/build": "^22.1.7",
+    "@angular/cli": "^22.1.7",
+    "@angular/compiler-cli": "^22.1.5",
     "@capacitor/cli": "^8.5.1",
     "@csstools/postcss-cascade-layers": "^6.0.0",
     "@csstools/postcss-color-mix-function": "^4.0.4",
@@ -69,7 +69,7 @@
     "jsdom": "^28.0.0",
     "postcss-preset-env": "^11.3.0",
     "prettier": "^3.8.1",
-    "typescript": "~5.9.2",
+    "typescript": "~6.0.3",
     "vitest": "^4.0.8"
   }
 }

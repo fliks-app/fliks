@@ -14,7 +14,6 @@
     "importHelpers": true,
     "target": "ES2022",
     "module": "preserve",
-    "baseUrl": ".",
     "paths": {
       "@fliks/plugin-contract/ui": ["../backend/src/common/plugin-contract/ui-contribution.ts"]
     }

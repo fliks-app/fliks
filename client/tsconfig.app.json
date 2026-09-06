@@ -4,14 +4,17 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "./out-tsc/app",
+    // The plugin contract lives in backend/, outside this root.
+    "rootDir": "..",
     "types": []
   },
-  "include": [
-    "src/**/*.ts",
-    "../backend/src/common/plugin-contract/ui-contribution.ts"
-  ],
-  "exclude": [
-    "src/**/*.spec.ts",
-    "../backend/src/common/plugin-contract/ui-contribution.ts"
-  ]
+  "include": ["src/**/*.ts", "../backend/src/common/plugin-contract/ui-contribution.ts"],
+  "exclude": ["src/**/*.spec.ts", "../backend/src/common/plugin-contract/ui-contribution.ts"],
+  "angularCompilerOptions": {
+    "extendedDiagnostics": {
+      // NG8107 misfires under Angular 22's template `?.` typing: dropping the
+      // operator where it points turns into a hard TS2532 instead.
+      "checks": { "optionalChainNotNullable": "suppress" }
+    }
+  }
 }

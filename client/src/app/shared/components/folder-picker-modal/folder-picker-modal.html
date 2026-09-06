@@ -6,7 +6,7 @@
       <button
         type="button"
         class="btn btn-ghost btn-xs"
-        [disabled]="listing()?.parent === null || loading()"
+        [disabled]="(listing()?.parent ?? null) === null || loading()"
         (click)="navigate(listing()?.parent ?? '')"
       >
         ↑ {{ 'folder_picker.up' | translate }}
