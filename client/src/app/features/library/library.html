@@ -363,6 +363,8 @@
                   [progressPercent]="item.progressPercent ?? 0"
                   [interactiveWatched]="canMarkMediaWatched(item)"
                   (watchedToggled)="toggleMediaWatched(item, $event)"
+                  [liked]="isLiked(item.id)"
+                  (likeToggled)="toggleLike(item, $event)"
                 />
               </div>
             } @else {
@@ -373,6 +375,8 @@
                   [progressPercent]="item.progressPercent ?? 0"
                   [interactiveWatched]="canMarkMediaWatched(item)"
                   (watchedToggled)="toggleMediaWatched(item, $event)"
+                  [liked]="isLiked(item.id)"
+                  (likeToggled)="toggleLike(item, $event)"
                 />
               </div>
             }

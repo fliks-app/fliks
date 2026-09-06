@@ -390,6 +390,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.scrollMemory.activate(scrollKey);
       this.syncQueryParams();
       await this.load(lib.id);
+      void this.loadLikes();
       if (this.viewMode() === 'suggestions') {
         // Either a deep-link with `?view=suggestions` or a return from
         // back-nav with the persisted mode. Fetch the suggestions data
@@ -427,10 +428,10 @@ export class LibraryComponent implements OnInit, OnDestroy {
       const lib = this.library();
       if (lib) {
         void this.load(lib.id, true);
+        void this.loadLikes();
         if (this.viewMode() === 'genres') void this.loadGenres();
         else if (this.viewMode() === 'collections') void this.loadCollections();
         else if (this.viewMode() === 'suggestions') void this.loadSuggestions();
-        else if (this.viewMode() === 'likes') void this.loadLikes();
       }
     });
   }
@@ -441,9 +442,9 @@ export class LibraryComponent implements OnInit, OnDestroy {
     const lib = this.library();
     if (!lib) return;
     void this.load(lib.id, true);
+    void this.loadLikes();
     if (this.viewMode() === 'suggestions') void this.loadSuggestions();
     else if (this.viewMode() === 'genres') void this.loadGenres();
-    else if (this.viewMode() === 'likes') void this.loadLikes();
   }
 
   ngOnDestroy() {
@@ -821,6 +822,17 @@ export class LibraryComponent implements OnInit, OnDestroy {
    *  reference and the action would silently no-op. */
   canMarkMediaWatched(m: Media): boolean {
     return m.type === 'series' || !!m.files?.length;
+  }
+
+  isLiked(mediaId: number): boolean {
+    return this.likesList().some((l) => l.mediaId === mediaId && !l.seasonId && !l.episodeId);
+  }
+
+  async toggleLike(m: Media, liked: boolean) {
+    try {
+      await (liked ? this.likesApi.like({ mediaId: m.id }) : this.likesApi.unlike({ mediaId: m.id }));
+      await this.loadLikes();
+    } catch { /* interceptor surfaces errors */ }
   }
 
   async toggleMediaWatched(m: Media, watched: boolean) {

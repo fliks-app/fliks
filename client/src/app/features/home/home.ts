@@ -9,7 +9,7 @@ import { StreamingApiService, ContinueWatchingItem, RecommendationItem } from '.
 import { OfflinePlaybackSyncService } from '../../core/services/offline-playback-sync.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { PlaylistsApiService, Playlist } from '../../core/services/api/playlists-api.service';
-import { LikesApiService, LikedItem } from '../../core/services/api/likes-api.service';
+import { LikesApiService, LikedItem, LikeTarget } from '../../core/services/api/likes-api.service';
 import { RequestsService, FliksRequestRow } from '../../core/services/api/requests.service';
 import { SseService } from '../../core/services/sse.service';
 import {
@@ -326,6 +326,21 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   openPlaylist(id: number): void {
     void this.router.navigate(['/playlists', id]);
+  }
+
+  isLiked(mediaId: number, episodeId?: number | null, seasonId?: number | null): boolean {
+    return this.likes().some(
+      (l) => l.mediaId === mediaId && l.episodeId === (episodeId ?? null) && l.seasonId === (seasonId ?? null),
+    );
+  }
+
+  /** Refetches the row: a new like needs the title/artwork only the server has. */
+  async toggleLike(target: LikeTarget, liked: boolean) {
+    try {
+      await (liked ? this.likesApi.like(target) : this.likesApi.unlike(target));
+      const likes = await this.likesApi.mine(undefined, { force: true });
+      this.likes.set(likes);
+    } catch { /* interceptor surfaces errors */ }
   }
 
   /** Route to a liked item: the episode page when it targets an episode,

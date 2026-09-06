@@ -30,7 +30,23 @@
         </button>
       </div>
     }
-    <app-dropdown-menu placement="bottom-end" [class]="canSwitchEpisodeView() ? 'order-last' : 'order-last ms-auto'">
+    @if (selSeason) {
+      <button
+        type="button"
+        class="order-last btn btn-ghost btn-circle shrink-0"
+        [class.ms-auto]="!canSwitchEpisodeView()"
+        (click)="toggleSeasonLike.emit(selSeason.id)"
+        [attr.aria-label]="(isSeasonLiked(selSeason.id) ? 'likes.unlike_season' : 'likes.like_season') | translate"
+      >
+        <svg
+          lucideHeart
+          class="h-5 w-5"
+          [class.text-error]="isSeasonLiked(selSeason.id)"
+          [attr.fill]="isSeasonLiked(selSeason.id) ? 'currentColor' : 'none'"
+        ></svg>
+      </button>
+    }
+    <app-dropdown-menu placement="bottom-end" class="order-last" [class.ms-auto]="!canSwitchEpisodeView() && !selSeason">
       <button trigger type="button" class="btn btn-ghost btn-circle shrink-0">
         <svg lucideEllipsisVertical class="h-5 w-5"></svg>
       </button>
@@ -254,6 +270,8 @@
                 [link]="episodeRoute(ep)"
                 [playlistMediaId]="m.id"
                 [playlistEpisodeId]="ep.id"
+                [liked]="likedEpisodeIds().includes(ep.id)"
+                (likeToggled)="toggleEpisodeLike.emit(ep.id)"
                 [replaceUrl]="hideControls()"
                 [playable]="ep.hasFile"
                 [interactiveWatched]="ep.hasFile"
@@ -316,6 +334,8 @@
             [link]="episodeRoute(ep)"
             [playlistMediaId]="m.id"
             [playlistEpisodeId]="ep.id"
+            [liked]="likedEpisodeIds().includes(ep.id)"
+            (likeToggled)="toggleEpisodeLike.emit(ep.id)"
             [replaceUrl]="hideControls()"
             [playable]="ep.hasFile"
             [interactiveWatched]="ep.hasFile"

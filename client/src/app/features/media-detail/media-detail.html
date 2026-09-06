@@ -105,6 +105,8 @@
               [episodeProgress]="episodeProgress()"
               [hideControls]="true"
               [sectionTitle]="'media_detail.more_from_season' | translate: { season: s.seasonNumber }"
+              [likedEpisodeIds]="likeState().episodeIds"
+              (toggleEpisodeLike)="toggleEpisodeLike($event)"
               (toggleEpisodeWatched)="onToggleEpisodeWatched(m.id, $event.episode, $event.watched)"
             />
           }
@@ -130,6 +132,8 @@
                   [interactiveWatched]="true"
                   [status]="seasonFullyWatched(other) ? 'watched' : null"
                   [highlighted]="other.id === focusedSeason()?.id"
+                  [liked]="seasonLiked(other.id)"
+                  (likeToggled)="toggleSeasonLike(other.id)"
                   (watchedToggled)="onToggleSeasonWatched(m.id, other, $event)"
                 />
               }
@@ -334,6 +338,8 @@
             [canRequest]="canRequest()"
             [userRequestedSeasonNumbers]="requestedSeasons()"
             [likedSeasonIds]="likeState().seasonIds"
+            [likedEpisodeIds]="likeState().episodeIds"
+            (toggleEpisodeLike)="toggleEpisodeLike($event)"
             (selectSeason)="selectSeason($event)"
             (episodesHasFileOnlyChange)="setEpisodesHasFileOnly($event)"
             (loadSeasonReleases)="loadSeasonReleases(m.id, $event)"

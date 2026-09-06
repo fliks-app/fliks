@@ -2,7 +2,7 @@ import { Component, ChangeDetectionStrategy, ElementRef, input, output, computed
 import { Router, RouterLink } from '@angular/router';
 import { NgClass, DecimalPipe } from '@angular/common';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import { LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX } from '@lucide/angular';
+import { LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { Media } from '../../../core/services/api/media.service';
 import { computeMediaBarStatus } from '../../utils/media-status.util';
@@ -47,7 +47,7 @@ export type CardStatus = 'watched' | 'missing' | null;
   selector: 'app-media-card',
   imports: [
     CachedSrcDirective,RouterLink, NgClass, DecimalPipe, ResolveUrlPipe, TranslateModule,
-    LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX,
+    LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart,
     CardActionsDirective, SpoilerDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-card.html',
@@ -155,6 +155,8 @@ export class MediaCardComponent {
    * change, otherwise the click does nothing.
    */
   readonly interactiveWatched = input(false);
+  /** Viewer's like on this card; `null` hides the heart. Parents persist via {@link likeToggled}. */
+  readonly liked = input<boolean | null>(null);
   /**
    * Escape hatch for a caller-owned action the `card.actions` registry can't
    * express (e.g. home's recommendation-row "mark watched", which drops the
@@ -178,6 +180,8 @@ export class MediaCardComponent {
   readonly dismissed = output<void>();
   /** Emits the desired target state (true = mark watched, false = unmark). */
   readonly watchedToggled = output<boolean>();
+  /** Emits the desired target state (true = like, false = unlike). */
+  readonly likeToggled = output<boolean>();
 
   // Resolved template values (explicit input wins over media-derived default)
   protected readonly _img = computed(() => this.imageUrl() ?? this.media()?.posterUrl ?? null);
@@ -410,6 +414,11 @@ export class MediaCardComponent {
   protected onWatchedClick(event: Event) {
     event.stopPropagation();
     this.watchedToggled.emit(this.status() !== 'watched');
+  }
+
+  protected onLikeClick(event: Event) {
+    event.stopPropagation();
+    this.likeToggled.emit(!this.liked());
   }
 
   protected onPlayClick(event: Event) {

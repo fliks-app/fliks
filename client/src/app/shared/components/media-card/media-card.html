@@ -110,20 +110,17 @@
     } @else if (interactiveWatched()) {
       <button
         type="button"
-        class="absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-full flex items-center justify-center shadow transition-colors cursor-pointer pointer-events-auto"
+        class="absolute top-2 right-2 z-10 btn btn-circle btn-xs border-0 transition-colors pointer-events-auto"
         [class.bg-success]="status() === 'watched'"
-        [class.hover:bg-success/90]="status() === 'watched'"
+        [class.hover:bg-success/80]="status() === 'watched'"
+        [class.text-success-content]="status() === 'watched'"
         [class.bg-black/50]="status() !== 'watched'"
-        [class.hover:bg-black/70]="status() !== 'watched'"
+        [class.hover:bg-neutral-500/50]="status() !== 'watched'"
+        [class.text-white]="status() !== 'watched'"
         (click)="onWatchedClick($event)"
         [attr.aria-label]="(status() === 'watched' ? 'media_card.mark_unwatched' : 'media_card.mark_watched') | translate"
       >
-        <svg
-          lucideCheck
-          class="h-3 w-3"
-          [class.text-success-content]="status() === 'watched'"
-          [class.text-white/80]="status() !== 'watched'"
-        ></svg>
+        <svg lucideCheck class="h-3.5 w-3.5" [strokeWidth]="2"></svg>
       </button>
     } @else if (_resolvedStatus() === 'watched') {
       <div class="absolute top-1.5 right-1.5 z-10">
@@ -154,16 +151,30 @@
       </div>
     }
 
-    <!-- Actions button (desktop) — opens the same panel as TV menu / mobile long-press -->
-    @if (showHoverOverlay() && cardActions().length) {
-      <button
-        type="button"
-        class="absolute bottom-2 right-2 z-10 btn btn-circle btn-sm border-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-neutral-500/50 pointer-events-auto"
-        (click)="openActions($event)"
-        [attr.aria-label]="'media_card.actions' | translate"
-      >
-        <svg lucideEllipsisVertical class="h-4 w-4" [strokeWidth]="2"></svg>
-      </button>
+    <!-- Bottom-right (desktop): like heart + actions button opening the same panel as TV menu / mobile long-press -->
+    @if (showHoverOverlay() && (liked() !== null || cardActions().length)) {
+      <div class="absolute bottom-2 right-2 z-10 flex items-center gap-1 pointer-events-auto">
+        @if (liked() !== null) {
+          <button
+            type="button"
+            class="btn btn-circle btn-xs border-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-neutral-500/50"
+            (click)="onLikeClick($event)"
+            [attr.aria-label]="(liked() ? 'likes.unlike' : 'likes.like') | translate"
+          >
+            <svg lucideHeart class="h-3.5 w-3.5" [strokeWidth]="2" [class.text-error]="liked()" [attr.fill]="liked() ? 'currentColor' : 'none'"></svg>
+          </button>
+        }
+        @if (cardActions().length) {
+          <button
+            type="button"
+            class="btn btn-circle btn-xs border-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-neutral-500/50"
+            (click)="openActions($event)"
+            [attr.aria-label]="'media_card.actions' | translate"
+          >
+            <svg lucideEllipsisVertical class="h-3.5 w-3.5" [strokeWidth]="2"></svg>
+          </button>
+        }
+      </div>
     }
     </div>
   </figure>

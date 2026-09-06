@@ -95,6 +95,8 @@
                 [titleLink]="item.episodeId ? ['/' + (item.mediaType === 'series' ? 'series' : 'movies'), '' + item.mediaId] : null"
                 [dismissable]="true"
                 [interactiveWatched]="true"
+                [liked]="isLiked(item.mediaId, item.episodeId)"
+                (likeToggled)="toggleLike({ mediaId: item.mediaId, episodeId: item.episodeId ?? undefined }, $event)"
                 [clickIntent]="'play'"
                 (clicked)="playContinueWatching(item)"
                 (dismissed)="removeContinueWatching(item)"
@@ -118,6 +120,8 @@
                 [subtitle]="'' + rec.media.year"
                 [link]="['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id]"
                 [playlistMediaId]="rec.media.id"
+                [liked]="isLiked(rec.media.id)"
+                (likeToggled)="toggleLike({ mediaId: rec.media.id }, $event)"
                 [status]="rec.media.available ? null : 'missing'"
                 [playable]="rec.media.available"
                 [dismissable]="true"
@@ -144,6 +148,8 @@
                 [link]="likeLink(item)"
                 [playlistMediaId]="item.mediaId"
                 [playlistEpisodeId]="item.episodeId"
+                [liked]="true"
+                (likeToggled)="toggleLike({ mediaId: item.mediaId, seasonId: item.seasonId ?? undefined, episodeId: item.episodeId ?? undefined }, $event)"
               />
             }
           </app-horizontal-scroller>
@@ -163,6 +169,8 @@
                 [hideStatusBar]="true"
                 [interactiveWatched]="canMarkMediaWatched(m)"
                 (watchedToggled)="toggleRecentMediaWatched(m, $event)"
+                [liked]="isLiked(m.id)"
+                (likeToggled)="toggleLike({ mediaId: m.id }, $event)"
               />
             }
           </app-horizontal-scroller>
@@ -201,6 +209,8 @@
                 [subtitle]="entry.date | localeDate"
                 [link]="['/' + (entry.type === 'series' ? 'series' : 'movies'), '' + entry.mediaId]"
                 [playlistMediaId]="entry.mediaId"
+                [liked]="isLiked(entry.mediaId)"
+                (likeToggled)="toggleLike({ mediaId: entry.mediaId }, $event)"
               />
             }
           </app-horizontal-scroller>
@@ -241,6 +251,8 @@
                 [hideStatusBar]="true"
                 [interactiveWatched]="canMarkMediaWatched(m)"
                 (watchedToggled)="toggleLibraryRecentWatched(section.libraryId!, m, $event)"
+                [liked]="isLiked(m.id)"
+                (likeToggled)="toggleLike({ mediaId: m.id }, $event)"
               />
             }
           </app-horizontal-scroller>

@@ -127,6 +127,7 @@ export class MediaDetailSeasonsComponent {
   readonly activeEpisodeId = input<number | null>(null);
   /** Season ids the viewer has liked — drives the season heart entry. */
   readonly likedSeasonIds = input<number[]>([]);
+  readonly likedEpisodeIds = input<number[]>([]);
 
   /**
    * Card the rail should land on: the episode the page is showing, or the one
@@ -156,6 +157,7 @@ export class MediaDetailSeasonsComponent {
   readonly viewSeasonTracking = output<number>();
   /** Toggle the viewer's like on this season (emits the season id). */
   readonly toggleSeasonLike = output<number>();
+  readonly toggleEpisodeLike = output<number>();
   /** Recommend this season to another member (emits the season id). */
   readonly recommendSeason = output<number>();
   readonly seasonWatchedBusyId = input<number | null>(null);
