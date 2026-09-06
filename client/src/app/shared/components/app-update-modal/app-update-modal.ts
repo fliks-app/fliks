@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   computed,
@@ -29,7 +28,6 @@ import { ModalFooterComponent } from '../modal-footer';
     LucideRocket,
     ModalHeaderComponent,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './app-update-modal.html',
   styles: [
     `

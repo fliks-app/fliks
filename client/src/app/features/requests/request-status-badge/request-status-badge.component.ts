@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   computed,
   inject,
@@ -36,7 +35,6 @@ import {
   selector: 'app-request-status-badge',
   standalone: true,
   imports: [TranslatePipe, ProgressBadgeComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   // Transparent to layout so the inner badge stays the flex item it replaced.
   host: { class: 'contents' },
   templateUrl: './request-status-badge.component.html',

@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   OnInit,
   effect,
@@ -23,7 +22,6 @@ import { LucideMonitor, LucideTablet, LucideSmartphone, LucideTv, LucideMonitorS
     LucideTv,
     LucideMonitorSmartphone,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './pending-requests.html',
 })
 export class PendingRequestsComponent implements OnInit {

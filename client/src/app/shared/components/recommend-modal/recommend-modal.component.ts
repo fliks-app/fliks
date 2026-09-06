@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   inject,
@@ -27,7 +26,6 @@ import { ToastService } from '../../../core/services/toast.service';
 @Component({
   selector: 'app-recommend-modal',
   imports: [FormsModule, TranslatePipe, LucideSend, ModalHeaderComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './recommend-modal.component.html',
 })
 export class RecommendModalComponent {

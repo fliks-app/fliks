@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   input,
   model,
@@ -25,7 +24,6 @@ export type InputFieldType =
 @Component({
   selector: 'app-input-field',
   imports: [FormsModule],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './input-field.html',
 })
 export class InputFieldComponent {

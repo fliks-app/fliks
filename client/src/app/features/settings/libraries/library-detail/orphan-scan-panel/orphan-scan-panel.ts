@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   computed,
   inject,
@@ -58,7 +57,6 @@ interface GroupVM {
     LucideChevronsUpDown,
     PaginationComponent,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orphan-scan-panel.html',
   host: { class: 'flex flex-col min-h-0 flex-1' },
 })

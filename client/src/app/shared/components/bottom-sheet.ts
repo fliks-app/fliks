@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   input,
   output,
   signal,
@@ -23,7 +22,6 @@ import {
 @Component({
   selector: 'app-bottom-sheet',
   standalone: true,
-  changeDetection: ChangeDetectionStrategy.OnPush,
   // Same reason as `app-popover-menu`: the backdrop and sheet are
   // `position: fixed`, so the host needs no box — and left with one it becomes
   // a stray grid item in a parent like daisyUI's `.modal` (display: grid),

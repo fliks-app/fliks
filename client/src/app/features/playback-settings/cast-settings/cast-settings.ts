@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   inject,
   signal,
   OnInit,
@@ -17,7 +16,6 @@ import { QUALITY_OPTIONS, AUDIO_CHANNEL_OPTIONS } from '../playback-options';
 @Component({
   selector: 'app-cast-settings',
   imports: [TvSelectDirective, FormsModule, TranslatePipe, SubtitleAppearanceComponent, ToggleFieldComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './cast-settings.html',
 })
 export class CastSettingsPageComponent implements OnInit {

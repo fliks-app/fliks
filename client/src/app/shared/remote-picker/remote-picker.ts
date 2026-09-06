@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Signal, computed, inject, signal } from '@angular/core';
+import { Component, Signal, computed, inject, signal } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { RouterLink } from '@angular/router';
 import {
@@ -43,7 +43,6 @@ interface PickerRow {
     LucideTv, LucideTablet, LucideSmartphone, LucideMonitor, LucideCast, LucidePlus,
     RouterLink,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './remote-picker.html',
 })
 export class RemotePickerComponent {

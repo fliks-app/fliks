@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   signal,
   effect,
   untracked,
@@ -45,7 +44,6 @@ import { UserAvatarComponent } from '../../shared/components/user-avatar/user-av
 @Component({
   selector: 'app-search',
   imports: [TvSelectDirective, UserAvatarComponent, FormsModule, TranslatePipe, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings, ModalHeaderComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './search.html',
 })
 export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {

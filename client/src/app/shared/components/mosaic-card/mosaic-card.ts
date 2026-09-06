@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   input,
   output,
@@ -11,7 +10,6 @@ import { ImgFadeInDirective } from '../../directives/img-fade-in.directive';
 @Component({
   selector: 'app-mosaic-card',
   imports: [LucideFolder, ResolveUrlPipe, ImgFadeInDirective],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <button
       type="button"

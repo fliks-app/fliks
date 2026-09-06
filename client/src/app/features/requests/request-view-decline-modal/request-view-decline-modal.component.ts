@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   input,
@@ -18,7 +17,6 @@ export interface RequestViewDeclinePayload {
 @Component({
   selector: 'app-request-view-decline-modal',
   imports: [ModalFooterComponent, ModalHeaderComponent, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './request-view-decline-modal.component.html',
 })
 export class RequestViewDeclineModalComponent {

@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   DestroyRef,
   ElementRef,
@@ -49,7 +48,6 @@ type Placement = 'bottom-end' | 'bottom-start' | 'top-end' | 'top-start';
   selector: 'app-dropdown-menu',
   standalone: true,
   imports: [NgTemplateOutlet, BottomSheetComponent, DropdownToggleDirective],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <ng-template #triggerTpl><ng-content select="[trigger]"></ng-content></ng-template>
     <ng-template #itemsTpl><ng-content></ng-content></ng-template>

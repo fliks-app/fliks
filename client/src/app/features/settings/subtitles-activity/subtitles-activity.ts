@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   signal,
   inject,
   OnInit,
@@ -23,7 +22,6 @@ import { episodeLabel } from '../../../shared/utils/episode-label';
 @Component({
   selector: 'app-subtitles-activity',
   imports: [TvSelectDirective, TranslatePipe, LocaleDatePipe, LocalizeLanguagePipe, NgClass, RouterLink, FormsModule, PaginationComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './subtitles-activity.html',
 })
 export class SubtitlesActivityComponent implements OnInit {

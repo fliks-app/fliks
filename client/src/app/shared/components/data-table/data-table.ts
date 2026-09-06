@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   DestroyRef,
   OnInit,
@@ -83,7 +82,6 @@ const BADGE_CLASSES: Readonly<Record<BadgeTone, string>> = {
     ProgressBadgeComponent,
   ],
   providers: [LocaleDatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './data-table.html',
 })
 export class DataTableComponent implements OnInit {

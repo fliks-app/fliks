@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   WritableSignal,
@@ -28,7 +27,6 @@ const ALLOW_UNSIGNED_KEY = 'plugins.allow_unsigned';
 @Component({
   selector: 'app-plugin-settings',
   imports: [ModalFooterComponent, ModalHeaderComponent, TranslatePipe, ToggleFieldComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugin-settings.html',
 })
 export class PluginSettingsComponent {

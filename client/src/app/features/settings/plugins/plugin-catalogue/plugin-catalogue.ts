@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, input, output, signal } from '@angular/core';
+import { Component, OnInit, inject, input, output, signal } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideChevronDown } from '@lucide/angular';
 import {
@@ -23,7 +23,6 @@ interface CatalogueRow {
 @Component({
   selector: 'app-plugin-catalogue',
   imports: [TranslatePipe, DropdownToggleDirective, LucideChevronDown, SelectedOptionDirective],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugin-catalogue.html',
 })
 export class PluginCatalogueComponent implements OnInit {

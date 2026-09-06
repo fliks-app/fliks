@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   signal,
   inject,
   OnInit,
@@ -19,7 +18,6 @@ const MAX_SLIDER = 60000; // MB/h max for slider
 @Component({
   selector: 'app-quality-definitions',
   imports: [FormsModule, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './quality-definitions.html',
 })
 export class QualityDefinitionsComponent implements OnInit {

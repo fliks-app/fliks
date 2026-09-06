@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   signal,
   inject,
   computed,
@@ -63,7 +62,6 @@ function applySeasonFolderFormat(format: string): string {
 @Component({
   selector: 'app-naming-settings',
   imports: [FormsModule, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './naming.html',
 })
 export class NamingSettingsComponent implements OnInit {

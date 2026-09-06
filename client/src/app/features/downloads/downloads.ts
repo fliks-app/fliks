@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   signal,
   computed,
   effect,
@@ -50,7 +49,6 @@ export interface DisplayDownloadTask extends DownloadTask {
     LucideAlertCircle,
     LucideRotateCcw,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './downloads.html',
 })
 export class DownloadsComponent implements OnInit, OnDestroy {

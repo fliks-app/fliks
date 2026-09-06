@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   computed,
   effect,
@@ -140,7 +139,6 @@ interface AudioTrack {
     LucideCheck, LucideDownload, LucideEllipsisVertical,
     LucideFilm, LucideHeart, LucideListPlus, LucidePlay, LucideRotateCcw,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-info-header.html',
 })
 export class MediaInfoHeaderComponent {

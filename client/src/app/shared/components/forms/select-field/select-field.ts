@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   input,
   model,
@@ -20,7 +19,6 @@ import { TvSelectDirective } from '../../../directives/tv-select.directive';
 @Component({
   selector: 'app-select-field',
   imports: [TvSelectDirective, FormsModule],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './select-field.html',
 })
 export class SelectFieldComponent<T = unknown> {

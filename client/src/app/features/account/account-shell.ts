@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy } from '@angular/core';
+import { Component } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { SettingsDrawerComponent } from '../../shared/components/settings-drawer/settings-drawer';
@@ -11,7 +11,6 @@ import { LucideUser, LucideLock, LucideSparkles, LucideUsers, LucideEyeOff } fro
     SettingsDrawerComponent,
     LucideUser, LucideLock, LucideSparkles, LucideUsers, LucideEyeOff,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './account-shell.html',
 })
 export class AccountShellComponent {}

@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   ElementRef,
   signal,
   inject,
@@ -43,7 +42,6 @@ const subKey = (isoCode: string, forced: boolean) =>
 @Component({
   selector: 'app-language-profiles',
   imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './language-profiles.html',
 })
 export class LanguageProfilesComponent implements OnInit {

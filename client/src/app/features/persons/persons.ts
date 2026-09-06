@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   signal,
   inject,
   Injector,
@@ -27,7 +26,6 @@ const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
   selector: 'app-persons',
   imports: [TvSelectDirective, 
     CachedSrcDirective,FormsModule, TranslatePipe, RouterLink, ResolveUrlPipe, LucideSearch, LucideUsers],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './persons.html',
 })
 export class PersonsComponent implements OnInit, OnDestroy {

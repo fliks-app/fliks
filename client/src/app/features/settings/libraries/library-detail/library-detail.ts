@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject, OnInit } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
 import {
   ActivatedRoute,
   Router,
@@ -30,7 +30,6 @@ import { ImportProgressBannerComponent } from '../../../../shared/components/imp
     ImportProgressBannerComponent,
   ],
   providers: [LibraryDetailState],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './library-detail.html',
 })
 export class LibraryDetailComponent implements OnInit {

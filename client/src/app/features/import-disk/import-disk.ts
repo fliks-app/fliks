@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   signal,
   inject,
   computed,
@@ -58,7 +57,6 @@ export type ImportMethod = 'copy' | 'move';
 @Component({
   selector: 'app-import-disk',
   imports: [TvSelectDirective, DecimalPipe, FormsModule, TranslatePipe, SearchableSelectComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './import-disk.html',
 })
 export class ImportDiskComponent implements OnInit {

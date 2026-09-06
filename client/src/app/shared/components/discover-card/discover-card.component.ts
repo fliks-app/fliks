@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { Component, input, output } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { MetadataSearchResult } from '../../../core/services/api/metadata.service';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
@@ -11,7 +11,6 @@ export type CardStatus = 'library' | 'pending' | 'declined' | null;
   selector: 'app-discover-card',
   imports: [
     CachedSrcDirective,DecimalPipe, ResolveUrlPipe, LucideFilm, LucideCheck, LucideClock, LucideX],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './discover-card.component.html',
 })
 export class DiscoverCardComponent {

@@ -1,6 +1,5 @@
 import {
   AfterViewInit,
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   OnDestroy,
@@ -147,7 +146,6 @@ class PausableTimeout {
 
 @Component({
   imports: [TranslatePipe, LucideCircleAlert, LucideInfo, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, DefaultFocusDirective],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './player.html',
   encapsulation: ViewEncapsulation.None,
   styles: [`

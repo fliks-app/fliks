@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, computed, effect, inject, signal } from '@angular/core';
+import { Component, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
@@ -116,7 +116,6 @@ const PLUGIN_PROVIDER_LABELS: ProviderListLabels = {
 @Component({
   selector: 'app-plugin-view',
   imports: [TranslatePipe, LucideTriangleAlert, SchemaFormComponent, ProviderListComponent, DataTableComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugin-view.html',
 })
 export class PluginViewComponent implements OnDestroy {

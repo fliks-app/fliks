@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   OnDestroy,
   OnInit,
@@ -40,7 +39,6 @@ export function writeSectionOpen(key: string, open: boolean): void {
 @Component({
   selector: 'app-collapsible-section',
   imports: [LucideChevronDown],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './collapsible-section.html',
   host: { class: 'block' },
 })

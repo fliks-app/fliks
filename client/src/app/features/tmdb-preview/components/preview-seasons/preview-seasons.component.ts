@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   computed,
   effect,
@@ -28,7 +27,6 @@ import { TvRowDirective } from '../../../../shared/directives/tv-row.directive';
     ClampToggleDirective,
     TvRowDirective,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './preview-seasons.component.html',
   host: { class: 'block' },
 })

@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   computed,
@@ -57,7 +56,6 @@ interface SeasonRow {
   selector: 'app-download-detail-modal',
   standalone: true,
   imports: [ModalFooterComponent, TranslatePipe, ProgressBarComponent, ModalHeaderComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './download-detail-modal.html',
 })
 export class DownloadDetailModalComponent {

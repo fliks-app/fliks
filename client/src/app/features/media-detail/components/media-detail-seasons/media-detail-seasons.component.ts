@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   computed,
   effect,
@@ -79,7 +78,6 @@ function readEpisodeViewFromStorage(): EpisodeView {
 @Component({
   selector: 'app-media-detail-seasons',
   imports: [TranslatePipe, UpperCasePipe, SeasonLabelPipe, NgTemplateOutlet, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, CollapsibleSectionComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, SynopsisComponent, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideLayoutGrid, LucideList, LucideListChecks, LucideListPlus, LucidePackage, LucideUserPlus, LucideX],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })
 export class MediaDetailSeasonsComponent {

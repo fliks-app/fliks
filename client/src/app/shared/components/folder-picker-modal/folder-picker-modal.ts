@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   ElementRef,
   effect,
   inject,
@@ -28,7 +27,6 @@ interface FsListing {
 @Component({
   selector: 'app-folder-picker-modal',
   imports: [ModalFooterComponent, ModalHeaderComponent, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './folder-picker-modal.html',
 })
 export class FolderPickerModalComponent {

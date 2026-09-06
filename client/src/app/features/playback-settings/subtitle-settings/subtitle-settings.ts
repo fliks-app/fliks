@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject, signal, OnInit } from '@angular/core';
+import { Component, inject, signal, OnInit } from '@angular/core';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -15,7 +15,6 @@ import {
 @Component({
   selector: 'app-subtitle-settings',
   imports: [TvSelectDirective, FormsModule, TranslatePipe, LucideTrash2, SubtitleAppearanceComponent, ToggleFieldComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './subtitle-settings.html',
 })
 export class SubtitleSettingsPageComponent implements OnInit {

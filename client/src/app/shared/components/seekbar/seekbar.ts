@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   computed,
@@ -14,7 +13,6 @@ import { TvService } from '../../../core/services/tv.service';
 
 @Component({
   selector: 'app-seekbar',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './seekbar.html',
 })
 export class SeekbarComponent {

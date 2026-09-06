@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   ElementRef,
   computed,
   signal,
@@ -46,7 +45,6 @@ interface CreateNotificationBody {
 @Component({
   selector: 'app-notifications-settings',
   imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './notifications.html',
 })
 export class NotificationsSettingsComponent implements OnInit {

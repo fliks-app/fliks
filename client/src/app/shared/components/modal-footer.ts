@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   booleanAttribute,
   input,
@@ -12,7 +11,6 @@ import {
  */
 @Component({
   selector: 'app-modal-footer',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   template: '<ng-content />',
   host: {
     class: 'modal-action border-t border-base-200 bg-base-100',

@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   DestroyRef,
   ElementRef,
   computed,
@@ -108,7 +107,6 @@ type PlaylistGroupedEntry =
     ModalHeaderComponent,
     ResolveUrlPipe,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './playlist-detail.html',
 })
 export class PlaylistDetailComponent {

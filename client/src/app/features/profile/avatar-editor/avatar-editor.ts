@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   computed,
@@ -27,7 +26,6 @@ const OUTPUT = 512;
 @Component({
   selector: 'app-avatar-editor',
   imports: [ModalFooterComponent, ModalHeaderComponent, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './avatar-editor.html',
 })
 export class AvatarEditorComponent {

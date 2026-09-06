@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   HostListener,
@@ -29,7 +28,6 @@ export interface SearchableSelectOption {
   selector: 'app-searchable-select',
   standalone: true,
   imports: [FormsModule, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './searchable-select.html',
   host: { class: 'relative inline-block' },
 })

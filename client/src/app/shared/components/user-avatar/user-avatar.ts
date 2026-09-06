@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   computed,
   inject,
@@ -20,7 +19,6 @@ import { initialsAvatar } from '../../../core/utils/initials-avatar';
 @Component({
   selector: 'app-user-avatar',
   imports: [TranslatePipe, LucideCheck],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './user-avatar.html',
 })
 export class UserAvatarComponent {

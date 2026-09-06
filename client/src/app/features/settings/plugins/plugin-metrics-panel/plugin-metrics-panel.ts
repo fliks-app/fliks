@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { Component, input } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import type { PluginMetricsEntry } from '../../../../core/services/api/plugins-api.service';
 
@@ -7,7 +7,6 @@ import type { PluginMetricsEntry } from '../../../../core/services/api/plugins-a
 @Component({
   selector: 'app-plugin-metrics-panel',
   imports: [TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugin-metrics-panel.html',
 })
 export class PluginMetricsPanelComponent {

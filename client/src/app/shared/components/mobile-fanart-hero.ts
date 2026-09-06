@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { Component, input } from '@angular/core';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { ImgFadeInDirective } from '../directives/img-fade-in.directive';
 
@@ -28,7 +28,6 @@ import { ImgFadeInDirective } from '../directives/img-fade-in.directive';
       }
     </div>
   `,
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MobileFanartHeroComponent {
   readonly fanartUrl = input<string | null | undefined>(null);

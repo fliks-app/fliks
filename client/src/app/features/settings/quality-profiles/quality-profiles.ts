@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   ElementRef,
   signal,
   inject,
@@ -30,7 +29,6 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
     RouterLink,
     TranslatePipe,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './quality-profiles.html',
 })
 export class QualityProfilesComponent implements OnInit {

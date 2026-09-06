@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   computed,
@@ -38,7 +37,6 @@ const FILTER_FROM_OPTIONS = 8;
   selector: 'app-multi-select',
   standalone: true,
   imports: [FormsModule, TranslatePipe, PopoverMenuComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './multi-select.html',
   host: { class: 'block' },
 })

@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   signal,
   inject,
   OnInit,
@@ -14,7 +13,6 @@ import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-fi
 @Component({
   selector: 'app-subtitles-settings',
   imports: [FormsModule, TranslatePipe, ToggleFieldComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './subtitles-settings.html',
 })
 export class SubtitlesSettingsComponent implements OnInit {

@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   DestroyRef,
   computed,
@@ -42,7 +41,6 @@ import {
   selector: 'app-popover-menu',
   standalone: true,
   imports: [BottomSheetComponent, NgTemplateOutlet],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   // `display: contents` keeps the host out of its parent's layout — the
   // backdrop + content divs are `position: fixed` so they don't need a
   // box of their own, and the host would otherwise act as a stray grid

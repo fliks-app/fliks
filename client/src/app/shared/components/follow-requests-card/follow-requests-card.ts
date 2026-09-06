@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   OnInit,
   effect,
@@ -23,7 +22,6 @@ import { UserAvatarComponent } from '../user-avatar/user-avatar';
 @Component({
   selector: 'app-follow-requests-card',
   imports: [UserAvatarComponent, RouterLink, TranslatePipe, LucideCheck, LucideX],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './follow-requests-card.html',
 })
 export class FollowRequestsCardComponent implements OnInit {

@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   ElementRef,
   signal,
   viewChild,
@@ -28,7 +27,6 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 @Component({
   selector: 'app-users-settings',
   imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, RouterLink, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './users.html',
 })
 export class UsersSettingsComponent implements OnInit {

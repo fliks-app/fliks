@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   signal,
   effect,
   input,
@@ -25,7 +24,6 @@ import { TvService } from '../../../core/services/tv.service';
 @Component({
   selector: 'app-settings-drawer',
   imports: [RouterOutlet, RouterLink, LucideChevronLeft, LucideMenu],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './settings-drawer.html',
 })
 export class SettingsDrawerComponent implements OnInit, OnDestroy {

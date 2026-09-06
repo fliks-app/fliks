@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   computed,
   inject,
@@ -33,7 +32,6 @@ import {
     LucideTriangleAlert,
     LucideX,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './setup-checklist.html',
 })
 export class SetupChecklistComponent implements OnInit {

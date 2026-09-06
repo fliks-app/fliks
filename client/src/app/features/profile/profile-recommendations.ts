@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   effect,
   inject,
@@ -26,7 +25,6 @@ import { itemArtwork } from '../../shared/utils/media-artwork.util';
   selector: 'app-profile-recommendations',
   imports: [
     CachedSrcDirective,TranslatePipe, RouterLink, ResolveUrlPipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './profile-recommendations.html',
 })
 export class ProfileRecommendationsComponent {

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { Component, input } from '@angular/core';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
 
@@ -19,7 +19,6 @@ import { CachedSrcDirective } from '../../directives/cached-src.directive';
   selector: 'app-dropdown-option',
   imports: [
     CachedSrcDirective,ResolveUrlPipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './dropdown-option.html',
   host: { class: 'contents' },
 })

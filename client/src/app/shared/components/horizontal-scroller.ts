@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   DestroyRef,
   HostListener,
   inject,
@@ -22,7 +21,6 @@ import { rowTopOffset, snapRowOnFocus } from '../../core/utils/focus-snap.util';
 @Component({
   selector: 'app-horizontal-scroller',
   imports: [LucideChevronLeft, LucideChevronRight, TvRowDirective],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './horizontal-scroller.html',
   styleUrl: './horizontal-scroller.css',
 })

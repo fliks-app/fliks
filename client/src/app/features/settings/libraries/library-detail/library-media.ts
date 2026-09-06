@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   computed,
   effect,
   inject,
@@ -34,7 +33,6 @@ const PAGE_SIZE = 30;
     PaginationComponent,
     OrphanScanModalComponent,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './library-media.html',
 })
 export class LibraryMediaComponent implements OnInit {

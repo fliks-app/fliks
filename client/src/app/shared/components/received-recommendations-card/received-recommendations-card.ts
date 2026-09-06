@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   OnInit,
   computed,
@@ -50,7 +49,6 @@ import { itemArtwork } from '../../utils/media-artwork.util';
     LucideHeart,
     LucideListPlus,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './received-recommendations-card.html',
   host: { class: 'contents' },
 })

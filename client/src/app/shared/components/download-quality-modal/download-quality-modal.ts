@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   signal,
   input,
   output,
@@ -22,7 +21,6 @@ import { formatBytes } from '../../utils/download-format';
 @Component({
   selector: 'app-download-quality-modal',
   imports: [TranslatePipe, LucideDownload, LucideX],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <dialog #dialog class="modal">
       <div class="modal-box max-w-sm">

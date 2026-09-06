@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   computed,
@@ -37,7 +36,6 @@ export type TrackingScope =
     LucideCircleAlert,
     LucideEyeOff,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './tracking-status-modal.html',
 })
 export class TrackingStatusModalComponent {

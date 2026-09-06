@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   ElementRef,
   signal,
   inject,
@@ -114,7 +113,6 @@ const LABELS: ProviderListLabels = {
     TranslatePipe,
     ProviderListComponent,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './subtitle-providers.html',
 })
 export class SubtitleProvidersSettingsComponent implements OnInit {

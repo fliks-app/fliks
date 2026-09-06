@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   OnDestroy,
@@ -155,7 +154,6 @@ const GRAB_HANDOFF_MS = 8000;
     ImgFadeInDirective,
     TvSectionDirective,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail.html',
 })
 export class MediaDetailComponent implements OnInit, OnDestroy {

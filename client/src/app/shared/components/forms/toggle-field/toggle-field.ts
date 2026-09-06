@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   input,
   model,
@@ -17,7 +16,6 @@ import { FormsModule } from '@angular/forms';
 @Component({
   selector: 'app-toggle-field',
   imports: [FormsModule],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './toggle-field.html',
 })
 export class ToggleFieldComponent {

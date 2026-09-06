@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   DestroyRef,
   ElementRef,
@@ -29,7 +28,6 @@ import { LucideMonitorSmartphone, LucideKeyRound, LucideUserRoundPen } from '@lu
     UserAvatarComponent,
     DefaultFocusDirective,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './select-user.html',
 })
 export class SelectUserComponent {

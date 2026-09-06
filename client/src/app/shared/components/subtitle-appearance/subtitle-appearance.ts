@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   input,
   output,
@@ -27,7 +26,6 @@ import {
   selector: 'app-subtitle-appearance',
   standalone: true,
   imports: [TvSelectDirective, FormsModule, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="flex flex-col gap-5">
       <div class="flex flex-col gap-1">

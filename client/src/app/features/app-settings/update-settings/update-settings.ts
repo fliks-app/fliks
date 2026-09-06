@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject } from '@angular/core';
+import { Component, OnInit, computed, inject } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import {
   LucideCircleAlert,
@@ -28,7 +28,6 @@ import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
     LucideExternalLink,
     LucideRocket,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './update-settings.html',
   styles: [
     `

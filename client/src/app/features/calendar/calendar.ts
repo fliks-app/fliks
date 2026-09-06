@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   signal,
   inject,
   OnInit,
@@ -27,7 +26,6 @@ interface CalendarDay {
 @Component({
   selector: 'app-calendar',
   imports: [RouterLink, TranslatePipe, NgClass, LocaleDatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './calendar.html',
 })
 export class CalendarComponent implements OnInit {

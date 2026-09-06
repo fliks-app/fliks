@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   OnDestroy,
   OnInit,
@@ -30,7 +29,6 @@ import { formatTime } from '../../../core/utils/player.utils';
 @Component({
   selector: 'app-remote-settings',
   imports: [DatePipe, FormsModule, TranslatePipe, ToggleFieldComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './remote-settings.html',
 })
 export class RemoteSettingsPageComponent implements OnInit, OnDestroy {

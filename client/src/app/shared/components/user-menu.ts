@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
@@ -24,7 +24,6 @@ import {
     LucideUser, LucideSettings, LucideShield, LucideRepeat, LucideLogOut,
     LucideServer, LucideMonitorSmartphone,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './user-menu.html',
 })
 export class UserMenuComponent {

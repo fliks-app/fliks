@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   ElementRef,
   computed,
   signal,
@@ -39,7 +38,6 @@ type RuleMediaType = '' | 'movie' | 'series';
     FormsModule,
     TranslatePipe,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './auto-approval.html',
 })
 export class AutoApprovalSettingsComponent implements OnInit {

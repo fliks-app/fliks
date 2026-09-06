@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   inject,
@@ -43,7 +42,6 @@ export interface IdentifyModalConfig {
     FormsModule,
     ResolveUrlPipe,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-identify-modal.component.html',
 })
 export class MediaDetailIdentifyModalComponent {

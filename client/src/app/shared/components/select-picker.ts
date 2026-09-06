@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { SelectPickerService } from '../../core/services/select-picker.service';
 import { PopoverMenuComponent } from './popover-menu';
 
@@ -12,7 +12,6 @@ import { PopoverMenuComponent } from './popover-menu';
   selector: 'app-select-picker',
   standalone: true,
   imports: [PopoverMenuComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-popover-menu
       [open]="picker.open()"

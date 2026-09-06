@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   inject,
   input,
   signal,
@@ -23,7 +22,6 @@ const detailsCache = new Map<
 @Component({
   selector: 'app-request-poster',
   imports: [ResolveUrlPipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block w-full h-full min-h-0' },
   template: `
     @if (imageUrl()) {

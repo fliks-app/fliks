@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   OnInit,
@@ -41,7 +40,6 @@ import { trustBadgeFor } from './plugin-trust';
     PluginSourcesComponent,
     PluginMetricsPanelComponent,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugins.html',
 })
 export class PluginsSettingsComponent implements OnInit {

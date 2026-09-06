@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   input,
@@ -21,7 +20,6 @@ import { ModalFooterComponent } from '../../../../shared/components/modal-footer
     TvSelectDirective,
     ModalHeaderComponent,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-profiles-modal.component.html',
 })
 export class MediaDetailProfilesModalComponent {

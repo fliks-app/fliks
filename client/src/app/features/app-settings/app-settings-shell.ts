@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { SettingsDrawerComponent } from '../../shared/components/settings-drawer/settings-drawer';
@@ -14,7 +14,6 @@ import { DeviceService } from '../../core/services/device.service';
     LucideSettings, LucidePlay, LucideCaptions, LucideCast, LucideHardDrive, LucideMonitor,
     LucideMonitorSmartphone, LucideHouse, LucideDownload,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './app-settings-shell.html',
 })
 export class AppSettingsShellComponent {

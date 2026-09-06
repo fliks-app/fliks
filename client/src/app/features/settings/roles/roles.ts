@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   ElementRef,
   signal,
   viewChild,
@@ -20,7 +19,6 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 @Component({
   selector: 'app-roles-settings',
   imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './roles.html',
 })
 export class RolesSettingsComponent implements OnInit {

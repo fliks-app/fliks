@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   OnInit,
   inject,
   signal,
@@ -31,7 +30,6 @@ import { LibraryWizardMediaComponent } from './library-wizard-media';
     LibraryUserPickerComponent,
     LibraryWizardMediaComponent,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './library-wizard.html',
   providers: [LibraryDetailState],
 })
