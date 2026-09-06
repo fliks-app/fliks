@@ -64,6 +64,11 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// Legible option deselected to clear the native caption while leaving PiP,
     /// restored once PiP has fully exited.
     private var pipDeselectedSubtitle: AVMediaSelectionOption?
+    /// Selection groups for the current item. Loaded asynchronously once the
+    /// item is ready (the synchronous asset accessor is gone since iOS 16) so
+    /// every track call site can stay synchronous.
+    private var audibleGroup: AVMediaSelectionGroup?
+    private var legibleGroup: AVMediaSelectionGroup?
 
     /// Exposed for PipPlugin to access the player layer.
     public var activePlayerLayer: AVPlayerLayer? { playerLayer }
@@ -309,6 +314,10 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// user explicitly picks a quality.
     @discardableResult
     private func attachPlayerItem(_ item: AVPlayerItem) -> AVPlayer {
+        // Groups belong to the outgoing asset — selecting one of its options
+        // on the new item would raise.
+        audibleGroup = nil
+        legibleGroup = nil
         // Pull cues off the legible track ourselves (player rendering
         // suppressed) so the custom overlay can draw them box-free.
         attachLegibleOutput(to: item)
@@ -403,6 +412,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         DispatchQueue.main.async { [weak self] in
             self?.player?.pause()
             self?.player?.replaceCurrentItem(with: nil)
+            self?.audibleGroup = nil
+            self?.legibleGroup = nil
             call.resolve()
         }
     }
@@ -414,13 +425,13 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             var tracks: [[String: Any]] = []
 
             if let item = self?.player?.currentItem,
-               let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .audible) {
+               let group = self?.audibleGroup {
                 let selected = item.currentMediaSelection.selectedMediaOption(in: group)
                 for (index, option) in group.options.enumerated() {
                     let locale = option.locale ?? Locale(identifier: "und")
                     tracks.append([
                         "id": "audio-\(index)",
-                        "language": locale.languageCode ?? "und",
+                        "language": locale.language.languageCode?.identifier ?? "und",
                         "label": option.displayName,
                         "selected": option == selected,
                     ])
@@ -439,7 +450,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
         DispatchQueue.main.async { [weak self] in
             guard let item = self?.player?.currentItem,
-                  let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .audible) else {
+                  let group = self?.audibleGroup else {
                 call.reject("No audio tracks available")
                 return
             }
@@ -465,13 +476,13 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         DispatchQueue.main.async { [weak self] in
             var tracks: [[String: Any]] = []
 
-            if let item = self?.player?.currentItem,
-               let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .legible) {
+            if self?.player?.currentItem != nil,
+               let group = self?.legibleGroup {
                 for (index, option) in group.options.enumerated() {
                     let locale = option.locale ?? Locale(identifier: "und")
                     tracks.append([
                         "id": "text-\(index)",
-                        "language": locale.languageCode ?? "und",
+                        "language": locale.language.languageCode?.identifier ?? "und",
                         "label": option.displayName,
                         // displayName == the manifest NAME (the rendition's
                         // stable id); the engine matches the picked track by it.
@@ -489,7 +500,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
         DispatchQueue.main.async { [weak self] in
             guard let item = self?.player?.currentItem,
-                  let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .legible) else {
+                  let group = self?.legibleGroup else {
                 call.resolve()
                 return
             }
@@ -581,7 +592,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// The option is remembered so cue delivery can be restored on exit.
     private func clearNativeCaption() {
         guard let item = player?.currentItem,
-              let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .legible) else { return }
+              let group = legibleGroup else { return }
         pipDeselectedSubtitle = item.currentMediaSelection.selectedMediaOption(in: group)
         item.select(nil, in: group)
     }
@@ -589,7 +600,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private func restoreLegibleSelection() {
         guard let option = pipDeselectedSubtitle,
               let item = player?.currentItem,
-              let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .legible) else { return }
+              let group = legibleGroup else { return }
         item.select(option, in: group)
         pipDeselectedSubtitle = nil
     }
@@ -953,21 +964,19 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private func ensureMediaSelectionPopulated(retries: Int = 8) {
         guard let item = player?.currentItem else { return }
         let asset = item.asset
-        let key = "availableMediaCharacteristicsWithMediaSelectionOptions"
-        asset.loadValuesAsynchronously(forKeys: [key]) { [weak self] in
-            DispatchQueue.main.async {
-                guard let self = self, self.player?.currentItem === item else { return }
-                let audible = asset.mediaSelectionGroup(forMediaCharacteristic: .audible)?.options.count ?? 0
-                let legible = asset.mediaSelectionGroup(forMediaCharacteristic: .legible)?.options.count ?? 0
-                if audible > 0 || legible > 0 {
-                    self.emitTracksChanged()
-                    return
-                }
-                if retries > 0 {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-                        self?.ensureMediaSelectionPopulated(retries: retries - 1)
-                    }
-                }
+        Task { @MainActor [weak self] in
+            let audible = try? await asset.loadMediaSelectionGroup(for: .audible)
+            let legible = try? await asset.loadMediaSelectionGroup(for: .legible)
+            guard let self = self, self.player?.currentItem === item else { return }
+            self.audibleGroup = audible
+            self.legibleGroup = legible
+            if (audible?.options.count ?? 0) > 0 || (legible?.options.count ?? 0) > 0 {
+                self.emitTracksChanged()
+                return
+            }
+            if retries > 0 {
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                self.ensureMediaSelectionPopulated(retries: retries - 1)
             }
         }
     }
@@ -976,13 +985,13 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         guard let item = player?.currentItem else { return }
 
         var audioTracks: [[String: Any]] = []
-        if let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .audible) {
+        if let group = audibleGroup {
             let selected = item.currentMediaSelection.selectedMediaOption(in: group)
             for (index, option) in group.options.enumerated() {
                 let locale = option.locale ?? Locale(identifier: "und")
                 audioTracks.append([
                     "id": "audio-\(index)",
-                    "language": locale.languageCode ?? "und",
+                    "language": locale.language.languageCode?.identifier ?? "und",
                     "label": option.displayName,
                     "selected": option == selected,
                 ])
@@ -990,12 +999,12 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         var subtitleTracks: [[String: Any]] = []
-        if let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .legible) {
+        if let group = legibleGroup {
             for (index, option) in group.options.enumerated() {
                 let locale = option.locale ?? Locale(identifier: "und")
                 subtitleTracks.append([
                     "id": "text-\(index)",
-                    "language": locale.languageCode ?? "und",
+                    "language": locale.language.languageCode?.identifier ?? "und",
                     "label": option.displayName,
                     "forced": option.hasMediaCharacteristic(.containsOnlyForcedSubtitles),
                 ])

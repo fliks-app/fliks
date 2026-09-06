@@ -291,47 +291,45 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         // No `AVAssetDownloadTaskMinimumRequiredMediaBitrateKey`: the manifest
         // is already scoped to the chosen quality (startQuality in the URL), so
         // AVFoundation takes the highest variant it exposes.
-        let key = "availableMediaCharacteristicsWithMediaSelectionOptions"
-        asset.loadValuesAsynchronously(forKeys: [key]) { [weak self] in
-            DispatchQueue.main.async {
-                defer { release() }
-                guard let self = self else { return }
-                // `removeDownload` drops the id from `starting`; if it is gone
-                // the user cancelled while the asset was loading.
-                guard self.starting.remove(id) != nil else { return }
-                guard let task = self.downloadSession.aggregateAssetDownloadTask(
-                    with: asset,
-                    mediaSelections: self.allMediaSelections(for: asset),
-                    assetTitle: id,
-                    assetArtworkData: nil,
-                    options: nil
-                ) else {
-                    NSLog("[Download] failed to create task id=\(id)")
-                    self.notifyListeners("downloadFailed", data: ["id": id, "progress": 0, "state": "failed"])
-                    self.batchFailed += 1
-                    self.finishBatchItem()
-                    self.pumpQueue()
-                    return
-                }
-                task.taskDescription = id
-                self.activeTasks[id] = task
-                self.progressById[id] = 0
-                task.resume()
-                self.notifyListeners("downloadProgress", data: [
-                    "id": id, "progress": 0, "state": "downloading",
-                ])
+        Task { @MainActor [weak self] in
+            defer { release() }
+            guard let self = self else { return }
+            let selections = await self.allMediaSelections(for: asset)
+            // `removeDownload` drops the id from `starting`; if it is gone
+            // the user cancelled while the asset was loading.
+            guard self.starting.remove(id) != nil else { return }
+            guard let task = self.downloadSession.aggregateAssetDownloadTask(
+                with: asset,
+                mediaSelections: selections,
+                assetTitle: id,
+                assetArtworkData: nil,
+                options: nil
+            ) else {
+                NSLog("[Download] failed to create task id=\(id)")
+                self.notifyListeners("downloadFailed", data: ["id": id, "progress": 0, "state": "failed"])
+                self.batchFailed += 1
+                self.finishBatchItem()
+                self.pumpQueue()
+                return
             }
+            task.taskDescription = id
+            self.activeTasks[id] = task
+            self.progressById[id] = 0
+            task.resume()
+            self.notifyListeners("downloadProgress", data: [
+                "id": id, "progress": 0, "state": "downloading",
+            ])
         }
     }
 
     /// Every audio + subtitle media selection for the asset, each derived from
     /// the preferred selection with one option chosen in its group, so the
     /// aggregate download bakes all renditions into the .movpkg for offline use.
-    private func allMediaSelections(for asset: AVURLAsset) -> [AVMediaSelection] {
+    private func allMediaSelections(for asset: AVURLAsset) async -> [AVMediaSelection] {
+        guard let base = try? await asset.load(.preferredMediaSelection) else { return [] }
         var selections: [AVMediaSelection] = []
-        let base = asset.preferredMediaSelection
         for characteristic in [AVMediaCharacteristic.audible, .legible] {
-            guard let group = asset.mediaSelectionGroup(forMediaCharacteristic: characteristic) else { continue }
+            guard let group = try? await asset.loadMediaSelectionGroup(for: characteristic) else { continue }
             for option in group.options {
                 guard let mutable = base.mutableCopy() as? AVMutableMediaSelection else { continue }
                 mutable.select(option, in: group)
