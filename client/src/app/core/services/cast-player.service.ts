@@ -25,6 +25,7 @@ export interface CastSubtitleOption {
   language: string;
   burnIn: boolean;
   forced?: boolean;
+  hearingImpaired?: boolean;
   castTrackId?: number;
   subtitleDbId?: number;
 }
@@ -99,6 +100,7 @@ interface SubtitleInfo {
   subtitleDbId?: number;
   url: string;
   forced?: boolean;
+  hearingImpaired?: boolean;
 }
 
 /**
@@ -353,6 +355,7 @@ export class CastPlayerService {
       language: s.language,
       burnIn: s.burnIn,
       forced: s.forced,
+      hearingImpaired: s.hearingImpaired,
       subtitleDbId: s.subtitleDbId,
       castTrackId: s.burnIn ? s.subtitleDbId : trackId++,
     })));
@@ -669,17 +672,20 @@ export class CastPlayerService {
     if (!settings.rememberSubtitleSelections || !mediaId) return null;
     const saved = this.playerSettings.getRememberedSubtitleTrack(mediaId);
     if (!saved || saved === 'off') return null;
-    const [savedLang, savedType] = saved.split(':');
-    const wantForced = savedType === 'forced';
+    const parts = saved.split(':');
+    const savedLang = parts[0];
+    const wantForced = parts.includes('forced');
+    const wantHi = parts.includes('hi');
     const match =
-      subtitles.find((s) => !s.burnIn && s.language === savedLang && !!s.forced === wantForced)
+      subtitles.find((s) => !s.burnIn && s.language === savedLang && !!s.forced === wantForced && !!s.hearingImpaired === wantHi)
+      ?? subtitles.find((s) => !s.burnIn && s.language === savedLang && !!s.forced === wantForced)
       ?? subtitles.find((s) => !s.burnIn && s.language === savedLang && !s.forced);
     return match?.id ?? null;
   }
 
-  saveSubtitleSelection(language: string | null, forced = false) {
+  saveSubtitleSelection(language: string | null, forced = false, hearingImpaired = false) {
     const mId = this.mediaId();
-    if (mId) this.trackManager.saveSubtitleSelection(mId, language, forced);
+    if (mId) this.trackManager.saveSubtitleSelection(mId, language, forced, false, false, hearingImpaired);
   }
 
   private async loadSpriteMetadata(mediaFileId: number) {
@@ -776,6 +782,7 @@ export class CastPlayerService {
             ? ''
             : this.streamingApi.getEmbeddedSubtitleUrl(opts.mediaFileId, t.streamIndex!),
       forced: t.forced,
+      hearingImpaired: t.hearingImpaired,
     }));
 
     const audioTracks = buildCastAudioOptions(streamInfo?.audio, this.translate);
