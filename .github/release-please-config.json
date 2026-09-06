@@ -14,13 +14,43 @@
         },
         {
           "type": "json",
+          "path": "backend/package-lock.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "backend/package-lock.json",
+          "jsonpath": "$.packages[''].version"
+        },
+        {
+          "type": "json",
           "path": "client/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
+          "path": "client/package-lock.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "client/package-lock.json",
+          "jsonpath": "$.packages[''].version"
+        },
+        {
+          "type": "json",
           "path": "desktop/package.json",
           "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "desktop/package-lock.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "desktop/package-lock.json",
+          "jsonpath": "$.packages[''].version"
         },
         {
           "type": "json",
