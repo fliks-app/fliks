@@ -1,4 +1,5 @@
 import { localizeLanguage, sortByLanguageName } from './language.utils';
+import { signal } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 
 const NAMES: Record<string, string> = {
@@ -34,13 +35,21 @@ describe('sortByLanguageName', () => {
 
 describe('localizeLanguage', () => {
   it('names a code the app carries no translation for', () => {
-    const bare = { instant: (key: string) => key, currentLang: 'fr' } as TranslateService;
+    const bare = {
+      instant: (key: string) => key,
+      currentLang: signal('fr'),
+      fallbackLang: signal('en'),
+    } as unknown as TranslateService;
     expect(localizeLanguage('est', bare)).toBe('Estonien');
     expect(localizeLanguage('tam', bare)).toBe('Tamoul');
   });
 
   it('keeps the raw code for a private-use tag', () => {
-    const bare = { instant: (key: string) => key, currentLang: 'en' } as TranslateService;
+    const bare = {
+      instant: (key: string) => key,
+      currentLang: signal('en'),
+      fallbackLang: signal('en'),
+    } as unknown as TranslateService;
     expect(localizeLanguage('qaa', bare)).toBe('qaa');
     expect(localizeLanguage(undefined, bare)).toBe('und');
   });
@@ -48,8 +57,9 @@ describe('localizeLanguage', () => {
   it('prefers our own translation over the platform name', () => {
     const translate = {
       instant: (key: string) => (key === 'language.fr' ? 'Français' : key),
-      currentLang: 'en',
-    } as TranslateService;
+      currentLang: signal('en'),
+      fallbackLang: signal('en'),
+    } as unknown as TranslateService;
     expect(localizeLanguage('fre', translate)).toBe('Français');
   });
 });

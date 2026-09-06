@@ -7,7 +7,7 @@ import {
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { map } from 'rxjs';
 import {
   ReceivedRecommendation,
@@ -25,7 +25,7 @@ import { itemArtwork } from '../../shared/utils/media-artwork.util';
 @Component({
   selector: 'app-profile-recommendations',
   imports: [
-    CachedSrcDirective,TranslateModule, RouterLink, ResolveUrlPipe],
+    CachedSrcDirective,TranslatePipe, RouterLink, ResolveUrlPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './profile-recommendations.html',
 })

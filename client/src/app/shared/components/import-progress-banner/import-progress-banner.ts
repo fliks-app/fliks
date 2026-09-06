@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { SseService, TaskProgress, formatProgressSubject } from '../../../core/services/sse.service';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 
@@ -26,7 +26,7 @@ const PHASES: { command: string; phase: ImportPhase }[] = [
  *  spatial-nav grid. */
 @Component({
   selector: 'app-import-progress-banner',
-  imports: [TranslateModule, ProgressBarComponent],
+  imports: [TranslatePipe, ProgressBarComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './import-progress-banner.html',
   host: { role: 'status', 'aria-live': 'polite' },

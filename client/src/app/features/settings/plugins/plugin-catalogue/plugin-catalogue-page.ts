@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { LucideChevronLeft } from '@lucide/angular';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { PluginUiRegistryService } from '../../../../core/plugin-ui/plugin-ui-registry.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import {
@@ -17,7 +17,7 @@ import { PluginCatalogueComponent } from './plugin-catalogue';
 /** Routed wrapper around the catalogue grid — owns installed-state + the consent sheet, same as the plugins page did before this moved to its own route. */
 @Component({
   selector: 'app-plugin-catalogue-page',
-  imports: [RouterLink, LucideChevronLeft, TranslateModule, PluginInstallConsentComponent, PluginCatalogueComponent],
+  imports: [RouterLink, LucideChevronLeft, TranslatePipe, PluginInstallConsentComponent, PluginCatalogueComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugin-catalogue-page.html',
 })

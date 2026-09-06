@@ -6,7 +6,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import {
   LucideClock,
   LucideFilm,
@@ -24,7 +24,7 @@ import { ProfileContextService } from './profile-context.service';
 @Component({
   selector: 'app-profile-statistics',
   imports: [
-    TranslateModule,
+    TranslatePipe,
     LucideClock,
     LucideFilm,
     LucideTv,

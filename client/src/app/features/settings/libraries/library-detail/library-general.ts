@@ -1,11 +1,11 @@
 import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { LibraryDetailState } from './library-detail.state';
 import { LibraryFormFieldsComponent } from './library-form-fields/library-form-fields';
 
 @Component({
   selector: 'app-library-general',
-  imports: [TranslateModule, LibraryFormFieldsComponent],
+  imports: [TranslatePipe, LibraryFormFieldsComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './library-general.html',
 })

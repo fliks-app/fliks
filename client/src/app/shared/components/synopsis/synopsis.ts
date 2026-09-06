@@ -1,12 +1,12 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { ClampToggleDirective } from '../../directives/clamp-toggle.directive';
 import { SpoilerDirective } from '../../directives/spoiler.directive';
 
 /** Clamped synopsis with its show-more toggle, optionally masked as a spoiler. */
 @Component({
   selector: 'app-synopsis',
-  imports: [TranslateModule, ClampToggleDirective, SpoilerDirective],
+  imports: [TranslatePipe, ClampToggleDirective, SpoilerDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './synopsis.html',
   host: { class: 'block' },

@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { CurrencyPipe } from '@angular/common';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucidePlay } from '@lucide/angular';
 import { Media } from '../../../core/services/api/media.service';
 import { localizeLanguage } from '../../../core/utils/language.utils';
@@ -26,7 +26,7 @@ import { CollapsibleSectionComponent } from '../collapsible-section/collapsible-
  */
 @Component({
   selector: 'app-media-info-extra',
-  imports: [LocaleDatePipe, CurrencyPipe, TranslateModule, CollapsibleSectionComponent, LucidePlay],
+  imports: [LocaleDatePipe, CurrencyPipe, TranslatePipe, CollapsibleSectionComponent, LucidePlay],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-info-extra.html',
 })

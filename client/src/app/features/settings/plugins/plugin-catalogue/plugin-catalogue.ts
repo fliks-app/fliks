@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject, input, output, signal } from '@angular/core';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideChevronDown } from '@lucide/angular';
 import {
   CatalogPluginEntry,
@@ -22,7 +22,7 @@ interface CatalogueRow {
 /** What every cached catalog offers, merged across sources. */
 @Component({
   selector: 'app-plugin-catalogue',
-  imports: [TranslateModule, DropdownToggleDirective, LucideChevronDown, SelectedOptionDirective],
+  imports: [TranslatePipe, DropdownToggleDirective, LucideChevronDown, SelectedOptionDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugin-catalogue.html',
 })

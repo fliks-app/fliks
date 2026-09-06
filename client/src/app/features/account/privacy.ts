@@ -5,7 +5,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideCheck, LucideX } from '@lucide/angular';
 import { ToggleFieldComponent } from '../../shared/components/forms/toggle-field/toggle-field';
 import { UsersApiService } from '../../core/services/api/users-api.service';
@@ -28,7 +28,7 @@ interface SocialPrefs {
 
 @Component({
   selector: 'app-account-privacy',
-  imports: [TranslateModule, ToggleFieldComponent, LucideCheck, LucideX],
+  imports: [TranslatePipe, ToggleFieldComponent, LucideCheck, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './privacy.html',
 })

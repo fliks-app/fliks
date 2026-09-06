@@ -7,7 +7,7 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { SubtitlesApiService, SubtitleStats } from '../../core/services/api/subtitles-api.service';
 import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
@@ -29,7 +29,7 @@ interface StatsReport {
 
 @Component({
   selector: 'app-dashboard',
-  imports: [RouterLink, TranslateModule, LocaleDatePipe],
+  imports: [RouterLink, TranslatePipe, LocaleDatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './dashboard.html',
 })

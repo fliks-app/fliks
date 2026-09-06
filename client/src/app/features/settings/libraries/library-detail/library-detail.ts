@@ -7,7 +7,7 @@ import {
   RouterOutlet,
 } from '@angular/router';
 import { LucideChevronLeft } from '@lucide/angular';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LibrariesApiService } from '../../../../core/services/api/libraries-api.service';
 import { UsersApiService, UserRow } from '../../../../core/services/api/users-api.service';
 import {
@@ -23,7 +23,7 @@ import { ImportProgressBannerComponent } from '../../../../shared/components/imp
   selector: 'app-library-detail',
   imports: [
     LucideChevronLeft,
-    TranslateModule,
+    TranslatePipe,
     RouterLink,
     RouterLinkActive,
     RouterOutlet,

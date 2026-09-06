@@ -16,7 +16,7 @@ import { CachedSrcDirective } from '../directives/cached-src.directive';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { DropdownMenuComponent } from '../components/dropdown-menu';
 import { DropdownOptionComponent } from '../components/dropdown-option/dropdown-option';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   LucideCast,
   LucidePause,
@@ -57,7 +57,7 @@ interface PickerRow {
     ResolveUrlPipe,
     DropdownMenuComponent,
     DropdownOptionComponent,
-    TranslateModule,
+    TranslatePipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './cast-overlay.html',

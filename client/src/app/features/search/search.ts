@@ -15,7 +15,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { ActivatedRoute, Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { MediaService, Media, SearchParams } from '../../core/services/api/media.service';
 import { StreamingApiService, RecommendationItem } from '../../core/services/api/streaming-api.service';
 import {
@@ -44,7 +44,7 @@ import { UserAvatarComponent } from '../../shared/components/user-avatar/user-av
 
 @Component({
   selector: 'app-search',
-  imports: [TvSelectDirective, UserAvatarComponent, FormsModule, TranslateModule, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings, ModalHeaderComponent],
+  imports: [TvSelectDirective, UserAvatarComponent, FormsModule, TranslatePipe, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings, ModalHeaderComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './search.html',
 })

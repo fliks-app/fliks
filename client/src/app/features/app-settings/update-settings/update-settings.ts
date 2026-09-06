@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import {
   LucideCircleAlert,
   LucideCircleCheck,
@@ -20,7 +20,7 @@ import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
   selector: 'app-update-settings',
   imports: [
     LocaleDatePipe,
-    TranslateModule,
+    TranslatePipe,
     MarkdownPipe,
     LucideCircleAlert,
     LucideCircleCheck,

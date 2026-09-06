@@ -6,7 +6,7 @@ import {
   input,
   output,
 } from '@angular/core';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideVideo, LucideVolume2, LucideTrash2 } from '@lucide/angular';
 import {
   MediaFileInfo,
@@ -26,7 +26,7 @@ type FileInput = {
 
 @Component({
   selector: 'app-media-file-info',
-  imports: [TranslateModule, CollapsibleSectionComponent, LucideVideo, LucideVolume2, LucideTrash2],
+  imports: [TranslatePipe, CollapsibleSectionComponent, LucideVideo, LucideVolume2, LucideTrash2],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-file-info.html',
 })
@@ -102,7 +102,7 @@ export class MediaFileInfoComponent {
     if (!iso) return '';
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return '';
-    return d.toLocaleString(this.translate.currentLang || undefined, {
+    return d.toLocaleString(this.translate.currentLang() || undefined, {
       day: 'numeric',
       month: 'short',
       year: 'numeric',

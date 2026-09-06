@@ -10,7 +10,7 @@ import { DecimalPipe } from '@angular/common';
 import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { MediaService } from '../../core/services/api/media.service';
 import { FolderPickerService } from '../../core/services/folder-picker.service';
@@ -57,7 +57,7 @@ export type ImportMethod = 'copy' | 'move';
 
 @Component({
   selector: 'app-import-disk',
-  imports: [TvSelectDirective, DecimalPipe, FormsModule, TranslateModule, SearchableSelectComponent],
+  imports: [TvSelectDirective, DecimalPipe, FormsModule, TranslatePipe, SearchableSelectComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './import-disk.html',
 })

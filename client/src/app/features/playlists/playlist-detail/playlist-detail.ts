@@ -14,7 +14,7 @@ import { TvSelectDirective } from '../../../shared/directives/tv-select.directiv
 import { NgTemplateOutlet } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   CdkDrag,
   CdkDragDrop,
@@ -81,7 +81,7 @@ type PlaylistGroupedEntry =
   imports: [TvSelectDirective, 
     ModalFooterComponent,
     CachedSrcDirective,
-    TranslateModule,
+    TranslatePipe,
     FormsModule,
     NgTemplateOutlet,
     RouterLink,

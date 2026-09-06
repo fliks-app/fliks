@@ -11,7 +11,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { MetadataService, MetadataSeason } from '../../../../core/services/api/metadata.service';
 import { RequestsService } from '../../../../core/services/api/requests.service';
 import { LibrarySummary } from '../../../../core/services/api/libraries-api.service';
@@ -22,7 +22,7 @@ import { ModalFooterComponent } from '../../../../shared/components/modal-footer
 
 @Component({
   selector: 'app-request-modal',
-  imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslateModule],
+  imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './request-modal.component.html',
 })

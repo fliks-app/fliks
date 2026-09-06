@@ -11,7 +11,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 
 export interface SearchableSelectOption {
   value: number;
@@ -28,7 +28,7 @@ export interface SearchableSelectOption {
 @Component({
   selector: 'app-searchable-select',
   standalone: true,
-  imports: [FormsModule, TranslateModule],
+  imports: [FormsModule, TranslatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './searchable-select.html',
   host: { class: 'relative inline-block' },

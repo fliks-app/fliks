@@ -11,7 +11,7 @@ import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideDownload } from '@lucide/angular';
 import { firstValueFrom } from 'rxjs';
 import { ImportDiskComponent } from '../../import-disk/import-disk';
@@ -81,7 +81,7 @@ type LibrarySelection = number | null;
     ModalHeaderComponent,
     ModalFooterComponent,
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     LucideDownload,
     ImportDiskComponent,
   ],

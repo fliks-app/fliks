@@ -7,14 +7,14 @@ import {
   viewChild,
   ElementRef,
 } from '@angular/core';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ModalHeaderComponent } from './modal-header';
 import { ModalFooterComponent } from './modal-footer';
 
 @Component({
   selector: 'app-confirmation-modal',
-  imports: [ModalFooterComponent, ModalHeaderComponent, TranslateModule],
+  imports: [ModalFooterComponent, ModalHeaderComponent, TranslatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './confirmation-modal.html',
 })

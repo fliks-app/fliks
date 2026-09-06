@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { FormsModule } from '@angular/forms';
 import {
   LucideCheck,
@@ -136,7 +136,7 @@ interface AudioTrack {
     TvRowDirective,
     TvSelectDirective,
     NgTemplateOutlet,
-    DecimalPipe, FormsModule, RouterLink, TranslateModule,
+    DecimalPipe, FormsModule, RouterLink, TranslatePipe,
     LucideCheck, LucideDownload, LucideEllipsisVertical,
     LucideFilm, LucideHeart, LucideListPlus, LucidePlay, LucideRotateCcw,
   ],

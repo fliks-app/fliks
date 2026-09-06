@@ -8,7 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideListPlus, LucidePlus } from '@lucide/angular';
 import {
   AddToPlaylistBody,
@@ -31,7 +31,7 @@ import { ModalFooterComponent } from '../modal-footer';
   imports: [
     ModalFooterComponent,
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     LucideListPlus,
     LucidePlus,
     ModalHeaderComponent,

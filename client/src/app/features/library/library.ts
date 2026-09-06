@@ -13,7 +13,7 @@ import {
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription, filter } from 'rxjs';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { MediaService, Media, GenreSummary, CollectionSummary } from '../../core/services/api/media.service';
 import {
   SocialApiService,
@@ -83,7 +83,7 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
     TvSelectDirective,
     HorizontalScrollerComponent,
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     LucideSearch,
     LucideSlidersHorizontal,
     LucideArrowUp,

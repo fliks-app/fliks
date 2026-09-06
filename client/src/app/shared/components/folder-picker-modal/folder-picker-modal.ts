@@ -8,7 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { FolderPickerService } from '../../../core/services/folder-picker.service';
 import { ModalHeaderComponent } from '../modal-header';
@@ -27,7 +27,7 @@ interface FsListing {
 
 @Component({
   selector: 'app-folder-picker-modal',
-  imports: [ModalFooterComponent, ModalHeaderComponent, TranslateModule],
+  imports: [ModalFooterComponent, ModalHeaderComponent, TranslatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './folder-picker-modal.html',
 })

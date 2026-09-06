@@ -8,7 +8,7 @@ import {
   signal,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import {
   LucideEllipsisVertical,
   LucideHeart,
@@ -41,7 +41,7 @@ import { itemArtwork } from '../../utils/media-artwork.util';
   imports: [
     CachedSrcDirective,
     RouterLink,
-    TranslateModule,
+    TranslatePipe,
     DropdownMenuComponent,
     TvRowDirective,
     ResolveUrlPipe,

@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router } from '@angular/router';
-import { provideTranslateService, TranslateLoader, TranslateModule } from '@ngx-translate/core';
+import { provideTranslateService, TranslateLoader, TranslatePipe } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { vi, afterEach, describe, it, expect } from 'vitest';
 import { MediaDetailComponent } from './media-detail';
@@ -128,7 +128,7 @@ function createHarness(media: Media, isAdmin: boolean) {
   });
 
   TestBed.overrideComponent(MediaDetailComponent, {
-    set: { template: CALLOUT_TEMPLATE, imports: [TranslateModule] },
+    set: { template: CALLOUT_TEMPLATE, imports: [TranslatePipe] },
   });
 
   const fixture = TestBed.createComponent(MediaDetailComponent);

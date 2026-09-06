@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, Signal, computed, inject, signal } from '@angular/core';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { RouterLink } from '@angular/router';
 import {
   LucideCast,
@@ -38,7 +38,7 @@ interface PickerRow {
 @Component({
   selector: 'app-remote-picker',
   imports: [
-    TranslateModule,
+    TranslatePipe,
     DropdownMenuComponent,
     LucideTv, LucideTablet, LucideSmartphone, LucideMonitor, LucideCast, LucidePlus,
     RouterLink,

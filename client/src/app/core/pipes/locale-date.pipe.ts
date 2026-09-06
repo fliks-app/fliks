@@ -23,7 +23,7 @@ export class LocaleDatePipe implements PipeTransform {
     const date = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(date.getTime())) return '';
     const lang =
-      this.translate.currentLang || this.translate.defaultLang || 'en';
+      this.translate.currentLang() || this.translate.fallbackLang() || 'en';
     const dateOnly =
       typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
     const opts: Intl.DateTimeFormatOptions = {

@@ -88,7 +88,7 @@ export function localizeLanguage(
   const key = `language.${norm}`;
   const t = translate.instant(key);
   if (typeof t === 'string' && t !== key) return t;
-  const locale = translate.currentLang || translate.defaultLang || 'en';
+  const locale = translate.currentLang() || translate.fallbackLang() || 'en';
   return nativeLanguageName(norm, locale) ?? norm;
 }
 

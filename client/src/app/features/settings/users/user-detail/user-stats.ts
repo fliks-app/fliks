@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   LucideClock,
   LucideFilm,
@@ -18,7 +18,7 @@ import { formatRelativeTime } from '../../../../core/utils/relative-time';
 @Component({
   selector: 'app-user-stats',
   imports: [
-    TranslateModule,
+    TranslatePipe,
     LucideClock,
     LucideFilm,
     LucideTv,
@@ -68,6 +68,6 @@ export class UserStatsComponent implements OnInit {
 
   formatRelative(iso: string | null): string {
     if (!iso) return '—';
-    return formatRelativeTime(iso, this.translate.currentLang ?? 'fr');
+    return formatRelativeTime(iso, this.translate.currentLang() ?? 'fr');
   }
 }

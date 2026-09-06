@@ -17,7 +17,7 @@ import { LucideEllipsisVertical } from '@lucide/angular';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { formatBytes, formatSpeed } from '../../utils/download-format';
 import { safeExternalUrl } from '../../utils/safe-url';
@@ -77,7 +77,7 @@ const BADGE_CLASSES: Readonly<Record<BadgeTone, string>> = {
     LucideEllipsisVertical,
     ModalFooterComponent,
     ModalHeaderComponent,
-    TranslateModule,
+    TranslatePipe,
     LocaleDatePipe,
     PaginationComponent,
     ProgressBadgeComponent,

@@ -8,7 +8,7 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TvService } from '../../../core/services/tv.service';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import {
   LucideCheck,
   LucideChevronRight,
@@ -26,7 +26,7 @@ import {
   selector: 'app-setup-checklist',
   imports: [
     RouterLink,
-    TranslateModule,
+    TranslatePipe,
     LucideCheck,
     LucideChevronRight,
     LucideCircleAlert,

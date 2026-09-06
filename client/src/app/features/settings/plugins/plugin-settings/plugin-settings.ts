@@ -7,7 +7,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideX } from '@lucide/angular';
 import { ToggleFieldComponent } from '../../../../shared/components/forms/toggle-field/toggle-field';
 import { SettingsApiService } from '../../../../core/services/api/settings-api.service';
@@ -27,7 +27,7 @@ const ALLOW_UNSIGNED_KEY = 'plugins.allow_unsigned';
 
 @Component({
   selector: 'app-plugin-settings',
-  imports: [ModalFooterComponent, ModalHeaderComponent, TranslateModule, ToggleFieldComponent],
+  imports: [ModalFooterComponent, ModalHeaderComponent, TranslatePipe, ToggleFieldComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugin-settings.html',
 })

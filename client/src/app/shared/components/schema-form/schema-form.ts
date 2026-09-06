@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, model } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { FieldDef, FormCaption, FormGroup, FormItem, FormStatus } from '@fliks/plugin-contract/ui';
 import { InputFieldComponent, InputFieldType } from '../forms/input-field/input-field';
 import { SelectFieldComponent } from '../forms/select-field/select-field';
@@ -47,7 +47,7 @@ interface FieldError {
     ToggleFieldComponent,
     MultiSelectComponent,
     NgTemplateOutlet,
-    TranslateModule,
+    TranslatePipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './schema-form.html',

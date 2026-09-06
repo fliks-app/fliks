@@ -8,7 +8,7 @@ import {
   signal,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { LucideCheck, LucideX } from '@lucide/angular';
 import { SocialApiService, SocialUser } from '../../../core/services/api/social-api.service';
 import { SseService } from '../../../core/services/sse.service';
@@ -22,7 +22,7 @@ import { UserAvatarComponent } from '../user-avatar/user-avatar';
  */
 @Component({
   selector: 'app-follow-requests-card',
-  imports: [UserAvatarComponent, RouterLink, TranslateModule, LucideCheck, LucideX],
+  imports: [UserAvatarComponent, RouterLink, TranslatePipe, LucideCheck, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './follow-requests-card.html',
 })

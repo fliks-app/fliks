@@ -1,6 +1,6 @@
 import { Component, ChangeDetectionStrategy, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideTrash2 } from '@lucide/angular';
 import { PlayerSettingsService } from '../../../core/services/player-settings.service';
 import { BrowserDeviceProfileService } from '../../../core/services/browser-device-profile.service';
@@ -13,7 +13,7 @@ import { LANGUAGE_OPTIONS } from '../playback-options';
   selector: 'app-player-settings',
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     LucideTrash2,
     ToggleFieldComponent,
     SelectFieldComponent,

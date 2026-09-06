@@ -1,6 +1,6 @@
 import { Component, ChangeDetectionStrategy, inject, signal, computed, Injector, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideHistory, LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck, LucideEllipsisVertical } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { PlaybackState, StreamingApiService, WatchHistoryItem } from '../../core/services/api/streaming-api.service';
@@ -14,7 +14,7 @@ import { CachedSrcDirective } from '../../shared/directives/cached-src.directive
 @Component({
   selector: 'app-watch-history',
   imports: [
-    CachedSrcDirective,TranslateModule, ResolveUrlPipe, PaginationComponent, DropdownMenuComponent, LucideHistory, LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck, LucideEllipsisVertical],
+    CachedSrcDirective,TranslatePipe, ResolveUrlPipe, PaginationComponent, DropdownMenuComponent, LucideHistory, LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck, LucideEllipsisVertical],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './watch-history.html',
 })
@@ -134,7 +134,7 @@ export class WatchHistoryComponent implements OnInit, OnDestroy {
   }
 
   formatDate(dateStr: string): string {
-    return new Date(dateStr).toLocaleDateString(this.translate.currentLang || undefined, {
+    return new Date(dateStr).toLocaleDateString(this.translate.currentLang() || undefined, {
       day: 'numeric',
       month: 'short',
       year: 'numeric',

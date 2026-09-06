@@ -3,7 +3,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { filter } from 'rxjs';
 import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { MediaService, Media, CalendarEntry } from '../../core/services/api/media.service';
 import { StreamingApiService, ContinueWatchingItem, RecommendationItem } from '../../core/services/api/streaming-api.service';
 import { OfflinePlaybackSyncService } from '../../core/services/offline-playback-sync.service';
@@ -79,7 +79,7 @@ import { itemArtwork } from '../../shared/utils/media-artwork.util';
 @Component({
   selector: 'app-home',
   imports: [
-    RouterLink, TranslateModule, DefaultFocusDirective,
+    RouterLink, TranslatePipe, DefaultFocusDirective,
     LocaleDatePipe,
     MediaCardComponent,
     MosaicCardComponent,

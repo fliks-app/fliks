@@ -5,7 +5,7 @@ import {
   input,
   output,
 } from '@angular/core';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   LucideTriangleAlert,
   LucideCheck,
@@ -21,7 +21,7 @@ import { ConfirmationService } from '../../../../core/services/confirmation.serv
 
 @Component({
   selector: 'app-releases-table',
-  imports: [TranslateModule, LucideTriangleAlert, LucideCheck, LucideCircleAlert, LucideDownload, LucidePackage],
+  imports: [TranslatePipe, LucideTriangleAlert, LucideCheck, LucideCircleAlert, LucideDownload, LucidePackage],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './releases-table.component.html',
 })

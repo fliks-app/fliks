@@ -7,7 +7,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { LocalizeLanguagePipe } from '../../../../core/pipes/localize-language.pipe';
 import { SubtitleSearchResult } from '../../../../core/services/api/subtitles-api.service';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
@@ -19,7 +19,7 @@ import { ModalFooterComponent } from '../../../../shared/components/modal-footer
   imports: [
     ModalFooterComponent,
     ModalHeaderComponent,
-    TranslateModule,
+    TranslatePipe,
     FormsModule,
     LocalizeLanguagePipe,
     TvSelectDirective,

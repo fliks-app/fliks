@@ -12,7 +12,7 @@ import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { HttpClient } from '@angular/common/http';
 import { LucideX } from '@lucide/angular';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { SECRETS_SET_KEY } from '@fliks/plugin-contract/ui';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
@@ -45,7 +45,7 @@ interface CreateNotificationBody {
 
 @Component({
   selector: 'app-notifications-settings',
-  imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslateModule],
+  imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './notifications.html',
 })

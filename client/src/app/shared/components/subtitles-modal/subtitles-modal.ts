@@ -11,7 +11,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   LucideChevronDown,
   LucideUpload,
@@ -73,7 +73,7 @@ interface SubtitleRow {
     ModalFooterComponent,
     ModalHeaderComponent,
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     LocalizeLanguagePipe,
     SubtitleFilenamePipe,
     PaginationComponent,

@@ -11,7 +11,7 @@ import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { RouterLink } from '@angular/router';
 import { LucideX } from '@lucide/angular';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   UsersApiService,
   UserRow,
@@ -27,7 +27,7 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 
 @Component({
   selector: 'app-users-settings',
-  imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, RouterLink, TranslateModule],
+  imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, RouterLink, TranslatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './users.html',
 })
@@ -105,7 +105,7 @@ export class UsersSettingsComponent implements OnInit {
   }
 
   formatLastLogin(iso: string): string {
-    return formatRelativeTime(iso, this.translate.currentLang ?? 'fr');
+    return formatRelativeTime(iso, this.translate.currentLang() ?? 'fr');
   }
 
   /** Modal is create-only — edits go through the dedicated /admin/users/:id page. */

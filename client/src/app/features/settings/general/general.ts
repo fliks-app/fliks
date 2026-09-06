@@ -7,7 +7,8 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { DEFAULT_LOCALE } from '../../../core/constants/app-locale';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { SetupChecklistComponent } from '../../../shared/components/setup-checklist/setup-checklist';
@@ -18,7 +19,7 @@ import {
 
 @Component({
   selector: 'app-general-settings',
-  imports: [TvSelectDirective, FormsModule, TranslateModule, SetupChecklistComponent],
+  imports: [TvSelectDirective, FormsModule, TranslatePipe, SetupChecklistComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './general.html',
 })
@@ -40,7 +41,7 @@ export class GeneralSettingsComponent implements OnInit {
   readonly metadataRegion = signal('US');
   readonly savingMetadataLanguage = signal(false);
   readonly metadataLanguageOptions = METADATA_LANGUAGE_OPTIONS;
-  readonly metadataRegionOptions = metadataRegionOptions(this.translate.currentLang);
+  readonly metadataRegionOptions = metadataRegionOptions(this.translate.currentLang() ?? DEFAULT_LOCALE);
 
   // Automation
   readonly autoDetectMarkersOnImport = signal('true');

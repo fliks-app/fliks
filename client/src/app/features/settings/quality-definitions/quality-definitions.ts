@@ -6,7 +6,7 @@ import {
   OnInit,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   QualityDefinitionsApiService,
   QualityDefinition,
@@ -18,7 +18,7 @@ const MAX_SLIDER = 60000; // MB/h max for slider
 
 @Component({
   selector: 'app-quality-definitions',
-  imports: [FormsModule, TranslateModule],
+  imports: [FormsModule, TranslatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './quality-definitions.html',
 })

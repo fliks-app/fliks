@@ -5,7 +5,7 @@ import {
   input,
   output,
 } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { LucideChevronLeft, LucideChevronRight } from '@lucide/angular';
 
 type Slot = number | 'ellipsis';
@@ -13,7 +13,7 @@ type Slot = number | 'ellipsis';
 @Component({
   selector: 'app-pagination',
   standalone: true,
-  imports: [TranslateModule, LucideChevronLeft, LucideChevronRight],
+  imports: [TranslatePipe, LucideChevronLeft, LucideChevronRight],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './pagination.html',
   host: { class: 'block' },

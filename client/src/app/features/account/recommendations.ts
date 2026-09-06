@@ -1,5 +1,5 @@
 import { Component, ChangeDetectionStrategy, inject, signal, OnInit } from '@angular/core';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideRotateCcw } from '@lucide/angular';
 import { StreamingApiService } from '../../core/services/api/streaming-api.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
@@ -12,7 +12,7 @@ import { ToastService } from '../../core/services/toast.service';
  */
 @Component({
   selector: 'app-account-recommendations',
-  imports: [TranslateModule, LucideRotateCcw],
+  imports: [TranslatePipe, LucideRotateCcw],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './recommendations.html',
 })

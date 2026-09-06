@@ -6,7 +6,7 @@ import {
   inject,
   viewChild,
 } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { ToastService } from '../../core/services/toast.service';
 import {
   LucideCircleCheck,
@@ -18,7 +18,7 @@ import {
 
 @Component({
   selector: 'app-toast-container',
-  imports: [TranslateModule, LucideCircleCheck, LucideCircleX, LucideTriangleAlert, LucideInfo, LucideX],
+  imports: [TranslatePipe, LucideCircleCheck, LucideCircleX, LucideTriangleAlert, LucideInfo, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './toast-container.html',
   styles: [

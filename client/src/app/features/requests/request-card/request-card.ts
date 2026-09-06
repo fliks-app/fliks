@@ -7,7 +7,7 @@ import {
   output,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { LucideTrash2 } from '@lucide/angular';
 import { RequestPosterComponent } from '../request-poster';
 import { RequestStatusBadgeComponent } from '../request-status-badge/request-status-badge.component';
@@ -26,7 +26,7 @@ import { clearPosterStamps } from '../../../shared/utils/view-transition';
   imports: [
     LocaleDatePipe,
     RouterLink,
-    TranslateModule,
+    TranslatePipe,
     RequestPosterComponent,
     RequestStatusBadgeComponent,
     LucideTrash2,

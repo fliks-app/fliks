@@ -5,12 +5,12 @@ import { DatePipe, NgClass } from '@angular/common';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 
 @Component({
   selector: 'app-system-logs',
-  imports: [TvSelectDirective, TranslateModule, DatePipe, NgClass, FormsModule],
+  imports: [TvSelectDirective, TranslatePipe, DatePipe, NgClass, FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './logs.html',
 })
