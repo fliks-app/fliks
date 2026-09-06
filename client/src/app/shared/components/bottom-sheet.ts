@@ -15,6 +15,7 @@ import { DismissableStackService } from '../../core/services/dismissable-stack.s
 import { TvService } from '../../core/services/tv.service';
 import {
   TABBABLE_SELECTOR,
+  focusOverlayEntry,
   initialOverlayFocus,
   restoreOpenerFocus,
 } from '../../core/services/focusable.constants';
@@ -179,9 +180,7 @@ export class BottomSheetComponent {
             // paint the focus halo on the wrong element first.
             queueMicrotask(() => {
               if (!this.open()) return;
-              initialOverlayFocus(this.sheet()?.nativeElement)?.focus({
-                preventScroll: true,
-              });
+              focusOverlayEntry(initialOverlayFocus(this.sheet()?.nativeElement));
             });
           }
         } else {

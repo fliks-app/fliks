@@ -34,7 +34,7 @@ import { BottomSheetComponent } from '../../../shared/components/bottom-sheet';
 import { TranslateModule } from '@ngx-translate/core';
 import { AppSettingsService } from '../../../core/services/app-settings.service';
 import { formatTime, SpriteMetadata } from '../../../core/utils/player.utils';
-import { initialOverlayFocus } from '../../../core/services/focusable.constants';
+import { focusOverlayEntry, initialOverlayFocus } from '../../../core/services/focusable.constants';
 import { SeekbarComponent } from '../../../shared/components/seekbar/seekbar';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../../shared/directives/cached-src.directive';
@@ -546,18 +546,21 @@ export class PlayerControlsComponent {
   }
 
   /** One step back inside the open dropdown: a sub-panel returns to its parent,
-   *  the root panel closes the menu and hands focus back to its trigger. */
-  private dropdownBack() {
+   *  the root panel closes the menu and hands focus back to its trigger.
+   *  Returns true while the dropdown stays open, so the dismissable stack keeps
+   *  it registered for the next Back/Escape. */
+  private dropdownBack(): boolean {
     if (this.openDropdown() === 'settings' && this.settingsPanel() !== 'main') {
       this.openSettingsPanel('main');
-      return;
+      return true;
     }
     if (this.openDropdown() === 'subtitles' && this.subtitlesPanel() !== 'tracks') {
       this.openSubtitlesPanel(this.activeAppearanceRow() ? 'appearance' : 'tracks');
-      return;
+      return true;
     }
     this.closeDropdown();
     this.dropdownTrigger?.focus({ preventScroll: true });
+    return false;
   }
 
   readonly formatTime = formatTime;
@@ -614,7 +617,7 @@ export class PlayerControlsComponent {
         const back = fromPanel
           ? panel?.querySelector<HTMLElement>(`[data-panel-row="${fromPanel}"]`)
           : null;
-        (back ?? initialOverlayFocus(panel))?.focus({ preventScroll: true });
+        focusOverlayEntry(back ?? initialOverlayFocus(panel));
       },
       { injector: this.injector },
     );

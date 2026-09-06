@@ -69,7 +69,13 @@ export class SearchableSelectComponent {
     // doesn't have to click twice to start typing.
     effect(() => {
       if (this.open()) {
-        queueMicrotask(() => this.searchInput()?.nativeElement.focus());
+        queueMicrotask(() => {
+          this.searchInput()?.nativeElement.focus();
+          // Focus stays in the search box, so reveal the selection ourselves.
+          this.host.nativeElement
+            .querySelector('[aria-current="true"]')
+            ?.scrollIntoView({ block: 'nearest' });
+        });
       } else {
         this.query.set('');
       }
