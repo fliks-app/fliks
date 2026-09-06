@@ -2886,10 +2886,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           this.state.paused.set(true);
           this.engine.pause().catch(() => this.state.paused.set(this.engine?.paused ?? true));
         }
+        // A remote pause is a remote viewer stepping in, so surface the controls
+        // the way a local pause does rather than freezing on a bare frame.
+        this.showControls();
         break;
       case 'playpause':
         if (casting) this.castService.togglePlayPause();
         else this.onTogglePlay();
+        this.showControls();
         break;
       case 'seek':
         if (cmd.positionSeconds === undefined) {

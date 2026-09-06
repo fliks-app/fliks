@@ -329,6 +329,74 @@ describe('RemoteService browse', () => {
   });
 });
 
+describe('RemoteService mirrors navigation to a target', () => {
+  async function routerSetup() {
+    const remoteState = signal<RemoteState | null>(null);
+    const sse = { commands: new Subject<RemoteCommand>(), stopped: new Subject<string>(), remoteState, lastEvent: signal(null), connectionId: signal<string | null>(null), targetId: signal<string | null>('phone#1') };
+    TestBed.configureTestingModule({
+      providers: [
+        RemoteService,
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([
+          { path: 'movies/:id', children: [] },
+          { path: 'series/:id', children: [] },
+          { path: 'series/:id/episode/:ep', children: [] },
+          { path: 'settings', children: [] },
+        ]),
+        { provide: SseService, useValue: sse },
+        { provide: ToastService, useValue: { error: vi.fn(), success: vi.fn(), info: vi.fn() } },
+        { provide: TranslateService, useValue: { instant: (k: string) => k } },
+      ],
+    });
+    const service = TestBed.inject(RemoteService);
+    const router = TestBed.inject(Router);
+    const http = TestBed.inject(HttpTestingController);
+    await router.navigateByUrl('/settings');
+    return { service, router, http };
+  }
+
+  it('sends a browse when the controller opens a movie from anywhere', async () => {
+    const { service, router, http } = await routerSetup();
+    service.selectedTargetId.set('tv#1');
+    await router.navigateByUrl('/movies/42');
+    const req = http.expectOne('/api/remote/tv%231/command');
+    expect(req.request.body).toMatchObject({ action: 'browse', mediaId: 42, mediaType: 'movie' });
+    req.flush({ cmdId: 'c' });
+  });
+
+  it('carries the episode id for an episode route', async () => {
+    const { service, router, http } = await routerSetup();
+    service.selectedTargetId.set('tv#1');
+    await router.navigateByUrl('/series/7/episode/12');
+    const req = http.expectOne('/api/remote/tv%231/command');
+    expect(req.request.body).toMatchObject({ action: 'browse', mediaId: 7, mediaType: 'series', episodeId: 12 });
+    req.flush({ cmdId: 'c' });
+  });
+
+  it('mirrors nothing without a selected target', async () => {
+    const { router, http } = await routerSetup();
+    await router.navigateByUrl('/movies/42');
+    http.expectNone('/api/remote/tv%231/command');
+  });
+});
+
+describe('RemoteService load race: a frame that beats the POST response', () => {
+  it('keeps the reading when the target reports before the command POST resolves', async () => {
+    const { service, remoteState } = setup();
+    const http = TestBed.inject(HttpTestingController);
+    // Warm target: it renders and heartbeats the new file within the round-trip.
+    void service.send('tv#1', { action: 'load', mediaFileId: 9 });
+    remoteState.set(frame({ mediaFileId: 9, sessionId: 'sid-new', positionSeconds: 2 }));
+    service.ingestState();
+    expect(service.targetState()?.mediaFileId).toBe(9);
+    // The POST resolves only now; it must not wipe the frame already applied.
+    http.expectOne('/api/remote/tv%231/command').flush({ cmdId: 'cmd-load' });
+    await Promise.resolve();
+    expect(service.targetState()?.mediaFileId).toBe(9);
+  });
+});
+
 describe('RemoteService recovers from an unlanded load', () => {
   it('accepts a later frame for another file once an unacked load times out', async () => {
     vi.useFakeTimers();
