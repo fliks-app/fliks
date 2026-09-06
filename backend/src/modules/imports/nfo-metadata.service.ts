@@ -3,12 +3,19 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as cheerio from 'cheerio';
 
-export interface NfoIds {
+export interface NfoData {
   tmdbId?: number;
   imdbId?: string;
   tvdbId?: number;
   title?: string;
+  originalTitle?: string;
   year?: number;
+  plot?: string;
+  genres?: string[];
+  runtime?: number;
+  rating?: number;
+  /** ISO `YYYY-MM-DD`. */
+  premiered?: string;
 }
 
 /**
@@ -26,7 +33,7 @@ export class NfoMetadataService {
    * same folder, then `tvshow.nfo` in the same folder and one level up (the
    * usual series layout: `Show/tvshow.nfo` + `Show/Season 01/<ep>.nfo`).
    */
-  async readForVideoFile(videoAbsPath: string): Promise<NfoIds | null> {
+  async readForVideoFile(videoAbsPath: string): Promise<NfoData | null> {
     const dir = path.dirname(videoAbsPath);
     const base = path.basename(videoAbsPath, path.extname(videoAbsPath));
     const candidates = [
@@ -36,7 +43,7 @@ export class NfoMetadataService {
       path.join(path.dirname(dir), 'tvshow.nfo'),
     ];
 
-    const merged: NfoIds = {};
+    const merged: NfoData = {};
     let found = false;
     for (const candidate of candidates) {
       const ids = await this.readNfoFile(candidate);
@@ -45,11 +52,11 @@ export class NfoMetadataService {
       // The most specific sidecar is read first; only fill keys still empty so
       // it keeps the title/episode hint while show-level files backfill ids.
       for (const [key, value] of Object.entries(ids) as [
-        keyof NfoIds,
-        NfoIds[keyof NfoIds],
+        keyof NfoData,
+        NfoData[keyof NfoData],
       ][]) {
         if (merged[key] == null && value != null) {
-          (merged[key] as NfoIds[keyof NfoIds]) = value;
+          (merged[key] as NfoData[keyof NfoData]) = value;
         }
       }
       if (merged.tmdbId || merged.tvdbId || merged.imdbId) break;
@@ -57,7 +64,7 @@ export class NfoMetadataService {
     return found ? merged : null;
   }
 
-  async readNfoFile(nfoAbsPath: string): Promise<NfoIds | null> {
+  async readNfoFile(nfoAbsPath: string): Promise<NfoData | null> {
     let xml: string;
     try {
       xml = await fs.readFile(nfoAbsPath, 'utf8');
@@ -67,9 +74,9 @@ export class NfoMetadataService {
     return this.parse(xml);
   }
 
-  /** Pure XML → ids extraction. */
-  parse(xml: string): NfoIds {
-    const out: NfoIds = {};
+  /** Pure XML → data extraction. */
+  parse(xml: string): NfoData {
+    const out: NfoData = {};
     try {
       const $ = cheerio.load(xml, { xml: true });
 
@@ -101,13 +108,40 @@ export class NfoMetadataService {
         $('title').first().text().trim();
       if (title) out.title = title;
 
+      const originalTitle = $('originaltitle').first().text().trim();
+      if (originalTitle) out.originalTitle = originalTitle;
+
+      const plot =
+        $('plot').first().text().trim() || $('outline').first().text().trim();
+      if (plot) out.plot = plot;
+
+      const genres = new Set<string>();
+      $('genre').each((_, el) => {
+        const g = $(el).text().trim();
+        if (g) genres.add(g);
+      });
+      if (genres.size) out.genres = [...genres];
+
+      const runtime = toInt($('runtime').first().text());
+      if (runtime) out.runtime = runtime;
+
+      const rating = toRating(
+        $('ratings rating[default="true"] value').first().text() ||
+          $('ratings rating value').first().text() ||
+          $('rating').first().text(),
+      );
+      if (rating != null) out.rating = rating;
+
+      const premieredRaw = (
+        $('premiered').first().text() || $('aired').first().text()
+      ).trim();
+      const isoDate = /^(\d{4}-\d{2}-\d{2})/.exec(premieredRaw)?.[1];
+      if (isoDate) out.premiered = isoDate;
+
       const year = toInt($('year').first().text());
       if (year) out.year = year;
       else {
-        const premiered = (
-          $('premiered').first().text() || $('aired').first().text()
-        ).trim();
-        const y = toInt(premiered.slice(0, 4));
+        const y = toInt(premieredRaw.slice(0, 4));
         if (y) out.year = y;
       }
     } catch (err) {
@@ -125,4 +159,9 @@ export class NfoMetadataService {
 function toInt(value: string): number | undefined {
   const n = parseInt((value ?? '').trim(), 10);
   return Number.isFinite(n) ? n : undefined;
+}
+
+function toRating(value: string): number | undefined {
+  const n = parseFloat((value ?? '').trim());
+  return Number.isFinite(n) && n >= 0 && n <= 10 ? n : undefined;
 }

@@ -30,6 +30,7 @@ import {
   RelinkResult,
 } from './dto/orphan-scan.dto';
 import { NfoMetadataService } from './nfo-metadata.service';
+import { findLocalArtwork } from './local-artwork.util';
 import { EventsService } from '../scheduler/events.service';
 import { ActivityRegistryService } from '../scheduler/activity-registry.service';
 import { mapWithConcurrency } from '../../common/utils/concurrency';
@@ -637,6 +638,18 @@ export class DiskImportService {
     });
     if (existing) return { media: existing, created: false };
 
+    const sample = path.resolve(dto.files[0].filePath);
+    const nfo = await this.nfo.readForVideoFile(sample);
+    const artworkDir =
+      dto.type === MediaType.SERIES
+        ? path.join(library.path!, dto.folderName)
+        : path.dirname(sample);
+    const artworkBasename =
+      dto.type === MediaType.SERIES
+        ? undefined
+        : path.basename(sample, path.extname(sample));
+    const artwork = await findLocalArtwork(artworkDir, artworkBasename);
+
     const created = await this.mediaService.createUnmatched(
       {
         title: dto.title?.trim() || dto.folderName,
@@ -646,6 +659,8 @@ export class DiskImportService {
         folderName: dto.folderName,
         qualityProfileId: dto.qualityProfileId,
         languageProfileId: dto.languageProfileId,
+        nfo: nfo ?? undefined,
+        artwork,
       },
       addedByUserId,
     );

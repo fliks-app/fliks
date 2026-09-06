@@ -2,6 +2,10 @@ import { BadRequestException } from '@nestjs/common';
 import { DiskImportService } from './disk-import.service';
 import { RelinkOrphansDto } from './dto/relink-orphans.dto';
 import { MediaType } from '../../common/enums';
+import { findLocalArtwork } from './local-artwork.util';
+
+jest.mock('./local-artwork.util');
+const mockedFindLocalArtwork = jest.mocked(findLocalArtwork);
 
 const library = {
   id: 1,
@@ -33,6 +37,8 @@ function makeService() {
   const metadata = { refreshSeriesEpisodes: jest.fn() };
   const events = { emit: jest.fn(), emitDomain: jest.fn() };
   const postImportQueue = { enqueue: jest.fn() };
+  const nfo = { readForVideoFile: jest.fn().mockResolvedValue(null) };
+  mockedFindLocalArtwork.mockResolvedValue({});
   const service = new DiskImportService(
     mediaRepo as never,
     null as never, // fileRepo
@@ -42,14 +48,14 @@ function makeService() {
     null as never, // naming
     libraries as never,
     metadata as never,
-    null as never, // nfo
+    nfo as never,
     null as never, // libraryIngest
     postImportQueue as never,
     null as never, // mediaServers
     events as never,
     { upsertPending: jest.fn(), upsertRunning: jest.fn(), remove: jest.fn() } as never,
   );
-  return { service, mediaRepo, mediaService, libraries, metadata, events, postImportQueue };
+  return { service, mediaRepo, mediaService, libraries, metadata, events, postImportQueue, nfo };
 }
 
 const unmatchedRow = (id: number, folderName: string, type = MediaType.MOVIE) => ({
@@ -64,11 +70,17 @@ const unmatchedRow = (id: number, folderName: string, type = MediaType.MOVIE) =>
 });
 
 describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
+  beforeEach(() => {
+    mockedFindLocalArtwork.mockClear();
+  });
+
   it('creates an unmatched media from the guessed title and links the files in place', async () => {
-    const { service, mediaRepo, mediaService } = makeService();
+    const { service, mediaRepo, mediaService, nfo } = makeService();
     mediaRepo.findOne
       .mockResolvedValueOnce(null) // no existing unmatched row for this folder
       .mockResolvedValueOnce(unmatchedRow(42, 'Quiet Harbour (2009)')); // reload
+    nfo.readForVideoFile.mockResolvedValue({ plot: 'A harbour tale.' });
+    mockedFindLocalArtwork.mockResolvedValue({ poster: '/media/Quiet Harbour (2009)/poster.jpg' });
     mediaService.createUnmatched.mockResolvedValue({ id: 42 });
     mediaService.linkExistingFileInPlace.mockResolvedValue({
       fileId: 1,
@@ -78,6 +90,13 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
 
     const res = await service.relinkOrphans(dto(), null);
 
+    expect(nfo.readForVideoFile).toHaveBeenCalledWith(
+      '/media/Quiet Harbour (2009)/Quiet.Harbour.2009.1080p.mkv',
+    );
+    expect(mockedFindLocalArtwork).toHaveBeenCalledWith(
+      '/media/Quiet Harbour (2009)',
+      'Quiet.Harbour.2009.1080p',
+    );
     expect(mediaService.createUnmatched).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'Quiet Harbour',
@@ -85,6 +104,8 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
         type: MediaType.MOVIE,
         libraryId: 1,
         folderName: 'Quiet Harbour (2009)',
+        nfo: { plot: 'A harbour tale.' },
+        artwork: { poster: '/media/Quiet Harbour (2009)/poster.jpg' },
       }),
       null,
     );
@@ -93,8 +114,40 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
     expect(res.mediaId).toBe(42);
   });
 
-  it('reuses the unmatched row already pinned to the same folder on a second scan', async () => {
+  it('reads a series folder for artwork with no filename basename', async () => {
     const { service, mediaRepo, mediaService } = makeService();
+    const seriesDto = dto({
+      type: MediaType.SERIES,
+      folderName: 'Northern Lights',
+      title: 'Northern Lights',
+      files: [
+        {
+          filePath: '/media/Northern Lights/Season 01/Northern.Lights.S01E01.mkv',
+          seasonNumber: 1,
+          episodeNumber: 1,
+        },
+      ],
+    });
+    mediaRepo.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(unmatchedRow(8, 'Northern Lights', MediaType.SERIES));
+    mediaService.createUnmatched.mockResolvedValue({ id: 8 });
+    mediaService.linkExistingFileInPlace.mockResolvedValue({
+      fileId: 1,
+      episodeId: 1,
+      created: false,
+    });
+
+    await service.relinkOrphans(seriesDto, null);
+
+    expect(mockedFindLocalArtwork).toHaveBeenCalledWith(
+      '/media/Northern Lights',
+      undefined,
+    );
+  });
+
+  it('reuses the unmatched row already pinned to the same folder on a second scan', async () => {
+    const { service, mediaRepo, mediaService, nfo } = makeService();
     mediaRepo.findOne.mockResolvedValueOnce(
       unmatchedRow(42, 'Quiet Harbour (2009)'),
     );
@@ -107,6 +160,8 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
     const res = await service.relinkOrphans(dto(), null);
 
     expect(mediaService.createUnmatched).not.toHaveBeenCalled();
+    expect(nfo.readForVideoFile).not.toHaveBeenCalled();
+    expect(mockedFindLocalArtwork).not.toHaveBeenCalled();
     expect(res.created).toBe(false);
     expect(res.mediaId).toBe(42);
   });
