@@ -6,8 +6,8 @@ describe('NfoMetadataService.parse', () => {
   it('reads every field from a full Kodi movie NFO', () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <movie>
-  <title>Quiet Harbour</title>
-  <originaltitle>Quiet Harbour Original</originaltitle>
+  <title>Sample Movie</title>
+  <originaltitle>Sample Movie Original</originaltitle>
   <year>2009</year>
   <plot>A long plot about a harbour.</plot>
   <outline>Short outline.</outline>
@@ -32,8 +32,8 @@ describe('NfoMetadataService.parse', () => {
     const out = service.parse(xml);
 
     expect(out).toMatchObject({
-      title: 'Quiet Harbour',
-      originalTitle: 'Quiet Harbour Original',
+      title: 'Sample Movie',
+      originalTitle: 'Sample Movie Original',
       year: 2009,
       plot: 'A long plot about a harbour.',
       genres: ['Drama', 'Mystery'],
@@ -52,7 +52,7 @@ describe('NfoMetadataService.parse', () => {
 
   it('reads a tvshow.nfo with showtitle and an <id> tvdb id', () => {
     const xml = `<tvshow>
-  <showtitle>Salt Meadow</showtitle>
+  <showtitle>Sample Show</showtitle>
   <year>2015</year>
   <genre>Comedy</genre>
   <id>556677</id>
@@ -60,7 +60,7 @@ describe('NfoMetadataService.parse', () => {
 
     const out = service.parse(xml);
     expect(out).toMatchObject({
-      title: 'Salt Meadow',
+      title: 'Sample Show',
       year: 2015,
       genres: ['Comedy'],
       tvdbId: 556677,

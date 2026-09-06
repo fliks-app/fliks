@@ -111,7 +111,7 @@ function makeMetadataService(
 function unidentifiedMedia(id: number) {
   return {
     id,
-    title: 'Unnamed Reel',
+    title: 'Sample Movie',
     type: MediaType.MOVIE,
     status: MediaStatus.RELEASED,
     tmdbId: null,
@@ -128,7 +128,7 @@ function unidentifiedMedia(id: number) {
 function identifiedMedia(id: number) {
   return {
     ...unidentifiedMedia(id),
-    title: 'Quiet Harbour',
+    title: 'Sample Movie 2',
     tmdbId: 42,
   };
 }

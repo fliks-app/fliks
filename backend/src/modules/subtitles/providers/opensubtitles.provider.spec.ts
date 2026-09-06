@@ -24,15 +24,15 @@ describe('OpenSubtitlesProvider.search', () => {
   });
 
   it('sends the title as a free-text query when hash and ids are absent', async () => {
-    await provider().search({ title: 'Quiet Harbour', year: 2020, language: 'en' });
+    await provider().search({ title: 'Sample Movie', year: 2020, language: 'en' });
 
     const url = new URL(mockedFetch.mock.calls[0][1] as string);
-    expect(url.searchParams.get('query')).toBe('Quiet Harbour');
+    expect(url.searchParams.get('query')).toBe('Sample Movie');
     expect(url.searchParams.get('year')).toBe('2020');
   });
 
   it('does not send the title when a tmdbId is present', async () => {
-    await provider().search({ title: 'Quiet Harbour', tmdbId: 42, language: 'en' });
+    await provider().search({ title: 'Sample Movie', tmdbId: 42, language: 'en' });
 
     const url = new URL(mockedFetch.mock.calls[0][1] as string);
     expect(url.searchParams.has('query')).toBe(false);

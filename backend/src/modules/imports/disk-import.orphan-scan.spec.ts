@@ -7,27 +7,27 @@ import { NfoMetadataService } from './nfo-metadata.service';
 import { NamingService } from '../scheduler/naming.service';
 import { MediaType } from '../../common/enums';
 
-const TVSHOW_NFO = `<tvshow><title>Northern Lights</title><year>2011</year>
+const TVSHOW_NFO = `<tvshow><title>Sample Show</title><year>2011</year>
 <uniqueid type="tmdb">4242</uniqueid></tvshow>`;
 
 async function buildTree(): Promise<string> {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'orphan-scan-'));
-  const show = path.join(root, 'Northern Lights');
+  const show = path.join(root, 'Sample Show');
   await fs.mkdir(path.join(show, 'Season 01'), { recursive: true });
   await fs.writeFile(path.join(show, 'tvshow.nfo'), TVSHOW_NFO);
   for (const ep of ['S01E01', 'S01E02', 'S01E03']) {
     await fs.writeFile(
-      path.join(show, 'Season 01', `Northern.Lights.${ep}.1080p.mkv`),
+      path.join(show, 'Season 01', `Sample.Show.${ep}.1080p.mkv`),
       'x',
     );
   }
   await fs.writeFile(
-    path.join(show, 'Season 01', 'Northern.Lights.Special.1080p.mkv'),
+    path.join(show, 'Season 01', 'Sample.Show.Special.1080p.mkv'),
     'x',
   );
-  const movie = path.join(root, 'Quiet Harbour (2009)');
+  const movie = path.join(root, 'Sample Movie (2009)');
   await fs.mkdir(movie, { recursive: true });
-  await fs.writeFile(path.join(movie, 'Quiet.Harbour.2009.1080p.mkv'), 'x');
+  await fs.writeFile(path.join(movie, 'Sample.Movie.2009.1080p.mkv'), 'x');
   await fs.writeFile(path.join(root, 'stray.mkv'), 'x');
   return root;
 }
@@ -77,11 +77,11 @@ describe('orphan scan', () => {
     expect(res.looseFiles.map((f) => f.filename)).toEqual(['stray.mkv']);
 
     const series = res.groups.find((g) => g.mediaType === MediaType.SERIES);
-    expect(series?.folderName).toBe('Northern Lights');
+    expect(series?.folderName).toBe('Sample Show');
     // The special has no SxxEyy but is still a file of this show.
     expect(series?.files).toHaveLength(4);
     // Show-level .nfo wins over the filename guess for the whole group.
-    expect(series?.guessTitle).toBe('Northern Lights');
+    expect(series?.guessTitle).toBe('Sample Show');
     expect(series?.nfo?.tmdbId).toBe(4242);
 
     const movie = res.groups.find((g) => g.mediaType === MediaType.MOVIE);
