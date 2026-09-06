@@ -99,20 +99,26 @@ describe('OrphanScanPanelComponent.importAll', () => {
     const { panel, relinked } = setup(['Alpha', 'Beta']);
     await panel.scanPath('/medias', ['movie'], 'tmdb');
 
-    expect(await panel.importAll(7)).toEqual({ queued: 2, skipped: 0 });
+    expect(await panel.importAll(7)).toEqual({ queued: 2, unmatched: 0 });
     expect(relinked.map((b) => [b.folderName, b.externalId, b.libraryId])).toEqual([
       ['Alpha', '11', 7],
       ['Beta', '11', 7],
     ]);
   });
 
-  it('skips a group whose default pick was deselected', async () => {
+  it('adds a group whose default pick was deselected as unmatched, without dropping it', async () => {
     const { panel, relinked } = setup(['Alpha', 'Beta']);
     await panel.scanPath('/medias', ['movie'], 'tmdb');
     panel.pick(0, panel.groups()[0].pick!); // clicking the selected row clears it
 
-    expect(await panel.importAll(7)).toEqual({ queued: 1, skipped: 1 });
-    expect(relinked.map((b) => b.folderName)).toEqual(['Beta']);
+    expect(await panel.importAll(7)).toEqual({ queued: 2, unmatched: 1 });
+    const alpha = relinked.find((b) => b.folderName === 'Alpha')!;
+    expect(alpha.externalId).toBeUndefined();
+    expect(alpha.title).toBe('Alpha');
+    expect(alpha.year).toBe(2001);
+    expect(alpha.reorganize).toBe(false);
+    const beta = relinked.find((b) => b.folderName === 'Beta')!;
+    expect(beta.externalId).toBe('11');
   });
 
   it('selects the first result as soon as a group is searched', async () => {

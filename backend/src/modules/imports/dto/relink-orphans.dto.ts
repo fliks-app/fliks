@@ -5,6 +5,8 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Max,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -43,12 +45,26 @@ export class RelinkOrphansDto {
   @IsEnum(MediaType)
   type: MediaType;
 
+  @IsOptional()
   @IsString()
-  externalId: string;
+  externalId?: string;
 
   @IsOptional()
   @IsString()
   provider?: string;
+
+  /** Used only when `externalId` is absent, to create an unmatched title. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  title?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1888)
+  @Max(2100)
+  year?: number;
 
   @IsOptional()
   @Type(() => Number)

@@ -1941,7 +1941,6 @@
       "scan_folder": "Analizza la cartella",
       "scan_required": "Analizza la cartella per verificare i file multimediali trovati prima di creare la libreria.",
       "scan_queued": "Importazione di {{count}} file multimediali avviata in background.",
-      "scan_unmatched": "{{count}} cartella/e non riconosciuta/e: riesegui «Analizza la cartella» dalla scheda Media per associarle.",
       "scan_title": "Analisi della cartella",
       "scan_scanning": "Analisi dei file in corso…",
       "scan_progress": "Analisi di {{done}}/{{total}} file…",
@@ -1967,7 +1966,12 @@
       "scan_nothing_linked": "Nessun file collegato (duplicato già presente nel file multimediale).",
       "scan_error": "Analisi fallita.",
       "scan_loose_skipped": "{{count}} file nella radice ignorato/i — spostali in una sottocartella per collegarli.",
-      "scan_files": "{{count}} file"
+      "scan_files": "{{count}} file",
+      "scan_add_unmatched": "Aggiungi senza metadati",
+      "scan_unmatched_badge": "Senza metadati",
+      "scan_unmatched_option": "Nessuna corrispondenza: aggiungi così com'è",
+      "scan_reorganize_needs_match": "Sposta/rinomina si applica solo ai titoli identificati",
+      "scan_queued_unmatched": "{{count}} titolo/i aggiunto/i senza metadati, identificali dalla scheda Media"
     },
     "users": {
       "title": "Utenti",

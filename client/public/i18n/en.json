@@ -1958,7 +1958,6 @@
       "scan_folder": "Scan the folder",
       "scan_required": "Scan the folder to review the media found before creating the library.",
       "scan_queued": "Import of {{count}} media started in the background.",
-      "scan_unmatched": "{{count}} folder(s) not recognised: run \"Scan the folder\" again from the Media tab to match them.",
       "scan_title": "Folder scan",
       "scan_scanning": "Scanning files…",
       "scan_progress": "Scanning {{done}}/{{total}} files…",
@@ -1984,7 +1983,12 @@
       "scan_nothing_linked": "No file linked (duplicate already present in the media).",
       "scan_error": "Scan failed.",
       "scan_loose_skipped": "{{count}} file(s) at the root skipped — move them into a subfolder to link them.",
-      "scan_files": "{{count}} file(s)"
+      "scan_files": "{{count}} file(s)",
+      "scan_add_unmatched": "Add without metadata",
+      "scan_unmatched_badge": "No metadata",
+      "scan_unmatched_option": "No match: add as is",
+      "scan_reorganize_needs_match": "Move/rename only applies to identified titles",
+      "scan_queued_unmatched": "{{count}} title(s) added without metadata, identify them from the Media tab"
     },
     "users": {
       "title": "Users",

@@ -1941,7 +1941,6 @@
       "scan_folder": "Analisar a pasta",
       "scan_required": "Analise a pasta para verificar as medias encontradas antes de criar a biblioteca.",
       "scan_queued": "Importação de {{count}} medias iniciada em segundo plano.",
-      "scan_unmatched": "{{count}} pasta(s) não reconhecida(s): volte a executar «Analisar a pasta» no separador Media para as associar.",
       "scan_title": "Análise da pasta",
       "scan_scanning": "Análise dos ficheiros em curso…",
       "scan_progress": "A analisar {{done}}/{{total}} ficheiros…",
@@ -1967,7 +1966,12 @@
       "scan_nothing_linked": "Nenhum ficheiro associado (duplicado já presente no media).",
       "scan_error": "Falha na análise.",
       "scan_loose_skipped": "{{count}} ficheiro(s) na raiz ignorado(s) — mova-os para uma subpasta para os associar.",
-      "scan_files": "{{count}} ficheiro(s)"
+      "scan_files": "{{count}} ficheiro(s)",
+      "scan_add_unmatched": "Adicionar sem metadados",
+      "scan_unmatched_badge": "Sem metadados",
+      "scan_unmatched_option": "Sem correspondência: adicionar tal como está",
+      "scan_reorganize_needs_match": "Mover/renomear aplica-se apenas a títulos identificados",
+      "scan_queued_unmatched": "{{count}} título(s) adicionado(s) sem metadados, identifique-os no separador Media"
     },
     "users": {
       "title": "Utilizadores",

@@ -49,7 +49,7 @@ export class LibraryWizardMediaComponent {
   }
 
   /** Import every detected media into the library once it exists. */
-  async importAll(libraryId: number): Promise<{ queued: number; skipped: number }> {
-    return (await this.scanPanel()?.importAll(libraryId)) ?? { queued: 0, skipped: 0 };
+  async importAll(libraryId: number): Promise<{ queued: number; unmatched: number }> {
+    return (await this.scanPanel()?.importAll(libraryId)) ?? { queued: 0, unmatched: 0 };
   }
 }

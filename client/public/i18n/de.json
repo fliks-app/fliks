@@ -1941,7 +1941,6 @@
       "scan_folder": "Ordner scannen",
       "scan_required": "Scannen Sie den Ordner, um die gefundenen Medien vor dem Erstellen der Bibliothek zu prüfen.",
       "scan_queued": "Import von {{count}} Medien im Hintergrund gestartet.",
-      "scan_unmatched": "{{count}} Ordner nicht erkannt: führen Sie „Ordner scannen“ im Tab Medien erneut aus, um sie zuzuordnen.",
       "scan_title": "Ordner-Scan",
       "scan_scanning": "Dateien werden gescannt…",
       "scan_progress": "{{done}}/{{total}} Dateien werden geprüft…",
@@ -1967,7 +1966,12 @@
       "scan_nothing_linked": "Keine Datei verknüpft (Duplikat bereits im Medium vorhanden).",
       "scan_error": "Scan fehlgeschlagen.",
       "scan_loose_skipped": "{{count}} Datei(en) im Stammverzeichnis übersprungen — verschieben Sie sie in einen Unterordner, um sie zu verknüpfen.",
-      "scan_files": "{{count}} Datei(en)"
+      "scan_files": "{{count}} Datei(en)",
+      "scan_add_unmatched": "Ohne Metadaten hinzufügen",
+      "scan_unmatched_badge": "Keine Metadaten",
+      "scan_unmatched_option": "Keine Übereinstimmung: unverändert hinzufügen",
+      "scan_reorganize_needs_match": "Verschieben/Umbenennen gilt nur für identifizierte Titel",
+      "scan_queued_unmatched": "{{count}} Titel ohne Metadaten hinzugefügt, identifizieren Sie sie im Tab Medien"
     },
     "users": {
       "title": "Benutzer",

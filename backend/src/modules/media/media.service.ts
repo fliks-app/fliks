@@ -74,6 +74,13 @@ export class MediaService {
     return this.imports.create(dto);
   }
 
+  createUnmatched(
+    dto: Parameters<MediaImportService['createUnmatched']>[0],
+    addedByUserId: number | null = null,
+  ) {
+    return this.imports.createUnmatched(dto, addedByUserId);
+  }
+
   // -- Reads ------------------------------------------------------------------
 
   getCounts(accessibleLibraryIds: number[]) {

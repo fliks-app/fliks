@@ -78,15 +78,15 @@ export class LibraryWizardComponent implements OnInit {
     // it. The library page reports the import over SSE.
     void media
       .importAll(id)
-      .then(({ queued, skipped }) => {
+      .then(({ queued, unmatched }) => {
         if (queued > 0) {
           this.toast.success(
             this.translate.instant('settings.libraries.scan_queued', { count: queued }),
           );
         }
-        if (skipped > 0) {
-          this.toast.warning(
-            this.translate.instant('settings.libraries.scan_unmatched', { count: skipped }),
+        if (unmatched > 0) {
+          this.toast.info(
+            this.translate.instant('settings.libraries.scan_queued_unmatched', { count: unmatched }),
           );
         }
       })
