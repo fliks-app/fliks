@@ -16,16 +16,25 @@
  *  look bigger on Cast than on the same device's local playback, the
  *  Cast scale is the lever to retune — not the Native one. */
 
-/** Text height at scale 1.0, as a fraction of the surface height, for the
- *  engines that own their renderer. The ExoPlayer and AVPlayer overlays
- *  hardcode the same value (SubtitleOverlay.java, SubtitleOverlayView.swift) —
- *  retune the three together. */
+/** Text height at scale 1.0, as a fraction of the surface's *short* side, for
+ *  the engines that own their renderer. The short side is orientation-
+ *  invariant, so a cue keeps its size across a rotation; the full height would
+ *  oversize portrait, where the picture is mostly letterbox. The ExoPlayer and
+ *  AVPlayer overlays hardcode the same value (SubtitleOverlay.java,
+ *  SubtitleOverlayView.swift) — retune the three together. */
 export const SUBTITLE_HEIGHT_FRACTION = 0.035;
 
 /** Same ladder for DOM cues, one notch lower: the browser path is mostly read
  *  on a desktop monitor, further away than a held device. TVs sit on this path
  *  too but default to the `large` preset. */
 export const DOM_SUBTITLE_HEIGHT_FRACTION = 0.03;
+
+/** Floor under the fraction, in CSS px / dp / pt. A phone's short side is
+ *  ~390 of those, so the fraction alone lands around 12px — unreadable at
+ *  arm's length. Scaled by the preset like the fraction is, so the ladder
+ *  keeps its steps. Repeated by the two native renderers
+ *  (MIN_TEXT_SIZE_SP, minPointSize). */
+export const SUBTITLE_MIN_TEXT_PX = 18;
 
 export const NATIVE_SUBTITLE_SIZE_SCALE: Record<string, number> = {
   xsmall: 0.7,
