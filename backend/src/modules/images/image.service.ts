@@ -46,10 +46,8 @@ export type ImageType =
   | 'season'
   | 'request'
   | 'user';
-/** Variant of a media image. `fanart-${N}` (N≥1) addresses the extra
- *  fanarts kept for randomised page backgrounds — they share `fanart`'s
- *  size pipeline (thumb / medium / full) so frontends can request any
- *  size without an extra round-trip to the source provider. */
+/** Variant of a media image. `fanart-${N}` (N>=1) addresses the extra
+ *  fanarts kept for randomised page backgrounds, sharing `fanart`'s size pipeline. */
 export type MediaImageVariant =
   | 'poster'
   | 'fanart'
@@ -206,12 +204,9 @@ export class ImageService {
       );
   }
 
-  /**
-   * Write the full image plus its resized variants and the cache sidecar for
-   * (type, id, variant), and return the local API path. Shared by the download
-   * path (`sourceKey` = the remote URL) and {@link storeFromDisk} (`sourceKey`
-   * carries the source file's path + mtime instead, since there is no URL).
-   */
+  /** Write the full image, its resized variants and the cache sidecar for (type, id,
+   *  variant); returns the local API path. `sourceKey` is the remote URL or, from
+   *  {@link storeFromDisk}, the source file's path + mtime. */
   private async storeBuffer(
     buffer: Buffer,
     type: ImageType,
@@ -226,8 +221,13 @@ export class ImageService {
     const fullDest = this.getDiskPath(type, id, variant, 'full');
     const srcPath = this.getSrcPath(type, id, variant);
 
-    await fs.promises.mkdir(path.dirname(fullDest), { recursive: true });
-    await this.writeFileAtomic(fullDest, buffer);
+    try {
+      await fs.promises.mkdir(path.dirname(fullDest), { recursive: true });
+      await this.writeFileAtomic(fullDest, buffer);
+    } catch (err) {
+      this.logger.warn(`Failed to write image ${type}/${id}: ${err.message}`);
+      return null;
+    }
 
     // Derive the smaller variants by resizing the full locally, so every
     // source yields the full size pipeline. Best-effort per variant: the
@@ -267,12 +267,8 @@ export class ImageService {
     return `${this.getApiPath(type, id, variant)}?v=${hash}`;
   }
 
-  /**
-   * Store an image already on disk (sibling artwork found next to a media
-   * file) instead of downloading it. `sourceKey` embeds the file's mtime so
-   * an unchanged file is a cache hit and a replaced one is re-stored.
-   * Returns null (with a `warn`) when the file can't be read or decoded.
-   */
+  /** Store an image already on disk (sibling artwork) instead of downloading it.
+   *  Returns null (with a `warn`) when the file can't be read or decoded. */
   async storeFromDisk(
     absPath: string,
     type: ImageType,
@@ -298,10 +294,8 @@ export class ImageService {
     variant?: MediaImageVariant,
   ): Promise<string | null> {
     let stat: fs.Stats;
-    let buffer: Buffer;
     try {
       stat = await fs.promises.stat(absPath);
-      buffer = await fs.promises.readFile(absPath);
     } catch (err) {
       this.logger.warn(`Failed to read local artwork ${absPath}: ${err.message}`);
       return null;
@@ -324,6 +318,13 @@ export class ImageService {
 
     const release = await downloadSemaphore.acquire();
     try {
+      let buffer: Buffer;
+      try {
+        buffer = await fs.promises.readFile(absPath);
+      } catch (err) {
+        this.logger.warn(`Failed to read local artwork ${absPath}: ${err.message}`);
+        return null;
+      }
       try {
         await sharp(buffer).metadata();
       } catch (err) {

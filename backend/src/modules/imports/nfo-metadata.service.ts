@@ -136,7 +136,7 @@ export class NfoMetadataService {
         $('premiered').first().text() || $('aired').first().text()
       ).trim();
       const isoDate = /^(\d{4}-\d{2}-\d{2})/.exec(premieredRaw)?.[1];
-      if (isoDate) out.premiered = isoDate;
+      if (isoDate && !Number.isNaN(Date.parse(isoDate))) out.premiered = isoDate;
 
       const year = toInt($('year').first().text());
       if (year) out.year = year;
@@ -162,6 +162,6 @@ function toInt(value: string): number | undefined {
 }
 
 function toRating(value: string): number | undefined {
-  const n = parseFloat((value ?? '').trim());
+  const n = parseFloat((value ?? '').trim().replace(',', '.'));
   return Number.isFinite(n) && n >= 0 && n <= 10 ? n : undefined;
 }

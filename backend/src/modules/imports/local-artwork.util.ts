@@ -27,11 +27,8 @@ export interface LocalArtwork {
   logo?: string;
 }
 
-/**
- * Finds the usual media-center sidecar artwork next to a video file (movie,
- * `basename` given) or in a series folder (`basename` omitted). One `readdir`
- * per call, case-insensitive matching so `Poster.JPG` is found.
- */
+/** Finds the usual sidecar artwork next to a video file (movie, `basename` given) or
+ *  in a series folder (omitted). One `readdir`, case-insensitive matching. */
 export async function findLocalArtwork(
   dir: string,
   basename?: string,

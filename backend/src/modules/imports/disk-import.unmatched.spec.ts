@@ -37,7 +37,10 @@ function makeService() {
   const metadata = { refreshSeriesEpisodes: jest.fn() };
   const events = { emit: jest.fn(), emitDomain: jest.fn() };
   const postImportQueue = { enqueue: jest.fn() };
-  const nfo = { readForVideoFile: jest.fn().mockResolvedValue(null) };
+  const nfo = {
+    readForVideoFile: jest.fn().mockResolvedValue(null),
+    readNfoFile: jest.fn().mockResolvedValue(null),
+  };
   mockedFindLocalArtwork.mockResolvedValue({});
   const service = new DiskImportService(
     mediaRepo as never,
@@ -144,6 +147,110 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
       '/media/Northern Lights',
       undefined,
     );
+  });
+
+  it("reads a series' tvshow.nfo instead of the episode's own nfo", async () => {
+    const { service, mediaRepo, mediaService, nfo } = makeService();
+    const seriesDto = dto({
+      type: MediaType.SERIES,
+      folderName: 'Northern Lights',
+      title: 'Northern Lights',
+      files: [
+        {
+          filePath: '/media/Northern Lights/Season 01/Northern.Lights.S01E01.mkv',
+          seasonNumber: 1,
+          episodeNumber: 1,
+        },
+      ],
+    });
+    mediaRepo.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(unmatchedRow(9, 'Northern Lights', MediaType.SERIES));
+    nfo.readNfoFile.mockResolvedValue({ title: 'Northern Lights Show' });
+    mediaService.createUnmatched.mockResolvedValue({ id: 9 });
+    mediaService.linkExistingFileInPlace.mockResolvedValue({
+      fileId: 1,
+      episodeId: 1,
+      created: false,
+    });
+
+    await service.relinkOrphans(seriesDto, null);
+
+    expect(nfo.readNfoFile).toHaveBeenCalledWith('/media/Northern Lights/tvshow.nfo');
+    expect(nfo.readForVideoFile).not.toHaveBeenCalled();
+    expect(mediaService.createUnmatched).toHaveBeenCalledWith(
+      expect.objectContaining({ nfo: { title: 'Northern Lights Show' } }),
+      null,
+    );
+  });
+
+  it('falls back to the episode nfo when the series has no tvshow.nfo', async () => {
+    const { service, mediaRepo, mediaService, nfo } = makeService();
+    const seriesDto = dto({
+      type: MediaType.SERIES,
+      folderName: 'Northern Lights',
+      title: 'Northern Lights',
+      files: [
+        {
+          filePath: '/media/Northern Lights/Season 01/Northern.Lights.S01E01.mkv',
+          seasonNumber: 1,
+          episodeNumber: 1,
+        },
+      ],
+    });
+    mediaRepo.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(unmatchedRow(9, 'Northern Lights', MediaType.SERIES));
+    nfo.readNfoFile.mockResolvedValue(null);
+    nfo.readForVideoFile.mockResolvedValue({ title: 'Episode-derived title' });
+    mediaService.createUnmatched.mockResolvedValue({ id: 9 });
+    mediaService.linkExistingFileInPlace.mockResolvedValue({
+      fileId: 1,
+      episodeId: 1,
+      created: false,
+    });
+
+    await service.relinkOrphans(seriesDto, null);
+
+    expect(nfo.readForVideoFile).toHaveBeenCalledWith(
+      '/media/Northern Lights/Season 01/Northern.Lights.S01E01.mkv',
+    );
+    expect(mediaService.createUnmatched).toHaveBeenCalledWith(
+      expect.objectContaining({ nfo: { title: 'Episode-derived title' } }),
+      null,
+    );
+  });
+
+  it('rejects a file outside the library root before creating anything', async () => {
+    const { service, mediaRepo, mediaService } = makeService();
+    mediaRepo.findOne.mockResolvedValueOnce(null);
+    const outsideDto = dto({
+      files: [{ filePath: '/etc/Quiet.Harbour.2009.1080p.mkv' }],
+    });
+
+    await expect(service.relinkOrphans(outsideDto, null)).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(mediaService.createUnmatched).not.toHaveBeenCalled();
+  });
+
+  it('rejects a series folderName that escapes the library root before creating anything', async () => {
+    const { service, mediaRepo, mediaService } = makeService();
+    mediaRepo.findOne.mockResolvedValueOnce(null);
+    // The sample file itself is a valid path under the root; only the
+    // folderName-derived artwork dir tries to escape it.
+    const escapingDto = dto({
+      type: MediaType.SERIES,
+      folderName: '../../etc',
+      files: [
+        { filePath: '/media/Northern Lights/Season 01/Escape.S01E01.mkv' },
+      ],
+    });
+
+    await expect(service.relinkOrphans(escapingDto, null)).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(mediaService.createUnmatched).not.toHaveBeenCalled();
   });
 
   it('reuses the unmatched row already pinned to the same folder on a second scan', async () => {

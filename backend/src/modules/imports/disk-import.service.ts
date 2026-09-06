@@ -639,11 +639,27 @@ export class DiskImportService {
     if (existing) return { media: existing, created: false };
 
     const sample = path.resolve(dto.files[0].filePath);
-    const nfo = await this.nfo.readForVideoFile(sample);
     const artworkDir =
       dto.type === MediaType.SERIES
         ? path.join(library.path!, dto.folderName)
         : path.dirname(sample);
+    // Checked independently: a crafted folderName must not escape the root even
+    // when the sample file itself is a valid path under it.
+    const libraryRoot = path.resolve(library.path!);
+    const resolvedArtworkDir = path.resolve(artworkDir);
+    if (
+      relativePathUnderMediaRoot(library.path, sample) == null ||
+      (resolvedArtworkDir !== libraryRoot &&
+        !resolvedArtworkDir.startsWith(libraryRoot + path.sep))
+    ) {
+      throw new BadRequestException('File outside the library root');
+    }
+
+    const nfo =
+      dto.type === MediaType.SERIES
+        ? (await this.nfo.readNfoFile(path.join(artworkDir, 'tvshow.nfo'))) ??
+          (await this.nfo.readForVideoFile(sample))
+        : await this.nfo.readForVideoFile(sample);
     const artworkBasename =
       dto.type === MediaType.SERIES
         ? undefined

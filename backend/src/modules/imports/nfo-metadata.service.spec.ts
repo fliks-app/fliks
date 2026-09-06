@@ -89,6 +89,16 @@ describe('NfoMetadataService.parse', () => {
     expect(out.premiered).toBe('2012-01-09');
   });
 
+  it('accepts a decimal comma in a rating value', () => {
+    const xml = '<movie><rating>7,3</rating></movie>';
+    expect(service.parse(xml).rating).toBe(7.3);
+  });
+
+  it('drops a <premiered> value that is not a real calendar date', () => {
+    const xml = '<movie><premiered>2012-13-40</premiered></movie>';
+    expect(service.parse(xml).premiered).toBeUndefined();
+  });
+
   it('returns an empty object for malformed input instead of throwing', () => {
     expect(service.parse('not xml at all, just plain text')).toEqual({});
     expect(service.parse('<<<>>>garbage&&&')).toEqual({});

@@ -1,4 +1,5 @@
 import {
+  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsEnum,
@@ -91,6 +92,7 @@ export class RelinkOrphansDto {
   reorganize?: boolean;
 
   @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => RelinkFileDto)
   files: RelinkFileDto[];
