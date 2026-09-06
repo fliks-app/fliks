@@ -2176,19 +2176,26 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.recommend.open({ mediaId: m.id, seasonId });
   }
 
-  async toggleSeasonLike(seasonId: number): Promise<void> {
+  toggleSeasonLike(seasonId: number): Promise<void> {
+    return this.toggleIdLike('seasonIds', seasonId);
+  }
+
+  toggleEpisodeLike(episodeId: number): Promise<void> {
+    return this.toggleIdLike('episodeIds', episodeId);
+  }
+
+  private async toggleIdLike(key: 'seasonIds' | 'episodeIds', id: number): Promise<void> {
     const m = this.media();
     if (!m) return;
-    const wasLiked = this.seasonLiked(seasonId);
+    const wasLiked = this.likeState()[key].includes(id);
     this.likeState.update((st) => ({
       ...st,
-      seasonIds: wasLiked
-        ? st.seasonIds.filter((i) => i !== seasonId)
-        : [...st.seasonIds, seasonId],
+      [key]: wasLiked ? st[key].filter((i) => i !== id) : [...st[key], id],
     }));
+    const target = key === 'seasonIds' ? { mediaId: m.id, seasonId: id } : { mediaId: m.id, episodeId: id };
     try {
-      if (wasLiked) await this.likesApi.unlike({ mediaId: m.id, seasonId });
-      else await this.likesApi.like({ mediaId: m.id, seasonId });
+      if (wasLiked) await this.likesApi.unlike(target);
+      else await this.likesApi.like(target);
     } catch {
       void this.loadLikeState(m.id);
     }
