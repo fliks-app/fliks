@@ -358,7 +358,7 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
         print("[CastPlugin] didUpdateDeviceList: deviceCount=\(dm.deviceCount)")
         for i in 0..<dm.deviceCount {
             let device = dm.device(at: i)
-            print("[CastPlugin]   device[\(i)]: \(device.friendlyName ?? "?") @ \(device.ipAddress ?? "?")")
+            print("[CastPlugin]   device[\(i)]: \(device.friendlyName ?? "?") @ \(device.networkAddress.ipAddress ?? "?")")
         }
         emitAvailability(dm.deviceCount > 0)
     }
