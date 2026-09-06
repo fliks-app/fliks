@@ -74,6 +74,7 @@
           [userHasOpenWholeRequest]="hasBlockingRequest()"
           [releasesLoading]="epReleasesLoading()"
           [grabBusy]="epHeaderGrabBusy()"
+          [identified]="!unidentified()"
           (selectedFileIdChange)="selectedFileId.set($event)"
           (openDownload)="openDownloadModal()"
           (refreshMetadata)="refreshMetadata()"
@@ -166,12 +167,20 @@
       <!-- ===== NORMAL MODE (movie / series) ===== -->
     } @else {
       <div class="flex flex-col">
+        @if (isAdmin() && unidentified()) {
+          <div role="alert" class="alert alert-info mb-4 flex items-center justify-between py-2">
+            <span class="text-sm">{{ 'media_detail.unidentified_callout' | translate }}</span>
+            <button class="btn btn-sm btn-ghost" (click)="openIdentifyModal()">
+              {{ 'media_detail.identify' | translate }}
+            </button>
+          </div>
+        }
         <app-media-info-header
           [title]="m.title"
           [mediaId]="m.id"
           [rating]="m.rating"
           [dateLabel]="m.year ? '' + m.year : null"
-          [runtime]="m.runtime"
+          [runtime]="displayRuntime()"
           [overview]="m.overview"
           [genres]="m.genres ?? []"
           [resumeEpisodeLabel]="resumeEpisodeLabel()"
@@ -202,6 +211,7 @@
           [grabBusy]="movieHeaderGrabBusy()"
           [monitoredLoading]="monitoredLoading()"
           [deleteLoading]="deleteLoading()"
+          [identified]="!unidentified()"
           (selectedFileIdChange)="selectedFileId.set($event)"
           (openDownload)="openDownloadModal()"
           (openProfiles)="openProfilesModal()"

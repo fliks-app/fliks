@@ -26,6 +26,8 @@ export type WhenPredicateName =
   | 'isMonitored'
   | 'hasQualityProfile'
   | 'isEpisode'
+  /** False when the title has no metadata-provider id (tmdbId/tvdbId/imdbId all null). */
+  | 'identified'
   | 'isTv'
   | 'isTouch'
   /** Which menu is being built. The card menu and the media detail menu read the

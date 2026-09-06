@@ -12,6 +12,8 @@ export interface WhenContext {
   isMonitored?: boolean;
   hasQualityProfile?: boolean;
   isEpisode?: boolean;
+  /** False when the title has no metadata-provider id: a refresh has nothing to refresh from. */
+  identified?: boolean;
   isTv: boolean;
   isTouch: boolean;
   /** Which menu is being built. Both surfaces read the same contribution
@@ -32,6 +34,7 @@ function evaluateKnown(predicate: string, ctx: WhenContext): boolean | null {
   if (predicate === 'isMonitored') return ctx.isMonitored ?? false;
   if (predicate === 'hasQualityProfile') return ctx.hasQualityProfile ?? false;
   if (predicate === 'isEpisode') return ctx.isEpisode ?? false;
+  if (predicate === 'identified') return ctx.identified ?? true;
   if (predicate === 'isTv') return ctx.isTv;
   if (predicate === 'isTouch') return ctx.isTouch;
   if (predicate === 'surface:card') return ctx.surface === 'card';

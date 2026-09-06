@@ -41,6 +41,14 @@ describe('evaluateWhen', () => {
     expect(evaluateWhen(['isEpisode'], ctx())).toBe(false);
   });
 
+  // `identified` defaults to true (unlike the other optional flags) so a
+  // surface that never sets it keeps showing the refresh-metadata row.
+  it('defaults identified to true when the context omits it, false when set', () => {
+    expect(evaluateWhen(['identified'], ctx())).toBe(true);
+    expect(evaluateWhen(['identified'], ctx({ identified: false }))).toBe(false);
+    expect(evaluateWhen(['!identified'], ctx({ identified: false }))).toBe(true);
+  });
+
   it('negates a known predicate with a leading "!"', () => {
     expect(evaluateWhen(['!isAdmin'], ctx({ isAdmin: false }))).toBe(true);
     expect(evaluateWhen(['!isAdmin'], ctx({ isAdmin: true }))).toBe(false);

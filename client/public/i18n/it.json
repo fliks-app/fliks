@@ -1123,7 +1123,8 @@
     "advanced_group": "Avanzate",
     "add_to_list": "Aggiungi a un elenco",
     "unlike": "Non mi piace più",
-    "subtitle_failed": "Non riuscito"
+    "subtitle_failed": "Non riuscito",
+    "unidentified_callout": "Questo titolo non è identificato. Le informazioni mostrate provengono dal file."
   },
   "requests": {
     "title": "Richieste",
@@ -1971,7 +1972,8 @@
       "scan_unmatched_option": "Nessuna corrispondenza: aggiungi così com'è",
       "scan_reorganize_needs_match": "Sposta/rinomina si applica solo ai titoli identificati",
       "scan_queued_unmatched": "{{count}} titolo/i aggiunto/i senza metadati, identificali dalla scheda Media",
-      "scan_search_failed_count": "{{count}} cartella/e non analizzata/e (ricerca fallita), rilancia la scansione dalla scheda Media"
+      "scan_search_failed_count": "{{count}} cartella/e non analizzata/e (ricerca fallita), rilancia la scansione dalla scheda Media",
+      "media_filter_unidentified": "Non identificati"
     },
     "users": {
       "title": "Utenti",

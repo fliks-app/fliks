@@ -51,6 +51,8 @@ export class LibraryMediaComponent implements OnInit {
   readonly search = signal('');
   readonly loading = signal(true);
   readonly loadError = signal(false);
+  readonly unidentifiedOnly = signal(false);
+  readonly unidentifiedCount = signal(0);
 
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -80,21 +82,32 @@ export class LibraryMediaComponent implements OnInit {
     if (!silent) this.loading.set(true);
     this.loadError.set(false);
     try {
-      const res = await this.mediaService.getAll({
-        libraryId,
-        q: this.search().trim() || undefined,
-        page: this.page(),
-        limit: PAGE_SIZE,
-        sortBy: 'title',
-        sortOrder: 'ASC',
-      });
+      const [res, unidentified] = await Promise.all([
+        this.mediaService.getAll({
+          libraryId,
+          q: this.search().trim() || undefined,
+          page: this.page(),
+          limit: PAGE_SIZE,
+          sortBy: 'title',
+          sortOrder: 'ASC',
+          unidentified: this.unidentifiedOnly() || undefined,
+        }),
+        this.mediaService.getAll({ libraryId, unidentified: true, limit: 1 }),
+      ]);
       this.items.set(res.data);
       this.total.set(res.total);
+      this.unidentifiedCount.set(unidentified.total);
     } catch {
       this.loadError.set(true);
     } finally {
       this.loading.set(false);
     }
+  }
+
+  toggleUnidentified() {
+    this.unidentifiedOnly.update((v) => !v);
+    this.page.set(1);
+    void this.load();
   }
 
   onSearch(value: string) {

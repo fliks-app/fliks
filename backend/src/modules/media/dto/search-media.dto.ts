@@ -121,6 +121,11 @@ export class SearchMediaDto {
   @Transform(({ value }) => value === 'true' || value === true)
   cutoffUnmet?: boolean;
 
+  @IsBoolean()
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  unidentified?: boolean;
+
   @IsString()
   @IsOptional()
   letter?: string;

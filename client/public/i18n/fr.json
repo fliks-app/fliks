@@ -1131,7 +1131,8 @@
     "advanced_group": "Avancé",
     "add_to_list": "Ajouter à une liste",
     "unlike": "Je n’aime plus",
-    "subtitle_failed": "Échec"
+    "subtitle_failed": "Échec",
+    "unidentified_callout": "Ce titre n'est pas identifié. Les informations affichées viennent du fichier."
   },
   "requests": {
     "title": "Demandes",
@@ -1988,7 +1989,8 @@
       "scan_unmatched_option": "Aucune correspondance : ajouter tel quel",
       "scan_reorganize_needs_match": "Le déplacement/renommage ne s'applique qu'aux titres identifiés",
       "scan_queued_unmatched": "{{count}} titre(s) ajouté(s) sans métadonnées, identifiez-les depuis l'onglet Médias",
-      "scan_search_failed_count": "{{count}} dossier(s) non analysé(s) (recherche en erreur), relancez l'analyse depuis l'onglet Médias"
+      "scan_search_failed_count": "{{count}} dossier(s) non analysé(s) (recherche en erreur), relancez l'analyse depuis l'onglet Médias",
+      "media_filter_unidentified": "Non identifiés"
     },
     "users": {
       "title": "Utilisateurs",

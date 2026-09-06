@@ -15,6 +15,7 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NgTemplateOutlet } from '@angular/common';
 import { IdentifyModalService } from '../../core/services/identify-modal.service';
+import { hasProviderId } from '../../core/utils/media-identity';
 import { TrackingModalService } from '../../core/services/tracking-modal.service';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -395,6 +396,14 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     return m.type === 'series' ? [] : list;
   });
 
+  /** Falls back to the file's own duration when the provider never gave a runtime. */
+  readonly displayRuntime = computed(() => {
+    const m = this.media();
+    if (m?.runtime) return m.runtime;
+    const seconds = this.mediaFiles()[0]?.streamInfo?.durationSeconds;
+    return seconds ? Math.round(seconds / 60) : (m?.runtime ?? null);
+  });
+
   /**
    * For a series, true iff every downloaded episode in a non-special season
    * (seasonNumber > 0, hasFile=true) is marked as watched. Drives the series
@@ -749,6 +758,12 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly canDelete = computed(() => this.auth.hasPermission('media.delete'));
   readonly isAdmin = computed(() => this.auth.hasPermission('settings.access'));
 
+  /** No metadata-provider id: title, artwork and provider-derived sections all come from the file. */
+  readonly unidentified = computed(() => {
+    const m = this.media();
+    return !!m && !hasProviderId(m);
+  });
+
   /** Anti-spoiler masks for the focused episode's hero, still and synopsis. */
   readonly episodeSpoilerImage = computed(() =>
     this.focusedEpisodeWatched() === null
@@ -1040,24 +1055,26 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       // by episodeFocusEffect as soon as `media` is set, so no imperative
       // call is needed here.
 
-      // Load cast/crew async — doesn't block page render
-      this.mediaService
-        .getCast(m.id)
-        .then((c) => this.cast.set(c))
-        .catch(() => {});
-      this.mediaService
-        .getCrew(m.id)
-        .then((c) => this.crew.set(c))
-        .catch(() => {});
-      if (m.type === 'movie') {
+      // Provider-derived sections have nothing to fetch for an unidentified title.
+      if (hasProviderId(m)) {
         this.mediaService
-          .getSimilar(m.id)
-          .then((s) => this.similar.set(s))
+          .getCast(m.id)
+          .then((c) => this.cast.set(c))
           .catch(() => {});
         this.mediaService
-          .getCollection(m.id)
-          .then((c) => this.collection.set(c))
+          .getCrew(m.id)
+          .then((c) => this.crew.set(c))
           .catch(() => {});
+        if (m.type === 'movie') {
+          this.mediaService
+            .getSimilar(m.id)
+            .then((s) => this.similar.set(s))
+            .catch(() => {});
+          this.mediaService
+            .getCollection(m.id)
+            .then((c) => this.collection.set(c))
+            .catch(() => {});
+        }
       }
       // Active requests (only for users who would ever see the Demander
       // button — admins skip the round-trip).

@@ -23,6 +23,7 @@ import { PlayableMediaService } from '../../../core/services/playable-media.serv
 import { NavbarService } from '../../../core/services/navbar.service';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
 import { evaluateWhen, type WhenContext } from '../../../core/plugin-ui/when-evaluator';
+import { hasProviderId } from '../../../core/utils/media-identity';
 import type { UiContribution } from '@fliks/plugin-contract/ui';
 import { CORE_MEDIA_ACTIONS, sectionOf } from '../media-info-header/core-media-actions';
 import { resolveMenuContributions } from '../../../core/plugin-ui/resolve-menu-contributions';
@@ -438,6 +439,7 @@ export class MediaCardComponent {
     isMonitored: this.media()?.monitored,
     hasQualityProfile: !!this.media()?.qualityProfile,
     isEpisode: this.playlistEpisodeId() != null,
+    identified: !this.media() || hasProviderId(this.media()!),
     isTv: this.tv.isTv(),
     isTouch: this.device.isTouch(),
     surface: 'card',
