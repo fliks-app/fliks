@@ -205,6 +205,7 @@ export type SseEvent =
       byTargetId: string | null;
       action: RemoteCommandAction;
       mediaId?: number;
+      mediaType?: 'movie' | 'series';
       mediaFileId?: number;
       episodeId?: number;
       positionSeconds?: number;
@@ -280,7 +281,9 @@ export type RemoteCommandAction =
   | 'next'
   | 'audio'
   | 'subtitle'
-  | 'quality';
+  | 'quality'
+  /** Open a detail page: mirrors what the controller browses, plays nothing. */
+  | 'browse';
 
 /** One rung of a target's quality ladder. `lowBandwidth` marks an eco rung, of
  *  which there is one per height, so a controller listing both without it shows

@@ -25,6 +25,7 @@ export const REMOTE_COMMAND_ACTIONS: RemoteCommandAction[] = [
   'audio',
   'subtitle',
   'quality',
+  'browse',
 ];
 
 /** Every field is absolute / state-setting, never a delta: see `RemoteCommandAction`. */
@@ -35,6 +36,10 @@ export class RemoteCommandDto {
   @IsInt()
   @IsOptional()
   mediaId?: number;
+
+  @IsIn(['movie', 'series'])
+  @IsOptional()
+  mediaType?: 'movie' | 'series';
 
   @IsInt()
   @IsOptional()

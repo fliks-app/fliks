@@ -272,6 +272,63 @@ describe('RemoteService applyLoad', () => {
   });
 });
 
+describe('RemoteService browse', () => {
+  function browseCmd(over: Partial<RemoteCommand> = {}): RemoteCommand {
+    return {
+      type: 'remote.command',
+      cmdId: 'cmd-browse',
+      expiresAt: Date.now() + 10_000,
+      byTargetId: null,
+      action: 'browse',
+      mediaId: 7,
+      mediaType: 'series',
+      episodeId: 12,
+      ...over,
+    };
+  }
+
+  it('opens the browsed detail page on the target', async () => {
+    const { service } = setup();
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    TestBed.inject(SseService).commands.next(browseCmd());
+
+    await vi.waitFor(() => expect(navigateSpy).toHaveBeenCalled());
+    expect(navigateSpy).toHaveBeenCalledWith(['/series', 7, 'episode', 12]);
+    expect(service.pendingAction()).toBeNull();
+  });
+
+  it('never leaves a playing player for a browse', async () => {
+    setup();
+    const router = TestBed.inject(Router);
+    vi.spyOn(router, 'url', 'get').mockReturnValue('/watch/3');
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    TestBed.inject(SseService).commands.next(browseCmd({ mediaType: 'movie', episodeId: undefined }));
+
+    await Promise.resolve();
+    expect(navigateSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not mirror a browse it just applied back to its own target', async () => {
+    const { service } = setup();
+    const http = TestBed.inject(HttpTestingController);
+    const router = TestBed.inject(Router);
+    vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    TestBed.inject(SseService).commands.next(browseCmd());
+    await Promise.resolve();
+    service.browse({ mediaId: 7, mediaType: 'series', episodeId: 12 });
+    http.expectNone('/api/remote/tv%231/command');
+
+    service.browse({ mediaId: 8, mediaType: 'movie' });
+    const req = http.expectOne('/api/remote/tv%231/command');
+    expect(req.request.body).toMatchObject({ action: 'browse', mediaId: 8, mediaType: 'movie' });
+    expect(service.pendingAction()).toBeNull();
+  });
+});
+
 describe('RemoteService recovers from an unlanded load', () => {
   it('accepts a later frame for another file once an unacked load times out', async () => {
     vi.useFakeTimers();

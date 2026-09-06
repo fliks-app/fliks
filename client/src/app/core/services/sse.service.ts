@@ -34,8 +34,9 @@ export interface RemoteCommand {
   byTargetId: string | null;
   action:
     | 'load' | 'play' | 'pause' | 'playpause' | 'stop'
-    | 'seek' | 'volume' | 'mute' | 'next' | 'audio' | 'subtitle' | 'quality';
+    | 'seek' | 'volume' | 'mute' | 'next' | 'audio' | 'subtitle' | 'quality' | 'browse';
   mediaId?: number;
+  mediaType?: 'movie' | 'series';
   mediaFileId?: number;
   episodeId?: number;
   positionSeconds?: number;

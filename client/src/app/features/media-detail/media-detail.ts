@@ -74,6 +74,7 @@ import { DownloadManagerService } from '../../core/services/download-manager.ser
 import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
 import { collectScopedLeaves, describeDownload } from '../../shared/utils/download-format';
 import { TvService } from '../../core/services/tv.service';
+import { RemoteService } from '../../core/services/remote.service';
 import { DownloadProgressService } from '../../core/services/download-progress.service';
 import {
   episodeBadgeLabel,
@@ -182,6 +183,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   private readonly downloadManager = inject(DownloadManagerService);
   private readonly downloadProgress = inject(DownloadProgressService);
   private readonly tv = inject(TvService);
+  private readonly remote = inject(RemoteService);
 
   /** Live download progress for the media on screen (null when not
    *  downloading). Fed by `download.progress` SSE + a one-shot seed on load. */
@@ -316,6 +318,19 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     if (id === this.loadedId) return;
     this.loadedId = id;
     void this.loadMedia(id);
+  });
+
+  /** A controlled device shows what the controller browses. */
+  private readonly mirrorToRemoteEffect = effect(() => {
+    const params = this.routeParams();
+    if (!params) return;
+    untracked(() =>
+      this.remote.browse({
+        mediaId: Number(params.get('id')),
+        mediaType: this.route.snapshot.data['kind'] as MediaType,
+        episodeId: Number(params.get('episodeId')) || undefined,
+      }),
+    );
   });
 
   /**

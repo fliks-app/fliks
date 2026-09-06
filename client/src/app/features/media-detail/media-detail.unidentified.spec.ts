@@ -18,6 +18,7 @@ import { RequestsService } from '../../core/services/api/requests.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ToastService } from '../../core/services/toast.service';
 import { SseService } from '../../core/services/sse.service';
+import { RemoteService } from '../../core/services/remote.service';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
 import { DownloadProgressService } from '../../core/services/download-progress.service';
 import { TvService } from '../../core/services/tv.service';
@@ -107,6 +108,7 @@ function createHarness(media: Media, isAdmin: boolean) {
       { provide: ConfirmationService, useValue: {} },
       { provide: ToastService, useValue: { success: vi.fn(), error: vi.fn() } },
       { provide: SseService, useValue: { lastEvent: signal(null) } },
+      { provide: RemoteService, useValue: { browse: vi.fn() } },
       {
         provide: StreamingApiService,
         useValue: {
