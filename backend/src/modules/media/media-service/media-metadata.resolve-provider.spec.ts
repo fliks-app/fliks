@@ -1,12 +1,9 @@
 import { MediaMetadataService } from './media-metadata.service';
 
-/**
- * resolveProviderForMedia's fallback step (no season/media/library override,
- * no direct tmdbId/tvdbId): an imdb-only media passes hasProviderId() but
- * used to fall straight to the "no provider ID" throw. It must first try the
- * TMDB imdb cross-reference, same as the tvdb/tmdb direct-match paths above it.
- */
-describe('MediaMetadataService.resolveProviderForMedia — imdb-only fallback', () => {
+/** resolveProviderForMedia's fallback step: an imdb-only media passes
+ *  hasProviderId() so it must resolve through the TMDB imdb cross-reference
+ *  instead of throwing, same as the tvdb/tmdb direct-match paths above it. */
+describe('MediaMetadataService.resolveProviderForMedia, imdb-only fallback', () => {
   function harness() {
     const mediaRepo = { update: jest.fn(() => Promise.resolve({})) };
     const tmdb = {
