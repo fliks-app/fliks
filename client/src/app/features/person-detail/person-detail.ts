@@ -6,7 +6,7 @@ import {
   OnInit,
 } from '@angular/core';
 import { ActivatedRoute, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import {
   PersonsApiService,
   PersonDetail,
@@ -20,7 +20,7 @@ import { CachedSrcDirective } from '../../shared/directives/cached-src.directive
 @Component({
   selector: 'app-person-detail',
   imports: [
-    CachedSrcDirective,TranslateModule, RouterLink, RouterLinkActive, RouterOutlet, ResolveUrlPipe, ClampToggleDirective, LucideChevronLeft],
+    CachedSrcDirective,TranslatePipe, RouterLink, RouterLinkActive, RouterOutlet, ResolveUrlPipe, ClampToggleDirective, LucideChevronLeft],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './person-detail.html',
 })

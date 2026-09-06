@@ -6,7 +6,7 @@ import {
   input,
   linkedSignal,
 } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { LucideCheck } from '@lucide/angular';
 import { ServerConfigService } from '../../../core/services/server-config.service';
 import { initialsAvatar } from '../../../core/utils/initials-avatar';
@@ -19,7 +19,7 @@ import { initialsAvatar } from '../../../core/utils/initials-avatar';
  */
 @Component({
   selector: 'app-user-avatar',
-  imports: [TranslateModule, LucideCheck],
+  imports: [TranslatePipe, LucideCheck],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './user-avatar.html',
 })

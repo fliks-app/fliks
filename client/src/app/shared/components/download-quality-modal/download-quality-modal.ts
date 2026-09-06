@@ -9,7 +9,7 @@ import {
   ElementRef,
 } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import {
   StreamingApiService,
   DownloadQuality,
@@ -21,7 +21,7 @@ import { formatBytes } from '../../utils/download-format';
 
 @Component({
   selector: 'app-download-quality-modal',
-  imports: [TranslateModule, LucideDownload, LucideX],
+  imports: [TranslatePipe, LucideDownload, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <dialog #dialog class="modal">

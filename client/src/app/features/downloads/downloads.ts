@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { Router } from '@angular/router';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { DownloadCacheService, DownloadTask } from '../../core/services/download-cache.service';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
@@ -42,7 +42,7 @@ export interface DisplayDownloadTask extends DownloadTask {
   selector: 'app-downloads',
   imports: [
     CachedSrcDirective,
-    TranslateModule,
+    TranslatePipe,
     ResolveUrlPipe,
     LucideDownload,
     LucideTrash2,

@@ -7,7 +7,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideSend } from '@lucide/angular';
 import {
   SocialApiService,
@@ -26,7 +26,7 @@ import { ToastService } from '../../../core/services/toast.service';
  */
 @Component({
   selector: 'app-recommend-modal',
-  imports: [FormsModule, TranslateModule, LucideSend, ModalHeaderComponent],
+  imports: [FormsModule, TranslatePipe, LucideSend, ModalHeaderComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './recommend-modal.component.html',
 })

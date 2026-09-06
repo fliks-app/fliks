@@ -6,7 +6,7 @@ import {
   signal,
 } from '@angular/core';
 import { Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
@@ -23,7 +23,7 @@ import { itemArtwork } from '../../shared/utils/media-artwork.util';
 @Component({
   selector: 'app-profile-overview',
   imports: [
-    TranslateModule,
+    TranslatePipe,
     MosaicCardComponent,
     MediaCardComponent,
     HorizontalScrollerComponent,

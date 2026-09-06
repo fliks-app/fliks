@@ -7,7 +7,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 
@@ -26,7 +26,7 @@ const OUTPUT = 512;
  */
 @Component({
   selector: 'app-avatar-editor',
-  imports: [ModalFooterComponent, ModalHeaderComponent, TranslateModule],
+  imports: [ModalFooterComponent, ModalHeaderComponent, TranslatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './avatar-editor.html',
 })

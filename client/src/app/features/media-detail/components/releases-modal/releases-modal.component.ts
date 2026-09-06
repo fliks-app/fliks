@@ -11,7 +11,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { LucideCirclePause, LucideSearchX, LucideTriangleAlert } from '@lucide/angular';
 import { MovieRelease } from '../../media-detail-release-picker.service';
 import { IndexerRosterEntry } from '../../release-search-stream.service';
@@ -38,7 +38,7 @@ type IndexerSearchStateOrAll = IndexerRosterEntry['state'] | 'all';
     ModalFooterComponent,
     ModalHeaderComponent,
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     ReleasesTableComponent,
     LucideSearchX,
     LucideTriangleAlert,

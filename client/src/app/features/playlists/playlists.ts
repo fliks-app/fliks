@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucidePlus } from '@lucide/angular';
 import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
 import { ModalHeaderComponent } from '../../shared/components/modal-header';
@@ -23,7 +23,7 @@ import { ModalFooterComponent } from '../../shared/components/modal-footer';
   imports: [
     ModalFooterComponent,
     MosaicCardComponent,
-    TranslateModule,
+    TranslatePipe,
     FormsModule,
     LucidePlus,
     ModalHeaderComponent,

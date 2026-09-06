@@ -1,7 +1,7 @@
 import { Component, ChangeDetectionStrategy, ElementRef, input, output, computed, inject, linkedSignal, viewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { NgClass, DecimalPipe } from '@angular/common';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { Media } from '../../../core/services/api/media.service';
@@ -46,7 +46,7 @@ export type CardStatus = 'watched' | 'missing' | null;
 @Component({
   selector: 'app-media-card',
   imports: [
-    CachedSrcDirective,RouterLink, NgClass, DecimalPipe, ResolveUrlPipe, TranslateModule,
+    CachedSrcDirective,RouterLink, NgClass, DecimalPipe, ResolveUrlPipe, TranslatePipe,
     LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart,
     CardActionsDirective, SpoilerDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,

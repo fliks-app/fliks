@@ -14,7 +14,7 @@ import {
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { NgTemplateOutlet } from '@angular/common';
 import { firstValueFrom } from 'rxjs';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideArrowUp, LucideArrowDown, LucideRotateCcw, LucideSearch } from '@lucide/angular';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { SKIP_ERROR_TOAST } from '../../../core/interceptors/error.interceptor';
@@ -65,7 +65,7 @@ export function resolveRowActionRoute(route: string, id: number | string): strin
   imports: [
     ModalFooterComponent,
     ModalHeaderComponent,
-    TranslateModule,
+    TranslatePipe,
     NgTemplateOutlet,
     InputFieldComponent,
     ToggleFieldComponent,

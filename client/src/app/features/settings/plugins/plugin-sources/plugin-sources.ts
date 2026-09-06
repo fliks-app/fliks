@@ -11,7 +11,7 @@ import {
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LucideX } from '@lucide/angular';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../../core/services/confirmation.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import {
@@ -37,7 +37,7 @@ function createErrorKey(code: string | undefined): string {
 /** Sources list + add form — any number of sources, the official catalog is just the seeded first row. */
 @Component({
   selector: 'app-plugin-sources',
-  imports: [ModalHeaderComponent, FormsModule, DatePipe, TranslateModule],
+  imports: [ModalHeaderComponent, FormsModule, DatePipe, TranslatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugin-sources.html',
 })

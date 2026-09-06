@@ -9,7 +9,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   PluginsApiService,
   PluginInspectReport,
@@ -26,7 +26,7 @@ import { ModalFooterComponent } from '../../../../shared/components/modal-footer
  */
 @Component({
   selector: 'app-plugin-install-consent',
-  imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslateModule],
+  imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugin-install-consent.html',
 })

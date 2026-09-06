@@ -7,7 +7,7 @@ import {
   OnInit,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import { ToastService } from '../../../core/services/toast.service';
 
@@ -62,7 +62,7 @@ function applySeasonFolderFormat(format: string): string {
 
 @Component({
   selector: 'app-naming-settings',
-  imports: [FormsModule, TranslateModule],
+  imports: [FormsModule, TranslatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './naming.html',
 })

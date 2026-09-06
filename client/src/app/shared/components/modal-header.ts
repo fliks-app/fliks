@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, booleanAttribute, input, output } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 
 /**
  * Standard dialog header: title on the left, close button on the right, ruled
@@ -14,7 +14,7 @@ import { TranslateModule } from '@ngx-translate/core';
  */
 @Component({
   selector: 'app-modal-header',
-  imports: [TranslateModule],
+  imports: [TranslatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './modal-header.html',
   host: {

@@ -8,7 +8,7 @@ import {
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import {
   LucidePlay,
   LucideExternalLink,
@@ -67,7 +67,7 @@ import { CachedSrcDirective } from '../../directives/cached-src.directive';
   standalone: true,
   imports: [
     CachedSrcDirective,
-    TranslateModule,
+    TranslatePipe,
     PopoverMenuComponent,
     ResolveUrlPipe,
     LucidePlay,

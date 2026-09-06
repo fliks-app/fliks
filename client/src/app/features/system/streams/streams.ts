@@ -8,7 +8,7 @@ import {
 } from '@angular/core';
 import { UpperCasePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { FormsModule } from '@angular/forms';
 import { StreamsApiService, ActiveStream } from '../../../core/services/api/streams-api.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
@@ -26,7 +26,7 @@ import { ModalHeaderComponent } from '../../../shared/components/modal-header';
     ModalFooterComponent,
     UpperCasePipe,
     RouterLink,
-    TranslateModule,
+    TranslatePipe,
     FormsModule,
     ResolveUrlPipe,
     LucideMessageSquare,

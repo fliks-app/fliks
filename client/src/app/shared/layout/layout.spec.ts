@@ -3,7 +3,7 @@ import { provideZonelessChangeDetection, signal, NO_ERRORS_SCHEMA } from '@angul
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { RouterLink, RouterLinkActive, RouterOutlet, provideRouter } from '@angular/router';
-import { TranslateLoader, TranslateModule, provideTranslateService } from '@ngx-translate/core';
+import { TranslateLoader, TranslatePipe, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { vi } from 'vitest';
 import {
@@ -184,7 +184,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
     set: {
       schemas: [NO_ERRORS_SCHEMA],
       imports: [
-        RouterOutlet, RouterLink, RouterLinkActive, TranslateModule,
+        RouterOutlet, RouterLink, RouterLinkActive, TranslatePipe,
         LucideMenu, LucideChevronLeft, LucideSearch, LucideCast, LucideEllipsisVertical, LucidePin, LucideRocket,
         LucideIconComponent,
         NavIconComponent,

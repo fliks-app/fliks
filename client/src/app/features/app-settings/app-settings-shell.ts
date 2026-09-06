@@ -1,6 +1,6 @@
 import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { SettingsDrawerComponent } from '../../shared/components/settings-drawer/settings-drawer';
 import { LucideSettings, LucidePlay, LucideCaptions, LucideCast, LucideHardDrive, LucideMonitor, LucideMonitorSmartphone, LucideHouse, LucideDownload } from '@lucide/angular';
 import { TvService } from '../../core/services/tv.service';
@@ -9,7 +9,7 @@ import { DeviceService } from '../../core/services/device.service';
 @Component({
   selector: 'app-app-settings-shell',
   imports: [
-    RouterLink, RouterLinkActive, TranslateModule,
+    RouterLink, RouterLinkActive, TranslatePipe,
     SettingsDrawerComponent,
     LucideSettings, LucidePlay, LucideCaptions, LucideCast, LucideHardDrive, LucideMonitor,
     LucideMonitorSmartphone, LucideHouse, LucideDownload,

@@ -11,7 +11,7 @@ import { HttpClient } from '@angular/common/http';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { firstValueFrom } from 'rxjs';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import {
@@ -111,7 +111,7 @@ const LABELS: ProviderListLabels = {
     ModalFooterComponent,
     ModalHeaderComponent,
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     ProviderListComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,

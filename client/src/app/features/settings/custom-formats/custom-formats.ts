@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   CustomFormatsApiService,
   CustomFormat,
@@ -48,7 +48,7 @@ const VALUE_OPTIONS: Partial<Record<CustomFormatSpecType, readonly string[]>> = 
 
 @Component({
   selector: 'app-custom-formats-settings',
-  imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslateModule],
+  imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './custom-formats.html',
 })

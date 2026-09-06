@@ -1,7 +1,7 @@
 import { Component, ChangeDetectionStrategy, inject, signal, OnInit } from '@angular/core';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { PlayerSettingsService } from '../../../core/services/player-settings.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { LucideTrash2 } from '@lucide/angular';
@@ -14,7 +14,7 @@ import {
 
 @Component({
   selector: 'app-subtitle-settings',
-  imports: [TvSelectDirective, FormsModule, TranslateModule, LucideTrash2, SubtitleAppearanceComponent, ToggleFieldComponent],
+  imports: [TvSelectDirective, FormsModule, TranslatePipe, LucideTrash2, SubtitleAppearanceComponent, ToggleFieldComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './subtitle-settings.html',
 })

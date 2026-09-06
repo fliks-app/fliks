@@ -1,12 +1,12 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import type { PluginMetricsEntry } from '../../../../core/services/api/plugins-api.service';
 
 /** One plugin's row from `GET /plugins/metrics`. `entry().metrics` is null for a `data`
  *  plugin or a `process` plugin that isn't running — rendered as "not applicable", never as zeros. */
 @Component({
   selector: 'app-plugin-metrics-panel',
-  imports: [TranslateModule],
+  imports: [TranslatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugin-metrics-panel.html',
 })

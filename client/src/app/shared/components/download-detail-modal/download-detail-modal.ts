@@ -6,7 +6,7 @@ import {
   input,
   viewChild,
 } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { MediaDownloadProgress } from '../../../core/services/download-progress.service';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { ModalHeaderComponent } from '../modal-header';
@@ -56,7 +56,7 @@ interface SeasonRow {
 @Component({
   selector: 'app-download-detail-modal',
   standalone: true,
-  imports: [ModalFooterComponent, TranslateModule, ProgressBarComponent, ModalHeaderComponent],
+  imports: [ModalFooterComponent, TranslatePipe, ProgressBarComponent, ModalHeaderComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './download-detail-modal.html',
 })

@@ -6,7 +6,7 @@ import {
   inject,
   OnInit,
 } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
 import {
   RequestsService,
@@ -16,7 +16,7 @@ import { UserDetailState } from './user-detail.state';
 
 @Component({
   selector: 'app-user-requests',
-  imports: [LocaleDatePipe, TranslateModule],
+  imports: [LocaleDatePipe, TranslatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './user-requests.html',
 })

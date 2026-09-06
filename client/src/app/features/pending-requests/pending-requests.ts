@@ -7,7 +7,7 @@ import {
   signal,
 } from '@angular/core';
 import { Router } from '@angular/router';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { AuthService, PendingRequest } from '../../core/services/auth.service';
 import { ToastService } from '../../core/services/toast.service';
 import { SseService } from '../../core/services/sse.service';
@@ -16,7 +16,7 @@ import { LucideMonitor, LucideTablet, LucideSmartphone, LucideTv, LucideMonitorS
 @Component({
   selector: 'app-pending-requests',
   imports: [
-    TranslateModule,
+    TranslatePipe,
     LucideMonitor,
     LucideTablet,
     LucideSmartphone,

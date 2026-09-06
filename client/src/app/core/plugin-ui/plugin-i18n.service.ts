@@ -1,4 +1,4 @@
-import { Injectable, effect, inject } from '@angular/core';
+import { Injectable, effect, inject, untracked } from '@angular/core';
 import { TranslateService, TranslateStore, insertValue, mergeDeep, type TranslationObject } from '@ngx-translate/core';
 import { PluginUiRegistryService } from './plugin-ui-registry.service';
 
@@ -29,7 +29,12 @@ export class PluginI18nService {
     // register it would leave the effect subscribed to nothing.
     effect(() => {
       this.registry.pluginEntries();
-      for (const lang of this.translate.getLangs()) this.mergeIntoLang(lang);
+      // The merge must stay untracked: `getLangs()` reads the store's language
+      // signal and `setTranslations` writes it back, so a tracked read would
+      // re-enter this effect forever.
+      untracked(() => {
+        for (const lang of this.translate.getLangs()) this.mergeIntoLang(lang);
+      });
     });
   }
 

@@ -1,6 +1,6 @@
 import { Component, ChangeDetectionStrategy, signal, inject, OnInit } from '@angular/core';
 import { SlicePipe } from '@angular/common';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { LucideFilm } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import {
@@ -13,7 +13,7 @@ import { CachedSrcDirective } from '../../shared/directives/cached-src.directive
 @Component({
   selector: 'app-person-filmography',
   imports: [
-    CachedSrcDirective,TranslateModule, SlicePipe, ResolveUrlPipe, LucideFilm],
+    CachedSrcDirective,TranslatePipe, SlicePipe, ResolveUrlPipe, LucideFilm],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './person-filmography.html',
 })

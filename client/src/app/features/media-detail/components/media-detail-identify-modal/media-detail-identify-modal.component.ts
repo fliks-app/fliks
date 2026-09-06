@@ -8,7 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ResolveUrlPipe } from '../../../../core/pipes/resolve-url.pipe';
 import {
   MetadataService,
@@ -39,7 +39,7 @@ export interface IdentifyModalConfig {
   imports: [
     ModalFooterComponent,
     ModalHeaderComponent,
-    TranslateModule,
+    TranslatePipe,
     FormsModule,
     ResolveUrlPipe,
   ],

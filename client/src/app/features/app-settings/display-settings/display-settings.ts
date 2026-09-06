@@ -1,14 +1,14 @@
 import { Component, ChangeDetectionStrategy, inject, signal, OnInit } from '@angular/core';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { DisplaySettingsService } from '../../../core/services/display-settings.service';
 import { SUPPORTED_LOCALES, resolveInitialLocale } from '../../../core/constants/app-locale';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 
 @Component({
   selector: 'app-display-settings',
-  imports: [TvSelectDirective, FormsModule, TranslateModule, ToggleFieldComponent],
+  imports: [TvSelectDirective, FormsModule, TranslatePipe, ToggleFieldComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './display-settings.html',
 })

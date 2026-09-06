@@ -16,17 +16,21 @@ import localeIt from '@angular/common/locales/it';
 import localePt from '@angular/common/locales/pt';
 import { Capacitor } from '@capacitor/core';
 import { provideServiceWorker } from '@angular/service-worker';
-import { provideRouter, RouteReuseStrategy, withInMemoryScrolling, withViewTransitions } from '@angular/router';
+import {
+  provideRouter,
+  RouteReuseStrategy,
+  withInMemoryScrolling,
+  withRouterConfig,
+  withViewTransitions,
+} from '@angular/router';
 import { detectDevice, viewTransitionsEnabled } from './core/services/device.service';
-import { HttpBackend, provideHttpClient, withInterceptors } from '@angular/common/http';
+import { HttpBackend, provideHttpClient, withInterceptors, withXhr } from '@angular/common/http';
 import { provideTranslateService, TranslateLoader } from '@ngx-translate/core';
 
 // Register CLDR data for every shipped UI language so DatePipe / DecimalPipe /
 // CurrencyPipe honour the active locale (resolved below) instead of the Angular
 // default. Registration is idempotent on Angular's side.
-[localeEn, localeFr, localeEs, localeDe, localeIt, localePt].forEach(
-  registerLocaleData,
-);
+[localeEn, localeFr, localeEs, localeDe, localeIt, localePt].forEach(registerLocaleData);
 import { routes } from './app.routes';
 import { resolveInitialLocale, DEFAULT_LOCALE } from './core/constants/app-locale';
 import { serverUrlInterceptor } from './core/interceptors/server-url.interceptor';
@@ -87,6 +91,8 @@ export const appConfig: ApplicationConfig = {
     provideRouter(
       routes,
       withInMemoryScrolling({ scrollPositionRestoration: 'top' }),
+      // A route reads its own params only; an ancestor's are not inherited.
+      withRouterConfig({ paramsInheritanceStrategy: 'emptyOnly' }),
       // Poster→hero morph. On TV the root snapshot costs ~400 ms on a Tizen 9
       // panel, so only the player close earns one.
       ...(!viewTransitionsEnabled()
@@ -120,10 +126,7 @@ export const appConfig: ApplicationConfig = {
                   transition.skipTransition();
                   return;
                 }
-                if (
-                  leafRoutePath(from) === EPISODE_PATH &&
-                  leafRoutePath(to) === EPISODE_PATH
-                ) {
+                if (leafRoutePath(from) === EPISODE_PATH && leafRoutePath(to) === EPISODE_PATH) {
                   transition.skipTransition();
                   return;
                 }
@@ -157,11 +160,17 @@ export const appConfig: ApplicationConfig = {
     ),
     { provide: RouteReuseStrategy, useExisting: CachingReuseStrategy },
     provideHttpClient(
+      withXhr(),
       // cacheInterceptor must run BEFORE serverUrlInterceptor: the cache keys on
       // logical paths (/api/...). Once serverUrl rewrites them to absolute URLs
       // (native), every startsWith('/api/...') check inside the cache misses,
       // so on native nothing was cached and invalidation never fired.
-      withInterceptors([cacheInterceptor, serverUrlInterceptor, credentialsInterceptor, errorInterceptor]),
+      withInterceptors([
+        cacheInterceptor,
+        serverUrlInterceptor,
+        credentialsInterceptor,
+        errorInterceptor,
+      ]),
     ),
     provideTranslateService({
       loader: {

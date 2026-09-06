@@ -7,7 +7,7 @@ import {
   viewChild,
   OnInit,
 } from '@angular/core';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { FormsModule } from '@angular/forms';
 import {
   CdkDropList,
@@ -45,7 +45,7 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
   imports: [
     ModalFooterComponent,
     ModalHeaderComponent,
-    TranslateModule,
+    TranslatePipe,
     FormsModule,
     CdkDropList,
     CdkDrag,

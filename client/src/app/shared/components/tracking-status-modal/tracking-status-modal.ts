@@ -8,7 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { LucideArrowRight, LucideCheck, LucideCircleAlert, LucideEyeOff } from '@lucide/angular';
 import {
   MediaService,
@@ -30,7 +30,7 @@ export type TrackingScope =
   imports: [
     ModalFooterComponent,
     NgTemplateOutlet,
-    TranslateModule,
+    TranslatePipe,
     ModalHeaderComponent,
     LucideArrowRight,
     LucideCheck,

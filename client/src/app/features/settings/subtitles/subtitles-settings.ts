@@ -6,14 +6,14 @@ import {
   OnInit,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 
 @Component({
   selector: 'app-subtitles-settings',
-  imports: [FormsModule, TranslateModule, ToggleFieldComponent],
+  imports: [FormsModule, TranslatePipe, ToggleFieldComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './subtitles-settings.html',
 })

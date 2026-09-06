@@ -6,7 +6,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import {
   SIZE_OPTIONS,
   COLOR_OPTIONS,
@@ -26,7 +26,7 @@ import {
 @Component({
   selector: 'app-subtitle-appearance',
   standalone: true,
-  imports: [TvSelectDirective, FormsModule, TranslateModule],
+  imports: [TvSelectDirective, FormsModule, TranslatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="flex flex-col gap-5">

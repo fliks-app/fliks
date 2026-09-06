@@ -7,7 +7,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { FolderPickerService } from '../../../../core/services/folder-picker.service';
 import { MediaType } from '../../../../core/enums/media-type.enum';
 import { LibraryDetailState } from '../library-detail/library-detail.state';
@@ -15,7 +15,7 @@ import { OrphanScanPanelComponent } from '../library-detail/orphan-scan-panel/or
 
 @Component({
   selector: 'app-library-wizard-media',
-  imports: [FormsModule, TranslateModule, OrphanScanPanelComponent],
+  imports: [FormsModule, TranslatePipe, OrphanScanPanelComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './library-wizard-media.html',
 })

@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import {
   AutoApprovalApiService,
@@ -37,7 +37,7 @@ type RuleMediaType = '' | 'movie' | 'series';
     ModalHeaderComponent,
     MultiSelectComponent,
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './auto-approval.html',

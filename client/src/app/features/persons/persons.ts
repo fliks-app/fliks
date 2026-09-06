@@ -12,7 +12,7 @@ import {
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { PersonsApiService, Person } from '../../core/services/api/persons-api.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { keepRouteFresh } from '../../core/services/keep-route-fresh';
@@ -26,7 +26,7 @@ const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 @Component({
   selector: 'app-persons',
   imports: [TvSelectDirective, 
-    CachedSrcDirective,FormsModule, TranslateModule, RouterLink, ResolveUrlPipe, LucideSearch, LucideUsers],
+    CachedSrcDirective,FormsModule, TranslatePipe, RouterLink, ResolveUrlPipe, LucideSearch, LucideUsers],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './persons.html',
 })

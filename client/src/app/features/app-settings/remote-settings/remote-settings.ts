@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../../core/services/auth.service';
 import { CastSettingsService } from '../../../core/services/cast-settings.service';
 import {
@@ -29,7 +29,7 @@ import { formatTime } from '../../../core/utils/player.utils';
  */
 @Component({
   selector: 'app-remote-settings',
-  imports: [DatePipe, FormsModule, TranslateModule, ToggleFieldComponent],
+  imports: [DatePipe, FormsModule, TranslatePipe, ToggleFieldComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './remote-settings.html',
 })

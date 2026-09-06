@@ -18,7 +18,7 @@ import { IdentifyModalService } from '../../core/services/identify-modal.service
 import { hasProviderId } from '../../core/utils/media-identity';
 import { TrackingModalService } from '../../core/services/tracking-modal.service';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   MediaService,
   Media,
@@ -132,7 +132,7 @@ const GRAB_HANDOFF_MS = 8000;
     ModalFooterComponent,
     ModalHeaderComponent,
     CachedSrcDirective,
-    TranslateModule,
+    TranslatePipe,
     DefaultFocusDirective,
     MediaInfoHeaderComponent,
     MediaInfoExtraComponent,
@@ -494,7 +494,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   readonly episodeDateLabel = computed(() => {
     const ep = this.focusedEpisode();
     if (!ep?.airDate) return null;
-    return new Date(ep.airDate).toLocaleDateString(this.translate.currentLang || undefined, {
+    return new Date(ep.airDate).toLocaleDateString(this.translate.currentLang() || undefined, {
       day: 'numeric',
       month: 'short',
       year: 'numeric',

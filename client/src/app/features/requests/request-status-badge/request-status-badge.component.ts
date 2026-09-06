@@ -6,7 +6,7 @@ import {
   input,
   output,
 } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { ProgressBadgeComponent } from '../../../shared/components/progress-badge/progress-badge.component';
 import { DownloadProgressService } from '../../../core/services/download-progress.service';
 import {
@@ -35,7 +35,7 @@ import {
 @Component({
   selector: 'app-request-status-badge',
   standalone: true,
-  imports: [TranslateModule, ProgressBadgeComponent],
+  imports: [TranslatePipe, ProgressBadgeComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // Transparent to layout so the inner badge stays the flex item it replaced.
   host: { class: 'contents' },

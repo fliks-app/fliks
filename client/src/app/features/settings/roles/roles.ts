@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { LucideX } from '@lucide/angular';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { RolesApiService, RoleRow } from '../../../core/services/api/roles-api.service';
 import { LibrariesApiService, Library } from '../../../core/services/api/libraries-api.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
@@ -19,7 +19,7 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 
 @Component({
   selector: 'app-roles-settings',
-  imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslateModule],
+  imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './roles.html',
 })

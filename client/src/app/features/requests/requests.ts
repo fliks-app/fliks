@@ -13,7 +13,7 @@ import { Subscription } from 'rxjs';
 import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import {
@@ -49,7 +49,7 @@ import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
   imports: [TvSelectDirective, 
     FormsModule,
     LocaleDatePipe,
-    TranslateModule,
+    TranslatePipe,
     RouterLink,
     RequestPosterComponent,
     RequestDeclineModalComponent,

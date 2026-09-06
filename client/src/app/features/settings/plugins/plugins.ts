@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { LucideEllipsisVertical } from '@lucide/angular';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
@@ -33,7 +33,7 @@ import { trustBadgeFor } from './plugin-trust';
   imports: [
     RouterLink,
     LucideEllipsisVertical,
-    TranslateModule,
+    TranslatePipe,
     DropdownMenuComponent,
     ToggleFieldComponent,
     PluginInstallConsentComponent,

@@ -11,7 +11,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { LucideSearch } from '@lucide/angular';
 import { PaginationComponent } from '../../../../shared/components/pagination/pagination';
 import { ResolveUrlPipe } from '../../../../core/pipes/resolve-url.pipe';
@@ -27,7 +27,7 @@ const PAGE_SIZE = 30;
   selector: 'app-library-media',
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     RouterLink,
     LucideSearch,
     ResolveUrlPipe,

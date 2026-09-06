@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { NgTemplateOutlet, UpperCasePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   LucideCheck,
   LucideClipboardList,
@@ -78,7 +78,7 @@ function readEpisodeViewFromStorage(): EpisodeView {
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslateModule, UpperCasePipe, SeasonLabelPipe, NgTemplateOutlet, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, CollapsibleSectionComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, SynopsisComponent, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideLayoutGrid, LucideList, LucideListChecks, LucideListPlus, LucidePackage, LucideUserPlus, LucideX],
+  imports: [TranslatePipe, UpperCasePipe, SeasonLabelPipe, NgTemplateOutlet, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, CollapsibleSectionComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, SynopsisComponent, LucideCheck, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideLayoutGrid, LucideList, LucideListChecks, LucideListPlus, LucidePackage, LucideUserPlus, LucideX],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-seasons.component.html',
 })

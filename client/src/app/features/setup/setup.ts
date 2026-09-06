@@ -9,7 +9,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ServerConfigService, KnownServer } from '../../core/services/server-config.service';
 import { AuthService } from '../../core/services/auth.service';
 
@@ -26,7 +26,7 @@ export function withHttpsFallback(base: string): string[] {
 
 @Component({
   selector: 'app-setup',
-  imports: [FormsModule, TranslateModule],
+  imports: [FormsModule, TranslatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './setup.html',
 })

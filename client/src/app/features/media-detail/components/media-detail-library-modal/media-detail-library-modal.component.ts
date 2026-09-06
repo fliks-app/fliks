@@ -7,7 +7,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { LibrarySummary } from '../../../../core/services/api/libraries-api.service';
 import { METADATA_PROVIDER_OPTIONS_OVERRIDE } from '../../../../core/constants/metadata-providers';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
@@ -18,7 +18,7 @@ import { ModalFooterComponent } from '../../../../shared/components/modal-footer
   selector: 'app-media-detail-library-modal',
   imports: [
     ModalFooterComponent,
-    TranslateModule,
+    TranslatePipe,
     FormsModule,
     TvSelectDirective,
     ModalHeaderComponent,

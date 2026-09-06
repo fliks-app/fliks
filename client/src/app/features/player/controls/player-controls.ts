@@ -31,7 +31,7 @@ import {
 import { QueueItem } from '../../../core/services/playback-queue.service';
 import { NgTemplateOutlet } from '@angular/common';
 import { BottomSheetComponent } from '../../../shared/components/bottom-sheet';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { AppSettingsService } from '../../../core/services/app-settings.service';
 import { formatTime, SpriteMetadata } from '../../../core/utils/player.utils';
 import { focusOverlayEntry, initialOverlayFocus } from '../../../core/services/focusable.constants';
@@ -92,7 +92,7 @@ interface AppearanceRow {
   imports: [
     CachedSrcDirective,
     SelectedOptionDirective,
-    TranslateModule,
+    TranslatePipe,
     LucideCaptions,
     LucideCheck,
     LucideChevronLeft,

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ToggleFieldComponent } from '../../shared/components/forms/toggle-field/toggle-field';
 import {
   UpdateUserBody,
@@ -10,7 +10,7 @@ import { ToastService } from '../../core/services/toast.service';
 
 @Component({
   selector: 'app-account-spoilers',
-  imports: [TranslateModule, ToggleFieldComponent],
+  imports: [TranslatePipe, ToggleFieldComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './spoilers.html',
 })

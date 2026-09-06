@@ -10,7 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { PopoverMenuComponent } from '../../popover-menu';
 
 export interface MultiSelectOption<T extends string | number = number> {
@@ -37,7 +37,7 @@ const FILTER_FROM_OPTIONS = 8;
 @Component({
   selector: 'app-multi-select',
   standalone: true,
-  imports: [FormsModule, TranslateModule, PopoverMenuComponent],
+  imports: [FormsModule, TranslatePipe, PopoverMenuComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './multi-select.html',
   host: { class: 'block' },

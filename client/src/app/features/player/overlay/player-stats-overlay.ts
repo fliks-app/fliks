@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { UpperCasePipe } from '@angular/common';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 
 export interface PlayerStats {
   container: string;
@@ -41,7 +41,7 @@ export interface PlayerStats {
 
 @Component({
   selector: 'app-player-stats-overlay',
-  imports: [UpperCasePipe, TranslateModule],
+  imports: [UpperCasePipe, TranslatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './player-stats-overlay.html',
 })

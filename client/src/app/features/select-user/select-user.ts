@@ -10,7 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { Router } from '@angular/router';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { AuthService, PublicUserSummary } from '../../core/services/auth.service';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
@@ -22,7 +22,7 @@ import { LucideMonitorSmartphone, LucideKeyRound, LucideUserRoundPen } from '@lu
 @Component({
   selector: 'app-select-user',
   imports: [
-    TranslateModule,
+    TranslatePipe,
     LucideMonitorSmartphone,
     LucideKeyRound,
     LucideUserRoundPen,

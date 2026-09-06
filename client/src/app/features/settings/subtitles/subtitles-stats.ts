@@ -8,7 +8,7 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { LucideSearch } from '@lucide/angular';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import {
   SubtitlesApiService,
   SubtitleStats,
@@ -20,7 +20,7 @@ import { PaginationComponent } from '../../../shared/components/pagination/pagin
 
 @Component({
   selector: 'app-subtitles-stats',
-  imports: [LucideSearch, RouterLink, TranslateModule, PaginationComponent],
+  imports: [LucideSearch, RouterLink, TranslatePipe, PaginationComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './subtitles-stats.html',
 })

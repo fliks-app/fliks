@@ -7,7 +7,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideChevronLeft } from '@lucide/angular';
 import { UsersApiService, UserRow } from '../../../../core/services/api/users-api.service';
 import {
@@ -25,7 +25,7 @@ import { LibraryWizardMediaComponent } from './library-wizard-media';
   selector: 'app-library-wizard',
   imports: [
     RouterLink,
-    TranslateModule,
+    TranslatePipe,
     LucideChevronLeft,
     LibraryFormFieldsComponent,
     LibraryUserPickerComponent,

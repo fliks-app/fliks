@@ -6,7 +6,7 @@ import {
   inject,
   viewChild,
 } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { LucideDownload, LucideExternalLink, LucideRocket } from '@lucide/angular';
 import { AppUpdateService } from '../../../core/services/app-update.service';
 import { MarkdownPipe } from '../../pipes/markdown.pipe';
@@ -22,7 +22,7 @@ import { ModalFooterComponent } from '../modal-footer';
   imports: [
     ModalFooterComponent,
     LocaleDatePipe,
-    TranslateModule,
+    TranslatePipe,
     MarkdownPipe,
     LucideDownload,
     LucideExternalLink,

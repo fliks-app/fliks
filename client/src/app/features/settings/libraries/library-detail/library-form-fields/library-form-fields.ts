@@ -1,12 +1,13 @@
 import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
 import { TvSelectDirective } from '../../../../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   LIBRARY_COLOR_OPTIONS,
   LIBRARY_ICON_OPTIONS,
   libraryColorVar,
 } from '../../../../../core/constants/library-appearance';
+import { DEFAULT_LOCALE } from '../../../../../core/constants/app-locale';
 import { METADATA_PROVIDER_OPTIONS_LIBRARY } from '../../../../../core/constants/metadata-providers';
 import {
   METADATA_LANGUAGE_OPTIONS,
@@ -17,7 +18,7 @@ import { LibraryDetailState } from '../library-detail.state';
 
 @Component({
   selector: 'app-library-form-fields',
-  imports: [TvSelectDirective, FormsModule, TranslateModule, LucideIconComponent],
+  imports: [TvSelectDirective, FormsModule, TranslatePipe, LucideIconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './library-form-fields.html',
   host: { class: 'flex flex-col gap-5' },
@@ -31,7 +32,7 @@ export class LibraryFormFieldsComponent {
 
   readonly providerOptions = METADATA_PROVIDER_OPTIONS_LIBRARY;
   readonly metadataLanguageOptions = METADATA_LANGUAGE_OPTIONS;
-  readonly metadataRegionOptions = metadataRegionOptions(this.translate.currentLang);
+  readonly metadataRegionOptions = metadataRegionOptions(this.translate.currentLang() ?? DEFAULT_LOCALE);
 
   readonly colorVar = libraryColorVar;
 }

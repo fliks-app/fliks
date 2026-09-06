@@ -11,7 +11,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { Router } from '@angular/router';
 import { MetadataService } from '../../../../core/services/api/metadata.service';
 import { ProfilesService } from '../../../../core/services/api/profiles.service';
@@ -24,7 +24,7 @@ import { ModalFooterComponent } from '../../../../shared/components/modal-footer
 
 @Component({
   selector: 'app-import-modal',
-  imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslateModule],
+  imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './import-modal.component.html',
 })

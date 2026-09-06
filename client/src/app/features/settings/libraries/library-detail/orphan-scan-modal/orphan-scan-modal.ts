@@ -1,12 +1,12 @@
 import { ChangeDetectionStrategy, Component, ElementRef, output, viewChild } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { ModalHeaderComponent } from '../../../../../shared/components/modal-header';
 import { OrphanScanPanelComponent } from '../orphan-scan-panel/orphan-scan-panel';
 import { ModalFooterComponent } from '../../../../../shared/components/modal-footer';
 
 @Component({
   selector: 'app-orphan-scan-modal',
-  imports: [ModalFooterComponent, TranslateModule, ModalHeaderComponent, OrphanScanPanelComponent],
+  imports: [ModalFooterComponent, TranslatePipe, ModalHeaderComponent, OrphanScanPanelComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orphan-scan-modal.html',
 })

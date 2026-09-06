@@ -8,7 +8,7 @@ import {
 } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { ModalHeaderComponent } from '../modal-header';
 import { VttCue, parseVtt } from '../../../core/services/playback-engine/subtitle-overlay.util';
 import { formatTime } from '../../../core/utils/player.utils';
@@ -18,7 +18,7 @@ import { ModalFooterComponent } from '../modal-footer';
  *  parser, so it shows what would be rendered, tag sanitisation included. */
 @Component({
   selector: 'app-subtitle-viewer-modal',
-  imports: [ModalFooterComponent, TranslateModule, ModalHeaderComponent],
+  imports: [ModalFooterComponent, TranslatePipe, ModalHeaderComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './subtitle-viewer-modal.html',
 })

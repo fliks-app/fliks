@@ -12,7 +12,7 @@ import { TvSelectDirective } from '../../../shared/directives/tv-select.directiv
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { RouterLink } from '@angular/router';
 import { LucideChevronLeft } from '@lucide/angular';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ProfilesService, QualityProfile } from '../../../core/services/api/profiles.service';
 import { MediaService, AppQualityDef } from '../../../core/services/api/media.service';
@@ -28,7 +28,7 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
     ToggleFieldComponent,
     LucideChevronLeft,
     RouterLink,
-    TranslateModule,
+    TranslatePipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './quality-profiles.html',

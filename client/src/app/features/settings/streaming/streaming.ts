@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
@@ -11,7 +11,7 @@ import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
   selector: 'app-streaming-settings',
-  imports: [TvSelectDirective, FormsModule, TranslateModule, ToggleFieldComponent],
+  imports: [TvSelectDirective, FormsModule, TranslatePipe, ToggleFieldComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './streaming.html',
 })

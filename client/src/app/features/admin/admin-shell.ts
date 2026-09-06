@@ -1,6 +1,6 @@
 import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { LucideShield } from '@lucide/angular';
 import { SettingsDrawerComponent } from '../../shared/components/settings-drawer/settings-drawer';
 import { SettingsIconComponent } from './settings-icon';
@@ -9,7 +9,7 @@ import { SettingsSectionsService } from './settings-sections.service';
 @Component({
   selector: 'app-admin-shell',
   imports: [
-    RouterLink, TranslateModule,
+    RouterLink, TranslatePipe,
     SettingsDrawerComponent, SettingsIconComponent,
     LucideShield,
   ],

@@ -7,7 +7,7 @@ import {
   input,
   signal,
 } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import {
   MetadataSeason,
   MetadataService,
@@ -21,7 +21,7 @@ import { TvRowDirective } from '../../../../shared/directives/tv-row.directive';
 @Component({
   selector: 'app-preview-seasons',
   imports: [
-    TranslateModule,
+    TranslatePipe,
     LocaleDatePipe,
     SeasonLabelPipe,
     ImgFadeInDirective,

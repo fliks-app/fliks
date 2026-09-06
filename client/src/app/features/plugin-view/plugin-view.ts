@@ -3,7 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideTriangleAlert } from '@lucide/angular';
 import { PluginUiRegistryService } from '../../core/plugin-ui/plugin-ui-registry.service';
 import { evaluateWhen } from '../../core/plugin-ui/when-evaluator';
@@ -115,7 +115,7 @@ const PLUGIN_PROVIDER_LABELS: ProviderListLabels = {
  */
 @Component({
   selector: 'app-plugin-view',
-  imports: [TranslateModule, LucideTriangleAlert, SchemaFormComponent, ProviderListComponent, DataTableComponent],
+  imports: [TranslatePipe, LucideTriangleAlert, SchemaFormComponent, ProviderListComponent, DataTableComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugin-view.html',
 })

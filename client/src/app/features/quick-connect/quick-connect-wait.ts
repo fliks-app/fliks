@@ -9,7 +9,7 @@ import {
   signal,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
 import { SystemInfoService } from '../../core/services/system-info.service';
 import { getDeviceName, getOrCreateDeviceId } from '../../core/utils/device-info';
@@ -20,7 +20,7 @@ type View = 'starting' | 'waiting' | 'denied' | 'expired' | 'error';
 
 @Component({
   selector: 'app-quick-connect-wait',
-  imports: [TranslateModule],
+  imports: [TranslatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './quick-connect-wait.html',
 })

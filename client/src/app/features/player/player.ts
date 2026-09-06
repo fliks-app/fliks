@@ -16,7 +16,7 @@ import {
 import { ActivatedRoute, Router } from '@angular/router';
 import { Title } from '@angular/platform-browser';
 import { Subscription } from 'rxjs';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { StreamingApiService, PlaybackInfoResponse } from '../../core/services/api/streaming-api.service';
 import { MediaService, Media } from '../../core/services/api/media.service';
 import { BrowserDeviceProfileService, DeviceProfile } from '../../core/services/browser-device-profile.service';
@@ -146,7 +146,7 @@ class PausableTimeout {
 }
 
 @Component({
-  imports: [TranslateModule, LucideCircleAlert, LucideInfo, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, DefaultFocusDirective],
+  imports: [TranslatePipe, LucideCircleAlert, LucideInfo, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, DefaultFocusDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './player.html',
   encapsulation: ViewEncapsulation.None,

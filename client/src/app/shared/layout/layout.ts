@@ -16,7 +16,7 @@ import { Title } from '@angular/platform-browser';
 import { RouterLink, RouterLinkActive, RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Keyboard } from '@capacitor/keyboard';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
 import { LibraryPrefsService } from '../../core/services/library-prefs.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
@@ -72,7 +72,7 @@ const SIDEBAR_COUNTS_DEBOUNCE_MS = 400;
   selector: 'app-layout',
   imports: [
     CachedSrcDirective,
-    RouterOutlet, RouterLink, RouterLinkActive, TranslateModule,
+    RouterOutlet, RouterLink, RouterLinkActive, TranslatePipe,
     LucideMenu, LucideChevronLeft, LucideSearch, LucideCast, LucideEllipsisVertical, LucidePin, LucideRocket,
     RemotePickerComponent,
     CardActionsPanelComponent,

@@ -7,7 +7,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '@ngx-translate/core';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
@@ -16,7 +16,7 @@ import { ModalFooterComponent } from '../../../../shared/components/modal-footer
   selector: 'app-media-detail-profiles-modal',
   imports: [
     ModalFooterComponent,
-    TranslateModule,
+    TranslatePipe,
     FormsModule,
     TvSelectDirective,
     ModalHeaderComponent,
