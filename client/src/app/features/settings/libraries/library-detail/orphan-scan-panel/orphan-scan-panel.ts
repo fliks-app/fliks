@@ -81,7 +81,6 @@ export class OrphanScanPanelComponent {
   readonly scanError = signal('');
   readonly scannedFiles = signal(0);
   readonly orphanCount = signal(0);
-  readonly looseCount = signal(0);
   readonly groups = signal<GroupVM[]>([]);
 
   /** Live file counter pushed by the server walk, so a multi-minute scan of a
@@ -148,7 +147,6 @@ export class OrphanScanPanelComponent {
     this.groups.set([]);
     this.scannedFiles.set(0);
     this.orphanCount.set(0);
-    this.looseCount.set(0);
 
     this.page.set(1);
 
@@ -157,7 +155,6 @@ export class OrphanScanPanelComponent {
       const res = await scan();
       this.scannedFiles.set(res.scannedFiles);
       this.orphanCount.set(res.orphanCount);
-      this.looseCount.set(res.looseFiles.length);
       this.groups.set(
         res.groups.map((group) => ({
           group,
@@ -259,7 +256,8 @@ export class OrphanScanPanelComponent {
             year: vm.year ?? undefined,
           }),
       folderName: group.folderName,
-      reorganize: pick ? this.reorganize() : false,
+      // A root-level movie has no folder to move into; the server refuses it anyway.
+      reorganize: pick && group.folderName !== '' ? this.reorganize() : false,
       files: group.files.map((f) => ({
         filePath: f.filePath,
         seasonNumber: f.seasonNumber ?? undefined,
@@ -343,6 +341,16 @@ export class OrphanScanPanelComponent {
   /** The "add as is" pseudo-option: always sets an unmatched pick, no toggle. */
   pickUnmatched(index: number) {
     this.patch(index, { pick: null, fromNfo: false });
+  }
+
+  /** Why the reorganize toggle is ignored for this group's link button, or '' when it applies. */
+  reorganizeTooltip(vm: GroupVM): string {
+    if (!this.reorganize()) return '';
+    if (!vm.pick) return this.translate.instant('settings.libraries.scan_reorganize_needs_match');
+    if (vm.group.folderName === '') {
+      return this.translate.instant('settings.libraries.scan_reorganize_needs_folder');
+    }
+    return '';
   }
 
   async link(index: number) {

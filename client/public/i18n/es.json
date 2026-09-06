@@ -1124,7 +1124,8 @@
     "add_to_list": "Añadir a una lista",
     "unlike": "Ya no me gusta",
     "subtitle_failed": "Error",
-    "unidentified_callout": "Este título no está identificado. La información mostrada proviene del archivo."
+    "unidentified_callout": "Este título no está identificado. La información mostrada proviene del archivo.",
+    "delete_no_folder": "Este título no tiene una carpeta propia: solo se eliminará la entrada de la biblioteca, el archivo permanece en el disco."
   },
   "requests": {
     "title": "Solicitudes",
@@ -1965,7 +1966,6 @@
       "scan_linked": "{{count}} archivo(s) vinculado(s)",
       "scan_nothing_linked": "No se ha vinculado ningún archivo (duplicado ya presente en el medio).",
       "scan_error": "Error del análisis.",
-      "scan_loose_skipped": "{{count}} archivo(s) en la raíz ignorado(s) — muévalos a una subcarpeta para vincularlos.",
       "scan_files": "{{count}} archivo(s)",
       "scan_add_unmatched": "Añadir sin metadatos",
       "scan_unmatched_badge": "Sin metadatos",
@@ -1973,7 +1973,8 @@
       "scan_reorganize_needs_match": "Mover/renombrar solo se aplica a títulos identificados",
       "scan_queued_unmatched": "{{count}} título(s) añadido(s) sin metadatos, identifíquelos desde la pestaña Medios",
       "scan_search_failed_count": "{{count}} carpeta(s) no analizada(s) (búsqueda fallida), vuelva a lanzar el análisis desde la pestaña Medios",
-      "media_filter_unidentified": "No identificados"
+      "media_filter_unidentified": "No identificados",
+      "scan_reorganize_needs_folder": "Mover/renombrar solo se aplica a títulos con su propia carpeta"
     },
     "users": {
       "title": "Usuarios",

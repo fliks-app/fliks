@@ -67,6 +67,8 @@ export interface Media {
   status: string;
   monitored: boolean;
   path?: string | null;
+  /** On-disk folder name under the library root; empty for a movie file that sits directly at the root. */
+  folderName?: string;
   libraryId?: number | null;
   library?: { id: number; name: string } | null;
   posterUrl: string | null;

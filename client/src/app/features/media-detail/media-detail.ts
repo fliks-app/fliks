@@ -1403,10 +1403,13 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   async deleteMedia() {
     const m = this.media();
     if (!m) return;
+    const messageKey = m.folderName
+      ? 'media_detail.confirm_delete'
+      : 'media_detail.delete_no_folder';
     if (
       !(await this.confirmation.confirm({
         title: this.translate.instant('common.confirm'),
-        message: this.translate.instant('media_detail.confirm_delete', { title: m.title }),
+        message: this.translate.instant(messageKey, { title: m.title }),
         variant: 'danger',
       }))
     )

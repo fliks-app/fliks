@@ -156,6 +156,7 @@ describe('MediaRescanService.rescanFiles — quality from probe results', () => 
       id: 8,
       title: 'Ember Horizon',
       type: MediaType.MOVIE,
+      folderName: 'Ember Horizon (2022)',
       files: [],
       get path() {
         return mediaDir;
@@ -195,5 +196,74 @@ describe('MediaRescanService.rescanFiles — quality from probe results', () => 
     expect(h.mediaFileRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({ relativePath: filename, quality: 'WEBDL-480p' }),
     );
+  });
+});
+
+describe('MediaRescanService.rescanFiles - a movie with no folder of its own', () => {
+  let mediaDir: string;
+
+  beforeEach(() => {
+    mediaDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rescan-root-movie-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(mediaDir, { recursive: true, force: true });
+  });
+
+  function rootMovieMedia(over: Record<string, unknown>) {
+    return {
+      id: 11,
+      title: 'Quiet Harbour',
+      type: MediaType.MOVIE,
+      folderName: '',
+      files: [],
+      get path() {
+        return mediaDir;
+      },
+      ...over,
+    };
+  }
+
+  it('never walks the shared library root: a sibling root-level movie file is not discovered', async () => {
+    const h = buildHarness();
+    const ownFilename = 'Quiet.Harbour.2009.1080p.mkv';
+    fs.writeFileSync(path.join(mediaDir, ownFilename), 'video-bytes');
+    // Another root-level movie's own file, sitting right next to this one.
+    fs.writeFileSync(path.join(mediaDir, 'Some.Other.Movie.2020.mkv'), 'video-bytes');
+    const dbFile = {
+      id: 21,
+      relativePath: ownFilename,
+      size: 1,
+      quality: 'WEBDL-1080p',
+      streamInfo: null,
+    };
+    h.mediaRepo.findOne.mockResolvedValue(rootMovieMedia({ files: [dbFile] }));
+    h.ffprobe.detectMediaFileInfo.mockResolvedValue({
+      video: [{ width: 1920, height: 1080 }],
+      audio: [],
+      subtitles: [],
+    });
+
+    const res = await h.service.rescanFiles(11, { skipWarmup: true });
+
+    expect(res.added).toBe(0);
+    expect(h.mediaFileRepo.save).not.toHaveBeenCalledWith(
+      expect.objectContaining({ relativePath: 'Some.Other.Movie.2020.mkv' }),
+    );
+    // Its own file is still refreshed.
+    expect(res.updated).toBe(1);
+  });
+
+  it('does not wipe the shared .cache directory at the library root', async () => {
+    const h = buildHarness();
+    const cacheDir = path.join(mediaDir, '.cache');
+    fs.mkdirSync(cacheDir);
+    fs.writeFileSync(path.join(cacheDir, 'marker.txt'), 'x');
+    h.mediaRepo.findOne.mockResolvedValue(rootMovieMedia({ files: [] }));
+    h.ffprobe.detectMediaFileInfo.mockResolvedValue({ video: [], audio: [], subtitles: [] });
+
+    await h.service.rescanFiles(11, { skipWarmup: true });
+
+    expect(fs.existsSync(cacheDir)).toBe(true);
   });
 });

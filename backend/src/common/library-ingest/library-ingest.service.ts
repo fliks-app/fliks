@@ -90,6 +90,13 @@ export class LibraryIngestService {
         `Media #${req.mediaId} is not anchored to a library folder`,
       );
     }
+    // A grab must never land loose files at the library root: `media.path`
+    // falls back to it when `folderName` is empty.
+    if (!media.folderName) {
+      throw new Error(
+        `Media #${req.mediaId} has no folder of its own, refusing to place files at the library root`,
+      );
+    }
     if (!req.files.length) return { imported: [], alreadyPresent: [] };
 
     // A series release carrying several video files is a season pack: every file

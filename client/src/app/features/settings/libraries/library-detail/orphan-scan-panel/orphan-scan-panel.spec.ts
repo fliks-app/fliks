@@ -58,7 +58,6 @@ const scanResult = (folders: string[]): OrphanScanResult => ({
       },
     ],
   })),
-  looseFiles: [],
   scannedFiles: folders.length,
   orphanCount: folders.length,
 });
@@ -244,6 +243,102 @@ describe('OrphanScanPanelComponent — a failing search', () => {
 
     expect(panel.groups()[0].error).toBe(
       'Metadata search failed on tmdb: HTTP 401 — Invalid API key (HTTP 503)',
+    );
+  });
+});
+
+describe('OrphanScanPanelComponent - a movie file directly at the library root', () => {
+  function setupRoot(filename: string, metadataOverrides: Record<string, unknown> = {}) {
+    const relinked: RelinkOrphansBody[] = [];
+    const rootResult: OrphanScanResult = {
+      libraryPath: '/medias',
+      groups: [
+        {
+          groupKey: `movie:/medias/${filename}`,
+          mediaType: 'movie',
+          folderName: '',
+          guessTitle: 'Quiet Harbor',
+          guessYear: 2020,
+          nfo: null,
+          suggestedProvider: 'tmdb',
+          files: [
+            {
+              filePath: `/medias/${filename}`,
+              filename,
+              size: 1,
+              qualityName: 'HDTV-720p',
+              qualityId: 1,
+              seasonNumber: null,
+              episodeNumber: null,
+              episodeEnd: null,
+            },
+          ],
+        },
+      ],
+      scannedFiles: 1,
+      orphanCount: 1,
+    };
+    const importsApi = {
+      previewOrphans: () => Promise.resolve(rootResult),
+      relinkOrphansBatch: (items: RelinkOrphansBody[]) => {
+        relinked.push(...items);
+        return Promise.resolve({ queued: items.length });
+      },
+      relinkOrphans: (body: RelinkOrphansBody) => {
+        relinked.push(body);
+        return Promise.resolve({ mediaId: 1, created: true, linked: body.files.length, errors: [] });
+      },
+    };
+    const metadata = {
+      searchMovie: () => Promise.resolve([result(11, 'Quiet Harbor')]),
+      searchTv: () => Promise.resolve([]),
+      ...metadataOverrides,
+    };
+
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTranslateService({
+          lang: 'en',
+          loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
+        }),
+        { provide: ImportsApiService, useValue: importsApi as unknown as ImportsApiService },
+        { provide: MetadataService, useValue: metadata as unknown as MetadataService },
+        { provide: ToastService, useValue: { success: () => undefined } },
+      ],
+    });
+    const fixture = TestBed.createComponent(OrphanScanPanelComponent);
+    return { panel: fixture.componentInstance, fixture, relinked };
+  }
+
+  it('shows the file name in the collapsed header instead of the empty folder name', async () => {
+    const { panel, fixture } = setupRoot('Quiet.Harbor.2020.mkv');
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+    fixture.detectChanges();
+
+    const header = fixture.nativeElement.querySelector('.collapse-title .font-mono');
+    expect(header?.textContent?.trim()).toBe('Quiet.Harbor.2020.mkv');
+  });
+
+  it('forwards folderName \'\' untouched and forces reorganize off even with a match', async () => {
+    const { panel, relinked } = setupRoot('Quiet.Harbor.2020.mkv');
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+    expect(panel.groups()[0].pick?.title).toBe('Quiet Harbor');
+
+    await panel.importAll(7);
+
+    expect(relinked).toHaveLength(1);
+    expect(relinked[0].folderName).toBe('');
+    expect(relinked[0].externalId).toBe('11');
+    expect(relinked[0].reorganize).toBe(false);
+  });
+
+  it('explains why reorganize is skipped for a root-level movie', async () => {
+    const { panel } = setupRoot('Quiet.Harbor.2020.mkv');
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+
+    expect(panel.reorganizeTooltip(panel.groups()[0])).toBe(
+      'settings.libraries.scan_reorganize_needs_folder',
     );
   });
 });

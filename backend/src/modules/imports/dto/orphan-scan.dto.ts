@@ -16,7 +16,8 @@ export interface OrphanFileEntry {
 /**
  * A re-linkable unit: a single movie file, or all episode files sharing one
  * show folder. `folderName` is the on-disk folder (first path segment under
- * the library root) that the re-created media will be pinned to.
+ * the library root) that the re-created media will be pinned to; empty for a
+ * movie file sitting directly at the library root (a series always needs one).
  */
 export interface OrphanGroup {
   groupKey: string;
@@ -32,8 +33,6 @@ export interface OrphanGroup {
 export interface OrphanScanResult {
   libraryPath: string;
   groups: OrphanGroup[];
-  /** Video files directly at the library root — not re-linkable in V1. */
-  looseFiles: OrphanFileEntry[];
   scannedFiles: number;
   orphanCount: number;
 }

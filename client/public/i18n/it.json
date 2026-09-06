@@ -1124,7 +1124,8 @@
     "add_to_list": "Aggiungi a un elenco",
     "unlike": "Non mi piace più",
     "subtitle_failed": "Non riuscito",
-    "unidentified_callout": "Questo titolo non è identificato. Le informazioni mostrate provengono dal file."
+    "unidentified_callout": "Questo titolo non è identificato. Le informazioni mostrate provengono dal file.",
+    "delete_no_folder": "Questo titolo non ha una cartella propria: verrà rimossa solo la voce della libreria, il file rimane sul disco."
   },
   "requests": {
     "title": "Richieste",
@@ -1965,7 +1966,6 @@
       "scan_linked": "{{count}} file collegato/i",
       "scan_nothing_linked": "Nessun file collegato (duplicato già presente nel file multimediale).",
       "scan_error": "Analisi fallita.",
-      "scan_loose_skipped": "{{count}} file nella radice ignorato/i — spostali in una sottocartella per collegarli.",
       "scan_files": "{{count}} file",
       "scan_add_unmatched": "Aggiungi senza metadati",
       "scan_unmatched_badge": "Senza metadati",
@@ -1973,7 +1973,8 @@
       "scan_reorganize_needs_match": "Sposta/rinomina si applica solo ai titoli identificati",
       "scan_queued_unmatched": "{{count}} titolo/i aggiunto/i senza metadati, identificali dalla scheda Media",
       "scan_search_failed_count": "{{count}} cartella/e non analizzata/e (ricerca fallita), rilancia la scansione dalla scheda Media",
-      "media_filter_unidentified": "Non identificati"
+      "media_filter_unidentified": "Non identificati",
+      "scan_reorganize_needs_folder": "Sposta/rinomina si applica solo ai titoli con una propria cartella"
     },
     "users": {
       "title": "Utenti",

@@ -25,8 +25,13 @@ describe('Media.path serialization', () => {
     expect(plain.path).toBe('/medias/tvshows/Some Show');
   });
 
-  it('serializes path as null when there is no folder', () => {
+  it('falls back to the library root when the media has no folder of its own', () => {
     const plain = instanceToPlain(mediaWith('/medias/tvshows', undefined));
+    expect(plain.path).toBe('/medias/tvshows');
+  });
+
+  it('serializes path as null when there is no library at all', () => {
+    const plain = instanceToPlain(mediaWith(undefined, undefined));
     expect(plain.path).toBeNull();
   });
 });

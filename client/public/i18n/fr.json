@@ -1132,7 +1132,8 @@
     "add_to_list": "Ajouter à une liste",
     "unlike": "Je n’aime plus",
     "subtitle_failed": "Échec",
-    "unidentified_callout": "Ce titre n'est pas identifié. Les informations affichées viennent du fichier."
+    "unidentified_callout": "Ce titre n'est pas identifié. Les informations affichées viennent du fichier.",
+    "delete_no_folder": "Ce titre n'a pas de dossier propre : seule l'entrée de la bibliothèque sera supprimée, le fichier reste sur le disque."
   },
   "requests": {
     "title": "Demandes",
@@ -1982,7 +1983,6 @@
       "scan_linked": "{{count}} fichier(s) lié(s)",
       "scan_nothing_linked": "Aucun fichier lié (doublon déjà présent dans le média).",
       "scan_error": "Échec de l'analyse.",
-      "scan_loose_skipped": "{{count}} fichier(s) à la racine ignoré(s) — déplacez-les dans un sous-dossier pour les lier.",
       "scan_files": "{{count}} fichier(s)",
       "scan_add_unmatched": "Ajouter sans métadonnées",
       "scan_unmatched_badge": "Sans métadonnées",
@@ -1990,7 +1990,8 @@
       "scan_reorganize_needs_match": "Le déplacement/renommage ne s'applique qu'aux titres identifiés",
       "scan_queued_unmatched": "{{count}} titre(s) ajouté(s) sans métadonnées, identifiez-les depuis l'onglet Médias",
       "scan_search_failed_count": "{{count}} dossier(s) non analysé(s) (recherche en erreur), relancez l'analyse depuis l'onglet Médias",
-      "media_filter_unidentified": "Non identifiés"
+      "media_filter_unidentified": "Non identifiés",
+      "scan_reorganize_needs_folder": "Le déplacement/renommage ne s'applique qu'aux titres dans leur propre dossier"
     },
     "users": {
       "title": "Utilisateurs",

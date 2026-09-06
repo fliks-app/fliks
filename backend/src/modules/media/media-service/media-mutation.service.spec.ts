@@ -161,10 +161,11 @@ describe('MediaMutationService remove disk cleanup', () => {
       id: 1,
       title: 'placeholder',
       library: root ? { path: root } : undefined,
+      folderName,
       get path() {
         return this.library?.path && folderName
           ? path.join(this.library.path, folderName)
-          : null;
+          : (this.library?.path ?? null);
       },
     };
   }
@@ -231,6 +232,17 @@ describe('MediaMutationService remove disk cleanup', () => {
 
     expect(result.diskPath).toBeNull();
     expect(mediaRepo.remove).toHaveBeenCalled();
+  });
+
+  it('returns no folder for a movie with no folder of its own (root-level file)', async () => {
+    query.findOne.mockResolvedValue(mediaIn('/library/movies', ''));
+
+    const result = await service.remove(1);
+
+    // `media.path` resolves to the library root itself: never delete it.
+    expect(result.diskPath).toBeNull();
+    expect(mediaRepo.remove).toHaveBeenCalled();
+    expect(rmSpy).not.toHaveBeenCalled();
   });
 
   it('deleteMediaFolder removes the folder recursively', async () => {

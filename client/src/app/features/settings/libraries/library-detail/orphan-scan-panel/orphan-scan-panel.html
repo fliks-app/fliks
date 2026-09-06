@@ -58,7 +58,7 @@
                     ? 'settings.libraries.scan_group_series'
                     : 'settings.libraries.scan_group_movie') | translate }}
                 </span>
-                <span class="font-mono text-sm text-base-content/70 truncate">{{ vm.group.folderName }}</span>
+                <span class="font-mono text-sm text-base-content/70 truncate">{{ vm.group.folderName || vm.group.files[0].filename }}</span>
                 <span class="text-xs text-base-content/50 shrink-0">
                   {{ 'settings.libraries.scan_files' | translate: { count: vm.group.files.length } }}
                 </span>
@@ -163,7 +163,7 @@
                   @if (!deferLink()) {
                     <div class="flex justify-end">
                       <button type="button" class="btn btn-sm btn-primary"
-                        [title]="(reorganize() && !vm.pick) ? ('settings.libraries.scan_reorganize_needs_match' | translate) : ''"
+                        [title]="reorganizeTooltip(vm)"
                         (click)="link(i)" [disabled]="vm.linking || vm.searching">
                         @if (vm.linking) { <span class="loading loading-spinner loading-xs"></span> }
                         {{ (vm.pick?.existingMediaId
@@ -190,11 +190,6 @@
       />
     }
 
-    @if (looseCount() > 0) {
-        <p class="text-xs text-base-content/50 mt-4">
-          {{ 'settings.libraries.scan_loose_skipped' | translate: { count: looseCount() } }}
-        </p>
-      }
     }
   </div>
 

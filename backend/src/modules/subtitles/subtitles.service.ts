@@ -739,6 +739,9 @@ export class SubtitlesService {
       relations: ['files'],
     });
     if (!media?.path || !media.files?.length) return 0;
+    // A media with no folder of its own shares its "root" with every sibling
+    // root-level movie: scanning it would cross-match their sidecar subtitles.
+    if (!media.folderName) return 0;
 
     // Build a map: video basename (without ext, lowercase) → MediaFile
     const fileByBasename = new Map<string, MediaFile>();
