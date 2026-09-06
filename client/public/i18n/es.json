@@ -114,7 +114,7 @@
       "VideoCodecNotSupported": "Códec de vídeo no compatible",
       "VideoHdrNotSupported": "HDR → SDR",
       "VideoProfileNotSupported": "Perfil de vídeo no compatible",
-      "VideoLevelNotSupported": "Nivel de vídeo demasiado alto",
+      "VideoLevelNotSupported": "Nivel de códec de vídeo demasiado alto",
       "VideoBitDepthNotSupported": "10-bit no compatible",
       "VideoResolutionNotSupported": "Resolución demasiado alta",
       "VideoCrop": "Eliminación de las barras negras",
