@@ -1124,7 +1124,6 @@
     "add_to_list": "Añadir a una lista",
     "unlike": "Ya no me gusta",
     "subtitle_failed": "Error",
-    "unidentified_callout": "Este título no está identificado. La información mostrada proviene del archivo.",
     "delete_no_folder": "Este título no tiene una carpeta propia: solo se eliminará la entrada de la biblioteca, el archivo permanece en el disco."
   },
   "requests": {

@@ -1124,7 +1124,6 @@
     "add_to_list": "Zu Liste hinzufügen",
     "unlike": "Gefällt mir nicht mehr",
     "subtitle_failed": "Fehlgeschlagen",
-    "unidentified_callout": "Dieser Titel ist nicht identifiziert. Die angezeigten Informationen stammen aus der Datei.",
     "delete_no_folder": "Dieser Titel hat keinen eigenen Ordner: Nur der Bibliothekseintrag wird entfernt, die Datei bleibt auf der Festplatte."
   },
   "requests": {

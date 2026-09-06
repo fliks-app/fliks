@@ -1132,7 +1132,6 @@
     "add_to_list": "Add to list",
     "unlike": "Unlike",
     "subtitle_failed": "Failed",
-    "unidentified_callout": "This title isn't identified. The information shown comes from the file.",
     "delete_no_folder": "This title has no folder of its own: only the library entry will be removed, the file stays on disk."
   },
   "requests": {
