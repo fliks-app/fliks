@@ -75,7 +75,7 @@ export class CastPlaybackTarget implements PlaybackTarget {
       return;
     }
     this.cp.activeSubtitleId.set(s.id);
-    this.cp.saveSubtitleSelection(s.language, s.forced);
+    this.cp.saveSubtitleSelection(s.language, s.forced, s.hearingImpaired);
     if (s.burnIn) {
       this.cp.changeBurnIn(s.castTrackId ?? 0);
     } else if (s.castTrackId) {

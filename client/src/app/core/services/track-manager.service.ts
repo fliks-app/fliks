@@ -24,6 +24,7 @@ export interface SubtitleOption {
   subtitleDbId?: number;
   /** True if this is a forced subtitle track */
   forced?: boolean;
+  hearingImpaired?: boolean;
   /** Origin: `translated`, `ocr`, `embedded`, or a download provider name. */
   providerType?: string | null;
   /** Player-menu two-line label: language head + details subline ("SRT • …"). */
@@ -121,10 +122,10 @@ export class TrackManagerService {
   }
 
   /** Save subtitle selection for this media. Pass null = user explicitly disabled.
-   *  Stores "language[:forced][:embedded][:image]", or "off" when disabled. */
-  saveSubtitleSelection(mediaId: number, language: string | null, forced = false, embedded = false, image = false): void {
+   *  Stores "language[:forced][:embedded][:image][:hi]", or "off" when disabled. */
+  saveSubtitleSelection(mediaId: number, language: string | null, forced = false, embedded = false, image = false, hearingImpaired = false): void {
     if (!this.playerSettings.get().rememberSubtitleSelections || !mediaId) return;
-    const flags = [forced ? 'forced' : '', embedded ? 'embedded' : '', image ? 'image' : ''].filter(Boolean).join(':');
+    const flags = [forced ? 'forced' : '', embedded ? 'embedded' : '', image ? 'image' : '', hearingImpaired ? 'hi' : ''].filter(Boolean).join(':');
     const value = language ? `${language}${flags ? ':' + flags : ''}` : 'off';
     this.playerSettings.saveRememberedSubtitleTrack(mediaId, value);
   }
@@ -175,6 +176,7 @@ export class TrackManagerService {
         burnIn: t.kind === 'embedded' && t.isImage && !rendersImageNatively,
         subtitleDbId: t.subtitleId,
         forced: t.forced,
+        hearingImpaired: t.hearingImpaired,
         providerType: t.providerType,
         };
       });
@@ -202,6 +204,7 @@ export class TrackManagerService {
             language: emb.language,
             burnIn: false,
             forced: emb.forced ?? false,
+            hearingImpaired: emb.hearingImpaired ?? false,
           });
         }
       }
@@ -241,7 +244,7 @@ export class TrackManagerService {
     const subs = subtitles.filter((s) => !s.isImage);
     if (!subs.length && !subtitles.length) return;
 
-    // Priority 1: remembered selection by "language[:forced][:embedded]" or "off"
+    // Priority 1: remembered selection by "language[:forced][:embedded][:image][:hi]" or "off"
     if (settings.rememberSubtitleSelections) {
       const saved = this.playerSettings.getRememberedSubtitleTrack(mediaId);
       if (saved === 'off') return; // User explicitly disabled subtitles
@@ -251,14 +254,17 @@ export class TrackManagerService {
         const wantForced = parts.includes('forced');
         const wantEmbedded = parts.includes('embedded');
         const wantImage = parts.includes('image');
+        const wantHi = parts.includes('hi');
         const isEmbedded = (s: SubtitleOption) => s.id.startsWith('emb-');
         const sameImage = (s: SubtitleOption) => !!s.isImage === wantImage;
+        const sameHi = (s: SubtitleOption) => !!s.hearingImpaired === wantHi;
         // Restore image picks too — selectSubtitle renders them natively
         // (direct play) or burns them in (web / transcode).
         const pool = wantImage ? subtitles : subs;
-        // Best match: language + image-ness + type (embedded/external) + forced.
+        // Best match: language + image-ness + forced + hearing-impaired + type (embedded/external).
         const match =
-          pool.find((s) => s.language === savedLang && sameImage(s) && !!s.forced === wantForced && isEmbedded(s) === wantEmbedded)
+          pool.find((s) => s.language === savedLang && sameImage(s) && !!s.forced === wantForced && sameHi(s) && isEmbedded(s) === wantEmbedded)
+          ?? pool.find((s) => s.language === savedLang && sameImage(s) && !!s.forced === wantForced && sameHi(s))
           ?? pool.find((s) => s.language === savedLang && sameImage(s) && !!s.forced === wantForced)
           ?? pool.find((s) => s.language === savedLang && sameImage(s))
           ?? subs.find((s) => s.language === savedLang && !s.forced);

@@ -498,6 +498,7 @@ export class SubtitlesModalComponent {
         sub: parts.sub,
         language: s.language,
         forced: s.forced,
+        hearingImpaired: s.hearingImpaired,
         image: isImageBasedSubtitleCodec(s.codec),
       };
     });

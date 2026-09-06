@@ -4172,6 +4172,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         sub.forced,
         sub.id.startsWith('emb-'),
         true,
+        sub.hearingImpaired,
       );
       await this.reloadStream();
       return;
@@ -4205,7 +4206,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
 
     this.activeSubtitleId.set(sub.id);
-    this.trackManager.saveSubtitleSelection(this.mediaId, sub.language, sub.forced, sub.id.startsWith('emb-'), sub.isImage);
+    this.trackManager.saveSubtitleSelection(this.mediaId, sub.language, sub.forced, sub.id.startsWith('emb-'), sub.isImage, sub.hearingImpaired);
   }
 
   // Bound DOM handlers kept as stable references so ngOnDestroy can remove
