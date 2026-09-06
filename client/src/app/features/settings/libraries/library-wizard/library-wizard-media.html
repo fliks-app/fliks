@@ -9,7 +9,7 @@
         </div>
         <input type="text" class="input input-bordered w-full font-mono"
           [ngModel]="state.formPath()" (ngModelChange)="state.formPath.set($event)"
-          placeholder="/medias/movies" />
+          placeholder="/medias/movies" (keydown.enter)="scan()" />
         <div class="label">
           <span class="label-text-alt text-sm text-base-content/50">{{ 'settings.libraries.path_hint' | translate }}</span>
         </div>
@@ -18,7 +18,8 @@
         {{ 'common.browse' | translate }}
       </button>
       <button type="button" class="btn btn-primary mb-6"
-        (click)="scan()" [disabled]="!state.formPath().trim()">
+        (click)="scan()" [disabled]="!state.formPath().trim() || scanPanel()?.scanning()">
+        @if (scanPanel()?.scanning()) { <span class="loading loading-spinner loading-sm"></span> }
         {{ 'settings.libraries.scan_folder' | translate }}
       </button>
     </div>

@@ -74,12 +74,23 @@ export class LibraryWizardComponent implements OnInit {
 
     const id = await this.state.create();
     if (!id) return;
-    const queued = await media.importAll(id);
-    if (queued > 0) {
-      this.toast.success(
-        this.translate.instant('settings.libraries.scan_queued', { count: queued }),
-      );
-    }
+    // One metadata search per detected folder: the redirect must not wait for
+    // it. The library page reports the import over SSE.
+    void media
+      .importAll(id)
+      .then(({ queued, skipped }) => {
+        if (queued > 0) {
+          this.toast.success(
+            this.translate.instant('settings.libraries.scan_queued', { count: queued }),
+          );
+        }
+        if (skipped > 0) {
+          this.toast.warning(
+            this.translate.instant('settings.libraries.scan_unmatched', { count: skipped }),
+          );
+        }
+      })
+      .catch(() => undefined);
     void this.router.navigate(['/admin/settings/libraries', id, 'media']);
   }
 

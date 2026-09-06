@@ -99,7 +99,7 @@ describe('OrphanScanPanelComponent.importAll', () => {
     const { panel, relinked } = setup(['Alpha', 'Beta']);
     await panel.scanPath('/medias', ['movie'], 'tmdb');
 
-    expect(await panel.importAll(7)).toBe(2);
+    expect(await panel.importAll(7)).toEqual({ queued: 2, skipped: 0 });
     expect(relinked.map((b) => [b.folderName, b.externalId, b.libraryId])).toEqual([
       ['Alpha', '11', 7],
       ['Beta', '11', 7],
@@ -111,7 +111,7 @@ describe('OrphanScanPanelComponent.importAll', () => {
     await panel.scanPath('/medias', ['movie'], 'tmdb');
     panel.pick(0, panel.groups()[0].pick!); // clicking the selected row clears it
 
-    expect(await panel.importAll(7)).toBe(1);
+    expect(await panel.importAll(7)).toEqual({ queued: 1, skipped: 1 });
     expect(relinked.map((b) => b.folderName)).toEqual(['Beta']);
   });
 

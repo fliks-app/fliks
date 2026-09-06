@@ -29,6 +29,7 @@ import {
 } from '../../../../../core/services/api/imports-api.service';
 
 const PAGE_SIZE = 20;
+const SEARCH_CONCURRENCY = 8;
 
 interface GroupVM {
   group: OrphanGroup;
@@ -88,10 +89,6 @@ export class OrphanScanPanelComponent {
   readonly scanProgress = computed(() => this.sse.activeProgress().get('OrphanScan') ?? null);
 
   readonly page = signal(1);
-  /** Groups matched and queued so far; the import itself runs server-side and is
-   *  reported by the library page's banner. */
-  readonly imported = signal(0);
-  readonly importTotal = signal(0);
   readonly autoImporting = signal(false);
   /** Move + rename files into the naming layout instead of linking in place. */
   readonly reorganize = signal(true);
@@ -154,8 +151,6 @@ export class OrphanScanPanelComponent {
     this.looseCount.set(0);
 
     this.page.set(1);
-    this.imported.set(0);
-    this.importTotal.set(0);
 
     this.scanning.set(true);
     try {
@@ -205,27 +200,30 @@ export class OrphanScanPanelComponent {
   /**
    * Queue every detected group for import into a library that now exists.
    * A group the admin left untouched takes the provider's first result.
-   * Returns immediately: the server imports in the background.
+   * Returns once the batch is queued: the server imports in the background.
    */
-  async importAll(libraryId: number): Promise<number> {
-    this.imported.set(0);
-    this.importTotal.set(this.groups().filter((g) => !g.done).length);
+  async importAll(libraryId: number): Promise<{ queued: number; skipped: number }> {
+    const pending = this.groups()
+      .map((g, i) => (g.done ? -1 : i))
+      .filter((i) => i >= 0);
+    const unsearched = pending.filter((i) => !this.groups()[i].searched);
+    for (let s = 0; s < unsearched.length; s += SEARCH_CONCURRENCY) {
+      await Promise.all(
+        unsearched.slice(s, s + SEARCH_CONCURRENCY).map((i) => this.search(i)),
+      );
+    }
 
     const items: RelinkOrphansBody[] = [];
-    for (let i = 0; i < this.groups().length; i++) {
-      if (this.groups()[i].done) continue;
-      if (!this.groups()[i].searched) await this.search(i);
+    let skipped = 0;
+    for (const i of pending) {
       // The search selects the first result, so an empty pick is a deselection:
       // the group is skipped rather than imported against a row nobody chose.
       const vm = this.groups()[i];
-      if (vm.pick) {
-        items.push(this.relinkBody(libraryId, vm.group, vm.pick));
-      }
-      this.imported.update((n) => n + 1);
+      if (vm.pick) items.push(this.relinkBody(libraryId, vm.group, vm.pick));
+      else skipped++;
     }
-    if (!items.length) return 0;
-    await this.importsApi.relinkOrphansBatch(items);
-    return items.length;
+    if (items.length) await this.importsApi.relinkOrphansBatch(items);
+    return { queued: items.length, skipped };
   }
 
   private relinkBody(
