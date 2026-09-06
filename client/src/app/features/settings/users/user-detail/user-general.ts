@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   signal,
   inject,
   OnInit,
@@ -23,7 +22,6 @@ import { LucideIconComponent } from '../../../../shared/components/lucide-icon';
 @Component({
   selector: 'app-user-general',
   imports: [TvSelectDirective, FormsModule, TranslatePipe, LucideIconComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './user-general.html',
 })
 export class UserGeneralComponent implements OnInit {

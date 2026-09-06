@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   ElementRef,
   computed,
   inject,
@@ -27,7 +26,6 @@ import { ModalFooterComponent } from '../../../../shared/components/modal-footer
 @Component({
   selector: 'app-plugin-install-consent',
   imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugin-install-consent.html',
 })
 export class PluginInstallConsentComponent {

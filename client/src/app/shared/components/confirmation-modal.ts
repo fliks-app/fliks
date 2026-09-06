@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   inject,
   computed,
   effect,
@@ -15,7 +14,6 @@ import { ModalFooterComponent } from './modal-footer';
 @Component({
   selector: 'app-confirmation-modal',
   imports: [ModalFooterComponent, ModalHeaderComponent, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './confirmation-modal.html',
 })
 export class ConfirmationModalComponent {

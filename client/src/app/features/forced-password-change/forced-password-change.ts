@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -15,7 +15,6 @@ import { UsersApiService } from '../../core/services/api/users-api.service';
 @Component({
   selector: 'app-forced-password-change',
   imports: [ReactiveFormsModule, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './forced-password-change.html',
 })
 export class ForcedPasswordChangeComponent {

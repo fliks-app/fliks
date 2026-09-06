@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideShield } from '@lucide/angular';
@@ -13,7 +13,6 @@ import { SettingsSectionsService } from './settings-sections.service';
     SettingsDrawerComponent, SettingsIconComponent,
     LucideShield,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './admin-shell.html',
 })
 export class AdminShellComponent {

@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   DestroyRef,
   computed,
@@ -55,7 +54,6 @@ import { UserAvatarComponent } from '../../shared/components/user-avatar/user-av
     LucideCamera,
     AvatarEditorComponent,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './profile.html',
 })
 export class ProfileComponent {

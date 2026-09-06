@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   signal,
   inject,
   computed,
@@ -63,7 +62,6 @@ import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
     LucidePencil,
     LucideTrash2,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './requests.html',
 })
 export class RequestsComponent implements OnInit, OnDestroy {

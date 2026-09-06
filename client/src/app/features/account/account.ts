@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject, signal, computed } from '@angular/core';
+import { Component, inject, signal, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { UsersApiService } from '../../core/services/api/users-api.service';
@@ -8,7 +8,6 @@ import { ToastService } from '../../core/services/toast.service';
 @Component({
   selector: 'app-account',
   imports: [FormsModule, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './account.html',
 })
 export class AccountComponent {

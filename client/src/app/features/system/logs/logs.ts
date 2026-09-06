@@ -1,5 +1,5 @@
 import {
-  Component, ChangeDetectionStrategy, signal, inject, OnInit, OnDestroy,
+  Component, signal, inject, OnInit, OnDestroy,
 } from '@angular/core';
 import { DatePipe, NgClass } from '@angular/common';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
@@ -11,7 +11,6 @@ import { firstValueFrom } from 'rxjs';
 @Component({
   selector: 'app-system-logs',
   imports: [TvSelectDirective, TranslatePipe, DatePipe, NgClass, FormsModule],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './logs.html',
 })
 export class SystemLogsComponent implements OnInit, OnDestroy {

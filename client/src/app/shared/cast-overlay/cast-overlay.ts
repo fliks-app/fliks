@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   HostListener,
   computed,
@@ -59,7 +58,6 @@ interface PickerRow {
     DropdownOptionComponent,
     TranslatePipe,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './cast-overlay.html',
 })
 export class CastOverlayComponent {

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   LucideClock,
@@ -29,7 +29,6 @@ import { formatRelativeTime } from '../../../../core/utils/relative-time';
     LucideUserPlus,
     LucideZap,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './user-stats.html',
 })
 export class UserStatsComponent implements OnInit {

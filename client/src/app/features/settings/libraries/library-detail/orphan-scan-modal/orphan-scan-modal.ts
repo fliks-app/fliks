@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, output, viewChild } from '@angular/core';
+import { Component, ElementRef, output, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { ModalHeaderComponent } from '../../../../../shared/components/modal-header';
 import { OrphanScanPanelComponent } from '../orphan-scan-panel/orphan-scan-panel';
@@ -7,7 +7,6 @@ import { ModalFooterComponent } from '../../../../../shared/components/modal-foo
 @Component({
   selector: 'app-orphan-scan-modal',
   imports: [ModalFooterComponent, TranslatePipe, ModalHeaderComponent, OrphanScanPanelComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orphan-scan-modal.html',
 })
 export class OrphanScanModalComponent {

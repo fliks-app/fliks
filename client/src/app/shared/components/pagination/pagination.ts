@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   computed,
   input,
@@ -14,7 +13,6 @@ type Slot = number | 'ellipsis';
   selector: 'app-pagination',
   standalone: true,
   imports: [TranslatePipe, LucideChevronLeft, LucideChevronRight],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './pagination.html',
   host: { class: 'block' },
 })

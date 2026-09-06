@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, input } from '@angular/core';
+import { Component, input } from '@angular/core';
 import {
   LucideBarChart3,
   LucideLayoutGrid,
@@ -31,7 +31,6 @@ import {
     LucideHistory,
     LucideSettings,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './settings-icon.html',
   styles: [`:host { display: inline-flex; } svg { width: 100%; height: 100%; }`],
 })

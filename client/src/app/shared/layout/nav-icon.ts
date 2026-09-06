@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, input } from '@angular/core';
+import { Component, input } from '@angular/core';
 import {
   LucideHome,
   LucideSearch,
@@ -22,7 +22,6 @@ import {
     LucideHome, LucideSearch, LucideUserRound, LucideListVideo,
     LucideDownload, LucideHistory, LucideClipboardList, LucideCalendar, LucideCircle,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './nav-icon.html',
   styles: [`:host { display: inline-flex; } svg { width: 100%; height: 100%; }`],
 })

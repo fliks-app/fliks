@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   inject,
@@ -19,7 +18,6 @@ import { ModalFooterComponent } from '../modal-footer';
 @Component({
   selector: 'app-subtitle-viewer-modal',
   imports: [ModalFooterComponent, TranslatePipe, ModalHeaderComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './subtitle-viewer-modal.html',
 })
 export class SubtitleViewerModalComponent {

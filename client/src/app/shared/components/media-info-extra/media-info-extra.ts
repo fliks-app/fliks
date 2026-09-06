@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   computed,
@@ -27,7 +26,6 @@ import { CollapsibleSectionComponent } from '../collapsible-section/collapsible-
 @Component({
   selector: 'app-media-info-extra',
   imports: [LocaleDatePipe, CurrencyPipe, TranslatePipe, CollapsibleSectionComponent, LucidePlay],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-info-extra.html',
 })
 export class MediaInfoExtraComponent {

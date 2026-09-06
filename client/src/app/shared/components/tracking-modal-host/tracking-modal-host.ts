@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, effect, inject, viewChild } from '@angular/core';
+import { Component, effect, inject, viewChild } from '@angular/core';
 import { TrackingModalService } from '../../../core/services/tracking-modal.service';
 import { TrackingStatusModalComponent } from '../tracking-status-modal/tracking-status-modal';
 
@@ -11,7 +11,6 @@ import { TrackingStatusModalComponent } from '../tracking-status-modal/tracking-
   selector: 'app-tracking-modal-host',
   standalone: true,
   imports: [TrackingStatusModalComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `<app-tracking-status-modal />`,
 })
 export class TrackingModalHostComponent {

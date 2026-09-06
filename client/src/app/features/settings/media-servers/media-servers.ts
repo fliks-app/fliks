@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   ElementRef,
   signal,
   computed,
@@ -24,7 +23,6 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 @Component({
   selector: 'app-media-servers-settings',
   imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-servers.html',
 })
 export class MediaServersSettingsComponent implements OnInit {

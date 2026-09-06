@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   inject,
   signal,
   computed,
@@ -88,7 +87,6 @@ const SIDEBAR_COUNTS_DEBOUNCE_MS = 400;
     BackgroundComponent,
     ResolveUrlPipe,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './layout.html',
 })
 export class LayoutComponent implements OnInit, OnDestroy {

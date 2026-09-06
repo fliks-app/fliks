@@ -1,5 +1,5 @@
 import {
-  Component, ChangeDetectionStrategy, signal, inject, OnInit,
+  Component, signal, inject, OnInit,
 } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -10,7 +10,6 @@ import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 @Component({
   selector: 'app-system-backups',
   imports: [TranslatePipe, LocaleDatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './backups.html',
 })
 export class SystemBackupsComponent implements OnInit {

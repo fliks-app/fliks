@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   computed,
@@ -82,7 +81,6 @@ interface SubtitleRow {
     LucideChevronDown,
     LucideUpload,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './subtitles-modal.html',
 })
 export class SubtitlesModalComponent {

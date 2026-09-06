@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   input,
@@ -24,7 +23,6 @@ import { ModalFooterComponent } from '../../../../shared/components/modal-footer
     LocalizeLanguagePipe,
     TvSelectDirective,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-detail-subtitle-search-modal.component.html',
 })
 export class MediaDetailSubtitleSearchModalComponent {

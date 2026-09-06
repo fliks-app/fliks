@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal, viewChild } from '@angular/core';
+import { Component, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { LucideChevronLeft } from '@lucide/angular';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -18,7 +18,6 @@ import { PluginCatalogueComponent } from './plugin-catalogue';
 @Component({
   selector: 'app-plugin-catalogue-page',
   imports: [RouterLink, LucideChevronLeft, TranslatePipe, PluginInstallConsentComponent, PluginCatalogueComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugin-catalogue-page.html',
 })
 export class PluginCataloguePageComponent implements OnInit {

@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, input } from '@angular/core';
+import { Component, input } from '@angular/core';
 import {
   LucideFilm,
   LucideTv,
@@ -33,7 +33,6 @@ import {
     LucideStar, LucideGlobe, LucideMonitor, LucidePopcorn,
     LucideClapperboard, LucideUsers, LucideFolder, LucideSwords,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @switch (name()) {
       @case ('film') { <svg lucideFilm></svg> }

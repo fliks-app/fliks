@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject, signal, OnInit } from '@angular/core';
+import { Component, inject, signal, OnInit } from '@angular/core';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -9,7 +9,6 @@ import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-fi
 @Component({
   selector: 'app-display-settings',
   imports: [TvSelectDirective, FormsModule, TranslatePipe, ToggleFieldComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './display-settings.html',
 })
 export class DisplaySettingsPageComponent implements OnInit {

@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   inject,
   OnInit,
 } from '@angular/core';
@@ -17,7 +16,6 @@ import { UserDetailState } from './user-detail.state';
   selector: 'app-user-detail',
   imports: [LucideChevronLeft, LucideUser, TranslatePipe, RouterLink, RouterLinkActive, RouterOutlet],
   providers: [UserDetailState],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './user-detail.html',
 })
 export class UserDetailComponent implements OnInit {

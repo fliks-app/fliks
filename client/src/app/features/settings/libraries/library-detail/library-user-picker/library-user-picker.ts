@@ -1,11 +1,10 @@
-import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LibraryDetailState } from '../library-detail.state';
 
 @Component({
   selector: 'app-library-user-picker',
   imports: [TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './library-user-picker.html',
   host: { class: 'flex flex-col gap-5' },
 })

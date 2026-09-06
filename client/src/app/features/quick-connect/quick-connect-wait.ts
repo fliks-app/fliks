@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   DestroyRef,
   OnDestroy,
@@ -21,7 +20,6 @@ type View = 'starting' | 'waiting' | 'denied' | 'expired' | 'error';
 @Component({
   selector: 'app-quick-connect-wait',
   imports: [TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './quick-connect-wait.html',
 })
 export class QuickConnectWaitComponent implements OnInit, OnDestroy {

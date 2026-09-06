@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   signal,
   inject,
   OnInit,
@@ -30,7 +29,6 @@ interface StatsReport {
 @Component({
   selector: 'app-dashboard',
   imports: [RouterLink, TranslatePipe, LocaleDatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './dashboard.html',
 })
 export class DashboardComponent implements OnInit {

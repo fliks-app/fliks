@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   computed,
   effect,
@@ -22,7 +21,6 @@ type ConnectionsMode = 'followers' | 'following';
 @Component({
   selector: 'app-profile-connections',
   imports: [UserAvatarComponent, RouterLink, TranslatePipe, LucideUserPlus, LucideUserCheck, LucideClock],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './profile-connections.html',
 })
 export class ProfileConnectionsComponent {

@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   OnInit,
   inject,
@@ -29,7 +28,6 @@ interface SocialPrefs {
 @Component({
   selector: 'app-account-privacy',
   imports: [TranslatePipe, ToggleFieldComponent, LucideCheck, LucideX],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './privacy.html',
 })
 export class AccountPrivacyComponent implements OnInit {

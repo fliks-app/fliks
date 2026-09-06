@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { UpperCasePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -10,7 +10,6 @@ import {
 @Component({
   selector: 'app-libraries-settings',
   imports: [RouterLink, TranslatePipe, UpperCasePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './libraries.html',
 })
 export class LibrariesSettingsComponent implements OnInit {

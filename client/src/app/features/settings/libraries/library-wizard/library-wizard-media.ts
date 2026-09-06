@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   computed,
   inject,
@@ -16,7 +15,6 @@ import { OrphanScanPanelComponent } from '../library-detail/orphan-scan-panel/or
 @Component({
   selector: 'app-library-wizard-media',
   imports: [FormsModule, TranslatePipe, OrphanScanPanelComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './library-wizard-media.html',
 })
 export class LibraryWizardMediaComponent {

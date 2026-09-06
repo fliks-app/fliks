@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   computed,
@@ -25,7 +24,6 @@ import { ModalFooterComponent } from '../../../../shared/components/modal-footer
 @Component({
   selector: 'app-import-modal',
   imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './import-modal.component.html',
 })
 export class ImportModalComponent {

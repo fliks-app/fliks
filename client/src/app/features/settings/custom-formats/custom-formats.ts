@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   ElementRef,
   computed,
   signal,
@@ -49,7 +48,6 @@ const VALUE_OPTIONS: Partial<Record<CustomFormatSpecType, readonly string[]>> = 
 @Component({
   selector: 'app-custom-formats-settings',
   imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './custom-formats.html',
 })
 export class CustomFormatsSettingsComponent implements OnInit {

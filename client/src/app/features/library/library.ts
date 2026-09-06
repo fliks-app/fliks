@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   signal,
   computed,
   inject,
@@ -99,7 +98,6 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
     CardSkeletonComponent,
     ImportProgressBannerComponent,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './library.html',
 })
 export class LibraryComponent implements OnInit, OnDestroy {

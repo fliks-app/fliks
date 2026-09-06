@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { Component, input } from '@angular/core';
 
 /**
  * One card-shaped placeholder: art box plus a title and subtitle bar. Sized by
@@ -9,7 +9,6 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
  */
 @Component({
   selector: 'app-card-skeleton',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './card-skeleton.html',
   host: { class: 'block' },
 })

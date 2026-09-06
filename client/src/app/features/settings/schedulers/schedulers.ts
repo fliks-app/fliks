@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   DestroyRef,
   OnInit,
@@ -30,7 +29,6 @@ interface SchedulerInfo {
 @Component({
   selector: 'app-schedulers',
   imports: [LucideCirclePlay, TranslatePipe, LocaleDatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './schedulers.html',
 })
 export class SchedulersComponent implements OnInit {

@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   signal,
   computed,
   inject,
@@ -17,7 +16,6 @@ import { UserDetailState } from './user-detail.state';
 @Component({
   selector: 'app-user-requests',
   imports: [LocaleDatePipe, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './user-requests.html',
 })
 export class UserRequestsComponent implements OnInit {

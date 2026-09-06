@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   ElementRef,
   signal,
   inject,
@@ -27,7 +26,6 @@ export function withHttpsFallback(base: string): string[] {
 @Component({
   selector: 'app-setup',
   imports: [FormsModule, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './setup.html',
 })
 export class SetupComponent {

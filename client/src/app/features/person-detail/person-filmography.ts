@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, signal, inject, OnInit } from '@angular/core';
+import { Component, signal, inject, OnInit } from '@angular/core';
 import { SlicePipe } from '@angular/common';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideFilm } from '@lucide/angular';
@@ -14,7 +14,6 @@ import { CachedSrcDirective } from '../../shared/directives/cached-src.directive
   selector: 'app-person-filmography',
   imports: [
     CachedSrcDirective,TranslatePipe, SlicePipe, ResolveUrlPipe, LucideFilm],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './person-filmography.html',
 })
 export class PersonFilmographyComponent implements OnInit {

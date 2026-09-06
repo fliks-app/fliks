@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, effect, inject, viewChild } from '@angular/core';
+import { Component, effect, inject, viewChild } from '@angular/core';
 import { IdentifyModalService } from '../../../core/services/identify-modal.service';
 import { MediaDetailIdentifyModalComponent } from '../../../features/media-detail/components/media-detail-identify-modal/media-detail-identify-modal.component';
 
@@ -7,7 +7,6 @@ import { MediaDetailIdentifyModalComponent } from '../../../features/media-detai
   selector: 'app-identify-modal-host',
   standalone: true,
   imports: [MediaDetailIdentifyModalComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `<app-media-detail-identify-modal (identified)="service.markIdentified()" />`,
 })
 export class IdentifyModalHostComponent {

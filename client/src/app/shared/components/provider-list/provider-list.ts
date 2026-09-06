@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   OnInit,
@@ -77,7 +76,6 @@ export function resolveRowActionRoute(route: string, id: number | string): strin
     LucideRotateCcw,
     LucideSearch,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './provider-list.html',
 })
 export class ProviderListComponent implements OnInit {

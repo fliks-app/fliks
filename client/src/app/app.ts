@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, effect, inject, untracked, OnInit, OnDestroy } from '@angular/core';
+import { Component, effect, inject, untracked, OnInit, OnDestroy } from '@angular/core';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter, take } from 'rxjs';
 import { Capacitor, registerPlugin } from '@capacitor/core';
@@ -29,7 +29,6 @@ import { TvKeyboardDeferralService } from './core/services/tv-keyboard-deferral.
 @Component({
   selector: 'app-root',
   imports: [RouterOutlet, ToastContainerComponent, ConfirmationModalComponent, FolderPickerModalComponent, SelectPickerComponent, CastOverlayComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './app.html',
 })
 export class App implements OnInit, OnDestroy {

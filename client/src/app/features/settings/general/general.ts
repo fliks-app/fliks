@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   signal,
   inject,
   OnInit,
@@ -20,7 +19,6 @@ import {
 @Component({
   selector: 'app-general-settings',
   imports: [TvSelectDirective, FormsModule, TranslatePipe, SetupChecklistComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './general.html',
 })
 export class GeneralSettingsComponent implements OnInit {

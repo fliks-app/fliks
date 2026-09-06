@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   OnInit,
   computed,
@@ -85,7 +84,6 @@ type LibrarySelection = number | null;
     LucideDownload,
     ImportDiskComponent,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './data-imports.html',
 })
 export class DataImportsSettingsComponent implements OnInit {

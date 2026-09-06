@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   ElementRef,
   effect,
   inject,
@@ -19,7 +18,6 @@ import {
 @Component({
   selector: 'app-toast-container',
   imports: [TranslatePipe, LucideCircleCheck, LucideCircleX, LucideTriangleAlert, LucideInfo, LucideX],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './toast-container.html',
   styles: [
     `

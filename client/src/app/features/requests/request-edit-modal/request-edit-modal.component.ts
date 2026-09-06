@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   input,
@@ -17,7 +16,6 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 @Component({
   selector: 'app-request-edit-modal',
   imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './request-edit-modal.component.html',
 })
 export class RequestEditModalComponent {

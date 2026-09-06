@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject, signal, computed, effect, OnInit, OnDestroy, Injector, viewChild } from '@angular/core';
+import { Component, inject, signal, computed, effect, OnInit, OnDestroy, Injector, viewChild } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { filter } from 'rxjs';
 import { keepRouteFresh } from '../../core/services/keep-route-fresh';
@@ -93,7 +93,6 @@ import { itemArtwork } from '../../shared/utils/media-artwork.util';
     RequestDeclineModalComponent,
     DownloadDetailModalComponent,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './home.html',
 })
 export class HomeComponent implements OnInit, OnDestroy {

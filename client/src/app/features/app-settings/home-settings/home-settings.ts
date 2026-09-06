@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   ElementRef,
   inject,
   signal,
@@ -59,7 +58,6 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
     SelectFieldComponent,
     ToggleFieldComponent,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './home-settings.html',
 })
 export class HomeSettingsPageComponent implements OnInit {

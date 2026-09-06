@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   HostListener,
@@ -117,7 +116,6 @@ interface AppearanceRow {
     SeekbarComponent,
     ResolveUrlPipe,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './player-controls.html',
   // Bar insets live on the host so the floating cues inherit them and line up
   // with the controls' right edge.

@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   computed,
   effect,
@@ -31,7 +30,6 @@ import { ProfileContextService } from './profile-context.service';
     LucideListVideo,
     LucideClipboardList,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './profile-statistics.html',
 })
 export class ProfileStatisticsComponent {

@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   computed,
   inject,
@@ -27,7 +26,6 @@ type FileInput = {
 @Component({
   selector: 'app-media-file-info',
   imports: [TranslatePipe, CollapsibleSectionComponent, LucideVideo, LucideVolume2, LucideTrash2],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-file-info.html',
 })
 export class MediaFileInfoComponent {

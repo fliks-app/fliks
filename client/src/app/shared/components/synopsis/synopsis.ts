@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { Component, input } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { ClampToggleDirective } from '../../directives/clamp-toggle.directive';
 import { SpoilerDirective } from '../../directives/spoiler.directive';
@@ -7,7 +7,6 @@ import { SpoilerDirective } from '../../directives/spoiler.directive';
 @Component({
   selector: 'app-synopsis',
   imports: [TranslatePipe, ClampToggleDirective, SpoilerDirective],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './synopsis.html',
   host: { class: 'block' },
 })

@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   signal,
   inject,
   OnInit,
@@ -21,7 +20,6 @@ import { CachedSrcDirective } from '../../shared/directives/cached-src.directive
   selector: 'app-person-detail',
   imports: [
     CachedSrcDirective,TranslatePipe, RouterLink, RouterLinkActive, RouterOutlet, ResolveUrlPipe, ClampToggleDirective, LucideChevronLeft],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './person-detail.html',
 })
 export class PersonDetailComponent implements OnInit {

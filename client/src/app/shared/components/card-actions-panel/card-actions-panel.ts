@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   computed,
   effect,
@@ -111,7 +110,6 @@ import { CachedSrcDirective } from '../../directives/cached-src.directive';
     NgTemplateOutlet,
     RouterLink,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './card-actions-panel.html',
 })
 export class CardActionsPanelComponent {

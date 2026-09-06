@@ -1,6 +1,5 @@
 import {
   Component,
-  ChangeDetectionStrategy,
   ElementRef,
   OnInit,
   inject,
@@ -28,7 +27,6 @@ import { ModalFooterComponent } from '../../shared/components/modal-footer';
     LucidePlus,
     ModalHeaderComponent,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './playlists.html',
 })
 export class PlaylistsComponent implements OnInit {

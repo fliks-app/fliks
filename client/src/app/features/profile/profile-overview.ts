@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   computed,
   inject,
@@ -28,7 +27,6 @@ import { itemArtwork } from '../../shared/utils/media-artwork.util';
     MediaCardComponent,
     HorizontalScrollerComponent,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './profile-overview.html',
 })
 export class ProfileOverviewComponent {

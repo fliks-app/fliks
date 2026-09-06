@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, signal, inject } from '@angular/core';
+import { Component, signal, inject } from '@angular/core';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -9,7 +9,6 @@ import { ServerConfigService } from '../../core/services/server-config.service';
 @Component({
   selector: 'app-login',
   imports: [ReactiveFormsModule, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './login.html',
 })
 export class LoginComponent {

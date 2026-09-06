@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject, signal, OnInit } from '@angular/core';
+import { Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideTrash2 } from '@lucide/angular';
@@ -18,7 +18,6 @@ import { LANGUAGE_OPTIONS } from '../playback-options';
     ToggleFieldComponent,
     SelectFieldComponent,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './player-settings.html',
 })
 export class PlayerSettingsPageComponent implements OnInit {

@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   effect,
   inject,
@@ -23,7 +22,6 @@ import { CachedSrcDirective } from '../../directives/cached-src.directive';
   selector: 'app-background',
   imports: [
     CachedSrcDirective,ResolveUrlPipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './background.html',
 })
 export class BackgroundComponent {

@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   input,
@@ -14,7 +13,6 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 @Component({
   selector: 'app-request-decline-modal',
   imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './request-decline-modal.component.html',
 })
 export class RequestDeclineModalComponent {

@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   OnInit,
@@ -38,7 +37,6 @@ function createErrorKey(code: string | undefined): string {
 @Component({
   selector: 'app-plugin-sources',
   imports: [ModalHeaderComponent, FormsModule, DatePipe, TranslatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './plugin-sources.html',
 })
 export class PluginSourcesComponent implements OnInit {

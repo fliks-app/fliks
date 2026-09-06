@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   OnInit,
   computed,
@@ -21,7 +20,6 @@ import { PaginationComponent } from '../../../shared/components/pagination/pagin
 @Component({
   selector: 'app-subtitles-stats',
   imports: [LucideSearch, RouterLink, TranslatePipe, PaginationComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './subtitles-stats.html',
 })
 export class SubtitlesStatsComponent implements OnInit {

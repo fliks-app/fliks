@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   computed,
@@ -44,7 +43,6 @@ type IndexerSearchStateOrAll = IndexerRosterEntry['state'] | 'all';
     LucideTriangleAlert,
     LucideCirclePause,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './releases-modal.component.html',
 })
 export class ReleasesModalComponent {

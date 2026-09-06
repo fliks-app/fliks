@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   computed,
   inject,
@@ -31,7 +30,6 @@ import { clearPosterStamps } from '../../../shared/utils/view-transition';
     RequestStatusBadgeComponent,
     LucideTrash2,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   // The host is the scroller flex item: fixed width, and a column flex so the
   // inner card fills the row's stretched height (all cards same height).
   // Compact on mobile, growing to full size on desktop/TV.

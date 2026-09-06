@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
+import { Component, inject, signal, OnInit } from '@angular/core';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -12,7 +12,6 @@ import { ToastService } from '../../../core/services/toast.service';
 @Component({
   selector: 'app-streaming-settings',
   imports: [TvSelectDirective, FormsModule, TranslatePipe, ToggleFieldComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './streaming.html',
 })
 export class StreamingSettingsComponent implements OnInit {

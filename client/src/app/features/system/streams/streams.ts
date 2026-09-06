@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   OnDestroy,
   OnInit,
@@ -34,7 +33,6 @@ import { ModalHeaderComponent } from '../../../shared/components/modal-header';
     LucidePlay,
     LucideSquare,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './streams.html',
 })
 export class SystemStreamsComponent implements OnInit, OnDestroy {

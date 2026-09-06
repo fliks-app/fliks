@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject, signal, computed, Injector, OnDestroy, OnInit } from '@angular/core';
+import { Component, inject, signal, computed, Injector, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideHistory, LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck, LucideEllipsisVertical } from '@lucide/angular';
@@ -15,7 +15,6 @@ import { CachedSrcDirective } from '../../shared/directives/cached-src.directive
   selector: 'app-watch-history',
   imports: [
     CachedSrcDirective,TranslatePipe, ResolveUrlPipe, PaginationComponent, DropdownMenuComponent, LucideHistory, LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck, LucideEllipsisVertical],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './watch-history.html',
 })
 export class WatchHistoryComponent implements OnInit, OnDestroy {

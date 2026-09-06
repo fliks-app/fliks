@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   inject,
   input,
@@ -22,7 +21,6 @@ import { ConfirmationService } from '../../../../core/services/confirmation.serv
 @Component({
   selector: 'app-releases-table',
   imports: [TranslatePipe, LucideTriangleAlert, LucideCheck, LucideCircleAlert, LucideDownload, LucidePackage],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './releases-table.component.html',
 })
 export class ReleasesTableComponent {

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, model } from '@angular/core';
+import { Component, computed, inject, input, model } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { FieldDef, FormCaption, FormGroup, FormItem, FormStatus } from '@fliks/plugin-contract/ui';
@@ -49,7 +49,6 @@ interface FieldError {
     NgTemplateOutlet,
     TranslatePipe,
   ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './schema-form.html',
 })
 export class SchemaFormComponent {
