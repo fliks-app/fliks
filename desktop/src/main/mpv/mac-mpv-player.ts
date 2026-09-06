@@ -166,6 +166,9 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
     // timeout + the error path keep an aborted load from hanging.
     this.firstFrameResolve?.();
     this.sawFirstFrame = false;
+    // Global property, so it is always written — otherwise the previous file's
+    // rectangle would crop the next one.
+    this.addon.setProperty('video-crop', opts.videoCrop ?? '');
     this.addon.load(opts);
     await this.waitFirstFrame();
   }

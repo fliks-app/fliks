@@ -483,6 +483,9 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
       'http-header-fields',
       opts.headers ? Object.entries(opts.headers).map(([k, v]) => `${k}: ${v}`) : [],
     );
+    // Always written, so a cropped file's rectangle can't survive into the next
+    // one (the property is global, not per-file).
+    await this.set('video-crop', opts.videoCrop ?? '').catch(() => {});
     if (gen !== this.loadGen) return;
     // mpv >= 0.38 loadfile signature is <url> <flags> <index> <options>; the
     // bundled mpv is recent, so pass index 0 then the options. Omit the options
