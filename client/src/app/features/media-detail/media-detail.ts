@@ -765,15 +765,22 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   });
 
   /** Regular requester (no `media.create` permission). The Demander
-   *  actions are only surfaced for them — admins use Grab/Search. */
+   *  actions are only surfaced for them — admins use Grab/Search. An
+   *  unidentified title has no tmdbId to key the request on. */
   readonly canRequest = computed(
-    () => !this.auth.hasPermission('media.create') && this.auth.hasPermission('requests.create'),
+    () =>
+      !this.auth.hasPermission('media.create') &&
+      this.auth.hasPermission('requests.create') &&
+      this.media()?.tmdbId != null,
   );
 
   /** Requester (no `media.delete`) can ask an admin to delete this library
    *  title. Admins with `media.delete` delete directly and never see it. */
   readonly canRequestDeletion = computed(
-    () => this.auth.hasPermission('requests.create') && !this.auth.hasPermission('media.delete'),
+    () =>
+      this.auth.hasPermission('requests.create') &&
+      !this.auth.hasPermission('media.delete') &&
+      this.media()?.tmdbId != null,
   );
 
   /** A deletion request on this title is already pending (submitted by the
@@ -2168,7 +2175,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   /** Fetch the global active-request state for this title. Run after the
    *  media loads, and again after a successful submit so the gates and the
    *  profile lock flip without a manual reload. */
-  private async loadTitleState(tmdbId: number, mediaType: MediaType) {
+  private async loadTitleState(tmdbId: number | null, mediaType: MediaType) {
+    if (tmdbId == null) return;
     try {
       this.titleState.set(await this.requestsApi.getTitleState(tmdbId, mediaType));
     } catch {
@@ -2178,7 +2186,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   /** Seed the pending-deletion gate from the viewer's visible requests so the
    *  entry hides when a deletion request already exists on this title. */
-  private async loadDeleteRequestState(tmdbId: number, mediaType: MediaType) {
+  private async loadDeleteRequestState(tmdbId: number | null, mediaType: MediaType) {
+    if (tmdbId == null) return;
     try {
       const res = await this.requestsApi.list({ kind: 'delete', status: 'pending' });
       this.deleteRequestPending.set(
@@ -2193,7 +2202,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
    *  deletion request scoped to the whole title (movie or series). */
   protected async requestDeletion() {
     const m = this.media();
-    if (!m) return;
+    if (!m || m.tmdbId == null) return;
     if (
       !(await this.confirmation.confirm({
         title: this.translate.instant('media_detail.request_deletion_title'),
@@ -2223,7 +2232,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
    *  whole-series scope (no seasons pre-selected). */
   protected openRequestForMedia() {
     const m = this.media();
-    if (!m) return;
+    if (!m || m.tmdbId == null) return;
     const state = this.titleState();
     this.requestModal()?.open({
       title: m.title,
@@ -2241,7 +2250,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
    *  the user toggle which seasons to send. */
   protected openRequestForSeason(season: Season) {
     const m = this.media();
-    if (!m) return;
+    if (!m || m.tmdbId == null) return;
     const state = this.titleState();
     this.requestModal()?.open({
       title: m.title,

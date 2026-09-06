@@ -62,7 +62,7 @@ export interface Media {
   originalTitle: string;
   year: number;
   type: MediaType;
-  tmdbId: number;
+  tmdbId: number | null;
   overview: string;
   status: string;
   monitored: boolean;
