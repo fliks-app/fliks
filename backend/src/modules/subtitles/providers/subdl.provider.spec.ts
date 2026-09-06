@@ -30,6 +30,17 @@ describe('SubdlProvider.search', () => {
     expect(url.searchParams.get('year')).toBe('2020');
   });
 
+  it('sends film_name even when a moviehash is present, Subdl has no hash search', async () => {
+    await provider().search({
+      title: 'Quiet Harbour',
+      moviehash: 'deadbeefcafebabe',
+      language: 'en',
+    });
+
+    const url = new URL(mockedFetch.mock.calls[0][1] as string);
+    expect(url.searchParams.get('film_name')).toBe('Quiet Harbour');
+  });
+
   it('does not send the title when a tmdbId is present', async () => {
     await provider().search({ title: 'Quiet Harbour', tmdbId: 42, language: 'en' });
 

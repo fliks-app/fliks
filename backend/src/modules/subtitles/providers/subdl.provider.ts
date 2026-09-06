@@ -41,7 +41,7 @@ export class SubdlProvider implements SubtitleProviderInterface {
     query.set('api_key', this.settings.apiKey);
     if (params.imdbId) query.set('imdb_id', params.imdbId);
     if (params.tmdbId) query.set('tmdb_id', String(params.tmdbId));
-    if (!params.moviehash && !params.imdbId && !params.tmdbId) {
+    if (!params.imdbId && !params.tmdbId) {
       query.set('film_name', params.title);
       if (params.year) query.set('year', String(params.year));
     }
