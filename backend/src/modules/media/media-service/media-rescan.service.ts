@@ -31,7 +31,6 @@ import { ThumbnailService } from '../../streaming/thumbnail.service';
 import { MediaServersService } from '../../media-servers/media-servers.service';
 import { PostImportQueueService } from '../../../common/post-import/post-import-queue.service';
 import { MediaMetadataService } from './media-metadata.service';
-import { clearMediaCache } from '../../../common/utils/media-cache.util';
 import { relativePathUnderMediaRoot } from '../../../common/utils/media-path.util';
 import { VIDEO_EXTS } from '../../../common/constants/video-extensions';
 import { buildMediaProgressSubject } from '../../../common/utils/media-progress-subject.util';
@@ -441,22 +440,8 @@ export class MediaRescanService {
     // by running the shared series refresh so they don't show up empty.
     let metadataSlotsCreated = false;
 
-    // Wipe the whole per-media `.cache/` tree (subtitles + any other cached
-    // artefact) — streamInfo is about to be re-read so anything derived
-    // from the old layout is stale. Skipped for a media with no folder of its
-    // own: its `.cache/` would be the library root's, shared by every sibling
-    // root-level movie.
-    if (media.folderName) {
-      try {
-        await clearMediaCache(media.path);
-      } catch (err) {
-        this.log.warn(
-          `Rescan[media #${mediaId}]: clearMediaCache failed for "${media.path}": ${err instanceof Error ? err.message : err}`,
-        );
-      }
-    }
-    // The subtitle cache lives outside `.cache/`, in the images volume, so it
-    // needs its own invalidation to preserve "full rescan wipes every cached VTT".
+    // A full rescan re-reads streamInfo, so every cached VTT derived from the
+    // old layout is stale.
     for (const f of media.files ?? []) {
       void this.subtitleStream.clearMediaFileSubtitleCache(f.id);
     }
