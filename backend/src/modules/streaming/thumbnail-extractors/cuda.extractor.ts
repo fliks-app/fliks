@@ -1,8 +1,9 @@
+import { downloadPixFmt, tonemapChain } from './tonemap';
 import type { CropArea, ExtractArgs, ExtractorBackend } from './types';
 
-/** CUDA/NVDEC backend for NVIDIA Linux hosts. `scale_cuda` converts p010→nv12
- *  itself (untonemapped, like vaapi/qsv) but has no crop option, so the crop
- *  case falls back to a CPU crop+scale. */
+/** CUDA/NVDEC backend for NVIDIA Linux hosts. `scale_cuda` handles the pixel
+ *  format conversion itself but has no crop option, so the crop case falls
+ *  back to a CPU crop+scale. */
 export class CudaExtractor implements ExtractorBackend {
   readonly name = 'cuda';
 
@@ -20,11 +21,14 @@ export class CudaExtractor implements ExtractorBackend {
     outputPath,
     crop,
     thumbWidth,
+    hdr,
   }: ExtractArgs): string[] {
+    const pix = downloadPixFmt(hdr);
+    const scale = hdr ? tonemapChain(thumbWidth) : `scale=${thumbWidth}:-1`;
     const vf = crop
       ? // ponytail: full-frame download on crop; cuvid -crop/-resize if benches say so
-        `hwdownload,crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},scale=${thumbWidth}:-1`
-      : `scale_cuda=w=${thumbWidth}:h=-2:format=nv12,hwdownload,format=nv12`;
+        `hwdownload${hdr ? `,format=${pix}` : ''},crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},${scale}`
+      : `scale_cuda=w=${thumbWidth}:h=-2:format=${pix},hwdownload,format=${pix}${hdr ? `,${tonemapChain(thumbWidth)}` : ''}`;
     return [
       '-nostdin',
       '-hide_banner',

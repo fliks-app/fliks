@@ -1,3 +1,4 @@
+import { tonemapChain } from './tonemap';
 import type { CropArea, ExtractArgs, ExtractorBackend } from './types';
 
 /**
@@ -31,10 +32,12 @@ export class VideoToolboxExtractor implements ExtractorBackend {
     outputPath,
     crop,
     thumbWidth,
+    hdr,
   }: ExtractArgs): string[] {
+    const scale = hdr ? tonemapChain(thumbWidth) : `scale=${thumbWidth}:-1`;
     const vf = crop
-      ? `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},scale=${thumbWidth}:-1`
-      : `scale=${thumbWidth}:-1`;
+      ? `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},${scale}`
+      : scale;
     return [
       '-nostdin',
       '-hide_banner',

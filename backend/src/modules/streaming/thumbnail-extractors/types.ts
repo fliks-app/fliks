@@ -13,6 +13,8 @@ export interface ExtractArgs {
   outputPath: string;
   crop?: CropArea;
   thumbWidth: number;
+  /** Source carries a PQ / HLG transfer — the tile needs tone-mapping. */
+  hdr?: boolean;
 }
 
 /** One backend = one ffmpeg invocation strategy. The factory in `index.ts`
