@@ -184,6 +184,19 @@ describe('MediaRescanService.rescanFiles — quality from probe results', () => 
     expect(dbFile.quality).toBe('WEBDL-1080p');
   });
 
+  it('never deletes anything inside the media folder: a .cache directory survives', async () => {
+    const h = buildHarness();
+    const cacheDir = path.join(mediaDir, '.cache');
+    fs.mkdirSync(cacheDir);
+    fs.writeFileSync(path.join(cacheDir, 'marker.txt'), 'x');
+    h.mediaRepo.findOne.mockResolvedValue(movieMedia({ files: [] }));
+    h.ffprobe.detectMediaFileInfo.mockResolvedValue({ video: [], audio: [], subtitles: [] });
+
+    await h.service.rescanFiles(8, { skipWarmup: true });
+
+    expect(fs.existsSync(cacheDir)).toBe(true);
+  });
+
   it('assigns the filename-derived 480p fallback to a brand-new file when the probe finds no video stream', async () => {
     const h = buildHarness();
     const filename = 'Ember.Horizon.2022.1080p.WEB-DL-RELGRP.mkv';
@@ -254,18 +267,6 @@ describe('MediaRescanService.rescanFiles - a movie with no folder of its own', (
     expect(res.updated).toBe(1);
   });
 
-  it('does not wipe the shared .cache directory at the library root', async () => {
-    const h = buildHarness();
-    const cacheDir = path.join(mediaDir, '.cache');
-    fs.mkdirSync(cacheDir);
-    fs.writeFileSync(path.join(cacheDir, 'marker.txt'), 'x');
-    h.mediaRepo.findOne.mockResolvedValue(rootMovieMedia({ files: [] }));
-    h.ffprobe.detectMediaFileInfo.mockResolvedValue({ video: [], audio: [], subtitles: [] });
-
-    await h.service.rescanFiles(11, { skipWarmup: true });
-
-    expect(fs.existsSync(cacheDir)).toBe(true);
-  });
 });
 
 describe('MediaRescanService.linkExistingFileInPlace - a movie with no folder of its own', () => {
