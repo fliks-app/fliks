@@ -472,12 +472,14 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       ep.endEpisodeNumber != null && ep.endEpisodeNumber > ep.episodeNumber
         ? `E${start}-E${String(ep.endEpisodeNumber).padStart(2, '0')}`
         : `E${start}`;
+    const code = `S${sn}:${epPart}`;
+    if (!ep.title) return code;
     const title = this.spoilers.title(
       this.watchedEpisodeIds().has(ep.id),
       episodeBadgeLabel(ep),
-      ep.title ?? '',
+      ep.title,
     );
-    return `S${sn}:${epPart} - ${title}`;
+    return `${code} - ${title}`;
   });
 
   readonly episodeDateLabel = computed(() => {
@@ -681,7 +683,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     if (!ctx) return null;
     const sn = String(ctx.season.seasonNumber).padStart(2, '0');
     const en = String(ctx.episode.episodeNumber).padStart(2, '0');
-    return `S${sn}:E${en} - ${ctx.episode.title ?? ''}`;
+    const code = `S${sn}:E${en}`;
+    return ctx.episode.title ? `${code} - ${ctx.episode.title}` : code;
   });
 
   readonly nextPlayEpisodeId = computed(() => this.nextPlayEpisode()?.episode.id);
@@ -1186,7 +1189,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const sn = String(foundSeason!.seasonNumber).padStart(2, '0');
     const en = String(foundEpisode.episodeNumber).padStart(2, '0');
     this.navbarService.enterHeroPage(
-      `${m.title} — S${sn}:E${en} — ${foundEpisode.title ?? ''}`,
+      [m.title, `S${sn}:E${en}`, foundEpisode.title].filter(Boolean).join(' — '),
       m.logoUrl,
     );
   }

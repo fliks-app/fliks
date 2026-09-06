@@ -24,11 +24,11 @@ export class SpoilerService {
     return this.on(watched) && (this.auth.user()?.spoilerHideOverviews ?? true);
   }
 
-  /** Episode name, swapped for `Episode 3` while it would spoil. */
+  /** Episode name, swapped for `Episode 3` while it would spoil or when the episode has none. */
   title(watched: boolean, number: string, title: string | null): string {
     if (this.on(watched) && (this.auth.user()?.spoilerHideTitles ?? true)) {
       return this.translate.instant('spoilers.episode_title', { number });
     }
-    return title ?? this.translate.instant('media_detail.ep_no_title');
+    return title || this.translate.instant('spoilers.episode_title', { number });
   }
 }

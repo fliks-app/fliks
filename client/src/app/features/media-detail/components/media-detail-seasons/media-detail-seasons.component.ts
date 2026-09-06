@@ -269,7 +269,7 @@ export class MediaDetailSeasonsComponent {
    * locale pipe stays in the template and keeps re-running on a language switch.
    */
   episodeCardSubtitle(formattedDate: string, runtime?: number | null): string {
-    const parts = [formattedDate || '—'];
+    const parts = formattedDate ? [formattedDate] : [];
     if (runtime) parts.push(`${runtime} ${this.translate.instant('common.min')}`);
     return parts.join(' · ');
   }
