@@ -74,6 +74,7 @@
           [userHasOpenWholeRequest]="hasBlockingRequest()"
           [releasesLoading]="epReleasesLoading()"
           [grabBusy]="epHeaderGrabBusy()"
+          [identified]="!unidentified()"
           (selectedFileIdChange)="selectedFileId.set($event)"
           (openDownload)="openDownloadModal()"
           (refreshMetadata)="refreshMetadata()"

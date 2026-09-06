@@ -1055,7 +1055,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       // by episodeFocusEffect as soon as `media` is set, so no imperative
       // call is needed here.
 
-      // Load cast/crew async — doesn't block page render
       // Provider-derived sections have nothing to fetch for an unidentified title.
       if (hasProviderId(m)) {
         this.mediaService

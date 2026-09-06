@@ -37,7 +37,7 @@
         <button type="button" class="btn btn-outline btn-sm" (click)="openScan()">
           {{ 'settings.libraries.scan_folder' | translate }}
         </button>
-        @if (unidentifiedCount() > 0) {
+        @if (unidentifiedCount() > 0 || unidentifiedOnly()) {
           <button
             type="button"
             class="btn btn-outline btn-sm"
