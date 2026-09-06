@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router } from '@angular/router';
-import { provideTranslateService, TranslateLoader, TranslatePipe } from '@ngx-translate/core';
+import { provideTranslateService, TranslateLoader } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { vi, afterEach, describe, it, expect } from 'vitest';
 import { MediaDetailComponent } from './media-detail';
@@ -55,16 +55,6 @@ const UNIDENTIFIED_MOVIE: Media = {
   tvdbId: null,
   imdbId: null,
 };
-
-/** Only the admin-callout markup, so the test doesn't drag in the whole page's child tree. */
-const CALLOUT_TEMPLATE = `
-  @if (isAdmin() && unidentified()) {
-    <div class="unidentified-callout">
-      {{ 'media_detail.unidentified_callout' | translate }}
-      <button (click)="openIdentifyModal()">{{ 'media_detail.identify' | translate }}</button>
-    </div>
-  }
-`;
 
 function createHarness(media: Media, isAdmin: boolean) {
   const getSimilar = vi.fn(async () => []);
@@ -127,9 +117,7 @@ function createHarness(media: Media, isAdmin: boolean) {
     ],
   });
 
-  TestBed.overrideComponent(MediaDetailComponent, {
-    set: { template: CALLOUT_TEMPLATE, imports: [TranslatePipe] },
-  });
+  TestBed.overrideComponent(MediaDetailComponent, { set: { template: '' } });
 
   const fixture = TestBed.createComponent(MediaDetailComponent);
   const mediaService = TestBed.inject(MediaService) as unknown as {
@@ -141,33 +129,6 @@ function createHarness(media: Media, isAdmin: boolean) {
 
 describe('MediaDetailComponent, unidentified title', () => {
   afterEach(() => TestBed.resetTestingModule());
-
-  it('shows the callout to an admin on an unidentified title', async () => {
-    const { fixture } = createHarness(UNIDENTIFIED_MOVIE, true);
-    await fixture.whenStable();
-    fixture.detectChanges();
-
-    const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('.unidentified-callout')).not.toBeNull();
-  });
-
-  it('hides the callout from a non-admin viewer even on an unidentified title', async () => {
-    const { fixture } = createHarness(UNIDENTIFIED_MOVIE, false);
-    await fixture.whenStable();
-    fixture.detectChanges();
-
-    const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('.unidentified-callout')).toBeNull();
-  });
-
-  it('hides the callout for an admin on an identified title', async () => {
-    const { fixture } = createHarness(BASE_MOVIE, true);
-    await fixture.whenStable();
-    fixture.detectChanges();
-
-    const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('.unidentified-callout')).toBeNull();
-  });
 
   it('never calls getSimilar for an unidentified title', async () => {
     const { fixture, getSimilar } = createHarness(UNIDENTIFIED_MOVIE, true);

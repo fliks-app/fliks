@@ -171,14 +171,6 @@
       <!-- ===== NORMAL MODE (movie / series) ===== -->
     } @else {
       <div class="flex flex-col">
-        @if (isAdmin() && unidentified()) {
-          <div role="alert" class="alert alert-info mb-4 flex items-center justify-between py-2">
-            <span class="text-sm">{{ 'media_detail.unidentified_callout' | translate }}</span>
-            <button class="btn btn-sm btn-ghost" (click)="openIdentifyModal()">
-              {{ 'media_detail.identify' | translate }}
-            </button>
-          </div>
-        }
         <app-media-info-header
           [title]="m.title"
           [mediaId]="m.id"
