@@ -16,7 +16,11 @@ import { BottomSheetComponent } from './bottom-sheet';
 import { TvService } from '../../core/services/tv.service';
 import { DeviceService } from '../../core/services/device.service';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
-import { initialOverlayFocus, restoreOpenerFocus } from '../../core/services/focusable.constants';
+import {
+  focusOverlayEntry,
+  initialOverlayFocus,
+  restoreOpenerFocus,
+} from '../../core/services/focusable.constants';
 
 /**
  * Reusable menu chrome that picks its presentation per-platform:
@@ -190,9 +194,7 @@ export class PopoverMenuComponent {
         }
         // Land on the current selection rather than making the user scroll to
         // it; falls back to the first focusable when nothing is marked.
-        const target = initialOverlayFocus(this.host.nativeElement);
-        target?.focus({ preventScroll: false });
-        target?.scrollIntoView({ block: 'nearest', behavior: 'instant' as ScrollBehavior });
+        focusOverlayEntry(initialOverlayFocus(this.host.nativeElement));
       });
       // Register with the dismissable stack so Escape (browser) and the
       // hardware back button (Capacitor / Tizen) close the popover. Return

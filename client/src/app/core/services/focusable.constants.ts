@@ -50,6 +50,14 @@ export function restoreOpenerFocus(opener: HTMLElement | null | undefined): void
   if (document.activeElement === opener) opener.blur();
 }
 
+/** Focus an overlay entry and reveal it inside its own scroller: the entry is
+ *  usually the current selection, which in a long list sits below the fold. */
+export function focusOverlayEntry(el: HTMLElement | null | undefined): void {
+  if (!el) return;
+  el.focus({ preventScroll: true });
+  el.scrollIntoView({ block: 'nearest', behavior: 'instant' as ScrollBehavior });
+}
+
 export function initialOverlayFocus(root: ParentNode | null | undefined): HTMLElement | null {
   if (!root) return null;
   for (const marker of ['[autofocus]', '[aria-current="true"]', '[aria-disabled="true"]']) {
