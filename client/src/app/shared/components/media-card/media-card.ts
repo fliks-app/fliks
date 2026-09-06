@@ -471,6 +471,7 @@ export class MediaCardComponent {
       return mediaId != null && !this.auth.sharingDisabled();
     },
     'core.toggle_watched': () => this.interactiveWatched(),
+    'core.like': () => this.liked() !== null,
     'core.remove': () => this.dismissable(),
     // Identity and a metadata re-read need a library row. A card for a title
     // that isn't in the library (search, discovery) has none, and the enclosing
@@ -497,6 +498,7 @@ export class MediaCardComponent {
     'media.play': () => (this.clickIntent() === 'play' ? this.onCardClick() : this.onPlayClick(new Event('synthetic'))),
     'media.open': () => this.openDetail(),
     'media.toggle-watched': () => this.watchedToggled.emit(this.status() !== 'watched'),
+    'media.toggle-like': () => this.likeToggled.emit(!this.liked()),
     'media.toggle-series-watched': () => this.watchedToggled.emit(this.status() !== 'watched'),
     'media.remove': () => this.dismissed.emit(),
     'media.open-tracking': () => {
@@ -562,10 +564,12 @@ export class MediaCardComponent {
 
     const resolved = rows.map((r) => {
       const isToggle = r.actionId === 'media.toggle-watched';
+      const isLike = r.actionId === 'media.toggle-like';
       return {
         weight: r.weight,
         action: {
-          labelKey: isToggle ? (watched ? 'media_card.mark_unwatched' : 'media_card.mark_watched') : r.labelKey,
+          labelKey: isToggle ? (watched ? 'media_card.mark_unwatched' : 'media_card.mark_watched')
+            : isLike ? (this.liked() ? 'likes.unlike' : 'likes.like') : r.labelKey,
           icon: isToggle ? (watched ? 'eye-off' : 'eye') : r.icon,
           tone: r.tone,
           section: sectionOf(r.weight),
