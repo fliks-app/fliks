@@ -15,11 +15,11 @@ describe('findLocalArtwork', () => {
   });
 
   it('prefers the basename-prefixed poster over a generic one', async () => {
-    writeFileSync(join(dir, 'Quiet Harbour-poster.jpg'), '');
+    writeFileSync(join(dir, 'Sample Movie-poster.jpg'), '');
     writeFileSync(join(dir, 'poster.jpg'), '');
 
-    const out = await findLocalArtwork(dir, 'Quiet Harbour');
-    expect(out.poster).toBe(join(dir, 'Quiet Harbour-poster.jpg'));
+    const out = await findLocalArtwork(dir, 'Sample Movie');
+    expect(out.poster).toBe(join(dir, 'Sample Movie-poster.jpg'));
   });
 
   it('falls back through folder, cover, movie in order', async () => {

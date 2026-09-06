@@ -31,7 +31,7 @@ describe('MediaMetadataService.resolveProviderForMedia, imdb-only fallback', () 
     const { service, mediaRepo, tmdb } = harness();
     const media = {
       id: 5,
-      title: 'Quiet Harbour',
+      title: 'Sample Movie',
       tmdbId: null,
       tvdbId: null,
       imdbId: 'tt1234567',

@@ -14,7 +14,7 @@ describe('MediaImportService.createUnmatched', () => {
       update: jest.fn(async (id: number, m: any) => {
         updates.push({ id, ...m });
       }),
-      findOne: jest.fn().mockResolvedValue({ id: 1, title: 'Quiet Harbour' }),
+      findOne: jest.fn().mockResolvedValue({ id: 1, title: 'Sample Movie' }),
     };
     const emitDomain = jest.fn();
     const svc = new MediaImportService(
@@ -43,16 +43,16 @@ describe('MediaImportService.createUnmatched', () => {
   it('creates an unmonitored, released title with no provider id', async () => {
     const { svc, saved, emitDomain } = makeService();
     const media = await svc.createUnmatched({
-      title: 'Quiet Harbour',
+      title: 'Sample Movie',
       year: 2009,
       type: MediaType.MOVIE,
       libraryId: 3,
-      folderName: 'Quiet Harbour (2009)',
+      folderName: 'Sample Movie (2009)',
     });
 
     expect(saved[0]).toMatchObject({
-      title: 'Quiet Harbour',
-      originalTitle: 'Quiet Harbour',
+      title: 'Sample Movie',
+      originalTitle: 'Sample Movie',
       monitored: false,
       status: MediaStatus.RELEASED,
     });
@@ -72,13 +72,13 @@ describe('MediaImportService.createUnmatched', () => {
   it('fills empty fields from the nfo but never overrides a real title', async () => {
     const { svc, saved } = makeService();
     await svc.createUnmatched({
-      title: 'Salt Meadow',
+      title: 'Sample Movie 2',
       type: MediaType.MOVIE,
       libraryId: 3,
-      folderName: 'Salt Meadow (2011)',
+      folderName: 'Sample Movie 2 (2011)',
       nfo: {
-        title: 'Salt Meadow Extended',
-        originalTitle: 'Salt Meadow Original',
+        title: 'Sample Movie 2 Extended',
+        originalTitle: 'Sample Movie 2 Original',
         year: 2011,
         plot: 'A tale of a meadow.',
         genres: ['Drama'],
@@ -89,8 +89,8 @@ describe('MediaImportService.createUnmatched', () => {
     });
 
     expect(saved[0]).toMatchObject({
-      title: 'Salt Meadow',
-      originalTitle: 'Salt Meadow Original',
+      title: 'Sample Movie 2',
+      originalTitle: 'Sample Movie 2 Original',
       year: 2011,
       overview: 'A tale of a meadow.',
       genres: ['Drama'],
@@ -103,15 +103,15 @@ describe('MediaImportService.createUnmatched', () => {
   it('uses the nfo title when the guess is just the folder name', async () => {
     const { svc, saved } = makeService();
     await svc.createUnmatched({
-      title: 'Salt Meadow (2011)',
+      title: 'Sample Movie 2 (2011)',
       type: MediaType.MOVIE,
       libraryId: 3,
-      folderName: 'Salt Meadow (2011)',
-      nfo: { title: 'Salt Meadow' },
+      folderName: 'Sample Movie 2 (2011)',
+      nfo: { title: 'Sample Movie 2' },
     });
 
-    expect(saved[0].title).toBe('Salt Meadow');
-    expect(saved[0].originalTitle).toBe('Salt Meadow');
+    expect(saved[0].title).toBe('Sample Movie 2');
+    expect(saved[0].originalTitle).toBe('Sample Movie 2');
   });
 
   it('stores sibling artwork and writes the local image urls', async () => {
@@ -122,21 +122,21 @@ describe('MediaImportService.createUnmatched', () => {
       );
     const { svc, updates } = makeService({ storeFromDisk });
     await svc.createUnmatched({
-      title: 'Quiet Harbour',
+      title: 'Sample Movie',
       type: MediaType.MOVIE,
       libraryId: 3,
-      folderName: 'Quiet Harbour (2009)',
-      artwork: { poster: '/media/Quiet Harbour (2009)/poster.jpg', fanart: '/media/Quiet Harbour (2009)/fanart.jpg' },
+      folderName: 'Sample Movie (2009)',
+      artwork: { poster: '/media/Sample Movie (2009)/poster.jpg', fanart: '/media/Sample Movie (2009)/fanart.jpg' },
     });
 
     expect(storeFromDisk).toHaveBeenCalledWith(
-      '/media/Quiet Harbour (2009)/poster.jpg',
+      '/media/Sample Movie (2009)/poster.jpg',
       'media',
       1,
       'poster',
     );
     expect(storeFromDisk).toHaveBeenCalledWith(
-      '/media/Quiet Harbour (2009)/fanart.jpg',
+      '/media/Sample Movie (2009)/fanart.jpg',
       'media',
       1,
       'fanart',
@@ -154,11 +154,11 @@ describe('MediaImportService.createUnmatched', () => {
 
     await expect(
       svc.createUnmatched({
-        title: 'Quiet Harbour',
+        title: 'Sample Movie',
         type: MediaType.MOVIE,
         libraryId: 3,
-        folderName: 'Quiet Harbour (2009)',
-        artwork: { poster: '/media/Quiet Harbour (2009)/poster.jpg' },
+        folderName: 'Sample Movie (2009)',
+        artwork: { poster: '/media/Sample Movie (2009)/poster.jpg' },
       }),
     ).resolves.toBeDefined();
     expect(saved).toHaveLength(1);

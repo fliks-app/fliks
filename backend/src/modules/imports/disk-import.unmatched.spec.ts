@@ -18,10 +18,10 @@ const dto = (overrides: Partial<RelinkOrphansDto> = {}): RelinkOrphansDto =>
   ({
     libraryId: 1,
     type: MediaType.MOVIE,
-    folderName: 'Quiet Harbour (2009)',
-    title: 'Quiet Harbour',
+    folderName: 'Sample Movie (2009)',
+    title: 'Sample Movie',
     year: 2009,
-    files: [{ filePath: '/media/Quiet Harbour (2009)/Quiet.Harbour.2009.1080p.mkv' }],
+    files: [{ filePath: '/media/Sample Movie (2009)/Sample.Movie.2009.1080p.mkv' }],
     ...overrides,
   }) as RelinkOrphansDto;
 
@@ -81,9 +81,9 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
     const { service, mediaRepo, mediaService, nfo } = makeService();
     mediaRepo.findOne
       .mockResolvedValueOnce(null) // no existing unmatched row for this folder
-      .mockResolvedValueOnce(unmatchedRow(42, 'Quiet Harbour (2009)')); // reload
+      .mockResolvedValueOnce(unmatchedRow(42, 'Sample Movie (2009)')); // reload
     nfo.readForVideoFile.mockResolvedValue({ plot: 'A harbour tale.' });
-    mockedFindLocalArtwork.mockResolvedValue({ poster: '/media/Quiet Harbour (2009)/poster.jpg' });
+    mockedFindLocalArtwork.mockResolvedValue({ poster: '/media/Sample Movie (2009)/poster.jpg' });
     mediaService.createUnmatched.mockResolvedValue({ id: 42 });
     mediaService.linkExistingFileInPlace.mockResolvedValue({
       fileId: 1,
@@ -94,21 +94,21 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
     const res = await service.relinkOrphans(dto(), null);
 
     expect(nfo.readForVideoFile).toHaveBeenCalledWith(
-      '/media/Quiet Harbour (2009)/Quiet.Harbour.2009.1080p.mkv',
+      '/media/Sample Movie (2009)/Sample.Movie.2009.1080p.mkv',
     );
     expect(mockedFindLocalArtwork).toHaveBeenCalledWith(
-      '/media/Quiet Harbour (2009)',
-      'Quiet.Harbour.2009.1080p',
+      '/media/Sample Movie (2009)',
+      'Sample.Movie.2009.1080p',
     );
     expect(mediaService.createUnmatched).toHaveBeenCalledWith(
       expect.objectContaining({
-        title: 'Quiet Harbour',
+        title: 'Sample Movie',
         year: 2009,
         type: MediaType.MOVIE,
         libraryId: 1,
-        folderName: 'Quiet Harbour (2009)',
+        folderName: 'Sample Movie (2009)',
         nfo: { plot: 'A harbour tale.' },
-        artwork: { poster: '/media/Quiet Harbour (2009)/poster.jpg' },
+        artwork: { poster: '/media/Sample Movie (2009)/poster.jpg' },
       }),
       null,
     );
@@ -121,11 +121,11 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
     const { service, mediaRepo, mediaService } = makeService();
     const seriesDto = dto({
       type: MediaType.SERIES,
-      folderName: 'Northern Lights',
-      title: 'Northern Lights',
+      folderName: 'Sample Show',
+      title: 'Sample Show',
       files: [
         {
-          filePath: '/media/Northern Lights/Season 01/Northern.Lights.S01E01.mkv',
+          filePath: '/media/Sample Show/Season 01/Sample.Show.S01E01.mkv',
           seasonNumber: 1,
           episodeNumber: 1,
         },
@@ -133,7 +133,7 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
     });
     mediaRepo.findOne
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(unmatchedRow(8, 'Northern Lights', MediaType.SERIES));
+      .mockResolvedValueOnce(unmatchedRow(8, 'Sample Show', MediaType.SERIES));
     mediaService.createUnmatched.mockResolvedValue({ id: 8 });
     mediaService.linkExistingFileInPlace.mockResolvedValue({
       fileId: 1,
@@ -144,7 +144,7 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
     await service.relinkOrphans(seriesDto, null);
 
     expect(mockedFindLocalArtwork).toHaveBeenCalledWith(
-      '/media/Northern Lights',
+      '/media/Sample Show',
       undefined,
     );
   });
@@ -153,11 +153,11 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
     const { service, mediaRepo, mediaService, nfo } = makeService();
     const seriesDto = dto({
       type: MediaType.SERIES,
-      folderName: 'Northern Lights',
-      title: 'Northern Lights',
+      folderName: 'Sample Show',
+      title: 'Sample Show',
       files: [
         {
-          filePath: '/media/Northern Lights/Season 01/Northern.Lights.S01E01.mkv',
+          filePath: '/media/Sample Show/Season 01/Sample.Show.S01E01.mkv',
           seasonNumber: 1,
           episodeNumber: 1,
         },
@@ -165,8 +165,8 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
     });
     mediaRepo.findOne
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(unmatchedRow(9, 'Northern Lights', MediaType.SERIES));
-    nfo.readNfoFile.mockResolvedValue({ title: 'Northern Lights Show' });
+      .mockResolvedValueOnce(unmatchedRow(9, 'Sample Show', MediaType.SERIES));
+    nfo.readNfoFile.mockResolvedValue({ title: 'Sample Show Extended' });
     mediaService.createUnmatched.mockResolvedValue({ id: 9 });
     mediaService.linkExistingFileInPlace.mockResolvedValue({
       fileId: 1,
@@ -176,10 +176,10 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
 
     await service.relinkOrphans(seriesDto, null);
 
-    expect(nfo.readNfoFile).toHaveBeenCalledWith('/media/Northern Lights/tvshow.nfo');
+    expect(nfo.readNfoFile).toHaveBeenCalledWith('/media/Sample Show/tvshow.nfo');
     expect(nfo.readForVideoFile).not.toHaveBeenCalled();
     expect(mediaService.createUnmatched).toHaveBeenCalledWith(
-      expect.objectContaining({ nfo: { title: 'Northern Lights Show' } }),
+      expect.objectContaining({ nfo: { title: 'Sample Show Extended' } }),
       null,
     );
   });
@@ -188,11 +188,11 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
     const { service, mediaRepo, mediaService, nfo } = makeService();
     const seriesDto = dto({
       type: MediaType.SERIES,
-      folderName: 'Northern Lights',
-      title: 'Northern Lights',
+      folderName: 'Sample Show',
+      title: 'Sample Show',
       files: [
         {
-          filePath: '/media/Northern Lights/Season 01/Northern.Lights.S01E01.mkv',
+          filePath: '/media/Sample Show/Season 01/Sample.Show.S01E01.mkv',
           seasonNumber: 1,
           episodeNumber: 1,
         },
@@ -200,7 +200,7 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
     });
     mediaRepo.findOne
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(unmatchedRow(9, 'Northern Lights', MediaType.SERIES));
+      .mockResolvedValueOnce(unmatchedRow(9, 'Sample Show', MediaType.SERIES));
     nfo.readNfoFile.mockResolvedValue(null);
     nfo.readForVideoFile.mockResolvedValue({ title: 'Episode-derived title' });
     mediaService.createUnmatched.mockResolvedValue({ id: 9 });
@@ -213,7 +213,7 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
     await service.relinkOrphans(seriesDto, null);
 
     expect(nfo.readForVideoFile).toHaveBeenCalledWith(
-      '/media/Northern Lights/Season 01/Northern.Lights.S01E01.mkv',
+      '/media/Sample Show/Season 01/Sample.Show.S01E01.mkv',
     );
     expect(mediaService.createUnmatched).toHaveBeenCalledWith(
       expect.objectContaining({ nfo: { title: 'Episode-derived title' } }),
@@ -225,7 +225,7 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
     const { service, mediaRepo, mediaService } = makeService();
     mediaRepo.findOne.mockResolvedValueOnce(null);
     const outsideDto = dto({
-      files: [{ filePath: '/etc/Quiet.Harbour.2009.1080p.mkv' }],
+      files: [{ filePath: '/etc/Sample.Movie.2009.1080p.mkv' }],
     });
 
     await expect(service.relinkOrphans(outsideDto, null)).rejects.toThrow(
@@ -243,7 +243,7 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
       type: MediaType.SERIES,
       folderName: '../../etc',
       files: [
-        { filePath: '/media/Northern Lights/Season 01/Escape.S01E01.mkv' },
+        { filePath: '/media/Sample Show/Season 01/Escape.S01E01.mkv' },
       ],
     });
 
@@ -256,7 +256,7 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
   it('reuses the unmatched row already pinned to the same folder on a second scan', async () => {
     const { service, mediaRepo, mediaService, nfo } = makeService();
     mediaRepo.findOne.mockResolvedValueOnce(
-      unmatchedRow(42, 'Quiet Harbour (2009)'),
+      unmatchedRow(42, 'Sample Movie (2009)'),
     );
     mediaService.linkExistingFileInPlace.mockResolvedValue({
       fileId: 2,
@@ -284,12 +284,12 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
     const { service, mediaRepo, mediaService, metadata } = makeService();
     const seriesDto = dto({
       type: MediaType.SERIES,
-      folderName: 'Northern Lights',
-      title: 'Northern Lights',
+      folderName: 'Sample Show',
+      title: 'Sample Show',
       year: 2011,
       files: [
         {
-          filePath: '/media/Northern Lights/Northern.Lights.S01E01.mkv',
+          filePath: '/media/Sample Show/Sample.Show.S01E01.mkv',
           seasonNumber: 1,
           episodeNumber: 1,
         },
@@ -297,7 +297,7 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
     });
     mediaRepo.findOne
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(unmatchedRow(7, 'Northern Lights', MediaType.SERIES));
+      .mockResolvedValueOnce(unmatchedRow(7, 'Sample Show', MediaType.SERIES));
     mediaService.createUnmatched.mockResolvedValue({ id: 7 });
     // A slot is invented for the file, which would normally trigger the backfill.
     mediaService.linkExistingFileInPlace.mockResolvedValue({
