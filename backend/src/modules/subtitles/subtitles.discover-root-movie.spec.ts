@@ -12,14 +12,14 @@ function buildHarness() {
   return { service, mediaRepo };
 }
 
-describe('SubtitlesService.discoverExternalSubtitles — a movie with no folder of its own', () => {
+describe('SubtitlesService.discoverExternalSubtitles - a movie with no folder of its own', () => {
   it('never scans the shared library root: a sibling root-level movie could share it', async () => {
     const { service, mediaRepo } = buildHarness();
     mediaRepo.findOne.mockResolvedValue({
       id: 1,
       folderName: '',
       path: '/library/movies',
-      files: [{ id: 1, relativePath: 'Quiet.Harbor.2020.mkv' }],
+      files: [{ id: 1, relativePath: 'sample.movie.2001.1080p.mkv' }],
     });
 
     const discovered = await service.discoverExternalSubtitles(1);

@@ -98,7 +98,7 @@ function createHarness() {
   return { fixture, confirm };
 }
 
-describe('MediaDetailComponent.deleteMedia — confirm message', () => {
+describe('MediaDetailComponent.deleteMedia - confirm message', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('warns about the on-disk folder for a title that owns one', async () => {

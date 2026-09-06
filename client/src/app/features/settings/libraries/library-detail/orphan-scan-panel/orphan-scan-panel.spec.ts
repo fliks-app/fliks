@@ -257,7 +257,7 @@ describe('OrphanScanPanelComponent - a movie file directly at the library root',
           groupKey: `movie:/medias/${filename}`,
           mediaType: 'movie',
           folderName: '',
-          guessTitle: 'Quiet Harbor',
+          guessTitle: 'Sample Movie',
           guessYear: 2020,
           nfo: null,
           suggestedProvider: 'tmdb',
@@ -290,7 +290,7 @@ describe('OrphanScanPanelComponent - a movie file directly at the library root',
       },
     };
     const metadata = {
-      searchMovie: () => Promise.resolve([result(11, 'Quiet Harbor')]),
+      searchMovie: () => Promise.resolve([result(11, 'Sample Movie')]),
       searchTv: () => Promise.resolve([]),
       ...metadataOverrides,
     };
@@ -312,18 +312,18 @@ describe('OrphanScanPanelComponent - a movie file directly at the library root',
   }
 
   it('shows the file name in the collapsed header instead of the empty folder name', async () => {
-    const { panel, fixture } = setupRoot('Quiet.Harbor.2020.mkv');
+    const { panel, fixture } = setupRoot('sample.movie.2001.mkv');
     await panel.scanPath('/medias', ['movie'], 'tmdb');
     fixture.detectChanges();
 
     const header = fixture.nativeElement.querySelector('.collapse-title .font-mono');
-    expect(header?.textContent?.trim()).toBe('Quiet.Harbor.2020.mkv');
+    expect(header?.textContent?.trim()).toBe('sample.movie.2001.mkv');
   });
 
   it('forwards folderName \'\' untouched and forces reorganize off even with a match', async () => {
-    const { panel, relinked } = setupRoot('Quiet.Harbor.2020.mkv');
+    const { panel, relinked } = setupRoot('sample.movie.2001.mkv');
     await panel.scanPath('/medias', ['movie'], 'tmdb');
-    expect(panel.groups()[0].pick?.title).toBe('Quiet Harbor');
+    expect(panel.groups()[0].pick?.title).toBe('Sample Movie');
 
     await panel.importAll(7);
 
@@ -334,7 +334,7 @@ describe('OrphanScanPanelComponent - a movie file directly at the library root',
   });
 
   it('explains why reorganize is skipped for a root-level movie', async () => {
-    const { panel } = setupRoot('Quiet.Harbor.2020.mkv');
+    const { panel } = setupRoot('sample.movie.2001.mkv');
     await panel.scanPath('/medias', ['movie'], 'tmdb');
 
     expect(panel.reorganizeTooltip(panel.groups()[0])).toBe(

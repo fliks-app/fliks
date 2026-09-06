@@ -117,7 +117,7 @@ describe('orphan scan', () => {
     const seriesRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'orphan-scan-series-root-'));
     try {
       await fs.writeFile(
-        path.join(seriesRoot, 'Northern.Lights.S01E01.1080p.mkv'),
+        path.join(seriesRoot, 'Sample.Show.S01E01.1080p.mkv'),
         'x',
       );
       const res = await service.previewOrphans({ path: seriesRoot });

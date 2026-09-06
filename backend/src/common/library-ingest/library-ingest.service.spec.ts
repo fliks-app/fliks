@@ -236,7 +236,7 @@ describe('LibraryIngestService.ingest', () => {
 
   it('refuses to place a grabbed file at the library root when the media has no folder of its own', async () => {
     const h = buildHarness();
-    const srcFile = path.join(srcDir, 'Quiet.Harbor.2020.mkv');
+    const srcFile = path.join(srcDir, 'sample.movie.2001.1080p.mkv');
     fs.writeFileSync(srcFile, 'x');
 
     const media = buildMovie({ id: 9, folderName: '', path: '/library/movies' });
@@ -248,7 +248,7 @@ describe('LibraryIngestService.ingest', () => {
         files: [{ path: srcFile }],
         transfer: 'copy',
         fallbackQuality: 'WEBDL-1080p',
-        sourceLabel: 'Quiet Harbor',
+        sourceLabel: 'Sample Movie',
       }),
     ).rejects.toThrow('has no folder of its own');
   });

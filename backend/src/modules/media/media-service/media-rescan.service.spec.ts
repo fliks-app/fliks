@@ -156,7 +156,7 @@ describe('MediaRescanService.rescanFiles — quality from probe results', () => 
       id: 8,
       title: 'Ember Horizon',
       type: MediaType.MOVIE,
-      folderName: 'Ember Horizon (2022)',
+      folderName: 'Sample Movie (2001)',
       files: [],
       get path() {
         return mediaDir;
@@ -213,7 +213,7 @@ describe('MediaRescanService.rescanFiles - a movie with no folder of its own', (
   function rootMovieMedia(over: Record<string, unknown>) {
     return {
       id: 11,
-      title: 'Quiet Harbour',
+      title: 'Sample Movie',
       type: MediaType.MOVIE,
       folderName: '',
       files: [],
@@ -226,10 +226,10 @@ describe('MediaRescanService.rescanFiles - a movie with no folder of its own', (
 
   it('never walks the shared library root: a sibling root-level movie file is not discovered', async () => {
     const h = buildHarness();
-    const ownFilename = 'Quiet.Harbour.2009.1080p.mkv';
+    const ownFilename = 'sample.movie.2001.1080p.mkv';
     fs.writeFileSync(path.join(mediaDir, ownFilename), 'video-bytes');
     // Another root-level movie's own file, sitting right next to this one.
-    fs.writeFileSync(path.join(mediaDir, 'Some.Other.Movie.2020.mkv'), 'video-bytes');
+    fs.writeFileSync(path.join(mediaDir, 'sample.movie.2.2002.1080p.mkv'), 'video-bytes');
     const dbFile = {
       id: 21,
       relativePath: ownFilename,
@@ -248,7 +248,7 @@ describe('MediaRescanService.rescanFiles - a movie with no folder of its own', (
 
     expect(res.added).toBe(0);
     expect(h.mediaFileRepo.save).not.toHaveBeenCalledWith(
-      expect.objectContaining({ relativePath: 'Some.Other.Movie.2020.mkv' }),
+      expect.objectContaining({ relativePath: 'sample.movie.2.2002.1080p.mkv' }),
     );
     // Its own file is still refreshed.
     expect(res.updated).toBe(1);

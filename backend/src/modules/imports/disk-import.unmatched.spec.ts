@@ -349,7 +349,7 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
       provider: 'tmdb',
       reorganize: true,
       folderName: '',
-      files: [{ filePath: '/media/Quiet.Harbour.2009.1080p.mkv' }],
+      files: [{ filePath: '/media/sample.movie.2001.1080p.mkv' }],
     });
     await expect(service.relinkOrphans(rootDto, null)).rejects.toThrow(
       BadRequestException,
@@ -361,8 +361,8 @@ describe('DiskImportService.relinkOrphans: movie files directly at the library r
   const rootDto = (overrides: Partial<RelinkOrphansDto> = {}): RelinkOrphansDto =>
     dto({
       folderName: '',
-      title: 'Quiet Harbour',
-      files: [{ filePath: '/media/Quiet.Harbour.2009.1080p.mkv' }],
+      title: 'Sample Movie',
+      files: [{ filePath: '/media/sample.movie.2001.1080p.mkv' }],
       ...overrides,
     });
 
@@ -391,7 +391,7 @@ describe('DiskImportService.relinkOrphans: movie files directly at the library r
     const { service, mediaRepo, mediaService } = makeService();
     const movieA = {
       ...unmatchedRow(1, ''),
-      files: [{ relativePath: 'Movie.A.2019.mkv' }],
+      files: [{ relativePath: 'sample.movie.2001.mkv' }],
     };
     // The only existing unmatched root row is a different file: reuse must
     // not pick it just because folderName also happens to be ''.
@@ -405,7 +405,7 @@ describe('DiskImportService.relinkOrphans: movie files directly at the library r
     });
 
     const res = await service.relinkOrphans(
-      rootDto({ files: [{ filePath: '/media/Movie.B.2020.mkv' }] }),
+      rootDto({ files: [{ filePath: '/media/sample.movie.2.2002.mkv' }] }),
       null,
     );
 
@@ -417,7 +417,7 @@ describe('DiskImportService.relinkOrphans: movie files directly at the library r
     const { service, mediaRepo, mediaService } = makeService();
     const movieA = {
       ...unmatchedRow(1, ''),
-      files: [{ relativePath: 'Movie.A.2019.mkv' }],
+      files: [{ relativePath: 'sample.movie.2001.mkv' }],
     };
     mediaRepo.find.mockResolvedValueOnce([movieA]);
     mediaService.linkExistingFileInPlace.mockResolvedValue({
@@ -427,7 +427,7 @@ describe('DiskImportService.relinkOrphans: movie files directly at the library r
     });
 
     const res = await service.relinkOrphans(
-      rootDto({ files: [{ filePath: '/media/Movie.A.2019.mkv' }] }),
+      rootDto({ files: [{ filePath: '/media/sample.movie.2001.mkv' }] }),
       null,
     );
 
