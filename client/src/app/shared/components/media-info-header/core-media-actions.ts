@@ -118,7 +118,7 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
       weight: 20,
       labelKey: 'media_detail.refresh_metadata',
       icon: 'rotate-ccw',
-      when: ['isAdmin'],
+      when: ['isAdmin', 'identified'],
       action: { kind: 'action', actionId: 'media.refresh-metadata' },
     },
     ],

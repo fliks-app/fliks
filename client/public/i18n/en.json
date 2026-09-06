@@ -1131,7 +1131,8 @@
     "advanced_group": "Advanced",
     "add_to_list": "Add to list",
     "unlike": "Unlike",
-    "subtitle_failed": "Failed"
+    "subtitle_failed": "Failed",
+    "unidentified_callout": "This title isn't identified. The information shown comes from the file."
   },
   "requests": {
     "title": "Requests",
@@ -1988,7 +1989,8 @@
       "scan_unmatched_option": "No match: add as is",
       "scan_reorganize_needs_match": "Move/rename only applies to identified titles",
       "scan_queued_unmatched": "{{count}} title(s) added without metadata, identify them from the Media tab",
-      "scan_search_failed_count": "{{count}} folder(s) not scanned (search failed), relaunch the scan from the Media tab"
+      "scan_search_failed_count": "{{count}} folder(s) not scanned (search failed), relaunch the scan from the Media tab",
+      "media_filter_unidentified": "Unidentified"
     },
     "users": {
       "title": "Users",

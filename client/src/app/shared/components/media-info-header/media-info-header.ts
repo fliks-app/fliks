@@ -256,6 +256,9 @@ export class MediaInfoHeaderComponent {
    *  openDownloadDetail. */
   readonly badge = input<MediaInfoHeaderBadge | null>(null);
 
+  /** False when the title has no metadata-provider id; gates the refresh-metadata action. */
+  readonly identified = input(true);
+
   protected badgeLabel(b: MediaInfoHeaderBadge): string {
     return this.translate.instant(b.labelKey, b.labelParams ?? undefined);
   }
@@ -649,6 +652,7 @@ export class MediaInfoHeaderComponent {
     isMonitored: this.monitored(),
     hasQualityProfile: !!this.qualityProfileName(),
     isEpisode: !!this.episodeId(),
+    identified: this.identified(),
     isTv: this.tv.isTv(),
     isTouch: this.device.isTouch(),
     surface: 'detail',

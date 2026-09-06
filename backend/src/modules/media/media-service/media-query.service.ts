@@ -1059,6 +1059,11 @@ export class MediaQueryService {
     } else if (query.missing === false) {
       qb.andWhere('files.id IS NOT NULL');
     }
+    if (query.unidentified === true) {
+      qb.andWhere(
+        'media."tmdbId" IS NULL AND media."tvdbId" IS NULL AND media."imdbId" IS NULL',
+      );
+    }
     if (query.letter) {
       const letter = query.letter.toUpperCase();
       if (letter === '#') {

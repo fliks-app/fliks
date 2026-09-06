@@ -229,6 +229,7 @@ export interface SearchParams {
   limit?: number;
   missing?: boolean;
   cutoffUnmet?: boolean;
+  unidentified?: boolean;
   letter?: string;
   excludeWatched?: boolean;
   onlyWatched?: boolean;

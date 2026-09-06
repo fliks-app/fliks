@@ -1123,7 +1123,8 @@
     "advanced_group": "Erweitert",
     "add_to_list": "Zu Liste hinzufügen",
     "unlike": "Gefällt mir nicht mehr",
-    "subtitle_failed": "Fehlgeschlagen"
+    "subtitle_failed": "Fehlgeschlagen",
+    "unidentified_callout": "Dieser Titel ist nicht identifiziert. Die angezeigten Informationen stammen aus der Datei."
   },
   "requests": {
     "title": "Anfragen",
@@ -1971,7 +1972,8 @@
       "scan_unmatched_option": "Keine Übereinstimmung: unverändert hinzufügen",
       "scan_reorganize_needs_match": "Verschieben/Umbenennen gilt nur für identifizierte Titel",
       "scan_queued_unmatched": "{{count}} Titel ohne Metadaten hinzugefügt, identifizieren Sie sie im Tab Medien",
-      "scan_search_failed_count": "{{count}} Ordner nicht analysiert (Suche fehlgeschlagen), starten Sie den Scan im Tab Medien erneut"
+      "scan_search_failed_count": "{{count}} Ordner nicht analysiert (Suche fehlgeschlagen), starten Sie den Scan im Tab Medien erneut",
+      "media_filter_unidentified": "Nicht identifiziert"
     },
     "users": {
       "title": "Benutzer",

@@ -37,6 +37,17 @@
         <button type="button" class="btn btn-outline btn-sm" (click)="openScan()">
           {{ 'settings.libraries.scan_folder' | translate }}
         </button>
+        @if (unidentifiedCount() > 0) {
+          <button
+            type="button"
+            class="btn btn-outline btn-sm"
+            [class.btn-active]="unidentifiedOnly()"
+            (click)="toggleUnidentified()"
+          >
+            {{ 'settings.libraries.media_filter_unidentified' | translate }}
+            <span class="badge badge-sm">{{ unidentifiedCount() }}</span>
+          </button>
+        }
       </div>
       <div class="relative w-full max-w-xs">
         <svg lucideSearch class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-base-content/40 pointer-events-none z-10"></svg>

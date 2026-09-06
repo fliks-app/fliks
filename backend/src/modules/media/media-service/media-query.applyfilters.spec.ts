@@ -104,6 +104,28 @@ describe('MediaQueryService.applyFilters', () => {
     expect(clauses(qb)).not.toContain('media.genres @> :genres');
   });
 
+  it('emits the tmdbId/tvdbId/imdbId null clause when unidentified is true', () => {
+    const qb = fakeQueryBuilder();
+
+    (service as any).applyFilters(qb, {
+      unidentified: true,
+    } as SearchMediaDto);
+
+    expect(clauses(qb)).toContain(
+      'media."tmdbId" IS NULL AND media."tvdbId" IS NULL AND media."imdbId" IS NULL',
+    );
+  });
+
+  it('omits the unidentified clause when unidentified is not set', () => {
+    const qb = fakeQueryBuilder();
+
+    (service as any).applyFilters(qb, {} as SearchMediaDto);
+
+    expect(clauses(qb)).not.toContain(
+      'media."tmdbId" IS NULL AND media."tvdbId" IS NULL AND media."imdbId" IS NULL',
+    );
+  });
+
   it('keeps the single-genre and exact-year branches for other callers', () => {
     const qb = fakeQueryBuilder();
 
