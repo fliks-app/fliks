@@ -764,9 +764,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     return ep ? this.watchedEpisodeIds().has(ep.id) : null;
   });
 
-  /** Regular requester (no `media.create` permission). The Demander
-   *  actions are only surfaced for them — admins use Grab/Search. An
-   *  unidentified title has no tmdbId to key the request on. */
+  /** Regular requester (no `media.create`) with a tmdbId to request against;
+   *  an unidentified title has none, so the Demander actions stay hidden. */
   readonly canRequest = computed(
     () =>
       !this.auth.hasPermission('media.create') &&

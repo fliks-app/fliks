@@ -75,8 +75,6 @@ describe('SchedulerService.triggerCommand', () => {
   });
 });
 
-/** Builds a service where only `mediaRepo`/`mediaService`/`config` drive the refresh
- *  jobs — `eventsService`/`activityRegistry` are jest.fn() stubs, everything else unused. */
 function makeMetadataService(
   mediaRepo: { find: jest.Mock },
   mediaService: { refreshMetadata: jest.Mock },

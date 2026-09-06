@@ -1,4 +1,4 @@
-# Plan — show every file on disk, matched to a metadata provider or not
+# Plan: show every file on disk, matched to a metadata provider or not
 
 Status: **planned, not started**. Written 2026-09-06.
 
@@ -6,17 +6,17 @@ Goal: a video file under a library root is always reachable in Fliks. A title
 that TMDB/TVDB never matched (or that the admin never bothered to match) gets a
 `Media` row anyway, with a placeholder poster and whatever the file itself can
 tell us (filename, `.nfo`, ffprobe, sibling artwork). Metadata decorates the
-library; it no longer gates it. The model is Jellyfin's: the file is the source
-of truth, the provider match is an optional enrichment the admin can apply later
-through the existing **Identify** flow.
+library; it no longer gates it. The file is the source of truth, the provider
+match is an optional enrichment the admin can apply later through the existing
+**Identify** flow.
 
-Non-goals (this plan): a periodic full-library scan à la Jellyfin, auto-matching
+Non-goals (this plan): a periodic full-library scan, auto-matching
 after the fact, local artwork for *matched* titles, a frame-extraction poster
 (listed as optional at the end).
 
 ## What the audit found
 
-Everything below is already true on `main` — the plan builds on it, nothing
+Everything below is already true on `main`: the plan builds on it, nothing
 here needs to be re-verified before starting.
 
 **The data model already allows it.**
@@ -79,19 +79,19 @@ the creation path):
   logic sane; monitoring is the admin's explicit choice after an Identify.
 - **Natural key for an unmatched title is `(libraryId, type, folderName)`.**
   Two scans of the same folder relink into the same row instead of creating a
-  twin. Two folders with the same guessed title stay two titles, like Jellyfin.
+  twin. Two folders with the same guessed title stay two titles.
 - **Requests stay TMDB-keyed.** The Request / Request-deletion entries are
   hidden on an unmatched title (the admin identifies it first). Re-keying the
   requests table on `mediaId` is a separate project with no payoff here.
 - **"Reorganize" is refused server-side for an unmatched title** (400), and
   the client never sends it for one. Linking is always in place.
 - **Local `.nfo` and sibling artwork are read only for unmatched titles** in
-  this plan. Applying them to matched titles (Jellyfin's "local over remote"
-  preference) is a follow-up with its own precedence rules.
+  this plan. Applying a local-over-remote artwork preference to matched titles
+  is a follow-up with its own precedence rules.
 - **Files at the library root are their own PR** (Phase 5): they touch
   `media.path`, which feeds the folder deletion path.
 
-## Phase 0 — guards (ship first, safe on its own)
+## Phase 0: guards (ship first, safe on its own)
 
 Nothing in this phase changes behaviour for matched titles. It closes the
 three silent-guard holes so Phase 1 can't hurt anyone.
@@ -103,7 +103,7 @@ three silent-guard holes so Phase 1 can't hurt anyone.
   parameter is the documented free-text search.
 - `subdl.provider.ts`: same shape with `film_name`.
 - `SubtitlesService.searchSubtitles`: log at `warn` when a search runs with no
-  hash and no id — the scorer already rates candidates by release name and
+  hash and no id, the scorer already rates candidates by release name and
   title, so the results are usable, but the log makes a bad match diagnosable.
 - Spec: one test per provider asserting the URL carries the title when ids
   and hash are absent, and does not when an id is present.
@@ -116,7 +116,7 @@ three silent-guard holes so Phase 1 can't hurt anyone.
   (`… (N unidentified title(s) skipped)`), not per title.
 - `MediaMetadataService.refreshMetadata`: keep the throw (a manual refresh on
   an unmatched title must say why), the schedulers just stop calling it.
-- Spec: `scheduler.service.spec.ts` — an unmatched row is neither refreshed
+- Spec: `scheduler.service.spec.ts`: an unmatched row is neither refreshed
   nor counted as failed.
 
 ### 0.3 Client request gates tolerate a missing `tmdbId`
@@ -129,7 +129,7 @@ three silent-guard holes so Phase 1 can't hurt anyone.
 
 PR title: `fix(metadata): guard subtitle search, refresh jobs and request gates against titles with no provider id`.
 
-## Phase 1 — backend: create an unmatched title from an orphan group
+## Phase 1: backend, create an unmatched title from an orphan group
 
 ### 1.1 DTO
 
@@ -142,7 +142,7 @@ PR title: `fix(metadata): guard subtitle search, refresh jobs and request gates 
   fields, so the admin's correction of the guessed title is what gets stored.
 - Class-level rule: `externalId` absent + `reorganize: true` → 400
   (`Reorganize needs an identified title`). Do it in the service, not with a
-  custom validator — one `if`, one exception.
+  custom validator: one `if`, one exception.
 
 ### 1.2 Service branch
 
@@ -170,10 +170,10 @@ let media = dto.externalId
   status: MediaStatus.RELEASED, monitored: false, alternativeTitles: [],
   genres: [], library, folderName, addedBy })`.
 - `updateSearchVector(saved.id)`.
-- `events.emitDomain({ type: 'media.imported', tmdbId: null, … })` — the
+- `events.emitDomain({ type: 'media.imported', tmdbId: null, … })`: the
   event is already typed `tmdbId: number | null`; `RequestLifecycleService.
   onMediaImported` already returns on `!media.tmdbId`.
-- Log: `Library: added unidentified movie "<title>" (<year>) — id=…`.
+- Log: `Library: added unidentified movie "<title>" (<year>), id=…`.
 
 Everything after that in `relinkOrphans` is unchanged: pin `folderName`,
 `linkExistingFileInPlace` per file, `postImportQueue.enqueue`, the
@@ -184,7 +184,7 @@ Everything after that in `relinkOrphans` is unchanged: pin `folderName`,
 ### 1.3 Helper
 
 `backend/src/modules/media/media-identity.util.ts` (or inside the entity as a
-getter — pick the entity getter only if it doesn't need `@Expose`):
+getter, pick the entity getter only if it doesn't need `@Expose`):
 
 ```ts
 export const hasProviderId = (m: Pick<Media, 'tmdbId' | 'tvdbId' | 'imdbId'>) =>
@@ -205,7 +205,7 @@ Phase 3.
 - `media-import.service` spec: `createUnmatched` sets `monitored: false`,
   `status: released`, emits `media.imported` with `tmdbId: null`.
 
-## Phase 2 — client: the scan panel offers "add without metadata"
+## Phase 2: client, the scan panel offers "add without metadata"
 
 `client/src/app/features/settings/libraries/library-detail/orphan-scan-panel/`.
 
@@ -225,7 +225,7 @@ what a null pick *means*: today it's "skip", after this it's "add as is".
   counts groups whose request failed to build (in practice zero). Return
   `{ queued, unmatched }` so the wizard toast can say how many landed without
   metadata.
-- `autoImportAll`: unchanged — it still picks the best provider match when
+- `autoImportAll`: unchanged, it still picks the best provider match when
   there is one; when `bestMatch` returns null it now links unmatched instead
   of leaving the group behind.
 - `pendingGroups` / `hasLinkable`: drop the `g.pick` condition.
@@ -260,7 +260,7 @@ forced to `false` on that body.
 PR (Phases 1 + 2 together, they are useless apart):
 `feat(libraries): add unidentified titles from the orphan scan instead of skipping them`.
 
-## Phase 3 — display and admin tooling for unidentified titles
+## Phase 3: display and admin tooling for unidentified titles
 
 ### 3.1 Detail page
 
@@ -283,7 +283,7 @@ PR (Phases 1 + 2 together, they are useless apart):
 ### 3.2 Cards and rows
 
 No change to `media-card`. Optional: a tiny "?" corner badge for admins on
-unmatched cards — skip unless the admin filter below proves insufficient.
+unmatched cards, skip unless the admin filter below proves insufficient.
 
 ### 3.3 Admin filter
 
@@ -302,7 +302,7 @@ unmatched cards — skip unless the admin filter below proves insufficient.
 
 PR: `feat(media-detail): surface unidentified titles and let admins filter and identify them`.
 
-## Phase 4 — metadata from the disk (the Jellyfin part worth copying)
+## Phase 4: metadata from the disk
 
 Applied only in `createUnmatched` and only when the field is still empty.
 
@@ -316,10 +316,10 @@ cheerio. `readForVideoFile` merges per key the same way it does today.
 
 `OrphanGroup.nfo` already flows to the client; the panel can prefill the
 query field from `nfo.title` (it does) and the backend uses the full NFO at
-create time — re-read server-side from the sample file rather than trusting
+create time, re-read server-side from the sample file rather than trusting
 the client copy.
 
-Spec: `nfo-metadata.service.spec.ts` (new) — a full Kodi movie NFO and a
+Spec: `nfo-metadata.service.spec.ts` (new): a full Kodi movie NFO and a
 `tvshow.nfo`, plus malformed XML → `{}`.
 
 ### 4.2 Sibling artwork
@@ -329,8 +329,9 @@ Spec: `nfo-metadata.service.spec.ts` (new) — a full Kodi movie NFO and a
 Add `storeFromDisk(absPath, type, id, variant)` whose sidecar `url` is
 `file://<abs>@<mtimeMs>` so the cache-hit path stays valid.
 
-`backend/src/modules/imports/local-artwork.util.ts` — pure candidate list,
-Jellyfin's conventions, first hit wins, extensions `jpg|jpeg|png|webp`:
+`backend/src/modules/imports/local-artwork.util.ts`: pure candidate list,
+the usual media-center sidecar conventions (Kodi-style names), first hit wins,
+extensions `jpg|jpeg|png|webp`:
 
 - Movie poster: `<basename>-poster`, `poster`, `folder`, `cover`, `movie`.
 - Movie fanart: `<basename>-fanart`, `fanart`, `backdrop`.
@@ -349,11 +350,11 @@ cache hit).
 
 ffprobe already returns `format.tags`. If `tags.title` exists and the
 filename-derived title is a bare release name, prefer `tags.title`. Only if
-4.1/4.2 leave real gaps in practice — flag it, do not build it now.
+4.1/4.2 leave real gaps in practice, flag it, do not build it now.
 
 PR: `feat(imports): read local nfo fields and sibling artwork for unidentified titles`.
 
-## Phase 5 — files directly under the library root
+## Phase 5: files directly under the library root
 
 Today: `folderName: ''` → `media.path` getter returns `null` →
 `linkExistingFileInPlace` refuses → the scan lists them as "skipped".
@@ -363,16 +364,16 @@ definition) and make `media.path` fall back to `library.path`. Everything that
 treats `media.path` as "the folder I own" must be audited because the root is
 now a possible answer:
 
-- `MediaMutationService.resolveSafeMediaDir` — already returns `null` when
+- `MediaMutationService.resolveSafeMediaDir`: already returns `null` when
   `resolvedDir === resolvedRoot`. Keep, add a spec asserting it.
-- `LibraryIngestService.ingest` — refuse a media whose `folderName` is empty
+- `LibraryIngestService.ingest`: refuse a media whose `folderName` is empty
   (a grab must never land loose files at the root). Today it throws on
   `!media.path`; it must throw on `!media.folderName` instead.
-- `NamingService` rename / reorganize — refuse (already refused for
+- `NamingService` rename / reorganize: refuse (already refused for
   unmatched; a root movie can be identified later, so check `folderName` too).
-- `DiskImportService.scanLibraryOrphans` `linkedSet` — uses
+- `DiskImportService.scanLibraryOrphans` `linkedSet`: uses
   `f.media?.path ?? library.path`, fine.
-- `doRescanMissingFiles` / `rescanMediaList` — a root movie's "folder" is the
+- `doRescanMissingFiles` / `rescanMediaList`: a root movie's "folder" is the
   whole library; the rescan must only look at its own `relativePath`, not walk
   the root. Check `MediaRescanService.rescan` before enabling.
 - Orphan scan: loose movie files become groups with `folderName: ''` and
@@ -395,7 +396,7 @@ PR: `feat(libraries): link movie files that sit directly under the library root`
   `ThumbnailService` sprite pipeline already decodes the file; a
   `-ss <10 %> -frames:v 1` extraction stored via `storeFromDisk` as `poster`
   is ~40 lines. Do it only if placeholders turn out to be a real complaint.
-- **Local artwork for matched titles** (Jellyfin's "prefer local").
+- **Local artwork for matched titles** (a local-over-remote artwork preference).
 - **Dedup by title/year** in `findByTmdbId` callers so a request for an
   unmatched title that is already on disk is caught.
 - **Auto-identify job** for unmatched titles (year + exact title from the
@@ -420,7 +421,7 @@ builds go to `/tmp/fliks-verify` (`dist/` is root-owned on the dev machine).
 
 1. Wizard default: when a group has no provider match, add it unmatched
    silently (with a count toast) or stop and ask? Plan assumes **add
-   silently** — a library that shows everything is the point.
+   silently**, a library that shows everything is the point.
 2. Should `autoImportAll` on the library page also link groups with *no*
    provider result as unmatched? Plan assumes **yes** (same rule as the
    wizard).
