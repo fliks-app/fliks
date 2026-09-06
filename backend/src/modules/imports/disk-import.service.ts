@@ -6,13 +6,14 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 import { sanitizeFsPath } from '../../common/utils/fs-path.util';
 import { Media } from '../media/entities/media.entity';
+import { hasProviderId } from '../media/media-identity.util';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { Season } from '../media/entities/season.entity';
 import { Episode } from '../media/entities/episode.entity';
@@ -432,51 +433,14 @@ export class DiskImportService {
         `Library "${library.name}" does not accept ${dto.type}`,
       );
     }
-
-    const externalIdNum = Number(dto.externalId);
-    const where =
-      dto.provider === 'tvdb'
-        ? { tvdbId: externalIdNum, type: dto.type }
-        : { tmdbId: externalIdNum, type: dto.type };
-
-    let media = await this.mediaRepo.findOne({
-      where,
-      relations: ['library', 'files'],
-    });
-    let created = false;
-    if (!media) {
-      try {
-        const imported = await this.mediaService.importMedia(
-          {
-            type: dto.type,
-            externalId: dto.externalId,
-            provider: dto.provider,
-            libraryId: dto.libraryId,
-            qualityProfileId: dto.qualityProfileId,
-            languageProfileId: dto.languageProfileId,
-          },
-          addedByUserId,
-        );
-        media = await this.mediaRepo.findOne({
-          where: { id: imported.id },
-          relations: ['library', 'files'],
-        });
-        created = true;
-      } catch (e) {
-        // Two orphan files of the same title (e.g. multiple editions, or the
-        // auto-import linking siblings in parallel) can both reach the create
-        // branch before either insert lands, tripping the unique (type,tmdbId)
-        // constraint. Re-fetch and reuse the row the other request created.
-        media = await this.mediaRepo.findOne({
-          where,
-          relations: ['library', 'files'],
-        });
-        if (!media) throw e;
-      }
+    if (!dto.externalId && dto.reorganize) {
+      throw new BadRequestException('Reorganize needs an identified title');
     }
-    if (!media) {
-      throw new BadRequestException('Media not found after import');
-    }
+
+    const { media, created } = dto.externalId
+      ? await this.findOrImportIdentified(dto, addedByUserId)
+      : await this.findOrCreateUnmatched(dto, library, addedByUserId);
+
     if (media.library && media.library.id !== dto.libraryId) {
       throw new BadRequestException(
         `Media already belongs to another library ("${media.library.name}")`,
@@ -582,7 +546,8 @@ export class DiskImportService {
     }
 
     // Backfill metadata for any season/episode slot invented while linking.
-    if (media.type === MediaType.SERIES && slotCreated) {
+    // An unmatched media has no provider id to refresh from, it would just throw.
+    if (media.type === MediaType.SERIES && slotCreated && hasProviderId(media)) {
       try {
         await this.metadata.refreshSeriesEpisodes(media);
       } catch (e) {
@@ -596,6 +561,102 @@ export class DiskImportService {
       `Orphan relink — media #${media.id} created=${created} linked=${linked} errors=${errors.length}`,
     );
     return { mediaId: media.id, created, linked, errors };
+  }
+
+  /** Reuse the media holding this external id, or import it. */
+  private async findOrImportIdentified(
+    dto: RelinkOrphansDto,
+    addedByUserId: number | null,
+  ): Promise<{ media: Media; created: boolean }> {
+    const externalIdNum = Number(dto.externalId);
+    const where =
+      dto.provider === 'tvdb'
+        ? { tvdbId: externalIdNum, type: dto.type }
+        : { tmdbId: externalIdNum, type: dto.type };
+
+    let media = await this.mediaRepo.findOne({
+      where,
+      relations: ['library', 'files'],
+    });
+    let created = false;
+    if (!media) {
+      try {
+        const imported = await this.mediaService.importMedia(
+          {
+            type: dto.type,
+            externalId: dto.externalId!,
+            provider: dto.provider,
+            libraryId: dto.libraryId,
+            qualityProfileId: dto.qualityProfileId,
+            languageProfileId: dto.languageProfileId,
+          },
+          addedByUserId,
+        );
+        media = await this.mediaRepo.findOne({
+          where: { id: imported.id },
+          relations: ['library', 'files'],
+        });
+        created = true;
+      } catch (e) {
+        // Two orphan files of the same title (e.g. multiple editions, or the
+        // auto-import linking siblings in parallel) can both reach the create
+        // branch before either insert lands, tripping the unique (type,tmdbId)
+        // constraint. Re-fetch and reuse the row the other request created.
+        media = await this.mediaRepo.findOne({
+          where,
+          relations: ['library', 'files'],
+        });
+        if (!media) throw e;
+      }
+    }
+    if (!media) {
+      throw new BadRequestException('Media not found after import');
+    }
+    return { media, created };
+  }
+
+  /**
+   * No external id: reuse the media already pinned to this folder, or create one from the
+   * guessed/corrected title. Natural key is (library, type, folderName).
+   */
+  private async findOrCreateUnmatched(
+    dto: RelinkOrphansDto,
+    library: Library,
+    addedByUserId: number | null,
+  ): Promise<{ media: Media; created: boolean }> {
+    const existing = await this.mediaRepo.findOne({
+      where: {
+        library: { id: library.id },
+        type: dto.type,
+        folderName: dto.folderName,
+        tmdbId: IsNull(),
+        tvdbId: IsNull(),
+        imdbId: IsNull(),
+      },
+      relations: ['library', 'files'],
+    });
+    if (existing) return { media: existing, created: false };
+
+    const created = await this.mediaService.createUnmatched(
+      {
+        title: dto.title?.trim() || dto.folderName,
+        year: dto.year,
+        type: dto.type,
+        libraryId: dto.libraryId,
+        folderName: dto.folderName,
+        qualityProfileId: dto.qualityProfileId,
+        languageProfileId: dto.languageProfileId,
+      },
+      addedByUserId,
+    );
+    const media = await this.mediaRepo.findOne({
+      where: { id: created.id },
+      relations: ['library', 'files'],
+    });
+    if (!media) {
+      throw new BadRequestException('Media not found after import');
+    }
+    return { media, created: true };
   }
 
   async scanFolder(folderPath: string): Promise<ScanCandidate[]> {

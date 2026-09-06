@@ -94,7 +94,7 @@ export class OrphanScanPanelComponent {
   readonly reorganize = signal(true);
 
   readonly pendingGroups = computed(() =>
-    this.groups().filter((g) => !g.done && g.pick && !g.linking),
+    this.groups().filter((g) => !g.done && !g.linking),
   );
 
   readonly hasLinkable = computed(() =>
@@ -197,50 +197,69 @@ export class OrphanScanPanelComponent {
     );
   }
 
-  /**
-   * Queue every detected group for import into a library that now exists.
-   * A group the admin left untouched takes the provider's first result.
-   * Returns once the batch is queued: the server imports in the background.
-   */
-  async importAll(libraryId: number): Promise<{ queued: number; skipped: number }> {
-    const pending = this.groups()
-      .map((g, i) => (g.done ? -1 : i))
-      .filter((i) => i >= 0);
-    const unsearched = pending.filter((i) => !this.groups()[i].searched);
+  /** Search every listed group not yet searched, capped at SEARCH_CONCURRENCY concurrent requests. */
+  private async searchBatched(indices: number[]) {
+    const unsearched = indices.filter((i) => !this.groups()[i].searched);
     for (let s = 0; s < unsearched.length; s += SEARCH_CONCURRENCY) {
       await Promise.all(
         unsearched.slice(s, s + SEARCH_CONCURRENCY).map((i) => this.search(i)),
       );
     }
+  }
+
+  /**
+   * Queue every detected group for import into a library that now exists.
+   * A group the admin left untouched takes the provider's first result; a
+   * group with no pick (no match, or explicitly deselected) is added unmatched.
+   * A group whose search errored is left alone (still visible with its alert)
+   * rather than queued unmatched. Returns once the batch is queued: the
+   * server imports in the background.
+   */
+  async importAll(libraryId: number): Promise<{ queued: number; unmatched: number; failed: number }> {
+    const pending = this.groups()
+      .map((g, i) => (g.done ? -1 : i))
+      .filter((i) => i >= 0);
+    await this.searchBatched(pending);
 
     const items: RelinkOrphansBody[] = [];
-    let skipped = 0;
+    let unmatched = 0;
+    let failed = 0;
     for (const i of pending) {
-      // The search selects the first result, so an empty pick is a deselection:
-      // the group is skipped rather than imported against a row nobody chose.
       const vm = this.groups()[i];
-      if (vm.pick) items.push(this.relinkBody(libraryId, vm.group, vm.pick));
-      else skipped++;
+      if (vm.error) {
+        failed++;
+        continue;
+      }
+      items.push(this.relinkBody(libraryId, vm, vm.pick));
+      if (!vm.pick) unmatched++;
     }
     if (items.length) await this.importsApi.relinkOrphansBatch(items);
-    return { queued: items.length, skipped };
+    return { queued: items.length, unmatched, failed };
   }
 
   private relinkBody(
     libraryId: number,
-    group: OrphanGroup,
-    pick: MetadataSearchResult,
+    vm: GroupVM,
+    pick: MetadataSearchResult | null,
   ): RelinkOrphansBody {
+    const group = vm.group;
     return {
       libraryId,
       type: group.mediaType,
-      externalId:
-        pick.provider === 'tvdb' && pick.tvdbId != null
-          ? String(pick.tvdbId)
-          : String(pick.tmdbId),
-      provider: pick.provider,
+      ...(pick
+        ? {
+            externalId:
+              pick.provider === 'tvdb' && pick.tvdbId != null
+                ? String(pick.tvdbId)
+                : String(pick.tmdbId),
+            provider: pick.provider,
+          }
+        : {
+            title: vm.query.trim() || group.guessTitle || group.folderName,
+            year: vm.year ?? undefined,
+          }),
       folderName: group.folderName,
-      reorganize: this.reorganize(),
+      reorganize: pick ? this.reorganize() : false,
       files: group.files.map((f) => ({
         filePath: f.filePath,
         seasonNumber: f.seasonNumber ?? undefined,
@@ -321,14 +340,18 @@ export class OrphanScanPanelComponent {
     this.patch(index, { pick: same ? null : result, fromNfo: false });
   }
 
+  /** The "add as is" pseudo-option: always sets an unmatched pick, no toggle. */
+  pickUnmatched(index: number) {
+    this.patch(index, { pick: null, fromNfo: false });
+  }
+
   async link(index: number) {
     const vm = this.groups()[index];
-    if (!vm?.pick || vm.linking || vm.done) return;
-    const pick = vm.pick;
+    if (!vm || vm.linking || vm.done) return;
     this.patch(index, { linking: true, error: '' });
     try {
       const res = await this.importsApi.relinkOrphans(
-        this.relinkBody(this.libraryId, vm.group, pick),
+        this.relinkBody(this.libraryId, vm, vm.pick),
       );
       if (res.linked > 0) {
         this.anyLinked.set(true);
@@ -359,9 +382,11 @@ export class OrphanScanPanelComponent {
   async linkAll() {
     const indices = this.groups()
       .map((g, i) => ({ g, i }))
-      .filter(({ g }) => !g.done && g.pick && !g.linking)
+      .filter(({ g }) => !g.done && !g.linking)
       .map(({ i }) => i);
+    await this.searchBatched(indices);
     for (const i of indices) {
+      if (this.groups()[i].error) continue;
       await this.link(i);
     }
   }
@@ -386,8 +411,9 @@ export class OrphanScanPanelComponent {
     const vm = this.groups()[index];
     if (vm.done || vm.linking) return;
     if (!vm.searched) await this.search(index);
+    if (this.groups()[index].error) return;
+    // No provider match: still add it, unmatched, rather than leave it behind.
     const best = this.bestMatch(this.groups()[index]);
-    if (!best) return;
     this.patch(index, { pick: best });
     await this.link(index);
   }

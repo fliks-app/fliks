@@ -65,11 +65,16 @@ const scanResult = (folders: string[]): OrphanScanResult => ({
 
 function setup(folders: string[], metadataOverrides: Record<string, unknown> = {}) {
   const relinked: RelinkOrphansBody[] = [];
+  const linked: RelinkOrphansBody[] = [];
   const importsApi = {
     previewOrphans: () => Promise.resolve(scanResult(folders)),
     relinkOrphansBatch: (items: RelinkOrphansBody[]) => {
       relinked.push(...items);
       return Promise.resolve({ queued: items.length });
+    },
+    relinkOrphans: (body: RelinkOrphansBody) => {
+      linked.push(body);
+      return Promise.resolve({ mediaId: 1, created: true, linked: body.files.length, errors: [] });
     },
   };
   const metadata = {
@@ -91,7 +96,7 @@ function setup(folders: string[], metadataOverrides: Record<string, unknown> = {
     ],
   });
   const fixture = TestBed.createComponent(OrphanScanPanelComponent);
-  return { panel: fixture.componentInstance, relinked };
+  return { panel: fixture.componentInstance, relinked, linked };
 }
 
 describe('OrphanScanPanelComponent.importAll', () => {
@@ -99,20 +104,26 @@ describe('OrphanScanPanelComponent.importAll', () => {
     const { panel, relinked } = setup(['Alpha', 'Beta']);
     await panel.scanPath('/medias', ['movie'], 'tmdb');
 
-    expect(await panel.importAll(7)).toEqual({ queued: 2, skipped: 0 });
+    expect(await panel.importAll(7)).toEqual({ queued: 2, unmatched: 0, failed: 0 });
     expect(relinked.map((b) => [b.folderName, b.externalId, b.libraryId])).toEqual([
       ['Alpha', '11', 7],
       ['Beta', '11', 7],
     ]);
   });
 
-  it('skips a group whose default pick was deselected', async () => {
+  it('adds a group whose default pick was deselected as unmatched, without dropping it', async () => {
     const { panel, relinked } = setup(['Alpha', 'Beta']);
     await panel.scanPath('/medias', ['movie'], 'tmdb');
     panel.pick(0, panel.groups()[0].pick!); // clicking the selected row clears it
 
-    expect(await panel.importAll(7)).toEqual({ queued: 1, skipped: 1 });
-    expect(relinked.map((b) => b.folderName)).toEqual(['Beta']);
+    expect(await panel.importAll(7)).toEqual({ queued: 2, unmatched: 1, failed: 0 });
+    const alpha = relinked.find((b) => b.folderName === 'Alpha')!;
+    expect(alpha.externalId).toBeUndefined();
+    expect(alpha.title).toBe('Alpha');
+    expect(alpha.year).toBe(2001);
+    expect(alpha.reorganize).toBe(false);
+    const beta = relinked.find((b) => b.folderName === 'Beta')!;
+    expect(beta.externalId).toBe('11');
   });
 
   it('selects the first result as soon as a group is searched', async () => {
@@ -130,6 +141,54 @@ describe('OrphanScanPanelComponent.importAll', () => {
 
     await panel.importAll(7);
     expect(relinked[0].externalId).toBe('22');
+  });
+});
+
+describe('OrphanScanPanelComponent.linkAll', () => {
+  it('searches a not-yet-searched group before linking it, rather than adding it unmatched blind', async () => {
+    const folders = Array.from({ length: 25 }, (_, i) => `F${i}`);
+    const { panel, linked } = setup(folders);
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+    // Page 2 was never opened, so its groups never went through search().
+    expect(panel.groups()[24].searched).toBe(false);
+
+    await panel.linkAll();
+
+    expect(panel.groups()[24].searched).toBe(true);
+    const last = linked.find((b) => b.folderName === 'F24');
+    expect(last?.externalId).toBe('11');
+  });
+});
+
+describe('OrphanScanPanelComponent: a group whose search errored', () => {
+  const withOneFailing = (folders: string[], failing: string) =>
+    setup(folders, {
+      searchMovie: (query: string) =>
+        query === failing
+          ? Promise.reject({ status: 500, error: {} })
+          : Promise.resolve([result(11, 'First')]),
+    });
+
+  it('is not queued by importAll, and is counted as failed', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { panel, relinked } = withOneFailing(['Alpha', 'Beta'], 'Beta');
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+
+    expect(await panel.importAll(7)).toEqual({ queued: 1, unmatched: 0, failed: 1 });
+    expect(relinked.map((b) => b.folderName)).toEqual(['Alpha']);
+  });
+
+  it('is not linked unmatched by autoImportAll', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { panel, linked } = withOneFailing(['Alpha', 'Beta'], 'Beta');
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+    expect(panel.groups()[1].error).toBeTruthy();
+
+    await panel.autoImportAll();
+
+    expect(panel.groups()[1].done).toBe(false);
+    expect(linked.some((b) => b.folderName === 'Beta')).toBe(false);
+    expect(linked.some((b) => b.folderName === 'Alpha')).toBe(true);
   });
 });
 

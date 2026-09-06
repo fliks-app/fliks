@@ -1958,7 +1958,6 @@
       "scan_folder": "Analyser le dossier",
       "scan_required": "Analysez le dossier pour vérifier les médias trouvés avant de créer la bibliothèque.",
       "scan_queued": "Import de {{count}} médias lancé en arrière-plan.",
-      "scan_unmatched": "{{count}} dossier(s) non reconnu(s) : relancez « Analyser le dossier » depuis l'onglet Médias pour les associer.",
       "scan_title": "Analyse du dossier",
       "scan_scanning": "Analyse des fichiers en cours…",
       "scan_progress": "Analyse de {{done}}/{{total}} fichiers…",
@@ -1984,7 +1983,13 @@
       "scan_nothing_linked": "Aucun fichier lié (doublon déjà présent dans le média).",
       "scan_error": "Échec de l'analyse.",
       "scan_loose_skipped": "{{count}} fichier(s) à la racine ignoré(s) — déplacez-les dans un sous-dossier pour les lier.",
-      "scan_files": "{{count}} fichier(s)"
+      "scan_files": "{{count}} fichier(s)",
+      "scan_add_unmatched": "Ajouter sans métadonnées",
+      "scan_unmatched_badge": "Sans métadonnées",
+      "scan_unmatched_option": "Aucune correspondance : ajouter tel quel",
+      "scan_reorganize_needs_match": "Le déplacement/renommage ne s'applique qu'aux titres identifiés",
+      "scan_queued_unmatched": "{{count}} titre(s) ajouté(s) sans métadonnées, identifiez-les depuis l'onglet Médias",
+      "scan_search_failed_count": "{{count}} dossier(s) non analysé(s) (recherche en erreur), relancez l'analyse depuis l'onglet Médias"
     },
     "users": {
       "title": "Utilisateurs",

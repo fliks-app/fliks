@@ -67,6 +67,8 @@
                 <span class="badge badge-success badge-sm">{{ 'common.saved' | translate }}</span>
               } @else if (vm.pick) {
                 <span class="badge badge-primary badge-sm truncate max-w-40">{{ vm.pick.title }}</span>
+              } @else if (vm.searched) {
+                <span class="badge badge-ghost badge-sm">{{ 'settings.libraries.scan_unmatched_badge' | translate }}</span>
               }
             </div>
             <div class="collapse-content">
@@ -102,6 +104,26 @@
                   }
 
                   <div class="flex flex-col gap-1 max-h-60 overflow-auto">
+                    @if (vm.searched) {
+                      <button type="button"
+                        class="relative flex items-center gap-3 p-2 rounded-lg text-left border-2 hover:bg-base-300/50"
+                        [class.bg-base-300]="!vm.pick"
+                        [class.border-primary]="!vm.pick"
+                        [class.border-transparent]="!!vm.pick"
+                        (click)="pickUnmatched(i)">
+                        @if (!vm.pick) {
+                          <span class="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-content">
+                            <svg lucideCheck class="h-3 w-3"></svg>
+                          </span>
+                        }
+                        <div class="h-14 w-9 rounded bg-base-300 shrink-0"></div>
+                        <div class="min-w-0">
+                          <span class="font-medium truncate italic text-base-content/70">
+                            {{ 'settings.libraries.scan_unmatched_option' | translate }}
+                          </span>
+                        </div>
+                      </button>
+                    }
                     @for (r of vm.results; track key(r)) {
                       <button type="button"
                         class="relative flex items-center gap-3 p-2 rounded-lg text-left border-2 hover:bg-base-300/50"
@@ -141,11 +163,14 @@
                   @if (!deferLink()) {
                     <div class="flex justify-end">
                       <button type="button" class="btn btn-sm btn-primary"
-                        (click)="link(i)" [disabled]="!vm.pick || vm.linking">
+                        [title]="(reorganize() && !vm.pick) ? ('settings.libraries.scan_reorganize_needs_match' | translate) : ''"
+                        (click)="link(i)" [disabled]="vm.linking || vm.searching">
                         @if (vm.linking) { <span class="loading loading-spinner loading-xs"></span> }
                         {{ (vm.pick?.existingMediaId
                           ? 'settings.libraries.scan_relink_existing'
-                          : 'settings.libraries.scan_link') | translate }}
+                          : vm.pick
+                            ? 'settings.libraries.scan_link'
+                            : 'settings.libraries.scan_add_unmatched') | translate }}
                       </button>
                     </div>
                   }

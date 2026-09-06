@@ -57,8 +57,11 @@ export interface RelinkFile {
 export interface RelinkOrphansBody {
   libraryId: number;
   type: MediaType;
-  externalId: string;
+  externalId?: string;
   provider?: string;
+  /** Used only when `externalId` is absent, to create an unmatched title. */
+  title?: string;
+  year?: number;
   qualityProfileId?: number;
   languageProfileId?: number;
   folderName: string;

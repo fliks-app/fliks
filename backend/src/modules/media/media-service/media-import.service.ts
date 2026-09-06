@@ -23,7 +23,7 @@ import {
   SeasonDetails,
 } from '../../metadata-providers/interfaces/metadata-provider.interface';
 import { MetadataLanguageOverride } from '../../metadata-providers/metadata-settings-cache.service';
-import { MediaType } from '../../../common/enums';
+import { MediaType, MediaStatus } from '../../../common/enums';
 import { RequestLifecycleService } from '../../requests/request-lifecycle.service';
 import { ProfilesService } from '../../profiles/profiles.service';
 import { QualityProfile } from '../../profiles/entities/quality-profile.entity';
@@ -375,6 +375,69 @@ export class MediaImportService {
       if (cross) return cross.id;
     }
     return null;
+  }
+
+  /**
+   * Create a title no metadata provider matched, straight from the orphan scan's guessed title.
+   * No provider call, no images, no cast: an Identify later fills those in.
+   */
+  async createUnmatched(
+    dto: {
+      title: string;
+      year?: number | null;
+      type: MediaType;
+      libraryId: number;
+      folderName: string;
+      qualityProfileId?: number;
+      languageProfileId?: number;
+    },
+    addedByUserId: number | null = null,
+  ): Promise<Media> {
+    const qualityProfileId =
+      await this.profiles.resolveQualityProfileIdForImport(
+        dto.qualityProfileId,
+      );
+    const languageProfileId =
+      await this.profiles.resolveLanguageProfileIdForImport(
+        dto.languageProfileId,
+      );
+
+    const row = this.mediaRepo.create({
+      title: dto.title,
+      originalTitle: dto.title,
+      year: dto.year ?? undefined,
+      type: dto.type,
+      status: MediaStatus.RELEASED,
+      monitored: false,
+      alternativeTitles: [],
+      genres: [],
+      library: { id: dto.libraryId } as Library,
+      folderName: dto.folderName,
+      ...(qualityProfileId != null
+        ? { qualityProfile: { id: qualityProfileId } as QualityProfile }
+        : {}),
+      ...(languageProfileId != null
+        ? { languageProfile: { id: languageProfileId } as LanguageProfile }
+        : {}),
+      ...(addedByUserId ? { addedBy: { id: addedByUserId } as User } : {}),
+    });
+    const saved = await this.mediaRepo.save(row);
+    await this.metadata.updateSearchVector(saved.id);
+    this.events.emitDomain({
+      type: 'media.imported',
+      mediaId: saved.id,
+      tmdbId: null,
+      mediaType: dto.type,
+      libraryId: dto.libraryId,
+      addedByUserId: addedByUserId ?? null,
+    });
+    const year = dto.year ? ` (${dto.year})` : '';
+    this.log.log(
+      `Library: added unidentified ${dto.type} "${dto.title}"${year}, id=${saved.id}`,
+    );
+    const reloaded = await this.mediaRepo.findOne({ where: { id: saved.id } });
+    if (!reloaded) throw new Error(`Media #${saved.id} not found after save`);
+    return reloaded;
   }
 
   async create(dto: CreateMediaDto): Promise<Media> {
