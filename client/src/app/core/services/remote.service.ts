@@ -369,9 +369,12 @@ export class RemoteService {
     if (cmd.mediaId) queryParams['mediaId'] = cmd.mediaId;
     if (cmd.episodeId) queryParams['episodeId'] = cmd.episodeId;
     if (cmd.positionSeconds !== undefined) queryParams['t'] = Math.floor(cmd.positionSeconds);
-    // Force a remount so the same file reloads too, which is what lets this
-    // work identically whether or not a player is already on screen.
-    await this.router.navigateByUrl('/', { skipLocationChange: true });
+    // Only a player already on screen needs the bounce, to remount on a load
+    // the router would otherwise consider the same route: from anywhere else it
+    // just flashed the home page on the way to the film.
+    if (this.router.url.startsWith('/watch')) {
+      await this.router.navigateByUrl('/', { skipLocationChange: true });
+    }
     await this.router.navigate(['/watch', cmd.mediaFileId], { queryParams });
   }
 

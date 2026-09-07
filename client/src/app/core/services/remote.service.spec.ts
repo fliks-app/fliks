@@ -251,6 +251,46 @@ describe('RemoteService stop handling', () => {
 });
 
 describe('RemoteService applyLoad', () => {
+  function loadCmd(): RemoteCommand {
+    return {
+      type: 'remote.command',
+      cmdId: 'cmd-load',
+      expiresAt: Date.now() + 10_000,
+      byTargetId: null,
+      action: 'load',
+      mediaFileId: 42,
+      positionSeconds: 0,
+    };
+  }
+
+  /** A load from a detail page went home first, so the target flashed the home
+   *  page before the film instead of opening it. */
+  it('goes straight to the player from anywhere but a player', async () => {
+    setup();
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    const bounceSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    vi.spyOn(router, 'url', 'get').mockReturnValue('/movies/7');
+
+    TestBed.inject(SseService).commands.next(loadCmd());
+
+    await vi.waitFor(() => expect(navigateSpy).toHaveBeenCalled());
+    expect(bounceSpy).not.toHaveBeenCalled();
+  });
+
+  it('remounts a player already on screen', async () => {
+    setup();
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    const bounceSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    vi.spyOn(router, 'url', 'get').mockReturnValue('/watch/3');
+
+    TestBed.inject(SseService).commands.next(loadCmd());
+
+    await vi.waitFor(() => expect(navigateSpy).toHaveBeenCalled());
+    expect(bounceSpy).toHaveBeenCalledWith('/', { skipLocationChange: true });
+  });
+
   it('puts t=0 on the load url when the position is exactly zero', async () => {
     const { service } = setup();
     const router = TestBed.inject(Router);
