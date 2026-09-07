@@ -107,7 +107,9 @@ export function isFocusOptedOut(el: HTMLElement): boolean {
   // `a[href]` matches regardless of tabindex, so a media-card's inner links
   // (tabindex=-1 on TV) would otherwise show up as separate targets.
   if (el.getAttribute('tabindex') === '-1') return true;
-  // A collapsed section keeps its content laid out, just inert: it measures
-  // as visible but refuses focus, which dead-ends the move.
-  return !!el.closest('[inert]');
+  // `[inert]`: a collapsed section keeps its content laid out, just inert, so it
+  // measures as visible but refuses focus and dead-ends the move.
+  // `.modal-backdrop`: its click-outside button spans the viewport, so it wins
+  // every direction from inside a dialog and paints a full-screen focus ring.
+  return !!el.closest('[inert], .modal-backdrop');
 }

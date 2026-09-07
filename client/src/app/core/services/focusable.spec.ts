@@ -26,6 +26,11 @@ describe('focus opt-outs', () => {
     expect(isFocusOptedOut(section)).toBe(true);
   });
 
+  it('rejects the full-screen click-outside button of a modal backdrop', () => {
+    const form = html('<form class="modal-backdrop"><button>close</button></form>');
+    expect(isFocusOptedOut(form.querySelector('button') as HTMLElement)).toBe(true);
+  });
+
   it('takes the same element once its section is no longer inert', () => {
     const section = html('<div inert><a href="/x">x</a></div>');
     const link = section.querySelector('a') as HTMLElement;

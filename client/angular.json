@@ -54,6 +54,7 @@
             },
             "tizen": {
               "baseHref": "./",
+              "polyfills": ["src/tv-polyfills.ts"],
               "outputHashing": "all",
               "optimization": {
                 "scripts": true,
@@ -66,6 +67,7 @@
             },
             "webos": {
               "baseHref": "./",
+              "polyfills": ["src/tv-polyfills.ts"],
               "outputHashing": "all",
               "optimization": {
                 "scripts": true,
