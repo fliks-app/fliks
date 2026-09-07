@@ -2485,6 +2485,7 @@
     "idle_hint": "Pick a title and it will start here.",
     "starting_message": "Loading...",
     "offline_message": "This device isn't reachable anymore.",
+    "released_offline": "That device went offline, so it is no longer being controlled.",
     "play_here_instead": "Play here instead",
     "autoplay_blocked": "This device cannot start playback on its own. Press play on the device itself.",
     "grant_offer": "Show a code",

@@ -2458,6 +2458,7 @@
     "idle_hint": "Escolha um título e começará aqui.",
     "starting_message": "A carregar...",
     "offline_message": "Este dispositivo já não está acessível.",
+    "released_offline": "O dispositivo ficou offline, já não está a ser controlado.",
     "play_here_instead": "Reproduzir aqui",
     "autoplay_blocked": "Este dispositivo não consegue iniciar a reprodução sozinho. Prima reproduzir no próprio dispositivo.",
     "grant_offer": "Mostrar um código",
