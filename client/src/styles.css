@@ -105,15 +105,6 @@
   position: relative;
 }
 
-/* Router scroll-to-top on navigation goes through window.scrollTo, so smooth
-   here animates the jump instead of teleporting. Scroll restores that must land
-   instantly pass behavior:'instant'. */
-@media (prefers-reduced-motion: no-preference) {
-  html {
-    scroll-behavior: smooth;
-  }
-}
-
 /* Sidebar veil when a fanart background is showing — frosted
    look without depending on Tailwind's color-mix-based
    `bg-base-100/40`. Phones/tablets/desktop: 40 % alpha. TV: a
@@ -790,6 +781,10 @@ body.tv .mosaic-art > * > img:nth-child(4) {
    card at once and its snapshot came out with grey boxes for artwork. */
 html.nav-back .card-img-reveal {
   animation-duration: 0s;
+  /* `appSpoiler` puts a `transition` on the same img for its blur, and dropping
+     `opacity-0` on load rides it — so the artwork faded in on the way back even
+     with the reveal neutralised. Keep the blur eased, take opacity out. */
+  transition-property: filter, transform;
 }
 
 /* The opacity animation promotes the img to its own layer, and this WebView then
@@ -1223,18 +1218,84 @@ html.vt-poster-out::view-transition-new(.poster) {
   object-fit: cover;
 }
 
-/* A card scrolled out of its row still owns its real rect, so the box flies to
-   it over the sidebar or the native dock. Dropping the root snapshot leaves the
-   page itself painting under the pseudo-tree, so the box can be clipped to the
-   content area without the chrome going with it: the sidebar's translucent veil
-   then reads the live page behind it, not the poster passing under. */
-html.vt-poster-in,
-html.vt-poster-out {
-  view-transition-name: none;
+/* The root snapshot is what holds the chrome. Dropping it left the live page
+   painting under the pseudo-tree, and a `position: fixed` element that is not
+   itself captured is then dropped for the length of the transition once the
+   document is long enough — 45 000 px of library grid lost the dock, the topbar
+   and the alphabet column on Android while the in-flow cards painted fine. One
+   snapshot of the whole page cannot come apart that way. */
+
+/* The topbar and the hero's lead block are what the morph must pass under
+   rather than over, so both are captured and ordered above it. The bar's
+   frosted veil comes along: the snapshot bakes the blur of what it was over.
+   The lead block is named on the way in only — going back it has no half to
+   pair with, so it would be a lone layer fading out over the card list. */
+html.vt-poster-in nav.navbar,
+html.vt-poster-out nav.navbar {
+  view-transition-name: vt-topbar;
 }
-html.vt-poster-in::view-transition,
-html.vt-poster-out::view-transition {
-  clip-path: inset(0 0 var(--vt-chrome-bottom, 0px) var(--vt-chrome-left, 0px));
+html.vt-poster-in app-media-info-header [data-hero-lead] {
+  view-transition-name: vt-hero-lead;
+}
+/* The scrim the title reads against, as a mask on the picture rather than a
+   layer over it. An overlay is a second element: a view transition carries one,
+   so the gradient either stayed behind while the picture flew or, captured
+   beside it, brought a second copy of the image along. Masked, the fade is part
+   of what the image paints and travels with it for free. */
+.hero-fanart-fade {
+  mask-image: linear-gradient(to top, transparent 0, #000 38%);
+}
+/* The dock and the search button sit inside the root snapshot, so lifting the
+   lead block above root also lifted the overview — "voir plus" and all — in
+   front of them. They have to come along, ordered as they are on the settled
+   page: lead, then dock, then the button in its cradle. */
+html.vt-poster-in .dock,
+html.vt-poster-out .dock {
+  view-transition-name: vt-dock;
+}
+html.vt-poster-in [data-chrome-fab],
+html.vt-poster-out [data-chrome-fab] {
+  view-transition-name: vt-fab;
+}
+html.vt-poster-in::view-transition-group(vt-topbar),
+html.vt-poster-out::view-transition-group(vt-topbar),
+html.vt-poster-in::view-transition-group(vt-hero-lead) {
+  z-index: 2;
+}
+/* The bar is the same box on both sides, so it swaps rather than cross-fading —
+   opacity as well as the animation, or the outgoing bar stays stacked under the
+   incoming one and you get two logos at once. */
+html.vt-poster-in::view-transition-group(vt-topbar),
+html.vt-poster-out::view-transition-group(vt-topbar),
+html.vt-poster-in::view-transition-new(vt-topbar),
+html.vt-poster-out::view-transition-new(vt-topbar) {
+  animation: none;
+}
+html.vt-poster-in::view-transition-old(vt-topbar),
+html.vt-poster-out::view-transition-old(vt-topbar) {
+  animation: none;
+  opacity: 0;
+}
+html.vt-poster-in::view-transition-group(vt-dock),
+html.vt-poster-out::view-transition-group(vt-dock),
+html.vt-poster-in::view-transition-new(vt-dock),
+html.vt-poster-out::view-transition-new(vt-dock) {
+  z-index: 3;
+  animation: none;
+}
+html.vt-poster-in::view-transition-group(vt-fab),
+html.vt-poster-out::view-transition-group(vt-fab),
+html.vt-poster-in::view-transition-new(vt-fab),
+html.vt-poster-out::view-transition-new(vt-fab) {
+  z-index: 4;
+  animation: none;
+}
+html.vt-poster-in::view-transition-old(vt-dock),
+html.vt-poster-out::view-transition-old(vt-dock),
+html.vt-poster-in::view-transition-old(vt-fab),
+html.vt-poster-out::view-transition-old(vt-fab) {
+  animation: none;
+  opacity: 0;
 }
 
 /* Force the hero (poster) morph above root. The default pseudo-tree order
@@ -1247,6 +1308,10 @@ html.vt-poster-out::view-transition {
 }
 ::view-transition-group(root) {
   z-index: 0;
+  /* The pair does not cross-fade, so the group must not travel either: the two
+     roots are a short detail page and a 45 000 px library, and animating
+     between those geometries slid the whole page for the length of the trip. */
+  animation: none;
 }
 
 /* The card's own badges and progress bar ride above the poster that morphs

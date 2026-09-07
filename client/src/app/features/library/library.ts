@@ -32,6 +32,8 @@ import type {
   RecommendationItem,
 } from '../../core/services/api/streaming-api.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
+import { BackgroundService } from '../../core/services/background.service';
+import { DisplaySettingsService } from '../../core/services/display-settings.service';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { NavbarService } from '../../core/services/navbar.service';
@@ -43,7 +45,8 @@ import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-
 import { CardSkeletonComponent } from '../../shared/components/card-skeleton';
 import { ImportProgressBannerComponent } from '../../shared/components/import-progress-banner/import-progress-banner';
 import { NgTemplateOutlet } from '@angular/common';
-import { itemArtwork } from '../../shared/utils/media-artwork.util';
+import { fanartPool, itemArtwork } from '../../shared/utils/media-artwork.util';
+import { renderRowsForOffset } from '../../shared/utils/restore-virtual-rows';
 import { PlayableMediaService } from '../../core/services/playable-media.service';
 import {
   CdkVirtualScrollViewport,
@@ -112,6 +115,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly scrollMemory = inject(ScrollMemoryService);
+  private readonly background = inject(BackgroundService);
+  private readonly displaySettings = inject(DisplaySettingsService);
   readonly navbar = inject(NavbarService);
   private readonly tv = inject(TvService);
   private readonly injector = inject(Injector);
@@ -129,8 +134,36 @@ export class LibraryComponent implements OnInit, OnDestroy {
     onAttach: () => {
       const lib = this.library();
       if (lib) this.navbar.setPageTitle(lib.name);
+      if (lib) this.prerenderRestoredRows(`library-${lib.id}`);
+      this.applyBackground();
     },
   });
+
+  /** Renders the rows for the offset the scroll is about to be restored to —
+   *  see {@link renderRowsForOffset}. The flush is CDK's own: `ApplicationRef
+   *  .tick()` in its place leaves the rows in the DOM but unplaced, captured
+   *  thousands of pixels off screen, so the internal call is the only one that
+   *  does the whole job. */
+  private prerenderRestoredRows(key: string): void {
+    const y = this.scrollMemory.remembered(key);
+    const vp = this.viewport;
+    if (y == null || !vp) return;
+    const render = (vp as unknown as { _doChangeDetection?: () => void })._doChangeDetection;
+    renderRowsForOffset(vp, y, () => render?.call(vp));
+  }
+
+  /** Same fanart backdrop as the home page, from this library's own titles, so
+   *  the topbar keeps its frosted look here too — but only to fill a gap.
+   *  Opening a library from the home page keeps the image already showing; it is
+   *  coming back from a detail page, which clears the background on its way out,
+   *  that leaves nothing behind to look at. */
+  private applyBackground(): void {
+    if (this.background.url()) return;
+    this.background.applyPool(
+      fanartPool(this.list.all()),
+      this.displaySettings.settings().homeBackground,
+    );
+  }
   private queryParamSub?: Subscription;
   /** Set while a state-driven `syncQueryParams` is being applied to the
    *  URL, so the `queryParamMap` subscription that fires right after
@@ -446,6 +479,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.background.clear();
     this.scrollMemory.deactivate();
     this.list.destroy();
     if (this.onResize) window.removeEventListener('resize', this.onResize);
@@ -794,6 +828,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
         this.streamingApi.getWatchedMediaIds().catch(() => [] as number[]),
       ]);
       this.list.setItems(res.data, (m) => m.title);
+      this.applyBackground();
       this.watchedIds.set(new Set(watchedIds));
     } finally {
       if (!silent) this.loading.set(false);
@@ -809,7 +844,10 @@ export class LibraryComponent implements OnInit, OnDestroy {
         this.streamingApi.getWatchedMediaIds({ force: true }).catch(() => null),
       ]).then(([res, watchedIds]) => {
         if (gen !== this.loadGen) return;
-        if (res) this.list.setItems(res.data, (m) => m.title);
+        if (res) {
+          this.list.setItems(res.data, (m) => m.title);
+          this.applyBackground();
+        }
         if (watchedIds) this.watchedIds.set(new Set(watchedIds));
       });
     });

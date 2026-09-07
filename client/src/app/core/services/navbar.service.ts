@@ -248,13 +248,6 @@ export class NavbarService {
     this.pageTitle.set('');
     this.heroTitle.set(title);
     this.heroLogoUrl.set(logoUrl);
-    // Re-evaluate scrollAtTop from the actual position. Without this, the
-    // navbar stays opaque after returning from /watch — the scroll value
-    // is whatever the previous page left it at and no scroll event fires
-    // on a programmatic nav.
-    if (typeof window !== 'undefined') {
-      this.scrollAtTop.set(window.scrollY < 20);
-    }
   }
 
   leaveHeroPage() {

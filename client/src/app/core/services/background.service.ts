@@ -45,6 +45,19 @@ export class BackgroundService {
     this.url.set(next[Math.floor(Math.random() * next.length)]);
   }
 
+  /**
+   * Apply a fanart pool, or clear when the user has page backgrounds off. The
+   * pick stays stable for an unchanged pool, so a page holds the same image for
+   * as long as the user is on it.
+   */
+  applyPool(pool: readonly string[], enabled: boolean): void {
+    if (!enabled) {
+      this.clear();
+      return;
+    }
+    if (pool.length) this.setBackgrounds([...pool]);
+  }
+
   clear(): void {
     this.pool = [];
     this.url.set(null);

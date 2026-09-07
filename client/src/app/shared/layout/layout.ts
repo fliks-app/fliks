@@ -12,7 +12,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Title } from '@angular/platform-browser';
-import { RouterLink, RouterLinkActive, RouterOutlet, Router, NavigationEnd } from '@angular/router';
+import { RouterLink, RouterLinkActive, RouterOutlet, Router, NavigationEnd, Scroll } from '@angular/router';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Keyboard } from '@capacitor/keyboard';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -191,6 +191,10 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.title.setTitle(`${main} · ${this.translate.instant('app.name')}`);
   });
   private lastScrollY = 0;
+  /** NavigationEnd until the new page's navbar has painted: gates scroll
+   *  reads and, bound to the element, its CSS transition. */
+  readonly restorePending = signal(false);
+  private restoreFallback: ReturnType<typeof setTimeout> | undefined;
   private scrollRaf: number | null = null;
   private topSentinelObserver?: IntersectionObserver;
   /** TV never hides the navbar, so the scroll handler would exist only to
@@ -206,6 +210,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
     });
   };
   private readScroll(): void {
+    if (this.restorePending()) return;
     const y = window.scrollY;
     this.navbar.scrollAtTop.set(y < 20);
     if (Math.abs(y - this.lastScrollY) < 10) return;
@@ -316,7 +321,9 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.router.events
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(e => {
+        if (e instanceof Scroll) this.endScrollRestore();
         if (e instanceof NavigationEnd) {
+          this.beginScrollRestore();
           this.replayPageEnter();
           this.bottomMenuOpen.set(false);
           this.isHomeRoute.set(e.urlAfterRedirects === '/' || e.urlAfterRedirects.startsWith('/?'));
@@ -324,6 +331,36 @@ export class LayoutComponent implements OnInit, OnDestroy {
         }
       });
     this.syncNavbarTitleFromRoute();
+  }
+
+  /** A navigation swaps pages before the router restores the scroll, so reads
+   *  in between report the offset of the page being left. Seed the state the
+   *  restore is about to produce and hold reads until it lands. */
+  private beginScrollRestore(): void {
+    this.restorePending.set(true);
+    this.navbarHidden.set(false);
+    this.navbar.scrollAtTop.set(true);
+    clearTimeout(this.restoreFallback);
+    // The router owes us a Scroll event; don't stay deaf to scrolling if it
+    // never comes (in-memory scrolling turned off, a skipped navigation).
+    this.restoreFallback = setTimeout(() => this.endScrollRestore(), 1000);
+  }
+
+  /** Two frames, not now: this runs from the event stream that drives the
+   *  scroll, and the navbar must paint the new page once before re-arming. */
+  private endScrollRestore(): void {
+    if (!this.restorePending()) return;
+    clearTimeout(this.restoreFallback);
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        this.restorePending.set(false);
+        // Adopt the restored offset instead of reading it: a restore is not a
+        // gesture, and against a zero baseline it reads as one long scroll
+        // down — which hid the navbar on every return to a scrolled page.
+        this.lastScrollY = window.scrollY;
+        this.navbar.scrollAtTop.set(window.scrollY < 20);
+      }),
+    );
   }
 
   /** Restart the page-enter animation. Re-adding the class a frame later is
@@ -363,6 +400,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
       Keyboard.removeAllListeners();
     }
     if (this.sidebarCountsDebounceTimer) clearTimeout(this.sidebarCountsDebounceTimer);
+    clearTimeout(this.restoreFallback);
   }
 
   async refreshCounts() {

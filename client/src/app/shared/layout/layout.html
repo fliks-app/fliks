@@ -10,6 +10,7 @@
     <nav
       appTvRow
       class="navbar fixed left-0 right-0 z-30 transition-all duration-300 tv:px-[var(--page-p)] tv:static"
+      [style.transition]="restorePending() ? 'none' : null"
       [style.padding-top]="tv.isTv() ? 'calc(env(safe-area-inset-top, 0px) + var(--page-p) / 2)' : 'calc(env(safe-area-inset-top, 0px) + 4px)'"
       [class.top-0]="!tv.isTv() || tv.isTizen()"
       [class.top-4]="tv.isAndroidTv()"
@@ -217,6 +218,7 @@
            circle). Active (current route): inverted via routerLinkActive.
            Arbitrary variants suppress the DaisyUI .dock-active underline. -->
       <a routerLink="/search"
+         data-chrome-fab
          [routerLinkActive]="['dock-active', '!bg-primary', '!text-primary-content']"
          [routerLinkActiveOptions]="{ exact: false }"
          (click)="onSearchNavClick()"

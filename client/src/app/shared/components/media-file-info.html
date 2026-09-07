@@ -78,7 +78,11 @@
           @for (a of audioStreams(); track a.streamIndex) {
             <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-1 text-sm">
               @if (a.title || a.codec) {
-                <div><span class="text-base-content/50">{{ 'file_info.track_title' | translate }} :&nbsp;</span><span class="font-medium">{{ a.title ?? formatAudioTitle(a) }}</span></div>
+                <!-- `break-all`, like the path above: a track title is often the
+                     whole release name, one dotted token with nowhere to wrap, and
+                     this page cannot clip its overflow — `main` stays visible-x on
+                     a hero page so the fanart can bleed. -->
+                <div class="min-w-0"><span class="text-base-content/50">{{ 'file_info.track_title' | translate }} :&nbsp;</span><span class="font-medium break-all">{{ a.title ?? formatAudioTitle(a) }}</span></div>
               }
               <div><span class="text-base-content/50">{{ 'file_info.language' | translate }} :&nbsp;</span><span class="font-medium">{{ a.language }}</span></div>
               <div><span class="text-base-content/50">{{ 'file_info.codec' | translate }} :&nbsp;</span><span class="font-medium">{{ a.codec }}</span></div>

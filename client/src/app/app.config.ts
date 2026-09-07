@@ -51,7 +51,6 @@ import {
   leavingPosterPage,
   leafRoutePath,
   markViewTransition,
-  stampChromeInsets,
   WATCH_PATH,
 } from './shared/utils/view-transition';
 
@@ -148,7 +147,6 @@ export const appConfig: ApplicationConfig = {
                   (enteringPosterPage(from, to) && POSTER_IN_CLASS);
                 if (posterTrip) {
                   const root = document.documentElement;
-                  stampChromeInsets();
                   root.classList.add(posterTrip);
                   const done = () => root.classList.remove(posterTrip);
                   void transition.finished.then(done, done);

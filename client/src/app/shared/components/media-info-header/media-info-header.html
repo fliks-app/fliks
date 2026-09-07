@@ -5,9 +5,10 @@
     [appSpoiler]="spoilerImage()"
     [revealLabel]="'spoilers.reveal' | translate"
     [fanartUrl]="fanartUrl()"
+    [viewTransitionName]="episodeId() ? 'media-poster-ep-' + episodeId() : 'media-poster-' + mediaId()"
   />
 
-  <div class="-mt-16 relative z-20">
+  <div data-hero-lead class="-mt-16 relative z-20">
     <!-- Title -->
     <h1 class="text-3xl font-semibold tracking-tight leading-tight">
       @if (episodeLabel()) {
@@ -423,8 +424,12 @@
     <!-- min-h reserves the tallest child (a `select-sm`): the subtitle dropdown
          arrives after the video/audio labels, which are plain text. -->
     <div appTvRow class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-5 min-h-8">
-      <div class="flex items-center gap-2">
-        <span class="text-base-content/50">{{ 'media_info.video' | translate }}</span>
+      <!-- Every cell shrinks and every value wraps: a single long track label
+           (a commentary track names its whole channel layout) is otherwise wider
+           than the phone, and this page is the one that cannot clip its overflow
+           — `main` stays visible-x on a hero page so the fanart can bleed. -->
+      <div class="flex items-center gap-2 min-w-0">
+        <span class="shrink-0 text-base-content/50">{{ 'media_info.video' | translate }}</span>
         @if (multipleFiles()) {
           <select class="select select-bordered select-sm w-fit" appTvSelect [ngModel]="selectedFileId()" (ngModelChange)="selectedFileIdChange.emit($event)">
             @for (f of files(); track f.id) {
@@ -432,17 +437,17 @@
             }
           </select>
         } @else if (videoLabel()) {
-          <span>{{ videoLabel() }}</span>
+          <span class="min-w-0 break-words">{{ videoLabel() }}</span>
         }
       </div>
       @if (audioTracks().length) {
-        <div class="flex items-center gap-2">
-          <span class="text-base-content/50">{{ 'media_info.audio' | translate }}</span>
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="shrink-0 text-base-content/50">{{ 'media_info.audio' | translate }}</span>
           @if (audioTracks().length === 1) {
-            <span>{{ audioTracks()[0].label }}</span>
+            <span class="min-w-0 break-words">{{ audioTracks()[0].label }}</span>
           } @else {
             <app-dropdown-menu placement="bottom-end">
-              <button trigger type="button" class="select select-bordered select-sm w-fit text-left cursor-pointer transition-colors hover:bg-base-content/10">
+              <button trigger type="button" class="select select-bordered select-sm w-fit max-w-full truncate text-left cursor-pointer transition-colors hover:bg-base-content/10">
                 {{ selectedAudio()?.head || selectedAudio()?.label }}
               </button>
               @for (t of audioTracks(); track t.index) {
@@ -458,10 +463,10 @@
         </div>
       }
       @if (subtitles().length) {
-        <div class="flex items-center gap-2">
-          <span class="text-base-content/50">{{ 'media_info.subtitles' | translate }}</span>
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="shrink-0 text-base-content/50">{{ 'media_info.subtitles' | translate }}</span>
           <app-dropdown-menu placement="bottom-end">
-            <button trigger type="button" class="select select-bordered select-sm w-fit text-left cursor-pointer transition-colors hover:bg-base-content/10">
+            <button trigger type="button" class="select select-bordered select-sm w-fit max-w-full truncate text-left cursor-pointer transition-colors hover:bg-base-content/10">
               {{ selectedSubtitle()?.head || selectedSubtitle()?.label || ('player.off' | translate) }}
             </button>
             <app-dropdown-option
