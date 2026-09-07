@@ -27,7 +27,7 @@
           {{ cancelLabel() }}
         </button>
       }
-      <button class="btn" [class]="confirmBtnClass()" (click)="confirmService.accept()">
+      <button autofocus class="btn" [class]="confirmBtnClass()" (click)="confirmService.accept()">
         {{ alertOnly() ? ('common.ok' | translate) : confirmLabel() }}
       </button>
     </app-modal-footer>
