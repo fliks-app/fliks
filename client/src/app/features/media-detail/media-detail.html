@@ -187,7 +187,7 @@
           [libraryName]="m.library?.name ?? null"
           [qualityProfileName]="m.qualityProfile?.name ?? null"
           [languageProfileName]="m.languageProfile?.name ?? null"
-          [fanartUrl]="m.fanartUrl ?? null"
+          [fanartUrl]="m.fanartUrl ?? m.posterUrl ?? null"
           [posterUrl]="m.posterUrl ?? null"
           [backRoute]="['/', backSegment()]"
           [subtitles]="subtitleSection()?.headerSubtitles() ?? []"

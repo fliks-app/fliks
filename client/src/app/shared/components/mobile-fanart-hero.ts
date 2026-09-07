@@ -12,15 +12,19 @@ import { ImgFadeInDirective } from '../directives/img-fade-in.directive';
   template: `
     <div class="relative -mx-4 -mt-4 hero-fanart-bleed">
       @if (fanartUrl()) {
+        <!-- The name rides the image, not the wrapper: desktop pairs img with
+             img and its morph shows the destination's picture, a div snapshot
+             does not. -->
         <img
           appImgFadeIn
+          [style.view-transition-name]="viewTransitionName()"
           [src]="fanartUrl()! | resolveUrl:'medium'"
           [alt]="imageAlt()"
           loading="eager"
           fetchpriority="high"
-          class="w-full min-h-[230px] h-[38svh] max-h-[53svh] landscape:min-h-0 landscape:h-auto landscape:max-h-[47vh] landscape:aspect-video object-cover object-[50%_25%]"
+          class="hero-fanart-fade relative w-full min-h-[230px] h-[38svh] max-h-[53svh] landscape:min-h-0 landscape:h-auto landscape:max-h-[47vh] landscape:aspect-video object-cover object-[50%_25%]"
         />
-        <div class="pointer-events-none absolute inset-0 bg-linear-to-t from-base-100 via-transparent to-black/20"></div>
+
       } @else {
         <div
           class="w-full min-h-[230px] h-[38svh] max-h-[53svh] landscape:min-h-0 landscape:h-auto landscape:aspect-video landscape:max-h-[47vh] bg-base-300"
@@ -32,4 +36,9 @@ import { ImgFadeInDirective } from '../directives/img-fade-in.directive';
 export class MobileFanartHeroComponent {
   readonly fanartUrl = input<string | null | undefined>(null);
   readonly imageAlt = input('');
+  /** Pairs this hero with the card that opened the page, so the poster morph
+   *  has a destination on mobile too — the box carries the whole aspect change,
+   *  portrait card into landscape hero. On the wrapper rather than the image so
+   *  the scrim the title sits on travels with it. Null where nothing pairs. */
+  readonly viewTransitionName = input<string | null>(null);
 }

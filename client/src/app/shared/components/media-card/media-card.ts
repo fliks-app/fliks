@@ -13,6 +13,8 @@ import { TrackingModalService } from '../../../core/services/tracking-modal.serv
 import { CardActionsDirective } from '../../directives/card-actions.directive';
 import { SpoilerDirective } from '../../directives/spoiler.directive';
 import { clearPosterStamps, stampPoster } from '../../utils/view-transition';
+import { ServerConfigService } from '../../../core/services/server-config.service';
+import { imageUrlWithSize } from '../../../core/pipes/resolve-url.pipe';
 import { CardAction, CardActionsService } from '../../../core/services/card-actions.service';
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { RecommendService } from '../../../core/services/recommend.service';
@@ -339,6 +341,23 @@ export class MediaCardComponent {
     if (this.replaceUrl()) this.navbar.markAsBackNavigation();
   }
 
+  private readonly serverConfig = inject(ServerConfigService);
+
+  /**
+   * Warm the picture the destination will show, while the click is still being
+   * handled. A view transition captures the destination before its own images
+   * have decoded — measured `complete: false` at that exact point — so without
+   * this the morph has nothing of the target to carry and flies the card's
+   * poster instead. Decoding it here gives it the ~100 ms until the capture.
+   */
+  private prefetchHeroArtwork() {
+    const url = this.media()?.fanartUrl;
+    if (!url) return;
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = this.serverConfig.resolveUrl(imageUrlWithSize(url, 'medium'));
+  }
+
   protected flagPosterForTransition() {
     // Pointless where the engine has no View Transitions (Chromium <111, Tizen 5.5
     // WebKit, webOS 5), and it costs a querySelectorAll per click.
@@ -352,6 +371,7 @@ export class MediaCardComponent {
     const id = this.resolveMediaId();
     const img = this.imgRef()?.nativeElement;
     if (id == null || !img) return;
+    this.prefetchHeroArtwork();
     stampPoster(img, id, this.episodeIdFromLink(), this.overlayRef()?.nativeElement);
   }
   protected readonly _playable = computed(() => {

@@ -41,7 +41,7 @@ import { RequestCardComponent } from '../requests/request-card/request-card';
 import { RequestDeclineModalComponent } from '../requests/request-decline-modal/request-decline-modal.component';
 import { libraryColorVar } from '../../core/constants/library-appearance';
 import { StorageScopeService } from '../../core/services/storage-scope.service';
-import { itemArtwork } from '../../shared/utils/media-artwork.util';
+import { fanartPool, itemArtwork } from '../../shared/utils/media-artwork.util';
 
 /**
  * # Home page
@@ -134,6 +134,11 @@ export class HomeComponent implements OnInit, OnDestroy {
     // repaint nothing.
     refreshOnResume: () => void this.loadAllSections({ force: true }),
     scrollKey: HomeComponent.SCROLL_KEY,
+    onAttach: () =>
+      this.applyBackground(
+        this.recommendations(),
+        this.displaySettings.settings().homeBackground,
+      ),
   });
   private readonly declineModal = viewChild(RequestDeclineModalComponent);
   private readonly detailModal = viewChild(DownloadDetailModalComponent);
@@ -248,19 +253,17 @@ export class HomeComponent implements OnInit, OnDestroy {
    *  the BackgroundService keeps it stable while the user stays on
    *  the home — same contract as media-detail. */
   private readonly recommendationsBackgroundEffect = effect(() => {
-    const recs = this.recommendations();
-    if (recs.length === 0) return;
-    if (!this.displaySettings.settings().homeBackground) {
-      this.backgroundService.clear();
-      return;
-    }
-    const pool: string[] = [];
-    for (const r of recs) {
-      if (r.media.fanartUrl) pool.push(r.media.fanartUrl);
-      pool.push(...(r.media.additionalFanartUrls ?? []));
-    }
-    if (pool.length) this.backgroundService.setBackgrounds(pool);
+    this.applyBackground(this.recommendations(), this.displaySettings.settings().homeBackground);
   });
+
+  /** The background is global chrome, so a cached page has to reclaim it on the
+   *  way back in — the effect above won't re-run for data that never changed,
+   *  and the page left behind cleared it. Reclaiming it late is what made the
+   *  topbar flip from solid to frosted a frame after a back navigation. */
+  private applyBackground(recs: readonly RecommendationItem[], enabled: boolean): void {
+    if (recs.length === 0) return;
+    this.backgroundService.applyPool(fanartPool(recs.map((r) => r.media)), enabled);
+  }
 
   /** A playback that ended leaves this row stale, whether it ran here or on a
    *  device this one is driving. The server announces every session stop to all
