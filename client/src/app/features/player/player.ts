@@ -3289,7 +3289,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         await this.streamingApi.stopSession(prevSid).catch(() => {});
       }
       if (opts.unmute) this.engine.muted = false;
-      const wasPaused = opts.preservePause ? this.paused() : false;
+      const wasPaused = opts.preservePause ? this.pauseIntent() : false;
       const deviceProfile = this.deviceProfileService.getProfile();
       // Pass the active rung as startQuality so the backend prewarms ffmpeg at
       // the resume position — main session at -ss pos plus the bounded early
@@ -3357,6 +3357,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    * left unplayed. The single enforcement point keeps every reload path
    * consistent.
    */
+  /** The viewer's pause intent. Before the first frame `paused` still holds its
+   *  initial `true` — a launch that hasn't started, never a pause to preserve.
+   *  A native launch autoplays without calling `play()`, so nothing else would
+   *  distinguish the two. */
+  private pauseIntent(): boolean {
+    return this.state.videoStarted() && this.paused();
+  }
+
   private restorePlayState(wasPaused: boolean): void {
     if (!this.engine) return;
     if (wasPaused) this.engine.pause().catch(() => {});
@@ -4083,7 +4091,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Capture the play/pause intent first: a native engine reloads the stream
       // to switch track, which comes back playing — switching language must not
       // resume a player the user paused. `reloadStream` does the same below.
-      const wasPaused = this.paused();
+      const wasPaused = this.pauseIntent();
       // Show spinner during audio switch (native player reloads the stream)
       if (this.isNativeEngine()) {
         this.state.buffering.set(true);
@@ -4538,7 +4546,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         : this.engine.currentTime;
       // Capture the user's play/pause intent before tearing the stream down — a
       // quality / audio / subtitle switch must not resume a paused player.
-      const wasPaused = this.paused();
+      const wasPaused = this.pauseIntent();
 
       // Remember active subtitle so we can restore it after reload
       const activeSub = this.activeSubtitleId()
