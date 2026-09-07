@@ -14,6 +14,7 @@ import { TvService } from './core/services/tv.service';
 import { TvSpatialNavService } from './core/services/tv-spatial-nav.service';
 import { ToastContainerComponent } from './shared/components/toast-container';
 import { ConfirmationModalComponent } from './shared/components/confirmation-modal';
+import { ConfirmationService } from './core/services/confirmation.service';
 import { FolderPickerModalComponent } from './shared/components/folder-picker-modal/folder-picker-modal';
 import { SelectPickerComponent } from './shared/components/select-picker';
 import { DismissableStackService } from './core/services/dismissable-stack.service';
@@ -25,6 +26,7 @@ import { RemoteService } from './core/services/remote.service';
 import { remoteOverlayOpen } from './core/services/remote-playback-target';
 import { CastOverlayComponent } from './shared/cast-overlay/cast-overlay';
 import { TvKeyboardDeferralService } from './core/services/tv-keyboard-deferral.service';
+import { TranslateService } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-root',
@@ -56,6 +58,8 @@ export class App implements OnInit, OnDestroy {
   /** Injected so a command aimed at this device is honoured wherever the user
    *  is in the app: including the player route, which sits outside the layout. */
   private readonly remote = inject(RemoteService);
+  private readonly confirmation = inject(ConfirmationService);
+  private readonly translate = inject(TranslateService);
   private backButtonListener?: { remove: () => Promise<void> };
   private visibilityListener?: () => void;
 
@@ -290,12 +294,25 @@ export class App implements OnInit, OnDestroy {
     // webOS's platformBack (returns to the launcher / previous app).
     const platform = this.tv.tvPlatform();
     if (platform === 'tizen') {
-      const tizen = (window as unknown as { tizen?: { application?: { getCurrentApplication: () => { exit: () => void } } } }).tizen;
-      try {
-        tizen?.application?.getCurrentApplication().exit();
-      } catch {
-        /* exit() can throw on dev profiles — ignore */
-      }
+      // Samsung certification: Return on the top-level page must ask before
+      // quitting, and the popup has to be ours — no system dialog exists.
+      if (this.confirmation.state()) return;
+      void this.confirmation
+        .confirm({
+          title: this.translate.instant('app.exit_title'),
+          message: this.translate.instant('app.exit_message'),
+          confirmLabel: this.translate.instant('common.yes'),
+          cancelLabel: this.translate.instant('common.no'),
+        })
+        .then((confirmed) => {
+          if (!confirmed) return;
+          const tizen = (window as unknown as { tizen?: { application?: { getCurrentApplication: () => { exit: () => void } } } }).tizen;
+          try {
+            tizen?.application?.getCurrentApplication().exit();
+          } catch {
+            /* exit() can throw on dev profiles — ignore */
+          }
+        });
     } else if (platform === 'webos') {
       const sys = (window as unknown as { webOSSystem?: { platformBack?: () => void } }).webOSSystem;
       try {

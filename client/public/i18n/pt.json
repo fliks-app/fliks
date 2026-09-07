@@ -1,6 +1,8 @@
 {
   "app": {
-    "name": "Fliks"
+    "name": "Fliks",
+    "exit_title": "Sair do Fliks?",
+    "exit_message": "Deseja fechar a aplicação?"
   },
   "file_info": {
     "title": "Informações do ficheiro",
