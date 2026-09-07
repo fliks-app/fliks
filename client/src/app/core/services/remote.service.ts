@@ -1,9 +1,10 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpErrorResponse } from '@angular/common/http';
 import { NavigationEnd, Router } from '@angular/router';
 import { Subject, filter, firstValueFrom } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
 import { RemoteCommand, RemoteQualityRung, SseService } from './sse.service';
+import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { ToastService } from './toast.service';
 import { CastSettingsService } from './cast-settings.service';
 import { CastService } from './cast.service';
@@ -79,6 +80,10 @@ const SELECTED_TARGET_KEY = 'fliks.remote.target';
 /** How long a freshly selected target is assumed to maybe be playing, before
  *  its silence is taken as "idle". */
 const FIRST_REPORT_GRACE_MS = 12_000;
+/** How long a selected target may stay off the listing before the selection is
+ *  released. Longer than the SSE reconnect backoff (30s at its longest), since
+ *  a target riding that out is still there. */
+const OFFLINE_RELEASE_MS = 45_000;
 
 const browseKey = (c: { mediaId?: number; episodeId?: number }) => `${c.mediaId}:${c.episodeId ?? ''}`;
 
@@ -124,10 +129,16 @@ export class RemoteService {
    *  rather than needing its own bookkeeping. */
   readonly restarting = computed(() => this.pendingAction() === 'quality');
   readonly targetOffline = signal(false);
+  private offlineTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Last listing of the selected target. The offline card that releases the
+   *  device is reached from the chip this feeds, so a target that drops off the
+   *  listing must not take its own way out with it. */
+  private readonly selectedRow = signal<RemoteTarget | null>(null);
 
   readonly selectedTarget = computed(() => {
     const id = this.selectedTargetId();
-    return id ? (this.targets().find((t) => t.targetId === id) ?? null) : null;
+    if (!id) return null;
+    return this.targets().find((t) => t.targetId === id) ?? this.selectedRow();
   });
   /** A selection, not its live listing: a target that drops off `targets()`
    *  is still the one we're remoting to, just offline, so the overlay stays
@@ -395,6 +406,7 @@ export class RemoteService {
         this.http.post<{ cmdId: string }>(
           `/api/remote/${encodeURIComponent(targetId)}/command`,
           { ...input, action: 'browse', byTargetId: this.sse.targetId() },
+          { context: new HttpContext().set(SKIP_ERROR_TOAST, true) },
         ),
       );
     } catch (err) {
@@ -437,17 +449,16 @@ export class RemoteService {
           ? rows
           : rows.filter((r) => !r.ownerUsername || r.targetId === selected),
       );
-      if (selected && !rows.some((r) => r.targetId === selected)) {
-        // Never fall back to local playback on its own: offer it, don't do it.
-        this.targetOffline.set(true);
-        console.warn('[remote] selected target went offline', selected);
+      const listed = selected ? rows.find((r) => r.targetId === selected) : undefined;
+      if (selected && !listed) {
+        this.markOffline(selected);
       } else if (selected) {
-        this.targetOffline.set(false);
+        this.selectedRow.set(listed ?? null);
+        this.clearOffline();
         // The target sends a farewell heartbeat as it leaves the player, which
         // lands after any local clear and would then sit there forever. Let the
         // server settle it: a live playback reports every 10s, so a silent
         // target the listing shows as empty really has stopped.
-        const listed = rows.find((r) => r.targetId === selected);
         const silentFor = Date.now() - this.stateAt;
         if (listed && !listed.nowPlaying && this.reportedState() && silentFor > 15_000) {
           console.debug('[remote] target reports nothing playing, clearing its state');
@@ -468,13 +479,40 @@ export class RemoteService {
     if (targetId && this.cast.isConnected()) this.cast.disconnect();
     this.selectedTargetId.set(targetId);
     this.reportedState.set(null);
-    this.targetOffline.set(false);
+    this.selectedRow.set(null);
+    this.clearOffline();
     this.expectedMediaFileId = null;
     try {
       if (targetId) localStorage.setItem(SELECTED_TARGET_KEY, targetId);
       else localStorage.removeItem(SELECTED_TARGET_KEY);
     } catch { /* blocked storage: selection is per-session only */ }
 
+  }
+
+  /** Both ways a target turns out to be gone — absent from a listing, or a
+   *  command it never took — land here, so one countdown covers them. A powered
+   *  off device never comes back under the same target id (the nonce is per
+   *  tab), so holding its selection only strands the UI: offer the local
+   *  fallback while it might still answer, then release it.  */
+  private markOffline(targetId: string): void {
+    this.targetOffline.set(true);
+    console.warn('[remote] selected target is offline', targetId);
+    if (this.offlineTimer) return;
+    this.offlineTimer = setTimeout(() => {
+      this.offlineTimer = null;
+      if (this.selectedTargetId() !== targetId || !this.targetOffline()) return;
+      console.warn('[remote] releasing a target that stayed offline', targetId);
+      this.selectTarget(null);
+      this.toast.error(this.translate.instant('remote.released_offline'));
+    }, OFFLINE_RELEASE_MS);
+  }
+
+  private clearOffline(): void {
+    this.targetOffline.set(false);
+    if (this.offlineTimer) {
+      clearTimeout(this.offlineTimer);
+      this.offlineTimer = null;
+    }
   }
 
   /** Coalesce a dragged control so one gesture costs a handful of POSTs. */
@@ -526,7 +564,7 @@ export class RemoteService {
         }
       }
       this.pendingAction.set(null);
-      this.targetOffline.set(true);
+      this.markOffline(targetId);
       console.warn('[remote] command failed', input.action, targetId, err);
       // The interceptor already toasts an HTTP failure, with the server's own
       // reason rather than one generic line, so toasting here too showed the
@@ -599,7 +637,7 @@ export class RemoteService {
       audioTrackIndex: s.audioTrackIndex,
       subtitleTrackIndex: s.subtitleTrackIndex,
     });
-    this.targetOffline.set(false);
+    this.clearOffline();
     const pinned = this.pinnedVolume();
     if (pinned !== null) {
       const converged = s.volume !== null && Math.abs(s.volume - pinned) < 0.02;

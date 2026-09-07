@@ -2458,6 +2458,7 @@
     "idle_hint": "Wählen Sie einen Titel, er startet hier.",
     "starting_message": "Wird geladen...",
     "offline_message": "Dieses Gerät ist nicht mehr erreichbar.",
+    "released_offline": "Das Gerät ist offline gegangen und wird nicht mehr gesteuert.",
     "play_here_instead": "Stattdessen hier abspielen",
     "autoplay_blocked": "Dieses Gerät kann die Wiedergabe nicht selbst starten. Drücken Sie am Gerät auf Wiedergabe.",
     "grant_offer": "Code anzeigen",

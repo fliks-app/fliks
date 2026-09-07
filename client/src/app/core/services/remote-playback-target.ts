@@ -86,8 +86,11 @@ export class RemotePlaybackTarget implements PlaybackTarget {
 
   constructor() {
     effect(() => {
-      this.remote.selectedTargetId();
+      const targetId = this.remote.selectedTargetId();
       untracked(() => {
+        // Every release path funnels through here, so the card cannot be left
+        // open over a device that is no longer ours to control.
+        if (!targetId) remoteOverlayOpen.set(false);
         this.tracksLoadedForKey = null;
         this.audioOptions.set([]);
         this.subtitleOptions.set([]);

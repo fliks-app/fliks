@@ -9,6 +9,7 @@ import { TranslateService } from '@ngx-translate/core';
 import { RemoteService, type RemoteTarget } from './remote.service';
 import { SseService, type RemoteCommand, type RemoteState } from './sse.service';
 import { ToastService } from './toast.service';
+import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 
 function frame(over: Partial<RemoteState> = {}): RemoteState {
   return {
@@ -515,5 +516,78 @@ describe('RemoteService restored selection', () => {
     expect(service.selectedTargetId()).toBeNull();
     expect(service.targetOffline()).toBe(false);
     expect(localStorage.getItem('fliks.remote.target')).toBeNull();
+  });
+});
+
+/**
+ * Powering the target off stranded the controller: the chip that opens its
+ * control card reads the live listing, so the only way to release the device
+ * went away with the device, while every mirrored navigation kept POSTing a
+ * browse that toasted "not reachable".
+ */
+describe('RemoteService offline target', () => {
+  const target: RemoteTarget = {
+    targetId: 'tv#1',
+    userAgent: null,
+    deviceName: null,
+    systemName: null,
+    formFactor: null,
+    tvPlatform: null,
+    nowPlaying: null,
+  };
+
+  async function goOffline(service: RemoteService) {
+    const httpMock = TestBed.inject(HttpTestingController);
+    let done = service.refreshTargets();
+    httpMock.expectOne((req) => req.url === '/api/remote/targets').flush([target]);
+    await done;
+    done = service.refreshTargets();
+    httpMock.expectOne((req) => req.url === '/api/remote/targets').flush([]);
+    await done;
+  }
+
+  it('keeps the chip on an offline target, then releases it', async () => {
+    vi.useFakeTimers();
+    try {
+      const { service } = setup();
+      await goOffline(service);
+
+      expect(service.targetOffline()).toBe(true);
+      expect(service.selectedTarget()?.targetId).toBe('tv#1');
+
+      vi.advanceTimersByTime(46_000);
+      expect(service.selectedTargetId()).toBeNull();
+      expect(service.selectedTarget()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('holds the selection while the target answers again in time', async () => {
+    vi.useFakeTimers();
+    try {
+      const { service, remoteState } = setup();
+      await goOffline(service);
+
+      vi.advanceTimersByTime(30_000);
+      remoteState.set(frame());
+      service.ingestState();
+      vi.advanceTimersByTime(30_000);
+
+      expect(service.targetOffline()).toBe(false);
+      expect(service.selectedTargetId()).toBe('tv#1');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reports a failed browse itself instead of letting the interceptor toast it', async () => {
+    const { service } = setup();
+    const httpMock = TestBed.inject(HttpTestingController);
+    const done = service.browse({ mediaId: 7, mediaType: 'movie' }, false);
+    const req = httpMock.expectOne((r) => r.url === '/api/remote/tv%231/command');
+    expect(req.request.context.get(SKIP_ERROR_TOAST)).toBe(true);
+    req.flush({ message: 'remote.error_device_offline' }, { status: 404, statusText: 'Not Found' });
+    await done;
   });
 });

@@ -2485,6 +2485,7 @@
     "idle_hint": "Choisissez un titre, il démarrera ici.",
     "starting_message": "Chargement...",
     "offline_message": "Cet appareil n'est plus joignable.",
+    "released_offline": "L'appareil s'est déconnecté, il n'est plus contrôlé.",
     "play_here_instead": "Lire ici à la place",
     "autoplay_blocked": "Cet appareil ne peut pas démarrer la lecture seul. Appuyez sur lecture sur l'appareil.",
     "grant_offer": "Afficher un code",
