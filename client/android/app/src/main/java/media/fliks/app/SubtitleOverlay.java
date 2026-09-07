@@ -54,13 +54,6 @@ class SubtitleOverlay {
             applyTextSize();
             applyBottomMargin();
         });
-        // The picture only gets its height once the video's aspect is known, and
-        // it changes again on rotation — the cue size follows it.
-        if (surfaceView != null) {
-            surfaceView.addOnLayoutChangeListener(
-                    (v, l, t, r, b, ol, ot, or_, ob) -> applyTextSize());
-        }
-
         // Added to `wrapper` (a FrameLayout we own) so the gravity-bearing
         // FrameLayout.LayoutParams cast stays valid regardless of the host
         // WebView parent's layout type.
@@ -89,12 +82,12 @@ class SubtitleOverlay {
         renderImageCue(null);
     }
 
-    /** Text height as a fraction of the video, not of the view: the view spans the
-     *  whole screen, which in portrait is mostly letterbox. */
+    /** Text height as a fraction of the surface's short side, which is invariant
+     *  across rotation and fill mode — unlike the letterboxed picture. */
     private static final float TEXT_SIZE_FRACTION = 0.035f;
 
-    /** Floor under the fraction: a phone's picture is ~200dp tall in portrait and
-     *  ~360dp in landscape, too short for the fraction alone to stay readable. */
+    /** Floor under the fraction, for a surface too short to reach a readable
+     *  size from it alone. */
     private static final float MIN_TEXT_SIZE_SP = 18f;
 
     private float fontScale = 1f;
@@ -115,9 +108,9 @@ class SubtitleOverlay {
         float minPx = TypedValue.applyDimension(
                 TypedValue.COMPLEX_UNIT_SP, MIN_TEXT_SIZE_SP * fontScale,
                 subtitleView.getResources().getDisplayMetrics());
-        int videoH = surfaceView != null ? surfaceView.getHeight() : 0;
+        int shortSide = Math.min(subtitleView.getWidth(), subtitleView.getHeight());
         subtitleView.setFixedTextSize(TypedValue.COMPLEX_UNIT_PX,
-                Math.max(videoH * TEXT_SIZE_FRACTION * fontScale, minPx));
+                Math.max(shortSide * TEXT_SIZE_FRACTION * fontScale, minPx));
     }
 
     private void applyBottomMargin() {
