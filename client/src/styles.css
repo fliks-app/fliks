@@ -437,10 +437,9 @@ html.tv-host {
 /* Same focus-into-view breathing room on the browser when navigating by
    keyboard: arrow / Tab focus scrolls via scrollIntoView({block:'nearest'}) (or
    sequential focus nav), which otherwise parks the focused card against the
-   bottom edge. Scoped through :has to keyboard modality so mouse scrolling is
-   untouched. TVs already get this via html.tv-host above; :has never matches on
-   the TV WebView's Chrome 85, which is fine. */
-html:has(body.keyboard-modality) {
+   bottom edge. Scoped to keyboard modality so mouse scrolling is untouched.
+   TVs already get this via html.tv-host above. */
+html.keyboard-modality {
   scroll-padding-top: 96px;
   scroll-padding-bottom: 20vh;
 }
@@ -451,16 +450,20 @@ body.tv *:hover {
 /* Suppress every `:focus-visible` visual when the user isn't on a
    keyboard / D-pad modality. Safari WebKit on iOS incorrectly fires
    focus-visible on long-press, so a context-tap on a media card used
-   to paint the high-contrast ring. The `keyboard-modality` body
-   class is set by app.ts on the first navigation keydown and cleared
-   on the next pointer / touch interaction; TV always uses the ring
-   so it short-circuits the suppression. `transform: none` covers the
+   to paint the high-contrast ring. The `keyboard-modality` class is
+   set by app.ts on the first navigation keydown and cleared on the
+   next pointer / touch interaction; TV always uses the ring so it
+   short-circuits the suppression. `transform: none` covers the
    scale-up rule on media cards a few selectors down.
+
+   Scoped to <html>, not <body>: overlays are reparented under <html>
+   to escape stacking contexts, and a body-scoped rule left their
+   focused entry ringed after a plain mouse click.
 
    A select is not exempt: tapping one opens its picker, which is the
    indication, and no platform leaves a ring on a field after a tap. Text
    fields stay exempt because a caret alone reads as nothing on a wide row. */
-body:not(.keyboard-modality):not(.tv)
+html:not(.keyboard-modality):not(.tv-host)
   :focus-visible:not(input, textarea, [contenteditable]) {
   outline: none !important;
   box-shadow: none !important;
@@ -471,7 +474,7 @@ body:not(.keyboard-modality):not(.tv)
    select (WebKit notably), so there the outline stayed and read as a second ring
    next to the untouched border. Reached on plain :focus so the modality, not the
    engine's focus-visible verdict, decides. */
-body:not(.keyboard-modality):not(.tv) .select:focus {
+html:not(.keyboard-modality):not(.tv-host) .select:focus {
   outline: none;
 }
 
@@ -485,10 +488,10 @@ body.native textarea,
 body.native select {
   font-size: 16px;
 }
-body:not(.keyboard-modality):not(.tv) app-media-card figure:focus-visible,
-body:not(.keyboard-modality):not(.tv) [data-home-focus]:focus-visible,
-body:not(.keyboard-modality):not(.tv) [data-tv-focusable]:focus-visible,
-body:not(.keyboard-modality):not(.tv) app-mosaic-card button:focus-visible .mosaic-art {
+html:not(.keyboard-modality):not(.tv-host) app-media-card figure:focus-visible,
+html:not(.keyboard-modality):not(.tv-host) [data-home-focus]:focus-visible,
+html:not(.keyboard-modality):not(.tv-host) [data-tv-focusable]:focus-visible,
+html:not(.keyboard-modality):not(.tv-host) app-mosaic-card button:focus-visible .mosaic-art {
   transform: none !important;
 }
 
@@ -1012,7 +1015,7 @@ body.tv .to-base-100\/50 {
 /* TV / keyboard focus: subtle hover tint isn't enough on a 10-foot UI —
    the user can't track which row is highlighted from the couch without
    a clear ring. */
-body.tv .dropdown-item:focus-visible {
+html.tv-host .dropdown-item:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: -2px;
 }

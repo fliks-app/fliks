@@ -202,13 +202,13 @@ export class App implements OnInit, OnDestroy {
   }
 
   /** Track input modality (keyboard / D-pad vs pointer / touch) and
-   *  toggle `body.keyboard-modality`. CSS gates `:focus-visible`
+   *  toggle `html.keyboard-modality`. CSS gates `:focus-visible`
    *  visuals on it so an iOS long-press — which Safari WebKit
    *  incorrectly classifies as a focus-visible trigger — doesn't
    *  paint the high-contrast focus ring on the card the user was
    *  trying to context-tap. The class flips on the first
    *  navigation-key press and clears on the next pointer / touch
-   *  interaction. TV stays focused-visible regardless (`body.tv`
+   *  interaction. TV stays focused-visible regardless (`html.tv-host`
    *  short-circuits the suppression rule in styles.css). */
   private initInputModalityTracking(): void {
     const NAV_KEYS = new Set([
@@ -224,11 +224,20 @@ export class App implements OnInit, OnDestroy {
     const setKeyboard = (on: boolean) => {
       if (on === keyboardActive) return;
       keyboardActive = on;
-      document.body.classList.toggle('keyboard-modality', on);
+      // On <html>, not <body>: overlays are reparented out of the body to
+      // escape stacking contexts, so a body-scoped rule can't reach them.
+      document.documentElement.classList.toggle('keyboard-modality', on);
     };
-    window.addEventListener('keydown', (e) => {
-      if (NAV_KEYS.has(e.key)) setKeyboard(true);
-    });
+    // Capture, like the pointer listeners below: the components that own these
+    // keys stopPropagation them (a select opening its picker, spatial nav), so a
+    // bubble-phase listener never sees the press that starts a keyboard session.
+    window.addEventListener(
+      'keydown',
+      (e) => {
+        if (NAV_KEYS.has(e.key)) setKeyboard(true);
+      },
+      { capture: true },
+    );
     const clearOnPointer = () => setKeyboard(false);
     window.addEventListener('pointerdown', clearOnPointer, { capture: true });
     window.addEventListener('touchstart', clearOnPointer, {

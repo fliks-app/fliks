@@ -45,7 +45,10 @@ export class DefaultFocusService {
    *  focus on arrival (and where the ring is shown, gated identically in CSS). */
   private shouldAutoFocus(): boolean {
     if (typeof document === 'undefined') return false;
-    return this.device.isTv() || document.body.classList.contains('keyboard-modality');
+    return (
+      this.device.isTv() ||
+      document.documentElement.classList.contains('keyboard-modality')
+    );
   }
 
   /** Focus the page's default target on arrival — the previously focused item
