@@ -7,7 +7,11 @@ const NAMES: Record<string, string> = {
   'language.en': 'Anglais',
   'language.de': 'Allemand',
 };
-const translate = { instant: (key: string) => NAMES[key] ?? key } as TranslateService;
+const translate = {
+  instant: (key: string) => NAMES[key] ?? key,
+  currentLang: signal('fr'),
+  fallbackLang: signal('en'),
+} as unknown as TranslateService;
 
 describe('sortByLanguageName', () => {
   it('sorts by name and pushes unnamed tracks last', () => {
