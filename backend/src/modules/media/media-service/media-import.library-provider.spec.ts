@@ -85,6 +85,7 @@ describe('MediaImportService — the destination library owns the provider', () 
       } as never,
       { onMediaImported: jest.fn().mockResolvedValue(undefined) } as never,
       { emitDomain: jest.fn() } as never,
+      { storeFromDisk: jest.fn().mockResolvedValue(null) } as never,
     );
     Object.assign(svc, {
       log: { log: jest.fn(), warn: jest.fn((m: string) => warnings.push(m)) },
