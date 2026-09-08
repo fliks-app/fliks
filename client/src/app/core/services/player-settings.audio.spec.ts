@@ -102,4 +102,27 @@ describe('PlayerSettingsService audio selection', () => {
     });
     expect(TestBed.inject(PlayerSettingsService).get().audioSelectionMode).toBe(mode);
   });
+
+  /** The settings picker stores ISO 639-1; ffprobe reports either 639-2 form,
+   *  and `fre` is the one that never equalled `fra`. */
+  it('matches a stream whichever ISO form it carries', () => {
+    const svc = make({ audioSelectionMode: 'preferred', preferredAudioLanguage: 'fr' });
+    expect(svc.resolveAudioStreamIndex(1, [{ language: 'eng' }, { language: 'fre' }], 1, null))
+      .toBe(1);
+  });
+
+  it('folds a preference stored by an older build', () => {
+    localStorage.setItem(
+      'player.settings',
+      JSON.stringify({ preferredAudioLanguage: 'fra', preferredSubtitleLanguage: 'jpn' }),
+    );
+    const svc = make();
+    expect(svc.get().preferredAudioLanguage).toBe('fr');
+    expect(svc.get().preferredSubtitleLanguage).toBe('ja');
+  });
+
+  it('leaves "no preference" empty rather than folding it to und', () => {
+    localStorage.setItem('player.settings', JSON.stringify({ preferredAudioLanguage: '' }));
+    expect(make().get().preferredAudioLanguage).toBe('');
+  });
 });

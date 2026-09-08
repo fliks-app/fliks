@@ -70,6 +70,7 @@ import {
 } from '../../../core/plugin-ui/resolve-menu-contributions';
 import type { UiContribution } from '@fliks/plugin-contract/ui';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
+import { normalizeLangCode } from '../../../core/utils/language.utils';
 
 /** One `media.actions` contribution resolved to something the template can
  *  render directly — visibility, handler and icon fallback already decided. */
@@ -463,7 +464,7 @@ export class MediaInfoHeaderComponent {
     const saved = this.playerSettings.getRememberedSubtitleTrack(mediaId);
     if (saved && saved !== 'off') {
       const parts = saved.split(':');
-      const lang = parts[0];
+      const lang = normalizeLangCode(parts[0]);
       const wantForced = parts.includes('forced');
       const wantImage = parts.includes('image');
       const wantHi = parts.includes('hi');

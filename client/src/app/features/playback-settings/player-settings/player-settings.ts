@@ -12,13 +12,15 @@ import { ToastService } from '../../../core/services/toast.service';
 import { persistOnChange } from '../../../core/utils/persist-on-change';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { SelectFieldComponent } from '../../../shared/components/forms/select-field/select-field';
-import { AUDIO_SELECTION_MODE_OPTIONS, LANGUAGE_OPTIONS } from '../playback-options';
+import { AUDIO_SELECTION_MODE_OPTIONS, LANGUAGE_CODE_OPTIONS } from '../playback-options';
+import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe';
 
 @Component({
   selector: 'app-player-settings',
   imports: [
     FormsModule,
     TranslatePipe,
+    LocalizeLanguagePipe,
     LucideTrash2,
     ToggleFieldComponent,
     SelectFieldComponent,
@@ -32,7 +34,7 @@ export class PlayerSettingsPageComponent {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
 
-  readonly languageOptions = LANGUAGE_OPTIONS;
+  readonly languageOptions = LANGUAGE_CODE_OPTIONS;
   readonly audioModeOptions = AUDIO_SELECTION_MODE_OPTIONS;
 
   private readonly initial = this.ps.get();

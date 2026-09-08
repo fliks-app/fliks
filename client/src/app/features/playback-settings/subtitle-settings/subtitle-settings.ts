@@ -8,15 +8,16 @@ import { ToastService } from '../../../core/services/toast.service';
 import { persistOnChange } from '../../../core/utils/persist-on-change';
 import { LucideTrash2 } from '@lucide/angular';
 import { SubtitleAppearanceComponent } from '../../../shared/components/subtitle-appearance/subtitle-appearance';
+import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import {
-  LANGUAGE_OPTIONS, SUBTITLE_MODE_OPTIONS,
+  LANGUAGE_CODE_OPTIONS, SUBTITLE_MODE_OPTIONS, SUBTITLE_HI_OPTIONS,
   BOTTOM_MARGIN_OPTIONS, TOP_MARGIN_OPTIONS,
 } from '../playback-options';
 
 @Component({
   selector: 'app-subtitle-settings',
-  imports: [TvSelectDirective, FormsModule, TranslatePipe, LucideTrash2, SubtitleAppearanceComponent, ToggleFieldComponent],
+  imports: [TvSelectDirective, FormsModule, TranslatePipe, LocalizeLanguagePipe, LucideTrash2, SubtitleAppearanceComponent, ToggleFieldComponent],
   templateUrl: './subtitle-settings.html',
 })
 export class SubtitleSettingsPageComponent {
@@ -25,14 +26,16 @@ export class SubtitleSettingsPageComponent {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
 
-  readonly languageOptions = LANGUAGE_OPTIONS;
+  readonly languageOptions = LANGUAGE_CODE_OPTIONS;
   readonly subtitleModeOptions = SUBTITLE_MODE_OPTIONS;
+  readonly hearingImpairedOptions = SUBTITLE_HI_OPTIONS;
   readonly bottomMarginOptions = BOTTOM_MARGIN_OPTIONS;
   readonly topMarginOptions = TOP_MARGIN_OPTIONS;
 
   private readonly initial = this.ps.get();
   readonly preferredSubtitleLanguage = signal(this.initial.preferredSubtitleLanguage);
   readonly subtitleMode = signal(this.initial.subtitleMode);
+  readonly subtitleHearingImpaired = signal(this.initial.subtitleHearingImpaired);
   readonly rememberSubtitleSelections = signal(this.initial.rememberSubtitleSelections);
   readonly hideImageSubtitles = signal(this.initial.hideImageSubtitles);
   readonly showSubtitleFormat = signal(this.initial.showSubtitleFormat);
@@ -48,6 +51,7 @@ export class SubtitleSettingsPageComponent {
       () => ({
         preferredSubtitleLanguage: this.preferredSubtitleLanguage(),
         subtitleMode: this.subtitleMode(),
+        subtitleHearingImpaired: this.subtitleHearingImpaired(),
         rememberSubtitleSelections: this.rememberSubtitleSelections(),
         hideImageSubtitles: this.hideImageSubtitles(),
         showSubtitleFormat: this.showSubtitleFormat(),

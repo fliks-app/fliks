@@ -6,6 +6,7 @@ import { StreamingApiService } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { AppSettingsService } from './app-settings.service';
 import { buildSubtitleTracks } from '../utils/subtitle-tracks';
+import { normalizeLangCode } from '../utils/language.utils';
 import { AuthService } from './auth.service';
 import { DeviceProfile } from './browser-device-profile.service';
 import { ENGINE_TRAITS, EngineKind } from './engine-traits';
@@ -62,7 +63,9 @@ export function buildCastAudioOptions(
       label: formatAudioLabel(a, translate, i + 1),
       head: parts.head,
       sub: parts.sub,
-      language: lang,
+      language: normalizeLangCode(lang),
+      // The name pairs with the manifest's own NAME, which is a display label
+      // rather than a code, so it keeps the raw fallback.
       name: a.title || lang,
     };
   });
@@ -676,7 +679,7 @@ export class CastPlayerService {
     const saved = this.playerSettings.getRememberedSubtitleTrack(mediaId);
     if (!saved || saved === 'off') return null;
     const parts = saved.split(':');
-    const savedLang = parts[0];
+    const savedLang = normalizeLangCode(parts[0]);
     const wantForced = parts.includes('forced');
     const wantHi = parts.includes('hi');
     const match =

@@ -5,7 +5,7 @@
       <div class="label"><span class="label-text font-medium">{{ 'playback_settings.sub_preferred_lang' | translate }}</span></div>
       <select
     appTvSelect class="select select-bordered w-full" [ngModel]="preferredSubtitleLanguage()" (ngModelChange)="preferredSubtitleLanguage.set($event)">
-        @for (l of languageOptions; track l.value) { <option [value]="l.value">{{ l.labelKey ? (l.labelKey | translate) : l.label }}</option> }
+        @for (code of languageOptions; track code) { <option [value]="code">{{ code ? (code | localizeLanguage) : ('playback_settings.lang_any' | translate) }}</option> }
       </select>
     </label>
 
@@ -18,6 +18,15 @@
         @for (m of subtitleModeOptions; track m.value) { <option [value]="m.value">{{ m.labelKey | translate }}</option> }
       </select>
       <div class="label"><span class="label-text-alt text-base-content/50">{{ 'playback_settings.sub_mode_hint' | translate }}</span></div>
+    </label>
+
+    <label class="form-control w-full max-w-xs">
+      <div class="label"><span class="label-text font-medium">{{ 'playback_settings.sub_hi' | translate }}</span></div>
+      <select
+    appTvSelect class="select select-bordered w-full" [ngModel]="subtitleHearingImpaired()" (ngModelChange)="subtitleHearingImpaired.set($event)">
+        @for (h of hearingImpairedOptions; track h.value) { <option [value]="h.value">{{ h.labelKey | translate }}</option> }
+      </select>
+      <div class="label"><span class="label-text-alt text-base-content/50">{{ 'playback_settings.sub_hi_hint' | translate }}</span></div>
     </label>
 
     <div class="divider my-0"></div>

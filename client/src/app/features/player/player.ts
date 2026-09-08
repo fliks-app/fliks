@@ -45,8 +45,9 @@ import { buildSeriesQueueItems, resolvePlayableFile } from '../../shared/utils/m
 import { audioChannelsLabel, formatAudioLabel, formatAudioParts, inIntroRange, inOutroRange, parseAudioIndex, SpriteMetadata, widthForProfile } from '../../core/utils/player.utils';
 import { classifyPlaybackError, formatErrorDiagnostics, userMessageKeyFor } from '../../core/services/playback-engine/playback-error';
 import { environment } from '../../../environments/environment';
+import { normalizeLangCode } from '../../core/utils/language.utils';
 import {
-  PlayerSettingsService, normalizeLang,
+  PlayerSettingsService,
   SUBTITLE_SIZE_MAP, SUBTITLE_COLOR_MAP, SUBTITLE_SHADOW_MAP, SUBTITLE_BG_MAP,
   type AudioStreamChoice,
 } from '../../core/services/player-settings.service';
@@ -1949,7 +1950,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         label: audioList[i] ? formatAudioLabel(audioList[i], this.translate, i + 1) : t.label,
         menuHead: audioList[i] ? formatAudioParts(audioList[i], this.translate, i + 1).head : t.label,
         menuSub: audioList[i] ? formatAudioParts(audioList[i], this.translate, i + 1).sub : '',
-        language: normalizeLang(t.language),
+        language: normalizeLangCode(t.language),
         selected: !!t.selected,
       }));
       const existing = this.availableAudioTracks();
@@ -3998,7 +3999,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             label: formatAudioLabel(a, this.translate, i + 1),
             menuHead: formatAudioParts(a, this.translate, i + 1).head,
             menuSub: formatAudioParts(a, this.translate, i + 1).sub,
-            language: normalizeLang(a.language),
+            language: normalizeLangCode(a.language),
           }));
           this.availableAudioTracks.set(tracks);
           // Set active to the track the backend is already using (preselected at startup)
@@ -4028,7 +4029,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         label: audioList[i] ? formatAudioLabel(audioList[i], this.translate, i + 1) : t.label,
         menuHead: audioList[i] ? formatAudioParts(audioList[i], this.translate, i + 1).head : t.label,
         menuSub: audioList[i] ? formatAudioParts(audioList[i], this.translate, i + 1).sub : '',
-        language: normalizeLang(t.language),
+        language: normalizeLangCode(t.language),
       }));
 
       this.availableAudioTracks.set(tracks);

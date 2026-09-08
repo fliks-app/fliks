@@ -1,11 +1,17 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { DeviceService } from './device.service';
+import { normalizeLangCode } from '../utils/language.utils';
 import {
   DOM_SUBTITLE_HEIGHT_FRACTION,
   NATIVE_SUBTITLE_SIZE_SCALE,
   SUBTITLE_MIN_TEXT_PX,
 } from '../utils/subtitle-presets';
 
+
+/** How much the viewer wants a hearing-impaired (SDH) track: `avoid` keeps the
+ *  annotations out unless nothing else carries the language, `prefer` asks for
+ *  them, `any` takes whichever track comes first. */
+export type HearingImpairedPreference = 'avoid' | 'any' | 'prefer';
 
 export interface PlayerSettings {
   // Audio
@@ -23,7 +29,11 @@ export interface PlayerSettings {
   showEcoQualities: boolean;
   // Subtitles
   preferredSubtitleLanguage: string;
-  subtitleMode: 'off' | 'intelligent' | 'always';
+  /** `off`: never. `onlyForced`: just the foreign-dialogue track. `intelligent`:
+   *  a full track when the audio is foreign, the forced one when it isn't.
+   *  `always`: a full track whenever the language exists. */
+  subtitleMode: 'off' | 'onlyForced' | 'intelligent' | 'always';
+  subtitleHearingImpaired: HearingImpairedPreference;
   rememberSubtitleSelections: boolean;
   // Hide image-based (PGS/VOBSUB) subtitles from the pickers and native player
   hideImageSubtitles: boolean;
@@ -44,6 +54,11 @@ export interface PlayerSettings {
   autoPlayNext: boolean;
 }
 
+/** Empty stays empty: it is the "no preference" value, not a language. */
+function foldLang(code: string): string {
+  return code ? normalizeLangCode(code) : '';
+}
+
 const SETTINGS_KEY = 'player.settings';
 const AUDIO_SELECTIONS_KEY = 'player.audioSelections';
 const SUB_SELECTIONS_KEY = 'player.subtitleSelections';
@@ -56,6 +71,7 @@ const DEFAULTS: PlayerSettings = {
   showEcoQualities: true,
   preferredSubtitleLanguage: '',
   subtitleMode: 'intelligent',
+  subtitleHearingImpaired: 'avoid',
   rememberSubtitleSelections: true,
   hideImageSubtitles: true,
   showSubtitleFormat: false,
@@ -75,20 +91,7 @@ export interface AudioStreamChoice {
   isDefault?: boolean;
 }
 
-/** Map ISO 639-1 (2-letter) to ISO 639-2/B (3-letter) for language matching. */
-const ISO_MAP: Record<string, string> = {
-  fr: 'fra', en: 'eng', ja: 'jpn', de: 'deu', es: 'spa',
-  it: 'ita', pt: 'por', ko: 'kor', zh: 'zho', ru: 'rus', ar: 'ara',
-  hi: 'hin', nl: 'nld', pl: 'pol', sv: 'swe', th: 'tha', tr: 'tur',
-};
-
 /** Normalize any language code to 3-letter ISO 639-2/B. */
-export function normalizeLang(code: string | undefined): string {
-  if (!code) return 'und';
-  const lower = code.toLowerCase();
-  return ISO_MAP[lower] ?? lower;
-}
-
 // ── Subtitle appearance maps ──
 
 /** The DOM cue sizes are the native ladder in `vmin` — the viewport's short
@@ -137,7 +140,12 @@ export class PlayerSettingsService {
           stored.audioSelectionMode = stored.useDefaultAudioStream ? 'default' : 'preferred';
         }
         delete stored.useDefaultAudioStream;
-        return { ...defaults, ...stored };
+        const merged = { ...defaults, ...stored };
+        // Older builds stored ISO 639-2 ("fra"), which matches no track: every
+        // list is canonicalised to ISO 639-1 now.
+        merged.preferredAudioLanguage = foldLang(merged.preferredAudioLanguage);
+        merged.preferredSubtitleLanguage = foldLang(merged.preferredSubtitleLanguage);
+        return merged;
       }
     } catch { /* ignore */ }
     return defaults;
@@ -167,7 +175,7 @@ export class PlayerSettingsService {
   audioLanguage(originalLanguage?: string | null): string | undefined {
     const s = this.get();
     if (s.audioSelectionMode === 'original') {
-      return originalLanguage ? normalizeLang(originalLanguage) : undefined;
+      return originalLanguage ? normalizeLangCode(originalLanguage) : undefined;
     }
     if (s.audioSelectionMode === 'preferred') {
       return s.preferredAudioLanguage || undefined;
@@ -206,7 +214,9 @@ export class PlayerSettingsService {
     if (!audioStreams.length) return undefined;
     const s = this.get();
     const indexOfLang = (lang: string) =>
-      audioStreams.findIndex((a) => normalizeLang(a.language) === lang);
+      audioStreams.findIndex(
+        (a) => normalizeLangCode(a.language) === normalizeLangCode(lang),
+      );
 
     // Priority 1: remembered selection always wins, whatever the mode.
     // Uses mediaId (series/movie) so the choice carries across episodes.
