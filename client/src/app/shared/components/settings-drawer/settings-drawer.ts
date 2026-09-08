@@ -20,6 +20,7 @@ import { Location } from '@angular/common';
 import { Subscription, filter } from 'rxjs';
 import { LucideChevronLeft, LucideMenu } from '@lucide/angular';
 import { TvService } from '../../../core/services/tv.service';
+import { PageScrollerService } from '../../../core/services/page-scroller.service';
 
 @Component({
   selector: 'app-settings-drawer',
@@ -31,6 +32,7 @@ export class SettingsDrawerComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly titleService = inject(Title);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly pageScroller = inject(PageScrollerService);
 
   /** Layout name — shown in the header and used as the tab-title suffix. */
   readonly title = input('');
@@ -58,15 +60,16 @@ export class SettingsDrawerComponent implements OnInit, OnDestroy {
   });
 
   private lastScrollY = 0;
+  private scrollSub?: Subscription;
   private readonly onScroll = () => {
-    const y = window.scrollY;
+    const y = this.pageScroller.offset();
     if (Math.abs(y - this.lastScrollY) < 10) return;
     this.navbarHidden.set(y > this.lastScrollY && y > 56);
     this.lastScrollY = y;
   };
 
   ngOnInit() {
-    window.addEventListener('scroll', this.onScroll, { passive: true });
+    this.scrollSub = this.pageScroller.changes().subscribe(this.onScroll);
 
     this.routerSub = this.router.events
       .pipe(filter((e) => e instanceof NavigationEnd))
@@ -76,7 +79,7 @@ export class SettingsDrawerComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    window.removeEventListener('scroll', this.onScroll);
+    this.scrollSub?.unsubscribe();
     this.routerSub?.unsubscribe();
   }
 

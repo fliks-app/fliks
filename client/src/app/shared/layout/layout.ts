@@ -31,6 +31,7 @@ import { CastPlayerService } from '../../core/services/cast-player.service';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
 import { NavigationHistoryService } from '../../core/services/navigation-history.service';
 import { NetworkService } from '../../core/services/network.service';
+import { PageScrollerService } from '../../core/services/page-scroller.service';
 import { CardActionsPanelComponent } from '../components/card-actions-panel/card-actions-panel';
 import { AddToPlaylistModalComponent } from '../components/add-to-playlist-modal/add-to-playlist-modal.component';
 import { RecommendModalComponent } from '../components/recommend-modal/recommend-modal.component';
@@ -131,6 +132,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
       void modal.open(req.target);
     }
   });
+  private readonly pageScroller = inject(PageScrollerService);
   readonly networkService = inject(NetworkService);
   readonly castService = inject(CastService);
   readonly remote = inject(RemoteService);
@@ -198,10 +200,10 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private scrollRaf: number | null = null;
   private topSentinelObserver?: IntersectionObserver;
   /** TV never hides the navbar, so the scroll handler would exist only to
-   *  recompute `scrollAtTop` — and reading `scrollY` flushes whatever layout
-   *  the frame has dirtied, which on a windowed library grid is a relayout of
-   *  a 60 000 px document. The sentinel below reports the same thing with no
-   *  layout read at all, so the handler is skipped there entirely. */
+   *  recompute `scrollAtTop` — and reading the scroll offset flushes whatever
+   *  layout the frame has dirtied, which on a long document is a full relayout.
+   *  The sentinel below reports the same thing with no layout read at all, so
+   *  the handler is skipped there entirely. */
   private readonly onScroll = () => {
     if (this.device.isTv() || this.scrollRaf !== null) return;
     this.scrollRaf = requestAnimationFrame(() => {
@@ -211,7 +213,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   };
   private readScroll(): void {
     if (this.restorePending()) return;
-    const y = window.scrollY;
+    const y = this.pageScroller.offset();
     this.navbar.scrollAtTop.set(y < 20);
     if (Math.abs(y - this.lastScrollY) < 10) return;
     // TV keeps the topbar anchored — it is a D-pad target, and sliding it out
@@ -221,15 +223,20 @@ export class LayoutComponent implements OnInit, OnDestroy {
   }
 
   /** `scrollAtTop` without touching the scroll position: a zero-width strip
-   *  pinned to the top of the page, watched by an IntersectionObserver. */
-  private watchTopSentinel(): void {
+   *  pinned to the top of the page, watched by an IntersectionObserver rooted
+   *  in whatever currently scrolls the page — re-created whenever that changes,
+   *  since an observer's `root` can't be swapped after construction. */
+  private readonly topSentinelObserverEffect = effect(() => {
     const el = this.topSentinel()?.nativeElement;
+    const root = this.pageScroller.element();
+    this.topSentinelObserver?.disconnect();
     if (!el || typeof IntersectionObserver === 'undefined') return;
     this.topSentinelObserver = new IntersectionObserver(
       ([entry]) => this.navbar.scrollAtTop.set(entry.isIntersecting),
+      { root },
     );
     this.topSentinelObserver.observe(el);
-  }
+  });
 
   /** Accessible libraries for the sidebar (raw, as fetched). */
   readonly libraries = signal<LibrarySummary[]>([]);
@@ -308,8 +315,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
       console.debug('[layout] remote-control entry point suppressed on tv: no controller UI on the 10-foot surface');
     }
     // DownloadManagerService is activated by injection (effect in constructor)
-    window.addEventListener('scroll', this.onScroll, { passive: true });
-    this.watchTopSentinel();
+    this.pageScroller.changes().pipe(takeUntilDestroyed(this.destroyRef)).subscribe(this.onScroll);
     if (this.isNative) {
       Keyboard.addListener('keyboardWillShow', () => this.keyboardOpen.set(true));
       Keyboard.addListener('keyboardWillHide', () => this.keyboardOpen.set(false));
@@ -357,8 +363,9 @@ export class LayoutComponent implements OnInit, OnDestroy {
         // Adopt the restored offset instead of reading it: a restore is not a
         // gesture, and against a zero baseline it reads as one long scroll
         // down — which hid the navbar on every return to a scrolled page.
-        this.lastScrollY = window.scrollY;
-        this.navbar.scrollAtTop.set(window.scrollY < 20);
+        const y = this.pageScroller.offset();
+        this.lastScrollY = y;
+        this.navbar.scrollAtTop.set(y < 20);
       }),
     );
   }
@@ -393,7 +400,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    window.removeEventListener('scroll', this.onScroll);
     if (this.scrollRaf !== null) cancelAnimationFrame(this.scrollRaf);
     this.topSentinelObserver?.disconnect();
     if (this.isNative) {
