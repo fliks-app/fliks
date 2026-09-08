@@ -2,12 +2,15 @@ import { Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideTrash2 } from '@lucide/angular';
-import { PlayerSettingsService } from '../../../core/services/player-settings.service';
+import {
+  PlayerSettings,
+  PlayerSettingsService,
+} from '../../../core/services/player-settings.service';
 import { BrowserDeviceProfileService } from '../../../core/services/browser-device-profile.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { SelectFieldComponent } from '../../../shared/components/forms/select-field/select-field';
-import { LANGUAGE_OPTIONS } from '../playback-options';
+import { AUDIO_SELECTION_MODE_OPTIONS, LANGUAGE_OPTIONS } from '../playback-options';
 
 @Component({
   selector: 'app-player-settings',
@@ -27,8 +30,9 @@ export class PlayerSettingsPageComponent implements OnInit {
   private readonly translate = inject(TranslateService);
 
   readonly languageOptions = LANGUAGE_OPTIONS;
+  readonly audioModeOptions = AUDIO_SELECTION_MODE_OPTIONS;
   readonly preferredAudioLanguage = signal('');
-  readonly useDefaultAudioStream = signal(false);
+  readonly audioSelectionMode = signal<PlayerSettings['audioSelectionMode']>('default');
   readonly rememberAudioSelections = signal(false);
   readonly forceDisableHdr = signal(false);
   readonly showHdrToggle = signal(false);
@@ -39,7 +43,7 @@ export class PlayerSettingsPageComponent implements OnInit {
   ngOnInit() {
     const p = this.ps.get();
     this.preferredAudioLanguage.set(p.preferredAudioLanguage);
-    this.useDefaultAudioStream.set(p.useDefaultAudioStream);
+    this.audioSelectionMode.set(p.audioSelectionMode);
     this.rememberAudioSelections.set(p.rememberAudioSelections);
     this.forceDisableHdr.set(p.forceDisableHdr);
     this.showHdrToggle.set(this.deviceProfile.hardwareSupportsHdr);
@@ -58,7 +62,7 @@ export class PlayerSettingsPageComponent implements OnInit {
     this.ps.save({
       ...current,
       preferredAudioLanguage: this.preferredAudioLanguage(),
-      useDefaultAudioStream: this.useDefaultAudioStream(),
+      audioSelectionMode: this.audioSelectionMode(),
       rememberAudioSelections: this.rememberAudioSelections(),
       forceDisableHdr: this.forceDisableHdr(),
       showEcoQualities: this.showEcoQualities(),

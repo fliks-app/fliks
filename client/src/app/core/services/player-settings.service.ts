@@ -10,7 +10,11 @@ import {
 export interface PlayerSettings {
   // Audio
   preferredAudioLanguage: string;
-  useDefaultAudioStream: boolean;
+  /** `preferred`: the language above. `original`: the title's own language.
+   *  `default`: the track the file flags as default. `first`: the first track,
+   *  whatever it is. Every mode falls back to the first track when it can't be
+   *  satisfied. */
+  audioSelectionMode: 'preferred' | 'original' | 'default' | 'first';
   rememberAudioSelections: boolean;
   // Video
   forceDisableHdr: boolean;
@@ -46,7 +50,7 @@ const SUB_SELECTIONS_KEY = 'player.subtitleSelections';
 
 const DEFAULTS: PlayerSettings = {
   preferredAudioLanguage: '',
-  useDefaultAudioStream: false,
+  audioSelectionMode: 'default',
   rememberAudioSelections: true,
   forceDisableHdr: false,
   showEcoQualities: true,
@@ -64,6 +68,12 @@ const DEFAULTS: PlayerSettings = {
   autoSkipIntro: false,
   autoPlayNext: true,
 };
+
+/** The audio-stream fields the track selection reads. */
+export interface AudioStreamChoice {
+  language?: string;
+  isDefault?: boolean;
+}
 
 /** Map ISO 639-1 (2-letter) to ISO 639-2/B (3-letter) for language matching. */
 const ISO_MAP: Record<string, string> = {
@@ -121,7 +131,14 @@ export class PlayerSettingsService {
       : { ...DEFAULTS };
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
-      if (raw) return { ...defaults, ...JSON.parse(raw) };
+      if (raw) {
+        const stored = JSON.parse(raw);
+        if (!stored.audioSelectionMode) {
+          stored.audioSelectionMode = stored.useDefaultAudioStream ? 'default' : 'preferred';
+        }
+        delete stored.useDefaultAudioStream;
+        return { ...defaults, ...stored };
+      }
     } catch { /* ignore */ }
     return defaults;
   }
@@ -142,45 +159,82 @@ export class PlayerSettingsService {
   }
 
   /**
+   * The language the audio auto-selection targets, if any. Undefined in the
+   * `default` and `first` modes, which don't select by language at all.
+   *
+   * @param originalLanguage The title's original language (TMDB, ISO 639-1).
+   */
+  audioLanguage(originalLanguage?: string | null): string | undefined {
+    const s = this.get();
+    if (s.audioSelectionMode === 'original') {
+      return originalLanguage ? normalizeLang(originalLanguage) : undefined;
+    }
+    if (s.audioSelectionMode === 'preferred') {
+      return s.preferredAudioLanguage || undefined;
+    }
+    return undefined;
+  }
+
+  /**
+   * The single language to configure an engine with before load, so it picks
+   * the right rendition during manifest parse instead of switching after.
+   */
+  resolveAudioLanguage(
+    mediaId?: number,
+    originalLanguage?: string | null,
+  ): string | undefined {
+    const s = this.get();
+    if (s.rememberAudioSelections && mediaId) {
+      // The stored value may carry a ":n" ordinal (same-language
+      // disambiguator); engines pre-pick by language, so strip it here.
+      const saved = this.getRememberedAudioTrack(mediaId)?.split(':')[0];
+      if (saved) return saved;
+    }
+    return this.audioLanguage(originalLanguage);
+  }
+
+  /**
    * Resolve the preferred audio stream index for a media file.
    * Used by both the local player and Cast to ensure consistent audio selection.
    */
   resolveAudioStreamIndex(
     mediaFileId: number,
-    audioStreams: { language?: string }[],
+    audioStreams: AudioStreamChoice[],
     mediaId?: number,
+    originalLanguage?: string | null,
   ): number | undefined {
+    if (!audioStreams.length) return undefined;
     const s = this.get();
+    const indexOfLang = (lang: string) =>
+      audioStreams.findIndex((a) => normalizeLang(a.language) === lang);
 
-    // Priority 1: remembered selection always wins (even with "use default" enabled)
+    // Priority 1: remembered selection always wins, whatever the mode.
     // Uses mediaId (series/movie) so the choice carries across episodes.
     if (s.rememberAudioSelections && mediaId) {
-      // The stored value may carry a ":n" ordinal (same-language disambiguator);
-      // the backend index resolves by language, so strip it here.
       const savedLang = this.getRememberedAudioTrack(mediaId)?.split(':')[0];
       if (savedLang) {
-        const idx = audioStreams.findIndex(
-          (a) => normalizeLang(a.language) === savedLang,
-        );
+        const idx = indexOfLang(savedLang);
         if (idx >= 0) return idx;
       }
     }
 
-    // "Use default audio stream" skips language/auto-selection but not remembered choices
-    if (s.useDefaultAudioStream) return undefined;
-
-    // Priority 2: preferred language
-    if (s.preferredAudioLanguage) {
-      const idx = audioStreams.findIndex(
-        (a) => normalizeLang(a.language) === s.preferredAudioLanguage,
-      );
+    // Priority 2: the mode's target language.
+    const lang = this.audioLanguage(originalLanguage);
+    if (lang) {
+      const idx = indexOfLang(lang);
       if (idx >= 0) return idx;
     }
 
-    // Priority 3: default to first stream for multi-audio files
-    if (audioStreams.length > 1) return 0;
+    // Priority 3: the track the file flags as default. Resolved here rather
+    // than left to the container — the HLS paths rebuild the audio group and
+    // would otherwise always mark the first rendition as the default one.
+    if (s.audioSelectionMode === 'default') {
+      const idx = audioStreams.findIndex((a) => a.isDefault);
+      if (idx >= 0) return idx;
+    }
 
-    return undefined;
+    // Priority 4: the first track, and the fallback for every unmet mode.
+    return 0;
   }
 
   // ── Audio track memory ──

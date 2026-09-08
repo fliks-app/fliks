@@ -21,6 +21,13 @@ export const LANGUAGE_OPTIONS: readonly PlaybackOption[] = [
   { value: 'ara', label: 'العربية (Arabic)' },
 ];
 
+export const AUDIO_SELECTION_MODE_OPTIONS = [
+  { value: 'preferred', labelKey: 'playback_settings.audio_mode_preferred' },
+  { value: 'original', labelKey: 'playback_settings.audio_mode_original' },
+  { value: 'default', labelKey: 'playback_settings.audio_mode_default' },
+  { value: 'first', labelKey: 'playback_settings.audio_mode_first' },
+];
+
 export const SUBTITLE_MODE_OPTIONS = [
   { value: 'off', labelKey: 'playback_settings.sub_mode_off' },
   { value: 'intelligent', labelKey: 'playback_settings.sub_mode_intelligent' },

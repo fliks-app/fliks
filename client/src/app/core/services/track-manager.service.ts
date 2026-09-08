@@ -50,6 +50,7 @@ export class TrackManagerService {
    * @param mediaFileId   Media file ID
    * @param activeAudioTrackId  Currently active audio track ID
    * @param onSelect      Callback invoked with the track ID to select
+   * @param originalLanguage The title's original language, for `original` mode
    */
   autoSelectAudioTrack(
     tracks: { id: string; language: string }[],
@@ -57,15 +58,10 @@ export class TrackManagerService {
     mediaFileId: number,
     activeAudioTrackId: string | null,
     onSelect: (trackId: string) => void,
+    originalLanguage?: string | null,
   ): void {
     const settings = this.playerSettings.get();
-
-    // "Use default audio stream" only applies when no remembered selection exists
-    // (i.e. first time watching). On refresh, the saved choice takes priority.
     const key = mediaId;
-    const hasSavedSelection = settings.rememberAudioSelections &&
-      !!this.playerSettings.getRememberedAudioTrack(key);
-    if (settings.useDefaultAudioStream && !hasSavedSelection) return;
 
     // Priority 1: remembered selection for this media (saved as "language" or
     // "language:ordinal" — see saveAudioSelection). The ordinal picks the Nth
@@ -84,15 +80,10 @@ export class TrackManagerService {
       }
     }
 
-    // Priority 2: preferred language
-    if (settings.preferredAudioLanguage) {
-      const match = tracks.find(
-        (t) => t.language === settings.preferredAudioLanguage,
-      );
-      if (match && match.id !== activeAudioTrackId) {
-        onSelect(match.id);
-      }
-    }
+    // Priority 2: the mode's target language.
+    const lang = this.playerSettings.audioLanguage(originalLanguage);
+    const match = lang ? tracks.find((t) => t.language === lang) : undefined;
+    if (match && match.id !== activeAudioTrackId) onSelect(match.id);
   }
 
   /**

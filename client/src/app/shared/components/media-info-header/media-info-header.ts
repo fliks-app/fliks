@@ -27,7 +27,10 @@ import {
   type PlaybackState,
 } from '../../../core/services/api/streaming-api.service';
 import { OfflinePlaybackSyncService } from '../../../core/services/offline-playback-sync.service';
-import { PlayerSettingsService } from '../../../core/services/player-settings.service';
+import {
+  PlayerSettingsService,
+  type AudioStreamChoice,
+} from '../../../core/services/player-settings.service';
 import { TrackManagerService } from '../../../core/services/track-manager.service';
 import { NavbarService } from '../../../core/services/navbar.service';
 import { TvService } from '../../../core/services/tv.service';
@@ -202,6 +205,9 @@ export class MediaInfoHeaderComponent {
   readonly libraryName = input<string | null>(null);
   readonly qualityProfileName = input<string | null>(null);
   readonly languageProfileName = input<string | null>(null);
+  /** Title's original language — keeps the preselected audio label in step
+   *  with the player's `original` audio-selection mode. */
+  readonly originalLanguage = input<string | null>(null);
   readonly tags = input<string[]>([]);
 
   // ── Inputs: images / navigation ──
@@ -444,9 +450,11 @@ export class MediaInfoHeaderComponent {
     const mediaId = this.mediaId();
     if (!file || !mediaId) return;
 
-    const audio = file.streamInfo?.audio as { language?: string }[] | undefined;
+    const audio = file.streamInfo?.audio as AudioStreamChoice[] | undefined;
     if (audio?.length) {
-      const idx = this.playerSettings.resolveAudioStreamIndex(file.id, audio, mediaId);
+      const idx = this.playerSettings.resolveAudioStreamIndex(
+        file.id, audio, mediaId, this.originalLanguage(),
+      );
       this.selectedAudioIndex.set(idx ?? null);
     } else {
       this.selectedAudioIndex.set(null);
