@@ -1,4 +1,5 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, inject, effect } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router } from '@angular/router';
 import { BehaviorSubject, Observable, fromEvent, map, switchMap } from 'rxjs';
 
@@ -12,14 +13,20 @@ import { BehaviorSubject, Observable, fromEvent, map, switchMap } from 'rxjs';
 export class PageScrollerService {
   private readonly router = inject(Router);
 
-  readonly element = signal<HTMLElement | null>(null);
-  // Mirrors `element` synchronously: `changes()` has to re-target the instant
-  // a claim changes, and a signal only replays through an effect flush.
+  /** Single source of truth; `element` is a synchronous read of it so no
+   *  outside `.set()` can desync the two. */
   private readonly elementChanges = new BehaviorSubject<HTMLElement | null>(null);
+  readonly element = toSignal(this.elementChanges, { requireSync: true });
 
   private readonly changes$: Observable<void> = this.elementChanges.pipe(
-    switchMap((el) => fromEvent(el ?? window, 'scroll').pipe(map(() => undefined))),
+    switchMap((el) => fromEvent(el ?? window, 'scroll', { passive: true }).pipe(map(() => undefined))),
   );
+
+  /** Toggles `html.page-owns-scroll`, the CSS hook a claiming page's ancestor
+   *  chain bounds itself against — see styles.css. */
+  private readonly hostClassEffect = effect(() => {
+    document.documentElement.classList.toggle('page-owns-scroll', this.element() !== null);
+  });
 
   constructor() {
     // A page that forgot to release() on its way out would otherwise poison
@@ -28,18 +35,18 @@ export class PageScrollerService {
     this.router.events.subscribe((event) => {
       if (!(event instanceof NavigationEnd)) return;
       const el = this.element();
-      if (el && !document.contains(el)) this.setElement(null);
+      if (el && !document.contains(el)) this.elementChanges.next(null);
     });
   }
 
   claim(el: HTMLElement): void {
-    this.setElement(el);
+    this.elementChanges.next(el);
   }
 
-  /** Same-owner guard as {@link ScrollMemoryService.deactivateIf}: a page
-   *  navigated away from cannot wipe the claim of the page navigated to. */
+  /** Same-owner guard: a page navigated away from cannot wipe the claim of
+   *  the page navigated to. */
   release(el: HTMLElement): void {
-    if (this.element() === el) this.setElement(null);
+    if (this.element() === el) this.elementChanges.next(null);
   }
 
   offset(): number {
@@ -54,10 +61,5 @@ export class PageScrollerService {
 
   changes(): Observable<void> {
     return this.changes$;
-  }
-
-  private setElement(el: HTMLElement | null): void {
-    this.element.set(el);
-    this.elementChanges.next(el);
   }
 }

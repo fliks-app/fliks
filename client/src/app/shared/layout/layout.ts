@@ -215,6 +215,9 @@ export class LayoutComponent implements OnInit, OnDestroy {
     if (this.restorePending()) return;
     const y = this.pageScroller.offset();
     this.navbar.scrollAtTop.set(y < 20);
+    // A page that owns its own scroller has no document scroll to hide the
+    // topbar against, and hiding it there would uncover a permanent gap.
+    if (this.pageScroller.element()) return;
     if (Math.abs(y - this.lastScrollY) < 10) return;
     // TV keeps the topbar anchored — it is a D-pad target, and sliding it out
     // from under the focus ring strands the cursor.
@@ -222,18 +225,16 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.lastScrollY = y;
   }
 
-  /** `scrollAtTop` without touching the scroll position: a zero-width strip
-   *  pinned to the top of the page, watched by an IntersectionObserver rooted
-   *  in whatever currently scrolls the page — re-created whenever that changes,
-   *  since an observer's `root` can't be swapped after construction. */
+  /** `scrollAtTop` via a top-strip IntersectionObserver, rooted in whatever
+   *  currently scrolls the page — skipped in container mode, which `readScroll` owns instead. */
   private readonly topSentinelObserverEffect = effect(() => {
     const el = this.topSentinel()?.nativeElement;
     const root = this.pageScroller.element();
     this.topSentinelObserver?.disconnect();
-    if (!el || typeof IntersectionObserver === 'undefined') return;
+    if (!el || root || typeof IntersectionObserver === 'undefined') return;
     this.topSentinelObserver = new IntersectionObserver(
       ([entry]) => this.navbar.scrollAtTop.set(entry.isIntersecting),
-      { root },
+      { root: null },
     );
     this.topSentinelObserver.observe(el);
   });

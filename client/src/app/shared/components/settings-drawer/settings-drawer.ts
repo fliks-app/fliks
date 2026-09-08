@@ -62,6 +62,8 @@ export class SettingsDrawerComponent implements OnInit, OnDestroy {
   private lastScrollY = 0;
   private scrollSub?: Subscription;
   private readonly onScroll = () => {
+    // A page owning its own scroller has no document scroll to hide against.
+    if (this.pageScroller.element()) return;
     const y = this.pageScroller.offset();
     if (Math.abs(y - this.lastScrollY) < 10) return;
     this.navbarHidden.set(y > this.lastScrollY && y > 56);

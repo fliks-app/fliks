@@ -292,13 +292,13 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.list.activeLetter.set(this.list.letterAt(row * this.gridCols()));
     });
   };
-  /** The viewport is recreated whenever its `@if` block toggles (tab switch,
-   *  loading state), so claiming/listening here — rather than once in
-   *  `ngAfterViewInit` — keeps both current across those swaps. A cached-route
-   *  reattach doesn't re-run this setter (the view is preserved, not rebuilt),
-   *  which is why `onAttach` above re-claims separately. */
+  /** Recreated whenever the `@if` block toggles (tab switch, loading state) —
+   *  `onAttach` re-claims separately since a cached reattach preserves this view. */
   @ViewChild(CdkVirtualScrollViewport) private set viewportRef(ref: CdkVirtualScrollViewport | undefined) {
-    this.viewport?.elementRef.nativeElement.removeEventListener('scroll', this.onLetterScroll);
+    if (this.viewport) {
+      this.viewport.elementRef.nativeElement.removeEventListener('scroll', this.onLetterScroll);
+      this.pageScroller.release(this.viewport.elementRef.nativeElement);
+    }
     this.viewport = ref;
     if (!ref) return;
     this.pageScroller.claim(ref.elementRef.nativeElement);

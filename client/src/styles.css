@@ -674,23 +674,41 @@ html.vt-player-close body.tv main.page-enter {
   animation: none;
 }
 
-/* CDK gives its content wrapper `contain: content`, whose paint containment
-   clips anything drawn outside a row — which is exactly where the focus ring
-   and the card's scale-up land. The wrapper is absolutely positioned and sized
-   by the viewport, so dropping containment costs no layout correctness. */
+/* CDK's content wrapper ships `contain: content`, clipping the focus ring and
+   scale-up outside a row; dropping it only matters inside the viewport's own overflow. */
 .library-viewport .cdk-virtual-scroll-content-wrapper {
   contain: none;
 }
 
-/* Bounds the grid to a real scrollable box instead of the document. ~5rem is
-   the fixed topbar + <main>'s own vertical padding — an approximation, not
-   exact per form factor (native bottom dock isn't accounted for). */
-.library-shell {
-  height: calc(100vh - 5rem);
-  height: calc(100dvh - 5rem);
+/* Bounds a page that claims its own scroller (page-scroller.service.ts) to the
+   viewport; gated so every other route keeps scrolling the document unbounded. */
+html.page-owns-scroll .drawer {
+  /* min-h-screen is min-height:100vh, which beats 100dvh on mobile unless neutralised. */
+  height: 100dvh;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
+}
+html.page-owns-scroll .drawer-content {
+  min-height: 0;
+}
+html.page-owns-scroll main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+/* The missing link: the routed component itself has no styles otherwise. */
+html.page-owns-scroll app-library {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+html.page-owns-scroll .library-shell {
+  flex: 1;
+  min-height: 0;
 }
 /* TV keeps the D-pad's focus-into-view scroll smooth and off the screen edges
-   inside the grid's own scroller now, matching the document-scroll rule above. */
+   inside the grid's own scroller, matching the document-scroll rule above. */
 html.tv-host .library-viewport {
   scroll-behavior: smooth;
   scroll-padding-top: 96px;
