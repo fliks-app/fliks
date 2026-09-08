@@ -377,6 +377,13 @@ export class SystemController {
     res.download(filePath, name);
   }
 
+  @Delete('backups/:name')
+  @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
+  deleteBackup(@Param('name') name: string): { ok: true } {
+    this.backup.deleteBackup(name);
+    return { ok: true };
+  }
+
   @Get('logs')
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
   getLogs(

@@ -20,6 +20,7 @@ import { MediaService } from '../media/media.service';
 import { MediaType, MediaStatus } from '../../common/enums';
 import { ConfigService } from '@nestjs/config';
 import { SubtitleSchedulerService } from './subtitle-scheduler.service';
+import { BackupService } from './backup.service';
 import { EventsService } from './events.service';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { ThumbnailService } from '../streaming/thumbnail.service';
@@ -66,6 +67,7 @@ export class SchedulerService implements OnModuleInit {
     private readonly pluginAutoUpdate: PluginAutoUpdateService,
     private readonly postImport: PostImportService,
     private readonly activityRegistry: ActivityRegistryService,
+    private readonly backup: BackupService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -82,6 +84,12 @@ export class SchedulerService implements OnModuleInit {
     triggerable: boolean;
     labelKey: string;
   }[] = [
+    {
+      name: 'Backup',
+      cron: CronExpression.EVERY_DAY_AT_2AM,
+      triggerable: true,
+      labelKey: 'system.cmd_backup',
+    },
     {
       name: 'RefreshMetadata',
       cron: CronExpression.EVERY_DAY_AT_4AM,
@@ -123,6 +131,13 @@ export class SchedulerService implements OnModuleInit {
   // ---------------------------------------------------------------------------
   // Scheduled jobs
   // ---------------------------------------------------------------------------
+
+  /** Dump the database once a day, then drop everything past the retention
+   *  window — a rolling backup nobody has to remember to take. */
+  @Cron(CronExpression.EVERY_DAY_AT_2AM)
+  async scheduledBackup(): Promise<void> {
+    return this.runCommand('Backup', 'scheduled', () => this.doBackup());
+  }
 
   /** Refresh metadata for all media once a day */
   @Cron(CronExpression.EVERY_DAY_AT_4AM)
@@ -324,6 +339,7 @@ export class SchedulerService implements OnModuleInit {
     try {
       const registered = this.jobRegistry.get(name);
       if (registered) await registered.run();
+      else if (name === 'Backup') await this.doBackup();
       else if (name === 'RefreshMetadata') await this.doRefreshMetadata();
       else if (name === 'SubtitleSearch')
         await this.subtitleScheduler.searchMissingSubtitles();
@@ -360,6 +376,15 @@ export class SchedulerService implements OnModuleInit {
       });
       throw e;
     }
+  }
+
+  private async doBackup(): Promise<void> {
+    const { filename, size } = await this.backup.createBackup();
+    const removed = this.backup.pruneOldBackups();
+    this.log.log(
+      `Backup: wrote ${filename} (${size} bytes)` +
+        (removed.length ? `, pruned ${removed.length} older backup(s)` : ''),
+    );
   }
 
   private async doRefreshMetadata(): Promise<void> {
