@@ -1126,6 +1126,7 @@
     "add_to_list": "Zu Liste hinzufügen",
     "unlike": "Gefällt mir nicht mehr",
     "subtitle_failed": "Fehlgeschlagen",
+    "subtitle_sync_failed": "Sync fehlgeschlagen",
     "delete_no_folder": "Dieser Titel hat keinen eigenen Ordner: Nur der Bibliothekseintrag wird entfernt, die Datei bleibt auf der Festplatte."
   },
   "requests": {
@@ -1212,6 +1213,7 @@
     "status_upgraded": "Aktualisiert",
     "status_synced": "Synchronisiert",
     "status_failed": "Fehlgeschlagen",
+    "sync_failed": "Sync fehlgeschlagen",
     "error_detail_title": "Fehlerdetails",
     "subtitle_error_interrupted": "Die OCR wurde durch einen Serverneustart unterbrochen."
   },

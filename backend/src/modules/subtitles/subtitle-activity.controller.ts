@@ -108,6 +108,7 @@ export class SubtitleActivityController {
         forced: sf.forced,
         hearingImpaired: sf.hearingImpaired,
         synced: sf.synced,
+        syncFailed: sf.syncFailed,
         errorMessage: sf.errorMessage,
         createdAt: sf.createdAt,
       })),

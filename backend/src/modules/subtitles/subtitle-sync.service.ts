@@ -235,6 +235,11 @@ export class SubtitleSyncService {
       return args;
     };
 
+    // A fresh attempt owns the outcome: a success below has to clear what the
+    // last failure recorded.
+    subtitle.syncFailed = false;
+    subtitle.errorMessage = null;
+
     try {
       await execFileAsync(
         'ffsubsync',
@@ -296,9 +301,13 @@ export class SubtitleSyncService {
         subtitle.synced = true;
         subtitle.status = SubtitleStatus.SYNCED;
       } catch (alassErr: any) {
-        this.logger.error(
-          `Subtitle sync failed for #${id}:\n  ffsubsync stderr: ${err.stderr || '(none)'}\n  alass stderr: ${alassErr.stderr || '(none)'}\n  alass stdout: ${alassErr.stdout || '(none)'}\n  alass message: ${alassErr.message || alassErr}`,
-        );
+        const detail = `ffsubsync stderr: ${err.stderr || '(none)'}\nalass stderr: ${alassErr.stderr || '(none)'}\nalass stdout: ${alassErr.stdout || '(none)'}\nalass message: ${alassErr.message || alassErr}`;
+        this.logger.error(`Subtitle sync failed for #${id}:\n${detail}`);
+        // Saved before the throw: the caller only reports the failure to the
+        // in-memory sync queue, which no page outlives.
+        subtitle.syncFailed = true;
+        subtitle.errorMessage = detail.slice(0, 2000);
+        await this.repo.save(subtitle);
         throw new Error(`Sync failed: ${(alassErr as Error).message}`);
       }
     }

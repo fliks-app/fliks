@@ -9,7 +9,7 @@ import {
 } from '../../../core/services/api/subtitles-api.service';
 
 const entry = (errorMessage: string | null): SubtitleHistoryEntry =>
-  ({ id: 1, status: 'failed', errorMessage }) as SubtitleHistoryEntry;
+  ({ id: 1, status: 'failed', syncFailed: false, errorMessage }) as SubtitleHistoryEntry;
 
 function setup() {
   TestBed.configureTestingModule({

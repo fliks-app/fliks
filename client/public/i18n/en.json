@@ -1134,6 +1134,7 @@
     "add_to_list": "Add to list",
     "unlike": "Unlike",
     "subtitle_failed": "Failed",
+    "subtitle_sync_failed": "Sync failed",
     "delete_no_folder": "This title has no folder of its own: only the library entry will be removed, the file stays on disk."
   },
   "requests": {
@@ -1220,6 +1221,7 @@
     "status_upgraded": "Upgraded",
     "status_synced": "Synced",
     "status_failed": "Failed",
+    "sync_failed": "Sync failed",
     "error_detail_title": "Failure detail",
     "subtitle_error_interrupted": "The OCR run was interrupted by a server restart."
   },
