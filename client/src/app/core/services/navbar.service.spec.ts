@@ -102,4 +102,45 @@ describe('NavbarService', () => {
 
     expect(navbar.canGoBack()).toBe(true);
   });
+
+  it('clears the back entry when the navigation itself is marked a root entry', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([
+          { path: '', component: PageStub },
+          { path: 'library', component: PageStub },
+        ]),
+      ],
+    });
+
+    const navbar = TestBed.inject(NavbarService);
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/');
+    await router.navigateByUrl('/library');
+    expect(navbar.canGoBack()).toBe(true);
+
+    // What a top-level dock entry does: the intent rides on the navigation, so
+    // the arrow can only clear once the router has actually landed.
+    await router.navigate(['/'], { state: { rootEntry: true } });
+
+    expect(navbar.canGoBack()).toBe(false);
+  });
+
+  it('keeps recording back entries after a root entry', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([
+          { path: '', component: PageStub },
+          { path: 'library', component: PageStub },
+        ]),
+      ],
+    });
+
+    const navbar = TestBed.inject(NavbarService);
+    const router = TestBed.inject(Router);
+    await router.navigate(['/'], { state: { rootEntry: true } });
+    await router.navigateByUrl('/library');
+
+    expect(navbar.canGoBack()).toBe(true);
+  });
 });

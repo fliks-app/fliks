@@ -1,3 +1,4 @@
+import { Location } from '@angular/common';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { NavigationEnd, NavigationStart, Router } from '@angular/router';
 import { Capacitor } from '@capacitor/core';
@@ -54,6 +55,7 @@ export class NavbarService {
 
   private readonly device = inject(DeviceService);
   private readonly router = inject(Router);
+  private readonly location = inject(Location);
   /** Stack of in-app URLs we've visited (most recent last, current excluded). */
   private readonly history: string[] = [];
   /** Set while goBack() is navigating, so the NavigationEnd it triggers is
@@ -65,7 +67,7 @@ export class NavbarService {
   private get isNative() { return this.isNativePlatform; }
   /** True while the viewport matches Tailwind's `lg` breakpoint (≥1024px). */
   private readonly isLargeScreen = signal(false);
-  private navCount = 0;
+
 
   constructor() {
     if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
@@ -107,15 +109,17 @@ export class NavbarService {
         }
       }
       if (e instanceof NavigationEnd) {
-        this.navCount++;
-        // Track the previous URL on every NavigationEnd. We can't trust
-        // `window.history.back()` on Capacitor's Android WebView (SPA
-        // pushState entries aren't reliably popped), so goBack() navigates
-        // explicitly to the URL we recorded here. Skip the push when this
-        // navigation IS a back-pop, otherwise back→back would just toggle
-        // between two URLs forever.
-        if (this.isPoppingBack) {
-          this.isPoppingBack = false;
+        // Top-level entries mark their own navigation, so the stack is decided
+        // by where the router landed rather than by a click that preceded it.
+        const rootEntry = !!(this.location.getState() as { rootEntry?: boolean } | null)?.rootEntry;
+        const popped = this.isPoppingBack;
+        this.isPoppingBack = false;
+        // goBack() navigates to a URL recorded here rather than calling
+        // history.back(): Capacitor's WebView drops SPA pushState entries.
+        if (rootEntry) {
+          this.history.length = 0;
+        } else if (popped) {
+          // Nothing to push: this navigation IS the pop.
         } else if (lastUrl && this.pathOf(lastUrl) !== this.pathOf(e.urlAfterRedirects)) {
           // Only a real page change (path differs) pushes a back entry. A
           // query-only change on the same path — library tabs, filters, sort,
@@ -131,7 +135,7 @@ export class NavbarService {
         // (see goBack()'s comment).
         const hasRealHistory = !this.isNative && window.history.length > 1;
         this.canGoBack.set(
-          (this.history.length > 0 || hasRealHistory) && this.router.url !== '/',
+          !rootEntry && (this.history.length > 0 || hasRealHistory) && this.router.url !== '/',
         );
       }
     });
@@ -143,20 +147,6 @@ export class NavbarService {
     return url.split(/[?#]/)[0];
   }
 
-  /**
-   * Reset history tracking — called from top-level nav entries (home,
-   * downloads, search, …). Click handlers fire *before* the resulting
-   * `NavigationEnd`, so we also flip `isPoppingBack` to suppress the
-   * push that would otherwise re-add the page we're leaving onto the
-   * freshly-cleared stack — which is why the back arrow used to flash
-   * on the first dock click and only disappear on the second.
-   */
-  resetNavHistory() {
-    this.navCount = 0;
-    this.history.length = 0;
-    this.isPoppingBack = true;
-    this.canGoBack.set(false);
-  }
 
   /**
    * Mark the next navigation as a "going back" event so the resulting

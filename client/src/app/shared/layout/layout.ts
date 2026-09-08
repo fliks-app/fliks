@@ -488,26 +488,13 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
 
 
-  resetNavHistory() {
-    this.navbar.resetNavHistory();
-  }
 
   /** Bottom-dock search button: same-route click should re-focus the
    *  input and re-open the soft keyboard. The default Router behaviour
    *  no-ops on a same-URL navigation, so the click handler signals the
    *  search page via {@link SearchStateService.requestFocus}. */
   onSearchNavClick(): void {
-    if (this.router.url.split('?')[0] === '/search') {
-      // Already on search: re-focus the input (re-open the keyboard). No
-      // navigation happens, so we must NOT resetNavHistory() here — its
-      // isPoppingBack flag would linger with nothing to consume it and then
-      // swallow the history push of the next navigation (tapping a result),
-      // leaving that page with no back arrow / dead back gesture.
-      this.searchState.requestFocus();
-      return;
-    }
-    // Navigating to search fresh — a top-level dock entry, so clear the stack.
-    this.resetNavHistory();
+    if (this.router.url.split('?')[0] === '/search') this.searchState.requestFocus();
   }
 
   toggleBottomMenu() {
