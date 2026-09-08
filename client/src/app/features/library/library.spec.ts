@@ -114,6 +114,9 @@ function createHarness() {
   // The template is stubbed out above, so the real `#shell` never resolves —
   // stand in for what Angular's `@ViewChild('shell', { static: true })` would give it.
   const shellEl = document.createElement('div');
+  // Connected because the restore waits for the shell to be in the document:
+  // a scrollTop write to a detached element is dropped.
+  document.body.appendChild(shellEl);
   (fixture.componentInstance as unknown as { shellRef: { nativeElement: HTMLElement } }).shellRef = {
     nativeElement: shellEl,
   };

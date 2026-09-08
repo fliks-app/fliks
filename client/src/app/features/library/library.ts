@@ -132,10 +132,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     onAttach: () => {
       const lib = this.library();
       if (lib) this.navbar.setPageTitle(lib.name);
-      if (this.viewport) {
-        this.pageScroller.claim(this.shellRef.nativeElement);
-        if (this.savedScrollTop > 0) this.viewport.scrollToOffset(this.savedScrollTop, 'instant');
-      }
+      this.restoreScrollWhenLive();
       this.applyBackground();
     },
     onDetach: () => {
@@ -324,6 +321,20 @@ export class LibraryComponent implements OnInit, OnDestroy {
     // component exists), but the CDK viewport still needs a tick to see it.
     queueMicrotask(() => ref.checkViewportSize());
   }
+  /** `attached$` fires before the outlet reinserts the subtree, and a write to
+   *  a detached element's scrollTop is dropped, leaving CDK's rendered range
+   *  stranded off-screen. */
+  private restoreScrollWhenLive(frames = 0): void {
+    const el = this.shellRef.nativeElement;
+    if (!this.viewport || this.destroyed) return;
+    if (!el.isConnected) {
+      if (frames < 60) requestAnimationFrame(() => this.restoreScrollWhenLive(frames + 1));
+      return;
+    }
+    this.pageScroller.claim(el);
+    if (this.savedScrollTop > 0) this.viewport.scrollToOffset(this.savedScrollTop, 'instant');
+  }
+  private destroyed = false;
   private viewport?: CdkVirtualScrollViewport;
   private cardRowEl?: HTMLElement;
   /** Measured once per layout. The strategy is fixed-size: it places every row
@@ -486,6 +497,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.destroyed = true;
     this.background.clear();
     this.list.destroy();
     if (this.onResize) window.removeEventListener('resize', this.onResize);
