@@ -691,6 +691,11 @@ html.page-owns-scroll .drawer {
 html.page-owns-scroll .drawer-content {
   min-height: 0;
 }
+/* Sits outside the claiming page's scroller, so it cannot scroll away with the
+   content; the page adds its height to its own padding instead. */
+html.page-owns-scroll .navbar-spacer {
+  display: none;
+}
 html.page-owns-scroll main {
   display: flex;
   flex-direction: column;

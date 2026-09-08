@@ -123,8 +123,15 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private paramSub?: Subscription;
   readonly isNative = Capacitor.isNativePlatform();
   /** Detaching removes the shell from the document, and a detached element has
-   *  no layout box — `scrollTop` reads back 0 on reattach, so it's saved here. */
+   *  no layout box, so the offset has to be kept outside the DOM. */
   private savedScrollTop = 0;
+  /** The fixed-navbar clearance `<main>` gives every other page: the claiming
+   *  page carries it inside its own scroller so it scrolls away with content. */
+  protected readonly shellPadTop = computed(() => {
+    if (!this.pageScroller.element()) return null;
+    if (!this.navbar.mobileNavbarVisible()) return '1rem';
+    return `calc(3rem + env(safe-area-inset-top, 0px) + ${this.isNative ? '1rem' : '2rem'})`;
+  });
   /** Cached per library name: revalidate the grid on return, re-claim the
    *  scroller and restore its saved offset. */
   private readonly routeFresh = keepRouteFresh({
@@ -139,10 +146,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.applyBackground();
     },
     onDetach: () => {
-      if (this.viewport) {
-        this.savedScrollTop = this.shellRef.nativeElement.scrollTop;
-        this.pageScroller.release(this.shellRef.nativeElement);
-      }
+      if (this.viewport) this.pageScroller.release(this.shellRef.nativeElement);
     },
   });
 
@@ -300,6 +304,9 @@ export class LibraryComponent implements OnInit, OnDestroy {
    *  scroll-driven recompute below would immediately highlight that one. */
   private letterClickUntil = 0;
   private readonly onLetterScroll = () => {
+    // Recorded on every scroll: Angular detaches the subtree before `store()`
+    // runs, so by `onDetach` the offset is already gone.
+    this.savedScrollTop = this.shellRef.nativeElement.scrollTop;
     if (this.letterRaf !== null) return;
     this.letterRaf = requestAnimationFrame(() => {
       this.letterRaf = null;

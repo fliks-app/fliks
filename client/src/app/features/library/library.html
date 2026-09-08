@@ -5,8 +5,7 @@
   [focusKey]="'library-' + (library()?.id ?? '')"
   focusIdAttr="data-library-focus"
   class="library-shell flex flex-col gap-4 min-h-0"
-  [class.pt-4]="isNative || !navbar.mobileNavbarVisible()"
-  [class.pt-8]="!isNative && navbar.mobileNavbarVisible()"
+  [style.paddingTop]="shellPadTop()"
 >
   <!-- Library title — hidden when the mobile topbar already shows it
        (avoids the duplicated heading on small screens). -->
@@ -393,9 +392,14 @@
           [minBufferPx]="rowHeight() * 2"
           [maxBufferPx]="rowHeight() * 4"
           class="flex-1 min-w-0 library-viewport">
+          <!-- The right padding clears the alphabet column: it sits at `right-4`
+               and is `w-4` wide, so anything under 2rem lets the cards slide
+               under the letters. -->
           <div *cdkVirtualFor="let row of gridRows(); trackBy: trackRow"
                #cardRow
-               class="grid content-start grid-cols-3 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8 pl-2 pr-2 tv:pl-4 tv:pr-4"
+               [class.pr-8]="sortBy() === 'title' && sortOrder() === 'ASC'"
+               [class.pr-2]="sortBy() !== 'title' || sortOrder() !== 'ASC'"
+               class="grid content-start grid-cols-3 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8 tv:pr-4"
                [style.height.px]="rowHeight()">
             @for (item of row.items; track item.id) {
               <ng-container [ngTemplateOutlet]="cardCell" [ngTemplateOutletContext]="{ $implicit: item }" />

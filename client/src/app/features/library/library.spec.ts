@@ -166,14 +166,17 @@ describe('LibraryComponent — container scroller', () => {
     expect(viewport.scrollToOffset).not.toHaveBeenCalled();
   });
 
-  it('saves the shell\'s scrollTop on detach and restores it via scrollToOffset on attach', () => {
+  it('records the shell\'s scrollTop while scrolling and restores it on attach', () => {
     const { component, attached$, detached$, shellEl } = createHarness();
     const viewport = fakeViewport();
     (component as unknown as { viewportRef: CdkVirtualScrollViewport }).viewportRef = viewport;
 
-    // A detached subtree has no layout box — scrollTop would read back 0 on
-    // reattach unless the component captures it itself before that happens.
+    // The router detaches the subtree before `store()` runs, so by detach time
+    // the offset is already 0 — only a live scroll can capture it.
     shellEl.scrollTop = 1234;
+    shellEl.dispatchEvent(new Event('scroll'));
+    shellEl.scrollTop = 0;
+
     detached$.next(OWN_KEY);
     attached$.next(OWN_KEY);
 
