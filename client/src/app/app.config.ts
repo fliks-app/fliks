@@ -89,7 +89,17 @@ export const appConfig: ApplicationConfig = {
     { provide: LOCALE_ID, useFactory: resolveInitialLocale },
     provideRouter(
       routes,
-      withInMemoryScrolling({ scrollPositionRestoration: 'top' }),
+      // ScrollMemoryService owns the scroll, so the router must not also drive
+      // it: its own scroll runs a frame after NavigationEnd, which lands in the
+      // middle of the poster morph and is then undone by the restore. On device
+      // that read as the grid blinking to bare background (or, before the
+      // rendered range was preserved, as the A-Z index flashing `A`) a couple of
+      // frames into every back transition. `disabled` also stops Angular
+      // setting `history.scrollRestoration`, so the service sets it instead.
+      withInMemoryScrolling({
+        scrollPositionRestoration: 'disabled',
+        anchorScrolling: 'disabled',
+      }),
       // A route reads its own params only; an ancestor's are not inherited.
       withRouterConfig({ paramsInheritanceStrategy: 'emptyOnly' }),
       // Poster→hero morph. On TV the root snapshot costs ~400 ms on a Tizen 9

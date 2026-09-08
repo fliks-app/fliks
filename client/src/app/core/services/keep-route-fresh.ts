@@ -2,6 +2,7 @@ import { DestroyRef, inject, Signal, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import { AppResumeService } from './app-resume.service';
+import { NavbarService } from './navbar.service';
 import { CachingReuseStrategy } from './route-reuse.strategy';
 import { ScrollMemoryService } from './scroll-memory.service';
 
@@ -48,6 +49,7 @@ export function keepRouteFresh(
   const route = inject(ActivatedRoute);
   const scrollMemory = inject(ScrollMemoryService);
   const appResume = inject(AppResumeService);
+  const navbar = inject(NavbarService);
   const destroyRef = inject(DestroyRef);
 
   const detached = signal(false);
@@ -68,7 +70,11 @@ export function keepRouteFresh(
     if (sk) scrollMemory.activate(sk);
     opts.onAttach?.();
     opts.refresh?.();
-    if (sk) scrollMemory.restoreSticky(sk);
+    // Only a return restores the offset. A page opened fresh whose instance is
+    // still in the reuse cache (a card tapped for a title visited earlier) has
+    // to land at the top like any other, and the sticky restore otherwise spent
+    // its whole window dragging the page back down against the router's scroll.
+    if (sk && navbar.navigatedBack()) scrollMemory.restoreSticky(sk);
   });
 
   reuse.detached$.pipe(takeUntilDestroyed(destroyRef)).subscribe((key) => {

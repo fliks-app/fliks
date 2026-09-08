@@ -131,13 +131,55 @@ export class LibraryComponent implements OnInit, OnDestroy {
       const lib = this.library();
       return lib ? `library-${lib.id}` : null;
     },
+    onDetach: () => this.suspendRanging(),
     onAttach: () => {
       const lib = this.library();
       if (lib) this.navbar.setPageTitle(lib.name);
       if (lib) this.prerenderRestoredRows(`library-${lib.id}`);
       this.applyBackground();
+      // After the prerender: the scroll is back on the offset the rows were
+      // rendered for, so the first scroll event CDK sees again agrees with them.
+      this.resumeRanging();
     },
   });
+
+  /**
+   * The grid scrolls the window, and this page's DOM leaves the document while
+   * it waits in the reuse cache — but its viewport keeps that subscription. The
+   * document shrinks to the page navigated to, the scroll clamps to 0, and CDK
+   * re-ranges the detached grid onto the top of the list, dropping every row
+   * that was on screen. They are rebuilt on the way back, which reads as the
+   * whole grid reloading its artwork and the A-Z index flashing `A` before the
+   * real letter. Nothing about that scroll concerns a page nobody is looking at,
+   * so the strategy's reaction to it is muted for the trip. `onDataLengthChanged`
+   * and the rest stay live, so a list that changes meanwhile still re-lays out.
+   */
+  private suspendRanging(): void {
+    const strategy = this.scrollStrategy();
+    if (strategy) strategy.onContentScrolled = () => {};
+    // Same reason, same trip: the alphabet highlight is derived from the window
+    // offset too, so the clamp to 0 left it reading the list's first letter
+    // until a real scroll corrected it after the page was back.
+    window.removeEventListener('scroll', this.onLetterScroll);
+  }
+
+  private resumeRanging(): void {
+    const strategy = this.scrollStrategy();
+    // Back to the prototype method rather than a copy captured on the way out.
+    if (strategy) delete strategy.onContentScrolled;
+    window.addEventListener('scroll', this.onLetterScroll, { passive: true });
+    // The offset moved while nothing was listening, so nothing will announce
+    // it: recompute once, off the offset the rows were just rendered for.
+    this.onLetterScroll();
+  }
+
+  private scrollStrategy(): { onContentScrolled?: () => void } | null {
+    return (
+      (this.viewport as unknown as {
+        _scrollStrategy?: { onContentScrolled?: () => void };
+      } | undefined)?._scrollStrategy ?? null
+    );
+  }
 
   /** Renders the rows for the offset the scroll is about to be restored to —
    *  see {@link renderRowsForOffset}. The flush is CDK's own: `ApplicationRef
@@ -148,6 +190,12 @@ export class LibraryComponent implements OnInit, OnDestroy {
     const y = this.scrollMemory.remembered(key);
     const vp = this.viewport;
     if (y == null || !vp) return;
+    // The router retrieves a cached route twice per return, and on the first
+    // pass this page is not back in the document: CDK measures a zero-height
+    // viewport, collapses the rendered range onto the top of the list, and
+    // destroys every row on screen — which the second pass rebuilds, reloading
+    // all of their artwork. Only the pass that can measure may lay rows out.
+    if (!vp.elementRef.nativeElement.clientHeight) return;
     const render = (vp as unknown as { _doChangeDetection?: () => void })._doChangeDetection;
     renderRowsForOffset(vp, y, () => render?.call(vp));
   }
