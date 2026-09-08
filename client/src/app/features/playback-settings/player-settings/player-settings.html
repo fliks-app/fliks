@@ -3,22 +3,27 @@
   <div class="card-body gap-5">
     <app-select-field
       class="w-full max-w-xs"
-      [(value)]="preferredAudioLanguage"
-      [label]="'playback_settings.player_preferred_lang' | translate"
-      [hint]="'playback_settings.player_preferred_lang_hint' | translate"
+      [(value)]="audioSelectionMode"
+      [label]="'playback_settings.player_audio_mode' | translate"
+      [hint]="'playback_settings.player_audio_mode_hint' | translate"
     >
-      @for (l of languageOptions; track l.value) {
-        <option [value]="l.value">{{ l.labelKey ? (l.labelKey | translate) : l.label }}</option>
+      @for (m of audioModeOptions; track m.value) {
+        <option [value]="m.value">{{ m.labelKey | translate }}</option>
       }
     </app-select-field>
 
-    <div class="divider my-0"></div>
-
-    <app-toggle-field
-      [(value)]="useDefaultAudioStream"
-      [label]="'playback_settings.player_use_default' | translate"
-      [hint]="'playback_settings.player_use_default_hint' | translate"
-    />
+    @if (audioSelectionMode() === 'preferred') {
+      <app-select-field
+        class="w-full max-w-xs"
+        [(value)]="preferredAudioLanguage"
+        [label]="'playback_settings.player_preferred_lang' | translate"
+        [hint]="'playback_settings.player_preferred_lang_hint' | translate"
+      >
+        @for (l of languageOptions; track l.value) {
+          <option [value]="l.value">{{ l.labelKey ? (l.labelKey | translate) : l.label }}</option>
+        }
+      </app-select-field>
+    }
 
     <div class="divider my-0"></div>
 

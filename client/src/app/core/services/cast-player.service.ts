@@ -11,7 +11,10 @@ import { DeviceProfile } from './browser-device-profile.service';
 import { ENGINE_TRAITS, EngineKind } from './engine-traits';
 import { ServerConfigService } from './server-config.service';
 import { formatAudioParts, formatAudioLabel, formatSubtitleLabel, formatSubtitleParts, parseAudioIndex, SpriteMetadata } from '../utils/player.utils';
-import { PlayerSettingsService } from './player-settings.service';
+import {
+  PlayerSettingsService,
+  type AudioStreamChoice,
+} from './player-settings.service';
 import { TrackManagerService } from './track-manager.service';
 import { MediaService } from './api/media.service';
 import { ToastService } from './toast.service';
@@ -723,7 +726,11 @@ export class CastPlayerService {
   }) {
     // Phase 1 — parallelize every fetch that doesn't depend on streamInfo
     // resolution. Saves ~3 sequential round-trips on cold cast.
-    const needsMediaFetch = !opts.streamInfo;
+    // `original` audio mode needs the title's language, which only the media
+    // payload carries — fetch it even when the caller supplied streamInfo.
+    const needsMediaFetch =
+      !opts.streamInfo ||
+      this.playerSettings.get().audioSelectionMode === 'original';
     const needsSavedState = opts.startTime == null;
     const [mediaResult, subsResult, savedState, castInfo] = await Promise.all([
       needsMediaFetch
@@ -742,7 +749,7 @@ export class CastPlayerService {
     let fanartUrl = opts.fanartUrl ?? null;
     if (mediaResult) {
       const file = mediaResult.files?.find((f: any) => f.id === opts.mediaFileId);
-      streamInfo = file?.streamInfo;
+      streamInfo = file?.streamInfo ?? opts.streamInfo;
       if (!fanartUrl && mediaResult.fanartUrl) fanartUrl = mediaResult.fanartUrl;
     }
     if (fanartUrl) fanartUrl = this.serverConfig.resolveUrl(fanartUrl);
@@ -754,9 +761,10 @@ export class CastPlayerService {
     }
     startTime ??= 0;
 
-    const audioStreams: { language?: string }[] = streamInfo?.audio ?? [];
+    const audioStreams: AudioStreamChoice[] = streamInfo?.audio ?? [];
     const audioIndex = this.playerSettings.resolveAudioStreamIndex(
       opts.mediaFileId, audioStreams, opts.mediaId,
+      mediaResult?.metadata?.originalLanguage ?? null,
     );
 
     // Build subtitle list from the parallel fetch (shared with the player).

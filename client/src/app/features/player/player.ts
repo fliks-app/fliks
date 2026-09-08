@@ -48,6 +48,7 @@ import { environment } from '../../../environments/environment';
 import {
   PlayerSettingsService, normalizeLang,
   SUBTITLE_SIZE_MAP, SUBTITLE_COLOR_MAP, SUBTITLE_SHADOW_MAP, SUBTITLE_BG_MAP,
+  type AudioStreamChoice,
 } from '../../core/services/player-settings.service';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
@@ -716,6 +717,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private isOfflinePlayback = false;
   private episodeId: number | undefined;
   private media: Media | null = null;
+
+  /** The title's original language (TMDB, ISO 639-1) — drives the `original`
+   *  audio-selection mode. */
+  private get originalLanguage(): string | null {
+    return this.media?.metadata?.originalLanguage ?? null;
+  }
+
   /** Bumped whenever {@link media} is (re)assigned so reactive computeds re-run. */
   private readonly mediaLoadedTick = signal(0);
   private activeBurnInId: number | null = null;
@@ -1257,9 +1265,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         // Pre-compute audio preference (for UI/state only — the backend
         // already picked an audio during the parallel playback-info call).
         const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
-        const audioStreams: { language?: string }[] = (file?.streamInfo as any)?.audio ?? [];
+        const audioStreams: AudioStreamChoice[] = (file?.streamInfo as any)?.audio ?? [];
         const preselectedAudioIndex = this.playerSettings.resolveAudioStreamIndex(
-          this.mediaFileId, audioStreams, this.mediaId,
+          this.mediaFileId, audioStreams, this.mediaId, this.originalLanguage,
         );
         this.activeAudioStreamIndex = preselectedAudioIndex;
 
@@ -1363,15 +1371,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           // reverting to the manifest's default track (which may be a different
           // language). Same source as the Shaka path's preferredAudioLanguage.
           if (this.isDesktopNative) {
-            const audioCfg = this.playerSettings.get();
-            let preferredAudioLang: string | undefined;
-            if (audioCfg.rememberAudioSelections && this.mediaId) {
-              preferredAudioLang =
-                this.playerSettings.getRememberedAudioTrack(this.mediaId)?.split(':')[0] ?? undefined;
-            }
-            if (!preferredAudioLang && !audioCfg.useDefaultAudioStream) {
-              preferredAudioLang = audioCfg.preferredAudioLanguage || undefined;
-            }
+            const preferredAudioLang = this.playerSettings.resolveAudioLanguage(
+              this.mediaId, this.originalLanguage,
+            );
             if (preferredAudioLang) {
               this.engine!.configure({ preferredAudioLanguage: preferredAudioLang });
             }
@@ -1447,18 +1449,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             // the matching variant during manifest parse — otherwise
             // autoSelectAudioTrack would fire selectVariantTrack after load
             // and trigger a second init.mp4 + seg-0 fetch.
-            const audioSettings = this.playerSettings.get();
-            let preferredLang: string | undefined;
-            if (audioSettings.rememberAudioSelections && this.mediaId) {
-              // Strip any ":n" ordinal — Shaka pre-picks the variant by
-              // language; autoSelectAudioTrack corrects to the Nth post-load.
-              preferredLang =
-                this.playerSettings.getRememberedAudioTrack(this.mediaId)?.split(':')[0] ??
-                undefined;
-            }
-            if (!preferredLang && !audioSettings.useDefaultAudioStream) {
-              preferredLang = audioSettings.preferredAudioLanguage || undefined;
-            }
+            // A remembered ":n" ordinal is stripped by the resolver — Shaka
+            // pre-picks the variant by language; autoSelectAudioTrack
+            // corrects to the Nth post-load.
+            const preferredLang = this.playerSettings.resolveAudioLanguage(
+              this.mediaId, this.originalLanguage,
+            );
 
             // Disable ABR when a specific quality is saved — avoids background
             // variant-switch chatter mid-playback. The backend serves a
@@ -1995,6 +1991,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         tracks, this.mediaId, this.mediaFileId,
         this.activeAudioTrackId(),
         (trackId) => this.onSelectAudioTrack(trackId),
+        this.originalLanguage,
       );
     });
   }
@@ -2170,6 +2167,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // into the intro on purpose without being kicked forward again.
     this.autoSkipSuppressedUntil = Date.now() + 2000;
     this.resetHideTimer();
+  }
+
+  /** Step one frame, pausing first. Falls back to 24 fps when the source rate
+   *  is unknown — a slightly wrong step beats a dead key. */
+  private stepFrame(direction: -1 | 1) {
+    if (!this.engine) return;
+    const fps = Number(this.playbackInfo?.source?.frameRate) || 24;
+    if (!this.engine.paused) this.onTogglePlay();
+    this.onSeek(this.engine.currentTime + direction / fps);
   }
 
   /** Generation counter — every `onSeek` bumps it and the corresponding
@@ -2588,9 +2594,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       // Audio preference for the new file (UI/state; the backend picks the
       // default during playback-info negotiation).
-      const audioStreams: { language?: string }[] = (file?.streamInfo as any)?.audio ?? [];
+      const audioStreams: AudioStreamChoice[] = (file?.streamInfo as any)?.audio ?? [];
       this.activeAudioStreamIndex = this.playerSettings.resolveAudioStreamIndex(
-        this.mediaFileId, audioStreams, this.mediaId,
+        this.mediaFileId, audioStreams, this.mediaId, this.originalLanguage,
       );
 
       // Re-negotiate the stream for the new file (DirectPlay vs the ladder).
@@ -4003,6 +4009,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             tracks, this.mediaId, this.mediaFileId,
             this.activeAudioTrackId(),
             (trackId) => this.onSelectAudioTrack(trackId),
+            this.originalLanguage,
           );
         }
         return;
@@ -4038,6 +4045,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         tracks, this.mediaId, this.mediaFileId,
         this.activeAudioTrackId(),
         (trackId) => this.onSelectAudioTrack(trackId),
+        this.originalLanguage,
       );
     }, 2000);
   }
@@ -4358,6 +4366,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       case '>':
         e.preventDefault();
         this.onSpeedChange(Math.min(2, this.playbackRate() + 0.25));
+        break;
+      case ',':
+      case '.':
+        e.preventDefault();
+        this.stepFrame(e.key === '.' ? 1 : -1);
         break;
     }
     // Don't wake controls for the back key — the user wants to LEAVE.
