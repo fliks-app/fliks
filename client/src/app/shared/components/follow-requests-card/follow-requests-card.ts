@@ -10,6 +10,7 @@ import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideCheck, LucideX } from '@lucide/angular';
 import { SocialApiService, SocialUser } from '../../../core/services/api/social-api.service';
+import { keepRouteFresh } from '../../../core/services/keep-route-fresh';
 import { SseService } from '../../../core/services/sse.service';
 import { TvService } from '../../../core/services/tv.service';
 import { UserAvatarComponent } from '../user-avatar/user-avatar';
@@ -36,6 +37,8 @@ export class FollowRequestsCardComponent implements OnInit {
   readonly busyId = signal<number | null>(null);
 
   constructor() {
+    // Home is a cached route, so ngOnInit doesn't run again on return.
+    keepRouteFresh({ refresh: () => { if (!this.tv.isTv()) void this.load(); } });
     // Prepend a request the moment its SSE arrives, without a round-trip.
     effect(() => {
       if (this.sse.lastEvent()?.type === 'social.follow_request') void this.load();
