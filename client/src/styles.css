@@ -674,9 +674,14 @@ html.vt-player-close body.tv main.page-enter {
   animation: none;
 }
 
-/* CDK's content wrapper ships `contain: content`, clipping the focus ring and
-   scale-up outside a row; the viewport itself no longer clips (the shell does). */
+/* CDK's content wrapper ships `contain: content`, which clips a card's focus
+   ring and scale-up where they overflow its row. */
 .library-viewport .cdk-virtual-scroll-content-wrapper {
+  contain: none;
+}
+/* CDK marks its scrollable `contain: strict`, and paint containment makes it the
+   containing block for `position: fixed` — which would scroll the alphabet away. */
+.library-shell.cdk-virtual-scrollable {
   contain: none;
 }
 
@@ -693,6 +698,16 @@ html.page-owns-scroll .drawer-content {
 }
 /* Sits outside the claiming page's scroller, so it cannot scroll away with the
    content; the page adds its height to its own padding instead. */
+/* A claimed scroller's gutter is inside the layout viewport, where the
+   document's scrollbar never was, so fixed chrome must stop short of it. */
+html.page-owns-scroll nav.navbar {
+  right: var(--page-scrollbar, 0px);
+  /* daisyUI's `width: 100%` would over-constrain the box and make `right` moot. */
+  width: auto;
+}
+html.page-owns-scroll .library-alphabet {
+  right: calc(1rem + var(--page-scrollbar, 0px));
+}
 html.page-owns-scroll .navbar-spacer {
   display: none;
 }

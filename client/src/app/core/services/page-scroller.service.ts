@@ -23,9 +23,21 @@ export class PageScrollerService {
   );
 
   /** Toggles `html.page-owns-scroll`, the CSS hook a claiming page's ancestor
-   *  chain bounds itself against — see styles.css. */
+   *  chain bounds itself against, and publishes the scroller's gutter width so
+   *  fixed chrome can stop short of a scrollbar the document never had. */
   private readonly hostClassEffect = effect(() => {
-    document.documentElement.classList.toggle('page-owns-scroll', this.element() !== null);
+    const el = this.element();
+    const root = document.documentElement;
+    root.classList.toggle('page-owns-scroll', el !== null);
+    if (!el) {
+      root.style.removeProperty('--page-scrollbar');
+      return;
+    }
+    // Deferred: the gutter only exists once the class above has bounded `el`.
+    requestAnimationFrame(() => {
+      if (this.element() !== el) return;
+      root.style.setProperty('--page-scrollbar', `${el.offsetWidth - el.clientWidth}px`);
+    });
   });
 
   constructor() {
