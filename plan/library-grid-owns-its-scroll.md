@@ -181,47 +181,70 @@ claim falls back to the document.
 
 ## Phase 1 — the library grid becomes its own scroller
 
-### 1.1 Bound the page shell to the viewport height
+The scroller is the page shell (`.library-shell`), not the CDK viewport — the
+whole page (title, tabs, filters, grid, legend) scrolls together, exactly as it
+did on the document, just with the offset living on an element instead of
+`window`.
 
-The grid sits in `<div class="flex gap-1 pt-2">` (`library.html:385`). For the
-viewport to have a scrollable height it needs a bounded parent: the page shell
-becomes a `min-h-0` flex column at viewport height (minus the safe-area insets
-already applied to `body.native`, `styles.css:134`), with the filters/header row
-fixed-size and the grid row `flex-1 min-h-0`.
+### 1.1 Bound the page shell, not the grid row
 
-`min-h-0` on every ancestor of the viewport is the part that silently fails if
-missed: a flex child defaults to `min-height: auto` and refuses to shrink, so the
-container grows to its content and the *document* scrolls again — reintroducing
-the whole bug with no error.
+The page shell (`.library-shell`, `library.html:5`) is the element that becomes
+the scroller: `html.page-owns-scroll .library-shell` (`styles.css:706`) gives it
+`overflow: hidden auto` plus a bounded height (`flex: 1; min-height: 0`), a
+horizontal bleed out of `<main>`'s own padding so its scrollbar clears the fixed
+alphabet column, and the padding re-applied inside for the cards' focus-lift
+overflow. The grid row and the CDK viewport underneath stay their natural
+height — no `flex-1 min-h-0` on either — because the viewport is no longer the
+scroller; the shell is.
 
-### 1.2 Drop `scrollWindow`
+`min-h-0` on every ancestor **above** the shell (`.drawer`, `.drawer-content`,
+`main`, `app-library`) is still the part that silently fails if missed: a flex
+child defaults to `min-height: auto` and refuses to shrink, so an ancestor grows
+to its content and the *document* scrolls again — reintroducing the whole bug
+with no error.
 
-Remove the attribute (`library.html:387`). No import change is needed —
-`CdkVirtualScrollableWindow` comes from `ScrollingModule`, which stays for
-`CdkVirtualScrollViewport`, `CdkFixedSizeVirtualScroll` and `CdkVirtualForOf`.
-Remove the now-unused `CdkVirtualScrollableWindow` from the component's
-`imports` array (`library.ts:55`).
+### 1.2 Swap `scrollWindow` for `cdkVirtualScrollingElement` on the shell
 
-Keep `class="flex-1 min-w-0 library-viewport"` and add the height it now needs.
-Note `.library-viewport .cdk-virtual-scroll-content-wrapper { contain: none }`
-(`styles.css:681`) — it was added for the window mode; re-verify whether the
-default mode still needs it, and drop it if not.
+Remove `scrollWindow` (`library.html:387`). In its place, `cdkVirtualScrollingElement`
+(`CdkVirtualScrollableElement`, selector `[cdkVirtualScrollingElement]`) goes on
+`.library-shell`, not the viewport — CDK's other opt-in mode, which puts the
+scroller on an ancestor instead of the viewport itself. Add
+`CdkVirtualScrollableElement` to the component's `imports` array
+(`library.ts:55`) alongside `CdkVirtualScrollViewport` / `CdkVirtualForOf`.
+
+With a `VIRTUAL_SCROLLABLE` ancestor present, the viewport itself never adds
+`.cdk-virtual-scrollable` (`overflow: auto; contain: strict`) — it stays
+`display: block; position: relative` at full content height, same as the old
+`scrollWindow` mode, but now delegating to the shell's `scrollTop` instead of
+`window`. Keep `class="flex-1 min-w-0 library-viewport"`, drop the `h-full` the
+first draft of this plan added (the viewport is unbounded again) and the
+now-dead scrollbar-clearance margin binding that only mattered when the
+scrollbar drew on the viewport itself.
+
+Keep `.library-viewport .cdk-virtual-scroll-content-wrapper { contain: none }`
+(`styles.css:679`) — confirmed still needed: the viewport itself never clips in
+either mode, so CDK's content wrapper (`contain: content`) is the only thing
+that would still trap the focus ring / D-pad scale-up outside a row.
 
 ### 1.3 Claim the scroller
 
-In `library.ts`, `afterNextRender` (or the existing `ngAfterViewInit` path):
-`pageScroller.claim(this.viewport.elementRef.nativeElement)`, released in
-`ngOnDestroy` and on `onDetach`, re-claimed on `onAttach`.
+The claim targets the shell element, not the viewport's — `pageScroller.claim(this.shellRef.nativeElement)`
+(a `@ViewChild('shell', { static: true })` on the root div), released in
+`ngOnDestroy` and on `onDetach`, re-claimed on `onAttach`. It stays gated on the
+existing `@ViewChild(CdkVirtualScrollViewport)` setter (i.e. only claimed while
+a viewport exists), because `.library-shell` wraps all five view modes and only
+`all` has one — the other four tabs keep scrolling the document, topbar hide
+included.
 
 ### 1.4 The alphabet reads the container
 
-`onLetterScroll` (`library.ts:351`) currently does
-`document.scrollingElement.scrollTop` and offsets by the viewport's
-`getBoundingClientRect().top`. With a container it is simply
-`viewport.measureScrollOffset()` — the rect maths disappears, because the
-viewport *is* the scroller and its offset is already relative to the rows.
-
-Bind the listener to the container, not `window`.
+`onLetterScroll` binds to the shell, not the viewport's element. Its body is
+unchanged: `viewport.measureScrollOffset()` still returns a content-relative
+offset in ancestor-scrollable mode too — CDK's own implementation delegates to
+`this.scrollable.measureScrollOffset(from) - this.measureViewportOffset()`,
+where `scrollable` is the shell and `measureViewportOffset()` is the (zero, here)
+distance between the viewport's box and the shell's — so the rect maths still
+disappears, just resolved through the ancestor instead of `this`.
 
 ### 1.5 Delete the workarounds
 
@@ -237,16 +260,16 @@ are still wanted on return.
 
 `scroll-padding-top: 96px` / `scroll-padding-bottom: 20vh` are set on
 `html.tv-host` (`styles.css:438`). Scroll padding applies to the **scroll
-container**, so it must also be set on `.library-viewport` under `html.tv-host`,
-or D-pad `scrollIntoView({block: 'nearest'})` parks the focused card flush
-against the container edge. The spatial-nav calls themselves
+container**, which is now `.library-shell`, not the viewport — moved there
+(`styles.css:718`), or D-pad `scrollIntoView({block: 'nearest'})` parks the
+focused card flush against the shell's edge. The spatial-nav calls themselves
 (`tv-spatial-nav.service.ts:337`, `focusable.constants.ts:58`) need no change —
 `scrollIntoView` walks to the nearest scrollable ancestor.
 
-Also re-check `html.tv-host { scroll-behavior: smooth }` (`styles.css:431`):
-CDK's own `.cdk-virtual-scrollable` sets `scroll-behavior: auto`, so the smooth
-D-pad scrolling that rule buys on TV may be lost inside the container and have
-to be re-applied to `.library-viewport`.
+`scroll-behavior: smooth` moves with it, onto `html.tv-host .library-shell`: the
+viewport itself carries no `.cdk-virtual-scrollable` class in ancestor mode (it
+never becomes a scroller), so there is nothing on the viewport for that rule to
+apply to anymore.
 
 ### 1.7 Tests
 

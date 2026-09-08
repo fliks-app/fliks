@@ -50,6 +50,7 @@ import {
   CdkVirtualScrollViewport,
   CdkFixedSizeVirtualScroll,
   CdkVirtualForOf,
+  CdkVirtualScrollableElement,
 } from '@angular/cdk/scrolling';
 
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -94,6 +95,7 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
     CdkVirtualScrollViewport,
     CdkFixedSizeVirtualScroll,
     CdkVirtualForOf,
+    CdkVirtualScrollableElement,
     CardSkeletonComponent,
     ImportProgressBannerComponent,
   ],
@@ -126,11 +128,11 @@ export class LibraryComponent implements OnInit, OnDestroy {
     onAttach: () => {
       const lib = this.library();
       if (lib) this.navbar.setPageTitle(lib.name);
-      if (this.viewport) this.pageScroller.claim(this.viewport.elementRef.nativeElement);
+      if (this.viewport) this.pageScroller.claim(this.shellRef.nativeElement);
       this.applyBackground();
     },
     onDetach: () => {
-      if (this.viewport) this.pageScroller.release(this.viewport.elementRef.nativeElement);
+      if (this.viewport) this.pageScroller.release(this.shellRef.nativeElement);
     },
   });
 
@@ -243,6 +245,11 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.list.observeSentinel(ref);
   }
 
+  /** The scroller: `.library-shell` claims the page scroll for every view mode
+   *  the viewport is present in (only `all`), so the claim below targets this,
+   *  not the CDK viewport element. */
+  @ViewChild('shell', { static: true }) private shellRef!: ElementRef<HTMLElement>;
+
   /** The `all`-view card grid — measured for DOM windowing on TV. */
   private onResize?: () => void;
 
@@ -296,13 +303,16 @@ export class LibraryComponent implements OnInit, OnDestroy {
    *  `onAttach` re-claims separately since a cached reattach preserves this view. */
   @ViewChild(CdkVirtualScrollViewport) private set viewportRef(ref: CdkVirtualScrollViewport | undefined) {
     if (this.viewport) {
-      this.viewport.elementRef.nativeElement.removeEventListener('scroll', this.onLetterScroll);
-      this.pageScroller.release(this.viewport.elementRef.nativeElement);
+      this.shellRef.nativeElement.removeEventListener('scroll', this.onLetterScroll);
+      this.pageScroller.release(this.shellRef.nativeElement);
     }
     this.viewport = ref;
     if (!ref) return;
-    this.pageScroller.claim(ref.elementRef.nativeElement);
-    ref.elementRef.nativeElement.addEventListener('scroll', this.onLetterScroll, { passive: true });
+    this.pageScroller.claim(this.shellRef.nativeElement);
+    this.shellRef.nativeElement.addEventListener('scroll', this.onLetterScroll, { passive: true });
+    // The shell is only bounded once `page-owns-scroll` lands (a signal effect,
+    // not synchronous with the claim above); re-measure after it has a chance to.
+    queueMicrotask(() => ref.checkViewportSize());
   }
   private viewport?: CdkVirtualScrollViewport;
   private cardRowEl?: HTMLElement;
@@ -470,8 +480,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.list.destroy();
     if (this.onResize) window.removeEventListener('resize', this.onResize);
     if (this.viewport) {
-      this.viewport.elementRef.nativeElement.removeEventListener('scroll', this.onLetterScroll);
-      this.pageScroller.release(this.viewport.elementRef.nativeElement);
+      this.shellRef.nativeElement.removeEventListener('scroll', this.onLetterScroll);
+      this.pageScroller.release(this.shellRef.nativeElement);
     }
     if (this.letterRaf !== null) cancelAnimationFrame(this.letterRaf);
     this.navbar.clearPageTitle();

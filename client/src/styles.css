@@ -675,7 +675,7 @@ html.vt-player-close body.tv main.page-enter {
 }
 
 /* CDK's content wrapper ships `contain: content`, clipping the focus ring and
-   scale-up outside a row; dropping it only matters inside the viewport's own overflow. */
+   scale-up outside a row; the viewport itself no longer clips (the shell does). */
 .library-viewport .cdk-virtual-scroll-content-wrapper {
   contain: none;
 }
@@ -706,10 +706,16 @@ html.page-owns-scroll app-library {
 html.page-owns-scroll .library-shell {
   flex: 1;
   min-height: 0;
+  overflow: hidden auto;
+  /* Bleeds past <main>'s own padding so the shell's scrollbar draws at main's
+     border edge, clear of the fixed alphabet column, then restores the gap
+     for the grid's own D-pad focus-lift overflow. */
+  margin-inline: calc(-1 * var(--page-p));
+  padding-inline: var(--page-p);
 }
 /* TV keeps the D-pad's focus-into-view scroll smooth and off the screen edges
    inside the grid's own scroller, matching the document-scroll rule above. */
-html.tv-host .library-viewport {
+html.tv-host .library-shell {
   scroll-behavior: smooth;
   scroll-padding-top: 96px;
   scroll-padding-bottom: 20vh;

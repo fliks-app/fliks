@@ -54,9 +54,11 @@ function fakeViewport() {
     elementRef: { nativeElement: el },
     measureScrollOffset: vi.fn(() => 0),
     scrollToOffset: vi.fn(),
+    checkViewportSize: vi.fn(),
   } as unknown as CdkVirtualScrollViewport & {
     measureScrollOffset: ReturnType<typeof vi.fn>;
     scrollToOffset: ReturnType<typeof vi.fn>;
+    checkViewportSize: ReturnType<typeof vi.fn>;
   };
 }
 
@@ -109,14 +111,21 @@ function createHarness() {
   const fixture = TestBed.createComponent(LibraryComponent);
   fixture.detectChanges(); // runs ngOnInit
 
-  return { fixture, component: fixture.componentInstance, pageScroller, attached$, detached$ };
+  // The template is stubbed out above, so the real `#shell` never resolves —
+  // stand in for what Angular's `@ViewChild('shell', { static: true })` would give it.
+  const shellEl = document.createElement('div');
+  (fixture.componentInstance as unknown as { shellRef: { nativeElement: HTMLElement } }).shellRef = {
+    nativeElement: shellEl,
+  };
+
+  return { fixture, component: fixture.componentInstance, pageScroller, attached$, detached$, shellEl };
 }
 
 describe('LibraryComponent — container scroller', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('derives the active letter from the viewport\'s own measureScrollOffset()', async () => {
-    const { component } = createHarness();
+    const { component, shellEl } = createHarness();
     component.list.setItems(
       [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((n) =>
         media(n, n <= 6 ? `Apple ${n}` : `Banana ${n}`),
@@ -129,29 +138,29 @@ describe('LibraryComponent — container scroller', () => {
     (component as unknown as { viewportRef: CdkVirtualScrollViewport }).viewportRef = viewport;
 
     viewport.measureScrollOffset.mockReturnValue(0);
-    viewport.elementRef.nativeElement.dispatchEvent(new Event('scroll'));
+    shellEl.dispatchEvent(new Event('scroll'));
     await new Promise((r) => requestAnimationFrame(r));
     expect(component.list.activeLetter()).toBe('A');
 
     viewport.measureScrollOffset.mockReturnValue(component.rowHeight());
-    viewport.elementRef.nativeElement.dispatchEvent(new Event('scroll'));
+    shellEl.dispatchEvent(new Event('scroll'));
     await new Promise((r) => requestAnimationFrame(r));
     expect(component.list.activeLetter()).toBe('B');
   });
 
-  it('a detach/attach cycle re-claims the same viewport without touching its scroll state', () => {
-    const { component, pageScroller, attached$, detached$ } = createHarness();
+  it('a detach/attach cycle re-claims the same shell without touching the viewport\'s scroll state', () => {
+    const { component, pageScroller, attached$, detached$, shellEl } = createHarness();
     const viewport = fakeViewport();
     (component as unknown as { viewportRef: CdkVirtualScrollViewport }).viewportRef = viewport;
 
-    expect(pageScroller.claim).toHaveBeenCalledWith(viewport.elementRef.nativeElement);
+    expect(pageScroller.claim).toHaveBeenCalledWith(shellEl);
     pageScroller.claim.mockClear();
 
     detached$.next(OWN_KEY);
-    expect(pageScroller.release).toHaveBeenCalledWith(viewport.elementRef.nativeElement);
+    expect(pageScroller.release).toHaveBeenCalledWith(shellEl);
 
     attached$.next(OWN_KEY);
-    expect(pageScroller.claim).toHaveBeenCalledWith(viewport.elementRef.nativeElement);
+    expect(pageScroller.claim).toHaveBeenCalledWith(shellEl);
 
     // The whole point: nothing re-renders or re-scrolls the viewport on the
     // way back — its own `scrollTop` already survived the round trip.
