@@ -2,16 +2,6 @@
      each one lets the outgoing picture paint through the incoming one's faded
      bottom, so the gradient only appeared once the old layer went. -->
 <div class="relative -mx-4 -mt-4 hero-fanart-bleed" [class.hero-fanart-fade]="!!outgoing()">
-  <!-- The picture being replaced, held under the incoming one so a swap
-       cross-fades in place instead of cutting. -->
-  @if (outgoing(); as prev) {
-    <img
-      [src]="prev | resolveUrl: 'medium'"
-      alt=""
-      aria-hidden="true"
-      class="absolute inset-0 w-full h-full object-cover object-[50%_25%]"
-    />
-  }
   <!-- Keyed on the url: a fresh element is what makes appImgFadeIn fade the
        new picture in. The name rides the image, not the wrapper: desktop pairs
        img with img and its morph shows the destination's picture, a div
@@ -19,6 +9,7 @@
   @for (url of incoming(); track url) {
     <img
       appImgFadeIn
+      [instant]="!!outgoing()"
       [style.view-transition-name]="viewTransitionName()"
       [src]="url | resolveUrl: 'medium'"
       [alt]="imageAlt()"
@@ -32,5 +23,18 @@
     <div
       class="w-full min-h-[230px] h-[38svh] max-h-[53svh] landscape:min-h-0 landscape:h-auto landscape:aspect-video landscape:max-h-[47vh] bg-base-300"
     ></div>
+  }
+  <!-- The picture being replaced, held OVER the incoming one and faded out once
+       that has loaded. The other way round the fade rode on the incoming image,
+       which a cached picture skips entirely — no animation on most swaps. -->
+  @if (outgoing(); as prev) {
+    <img
+      [src]="prev | resolveUrl: 'medium'"
+      alt=""
+      aria-hidden="true"
+      [class.hero-swap-out]="fadingOut()"
+      (animationend)="outgoing.set(null)"
+      class="absolute inset-0 w-full h-full object-cover object-[50%_25%] pointer-events-none"
+    />
   }
 </div>

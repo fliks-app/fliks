@@ -1,16 +1,15 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { MobileFanartHeroComponent } from './mobile-fanart-hero';
 import { ServerConfigService } from '../../core/services/server-config.service';
 
 /** A single <img> whose src changes cuts to the new picture the moment it
- *  decodes, so the swap holds the outgoing one under the fade. */
+ *  decodes, so a swap fades the outgoing one out over the incoming one. The
+ *  fade rides the OUTGOING layer on purpose: on the incoming one an
+ *  already-cached picture skips it, which is most swaps. */
 describe('MobileFanartHeroComponent — cross-fade on swap', () => {
-  afterEach(() => {
-    vi.useRealTimers();
-    TestBed.resetTestingModule();
-  });
+  afterEach(() => TestBed.resetTestingModule());
 
   function createFixture() {
     TestBed.configureTestingModule({
@@ -28,27 +27,35 @@ describe('MobileFanartHeroComponent — cross-fade on swap', () => {
     return fixture;
   }
 
+  const images = (fixture: { nativeElement: HTMLElement }) => [
+    ...fixture.nativeElement.querySelectorAll('img'),
+  ];
   const sources = (fixture: { nativeElement: HTMLElement }) =>
-    [...fixture.nativeElement.querySelectorAll('img')].map((i) => i.getAttribute('src'));
+    images(fixture).map((i) => i.getAttribute('src'));
 
-  it('holds the outgoing picture until the incoming one has loaded', () => {
-    vi.useFakeTimers();
+  it('fades the outgoing picture out over an incoming one shown at once', () => {
     const fixture = createFixture();
     expect(sources(fixture)).toEqual(['/a.jpg']);
 
     fixture.componentRef.setInput('fanartUrl', '/b.jpg');
     fixture.detectChanges();
-    expect(sources(fixture)).toEqual(['/a.jpg', '/b.jpg']);
+    const [incoming, outgoing] = images(fixture);
+    expect(sources(fixture)).toEqual(['/b.jpg', '/a.jpg']);
+    // Nothing in jsdom ever loads: the incoming layer is opaque because the
+    // swap asks for it, not because the picture happened to be cached.
+    expect(incoming.style.opacity).toBe('1');
+    expect(outgoing.classList).not.toContain('hero-swap-out');
 
-    const incoming = fixture.nativeElement.querySelector('img[src="/b.jpg"]')!;
     incoming.dispatchEvent(new Event('load'));
-    vi.advanceTimersByTime(300);
     fixture.detectChanges();
+    expect(outgoing.classList).toContain('hero-swap-out');
 
+    outgoing.dispatchEvent(new Event('animationend'));
+    fixture.detectChanges();
     expect(sources(fixture)).toEqual(['/b.jpg']);
   });
 
-  it('renders the placeholder and no image without a url', () => {
+  it('renders no image without a url', () => {
     const fixture = createFixture();
     fixture.componentRef.setInput('fanartUrl', null);
     fixture.detectChanges();

@@ -1290,6 +1290,24 @@ html.vt-poster-in app-media-info-header [data-hero-lead] {
 .hero-fanart-fade {
   mask-image: linear-gradient(to top, transparent 0, #000 38%);
 }
+/* The hero's outgoing picture fading out over the incoming one. An animation
+   rather than a transition: the layer is inserted and flagged in the same
+   navigation, so a transition has no rendered start value to run from. */
+@keyframes hero-swap-out {
+  to {
+    opacity: 0;
+  }
+}
+.hero-swap-out {
+  animation: hero-swap-out 320ms ease-out forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Not `none`: `animationend` is what drops the layer. */
+  .hero-swap-out {
+    animation-duration: 1ms;
+  }
+}
+
 /* The dock and the search button sit inside the root snapshot, so lifting the
    lead block above root also lifted the overview — "voir plus" and all — in
    front of them. They have to come along, ordered as they are on the settled
