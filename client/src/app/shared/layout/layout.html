@@ -3,7 +3,8 @@
      [class.lg:drawer-open]="navbar.sidebarDocked()"
      [class.md:drawer-open]="device.isTablet() && navbar.effectiveSidebarPinned()">
   <input id="sidebar" type="checkbox" class="drawer-toggle" />
-  <div class="drawer-content flex flex-col relative">
+  <div class="drawer-content flex flex-col relative"
+       [style.--dock-clearance]="isNative && device.isPhone() ? '6rem' : null">
     <!-- Watched by an IntersectionObserver to derive `scrollAtTop` without ever
          reading the scroll position. Absolute, so it adds no layout height. -->
     <div #topSentinel aria-hidden="true" class="absolute top-0 left-0 h-5 w-px pointer-events-none"></div>
@@ -177,7 +178,7 @@
          navigate via the drawer/sidebar; phones use the dock as the primary
          nav surface so they need the spacer to avoid content under the bar. -->
     @if (isNative && device.isPhone()) {
-      <div class="h-24"></div>
+      <div class="dock-spacer h-24"></div>
     }
     <!-- Native bottom navigation bar — phones only.
          Tablets and TV use the drawer/sidebar instead. -->

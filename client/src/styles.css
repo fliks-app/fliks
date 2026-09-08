@@ -708,7 +708,8 @@ html.page-owns-scroll nav.navbar {
 html.page-owns-scroll .library-alphabet {
   right: calc(1rem + var(--page-scrollbar, 0px));
 }
-html.page-owns-scroll .navbar-spacer {
+html.page-owns-scroll .navbar-spacer,
+html.page-owns-scroll .dock-spacer {
   display: none;
 }
 html.page-owns-scroll main {
@@ -733,8 +734,9 @@ html.page-owns-scroll .library-shell {
   /* main's own inline padding is zeroed above, so the scrollbar already lands
      at main's border edge, clear of the fixed alphabet column — no bleed needed. */
   padding-inline: var(--page-p);
-  /* Replaces main's py-4 bottom, which used to give the grid room to breathe. */
-  padding-bottom: 1rem;
+  /* main's py-4 bottom, plus the dock's own clearance so the grid scrolls
+     under it and its frosted veil has content to blur. */
+  padding-bottom: calc(1rem + var(--dock-clearance, 0px));
 }
 /* A scroll container's automatic minimum size is zero, so the tabs row would
    absorb the whole column's shrink pressure and collapse to its scrollbar. */
