@@ -1,9 +1,11 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { PlayerSettingsService } from '../../../core/services/player-settings.service';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { persistOnChange } from '../../../core/utils/persist-on-change';
 import { LucideTrash2 } from '@lucide/angular';
 import { SubtitleAppearanceComponent } from '../../../shared/components/subtitle-appearance/subtitle-appearance';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
@@ -17,8 +19,9 @@ import {
   imports: [TvSelectDirective, FormsModule, TranslatePipe, LucideTrash2, SubtitleAppearanceComponent, ToggleFieldComponent],
   templateUrl: './subtitle-settings.html',
 })
-export class SubtitleSettingsPageComponent implements OnInit {
+export class SubtitleSettingsPageComponent {
   private readonly ps = inject(PlayerSettingsService);
+  private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
 
@@ -27,54 +30,48 @@ export class SubtitleSettingsPageComponent implements OnInit {
   readonly bottomMarginOptions = BOTTOM_MARGIN_OPTIONS;
   readonly topMarginOptions = TOP_MARGIN_OPTIONS;
 
-  readonly preferredSubtitleLanguage = signal('');
-  readonly subtitleMode = signal<'off' | 'intelligent' | 'always'>('intelligent');
-  readonly rememberSubtitleSelections = signal(false);
-  readonly hideImageSubtitles = signal(true);
-  readonly showSubtitleFormat = signal(false);
-  readonly subtitleSize = signal('normal');
-  readonly subtitleColor = signal('white');
-  readonly subtitleShadow = signal('drop');
-  readonly subtitleBackground = signal('transparent');
-  readonly subtitleBottomMargin = signal(10);
-  readonly subtitleTopMargin = signal(5);
+  private readonly initial = this.ps.get();
+  readonly preferredSubtitleLanguage = signal(this.initial.preferredSubtitleLanguage);
+  readonly subtitleMode = signal(this.initial.subtitleMode);
+  readonly rememberSubtitleSelections = signal(this.initial.rememberSubtitleSelections);
+  readonly hideImageSubtitles = signal(this.initial.hideImageSubtitles);
+  readonly showSubtitleFormat = signal(this.initial.showSubtitleFormat);
+  readonly subtitleSize = signal(this.initial.subtitleSize);
+  readonly subtitleColor = signal(this.initial.subtitleColor);
+  readonly subtitleShadow = signal(this.initial.subtitleShadow);
+  readonly subtitleBackground = signal(this.initial.subtitleBackground);
+  readonly subtitleBottomMargin = signal(this.initial.subtitleBottomMargin);
+  readonly subtitleTopMargin = signal(this.initial.subtitleTopMargin);
 
-  ngOnInit() {
-    const p = this.ps.get();
-    this.preferredSubtitleLanguage.set(p.preferredSubtitleLanguage);
-    this.subtitleMode.set(p.subtitleMode);
-    this.rememberSubtitleSelections.set(p.rememberSubtitleSelections);
-    this.hideImageSubtitles.set(p.hideImageSubtitles);
-    this.showSubtitleFormat.set(p.showSubtitleFormat);
-    this.subtitleSize.set(p.subtitleSize);
-    this.subtitleColor.set(p.subtitleColor);
-    this.subtitleShadow.set(p.subtitleShadow);
-    this.subtitleBackground.set(p.subtitleBackground);
-    this.subtitleBottomMargin.set(p.subtitleBottomMargin);
-    this.subtitleTopMargin.set(p.subtitleTopMargin);
+  constructor() {
+    persistOnChange(
+      () => ({
+        preferredSubtitleLanguage: this.preferredSubtitleLanguage(),
+        subtitleMode: this.subtitleMode(),
+        rememberSubtitleSelections: this.rememberSubtitleSelections(),
+        hideImageSubtitles: this.hideImageSubtitles(),
+        showSubtitleFormat: this.showSubtitleFormat(),
+        subtitleSize: this.subtitleSize(),
+        subtitleColor: this.subtitleColor(),
+        subtitleShadow: this.subtitleShadow(),
+        subtitleBackground: this.subtitleBackground(),
+        subtitleBottomMargin: this.subtitleBottomMargin(),
+        subtitleTopMargin: this.subtitleTopMargin(),
+      }),
+      // Spread first: other pages own fields of this store.
+      (values) => this.ps.save({ ...this.ps.get(), ...values }),
+    );
   }
 
-  clearSubtitleSelections() {
+  async clearSubtitleSelections() {
+    const confirmed = await this.confirmation.confirm({
+      title: this.translate.instant('playback_settings.sub_clear_saved'),
+      message: this.translate.instant('playback_settings.sub_clear_saved_confirm'),
+      confirmLabel: this.translate.instant('common.clear'),
+      variant: 'danger',
+    });
+    if (!confirmed) return;
     this.ps.clearRememberedSubtitleTracks();
     this.toast.success(this.translate.instant('common.selections_cleared'));
-  }
-
-  save() {
-    const current = this.ps.get();
-    this.ps.save({
-      ...current,
-      preferredSubtitleLanguage: this.preferredSubtitleLanguage(),
-      subtitleMode: this.subtitleMode(),
-      rememberSubtitleSelections: this.rememberSubtitleSelections(),
-      hideImageSubtitles: this.hideImageSubtitles(),
-      showSubtitleFormat: this.showSubtitleFormat(),
-      subtitleSize: this.subtitleSize(),
-      subtitleColor: this.subtitleColor(),
-      subtitleShadow: this.subtitleShadow(),
-      subtitleBackground: this.subtitleBackground(),
-      subtitleBottomMargin: this.subtitleBottomMargin(),
-      subtitleTopMargin: this.subtitleTopMargin(),
-    });
-    this.toast.success(this.translate.instant('common.settings_saved'));
   }
 }
