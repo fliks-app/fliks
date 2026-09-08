@@ -59,7 +59,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 # RPU tone-map) — that stays, amd64-only. The jellyfin-ffmpeg deb is per-arch;
 # on arm64 there's no Intel HW so the image is CPU-only (libx264) + ffsubsync.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  postgresql-client \
   procps \
   python3 \
   python3-pip \
@@ -72,6 +71,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   gcc \
   python3-dev \
   libc6-dev \
+  # postgres client tools from PGDG: Ubuntu ships 16 and pg_dump refuses a
+  # server newer than itself, which is every supported deployment.
+  && wget -q -O /usr/share/keyrings/pgdg.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+  && echo "deb [signed-by=/usr/share/keyrings/pgdg.asc] http://apt.postgresql.org/pub/repos/apt noble-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends postgresql-client \
   && if [ "$TARGETARCH" = "amd64" ]; then \
        apt-get install -y --no-install-recommends \
          intel-opencl-icd; \
