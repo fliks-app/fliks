@@ -73,16 +73,16 @@
                   (click)="openError(entry)"
                   [attr.aria-label]="'activity.error_detail_title' | translate"
                 >
-                  <span class="badge badge-sm" [ngClass]="subStatusClass(entry.status)">{{ entry.status }}</span>
+                  <span class="badge badge-sm" [ngClass]="subStatusClass(entry.status)">{{ entry.status | subtitleStatus }}</span>
                 </button>
               } @else {
-                <span class="badge badge-sm" [ngClass]="subStatusClass(entry.status)">{{ entry.status }}</span>
+                <span class="badge badge-sm" [ngClass]="subStatusClass(entry.status)">{{ entry.status | subtitleStatus }}</span>
               }
             </td>
             <td class="text-center text-sm">
               @if (entry.forced) { <span class="badge badge-sm badge-outline mr-1">F</span> }
               @if (entry.hearingImpaired) { <span class="badge badge-sm badge-outline">HI</span> }
-              @if (entry.synced) { <span class="badge badge-sm badge-info ml-1">Synced</span> }
+              @if (entry.synced) { <span class="badge badge-sm badge-info ml-1">{{ 'activity.status_synced' | translate }}</span> }
               @if (entry.syncFailed) {
                 @if (errorText(entry)) {
                   <button

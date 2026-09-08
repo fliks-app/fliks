@@ -20,12 +20,13 @@ import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe';
+import { SubtitleStatusPipe } from '../../../core/pipes/subtitle-status.pipe';
 import { SUBTITLE_LANGUAGE_CODES } from '../../../core/constants/subtitle-languages';
 import { episodeLabel } from '../../../shared/utils/episode-label';
 
 @Component({
   selector: 'app-subtitles-activity',
-  imports: [TvSelectDirective, TranslatePipe, LocaleDatePipe, LocalizeLanguagePipe, NgClass, RouterLink, FormsModule, PaginationComponent, ModalHeaderComponent, ModalFooterComponent],
+  imports: [TvSelectDirective, TranslatePipe, LocaleDatePipe, LocalizeLanguagePipe, NgClass, RouterLink, FormsModule, PaginationComponent, ModalHeaderComponent, ModalFooterComponent, SubtitleStatusPipe],
   templateUrl: './subtitles-activity.html',
 })
 export class SubtitlesActivityComponent implements OnInit {
