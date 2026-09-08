@@ -1211,7 +1211,9 @@
     "status_downloaded": "Heruntergeladen",
     "status_upgraded": "Aktualisiert",
     "status_synced": "Synchronisiert",
-    "status_failed": "Fehlgeschlagen"
+    "status_failed": "Fehlgeschlagen",
+    "error_detail_title": "Fehlerdetails",
+    "subtitle_error_interrupted": "Die OCR wurde durch einen Serverneustart unterbrochen."
   },
   "tracking": {
     "menu_item": "Tracking-Status ansehen",

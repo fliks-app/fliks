@@ -235,6 +235,8 @@ export interface SubtitleHistoryEntry {
   forced: boolean;
   hearingImpaired: boolean;
   synced: boolean;
+  /** Why a failed entry failed: a raw engine error, or a translation key. */
+  errorMessage: string | null;
   createdAt: string;
 }
 

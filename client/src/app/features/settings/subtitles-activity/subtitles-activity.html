@@ -66,7 +66,18 @@
             <td class="text-sm">{{ entry.providerType }}</td>
             <td class="text-center tabular-nums">{{ entry.score }}</td>
             <td class="text-center">
-              <span class="badge badge-sm" [ngClass]="subStatusClass(entry.status)">{{ entry.status }}</span>
+              @if (errorText(entry)) {
+                <button
+                  type="button"
+                  class="link link-hover"
+                  (click)="openError(entry)"
+                  [attr.aria-label]="'activity.error_detail_title' | translate"
+                >
+                  <span class="badge badge-sm" [ngClass]="subStatusClass(entry.status)">{{ entry.status }}</span>
+                </button>
+              } @else {
+                <span class="badge badge-sm" [ngClass]="subStatusClass(entry.status)">{{ entry.status }}</span>
+              }
             </td>
             <td class="text-center text-sm">
               @if (entry.forced) { <span class="badge badge-sm badge-outline mr-1">F</span> }
@@ -88,3 +99,18 @@
     />
   }
 }
+
+<dialog #errorDialog class="modal">
+  <div class="modal-box max-w-2xl">
+    <app-modal-header [title]="'activity.error_detail_title' | translate" (closed)="closeError()" />
+    <pre class="text-sm whitespace-pre-wrap break-words bg-base-200 rounded p-3 max-h-[60vh] overflow-auto">{{ errorDetail() }}</pre>
+    <app-modal-footer>
+      <button type="button" class="btn btn-ghost" (click)="closeError()">
+        {{ 'common.close' | translate }}
+      </button>
+    </app-modal-footer>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeError()" [attr.aria-label]="'common.close' | translate">close</button>
+  </form>
+</dialog>

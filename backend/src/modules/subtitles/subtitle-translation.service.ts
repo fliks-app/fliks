@@ -40,9 +40,9 @@ const execFileAsync = promisify(execFile);
  * storing the result as a normal text sidecar tagged with the `TRANSLATED`
  * provider type and carrying the source subtitle's score. The work is slow (many
  * API calls), so callers get a `PROCESSING` placeholder row immediately and the
- * run finishes in the background — flipping the row to `DOWNLOADED` (or deleting
- * it on failure) and emitting SSE events the subtitle modal already reloads on,
- * plus a per-batch progress event.
+ * run finishes in the background — flipping the row to `DOWNLOADED` (or `FAILED`,
+ * carrying the cause) and emitting SSE events the subtitle modal already reloads
+ * on, plus a per-batch progress event.
  */
 @Injectable()
 export class SubtitleTranslationService {
@@ -303,7 +303,12 @@ export class SubtitleTranslationService {
         error: String(err),
         ...(err instanceof TranslationRateLimitError ? { reason: 'rate_limit' } : {}),
       });
-      await this.repo.delete(placeholderId);
+      // Kept, not deleted: the row is the only trace of the run, and translation
+      // is manual-only, so a FAILED one can't feed an automatic retry loop.
+      await this.repo.update(placeholderId, {
+        status: SubtitleStatus.FAILED,
+        errorMessage: String(err).slice(0, 2000),
+      });
     } finally {
       await this.cleanupTemp(base);
     }

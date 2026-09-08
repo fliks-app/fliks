@@ -1211,7 +1211,9 @@
     "status_downloaded": "Scaricato",
     "status_upgraded": "Aggiornato",
     "status_synced": "Sincronizzato",
-    "status_failed": "Fallito"
+    "status_failed": "Fallito",
+    "error_detail_title": "Dettaglio dell'errore",
+    "subtitle_error_interrupted": "L'OCR è stato interrotto da un riavvio del server."
   },
   "tracking": {
     "menu_item": "Vedi lo stato del monitoraggio",

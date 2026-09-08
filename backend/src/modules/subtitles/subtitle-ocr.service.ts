@@ -91,7 +91,10 @@ export class SubtitleOcrService implements OnModuleInit {
   async onModuleInit(): Promise<void> {
     const { affected } = await this.repo.update(
       { providerType: SubtitleProviderType.OCR, status: SubtitleStatus.PROCESSING },
-      { status: SubtitleStatus.FAILED },
+      {
+        status: SubtitleStatus.FAILED,
+        errorMessage: 'activity.subtitle_error_interrupted',
+      },
     );
     if (affected) this.log.warn(`Marked ${affected} interrupted OCR run(s) as failed`);
   }
@@ -288,7 +291,11 @@ export class SubtitleOcrService implements OnModuleInit {
       // already tried, so the language falls through to the providers instead
       // of re-running a 30-minute OCR on every scheduled sweep. Deleting it
       // re-arms the automatic retry.
-      await this.repo.update(placeholderId, { status: SubtitleStatus.FAILED });
+      await this.repo.update(placeholderId, {
+        status: SubtitleStatus.FAILED,
+        // Bounded: an ffmpeg/tesseract failure can carry a whole stderr dump.
+        errorMessage: String(err).slice(0, 2000),
+      });
     }
   }
 

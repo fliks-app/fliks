@@ -1219,7 +1219,9 @@
     "status_downloaded": "Téléchargé",
     "status_upgraded": "Mis à niveau",
     "status_synced": "Synchronisé",
-    "status_failed": "Échec"
+    "status_failed": "Échec",
+    "error_detail_title": "Détail de l'échec",
+    "subtitle_error_interrupted": "L'OCR a été interrompu par un redémarrage du serveur."
   },
   "tracking": {
     "menu_item": "Voir l'état du suivi",
