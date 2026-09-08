@@ -1156,7 +1156,12 @@ body.tablet [data-touch-only] {
      top: -12 puts the cradle's centre at the same y as the FAB. */
   top: -12px;
   transform: translateX(-50%);
-  background: var(--color-base-100);
+  background: color-mix(in oklab, var(--color-base-100) 70%, transparent);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  /* Only the protruding cap is drawn: over the bar it would stack a second
+     translucent layer and show as a lighter half-circle. */
+  clip-path: inset(0 0 52px 0);
 }
 
 /* Skip the full-page cross-fade. Rasterizing + compositing two viewport-sized
