@@ -22,6 +22,8 @@
       [class.backdrop-blur-sm]="!navbarTransparent() && !tv.isTv()"
       [class.shadow-sm]="!navbarTransparent() && !background.url() && !tv.isTv()"
       [class.bg-transparent]="navbarTransparent()"
+      [class.border-b]="!navbarTransparent() && !tv.isTv()"
+      [class.border-base-100/20]="!navbarTransparent() && !tv.isTv()"
       [class.text-white]="navbarTransparent()"
       [class.nav-hero-icons]="navbarTransparent()"
     >
@@ -231,9 +233,10 @@
              since the .dock is no longer the parent stacking context). -->
         @if (bottomMenuOpen()) {
           <div class="fixed inset-0 z-40" (click)="bottomMenuOpen.set(false)"></div>
-          <div class="fixed bottom-20 right-2 mb-2 bg-base-100 rounded-box shadow-xl border border-base-200 min-w-48 z-50"
-               style="bottom: calc(4rem + env(safe-area-inset-bottom, 0px) + 0.5rem)">
-            <ul class="menu p-2 gap-0.5">
+          <div animate.leave="popover-pop-leaving"
+               class="popover-pop-in fixed bottom-20 right-2 mb-2 bg-base-100/70 backdrop-blur-sm rounded-box shadow-xl border border-base-200 min-w-48 z-50"
+               style="bottom: calc(4rem + env(safe-area-inset-bottom, 0px) + 0.5rem); transform-origin: bottom right">
+            <ul class="menu w-full p-2 gap-0.5">
               @for (lib of customLibraries(); track lib.id) {
                 <li>
                   <a [routerLink]="libraryUrl(lib)" routerLinkActive="menu-active" class="justify-between" (click)="resetNavHistory()">

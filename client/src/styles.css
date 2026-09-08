@@ -1149,7 +1149,27 @@ body.tablet [data-touch-only] {
    `overflow: visible` is required so the pseudo can extend past the dock's
    own bounding box (DaisyUI's .dock would otherwise clip it). */
 .dock-with-fab-cradle {
+  --dock-edge: color-mix(in oklab, var(--color-base-100) 20%, transparent);
   overflow: visible !important;
+  /* Drawn by ::after instead, which leaves the cradle's chord out. */
+  border-top-color: transparent;
+}
+/* The dock's top edge, interrupted where the cradle's outline takes over. The
+   gap is the cradle's chord at its clip line: r 32, cut 12px down. */
+.dock-with-fab-cradle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    var(--dock-edge) calc(50% - 25px),
+    transparent calc(50% - 25px),
+    transparent calc(50% + 25px),
+    var(--dock-edge) calc(50% + 25px)
+  );
 }
 .dock-with-fab-cradle::before {
   content: '';
@@ -1164,6 +1184,7 @@ body.tablet [data-touch-only] {
   top: -12px;
   transform: translateX(-50%);
   background: color-mix(in oklab, var(--color-base-100) 70%, transparent);
+  border: 1px solid var(--dock-edge);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   /* Only the protruding cap is drawn: over the bar it would stack a second
