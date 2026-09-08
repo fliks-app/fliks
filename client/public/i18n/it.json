@@ -1126,6 +1126,7 @@
     "add_to_list": "Aggiungi a un elenco",
     "unlike": "Non mi piace più",
     "subtitle_failed": "Non riuscito",
+    "subtitle_sync_failed": "Sincronizzazione non riuscita",
     "delete_no_folder": "Questo titolo non ha una cartella propria: verrà rimossa solo la voce della libreria, il file rimane sul disco."
   },
   "requests": {
@@ -1212,6 +1213,7 @@
     "status_upgraded": "Aggiornato",
     "status_synced": "Sincronizzato",
     "status_failed": "Fallito",
+    "sync_failed": "Sincronizzazione non riuscita",
     "error_detail_title": "Dettaglio dell'errore",
     "subtitle_error_interrupted": "L'OCR è stato interrotto da un riavvio del server."
   },

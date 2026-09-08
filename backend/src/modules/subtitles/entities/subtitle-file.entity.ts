@@ -104,6 +104,11 @@ export class SubtitleFile extends BaseEntity {
   @Column({ default: false })
   synced: boolean;
 
+  /** The last sync attempt failed. Its own axis, not a status: the file is still
+   *  servable, and the row keeps the acquisition state it was in. */
+  @Column({ default: false })
+  syncFailed: boolean;
+
   @Column({ type: 'int', nullable: true })
   syncOffset: number;
 

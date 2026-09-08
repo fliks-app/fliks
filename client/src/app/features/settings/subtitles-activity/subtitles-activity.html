@@ -66,7 +66,7 @@
             <td class="text-sm">{{ entry.providerType }}</td>
             <td class="text-center tabular-nums">{{ entry.score }}</td>
             <td class="text-center">
-              @if (errorText(entry)) {
+              @if (entry.status === 'failed' && errorText(entry)) {
                 <button
                   type="button"
                   class="link link-hover"
@@ -83,6 +83,20 @@
               @if (entry.forced) { <span class="badge badge-sm badge-outline mr-1">F</span> }
               @if (entry.hearingImpaired) { <span class="badge badge-sm badge-outline">HI</span> }
               @if (entry.synced) { <span class="badge badge-sm badge-info ml-1">Synced</span> }
+              @if (entry.syncFailed) {
+                @if (errorText(entry)) {
+                  <button
+                    type="button"
+                    class="link link-hover ml-1"
+                    (click)="openError(entry)"
+                    [attr.aria-label]="'activity.error_detail_title' | translate"
+                  >
+                    <span class="badge badge-sm badge-warning">{{ 'activity.sync_failed' | translate }}</span>
+                  </button>
+                } @else {
+                  <span class="badge badge-sm badge-warning ml-1">{{ 'activity.sync_failed' | translate }}</span>
+                }
+              }
             </td>
           </tr>
         }

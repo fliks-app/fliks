@@ -18,6 +18,9 @@ export interface SubtitleFileRow {
   status: string;
   score: number;
   synced: boolean;
+  syncFailed: boolean;
+  /** Set when `syncFailed`: the ffsubsync/alass output of the last attempt. */
+  errorMessage?: string | null;
   syncOffset?: number;
   streamIndex?: number | null;
   codec?: string | null;
@@ -235,6 +238,7 @@ export interface SubtitleHistoryEntry {
   forced: boolean;
   hearingImpaired: boolean;
   synced: boolean;
+  syncFailed: boolean;
   /** Why a failed entry failed: a raw engine error, or a translation key. */
   errorMessage: string | null;
   createdAt: string;
