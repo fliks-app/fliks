@@ -172,7 +172,9 @@
                         <span class="badge badge-sm badge-outline">HI</span>
                       }
                       @if (sub.synced) {
-                        <span class="badge badge-sm badge-info ml-1">Synced</span>
+                        <span class="badge badge-sm badge-info ml-1">{{
+                          'activity.status_synced' | translate
+                        }}</span>
                       }
                       @if (sub.syncFailed) {
                         <span
@@ -290,7 +292,9 @@
             <optgroup [label]="'media_detail.sync_external_subtitles' | translate">
               @for (s of externalSubtitleRefs(); track s.id) {
                 <option [value]="'file:' + s.relativePath">
-                  {{ s.language | localizeLanguage }} — {{ s.providerType }} ({{ s.status }})
+                  {{ s.language | localizeLanguage }} — {{ s.providerType }} ({{
+                    s.status | subtitleStatus
+                  }})
                 </option>
               }
             </optgroup>

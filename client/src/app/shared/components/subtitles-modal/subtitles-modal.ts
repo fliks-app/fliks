@@ -16,6 +16,7 @@ import {
   LucideUpload,
 } from '@lucide/angular';
 import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe';
+import { SubtitleStatusPipe } from '../../../core/pipes/subtitle-status.pipe';
 import { formatSubtitleLabel, formatSubtitleParts } from '../../../core/utils/player.utils';
 import { guessLanguageFromFilename, localizeLanguage } from '../../../core/utils/language.utils';
 import {
@@ -74,6 +75,7 @@ interface SubtitleRow {
     FormsModule,
     TranslatePipe,
     LocalizeLanguagePipe,
+    SubtitleStatusPipe,
     SubtitleFilenamePipe,
     PaginationComponent,
     MediaDetailSubtitleSearchModalComponent,
