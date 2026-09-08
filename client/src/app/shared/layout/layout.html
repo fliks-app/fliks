@@ -9,7 +9,7 @@
     <div #topSentinel aria-hidden="true" class="absolute top-0 left-0 h-5 w-px pointer-events-none"></div>
     <nav
       appTvRow
-      class="navbar fixed left-0 right-0 z-30 transition-all duration-300 tv:px-[var(--page-p)] tv:static"
+      class="navbar fixed left-0 right-0 z-30 transition-all duration-300 border-base-100/20 tv:px-[var(--page-p)] tv:static"
       [style.transition]="restorePending() ? 'none' : null"
       [style.padding-top]="tv.isTv() ? 'calc(env(safe-area-inset-top, 0px) + var(--page-p) / 2)' : 'calc(env(safe-area-inset-top, 0px) + 4px)'"
       [class.top-0]="!tv.isTv() || tv.isTizen()"
@@ -23,7 +23,6 @@
       [class.shadow-sm]="!navbarTransparent() && !background.url() && !tv.isTv()"
       [class.bg-transparent]="navbarTransparent()"
       [class.border-b]="!navbarTransparent() && !tv.isTv()"
-      [class.border-base-100/20]="!navbarTransparent() && !tv.isTv()"
       [class.text-white]="navbarTransparent()"
       [class.nav-hero-icons]="navbarTransparent()"
     >
