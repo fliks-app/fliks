@@ -82,8 +82,7 @@ export interface EncoderInput {
   forceKeyframesExpr: string;
   /** QSV-specific rate-control knobs. Other encoders ignore. */
   qsv: {
-    /** Encoder flags: `-forced_idr 1 -adaptive_i 0 -bf 0 -b_strategy 0`,
-     *  plus `-low_power 1` when enabled in admin settings. */
+    /** Encoder flags: `-forced_idr 1 -adaptive_i 0 -bf 0 -b_strategy 0`. */
     extra: string[];
     /** `-rc_init_occupancy` in bits. */
     rcInitOccupancy: number;

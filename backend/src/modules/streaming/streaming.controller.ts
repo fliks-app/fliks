@@ -769,7 +769,6 @@ export class StreamingController {
       'var-stream-map';
 
     this.activeStreamTracker.setSegmentDuration(ss.segmentDuration);
-    this.activeStreamTracker.setQsvOptions({ lowPower: ss.qsvLowPower });
     this.activeStreamTracker.setTonemapAlgo(ss.tonemapAlgo);
     this.activeStreamTracker.setAutoCropEnabled(ss.autoCropEnabled);
     // Pin HW transcoding to the admin-selected GPU (multi-GPU hosts); 'auto'

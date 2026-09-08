@@ -27,11 +27,13 @@ export class StreamingSettingsComponent implements OnInit {
 
   readonly cacheBytes = signal(0);
   readonly cacheEntries = signal(0);
+  /** The footprint is a recursive walk of every cached segment, so it lands
+   *  well after the page. Until it does, 0 entries is unknown, not empty. */
+  readonly cacheStatsLoaded = signal(false);
   readonly purging = signal(false);
 
   readonly segmentDuration = signal('3');
   readonly qsvPreset = signal('faster');
-  readonly qsvLowPower = signal(false);
   readonly tonemapAlgo = signal('auto');
   /** When off, detected black bars are kept instead of cropped — avoids a
    *  forced re-encode on low-power servers. Default on. */
@@ -68,7 +70,6 @@ export class StreamingSettingsComponent implements OnInit {
       this.refreshCacheStats();
       this.segmentDuration.set(all['streaming_segment_duration'] ?? '3');
       this.qsvPreset.set(all['streaming_qsv_preset'] ?? 'faster');
-      this.qsvLowPower.set(all['streaming_qsv_low_power'] === 'true');
       this.autoCropEnabled.set(all['streaming_auto_crop_enabled'] !== 'false');
       this.autoQualityMode.set(
         all['streaming_auto_quality_mode'] === 'abr' ? 'abr' : 'directplay',
@@ -98,7 +99,6 @@ export class StreamingSettingsComponent implements OnInit {
       await this.api.setBulk({
         streaming_segment_duration: this.segmentDuration(),
         streaming_qsv_preset: this.qsvPreset(),
-        streaming_qsv_low_power: String(this.qsvLowPower()),
         streaming_tonemap_algo: this.tonemapAlgo(),
         streaming_gpu_render_node: this.gpuRenderNode(),
         streaming_auto_quality_mode: this.autoQualityMode(),
@@ -111,11 +111,16 @@ export class StreamingSettingsComponent implements OnInit {
   }
 
   private async refreshCacheStats() {
+    this.cacheStatsLoaded.set(false);
     try {
       const stats = await this.streamsApi.transcodeCacheStats();
       this.cacheEntries.set(stats.entries);
       this.cacheBytes.set(stats.bytes);
-    } catch { /* interceptor */ }
+    } catch {
+      /* interceptor toasts it; the spinner still has to stop */
+    } finally {
+      this.cacheStatsLoaded.set(true);
+    }
   }
 
   async purgeCache() {

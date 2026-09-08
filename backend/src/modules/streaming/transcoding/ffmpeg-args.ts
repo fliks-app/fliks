@@ -318,7 +318,6 @@ export interface BuildFfmpegArgsOptions {
     outputChannels?: number;
   }[];
   encoderPreset?: string;
-  qsvOptions?: { lowPower: boolean };
   /** HDR → SDR tone-mapping algorithm (admin override). Defaults to `'auto'`
    *  which preserves the historical vaapi-when-available preference. */
   tonemapAlgo?: TonemapAlgo;
@@ -799,7 +798,6 @@ export function buildFfmpegArgs(
     audioPlan,
     audioTrackPlans,
     encoderPreset = 'faster',
-    qsvOptions = { lowPower: false },
     sourceFps,
     sourceColorSpace,
     sourceColorPrimaries,
@@ -851,9 +849,6 @@ export function buildFfmpegArgs(
     '-b_strategy',
     '0',
   ];
-  if (qsvOptions.lowPower) {
-    qsvExtra.push('-low_power', '1');
-  }
   const args = ['-hide_banner', '-loglevel', 'warning'];
 
   // Reduce FFmpeg's avformat_find_stream_info scan. When we already have a

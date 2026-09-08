@@ -23,7 +23,6 @@ const req = { user: { id: 7, username: 'u' } } as unknown as Request;
 describe('SessionContextBuilder.build', () => {
   let sessionRouter: { findRequestSession: jest.Mock };
   let tracker: {
-    getQsvOptions: jest.Mock;
     getTonemapAlgo: jest.Mock;
     getAutoCropEnabled: jest.Mock;
     getSegmentDuration: jest.Mock;
@@ -33,7 +32,6 @@ describe('SessionContextBuilder.build', () => {
   beforeEach(() => {
     sessionRouter = { findRequestSession: jest.fn().mockReturnValue(null) };
     tracker = {
-      getQsvOptions: jest.fn().mockReturnValue({ lowPower: false }),
       getTonemapAlgo: jest.fn().mockReturnValue('auto'),
       getAutoCropEnabled: jest.fn().mockReturnValue(true),
       getSegmentDuration: jest.fn().mockReturnValue(3),

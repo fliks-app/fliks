@@ -117,11 +117,6 @@ export interface SessionContext {
    * Default 'faster' if unset — good speed/quality trade-off.
    */
   encoderPreset?: string;
-  /** h264_qsv advanced options (admin-configurable). */
-  qsvOptions?: {
-    /** -low_power 1 (VDENC on Gen9+ — faster, slight quality loss) */
-    lowPower: boolean;
-  };
   /** HDR → SDR tone-mapping algorithm picked by the admin (or `'auto'` to
    *  let the codec selector keep its built-in preference order). Forwarded
    *  to `ffmpeg-args` to override the default `useVaapiTonemap` decision. */
