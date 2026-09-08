@@ -297,6 +297,36 @@ investigation moves elsewhere.
 
 Do not bundle this into Phase 1. It is a separate question with a separate test.
 
+### Measured, 2026-09-08 — the cost is gone, the gate is not cleared
+
+Taken on a physical SM-S931B over CDP, comparing the shipped suppression against
+an explicit 250 ms root cross-fade, on the poster morph in and out of a library
+card. Frame rate inside the transition, not its duration: duration is useless
+here because re-enabling the pair necessarily lengthens the transition by the
+animation's own 250 ms.
+
+| | suppressed | cross-fade |
+| --- | --- | --- |
+| in, mean | 91 fps | 89 fps |
+| in, gaps over 24 ms | 1 (worst 82 ms) | 1 (worst 87 ms) |
+| out, mean | 85 fps | 95 fps |
+| out, gaps over 24 ms | 1 (worst 87 ms) | 1 (worst 82 ms) |
+
+Identical within noise, so with a viewport-sized document the cross-fade costs
+nothing measurable **on that hardware**. That is not the measurement this phase
+asked for: the rule was written for weak GPUs and for TV, and neither was
+measured, so the rule stays. Two further notes for whoever picks this up:
+
+- `animation: revert` does **not** restore the UA cross-fade on these
+  pseudo-elements — no root pseudo animated and the timings were unchanged. The
+  measurement needs explicit keyframes.
+- Removing the rule globally is not a one-line change: `vt-player-close` depends
+  on `::view-transition-new(root)` being opaque from the first frame (see the
+  `z-index: 0` rule beside it), so a scoped selector is required.
+
+The blank frame cannot be re-tested from this branch at all: the per-frame trace
+that reported it lives on #1322, whose workarounds never landed here.
+
 ## What this does not promise
 
 - **The blank frame is not diagnosed.** The per-frame trace in #1322 proves the
