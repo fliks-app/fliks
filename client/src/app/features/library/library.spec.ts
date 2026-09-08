@@ -162,8 +162,32 @@ describe('LibraryComponent — container scroller', () => {
     attached$.next(OWN_KEY);
     expect(pageScroller.claim).toHaveBeenCalledWith(shellEl);
 
-    // The whole point: nothing re-renders or re-scrolls the viewport on the
-    // way back — its own `scrollTop` already survived the round trip.
+    // No scroll happened between detach and attach, so there is nothing to restore.
+    expect(viewport.scrollToOffset).not.toHaveBeenCalled();
+  });
+
+  it('saves the shell\'s scrollTop on detach and restores it via scrollToOffset on attach', () => {
+    const { component, attached$, detached$, shellEl } = createHarness();
+    const viewport = fakeViewport();
+    (component as unknown as { viewportRef: CdkVirtualScrollViewport }).viewportRef = viewport;
+
+    // A detached subtree has no layout box — scrollTop would read back 0 on
+    // reattach unless the component captures it itself before that happens.
+    shellEl.scrollTop = 1234;
+    detached$.next(OWN_KEY);
+    attached$.next(OWN_KEY);
+
+    expect(viewport.scrollToOffset).toHaveBeenCalledWith(1234, 'instant');
+  });
+
+  it('does not restore on a first attach with nothing saved', () => {
+    const { component, attached$, detached$ } = createHarness();
+    const viewport = fakeViewport();
+    (component as unknown as { viewportRef: CdkVirtualScrollViewport }).viewportRef = viewport;
+
+    detached$.next(OWN_KEY);
+    attached$.next(OWN_KEY);
+
     expect(viewport.scrollToOffset).not.toHaveBeenCalled();
   });
 });

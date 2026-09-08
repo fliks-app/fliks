@@ -97,9 +97,11 @@ four fixes benefit Android silently.
   The rendered rows and the offset can no longer disagree, because the offset
   never moved.
 - The library's participation in `ScrollMemoryService`: no `scrollKey`, no
-  `remembered`, no `restoreSticky` for this page. `scrollTop` on a detached
-  element is preserved by the DOM. The service stays for the pages that really
-  do scroll the document.
+  `remembered`, no `restoreSticky` for this page. A detached subtree has no
+  layout box, so `scrollTop` does NOT survive the trip — the page saves and
+  restores its own offset around the detach instead, which is still far less
+  machinery than the window-scroll workarounds it replaces. The service stays
+  for the pages that really do scroll the document.
 - The library's own `window` scroll listener for the alphabet, in favour of one
   on the container that cannot fire for a page nobody is looking at.
 
@@ -277,9 +279,9 @@ The existing library specs cover row chunking and letter maths; extend for the
 container:
 
 - The active letter is derived from `measureScrollOffset()`.
-- A detach/attach cycle leaves the rendered range and `scrollTop` untouched
-  (this is the regression test for the whole plan — it should pass trivially,
-  which is the point).
+- A detach/attach cycle saves `scrollTop` before detach and restores it via
+  `scrollToOffset` on attach — a detached subtree has no layout box, so the
+  offset does not survive on its own and the page must carry it itself.
 
 ## Phase 2 — reconsider the view-transition root suppression
 

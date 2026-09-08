@@ -695,6 +695,9 @@ html.page-owns-scroll main {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /* The claiming page owns its own padding instead — see .library-shell below —
+     so the clearance scrolls away with the content rather than pinning here. */
+  padding: 0;
 }
 /* The missing link: the routed component itself has no styles otherwise. */
 html.page-owns-scroll app-library {
@@ -707,11 +710,16 @@ html.page-owns-scroll .library-shell {
   flex: 1;
   min-height: 0;
   overflow: hidden auto;
-  /* Bleeds past <main>'s own padding so the shell's scrollbar draws at main's
-     border edge, clear of the fixed alphabet column, then restores the gap
-     for the grid's own D-pad focus-lift overflow. */
-  margin-inline: calc(-1 * var(--page-p));
+  /* main's own inline padding is zeroed above, so the scrollbar already lands
+     at main's border edge, clear of the fixed alphabet column — no bleed needed. */
   padding-inline: var(--page-p);
+  /* Replaces main's py-4 bottom, which used to give the grid room to breathe. */
+  padding-bottom: 1rem;
+}
+/* A scroll container's automatic minimum size is zero, so the tabs row would
+   absorb the whole column's shrink pressure and collapse to its scrollbar. */
+html.page-owns-scroll .library-shell > * {
+  flex-shrink: 0;
 }
 /* TV keeps the D-pad's focus-into-view scroll smooth and off the screen edges
    inside the grid's own scroller, matching the document-scroll rule above. */

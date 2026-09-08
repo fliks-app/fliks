@@ -5,6 +5,8 @@
   [focusKey]="'library-' + (library()?.id ?? '')"
   focusIdAttr="data-library-focus"
   class="library-shell flex flex-col gap-4 min-h-0"
+  [class.pt-4]="isNative || !navbar.mobileNavbarVisible()"
+  [class.pt-8]="!isNative && navbar.mobileNavbarVisible()"
 >
   <!-- Library title — hidden when the mobile topbar already shows it
        (avoids the duplicated heading on small screens). -->

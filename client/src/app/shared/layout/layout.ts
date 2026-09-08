@@ -215,9 +215,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
     if (this.restorePending()) return;
     const y = this.pageScroller.offset();
     this.navbar.scrollAtTop.set(y < 20);
-    // A page that owns its own scroller has no document scroll to hide the
-    // topbar against, and hiding it there would uncover a permanent gap.
-    if (this.pageScroller.element()) return;
     if (Math.abs(y - this.lastScrollY) < 10) return;
     // TV keeps the topbar anchored — it is a D-pad target, and sliding it out
     // from under the focus ring strands the cursor.

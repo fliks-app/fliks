@@ -9,6 +9,7 @@ import {
   ViewChild,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
+import { Capacitor } from '@capacitor/core';
 import { Subscription, filter } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -120,19 +121,28 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private readonly translate = inject(TranslateService);
   protected readonly itemArtwork = itemArtwork;
   private paramSub?: Subscription;
-  /** Cached per library name: revalidate the grid on return, and re-claim the
-   *  scroller — `scrollTop` on a detached element survives the trip on its
-   *  own, but the claim itself (a root-owned service) does not. */
+  readonly isNative = Capacitor.isNativePlatform();
+  /** Detaching removes the shell from the document, and a detached element has
+   *  no layout box — `scrollTop` reads back 0 on reattach, so it's saved here. */
+  private savedScrollTop = 0;
+  /** Cached per library name: revalidate the grid on return, re-claim the
+   *  scroller and restore its saved offset. */
   private readonly routeFresh = keepRouteFresh({
     refresh: () => this.refreshCurrentView(),
     onAttach: () => {
       const lib = this.library();
       if (lib) this.navbar.setPageTitle(lib.name);
-      if (this.viewport) this.pageScroller.claim(this.shellRef.nativeElement);
+      if (this.viewport) {
+        this.pageScroller.claim(this.shellRef.nativeElement);
+        if (this.savedScrollTop > 0) this.viewport.scrollToOffset(this.savedScrollTop, 'instant');
+      }
       this.applyBackground();
     },
     onDetach: () => {
-      if (this.viewport) this.pageScroller.release(this.shellRef.nativeElement);
+      if (this.viewport) {
+        this.savedScrollTop = this.shellRef.nativeElement.scrollTop;
+        this.pageScroller.release(this.shellRef.nativeElement);
+      }
     },
   });
 
