@@ -678,6 +678,13 @@ html.vt-player-close body.tv main.page-enter {
 body.tv [data-scroller] {
   will-change: scroll-position;
 }
+/* End room for the last card, matching what the first one gets at scrollLeft 0.
+   The negative margin cancels the rail's gap, so this adds 16px, not 40. */
+body.tv [data-scroller]::after {
+  content: '';
+  flex: 0 0 1rem;
+  margin-left: -1.5rem;
+}
 
 /* Run the focus lift on the compositor. The scale itself is cheap; animating it
    on an unpromoted element is not — the TV WebView repaints the card and
