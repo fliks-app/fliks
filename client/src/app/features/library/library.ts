@@ -289,10 +289,10 @@ export class LibraryComponent implements OnInit, OnDestroy {
    *  (only a handful of rows exist) and not from `scrolledIndexChange`, which
    *  stays at 0 when the viewport scrolls the window rather than itself. */
   private letterRaf: number | null = null;
-  /** A click on the alphabet stays authoritative for a moment: the row it lands
-   *  on usually opens with the tail of the previous letter, and the
-   *  scroll-driven recompute below would immediately highlight that one. */
-  private letterClickUntil = 0;
+  /** How long a deliberate jump outranks the scroll-driven recompute: the row
+   *  it lands on usually opens with the tail of the previous letter. */
+  private static readonly LETTER_HOLD_MS = 600;
+  private letterHeldUntil = 0;
   private readonly onLetterScroll = () => {
     // Recorded on every scroll: Angular detaches the subtree before `store()`
     // runs, so by `onDetach` the offset is already gone.
@@ -300,7 +300,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     if (this.letterRaf !== null) return;
     this.letterRaf = requestAnimationFrame(() => {
       this.letterRaf = null;
-      if (performance.now() < this.letterClickUntil) return;
+      if (performance.now() < this.letterHeldUntil) return;
       if (!this.viewport) return;
       const row = Math.max(0, Math.round(this.viewport.measureScrollOffset() / this.rowHeight()));
       this.list.activeLetter.set(this.list.letterAt(row * this.gridCols()));
@@ -332,7 +332,15 @@ export class LibraryComponent implements OnInit, OnDestroy {
       return;
     }
     this.pageScroller.claim(el);
-    if (this.savedScrollTop > 0) this.viewport.scrollToOffset(this.savedScrollTop, 'instant');
+    if (this.savedScrollTop > 0) {
+      // The letter survives the trip in this component; the restore's own
+      // scroll event must not recompute it off the row it lands on.
+      this.holdLetter();
+      this.viewport.scrollToOffset(this.savedScrollTop, 'instant');
+    }
+  }
+  private holdLetter(): void {
+    this.letterHeldUntil = performance.now() + LibraryComponent.LETTER_HOLD_MS;
   }
   private destroyed = false;
   private viewport?: CdkVirtualScrollViewport;
@@ -520,14 +528,22 @@ export class LibraryComponent implements OnInit, OnDestroy {
       });
       if (index < 0) return;
       this.list.activeLetter.set(letter);
-      this.letterClickUntil = performance.now() + 600;
+      this.holdLetter();
       const row = Math.floor(index / this.gridCols());
-      // Stop just short of the row's top edge so it doesn't sit flush against
-      // the screen — everything above has scrolled away by then. Instant,
-      // because the rows in between are not rendered — an animated jump would
-      // spend its whole duration crossing blank space.
-      const headroom = 32;
-      this.viewport.scrollToOffset(Math.max(0, row * this.rowHeight() - headroom), 'instant');
+      const shell = this.shellRef.nativeElement;
+      const vp = this.viewport.elementRef.nativeElement;
+      // `scrollToOffset` writes the scroller's own scrollTop, so the rows'
+      // offset inside it has to be added back, and the fixed chrome subtracted
+      // for the row to land below it rather than behind it.
+      const rowsOffset =
+        vp.getBoundingClientRect().top - shell.getBoundingClientRect().top + shell.scrollTop;
+      const chrome = parseFloat(getComputedStyle(shell).paddingTop) || 0;
+      // Instant: the rows in between are not rendered, so an animated jump
+      // would spend its whole duration crossing blank space.
+      this.viewport.scrollToOffset(
+        Math.max(0, row * this.rowHeight() + rowsOffset - chrome),
+        'instant',
+      );
       return;
     }
     this.list.scrollToLetter(letter, (m) => m.title, 'media');
