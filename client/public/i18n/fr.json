@@ -1134,6 +1134,7 @@
     "add_to_list": "Ajouter à une liste",
     "unlike": "Je n’aime plus",
     "subtitle_failed": "Échec",
+    "subtitle_sync_failed": "Échec de la synchro",
     "delete_no_folder": "Ce titre n'a pas de dossier propre : seule l'entrée de la bibliothèque sera supprimée, le fichier reste sur le disque."
   },
   "requests": {
@@ -1220,6 +1221,7 @@
     "status_upgraded": "Mis à niveau",
     "status_synced": "Synchronisé",
     "status_failed": "Échec",
+    "status_sync_failed": "Échec de la synchro",
     "error_detail_title": "Détail de l'échec",
     "subtitle_error_interrupted": "L'OCR a été interrompu par un redémarrage du serveur."
   },

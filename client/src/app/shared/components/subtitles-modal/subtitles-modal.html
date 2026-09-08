@@ -165,6 +165,11 @@
                           'media_detail.subtitle_failed' | translate
                         }}</span>
                       }
+                      @if (sub.status === 'sync_failed') {
+                        <span class="badge badge-sm badge-warning mr-1">{{
+                          'media_detail.subtitle_sync_failed' | translate
+                        }}</span>
+                      }
                       @if (sub.forced) {
                         <span class="badge badge-sm badge-outline mr-1">F</span>
                       }

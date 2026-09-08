@@ -1126,6 +1126,7 @@
     "add_to_list": "Añadir a una lista",
     "unlike": "Ya no me gusta",
     "subtitle_failed": "Error",
+    "subtitle_sync_failed": "Sincronización fallida",
     "delete_no_folder": "Este título no tiene una carpeta propia: solo se eliminará la entrada de la biblioteca, el archivo permanece en el disco."
   },
   "requests": {
@@ -1212,6 +1213,7 @@
     "status_upgraded": "Mejorado",
     "status_synced": "Sincronizado",
     "status_failed": "Fallido",
+    "status_sync_failed": "Sincronización fallida",
     "error_detail_title": "Detalle del fallo",
     "subtitle_error_interrupted": "El OCR se interrumpió por un reinicio del servidor."
   },

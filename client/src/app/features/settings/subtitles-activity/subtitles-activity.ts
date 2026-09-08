@@ -102,6 +102,8 @@ export class SubtitlesActivityComponent implements OnInit {
     switch (status) {
       case 'downloaded': case 'synced': return 'badge-success';
       case 'upgraded': return 'badge-warning';
+      // The file plays; only its timing is off. Not the same red as a row with no file.
+      case 'sync_failed': return 'badge-warning';
       case 'failed': return 'badge-error';
       default: return 'badge-ghost';
     }

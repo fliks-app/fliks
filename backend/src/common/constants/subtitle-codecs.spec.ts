@@ -43,6 +43,13 @@ describe('hasCoveringSub', () => {
     expect(hasCoveringSub(subs, want())).toBe(false);
   });
 
+  it('counts a sync failure as covering: the file plays, only its timing is off', () => {
+    const subs = [
+      { language: 'fr', codec: 'subrip', status: SubtitleStatus.SYNC_FAILED },
+    ];
+    expect(hasCoveringSub(subs, want())).toBe(true);
+  });
+
   it('counts an in-progress OCR (text) row as covering the language', () => {
     const subs = [
       { language: 'fr', codec: 'subrip', status: SubtitleStatus.PROCESSING },

@@ -8,6 +8,7 @@
     <option value="upgraded">{{ 'activity.status_upgraded' | translate }}</option>
     <option value="synced">{{ 'activity.status_synced' | translate }}</option>
     <option value="failed">{{ 'activity.status_failed' | translate }}</option>
+    <option value="sync_failed">{{ 'activity.status_sync_failed' | translate }}</option>
   </select>
   <select
     appTvSelect class="select select-bordered select-sm" [ngModel]="subFilterLang()" (ngModelChange)="subFilterLang.set($event); applySubFilters()">
