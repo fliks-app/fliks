@@ -8,16 +8,6 @@ import { DEFAULT_SEGMENT_DURATION } from './transcoding/constants';
  */
 @Injectable()
 export class ActiveStreamTracker {
-  private qsvLowPowerCache = false;
-
-  /** QSV advanced options are global (driven by admin streaming settings). */
-  setQsvOptions(opts: { lowPower: boolean }) {
-    this.qsvLowPowerCache = opts.lowPower;
-  }
-  getQsvOptions(): { lowPower: boolean } {
-    return { lowPower: this.qsvLowPowerCache };
-  }
-
   /** HLS segment duration in seconds (admin-configurable, global). Read once
    *  per session when the context is built and frozen onto the session, so a
    *  later change never re-grids a session mid-playback against segments

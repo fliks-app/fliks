@@ -14,7 +14,6 @@ export interface StreamingSettings {
     | 'slow'
     | 'slower'
     | 'veryslow';
-  qsvLowPower: boolean;
   /** HDR → SDR tone-mapping algorithm. See {@link TonemapAlgo}. Default
    *  is `'auto'` which currently routes through tonemap_opencl. */
   tonemapAlgo: TonemapAlgo;
@@ -60,7 +59,6 @@ export type SubtitlePrewarm = 'off' | 'playback' | 'import';
 const KEYS = [
   'streaming_segment_duration',
   'streaming_qsv_preset',
-  'streaming_qsv_low_power',
   'streaming_tonemap_algo',
   'streaming_auto_quality_mode',
   'streaming_auto_crop_enabled',
@@ -115,7 +113,6 @@ export class StreamingSettingsCache implements OnModuleInit {
     const [
       duration,
       qsvPreset,
-      qsvLowPower,
       tonemapAlgo,
       autoQualityMode,
       autoCropEnabled,
@@ -125,7 +122,6 @@ export class StreamingSettingsCache implements OnModuleInit {
     return {
       segmentDuration: parseFloat(duration ?? '3') || 3,
       qsvPreset: (qsvPreset ?? 'faster') as StreamingSettings['qsvPreset'],
-      qsvLowPower: qsvLowPower === 'true',
       tonemapAlgo: TONEMAP_ALGOS.includes(tonemapAlgo as TonemapAlgo)
         ? (tonemapAlgo as TonemapAlgo)
         : 'auto',

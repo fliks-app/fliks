@@ -103,19 +103,12 @@
       </div>
     }
 
-    <!-- QSV advanced options (Intel Quick Sync only) -->
-    <div class="divider">{{ 'settings.streaming.qsv_advanced' | translate }}</div>
-
-    <app-toggle-field
-      [(value)]="qsvLowPower"
-      [label]="'settings.streaming.qsv_low_power' | translate"
-      [hint]="'settings.streaming.qsv_low_power_help' | translate"
-    />
-
-    <button class="btn btn-primary" [disabled]="saving()" (click)="save()">
-      @if (saving()) { <span class="loading loading-spinner loading-xs"></span> }
-      {{ 'common.save' | translate }}
-    </button>
+    <div class="card-actions justify-end">
+      <button class="btn btn-primary" [disabled]="saving()" (click)="save()">
+        @if (saving()) { <span class="loading loading-spinner loading-xs"></span> }
+        {{ 'common.save' | translate }}
+      </button>
+    </div>
 
     <!-- Transcode cache footprint + manual purge -->
     <div class="divider">{{ 'settings.streaming.cache_title' | translate }}</div>
@@ -123,12 +116,21 @@
     <div class="form-control">
       <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.cache_usage' | translate }}</span></label>
       <p class="text-base-content/70">
-        {{ 'settings.streaming.cache_usage_value' | translate: { entries: cacheEntries(), size: formatBytes(cacheBytes()) } }}
+        @if (cacheStatsLoaded()) {
+          {{ 'settings.streaming.cache_usage_value' | translate: { entries: cacheEntries(), size: formatBytes(cacheBytes()) } }}
+        } @else {
+          <span class="loading loading-spinner loading-xs align-middle"></span>
+          <span class="ml-2">{{ 'settings.streaming.cache_usage_loading' | translate }}</span>
+        }
       </p>
       <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.cache_purge_help' | translate }}</span></label>
     </div>
 
-    <button class="btn btn-error btn-outline" [disabled]="purging() || cacheEntries() === 0" (click)="purgeCache()">
+    <button
+      class="btn btn-error btn-outline"
+      [disabled]="purging() || !cacheStatsLoaded() || cacheEntries() === 0"
+      (click)="purgeCache()"
+    >
       @if (purging()) { <span class="loading loading-spinner loading-xs"></span> }
       {{ 'settings.streaming.cache_purge' | translate }}
     </button>

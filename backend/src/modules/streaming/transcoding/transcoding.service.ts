@@ -1646,7 +1646,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       audioPlan: ctx?.audioPlan,
       audioTrackPlans: ctx?.audioTrackPlans,
       encoderPreset: ctx?.encoderPreset,
-      qsvOptions: ctx?.qsvOptions,
       tonemapAlgo: ctx?.tonemapAlgo,
       sourceFps: ctx?.sourceFps,
       sourceColorSpace: ctx?.sourceColorSpace,

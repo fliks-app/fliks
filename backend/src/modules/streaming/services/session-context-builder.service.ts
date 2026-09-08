@@ -66,7 +66,6 @@ export class SessionContextBuilder {
       deviceType: live?.deviceType ?? 'desktop',
       useTs,
       encoderPreset: live?.encoderPreset ?? 'faster',
-      qsvOptions: this.activeStreamTracker.getQsvOptions(),
       tonemapAlgo: this.activeStreamTracker.getTonemapAlgo(),
       // Source framerate (e.g. "24", "23.976", "29.97") — used to compute an
       // accurate GOP so IDR frames fall on the same boundary regardless of
