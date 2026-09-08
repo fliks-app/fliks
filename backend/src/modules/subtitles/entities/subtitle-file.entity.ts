@@ -107,6 +107,11 @@ export class SubtitleFile extends BaseEntity {
   @Column({ type: 'int', nullable: true })
   syncOffset: number;
 
+  /** Why a FAILED row failed: a raw engine error, or a translation key when the
+   *  cause is ours to name. Read by the activity page's failure dialog. */
+  @Column({ type: 'text', nullable: true })
+  errorMessage: string | null;
+
   @Column({ default: false })
   locked: boolean;
 

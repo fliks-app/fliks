@@ -2,6 +2,8 @@ import {
   Component,
   signal,
   inject,
+  viewChild,
+  ElementRef,
   OnInit,
 } from '@angular/core';
 import { NgClass } from '@angular/common';
@@ -14,6 +16,8 @@ import {
   SubtitleHistoryEntry,
 } from '../../../core/services/api/subtitles-api.service';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
+import { ModalHeaderComponent } from '../../../shared/components/modal-header';
+import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe';
 import { SUBTITLE_LANGUAGE_CODES } from '../../../core/constants/subtitle-languages';
@@ -21,7 +25,7 @@ import { episodeLabel } from '../../../shared/utils/episode-label';
 
 @Component({
   selector: 'app-subtitles-activity',
-  imports: [TvSelectDirective, TranslatePipe, LocaleDatePipe, LocalizeLanguagePipe, NgClass, RouterLink, FormsModule, PaginationComponent],
+  imports: [TvSelectDirective, TranslatePipe, LocaleDatePipe, LocalizeLanguagePipe, NgClass, RouterLink, FormsModule, PaginationComponent, ModalHeaderComponent, ModalFooterComponent],
   templateUrl: './subtitles-activity.html',
 })
 export class SubtitlesActivityComponent implements OnInit {
@@ -40,6 +44,9 @@ export class SubtitlesActivityComponent implements OnInit {
   readonly subHistoryError = signal('');
   readonly subFilterStatus = signal('');
   readonly subFilterLang = signal('');
+
+  readonly errorDetail = signal('');
+  private readonly errorDialog = viewChild<ElementRef<HTMLDialogElement>>('errorDialog');
 
   ngOnInit() {
     this.loadSubHistory(1);
@@ -69,6 +76,26 @@ export class SubtitlesActivityComponent implements OnInit {
 
   get subHistoryTotalPages(): number {
     return Math.max(1, Math.ceil(this.subHistoryTotal() / 25));
+  }
+
+  /** The entry's failure text, or '' when there is none to open. A translation
+   *  key resolves; a raw engine error comes through as-is. */
+  errorText(entry: SubtitleHistoryEntry): string {
+    const raw = (entry.errorMessage ?? '').trim();
+    if (!raw) return '';
+    const translated = this.translate.instant(raw);
+    return translated === raw ? raw : translated;
+  }
+
+  openError(entry: SubtitleHistoryEntry) {
+    const text = this.errorText(entry);
+    if (!text) return;
+    this.errorDetail.set(text);
+    this.errorDialog()?.nativeElement.showModal();
+  }
+
+  closeError() {
+    this.errorDialog()?.nativeElement.close();
   }
 
   subStatusClass(status: string): string {

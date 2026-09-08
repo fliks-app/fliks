@@ -1219,7 +1219,9 @@
     "status_downloaded": "Downloaded",
     "status_upgraded": "Upgraded",
     "status_synced": "Synced",
-    "status_failed": "Failed"
+    "status_failed": "Failed",
+    "error_detail_title": "Failure detail",
+    "subtitle_error_interrupted": "The OCR run was interrupted by a server restart."
   },
   "tracking": {
     "menu_item": "View tracking status",

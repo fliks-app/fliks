@@ -1211,7 +1211,9 @@
     "status_downloaded": "Descargado",
     "status_upgraded": "Mejorado",
     "status_synced": "Sincronizado",
-    "status_failed": "Fallido"
+    "status_failed": "Fallido",
+    "error_detail_title": "Detalle del fallo",
+    "subtitle_error_interrupted": "El OCR se interrumpió por un reinicio del servidor."
   },
   "tracking": {
     "menu_item": "Ver el estado del seguimiento",
