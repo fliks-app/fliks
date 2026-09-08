@@ -20,6 +20,15 @@
       <div class="label"><span class="label-text-alt text-base-content/50">{{ 'playback_settings.sub_mode_hint' | translate }}</span></div>
     </label>
 
+    <label class="form-control w-full max-w-xs">
+      <div class="label"><span class="label-text font-medium">{{ 'playback_settings.sub_hi' | translate }}</span></div>
+      <select
+    appTvSelect class="select select-bordered w-full" [ngModel]="subtitleHearingImpaired()" (ngModelChange)="subtitleHearingImpaired.set($event)">
+        @for (h of hearingImpairedOptions; track h.value) { <option [value]="h.value">{{ h.labelKey | translate }}</option> }
+      </select>
+      <div class="label"><span class="label-text-alt text-base-content/50">{{ 'playback_settings.sub_hi_hint' | translate }}</span></div>
+    </label>
+
     <div class="divider my-0"></div>
 
     <app-toggle-field

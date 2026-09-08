@@ -1,6 +1,10 @@
 import { Injectable, inject } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
-import { PlayerSettingsService, normalizeLang } from './player-settings.service';
+import {
+  PlayerSettingsService,
+  normalizeLang,
+  type HearingImpairedPreference,
+} from './player-settings.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { StreamingApiService } from './api/streaming-api.service';
 import { AppSettingsService } from './app-settings.service';
@@ -265,7 +269,20 @@ export class TrackManagerService {
 
     if (settings.subtitleMode === 'off') return;
 
+    const activeAudio = audioTracks.find((t) => t.id === activeAudioTrackId);
+    const audioLang = activeAudio?.language ?? 'und';
     const prefLang = settings.preferredSubtitleLanguage;
+    const hi = settings.subtitleHearingImpaired;
+
+    // A forced track translates the foreign lines of dialogue the viewer already
+    // understands, so with no preferred language it belongs to the audio's.
+    if (settings.subtitleMode === 'onlyForced') {
+      const lang = prefLang || (audioLang === 'und' ? '' : audioLang);
+      const match = lang ? pickSubtitle(subs, lang, { forced: true, hi, only: true }) : undefined;
+      if (match) await onSelect(match);
+      return;
+    }
+
     if (!prefLang) {
       // Fallback: try old localStorage key for migration
       const oldLang = localStorage.getItem('player.subtitleLang');
@@ -276,32 +293,48 @@ export class TrackManagerService {
       return;
     }
 
-    // Prefer a real (downloaded / embedded) track over a machine-generated one
-    // (translated / OCR) for the same language, so auto-select doesn't silently
-    // land on a machine translation when a native sub exists.
-    const isMachine = (s: SubtitleOption) =>
-      s.providerType === 'translated' || s.providerType === 'ocr';
-    const findMatch = () =>
-      subs.find((s) => s.language === prefLang && !s.forced && !isMachine(s))
-      ?? subs.find((s) => s.language === prefLang && !s.forced)
-      ?? subs.find((s) => s.language === prefLang && !isMachine(s))
-      ?? subs.find((s) => s.language === prefLang);
-
     if (settings.subtitleMode === 'always') {
-      const match = findMatch();
+      const match = pickSubtitle(subs, prefLang, { forced: false, hi });
       if (match) await onSelect(match);
       return;
     }
 
-    // Intelligent mode: show subtitles only when audio language differs from preferred
     if (settings.subtitleMode === 'intelligent') {
-      const activeAudio = audioTracks.find((t) => t.id === activeAudioTrackId);
-      const audioLang = activeAudio?.language ?? 'und';
-
-      if (audioLang !== prefLang && audioLang !== 'und') {
-        const match = findMatch();
-        if (match) await onSelect(match);
-      }
+      // Dialogue already in the viewer's language: only its foreign lines need a
+      // sub. Untagged audio counts as foreign: nothing says it isn't.
+      const forcedOnly = audioLang === prefLang;
+      const match = pickSubtitle(subs, prefLang, { forced: forcedOnly, hi, only: forcedOnly });
+      if (match) await onSelect(match);
     }
   }
+}
+
+/** Machine-made subs (translated / OCR) read worse than a real track, so they
+ *  lose every tie. */
+function isMachine(s: SubtitleOption): boolean {
+  return s.providerType === 'translated' || s.providerType === 'ocr';
+}
+
+/**
+ * The track auto-selection settles on, in one preference order: the wanted
+ * forced-ness first, then the viewer's hearing-impaired preference, then a real
+ * track over a machine-made one. Every criterion is a preference, not a filter
+ * (a language with nothing but an SDH track still gets subtitles), except
+ * `only`, which drops non-forced tracks outright for the modes that mean it.
+ */
+export function pickSubtitle(
+  subs: SubtitleOption[],
+  language: string,
+  want: { forced: boolean; hi: HearingImpairedPreference; only?: boolean },
+): SubtitleOption | undefined {
+  const hiPenalty = (s: SubtitleOption) => {
+    if (want.hi === 'prefer') return s.hearingImpaired ? 0 : 1;
+    if (want.hi === 'avoid') return s.hearingImpaired ? 1 : 0;
+    return 0;
+  };
+  const rank = (s: SubtitleOption) =>
+    (!!s.forced === want.forced ? 0 : 4) + hiPenalty(s) * 2 + (isMachine(s) ? 1 : 0);
+  return subs
+    .filter((s) => s.language === language && (!want.only || !!s.forced))
+    .sort((a, b) => rank(a) - rank(b))[0];
 }

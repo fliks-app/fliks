@@ -10,7 +10,7 @@ import { LucideTrash2 } from '@lucide/angular';
 import { SubtitleAppearanceComponent } from '../../../shared/components/subtitle-appearance/subtitle-appearance';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import {
-  LANGUAGE_OPTIONS, SUBTITLE_MODE_OPTIONS,
+  LANGUAGE_OPTIONS, SUBTITLE_MODE_OPTIONS, SUBTITLE_HI_OPTIONS,
   BOTTOM_MARGIN_OPTIONS, TOP_MARGIN_OPTIONS,
 } from '../playback-options';
 
@@ -27,12 +27,14 @@ export class SubtitleSettingsPageComponent {
 
   readonly languageOptions = LANGUAGE_OPTIONS;
   readonly subtitleModeOptions = SUBTITLE_MODE_OPTIONS;
+  readonly hearingImpairedOptions = SUBTITLE_HI_OPTIONS;
   readonly bottomMarginOptions = BOTTOM_MARGIN_OPTIONS;
   readonly topMarginOptions = TOP_MARGIN_OPTIONS;
 
   private readonly initial = this.ps.get();
   readonly preferredSubtitleLanguage = signal(this.initial.preferredSubtitleLanguage);
   readonly subtitleMode = signal(this.initial.subtitleMode);
+  readonly subtitleHearingImpaired = signal(this.initial.subtitleHearingImpaired);
   readonly rememberSubtitleSelections = signal(this.initial.rememberSubtitleSelections);
   readonly hideImageSubtitles = signal(this.initial.hideImageSubtitles);
   readonly showSubtitleFormat = signal(this.initial.showSubtitleFormat);
@@ -48,6 +50,7 @@ export class SubtitleSettingsPageComponent {
       () => ({
         preferredSubtitleLanguage: this.preferredSubtitleLanguage(),
         subtitleMode: this.subtitleMode(),
+        subtitleHearingImpaired: this.subtitleHearingImpaired(),
         rememberSubtitleSelections: this.rememberSubtitleSelections(),
         hideImageSubtitles: this.hideImageSubtitles(),
         showSubtitleFormat: this.showSubtitleFormat(),

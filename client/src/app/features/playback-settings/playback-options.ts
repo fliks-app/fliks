@@ -30,8 +30,15 @@ export const AUDIO_SELECTION_MODE_OPTIONS = [
 
 export const SUBTITLE_MODE_OPTIONS = [
   { value: 'off', labelKey: 'playback_settings.sub_mode_off' },
+  { value: 'onlyForced', labelKey: 'playback_settings.sub_mode_only_forced' },
   { value: 'intelligent', labelKey: 'playback_settings.sub_mode_intelligent' },
   { value: 'always', labelKey: 'playback_settings.sub_mode_always' },
+];
+
+export const SUBTITLE_HI_OPTIONS = [
+  { value: 'avoid', labelKey: 'playback_settings.sub_hi_avoid' },
+  { value: 'any', labelKey: 'playback_settings.sub_hi_any' },
+  { value: 'prefer', labelKey: 'playback_settings.sub_hi_prefer' },
 ];
 
 export const SIZE_OPTIONS = [

@@ -7,6 +7,11 @@ import {
 } from '../utils/subtitle-presets';
 
 
+/** How much the viewer wants a hearing-impaired (SDH) track: `avoid` keeps the
+ *  annotations out unless nothing else carries the language, `prefer` asks for
+ *  them, `any` takes whichever track comes first. */
+export type HearingImpairedPreference = 'avoid' | 'any' | 'prefer';
+
 export interface PlayerSettings {
   // Audio
   preferredAudioLanguage: string;
@@ -23,7 +28,11 @@ export interface PlayerSettings {
   showEcoQualities: boolean;
   // Subtitles
   preferredSubtitleLanguage: string;
-  subtitleMode: 'off' | 'intelligent' | 'always';
+  /** `off`: never. `onlyForced`: just the foreign-dialogue track. `intelligent`:
+   *  a full track when the audio is foreign, the forced one when it isn't.
+   *  `always`: a full track whenever the language exists. */
+  subtitleMode: 'off' | 'onlyForced' | 'intelligent' | 'always';
+  subtitleHearingImpaired: HearingImpairedPreference;
   rememberSubtitleSelections: boolean;
   // Hide image-based (PGS/VOBSUB) subtitles from the pickers and native player
   hideImageSubtitles: boolean;
@@ -56,6 +65,7 @@ const DEFAULTS: PlayerSettings = {
   showEcoQualities: true,
   preferredSubtitleLanguage: '',
   subtitleMode: 'intelligent',
+  subtitleHearingImpaired: 'avoid',
   rememberSubtitleSelections: true,
   hideImageSubtitles: true,
   showSubtitleFormat: false,
