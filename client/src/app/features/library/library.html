@@ -69,14 +69,14 @@
   <app-import-progress-banner />
 
   @if (viewMode() === 'all') {
-    <!-- Toolbar: count + sort + order + filter + search.
-         When the alphabet sidebar is visible (title-ASC sort), add right
-         padding equal to its column width (≈ button + gap) so the search
-         input never extends into the sticky alphabet column when it
-         passes through it during scroll. -->
+    <!-- Toolbar: count + sort + order + filter + search. Carries the grid's
+         own right padding, so the filter button lines up with the right edge
+         of the cards and the search input never runs under the sticky
+         alphabet column it passes through while scrolling. -->
     <div
       class="flex flex-wrap items-center gap-2"
-      [class.pr-4]="sortBy() === 'title' && sortOrder() === 'ASC'"
+      [class.pr-8]="sortBy() === 'title' && sortOrder() === 'ASC'"
+      [class.pr-2]="sortBy() !== 'title' || sortOrder() !== 'ASC'"
     >
       <span class="text-sm text-base-content/70 mr-1">
         {{ (list.total() <= 1 ? 'common.item_count_one' : 'common.item_count_other') | translate:{ count: list.total() } }}
@@ -324,7 +324,7 @@
       <!-- Same grid as the real one below, so the cards land where the
            placeholders sat instead of replacing a centred spinner. -->
       <div class="grid content-start grid-cols-3 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8 pt-2"
-        [class.pr-10]="sortBy() === 'title' && sortOrder() === 'ASC'"
+        [class.pr-8]="sortBy() === 'title' && sortOrder() === 'ASC'"
         [class.pr-2]="sortBy() !== 'title' || sortOrder() !== 'ASC'">
         @for (i of skeletonCards; track i) {
           <app-card-skeleton class="animate-pulse" [aspect]="'portrait'" />
@@ -395,7 +395,7 @@
                under the letters. -->
           <div *cdkVirtualFor="let row of gridRows(); trackBy: trackRow"
                #cardRow
-               [class.pr-10]="sortBy() === 'title' && sortOrder() === 'ASC'"
+               [class.pr-8]="sortBy() === 'title' && sortOrder() === 'ASC'"
                [class.pr-2]="sortBy() !== 'title' || sortOrder() !== 'ASC'"
                class="grid content-start grid-cols-3 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8"
                [style.height.px]="rowHeight()">
