@@ -1,4 +1,4 @@
-import { Component, DestroyRef, computed, inject, input, linkedSignal } from '@angular/core';
+import { Component, computed, input, linkedSignal } from '@angular/core';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { ImgFadeInDirective } from '../directives/img-fade-in.directive';
 
@@ -31,17 +31,14 @@ export class MobileFanartHeroComponent {
     computation: (next, previous) => (previous?.source && next ? previous.source : null),
   });
 
-  private timer?: ReturnType<typeof setTimeout>;
+  /** Reset by its source, so a swap landing mid-fade starts its own. */
+  protected readonly fadingOut = linkedSignal<string | null | undefined, boolean>({
+    source: () => this.fanartUrl(),
+    computation: () => false,
+  });
 
-  constructor() {
-    inject(DestroyRef).onDestroy(() => clearTimeout(this.timer));
-  }
-
-  /** Drop the old layer once the fade has covered it: its mask leaves the
-   *  bottom translucent, so keeping it would ghost through. */
+  /** Nothing is faded out before the picture underneath can be seen. */
   protected onIncomingLoad() {
-    if (!this.outgoing()) return;
-    clearTimeout(this.timer);
-    this.timer = setTimeout(() => this.outgoing.set(null), 250);
+    if (this.outgoing()) this.fadingOut.set(true);
   }
 }

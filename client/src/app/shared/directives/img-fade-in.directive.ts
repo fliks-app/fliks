@@ -1,4 +1,4 @@
-import { Directive, ElementRef, inject, OnInit } from '@angular/core';
+import { Directive, ElementRef, inject, input, OnInit } from '@angular/core';
 import { viewTransitionRunning } from '../utils/view-transition';
 
 /**
@@ -23,9 +23,12 @@ export class ImgFadeInDirective implements OnInit {
   private readonly host = inject<ElementRef<HTMLImageElement>>(ElementRef);
   protected opacity = '0';
 
+  /** Show the picture at once: the caller runs its own transition over it. */
+  readonly instant = input(false);
+
   ngOnInit() {
     const img = this.host.nativeElement;
-    if (viewTransitionRunning() || (img.complete && img.naturalWidth > 0)) {
+    if (this.instant() || viewTransitionRunning() || (img.complete && img.naturalWidth > 0)) {
       this.opacity = '1';
     }
   }
