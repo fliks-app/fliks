@@ -30,8 +30,8 @@ export const TABBABLE_SELECTOR =
  */
 export function wantsFocusRestore(): boolean {
   if (typeof document === 'undefined') return false;
-  const b = document.body.classList;
-  return b.contains('keyboard-modality') || b.contains('tv');
+  const c = document.documentElement.classList;
+  return c.contains('keyboard-modality') || c.contains('tv-host');
 }
 
 /**

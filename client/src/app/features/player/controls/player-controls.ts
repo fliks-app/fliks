@@ -491,12 +491,12 @@ export class PlayerControlsComponent {
 
   /** True under keyboard / D-pad input — the only modality where stealing focus
    *  is wanted (mouse and touch users are left alone, matching the CSS ring
-   *  gate). TV is always keyboard-like; the browser flags it on `body`. */
+   *  gate). TV is always keyboard-like. */
   private autoFocusModality(): boolean {
     return (
       this.isTv() ||
       (typeof document !== 'undefined' &&
-        document.body.classList.contains('keyboard-modality'))
+        document.documentElement.classList.contains('keyboard-modality'))
     );
   }
 
