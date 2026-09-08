@@ -1,25 +1,13 @@
 /** Shared option lists for playback settings pages. */
 
-export interface PlaybackOption {
-  value: string;
-  label?: string;
-  labelKey?: string;
-}
+import { SUBTITLE_LANGUAGE_CODES } from '../../core/constants/subtitle-languages';
 
-export const LANGUAGE_OPTIONS: readonly PlaybackOption[] = [
-  { value: '', labelKey: 'playback_settings.lang_any' },
-  { value: 'fra', label: 'Français' },
-  { value: 'eng', label: 'English' },
-  { value: 'jpn', label: '日本語 (Japanese)' },
-  { value: 'deu', label: 'Deutsch (German)' },
-  { value: 'spa', label: 'Español (Spanish)' },
-  { value: 'ita', label: 'Italiano (Italian)' },
-  { value: 'por', label: 'Português (Portuguese)' },
-  { value: 'kor', label: '한국어 (Korean)' },
-  { value: 'zho', label: '中文 (Chinese)' },
-  { value: 'rus', label: 'Русский (Russian)' },
-  { value: 'ara', label: 'العربية (Arabic)' },
-];
+/**
+ * The languages a preference can name: the canonical app list, so the picker
+ * can't drift from what the server stores, plus the empty "no preference".
+ * Labels come from `LocalizeLanguagePipe`, which is already translated.
+ */
+export const LANGUAGE_CODE_OPTIONS: readonly string[] = ['', ...SUBTITLE_LANGUAGE_CODES];
 
 export const AUDIO_SELECTION_MODE_OPTIONS = [
   { value: 'preferred', labelKey: 'playback_settings.audio_mode_preferred' },

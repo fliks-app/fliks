@@ -19,8 +19,10 @@
         [label]="'playback_settings.player_preferred_lang' | translate"
         [hint]="'playback_settings.player_preferred_lang_hint' | translate"
       >
-        @for (l of languageOptions; track l.value) {
-          <option [value]="l.value">{{ l.labelKey ? (l.labelKey | translate) : l.label }}</option>
+        @for (code of languageOptions; track code) {
+          <option [value]="code">
+            {{ code ? (code | localizeLanguage) : ('playback_settings.lang_any' | translate) }}
+          </option>
         }
       </app-select-field>
     }

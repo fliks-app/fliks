@@ -6,6 +6,7 @@ import { CastSettingsService, CastSubtitleStyle } from './cast-settings.service'
 import { ToastService } from './toast.service';
 import { CAST_SUBTITLE_SIZE_SCALE } from '../utils/subtitle-presets';
 import { Subject } from 'rxjs';
+import { normalizeLangCode } from '../utils/language.utils';
 
 /** Custom Cast message namespace shared between the Fliks receiver and
  *  every sender. Used today for receiver → sender error forwarding;
@@ -786,13 +787,13 @@ export class CastService implements OnDestroy {
     );
     if (!audioTracks.length) return false;
 
-    // Match by name first: Shaka rewrites manifest LANGUAGE attributes from
-    // ISO 639-2 (eng) to ISO 639-1 (en) before exposing them, so a plain
-    // language equality fails on 3-letter sources. The NAME we emit in
-    // master.m3u8 (track title or language fallback) is preserved verbatim.
+    // Match by name first: the NAME we emit in master.m3u8 (track title or
+    // language fallback) is preserved verbatim, while the receiver may hand
+    // back either code form.
+    const want = normalizeLangCode(language);
     const target =
       audioTracks.find((t) => t.name === name)
-      ?? audioTracks.find((t) => t.language === language);
+      ?? audioTracks.find((t) => normalizeLangCode(t.language) === want);
     if (!target) return false;
 
     return this.applyActiveTracks({ audioId: target.trackId });

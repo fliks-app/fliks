@@ -1,6 +1,7 @@
 import { localizeLanguage, sortByLanguageName } from './language.utils';
 import { signal } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
+import { buildSubtitleTracks } from './subtitle-tracks';
 
 const NAMES: Record<string, string> = {
   'language.fr': 'Français',
@@ -65,5 +66,29 @@ describe('localizeLanguage', () => {
       fallbackLang: signal('en'),
     } as unknown as TranslateService;
     expect(localizeLanguage('fre', translate)).toBe('Français');
+  });
+});
+
+/** Every subtitle list in the app goes through this builder, and every
+ *  comparison downstream assumes it hands back canonical ISO 639-1. */
+describe('buildSubtitleTracks language canonicalisation', () => {
+  const row = (id: number, language: string) => ({
+    id,
+    mediaFileId: 1,
+    language,
+    relativePath: `/${id}.srt`,
+  });
+
+  it('folds every code form a source can carry', () => {
+    const tracks = buildSubtitleTracks(
+      [row(1, 'fre'), row(2, 'fra'), row(3, 'FR'), row(4, 'fr'), row(5, 'chi')],
+      1,
+      { hideBurnIn: false },
+    );
+    expect(tracks.map((t) => t.language)).toEqual(['fr', 'fr', 'fr', 'fr', 'zh']);
+  });
+
+  it('keeps the placeholder for an untagged track', () => {
+    expect(buildSubtitleTracks([row(1, '')], 1, { hideBurnIn: false })[0].language).toBe('und');
   });
 });

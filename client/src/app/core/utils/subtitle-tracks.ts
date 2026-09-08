@@ -1,4 +1,5 @@
 import { isImageBasedSubtitleCodec } from './subtitle-codecs';
+import { normalizeLangCode } from './language.utils';
 
 /** Minimal subtitle row shape the builder needs (satisfied by SubtitleFileRow). */
 export interface SubtitleRowLike {
@@ -33,7 +34,8 @@ export interface SubtitleTrack {
 
 /**
  * Single source of truth for a media file's selectable subtitle list, shared by
- * the player and cast pickers so they can't drift. Drops burn-required tracks
+ * the player and cast pickers so they can't drift. Languages come out canonical
+ * (ISO 639-1), which is what every comparison downstream assumes. Drops burn-required tracks
  * when `hideBurnIn`, classifies image vs text, and dedupes external subs by id
  * and embedded subs by stream index. Callers map the result to their own shape
  * (label, url, …).
@@ -67,7 +69,7 @@ export function buildSubtitleTracks(
     out.push({
       key,
       subtitleId: sub.id,
-      language: sub.language,
+      language: normalizeLangCode(sub.language),
       codec: sub.codec ?? null,
       forced: sub.forced ?? false,
       hearingImpaired: sub.hearingImpaired ?? false,

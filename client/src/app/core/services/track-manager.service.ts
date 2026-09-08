@@ -2,7 +2,6 @@ import { Injectable, inject } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import {
   PlayerSettingsService,
-  normalizeLang,
   type HearingImpairedPreference,
 } from './player-settings.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
@@ -12,6 +11,7 @@ import { BrowserDeviceProfileService } from './browser-device-profile.service';
 import { formatSubtitleLabel, formatSubtitleParts } from '../utils/player.utils';
 import { isImageBasedSubtitleCodec } from '../utils/subtitle-codecs';
 import { buildSubtitleTracks } from '../utils/subtitle-tracks';
+import { normalizeLangCode } from '../utils/language.utils';
 import type { PlaybackEngine, AudioTrack } from './playback-engine/playback-engine';
 
 export interface SubtitleOption {
@@ -75,7 +75,8 @@ export class TrackManagerService {
       if (saved) {
         const [savedLang, ordStr] = saved.split(':');
         const ordinal = ordStr ? parseInt(ordStr, 10) : 0;
-        const sameLang = tracks.filter((t) => t.language === savedLang);
+        const want = normalizeLangCode(savedLang);
+        const sameLang = tracks.filter((t) => normalizeLangCode(t.language) === want);
         const match = sameLang[ordinal] ?? sameLang[0];
         if (match && match.id !== activeAudioTrackId) {
           onSelect(match.id);
@@ -86,7 +87,9 @@ export class TrackManagerService {
 
     // Priority 2: the mode's target language.
     const lang = this.playerSettings.audioLanguage(originalLanguage);
-    const match = lang ? tracks.find((t) => t.language === lang) : undefined;
+    const match = lang
+      ? tracks.find((t) => normalizeLangCode(t.language) === normalizeLangCode(lang))
+      : undefined;
     if (match && match.id !== activeAudioTrackId) onSelect(match.id);
   }
 
@@ -107,7 +110,9 @@ export class TrackManagerService {
     // the 2nd one. Reproducible across episodes when the audio layout is
     // consistent. The ":n" suffix is only added past the first, so single-track
     // languages stay a plain code; the language-keyed pre-load paths strip it.
-    const sameLang = tracks.filter((t) => (t.language ?? '') === lang);
+    const sameLang = tracks.filter(
+      (t) => normalizeLangCode(t.language ?? '') === normalizeLangCode(lang),
+    );
     const ordinal = sameLang.findIndex((t) => t.id === trackId);
     const key = mediaId;
     this.playerSettings.saveRememberedAudioTrack(
@@ -196,7 +201,7 @@ export class TrackManagerService {
             menuHead: embParts.head,
             menuSub: embParts.sub,
             url: streamingApi.getEmbeddedSubtitleUrl(mediaFileId, emb.streamIndex),
-            language: emb.language,
+            language: normalizeLangCode(emb.language),
             burnIn: false,
             forced: emb.forced ?? false,
             hearingImpaired: emb.hearingImpaired ?? false,
@@ -245,7 +250,7 @@ export class TrackManagerService {
       if (saved === 'off') return; // User explicitly disabled subtitles
       if (saved) {
         const parts = saved.split(':');
-        const savedLang = parts[0];
+        const savedLang = normalizeLangCode(parts[0]);
         const wantForced = parts.includes('forced');
         const wantEmbedded = parts.includes('embedded');
         const wantImage = parts.includes('image');
@@ -287,7 +292,8 @@ export class TrackManagerService {
       // Fallback: try old localStorage key for migration
       const oldLang = localStorage.getItem('player.subtitleLang');
       if (oldLang) {
-        const match = subs.find((s) => s.language === oldLang);
+        const want = normalizeLangCode(oldLang);
+        const match = subs.find((s) => s.language === want);
         if (match) await onSelect(match);
       }
       return;
