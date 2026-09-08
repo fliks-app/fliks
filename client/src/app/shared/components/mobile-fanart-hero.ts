@@ -1,4 +1,4 @@
-import { Component, input } from '@angular/core';
+import { Component, DestroyRef, computed, inject, input, linkedSignal } from '@angular/core';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { ImgFadeInDirective } from '../directives/img-fade-in.directive';
 
@@ -9,29 +9,7 @@ import { ImgFadeInDirective } from '../directives/img-fade-in.directive';
 @Component({
   selector: 'app-mobile-fanart-hero',
   imports: [ResolveUrlPipe, ImgFadeInDirective],
-  template: `
-    <div class="relative -mx-4 -mt-4 hero-fanart-bleed">
-      @if (fanartUrl()) {
-        <!-- The name rides the image, not the wrapper: desktop pairs img with
-             img and its morph shows the destination's picture, a div snapshot
-             does not. -->
-        <img
-          appImgFadeIn
-          [style.view-transition-name]="viewTransitionName()"
-          [src]="fanartUrl()! | resolveUrl:'medium'"
-          [alt]="imageAlt()"
-          loading="eager"
-          fetchpriority="high"
-          class="hero-fanart-fade relative w-full min-h-[230px] h-[38svh] max-h-[53svh] landscape:min-h-0 landscape:h-auto landscape:max-h-[47vh] landscape:aspect-video object-cover object-[50%_25%]"
-        />
-
-      } @else {
-        <div
-          class="w-full min-h-[230px] h-[38svh] max-h-[53svh] landscape:min-h-0 landscape:h-auto landscape:aspect-video landscape:max-h-[47vh] bg-base-300"
-        ></div>
-      }
-    </div>
-  `,
+  templateUrl: './mobile-fanart-hero.html',
 })
 export class MobileFanartHeroComponent {
   readonly fanartUrl = input<string | null | undefined>(null);
@@ -41,4 +19,29 @@ export class MobileFanartHeroComponent {
    *  portrait card into landscape hero. On the wrapper rather than the image so
    *  the scrim the title sits on travels with it. Null where nothing pairs. */
   readonly viewTransitionName = input<string | null>(null);
+
+  protected readonly incoming = computed(() => {
+    const url = this.fanartUrl();
+    return url ? [url] : [];
+  });
+
+  /** The url this hero was showing before the current one. */
+  protected readonly outgoing = linkedSignal<string | null | undefined, string | null>({
+    source: () => this.fanartUrl(),
+    computation: (next, previous) => (previous?.source && next ? previous.source : null),
+  });
+
+  private timer?: ReturnType<typeof setTimeout>;
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => clearTimeout(this.timer));
+  }
+
+  /** Drop the old layer once the fade has covered it: its mask leaves the
+   *  bottom translucent, so keeping it would ghost through. */
+  protected onIncomingLoad() {
+    if (!this.outgoing()) return;
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.outgoing.set(null), 250);
+  }
 }
