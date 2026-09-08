@@ -18,6 +18,7 @@ import {
   ReceivedRecommendation,
   SocialApiService,
 } from '../../../core/services/api/social-api.service';
+import { keepRouteFresh } from '../../../core/services/keep-route-fresh';
 import { SseService } from '../../../core/services/sse.service';
 import { TvService } from '../../../core/services/tv.service';
 import { DropdownMenuComponent } from '../dropdown-menu';
@@ -84,6 +85,8 @@ export class ReceivedRecommendationsCardComponent implements OnInit {
   });
 
   constructor() {
+    // Home is a cached route, so ngOnInit doesn't run again on return.
+    keepRouteFresh({ refresh: () => { if (!this.tv.isTv()) void this.load(); } });
     // Refresh the moment a new recommendation SSE arrives, without waiting for
     // the next page load.
     effect(() => {
