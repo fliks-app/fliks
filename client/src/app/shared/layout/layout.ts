@@ -174,6 +174,41 @@ export class LayoutComponent implements OnInit, OnDestroy {
   }
   readonly isHomeRoute = signal(this.router.url === '/' || this.router.url.startsWith('/?'));
 
+  /** Whether the deepest activated route owns its own scroll container. Read
+   *  synchronously from the NavigationEnd handler below (same as the other
+   *  per-navigation state there), so `.owns-scroll` lands in the same
+   *  change-detection pass as the outlet swap instead of racing it. */
+  readonly ownsScroll = signal(this.deepestRouteOwnsScroll());
+  private deepestRouteOwnsScroll(): boolean {
+    let r = this.router.routerState.snapshot.root;
+    while (r.firstChild) r = r.firstChild;
+    return !!r.data['ownsScroll'];
+  }
+
+  /** Fixed navbar's own clearance: its height (0 on hero pages / TV, where it
+   *  doesn't reserve space) plus safe area — 0 wherever the mobile-style
+   *  navbar itself is hidden (desktop, or a pinned tablet sidebar). */
+  private readonly navbarSpacerHeight = computed(() => {
+    if (!this.navbar.mobileNavbarVisible()) return '0px';
+    if (this.navbar.isHeroPage() || this.tv.isTv()) return '0px';
+    return 'calc(3rem + env(safe-area-inset-top, 0px))';
+  });
+  /** `<main>`'s own top padding: Tailwind's `pt-8` overrides `py-4`'s top
+   *  rather than adding to it, so this is 2rem or 1rem, never 3rem. */
+  private readonly mainPaddingTop = computed(() =>
+    !this.navbar.isHeroPage() && !this.isNative && this.navbar.mobileNavbarVisible() ? '2rem' : '1rem',
+  );
+  /** Total fixed-chrome clearance above the content — what `<main>` reserves
+   *  today, exposed as a CSS var so a page that owns its scroller can carry
+   *  the same space inside itself instead. */
+  readonly chromeTop = computed(() => `calc(${this.navbarSpacerHeight()} + ${this.mainPaddingTop()})`);
+  /** Same, below the content: the native phone dock's spacer plus main's own
+   *  bottom padding (always 1rem — `pt-8` only ever overrides the top). */
+  readonly chromeBottom = computed(() => {
+    const dock = this.isNative && this.device.isPhone() ? '6rem' : '0px';
+    return `calc(${dock} + 1rem)`;
+  });
+
   // Sync Android status bar icons with navbar state. App is dark-only, so the
   // bar gets dark icons (light=true) only when the navbar is fully visible
   // (non-transparent) and would otherwise blend with white text on its own
@@ -327,6 +362,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
       .subscribe(e => {
         if (e instanceof Scroll) this.endScrollRestore();
         if (e instanceof NavigationEnd) {
+          this.ownsScroll.set(this.deepestRouteOwnsScroll());
           this.beginScrollRestore();
           this.replayPageEnter();
           this.bottomMenuOpen.set(false);

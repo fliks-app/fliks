@@ -22,18 +22,17 @@ export class PageScrollerService {
     switchMap((el) => fromEvent(el ?? window, 'scroll', { passive: true }).pipe(map(() => undefined))),
   );
 
-  /** Toggles `html.page-owns-scroll`, the CSS hook a claiming page's ancestor
-   *  chain bounds itself against, and publishes the scroller's gutter width so
-   *  fixed chrome can stop short of a scrollbar the document never had. */
-  private readonly hostClassEffect = effect(() => {
+  /** Publishes the claimed scroller's gutter width, so fixed chrome (the
+   *  topbar, the alphabet column) can stop short of a scrollbar the document
+   *  never had. The layout mode itself is route data, not this service. */
+  private readonly gutterEffect = effect(() => {
     const el = this.element();
     const root = document.documentElement;
-    root.classList.toggle('page-owns-scroll', el !== null);
     if (!el) {
       root.style.removeProperty('--page-scrollbar');
       return;
     }
-    // Deferred: the gutter only exists once the class above has bounded `el`.
+    // Deferred: the gutter only exists once the element is actually bounded.
     requestAnimationFrame(() => {
       if (this.element() !== el) return;
       root.style.setProperty('--page-scrollbar', `${el.offsetWidth - el.clientWidth}px`);

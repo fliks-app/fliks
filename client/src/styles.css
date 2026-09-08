@@ -685,62 +685,62 @@ html.vt-player-close body.tv main.page-enter {
   contain: none;
 }
 
-/* Bounds a page that claims its own scroller (page-scroller.service.ts) to the
-   viewport; gated so every other route keeps scrolling the document unbounded. */
-html.page-owns-scroll .drawer {
+/* `<main>` reserves the fixed chrome's space on every route, computed once in
+   layout.ts and exposed as CSS vars so a page that owns its scroller (below)
+   can carry the same space inside itself instead. */
+app-layout main {
+  padding-block: var(--chrome-top, 0px) var(--chrome-bottom, 0px);
+}
+
+/* Bounds a page whose route sets `ownsScroll` (layout.ts) to the viewport;
+   gated so every other route keeps scrolling the document unbounded. */
+.drawer.owns-scroll {
   /* min-h-screen is min-height:100vh, which beats 100dvh on mobile unless neutralised. */
   height: 100dvh;
   min-height: 0;
   grid-template-rows: minmax(0, 1fr);
 }
-html.page-owns-scroll .drawer-content {
+.drawer.owns-scroll .drawer-content {
   min-height: 0;
 }
-/* Sits outside the claiming page's scroller, so it cannot scroll away with the
-   content; the page adds its height to its own padding instead. */
 /* A claimed scroller's gutter is inside the layout viewport, where the
    document's scrollbar never was, so fixed chrome must stop short of it. */
-html.page-owns-scroll nav.navbar {
+.drawer.owns-scroll nav.navbar {
   right: var(--page-scrollbar, 0px);
   /* daisyUI's `width: 100%` would over-constrain the box and make `right` moot. */
   width: auto;
 }
-html.page-owns-scroll .library-alphabet {
+.drawer.owns-scroll .library-alphabet {
   right: calc(1rem + var(--page-scrollbar, 0px));
 }
-html.page-owns-scroll .navbar-spacer,
-html.page-owns-scroll .dock-spacer {
-  display: none;
-}
-html.page-owns-scroll main {
+.drawer.owns-scroll main {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  /* The claiming page owns its own padding instead — see .library-shell below —
-     so the clearance scrolls away with the content rather than pinning here. */
+  /* The page's own `.page-scroller` carries this space instead (padding-inline
+     too, or the scrollbar would land inset from main's true edge). */
   padding: 0;
 }
 /* The missing link: the routed component itself has no styles otherwise. */
-html.page-owns-scroll app-library {
+.drawer.owns-scroll app-library {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
 }
-html.page-owns-scroll .library-shell {
+/* Contract for a page that owns its scroller: carries the chrome clearance
+   and the page's own horizontal padding, so adopting this mode is just
+   `ownsScroll: true` on the route plus this class on the scrolling element. */
+.page-scroller {
   flex: 1;
   min-height: 0;
   overflow: hidden auto;
-  /* main's own inline padding is zeroed above, so the scrollbar already lands
-     at main's border edge, clear of the fixed alphabet column — no bleed needed. */
+  padding-block: var(--chrome-top, 0px) var(--chrome-bottom, 0px);
   padding-inline: var(--page-p);
-  /* main's py-4 bottom, plus the dock's own clearance so the grid scrolls
-     under it and its frosted veil has content to blur. */
-  padding-bottom: calc(1rem + var(--dock-clearance, 0px));
 }
 /* A scroll container's automatic minimum size is zero, so the tabs row would
    absorb the whole column's shrink pressure and collapse to its scrollbar. */
-html.page-owns-scroll .library-shell > * {
+.library-shell > * {
   flex-shrink: 0;
 }
 /* TV keeps the D-pad's focus-into-view scroll smooth and off the screen edges

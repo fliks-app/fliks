@@ -4,8 +4,7 @@
   appDefaultFocus="[data-library-focus^='media:']"
   [focusKey]="'library-' + (library()?.id ?? '')"
   focusIdAttr="data-library-focus"
-  class="library-shell flex flex-col gap-4 min-h-0"
-  [style.paddingTop]="shellPadTop()"
+  class="library-shell page-scroller flex flex-col gap-4 min-h-0"
 >
   <!-- Library title — hidden when the mobile topbar already shows it
        (avoids the duplicated heading on small screens). -->

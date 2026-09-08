@@ -1,10 +1,12 @@
 <app-background />
 <div class="drawer min-h-screen"
      [class.lg:drawer-open]="navbar.sidebarDocked()"
-     [class.md:drawer-open]="device.isTablet() && navbar.effectiveSidebarPinned()">
+     [class.md:drawer-open]="device.isTablet() && navbar.effectiveSidebarPinned()"
+     [class.owns-scroll]="ownsScroll()"
+     [style.--chrome-top]="chromeTop()"
+     [style.--chrome-bottom]="chromeBottom()">
   <input id="sidebar" type="checkbox" class="drawer-toggle" />
-  <div class="drawer-content flex flex-col relative"
-       [style.--dock-clearance]="isNative && device.isPhone() ? '6rem' : null">
+  <div class="drawer-content flex flex-col relative">
     <!-- Watched by an IntersectionObserver to derive `scrollAtTop` without ever
          reading the scroll position. Absolute, so it adds no layout height. -->
     <div #topSentinel aria-hidden="true" class="absolute top-0 left-0 h-5 w-px pointer-events-none"></div>
@@ -97,15 +99,6 @@
         <app-user-menu />
       </div>
     </nav>
-    <!-- Spacer for the fixed navbar (navbar height + safe area); collapsed on
-         hero pages so the fanart extends under the status bar, and on TV where
-         the navbar sits in the flow. -->
-    <div
-      class="navbar-spacer"
-      [class.lg:hidden]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
-      [class.md:hidden]="device.isTablet() && navbar.effectiveSidebarPinned()"
-      [style.height]="navbar.isHeroPage() || tv.isTv() ? '0px' : 'calc(3rem + env(safe-area-inset-top, 0px))'"
-    ></div>
     <!-- Desktop top-right: Cast + User -->
     <div appTvRow
          [appTvRowSnap]="true"
@@ -162,9 +155,8 @@
          `position: sticky` on descendants (sticky would anchor to <main>
          and never engage because the actual scroll happens on the page). -->
     <main
-      class="min-w-0 flex-1 py-4 px-[var(--page-p)]"
+      class="min-w-0 flex-1 px-[var(--page-p)]"
       [class.overflow-x-clip]="!navbar.isHeroPage()"
-      [class.pt-8]="!navbar.isHeroPage() && !isNative && navbar.mobileNavbarVisible()"
     >
       @if (!networkService.isOnline()) {
         <div class="alert alert-warning mb-4 flex items-center justify-between py-2">
@@ -174,12 +166,6 @@
       }
       <router-outlet />
     </main>
-    <!-- Bottom spacer for native bottom bar — phones only. Tablets and TV
-         navigate via the drawer/sidebar; phones use the dock as the primary
-         nav surface so they need the spacer to avoid content under the bar. -->
-    @if (isNative && device.isPhone()) {
-      <div class="dock-spacer h-24"></div>
-    }
     <!-- Native bottom navigation bar — phones only.
          Tablets and TV use the drawer/sidebar instead. -->
     @if (isNative && device.isPhone() && !keyboardOpen()) {

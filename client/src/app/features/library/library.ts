@@ -125,13 +125,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
   /** Detaching removes the shell from the document, and a detached element has
    *  no layout box, so the offset has to be kept outside the DOM. */
   private savedScrollTop = 0;
-  /** The fixed-navbar clearance `<main>` gives every other page: the claiming
-   *  page carries it inside its own scroller so it scrolls away with content. */
-  protected readonly shellPadTop = computed(() => {
-    if (!this.pageScroller.element()) return null;
-    if (!this.navbar.mobileNavbarVisible()) return '1rem';
-    return `calc(3rem + env(safe-area-inset-top, 0px) + ${this.isNative ? '1rem' : '2rem'})`;
-  });
   /** Cached per library name: revalidate the grid on return, re-claim the
    *  scroller and restore its saved offset. */
   private readonly routeFresh = keepRouteFresh({
@@ -327,8 +320,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
     if (!ref) return;
     this.pageScroller.claim(this.shellRef.nativeElement);
     this.shellRef.nativeElement.addEventListener('scroll', this.onLetterScroll, { passive: true });
-    // The shell is only bounded once `page-owns-scroll` lands (a signal effect,
-    // not synchronous with the claim above); re-measure after it has a chance to.
+    // Bounding comes from route data (already applied by the time this
+    // component exists), but the CDK viewport still needs a tick to see it.
     queueMicrotask(() => ref.checkViewportSize());
   }
   private viewport?: CdkVirtualScrollViewport;
