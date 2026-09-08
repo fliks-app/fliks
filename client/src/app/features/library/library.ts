@@ -139,10 +139,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     onAttach: () => {
       const lib = this.library();
       if (lib) this.navbar.setPageTitle(lib.name);
-      if (this.viewport) {
-        this.pageScroller.claim(this.shellRef.nativeElement);
-        if (this.savedScrollTop > 0) this.viewport.scrollToOffset(this.savedScrollTop, 'instant');
-      }
+      this.claimWhenLive();
       this.applyBackground();
     },
     onDetach: () => {
@@ -325,12 +322,25 @@ export class LibraryComponent implements OnInit, OnDestroy {
     }
     this.viewport = ref;
     if (!ref) return;
-    this.pageScroller.claim(this.shellRef.nativeElement);
+    this.claimWhenLive();
     this.shellRef.nativeElement.addEventListener('scroll', this.onLetterScroll, { passive: true });
-    // The shell is only bounded once `page-owns-scroll` lands (a signal effect,
-    // not synchronous with the claim above); re-measure after it has a chance to.
-    queueMicrotask(() => ref.checkViewportSize());
   }
+  /** The claim bounds shared chrome, so it must wait until this page's DOM is
+   *  the one on screen: `attached$` fires before the outlet reinserts it. */
+  private claimWhenLive(frames = 0): void {
+    const el = this.shellRef.nativeElement;
+    if (!this.viewport || this.destroyed) return;
+    if (!el.isConnected) {
+      if (frames < 60) requestAnimationFrame(() => this.claimWhenLive(frames + 1));
+      return;
+    }
+    this.pageScroller.claim(el);
+    if (this.savedScrollTop > 0) this.viewport.scrollToOffset(this.savedScrollTop, 'instant');
+    // The shell is only bounded once `page-owns-scroll` lands (a signal effect,
+    // not synchronous with the claim), so re-measure after it has a chance to.
+    queueMicrotask(() => this.viewport?.checkViewportSize());
+  }
+  private destroyed = false;
   private viewport?: CdkVirtualScrollViewport;
   private cardRowEl?: HTMLElement;
   /** Measured once per layout. The strategy is fixed-size: it places every row
@@ -493,6 +503,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.destroyed = true;
     this.background.clear();
     this.list.destroy();
     if (this.onResize) window.removeEventListener('resize', this.onResize);
