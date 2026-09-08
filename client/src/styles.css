@@ -682,6 +682,21 @@ html.vt-player-close body.tv main.page-enter {
   contain: none;
 }
 
+/* Bounds the grid to a real scrollable box instead of the document. ~5rem is
+   the fixed topbar + <main>'s own vertical padding — an approximation, not
+   exact per form factor (native bottom dock isn't accounted for). */
+.library-shell {
+  height: calc(100vh - 5rem);
+  height: calc(100dvh - 5rem);
+}
+/* TV keeps the D-pad's focus-into-view scroll smooth and off the screen edges
+   inside the grid's own scroller now, matching the document-scroll rule above. */
+html.tv-host .library-viewport {
+  scroll-behavior: smooth;
+  scroll-padding-top: 96px;
+  scroll-padding-bottom: 20vh;
+}
+
 /* An option that is only marked unavailable because it IS the current selection
    must stay focusable — a D-pad has to be able to land on it — so it carries
    `aria-disabled` instead of `disabled`, which removes an element from the

@@ -2,7 +2,7 @@
   appDefaultFocus="[data-library-focus^='media:']"
   [focusKey]="'library-' + (library()?.id ?? '')"
   focusIdAttr="data-library-focus"
-  class="flex flex-col gap-4 h-full"
+  class="library-shell flex flex-col gap-4 min-h-0"
 >
   <!-- Library title — hidden when the mobile topbar already shows it
        (avoids the duplicated heading on small screens). -->
@@ -382,14 +382,13 @@
             }
       </ng-template>
 
-      <div class="flex gap-1 pt-2">
+      <div class="flex gap-1 pt-2 flex-1 min-h-0">
         <cdk-virtual-scroll-viewport
-          scrollWindow
           data-tv-zone
           [itemSize]="rowHeight()"
           [minBufferPx]="rowHeight() * 2"
           [maxBufferPx]="rowHeight() * 4"
-          class="flex-1 min-w-0 library-viewport">
+          class="flex-1 min-w-0 h-full library-viewport">
           <!-- The right padding clears the alphabet column: it sits at `right-4`
                and is `w-4` wide, so anything under 2rem lets the cards slide
                under the letters. -->
