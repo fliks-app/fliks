@@ -99,6 +99,10 @@ export class App implements OnInit, OnDestroy {
     document.addEventListener('visibilitychange', this.visibilityListener);
 
     if (Capacitor.isNativePlatform()) {
+      // On <html> as well as <body>: overlays (sheets, popovers) are
+      // reparented under <html> to escape stacking contexts, and a
+      // body-scoped selector never reaches them.
+      document.documentElement.classList.add('native');
       document.body.classList.add('native');
 
       // Hide the native splash on the first NavigationEnd. The splash sits in

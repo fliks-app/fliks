@@ -145,20 +145,24 @@ body.native.immersive {
    hold a media card. Inputs, textareas and explicit `[contenteditable]`
    regions are re-enabled below so forms and dialogs still work. The
    `.select-text` opt-in lets specific surfaces (e.g. release notes,
-   stack traces in the debug panel) keep selection if we want it. */
-body.native,
-body.native * {
+   stack traces in the debug panel) keep selection if we want it.
+
+   Scoped to <html>, not <body>: overlays are reparented under <html> to
+   escape stacking contexts, so a body-scoped rule never reaches a sheet's
+   own poster and title. */
+html.native,
+html.native * {
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
   -webkit-user-drag: none;
 }
-body.native input,
-body.native textarea,
-body.native [contenteditable="true"],
-body.native [contenteditable=""],
-body.native .select-text,
-body.native .select-text * {
+html.native input,
+html.native textarea,
+html.native [contenteditable="true"],
+html.native [contenteditable=""],
+html.native .select-text,
+html.native .select-text * {
   -webkit-user-select: text;
   user-select: text;
   -webkit-touch-callout: default;
@@ -483,16 +487,25 @@ html:not(.keyboard-modality):not(.tv-host) .select:focus {
    reads as "the page suddenly grows" when tapping the search bar.
    Lock the in-app form fields at 16 px on the Capacitor build so
    focus never triggers the zoom. Desktop / web is untouched. */
-body.native input,
-body.native textarea,
-body.native select {
+html.native input,
+html.native textarea,
+html.native select {
   font-size: 16px;
 }
 html:not(.keyboard-modality):not(.tv-host) app-media-card figure:focus-visible,
 html:not(.keyboard-modality):not(.tv-host) [data-home-focus]:focus-visible,
 html:not(.keyboard-modality):not(.tv-host) [data-tv-focusable]:focus-visible,
-html:not(.keyboard-modality):not(.tv-host) app-mosaic-card button:focus-visible .mosaic-art {
+html:not(.keyboard-modality):not(.tv-host) app-mosaic-card button:focus-visible .mosaic-art,
+html:not(.keyboard-modality):not(.tv-host) app-media-card figure:focus-visible + div,
+html:not(.keyboard-modality):not(.tv-host) app-mosaic-card button:focus-visible .mosaic-art + div {
   transform: none !important;
+}
+
+/* Same modality gate for a menu row's focus tint: the panel focuses its first
+   entry on open, and on a long-press-opened sheet that row read as already
+   selected. */
+html:not(.keyboard-modality):not(.tv-host) .dropdown-item:focus-visible {
+  background-color: transparent;
 }
 
 /* High-contrast primary focus ring — applies on every form factor so

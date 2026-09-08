@@ -47,6 +47,7 @@ export class CardActionsDirective implements OnDestroy {
   readonly actionsSubtitle = input<string>('');
 
   private longPressTimer: number | null = null;
+  private longPressFired = false;
   private touchStartX = 0;
   private touchStartY = 0;
   private boundHandlers: { type: string; fn: (e: Event) => void }[] = [];
@@ -104,6 +105,7 @@ export class CardActionsDirective implements OnDestroy {
   private onTouchStart(e: TouchEvent) {
     const actions = this.currentActions();
     if (!actions.length) return;
+    this.longPressFired = false;
     const t = e.touches[0];
     this.touchStartX = t?.clientX ?? 0;
     this.touchStartY = t?.clientY ?? 0;
@@ -118,6 +120,7 @@ export class CardActionsDirective implements OnDestroy {
       });
       this.service.show();
       this.longPressTimer = null;
+      this.longPressFired = true;
     }, 500);
   }
 
@@ -130,8 +133,35 @@ export class CardActionsDirective implements OnDestroy {
     }
   }
 
-  private onTouchEnd() {
+  private onTouchEnd(e: TouchEvent) {
     this.cancelLongPress();
+    if (!this.longPressFired) return;
+    this.longPressFired = false;
+    // WebKit hit-tests the compatibility click at the release point, which is
+    // now the sheet backdrop the hold just mounted — it would dismiss the panel
+    // the same gesture opened. preventDefault on touchend suppresses that
+    // click; the capture-phase swallower covers the WebView that fires it
+    // anyway.
+    if (e.cancelable) e.preventDefault();
+    this.swallowNextClick();
+  }
+
+  /** Eat the one click that closes out the long-press gesture. Self-disarms on
+   *  the first click or after 300 ms, so a deliberate tap is never lost. */
+  private swallowNextClick() {
+    if (typeof window === 'undefined') return;
+    let timer = 0;
+    const swallow = (ev: Event) => {
+      ev.stopPropagation();
+      ev.preventDefault();
+      disarm();
+    };
+    const disarm = () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('click', swallow, true);
+    };
+    timer = window.setTimeout(disarm, 300);
+    window.addEventListener('click', swallow, { capture: true });
   }
 
   private onContextMenu(e: Event) {
