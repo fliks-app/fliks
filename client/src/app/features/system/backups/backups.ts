@@ -52,6 +52,17 @@ export class SystemBackupsComponent implements OnInit {
     }
   }
 
+  async remove(filename: string) {
+    if (!await this.confirmation.confirm({ title: this.translate.instant('common.confirm'), message: this.translate.instant('system.confirm_delete_backup'), variant: 'danger' })) return;
+    try {
+      await firstValueFrom(this.http.delete(`/api/system/backups/${encodeURIComponent(filename)}`));
+      await this.load();
+    } catch (err: unknown) {
+      const httpErr = err as { error?: { message?: string } };
+      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? 'Delete failed', variant: 'danger' });
+    }
+  }
+
   formatBytes(bytes: number): string {
     if (!bytes || bytes < 0) return '—';
     const units = ['B', 'KB', 'MB', 'GB'];

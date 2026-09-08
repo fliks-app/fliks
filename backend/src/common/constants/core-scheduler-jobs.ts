@@ -13,6 +13,7 @@
 export const PLUGIN_SOURCE_REFRESH_CRON = '0 3 * * *';
 
 export const CORE_SCHEDULER_JOB_NAMES = [
+  'Backup',
   'RefreshMetadata',
   'RefreshPluginSources',
   'SubtitleSearch',

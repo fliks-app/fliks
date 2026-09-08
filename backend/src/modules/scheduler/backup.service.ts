@@ -21,6 +21,8 @@ import { getDataDir } from '../../common/constants/paths';
  */
 @Injectable()
 export class BackupService {
+  /** Backups kept by {@link pruneOldBackups}: a week of dailies. */
+  private static readonly KEEP = 7;
   private readonly log = new Logger(BackupService.name);
   /** Under the data dir, so backups survive an image upgrade. */
   private readonly backupDir = path.join(getDataDir(), 'backups');
@@ -64,6 +66,22 @@ export class BackupService {
         return { filename, size: stat.size, date: stat.mtime.toISOString() };
       })
       .sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  deleteBackup(filename: string): void {
+    const filePath = this.getBackupPath(filename);
+    fs.rmSync(filePath, { force: true });
+    this.log.log(`Backup deleted: ${filename}`);
+  }
+
+  /** Drop every backup past the newest {@link KEEP}, so the daily job can't
+   *  fill the data volume. Returns the names removed. */
+  pruneOldBackups(): string[] {
+    const stale = this.listBackups().slice(BackupService.KEEP);
+    for (const { filename } of stale) {
+      fs.rmSync(path.join(this.backupDir, filename), { force: true });
+    }
+    return stale.map((b) => b.filename);
   }
 
   async restore(filename: string): Promise<void> {

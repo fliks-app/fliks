@@ -29,6 +29,7 @@
             <td class="text-end">
               <a class="btn btn-ghost btn-xs" [href]="'/api/system/backups/' + b.filename" target="_blank">{{ 'system.download_backup' | translate }}</a>
               <button type="button" class="btn btn-ghost btn-xs text-warning" (click)="restore(b.filename)">{{ 'system.restore_backup' | translate }}</button>
+              <button type="button" class="btn btn-ghost btn-xs text-error" (click)="remove(b.filename)">{{ 'common.delete' | translate }}</button>
             </td>
           </tr>
         }

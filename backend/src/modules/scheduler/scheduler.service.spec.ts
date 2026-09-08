@@ -34,6 +34,7 @@ function makeService(pluginJobs: ReturnType<typeof fakePluginJobs>, jobRegistry:
     unused,
     unused,
     unused,
+    unused,
   );
 }
 
@@ -105,6 +106,7 @@ function makeMetadataService(
     unused,
     unused,
     activityRegistry as never,
+    unused,
   );
 }
 
