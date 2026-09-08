@@ -4,6 +4,7 @@ import {
   computed,
   effect,
   viewChild,
+  linkedSignal,
   ElementRef,
 } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -23,20 +24,30 @@ export class ConfirmationModalComponent {
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
 
   readonly isOpen = computed(() => !!this.confirmService.state());
-  readonly title = computed(() => this.confirmService.state()?.title ?? '');
-  readonly message = computed(() => this.confirmService.state()?.message ?? '');
+
+  /** Last non-null state, so the content survives the closing animation. */
+  private readonly view = linkedSignal<
+    ReturnType<ConfirmationService['state']>,
+    ReturnType<ConfirmationService['state']>
+  >({
+    source: this.confirmService.state,
+    computation: (state, previous) => state ?? previous?.value ?? null,
+  });
+
+  readonly title = computed(() => this.view()?.title ?? '');
+  readonly message = computed(() => this.view()?.message ?? '');
   readonly confirmLabel = computed(
-    () => this.confirmService.state()?.confirmLabel ?? this.translate.instant('common.confirm'),
+    () => this.view()?.confirmLabel ?? this.translate.instant('common.confirm'),
   );
   readonly cancelLabel = computed(
-    () => this.confirmService.state()?.cancelLabel ?? this.translate.instant('common.cancel'),
+    () => this.view()?.cancelLabel ?? this.translate.instant('common.cancel'),
   );
-  readonly variant = computed(() => this.confirmService.state()?.variant ?? 'default');
+  readonly variant = computed(() => this.view()?.variant ?? 'default');
 
-  readonly alertOnly = computed(() => this.confirmService.state()?.alertOnly ?? false);
-  readonly toggleLabel = computed(() => this.confirmService.state()?.toggleLabel ?? null);
-  readonly toggleHint = computed(() => this.confirmService.state()?.toggleHint ?? null);
-  readonly dismissLabel = computed(() => this.confirmService.state()?.dismissLabel ?? null);
+  readonly alertOnly = computed(() => this.view()?.alertOnly ?? false);
+  readonly toggleLabel = computed(() => this.view()?.toggleLabel ?? null);
+  readonly toggleHint = computed(() => this.view()?.toggleHint ?? null);
+  readonly dismissLabel = computed(() => this.view()?.dismissLabel ?? null);
 
   readonly confirmBtnClass = computed(() => {
     const map: Record<string, string> = {
