@@ -300,12 +300,16 @@ export class LibraryComponent implements OnInit, OnDestroy {
     if (this.letterRaf !== null) return;
     this.letterRaf = requestAnimationFrame(() => {
       this.letterRaf = null;
-      if (performance.now() < this.letterHeldUntil) return;
-      if (!this.viewport) return;
-      const row = Math.max(0, Math.round(this.viewport.measureScrollOffset() / this.rowHeight()));
-      this.list.activeLetter.set(this.list.letterAt(row * this.gridCols()));
+      this.syncActiveLetter();
     });
   };
+  /** The index tracks the row at the top of the scrollport, so it has to be
+   *  derived once the grid exists and not only when the offset changes. */
+  private syncActiveLetter(): void {
+    if (!this.viewport || performance.now() < this.letterHeldUntil) return;
+    const row = Math.max(0, Math.round(this.viewport.measureScrollOffset() / this.rowHeight()));
+    this.list.activeLetter.set(this.list.letterAt(row * this.gridCols()));
+  }
   /** Recreated whenever the `@if` block toggles (tab switch, loading state) —
    *  `onAttach` re-claims separately since a cached reattach preserves this view. */
   @ViewChild(CdkVirtualScrollViewport) private set viewportRef(ref: CdkVirtualScrollViewport | undefined) {
@@ -319,7 +323,10 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.shellRef.nativeElement.addEventListener('scroll', this.onLetterScroll, { passive: true });
     // Bounding comes from route data (already applied by the time this
     // component exists), but the CDK viewport still needs a tick to see it.
-    queueMicrotask(() => ref.checkViewportSize());
+    queueMicrotask(() => {
+      ref.checkViewportSize();
+      this.syncActiveLetter();
+    });
   }
   /** `attached$` fires before the outlet reinserts the subtree, and a write to
    *  a detached element's scrollTop is dropped, leaving CDK's rendered range
