@@ -2,12 +2,16 @@
   <div class="card bg-base-100 shadow-xl w-full max-w-md" (click)="closeMenu()">
     <div class="card-body gap-6">
       <div class="text-center">
-        <h1 class="text-2xl font-bold">Fliks</h1>
-        <p class="text-base-content/60 mt-1">{{ 'setup.subtitle' | translate }}</p>
+        <img
+          src="/fliks-logo-ondark.svg"
+          alt="{{ 'app.name' | translate }}"
+          class="h-12 w-auto mx-auto"
+        />
+        <p class="text-base-content/60 pt-4">{{ 'setup.subtitle' | translate }}</p>
       </div>
 
       @if (knownServers().length > 0) {
-        <section class="flex flex-col gap-2">
+        <section class="flex flex-col gap-2 pt-2">
           <div class="text-xs font-semibold uppercase tracking-wider text-base-content/60">
             {{ 'server_history.section_title' | translate }}
           </div>
@@ -16,7 +20,8 @@
               <button
                 type="button"
                 class="flex-1 min-w-0 text-left"
-                [attr.aria-busy]="switching()"
+                [disabled]="!!switchingTo()"
+                [attr.aria-busy]="switchingTo() === server.url"
                 (click)="useKnown(server)"
               >
                 <div class="font-medium truncate flex items-center gap-1.5">
@@ -33,6 +38,9 @@
                   }
                 </div>
               </button>
+              @if (switchingTo() === server.url) {
+                <span class="loading loading-spinner loading-sm text-primary"></span>
+              }
               <div class="dropdown dropdown-end" [class.dropdown-open]="openMenuFor() === server.url">
                 <button type="button" class="btn btn-ghost btn-sm btn-square" (click)="toggleMenu(server.url, $event)" [attr.aria-label]="'server_history.actions' | translate">⋯</button>
                 <ul class="dropdown-content menu bg-base-100 rounded-box shadow z-10 w-48 p-2">
@@ -88,9 +96,12 @@
           #saveBtn
           type="button"
           class="btn btn-primary flex-1"
-          [disabled]="!testResult()?.ok"
+          [disabled]="!testResult()?.ok || !!switchingTo()"
           (click)="save()"
         >
+          @if (saving()) {
+            <span class="loading loading-spinner loading-sm"></span>
+          }
           {{ 'setup.save' | translate }}
         </button>
       </div>
