@@ -14,6 +14,9 @@
   --radius-selector: 1rem;
   --radius-field: 1rem;
   --radius-box: 0.5rem;
+  --focus-ring:
+    0 0 0 2px var(--color-base-100, #1d232a),
+    0 0 0 4px var(--color-primary, #7a3ff2);
 }
 
 /* Active menu item styled like the hover state. daisyUI's neutral default is
@@ -502,9 +505,7 @@ body:not(.keyboard-modality):not(.tv) app-mosaic-card button:focus-visible .mosa
    because the second shadow shows through it. */
 :is(a, button, select, input, [role="button"], [tabindex]):focus-visible {
   outline: none;
-  box-shadow:
-    0 0 0 2px var(--color-base-100, #1d232a),
-    0 0 0 4px var(--color-primary, #7a3ff2);
+  box-shadow: var(--focus-ring);
   z-index: 1;
   /* Never set `position` here: it would re-anchor an absolutely placed
      focusable (a modal ✕, a floating cue) and make it jump on focus. */
@@ -516,6 +517,14 @@ body:not(.keyboard-modality):not(.tv) app-mosaic-card button:focus-visible .mosa
    ring is 4px and these rows carry a gap, so nothing overlaps without it. */
 body.tv :is(a, button, select, input, [role="button"], [tabindex]):focus-visible {
   z-index: auto;
+}
+
+/* daisyUI keeps its active menu item's own box-shadow at low specificity behind
+   a `:where()`. The TV downlevel unwraps that wrapper — Chromium 85 can't parse
+   it — which lifts the rule above the ring and swallows it, so the focused
+   sidebar entry you are already on shows no ring at all. */
+body.tv .menu li > .menu-active:focus-visible {
+  box-shadow: var(--focus-ring) !important;
 }
 
 /* Over the video, the ring's inner `--color-base-100` layer has nothing to
