@@ -583,7 +583,7 @@
     "sub_col_date": "Date"
   },
   "setup": {
-    "subtitle": "Configurez l'adresse de votre serveur Fliks",
+    "subtitle": "Configurez l'adresse de votre serveur",
     "server_url": "Adresse du serveur",
     "server_url_hint": "L'adresse complète de votre serveur (ex: http://192.168.1.10:3000)",
     "test": "Tester",

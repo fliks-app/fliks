@@ -38,8 +38,12 @@ export class SetupComponent {
   readonly testing = signal(false);
   readonly testResult = signal<{ ok: boolean; message: string } | null>(null);
   readonly knownServers = this.serverConfig.knownServers;
-  /** The app restarts on a server switch, so this only has to hold until then. */
-  readonly switching = signal(false);
+  /** URL being switched to, or null. The app restarts on a server switch, so
+   *  this only has to hold until then. */
+  readonly switchingTo = signal<string | null>(null);
+  /** True only for a switch started by the save button, so the recent-server
+   *  rows don't spin its spinner. */
+  readonly saving = signal(false);
   /** URL of the entry whose ⋯ menu is open, or null. */
   readonly openMenuFor = signal<string | null>(null);
   private readonly saveBtn = viewChild<ElementRef<HTMLButtonElement>>('saveBtn');
@@ -80,7 +84,12 @@ export class SetupComponent {
   async save() {
     const result = this.testResult();
     if (!result?.ok) return;
-    await this.switchTo(this.url().trim());
+    this.saving.set(true);
+    try {
+      await this.switchTo(this.url().trim());
+    } finally {
+      this.saving.set(false);
+    }
   }
 
   /** One-tap "use this server" — already known, skip the test step. Its stored
@@ -90,12 +99,12 @@ export class SetupComponent {
   }
 
   private async switchTo(url: string) {
-    if (this.switching()) return;
-    this.switching.set(true);
+    if (this.switchingTo()) return;
+    this.switchingTo.set(url);
     try {
       await this.auth.switchToServer(url);
     } finally {
-      this.switching.set(false);
+      this.switchingTo.set(null);
     }
   }
 

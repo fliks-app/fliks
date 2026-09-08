@@ -578,7 +578,7 @@
     "sub_col_date": "Fecha"
   },
   "setup": {
-    "subtitle": "Configure la dirección de su servidor Fliks",
+    "subtitle": "Configure la dirección de su servidor",
     "server_url": "Dirección del servidor",
     "server_url_hint": "La dirección completa de su servidor (ej.: http://192.168.1.10:3000)",
     "test": "Probar",
