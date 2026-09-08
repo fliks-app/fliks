@@ -1,8 +1,14 @@
 import { formatSubtitleLabel, formatSubtitleParts } from './player.utils';
+import { signal } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 
-/** The formatters only ever call `instant`, so a key-echoing stub is enough. */
-const translate = { instant: (key: string) => key } as TranslateService;
+/** Key-echoing stub. An unresolved key falls through to the platform's own
+ *  language name, so the locale signals have to be there too. */
+const translate = {
+  instant: (key: string) => key,
+  currentLang: signal('en'),
+  fallbackLang: signal('en'),
+} as unknown as TranslateService;
 
 const srt = { language: 'fra', codec: 'subrip', forced: true };
 
