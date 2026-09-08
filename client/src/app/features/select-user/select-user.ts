@@ -12,6 +12,7 @@ import { Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { AuthService, PublicUserSummary } from '../../core/services/auth.service';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
+import { restoreOpenerFocus } from '../../core/services/focusable.constants';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { ToastService } from '../../core/services/toast.service';
 import { UserAvatarComponent } from '../../shared/components/user-avatar/user-avatar';
@@ -77,6 +78,14 @@ export class SelectUserComponent {
     () => this.users().find((u) => u.id === this.openSheetFor()) ?? null,
   );
 
+  /** Tile the default-focus pass lands on: an account with a stored session
+   *  when there is one, else the first. A session-only marker would match
+   *  nothing on a fresh device and leave the boot screen unfocused until
+   *  `DefaultFocusService` times out. */
+  readonly focusTileId = computed(
+    () => this.users().find((u) => this.hasSession(u))?.id ?? this.users()[0]?.id ?? null,
+  );
+
   /** Default-focus target inside the sheet (password button). Captured as a
    *  view child so the effect below can pull focus to it the moment the
    *  sheet opens — `data-tv-modal` on the sheet container already traps
@@ -88,6 +97,9 @@ export class SelectUserComponent {
    *  fires multiple times (open → cancel → reopen). */
   private readonly dismissCallback = () => this.closeSheet();
   private dismissRegistered = false;
+  /** Tile the sheet was opened from, so closing hands focus back to it
+   *  instead of dropping it on `<body>`. */
+  private opener: HTMLElement | null = null;
 
   constructor() {
     void this.loadUsers();
@@ -106,7 +118,15 @@ export class SelectUserComponent {
         this.dismissStack.remove(this.dismissCallback);
         this.dismissRegistered = false;
       }
-      if (!open) return;
+      if (!open) {
+        const opener = this.opener;
+        this.opener = null;
+        // rAF for the same reason as the open path: the sheet's focused button
+        // is still in the DOM until Angular's commit pass lands, and its
+        // removal would blur whatever we restored.
+        if (opener) requestAnimationFrame(() => restoreOpenerFocus(opener));
+        return;
+      }
       requestAnimationFrame(() => {
         this.passwordBtn()?.nativeElement.focus({ preventScroll: true });
       });
@@ -144,6 +164,7 @@ export class SelectUserComponent {
    *  anything else opens the password / quick-connect sheet. */
   async selectUser(user: PublicUserSummary) {
     if (this.resuming() !== null) return;
+    this.opener = document.activeElement as HTMLElement | null;
     if (!this.hasSession(user)) {
       this.openSheetFor.set(user.id);
       return;
