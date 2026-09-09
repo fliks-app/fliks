@@ -1436,10 +1436,12 @@ html.vt-poster-in [data-chrome-fab],
 html.vt-poster-out [data-chrome-fab] {
   view-transition-name: vt-fab;
 }
+/* Above the card's badges (2), which the morph passes under along with its
+   picture — a tie there let the watched tick paint over the bar. */
 html.vt-poster-in::view-transition-group(vt-topbar),
 html.vt-poster-out::view-transition-group(vt-topbar),
 html.vt-poster-in::view-transition-group(vt-hero-lead) {
-  z-index: 2;
+  z-index: 3;
 }
 /* The bar is the same box on both sides, so it swaps rather than cross-fading —
    opacity as well as the animation, or the outgoing bar stays stacked under the
@@ -1459,14 +1461,14 @@ html.vt-poster-in::view-transition-group(vt-dock),
 html.vt-poster-out::view-transition-group(vt-dock),
 html.vt-poster-in::view-transition-new(vt-dock),
 html.vt-poster-out::view-transition-new(vt-dock) {
-  z-index: 3;
+  z-index: 4;
   animation: none;
 }
 html.vt-poster-in::view-transition-group(vt-fab),
 html.vt-poster-out::view-transition-group(vt-fab),
 html.vt-poster-in::view-transition-new(vt-fab),
 html.vt-poster-out::view-transition-new(vt-fab) {
-  z-index: 4;
+  z-index: 5;
   animation: none;
 }
 html.vt-poster-in::view-transition-old(vt-dock),
