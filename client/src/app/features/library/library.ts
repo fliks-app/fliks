@@ -348,6 +348,12 @@ export class LibraryComponent implements OnInit, OnDestroy {
       return;
     }
     this.pageScroller.claim(el);
+    // A cached page keeps its offset in the DOM, so a forward navigation would
+    // land on wherever it was left; only a return is meant to restore it.
+    if (!this.navbar.navigatedBack()) {
+      this.scrollOwnTo(0);
+      return;
+    }
     if (this.savedScrollTop > 0) {
       // The letter survives the trip in this component; the restore's own
       // scroll event must not recompute it off the row it lands on.
