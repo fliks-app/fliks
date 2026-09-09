@@ -7,6 +7,50 @@
    range and Tailwind packs the same column count as a portrait tablet). */
 @custom-variant tv (body.tv &);
 
+/* webOS reports `(hover: none)` even though the Magic Remote is a real
+   pointer, so Tailwind's default gate leaves every `hover:` utility inert on
+   LG. Re-open the variant there — and only there, since a touch device that
+   reports no hover would latch the state after a tap. Scoped to <html>, not
+   <body>: dropdown-menu and popover-menu reparent their host to
+   `document.documentElement`, outside <body>. */
+@custom-variant hover {
+  @media (hover: hover) {
+    &:hover {
+      @slot;
+    }
+  }
+  html.tv-webos &:hover {
+    @slot;
+  }
+}
+
+/* daisyUI authors its component hover states in its own `@media (hover: hover)`
+   block, which the variant above can't reach — mirrored here so LG gets them
+   too. Re-check the list against the built CSS on a daisyUI upgrade. */
+html.tv-webos .btn:hover {
+  --btn-bg: var(--btn-color, var(--color-base-200));
+}
+html.tv-webos .tab:hover {
+  color: var(--color-base-content);
+}
+html.tv-webos .dock > *:hover {
+  opacity: 80%;
+}
+html.tv-webos .link-hover:hover {
+  text-decoration-line: underline;
+}
+html.tv-webos .link-primary:hover {
+  color: var(--color-primary);
+}
+html.tv-webos .table tr.row-hover:hover,
+html.tv-webos .table tr.row-hover:nth-child(2n):hover {
+  background-color: var(--color-base-200);
+}
+html.tv-webos .table-zebra tbody tr.row-hover:hover,
+html.tv-webos .table-zebra tbody tr.row-hover:where(:nth-child(2n)):hover {
+  background-color: var(--color-base-300);
+}
+
 /* Rounder corners for all DaisyUI components */
 :root, [data-theme] {
   /* Page padding — <main>, the topbars, and anything that bleeds out of them. */
@@ -447,9 +491,13 @@ html.keyboard-modality {
   scroll-padding-top: 96px;
   scroll-padding-bottom: 20vh;
 }
-/* Disable hover styles on TV — there is no pointer */
-body.tv *:hover {
-  background-color: revert;
+/* Pointerless TVs: neutralise daisyUI's two ungated `:hover` backgrounds, so a
+   latched hover can't leave a phantom highlight. Tailwind's own `hover:`
+   utilities need no help — they sit behind `@media (hover: hover)`. Narrow on
+   purpose: `*:hover` reverted base backgrounds too, not just hover ones. */
+html.tv-host:not(.tv-webos) .menu li > :hover,
+html.tv-host:not(.tv-webos) .select option:hover {
+  background-color: revert !important;
 }
 /* Suppress every `:focus-visible` visual when the user isn't on a
    keyboard / D-pad modality. Safari WebKit on iOS incorrectly fires
@@ -1134,6 +1182,11 @@ body.tv .to-base-100\/50 {
 html.tv-host .dropdown-item:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: -2px;
+}
+/* Same distance problem for the pointer: `hover:bg-white/5` is ~4 RGB levels,
+   invisible from a couch. Focus stays ahead of it thanks to the ring above. */
+html.tv-webos .dropdown-item:hover {
+  background-color: color-mix(in oklab, var(--color-white) 12%, transparent);
 }
 
 /* TV (Tizen 6.5 / webOS 6 — Chromium ~85): daisyUI v5's `.toggle` relies on

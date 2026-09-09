@@ -223,10 +223,13 @@ export class DeviceService {
     html.classList.toggle('tv-host', this.formFactor() === 'tv');
 
     // Per-platform hook so CSS can target a specific TV OS without
-    // duplicating the formFactor check in every selector.
+    // duplicating the formFactor check in every selector. Mirrored on <html>
+    // because overlays are reparented there, out of <body>'s reach.
     const platforms: TvPlatform[] = ['androidtv', 'tizen', 'webos'];
     for (const p of platforms) {
-      body.classList.toggle(`tv-${p}`, this.tvPlatform() === p);
+      const on = this.tvPlatform() === p;
+      body.classList.toggle(`tv-${p}`, on);
+      html.classList.toggle(`tv-${p}`, on);
     }
   }
 
