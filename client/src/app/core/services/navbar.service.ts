@@ -1,6 +1,6 @@
 import { Location } from '@angular/common';
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { NavigationEnd, NavigationStart, Router } from '@angular/router';
+import { NavigationEnd, NavigationStart, Router, Scroll } from '@angular/router';
 import { Capacitor } from '@capacitor/core';
 import { DeviceService } from './device.service';
 
@@ -89,6 +89,12 @@ export class NavbarService {
         const back = e.navigationTrigger === 'popstate' || this.lastWasBack();
         this.navigatedBack.set(back);
         document.documentElement.classList.toggle('nav-back', back);
+        // The router restores the offset with the two-argument `scrollTo`,
+        // which honours `scroll-behavior`; TV would animate the jump to top.
+        document.documentElement.classList.add('nav-scroll-instant');
+      }
+      if (e instanceof Scroll) {
+        document.documentElement.classList.remove('nav-scroll-instant');
       }
       // Browser back/forward: mirror the pop on our internal stack so the
       // next in-app back button doesn't re-push the URL we just left (which

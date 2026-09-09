@@ -771,6 +771,12 @@ body.tv .drawer.owns-scroll nav.navbar,
 html.tv-host .page-scroller {
   scroll-behavior: smooth;
 }
+/* Smooth is for D-pad focus-into-view; the router's own jump to the top of a
+   page being entered must not animate. */
+html.tv-host.nav-scroll-instant,
+html.tv-host.nav-scroll-instant .page-scroller {
+  scroll-behavior: auto;
+}
 /* scroll-padding applies to the scroll container and is not inherited, so
    neither html rule above reaches a page that scrolls its own element. */
 html.tv-host .page-scroller,
