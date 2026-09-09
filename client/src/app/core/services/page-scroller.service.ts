@@ -67,6 +67,13 @@ export class PageScrollerService {
     return this.element()?.scrollTop ?? window.scrollY;
   }
 
+  /** Instant: TV builds set `scroll-behavior: smooth` for the D-pad, which
+   *  would turn a restore into a competing animation. */
+  scrollTo(top: number): void {
+    const el = this.element();
+    if (el) el.scrollTo({ top, left: 0, behavior: 'instant' });
+    else window.scrollTo({ top, left: 0, behavior: 'instant' });
+  }
 
   changes(): Observable<void> {
     return this.changes$;

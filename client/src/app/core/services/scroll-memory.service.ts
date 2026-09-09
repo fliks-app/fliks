@@ -1,11 +1,15 @@
 import { Injectable, Injector, afterNextRender, inject } from '@angular/core';
 import { NavigationStart, Router, Scroll } from '@angular/router';
+import { PageScrollerService } from './page-scroller.service';
 
 @Injectable({ providedIn: 'root' })
 export class ScrollMemoryService {
   private positions = new Map<string, number>();
   private currentKey: string | null = null;
   private readonly router = inject(Router);
+  /** Whatever scrolls the active page — the document, or a container a page
+   *  claimed. Both scroll models therefore share this one save/restore path. */
+  private readonly pageScroller = inject(PageScrollerService);
   /** False between NavigationStart and the router's own scroll. */
   private routerScrolled = true;
   private queued: (() => void)[] = [];
@@ -14,7 +18,7 @@ export class ScrollMemoryService {
     this.router.events.subscribe((event) => {
       // Save scroll position BEFORE navigation starts (scroll is still intact)
       if (event instanceof NavigationStart) {
-        if (this.currentKey) this.positions.set(this.currentKey, window.scrollY);
+        if (this.currentKey) this.positions.set(this.currentKey, this.pageScroller.offset());
         this.routerScrolled = false;
       }
       if (event instanceof Scroll) {
@@ -61,9 +65,7 @@ export class ScrollMemoryService {
   restore(key: string, injector: Injector) {
     const y = this.positions.get(key);
     if (!y) return;
-    afterNextRender(() => {
-      window.scrollTo({ top: y, left: 0, behavior: 'instant' });
-    }, { injector });
+    afterNextRender(() => this.pageScroller.scrollTo(y), { injector });
   }
 
   /**
@@ -73,9 +75,8 @@ export class ScrollMemoryService {
    * first frame where scrollY already equals the target, so a user scroll
    * within the window ends the loop cleanly too.
    *
-   * `behavior: 'instant'` is mandatory: TV builds set `scroll-behavior: smooth`
-   * on `html.tv-host` for D-pad navigation, which would otherwise turn each
-   * frame's `scrollTo` into a competing smooth animation and stall the loop.
+   * The retry window also covers a container scroller reattached before its
+   * content is laid out, where the first write clamps to 0.
    */
   restoreSticky(key: string): void {
     const target = this.positions.get(key);
@@ -84,15 +85,21 @@ export class ScrollMemoryService {
     // would scroll the page being left, be overwritten by the scroll-to-top,
     // and then correct itself — three jumps, the first of them on the outgoing
     // page. Wait for the router to have had its turn.
-    if (this.routerScrolled) this.stick(target);
-    else this.queued.push(() => this.stick(target));
+    // Captured now, not when the loop starts: the caller has just claimed the
+    // scroller it wants written, and by the router's turn another page may have.
+    const owner = this.pageScroller.element();
+    if (this.routerScrolled) this.stick(target, owner);
+    else this.queued.push(() => this.stick(target, owner));
   }
 
-  private stick(target: number): void {
+  private stick(target: number, owner: HTMLElement | null): void {
     const deadline = performance.now() + 600;
     const tick = () => {
-      if (Math.abs(window.scrollY - target) < 1) return;
-      window.scrollTo({ top: target, left: 0, behavior: 'instant' });
+      // Another page's claim means we are no longer the page being restored;
+      // writing on would scroll the one navigated to.
+      if (this.pageScroller.element() !== owner) return;
+      if (Math.abs(this.pageScroller.offset() - target) < 1) return;
+      this.pageScroller.scrollTo(target);
       if (performance.now() < deadline) requestAnimationFrame(tick);
     };
     tick();
