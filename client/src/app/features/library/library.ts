@@ -351,14 +351,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     // A cached page keeps its offset in the DOM, so only a return restores it.
     if (!this.navbar.navigatedBack()) {
       this.scrollOwnTo(0);
-      // Detachment already zeroed scrollTop, so that write fires no scroll
-      // event and CDK would keep the range it left with, off screen. Asking for
-      // the range costs a viewport measure, so it waits for the reattached
-      // subtree to be laid out or the measure reads the whole list as visible.
-      const vp = this.viewport;
-      requestAnimationFrame(() => {
-        if (!this.destroyed) vp?.checkViewportSize();
-      });
+      this.renderFromTop();
       this.list.activeLetter.set(this.list.letterAt(0));
       return;
     }
@@ -372,6 +365,16 @@ export class LibraryComponent implements OnInit, OnDestroy {
   /** Own element, not the ambient claim, so a write never reaches whichever
    *  page is on screen; instant because TV scrolls the shell smoothly. Window
    *  mode has no element of its own to write to — it IS the document. */
+  /** Detachment zeroes scrollTop, so writing 0 fires no scroll event and CDK
+   *  would keep the range it left with, off screen. Re-ranging without a
+   *  viewport measure: mid-reattach the measure reads the whole list. */
+  private renderFromTop(): void {
+    const vp = this.viewport;
+    if (!vp) return;
+    const range = vp.getRenderedRange();
+    vp.setRenderedRange({ start: 0, end: Math.max(1, range.end - range.start) });
+    vp.setRenderedContentOffset(0);
+  }
   private scrollOwnTo(top: number): void {
     if (this.windowScroll()) {
       window.scrollTo({ top, left: 0, behavior: 'instant' });
