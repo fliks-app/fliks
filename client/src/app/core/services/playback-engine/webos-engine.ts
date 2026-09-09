@@ -5,6 +5,7 @@ import {
   PlaybackEngine,
 } from './playback-engine';
 import { SubtitleOverlay } from './subtitle-overlay.util';
+import { WEBOS_CUE_SIZE_BOOST } from '../../utils/subtitle-presets';
 
 /** Open HLS a few rungs up so the picture isn't a soft 256×144 while the
  *  native ABR ramps. ~8 Mbps suits a TV display. */
@@ -48,7 +49,7 @@ const SEEK_DEBOUNCE_MS = 280;
  */
 export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngine {
   private video: HTMLVideoElement | null = null;
-  private readonly subtitles = new SubtitleOverlay();
+  private readonly subtitles = new SubtitleOverlay(WEBOS_CUE_SIZE_BOOST);
   private _duration = 0;
   /** Last URL handed to `load()` — the base for reload-on-seek. */
   private loadedUrl = '';

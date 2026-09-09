@@ -13,6 +13,11 @@
 
 /** OS name from the UA (no version — see file header). Null if unknown. */
 export function detectOs(ua: string): string | null {
+  // TV OSes lead: each one also says Android or Linux further along, so a
+  // generic match would win. LG writes its token with a zero — "Web0S".
+  if (/Web0S|webOS/.test(ua)) return 'webOS';
+  if (/\bTizen\b|SMART-TV/i.test(ua)) return 'Tizen';
+  if (/AndroidTV|GoogleTV/i.test(ua)) return 'Android TV';
   if (/iPad/.test(ua)) return 'iPadOS';
   if (/iPhone|iPod/.test(ua)) return 'iOS';
   if (/Android/.test(ua)) return 'Android';
