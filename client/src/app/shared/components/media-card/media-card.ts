@@ -100,6 +100,10 @@ export class MediaCardComponent {
 
   // Image (override media.posterUrl)
   readonly imageUrl = input<string | null>(null);
+  /** The landscape artwork the destination hero will show, for a card built
+   *  from a feed row rather than `[media]`: it is what the poster morph lands
+   *  on, and the hero falls back to the poster without it. */
+  readonly fanartUrl = input<string | null>(null);
   /** Mask the image behind a blur until the viewer clicks it (anti-spoiler). */
   readonly spoiler = input(false);
 
@@ -244,6 +248,7 @@ export class MediaCardComponent {
       type,
       title: this._title(),
       posterUrl: this.imageUrl() ?? null,
+      fanartUrl: this.fanartUrl() ?? null,
     } as unknown as Media;
     return { media: stub };
   });
@@ -351,7 +356,7 @@ export class MediaCardComponent {
    * poster instead. Decoding it here gives it the ~100 ms until the capture.
    */
   private prefetchHeroArtwork() {
-    const url = this.media()?.fanartUrl;
+    const url = this.media()?.fanartUrl ?? this.fanartUrl();
     if (!url) return;
     const img = new Image();
     img.decoding = 'async';

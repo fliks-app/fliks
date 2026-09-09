@@ -515,6 +515,7 @@
             <app-media-card
               [aspect]="'landscape'"
               [imageUrl]="itemArtwork(item)"
+              [fanartUrl]="item.fanartUrl"
               [title]="item.title"
               [subtitle]="item.label ?? ('recommend.received_by' | translate: { username: item.sender.username })"
               [link]="contentLink(item.mediaType, item.mediaId, item.episodeId)"
@@ -531,6 +532,7 @@
             <app-media-card
               [aspect]="'landscape'"
               [imageUrl]="itemArtwork(item)"
+              [fanartUrl]="item.fanartUrl"
               [title]="item.mediaTitle"
               [subtitle]="item.episodeLabel ?? undefined"
               [progressPercent]="item.progressPercent"
@@ -553,6 +555,7 @@
             <app-media-card
               class="shrink-0 w-28 sm:w-32 lg:w-40"
               [imageUrl]="rec.media.posterUrl"
+              [fanartUrl]="rec.media.fanartUrl"
               [title]="rec.media.title"
               [subtitle]="rec.media.year ? '' + rec.media.year : undefined"
               [link]="['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id]"
@@ -570,6 +573,7 @@
           @for (rec of suggestionsRecommendations(); track rec.media.id) {
             <app-media-card
               [imageUrl]="rec.media.posterUrl"
+              [fanartUrl]="rec.media.fanartUrl"
               [title]="rec.media.title"
               [subtitle]="rec.media.year ? '' + rec.media.year : undefined"
               [link]="['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id]"
@@ -659,6 +663,7 @@
           <app-media-card
             [aspect]="'landscape'"
             [imageUrl]="itemArtwork(item)"
+            [fanartUrl]="item.fanartUrl"
             [title]="item.title"
             [subtitle]="item.label ?? undefined"
             [link]="contentLink(item.mediaType, item.mediaId, item.episodeId)"
