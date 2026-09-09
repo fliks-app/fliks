@@ -72,17 +72,11 @@ function fakeViewport() {
     measureScrollOffset: vi.fn(() => 0),
     scrollToOffset: vi.fn(),
     checkViewportSize: vi.fn(),
-    getRenderedRange: vi.fn(() => ({ start: 47, end: 58 })),
-    setRenderedRange: vi.fn(),
-    setRenderedContentOffset: vi.fn(),
   } as unknown as CdkVirtualScrollViewport & {
     elementRef: { nativeElement: HTMLElement };
     measureScrollOffset: ReturnType<typeof vi.fn>;
     scrollToOffset: ReturnType<typeof vi.fn>;
     checkViewportSize: ReturnType<typeof vi.fn>;
-    getRenderedRange: ReturnType<typeof vi.fn>;
-    setRenderedRange: ReturnType<typeof vi.fn>;
-    setRenderedContentOffset: ReturnType<typeof vi.fn>;
   };
 }
 
@@ -278,12 +272,11 @@ describe('LibraryComponent — container scroller', () => {
     expect(shellScrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' });
     expect(shellScrollTo).not.toHaveBeenCalledWith({ top: 4200, left: 0, behavior: 'instant' });
 
-    // Re-ranged synchronously and without a measure, so the first card in the
-    // DOM is the list's first item before the default focus lands on it.
-    // The stale range was 47..58, so re-ranging keeps its span but starts at 0.
-    expect(viewport.setRenderedRange).toHaveBeenCalledWith({ start: 0, end: 11 });
-    expect(viewport.setRenderedContentOffset).toHaveBeenCalledWith(0);
+    // The re-range waits a frame: measuring mid-reattach reads the whole list
+    // as visible and renders every row.
     expect(viewport.checkViewportSize).not.toHaveBeenCalled();
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    expect(viewport.checkViewportSize).toHaveBeenCalled();
   });
 
   it('keeps the active letter through the restore\'s own scroll event', async () => {
