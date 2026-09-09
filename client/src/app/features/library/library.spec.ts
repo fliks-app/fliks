@@ -72,11 +72,17 @@ function fakeViewport() {
     measureScrollOffset: vi.fn(() => 0),
     scrollToOffset: vi.fn(),
     checkViewportSize: vi.fn(),
+    getRenderedRange: vi.fn(() => ({ start: 47, end: 58 })),
+    setRenderedRange: vi.fn(),
+    setRenderedContentOffset: vi.fn(),
   } as unknown as CdkVirtualScrollViewport & {
     elementRef: { nativeElement: HTMLElement };
     measureScrollOffset: ReturnType<typeof vi.fn>;
     scrollToOffset: ReturnType<typeof vi.fn>;
     checkViewportSize: ReturnType<typeof vi.fn>;
+    getRenderedRange: ReturnType<typeof vi.fn>;
+    setRenderedRange: ReturnType<typeof vi.fn>;
+    setRenderedContentOffset: ReturnType<typeof vi.fn>;
   };
 }
 
@@ -272,11 +278,25 @@ describe('LibraryComponent — container scroller', () => {
     expect(shellScrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' });
     expect(shellScrollTo).not.toHaveBeenCalledWith({ top: 4200, left: 0, behavior: 'instant' });
 
-    // The re-range waits a frame: measuring mid-reattach reads the whole list
-    // as visible and renders every row.
+    // Re-ranged synchronously and without a measure, so the DOM holds the
+    // list's first card before the default focus resolves onto it.
+    expect(viewport.setRenderedRange).toHaveBeenCalledWith({ start: 0, end: 11 });
+    expect(viewport.setRenderedContentOffset).toHaveBeenCalledWith(0);
     expect(viewport.checkViewportSize).not.toHaveBeenCalled();
-    await new Promise((r) => requestAnimationFrame(() => r(null)));
-    expect(viewport.checkViewportSize).toHaveBeenCalled();
+  });
+
+  it('re-ranges from the top on a forward entry in window mode too', () => {
+    const { component, attached$, detached$, navigatedBack } = createHarness('window');
+    const viewport = attachViewport(component);
+
+    detached$.next(OWN_KEY);
+    navigatedBack.set(false);
+    attached$.next(OWN_KEY);
+
+    // The document is shared with every page and already at the top, so no
+    // scroll event will correct the range the page left with.
+    expect(viewport.setRenderedRange).toHaveBeenCalledWith({ start: 0, end: 11 });
+    expect(viewport.setRenderedContentOffset).toHaveBeenCalledWith(0);
   });
 
   it('keeps the active letter through the restore\'s own scroll event', async () => {

@@ -1,4 +1,4 @@
-import { provideZonelessChangeDetection, runInInjectionContext, Injector } from '@angular/core';
+import { provideZonelessChangeDetection, runInInjectionContext, Injector, WritableSignal, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute } from '@angular/router';
 import { Subject } from 'rxjs';
@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { keepRouteFresh } from './keep-route-fresh';
 import { AppResumeService } from './app-resume.service';
 import { CachingReuseStrategy } from './route-reuse.strategy';
+import { NavbarService } from './navbar.service';
 import { ScrollMemoryService } from './scroll-memory.service';
 
 const OWN_KEY = 'route-7::id=1';
@@ -16,12 +17,14 @@ describe('keepRouteFresh', () => {
   let resume$: Subject<void>;
   let calls: string[];
   let scrollMemory: { activate: ReturnType<typeof vi.fn>; restoreSticky: ReturnType<typeof vi.fn>; deactivateIf: ReturnType<typeof vi.fn> };
+  let navigatedBack: WritableSignal<boolean>;
 
   beforeEach(() => {
     attached$ = new Subject<string>();
     detached$ = new Subject<string>();
     resume$ = new Subject<void>();
     calls = [];
+    navigatedBack = signal(true);
     scrollMemory = {
       activate: vi.fn((k: string) => calls.push(`activate:${k}`)),
       restoreSticky: vi.fn((k: string) => calls.push(`restore:${k}`)),
@@ -34,6 +37,7 @@ describe('keepRouteFresh', () => {
         { provide: ScrollMemoryService, useValue: scrollMemory },
         { provide: AppResumeService, useValue: { resume$ } },
         { provide: ActivatedRoute, useValue: { snapshot: {} } },
+        { provide: NavbarService, useValue: { navigatedBack } },
       ],
     });
   });
@@ -116,6 +120,16 @@ describe('keepRouteFresh', () => {
 
     attached$.next(OWN_KEY);
     expect(calls).toEqual(['forced', 'refresh']);
+  });
+
+  it('does not restore the offset when the page is entered forward', () => {
+    navigatedBack.set(false);
+    bind({ refresh: () => calls.push('refresh'), scrollKey: 'home' });
+
+    attached$.next(OWN_KEY);
+
+    expect(calls).toContain('activate:home');
+    expect(scrollMemory.restoreSticky).not.toHaveBeenCalled();
   });
 
   it('skips scroll handling while a computed key is still unknown', () => {

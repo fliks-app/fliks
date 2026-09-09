@@ -148,6 +148,9 @@ export class LibraryComponent implements OnInit, OnDestroy {
       const lib = this.library();
       if (lib) this.navbar.setPageTitle(lib.name);
       if (!this.windowScroll()) this.restoreScrollWhenLive();
+      // Window mode shares the document with every page, so it is already at
+      // the top here and no scroll event will correct the range on its own.
+      else if (!this.navbar.navigatedBack()) this.enterAtTop();
       this.applyBackground();
     },
     onDetach: () => {
@@ -351,15 +354,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     // A cached page keeps its offset in the DOM, so only a return restores it.
     if (!this.navbar.navigatedBack()) {
       this.scrollOwnTo(0);
-      // Detachment already zeroed scrollTop, so that write fires no scroll
-      // event and CDK would keep the range it left with, off screen. Asking for
-      // the range costs a viewport measure, so it waits for the reattached
-      // subtree to be laid out or the measure reads the whole list as visible.
-      const vp = this.viewport;
-      requestAnimationFrame(() => {
-        if (!this.destroyed) vp?.checkViewportSize();
-      });
-      this.list.activeLetter.set(this.list.letterAt(0));
+      this.enterAtTop();
       return;
     }
     if (this.savedScrollTop > 0) {
@@ -372,6 +367,20 @@ export class LibraryComponent implements OnInit, OnDestroy {
   /** Own element, not the ambient claim, so a write never reaches whichever
    *  page is on screen; instant because TV scrolls the shell smoothly. Window
    *  mode has no element of its own to write to — it IS the document. */
+  /** A cached entry reattaches with the range it left with, whose first row is
+   *  wherever the page was left, and the default focus takes the first card in
+   *  the DOM. Setting the range needs no viewport measure, so it can run before
+   *  focus resolves; the strategy recomputes on the next scroll. */
+  private enterAtTop(): void {
+    const vp = this.viewport;
+    if (vp) {
+      const range = vp.getRenderedRange();
+      vp.setRenderedRange({ start: 0, end: Math.max(1, range.end - range.start) });
+      vp.setRenderedContentOffset(0);
+    }
+    this.list.activeLetter.set(this.list.letterAt(0));
+    if (this.windowScroll()) window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }
   private scrollOwnTo(top: number): void {
     if (this.windowScroll()) {
       window.scrollTo({ top, left: 0, behavior: 'instant' });
