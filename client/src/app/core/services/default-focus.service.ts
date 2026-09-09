@@ -144,9 +144,7 @@ export class DefaultFocusService {
   }
 
   private tryRestore(t: DefaultFocusTarget): HTMLElement | null {
-    // The wider signal, so focus and the scroll offset answer the same
-    // question: a remote or gesture back never goes through goBack().
-    if (!t.focusKey || !this.navbar.navigatedBack()) return null;
+    if (!t.focusKey || !this.navbar.lastWasBack()) return null;
     const saved = this.focusMemory.retrieve(t.focusKey);
     if (!saved) return null;
     const item = t.host.querySelector<HTMLElement>(`[${t.focusIdAttr}="${CSS.escape(saved)}"]`);

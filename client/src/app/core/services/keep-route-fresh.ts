@@ -3,7 +3,6 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import { AppResumeService } from './app-resume.service';
 import { CachingReuseStrategy } from './route-reuse.strategy';
-import { NavbarService } from './navbar.service';
 import { ScrollMemoryService } from './scroll-memory.service';
 
 export interface KeepRouteFreshOptions {
@@ -48,7 +47,6 @@ export function keepRouteFresh(
   const reuse = inject(CachingReuseStrategy);
   const route = inject(ActivatedRoute);
   const scrollMemory = inject(ScrollMemoryService);
-  const navbar = inject(NavbarService);
   const appResume = inject(AppResumeService);
   const destroyRef = inject(DestroyRef);
 
@@ -70,9 +68,7 @@ export function keepRouteFresh(
     if (sk) scrollMemory.activate(sk);
     opts.onAttach?.();
     opts.refresh?.();
-    // Entering forward is a new screen and starts at the top, where the router
-    // has already put it; only a return asks for the offset back.
-    if (sk && navbar.navigatedBack()) scrollMemory.restoreSticky(sk);
+    if (sk) scrollMemory.restoreSticky(sk);
   });
 
   reuse.detached$.pipe(takeUntilDestroyed(destroyRef)).subscribe((key) => {
