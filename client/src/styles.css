@@ -684,6 +684,11 @@ html.vt-player-close body.tv main.page-enter {
 .library-shell.cdk-virtual-scrollable {
   contain: none;
 }
+/* CDK stamps its scrollable ancestor with `overflow: auto` on both axes. Only
+   `.page-scroller` decides whether this element scrolls, and on which. */
+.library-shell.cdk-virtual-scrollable:not(.page-scroller) {
+  overflow: visible;
+}
 
 /* `<main>` reserves the fixed chrome's space on every route, computed once in
    layout.ts and exposed as CSS vars so a page that owns its scroller (below)
