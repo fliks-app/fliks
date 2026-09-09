@@ -4,6 +4,9 @@ import { NavigationEnd, Router } from '@angular/router';
 import { BehaviorSubject, Observable, fromEvent, map, switchMap } from 'rxjs';
 
 /**
+ * Which element scrolls the ACTIVE page, for shared chrome that has to read one
+ * offset; {@link pageScrollOwner} answers the different question of which
+ * scroller contains a given element.
  * Which element scrolls the current page — the library grid claims its own
  * container, everything else stays on the document (`element() === null`).
  * A single indirection lets shared chrome (topbar, drawer) read one API
@@ -64,11 +67,6 @@ export class PageScrollerService {
     return this.element()?.scrollTop ?? window.scrollY;
   }
 
-  scrollTo(top: number): void {
-    const el = this.element();
-    if (el) el.scrollTop = top;
-    else window.scrollTo({ top, left: 0 });
-  }
 
   changes(): Observable<void> {
     return this.changes$;

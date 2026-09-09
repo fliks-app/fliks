@@ -157,6 +157,11 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   readonly isNative = Capacitor.isNativePlatform();
   private readonly topSentinel = viewChild<ElementRef<HTMLElement>>('topSentinel');
+  private readonly chromeBarMobile = viewChild<ElementRef<HTMLElement>>('chromeBarMobile');
+  private readonly chromeBarDesktop = viewChild<ElementRef<HTMLElement>>('chromeBarDesktop');
+  /** Measured, not assumed: the bar's height varies with the form factor, the
+   *  safe area and `--page-p`, which on TV is a viewport percentage. */
+  private readonly chromeBarHeight = signal(0);
   readonly bottomMenuOpen = signal(false);
   readonly keyboardOpen = signal(false);
   readonly navbarHidden = signal(false);
@@ -189,21 +194,24 @@ export class LayoutComponent implements OnInit, OnDestroy {
    *  doesn't reserve space) plus safe area — 0 wherever the mobile-style
    *  navbar itself is hidden (desktop, or a pinned tablet sidebar). */
   private readonly navbarSpacerHeight = computed(() => {
+    // A bar in flow reserves its own space, unless the page owns the scroll:
+    // there it is fixed, so its measured height moves inside the scroller.
+    if (this.barIsFixedOverScroller()) return `${this.chromeBarHeight()}px`;
     if (!this.navbar.mobileNavbarVisible()) return '0px';
     if (this.navbar.isHeroPage() || this.tv.isTv()) return '0px';
     return 'calc(3rem + env(safe-area-inset-top, 0px))';
   });
-  /** `<main>`'s own top padding: Tailwind's `pt-8` overrides `py-4`'s top
-   *  rather than adding to it, so this is 2rem or 1rem, never 3rem. */
-  private readonly mainPaddingTop = computed(() =>
+  /** Where the bar is in flow by default, owning the scroll pins it instead. */
+  private readonly barIsFixedOverScroller = computed(
+    () => this.ownsScroll() && (this.tv.isTv() || this.device.isDesktop()),
+  );
+  private readonly contentGapTop = computed(() =>
     !this.navbar.isHeroPage() && !this.isNative && this.navbar.mobileNavbarVisible() ? '2rem' : '1rem',
   );
-  /** Total fixed-chrome clearance above the content — what `<main>` reserves
-   *  today, exposed as a CSS var so a page that owns its scroller can carry
-   *  the same space inside itself instead. */
-  readonly chromeTop = computed(() => `calc(${this.navbarSpacerHeight()} + ${this.mainPaddingTop()})`);
-  /** Same, below the content: the native phone dock's spacer plus main's own
-   *  bottom padding (always 1rem — `pt-8` only ever overrides the top). */
+  /** Published as a CSS var so a page that owns its scroller reserves the same
+   *  space inside itself, and content still scrolls under the fixed navbar. */
+  readonly chromeTop = computed(() => `calc(${this.navbarSpacerHeight()} + ${this.contentGapTop()})`);
+  /** The 6rem term is the native phone dock's height. */
   readonly chromeBottom = computed(() => {
     const dock = this.isNative && this.device.isPhone() ? '6rem' : '0px';
     return `calc(${dock} + 1rem)`;
@@ -227,6 +235,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
     if (!main) return;
     this.title.setTitle(`${main} · ${this.translate.instant('app.name')}`);
   });
+  /** Offset past which the bar has scrolled out of the page's top. */
+  private static readonly NAVBAR_LEAVES_AT = 56;
   private lastScrollY = 0;
   /** NavigationEnd until the new page's navbar has painted: gates scroll
    *  reads and, bound to the element, its CSS transition. */
@@ -240,7 +250,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
    *  The sentinel below reports the same thing with no layout read at all, so
    *  the handler is skipped there entirely. */
   private readonly onScroll = () => {
-    if (this.device.isTv() || this.scrollRaf !== null) return;
+    if ((this.device.isTv() && !this.ownsScroll()) || this.scrollRaf !== null) return;
     this.scrollRaf = requestAnimationFrame(() => {
       this.scrollRaf = null;
       this.readScroll();
@@ -250,15 +260,35 @@ export class LayoutComponent implements OnInit, OnDestroy {
     if (this.restorePending()) return;
     const y = this.pageScroller.offset();
     this.navbar.scrollAtTop.set(y < 20);
+    // The bar is a D-pad target: sliding it out from under the focus ring
+    // would strand the cursor, so a focus inside it anchors the bar.
+    const focusInBar = !!document.activeElement?.closest('nav.navbar');
+    // Where the bar is in flow (TV, desktop) it reads as the top of the page,
+    // so it leaves with that top and returns only there.
+    if (this.barIsFixedOverScroller()) {
+      this.navbarHidden.set(!focusInBar && y > LayoutComponent.NAVBAR_LEAVES_AT);
+      this.lastScrollY = y;
+      return;
+    }
     if (Math.abs(y - this.lastScrollY) < 10) return;
-    // TV keeps the topbar anchored — it is a D-pad target, and sliding it out
-    // from under the focus ring strands the cursor.
-    this.navbarHidden.set(y > this.lastScrollY && y > 56);
+    this.navbarHidden.set(!focusInBar && y > this.lastScrollY && y > LayoutComponent.NAVBAR_LEAVES_AT);
     this.lastScrollY = y;
   }
 
   /** `scrollAtTop` via a top-strip IntersectionObserver, rooted in whatever
    *  currently scrolls the page — skipped in container mode, which `readScroll` owns instead. */
+  private readonly chromeBarEffect = effect((onCleanup) => {
+    const bars = [this.chromeBarMobile()?.nativeElement, this.chromeBarDesktop()?.nativeElement]
+      .filter((el): el is HTMLElement => !!el);
+    if (!bars.length || typeof ResizeObserver === 'undefined') return;
+    const measure = () =>
+      this.chromeBarHeight.set(Math.round(Math.max(...bars.map((el) => el.offsetHeight))));
+    const ro = new ResizeObserver(measure);
+    bars.forEach((el) => ro.observe(el));
+    measure();
+    onCleanup(() => ro.disconnect());
+  });
+
   private readonly topSentinelObserverEffect = effect(() => {
     const el = this.topSentinel()?.nativeElement;
     const root = this.pageScroller.element();

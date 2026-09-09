@@ -9,8 +9,7 @@ import {
   ViewChild,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Capacitor } from '@capacitor/core';
-import { Subscription, filter } from 'rxjs';
+import { Subscription } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { MediaService, Media, GenreSummary, CollectionSummary } from '../../core/services/api/media.service';
@@ -121,7 +120,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private readonly translate = inject(TranslateService);
   protected readonly itemArtwork = itemArtwork;
   private paramSub?: Subscription;
-  readonly isNative = Capacitor.isNativePlatform();
   /** Detaching removes the shell from the document, and a detached element has
    *  no layout box, so the offset has to be kept outside the DOM. */
   private savedScrollTop = 0;
@@ -135,9 +133,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.restoreScrollWhenLive();
       this.applyBackground();
     },
-    onDetach: () => {
-      if (this.viewport) this.pageScroller.release(this.shellRef.nativeElement);
-    },
+    onDetach: () => this.pageScroller.release(this.shellRef.nativeElement),
   });
 
   /** Same fanart backdrop as the home page, from this library's own titles, so
@@ -249,9 +245,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.list.observeSentinel(ref);
   }
 
-  /** The scroller: `.library-shell` claims the page scroll for every view mode
-   *  the viewport is present in (only `all`), so the claim below targets this,
-   *  not the CDK viewport element. */
+  /** The page's scroll container in every view mode, so the claim and the
+   *  scroll listener follow its lifetime, not the CDK viewport's. */
   @ViewChild('shell', { static: true }) private shellRef!: ElementRef<HTMLElement>;
 
   /** The `all`-view card grid — measured for DOM windowing on TV. */
@@ -310,17 +305,11 @@ export class LibraryComponent implements OnInit, OnDestroy {
     const row = Math.max(0, Math.round(this.viewport.measureScrollOffset() / this.rowHeight()));
     this.list.activeLetter.set(this.list.letterAt(row * this.gridCols()));
   }
-  /** Recreated whenever the `@if` block toggles (tab switch, loading state) —
-   *  `onAttach` re-claims separately since a cached reattach preserves this view. */
+  /** Recreated whenever the `@if` block toggles (tab switch, loading state), so
+   *  only what genuinely needs a viewport belongs here. */
   @ViewChild(CdkVirtualScrollViewport) private set viewportRef(ref: CdkVirtualScrollViewport | undefined) {
-    if (this.viewport) {
-      this.shellRef.nativeElement.removeEventListener('scroll', this.onLetterScroll);
-      this.pageScroller.release(this.shellRef.nativeElement);
-    }
     this.viewport = ref;
     if (!ref) return;
-    this.pageScroller.claim(this.shellRef.nativeElement);
-    this.shellRef.nativeElement.addEventListener('scroll', this.onLetterScroll, { passive: true });
     // Bounding comes from route data (already applied by the time this
     // component exists), but the CDK viewport still needs a tick to see it.
     queueMicrotask(() => {
@@ -333,7 +322,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
    *  stranded off-screen. */
   private restoreScrollWhenLive(frames = 0): void {
     const el = this.shellRef.nativeElement;
-    if (!this.viewport || this.destroyed) return;
+    if (this.destroyed) return;
     if (!el.isConnected) {
       if (frames < 60) requestAnimationFrame(() => this.restoreScrollWhenLive(frames + 1));
       return;
@@ -343,8 +332,13 @@ export class LibraryComponent implements OnInit, OnDestroy {
       // The letter survives the trip in this component; the restore's own
       // scroll event must not recompute it off the row it lands on.
       this.holdLetter();
-      this.viewport.scrollToOffset(this.savedScrollTop, 'instant');
+      this.scrollOwnTo(this.savedScrollTop);
     }
+  }
+  /** Own element, not the ambient claim, so a write never reaches whichever
+   *  page is on screen; instant because TV scrolls the shell smoothly. */
+  private scrollOwnTo(top: number): void {
+    this.shellRef.nativeElement.scrollTo({ top, left: 0, behavior: 'instant' });
   }
   private holdLetter(): void {
     this.letterHeldUntil = performance.now() + LibraryComponent.LETTER_HOLD_MS;
@@ -390,6 +384,9 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private loadGen = 0;
 
   ngOnInit() {
+    const shell = this.shellRef.nativeElement;
+    this.pageScroller.claim(shell);
+    shell.addEventListener('scroll', this.onLetterScroll, { passive: true });
     // A resize can change the column count, which re-chunks the rows.
     this.onResize = () => {
       this.rowMeasured = false;
@@ -491,6 +488,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.selectedCollectionId.set(collId ? Number(collId) : null);
       const lib = this.library();
       if (lib) {
+        // `silent` only suppresses the spinner, so the swap still needs the reset.
+        this.scrollOwnTo(0);
         void this.load(lib.id, true);
         void this.loadLikes();
         if (this.viewMode() === 'genres') void this.loadGenres();
@@ -516,10 +515,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.background.clear();
     this.list.destroy();
     if (this.onResize) window.removeEventListener('resize', this.onResize);
-    if (this.viewport) {
-      this.shellRef.nativeElement.removeEventListener('scroll', this.onLetterScroll);
-      this.pageScroller.release(this.shellRef.nativeElement);
-    }
+    this.shellRef.nativeElement.removeEventListener('scroll', this.onLetterScroll);
+    this.pageScroller.release(this.shellRef.nativeElement);
     if (this.letterRaf !== null) cancelAnimationFrame(this.letterRaf);
     this.navbar.clearPageTitle();
     this.paramSub?.unsubscribe();
@@ -587,6 +584,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   setViewMode(mode: LibraryViewMode) {
     if (this.viewMode() === mode) return;
     this.viewMode.set(mode);
+    this.scrollOwnTo(0);
     // Tab switches stay on the same history entry — back from the
     // library should return to the previous page, not walk through
     // every tab the user clicked.
@@ -837,7 +835,12 @@ export class LibraryComponent implements OnInit, OnDestroy {
       if (!silent) this.loading.set(false);
       return;
     }
-    if (!silent) this.loading.set(true);
+    if (!silent) {
+      this.loading.set(true);
+      // The scroller keeps its offset across a content swap, which a filter
+      // that returns a screenful would leave parked in blank space.
+      this.scrollOwnTo(0);
+    }
     const monitored = this.filterMonitored();
     const fs = this.filterStatus();
     const fw = this.filterWatched();
