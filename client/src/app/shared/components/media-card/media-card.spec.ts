@@ -356,6 +356,26 @@ describe('MediaCardComponent — card action handlers do what their row promises
     );
   });
 
+  it('a feed-row card hands the fanart over beside the poster', async () => {
+    const h = await createFixture(FULL_MEMBER, {
+      link: ['/movies', '7'],
+      imageUrl: '/poster.jpg',
+      fanartUrl: '/fanart.jpg',
+    });
+    const navigateSpy = vi.spyOn(h.router, 'navigate').mockResolvedValue(true);
+    findAction(h, 'media_card.action_open').run();
+    // The detail hero renders `fanartUrl ?? posterUrl`, so a rail that only
+    // handed the poster morphed a portrait card into the landscape hero box.
+    expect(navigateSpy).toHaveBeenCalledWith(
+      ['/movies', '7'],
+      expect.objectContaining({
+        state: {
+          media: expect.objectContaining({ posterUrl: '/poster.jpg', fanartUrl: '/fanart.jpg' }),
+        },
+      }),
+    );
+  });
+
   it('Add to playlist opens the modal with the resolved target', async () => {
     const h = await createFixture(FULL_MEMBER, { link: ['/movies', '7'], playlistMediaId: 7 });
     findAction(h, 'media_detail.add_to_list').run();

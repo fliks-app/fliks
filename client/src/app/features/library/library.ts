@@ -10,7 +10,7 @@ import {
   ViewChild,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Subscription, filter } from 'rxjs';
+import { Subscription } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { MediaService, Media, GenreSummary, CollectionSummary } from '../../core/services/api/media.service';
@@ -31,13 +31,14 @@ import type {
   ContinueWatchingItem,
   RecommendationItem,
 } from '../../core/services/api/streaming-api.service';
+import { PageScrollerService } from '../../core/services/page-scroller.service';
+import { PageScrollModeService } from '../../core/services/page-scroll-mode.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { BackgroundService } from '../../core/services/background.service';
 import { DisplaySettingsService } from '../../core/services/display-settings.service';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { NavbarService } from '../../core/services/navbar.service';
-import { TvService } from '../../core/services/tv.service';
 import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
 import { LucideSearch, LucideSlidersHorizontal, LucideArrowUp, LucideArrowDown, LucideX, LucideFilm } from '@lucide/angular';
@@ -46,12 +47,12 @@ import { CardSkeletonComponent } from '../../shared/components/card-skeleton';
 import { ImportProgressBannerComponent } from '../../shared/components/import-progress-banner/import-progress-banner';
 import { NgTemplateOutlet } from '@angular/common';
 import { fanartPool, itemArtwork } from '../../shared/utils/media-artwork.util';
-import { renderRowsForOffset } from '../../shared/utils/restore-virtual-rows';
 import { PlayableMediaService } from '../../core/services/playable-media.service';
 import {
   CdkVirtualScrollViewport,
   CdkFixedSizeVirtualScroll,
   CdkVirtualForOf,
+  CdkVirtualScrollableElement,
   CdkVirtualScrollableWindow,
 } from '@angular/cdk/scrolling';
 
@@ -97,6 +98,7 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
     CdkVirtualScrollViewport,
     CdkFixedSizeVirtualScroll,
     CdkVirtualForOf,
+    CdkVirtualScrollableElement,
     CdkVirtualScrollableWindow,
     CardSkeletonComponent,
     ImportProgressBannerComponent,
@@ -114,43 +116,49 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly pageScroller = inject(PageScrollerService);
+  private readonly scrollMode = inject(PageScrollModeService);
   private readonly scrollMemory = inject(ScrollMemoryService);
+  private readonly injector = inject(Injector);
   private readonly background = inject(BackgroundService);
   private readonly displaySettings = inject(DisplaySettingsService);
   readonly navbar = inject(NavbarService);
-  private readonly tv = inject(TvService);
-  private readonly injector = inject(Injector);
   private readonly translate = inject(TranslateService);
   protected readonly itemArtwork = itemArtwork;
   private paramSub?: Subscription;
-  /** Cached per library name: revalidate the grid on return, and re-claim the
-   *  scroll key, which is only known once the library itself has loaded. */
+  /** TV and desktop scroll the window instead (`PageScrollModeService`); every
+   *  mode-dependent branch below reads this rather than the platform itself. */
+  readonly windowScroll = computed(() => this.scrollMode.mode() === 'window');
+  /** Per-library scroll-memory key, in both modes: ScrollMemoryService saves
+   *  and restores whichever scroller the page claimed. */
+  private scrollMemoryKey(): string | null {
+    const name = this.libraryName();
+    return name ? `library-${name}` : null;
+  }
+  /** Cached per library name: revalidate the grid on return, re-claim the
+   *  scroller and restore its saved offset. */
   private readonly routeFresh = keepRouteFresh({
     refresh: () => this.refreshCurrentView(),
-    scrollKey: () => {
-      const lib = this.library();
-      return lib ? `library-${lib.id}` : null;
-    },
+    scrollKey: () => this.scrollMemoryKey(),
     onAttach: () => {
       const lib = this.library();
       if (lib) this.navbar.setPageTitle(lib.name);
-      if (lib) this.prerenderRestoredRows(`library-${lib.id}`);
+      // Synchronously, so the shared restore that follows writes this shell
+      // and not the document.
+      if (!this.windowScroll()) this.pageScroller.claim(this.shellRef.nativeElement);
+      if (!this.navbar.navigatedBack()) this.enterAtTop();
+      else {
+        // The letter survives the trip in this component; the restore's own
+        // scroll event must not recompute it off the row it lands on.
+        this.holdLetter();
+        this.renderRangeForRememberedOffset();
+      }
       this.applyBackground();
     },
+    onDetach: () => {
+      if (!this.windowScroll()) this.pageScroller.release(this.shellRef.nativeElement);
+    },
   });
-
-  /** Renders the rows for the offset the scroll is about to be restored to —
-   *  see {@link renderRowsForOffset}. The flush is CDK's own: `ApplicationRef
-   *  .tick()` in its place leaves the rows in the DOM but unplaced, captured
-   *  thousands of pixels off screen, so the internal call is the only one that
-   *  does the whole job. */
-  private prerenderRestoredRows(key: string): void {
-    const y = this.scrollMemory.remembered(key);
-    const vp = this.viewport;
-    if (y == null || !vp) return;
-    const render = (vp as unknown as { _doChangeDetection?: () => void })._doChangeDetection;
-    renderRowsForOffset(vp, y, () => render?.call(vp));
-  }
 
   /** Same fanart backdrop as the home page, from this library's own titles, so
    *  the topbar keeps its frosted look here too — but only to fill a gap.
@@ -261,6 +269,10 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.list.observeSentinel(ref);
   }
 
+  /** The page's scroll container in every view mode, so the claim and the
+   *  scroll listener follow its lifetime, not the CDK viewport's. */
+  @ViewChild('shell', { static: true }) private shellRef!: ElementRef<HTMLElement>;
+
   /** The `all`-view card grid — measured for DOM windowing on TV. */
   private onResize?: () => void;
 
@@ -296,24 +308,90 @@ export class LibraryComponent implements OnInit, OnDestroy {
    *  (only a handful of rows exist) and not from `scrolledIndexChange`, which
    *  stays at 0 when the viewport scrolls the window rather than itself. */
   private letterRaf: number | null = null;
-  /** A click on the alphabet stays authoritative for a moment: the row it lands
-   *  on usually opens with the tail of the previous letter, and the
-   *  scroll-driven recompute below would immediately highlight that one. */
-  private letterClickUntil = 0;
+  /** How long a deliberate jump outranks the scroll-driven recompute: the row
+   *  it lands on usually opens with the tail of the previous letter. */
+  private static readonly LETTER_HOLD_MS = 600;
+  private letterHeldUntil = 0;
   private readonly onLetterScroll = () => {
     if (this.letterRaf !== null) return;
     this.letterRaf = requestAnimationFrame(() => {
       this.letterRaf = null;
-      if (performance.now() < this.letterClickUntil) return;
-      const el = this.viewport?.elementRef.nativeElement;
-      if (!el) return;
-      const scroller = document.scrollingElement ?? document.documentElement;
-      const top = el.getBoundingClientRect().top + scroller.scrollTop;
-      const row = Math.max(0, Math.round((scroller.scrollTop - top) / this.rowHeight()));
-      this.list.activeLetter.set(this.list.letterAt(row * this.gridCols()));
+      this.syncActiveLetter();
     });
   };
-  @ViewChild(CdkVirtualScrollViewport) private viewport?: CdkVirtualScrollViewport;
+  /** The index tracks the row at the top of the scrollport, so it has to be
+   *  derived once the grid exists and not only when the offset changes. */
+  private syncActiveLetter(): void {
+    if (!this.viewport || performance.now() < this.letterHeldUntil) return;
+    const row = Math.max(0, Math.round(this.viewport.measureScrollOffset() / this.rowHeight()));
+    this.list.activeLetter.set(this.list.letterAt(row * this.gridCols()));
+  }
+  /** Recreated whenever the `@if` block toggles (tab switch, loading state), so
+   *  only what genuinely needs a viewport belongs here. */
+  @ViewChild(CdkVirtualScrollViewport) private set viewportRef(ref: CdkVirtualScrollViewport | undefined) {
+    this.viewport = ref;
+    if (!ref) return;
+    // Bounding comes from route data (already applied by the time this
+    // component exists), but the CDK viewport still needs a tick to see it.
+    queueMicrotask(() => {
+      ref.checkViewportSize();
+      this.syncActiveLetter();
+    });
+  }
+  /** Where the rows start inside whatever scrolls, since a scroll offset is
+   *  measured from the scroller's top. In window mode that IS the document. */
+  private rowsOffset(): number {
+    const vp = this.viewport?.elementRef.nativeElement;
+    if (!vp) return 0;
+    const shell = this.shellRef.nativeElement;
+    return this.windowScroll()
+      ? vp.getBoundingClientRect().top + window.scrollY
+      : vp.getBoundingClientRect().top - shell.getBoundingClientRect().top + shell.scrollTop;
+  }
+  /** The rows an offset lands on, rendered now: CDK would only get there on the
+   *  next change detection, too late for a poster morph or the default focus. */
+  private renderRangeForOffset(offset: number): void {
+    const vp = this.viewport;
+    if (!vp) return;
+    const range = vp.getRenderedRange();
+    const span = Math.max(1, range.end - range.start);
+    const rows = this.gridRows().length;
+    const first = Math.max(0, Math.min(
+      Math.floor(Math.max(0, offset - this.rowsOffset()) / this.rowHeight()),
+      Math.max(0, rows - span),
+    ));
+    // Only when it has moved: re-rendering a range recycles its views, and a
+    // poster morph pairs with the very DOM node the click stamped. A page that
+    // owns its scroller comes back with both its offset and its range intact.
+    if (first >= range.start && first < range.end) return;
+    vp.setRenderedRange({ start: first, end: first + span });
+    vp.setRenderedContentOffset(first * this.rowHeight());
+  }
+  /** The offset lives in the shared memory, whose sticky restore lands after
+   *  this: range from the value it is about to write. */
+  private renderRangeForRememberedOffset(): void {
+    const key = this.scrollMemoryKey();
+    const offset = key ? this.scrollMemory.remembered(key) : undefined;
+    if (offset) this.renderRangeForOffset(offset);
+  }
+  private enterAtTop(): void {
+    this.renderRangeForOffset(0);
+    this.list.activeLetter.set(this.list.letterAt(0));
+    this.scrollOwnTo(0);
+  }
+  /** Own element, not the ambient claim, so a write never reaches whichever
+   *  page is on screen; instant because TV scrolls the shell smoothly. */
+  private scrollOwnTo(top: number): void {
+    if (this.windowScroll()) {
+      window.scrollTo({ top, left: 0, behavior: 'instant' });
+      return;
+    }
+    this.shellRef.nativeElement.scrollTo({ top, left: 0, behavior: 'instant' });
+  }
+  private holdLetter(): void {
+    this.letterHeldUntil = performance.now() + LibraryComponent.LETTER_HOLD_MS;
+  }
+  private viewport?: CdkVirtualScrollViewport;
   private cardRowEl?: HTMLElement;
   /** Measured once per layout. The strategy is fixed-size: it places every row
    *  at `index * itemSize`, so re-measuring a row whose natural height moved by
@@ -353,13 +431,19 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private loadGen = 0;
 
   ngOnInit() {
+    const shell = this.shellRef.nativeElement;
+    if (this.windowScroll()) {
+      window.addEventListener('scroll', this.onLetterScroll, { passive: true });
+    } else {
+      this.pageScroller.claim(shell);
+      shell.addEventListener('scroll', this.onLetterScroll, { passive: true });
+    }
     // A resize can change the column count, which re-chunks the rows.
     this.onResize = () => {
       this.rowMeasured = false;
       this.measureRow(true);
     };
     window.addEventListener('resize', this.onResize, { passive: true });
-    window.addEventListener('scroll', this.onLetterScroll, { passive: true });
     // Subscribe to route param changes (handles initial load + sidebar nav).
     this.paramSub = this.route.params.subscribe(async (params) => {
       const rawName = params['libraryName'] as string;
@@ -393,9 +477,12 @@ export class LibraryComponent implements OnInit, OnDestroy {
       }
 
       this.navbar.setPageTitle(lib.name);
+      // A fresh instance (never cached, or evicted from the reuse cache) has
+      // no attach$ event to trigger keepRouteFresh's own restoreSticky.
+      const scrollKey = this.scrollMemoryKey();
+      if (scrollKey) this.scrollMemory.activate(scrollKey);
 
       // Restore filters
-      const scrollKey = `library-${lib.id}`;
       const qp = this.route.snapshot.queryParamMap;
       const stored = this.loadFilters(lib.name);
       this.searchQuery.set(qp.get('q') ?? stored['q'] ?? '');
@@ -418,9 +505,9 @@ export class LibraryComponent implements OnInit, OnDestroy {
       const collId = qp.get('collectionId');
       this.selectedCollectionId.set(collId ? Number(collId) : null);
 
-      this.scrollMemory.activate(scrollKey);
       this.syncQueryParams();
       await this.load(lib.id);
+      if (scrollKey) this.scrollMemory.restore(scrollKey, this.injector);
       void this.loadLikes();
       if (this.viewMode() === 'suggestions') {
         // Either a deep-link with `?view=suggestions` or a return from
@@ -434,7 +521,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
       } else if (this.viewMode() === 'likes') {
         void this.loadLikes();
       }
-      this.scrollMemory.restore(scrollKey, this.injector);
     });
 
     // Re-apply state on browser back/forward (same route, queryParams
@@ -458,6 +544,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.selectedCollectionId.set(collId ? Number(collId) : null);
       const lib = this.library();
       if (lib) {
+        // `silent` only suppresses the spinner, so the swap still needs the reset.
+        this.scrollOwnTo(0);
         void this.load(lib.id, true);
         void this.loadLikes();
         if (this.viewMode() === 'genres') void this.loadGenres();
@@ -480,10 +568,15 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.background.clear();
-    this.scrollMemory.deactivate();
     this.list.destroy();
     if (this.onResize) window.removeEventListener('resize', this.onResize);
-    window.removeEventListener('scroll', this.onLetterScroll);
+    this.scrollMemory.deactivate();
+    if (this.windowScroll()) {
+      window.removeEventListener('scroll', this.onLetterScroll);
+    } else {
+      this.shellRef.nativeElement.removeEventListener('scroll', this.onLetterScroll);
+      this.pageScroller.release(this.shellRef.nativeElement);
+    }
     if (this.letterRaf !== null) cancelAnimationFrame(this.letterRaf);
     this.navbar.clearPageTitle();
     this.paramSub?.unsubscribe();
@@ -499,24 +592,16 @@ export class LibraryComponent implements OnInit, OnDestroy {
       });
       if (index < 0) return;
       this.list.activeLetter.set(letter);
-      this.letterClickUntil = performance.now() + 600;
-      // Scroll the window directly rather than through `scrollToIndex`: in
-      // `scrollWindow` mode that lands short, since the row offset it computes
-      // does not account for where the viewport itself sits in the document.
-      // Instant, because the rows in between are not rendered — an animated
-      // jump would spend its whole duration crossing blank space.
-      const el = this.viewport.elementRef.nativeElement;
-      const scroller = document.scrollingElement ?? document.documentElement;
-      const viewportTop = el.getBoundingClientRect().top + scroller.scrollTop;
+      this.holdLetter();
       const row = Math.floor(index / this.gridCols());
-      // Stop just short of the row's top edge so it doesn't sit flush against
-      // the screen — everything above has scrolled away by then.
-      const headroom = 32;
-      window.scrollTo({
-        top: Math.max(0, viewportTop + row * this.rowHeight() - headroom),
-        left: 0,
-        behavior: 'instant',
-      });
+      const shell = this.shellRef.nativeElement;
+      const chrome = this.windowScroll() ? 0 : parseFloat(getComputedStyle(shell).paddingTop) || 0;
+      // Instant: the rows in between are not rendered, so an animated jump
+      // would spend its whole duration crossing blank space.
+      this.viewport.scrollToOffset(
+        Math.max(0, row * this.rowHeight() + this.rowsOffset() - chrome),
+        'instant',
+      );
       return;
     }
     this.list.scrollToLetter(letter, (m) => m.title, 'media');
@@ -553,6 +638,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   setViewMode(mode: LibraryViewMode) {
     if (this.viewMode() === mode) return;
     this.viewMode.set(mode);
+    this.scrollOwnTo(0);
     // Tab switches stay on the same history entry — back from the
     // library should return to the previous page, not walk through
     // every tab the user clicked.
@@ -803,7 +889,12 @@ export class LibraryComponent implements OnInit, OnDestroy {
       if (!silent) this.loading.set(false);
       return;
     }
-    if (!silent) this.loading.set(true);
+    if (!silent) {
+      this.loading.set(true);
+      // The scroller keeps its offset across a content swap, which a filter
+      // that returns a screenful would leave parked in blank space.
+      this.scrollOwnTo(0);
+    }
     const monitored = this.filterMonitored();
     const fs = this.filterStatus();
     const fw = this.filterWatched();

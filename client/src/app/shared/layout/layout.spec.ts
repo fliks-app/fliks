@@ -1,8 +1,8 @@
 import { CORE_NAV_CONTRIBUTIONS } from '../../core/plugin-ui/core-contributions';
-import { provideZonelessChangeDetection, signal, NO_ERRORS_SCHEMA } from '@angular/core';
+import { Component, provideZonelessChangeDetection, signal, NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
-import { RouterLink, RouterLinkActive, RouterOutlet, provideRouter } from '@angular/router';
+import { Router, RouterLink, RouterLinkActive, RouterOutlet, Routes, provideRouter } from '@angular/router';
 import { TranslateLoader, TranslatePipe, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { vi } from 'vitest';
@@ -54,6 +54,9 @@ vi.mock('@capacitor/keyboard', () => ({
   Keyboard: { addListener: () => {}, removeAllListeners: () => {} },
 }));
 
+@Component({ template: '' })
+class PageStub {}
+
 interface Fixture {
   userId: number;
   isAdmin: boolean;
@@ -81,14 +84,14 @@ const lib = (id: number, name: string, opts: Partial<LibrarySummary> = {}): Libr
   ...opts,
 });
 
-async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutComponent>> {
+async function createFixture(f: Fixture, routes: Routes = []): Promise<ComponentFixture<LayoutComponent>> {
   nativeState.value = f.isNative;
 
   TestBed.configureTestingModule({
     schemas: [NO_ERRORS_SCHEMA],
     providers: [
       provideZonelessChangeDetection(),
-      provideRouter([]),
+      provideRouter(routes),
       provideTranslateService({
         lang: 'en',
         loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
@@ -163,6 +166,12 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
           isPhone: () => !!f.device.isPhone,
           isTv: () => !!f.device.isTv,
           isTouch: () => !!f.device.isTouch,
+          formFactor: () =>
+            f.device.isTv ? 'tv'
+              : f.device.isDesktop ? 'desktop'
+              : f.device.isTablet ? 'tablet'
+              : f.device.isPhone ? 'phone'
+              : 'desktop',
         },
       },
       {
@@ -500,5 +509,48 @@ describe('LayoutComponent sidebar counts — SSE debounce', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('LayoutComponent — ownsScroll route derivation', () => {
+  afterEach(() => {
+    nativeState.value = false;
+  });
+
+  const ROUTES: Routes = [
+    { path: '', component: PageStub },
+    { path: 'library', component: PageStub, data: { ownsScroll: true } },
+  ];
+
+  it('is false for a route with no ownsScroll data', async () => {
+    const fixture = await createFixture(NON_ADMIN_NO_LIBRARIES, ROUTES);
+    expect(fixture.componentInstance.ownsScroll()).toBe(false);
+  });
+
+  it('flips to true on navigating to a route flagged ownsScroll, and back on leaving it', async () => {
+    const fixture = await createFixture(NON_ADMIN_NO_LIBRARIES, ROUTES);
+    const router = TestBed.inject(Router);
+
+    await router.navigateByUrl('/library');
+    expect(fixture.componentInstance.ownsScroll()).toBe(true);
+
+    await router.navigateByUrl('/');
+    expect(fixture.componentInstance.ownsScroll()).toBe(false);
+  });
+
+  it('stays false on TV even for a route flagged ownsScroll — the platform resolves to window mode', async () => {
+    const fixture = await createFixture(TV_FORM_FACTOR, ROUTES);
+    const router = TestBed.inject(Router);
+
+    await router.navigateByUrl('/library');
+    expect(fixture.componentInstance.ownsScroll()).toBe(false);
+  });
+
+  it('stays false on desktop for the same reason', async () => {
+    const fixture = await createFixture(ADMIN_WITH_LIBRARIES, ROUTES);
+    const router = TestBed.inject(Router);
+
+    await router.navigateByUrl('/library');
+    expect(fixture.componentInstance.ownsScroll()).toBe(false);
   });
 });

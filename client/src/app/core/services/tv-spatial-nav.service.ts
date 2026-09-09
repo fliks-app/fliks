@@ -7,6 +7,7 @@ import {
   isFocusCandidate,
   isRendered,
 } from './focusable.constants';
+import { pageScrollOwner } from '../utils/page-scroll.util';
 
 /**
  * Spatial navigation for D-pad input on Android TV — and keyboard
@@ -345,7 +346,10 @@ export class TvSpatialNavService {
     // No focusable neighbour: scroll the page so the user can reach info content
     // below the last card. Held keys stay put; up/down only; not in a modal.
     if (crossZones && !this.openModals().length && (dir === 'down' || dir === 'up')) {
-      window.scrollBy({ top: dir === 'down' ? PAGE_SCROLL_AMOUNT_PX : -PAGE_SCROLL_AMOUNT_PX, behavior: 'smooth' });
+      const top = dir === 'down' ? PAGE_SCROLL_AMOUNT_PX : -PAGE_SCROLL_AMOUNT_PX;
+      const owner = pageScrollOwner(active);
+      if (owner) owner.scrollBy({ top, behavior: 'smooth' });
+      else window.scrollBy({ top, behavior: 'smooth' });
     }
   }
 
@@ -751,13 +755,14 @@ function collectFocusables(root: ParentNode = document): HTMLElement[] {
     // teleport focus into it). But cards scrolled off a horizontal row, or
     // page sections scrolled above the viewport on a long detail page, are
     // valid targets: focusing them makes the browser scroll them back into
-    // view. Document coords (viewport rect + window scroll) stay positive
+    // view. Page coords (viewport rect + the page's scroll) stay positive
     // for scrolled-off content, and a horizontal-scroller's internal
     // scrollLeft reaches its hidden siblings, so allow either case.
     if (r.right <= 0 || r.bottom <= 0) {
       const inScroller = el.closest(SCROLLER_SELECTOR);
-      const docRight = r.right + window.scrollX;
-      const docBottom = r.bottom + window.scrollY;
+      const owner = pageScrollOwner(el);
+      const docRight = r.right + (owner ? owner.scrollLeft : window.scrollX);
+      const docBottom = r.bottom + (owner ? owner.scrollTop : window.scrollY);
       if (!inScroller && (docRight <= 0 || docBottom <= 0)) return false;
     }
     return true;

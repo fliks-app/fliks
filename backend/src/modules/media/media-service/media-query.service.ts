@@ -832,6 +832,7 @@ export class MediaQueryService {
       event: string;
       date: string;
       posterUrl: string | null;
+      fanartUrl: string | null;
       status: string;
       year: number;
       seasonNumber?: number;
@@ -898,6 +899,7 @@ export class MediaQueryService {
               event,
               date: d,
               posterUrl: m.posterUrl,
+              fanartUrl: m.fanartUrl,
               status: m.status,
               year: m.year,
               hasFile,
@@ -915,6 +917,7 @@ export class MediaQueryService {
             event: 'release',
             date: rd,
             posterUrl: m.posterUrl,
+            fanartUrl: m.fanartUrl,
             status: m.status,
             year: m.year,
             hasFile,
@@ -962,6 +965,7 @@ export class MediaQueryService {
           event: 'airing',
           date: toDateStr(ep.airDate) ?? ep.airDate,
           posterUrl: ep.season.media.posterUrl,
+          fanartUrl: ep.season.media.fanartUrl,
           status: ep.season.media.status,
           year: ep.season.media.year,
           seasonNumber: ep.season.seasonNumber,

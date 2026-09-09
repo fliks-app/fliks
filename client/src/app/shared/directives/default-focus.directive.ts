@@ -1,12 +1,4 @@
-import {
-  Directive,
-  ElementRef,
-  OnDestroy,
-  OnInit,
-  afterNextRender,
-  inject,
-  input,
-} from '@angular/core';
+import { Directive, ElementRef, Injector, OnDestroy, OnInit, afterNextRender, inject, input } from '@angular/core';
 import { ActivatedRoute, NavigationStart, Router } from '@angular/router';
 import { Subscription, filter } from 'rxjs';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
@@ -38,6 +30,7 @@ export class DefaultFocusDirective implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly reuseStrategy = inject(CachingReuseStrategy);
+  private readonly injector = inject(Injector);
   private readonly subs = new Subscription();
   private readonly targetGetter = (): DefaultFocusTarget => this.target();
 
@@ -56,7 +49,9 @@ export class DefaultFocusDirective implements OnInit, OnDestroy {
         // Resolved per event: a page reused across a param change is cached
         // under the params it last showed, not the ones it started on.
         .pipe(filter((key) => key === this.reuseStrategy.keyFor(this.route.snapshot)))
-        .subscribe(() => this.svc.applyOnArrival(this.target())),
+        // Deferred like the constructor's pass: a page can rebuild content on
+        // reattach, and its DOM lands on the render after this event.
+        .subscribe(() => afterNextRender(() => this.svc.applyOnArrival(this.target()), { injector: this.injector })),
     );
     // Capture the focused item the instant a navigation starts (host still in
     // the DOM) so a later back-navigation can return to it.

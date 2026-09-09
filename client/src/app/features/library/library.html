@@ -1,8 +1,11 @@
 <div
+  #shell
+  cdkVirtualScrollingElement
   appDefaultFocus="[data-library-focus^='media:']"
   [focusKey]="'library-' + (library()?.id ?? '')"
   focusIdAttr="data-library-focus"
-  class="flex flex-col gap-4 h-full"
+  class="library-shell flex flex-col gap-4 min-h-0"
+  [class.page-scroller]="!windowScroll()"
 >
   <!-- Library title — hidden when the mobile topbar already shows it
        (avoids the duplicated heading on small screens). -->
@@ -301,7 +304,7 @@
            element's OWN height, so the column drops half a screen whenever that
            height isn't settled yet. `justify-center` only ever needs the
            viewport's. The strip is click-through; the letters are not. -->
-      <nav class="fixed inset-y-0 right-4 z-20 flex flex-col items-center justify-center gap-0 select-none pointer-events-none">
+      <nav class="library-alphabet fixed inset-y-0 right-4 z-20 flex flex-col items-center justify-center gap-0 select-none pointer-events-none">
         @for (letter of alphabet; track letter) {
           <button
             type="button"
@@ -382,29 +385,53 @@
             }
       </ng-template>
 
-      <div class="flex gap-1 pt-2">
-        <cdk-virtual-scroll-viewport
-          scrollWindow
-          data-tv-zone
-          [itemSize]="rowHeight()"
-          [minBufferPx]="rowHeight() * 2"
-          [maxBufferPx]="rowHeight() * 4"
-          class="flex-1 min-w-0 library-viewport">
-          <!-- The right padding clears the alphabet column: it sits at `right-4`
-               and is `w-4` wide, so anything under 2rem lets the cards slide
-               under the letters. -->
-          <div *cdkVirtualFor="let row of gridRows(); trackBy: trackRow"
-               #cardRow
-               [class.pr-8]="sortBy() === 'title' && sortOrder() === 'ASC'"
-               [class.pr-2]="sortBy() !== 'title' || sortOrder() !== 'ASC'"
-               class="grid content-start grid-cols-3 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8 tv:pr-4"
-               [style.height.px]="rowHeight()">
-            @for (item of row.items; track item.id) {
-              <ng-container [ngTemplateOutlet]="cardCell" [ngTemplateOutletContext]="{ $implicit: item }" />
-            }
-          </div>
-        </cdk-virtual-scroll-viewport>
+      <!-- One row definition, rendered by both viewports below. -->
+      <ng-template #rowCells let-row>
+        @for (item of row.items; track item.id) {
+          <ng-container [ngTemplateOutlet]="cardCell" [ngTemplateOutletContext]="{ $implicit: item }" />
+        }
+      </ng-template>
 
+      <div class="flex gap-1 pt-2">
+        <!-- `scrollWindow` can't be toggled on one viewport instance (CDK
+             resolves it at compile time), so the two modes get two elements. -->
+        @if (windowScroll()) {
+          <cdk-virtual-scroll-viewport
+            scrollWindow
+            data-tv-zone
+            [itemSize]="rowHeight()"
+            [minBufferPx]="rowHeight() * 2"
+            [maxBufferPx]="rowHeight() * 4"
+            class="flex-1 min-w-0 library-viewport">
+            <!-- The right padding clears the alphabet column: it sits at `right-4`
+                 and is `w-4` wide, so anything under 2rem lets the cards slide
+                 under the letters. -->
+            <div *cdkVirtualFor="let row of gridRows(); trackBy: trackRow"
+                 #cardRow
+                 [class.pr-8]="sortBy() === 'title' && sortOrder() === 'ASC'"
+                 [class.pr-2]="sortBy() !== 'title' || sortOrder() !== 'ASC'"
+                 class="grid content-start grid-cols-3 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8 tv:pr-4"
+                 [style.height.px]="rowHeight()">
+              <ng-container [ngTemplateOutlet]="rowCells" [ngTemplateOutletContext]="{ $implicit: row }" />
+            </div>
+          </cdk-virtual-scroll-viewport>
+        } @else {
+          <cdk-virtual-scroll-viewport
+            data-tv-zone
+            [itemSize]="rowHeight()"
+            [minBufferPx]="rowHeight() * 2"
+            [maxBufferPx]="rowHeight() * 4"
+            class="flex-1 min-w-0 library-viewport">
+            <div *cdkVirtualFor="let row of gridRows(); trackBy: trackRow"
+                 #cardRow
+                 [class.pr-8]="sortBy() === 'title' && sortOrder() === 'ASC'"
+                 [class.pr-2]="sortBy() !== 'title' || sortOrder() !== 'ASC'"
+                 class="grid content-start grid-cols-3 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8 tv:pr-4"
+                 [style.height.px]="rowHeight()">
+              <ng-container [ngTemplateOutlet]="rowCells" [ngTemplateOutletContext]="{ $implicit: row }" />
+            </div>
+          </cdk-virtual-scroll-viewport>
+        }
       </div>
 
     }
@@ -488,6 +515,7 @@
             <app-media-card
               [aspect]="'landscape'"
               [imageUrl]="itemArtwork(item)"
+              [fanartUrl]="item.fanartUrl"
               [title]="item.title"
               [subtitle]="item.label ?? ('recommend.received_by' | translate: { username: item.sender.username })"
               [link]="contentLink(item.mediaType, item.mediaId, item.episodeId)"
@@ -504,6 +532,7 @@
             <app-media-card
               [aspect]="'landscape'"
               [imageUrl]="itemArtwork(item)"
+              [fanartUrl]="item.fanartUrl"
               [title]="item.mediaTitle"
               [subtitle]="item.episodeLabel ?? undefined"
               [progressPercent]="item.progressPercent"
@@ -526,6 +555,7 @@
             <app-media-card
               class="shrink-0 w-28 sm:w-32 lg:w-40"
               [imageUrl]="rec.media.posterUrl"
+              [fanartUrl]="rec.media.fanartUrl"
               [title]="rec.media.title"
               [subtitle]="rec.media.year ? '' + rec.media.year : undefined"
               [link]="['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id]"
@@ -543,6 +573,7 @@
           @for (rec of suggestionsRecommendations(); track rec.media.id) {
             <app-media-card
               [imageUrl]="rec.media.posterUrl"
+              [fanartUrl]="rec.media.fanartUrl"
               [title]="rec.media.title"
               [subtitle]="rec.media.year ? '' + rec.media.year : undefined"
               [link]="['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id]"
@@ -632,6 +663,7 @@
           <app-media-card
             [aspect]="'landscape'"
             [imageUrl]="itemArtwork(item)"
+            [fanartUrl]="item.fanartUrl"
             [title]="item.title"
             [subtitle]="item.label ?? undefined"
             [link]="contentLink(item.mediaType, item.mediaId, item.episodeId)"

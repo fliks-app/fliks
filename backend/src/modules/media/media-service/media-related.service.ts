@@ -10,6 +10,9 @@ export interface RelatedMediaItem {
   title: string;
   year: number;
   posterUrl: string | null;
+  /** The landscape half of the poster morph: the detail page's hero shows the
+   *  poster stretched into its wide box without it. */
+  fanartUrl: string | null;
   rating: number | null;
   genres: string[];
   /** False when nothing is on disk yet, so the card can flag it as missing. */
@@ -66,6 +69,7 @@ function toItem(media: Media): RelatedMediaItem {
     title: media.title,
     year: media.year,
     posterUrl: media.posterUrl ?? null,
+    fanartUrl: media.fanartUrl ?? null,
     rating: media.rating ?? null,
     genres: media.genres ?? [],
     hasFile: ((media as Media & { fileCount?: number }).fileCount ?? 0) > 0,

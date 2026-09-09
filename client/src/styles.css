@@ -433,8 +433,8 @@ html.tv-host {
      otherwise parks the focused card flush against a screen edge. Keep it off
      the edges: clear the top dock (matching the 96px the home rows snap to) and
      leave a strip of look-ahead below so moving down a grid row never leaves
-     the bottom row cut. The document is the scroll container (see layout: <main>
-     stays overflow-x:clip precisely so it isn't a scroller), so it goes here. */
+     the bottom row cut. scroll-padding applies to the scroll container, so this
+     targets the document scroller; a page that owns its own has a twin below. */
   scroll-padding-top: 96px;
   scroll-padding-bottom: 20vh;
 }
@@ -674,12 +674,115 @@ html.vt-player-close body.tv main.page-enter {
   animation: none;
 }
 
-/* CDK gives its content wrapper `contain: content`, whose paint containment
-   clips anything drawn outside a row — which is exactly where the focus ring
-   and the card's scale-up land. The wrapper is absolutely positioned and sized
-   by the viewport, so dropping containment costs no layout correctness. */
+/* CDK's content wrapper ships `contain: content`, which clips a card's focus
+   ring and scale-up where they overflow its row. */
 .library-viewport .cdk-virtual-scroll-content-wrapper {
   contain: none;
+}
+/* CDK marks its scrollable `contain: strict`, and paint containment makes it the
+   containing block for `position: fixed` — which would scroll the alphabet away. */
+.library-shell.cdk-virtual-scrollable {
+  contain: none;
+}
+/* CDK stamps its scrollable ancestor with `overflow: auto` on both axes. Only
+   `.page-scroller` decides whether this element scrolls, and on which. */
+.library-shell.cdk-virtual-scrollable:not(.page-scroller) {
+  overflow: visible;
+}
+
+/* `<main>` reserves the fixed chrome's space on every route, computed once in
+   layout.ts and exposed as CSS vars so a page that owns its scroller (below)
+   can carry the same space inside itself instead. */
+app-layout main {
+  padding-block: var(--chrome-top, 0px) var(--chrome-bottom, 0px);
+}
+
+/* Bounds a page whose route sets `ownsScroll` (layout.ts) to the viewport;
+   gated so every other route keeps scrolling the document unbounded. */
+.drawer.owns-scroll {
+  /* 100vh is the fallback for browsers without dvh (Tizen / webOS Chromium 85,
+     which have no dynamic toolbar for dvh to account for anyway). */
+  height: 100vh;
+  height: 100dvh;
+  /* min-h-screen is min-height:100vh, which beats 100dvh on mobile unless neutralised. */
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
+}
+.drawer.owns-scroll .drawer-content {
+  min-height: 0;
+}
+/* A claimed scroller's gutter is inside the layout viewport, where the
+   document's scrollbar never was, so fixed chrome must stop short of it. */
+.drawer.owns-scroll nav.navbar {
+  right: var(--page-scrollbar, 0px);
+  /* daisyUI's `width: 100%` would over-constrain the box and make `right` moot. */
+  width: auto;
+}
+.drawer.owns-scroll .library-alphabet {
+  right: calc(1rem + var(--page-scrollbar, 0px));
+}
+/* TV keeps the bar in flow so it reserves its own space; a page that owns the
+   scroll carries that space itself, so the bar can be fixed and retract. */
+body.tv .drawer.owns-scroll nav.navbar,
+.drawer.owns-scroll .chrome-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  /* Stops short of the scroller's own gutter, which the document's scrollbar
+     never occupied. */
+  right: var(--page-scrollbar, 0px);
+  /* Outside the scroller it can only translate, and a slid bar reads as an
+     animation on a surface that should simply not be there. */
+  transition: none;
+}
+.drawer.owns-scroll main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  /* The page's own `.page-scroller` carries this space instead (padding-inline
+     too, or the scrollbar would land inset from main's true edge). */
+  padding: 0;
+}
+/* The routed host carries no styles of its own, and is matched by position so
+   the mode works for any opted-in route. Nothing else follows the outlet. */
+.drawer.owns-scroll main > router-outlet ~ * {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+/* Contract for a page that owns its scroller: carries the chrome clearance
+   and the page's own horizontal padding, so adopting this mode is just
+   `ownsScroll: true` on the route plus this class on the scrolling element. */
+.page-scroller {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden auto;
+  padding-block: var(--chrome-top, 0px) var(--chrome-bottom, 0px);
+  padding-inline: var(--page-p);
+}
+/* A scroll container's automatic minimum size is zero, so the tabs row would
+   absorb the whole column's shrink pressure and collapse to its scrollbar. */
+.library-shell > * {
+  flex-shrink: 0;
+}
+/* TV keeps the D-pad's focus-into-view scroll smooth inside the page's own
+   scroller, matching the document-scroll rule above. */
+html.tv-host .page-scroller {
+  scroll-behavior: smooth;
+}
+/* Smooth is for D-pad focus-into-view; the router's own jump to the top of a
+   page being entered must not animate. */
+html.tv-host.nav-scroll-instant,
+html.tv-host.nav-scroll-instant .page-scroller {
+  scroll-behavior: auto;
+}
+/* scroll-padding applies to the scroll container and is not inherited, so
+   neither html rule above reaches a page that scrolls its own element. */
+html.tv-host .page-scroller,
+html.keyboard-modality .page-scroller {
+  scroll-padding-top: 96px;
+  scroll-padding-bottom: 20vh;
 }
 
 /* An option that is only marked unavailable because it IS the current selection
@@ -1333,10 +1436,12 @@ html.vt-poster-in [data-chrome-fab],
 html.vt-poster-out [data-chrome-fab] {
   view-transition-name: vt-fab;
 }
+/* Above the card's badges (2), which the morph passes under along with its
+   picture — a tie there let the watched tick paint over the bar. */
 html.vt-poster-in::view-transition-group(vt-topbar),
 html.vt-poster-out::view-transition-group(vt-topbar),
 html.vt-poster-in::view-transition-group(vt-hero-lead) {
-  z-index: 2;
+  z-index: 3;
 }
 /* The bar is the same box on both sides, so it swaps rather than cross-fading —
    opacity as well as the animation, or the outgoing bar stays stacked under the
@@ -1356,14 +1461,14 @@ html.vt-poster-in::view-transition-group(vt-dock),
 html.vt-poster-out::view-transition-group(vt-dock),
 html.vt-poster-in::view-transition-new(vt-dock),
 html.vt-poster-out::view-transition-new(vt-dock) {
-  z-index: 3;
+  z-index: 4;
   animation: none;
 }
 html.vt-poster-in::view-transition-group(vt-fab),
 html.vt-poster-out::view-transition-group(vt-fab),
 html.vt-poster-in::view-transition-new(vt-fab),
 html.vt-poster-out::view-transition-new(vt-fab) {
-  z-index: 4;
+  z-index: 5;
   animation: none;
 }
 html.vt-poster-in::view-transition-old(vt-dock),

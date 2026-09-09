@@ -1,7 +1,10 @@
 <app-background />
 <div class="drawer min-h-screen"
      [class.lg:drawer-open]="navbar.sidebarDocked()"
-     [class.md:drawer-open]="device.isTablet() && navbar.effectiveSidebarPinned()">
+     [class.md:drawer-open]="device.isTablet() && navbar.effectiveSidebarPinned()"
+     [class.owns-scroll]="ownsScroll()"
+     [style.--chrome-top]="chromeTop()"
+     [style.--chrome-bottom]="chromeBottom()">
   <input id="sidebar" type="checkbox" class="drawer-toggle" />
   <div class="drawer-content flex flex-col relative">
     <!-- Watched by an IntersectionObserver to derive `scrollAtTop` without ever
@@ -96,18 +99,11 @@
         <app-user-menu />
       </div>
     </nav>
-    <!-- Spacer for the fixed navbar (navbar height + safe area); collapsed on
-         hero pages so the fanart extends under the status bar, and on TV where
-         the navbar sits in the flow. -->
-    <div
-      [class.lg:hidden]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
-      [class.md:hidden]="device.isTablet() && navbar.effectiveSidebarPinned()"
-      [style.height]="navbar.isHeroPage() || tv.isTv() ? '0px' : 'calc(3rem + env(safe-area-inset-top, 0px))'"
-    ></div>
     <!-- Desktop top-right: Cast + User -->
     <div appTvRow
          [appTvRowSnap]="true"
-         class="hidden items-center justify-between gap-1 px-[var(--page-p)] relative z-30"
+         [class.-translate-y-full]="navbarHidden()"
+         class="chrome-bar hidden items-center justify-between gap-1 px-[var(--page-p)] relative z-30"
          [style.padding-top]="tv.isTv() ? 'calc(env(safe-area-inset-top, 0px) + var(--page-p) / 2)' : isNative ? 'calc(0.3rem + env(safe-area-inset-top, 1.5rem))' : '1rem'"
          [class.lg:flex]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
          [class.md:flex]="device.isTablet() && navbar.effectiveSidebarPinned()">
@@ -153,45 +149,40 @@
         <app-user-menu />
       </div>
     </div>
-    <!-- overflow-x: clip clips horizontal overflow without forcing the
-         element into a scroll container — `overflow-x: hidden` coerces
-         `overflow-y` to auto, which makes <main> a vertical scroll
-         container even when it doesn't actually scroll, breaking
-         `position: sticky` on descendants (sticky would anchor to <main>
-         and never engage because the actual scroll happens on the page). -->
+    <!-- clip, not hidden: `overflow-x: hidden` coerces `overflow-y` to auto,
+         making <main> a scroll container and breaking sticky descendants. -->
     <main
-      class="min-w-0 flex-1 py-4 px-[var(--page-p)]"
+      class="min-w-0 flex-1 px-[var(--page-p)]"
       [class.overflow-x-clip]="!navbar.isHeroPage()"
-      [class.pt-8]="!navbar.isHeroPage() && !isNative && navbar.mobileNavbarVisible()"
+      [style.--chrome-top]="ownsScroll() && !networkService.isOnline() ? '0px' : chromeTop()"
     >
       @if (!networkService.isOnline()) {
-        <div class="alert alert-warning mb-4 flex items-center justify-between py-2">
+        <!-- Above the page's own scroller, so while it is up the banner carries
+             the chrome clearance and the page gutter, and the scroller inherits none. -->
+        <div class="alert alert-warning mb-4 flex items-center justify-between py-2"
+             [style.margin-top]="ownsScroll() ? chromeTop() : null"
+             [style.margin-left]="ownsScroll() ? 'var(--page-p)' : null"
+             [style.margin-right]="ownsScroll() ? 'var(--page-p)' : null">
           <span class="text-sm">{{ 'common.offline_banner' | translate }}</span>
           <button class="btn btn-sm btn-ghost" (click)="retryConnection()">{{ 'common.retry' | translate }}</button>
         </div>
       }
       <router-outlet />
     </main>
-    <!-- Bottom spacer for native bottom bar — phones only. Tablets and TV
-         navigate via the drawer/sidebar; phones use the dock as the primary
-         nav surface so they need the spacer to avoid content under the bar. -->
-    @if (isNative && device.isPhone()) {
-      <div class="h-24"></div>
-    }
     <!-- Native bottom navigation bar — phones only.
          Tablets and TV use the drawer/sidebar instead. -->
     @if (isNative && device.isPhone() && !keyboardOpen()) {
       <div class="dock z-40 dock-with-fab-cradle bg-base-100/70 backdrop-blur-sm">
         @if (dockHome(); as item) {
           <a [routerLink]="item.route" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: item.exact }"
-             (click)="resetNavHistory()">
+             [state]="{ rootEntry: true }">
             <app-nav-icon [name]="item.icon" class="h-5 w-5" />
             <span class="dock-label truncate max-w-full">{{ (item.shortLabelKey ?? item.labelKey) | translate }}</span>
           </a>
         }
         @if (dockDownloads(); as item) {
           <a [routerLink]="item.route" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: item.exact }"
-             (click)="resetNavHistory()">
+             [state]="{ rootEntry: true }">
             <app-nav-icon [name]="item.icon" class="h-5 w-5" />
             <span class="dock-label truncate max-w-full">{{ (item.shortLabelKey ?? item.labelKey) | translate }}</span>
           </a>
@@ -202,7 +193,7 @@
         <span aria-hidden="true" class="invisible"></span>
         @if (dockRequests(); as item) {
           <a [routerLink]="item.route" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: item.exact }"
-             (click)="resetNavHistory()">
+             [state]="{ rootEntry: true }">
             <app-nav-icon [name]="item.icon" class="h-5 w-5" />
             <span class="dock-label truncate max-w-full">{{ (item.shortLabelKey ?? item.labelKey) | translate }}</span>
           </a>
@@ -219,6 +210,7 @@
            circle). Active (current route): inverted via routerLinkActive.
            Arbitrary variants suppress the DaisyUI .dock-active underline. -->
       <a routerLink="/search"
+         [state]="{ rootEntry: true }"
          data-chrome-fab
          [routerLinkActive]="['dock-active', '!bg-primary', '!text-primary-content']"
          [routerLinkActiveOptions]="{ exact: false }"
@@ -238,7 +230,7 @@
             <ul class="menu w-full p-2 gap-0.5">
               @for (lib of customLibraries(); track lib.id) {
                 <li>
-                  <a [routerLink]="libraryUrl(lib)" routerLinkActive="menu-active" class="justify-between" (click)="resetNavHistory()">
+                  <a [routerLink]="libraryUrl(lib)" routerLinkActive="menu-active" class="justify-between" [state]="{ rootEntry: true }">
                     <span class="flex items-center gap-2">
                       <app-lucide-icon [name]="libraryIcon(lib)" class="h-5 w-5" />
                       {{ lib.name }}
@@ -251,7 +243,7 @@
               }
               @for (item of sheetMainItems(); track item.id) {
                 <li>
-                  <a [routerLink]="item.route" routerLinkActive="menu-active" [routerLinkActiveOptions]="{ exact: item.exact }" class="justify-between" (click)="resetNavHistory()">
+                  <a [routerLink]="item.route" routerLinkActive="menu-active" [routerLinkActiveOptions]="{ exact: item.exact }" class="justify-between" [state]="{ rootEntry: true }">
                     <span class="flex items-center gap-2">
                       <app-nav-icon [name]="item.icon" class="h-5 w-5" />
                       {{ item.labelKey | translate }}
@@ -264,7 +256,7 @@
               }
               @for (item of sheetAcquisitionItems(); track item.id) {
                 <li>
-                  <a [routerLink]="item.route" routerLinkActive="menu-active" class="justify-between" (click)="resetNavHistory()">
+                  <a [routerLink]="item.route" routerLinkActive="menu-active" class="justify-between" [state]="{ rootEntry: true }">
                     <span class="flex items-center gap-2">
                       <app-nav-icon [name]="item.icon" class="h-5 w-5" />
                       {{ item.labelKey | translate }}

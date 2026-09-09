@@ -6,6 +6,7 @@
         @for (c of d.cast; track c.id) {
           <app-media-card
             [imageUrl]="c.media.posterUrl"
+            [fanartUrl]="c.media.fanartUrl"
             [title]="c.media.title"
             [subtitle]="c.character"
             [rating]="c.media.rating"
@@ -22,6 +23,7 @@
         @for (c of d.crew; track c.id) {
           <app-media-card
             [imageUrl]="c.media.posterUrl"
+            [fanartUrl]="c.media.fanartUrl"
             [title]="c.media.title"
             [subtitle]="c.job"
             [rating]="c.media.rating"

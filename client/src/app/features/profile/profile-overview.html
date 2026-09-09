@@ -50,6 +50,7 @@
           <app-media-card
             class="shrink-0 w-28 sm:w-32 lg:w-40"
             [imageUrl]="rec.media.posterUrl"
+            [fanartUrl]="rec.media.fanartUrl"
             [title]="rec.media.title"
             [subtitle]="'' + rec.media.year"
             [link]="mediaLink(rec.media.type, rec.media.id)"
@@ -65,6 +66,7 @@
           <app-media-card
             [aspect]="'landscape'"
             [imageUrl]="itemArtwork(item)"
+            [fanartUrl]="item.fanartUrl"
             [title]="item.mediaTitle"
             [subtitle]="item.episodeLabel ?? undefined"
             [link]="mediaLink(item.mediaType, item.mediaId)"
@@ -80,6 +82,7 @@
           <app-media-card
             [aspect]="'landscape'"
             [imageUrl]="itemArtwork(item)"
+            [fanartUrl]="item.fanartUrl"
             [title]="item.title"
             [subtitle]="item.label ?? undefined"
             [link]="likeLink(item)"
