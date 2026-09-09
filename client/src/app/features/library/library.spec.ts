@@ -54,6 +54,12 @@ function twoSections(): Media[] {
   );
 }
 
+/** 420 titles: at six columns that is 70 rows, well past the 47-58 range the
+ *  fake viewport reports, so a restored offset resolves to a real first row. */
+function manyRows(): Media[] {
+  return Array.from({ length: 420 }, (_, i) => media(i + 1, `Title ${i + 1}`));
+}
+
 function nextFrame(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
@@ -86,7 +92,7 @@ function fakeViewport() {
   };
 }
 
-function createHarness(mode: PageScrollMode = 'container') {
+function createHarness(mode: PageScrollMode = 'container', remembered?: number) {
   const navigatedBack = signal(false);
   const attached$ = new Subject<string>();
   const detached$ = new Subject<string>();
@@ -148,7 +154,7 @@ function createHarness(mode: PageScrollMode = 'container') {
       { provide: CachingReuseStrategy, useValue: { attached$, detached$, keyFor: () => OWN_KEY } },
       {
         provide: ScrollMemoryService,
-        useValue: { activate: vi.fn(), deactivate: vi.fn(), deactivateIf: vi.fn(), restore: vi.fn(), restoreSticky: vi.fn() },
+        useValue: { activate: vi.fn(), deactivate: vi.fn(), deactivateIf: vi.fn(), restore: vi.fn(), restoreSticky: vi.fn(), remembered: () => remembered },
       },
       { provide: AppResumeService, useValue: { resume$: EMPTY } },
     ],
@@ -229,25 +235,22 @@ describe('LibraryComponent — container scroller', () => {
     expect(pageScroller.scrollTo).not.toHaveBeenCalled();
   });
 
-  it('records the shell\'s scrollTop while scrolling and restores it on attach', () => {
-    const { component, pageScroller, attached$, detached$, shellEl, shellScrollTo, navigatedBack } =
+  it('re-claims the shell before the shared restore runs, not a frame later', () => {
+    const { component, pageScroller, attached$, detached$, shellEl, navigatedBack } =
       createHarness();
     navigatedBack.set(true);
     attachViewport(component);
-
-    // The router detaches the subtree before `store()` runs, so by detach time
-    // the offset is already 0 — only a live scroll can capture it.
-    shellEl.scrollTop = 1234;
-    shellEl.dispatchEvent(new Event('scroll'));
-    shellEl.scrollTop = 0;
+    pageScroller.claim.mockClear();
 
     detached$.next(OWN_KEY);
     attached$.next(OWN_KEY);
 
-    expect(shellScrollTo).toHaveBeenCalledWith({ top: 1234, left: 0, behavior: 'instant' });
+    // ScrollMemoryService writes whichever scroller is claimed, and its sticky
+    // restore runs in the same task: a deferred claim sends it to the document.
+    expect(pageScroller.claim).toHaveBeenCalledWith(shellEl);
     // A cached re-attach is not a content swap: a reset here would land the
     // return from a media detail back at the top of the library.
-    expect(shellScrollTo).not.toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' });
+    expect(component.list.activeLetter()).toBe('');
   });
 
   it('does not restore on a first attach with nothing saved', () => {
@@ -297,6 +300,57 @@ describe('LibraryComponent — container scroller', () => {
     // scroll event will correct the range the page left with.
     expect(viewport.setRenderedRange).toHaveBeenCalledWith({ start: 0, end: 11 });
     expect(viewport.setRenderedContentOffset).toHaveBeenCalledWith(0);
+  });
+
+  it('re-ranges onto the restored row, not just onto the top', () => {
+    const offset = 520 * 8;
+    const { component, attached$, detached$, navigatedBack } = createHarness('container', offset);
+    navigatedBack.set(true);
+    component.libraryName.set('films'); // the memory key is per library
+    component.list.setItems(manyRows(), (m) => m.title);
+    const viewport = attachViewport(component);
+
+    detached$.next(OWN_KEY);
+    attached$.next(OWN_KEY);
+
+    // Without this the range is whatever the page left with, and the poster
+    // morph coming back from a media detail has no card to land on.
+    expect(viewport.setRenderedRange).toHaveBeenCalledWith({ start: 8, end: 19 });
+    expect(viewport.setRenderedContentOffset).toHaveBeenCalledWith(offset);
+  });
+
+  it('leaves a range that already covers the restored row alone', () => {
+    const offset = 520 * 50;
+    const { component, attached$, detached$, navigatedBack } = createHarness('container', offset);
+    navigatedBack.set(true);
+    component.libraryName.set('films'); // the memory key is per library
+    component.list.setItems(manyRows(), (m) => m.title);
+    const viewport = attachViewport(component);
+
+    detached$.next(OWN_KEY);
+    attached$.next(OWN_KEY);
+
+    // Row 50 is inside the 47-58 range the page kept, and re-rendering it would
+    // recycle the card DOM node the poster morph was stamped on.
+    expect(viewport.setRenderedRange).not.toHaveBeenCalled();
+    expect(viewport.setRenderedContentOffset).not.toHaveBeenCalled();
+  });
+
+  it('re-ranges from the remembered offset on a window-mode return', () => {
+    const offset = 520 * 8;
+    const { component, attached$, detached$, navigatedBack } = createHarness('window', offset);
+    navigatedBack.set(true);
+    component.libraryName.set('films'); // the memory key is per library
+    component.list.setItems(manyRows(), (m) => m.title);
+    const viewport = attachViewport(component);
+
+    detached$.next(OWN_KEY);
+    attached$.next(OWN_KEY);
+
+    // Window mode has no shell offset of its own — the shared scroll memory
+    // holds it, and its sticky restore only lands after the re-attach.
+    expect(viewport.setRenderedRange).toHaveBeenCalledWith({ start: 8, end: 19 });
+    expect(viewport.setRenderedContentOffset).toHaveBeenCalledWith(offset);
   });
 
   it('keeps the active letter through the restore\'s own scroll event', async () => {

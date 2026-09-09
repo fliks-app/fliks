@@ -129,15 +129,11 @@ export class LibraryComponent implements OnInit, OnDestroy {
   /** TV and desktop scroll the window instead (`PageScrollModeService`); every
    *  mode-dependent branch below reads this rather than the platform itself. */
   readonly windowScroll = computed(() => this.scrollMode.mode() === 'window');
-  /** Detaching removes the shell from the document, and a detached element has
-   *  no layout box, so the offset has to be kept outside the DOM. Container
-   *  mode only — window mode's offset lives on `window`, held by ScrollMemoryService. */
-  private savedScrollTop = 0;
-  /** Per-library scroll-memory key for window mode; null skips the dance
-   *  entirely in container mode, which restores its own `savedScrollTop`. */
+  /** Per-library scroll-memory key, in both modes: ScrollMemoryService saves
+   *  and restores whichever scroller the page claimed. */
   private scrollMemoryKey(): string | null {
     const name = this.libraryName();
-    return this.windowScroll() && name ? `library-${name}` : null;
+    return name ? `library-${name}` : null;
   }
   /** Cached per library name: revalidate the grid on return, re-claim the
    *  scroller and restore its saved offset. */
@@ -147,10 +143,16 @@ export class LibraryComponent implements OnInit, OnDestroy {
     onAttach: () => {
       const lib = this.library();
       if (lib) this.navbar.setPageTitle(lib.name);
-      if (!this.windowScroll()) this.restoreScrollWhenLive();
-      // Window mode shares the document with every page, so it is already at
-      // the top here and no scroll event will correct the range on its own.
-      else if (!this.navbar.navigatedBack()) this.enterAtTop();
+      // Synchronously, so the shared restore that follows writes this shell
+      // and not the document.
+      if (!this.windowScroll()) this.pageScroller.claim(this.shellRef.nativeElement);
+      if (!this.navbar.navigatedBack()) this.enterAtTop();
+      else {
+        // The letter survives the trip in this component; the restore's own
+        // scroll event must not recompute it off the row it lands on.
+        this.holdLetter();
+        this.renderRangeForRememberedOffset();
+      }
       this.applyBackground();
     },
     onDetach: () => {
@@ -311,10 +313,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private static readonly LETTER_HOLD_MS = 600;
   private letterHeldUntil = 0;
   private readonly onLetterScroll = () => {
-    // Recorded on every scroll: Angular detaches the subtree before `store()`
-    // runs, so by `onDetach` the offset is already gone. Window mode has no
-    // shell offset to save — ScrollMemoryService holds that one instead.
-    if (!this.windowScroll()) this.savedScrollTop = this.shellRef.nativeElement.scrollTop;
     if (this.letterRaf !== null) return;
     this.letterRaf = requestAnimationFrame(() => {
       this.letterRaf = null;
@@ -340,47 +338,49 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.syncActiveLetter();
     });
   }
-  /** `attached$` fires before the outlet reinserts the subtree, and a write to
-   *  a detached element's scrollTop is dropped, leaving CDK's rendered range
-   *  stranded off-screen. */
-  private restoreScrollWhenLive(frames = 0): void {
-    const el = this.shellRef.nativeElement;
-    if (this.destroyed) return;
-    if (!el.isConnected) {
-      if (frames < 60) requestAnimationFrame(() => this.restoreScrollWhenLive(frames + 1));
-      return;
-    }
-    this.pageScroller.claim(el);
-    // A cached page keeps its offset in the DOM, so only a return restores it.
-    if (!this.navbar.navigatedBack()) {
-      this.scrollOwnTo(0);
-      this.enterAtTop();
-      return;
-    }
-    if (this.savedScrollTop > 0) {
-      // The letter survives the trip in this component; the restore's own
-      // scroll event must not recompute it off the row it lands on.
-      this.holdLetter();
-      this.scrollOwnTo(this.savedScrollTop);
-    }
+  /** Where the rows start inside whatever scrolls, since a scroll offset is
+   *  measured from the scroller's top. In window mode that IS the document. */
+  private rowsOffset(): number {
+    const vp = this.viewport?.elementRef.nativeElement;
+    if (!vp) return 0;
+    const shell = this.shellRef.nativeElement;
+    return this.windowScroll()
+      ? vp.getBoundingClientRect().top + window.scrollY
+      : vp.getBoundingClientRect().top - shell.getBoundingClientRect().top + shell.scrollTop;
+  }
+  /** The rows an offset lands on, rendered now: CDK would only get there on the
+   *  next change detection, too late for a poster morph or the default focus. */
+  private renderRangeForOffset(offset: number): void {
+    const vp = this.viewport;
+    if (!vp) return;
+    const range = vp.getRenderedRange();
+    const span = Math.max(1, range.end - range.start);
+    const rows = this.gridRows().length;
+    const first = Math.max(0, Math.min(
+      Math.floor(Math.max(0, offset - this.rowsOffset()) / this.rowHeight()),
+      Math.max(0, rows - span),
+    ));
+    // Only when it has moved: re-rendering a range recycles its views, and a
+    // poster morph pairs with the very DOM node the click stamped. A page that
+    // owns its scroller comes back with both its offset and its range intact.
+    if (first >= range.start && first < range.end) return;
+    vp.setRenderedRange({ start: first, end: first + span });
+    vp.setRenderedContentOffset(first * this.rowHeight());
+  }
+  /** The offset lives in the shared memory, whose sticky restore lands after
+   *  this: range from the value it is about to write. */
+  private renderRangeForRememberedOffset(): void {
+    const key = this.scrollMemoryKey();
+    const offset = key ? this.scrollMemory.remembered(key) : undefined;
+    if (offset) this.renderRangeForOffset(offset);
+  }
+  private enterAtTop(): void {
+    this.renderRangeForOffset(0);
+    this.list.activeLetter.set(this.list.letterAt(0));
+    this.scrollOwnTo(0);
   }
   /** Own element, not the ambient claim, so a write never reaches whichever
-   *  page is on screen; instant because TV scrolls the shell smoothly. Window
-   *  mode has no element of its own to write to — it IS the document. */
-  /** A cached entry reattaches with the range it left with, whose first row is
-   *  wherever the page was left, and the default focus takes the first card in
-   *  the DOM. Setting the range needs no viewport measure, so it can run before
-   *  focus resolves; the strategy recomputes on the next scroll. */
-  private enterAtTop(): void {
-    const vp = this.viewport;
-    if (vp) {
-      const range = vp.getRenderedRange();
-      vp.setRenderedRange({ start: 0, end: Math.max(1, range.end - range.start) });
-      vp.setRenderedContentOffset(0);
-    }
-    this.list.activeLetter.set(this.list.letterAt(0));
-    if (this.windowScroll()) window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-  }
+   *  page is on screen; instant because TV scrolls the shell smoothly. */
   private scrollOwnTo(top: number): void {
     if (this.windowScroll()) {
       window.scrollTo({ top, left: 0, behavior: 'instant' });
@@ -391,7 +391,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private holdLetter(): void {
     this.letterHeldUntil = performance.now() + LibraryComponent.LETTER_HOLD_MS;
   }
-  private destroyed = false;
   private viewport?: CdkVirtualScrollViewport;
   private cardRowEl?: HTMLElement;
   /** Measured once per layout. The strategy is fixed-size: it places every row
@@ -568,13 +567,12 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.destroyed = true;
     this.background.clear();
     this.list.destroy();
     if (this.onResize) window.removeEventListener('resize', this.onResize);
+    this.scrollMemory.deactivate();
     if (this.windowScroll()) {
       window.removeEventListener('scroll', this.onLetterScroll);
-      this.scrollMemory.deactivate();
     } else {
       this.shellRef.nativeElement.removeEventListener('scroll', this.onLetterScroll);
       this.pageScroller.release(this.shellRef.nativeElement);
@@ -597,20 +595,11 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.holdLetter();
       const row = Math.floor(index / this.gridCols());
       const shell = this.shellRef.nativeElement;
-      const vp = this.viewport.elementRef.nativeElement;
-      // `scrollToOffset` writes the scroller's own scrollTop, so the rows'
-      // offset inside it has to be added back, and the fixed chrome subtracted
-      // for the row to land below it rather than behind it. In window mode the
-      // scroller is the document, whose own scrollTop IS `window.scrollY`, and
-      // the shell carries no chrome padding of its own (`<main>` does instead).
-      const rowsOffset = this.windowScroll()
-        ? vp.getBoundingClientRect().top + window.scrollY
-        : vp.getBoundingClientRect().top - shell.getBoundingClientRect().top + shell.scrollTop;
       const chrome = this.windowScroll() ? 0 : parseFloat(getComputedStyle(shell).paddingTop) || 0;
       // Instant: the rows in between are not rendered, so an animated jump
       // would spend its whole duration crossing blank space.
       this.viewport.scrollToOffset(
-        Math.max(0, row * this.rowHeight() + rowsOffset - chrome),
+        Math.max(0, row * this.rowHeight() + this.rowsOffset() - chrome),
         'instant',
       );
       return;
