@@ -81,6 +81,7 @@ function fakeViewport() {
 }
 
 function createHarness(mode: PageScrollMode = 'container') {
+  const navigatedBack = signal(false);
   const attached$ = new Subject<string>();
   const detached$ = new Subject<string>();
   // Connected because the restore waits for the shell to be in the document:
@@ -128,7 +129,15 @@ function createHarness(mode: PageScrollMode = 'container') {
       { provide: PageScrollModeService, useValue: { mode: () => mode } },
       { provide: BackgroundService, useValue: { url: signal(null), applyPool: vi.fn(), clear: vi.fn() } },
       { provide: DisplaySettingsService, useValue: { settings: signal({ homeBackground: false }) } },
-      { provide: NavbarService, useValue: { setPageTitle: vi.fn(), clearPageTitle: vi.fn(), mobileNavbarVisible: signal(true) } },
+      {
+        provide: NavbarService,
+        useValue: {
+          setPageTitle: vi.fn(),
+          clearPageTitle: vi.fn(),
+          mobileNavbarVisible: signal(true),
+          navigatedBack,
+        },
+      },
       { provide: TranslateService, useValue: { instant: (key: string) => key } },
       { provide: CachingReuseStrategy, useValue: { attached$, detached$, keyFor: () => OWN_KEY } },
       {
@@ -157,6 +166,7 @@ function createHarness(mode: PageScrollMode = 'container') {
     detached$,
     shellEl,
     shellScrollTo,
+    navigatedBack,
   };
 }
 
@@ -214,7 +224,9 @@ describe('LibraryComponent — container scroller', () => {
   });
 
   it('records the shell\'s scrollTop while scrolling and restores it on attach', () => {
-    const { component, pageScroller, attached$, detached$, shellEl, shellScrollTo } = createHarness();
+    const { component, pageScroller, attached$, detached$, shellEl, shellScrollTo, navigatedBack } =
+      createHarness();
+    navigatedBack.set(true);
     attachViewport(component);
 
     // The router detaches the subtree before `store()` runs, so by detach time
@@ -233,7 +245,8 @@ describe('LibraryComponent — container scroller', () => {
   });
 
   it('does not restore on a first attach with nothing saved', () => {
-    const { component, attached$, detached$, shellScrollTo } = createHarness();
+    const { component, attached$, detached$, shellScrollTo, navigatedBack } = createHarness();
+    navigatedBack.set(true);
     attachViewport(component);
 
     detached$.next(OWN_KEY);
@@ -242,8 +255,28 @@ describe('LibraryComponent — container scroller', () => {
     expect(shellScrollTo).not.toHaveBeenCalled();
   });
 
+  it('returns to the top on a forward entry, re-ranging the viewport with it', () => {
+    const { component, attached$, detached$, shellEl, shellScrollTo, navigatedBack } = createHarness();
+    const viewport = attachViewport(component);
+
+    shellEl.scrollTop = 4200;
+    shellEl.dispatchEvent(new Event('scroll'));
+    detached$.next(OWN_KEY);
+
+    // Detachment zeroes scrollTop, so writing 0 fires no scroll event and CDK
+    // would keep the off-screen range it left with.
+    shellEl.scrollTop = 0;
+    navigatedBack.set(false);
+    attached$.next(OWN_KEY);
+
+    expect(shellScrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' });
+    expect(shellScrollTo).not.toHaveBeenCalledWith({ top: 4200, left: 0, behavior: 'instant' });
+    expect(viewport.checkViewportSize).toHaveBeenCalled();
+  });
+
   it('keeps the active letter through the restore\'s own scroll event', async () => {
-    const { component, attached$, detached$, shellEl } = createHarness();
+    const { component, attached$, detached$, shellEl, navigatedBack } = createHarness();
+    navigatedBack.set(true);
     component.list.setItems(twoSections(), (m) => m.title);
     const viewport = attachViewport(component);
 

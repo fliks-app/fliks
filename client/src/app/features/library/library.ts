@@ -348,6 +348,15 @@ export class LibraryComponent implements OnInit, OnDestroy {
       return;
     }
     this.pageScroller.claim(el);
+    // A cached page keeps its offset in the DOM, so only a return restores it.
+    if (!this.navbar.navigatedBack()) {
+      this.scrollOwnTo(0);
+      // Detachment already zeroed scrollTop, so that write fires no scroll
+      // event and CDK would keep the range it left with, off screen.
+      this.viewport?.checkViewportSize();
+      this.list.activeLetter.set(this.list.letterAt(0));
+      return;
+    }
     if (this.savedScrollTop > 0) {
       // The letter survives the trip in this component; the restore's own
       // scroll event must not recompute it off the row it lands on.
