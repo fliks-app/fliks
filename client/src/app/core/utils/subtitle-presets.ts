@@ -36,6 +36,11 @@ export const DOM_SUBTITLE_HEIGHT_FRACTION = 0.03;
  *  (MIN_TEXT_SIZE_SP, minPointSize). */
 export const SUBTITLE_MIN_TEXT_PX = 18;
 
+/** webOS reads smaller than the other TV paths at the same preset, so LG gets
+ *  the whole ladder shifted up one notch: its `normal` equals the shared
+ *  `xlarge`. Only the DOM overlay honours it — no other platform is affected. */
+export const WEBOS_CUE_SIZE_BOOST = 1.3;
+
 export const NATIVE_SUBTITLE_SIZE_SCALE: Record<string, number> = {
   xsmall: 0.7,
   small: 0.85,

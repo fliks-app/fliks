@@ -1,16 +1,17 @@
 import {
-  SUBTITLE_SIZE_MAP,
   SUBTITLE_COLOR_MAP,
   SUBTITLE_SHADOW_MAP,
   SUBTITLE_BG_MAP,
+  domCueFontSize,
 } from '../player-settings.service';
+import { NATIVE_SUBTITLE_SIZE_SCALE } from '../../utils/subtitle-presets';
 
 /**
  * DOM-rendered subtitle overlay shared by the TV engines (Tizen AVPlay,
  * webOS native `<video>`). Those pipelines either reject HTTPS external
  * subtitle paths (AVPlay) or give no styleable cue API, so we fetch the
- * WebVTT ourselves, parse the cues, and paint the active one into a
- * fixed positioned div on top of the hardware video surface.
+ * WebVTT ourselves, parse the cues, and paint the active one into our own
+ * div inside the player container.
  */
 
 export interface VttCue {
@@ -28,6 +29,10 @@ export class SubtitleOverlay {
   private visible = false;
   private lastText = '';
   private disposed = false;
+
+  /** Multiplies every preset on the ladder, so a platform can shift the whole
+   *  scale without redefining the presets. */
+  constructor(private readonly sizeScale = 1) {}
 
   /** Parse a remote WebVTT file and arm it as the active track. */
   async show(url: string): Promise<void> {
@@ -92,7 +97,8 @@ export class SubtitleOverlay {
     const el = this.ensureEl();
     if (!el) return;
     if (style.size) {
-      el.style.fontSize = SUBTITLE_SIZE_MAP[style.size] ?? SUBTITLE_SIZE_MAP['normal'];
+      const scale = NATIVE_SUBTITLE_SIZE_SCALE[style.size] ?? NATIVE_SUBTITLE_SIZE_SCALE['normal'];
+      el.style.fontSize = domCueFontSize(scale * this.sizeScale);
     }
     if (style.color) {
       el.style.color = SUBTITLE_COLOR_MAP[style.color] ?? SUBTITLE_COLOR_MAP['white'];
@@ -119,12 +125,19 @@ export class SubtitleOverlay {
   }
 
   private ensureEl(): HTMLDivElement | null {
-    if (this.el?.isConnected) return this.el;
     if (typeof document === 'undefined') return null;
+    // Must live inside `.player-container` (like Shaka's own text container):
+    // it is a z-index 100 stacking context, and on webOS the hardware video
+    // surface erases anything painted below it.
+    const host = document.querySelector('.player-container') ?? document.body;
+    if (this.el?.isConnected) {
+      if (this.el.parentElement !== host) host.appendChild(this.el);
+      return this.el;
+    }
     const el = document.createElement('div');
     el.id = 'fliks-tv-subtitle';
     el.style.cssText = [
-      'position: fixed',
+      'position: absolute',
       'left: 50%',
       'bottom: 10vh',
       'transform: translateX(-50%)',
@@ -132,7 +145,7 @@ export class SubtitleOverlay {
       'padding: 6px 14px',
       'background: transparent',
       'color: #fff',
-      'font-size: 3vh',
+      `font-size: ${domCueFontSize(this.sizeScale)}`,
       'font-weight: 500',
       'line-height: 1.3',
       'text-align: center',
@@ -144,7 +157,7 @@ export class SubtitleOverlay {
       'white-space: pre-wrap',
       'display: none',
     ].join(';');
-    document.body.appendChild(el);
+    host.appendChild(el);
     this.el = el;
     return el;
   }
