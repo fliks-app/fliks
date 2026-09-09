@@ -166,6 +166,12 @@ async function createFixture(f: Fixture, routes: Routes = []): Promise<Component
           isPhone: () => !!f.device.isPhone,
           isTv: () => !!f.device.isTv,
           isTouch: () => !!f.device.isTouch,
+          formFactor: () =>
+            f.device.isTv ? 'tv'
+              : f.device.isDesktop ? 'desktop'
+              : f.device.isTablet ? 'tablet'
+              : f.device.isPhone ? 'phone'
+              : 'desktop',
         },
       },
       {
@@ -529,6 +535,22 @@ describe('LayoutComponent — ownsScroll route derivation', () => {
     expect(fixture.componentInstance.ownsScroll()).toBe(true);
 
     await router.navigateByUrl('/');
+    expect(fixture.componentInstance.ownsScroll()).toBe(false);
+  });
+
+  it('stays false on TV even for a route flagged ownsScroll — the platform resolves to window mode', async () => {
+    const fixture = await createFixture(TV_FORM_FACTOR, ROUTES);
+    const router = TestBed.inject(Router);
+
+    await router.navigateByUrl('/library');
+    expect(fixture.componentInstance.ownsScroll()).toBe(false);
+  });
+
+  it('stays false on desktop for the same reason', async () => {
+    const fixture = await createFixture(ADMIN_WITH_LIBRARIES, ROUTES);
+    const router = TestBed.inject(Router);
+
+    await router.navigateByUrl('/library');
     expect(fixture.componentInstance.ownsScroll()).toBe(false);
   });
 });

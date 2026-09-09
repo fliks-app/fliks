@@ -15,10 +15,10 @@ import { LikesApiService } from '../../core/services/api/likes-api.service';
 import { ProfilesService } from '../../core/services/api/profiles.service';
 import { LibrariesApiService } from '../../core/services/api/libraries-api.service';
 import { PageScrollerService } from '../../core/services/page-scroller.service';
+import { PageScrollModeService, PageScrollMode } from '../../core/services/page-scroll-mode.service';
 import { BackgroundService } from '../../core/services/background.service';
 import { DisplaySettingsService } from '../../core/services/display-settings.service';
 import { NavbarService } from '../../core/services/navbar.service';
-import { TvService } from '../../core/services/tv.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { AppResumeService } from '../../core/services/app-resume.service';
@@ -80,7 +80,7 @@ function fakeViewport() {
   };
 }
 
-function createHarness() {
+function createHarness(mode: PageScrollMode = 'container') {
   const attached$ = new Subject<string>();
   const detached$ = new Subject<string>();
   // Connected because the restore waits for the shell to be in the document:
@@ -125,13 +125,16 @@ function createHarness() {
       { provide: ProfilesService, useValue: {} },
       { provide: LibrariesApiService, useValue: {} },
       { provide: PageScrollerService, useValue: pageScroller },
+      { provide: PageScrollModeService, useValue: { mode: () => mode } },
       { provide: BackgroundService, useValue: { url: signal(null), applyPool: vi.fn(), clear: vi.fn() } },
       { provide: DisplaySettingsService, useValue: { settings: signal({ homeBackground: false }) } },
       { provide: NavbarService, useValue: { setPageTitle: vi.fn(), clearPageTitle: vi.fn(), mobileNavbarVisible: signal(true) } },
-      { provide: TvService, useValue: {} },
       { provide: TranslateService, useValue: { instant: (key: string) => key } },
       { provide: CachingReuseStrategy, useValue: { attached$, detached$, keyFor: () => OWN_KEY } },
-      { provide: ScrollMemoryService, useValue: { activate: vi.fn(), deactivateIf: vi.fn(), restoreSticky: vi.fn() } },
+      {
+        provide: ScrollMemoryService,
+        useValue: { activate: vi.fn(), deactivate: vi.fn(), deactivateIf: vi.fn(), restore: vi.fn(), restoreSticky: vi.fn() },
+      },
       { provide: AppResumeService, useValue: { resume$: EMPTY } },
     ],
   });
@@ -302,5 +305,70 @@ describe('LibraryComponent — container scroller', () => {
 
     expect(shellScrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' });
     expect(pageScroller.scrollTo).not.toHaveBeenCalled();
+  });
+});
+
+describe('LibraryComponent — window scroller (TV / desktop)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('never claims the shell as a scroller', () => {
+    const { pageScroller } = createHarness('window');
+    expect(pageScroller.claim).not.toHaveBeenCalled();
+  });
+
+  it('derives the active letter from a window scroll, not the shell', async () => {
+    const { component } = createHarness('window');
+    component.list.setItems(twoSections(), (m) => m.title);
+    const viewport = attachViewport(component);
+
+    viewport.measureScrollOffset.mockReturnValue(component.rowHeight());
+    window.dispatchEvent(new Event('scroll'));
+    await nextFrame();
+
+    expect(component.list.activeLetter()).toBe('B');
+  });
+
+  it("resets the window's own scroll on a content swap, never the ambient claim", async () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    try {
+      const { component, pageScroller } = createHarness('window');
+
+      await load(component, false);
+
+      expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' });
+      expect(pageScroller.scrollTo).not.toHaveBeenCalled();
+    } finally {
+      scrollTo.mockRestore();
+    }
+  });
+
+  it('does not touch the page scroller across a detach/attach cycle', () => {
+    const { pageScroller, attached$, detached$ } = createHarness('window');
+
+    detached$.next(OWN_KEY);
+    attached$.next(OWN_KEY);
+
+    expect(pageScroller.release).not.toHaveBeenCalled();
+    expect(pageScroller.claim).not.toHaveBeenCalled();
+  });
+
+  it('lands a letter jump on the first row below the chrome, measured from the document', () => {
+    const original = Object.getOwnPropertyDescriptor(window, 'scrollY');
+    Object.defineProperty(window, 'scrollY', { value: 50, configurable: true });
+    try {
+      const { component } = createHarness('window');
+      component.list.setItems(twoSections(), (m) => m.title);
+      component.rowHeight.set(200);
+      const viewport = attachViewport(component);
+      stubTop(viewport.elementRef.nativeElement, 400);
+
+      component.scrollToLetter('B');
+
+      // The first B opens row 1, so 200px of rows, plus the grid's 450px
+      // absolute offset in the document (400 viewport-relative + 50 scrolled).
+      expect(viewport.scrollToOffset).toHaveBeenCalledWith(650, 'instant');
+    } finally {
+      if (original) Object.defineProperty(window, 'scrollY', original);
+    }
   });
 });

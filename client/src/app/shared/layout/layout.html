@@ -11,7 +11,6 @@
          reading the scroll position. Absolute, so it adds no layout height. -->
     <div #topSentinel aria-hidden="true" class="absolute top-0 left-0 h-5 w-px pointer-events-none"></div>
     <nav
-      #chromeBarMobile
       appTvRow
       class="navbar fixed left-0 right-0 z-30 transition-all duration-300 border-base-100/20 tv:px-[var(--page-p)] tv:static"
       [style.transition]="restorePending() ? 'none' : null"
@@ -102,7 +101,6 @@
     </nav>
     <!-- Desktop top-right: Cast + User -->
     <div appTvRow
-         #chromeBarDesktop
          [appTvRowSnap]="true"
          [class.-translate-y-full]="navbarHidden()"
          class="chrome-bar hidden items-center justify-between gap-1 px-[var(--page-p)] relative z-30"

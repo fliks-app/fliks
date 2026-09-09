@@ -32,6 +32,7 @@ import { DownloadManagerService } from '../../core/services/download-manager.ser
 import { NavigationHistoryService } from '../../core/services/navigation-history.service';
 import { NetworkService } from '../../core/services/network.service';
 import { PageScrollerService } from '../../core/services/page-scroller.service';
+import { PageScrollModeService } from '../../core/services/page-scroll-mode.service';
 import { CardActionsPanelComponent } from '../components/card-actions-panel/card-actions-panel';
 import { AddToPlaylistModalComponent } from '../components/add-to-playlist-modal/add-to-playlist-modal.component';
 import { RecommendModalComponent } from '../components/recommend-modal/recommend-modal.component';
@@ -133,6 +134,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
     }
   });
   private readonly pageScroller = inject(PageScrollerService);
+  private readonly scrollMode = inject(PageScrollModeService);
   readonly networkService = inject(NetworkService);
   readonly castService = inject(CastService);
   readonly remote = inject(RemoteService);
@@ -157,11 +159,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   readonly isNative = Capacitor.isNativePlatform();
   private readonly topSentinel = viewChild<ElementRef<HTMLElement>>('topSentinel');
-  private readonly chromeBarMobile = viewChild<ElementRef<HTMLElement>>('chromeBarMobile');
-  private readonly chromeBarDesktop = viewChild<ElementRef<HTMLElement>>('chromeBarDesktop');
-  /** Measured, not assumed: the bar's height varies with the form factor, the
-   *  safe area and `--page-p`, which on TV is a viewport percentage. */
-  private readonly chromeBarHeight = signal(0);
   readonly bottomMenuOpen = signal(false);
   readonly keyboardOpen = signal(false);
   readonly navbarHidden = signal(false);
@@ -179,32 +176,31 @@ export class LayoutComponent implements OnInit, OnDestroy {
   }
   readonly isHomeRoute = signal(this.router.url === '/' || this.router.url.startsWith('/?'));
 
-  /** Whether the deepest activated route owns its own scroll container. Read
-   *  synchronously from the NavigationEnd handler below (same as the other
-   *  per-navigation state there), so `.owns-scroll` lands in the same
+  /** Whether the deepest activated route owns its own scroll container —
+   *  route intent AND the platform's resolved scroll mode both have to agree.
+   *  Read synchronously from the NavigationEnd handler below (same as the
+   *  other per-navigation state there), so `.owns-scroll` lands in the same
    *  change-detection pass as the outlet swap instead of racing it. */
-  readonly ownsScroll = signal(this.deepestRouteOwnsScroll());
+  readonly ownsScroll = signal(this.effectiveOwnsScroll());
   private deepestRouteOwnsScroll(): boolean {
     let r = this.router.routerState.snapshot.root;
     while (r.firstChild) r = r.firstChild;
     return !!r.data['ownsScroll'];
   }
+  private effectiveOwnsScroll(): boolean {
+    return this.deepestRouteOwnsScroll() && this.scrollMode.mode() === 'container';
+  }
 
   /** Fixed navbar's own clearance: its height (0 on hero pages / TV, where it
    *  doesn't reserve space) plus safe area — 0 wherever the mobile-style
-   *  navbar itself is hidden (desktop, or a pinned tablet sidebar). */
+   *  navbar itself is hidden (desktop, or a pinned tablet sidebar). TV and
+   *  desktop never own the scroll (see `PageScrollModeService`), so their
+   *  in-flow bar always reserves its own space here rather than being fixed. */
   private readonly navbarSpacerHeight = computed(() => {
-    // A bar in flow reserves its own space, unless the page owns the scroll:
-    // there it is fixed, so its measured height moves inside the scroller.
-    if (this.barIsFixedOverScroller()) return `${this.chromeBarHeight()}px`;
     if (!this.navbar.mobileNavbarVisible()) return '0px';
     if (this.navbar.isHeroPage() || this.tv.isTv()) return '0px';
     return 'calc(3rem + env(safe-area-inset-top, 0px))';
   });
-  /** Where the bar is in flow by default, owning the scroll pins it instead. */
-  private readonly barIsFixedOverScroller = computed(
-    () => this.ownsScroll() && (this.tv.isTv() || this.device.isDesktop()),
-  );
   private readonly contentGapTop = computed(() =>
     !this.navbar.isHeroPage() && !this.isNative && this.navbar.mobileNavbarVisible() ? '2rem' : '1rem',
   );
@@ -250,7 +246,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
    *  The sentinel below reports the same thing with no layout read at all, so
    *  the handler is skipped there entirely. */
   private readonly onScroll = () => {
-    if ((this.device.isTv() && !this.ownsScroll()) || this.scrollRaf !== null) return;
+    if (this.device.isTv() || this.scrollRaf !== null) return;
     this.scrollRaf = requestAnimationFrame(() => {
       this.scrollRaf = null;
       this.readScroll();
@@ -263,31 +259,10 @@ export class LayoutComponent implements OnInit, OnDestroy {
     // The bar is a D-pad target: sliding it out from under the focus ring
     // would strand the cursor, so a focus inside it anchors the bar.
     const focusInBar = !!document.activeElement?.closest('nav.navbar');
-    // Where the bar is in flow (TV, desktop) it reads as the top of the page,
-    // so it leaves with that top and returns only there.
-    if (this.barIsFixedOverScroller()) {
-      this.navbarHidden.set(!focusInBar && y > LayoutComponent.NAVBAR_LEAVES_AT);
-      this.lastScrollY = y;
-      return;
-    }
     if (Math.abs(y - this.lastScrollY) < 10) return;
     this.navbarHidden.set(!focusInBar && y > this.lastScrollY && y > LayoutComponent.NAVBAR_LEAVES_AT);
     this.lastScrollY = y;
   }
-
-  /** `scrollAtTop` via a top-strip IntersectionObserver, rooted in whatever
-   *  currently scrolls the page — skipped in container mode, which `readScroll` owns instead. */
-  private readonly chromeBarEffect = effect((onCleanup) => {
-    const bars = [this.chromeBarMobile()?.nativeElement, this.chromeBarDesktop()?.nativeElement]
-      .filter((el): el is HTMLElement => !!el);
-    if (!bars.length || typeof ResizeObserver === 'undefined') return;
-    const measure = () =>
-      this.chromeBarHeight.set(Math.round(Math.max(...bars.map((el) => el.offsetHeight))));
-    const ro = new ResizeObserver(measure);
-    bars.forEach((el) => ro.observe(el));
-    measure();
-    onCleanup(() => ro.disconnect());
-  });
 
   private readonly topSentinelObserverEffect = effect(() => {
     const el = this.topSentinel()?.nativeElement;
@@ -392,7 +367,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
       .subscribe(e => {
         if (e instanceof Scroll) this.endScrollRestore();
         if (e instanceof NavigationEnd) {
-          this.ownsScroll.set(this.deepestRouteOwnsScroll());
+          this.ownsScroll.set(this.effectiveOwnsScroll());
           this.beginScrollRestore();
           this.replayPageEnter();
           this.bottomMenuOpen.set(false);
