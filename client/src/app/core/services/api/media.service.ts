@@ -155,6 +155,8 @@ export interface RelatedMedia {
   title: string;
   year: number;
   posterUrl: string | null;
+  /** The landscape half of the poster morph onto the detail page's hero. */
+  fanartUrl: string | null;
   rating: number | null;
   genres: string[];
   hasFile: boolean;
@@ -182,6 +184,7 @@ export interface CalendarEntry {
   event: string;
   date: string;
   posterUrl: string | null;
+  fanartUrl: string | null;
   status: string;
   year: number;
   seasonNumber?: number;
