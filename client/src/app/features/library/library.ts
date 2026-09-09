@@ -352,8 +352,13 @@ export class LibraryComponent implements OnInit, OnDestroy {
     if (!this.navbar.navigatedBack()) {
       this.scrollOwnTo(0);
       // Detachment already zeroed scrollTop, so that write fires no scroll
-      // event and CDK would keep the range it left with, off screen.
-      this.viewport?.checkViewportSize();
+      // event and CDK would keep the range it left with, off screen. Asking for
+      // the range costs a viewport measure, so it waits for the reattached
+      // subtree to be laid out or the measure reads the whole list as visible.
+      const vp = this.viewport;
+      requestAnimationFrame(() => {
+        if (!this.destroyed) vp?.checkViewportSize();
+      });
       this.list.activeLetter.set(this.list.letterAt(0));
       return;
     }

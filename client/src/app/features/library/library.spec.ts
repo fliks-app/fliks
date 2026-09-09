@@ -255,7 +255,7 @@ describe('LibraryComponent — container scroller', () => {
     expect(shellScrollTo).not.toHaveBeenCalled();
   });
 
-  it('returns to the top on a forward entry, re-ranging the viewport with it', () => {
+  it('returns to the top on a forward entry, re-ranging the viewport with it', async () => {
     const { component, attached$, detached$, shellEl, shellScrollTo, navigatedBack } = createHarness();
     const viewport = attachViewport(component);
 
@@ -271,6 +271,11 @@ describe('LibraryComponent — container scroller', () => {
 
     expect(shellScrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' });
     expect(shellScrollTo).not.toHaveBeenCalledWith({ top: 4200, left: 0, behavior: 'instant' });
+
+    // The re-range waits a frame: measuring mid-reattach reads the whole list
+    // as visible and renders every row.
+    expect(viewport.checkViewportSize).not.toHaveBeenCalled();
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
     expect(viewport.checkViewportSize).toHaveBeenCalled();
   });
 
