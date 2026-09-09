@@ -244,13 +244,12 @@ export class MediaDetailSeasonsComponent {
 
   /**
    * Card row or detail list. Kept local: nothing outside this component reacts
-   * to it, unlike the on-disk filter the parent owns. Cards only on a TV, where
-   * a vertical list has no idiom and the d-pad row does.
+   * to it, unlike the on-disk filter the parent owns. A TV gets the choice too:
+   * each list row is an `appTvRow`, and the page's vertical `appTvSection`
+   * steps between them, which is the shape the home rows already use.
    */
   readonly episodeView = signal<EpisodeView>(readEpisodeViewFromStorage());
-  readonly canSwitchEpisodeView = computed(
-    () => !this.hideControls() && !this.tv.isTv(),
-  );
+  readonly canSwitchEpisodeView = computed(() => !this.hideControls());
   readonly showEpisodeList = computed(
     () => this.canSwitchEpisodeView() && this.episodeView() === 'list',
   );
