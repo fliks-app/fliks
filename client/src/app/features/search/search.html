@@ -97,7 +97,7 @@
             } @else if (state.discoverResults().length) {
               <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 3xl:grid-cols-8 gap-3 sm:gap-4">
                 @for (row of state.discoverResults(); track row.mediaType + ':' + row.tmdbId) {
-                  <app-media-card [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating" [badge]="cardStatus(row)" (clicked)="onExternalCardClick(row)" />
+                  <app-media-card [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating" [badge]="cardStatus(row)" [mediaTypeBadge]="row.mediaType" (clicked)="onExternalCardClick(row)" />
                 }
               </div>
             } @else {
@@ -136,21 +136,21 @@
                     <button type="button" class="btn btn-xs join-item" [class.btn-primary]="state.trendingWindow() === 'week'" (click)="setTrendingWindow('week')">{{ 'search.trending_week' | translate }}</button>
                   </div>
                   @for (row of state.discoveryTrending(); track row.mediaType + ':' + row.tmdbId) {
-                    <app-media-card class="shrink-0 w-28 sm:w-32 lg:w-40" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating" [badge]="cardStatus(row)" (clicked)="onExternalCardClick(row)" />
+                    <app-media-card class="shrink-0 w-28 sm:w-32 lg:w-40" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating" [badge]="cardStatus(row)" [mediaTypeBadge]="row.mediaType" (clicked)="onExternalCardClick(row)" />
                   }
                 </app-horizontal-scroller>
               }
               @if (state.discoveryPopular().length) {
                 <app-horizontal-scroller [title]="'search.discover_popular' | translate" class="block">
                   @for (row of state.discoveryPopular(); track row.mediaType + ':' + row.tmdbId) {
-                    <app-media-card class="shrink-0 w-28 sm:w-32 lg:w-40" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating" [badge]="cardStatus(row)" (clicked)="onExternalCardClick(row)" />
+                    <app-media-card class="shrink-0 w-28 sm:w-32 lg:w-40" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating" [badge]="cardStatus(row)" [mediaTypeBadge]="row.mediaType" (clicked)="onExternalCardClick(row)" />
                   }
                 </app-horizontal-scroller>
               }
               @if (state.discoverySuggestions().length) {
                 <app-horizontal-scroller [title]="'search.discover_suggestions' | translate" class="block">
                   @for (row of state.discoverySuggestions(); track row.mediaType + ':' + row.tmdbId) {
-                    <app-media-card class="shrink-0 w-28 sm:w-32 lg:w-40" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating" [badge]="cardStatus(row)" (clicked)="onExternalCardClick(row)" />
+                    <app-media-card class="shrink-0 w-28 sm:w-32 lg:w-40" [imageUrl]="row.posterUrl" [title]="row.title" [subtitle]="'' + (row.year ?? '')" [rating]="row.rating" [badge]="cardStatus(row)" [mediaTypeBadge]="row.mediaType" (clicked)="onExternalCardClick(row)" />
                   }
                 </app-horizontal-scroller>
               }
@@ -206,6 +206,7 @@
                   [title]="row.title"
                   [subtitle]="'' + (row.year ?? '')"
                   [rating]="row.rating"
+                  [mediaTypeBadge]="row.mediaType"
                   (clicked)="onExternalCardClick(row)"
                 />
               }
@@ -229,6 +230,7 @@
                   [subtitle]="'' + (row.year ?? '')"
                   [rating]="row.rating"
                   [badge]="cardStatus(row)"
+                  [mediaTypeBadge]="row.mediaType"
                   (clicked)="onExternalCardClick(row)"
                 />
               }

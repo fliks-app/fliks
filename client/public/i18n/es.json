@@ -2438,6 +2438,8 @@
     "unreleased": "No estrenado",
     "queued": "En cola",
     "missing_files": "Archivos faltantes",
+    "type_movie": "Película",
+    "type_series": "Serie",
     "play": "Reproducir",
     "open_detail": "Ver la ficha",
     "mark_watched": "Marcar como visto",
