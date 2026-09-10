@@ -80,6 +80,12 @@ const POSTER_IN_CLASS = 'vt-poster-in';
 const POSTER_OUT_CLASS = 'vt-poster-out';
 const NATIVE_PLAYER_CLASS = 'native-player-active';
 const IS_TV = detectDevice().formFactor === 'tv';
+// The desktop shell composites the video under its own UI bitmap, so an empty
+// snapshot reveals the frame; a phone or a TV surface sits behind the WebView
+// and reveals black instead.
+const IS_DESKTOP_SHELL =
+  typeof window !== 'undefined' &&
+  (!!window.fliksDesktop || /\bElectron\//.test(navigator.userAgent));
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -114,6 +120,7 @@ export const appConfig: ApplicationConfig = {
                 // the destination.
                 if (
                   closingPlayer &&
+                  !IS_DESKTOP_SHELL &&
                   document.documentElement.classList.contains(NATIVE_PLAYER_CLASS)
                 ) {
                   transition.skipTransition();
