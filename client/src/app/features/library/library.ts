@@ -567,7 +567,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.background.clear();
     this.list.destroy();
     if (this.onResize) window.removeEventListener('resize', this.onResize);
     this.scrollMemory.deactivate();

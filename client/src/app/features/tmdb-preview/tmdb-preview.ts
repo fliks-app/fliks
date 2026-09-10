@@ -245,7 +245,6 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.navbar.leaveHeroPage();
-    this.backgroundService.clear();
   }
 
   async ngOnInit() {

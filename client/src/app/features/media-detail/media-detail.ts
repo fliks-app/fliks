@@ -288,12 +288,13 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
    *  image instead of re-randomising from the pool. */
   private parkedBackground: string | null = null;
 
-  /** The hero navbar and page backdrop are global state, so a cached page has
-   *  to hand them back on the way out and reclaim them on return. */
+  /** The hero navbar is global state, so a cached page hands it back on the way
+   *  out and reclaims it on return. The backdrop is parked rather than cleared:
+   *  whichever page arrives next decides what it shows, and blanking it here
+   *  would fade to nothing in between. */
   private releaseChrome(): void {
     this.parkedBackground = this.backgroundService.url();
     this.navbarService.leaveHeroPage();
-    this.backgroundService.clear();
   }
 
   private restoreChrome(): void {

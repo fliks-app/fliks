@@ -13,11 +13,17 @@ import { Injectable, signal } from '@angular/core';
  */
 @Injectable({ providedIn: 'root' })
 export class BackgroundService {
-  /** Current target URL. `null` means "fade out, no background". */
+  /** Current target URL. `null` means "fade out, no background".
+   *
+   *  Only an arriving page writes this. A page leaving does not blank it: the
+   *  next one decides, and clearing on the way out would fade to nothing for as
+   *  long as that page takes to load its own. */
   readonly url = signal<string | null>(null);
 
-  /** Pool the current pick came from, so a re-emit doesn't re-randomise. */
+  /** Pool the pick came from, and the pick itself, so the same pool always
+   *  yields the same image however many pages were visited in between. */
   private pool: string[] = [];
+  private pick: string | null = null;
 
   setBackground(url: string | null): void {
     this.pool = url ? [url] : [];
@@ -35,17 +41,25 @@ export class BackgroundService {
       this.clear();
       return;
     }
-    // Keep the current pick while it is still on offer. The pool grows as a
-    // page's data streams in, and re-rolling on every growth swaps the image
-    // again within the same frame, which collapses the crossfade into a cut.
+    // The same pool gives back the image it already chose, even after a detour
+    // through a page that showed its own: a return should restore what was
+    // there, not roll again.
+    if (this.pick && samePool(next, this.pool)) {
+      this.url.set(this.pick);
+      return;
+    }
+    // A pool that merely grew, as a page's data streams in, keeps the image it
+    // is already showing rather than re-rolling on every instalment.
     const current = this.url();
     if (current && next.includes(current)) {
       this.pool = next;
+      this.pick = current;
       return;
     }
 
     this.pool = next;
-    this.url.set(next[Math.floor(Math.random() * next.length)]);
+    this.pick = next[Math.floor(Math.random() * next.length)];
+    this.url.set(this.pick);
   }
 
   /**
@@ -65,4 +79,9 @@ export class BackgroundService {
     this.pool = [];
     this.url.set(null);
   }
+}
+
+/** Pools are equal when they hold the same urls in the same order. */
+function samePool(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((u, i) => u === b[i]);
 }
