@@ -51,7 +51,10 @@ jobs:
           # Linux ships both .deb (no in-app update — dpkg needs root) and
           # AppImage (electron-updater self-updates it). macOS ships the .dmg
           # (first install) plus a .zip (the artifact Squirrel.Mac updates from).
-          - os: ubuntu-latest
+          # Pinned, not `latest`: the committed libmpv.so.2 is a noble build and
+          # the runtime libs bundled beside it have to be the SONAMEs it asks
+          # for, which only noble packages.
+          - os: ubuntu-24.04
             label: deb
             dist_script: dist:linux
             artifact_glob: |
@@ -136,7 +139,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential python3 pkg-config \
+            build-essential python3 pkg-config patchelf \
             libsdl2-dev libgles2-mesa-dev libegl1-mesa-dev libmpv-dev
 
       # macOS embeds in-process libmpv (no SDL/GLES addon). `mpv` provides the
@@ -160,6 +163,11 @@ jobs:
       # electron-builder (files: native/vendor/**, asarUnpacked). It's the only
       # OS that uses the compositor addon today; mac/win embed mpv natively and
       # vendor their own .dylib/.dll later.
+      - name: Vendor libmpv runtime deps (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: bash desktop/scripts/vendor-libmpv-linux.sh
+
       - name: Verify vendored libmpv (Linux)
         if: runner.os == 'Linux'
         shell: bash
@@ -167,8 +175,8 @@ jobs:
           f=desktop/native/vendor/libmpv.so.2
           test -f "$f" || { echo "::error::vendored libmpv missing at $f"; exit 1; }
           test -z "$(nm -D "$f" 2>/dev/null | grep ' av_')" \
-            || { echo "::error::libmpv exports av_* — not self-contained, will clash with Electron's libffmpeg"; exit 1; }
-          echo "vendored libmpv OK: $(du -h "$f" | cut -f1)"
+            || { echo "::error::libmpv exports av_*, will clash with Electron's libffmpeg"; exit 1; }
+          echo "vendored libmpv OK: $(du -sh desktop/native/vendor | cut -f1)"
 
       # Windows embeds mpv via --wid by spawning a vendored mpv.exe, downloaded
       # from a pinned zhongfly/mpv-winbuild release (MPV_WINBUILD_TAG below) so
