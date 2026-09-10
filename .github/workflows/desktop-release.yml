@@ -176,11 +176,11 @@ jobs:
           test -f "$f" || { echo "::error::vendored libmpv missing at $f"; exit 1; }
           test -z "$(nm -D "$f" 2>/dev/null | grep ' av_')" \
             || { echo "::error::libmpv exports av_*, will clash with Electron's libffmpeg"; exit 1; }
-          # The bundled copies only prove themselves where the host has none of
-          # them: this box just apt-installed the lot, and a non-bundled dep
-          # (libarchive) pulls the host's libxml2 in under the same SONAME. A
-          # bare container resolves them through $ORIGIN or not at all; the
-          # X11/GL/audio entries dangle there by design, so only ours are read.
+          # The bundled copies only prove themselves where the host has none
+          # of them: here a non-bundled dep (libarchive) pulls the host's
+          # libxml2 in under the same SONAME. A bare container resolves them
+          # through $ORIGIN or not at all; its X11, GL and audio entries dangle
+          # by design, so only the bundled SONAMEs are read.
           bash desktop/scripts/vendor-libmpv-linux.sh --print-sonames > /tmp/bundled
           docker run --rm -v "$PWD/desktop/native/vendor:/v:ro" ubuntu:24.04 \
             sh -c 'ldd /v/libmpv.so.2' | awk '/not found/ {print $1}' > /tmp/dangling
@@ -250,16 +250,6 @@ jobs:
           # nothing in the tree may point outside @loader_path + the system dirs.
           stray=$(otool -L desktop/native/vendor/*.dylib | grep -E '/opt/homebrew|/usr/local' || true)
           test -z "$stray" || { echo "::error::stray non-bundled deps:"; echo "$stray"; exit 1; }
-          # The bundled copies only prove themselves where the host has none of
-          # them: this box just apt-installed the lot, and a non-bundled dep
-          # (libarchive) pulls the host's libxml2 in under the same SONAME. A
-          # bare container resolves them through $ORIGIN or not at all; the
-          # X11/GL/audio entries dangle there by design, so only ours are read.
-          bash desktop/scripts/vendor-libmpv-linux.sh --print-sonames > /tmp/bundled
-          docker run --rm -v "$PWD/desktop/native/vendor:/v:ro" ubuntu:24.04 \
-            sh -c 'ldd /v/libmpv.so.2' | awk '/not found/ {print $1}' > /tmp/dangling
-          ours=$(grep -Fxf /tmp/bundled /tmp/dangling || true)
-          test -z "$ours" || { echo "::error::bundled libs unresolved on a clean box:"; echo "$ours"; exit 1; }
           echo "vendored libmpv OK: $(du -sh desktop/native/vendor | cut -f1)"
 
       # ── Build the native compositor addon against the Electron 42 ABI ──
