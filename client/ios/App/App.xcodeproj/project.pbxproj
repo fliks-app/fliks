@@ -29,6 +29,7 @@
 		F1000001AAAA000000000008 /* SubtitleOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000018 /* SubtitleOverlayView.swift */; };
 		F1000001AAAA000000000009 /* DownloadPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000019 /* DownloadPlugin.swift */; };
 		F1000001AAAA00000000000A /* OrientationPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA00000000001A /* OrientationPlugin.swift */; };
+		F1000001AAAA00000000000B /* BackGesturePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA00000000001B /* BackGesturePlugin.swift */; };
 		F954F4DC03C3615047B0AABF /* DownloadActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8546BB7ADC2E5B59E726E7ED /* DownloadActivityAttributes.swift */; };
 		F9D6B0DE0B5D3649DA0CC8B8 /* FliksDownloadWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2014FCBAA5253E0B35A8DFD6 /* FliksDownloadWidgetBundle.swift */; };
 /* End PBXBuildFile section */
@@ -85,6 +86,7 @@
 		F1000001AAAA000000000018 /* SubtitleOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleOverlayView.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000019 /* DownloadPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA00000000001A /* OrientationPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrientationPlugin.swift; sourceTree = "<group>"; };
+		F1000001AAAA00000000001B /* BackGesturePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackGesturePlugin.swift; sourceTree = "<group>"; };
 		FC68EB0AF532CFC21C3344DD /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -147,6 +149,7 @@
 				F1000001AAAA000000000013 /* NativePlayerPlugin.swift */,
 				F1000001AAAA000000000014 /* ImmersivePlugin.swift */,
 				F1000001AAAA00000000001A /* OrientationPlugin.swift */,
+				F1000001AAAA00000000001B /* BackGesturePlugin.swift */,
 				F1000001AAAA000000000015 /* PipPlugin.swift */,
 				F1000001AAAA000000000016 /* CastPlugin.swift */,
 				F1000001AAAA000000000017 /* AudioCapabilitiesPlugin.swift */,
@@ -353,6 +356,7 @@
 				F1000001AAAA000000000003 /* NativePlayerPlugin.swift in Sources */,
 				F1000001AAAA000000000004 /* ImmersivePlugin.swift in Sources */,
 				F1000001AAAA00000000000A /* OrientationPlugin.swift in Sources */,
+				F1000001AAAA00000000000B /* BackGesturePlugin.swift in Sources */,
 				F1000001AAAA000000000005 /* PipPlugin.swift in Sources */,
 				F1000001AAAA000000000006 /* CastPlugin.swift in Sources */,
 				F1000001AAAA000000000007 /* AudioCapabilitiesPlugin.swift in Sources */,

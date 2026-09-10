@@ -117,3 +117,15 @@ export function markViewTransition(transition: { finished: Promise<unknown> }): 
 export function viewTransitionRunning(): boolean {
   return document.documentElement.classList.contains(VIEW_TRANSITION_CLASS);
 }
+
+let swipeBack = false;
+
+/** A swipe-back is animated natively, under an opaque snapshot of the page
+ *  being left: the web transition would run unseen and outlast the slide. */
+export function setSwipeBackActive(active: boolean): void {
+  swipeBack = active;
+}
+
+export function swipeBackActive(): boolean {
+  return swipeBack;
+}

@@ -51,6 +51,7 @@ import {
   leavingPosterPage,
   leafRoutePath,
   markViewTransition,
+  swipeBackActive,
   WATCH_PATH,
 } from './shared/utils/view-transition';
 
@@ -112,6 +113,10 @@ export const appConfig: ApplicationConfig = {
               // Episode → episode: the cross-fade keeps the old page (and its scroll
               // offset) on screen, so the jump to top only lands once it ends.
               onViewTransitionCreated: ({ transition, from, to }) => {
+                if (swipeBackActive()) {
+                  transition.skipTransition();
+                  return;
+                }
                 const closingPlayer =
                   leafRoutePath(from) === WATCH_PATH && leafRoutePath(to) !== WATCH_PATH;
                 // A native surface renders outside the WebView, and the class that

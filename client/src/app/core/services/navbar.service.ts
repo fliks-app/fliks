@@ -147,6 +147,13 @@ export class NavbarService {
     });
   }
 
+  /** Depth of the back stack. Read by the iOS swipe-back to keep its own stack
+   *  of page snapshots aligned with this one without re-deriving which
+   *  navigations count as a push. */
+  get backDepth(): number {
+    return this.history.length;
+  }
+
   /** URL path without query/fragment — query-only changes on the same path are
    *  in-page state (tabs / filters), not navigations to push onto the stack. */
   private pathOf(url: string): string {

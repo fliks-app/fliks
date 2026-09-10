@@ -20,6 +20,7 @@ import { FolderPickerModalComponent } from './shared/components/folder-picker-mo
 import { SelectPickerComponent } from './shared/components/select-picker';
 import { DismissableStackService } from './core/services/dismissable-stack.service';
 import { NavbarService } from './core/services/navbar.service';
+import { BackGestureService } from './core/services/back-gesture.service';
 import { PwaAutoUpdateService } from './core/services/pwa-auto-update.service';
 import { AppResumeService } from './core/services/app-resume.service';
 import { OfflinePlaybackSyncService } from './core/services/offline-playback-sync.service';
@@ -53,6 +54,7 @@ export class App implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly dismissStack = inject(DismissableStackService);
   private readonly navbar = inject(NavbarService);
+  private readonly backGesture = inject(BackGestureService);
   private readonly pwaAutoUpdate = inject(PwaAutoUpdateService);
   private readonly appResume = inject(AppResumeService);
   /** Injected so the offline playback queue is flushed on start, not only when
@@ -137,6 +139,10 @@ export class App implements OnInit, OnDestroy {
       }).then((handle) => {
         this.backButtonListener = handle;
       });
+
+      // iOS has no hardware back and a Capacitor app gets no interactive pop,
+      // so the left-edge swipe is recognized natively and lands here.
+      this.backGesture.init(() => this.handleBackButton());
 
       // Stamp the background-entry time so the resume handler can tell a real
       // away-spell from a momentary interruption (see AppResumeService).
@@ -344,6 +350,7 @@ export class App implements OnInit, OnDestroy {
       document.removeEventListener('visibilitychange', this.visibilityListener);
     }
     this.backButtonListener?.remove();
+    this.backGesture.destroy();
     this.resumeListener?.remove();
     this.pauseListener?.remove();
     if (this.tvBackKeyListener) {
