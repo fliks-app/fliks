@@ -11,8 +11,8 @@ import { CachedSrcDirective } from '../../directives/cached-src.directive';
 /**
  * Page-wide background renderer. Mounted at the app root, above the outlet
  * every route swaps through, so the image covers everything — including under
- * the sidebar — and survives a trip to the player, which is a top-level route
- * and would otherwise take the whole layout, and this, down with it.
+ * the sidebar. It has to sit above the outlet rather than in the layout: the
+ * player is a top-level route and would take the layout, and this, with it.
  *
  * Crossfade strategy: a ring of layers, one visible at a time. A new url is
  * written into the next one, which then fades in over the others. Two would be

@@ -239,6 +239,13 @@ html.native-player-active router-outlet + *,
 html.native-player-active app-player {
   background: transparent !important;
 }
+/* The backdrop reaches the player route from the app root, and its veil paints
+   an opaque tint the video would sit behind. Hidden rather than undisplayed:
+   coming back from `display: none` counts as entering, which replays the
+   layers' `@starting-style` and fades in an image that never left. */
+html.native-player-active app-background {
+  visibility: hidden !important;
+}
 /* Pages with hero fanart — content extends behind status bar */
 body.native.hero-page {
   padding-top: 0 !important;
