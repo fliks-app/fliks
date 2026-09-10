@@ -142,6 +142,18 @@ export class DeviceProfileDto {
   supportsHlsSubtitles?: boolean;
 
   /**
+   * Client surfaces one audio track per LANGUAGE, not one per rendition. LG
+   * webOS sends `true`: a group of eng/eng/hin reaches `audioTracks` as two
+   * entries, so same-language renditions can never be picked client-side.
+   * The master then publishes one rendition per language, the track the user
+   * asked for winning its own, and a same-language switch goes through a
+   * reload. Unset is treated as `false`.
+   */
+  @IsBoolean()
+  @IsOptional()
+  dedupesAudioByLanguage?: boolean;
+
+  /**
    * Client accelerates HLS through an `EXT-X-I-FRAME-STREAM-INF` rendition
    * (Tizen AVPlay's `setSpeed`). Only clients that declare it get the tag: any
    * player that reads one will fetch the frames behind it, and each frame costs

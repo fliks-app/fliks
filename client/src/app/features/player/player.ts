@@ -1839,6 +1839,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     engine.on('firstFrame', () => {
       this.state.videoStarted.set(true);
     });
+    this.wireAudioTracks(engine);
     this.wireSessionExpiredRecovery(engine);
   }
 
@@ -3993,8 +3994,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (this.isNativeEngine() && this.availableAudioTracks().length > 1) return;
 
       const engineTracks = this.engine.getAudioTracks();
+      // An engine that folds renditions by language enumerates fewer tracks
+      // than the source: keep streamInfo so none leaves the menu.
+      const sourceAudioCount =
+        (this.media?.files?.find((f: any) => f.id === this.mediaFileId)
+          ?.streamInfo as any)?.audio?.length ?? 0;
+      const foldsTracks =
+        !!this.deviceProfileService.getProfile().dedupesAudioByLanguage &&
+        engineTracks.length < sourceAudioCount;
 
-      if (engineTracks.length <= 1) {
+      if (engineTracks.length <= 1 || foldsTracks) {
         // Offline: don't show si-* fallback tracks — they can't be switched
         // via the engine. Only real engine-detected tracks are switchable.
         if (this.isOfflinePlayback) return;

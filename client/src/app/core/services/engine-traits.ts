@@ -38,6 +38,9 @@ export interface EngineTraits {
   useTsOnSingleAudio?: boolean;
   /** Engine consumes HLS `SUBTITLES` renditions natively. */
   supportsHlsSubtitles?: boolean;
+  /** Engine surfaces one audio track per LANGUAGE rather than one per
+   *  rendition, so same-language renditions can't be picked client-side. */
+  dedupesAudioByLanguage?: boolean;
   /** Engine accelerates HLS from an `EXT-X-I-FRAME-STREAM-INF` rendition
    *  (Tizen AVPlay `setSpeed`). */
   supportsIFrameTrickPlay?: boolean;
@@ -124,9 +127,13 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     supportsDirectPlay: true,
     supportsAbr: true,
   },
+  // webOS folds the audio group by language: a group of eng/eng/hin reaches
+  // `audioTracks` as two entries, so a second English rendition is
+  // unreachable client-side and only a reload can swap it in.
   [EngineKind.WEBOS]: {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: false,
+    dedupesAudioByLanguage: true,
     supportsImageSubtitles: false,
     probesSegZero: false,
     supportsDirectPlay: true,

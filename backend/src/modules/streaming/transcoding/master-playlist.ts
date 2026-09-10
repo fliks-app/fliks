@@ -199,6 +199,10 @@ export interface MasterPlaylistOptions {
   /** Source video bitrate + codec; caps each rung's declared BANDWIDTH. */
   sourceVideoBitrateBps?: number;
   sourceVideoCodec?: string;
+  /** Client exposes one audio track per language rather than one per
+   *  rendition, so the group publishes one per language — the renditions it
+   *  would fold away are unreachable, and the picked track wins its own. */
+  dedupesAudioByLanguage?: boolean;
   /** Client can switch HLS variants at runtime (real ABR). `false` collapses
    *  the ladder to {@link topFittingProfile} when there's no explicit
    *  `onlyQuality` pin — see {@link applyQualityPin}. Missing/undefined
@@ -244,6 +248,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
     sourceVideoBitrateBps,
     sourceVideoCodec,
     supportsAbr = true,
+    dedupesAudioByLanguage = false,
     iFrameTrickPlaySegmentSeconds,
     remuxCodecs,
     remuxBandwidthBps,
@@ -318,6 +323,8 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
         outputAudioCodec,
         mediaFileId,
         tokenParam,
+        undefined,
+        dedupesAudioByLanguage,
       );
     }
     const hdrAudioAttr = multiAudio ? ',AUDIO="audio"' : '';
@@ -397,6 +404,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
       mediaFileId,
       tokenParam,
       audioOutputChannels,
+      dedupesAudioByLanguage,
     );
   }
 

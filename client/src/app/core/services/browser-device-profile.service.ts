@@ -132,6 +132,12 @@ export interface DeviceProfile {
    *  VTT. True for phone/desktop (iOS, Android, web/Shaka); false for TVs,
    *  whose AVPlay/webOS cue APIs are limited so they keep a DOM overlay. */
   supportsHlsSubtitles?: boolean;
+
+  /** Engine surfaces one audio track per LANGUAGE rather than one per
+   *  rendition (webOS). The backend then publishes one rendition per
+   *  language, the picked track winning its own. */
+  dedupesAudioByLanguage?: boolean;
+
   /** Engine accelerates HLS from an `EXT-X-I-FRAME-STREAM-INF` rendition. */
   supportsIFrameTrickPlay?: boolean;
 
@@ -571,6 +577,7 @@ export class BrowserDeviceProfileService {
       // AVPlay/webOS cue APIs are limited, so those engines drive a DOM
       // overlay fed by sidecar VTT instead of the HLS renditions.
       supportsHlsSubtitles: traits.supportsHlsSubtitles,
+      dedupesAudioByLanguage: traits.dedupesAudioByLanguage,
       supportsIFrameTrickPlay: traits.supportsIFrameTrickPlay,
       supportsImageSubtitles: traits.supportsImageSubtitles,
       // Only the web/Shaka path probes seg-0 on a load-then-seek; that is

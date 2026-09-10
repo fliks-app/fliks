@@ -54,6 +54,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
   /** Last URL handed to `load()` — the base for reload-on-seek. */
   private loadedUrl = '';
   private boundListeners: Array<[keyof HTMLMediaElementEventMap, EventListener]> = [];
+  private audioTrackListeners: Array<[string, EventListener]> = [];
   private frameCbHandle: number | null = null;
   /** Suppress the persistent `error` handler while a (re)load is in flight —
    *  a mediaOption rejection is recovered via the fallback, not surfaced. */
@@ -85,6 +86,10 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
     const v = this.video;
     if (v) {
       for (const [event, fn] of this.boundListeners) v.removeEventListener(event, fn);
+      const audioList = (v as unknown as { audioTracks?: EventTarget }).audioTracks;
+      for (const [event, fn] of this.audioTrackListeners) {
+        audioList?.removeEventListener(event, fn);
+      }
       if (this.frameCbHandle != null && 'cancelVideoFrameCallback' in v) {
         (v as any).cancelVideoFrameCallback(this.frameCbHandle);
       }
@@ -95,6 +100,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
       } catch { /* element may already be detached */ }
     }
     this.boundListeners = [];
+    this.audioTrackListeners = [];
     this.frameCbHandle = null;
     this.video = null;
     this.subtitles.destroy();
@@ -168,6 +174,19 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
       });
       this.emit('stateChanged', { state: 'error' });
     });
+
+    // The native pipeline fills AudioTrackList as it opens the stream, well
+    // after `loadedmetadata`, and refills it on every reload-seek — a one-shot
+    // read after load would miss it.
+    const audioList = (v as unknown as { audioTracks?: EventTarget }).audioTracks;
+    if (audioList) {
+      const onAudioTracks = () =>
+        this.emit('audioTracksChanged', { tracks: this.getAudioTracks() });
+      for (const event of ['addtrack', 'removetrack', 'change'] as const) {
+        audioList.addEventListener(event, onAudioTracks);
+        this.audioTrackListeners.push([event, onAudioTracks]);
+      }
+    }
 
     // requestVideoFrameCallback fires once a frame is actually composited —
     // a tighter "first frame" signal than the `playing` DOM event.
@@ -403,21 +422,25 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
     const tracks: AudioTrack[] = [];
     for (let i = 0; i < list.length; i++) {
       const t = list[i];
+      // Position, never `t.id`: webOS numbers tracks from the demuxer stream
+      // id (1-based), and the player reads this suffix as a streamInfo index.
       tracks.push({
-        id: 'audio-' + (t.id || i),
+        id: 'audio-' + i,
         language: t.language || 'und',
         label: t.label || t.language || 'Track ' + (i + 1),
+        selected: !!t.enabled,
       });
     }
     return tracks;
   }
 
+  /** LG's AudioTrack API is a mute/unmute switch: the picked track goes
+   *  `enabled = true`, every other one false (webOS TV 3.0+). */
   async selectAudioTrack(id: string): Promise<void> {
     const list = this.audioTrackList();
     if (!list) return;
     for (let i = 0; i < list.length; i++) {
-      const t = list[i];
-      t.enabled = 'audio-' + (t.id || i) === id;
+      list[i].enabled = 'audio-' + i === id;
     }
   }
 
