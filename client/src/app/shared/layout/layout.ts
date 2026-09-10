@@ -45,7 +45,6 @@ import { AddToPlaylistService } from '../../core/services/add-to-playlist.servic
 import { RecommendService } from '../../core/services/recommend.service';
 import { LucideIconComponent } from '../components/lucide-icon';
 import { TvRowDirective } from '../directives/tv-row.directive';
-import { BackgroundComponent } from '../components/background/background';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { BackgroundService } from '../../core/services/background.service';
 import { SearchStateService } from '../../core/services/search-state.service';
@@ -86,7 +85,6 @@ const SIDEBAR_COUNTS_DEBOUNCE_MS = 400;
     LucideIconComponent,
     NavIconComponent,
     TvRowDirective,
-    BackgroundComponent,
     ResolveUrlPipe,
   ],
   templateUrl: './layout.html',

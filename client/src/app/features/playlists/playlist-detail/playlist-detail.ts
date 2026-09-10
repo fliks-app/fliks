@@ -357,14 +357,13 @@ export class PlaylistDetailComponent {
             .filter((u): u is string => !!u),
         ),
       ];
-      if (pool.length) this.background.setBackgrounds(pool);
-      else this.background.clear();
+      this.background.set(this, pool);
     });
     // Reuse the layout's desktop back button (no hero styling, so mobile keeps
     // its normal top padding).
     this.navbar.showBackButton.set(true);
     this.destroyRef.onDestroy(() => {
-      this.background.clear();
+      this.background.release(this);
       this.navbar.showBackButton.set(false);
     });
   }

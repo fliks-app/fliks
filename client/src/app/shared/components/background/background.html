@@ -2,29 +2,19 @@
      `mobile-fanart-hero` and don't show a second image of the same
      fanart. Tablets (md+) get the global background. -->
 <div class="fixed inset-0 -z-10 overflow-hidden pointer-events-none hidden md:block">
-  @if (layerA()) {
-    <img
-      [cachedSrc]="layerA()! | resolveUrl:'medium'"
-      alt=""
-      loading="lazy"
-      decoding="async"
-      fetchpriority="low"
-      class="absolute inset-0 w-full h-full object-cover object-[50%_25%] app-bg-layer transition-opacity duration-1500"
-      [class.opacity-100]="activeLayer() === 'A' && imageVisible()"
-      [class.opacity-0]="activeLayer() !== 'A' || !imageVisible()"
-    />
-  }
-  @if (layerB()) {
-    <img
-      [cachedSrc]="layerB()! | resolveUrl:'medium'"
-      alt=""
-      loading="lazy"
-      decoding="async"
-      fetchpriority="low"
-      class="absolute inset-0 w-full h-full object-cover object-[50%_25%] app-bg-layer transition-opacity duration-1500"
-      [class.opacity-100]="activeLayer() === 'B' && imageVisible()"
-      [class.opacity-0]="activeLayer() !== 'B' || !imageVisible()"
-    />
+  @for (url of layers(); track $index) {
+    @if (url) {
+      <img
+        [cachedSrc]="url | resolveUrl:'medium'"
+        alt=""
+        loading="lazy"
+        decoding="async"
+        fetchpriority="low"
+        class="absolute inset-0 w-full h-full object-cover object-[50%_25%] app-bg-layer transition-opacity duration-1500"
+        [class.opacity-100]="activeLayer() === $index && imageVisible()"
+        [class.opacity-0]="activeLayer() !== $index || !imageVisible()"
+      />
+    }
   }
   <!-- Veil is permanent: when no background is set, the tint over
        the body's solid base-100 is a no-op (same colour); when an

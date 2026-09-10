@@ -70,11 +70,8 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
    *  picks the URL up from the service and renders it under the page. */
   private readonly backgroundEffect = effect(() => {
     const m = this.media();
-    if (!m?.fanartUrl) {
-      this.backgroundService.clear();
-      return;
-    }
-    this.backgroundService.setBackgrounds([m.fanartUrl]);
+    // Nothing loaded yet holds the current image; a media with no fanart clears.
+    this.backgroundService.set(this, m ? [m.fanartUrl].filter((u): u is string => !!u) : null);
   });
 
   readonly media = signal<MetadataDetails | null>(null);
@@ -244,8 +241,8 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.backgroundService.release(this);
     this.navbar.leaveHeroPage();
-    this.backgroundService.clear();
   }
 
   async ngOnInit() {

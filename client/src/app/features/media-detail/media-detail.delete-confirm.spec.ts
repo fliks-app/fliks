@@ -73,7 +73,7 @@ function createHarness() {
       { provide: ProfilesService, useValue: {} },
       { provide: LibrariesApiService, useValue: {} },
       { provide: NavbarService, useValue: { enterHeroPage: vi.fn(), leaveHeroPage: vi.fn() } },
-      { provide: BackgroundService, useValue: { clear: vi.fn(), setBackgrounds: vi.fn(), setBackground: vi.fn(), url: signal(null) } },
+      { provide: BackgroundService, useValue: { set: vi.fn(), release: vi.fn(), url: signal(null) } },
       { provide: ConfirmationService, useValue: { confirm } },
       { provide: ToastService, useValue: { success: vi.fn(), error: vi.fn() } },
       { provide: SseService, useValue: { lastEvent: signal(null) } },

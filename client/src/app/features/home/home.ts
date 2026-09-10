@@ -256,13 +256,14 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.applyBackground(this.recommendations(), this.displaySettings.settings().homeBackground);
   });
 
-  /** The background is global chrome, so a cached page has to reclaim it on the
-   *  way back in — the effect above won't re-run for data that never changed,
-   *  and the page left behind cleared it. Reclaiming it late is what made the
-   *  topbar flip from solid to frosted a frame after a back navigation. */
+  /** The background is global chrome, so a cached page reclaims it on the way
+   *  back in: the effect above won't re-run for data that never changed, and
+   *  the page it returns from is still declaring its own on top. */
   private applyBackground(recs: readonly RecommendationItem[], enabled: boolean): void {
-    if (recs.length === 0) return;
-    this.backgroundService.applyPool(fanartPool(recs.map((r) => r.media)), enabled);
+    // No recommendations yet is not "no background": hold what is showing until
+    // they land, or the backdrop blinks out on every arrival here.
+    if (!enabled) return this.backgroundService.set(this, []);
+    this.backgroundService.set(this, recs.length ? fanartPool(recs.map((r) => r.media)) : null);
   }
 
   /** A playback that ended leaves this row stale, whether it ran here or on a
@@ -434,9 +435,9 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.backgroundService.release(this);
     this.scrollMemory.deactivate();
     this.playbackStopped.unsubscribe();
-    this.backgroundService.clear();
   }
 
   /**
