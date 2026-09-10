@@ -1,15 +1,14 @@
 # Flatpak manifest, PROOF OF CONCEPT.
 #
-# Repackages the .deb that desktop-release.yml already produces, rather than
-# building Electron and the addon inside the sandbox. That is deliberate: the
-# open questions are whether the SDL/GLES compositor, GL and mpv work under the
-# sandbox, and whether a static ostree remote can drive in-app updates.
-# Building from source in the manifest is the next step, not this one.
+# Electron, the compositor addon and the Angular client still come from the
+# .deb that desktop-release.yml produces. libmpv does not: the vendored one is
+# a noble build and the runtime is not Ubuntu, so it is dropped and mpv is
+# built here against the runtime instead.
 #
-# The vendored libmpv keeps its statically linked, symbol-hidden FFmpeg here.
-# Using the org.freedesktop.Platform.ffmpeg-full extension instead needs the
-# Electron libffmpeg symbol clash solved first (it exports 678 av_* symbols),
-# which is a separate question from packaging.
+# That makes this the test of the open question. mpv links the runtime's SHARED
+# FFmpeg, while Electron's own libffmpeg.so exports 678 av_* symbols into the
+# same process, which is exactly the clash the vendored static build avoids. If
+# playback works, the static libmpv and its bundle can go for good.
 #
 # Build: scripts/flatpak-poc.sh <path-to .deb>
 app-id: media.fliks.desktop
@@ -38,6 +37,55 @@ finish-args:
   - --talk-name=org.freedesktop.portal.Flatpak
 
 modules:
+  # The runtime already carries FFmpeg 61, SDL2, EGL, libdrm and Vulkan; only
+  # mpv's own two are missing.
+  - name: libass
+    buildsystem: meson
+    cleanup: [/include, /lib/pkgconfig]
+    sources:
+      - type: archive
+        url: https://github.com/libass/libass/archive/0.17.4.tar.gz
+        sha256: c287d180d93dc9c9021872574b618ac49027e84cc90e1289318b1ee68bb42251
+
+  - name: libplacebo
+    buildsystem: meson
+    config-opts: [-Dvulkan=enabled, -Ddemos=false]
+    cleanup: [/include, /lib/pkgconfig]
+    sources:
+      - type: git
+        url: https://github.com/haasn/libplacebo.git
+        tag: v7.360.1
+
+  - name: libXpresent
+    buildsystem: autotools
+    cleanup: [/include, /lib/pkgconfig]
+    sources:
+      - type: git
+        url: https://gitlab.freedesktop.org/xorg/lib/libxpresent.git
+        tag: libXpresent-1.0.2
+
+  # Library only, no player. Wayland and CUDA are left out while the app is
+  # pinned to X11 and the addon does its own GL.
+  - name: libmpv
+    buildsystem: meson
+    config-opts:
+      - -Dbuild-date=false
+      - -Dcplayer=false
+      - -Dlibmpv=true
+      - -Dmanpage-build=disabled
+      - -Dx11=enabled
+      - -Dgl=enabled
+      - -Degl=enabled
+      - -Degl-x11=enabled
+      - -Dvulkan=enabled
+      - -Dvaapi=enabled
+      - -Dvaapi-x11=enabled
+    cleanup: [/include, /lib/pkgconfig, /share/applications, /share/icons]
+    sources:
+      - type: archive
+        url: https://github.com/mpv-player/mpv/archive/v0.41.0.tar.gz
+        sha256: ee21092a5ee427353392360929dc64645c54479aefdb5babc5cfbb5fad626209
+
   - name: fliks
     buildsystem: simple
     sources:
@@ -48,6 +96,7 @@ modules:
         commands:
           # appendSwitch('ozone-platform') in the main script does not survive
           # zypak's re-exec; Chromium reads the platform from argv first.
+          - export FLIKS_MPV_PATH=/app/lib/libmpv.so.2
           - exec zypak-wrapper /app/fliks/fliks --ozone-platform=x11 "$@"
     build-commands:
       # dpkg-deb is not in the SDK; ar and tar are.
@@ -57,6 +106,9 @@ modules:
       # zypak redirects Chromium's sandbox onto the flatpak one, so the SUID
       # helper cannot work and is dead weight.
       - rm -f /app/fliks/chrome-sandbox
+      # The noble libmpv and the libs bundled beside it for Ubuntu hosts; the
+      # module below supersedes both.
+      - rm -rf /app/fliks/resources/app.asar.unpacked/native/vendor
       - install -Dm755 fliks.sh /app/bin/fliks
       # flatpak keys the desktop entry and the icon on the app-id, and rejects
       # anything above 512x512, so the 1024 master stays out.
