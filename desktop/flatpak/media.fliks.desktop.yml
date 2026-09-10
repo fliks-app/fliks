@@ -5,12 +5,14 @@
 # a noble build and the runtime is not Ubuntu, so it is dropped and mpv is
 # built here against the runtime instead.
 #
-# That makes this the test of the open question. mpv links the runtime's SHARED
-# FFmpeg, while Electron's own libffmpeg.so exports 678 av_* symbols into the
-# same process, which is exactly the clash the vendored static build avoids. If
-# playback works, the static libmpv and its bundle can go for good.
+# FFmpeg is built static and linked into libmpv, which is what the committed
+# blob is, except from a recipe and against the runtime. Nothing here may use
+# the runtime's shared FFmpeg: Electron hard-links its own libffmpeg.so and a
+# second shared copy in the process kills mpv_initialize.
 #
 # Build: scripts/flatpak-poc.sh <path-to .deb>
+# Install for the desktop session, not the snap's private XDG_DATA_HOME:
+#   env -u XDG_DATA_HOME flatpak install ...
 app-id: media.fliks.desktop
 runtime: org.freedesktop.Platform
 runtime-version: '24.08'
@@ -52,6 +54,7 @@ modules:
       - --enable-gpl
       - --enable-version3
       - --enable-vaapi
+      - --enable-gnutls
     cleanup: ['/include', '/lib/pkgconfig', '/lib/*.a', '/share/ffmpeg']
     sources:
       - type: archive
