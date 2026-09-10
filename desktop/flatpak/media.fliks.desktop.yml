@@ -37,8 +37,29 @@ finish-args:
   - --talk-name=org.freedesktop.portal.Flatpak
 
 modules:
-  # The runtime already carries FFmpeg 61, SDL2, EGL, libdrm and Vulkan; only
-  # mpv's own two are missing.
+  # Static, and NOT the runtime's shared FFmpeg. Electron hard-links its own
+  # libffmpeg.so (NEEDED, 678 av_* exports); a second shared FFmpeg in the same
+  # process kills mpv_initialize, and RTLD_DEEPBIND only moves the crash into
+  # the render path. Linking it into libmpv and hiding the symbols is the one
+  # configuration measured to work.
+  - name: ffmpeg
+    config-opts:
+      - --disable-shared
+      - --enable-static
+      - --enable-pic
+      - --disable-programs
+      - --disable-doc
+      - --enable-gpl
+      - --enable-version3
+      - --enable-vaapi
+    cleanup: ['/include', '/lib/pkgconfig', '/lib/*.a', '/share/ffmpeg']
+    sources:
+      - type: archive
+        url: https://ffmpeg.org/releases/ffmpeg-7.1.1.tar.xz
+        sha256: 733984395e0dbbe5c046abda2dc49a5544e7e0e1e2366bba849222ae9e3a03b1
+
+  # The runtime already carries SDL2, EGL, libdrm and Vulkan; only mpv's own
+  # two are missing.
   - name: libass
     buildsystem: meson
     cleanup: [/include, /lib/pkgconfig]
@@ -81,10 +102,20 @@ modules:
       - -Dvaapi=enabled
       - -Dvaapi-x11=enabled
     cleanup: [/include, /lib/pkgconfig, /share/applications, /share/icons]
+    # mpv already builds libmpv with hidden visibility and -Bsymbolic, but that
+    # covers its own objects, not the symbols pulled out of the static FFmpeg
+    # archives. The script keeps av_* from being exported at all, which is what
+    # desktop-release.yml's kill-switch checks.
+    build-options:
+      ldflags: -Wl,--version-script=/run/build/libmpv/mpv.ver
     sources:
       - type: archive
         url: https://github.com/mpv-player/mpv/archive/v0.41.0.tar.gz
         sha256: ee21092a5ee427353392360929dc64645c54479aefdb5babc5cfbb5fad626209
+      - type: inline
+        dest-filename: mpv.ver
+        contents: |
+          { global: mpv_*; local: *; };
 
   - name: fliks
     buildsystem: simple
