@@ -3,18 +3,16 @@
      fanart. Tablets (md+) get the global background. -->
 <div class="fixed inset-0 -z-10 overflow-hidden pointer-events-none hidden md:block">
   @for (url of layers(); track $index) {
-    @if (url) {
-      <img
-        [cachedSrc]="url | resolveUrl:'medium'"
-        alt=""
-        loading="lazy"
-        decoding="async"
-        fetchpriority="low"
-        class="absolute inset-0 w-full h-full object-cover object-[50%_25%] app-bg-layer transition-opacity duration-1500"
-        [class.opacity-100]="activeLayer() === $index && imageVisible()"
-        [class.opacity-0]="activeLayer() !== $index || !imageVisible()"
-      />
-    }
+    <img
+      [cachedSrc]="url | resolveUrl:'medium'"
+      alt=""
+      loading="lazy"
+      decoding="async"
+      fetchpriority="low"
+      (load)="onLoad($index, $event)"
+      class="absolute inset-0 w-full h-full object-cover object-[50%_25%]"
+      [class]="layerClass($index)"
+    />
   }
   <!-- Veil is permanent: when no background is set, the tint over
        the body's solid base-100 is a no-op (same colour); when an
@@ -25,5 +23,5 @@
        which Chromium 85 (Tizen TV) doesn't support — the preset-env
        fallback drops the alpha and the veil ends up 100% opaque,
        killing the fanart. Plain `rgba()` is universally supported. -->
-  <div class="absolute inset-0 app-bg-veil"></div>
+  <div class="absolute inset-0 z-30 app-bg-veil"></div>
 </div>

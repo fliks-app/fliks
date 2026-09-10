@@ -132,16 +132,6 @@ html.tv-webos .table-zebra tbody tr.row-hover:where(:nth-child(2n)):hover {
   background-color: rgba(29, 35, 42, 0.95);
 }
 
-/* Background crossfade — a layer is written and activated in the same tick, so
-   its <img> enters the DOM already at the target opacity and has no previous
-   value to transition from. @starting-style supplies one. Engines without it
-   fall back to today's instant swap. */
-.app-bg-layer {
-  @starting-style {
-    opacity: 0;
-  }
-}
-
 /* Home library pill. The tint and border are an overlay dimmed by `opacity`
    rather than a `color-mix()` alpha, which the TV WebView can't parse. */
 .library-card {
