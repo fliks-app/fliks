@@ -69,6 +69,8 @@ interface Fixture {
   /** Overrides the SSE `lastEvent` signal — a real writable signal, needed so
    *  the component's `sseEffect` reacts to `.set()` calls made mid-test. */
   sseLastEvent?: ReturnType<typeof signal<SseEvent | null>>;
+  /** Marks the active page as a hero (fanart) page. */
+  isHeroPage?: boolean;
   /** Overrides `CountsApiService.get` — a spy, so tests can assert call counts. */
   countsGet?: () => Promise<{ mediaByLibrary: Record<number, number>; badgeCounts: Record<string, number>; pendingRequests: number }>;
 }
@@ -138,7 +140,7 @@ async function createFixture(f: Fixture, routes: Routes = []): Promise<Component
           navbarTransparent: () => false,
           heroLogoUrl: () => null,
           heroTitle: () => '',
-          isHeroPage: () => false,
+          isHeroPage: () => !!f.isHeroPage,
           showBackButton: () => false,
           mobileNavTitle: () => '',
           mobileNavbarVisible: () => true,
@@ -509,6 +511,24 @@ describe('LayoutComponent sidebar counts — SSE debounce', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('LayoutComponent — chrome clearance', () => {
+  afterEach(() => {
+    nativeState.value = false;
+  });
+
+  it('reserves the same space on a hero page as anywhere else', async () => {
+    const plain = (await createFixture(NATIVE_PHONE)).componentInstance.chromeTop();
+    TestBed.resetTestingModule();
+    const hero = (await createFixture({ ...NATIVE_PHONE, isHeroPage: true })).componentInstance.chromeTop();
+
+    // A hero page takes the bar's height back in CSS (`body.hero-page`), which
+    // NavbarService toggles synchronously. Folding it into this value instead
+    // lands it a change detection late — after WebKit has laid out the cached
+    // page the router just reattached, which iOS 18.7 never redoes.
+    expect(hero).toBe(plain);
   });
 });
 

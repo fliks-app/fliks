@@ -61,6 +61,25 @@ describe('view-transition poster stamps', () => {
     expect(card.style.viewTransitionName).toBe('media-poster-ep-42');
   });
 
+  it("leaves a page's own declared name alone", () => {
+    const hero = img();
+    // A media page declares this through a style binding, which Angular only
+    // rewrites when its value changes — so taking it away here took it away
+    // for the rest of a cached page's life, and the trip back from it found
+    // no partner for the card, morphing the badge overlay instead.
+    hero.style.viewTransitionName = 'media-poster-7';
+    const card = img();
+
+    stampPoster(card, 9);
+
+    expect(hero.style.viewTransitionName).toBe('media-poster-7');
+    expect(card.style.viewTransitionName).toBe('media-poster-9');
+
+    clearPosterStamps();
+    expect(hero.style.viewTransitionName).toBe('media-poster-7');
+    expect(card.style.viewTransitionName).toBe('');
+  });
+
   it('clears every stamp for a navigation that owns no poster', () => {
     const card = img();
     stampPoster(card, 7);

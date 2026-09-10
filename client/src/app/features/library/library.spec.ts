@@ -454,6 +454,42 @@ describe('LibraryComponent — window scroller (TV / desktop)', () => {
     }
   });
 
+  it('stops reading the window once detached, so the letter survives the trip', async () => {
+    const { component, detached$ } = createHarness('window');
+    component.list.setItems(twoSections(), (m) => m.title);
+    const viewport = attachViewport(component);
+    viewport.measureScrollOffset.mockReturnValue(component.rowHeight());
+    window.dispatchEvent(new Event('scroll'));
+    await nextFrame();
+    expect(component.list.activeLetter()).toBe('B');
+
+    detached$.next(OWN_KEY);
+    // The page the user moved on to scrolls the same window back to the top.
+    viewport.measureScrollOffset.mockReturnValue(0);
+    window.dispatchEvent(new Event('scroll'));
+    await nextFrame();
+
+    expect(component.list.activeLetter()).toBe('B');
+  });
+
+  it('reads the window again once reattached', async () => {
+    const { component, attached$, detached$, navigatedBack } = createHarness('window');
+    component.list.setItems(twoSections(), (m) => m.title);
+    const viewport = attachViewport(component);
+    navigatedBack.set(true);
+
+    detached$.next(OWN_KEY);
+    attached$.next(OWN_KEY);
+    // Past the hold that protects the restore's own scroll event.
+    vi.spyOn(performance, 'now').mockReturnValue(performance.now() + 1000);
+    viewport.measureScrollOffset.mockReturnValue(component.rowHeight());
+    window.dispatchEvent(new Event('scroll'));
+    await nextFrame();
+
+    expect(component.list.activeLetter()).toBe('B');
+    vi.restoreAllMocks();
+  });
+
   it('does not touch the page scroller across a detach/attach cycle', () => {
     const { pageScroller, attached$, detached$ } = createHarness('window');
 
