@@ -2465,6 +2465,8 @@
     "unreleased": "Non sorti",
     "queued": "En file",
     "missing_files": "Fichiers manquants",
+    "type_movie": "Film",
+    "type_series": "Série",
     "play": "Lire",
     "open_detail": "Voir la fiche",
     "mark_watched": "Marquer comme vu",

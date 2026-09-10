@@ -2438,6 +2438,8 @@
     "unreleased": "Nicht veröffentlicht",
     "queued": "In Warteschlange",
     "missing_files": "Fehlende Dateien",
+    "type_movie": "Film",
+    "type_series": "Serie",
     "play": "Abspielen",
     "open_detail": "Details ansehen",
     "mark_watched": "Als gesehen markieren",

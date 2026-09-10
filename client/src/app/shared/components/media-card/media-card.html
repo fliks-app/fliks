@@ -67,9 +67,14 @@
       </div>
     }
 
-    <!-- Top-left: missing-files indicator (auto), status badge, episode number -->
-    @if (_resolvedStatus() === 'missing' || statusBadge() || topLeftBadge()) {
+    <!-- Top-left: missing-files indicator (auto), media type, status badge, episode number -->
+    @if (_resolvedStatus() === 'missing' || statusBadge() || topLeftBadge() || typeBadge()) {
       <div class="absolute top-2 left-2 z-10 flex items-center gap-1">
+        @if (typeBadge()) {
+          <span class="badge badge-sm badge-soft" [ngClass]="typeBadge()!.class">{{
+            typeBadge()!.text
+          }}</span>
+        }
         @if (_resolvedStatus() === 'missing') {
           <svg
             lucideCircleX

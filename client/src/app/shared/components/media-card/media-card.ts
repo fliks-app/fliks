@@ -4,6 +4,7 @@ import { NgClass, DecimalPipe } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
+import { MediaType } from '../../../core/enums/media-type.enum';
 import { Media } from '../../../core/services/api/media.service';
 import { computeMediaBarStatus } from '../../utils/media-status.util';
 import { MediaService } from '../../../core/services/api/media.service';
@@ -117,6 +118,9 @@ export class MediaCardComponent {
 
   // Badges
   readonly topLeftBadge = input<string | undefined>(undefined);
+  /** Marks a card as a movie or a series, for the mixed provider results where
+   *  the poster alone does not say which. */
+  readonly mediaTypeBadge = input<MediaType | null>(null);
   readonly badge = input<CardBadge>(null);
   readonly status = input<CardStatus>(null);
 
@@ -636,6 +640,22 @@ export class MediaCardComponent {
   });
 
   /** Status badge shown in the top-left corner of the poster. */
+  /** Blue for a movie, pink for a series: `info` and `secondary` are the theme's
+   *  blue and pink hues. */
+  protected readonly typeBadge = computed((): { text: string; class: string } | null => {
+    switch (this.mediaTypeBadge()) {
+      case 'movie':
+        return { text: this.translate.instant('media_card.type_movie'), class: 'badge-info' };
+      case 'series':
+        return {
+          text: this.translate.instant('media_card.type_series'),
+          class: 'badge-secondary',
+        };
+      default:
+        return null;
+    }
+  });
+
   protected readonly statusBadge = computed((): { text: string; class: string } | null => {
     const s = this._barStatus();
     if (!s) return null;

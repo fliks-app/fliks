@@ -2465,6 +2465,8 @@
     "unreleased": "Unreleased",
     "queued": "Queued",
     "missing_files": "Missing files",
+    "type_movie": "Movie",
+    "type_series": "Series",
     "play": "Play",
     "open_detail": "View details",
     "mark_watched": "Mark as watched",
