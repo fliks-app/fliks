@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import electronUpdater from 'electron-updater';
 import {
@@ -18,8 +18,6 @@ const RELEASES_URL = `https://github.com/${GITHUB_REPO}/releases`;
 const INITIAL_CHECK_DELAY_MS = 10_000;
 const PERIODIC_CHECK_MS = 6 * 60 * 60 * 1000;
 
-/** electron-updater self-installs only from an NSIS exe, a signed .app zip, or
- *  an AppImage. A .deb (dpkg needs root) and dev runs fall back to a download. */
 /** Opt out of the update check entirely (no outbound api.github.com request),
  *  matching the backend's FLIKS_DISABLE_UPDATE_CHECK. */
 function updateCheckDisabled(): boolean {
@@ -57,10 +55,22 @@ function fileUpdaterLogger(): {
   };
 }
 
+/** electron-builder's marker, absent outside a distro package. */
+function packageType(): string {
+  try {
+    return readFileSync(join(process.resourcesPath, 'package-type'), 'utf8').trim();
+  } catch {
+    return '';
+  }
+}
+
+/** An AppImage self-replaces; a distro package is reinstalled through the
+ *  package manager under pkexec. electron-updater keys its Linux updater on
+ *  the marker above, and only these three have one. */
 function canSelfInstall(): boolean {
   if (!app.isPackaged) return false;
-  if (process.platform === 'linux') return !!process.env.APPIMAGE;
-  return true;
+  if (process.platform !== 'linux') return true;
+  return !!process.env.APPIMAGE || ['deb', 'rpm', 'pacman'].includes(packageType());
 }
 
 function capability(): DesktopUpdateCapability {
@@ -85,7 +95,7 @@ function normalizeNotes(notes: unknown): string | null {
 }
 
 /** Wires the in-app updater: renderer-invokable channels + status broadcasts.
- *  Installable builds use electron-updater (autoDownload off); .deb/dev do a
+ *  Installable builds use electron-updater (autoDownload off); dev runs do a
  *  GitHub release lookup to surface availability + a download link. */
 export function setupUpdater(): void {
   const installable = canSelfInstall();
@@ -148,7 +158,7 @@ export function setupUpdater(): void {
       }),
     );
   } else {
-    // .deb / dev: detect-only via the public GitHub release, install = open page.
+    // Dev runs: detect-only via the public GitHub release, install = open page.
     ipcMain.handle(UPDATE_IPC.check, () => githubFallbackCheck(broadcast));
     ipcMain.handle(UPDATE_IPC.install, () => shell.openExternal(RELEASES_URL));
   }

@@ -1,0 +1,154 @@
+# Flatpak manifest, PROOF OF CONCEPT.
+#
+# Electron, the compositor addon and the Angular client still come from the
+# .deb that desktop-release.yml produces. libmpv does not: the vendored one is
+# a noble build and the runtime is not Ubuntu, so it is dropped and mpv is
+# built here against the runtime instead.
+#
+# FFmpeg is built static and linked into libmpv, which is what the committed
+# blob is, except from a recipe and against the runtime. Nothing here may use
+# the runtime's shared FFmpeg: Electron hard-links its own libffmpeg.so and a
+# second shared copy in the process kills mpv_initialize.
+#
+# Build: scripts/flatpak-poc.sh <path-to .deb>
+# Install for the desktop session, not the snap's private XDG_DATA_HOME:
+#   env -u XDG_DATA_HOME flatpak install ...
+app-id: media.fliks.desktop
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+base: org.electronjs.Electron2.BaseApp
+base-version: '24.08'
+command: fliks
+
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=x11
+  - --socket=pulseaudio
+  # Ozone's auto hint reads XDG_SESSION_TYPE and picks Wayland, then exits when
+  # the socket is absent instead of falling back. The compositor is only
+  # validated on X11 (XWayland).
+  - --env=ELECTRON_OZONE_PLATFORM_HINT=x11
+  # The visible window is an SDL2/GLES surface, so it needs the GPU itself.
+  - --device=dri
+  - --filesystem=xdg-download
+  - --talk-name=org.freedesktop.Notifications
+  # Lets the app drive its own update through the portal; electron-updater has
+  # no flatpak provider.
+  - --talk-name=org.freedesktop.portal.Flatpak
+
+modules:
+  # Static, and NOT the runtime's shared FFmpeg. Electron hard-links its own
+  # libffmpeg.so (NEEDED, 678 av_* exports); a second shared FFmpeg in the same
+  # process kills mpv_initialize, and RTLD_DEEPBIND only moves the crash into
+  # the render path. Linking it into libmpv and hiding the symbols is the one
+  # configuration measured to work.
+  - name: ffmpeg
+    config-opts:
+      - --disable-shared
+      - --enable-static
+      - --enable-pic
+      - --disable-programs
+      - --disable-doc
+      - --enable-gpl
+      - --enable-version3
+      - --enable-vaapi
+      - --enable-gnutls
+    cleanup: ['/include', '/lib/pkgconfig', '/lib/*.a', '/share/ffmpeg']
+    sources:
+      - type: archive
+        url: https://ffmpeg.org/releases/ffmpeg-7.1.1.tar.xz
+        sha256: 733984395e0dbbe5c046abda2dc49a5544e7e0e1e2366bba849222ae9e3a03b1
+
+  # The runtime already carries SDL2, EGL, libdrm and Vulkan; only mpv's own
+  # two are missing.
+  - name: libass
+    buildsystem: meson
+    cleanup: [/include, /lib/pkgconfig]
+    sources:
+      - type: archive
+        url: https://github.com/libass/libass/archive/0.17.4.tar.gz
+        sha256: c287d180d93dc9c9021872574b618ac49027e84cc90e1289318b1ee68bb42251
+
+  - name: libplacebo
+    buildsystem: meson
+    config-opts: [-Dvulkan=enabled, -Ddemos=false]
+    cleanup: [/include, /lib/pkgconfig]
+    sources:
+      - type: git
+        url: https://github.com/haasn/libplacebo.git
+        tag: v7.360.1
+
+  - name: libXpresent
+    buildsystem: autotools
+    cleanup: [/include, /lib/pkgconfig]
+    sources:
+      - type: git
+        url: https://gitlab.freedesktop.org/xorg/lib/libxpresent.git
+        tag: libXpresent-1.0.2
+
+  # Library only, no player. Wayland and CUDA are left out while the app is
+  # pinned to X11 and the addon does its own GL.
+  - name: libmpv
+    buildsystem: meson
+    config-opts:
+      - -Dbuild-date=false
+      - -Dcplayer=false
+      - -Dlibmpv=true
+      - -Dmanpage-build=disabled
+      - -Dx11=enabled
+      - -Dgl=enabled
+      - -Degl=enabled
+      - -Degl-x11=enabled
+      - -Dvulkan=enabled
+      - -Dvaapi=enabled
+      - -Dvaapi-x11=enabled
+    cleanup: [/include, /lib/pkgconfig, /share/applications, /share/icons]
+    # mpv already builds libmpv with hidden visibility and -Bsymbolic, but that
+    # covers its own objects, not the symbols pulled out of the static FFmpeg
+    # archives. The script keeps av_* from being exported at all, which is what
+    # desktop-release.yml's kill-switch checks.
+    build-options:
+      ldflags: -Wl,--version-script=/run/build/libmpv/mpv.ver
+    sources:
+      - type: archive
+        url: https://github.com/mpv-player/mpv/archive/v0.41.0.tar.gz
+        sha256: ee21092a5ee427353392360929dc64645c54479aefdb5babc5cfbb5fad626209
+      - type: inline
+        dest-filename: mpv.ver
+        contents: |
+          { global: mpv_*; local: *; };
+
+  - name: fliks
+    buildsystem: simple
+    sources:
+      - type: file
+        path: fliks.deb
+      - type: script
+        dest-filename: fliks.sh
+        commands:
+          # appendSwitch('ozone-platform') in the main script does not survive
+          # zypak's re-exec; Chromium reads the platform from argv first.
+          - export FLIKS_MPV_PATH=/app/lib/libmpv.so.2
+          - exec zypak-wrapper /app/fliks/fliks --ozone-platform=x11 "$@"
+    build-commands:
+      # dpkg-deb is not in the SDK; ar and tar are.
+      - ar x fliks.deb
+      - mkdir -p tree && tar -xf data.tar.xz -C tree
+      - mkdir -p /app/fliks && cp -a tree/opt/Fliks/. /app/fliks/
+      # zypak redirects Chromium's sandbox onto the flatpak one, so the SUID
+      # helper cannot work and is dead weight.
+      - rm -f /app/fliks/chrome-sandbox
+      # The noble libmpv and the libs bundled beside it for Ubuntu hosts; the
+      # module below supersedes both.
+      - rm -rf /app/fliks/resources/app.asar.unpacked/native/vendor
+      - install -Dm755 fliks.sh /app/bin/fliks
+      # flatpak keys the desktop entry and the icon on the app-id, and rejects
+      # anything above 512x512, so the 1024 master stays out.
+      - install -Dm644 tree/usr/share/applications/fliks.desktop /app/share/applications/media.fliks.desktop.desktop
+      - desktop-file-edit --set-key=Exec --set-value="fliks %U" --set-key=Icon --set-value=media.fliks.desktop /app/share/applications/media.fliks.desktop.desktop
+      - for s in 128 256 512; do install -Dm644 "tree/usr/share/icons/hicolor/${s}x${s}/apps/fliks.png" "/app/share/icons/hicolor/${s}x${s}/apps/media.fliks.desktop.png"; done
+      - install -Dm644 tree/usr/share/metainfo/media.fliks.desktop.metainfo.xml /app/share/metainfo/media.fliks.desktop.metainfo.xml
+      # The shipped metainfo names the .deb's launchable and stock icon; both are app-id prefixed here.
+      - sed -i -e 's|>fliks.desktop<|>media.fliks.desktop.desktop<|' -e 's|"stock">fliks<|"stock">media.fliks.desktop<|' /app/share/metainfo/media.fliks.desktop.metainfo.xml
