@@ -61,10 +61,8 @@ export function buildUniqueAudioNames(
  *  (issue #148). `outputChannels[i]` is the resolved per-track output count
  *  (copy keeps the source, transcode downmixes); falls back to a codec-derived
  *  guess when the plan isn't threaded. */
-/** Indices to publish when the client keeps one rendition per language: the
- *  picked track wins its own language, every other language keeps its first.
- *  webOS collapses the audio group that way on its own — the renditions it
- *  drops are unreachable, so the group has to carry the chosen one. */
+/** One index per language: the picked track wins its own, every other
+ *  language keeps its first. */
 function keepOnePerLanguage(
   audioStreams: AudioStreamMeta[],
   pickedIdx: number,

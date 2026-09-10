@@ -3994,16 +3994,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (this.isNativeEngine() && this.availableAudioTracks().length > 1) return;
 
       const engineTracks = this.engine.getAudioTracks();
-      // An engine that folds renditions together (webOS keeps one per
-      // language) reports fewer tracks than the source has. Its positional
-      // map to streamInfo would then mislabel, and the folded-away tracks
-      // would be unreachable — so keep the streamInfo list, whose picks route
-      // through a reload the backend can honour.
+      // An engine that folds renditions by language enumerates fewer tracks
+      // than the source: keep streamInfo so none leaves the menu.
       const sourceAudioCount =
         (this.media?.files?.find((f: any) => f.id === this.mediaFileId)
           ?.streamInfo as any)?.audio?.length ?? 0;
+      const foldsTracks =
+        !!this.deviceProfileService.getProfile().dedupesAudioByLanguage &&
+        engineTracks.length < sourceAudioCount;
 
-      if (engineTracks.length <= 1 || engineTracks.length < sourceAudioCount) {
+      if (engineTracks.length <= 1 || foldsTracks) {
         // Offline: don't show si-* fallback tracks — they can't be switched
         // via the engine. Only real engine-detected tracks are switchable.
         if (this.isOfflinePlayback) return;

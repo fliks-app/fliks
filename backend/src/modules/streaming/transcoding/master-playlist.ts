@@ -199,10 +199,9 @@ export interface MasterPlaylistOptions {
   /** Source video bitrate + codec; caps each rung's declared BANDWIDTH. */
   sourceVideoBitrateBps?: number;
   sourceVideoCodec?: string;
-  /** Client exposes one audio track per LANGUAGE rather than one per
-   *  rendition (measured on webOS: a group of eng/eng/hin surfaces two
-   *  tracks). The renditions it folds away are unreachable, so the group
-   *  publishes one per language with the picked track winning its own. */
+  /** Client exposes one audio track per language rather than one per
+   *  rendition, so the group publishes one per language — the renditions it
+   *  would fold away are unreachable, and the picked track wins its own. */
   dedupesAudioByLanguage?: boolean;
   /** Client can switch HLS variants at runtime (real ABR). `false` collapses
    *  the ladder to {@link topFittingProfile} when there's no explicit

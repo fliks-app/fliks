@@ -48,6 +48,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
   [EngineKind.WEBOS]: {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: false,
+    dedupesAudioByLanguage: true,
     supportsImageSubtitles: false,
     probesSegZero: false,
     supportsDirectPlay: true,
