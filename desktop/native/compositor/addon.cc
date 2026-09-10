@@ -322,8 +322,12 @@ void RenderThreadMain(GlState* s) {
           break;
         case SDL_MOUSEBUTTONDOWN:
         case SDL_MOUSEBUTTONUP: {
-          const char* btn = ev.button.button == SDL_BUTTON_RIGHT  ? "right"
+          // Thumb buttons are navigation, not clicks; the main process turns
+          // them into history moves rather than forwarding them to the page.
+          const char* btn = ev.button.button == SDL_BUTTON_RIGHT    ? "right"
                             : ev.button.button == SDL_BUTTON_MIDDLE ? "middle"
+                            : ev.button.button == SDL_BUTTON_X1     ? "back"
+                            : ev.button.button == SDL_BUTTON_X2     ? "forward"
                                                                     : "left";
           snprintf(ib, sizeof(ib),
                    "{\"kind\":\"button\",\"down\":%s,\"x\":%d,\"y\":%d,\"button\":\"%s\",\"clicks\":%d}",
