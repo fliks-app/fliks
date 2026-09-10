@@ -438,6 +438,9 @@ app.whenReady().then(async () => {
   // Route the renderer's player IPC to the addon (control via mpv properties).
   ipcMain.handle(IPC.load, (_e, opts) => {
     console.log('[ipc] load', opts?.url, 'start=', opts?.startTime, 'headers=', Object.keys(opts?.headers ?? {}).join(','));
+    // Global property, so it is always written — otherwise the previous file's
+    // rectangle would crop the next one.
+    addon.setProperty('video-crop', opts?.videoCrop ?? '');
     return addon.load(opts);
   });
   ipcMain.handle(IPC.play, () => addon.setProperty('pause', 'no'));
