@@ -42,6 +42,7 @@ import { ProfilesService, LanguageProfile } from '../../core/services/api/profil
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { BackgroundService } from '../../core/services/background.service';
+import { pickFanart } from '../../shared/utils/media-artwork.util';
 import {
   StreamingApiService,
   MediaResumeInfo,
@@ -284,21 +285,18 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     onAttach: () => this.restoreChrome(),
   });
 
-  /** Backdrop pick held across a detach so the page comes back on the same
-   *  image instead of re-randomising from the pool. */
-  /** Last pool declared, so returning to a cached page can re-declare it. */
-  private fanartPool: readonly string[] | null = null;
+  /** Last fanart declared, so returning to a cached page can re-declare it. */
+  private fanartUrl: string | null = null;
 
-  /** The hero navbar is global state, so a cached page hands it back on the way
-   *  out and reclaims it on return. The backdrop is not handed back: the
-   *  declaration stands until the page is destroyed, so a trip to the player
-   *  and back finds the same image rather than a blank that refills. */
+  /** The hero navbar and the backdrop are global state, so a cached page hands
+   *  them back on the way out and reclaims them on return. */
   private releaseChrome(): void {
     this.navbarService.leaveHeroPage();
+    this.backgroundService.suspend(this);
   }
 
   private restoreChrome(): void {
-    this.backgroundService.set(this, this.fanartPool);
+    this.backgroundService.set(this, this.fanartUrl);
     const m = this.media();
     if (m) this.applyEpisodeFocus(m, this.route.snapshot.paramMap.get('episodeId'));
     else this.navbarService.enterHeroPage('');
@@ -334,22 +332,12 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.applyEpisodeFocus(m, params.get('episodeId'));
   });
 
-  /**
-   * Drive the global page background from the currently-focused media.
-   *
-   * We always pull from the *series / movie* fanart pool (never the
-   * episode still): TMDB stills cap at ~780×438 and look mushy when
-   * stretched fullscreen. The pool is `[fanartUrl,
-   * ...additionalFanartUrls]`; one entry is picked at random when the
-   * page loads and stays put — no auto-rotation.
-   */
+  /** Series / movie fanart, never the episode still: TMDB stills cap at
+   *  ~780×438 and look mushy stretched fullscreen. */
   private readonly backgroundEffect = effect(() => {
     const m = this.media();
-    // No media yet is not the same as no fanart: hold what is on screen.
-    this.fanartPool = m
-      ? [m.fanartUrl, ...(m.additionalFanartUrls ?? [])].filter((u): u is string => !!u)
-      : null;
-    this.backgroundService.set(this, this.fanartPool);
+    this.fanartUrl = m ? pickFanart(m) : null;
+    this.backgroundService.set(this, this.fanartUrl);
   });
 
   /** React to SSE rescan / import / metadata-refresh events for this media */

@@ -34,8 +34,6 @@ import type {
 import { PageScrollerService } from '../../core/services/page-scroller.service';
 import { PageScrollModeService } from '../../core/services/page-scroll-mode.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
-import { BackgroundService } from '../../core/services/background.service';
-import { DisplaySettingsService } from '../../core/services/display-settings.service';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { NavbarService } from '../../core/services/navbar.service';
@@ -46,7 +44,7 @@ import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-
 import { CardSkeletonComponent } from '../../shared/components/card-skeleton';
 import { ImportProgressBannerComponent } from '../../shared/components/import-progress-banner/import-progress-banner';
 import { NgTemplateOutlet } from '@angular/common';
-import { fanartPool, itemArtwork } from '../../shared/utils/media-artwork.util';
+import { itemArtwork } from '../../shared/utils/media-artwork.util';
 import { PlayableMediaService } from '../../core/services/playable-media.service';
 import {
   CdkVirtualScrollViewport,
@@ -120,8 +118,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private readonly scrollMode = inject(PageScrollModeService);
   private readonly scrollMemory = inject(ScrollMemoryService);
   private readonly injector = inject(Injector);
-  private readonly background = inject(BackgroundService);
-  private readonly displaySettings = inject(DisplaySettingsService);
   readonly navbar = inject(NavbarService);
   private readonly translate = inject(TranslateService);
   protected readonly itemArtwork = itemArtwork;
@@ -153,22 +149,12 @@ export class LibraryComponent implements OnInit, OnDestroy {
         this.holdLetter();
         this.renderRangeForRememberedOffset();
       }
-      this.applyBackground();
     },
     onDetach: () => {
       if (!this.windowScroll()) this.pageScroller.release(this.shellRef.nativeElement);
     },
   });
 
-  /** Same fanart backdrop as the home page, drawn from this library's own
-   *  titles, so the topbar keeps its frosted look here too. */
-  private applyBackground(): void {
-    if (!this.displaySettings.settings().homeBackground) return this.background.set(this, []);
-    // An empty list is a list still loading, which must hold the current image
-    // rather than declare this page has none.
-    const pool = fanartPool(this.list.all());
-    this.background.set(this, pool.length ? pool : null);
-  }
   private queryParamSub?: Subscription;
   /** Set while a state-driven `syncQueryParams` is being applied to the
    *  URL, so the `queryParamMap` subscription that fires right after
@@ -564,7 +550,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.background.release(this);
     this.list.destroy();
     if (this.onResize) window.removeEventListener('resize', this.onResize);
     this.scrollMemory.deactivate();
@@ -916,7 +901,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
         this.streamingApi.getWatchedMediaIds().catch(() => [] as number[]),
       ]);
       this.list.setItems(res.data, (m) => m.title);
-      this.applyBackground();
       this.watchedIds.set(new Set(watchedIds));
     } finally {
       if (!silent) this.loading.set(false);
@@ -932,10 +916,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
         this.streamingApi.getWatchedMediaIds({ force: true }).catch(() => null),
       ]).then(([res, watchedIds]) => {
         if (gen !== this.loadGen) return;
-        if (res) {
-          this.list.setItems(res.data, (m) => m.title);
-          this.applyBackground();
-        }
+        if (res) this.list.setItems(res.data, (m) => m.title);
         if (watchedIds) this.watchedIds.set(new Set(watchedIds));
       });
     });

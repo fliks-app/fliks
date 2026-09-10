@@ -23,7 +23,6 @@ import { PlayableMediaService } from '../../core/services/playable-media.service
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 import { NavbarService } from '../../core/services/navbar.service';
-import { BackgroundService } from '../../core/services/background.service';
 import { DisplaySettingsService } from '../../core/services/display-settings.service';
 import { HomeSettingsService, HomeSectionType, ResolvedHomeSection } from '../../core/services/home-settings.service';
 import { LibraryPrefsService } from '../../core/services/library-prefs.service';
@@ -41,7 +40,7 @@ import { RequestCardComponent } from '../requests/request-card/request-card';
 import { RequestDeclineModalComponent } from '../requests/request-decline-modal/request-decline-modal.component';
 import { libraryColorVar } from '../../core/constants/library-appearance';
 import { StorageScopeService } from '../../core/services/storage-scope.service';
-import { fanartPool, itemArtwork } from '../../shared/utils/media-artwork.util';
+import { itemArtwork } from '../../shared/utils/media-artwork.util';
 
 /**
  * # Home page
@@ -113,7 +112,6 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly scrollMemory = inject(ScrollMemoryService);
   private readonly navbar = inject(NavbarService);
   private readonly translate = inject(TranslateService);
-  private readonly backgroundService = inject(BackgroundService);
   private readonly displaySettings = inject(DisplaySettingsService);
   private readonly home = inject(HomeSettingsService);
   private readonly libraryPrefs = inject(LibraryPrefsService);
@@ -134,11 +132,6 @@ export class HomeComponent implements OnInit, OnDestroy {
     // repaint nothing.
     refreshOnResume: () => void this.loadAllSections({ force: true }),
     scrollKey: HomeComponent.SCROLL_KEY,
-    onAttach: () =>
-      this.applyBackground(
-        this.recommendations(),
-        this.displaySettings.settings().homeBackground,
-      ),
   });
   private readonly declineModal = viewChild(RequestDeclineModalComponent);
   private readonly detailModal = viewChild(DownloadDetailModalComponent);
@@ -246,24 +239,6 @@ export class HomeComponent implements OnInit, OnDestroy {
   languageProfileDisplay(id: number | null): string {
     if (id == null) return '—';
     return this.languageProfileNames().get(id) ?? `#${id}`;
-  }
-
-  /** Once the recommendations land, randomise the page background
-   *  using their fanarts (primary + extras). One pick per visit;
-   *  the BackgroundService keeps it stable while the user stays on
-   *  the home — same contract as media-detail. */
-  private readonly recommendationsBackgroundEffect = effect(() => {
-    this.applyBackground(this.recommendations(), this.displaySettings.settings().homeBackground);
-  });
-
-  /** The background is global chrome, so a cached page reclaims it on the way
-   *  back in: the effect above won't re-run for data that never changed, and
-   *  the page it returns from is still declaring its own on top. */
-  private applyBackground(recs: readonly RecommendationItem[], enabled: boolean): void {
-    // No recommendations yet is not "no background": hold what is showing until
-    // they land, or the backdrop blinks out on every arrival here.
-    if (!enabled) return this.backgroundService.set(this, []);
-    this.backgroundService.set(this, recs.length ? fanartPool(recs.map((r) => r.media)) : null);
   }
 
   /** A playback that ended leaves this row stale, whether it ran here or on a
@@ -435,7 +410,6 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.backgroundService.release(this);
     this.scrollMemory.deactivate();
     this.playbackStopped.unsubscribe();
   }

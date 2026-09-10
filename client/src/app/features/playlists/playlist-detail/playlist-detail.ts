@@ -43,7 +43,6 @@ import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu'
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
-import { BackgroundService } from '../../../core/services/background.service';
 import { AutoDownloadService } from '../../../core/services/auto-download.service';
 import { NavbarService } from '../../../core/services/navbar.service';
 import { PlayableMediaService } from '../../../core/services/playable-media.service';
@@ -119,7 +118,6 @@ export class PlaylistDetailComponent {
   readonly tv = inject(TvService);
   readonly navbar = inject(NavbarService);
   private readonly streamingApi = inject(StreamingApiService);
-  private readonly background = inject(BackgroundService);
   private readonly autoDownload = inject(AutoDownloadService);
   private readonly playable = inject(PlayableMediaService);
   private readonly social = inject(SocialApiService);
@@ -347,23 +345,10 @@ export class PlaylistDetailComponent {
       const id = this.playlistId();
       if (Number.isFinite(id) && id > 0) void this.load(id);
     });
-    // Drive the global page background from the playlist's media, like the
-    // media-detail pages.
-    effect(() => {
-      const pool = [
-        ...new Set(
-          this.items()
-            .map((i) => i.media.fanartUrl)
-            .filter((u): u is string => !!u),
-        ),
-      ];
-      this.background.set(this, pool);
-    });
     // Reuse the layout's desktop back button (no hero styling, so mobile keeps
     // its normal top padding).
     this.navbar.showBackButton.set(true);
     this.destroyRef.onDestroy(() => {
-      this.background.release(this);
       this.navbar.showBackButton.set(false);
     });
   }
