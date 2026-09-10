@@ -20,6 +20,7 @@ import WebKit
 ///   BackGesture.setEnabled({ enabled: true })
 ///   BackGesture.captureCandidate()          // on NavigationStart
 ///   BackGesture.settle({ delta })           // on NavigationEnd
+///   BackGesture.settled()                   // page done rebuilding
 ///   BackGesture.addListener('end', …)       // carries { commit }
 @objc(BackGesturePlugin)
 public class BackGesturePlugin: CAPPlugin, CAPBridgedPlugin, UIGestureRecognizerDelegate {
@@ -29,6 +30,7 @@ public class BackGesturePlugin: CAPPlugin, CAPBridgedPlugin, UIGestureRecognizer
         CAPPluginMethod(name: "setEnabled", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "captureCandidate", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "settle", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "settled", returnType: CAPPluginReturnPromise),
     ]
 
     /// Past this fraction of the screen the release commits, whatever the speed.
@@ -54,7 +56,20 @@ public class BackGesturePlugin: CAPPlugin, CAPBridgedPlugin, UIGestureRecognizer
     /// Set between .began and the async snapshot arriving; a gesture that ends
     /// in that window must not install the overlay afterwards.
     private var awaitingSnapshot = false
+    /// Identifies the gesture a pending capture belongs to. Releasing before the
+    /// image lands and starting again re-arms `awaitingSnapshot`, which the
+    /// stale capture would otherwise take for its own — installing an overlay
+    /// for a gesture already over, with nothing left to tear it down.
+    private var gestureId = 0
     private var width: CGFloat = 1
+    /// Set once the slide is over and the overlay is only waiting on the page.
+    private var awaitingSettle = false
+    /// Uncovers the WebView even if JS never reports, so a stalled navigation
+    /// cannot leave the page hidden.
+    private var settleFallback: DispatchWorkItem?
+    /// Last resort: an overlay belongs to a live gesture or to the wait after a
+    /// commit. Outside both, it is orphaned, and an orphan hides the whole app.
+    private var watchdog: DispatchWorkItem?
 
     /// Pages left behind, oldest first: the last one is what a back returns to.
     /// Entries can be nil — a capture that failed, or one JS skipped — so the
@@ -63,6 +78,9 @@ public class BackGesturePlugin: CAPPlugin, CAPBridgedPlugin, UIGestureRecognizer
     /// Captured when a navigation starts, kept or dropped once the router says
     /// whether it grew the back stack.
     private var candidate: UIImage?
+    /// Identifies the navigation a pending capture belongs to, so one that comes
+    /// back after its own settle is dropped instead of being pushed for the next.
+    private var captureId = 0
 
     override public func load() {
         DispatchQueue.main.async { [weak self] in self?.attach() }
@@ -72,6 +90,20 @@ public class BackGesturePlugin: CAPPlugin, CAPBridgedPlugin, UIGestureRecognizer
             name: UIApplication.didReceiveMemoryWarningNotification,
             object: nil
         )
+        // A rotation resizes the container under an overlay whose layers are
+        // laid out in points fixed at .began, and the hold after a commit can
+        // still be running. Dropping it hands the page straight back.
+        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(dropOverlay),
+            name: UIDevice.orientationDidChangeNotification,
+            object: nil
+        )
+    }
+
+    @objc private func dropOverlay() {
+        DispatchQueue.main.async { [weak self] in self?.teardown() }
     }
 
     private func attach() {
@@ -90,6 +122,17 @@ public class BackGesturePlugin: CAPPlugin, CAPBridgedPlugin, UIGestureRecognizer
     @objc private func dropSnapshots() {
         pageSnapshots.removeAll()
         candidate = nil
+    }
+
+    /// Called by JS once the returning page has stopped rebuilding. A cached
+    /// page comes back with its rows re-rendered, and the frames painted while
+    /// that runs can be half-filled.
+    @objc func settled(_ call: CAPPluginCall) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if self.awaitingSettle { self.teardown() }
+            call.resolve()
+        }
     }
 
     @objc func setEnabled(_ call: CAPPluginCall) {
@@ -144,6 +187,7 @@ public class BackGesturePlugin: CAPPlugin, CAPBridgedPlugin, UIGestureRecognizer
                 }
             }
             self.candidate = nil
+            self.captureId &+= 1
             for _ in 0..<max(0, -delta) where !self.pageSnapshots.isEmpty {
                 self.pageSnapshots.removeLast()
             }
@@ -157,8 +201,9 @@ public class BackGesturePlugin: CAPPlugin, CAPBridgedPlugin, UIGestureRecognizer
 
         switch pan.state {
         case .began:
+            gestureId &+= 1
             width = max(container.bounds.width, 1)
-            captureSnapshot()
+            captureSnapshot(for: gestureId)
         case .changed:
             apply(translation: translation)
         case .ended, .cancelled, .failed:
@@ -173,28 +218,39 @@ public class BackGesturePlugin: CAPPlugin, CAPBridgedPlugin, UIGestureRecognizer
 
     /// takeSnapshot rather than snapshotView: WebKit renders out of process, and
     /// the UIView-level copy comes back blank often enough to matter.
-    private func captureSnapshot() {
+    private func captureSnapshot(for id: Int) {
         guard let webView = bridge?.webView, let container = bridge?.viewController?.view else { return }
         let config = WKSnapshotConfiguration()
         config.afterScreenUpdates = false
         awaitingSnapshot = true
         webView.takeSnapshot(with: config) { [weak self] image, _ in
-            guard let self, self.awaitingSnapshot, let image else { return }
+            guard let self, id == self.gestureId, self.awaitingSnapshot, let image else { return }
             self.awaitingSnapshot = false
+            // The finger may have lifted while the image was being taken.
+            let state = self.recognizer?.state
+            guard state == .began || state == .changed else { return }
             self.install(image: image, over: webView, in: container)
         }
     }
 
     private func install(image: UIImage, over webView: WKWebView, in container: UIView) {
+        // Nothing of a previous gesture survives into this one.
+        teardown()
         let frame = container.convert(webView.bounds, from: webView)
 
         let backdrop = UIView(frame: container.bounds)
         backdrop.backgroundColor = Self.backdropColor
         backdrop.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        // The hold can outlast the slide; a tap then belongs to the page
+        // underneath, which is already the one on display.
+        backdrop.isUserInteractionEnabled = false
         container.addSubview(backdrop)
         self.backdrop = backdrop
 
-        if let behind = pageSnapshots.last ?? nil {
+        // A snapshot taken in the other orientation would be stretched into
+        // this frame. The stack keeps it — rotating back makes it usable again
+        // — and this return simply falls back to the flat backdrop.
+        if let behind = pageSnapshots.last ?? nil, matches(behind, frame) {
             let view = UIImageView(image: behind)
             view.frame = frame
             container.addSubview(view)
@@ -215,10 +271,33 @@ public class BackGesturePlugin: CAPPlugin, CAPBridgedPlugin, UIGestureRecognizer
         view.layer.shadowOffset = CGSize(width: -4, height: 0)
         container.addSubview(view)
         snapshot = view
+        armWatchdog()
 
         // The finger has moved during the capture; catch up in one step.
         let live = recognizer?.state == .changed || recognizer?.state == .began
         apply(translation: live ? max(0, recognizer?.translation(in: container).x ?? 0) : 0)
+    }
+
+    private func armWatchdog() {
+        watchdog?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.backdrop != nil, !self.awaitingSettle else { return }
+            let state = self.recognizer?.state
+            guard state != .began && state != .changed else {
+                self.armWatchdog()
+                return
+            }
+            self.teardown()
+        }
+        watchdog = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2, execute: work)
+    }
+
+    /// Same shape, within the rounding a snapshot's pixel size introduces.
+    private func matches(_ image: UIImage, _ frame: CGRect) -> Bool {
+        guard image.size.height > 0, frame.height > 0 else { return false }
+        let ratio = (image.size.width / image.size.height) / (frame.width / frame.height)
+        return abs(ratio - 1) < 0.02
     }
 
     private func apply(translation: CGFloat) {
@@ -244,13 +323,28 @@ public class BackGesturePlugin: CAPPlugin, CAPBridgedPlugin, UIGestureRecognizer
         UIView.animate(withDuration: duration, delay: 0, options: [.curveEaseOut, .beginFromCurrentState]) {
             self.apply(translation: target)
         } completion: { [weak self] _ in
-            // JS gets the commit before the slide starts, so the router has the
-            // whole animation to swap the page in behind the backdrop.
-            self?.teardown()
+            guard let self else { return }
+            guard commit else {
+                self.teardown()
+                return
+            }
+            // What stays on screen is the snapshot of the page being returned
+            // to, so waiting on it shows the viewer nothing but the destination.
+            self.snapshot?.removeFromSuperview()
+            self.snapshot = nil
+            self.awaitingSettle = true
+            let fallback = DispatchWorkItem { [weak self] in self?.teardown() }
+            self.settleFallback = fallback
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.9, execute: fallback)
         }
     }
 
     private func teardown() {
+        watchdog?.cancel()
+        watchdog = nil
+        awaitingSettle = false
+        settleFallback?.cancel()
+        settleFallback = nil
         snapshot?.removeFromSuperview()
         snapshot = nil
         previous?.removeFromSuperview()

@@ -10,6 +10,7 @@ import { setSwipeBackActive } from '../../shared/utils/view-transition';
 
 interface BackGesturePlugin {
   setEnabled(options: { enabled: boolean }): Promise<void>;
+  settled(): Promise<void>;
   captureCandidate(): Promise<void>;
   settle(options: { delta: number }): Promise<void>;
   addListener(
@@ -24,6 +25,10 @@ const BackGesture = registerPlugin<BackGesturePlugin>('BackGesture');
  *  its own back; the settings, account and admin shells navigate between their
  *  own panels, where sliding the entire screen off reads as leaving the app. */
 const UNSWIPEABLE = ['/watch', '/admin', '/account', '/app-settings'];
+
+/** A frame at screen rate, with room for a 60 Hz frame that ran a little long.
+ *  The rebuild this waits out lands frames three to four times slower. */
+const SMOOTH_FRAME_MS = 24;
 
 /**
  * iOS left-edge swipe-back. The recognizer and the slide animation live in
@@ -101,9 +106,38 @@ export class BackGestureService {
       setSwipeBackActive(true);
       this.releaseTransitionsOnArrival();
       onCommit();
+      this.reportSettled();
     }).then((handle) => {
       this.listener = handle;
     });
+  }
+
+  /**
+   * Tells the native side when the page it navigated to has stopped rebuilding.
+   *
+   * A cached page comes back with its rows re-rendered, and on a slower device
+   * that rebuild runs for a few hundred milliseconds, painting half-filled
+   * frames along the way. Frame pacing is the signal for it: while the rebuild
+   * runs, frames land 60-80 ms apart, and two in a row at screen rate mean it
+   * is over. The snapshot held until then is the destination's own, so the
+   * wait shows nothing the viewer would not see anyway.
+   */
+  private reportSettled(): void {
+    const start = performance.now();
+    let previous = start;
+    let smooth = 0;
+    const tick = (now: number) => {
+      if (now - previous <= SMOOTH_FRAME_MS) smooth++;
+      else smooth = 0;
+      previous = now;
+      // The native side drops the overlay on its own past its own deadline.
+      if (smooth >= 2 || now - start > 900) {
+        void BackGesture.settled().catch(() => {});
+        return;
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
   }
 
   private pathOf(url: string): string {
