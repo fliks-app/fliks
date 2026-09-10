@@ -7,7 +7,6 @@ import {
   isFocusCandidate,
   isRendered,
 } from './focusable.constants';
-import { pageScrollOwner } from '../utils/page-scroll.util';
 
 /**
  * Spatial navigation for D-pad input on Android TV — and keyboard
@@ -347,9 +346,7 @@ export class TvSpatialNavService {
     // below the last card. Held keys stay put; up/down only; not in a modal.
     if (crossZones && !this.openModals().length && (dir === 'down' || dir === 'up')) {
       const top = dir === 'down' ? PAGE_SCROLL_AMOUNT_PX : -PAGE_SCROLL_AMOUNT_PX;
-      const owner = pageScrollOwner(active);
-      if (owner) owner.scrollBy({ top, behavior: 'smooth' });
-      else window.scrollBy({ top, behavior: 'smooth' });
+      window.scrollBy({ top, behavior: 'smooth' });
     }
   }
 
@@ -760,9 +757,8 @@ function collectFocusables(root: ParentNode = document): HTMLElement[] {
     // scrollLeft reaches its hidden siblings, so allow either case.
     if (r.right <= 0 || r.bottom <= 0) {
       const inScroller = el.closest(SCROLLER_SELECTOR);
-      const owner = pageScrollOwner(el);
-      const docRight = r.right + (owner ? owner.scrollLeft : window.scrollX);
-      const docBottom = r.bottom + (owner ? owner.scrollTop : window.scrollY);
+      const docRight = r.right + window.scrollX;
+      const docBottom = r.bottom + window.scrollY;
       if (!inScroller && (docRight <= 0 || docBottom <= 0)) return false;
     }
     return true;

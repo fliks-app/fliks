@@ -1,7 +1,6 @@
 <div class="drawer min-h-screen"
      [class.lg:drawer-open]="navbar.sidebarDocked()"
      [class.md:drawer-open]="device.isTablet() && navbar.effectiveSidebarPinned()"
-     [class.owns-scroll]="ownsScroll()"
      [style.--chrome-top]="chromeTop()"
      [style.--chrome-bottom]="chromeBottom()">
   <input id="sidebar" type="checkbox" class="drawer-toggle" />
@@ -153,15 +152,9 @@
     <main
       class="min-w-0 flex-1 px-[var(--page-p)]"
       [class.overflow-x-clip]="!navbar.isHeroPage()"
-      [style.--chrome-top]="ownsScroll() && !networkService.isOnline() ? '0px' : chromeTop()"
     >
       @if (!networkService.isOnline()) {
-        <!-- Above the page's own scroller, so while it is up the banner carries
-             the chrome clearance and the page gutter, and the scroller inherits none. -->
-        <div class="alert alert-warning mb-4 flex items-center justify-between py-2"
-             [style.margin-top]="ownsScroll() ? chromeTop() : null"
-             [style.margin-left]="ownsScroll() ? 'var(--page-p)' : null"
-             [style.margin-right]="ownsScroll() ? 'var(--page-p)' : null">
+        <div class="alert alert-warning mb-4 flex items-center justify-between py-2">
           <span class="text-sm">{{ 'common.offline_banner' | translate }}</span>
           <button class="btn btn-sm btn-ghost" (click)="retryConnection()">{{ 'common.retry' | translate }}</button>
         </div>

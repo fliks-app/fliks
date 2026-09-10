@@ -9,14 +9,12 @@ import { PageScrollerService } from './page-scroller.service';
 
 describe('ScrollMemoryService', () => {
   let events: Subject<unknown>;
-  let claimed: HTMLElement | null;
   let offset: number;
   let writes: number[];
   let wentBack: boolean;
 
   beforeEach(() => {
     events = new Subject();
-    claimed = null;
     offset = 0;
     writes = [];
     wentBack = false;
@@ -28,7 +26,6 @@ describe('ScrollMemoryService', () => {
         {
           provide: PageScrollerService,
           useValue: {
-            element: () => claimed,
             offset: () => offset,
             scrollTo: vi.fn((top: number) => {
               writes.push(top);
@@ -45,10 +42,9 @@ describe('ScrollMemoryService', () => {
   const service = () => TestBed.inject(ScrollMemoryService);
   const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
 
-  it('saves and restores the claimed container, not the document', async () => {
+  it('saves the offset a page is left at and restores it on the way back', async () => {
     const s = service();
     wentBack = true;
-    claimed = document.createElement('div');
     s.activate('library-films');
     offset = 4160;
 
@@ -61,44 +57,17 @@ describe('ScrollMemoryService', () => {
     expect(writes).toEqual([4160]);
   });
 
-  it('stops sticking once another page claims its own scroller', async () => {
+  it('retries while the reattached page is not yet tall enough to scroll', async () => {
     const s = service();
     wentBack = true;
-    claimed = document.createElement('div');
-    s.activate('library-films');
-    offset = 4160;
-    events.next(new NavigationStart(1, '/movies/1'));
-    offset = 0;
-    events.next(new Scroll({} as never, null, null));
-    await nextFrame();
-
-    // A write that lands short keeps the loop going; a page navigated to in
-    // the meantime must not inherit the rest of it.
-    const scroller = TestBed.inject(PageScrollerService) as unknown as {
-      scrollTo: (top: number) => void;
-    };
-    scroller.scrollTo = (top: number) => writes.push(top);
-
-    s.restoreSticky('library-films');
-    claimed = document.createElement('div');
-    await nextFrame();
-    await nextFrame();
-
-    expect(writes).toEqual([4160]);
-  });
-
-  it('retries while a reattached container is not yet scrollable', async () => {
-    const s = service();
-    wentBack = true;
-    claimed = document.createElement('div');
     s.activate('library-films');
     offset = 4160;
     events.next(new NavigationStart(1, '/movies/1'));
     events.next(new Scroll({} as never, null, null));
     await nextFrame();
 
-    // A container reattached before layout clamps the write to 0; the loop has
-    // to come back for it rather than give up on the first frame.
+    // A page reattached before layout clamps the write to 0; the loop has to
+    // come back for it rather than give up on the first frame.
     const scroller = TestBed.inject(PageScrollerService) as unknown as {
       scrollTo: (top: number) => void;
     };

@@ -32,7 +32,6 @@ import { DownloadManagerService } from '../../core/services/download-manager.ser
 import { NavigationHistoryService } from '../../core/services/navigation-history.service';
 import { NetworkService } from '../../core/services/network.service';
 import { PageScrollerService } from '../../core/services/page-scroller.service';
-import { PageScrollModeService } from '../../core/services/page-scroll-mode.service';
 import { CardActionsPanelComponent } from '../components/card-actions-panel/card-actions-panel';
 import { AddToPlaylistModalComponent } from '../components/add-to-playlist-modal/add-to-playlist-modal.component';
 import { RecommendModalComponent } from '../components/recommend-modal/recommend-modal.component';
@@ -132,7 +131,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
     }
   });
   private readonly pageScroller = inject(PageScrollerService);
-  private readonly scrollMode = inject(PageScrollModeService);
   readonly networkService = inject(NetworkService);
   readonly castService = inject(CastService);
   readonly remote = inject(RemoteService);
@@ -174,26 +172,9 @@ export class LayoutComponent implements OnInit, OnDestroy {
   }
   readonly isHomeRoute = signal(this.router.url === '/' || this.router.url.startsWith('/?'));
 
-  /** Whether the deepest activated route owns its own scroll container —
-   *  route intent AND the platform's resolved scroll mode both have to agree.
-   *  Read synchronously from the NavigationEnd handler below (same as the
-   *  other per-navigation state there), so `.owns-scroll` lands in the same
-   *  change-detection pass as the outlet swap instead of racing it. */
-  readonly ownsScroll = signal(this.effectiveOwnsScroll());
-  private deepestRouteOwnsScroll(): boolean {
-    let r = this.router.routerState.snapshot.root;
-    while (r.firstChild) r = r.firstChild;
-    return !!r.data['ownsScroll'];
-  }
-  private effectiveOwnsScroll(): boolean {
-    return this.deepestRouteOwnsScroll() && this.scrollMode.mode() === 'container';
-  }
-
   /** Fixed navbar's own clearance: its height (0 on TV, where it doesn't
    *  reserve space) plus safe area — 0 wherever the mobile-style navbar
-   *  itself is hidden (desktop, or a pinned tablet sidebar). TV and desktop
-   *  never own the scroll (see `PageScrollModeService`), so their in-flow bar
-   *  always reserves its own space here rather than being fixed.
+   *  itself is hidden (desktop, or a pinned tablet sidebar).
    *  Deliberately hero-blind: a hero page takes the space back through
    *  `body.hero-page` in CSS (styles.css), which NavbarService toggles
    *  synchronously — a value that only lands at the next change detection
@@ -207,8 +188,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly contentGapTop = computed(() =>
     !this.isNative && this.navbar.mobileNavbarVisible() ? '2rem' : '1rem',
   );
-  /** Published as a CSS var so a page that owns its scroller reserves the same
-   *  space inside itself, and content still scrolls under the fixed navbar. */
+  /** Published as a CSS var so content still scrolls under the fixed navbar. */
   readonly chromeTop = computed(() => `calc(${this.navbarSpacerHeight()} + ${this.contentGapTop()})`);
   /** The 6rem term is the native phone dock's height. */
   readonly chromeBottom = computed(() => {
@@ -269,9 +249,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   private readonly topSentinelObserverEffect = effect(() => {
     const el = this.topSentinel()?.nativeElement;
-    const root = this.pageScroller.element();
     this.topSentinelObserver?.disconnect();
-    if (!el || root || typeof IntersectionObserver === 'undefined') return;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
     this.topSentinelObserver = new IntersectionObserver(
       ([entry]) => this.navbar.scrollAtTop.set(entry.isIntersecting),
       { root: null },
@@ -370,7 +349,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
       .subscribe(e => {
         if (e instanceof Scroll) this.endScrollRestore();
         if (e instanceof NavigationEnd) {
-          this.ownsScroll.set(this.effectiveOwnsScroll());
           this.beginScrollRestore();
           this.replayPageEnter();
           this.bottomMenuOpen.set(false);
