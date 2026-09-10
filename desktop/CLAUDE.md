@@ -82,7 +82,21 @@ is ignored; the Linux `.so` is the one committed exception). It must be
 clashes with libmpv's FFmpeg and crashes (`free(): invalid pointer` / abort).
 Override the path with `FLIKS_MPV_PATH`.
 
-**Linux** — `native/vendor/libmpv.so.2` (~38 MB self-contained static).
+**Linux** — `native/vendor/libmpv.so.2` (~31 MB self-contained static). Build it
+with the build script, which drives mpv-build in a container and runs the
+kill-switches itself:
+```bash
+desktop/scripts/build-libmpv-linux.sh           # ubuntu:24.04 → glibc 2.39 floor
+BASE=ubuntu:22.04 desktop/scripts/build-libmpv-linux.sh
+```
+The base image is the minimum glibc every user of the `.deb` / AppImage then needs,
+so it is an LTS rather than the newest release. Anything whose soname churns between
+distro releases (libass, libplacebo, libunibreak) is linked statically and the
+features that dragged in the rest (bluray, rubberband, drm/wayland EDID) are off —
+a dynamic dep on one of those is what breaks the blob on a distro upgrade.
+`vendor-libmpv-linux.sh` is the other half, at release time: it bundles next to the
+lib the two SONAMEs a stock desktop still lacks. It guards on the exact `DT_NEEDED`
+set, so a rebuilt libmpv means re-deriving its list.
 Kill-switch (MUST print nothing):
 ```bash
 nm -D native/vendor/libmpv.so.2 | grep ' av_'
