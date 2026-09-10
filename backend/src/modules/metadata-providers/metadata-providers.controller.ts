@@ -200,6 +200,19 @@ export class MetadataProvidersController {
     return provider.getTvShowSeasons(externalId);
   }
 
+  /** Season numbers + episode counts only. A season picker renders nothing
+   *  else, and this costs one provider call instead of one per season. */
+  @Get(':provider/tv/:externalId/season-stubs')
+  async getSeasonStubs(
+    @Param('provider') providerName: string,
+    @Param('externalId') externalId: string,
+  ) {
+    const provider = this.registry.get(providerName);
+    if (!provider)
+      throw new BadRequestException(`Unknown provider: ${providerName}`);
+    return provider.getSeasonStubs(externalId);
+  }
+
   // ── Backward compat: /metadata/movie/:id defaults to tmdb ──
 
   @Get('movie/:tmdbId')

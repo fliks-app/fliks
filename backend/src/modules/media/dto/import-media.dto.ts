@@ -1,4 +1,11 @@
-import { IsEnum, IsString, IsOptional, IsInt, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsString,
+  IsOptional,
+  IsInt,
+  IsArray,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { MediaType } from '../../../common/enums';
 
@@ -30,4 +37,13 @@ export class ImportMediaDto {
   @IsInt()
   @Min(1)
   libraryId?: number;
+
+  /** Series only: the seasons to monitor. Absent or empty monitors every season
+   *  but the specials. Season 0 is only ever monitored by number. */
+  @IsOptional()
+  @IsArray()
+  @Type(() => Number)
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  monitoredSeasons?: number[];
 }

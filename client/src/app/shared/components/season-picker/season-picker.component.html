@@ -1,0 +1,62 @@
+@if (loading()) {
+  <div class="flex justify-center py-8">
+    <span class="loading loading-spinner loading-md"></span>
+  </div>
+} @else if (seasons().length) {
+  <div class="overflow-x-auto rounded-lg border border-base-200">
+    <table class="table">
+      <thead>
+        <tr>
+          <th class="w-12">
+            <input
+              type="checkbox"
+              class="toggle toggle-sm toggle-primary"
+              [checked]="allSelectableChosen()"
+              [disabled]="selectableCount() === 0"
+              (change)="allToggled.emit()"
+            />
+          </th>
+          <th>{{ 'discover.col_season' | translate }}</th>
+          <th>{{ 'discover.col_episodes' | translate }}</th>
+          <th>{{ 'discover.col_status' | translate }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (s of seasons(); track s.seasonNumber) {
+          @let isLocked = locked().has(s.seasonNumber);
+          @let isSelected = selected().has(s.seasonNumber);
+          <tr
+            class="hover"
+            [class.opacity-50]="!isSelected && !isLocked"
+            [class.opacity-60]="isLocked"
+          >
+            <td>
+              <input
+                type="checkbox"
+                class="toggle toggle-sm toggle-primary"
+                [checked]="isSelected || isLocked"
+                [disabled]="isLocked"
+                (change)="toggle(s.seasonNumber)"
+              />
+            </td>
+            <td class="font-medium">{{ s.seasonNumber | seasonLabel }}</td>
+            <td>{{ s.episodeCount }}</td>
+            <td>
+              @if (isLocked) {
+                <span class="badge badge-warning badge-sm">{{ lockedBadgeKey() | translate }}</span>
+              } @else if (isSelected) {
+                <span class="badge badge-primary badge-sm">{{
+                  selectedBadgeKey() | translate
+                }}</span>
+              } @else {
+                <span class="badge badge-ghost badge-sm">{{
+                  unselectedBadgeKey() | translate
+                }}</span>
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}

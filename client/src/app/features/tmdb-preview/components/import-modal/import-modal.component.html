@@ -1,5 +1,5 @@
 <dialog #dialog class="modal">
-  <div class="modal-box max-w-lg">
+  <div class="modal-box max-w-2xl">
     <app-modal-header>
       <div>
         <h3 class="text-lg font-bold text-primary">{{ 'discover.add_to_library' | translate }}</h3>
@@ -9,6 +9,24 @@
 
     @if (error()) {
       <div role="alert" class="alert alert-error text-sm mt-4 py-2">{{ error() }}</div>
+    }
+
+    @if (mediaType() === 'series') {
+      @if (seasonsFailed()) {
+        <div role="alert" class="alert alert-warning text-sm mt-4 py-2">
+          {{ 'discover.seasons_unavailable' | translate }}
+        </div>
+      }
+      <app-season-picker
+        class="block mt-4"
+        [seasons]="seasons()"
+        [selected]="selectedSeasons()"
+        [loading]="seasonsLoading()"
+        selectedBadgeKey="discover.status_monitored"
+        unselectedBadgeKey="discover.status_not_monitored"
+        (seasonToggled)="toggleSeason($event)"
+        (allToggled)="toggleAllSeasons()"
+      />
     }
 
     @if (loading()) {
@@ -23,7 +41,7 @@
               'discover.quality_profile' | translate
             }}</span>
             <select
-    appTvSelect
+              appTvSelect
               class="select select-bordered select-sm w-full"
               [ngModel]="selectedQualityProfileId()"
               (ngModelChange)="selectedQualityProfileId.set(+$event)"
@@ -40,7 +58,7 @@
               'discover.language_profile' | translate
             }}</span>
             <select
-    appTvSelect
+              appTvSelect
               class="select select-bordered select-sm w-full"
               [ngModel]="selectedLanguageProfileId()"
               (ngModelChange)="selectedLanguageProfileId.set(+$event)"
@@ -57,7 +75,7 @@
               'settings.libraries.title' | translate
             }}</span>
             <select
-    appTvSelect
+              appTvSelect
               class="select select-bordered select-sm w-full"
               [ngModel]="selectedLibraryId()"
               (ngModelChange)="selectedLibraryId.set($event ? +$event : null)"
@@ -78,7 +96,7 @@
       <button
         type="button"
         class="btn btn-primary"
-        [disabled]="importing() || loading()"
+        [disabled]="importing() || loading() || seasonsLoading() || nothingToMonitor()"
         (click)="confirm()"
       >
         @if (importing()) {

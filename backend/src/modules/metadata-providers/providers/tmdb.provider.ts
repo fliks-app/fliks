@@ -6,6 +6,7 @@ import {
   MetadataSearchResult,
   MetadataDetails,
   SeasonDetails,
+  SeasonStub,
   PersonDetails,
   PersonCombinedCredits,
   ExternalIdResult,
@@ -29,6 +30,7 @@ import {
   MetadataLanguageOverride,
 } from '../metadata-settings-cache.service';
 import { installCircuitBreaker } from '../http-circuit-breaker';
+import { mapWithConcurrency } from '../../../common/utils/concurrency';
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
@@ -36,6 +38,10 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
  *  downloaded at thumb + medium + full → ~3× storage per item, so 5
  *  stays under ~10 MB per series even with high-res sources. */
 const MAX_ADDITIONAL_FANARTS = 5;
+
+/** In-flight /season requests per show. TMDB tolerates ~50 req/s, so the cap is
+ *  about not monopolising the socket pool, not about the remote quota. */
+const SEASON_FETCH_CONCURRENCY = 8;
 
 /**
  * Pick the top `n` fanart URLs from a TMDB images response,
@@ -77,8 +83,10 @@ function pickLogo(
   // never enough to override a clearly better-voted logo in another language.
   const langBonus = (lang: string | null | undefined): number =>
     lang === preferIso1 ? 0.5 : lang === 'en' ? 0.25 : 0;
-  const score = (l: { vote_average?: number; iso_639_1?: string | null }): number =>
-    (l.vote_average ?? 0) + langBonus(l.iso_639_1);
+  const score = (l: {
+    vote_average?: number;
+    iso_639_1?: string | null;
+  }): number => (l.vote_average ?? 0) + langBonus(l.iso_639_1);
   const best = [...logos].sort((a, b) => score(b) - score(a))[0];
   return `${TMDB_IMAGE_BASE}/original${best.file_path}`;
 }
@@ -410,13 +418,15 @@ export class TmdbProvider implements IMetadataProvider {
   }
 
   /**
-   * Seasons + episode counts in one API call, so a library import does not fan
-   * out into N /season requests.
+   * Season numbers + episode counts in one API call. Season 0 is kept: a picker
+   * has to be able to monitor the specials, which are only ever opted into by
+   * number.
    */
-  async getTvSeasonStubs(
+  async getSeasonStubs(
     externalId: string,
-  ): Promise<{ seasonNumber: number; episodeCount: number }[]> {
-    const lang = await this.metaLang.resolve();
+    override?: MetadataLanguageOverride,
+  ): Promise<SeasonStub[]> {
+    const lang = await this.metaLang.resolve(override);
     const tmdbId = parseInt(externalId, 10);
     const { data: show } = await this.client.get<TmdbTvShowWithSeasons>(
       `/tv/${tmdbId}`,
@@ -424,12 +434,10 @@ export class TmdbProvider implements IMetadataProvider {
         params: { language: lang.tmdbLocale },
       },
     );
-    return (show.seasons ?? [])
-      .filter((s) => s.season_number > 0)
-      .map((s) => ({
-        seasonNumber: s.season_number,
-        episodeCount: s.episode_count ?? 0,
-      }));
+    return (show.seasons ?? []).map((s) => ({
+      seasonNumber: s.season_number,
+      episodeCount: s.episode_count ?? 0,
+    }));
   }
 
   async getTvSeason(
@@ -464,54 +472,35 @@ export class TmdbProvider implements IMetadataProvider {
     };
   }
 
+  /**
+   * Every season with its episodes. TMDB has no bulk endpoint, so this is one
+   * request per season, fanned out under {@link SEASON_FETCH_CONCURRENCY}
+   * instead of serialised, which is what made importing a long series take
+   * seconds. A season that fails is warned about and dropped: an import missing
+   * one season beats no import.
+   */
   async getTvShowSeasons(
     externalId: string,
     override?: MetadataLanguageOverride,
   ): Promise<SeasonDetails[]> {
-    const lang = await this.metaLang.resolve(override);
-    const tmdbId = parseInt(externalId, 10);
-    const { data: show } = await this.client.get<TmdbTvShowWithSeasons>(
-      `/tv/${tmdbId}`,
-      {
-        params: { language: lang.tmdbLocale },
+    const stubs = await this.getSeasonStubs(externalId, override);
+    const fetched = await mapWithConcurrency(
+      stubs,
+      SEASON_FETCH_CONCURRENCY,
+      async ({ seasonNumber }) => {
+        try {
+          return await this.getTvSeason(externalId, seasonNumber, override);
+        } catch (err) {
+          this.logger.warn(
+            `Failed to fetch season ${seasonNumber} for TV ${externalId}: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+          return null;
+        }
       },
     );
-
-    const seasons: SeasonDetails[] = [];
-    for (const s of show.seasons ?? []) {
-      try {
-        const { data: season } = await this.client.get<TmdbTvSeasonResponse>(
-          `/tv/${tmdbId}/season/${s.season_number}`,
-          { params: { language: lang.tmdbLocale } },
-        );
-        seasons.push({
-          seasonNumber: season.season_number,
-          episodeCount: season.episodes?.length ?? 0,
-          overview: season.overview || null,
-          airDate: season.air_date || null,
-          posterUrl: season.poster_path
-            ? `${TMDB_IMAGE_BASE}/w500${season.poster_path}`
-            : null,
-          episodes: (season.episodes ?? []).map((e: TmdbTvEpisode) => ({
-            episodeNumber: e.episode_number,
-            title: e.name,
-            overview: e.overview || null,
-            airDate: e.air_date || null,
-            runtime: e.runtime ?? null,
-            stillUrl: e.still_path
-              ? `${TMDB_IMAGE_BASE}/w780${e.still_path}`
-              : null,
-          })),
-        });
-      } catch (err) {
-        this.logger.warn(
-          `Failed to fetch season ${s.season_number} for TV ${tmdbId}: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
-      }
-    }
-    return seasons;
+    return fetched.filter((s): s is SeasonDetails => s !== null);
   }
 
   async getTrendingMovies(
@@ -588,23 +577,29 @@ export class TmdbProvider implements IMetadataProvider {
 
   async getUpcomingTvShows(): Promise<MetadataSearchResult[]> {
     const lang = await this.metaLang.resolve();
-    return this.withStaleFallback(`upcoming:tv:${lang.tmdbLocale}`, async () => {
-      const { data } = await this.client.get<TmdbPaginated<TmdbTvListItem>>(
-        '/tv/on_the_air',
-        { params: { language: lang.tmdbLocale } },
-      );
-      return data.results.map((r) => this.mapTvResult(r));
-    });
+    return this.withStaleFallback(
+      `upcoming:tv:${lang.tmdbLocale}`,
+      async () => {
+        const { data } = await this.client.get<TmdbPaginated<TmdbTvListItem>>(
+          '/tv/on_the_air',
+          { params: { language: lang.tmdbLocale } },
+        );
+        return data.results.map((r) => this.mapTvResult(r));
+      },
+    );
   }
 
   async getMovieGenres(): Promise<{ id: number; name: string }[]> {
     const lang = await this.metaLang.resolve();
-    return this.withStaleFallback(`genres:movie:${lang.tmdbLocale}`, async () => {
-      const { data } = await this.client.get<{
-        genres: { id: number; name: string }[];
-      }>('/genre/movie/list', { params: { language: lang.tmdbLocale } });
-      return data.genres;
-    });
+    return this.withStaleFallback(
+      `genres:movie:${lang.tmdbLocale}`,
+      async () => {
+        const { data } = await this.client.get<{
+          genres: { id: number; name: string }[];
+        }>('/genre/movie/list', { params: { language: lang.tmdbLocale } });
+        return data.genres;
+      },
+    );
   }
 
   async getTvGenres(): Promise<{ id: number; name: string }[]> {
@@ -628,8 +623,10 @@ export class TmdbProvider implements IMetadataProvider {
     };
     if (opts.genreIds?.length) params['with_genres'] = opts.genreIds.join(',');
     if (opts.voteAverageGte) params['vote_average.gte'] = opts.voteAverageGte;
-    if (opts.yearGte) params['primary_release_date.gte'] = `${opts.yearGte}-01-01`;
-    if (opts.yearLte) params['primary_release_date.lte'] = `${opts.yearLte}-12-31`;
+    if (opts.yearGte)
+      params['primary_release_date.gte'] = `${opts.yearGte}-01-01`;
+    if (opts.yearLte)
+      params['primary_release_date.lte'] = `${opts.yearLte}-12-31`;
     const { data } = await this.client.get<TmdbPaginated<TmdbMovieListItem>>(
       '/discover/movie',
       { params },
@@ -637,7 +634,9 @@ export class TmdbProvider implements IMetadataProvider {
     return data.results.map((r) => this.mapMovieResult(r));
   }
 
-  async discoverTvShows(opts: DiscoverOptions): Promise<MetadataSearchResult[]> {
+  async discoverTvShows(
+    opts: DiscoverOptions,
+  ): Promise<MetadataSearchResult[]> {
     const lang = await this.metaLang.resolve();
     // TMDB /discover/tv dates its sort on first_air_date, not release date.
     const sortBy = (opts.sortBy || 'popularity.desc').replace(

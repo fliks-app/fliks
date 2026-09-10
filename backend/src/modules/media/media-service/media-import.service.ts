@@ -291,6 +291,7 @@ export class MediaImportService {
       folderName,
       libraryId,
       addedByUserId,
+      dto.monitoredSeasons ?? null,
     );
   }
 

@@ -11,17 +11,25 @@ import {
 import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { MetadataService, MetadataSeason } from '../../../../core/services/api/metadata.service';
+import { MetadataService, SeasonStub } from '../../../../core/services/api/metadata.service';
 import { RequestsService } from '../../../../core/services/api/requests.service';
 import { LibrarySummary } from '../../../../core/services/api/libraries-api.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import { MediaType } from '../../../../core/enums/media-type.enum';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
+import { SeasonPickerComponent } from '../../../../shared/components/season-picker/season-picker.component';
 
 @Component({
   selector: 'app-request-modal',
-  imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
+  imports: [
+    TvSelectDirective,
+    ModalFooterComponent,
+    ModalHeaderComponent,
+    SeasonPickerComponent,
+    FormsModule,
+    TranslatePipe,
+  ],
   templateUrl: './request-modal.component.html',
 })
 export class RequestModalComponent {
@@ -49,15 +57,24 @@ export class RequestModalComponent {
   readonly libraryId = signal<number | null>(null);
   readonly requesting = signal(false);
 
-  readonly seasons = signal<MetadataSeason[]>([]);
+  readonly seasons = signal<SeasonStub[]>([]);
   readonly selectedSeasons = signal<Set<number>>(new Set());
   readonly seasonsLoading = signal(false);
+  /** Without a season list there is nothing to tick, so the ask falls back to
+   *  the whole series instead of leaving the confirm button dead. */
+  readonly seasonsFailed = signal(false);
   /** Season numbers already covered by an active request — passed in by
    *  the parent so the row is disabled in the table (cannot re-request). */
   readonly alreadyRequestedSeasons = signal<Set<number>>(new Set());
   /** A series already has an active request: its profiles are fixed and the
    *  selectors are locked to them (all seasons share one profile set). */
   readonly profilesLocked = signal(false);
+
+  /** Series only: a pick is required, unless the season list never loaded. */
+  readonly nothingPicked = computed(
+    () =>
+      this.mediaType() === 'series' && !this.seasonsFailed() && this.selectedSeasons().size === 0,
+  );
 
   open(params: {
     title: string;
@@ -95,13 +112,14 @@ export class RequestModalComponent {
     this.libraryId.set(compatible.length > 1 ? (defaultLib?.id ?? null) : null);
     this.seasons.set([]);
     this.selectedSeasons.set(new Set());
+    this.seasonsFailed.set(false);
     this.dialogEl()?.nativeElement.showModal();
 
     if (params.mediaType === 'series') {
       this.seasonsLoading.set(true);
       const preselected = new Set(params.preselectedSeasons ?? []);
       this.metadata
-        .getTvSeasons(params.tmdbId)
+        .getSeasonStubs('tmdb', String(params.tmdbId))
         .then((s) => {
           this.seasons.set(s);
           // Default empty unless the caller passed `preselectedSeasons`
@@ -115,35 +133,18 @@ export class RequestModalComponent {
             ),
           );
         })
-        .catch(() => {
-          this.seasons.set([]);
-        })
+        .catch(() => this.seasonsFailed.set(true))
         .finally(() => {
           this.seasonsLoading.set(false);
         });
     }
   }
 
-  /** Seasons the user can still pick (= total minus already-requested).
-   *  Drives the header toggle's checked state so it reflects only the
-   *  selectable rows, not the disabled "déjà demandé" rows. */
-  readonly selectableSeasonCount = computed(
-    () => this.seasons().length - this.alreadyRequestedSeasons().size,
-  );
-
-  /** True iff every selectable row is currently picked. */
-  readonly allSelectableChosen = computed(
-    () =>
-      this.selectableSeasonCount() > 0 &&
-      this.selectedSeasons().size === this.selectableSeasonCount(),
-  );
-
   close() {
     this.dialogEl()?.nativeElement.close();
   }
 
   toggleSeason(n: number) {
-    if (this.alreadyRequestedSeasons().has(n)) return;
     this.selectedSeasons.update((set) => {
       const next = new Set(set);
       next.has(n) ? next.delete(n) : next.add(n);
