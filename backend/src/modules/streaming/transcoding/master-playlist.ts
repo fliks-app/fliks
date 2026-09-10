@@ -199,12 +199,11 @@ export interface MasterPlaylistOptions {
   /** Source video bitrate + codec; caps each rung's declared BANDWIDTH. */
   sourceVideoBitrateBps?: number;
   sourceVideoCodec?: string;
-  /** Client can select an alternate `EXT-X-MEDIA:TYPE=AUDIO` rendition at
-   *  runtime. `false` publishes the picked one alone: LG webOS exposes a
-   *  single entry in `audioTracks` whatever the group holds and ignores
-   *  `DEFAULT=YES`, so the extra renditions only pin it to the wrong track.
-   *  Missing/undefined defaults to `true`. */
-  supportsHlsAudioRenditions?: boolean;
+  /** Client exposes one audio track per LANGUAGE rather than one per
+   *  rendition (measured on webOS: a group of eng/eng/hin surfaces two
+   *  tracks). The renditions it folds away are unreachable, so the group
+   *  publishes one per language with the picked track winning its own. */
+  dedupesAudioByLanguage?: boolean;
   /** Client can switch HLS variants at runtime (real ABR). `false` collapses
    *  the ladder to {@link topFittingProfile} when there's no explicit
    *  `onlyQuality` pin — see {@link applyQualityPin}. Missing/undefined
@@ -250,7 +249,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
     sourceVideoBitrateBps,
     sourceVideoCodec,
     supportsAbr = true,
-    supportsHlsAudioRenditions = true,
+    dedupesAudioByLanguage = false,
     iFrameTrickPlaySegmentSeconds,
     remuxCodecs,
     remuxBandwidthBps,
@@ -326,7 +325,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
         mediaFileId,
         tokenParam,
         undefined,
-        !supportsHlsAudioRenditions,
+        dedupesAudioByLanguage,
       );
     }
     const hdrAudioAttr = multiAudio ? ',AUDIO="audio"' : '';
@@ -406,7 +405,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
       mediaFileId,
       tokenParam,
       audioOutputChannels,
-      !supportsHlsAudioRenditions,
+      dedupesAudioByLanguage,
     );
   }
 

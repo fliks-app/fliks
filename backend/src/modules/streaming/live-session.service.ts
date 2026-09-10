@@ -114,10 +114,10 @@ export interface LiveSession {
    *  cues show in PiP / AirPlay / lock-screen. Web (Shaka) leaves this false
    *  and keeps fetching sidecar VTT. Sourced from the device profile. */
   supportsHlsSubtitles: boolean;
-  /** Client can select an alternate `EXT-X-MEDIA:TYPE=AUDIO` rendition at
-   *  runtime. `false` (webOS) publishes the picked rendition alone. Sourced
-   *  from the device profile. */
-  supportsHlsAudioRenditions: boolean;
+  /** Client surfaces one audio track per language, not per rendition (webOS).
+   *  The master then publishes one rendition per language. Sourced from the
+   *  device profile. */
+  dedupesAudioByLanguage: boolean;
   /** Client drives HLS trick play from an `EXT-X-I-FRAME-STREAM-INF`
    *  rendition (Tizen AVPlay). Sourced from the device profile. */
   supportsIFrameTrickPlay: boolean;
@@ -186,7 +186,7 @@ export interface CreateLiveSessionInput {
   deviceType?: 'mobile' | 'desktop';
   hdrLadder?: boolean;
   supportsHlsSubtitles?: boolean;
-  supportsHlsAudioRenditions?: boolean;
+  dedupesAudioByLanguage?: boolean;
   supportsIFrameTrickPlay?: boolean;
   probesSegZero?: boolean;
   supportsAbr?: boolean;
@@ -297,9 +297,7 @@ export function buildLiveSession(
       deviceType: input.deviceType ?? 'desktop',
       hdrLadder: input.hdrLadder ?? false,
       supportsHlsSubtitles: input.supportsHlsSubtitles ?? false,
-      // Default true: only a client that declares it can't pick a rendition
-      // gets the collapsed audio group.
-      supportsHlsAudioRenditions: input.supportsHlsAudioRenditions ?? true,
+      dedupesAudioByLanguage: input.dedupesAudioByLanguage ?? false,
       supportsIFrameTrickPlay: input.supportsIFrameTrickPlay ?? false,
       // Default true: only a client that explicitly declares it seeks straight
       // to the resume segment opts out of the seg-0 companion. Pre-flag clients

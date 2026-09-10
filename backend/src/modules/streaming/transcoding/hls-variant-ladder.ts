@@ -61,6 +61,23 @@ export function buildUniqueAudioNames(
  *  (issue #148). `outputChannels[i]` is the resolved per-track output count
  *  (copy keeps the source, transcode downmixes); falls back to a codec-derived
  *  guess when the plan isn't threaded. */
+/** Indices to publish when the client keeps one rendition per language: the
+ *  picked track wins its own language, every other language keeps its first.
+ *  webOS collapses the audio group that way on its own — the renditions it
+ *  drops are unreachable, so the group has to carry the chosen one. */
+function keepOnePerLanguage(
+  audioStreams: AudioStreamMeta[],
+  pickedIdx: number,
+): Set<number> {
+  const byLang = new Map<string, number>();
+  const langOf = (i: number) => audioStreams[i].language || 'und';
+  byLang.set(langOf(pickedIdx), pickedIdx);
+  for (let i = 0; i < audioStreams.length; i++) {
+    if (!byLang.has(langOf(i))) byLang.set(langOf(i), i);
+  }
+  return new Set(byLang.values());
+}
+
 export function emitAudioRenditions(
   lines: string[],
   audioStreams: AudioStreamMeta[],
@@ -69,17 +86,18 @@ export function emitAudioRenditions(
   mediaFileId: number,
   tokenParam: string,
   outputChannels?: (number | undefined)[],
-  onlyPicked = false,
+  dedupeByLanguage = false,
 ): void {
   const pickedIdx =
     defaultAudioIndex >= 0 && defaultAudioIndex < audioStreams.length
       ? defaultAudioIndex
       : 0;
   const names = buildUniqueAudioNames(audioStreams);
+  const publish = dedupeByLanguage
+    ? keepOnePerLanguage(audioStreams, pickedIdx)
+    : null;
   for (let i = 0; i < audioStreams.length; i++) {
-    // A player that can't select a rendition plays whichever it sees first,
-    // so publishing the others only pins it away from the picked track.
-    if (onlyPicked && i !== pickedIdx) continue;
+    if (publish && !publish.has(i)) continue;
     const a = audioStreams[i];
     const lang = a.language || 'und';
     const isDefault = i === pickedIdx ? 'YES' : 'NO';

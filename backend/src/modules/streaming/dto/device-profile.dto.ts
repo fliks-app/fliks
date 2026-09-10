@@ -142,15 +142,16 @@ export class DeviceProfileDto {
   supportsHlsSubtitles?: boolean;
 
   /**
-   * Client can select an alternate `EXT-X-MEDIA:TYPE=AUDIO` rendition at
-   * runtime. LG webOS sends `false`: its native HLS pipeline exposes one
-   * entry in `audioTracks` whatever the group holds, and it ignores
-   * `DEFAULT=YES`, so the master publishes the picked rendition alone and an
-   * audio switch goes through a reload. Unset is treated as `true`.
+   * Client surfaces one audio track per LANGUAGE, not one per rendition. LG
+   * webOS sends `true`: a group of eng/eng/hin reaches `audioTracks` as two
+   * entries, so same-language renditions can never be picked client-side.
+   * The master then publishes one rendition per language, the track the user
+   * asked for winning its own, and a same-language switch goes through a
+   * reload. Unset is treated as `false`.
    */
   @IsBoolean()
   @IsOptional()
-  supportsHlsAudioRenditions?: boolean;
+  dedupesAudioByLanguage?: boolean;
 
   /**
    * Client accelerates HLS through an `EXT-X-I-FRAME-STREAM-INF` rendition

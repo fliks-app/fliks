@@ -95,32 +95,64 @@ describe('generateMasterPlaylist — audio rendition CHANNELS', () => {
   });
 });
 
-describe('generateMasterPlaylist — supportsHlsAudioRenditions', () => {
+describe('generateMasterPlaylist — dedupesAudioByLanguage', () => {
   const mediaLines = (m: string): string[] =>
     m.split('\n').filter((l) => l.startsWith('#EXT-X-MEDIA:TYPE=AUDIO'));
+  const uri = (l: string): string => (l.match(/\/audio\/(\d+)\//) || [])[1];
+  // Measured shape on webOS: eng/eng/hin surfaces two tracks, so the second
+  // English is only reachable if the group publishes it instead of the first.
   const base = {
     mediaFileId: 1,
     sourceWidth: 1920,
     sourceHeight: 1080,
     tokenParam: '',
-    audioStreams: [{ channels: 6 }, { channels: 6 }, { channels: 2 }],
-    defaultAudioIndex: 2,
+    audioStreams: [
+      { channels: 6, language: 'eng' },
+      { channels: 6, language: 'eng' },
+      { channels: 2, language: 'hin' },
+    ],
   };
 
-  it('publishes the picked rendition alone when the client cannot select one', () => {
+  it('keeps one rendition per language, the picked track winning its own', () => {
     const media = mediaLines(
-      generateMasterPlaylist({ ...base, supportsHlsAudioRenditions: false }),
+      generateMasterPlaylist({
+        ...base,
+        defaultAudioIndex: 1,
+        dedupesAudioByLanguage: true,
+      }),
     );
-    expect(media).toHaveLength(1);
-    expect(media[0]).toContain('/audio/2/');
+    expect(media.map(uri)).toEqual(['1', '2']);
     expect(media[0]).toContain('DEFAULT=YES');
   });
 
-  it('publishes every rendition when unset or true', () => {
-    expect(mediaLines(generateMasterPlaylist(base))).toHaveLength(3);
+  it('keeps the other languages when the picked track is not theirs', () => {
+    const media = mediaLines(
+      generateMasterPlaylist({
+        ...base,
+        defaultAudioIndex: 2,
+        dedupesAudioByLanguage: true,
+      }),
+    );
+    // hin picked, and English still reachable through its first rendition.
+    expect(media.map(uri)).toEqual(['0', '2']);
+  });
+
+  it('never drops a rendition when each language is already unique', () => {
+    const twoLangs = {
+      ...base,
+      audioStreams: [
+        { channels: 6, language: 'fre' },
+        { channels: 6, language: 'eng' },
+      ],
+      defaultAudioIndex: 1,
+    };
     expect(
-      generateMasterPlaylist({ ...base, supportsHlsAudioRenditions: true }),
-    ).toEqual(generateMasterPlaylist(base));
+      mediaLines(generateMasterPlaylist({ ...twoLangs, dedupesAudioByLanguage: true })),
+    ).toHaveLength(2);
+  });
+
+  it('publishes every rendition when unset', () => {
+    expect(mediaLines(generateMasterPlaylist({ ...base, defaultAudioIndex: 1 }))).toHaveLength(3);
   });
 });
 
