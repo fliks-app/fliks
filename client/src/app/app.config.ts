@@ -129,6 +129,14 @@ export const appConfig: ApplicationConfig = {
                   transition.skipTransition();
                   return;
                 }
+                // Opening the player animates itself, and the root pair is off,
+                // so there is nothing to capture. Skipping keeps the stamp the
+                // eventual back morph pairs with, which clearing below would
+                // drop, leaving the returning page with only half a pair.
+                if (leafRoutePath(to) === WATCH_PATH) {
+                  transition.skipTransition();
+                  return;
+                }
                 // A stamp outlives its navigation so the back morph can pair it.
                 clearStalePosterStamps(from, to);
                 // Leaving the player is the one navigation that re-enables the
