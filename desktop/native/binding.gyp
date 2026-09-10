@@ -1,7 +1,7 @@
 {
   # One native unit per desktop OS, selected by top-level conditions so the
   # wrong-OS target (and its toolchain probes) never even resolve:
-  #   - linux → fliks_compositor: SDL2/GLES/EGL self-compositor (pkg-config).
+  #   - linux → fliks_compositor: SDL2 + desktop GL self-compositor (pkg-config).
   #     Its `<!@(pkg-config sdl2 …)` would FAIL at gyp time on macOS, hence the
   #     condition gate rather than a per-target no-op.
   #   - mac   → fliks_player_mac: in-process libmpv rendering offscreen via GL
@@ -19,10 +19,10 @@
           ],
           "include_dirs": [
             "<!@(node -p \"require('node-addon-api').include_dir\")",
-            "<!@(pkg-config --cflags-only-I sdl2 glesv2 egl mpv | sed 's/-I//g')"
+            "<!@(pkg-config --cflags-only-I sdl2 gl egl mpv | sed 's/-I//g')"
           ],
           "libraries": [
-            "<!@(pkg-config --libs sdl2 glesv2 egl)",
+            "<!@(pkg-config --libs sdl2 gl egl)",
             "-ldl"
           ],
           "cflags_cc": [ "-std=c++17", "-fexceptions" ],

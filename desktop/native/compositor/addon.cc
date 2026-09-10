@@ -1,6 +1,6 @@
 // fliks_compositor — native single-window GL compositor (Electron+mpv, Option C).
 //
-// One SDL2/GLES window. mpv (self-contained libmpv, plain dlopen — FFmpeg
+// One SDL2/GL window. mpv (self-contained libmpv, plain dlopen — FFmpeg
 // statically linked + symbols hidden, so no clash with Electron's libffmpeg)
 // renders video via the RENDER API into a GL FBO; the Electron OSR UI bitmap is
 // uploaded to a GL texture; both are composited (video then UI, premult-alpha)
@@ -11,7 +11,12 @@
 #include <napi.h>
 
 #include <SDL.h>
-#include <GLES3/gl32.h>
+// Desktop GL, not GLES: mpv drops RA_CAP_COMPUTE on any GLES context (ra_gl.c
+// disables it unconditionally), which costs HDR peak detection. Mesa's libGL
+// exports the 2.0+ entry points, so glext's prototypes are enough, no loader.
+#define GL_GLEXT_PROTOTYPES
+#include <GL/gl.h>
+#include <GL/glext.h>
 
 #include <mpv/client.h>
 #include <mpv/render.h>
@@ -133,7 +138,7 @@ struct GlState {
 
 GlState g_state;
 
-const char* kVert = R"(#version 320 es
+const char* kVert = R"(#version 430 core
 out vec2 v_uv;
 uniform float u_flipY;
 void main() {
@@ -145,8 +150,7 @@ void main() {
 }
 )";
 
-const char* kFrag = R"(#version 320 es
-precision mediump float;
+const char* kFrag = R"(#version 430 core
 in vec2 v_uv;
 uniform sampler2D u_tex;
 uniform int u_bgra;
@@ -255,9 +259,11 @@ void RenderThreadMain(GlState* s) {
     fprintf(stderr, "[compositor] SDL_Init failed: %s\n", SDL_GetError());
     return;
   }
-  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+  // 4.3 core: mpv gates compute shaders on GLSL >= 420, and they drive its HDR
+  // peak detection. The compositor's own GL surface is core-clean already.
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
   SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
   s->window = SDL_CreateWindow(
       s->title.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, s->width,

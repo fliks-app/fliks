@@ -514,14 +514,10 @@ export class BrowserDeviceProfileService {
       supportsHdr = hdrDisplay && has10bitCodec;
     }
 
-    // Windows vo=gpu and the macOS CAOpenGLLayer present HDR themselves. The
-    // Linux shell composites libmpv's render API into its own FBO and has no
-    // HDR path, so HDR there stays server-side.
-    const mpvHdrOutput =
-      this.device.isDesktopNative() && /Windows|Mac OS X/.test(navigator.userAgent);
     // mpv tone-maps HDR down to an SDR display on its own (the macOS layer does
-    // it whenever the screen has no EDR headroom).
-    const tonemapsHdrLocally = mpvHdrOutput && !supportsHdr;
+    // it whenever the screen has no EDR headroom), so the server can copy the
+    // bitstream instead of re-encoding it.
+    const tonemapsHdrLocally = this.device.isDesktopNative() && !supportsHdr;
     // `video-crop` cuts the bars at the VO: free, and hwdec-safe unlike a lavfi
     // crop. Every mpv backend qualifies, the Linux render API included, since
     // they all run the gl_video renderer that applies the rectangle.
