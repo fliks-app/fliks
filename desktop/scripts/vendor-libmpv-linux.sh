@@ -11,8 +11,9 @@
 # copies are gitignored (native/vendor/* minus libmpv.so.2) and shipped by
 # electron-builder's native/vendor/** glob + asarUnpack.
 #
-# `--print-packages` lists the apt packages to install first, so the workflow
-# and this script never hold two copies of the list.
+# `--print-packages` lists the apt packages to install first and
+# `--print-sonames` what ends up bundled, so the workflow and this script never
+# hold two copies of the list.
 # Requires patchelf. LD_LIBRARY_PATH, when set, is searched before the ld cache.
 set -euo pipefail
 
@@ -43,10 +44,10 @@ LIBS=(
   libicudata.so.74=libicu74
 )
 
-if [ "${1:-}" = "--print-packages" ]; then
-  printf '%s\n' "${LIBS[@]#*=}" | sort -u
-  exit 0
-fi
+case "${1:-}" in
+  --print-packages) printf '%s\n' "${LIBS[@]#*=}" | sort -u; exit 0 ;;
+  --print-sonames)  printf '%s\n' "${LIBS[@]%%=*}"; exit 0 ;;
+esac
 
 here="$(cd "$(dirname "$0")/.." && pwd)"
 dest="${1:-$here/native/vendor}"
@@ -82,15 +83,18 @@ for entry in "${LIBS[@]}"; do
 done
 patchelf --set-rpath '$ORIGIN' "$dest/libmpv.so.2"
 
-# The bundle has to win over the host's copies and leave nothing dangling.
+# Whether a bundled copy actually wins at load time can only be judged where
+# the host lacks these libs (the build box has just installed them, and a
+# non-bundled dep such as libarchive pulls the host's libxml2 in under the same
+# SONAME). Assert what is host-independent here; desktop-release.yml runs the
+# resolution check in a bare container.
 # LD_LIBRARY_PATH outranks DT_RUNPATH, so drop it or the check proves nothing.
-resolved="$(env -u LD_LIBRARY_PATH ldd "$dest/libmpv.so.2")"
-unresolved="$(printf '%s\n' "$resolved" | grep 'not found' || true)"
+unresolved="$(env -u LD_LIBRARY_PATH ldd "$dest/libmpv.so.2" | grep 'not found' || true)"
 [ -z "$unresolved" ] || { echo "::error::unresolved after bundling:"; echo "$unresolved"; exit 1; }
 for entry in "${LIBS[@]}"; do
   so="${entry%%=*}"
-  printf '%s\n' "$resolved" | grep -qF "$dest/$so" \
-    || { echo "::error::$so resolves outside the bundle, RUNPATH not applied"; exit 1; }
+  [ "$(patchelf --print-rpath "$dest/$so")" = '$ORIGIN' ] \
+    || { echo "::error::$so has no \$ORIGIN RUNPATH, it will not find its siblings"; exit 1; }
 done
 
 echo "Bundled ${#LIBS[@]} runtime libs ($(du -shc "$dest"/*.so* | tail -1 | cut -f1) total) into $dest"
