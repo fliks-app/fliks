@@ -16,8 +16,7 @@ export class BackgroundService {
   /** Current target URL. `null` means "fade out, no background". */
   readonly url = signal<string | null>(null);
 
-  /** Pool the current pick came from. Used to detect equivalent
-   *  calls so we don't re-randomise on every signal re-emit. */
+  /** Pool the current pick came from, so a re-emit doesn't re-randomise. */
   private pool: string[] = [];
 
   setBackground(url: string | null): void {
@@ -26,9 +25,9 @@ export class BackgroundService {
   }
 
   /**
-   * Pick one image at random from `urls`. Re-calling with an
-   * identical pool is a no-op so the displayed image doesn't
-   * change while the user is on the page.
+   * Pick one image at random from `urls`. The pick then holds for as long as
+   * it stays in the pool, so a page keeps its image while its data streams in
+   * and the pool grows underneath.
    */
   setBackgrounds(urls: string[]): void {
     const next = urls.filter((u): u is string => !!u);
@@ -36,10 +35,14 @@ export class BackgroundService {
       this.clear();
       return;
     }
-    const samePool =
-      next.length === this.pool.length &&
-      next.every((u, i) => u === this.pool[i]);
-    if (samePool) return;
+    // Keep the current pick while it is still on offer. The pool grows as a
+    // page's data streams in, and re-rolling on every growth swaps the image
+    // again within the same frame, which collapses the crossfade into a cut.
+    const current = this.url();
+    if (current && next.includes(current)) {
+      this.pool = next;
+      return;
+    }
 
     this.pool = next;
     this.url.set(next[Math.floor(Math.random() * next.length)]);
