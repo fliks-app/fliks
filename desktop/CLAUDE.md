@@ -8,13 +8,13 @@ it is NOT the menu-bar server host under `macos/`.
 
 - **Electron** loads the Angular client **offscreen** (`offscreen: true,
   transparent: true`) and paints it to a BGRA bitmap.
-- A **native N-API addon** (`native/compositor/addon.cc`, SDL2 + GLES 3.2) owns
+- A **native N-API addon** (`native/compositor/addon.cc`, SDL2 + GL 4.3 core) owns
   the single visible window. It composites **mpv video** (rendered into a GL FBO
   via libmpv's render API) under the **Angular UI bitmap**.
 - Embedded **mpv** comes from a self-contained static **libmpv** (render API).
 - ⚠️ **Three mpv backends — know which one you're debugging.**
   1. **Linux** — mpv runs **inside the native C++ addon** (`native/compositor/
-     addon.cc`, libmpv render API, self-compositing SDL/GLES window); its
+     addon.cc`, libmpv render API, self-compositing SDL/GL window); its
      property/event plumbing (`time-pos`, `demuxer-cache-time`,
      `paused-for-cache`, `timeUpdate`, `stateChanged`) lives in addon.cc + the
      `addon.onEvent` / `emitPosition` wiring in `src/main/index.ts`.
@@ -59,11 +59,12 @@ System packages (Debian/Ubuntu) — the C++ addon compiles against these via
 `pkg-config` and node-gyp needs a C++17 toolchain:
 ```bash
 sudo apt install -y build-essential python3 pkg-config \
-  libsdl2-dev libgles2-mesa-dev libegl1-mesa-dev libmpv-dev
+  libsdl2-dev libgl1-mesa-dev libegl1-mesa-dev libmpv-dev
 ```
 - `build-essential` + `python3` → node-gyp.
-- `pkg-config` + `libsdl2-dev` + `libgles2-mesa-dev` + `libegl1-mesa-dev` →
-  the addon links SDL2 / GLESv2 / EGL.
+- `pkg-config` + `libsdl2-dev` + `libgl1-mesa-dev` + `libegl1-mesa-dev` →
+  the addon links SDL2 / desktop GL / EGL. Desktop GL, not GLES: mpv drops
+  compute shaders on any GLES context, and they drive its HDR peak detection.
 - `libmpv-dev` → addon **compiles** against mpv's headers (`client.h`,
   `render_gl.h`). Runtime uses the vendored self-contained libmpv below, not the
   system one.
