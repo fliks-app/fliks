@@ -11,12 +11,10 @@
 # copies are gitignored (native/vendor/* minus libmpv.so.2) and shipped by
 # electron-builder's native/vendor/** glob + asarUnpack.
 #
-# Requires patchelf and the libs themselves (libmpv-dev pulls them all in).
-# LD_LIBRARY_PATH, when set, is searched before the ld cache.
+# `--print-packages` lists the apt packages to install first, so the workflow
+# and this script never hold two copies of the list.
+# Requires patchelf. LD_LIBRARY_PATH, when set, is searched before the ld cache.
 set -euo pipefail
-
-here="$(cd "$(dirname "$0")/.." && pwd)"
-dest="${1:-$here/native/vendor}"
 
 NEEDED_SHA256=3c2b1487fd5105b0c02ec86fc2847cedae584574c1469866ec8ab7562ccbe804
 
@@ -24,22 +22,43 @@ NEEDED_SHA256=3c2b1487fd5105b0c02ec86fc2847cedae584574c1469866ec8ab7562ccbe804
 # drag in (dvdnav to dvdread to udfread, bluray to xml2 to icu, rubberband to
 # fftw3). Regenerate on a clean machine: ldd libmpv.so.2 | grep 'not found',
 # install the providers, repeat until it comes back empty.
-SONAMES=(
-  libunibreak.so.5 libva-x11.so.2 libvdpau.so.1 libdvdnav.so.4
-  libsndio.so.7 libbluray.so.2 librubberband.so.2 libzimg.so.2
-  libjack.so.0 libdisplay-info.so.1 libsixel.so.1 libXpresent.so.1
-  libdvdread.so.8 libudfread.so.0 libxml2.so.2 libfftw3.so.3
-  libicuuc.so.74 libicudata.so.74
+LIBS=(
+  libunibreak.so.5=libunibreak5
+  libva-x11.so.2=libva-x11-2
+  libvdpau.so.1=libvdpau1
+  libdvdnav.so.4=libdvdnav4
+  libsndio.so.7=libsndio7.0
+  libbluray.so.2=libbluray2
+  librubberband.so.2=librubberband2
+  libzimg.so.2=libzimg2
+  libjack.so.0=libjack-jackd2-0
+  libdisplay-info.so.1=libdisplay-info1
+  libsixel.so.1=libsixel1
+  libXpresent.so.1=libxpresent1
+  libdvdread.so.8=libdvdread8t64
+  libudfread.so.0=libudfread0
+  libxml2.so.2=libxml2
+  libfftw3.so.3=libfftw3-double3
+  libicuuc.so.74=libicu74
+  libicudata.so.74=libicu74
 )
+
+if [ "${1:-}" = "--print-packages" ]; then
+  printf '%s\n' "${LIBS[@]#*=}" | sort -u
+  exit 0
+fi
+
+here="$(cd "$(dirname "$0")/.." && pwd)"
+dest="${1:-$here/native/vendor}"
 
 command -v patchelf >/dev/null || { echo "::error::patchelf missing (apt-get install patchelf)"; exit 1; }
 test -f "$dest/libmpv.so.2" || { echo "::error::vendored libmpv missing at $dest/libmpv.so.2"; exit 1; }
 
-# SONAMES was derived by hand from this exact libmpv, so a different one must
-# not silently reuse it.
+# LIBS was derived by hand from this exact libmpv, so a different one must not
+# silently reuse it.
 needed="$(patchelf --print-needed "$dest/libmpv.so.2" | LC_ALL=C sort)"
 if [ "$(printf '%s\n' "$needed" | sha256sum | cut -d' ' -f1)" != "$NEEDED_SHA256" ]; then
-  echo "::error::libmpv.so.2 links a different set of libraries, re-derive SONAMES below"
+  echo "::error::libmpv.so.2 links a different set of libraries, re-derive LIBS below"
   printf '%s\n' "$needed"
   exit 1
 fi
@@ -53,9 +72,10 @@ resolve() {
   ldconfig -p | awk -v s="$so" '$1 == s && index($0, "x86-64") { print $NF; exit }'
 }
 
-for so in "${SONAMES[@]}"; do
+for entry in "${LIBS[@]}"; do
+  so="${entry%%=*}"
   src="$(resolve "$so")"
-  [ -n "$src" ] && [ -f "$src" ] || { echo "::error::$so not found, install the package providing it"; exit 1; }
+  [ -n "$src" ] && [ -f "$src" ] || { echo "::error::$so not found, apt-get install ${entry#*=}"; exit 1; }
   cp -fL "$src" "$dest/$so"
   chmod u+w "$dest/$so"
   patchelf --set-rpath '$ORIGIN' "$dest/$so"
@@ -67,9 +87,10 @@ patchelf --set-rpath '$ORIGIN' "$dest/libmpv.so.2"
 resolved="$(env -u LD_LIBRARY_PATH ldd "$dest/libmpv.so.2")"
 unresolved="$(printf '%s\n' "$resolved" | grep 'not found' || true)"
 [ -z "$unresolved" ] || { echo "::error::unresolved after bundling:"; echo "$unresolved"; exit 1; }
-for so in "${SONAMES[@]}"; do
-  printf '%s\n' "$resolved" | grep -q "$dest/$so" \
+for entry in "${LIBS[@]}"; do
+  so="${entry%%=*}"
+  printf '%s\n' "$resolved" | grep -qF "$dest/$so" \
     || { echo "::error::$so resolves outside the bundle, RUNPATH not applied"; exit 1; }
 done
 
-echo "Bundled ${#SONAMES[@]} runtime libs ($(du -shc "$dest"/*.so* | tail -1 | cut -f1) total) into $dest"
+echo "Bundled ${#LIBS[@]} runtime libs ($(du -shc "$dest"/*.so* | tail -1 | cut -f1) total) into $dest"
