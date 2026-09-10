@@ -189,18 +189,23 @@ export class LayoutComponent implements OnInit, OnDestroy {
     return this.deepestRouteOwnsScroll() && this.scrollMode.mode() === 'container';
   }
 
-  /** Fixed navbar's own clearance: its height (0 on hero pages / TV, where it
-   *  doesn't reserve space) plus safe area — 0 wherever the mobile-style
-   *  navbar itself is hidden (desktop, or a pinned tablet sidebar). TV and
-   *  desktop never own the scroll (see `PageScrollModeService`), so their
-   *  in-flow bar always reserves its own space here rather than being fixed. */
+  /** Fixed navbar's own clearance: its height (0 on TV, where it doesn't
+   *  reserve space) plus safe area — 0 wherever the mobile-style navbar
+   *  itself is hidden (desktop, or a pinned tablet sidebar). TV and desktop
+   *  never own the scroll (see `PageScrollModeService`), so their in-flow bar
+   *  always reserves its own space here rather than being fixed.
+   *  Deliberately hero-blind: a hero page takes the space back through
+   *  `body.hero-page` in CSS (styles.css), which NavbarService toggles
+   *  synchronously — a value that only lands at the next change detection
+   *  reaches a reattached cached page after WebKit has already laid it out,
+   *  and iOS 18.7 never re-lays it out for a parent's padding change. */
   private readonly navbarSpacerHeight = computed(() => {
     if (!this.navbar.mobileNavbarVisible()) return '0px';
-    if (this.navbar.isHeroPage() || this.tv.isTv()) return '0px';
+    if (this.tv.isTv()) return '0px';
     return 'calc(3rem + env(safe-area-inset-top, 0px))';
   });
   private readonly contentGapTop = computed(() =>
-    !this.navbar.isHeroPage() && !this.isNative && this.navbar.mobileNavbarVisible() ? '2rem' : '1rem',
+    !this.isNative && this.navbar.mobileNavbarVisible() ? '2rem' : '1rem',
   );
   /** Published as a CSS var so a page that owns its scroller reserves the same
    *  space inside itself, and content still scrolls under the fixed navbar. */

@@ -751,6 +751,16 @@ html.vt-player-close body.tv main.page-enter {
 app-layout main {
   padding-block: var(--chrome-top, 0px) var(--chrome-bottom, 0px);
 }
+/* A hero page runs its fanart under the transparent navbar, so it keeps the
+   gap and drops the bar's height. A class rather than a term in
+   `--chrome-top`: NavbarService toggles it synchronously while the outgoing
+   page is deactivated, which is early enough for the cached page the router
+   is about to reattach to be laid out with its final padding. A value that
+   only lands at the next change detection arrives after that layout, and
+   iOS 18.7 WebKit never re-lays a subtree out for a parent's padding change. */
+body.hero-page app-layout main {
+  padding-top: 1rem;
+}
 
 /* Bounds a page whose route sets `ownsScroll` (layout.ts) to the viewport;
    gated so every other route keeps scrolling the document unbounded. */
@@ -815,6 +825,10 @@ body.tv .drawer.owns-scroll nav.navbar,
   overflow: hidden auto;
   padding-block: var(--chrome-top, 0px) var(--chrome-bottom, 0px);
   padding-inline: var(--page-p);
+}
+/* Same hero rule as `main` above, for a hero page that owns its scroller. */
+body.hero-page .page-scroller {
+  padding-top: 1rem;
 }
 /* A scroll container's automatic minimum size is zero, so the tabs row would
    absorb the whole column's shrink pressure and collapse to its scrollbar. */
