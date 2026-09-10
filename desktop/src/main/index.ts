@@ -456,8 +456,19 @@ app.whenReady().then(async () => {
     const wc = uiWin.webContents;
     if (i.kind !== 'move' && i.kind !== 'wheel') wc.focus();
     if (i.kind === 'move') wc.sendInputEvent({ type: 'mouseMove', x: i.x, y: i.y } as any);
-    else if (i.kind === 'button')
-      wc.sendInputEvent({ type: i.down ? 'mouseDown' : 'mouseUp', x: i.x, y: i.y, button: i.button, clickCount: i.clicks || 1 } as any);
+    else if (i.kind === 'button') {
+      // sendInputEvent only knows left/middle/right, so the thumb buttons are
+      // history moves here. Chromium's session history is what the router
+      // listens to, so this behaves like a browser's back button.
+      const history = wc.navigationHistory;
+      if (i.button === 'back') {
+        if (i.down && history.canGoBack()) history.goBack();
+      } else if (i.button === 'forward') {
+        if (i.down && history.canGoForward()) history.goForward();
+      } else {
+        wc.sendInputEvent({ type: i.down ? 'mouseDown' : 'mouseUp', x: i.x, y: i.y, button: i.button, clickCount: i.clicks || 1 } as any);
+      }
+    }
     else if (i.kind === 'wheel')
       wc.sendInputEvent({
         type: 'mouseWheel',
