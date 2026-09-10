@@ -204,12 +204,6 @@ export class MetadataService {
     );
   }
 
-  getTvSeasons(tmdbId: number) {
-    return firstValueFrom(
-      this.http.get<MetadataSeason[]>(`/api/metadata/tv/${tmdbId}/seasons`),
-    );
-  }
-
   /** Season numbers + episode counts only: one provider call, unlike
    *  {@link getSeasons} which fetches every episode of every season. */
   getSeasonStubs(provider: string, externalId: string) {

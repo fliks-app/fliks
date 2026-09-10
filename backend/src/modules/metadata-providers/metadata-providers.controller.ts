@@ -225,6 +225,8 @@ export class MetadataProvidersController {
     return this.tmdb.getTvShowDetails(tmdbId);
   }
 
+  /** @deprecated Serves 4.0.0 and earlier clients; current ones read
+   *  `:provider/tv/:externalId/season-stubs`. Drop once those are retired. */
   @Get('tv/:tmdbId/seasons')
   getTvSeasonsTmdb(@Param('tmdbId') tmdbId: string) {
     return this.tmdb.getTvShowSeasons(tmdbId);
