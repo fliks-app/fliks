@@ -11,11 +11,7 @@ export function itemArtwork(item: {
   return item.stillUrl ?? item.fanartUrl ?? item.posterUrl ?? null;
 }
 
-/**
- * Fanart URLs for a page-background pool: the primary plus every extra. The
- * BackgroundService keeps one stable pick per pool, so the page holds the same
- * image for as long as the user stays on it.
- */
+/** Fanart URLs for a page-background pool: the primary plus every extra. */
 export function fanartPool(
   items: readonly { fanartUrl?: string | null; additionalFanartUrls?: string[] | null }[],
 ): string[] {
@@ -25,4 +21,14 @@ export function fanartPool(
     pool.push(...(item.additionalFanartUrls ?? []));
   }
   return pool;
+}
+
+/** One fanart per title, the same on every visit. */
+export function pickFanart(m: {
+  id: number;
+  fanartUrl?: string | null;
+  additionalFanartUrls?: string[] | null;
+}): string | null {
+  const pool = fanartPool([m]);
+  return pool.length ? pool[m.id % pool.length] : null;
 }

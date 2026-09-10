@@ -1,73 +1,93 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Navigation, Router } from '@angular/router';
+import { AuthService } from './auth.service';
+import { DisplaySettingsService } from './display-settings.service';
+import { StreamingApiService } from './api/streaming-api.service';
+import { fanartPool } from '../../shared/utils/media-artwork.util';
+
+/** How long an ambient image stays before a navigation may replace it. */
+const AMBIENT_TTL = 5 * 60 * 1000;
+
+/** Settings and admin pages take no backdrop at all. */
+const BARE_ROUTES = ['/app-settings', '/account', '/admin'];
 
 /**
- * Global page-background image, resolved from what the live pages declare.
- *
- * A page states an intent rather than writing a url, because the two states it
- * used to conflate are not the same thing. `null` means "nothing to show yet",
- * which holds whatever is on screen: a page whose data is still loading, or
- * reloading after a detour through the player, must not blank the backdrop and
- * then bring it back. An empty pool means "this page has no background", which
- * does blank it. Anything else is a pool to pick from.
- *
- * The pick is remembered per owner and pool, so returning to a page restores
- * the image it had rather than rolling a new one.
+ * Global page-background image. A media page declares its own fanart and wins
+ * while it is on screen; every other page shows the ambient image, drawn from
+ * the viewer's recommendations and held across navigations.
  */
 @Injectable({ providedIn: 'root' })
 export class BackgroundService {
-  /** Live declarations, most recent last; the last resolved one is displayed. */
-  private readonly claims = signal<readonly Claim[]>([]);
+  private readonly router = inject(Router);
+  private readonly auth = inject(AuthService);
+  private readonly displaySettings = inject(DisplaySettingsService);
+  private readonly streamingApi = inject(StreamingApiService);
 
-  /** Current target url, or null when nothing is on offer. */
-  readonly url = computed(() => {
-    const resolved = this.claims().filter((c) => c.pool !== null);
-    const top = resolved[resolved.length - 1];
-    return top?.pick ?? null;
+  private readonly claim = signal<{ owner: object; url: string } | null>(null);
+  private readonly ambient = signal<string | null>(null);
+  private ambientAt = 0;
+  private rolling = false;
+
+  private readonly currentPath = computed(() => {
+    const nav = this.router.lastSuccessfulNavigation();
+    return nav ? this.pathOf(nav) : this.router.url;
   });
 
-  /**
-   * Declare what `owner` wants shown: a pool to pick from, `[]` for no
-   * background, or `null` while it does not know yet.
-   */
-  set(owner: object, pool: readonly string[] | null): void {
-    this.claims.update((claims) => {
-      const previous = claims.find((c) => c.owner === owner);
-      const next: Claim = { owner, ...resolve(pool, previous) };
-      // Newest declaration on top: the page arriving is the one speaking, and
-      // it takes the backdrop from the page it covers. Cached pages keep their
-      // declaration underneath, so leaving hands it back rather than blanking.
-      return [...claims.filter((c) => c.owner !== owner), next];
-    });
+  readonly url = computed(() => {
+    if (BARE_ROUTES.some((p) => this.currentPath().startsWith(p))) return null;
+    if (!this.auth.isAuthenticated()) return null;
+    return (
+      this.claim()?.url ?? (this.displaySettings.settings().homeBackground ? this.ambient() : null)
+    );
+  });
+
+  /** Declare the media page's fanart; `null` means not known yet, and holds. */
+  set(owner: object, url: string | null): void {
+    if (url) this.claim.set({ owner, url });
   }
 
-  /** Drop a page's declaration; the one below it takes over. */
   release(owner: object): void {
-    this.claims.update((claims) => claims.filter((c) => c.owner !== owner));
+    if (this.claim()?.owner === owner) this.claim.set(null);
+  }
+
+  /** A page leaving the screen hands the backdrop back — unless the player is
+   *  what covers it, which it has to come back from on the same image. */
+  suspend(owner: object): void {
+    const nav = this.router.currentNavigation();
+    if (!isPlayer(nav ? this.pathOf(nav) : this.router.url)) this.release(owner);
+  }
+
+  /** Each navigation may replace the ambient image, except a trip through the
+   *  player: however long the film ran, the viewer comes back to what they left. */
+  private readonly navigationEffect = effect(() => {
+    const nav = this.router.lastSuccessfulNavigation();
+    if (!nav) return;
+    const from = nav.previousNavigation;
+    if (isPlayer(this.pathOf(nav)) || (from && isPlayer(this.pathOf(from)))) return;
+    untracked(() => void this.rollAmbient());
+  });
+
+  private async rollAmbient(): Promise<void> {
+    if (this.rolling || Date.now() - this.ambientAt < AMBIENT_TTL) return;
+    if (!this.auth.isAuthenticated() || !this.displaySettings.settings().homeBackground) return;
+    this.rolling = true;
+    try {
+      // Same request as the home page, so this is served from its cache.
+      const recs = await this.streamingApi.getRecommendations().catch(() => []);
+      const pool = fanartPool(recs.map((r) => r.media)).filter((u) => u !== this.ambient());
+      if (!pool.length) return;
+      this.ambientAt = Date.now();
+      this.ambient.set(pool[Math.floor(Math.random() * pool.length)]);
+    } finally {
+      this.rolling = false;
+    }
+  }
+
+  private pathOf(nav: Navigation): string {
+    return this.router.serializeUrl(nav.finalUrl ?? nav.extractedUrl);
   }
 }
 
-interface Claim {
-  owner: object;
-  /** null while the owner has nothing to say yet. */
-  pool: readonly string[] | null;
-  pick: string | null;
-}
-
-/** Keep the pick while its pool is unchanged, so a re-emit never re-rolls. */
-function resolve(
-  pool: readonly string[] | null,
-  previous: Claim | undefined,
-): { pool: readonly string[] | null; pick: string | null } {
-  if (pool === null) return { pool: null, pick: previous?.pick ?? null };
-  const next = pool.filter((u) => !!u);
-  if (next.length === 0) return { pool: next, pick: null };
-  if (previous?.pick && previous.pool && samePool(next, previous.pool)) {
-    return { pool: next, pick: previous.pick };
-  }
-  return { pool: next, pick: next[Math.floor(Math.random() * next.length)] };
-}
-
-/** Pools are equal when they hold the same urls in the same order. */
-function samePool(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((u, i) => u === b[i]);
+function isPlayer(url: string): boolean {
+  return url.startsWith('/watch');
 }

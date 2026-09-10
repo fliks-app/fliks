@@ -70,8 +70,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
    *  picks the URL up from the service and renders it under the page. */
   private readonly backgroundEffect = effect(() => {
     const m = this.media();
-    // Nothing loaded yet holds the current image; a media with no fanart clears.
-    this.backgroundService.set(this, m ? [m.fanartUrl].filter((u): u is string => !!u) : null);
+    this.backgroundService.set(this, m?.fanartUrl ?? null);
   });
 
   readonly media = signal<MetadataDetails | null>(null);
