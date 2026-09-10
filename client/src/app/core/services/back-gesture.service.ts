@@ -26,8 +26,14 @@ const BackGesture = registerPlugin<BackGesturePlugin>('BackGesture');
  *  own panels, where sliding the entire screen off reads as leaving the app. */
 const UNSWIPEABLE = ['/watch', '/admin', '/account', '/app-settings'];
 
-/** A frame at screen rate, with room for a 60 Hz frame that ran a little long.
- *  The rebuild this waits out lands frames three to four times slower. */
+/**
+ * Above this, a frame belongs to the rebuild rather than to a page at rest.
+ *
+ * It sits between two populations rather than at a refresh rate: rebuilding
+ * lands frames 60-80 ms apart because the work is the CPU's and not the panel's,
+ * while a page at rest paces at 8-17 ms. A 120 Hz phone widens that gap from
+ * below, it does not close it, so one number serves both.
+ */
 const SMOOTH_FRAME_MS = 24;
 
 /**
