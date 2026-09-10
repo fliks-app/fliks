@@ -510,7 +510,7 @@ export class SubtitlesModalComponent {
   readonly subtitleStreams = computed(() => this.streams().filter((s) => s.type === 'subtitle'));
   /** External subtitle files usable as sync reference (excluding the one being synced) */
   readonly externalSubtitleRefs = computed(() =>
-    this.subtitles().filter((s) => s.relativePath && s.id !== this.syncSubtitleId()),
+    this.filteredSubtitles().filter((s) => s.relativePath && s.id !== this.syncSubtitleId()),
   );
 
   // Sync modal state
