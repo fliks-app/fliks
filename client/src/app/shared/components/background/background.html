@@ -9,7 +9,7 @@
       loading="lazy"
       decoding="async"
       fetchpriority="low"
-      class="absolute inset-0 w-full h-full object-cover object-[50%_25%] transition-opacity duration-1500"
+      class="absolute inset-0 w-full h-full object-cover object-[50%_25%] app-bg-layer transition-opacity duration-1500"
       [class.opacity-100]="activeLayer() === 'A' && imageVisible()"
       [class.opacity-0]="activeLayer() !== 'A' || !imageVisible()"
     />
@@ -21,7 +21,7 @@
       loading="lazy"
       decoding="async"
       fetchpriority="low"
-      class="absolute inset-0 w-full h-full object-cover object-[50%_25%] transition-opacity duration-1500"
+      class="absolute inset-0 w-full h-full object-cover object-[50%_25%] app-bg-layer transition-opacity duration-1500"
       [class.opacity-100]="activeLayer() === 'B' && imageVisible()"
       [class.opacity-0]="activeLayer() !== 'B' || !imageVisible()"
     />
