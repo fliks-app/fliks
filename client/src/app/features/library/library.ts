@@ -142,6 +142,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
       // Synchronously, so the shared restore that follows writes this shell
       // and not the document.
       if (!this.windowScroll()) this.pageScroller.claim(this.shellRef.nativeElement);
+      this.bindLetterScroll();
       if (!this.navbar.navigatedBack()) this.enterAtTop();
       else {
         // The letter survives the trip in this component; the restore's own
@@ -152,6 +153,9 @@ export class LibraryComponent implements OnInit, OnDestroy {
     },
     onDetach: () => {
       if (!this.windowScroll()) this.pageScroller.release(this.shellRef.nativeElement);
+      // The window keeps scrolling for the pages that follow, and a detached
+      // page listening to it recomputes its letter off their offset.
+      this.unbindLetterScroll();
     },
   });
 
@@ -371,6 +375,23 @@ export class LibraryComponent implements OnInit, OnDestroy {
     }
     this.shellRef.nativeElement.scrollTo({ top, left: 0, behavior: 'instant' });
   }
+  /** Bound only while the page is on screen: whichever scroller it reads,
+   *  the offset it would see once detached is another page's. */
+  private letterScrollTarget?: HTMLElement | Window;
+  private bindLetterScroll(): void {
+    if (this.letterScrollTarget) return;
+    const target = this.windowScroll() ? window : this.shellRef.nativeElement;
+    target.addEventListener('scroll', this.onLetterScroll, { passive: true });
+    this.letterScrollTarget = target;
+  }
+  private unbindLetterScroll(): void {
+    this.letterScrollTarget?.removeEventListener('scroll', this.onLetterScroll);
+    this.letterScrollTarget = undefined;
+    if (this.letterRaf !== null) {
+      cancelAnimationFrame(this.letterRaf);
+      this.letterRaf = null;
+    }
+  }
   private holdLetter(): void {
     this.letterHeldUntil = performance.now() + LibraryComponent.LETTER_HOLD_MS;
   }
@@ -414,13 +435,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
   private loadGen = 0;
 
   ngOnInit() {
-    const shell = this.shellRef.nativeElement;
-    if (this.windowScroll()) {
-      window.addEventListener('scroll', this.onLetterScroll, { passive: true });
-    } else {
-      this.pageScroller.claim(shell);
-      shell.addEventListener('scroll', this.onLetterScroll, { passive: true });
-    }
+    if (!this.windowScroll()) this.pageScroller.claim(this.shellRef.nativeElement);
+    this.bindLetterScroll();
     // A resize can change the column count, which re-chunks the rows.
     this.onResize = () => {
       this.rowMeasured = false;
@@ -553,13 +569,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.list.destroy();
     if (this.onResize) window.removeEventListener('resize', this.onResize);
     this.scrollMemory.deactivate();
-    if (this.windowScroll()) {
-      window.removeEventListener('scroll', this.onLetterScroll);
-    } else {
-      this.shellRef.nativeElement.removeEventListener('scroll', this.onLetterScroll);
-      this.pageScroller.release(this.shellRef.nativeElement);
-    }
-    if (this.letterRaf !== null) cancelAnimationFrame(this.letterRaf);
+    this.unbindLetterScroll();
+    if (!this.windowScroll()) this.pageScroller.release(this.shellRef.nativeElement);
     this.navbar.clearPageTitle();
     this.paramSub?.unsubscribe();
 
