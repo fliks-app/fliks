@@ -4,6 +4,7 @@ import { NavigationStart, Router, Scroll } from '@angular/router';
 import { Subject } from 'rxjs';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ScrollMemoryService } from './scroll-memory.service';
+import { NavbarService } from './navbar.service';
 import { PageScrollerService } from './page-scroller.service';
 
 describe('ScrollMemoryService', () => {
@@ -11,16 +12,19 @@ describe('ScrollMemoryService', () => {
   let claimed: HTMLElement | null;
   let offset: number;
   let writes: number[];
+  let wentBack: boolean;
 
   beforeEach(() => {
     events = new Subject();
     claimed = null;
     offset = 0;
     writes = [];
+    wentBack = false;
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
         { provide: Router, useValue: { events } },
+        { provide: NavbarService, useValue: { navigatedBack: () => wentBack } },
         {
           provide: PageScrollerService,
           useValue: {
@@ -43,6 +47,7 @@ describe('ScrollMemoryService', () => {
 
   it('saves and restores the claimed container, not the document', async () => {
     const s = service();
+    wentBack = true;
     claimed = document.createElement('div');
     s.activate('library-films');
     offset = 4160;
@@ -58,6 +63,7 @@ describe('ScrollMemoryService', () => {
 
   it('stops sticking once another page claims its own scroller', async () => {
     const s = service();
+    wentBack = true;
     claimed = document.createElement('div');
     s.activate('library-films');
     offset = 4160;
@@ -83,6 +89,7 @@ describe('ScrollMemoryService', () => {
 
   it('retries while a reattached container is not yet scrollable', async () => {
     const s = service();
+    wentBack = true;
     claimed = document.createElement('div');
     s.activate('library-films');
     offset = 4160;
@@ -107,5 +114,64 @@ describe('ScrollMemoryService', () => {
 
     expect(writes.length).toBeGreaterThan(1);
     expect(offset).toBe(4160);
+  });
+
+  it("holds a forward entry at the top when the router's own scroll is dropped", async () => {
+    service();
+    // WKWebView clamps the offset the previous, taller page had to this
+    // document's own maximum and ignores the router's single scrollTo.
+    offset = 1422;
+
+    events.next(new NavigationStart(1, '/movies/1'));
+    events.next(new Scroll({} as never, null, null));
+    await nextFrame();
+
+    expect(writes).toContain(0);
+    expect(offset).toBe(0);
+  });
+
+  it('takes the top back when the clamp lands a few frames later', async () => {
+    service();
+    events.next(new NavigationStart(1, '/movies/1'));
+    events.next(new Scroll({} as never, null, null));
+    await nextFrame();
+    writes.length = 0;
+
+    // WKWebView settles its contentSize off the main thread and reports the
+    // clamp as a scroll of its own, after the router's turn is over.
+    offset = 1422;
+    window.dispatchEvent(new Event('scroll'));
+
+    expect(writes).toEqual([0]);
+    expect(offset).toBe(0);
+  });
+
+  it('lets go of the top as soon as the user touches the page', async () => {
+    service();
+    events.next(new NavigationStart(1, '/movies/1'));
+    events.next(new Scroll({} as never, null, null));
+    await nextFrame();
+    writes.length = 0;
+
+    window.dispatchEvent(new Event('touchstart'));
+    offset = 900;
+    window.dispatchEvent(new Event('scroll'));
+
+    expect(writes).toEqual([]);
+    expect(offset).toBe(900);
+  });
+
+  it('leaves a return alone — its own restore owns the offset', async () => {
+    const s = service();
+    wentBack = true;
+    s.activate('library-films');
+    offset = 4160;
+    events.next(new NavigationStart(1, '/libraries/Films'));
+    offset = 1422;
+    events.next(new Scroll({} as never, null, null));
+    await nextFrame();
+    await nextFrame();
+
+    expect(writes).not.toContain(0);
   });
 });

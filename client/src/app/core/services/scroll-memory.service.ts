@@ -1,6 +1,13 @@
 import { Injectable, Injector, afterNextRender, inject } from '@angular/core';
 import { NavigationStart, Router, Scroll } from '@angular/router';
+import { NavbarService } from './navbar.service';
 import { PageScrollerService } from './page-scroller.service';
+
+/** How long a forward entry defends its own top. Long enough to outlast the
+ *  incoming document's growth, short enough to be over before a reader is. */
+const TOP_HOLD_MS = 600;
+/** Anything of these means the offset is the user's business now. */
+const USER_INPUT = ['touchstart', 'wheel', 'keydown'] as const;
 
 @Injectable({ providedIn: 'root' })
 export class ScrollMemoryService {
@@ -10,6 +17,9 @@ export class ScrollMemoryService {
   /** Whatever scrolls the active page — the document, or a container a page
    *  claimed. Both scroll models therefore share this one save/restore path. */
   private readonly pageScroller = inject(PageScrollerService);
+  /** Only a return asks for a remembered offset; everything else opens at the
+   *  top, and {@link enterAtTop} is what makes that stick. */
+  private readonly navbar = inject(NavbarService);
   /** False between NavigationStart and the router's own scroll. */
   private routerScrolled = true;
   private queued: (() => void)[] = [];
@@ -29,6 +39,7 @@ export class ScrollMemoryService {
         // scrolled whatever subscriber order puts first — same task either
         // way, so nothing in between is ever painted.
         if (due.length) queueMicrotask(() => due.forEach((fn) => fn()));
+        if (!this.navbar.navigatedBack()) queueMicrotask(() => this.enterAtTop());
       }
     });
   }
@@ -90,6 +101,36 @@ export class ScrollMemoryService {
     const owner = this.pageScroller.element();
     if (this.routerScrolled) this.stick(target, owner);
     else this.queued.push(() => this.stick(target, owner));
+  }
+
+  /**
+   * Hold a forward entry at the top. The router scrolls there once, and a
+   * WKWebView still sizing the incoming document drops that write — leaving
+   * the page at the offset the taller page before it had, which the new
+   * document's own maximum clamps to its footer.
+   *
+   * Two passes, because that clamp is not bound to this task: the sticky one
+   * for an offset that is already wrong, and a listener for the one that
+   * arrives a few frames later off the scrolling thread. Both end early —
+   * the first on the frame it reads zero, the second on the first thing the
+   * user does, so neither ever pulls against a real gesture.
+   */
+  private enterAtTop(): void {
+    const owner = this.pageScroller.element();
+    this.stick(0, owner);
+
+    const deadline = performance.now() + TOP_HOLD_MS;
+    const target: EventTarget = owner ?? window;
+    const done = () => {
+      target.removeEventListener('scroll', onScroll);
+      for (const ev of USER_INPUT) target.removeEventListener(ev, done);
+    };
+    const onScroll = () => {
+      if (performance.now() > deadline || this.pageScroller.element() !== owner) return done();
+      if (this.pageScroller.offset() > 1) this.pageScroller.scrollTo(0);
+    };
+    target.addEventListener('scroll', onScroll, { passive: true });
+    for (const ev of USER_INPUT) target.addEventListener(ev, done, { passive: true, once: true });
   }
 
   private stick(target: number, owner: HTMLElement | null): void {
