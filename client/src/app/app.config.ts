@@ -80,6 +80,11 @@ const POSTER_IN_CLASS = 'vt-poster-in';
 const POSTER_OUT_CLASS = 'vt-poster-out';
 const NATIVE_PLAYER_CLASS = 'native-player-active';
 const IS_TV = detectDevice().formFactor === 'tv';
+// The desktop shell composites the video itself, so a transparent snapshot
+// reveals it rather than the black an OS-level surface would show through.
+const IS_DESKTOP_SHELL =
+  typeof window !== 'undefined' &&
+  (!!window.fliksDesktop || /\bElectron\//.test(navigator.userAgent));
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -114,6 +119,7 @@ export const appConfig: ApplicationConfig = {
                 // the destination.
                 if (
                   closingPlayer &&
+                  !IS_DESKTOP_SHELL &&
                   document.documentElement.classList.contains(NATIVE_PLAYER_CLASS)
                 ) {
                   transition.skipTransition();
