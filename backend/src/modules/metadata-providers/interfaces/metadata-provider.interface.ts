@@ -119,6 +119,13 @@ export interface SeasonDetails {
   episodes: EpisodeDetails[];
 }
 
+/** A season without its episode payloads: what a season picker renders.
+ *  Providers answer it in a single call, unlike {@link SeasonDetails}. */
+export interface SeasonStub {
+  seasonNumber: number;
+  episodeCount: number;
+}
+
 export interface EpisodeDetails {
   episodeNumber: number;
   title: string;
@@ -151,6 +158,10 @@ export interface IMetadataProvider {
     externalId: string,
     override?: MetadataLanguageOverride,
   ): Promise<SeasonDetails[]>;
+  getSeasonStubs(
+    externalId: string,
+    override?: MetadataLanguageOverride,
+  ): Promise<SeasonStub[]>;
   getPersonDetails(externalId: string): Promise<PersonDetails>;
   getPersonCredits(externalId: string): Promise<PersonCombinedCredits>;
   findByExternalId?(

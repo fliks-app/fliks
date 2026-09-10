@@ -6,6 +6,7 @@ import {
   MetadataSearchResult,
   MetadataDetails,
   SeasonDetails,
+  SeasonStub,
   PersonDetails,
   PersonCombinedCredits,
   PersonCreditItem,
@@ -33,8 +34,14 @@ import {
   MetadataSettingsCache,
   MetadataLanguageOverride,
 } from '../metadata-settings-cache.service';
+import { mapWithConcurrency } from '../../../common/utils/concurrency';
 
 const TVDB_BASE = 'https://api4.thetvdb.com/v4';
+
+/** In-flight per-episode translation requests. TVDB advertises translations per
+ *  field, so a long series means hundreds of these; serialised they dominated a
+ *  series import. */
+const EPISODE_TRANSLATION_CONCURRENCY = 8;
 
 /**
  * Collect TVDB aliases into the same flat string array shape that the TMDB
@@ -134,7 +141,9 @@ export class TvdbProvider implements IMetadataProvider {
       '/search',
       { params },
     );
-    return (data.data ?? []).map((r) => this.mapSearchResult(r, 'series', tvdb));
+    return (data.data ?? []).map((r) =>
+      this.mapSearchResult(r, 'series', tvdb),
+    );
   }
 
   // ── Movie details ──
@@ -234,7 +243,9 @@ export class TvdbProvider implements IMetadataProvider {
     const imdbId = this.extractRemoteId(s.remoteIds, 'IMDB');
 
     return {
-      seasonCount: (s.seasons ?? []).filter((x: { number?: number }) => x.number !== 0).length || null,
+      seasonCount:
+        (s.seasons ?? []).filter((x: { number?: number }) => x.number !== 0)
+          .length || null,
       episodeCount: null,
       tmdbId: parseInt(
         this.extractRemoteId(s.remoteIds, 'TheMovieDB.com') ?? '0',
@@ -295,16 +306,9 @@ export class TvdbProvider implements IMetadataProvider {
 
   // ── Seasons ──
 
-  async getTvShowSeasons(
-    externalId: string,
-    override?: MetadataLanguageOverride,
-  ): Promise<SeasonDetails[]> {
-    await this.ensureAuth();
-    const tvdb = (await this.metaLang.resolve(override)).tvdbCode;
-    const id = parseInt(externalId, 10);
-
-    // Fetch all episodes (paginated) via the default season type
-    const allEpisodes: TvdbEpisodeBase[] = [];
+  /** Every episode of a series, following TVDB's 500-per-page cursor. */
+  private async fetchAllEpisodes(id: number): Promise<TvdbEpisodeBase[]> {
+    const all: TvdbEpisodeBase[] = [];
     let page = 0;
     let hasMore = true;
     while (hasMore) {
@@ -313,10 +317,36 @@ export class TvdbProvider implements IMetadataProvider {
         { params: { page: String(page) } },
       );
       const eps = data.data?.episodes ?? [];
-      allEpisodes.push(...eps);
+      all.push(...eps);
       hasMore = eps.length >= 500; // TVDB paginates at 500
       page++;
     }
+    return all;
+  }
+
+  /** Season numbers + episode counts, derived from the one episode listing.
+   *  No per-episode translation fetch: a picker has no use for it. */
+  async getSeasonStubs(externalId: string): Promise<SeasonStub[]> {
+    await this.ensureAuth();
+    const episodes = await this.fetchAllEpisodes(parseInt(externalId, 10));
+    const counts = new Map<number, number>();
+    for (const ep of episodes) {
+      counts.set(ep.seasonNumber, (counts.get(ep.seasonNumber) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([seasonNumber, episodeCount]) => ({ seasonNumber, episodeCount }))
+      .sort((a, b) => a.seasonNumber - b.seasonNumber);
+  }
+
+  async getTvShowSeasons(
+    externalId: string,
+    override?: MetadataLanguageOverride,
+  ): Promise<SeasonDetails[]> {
+    await this.ensureAuth();
+    const tvdb = (await this.metaLang.resolve(override)).tvdbCode;
+    const id = parseInt(externalId, 10);
+
+    const allEpisodes = await this.fetchAllEpisodes(id);
 
     // Also fetch season list for metadata
     const { data: seriesData } = await this.client.get<
@@ -329,25 +359,29 @@ export class TvdbProvider implements IMetadataProvider {
     );
 
     // Fetch localized translations for each episode that advertises them
-    const epTranslations = new Map<
-      number,
-      { name?: string; overview?: string }
-    >();
-    for (const ep of allEpisodes) {
-      if (
+    const translatable = allEpisodes.filter(
+      (ep) =>
         ep.overviewTranslations?.includes(tvdb) ||
-        ep.nameTranslations?.includes(tvdb)
-      ) {
+        ep.nameTranslations?.includes(tvdb),
+    );
+    const fetched = await mapWithConcurrency(
+      translatable,
+      EPISODE_TRANSLATION_CONCURRENCY,
+      async (ep) => {
         try {
           const { data: trData } = await this.client.get<
             TvdbResponse<{ name: string; overview: string }>
           >(`/episodes/${ep.id}/translations/${tvdb}`);
-          epTranslations.set(ep.id, trData.data);
+          return [ep.id, trData.data] as const;
         } catch {
-          /* translation not available */
+          return null; // translation not available
         }
-      }
-    }
+      },
+    );
+    const epTranslations = new Map<
+      number,
+      { name?: string; overview?: string }
+    >(fetched.filter((e): e is NonNullable<typeof e> => e !== null));
 
     // Group episodes by season
     const seasonMap = new Map<number, TvdbEpisodeBase[]>();
