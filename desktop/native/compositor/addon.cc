@@ -114,6 +114,8 @@ struct GlState {
   std::string iconPath;  // BMP loaded onto the window via SDL_SetWindowIcon
   std::atomic<bool> run{false};
   std::atomic<int> fsRequest{-1};  // -1 none, 0 windowed, 1 fullscreen-desktop
+  std::atomic<int> cursorRequest{-1};  // -1 none, 0 hidden, 1 shown
+  std::atomic<int> cursorShape{-1};    // -1 none, else an index into kCursors
   std::thread renderThread;
   std::thread eventThread;
 
@@ -250,11 +252,20 @@ void MpvRenderInit(GlState* s) {
   fprintf(stderr, "[compositor] mpv render context ready\n");
 }
 
+// Indexed by the shape ids main/index.ts maps Chromium's cursor names onto.
+const SDL_SystemCursor kCursors[] = {SDL_SYSTEM_CURSOR_ARROW, SDL_SYSTEM_CURSOR_HAND,
+                                     SDL_SYSTEM_CURSOR_IBEAM, SDL_SYSTEM_CURSOR_SIZEALL};
+constexpr int kCursorCount = static_cast<int>(sizeof(kCursors) / sizeof(kCursors[0]));
+
 void RenderThreadMain(GlState* s) {
+  SDL_Cursor* cursorCache[kCursorCount] = {};
   // Name the X11 WM_CLASS so the window isn't grouped under "electron" (argv0).
   // GNOME/Ubuntu key the dock entry on this; default to "fliks" but let an
   // explicit launch-time SDL_VIDEO_X11_WMCLASS win (overwrite=0).
   setenv("SDL_VIDEO_X11_WMCLASS", "fliks", 0);
+  // Without this SDL swallows the click that refocuses the window, so the first
+  // click back into the app lands on nothing and everything needs clicking twice.
+  SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
   if (SDL_Init(SDL_INIT_VIDEO) != 0) {
     fprintf(stderr, "[compositor] SDL_Init failed: %s\n", SDL_GetError());
     return;
@@ -354,6 +365,17 @@ void RenderThreadMain(GlState* s) {
     int fs = s->fsRequest.exchange(-1, std::memory_order_acq_rel);
     if (fs >= 0)
       SDL_SetWindowFullscreen(s->window, fs == 1 ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+    // The page's CSS cursor only covers the offscreen bitmap; the pointer the
+    // user sees belongs to this window.
+    int cur = s->cursorRequest.exchange(-1, std::memory_order_acq_rel);
+    if (cur >= 0) SDL_ShowCursor(cur == 1 ? SDL_ENABLE : SDL_DISABLE);
+    // Chromium resolves the CSS cursor for the page; only this window can show
+    // it. Built on demand and kept, since a shape recurs on every hover.
+    int shape = s->cursorShape.exchange(-1, std::memory_order_acq_rel);
+    if (shape >= 0 && shape < kCursorCount) {
+      if (!cursorCache[shape]) cursorCache[shape] = SDL_CreateSystemCursor(kCursors[shape]);
+      if (cursorCache[shape]) SDL_SetCursor(cursorCache[shape]);
+    }
 
     int w, h;
     SDL_GL_GetDrawableSize(s->window, &w, &h);
@@ -642,6 +664,18 @@ Napi::Value SetFullscreen(const Napi::CallbackInfo& info) {
   return info.Env().Undefined();
 }
 
+Napi::Value SetCursorShape(const Napi::CallbackInfo& info) {
+  int shape = info.Length() > 0 ? info[0].ToNumber().Int32Value() : 0;
+  g_state.cursorShape.store(shape, std::memory_order_release);
+  return info.Env().Undefined();
+}
+
+Napi::Value SetCursorVisible(const Napi::CallbackInfo& info) {
+  bool on = info.Length() > 0 && info[0].ToBoolean().Value();
+  g_state.cursorRequest.store(on ? 1 : 0, std::memory_order_release);
+  return info.Env().Undefined();
+}
+
 Napi::Value UploadUi(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   if (info.Length() < 3 || !info[0].IsBuffer()) return env.Undefined();
@@ -683,6 +717,8 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("getProperty", Napi::Function::New(env, GetProperty));
   exports.Set("setProperty", Napi::Function::New(env, SetProperty));
   exports.Set("setFullscreen", Napi::Function::New(env, SetFullscreen));
+  exports.Set("setCursorVisible", Napi::Function::New(env, SetCursorVisible));
+  exports.Set("setCursorShape", Napi::Function::New(env, SetCursorShape));
   exports.Set("stop", Napi::Function::New(env, Stop));
   return exports;
 }

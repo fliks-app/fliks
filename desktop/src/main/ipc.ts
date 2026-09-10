@@ -40,6 +40,8 @@ export function registerPlayerIpc(session: PlayerSession): void {
     session.player.setSubtitleStyle(style),
   );
   ipcMain.handle(IPC.setFillScreen, (_e, fill: boolean) => session.player.setFillScreen(fill));
+  // The page is the visible surface here, so its CSS cursor already applies.
+  ipcMain.handle(IPC.setCursorVisible, () => {});
   ipcMain.handle(IPC.setFullscreen, (_e, enabled: boolean) => session.setFullscreen(enabled));
   ipcMain.handle(IPC.resize, (_e, rect: DesktopRect) => session.resize(rect));
   ipcMain.handle(IPC.destroy, () => session.destroy());

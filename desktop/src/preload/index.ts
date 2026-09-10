@@ -43,6 +43,7 @@ const api: FliksDesktopApi = {
   setSubtitleStyle: (style: DesktopSubtitleStyle) =>
     ipcRenderer.invoke(IPC.setSubtitleStyle, style),
   setFillScreen: (fill: boolean) => ipcRenderer.invoke(IPC.setFillScreen, fill),
+  setCursorVisible: (visible: boolean) => ipcRenderer.invoke(IPC.setCursorVisible, visible),
   resize: (rect: DesktopRect) => ipcRenderer.invoke(IPC.resize, rect),
   destroy: () => ipcRenderer.invoke(IPC.destroy),
   getSystemInfo: () => ipcRenderer.invoke(IPC.getSystemInfo),

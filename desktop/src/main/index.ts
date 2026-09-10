@@ -62,6 +62,8 @@ type Addon = {
   getProperty(name: string): string | null;
   setProperty(name: string, value: string): void;
   setFullscreen(enabled: boolean): void;
+  setCursorVisible(visible: boolean): void;
+  setCursorShape(shape: number): void;
   stop(): void;
 };
 
@@ -171,6 +173,22 @@ const KEYMAP: Record<string, string> = {
   Home: 'Home',
   End: 'End',
 };
+
+// Chromium cursor name → index into the addon's SDL system-cursor table. These
+// are Blink's legacy names, where "pointer" is the plain arrow and "hand" is
+// what CSS calls cursor:pointer. Anything unlisted falls back to the arrow;
+// SDL has no grab cursor, so the hand stands in for the drag handles.
+const CURSOR_SHAPES: Record<string, number> = {
+  hand: 1,
+  grab: 1,
+  grabbing: 1,
+  text: 2,
+  move: 3,
+};
+
+// SDL reports wheel notches, Chromium wants pixels. GTK's own convention is
+// about 53px a notch, which reads sluggish against a browser's smooth scroll.
+const WHEEL_PIXELS_PER_NOTCH = 100;
 
 let uiWin: BrowserWindow | null = null;
 const inputCounts: Record<string, number> = {};
@@ -316,6 +334,20 @@ app.whenReady().then(async () => {
     },
   });
   uiWin.webContents.setFrameRate(60);
+  // The window is never shown, so Electron's focus() is a no-op on it and
+  // Chromium keeps the widget unfocused: no blinking caret in any text field.
+  // Focus emulation is the one switch that sets it without a visible window.
+  try {
+    uiWin.webContents.debugger.attach('1.3');
+    void uiWin.webContents.debugger.sendCommand('Emulation.setFocusEmulationEnabled', {
+      enabled: true,
+    });
+  } catch (e) {
+    console.error('[main] focus emulation unavailable, the caret will not blink', e);
+  }
+  // Chromium resolves the CSS cursor for the offscreen page and reports it
+  // here; the pointer it applies to belongs to the compositor's window.
+  uiWin.webContents.on('cursor-changed', (_e, type) => addon.setCursorShape(CURSOR_SHAPES[type] ?? 0));
   uiWin.webContents.on('paint', (_e, _dirty, image) => {
     const s = image.getSize();
     if (s.width > 0) addon.uploadUi(image.toBitmap(), s.width, s.height);
@@ -427,7 +459,14 @@ app.whenReady().then(async () => {
     else if (i.kind === 'button')
       wc.sendInputEvent({ type: i.down ? 'mouseDown' : 'mouseUp', x: i.x, y: i.y, button: i.button, clickCount: i.clicks || 1 } as any);
     else if (i.kind === 'wheel')
-      wc.sendInputEvent({ type: 'mouseWheel', x: i.x, y: i.y, deltaX: i.dx * 40, deltaY: i.dy * 40, canScroll: true } as any);
+      wc.sendInputEvent({
+        type: 'mouseWheel',
+        x: i.x,
+        y: i.y,
+        deltaX: i.dx * WHEEL_PIXELS_PER_NOTCH,
+        deltaY: i.dy * WHEEL_PIXELS_PER_NOTCH,
+        canScroll: true,
+      } as any);
     else if (i.kind === 'text') wc.sendInputEvent({ type: 'char', keyCode: i.text } as any);
     else if (i.kind === 'key') {
       const k = KEYMAP[i.key];
@@ -480,6 +519,7 @@ app.whenReady().then(async () => {
   ipcMain.handle(IPC.setFillScreen, (_e, fill: boolean) =>
     addon.setProperty('panscan', fill ? '1.0' : '0.0'),
   );
+  ipcMain.handle(IPC.setCursorVisible, (_e, visible: boolean) => addon.setCursorVisible(visible));
   ipcMain.handle(IPC.setFullscreen, (_e, enabled: boolean) => addon.setFullscreen(enabled));
   ipcMain.handle(IPC.setSubtitleStyle, (_e, s: DesktopSubtitleStyle) => {
     if (!s) return;

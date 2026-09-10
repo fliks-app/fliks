@@ -53,6 +53,7 @@ import {
 } from '../../core/services/player-settings.service';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
+import { desktopBridgeOrNull } from '../../core/plugins/desktop-player.bridge';
 import { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
 import { ShakaEngine } from '../../core/services/playback-engine/shaka-engine';
 import { TizenEngine, isTizenAvplayAvailable } from '../../core/services/playback-engine/tizen-engine';
@@ -493,6 +494,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const delay = this.device.isTv() ? 5000 : 3000;
     const id = setTimeout(() => this.hideControls(), delay);
     onCleanup(() => clearTimeout(id));
+  });
+
+  /** The CSS cursor above only covers the page. Where the visible surface is
+   *  the native compositor's window (Linux), the pointer belongs to it, so the
+   *  same visibility has to be pushed down to it. */
+  private readonly nativeCursorEffect = effect(() => {
+    const visible = this.controlsVisible();
+    void desktopBridgeOrNull()?.setCursorVisible(visible).catch(() => {});
   });
 
   // ── Skip-intro state ──
