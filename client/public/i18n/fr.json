@@ -1150,7 +1150,8 @@
     "unlike": "Je n’aime plus",
     "subtitle_failed": "Échec",
     "subtitle_sync_failed": "Échec de la synchro",
-    "delete_no_folder": "Ce titre n'a pas de dossier propre : seule l'entrée de la bibliothèque sera supprimée, le fichier reste sur le disque."
+    "delete_no_folder": "Ce titre n'a pas de dossier propre : seule l'entrée de la bibliothèque sera supprimée, le fichier reste sur le disque.",
+    "delete_success": "Titre supprimé de la bibliothèque."
   },
   "requests": {
     "title": "Demandes",

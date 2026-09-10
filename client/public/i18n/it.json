@@ -1142,7 +1142,8 @@
     "unlike": "Non mi piace più",
     "subtitle_failed": "Non riuscito",
     "subtitle_sync_failed": "Sincronizzazione non riuscita",
-    "delete_no_folder": "Questo titolo non ha una cartella propria: verrà rimossa solo la voce della libreria, il file rimane sul disco."
+    "delete_no_folder": "Questo titolo non ha una cartella propria: verrà rimossa solo la voce della libreria, il file rimane sul disco.",
+    "delete_success": "Titolo rimosso dalla libreria."
   },
   "requests": {
     "title": "Richieste",

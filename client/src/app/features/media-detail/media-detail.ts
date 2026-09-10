@@ -1415,6 +1415,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.deleteLoading.set(true);
     try {
       await this.mediaService.delete(m.id);
+      this.toast.success(this.translate.instant('media_detail.delete_success'));
       // Home, not /movies or /series: those redirect through the
       // __default_movies__/__default_series__ sentinel, which the user then sees in the URL.
       void this.router.navigate(['/']);

@@ -1142,7 +1142,8 @@
     "unlike": "Já não gosto",
     "subtitle_failed": "Falhou",
     "subtitle_sync_failed": "Sincronização falhou",
-    "delete_no_folder": "Este título não tem uma pasta própria: apenas a entrada da biblioteca será removida, o ficheiro permanece no disco."
+    "delete_no_folder": "Este título não tem uma pasta própria: apenas a entrada da biblioteca será removida, o ficheiro permanece no disco.",
+    "delete_success": "Título removido da biblioteca."
   },
   "requests": {
     "title": "Pedidos",
