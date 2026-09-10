@@ -67,9 +67,23 @@ echo "==> [2/3] desktop main + preload"
 ( cd "$ROOT/desktop" && npm run build )
 
 echo "==> [3/3] relaunch Electron"
+# Wait for the old instance to let go of ~/.config/Fliks: starting while it still
+# holds the IndexedDB lock loses the stored session, so every relaunch would ask
+# for a login again.
 pkill -x electron 2>/dev/null || true
+for _ in $(seq 50); do pgrep -x electron >/dev/null || break; sleep 0.2; done
+if pgrep -x electron >/dev/null; then
+  echo "dev-linux: previous instance still up after 10s, killing it" >&2
+  pkill -9 -x electron 2>/dev/null || true
+  sleep 1
+fi
 
 cd "$ROOT/desktop"
 # DISPLAY=:0 forces XWayland — the OSR compositor doesn't run on native Wayland.
+# env -u: a terminal inside an Electron host (VS Code) exports
+# ELECTRON_RUN_AS_NODE=1, which makes the binary run the app as plain node.
+# FLIKS_DEBUG_PORT=9223 exposes the UI page over CDP for inspection.
+dbg_port=""
+[ -n "${FLIKS_DEBUG_PORT:-}" ] && dbg_port="--remote-debugging-port=$FLIKS_DEBUG_PORT"
 FLIKS_WEB_DIR="$OUT/browser" DISPLAY="${DISPLAY:-:0}" \
-  exec ./node_modules/.bin/electron . --no-sandbox
+  exec env -u ELECTRON_RUN_AS_NODE ./node_modules/.bin/electron . --no-sandbox $dbg_port
