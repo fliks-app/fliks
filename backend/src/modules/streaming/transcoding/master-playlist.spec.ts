@@ -95,6 +95,35 @@ describe('generateMasterPlaylist — audio rendition CHANNELS', () => {
   });
 });
 
+describe('generateMasterPlaylist — supportsHlsAudioRenditions', () => {
+  const mediaLines = (m: string): string[] =>
+    m.split('\n').filter((l) => l.startsWith('#EXT-X-MEDIA:TYPE=AUDIO'));
+  const base = {
+    mediaFileId: 1,
+    sourceWidth: 1920,
+    sourceHeight: 1080,
+    tokenParam: '',
+    audioStreams: [{ channels: 6 }, { channels: 6 }, { channels: 2 }],
+    defaultAudioIndex: 2,
+  };
+
+  it('publishes the picked rendition alone when the client cannot select one', () => {
+    const media = mediaLines(
+      generateMasterPlaylist({ ...base, supportsHlsAudioRenditions: false }),
+    );
+    expect(media).toHaveLength(1);
+    expect(media[0]).toContain('/audio/2/');
+    expect(media[0]).toContain('DEFAULT=YES');
+  });
+
+  it('publishes every rendition when unset or true', () => {
+    expect(mediaLines(generateMasterPlaylist(base))).toHaveLength(3);
+    expect(
+      generateMasterPlaylist({ ...base, supportsHlsAudioRenditions: true }),
+    ).toEqual(generateMasterPlaylist(base));
+  });
+});
+
 describe('generateMasterPlaylist — supportsAbr collapses the ladder', () => {
   const base = {
     mediaFileId: 1,

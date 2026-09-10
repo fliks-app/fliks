@@ -1839,6 +1839,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     engine.on('firstFrame', () => {
       this.state.videoStarted.set(true);
     });
+    this.wireAudioTracks(engine);
     this.wireSessionExpiredRecovery(engine);
   }
 

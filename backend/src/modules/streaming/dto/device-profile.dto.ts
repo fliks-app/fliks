@@ -142,6 +142,17 @@ export class DeviceProfileDto {
   supportsHlsSubtitles?: boolean;
 
   /**
+   * Client can select an alternate `EXT-X-MEDIA:TYPE=AUDIO` rendition at
+   * runtime. LG webOS sends `false`: its native HLS pipeline exposes one
+   * entry in `audioTracks` whatever the group holds, and it ignores
+   * `DEFAULT=YES`, so the master publishes the picked rendition alone and an
+   * audio switch goes through a reload. Unset is treated as `true`.
+   */
+  @IsBoolean()
+  @IsOptional()
+  supportsHlsAudioRenditions?: boolean;
+
+  /**
    * Client accelerates HLS through an `EXT-X-I-FRAME-STREAM-INF` rendition
    * (Tizen AVPlay's `setSpeed`). Only clients that declare it get the tag: any
    * player that reads one will fetch the frames behind it, and each frame costs

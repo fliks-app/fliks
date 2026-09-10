@@ -69,6 +69,7 @@ export function emitAudioRenditions(
   mediaFileId: number,
   tokenParam: string,
   outputChannels?: (number | undefined)[],
+  onlyPicked = false,
 ): void {
   const pickedIdx =
     defaultAudioIndex >= 0 && defaultAudioIndex < audioStreams.length
@@ -76,6 +77,9 @@ export function emitAudioRenditions(
       : 0;
   const names = buildUniqueAudioNames(audioStreams);
   for (let i = 0; i < audioStreams.length; i++) {
+    // A player that can't select a rendition plays whichever it sees first,
+    // so publishing the others only pins it away from the picked track.
+    if (onlyPicked && i !== pickedIdx) continue;
     const a = audioStreams[i];
     const lang = a.language || 'und';
     const isDefault = i === pickedIdx ? 'YES' : 'NO';
