@@ -12,7 +12,7 @@ import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { Router } from '@angular/router';
-import { MetadataService } from '../../../../core/services/api/metadata.service';
+import { MetadataService, SeasonStub } from '../../../../core/services/api/metadata.service';
 import { ProfilesService } from '../../../../core/services/api/profiles.service';
 import { LibrariesApiService, Library } from '../../../../core/services/api/libraries-api.service';
 import { SettingsApiService } from '../../../../core/services/api/settings-api.service';
@@ -20,10 +20,18 @@ import { ToastService } from '../../../../core/services/toast.service';
 import { MediaType } from '../../../../core/enums/media-type.enum';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
+import { SeasonPickerComponent } from '../../../../shared/components/season-picker/season-picker.component';
 
 @Component({
   selector: 'app-import-modal',
-  imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
+  imports: [
+    TvSelectDirective,
+    ModalFooterComponent,
+    ModalHeaderComponent,
+    SeasonPickerComponent,
+    FormsModule,
+    TranslatePipe,
+  ],
   templateUrl: './import-modal.component.html',
 })
 export class ImportModalComponent {
@@ -55,8 +63,23 @@ export class ImportModalComponent {
   readonly selectedLanguageProfileId = signal<number | null>(null);
   readonly selectedLibraryId = signal<number | null>(null);
 
+  readonly seasons = signal<SeasonStub[]>([]);
+  readonly selectedSeasons = signal<Set<number>>(new Set());
+  readonly seasonsLoading = signal(false);
+  /** The season list is what the picker picks from: without it there is nothing
+   *  to tick, so the import falls back to the server-side default instead of
+   *  leaving the confirm button dead. */
+  readonly seasonsFailed = signal(false);
+
   readonly compatibleLibraries = computed(() =>
     this.libraries().filter((l) => l.mediaTypes.includes(this.mediaType())),
+  );
+
+  /** A series with no season monitored would import and then sit idle, so the
+   *  confirm button waits for a pick, same rule as the request modal. */
+  protected readonly nothingToMonitor = computed(
+    () =>
+      this.mediaType() === 'series' && !this.seasonsFailed() && this.selectedSeasons().size === 0,
   );
 
   async open(params: {
@@ -73,7 +96,12 @@ export class ImportModalComponent {
     this.externalId.set(params.externalId ?? String(params.tmdbId));
     this.error.set('');
     this.importing.set(false);
+    this.seasons.set([]);
+    this.selectedSeasons.set(new Set());
+    this.seasonsFailed.set(false);
     this.dialogEl()?.nativeElement.showModal();
+
+    if (params.mediaType === 'series') this.loadSeasons();
 
     this.loading.set(true);
     try {
@@ -104,6 +132,33 @@ export class ImportModalComponent {
     }
   }
 
+  /** Specials start unticked: season 0 is only ever monitored on purpose, which
+   *  is also what the backend does when no season list is sent. */
+  private loadSeasons() {
+    this.seasonsLoading.set(true);
+    this.metadata
+      .getSeasonStubs(this.provider(), this.externalId())
+      .then((stubs) => {
+        this.seasons.set(stubs);
+        this.selectedSeasons.set(new Set(stubs.map((s) => s.seasonNumber).filter((n) => n > 0)));
+      })
+      .catch(() => this.seasonsFailed.set(true))
+      .finally(() => this.seasonsLoading.set(false));
+  }
+
+  toggleSeason(n: number) {
+    this.selectedSeasons.update((set) => {
+      const next = new Set(set);
+      next.has(n) ? next.delete(n) : next.add(n);
+      return next;
+    });
+  }
+
+  toggleAllSeasons() {
+    const all = this.seasons().map((s) => s.seasonNumber);
+    this.selectedSeasons.set(this.selectedSeasons().size === all.length ? new Set() : new Set(all));
+  }
+
   close() {
     this.dialogEl()?.nativeElement.close();
   }
@@ -119,6 +174,11 @@ export class ImportModalComponent {
         qualityProfileId: this.selectedQualityProfileId() ?? undefined,
         languageProfileId: this.selectedLanguageProfileId() ?? undefined,
         libraryId: this.selectedLibraryId() ?? undefined,
+        ...(this.mediaType() === 'series' && !this.seasonsFailed()
+          ? {
+              monitoredSeasons: [...this.selectedSeasons()].sort((a, b) => a - b),
+            }
+          : {}),
       });
       this.toast.success(this.translate.instant('discover.import_success'));
       this.close();

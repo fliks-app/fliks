@@ -23,23 +23,23 @@ describe('MediaImportService — season monitoring scope on import', () => {
       create: jest.fn((m: any) => m),
       save: jest.fn(async (m: any) => ({ id: 1, ...m })),
     };
+    const tmdbDouble = {
+      name: 'tmdb',
+      getTvShowDetails: jest.fn().mockResolvedValue({ title: 'X', tmdbId: 42 }),
+      getTvShowSeasons: jest
+        .fn()
+        .mockResolvedValue(
+          [0, 1, 2, 3, 4, 5, 6].map((n) => ({ seasonNumber: n })),
+        ),
+    };
     const svc = new MediaImportService(
       mediaRepo as any,
       seasonRepo as any,
       {} as any,
       {} as any,
       { query: jest.fn().mockResolvedValue([]) } as any,
-      {
-        getTvShowDetails: jest
-          .fn()
-          .mockResolvedValue({ title: 'X', tmdbId: 42 }),
-        getTvShowSeasons: jest
-          .fn()
-          .mockResolvedValue(
-            [0, 1, 2, 3, 4, 5, 6].map((n) => ({ seasonNumber: n })),
-          ),
-      } as any,
-      {} as any,
+      tmdbDouble as any,
+      { resolve: jest.fn(() => tmdbDouble) } as any,
       { get: jest.fn().mockReturnValue('tmdb-key') } as any,
       {
         resolveQualityProfileIdForImport: jest.fn().mockResolvedValue(null),
@@ -103,5 +103,30 @@ describe('MediaImportService — season monitoring scope on import', () => {
     const { svc, created } = makeService();
     await svc.importFromTmdb(dto, null, [0]);
     expect(monitoredNumbers(created)).toEqual([0]);
+  });
+
+  /** The admin add form picks its seasons; the DTO has to carry them all the
+   *  way to the season rows, not just the request-approval path. */
+  it('VERDICT: honours monitoredSeasons coming from the import DTO', async () => {
+    const { svc, created } = makeService();
+    await svc.importMedia(
+      {
+        type: MediaType.SERIES,
+        externalId: '42',
+        provider: 'tmdb',
+        monitoredSeasons: [2, 5],
+      } as any,
+      null,
+    );
+    expect(monitoredNumbers(created)).toEqual([2, 5]);
+  });
+
+  it('monitors every season but the specials when the DTO names none', async () => {
+    const { svc, created } = makeService();
+    await svc.importMedia(
+      { type: MediaType.SERIES, externalId: '42', provider: 'tmdb' } as any,
+      null,
+    );
+    expect(monitoredNumbers(created)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 });

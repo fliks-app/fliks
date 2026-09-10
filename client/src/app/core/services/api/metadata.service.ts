@@ -102,6 +102,12 @@ export interface MetadataEpisode {
   stillUrl: string | null;
 }
 
+/** A season without its episodes: what a season picker renders. */
+export interface SeasonStub {
+  seasonNumber: number;
+  episodeCount: number;
+}
+
 export interface MetadataSeason {
   seasonNumber: number;
   episodeCount: number;
@@ -204,6 +210,14 @@ export class MetadataService {
     );
   }
 
+  /** Season numbers + episode counts only: one provider call, unlike
+   *  {@link getSeasons} which fetches every episode of every season. */
+  getSeasonStubs(provider: string, externalId: string) {
+    return firstValueFrom(
+      this.http.get<SeasonStub[]>(`/api/metadata/${provider}/tv/${externalId}/season-stubs`),
+    );
+  }
+
   getSeasons(provider: string, externalId: string) {
     return firstValueFrom(
       this.http.get<MetadataSeason[]>(
@@ -245,6 +259,9 @@ export class MetadataService {
     qualityProfileId?: number;
     languageProfileId?: number;
     libraryId?: number;
+    /** Series only: seasons to monitor. Omitted monitors every season but the
+     *  specials. */
+    monitoredSeasons?: number[];
   }) {
     return firstValueFrom(this.http.post<Media>('/api/media/import', opts));
   }
