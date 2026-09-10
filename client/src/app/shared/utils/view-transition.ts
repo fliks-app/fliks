@@ -8,15 +8,20 @@
  */
 /** The clicked card's badges and progress bar, captured as one layer. */
 export const CARD_OVERLAY_NAME = 'media-card-overlay';
+/**
+ * Marks what this module put there. A media page names its own hero the same
+ * way — a style binding is an inline style too — and Angular does not rewrite
+ * a binding whose value has not changed, so clearing by inline style took that
+ * name away for good on a page kept in the route cache: the trip back then
+ * found nothing to pair the card with.
+ */
+const STAMPED = 'data-poster-stamped';
 
 export function clearPosterStamps(): void {
-  document
-    .querySelectorAll<HTMLElement>(
-      'img[style*="view-transition-name"], [data-card-overlay][style*="view-transition-name"]',
-    )
-    .forEach((el) => {
-      el.style.viewTransitionName = '';
-    });
+  document.querySelectorAll<HTMLElement>(`[${STAMPED}]`).forEach((el) => {
+    el.style.viewTransitionName = '';
+    el.removeAttribute(STAMPED);
+  });
 }
 
 export function stampPoster(
@@ -31,9 +36,13 @@ export function stampPoster(
   img.style.viewTransitionName = episodeId
     ? `media-poster-ep-${episodeId}`
     : `media-poster-${mediaId}`;
+  img.setAttribute(STAMPED, '');
   // The morphing poster is painted above the page snapshot, so the card's own
   // badges only reappear when the animation ends unless they are lifted too.
-  if (overlay) overlay.style.viewTransitionName = CARD_OVERLAY_NAME;
+  if (overlay) {
+    overlay.style.viewTransitionName = CARD_OVERLAY_NAME;
+    overlay.setAttribute(STAMPED, '');
+  }
 }
 
 interface RouteNode {

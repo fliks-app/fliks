@@ -1576,6 +1576,11 @@ html.vt-poster-out::view-transition-old(vt-fab) {
    with the card it belongs to rather than hanging over the page. */
 ::view-transition-group(media-card-overlay) {
   z-index: 2;
+  /* Never travels, even when it does find a partner: a stamp kept alive in a
+     cached page can leave one of these on the side being left, and the two
+     then pair into a badge layer flying across the screen — the one thing on
+     the trip that must not read as the subject of the animation. */
+  animation: none;
   /* Captured out of the figure that rounds it, so the progress bar arrives with
      square ends unless the snapshot carries the card's own radius. */
   clip-path: inset(0 round 0.5rem);

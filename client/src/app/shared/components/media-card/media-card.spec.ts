@@ -15,6 +15,7 @@ import { PlayableMediaService } from '../../../core/services/playable-media.serv
 import { NavbarService } from '../../../core/services/navbar.service';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
 import type { SlotId, UiContribution } from '@fliks/plugin-contract/ui';
+import { stampPoster } from '../../utils/view-transition';
 
 /**
  * Characterisation test for the card's contextual actions menu. Captures the
@@ -656,9 +657,11 @@ describe('media-card poster morph opt-out', () => {
     (document as unknown as { startViewTransition: unknown }).startViewTransition = () => ({
       finished: Promise.resolve(),
     });
+    // Stamped the way a click does it, since only those are this module's to
+    // clear — a name a page declares for its own hero is left alone.
     const stale = document.createElement('img');
-    stale.style.viewTransitionName = 'media-poster-3';
     document.body.appendChild(stale);
+    stampPoster(stale, 3);
 
     const h = await createFixture(FULL_MEMBER, {
       media: makeMedia({ posterUrl: '/api/images/poster.jpg' }),
