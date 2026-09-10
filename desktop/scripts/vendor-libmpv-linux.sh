@@ -2,10 +2,10 @@
 # Bundle the shared libraries the committed libmpv.so.2 links against but a
 # stock Ubuntu desktop has no package for, and point every RUNPATH at $ORIGIN.
 #
-# Only FFmpeg is static inside that libmpv (av_* hidden); it still carries 50
-# DT_NEEDED entries. Shipping the gap as deb `depends:` is not an option: the
-# lib is built on noble, and four of its SONAMEs (unibreak.so.5, rubberband.so.2,
-# bluray.so.2, display-info.so.1) are packaged by no later Ubuntu.
+# FFmpeg, libass and libplacebo are static inside that libmpv (av_* hidden) and
+# the features that pulled the rest in are off, so only two of its DT_NEEDED
+# entries are missing from a stock desktop. See build-libmpv-linux.sh, which
+# builds it.
 #
 # The .debs are downloaded and unpacked, never installed: libjack-jackd2-0
 # displaces libjack0 on the runner and takes libmpv-dev out with it, which
@@ -20,31 +20,14 @@
 # Requires patchelf. FLIKS_LIBS_DIR skips the download and resolves from there.
 set -euo pipefail
 
-NEEDED_SHA256=3c2b1487fd5105b0c02ec86fc2847cedae584574c1469866ec8ab7562ccbe804
+NEEDED_SHA256=0c4cfe086268fa6c89c6907107bb4cb57b06a0faf08ce4a7058585b343a5e607
 
-# Direct DT_NEEDED of libmpv.so.2 that a stock desktop lacks, plus what those
-# drag in (dvdnav to dvdread to udfread, bluray to xml2 to icu, rubberband to
-# fftw3). Regenerate on a clean machine: ldd libmpv.so.2 | grep 'not found',
-# unpack the providers, repeat until it comes back empty.
+# Direct DT_NEEDED of libmpv.so.2 that a stock desktop lacks. Regenerate on a
+# clean machine: ldd libmpv.so.2 | grep 'not found', unpack the providers,
+# repeat until it comes back empty.
 LIBS=(
-  libunibreak.so.5=libunibreak5
   libva-x11.so.2=libva-x11-2
-  libvdpau.so.1=libvdpau1
-  libdvdnav.so.4=libdvdnav4
-  libsndio.so.7=libsndio7.0
-  libbluray.so.2=libbluray2
-  librubberband.so.2=librubberband2
-  libzimg.so.2=libzimg2
-  libjack.so.0=libjack-jackd2-0
-  libdisplay-info.so.1=libdisplay-info1
-  libsixel.so.1=libsixel1
   libXpresent.so.1=libxpresent1
-  libdvdread.so.8=libdvdread8t64
-  libudfread.so.0=libudfread0
-  libxml2.so.2=libxml2
-  libfftw3.so.3=libfftw3-double3
-  libicuuc.so.74=libicu74
-  libicudata.so.74=libicu74
 )
 
 if [ "${1:-}" = "--print-sonames" ]; then
