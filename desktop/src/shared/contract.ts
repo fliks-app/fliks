@@ -106,6 +106,7 @@ export const IPC = {
   subAdd: 'player:subAdd',
   setSubtitleStyle: 'player:setSubtitleStyle',
   setFillScreen: 'player:setFillScreen',
+  setCursorVisible: 'player:setCursorVisible',
   resize: 'player:resize',
   destroy: 'player:destroy',
   /** Host OS identity (name + version), resolved natively. */
@@ -243,6 +244,9 @@ export interface FliksDesktopApi {
   setSubtitleStyle(style: DesktopSubtitleStyle): Promise<void>;
   /** Crop the video to fill the window (mpv `panscan`) instead of letterboxing. */
   setFillScreen(fill: boolean): Promise<void>;
+  /** Show or hide the pointer over the native window, which the page's CSS
+   *  cursor cannot reach where the visible surface is not the page. */
+  setCursorVisible(visible: boolean): Promise<void>;
   resize(rect: DesktopRect): Promise<void>;
   destroy(): Promise<void>;
   /** Native host OS identity (e.g. { systemName: "macOS 26" }). */

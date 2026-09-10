@@ -93,6 +93,9 @@ export interface FliksDesktopApi {
   setSubtitleStyle(style: DesktopSubtitleStyle): Promise<void>;
   /** Crop the video to fill the window (mpv `panscan`) instead of letterboxing. */
   setFillScreen(fill: boolean): Promise<void>;
+  /** Show or hide the pointer over the native window; on Linux the visible
+   *  surface is the compositor's, so the page's CSS cursor never reaches it. */
+  setCursorVisible(visible: boolean): Promise<void>;
   resize(rect: DesktopRect): Promise<void>;
   setFullscreen(enabled: boolean): Promise<void>;
   destroy(): Promise<void>;
