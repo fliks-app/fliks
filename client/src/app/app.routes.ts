@@ -65,7 +65,7 @@ export const routes: Routes = [
         path: 'libraries/:libraryName',
         loadComponent: () =>
           import('./features/library/library').then((m) => m.LibraryComponent),
-        data: { reuse: true, ownsScroll: true },
+        data: { reuse: true },
       },
       // The app's only way to reach "my movies/series" without knowing the library's
       // name: LibraryComponent resolves the sentinel to whichever library holds the flag.

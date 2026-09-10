@@ -14,8 +14,6 @@ export class ScrollMemoryService {
   private positions = new Map<string, number>();
   private currentKey: string | null = null;
   private readonly router = inject(Router);
-  /** Whatever scrolls the active page — the document, or a container a page
-   *  claimed. Both scroll models therefore share this one save/restore path. */
   private readonly pageScroller = inject(PageScrollerService);
   /** Only a return asks for a remembered offset; everything else opens at the
    *  top, and {@link enterAtTop} is what makes that stick. */
@@ -85,9 +83,6 @@ export class ScrollMemoryService {
    * with rAF gating for a document that is still growing — stopping on the
    * first frame where scrollY already equals the target, so a user scroll
    * within the window ends the loop cleanly too.
-   *
-   * The retry window also covers a container scroller reattached before its
-   * content is laid out, where the first write clamps to 0.
    */
   restoreSticky(key: string): void {
     const target = this.positions.get(key);
@@ -96,11 +91,8 @@ export class ScrollMemoryService {
     // would scroll the page being left, be overwritten by the scroll-to-top,
     // and then correct itself — three jumps, the first of them on the outgoing
     // page. Wait for the router to have had its turn.
-    // Captured now, not when the loop starts: the caller has just claimed the
-    // scroller it wants written, and by the router's turn another page may have.
-    const owner = this.pageScroller.element();
-    if (this.routerScrolled) this.stick(target, owner);
-    else this.queued.push(() => this.stick(target, owner));
+    if (this.routerScrolled) this.stick(target);
+    else this.queued.push(() => this.stick(target));
   }
 
   /**
@@ -116,29 +108,24 @@ export class ScrollMemoryService {
    * user does, so neither ever pulls against a real gesture.
    */
   private enterAtTop(): void {
-    const owner = this.pageScroller.element();
-    this.stick(0, owner);
+    this.stick(0);
 
     const deadline = performance.now() + TOP_HOLD_MS;
-    const target: EventTarget = owner ?? window;
     const done = () => {
-      target.removeEventListener('scroll', onScroll);
-      for (const ev of USER_INPUT) target.removeEventListener(ev, done);
+      window.removeEventListener('scroll', onScroll);
+      for (const ev of USER_INPUT) window.removeEventListener(ev, done);
     };
     const onScroll = () => {
-      if (performance.now() > deadline || this.pageScroller.element() !== owner) return done();
+      if (performance.now() > deadline) return done();
       if (this.pageScroller.offset() > 1) this.pageScroller.scrollTo(0);
     };
-    target.addEventListener('scroll', onScroll, { passive: true });
-    for (const ev of USER_INPUT) target.addEventListener(ev, done, { passive: true, once: true });
+    window.addEventListener('scroll', onScroll, { passive: true });
+    for (const ev of USER_INPUT) window.addEventListener(ev, done, { passive: true, once: true });
   }
 
-  private stick(target: number, owner: HTMLElement | null): void {
+  private stick(target: number): void {
     const deadline = performance.now() + 600;
     const tick = () => {
-      // Another page's claim means we are no longer the page being restored;
-      // writing on would scroll the one navigated to.
-      if (this.pageScroller.element() !== owner) return;
       if (Math.abs(this.pageScroller.offset() - target) < 1) return;
       this.pageScroller.scrollTo(target);
       if (performance.now() < deadline) requestAnimationFrame(tick);

@@ -14,8 +14,6 @@ import { SocialApiService } from '../../core/services/api/social-api.service';
 import { LikesApiService } from '../../core/services/api/likes-api.service';
 import { ProfilesService } from '../../core/services/api/profiles.service';
 import { LibrariesApiService } from '../../core/services/api/libraries-api.service';
-import { PageScrollerService } from '../../core/services/page-scroller.service';
-import { PageScrollModeService, PageScrollMode } from '../../core/services/page-scroll-mode.service';
 import { BackgroundService } from '../../core/services/background.service';
 import { DisplaySettingsService } from '../../core/services/display-settings.service';
 import { NavbarService } from '../../core/services/navbar.service';
@@ -92,30 +90,10 @@ function fakeViewport() {
   };
 }
 
-function createHarness(mode: PageScrollMode = 'container', remembered?: number) {
+function createHarness(remembered?: number) {
   const navigatedBack = signal(false);
   const attached$ = new Subject<string>();
   const detached$ = new Subject<string>();
-  // Connected because the restore waits for the shell to be in the document:
-  // a scrollTop write to a detached element is dropped.
-  const shellEl = document.createElement('div');
-  document.body.appendChild(shellEl);
-  // jsdom lays nothing out, so the element's own scroll method is a spy.
-  const shellScrollTo = vi.fn();
-  shellEl.scrollTo = shellScrollTo;
-  const pageScroller = {
-    claim: vi.fn(),
-    release: vi.fn(),
-    element: signal<HTMLElement | null>(null),
-    offset: () => 0,
-    // Same two effects as the real service on a claimed scroller: the write,
-    // and the scroll event the browser then emits.
-    scrollTo: vi.fn((top: number) => {
-      shellEl.scrollTop = top;
-      shellEl.dispatchEvent(new Event('scroll'));
-    }),
-    changes: () => EMPTY,
-  };
 
   TestBed.configureTestingModule({
     providers: [
@@ -137,8 +115,6 @@ function createHarness(mode: PageScrollMode = 'container', remembered?: number) 
       { provide: LikesApiService, useValue: {} },
       { provide: ProfilesService, useValue: {} },
       { provide: LibrariesApiService, useValue: {} },
-      { provide: PageScrollerService, useValue: pageScroller },
-      { provide: PageScrollModeService, useValue: { mode: () => mode } },
       { provide: BackgroundService, useValue: { set: vi.fn(), release: vi.fn(), url: signal(null) } },
       { provide: DisplaySettingsService, useValue: { settings: signal({ homeBackground: false }) } },
       {
@@ -163,23 +139,21 @@ function createHarness(mode: PageScrollMode = 'container', remembered?: number) 
   TestBed.overrideComponent(LibraryComponent, { set: { template: '', imports: [] } });
 
   const fixture = TestBed.createComponent(LibraryComponent);
-  // No `#shell` in the stubbed template, and `ngOnInit` claims it: stand in
-  // before the first change detection runs.
-  (fixture.componentInstance as unknown as { shellRef: { nativeElement: HTMLElement } }).shellRef = {
-    nativeElement: shellEl,
-  };
   fixture.detectChanges(); // runs ngOnInit
 
   return {
     fixture,
     component: fixture.componentInstance,
-    pageScroller,
     attached$,
     detached$,
-    shellEl,
-    shellScrollTo,
     navigatedBack,
   };
+}
+
+/** jsdom's `window.scrollTo` is a stub that warns; the component's own resets
+ *  are asserted through this spy. */
+function spyWindowScrollTo() {
+  return vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
 }
 
 /** Simulates Angular resolving the `@ViewChild(CdkVirtualScrollViewport)` query. */
@@ -198,113 +172,65 @@ function load(component: LibraryComponent, silent: boolean): Promise<void> {
   );
 }
 
-describe('LibraryComponent — container scroller', () => {
-  afterEach(() => TestBed.resetTestingModule());
+describe('LibraryComponent — page scroll', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    vi.restoreAllMocks();
+  });
 
-  it('derives the active letter from the viewport\'s own measureScrollOffset()', async () => {
-    const { component, shellEl } = createHarness();
+  it("derives the active letter from the viewport's own measureScrollOffset()", async () => {
+    const { component } = createHarness();
     component.list.setItems(twoSections(), (m) => m.title);
-
     const viewport = attachViewport(component);
 
     viewport.measureScrollOffset.mockReturnValue(0);
-    shellEl.dispatchEvent(new Event('scroll'));
+    window.dispatchEvent(new Event('scroll'));
     await nextFrame();
     expect(component.list.activeLetter()).toBe('A');
 
     viewport.measureScrollOffset.mockReturnValue(component.rowHeight());
-    shellEl.dispatchEvent(new Event('scroll'));
+    window.dispatchEvent(new Event('scroll'));
     await nextFrame();
     expect(component.list.activeLetter()).toBe('B');
   });
 
-  it('a detach/attach cycle re-claims the same shell without touching the viewport\'s scroll state', () => {
-    const { component, pageScroller, attached$, detached$, shellEl } = createHarness();
-    attachViewport(component);
-
-    expect(pageScroller.claim).toHaveBeenCalledWith(shellEl);
-    pageScroller.claim.mockClear();
-
-    detached$.next(OWN_KEY);
-    expect(pageScroller.release).toHaveBeenCalledWith(shellEl);
-
-    attached$.next(OWN_KEY);
-    expect(pageScroller.claim).toHaveBeenCalledWith(shellEl);
-
-    // No scroll happened between detach and attach, so there is nothing to restore.
-    expect(pageScroller.scrollTo).not.toHaveBeenCalled();
-  });
-
-  it('re-claims the shell before the shared restore runs, not a frame later', () => {
-    const { component, pageScroller, attached$, detached$, shellEl, navigatedBack } =
-      createHarness();
+  it('does not restore, nor reset the letter, on a cached re-attach with nothing saved', () => {
+    const scrollTo = spyWindowScrollTo();
+    const { component, attached$, detached$, navigatedBack } = createHarness();
     navigatedBack.set(true);
     attachViewport(component);
-    pageScroller.claim.mockClear();
 
     detached$.next(OWN_KEY);
     attached$.next(OWN_KEY);
 
-    // ScrollMemoryService writes whichever scroller is claimed, and its sticky
-    // restore runs in the same task: a deferred claim sends it to the document.
-    expect(pageScroller.claim).toHaveBeenCalledWith(shellEl);
+    expect(scrollTo).not.toHaveBeenCalled();
     // A cached re-attach is not a content swap: a reset here would land the
     // return from a media detail back at the top of the library.
     expect(component.list.activeLetter()).toBe('');
   });
 
-  it('does not restore on a first attach with nothing saved', () => {
-    const { component, attached$, detached$, shellScrollTo, navigatedBack } = createHarness();
-    navigatedBack.set(true);
-    attachViewport(component);
-
-    detached$.next(OWN_KEY);
-    attached$.next(OWN_KEY);
-
-    expect(shellScrollTo).not.toHaveBeenCalled();
-  });
-
-  it('returns to the top on a forward entry, re-ranging the viewport with it', async () => {
-    const { component, attached$, detached$, shellEl, shellScrollTo, navigatedBack } = createHarness();
+  it('returns to the top on a forward entry, re-ranging the viewport with it', () => {
+    const scrollTo = spyWindowScrollTo();
+    const { component, attached$, detached$, navigatedBack } = createHarness();
     const viewport = attachViewport(component);
 
-    shellEl.scrollTop = 4200;
-    shellEl.dispatchEvent(new Event('scroll'));
     detached$.next(OWN_KEY);
-
-    // Detachment zeroes scrollTop, so writing 0 fires no scroll event and CDK
-    // would keep the off-screen range it left with.
-    shellEl.scrollTop = 0;
     navigatedBack.set(false);
     attached$.next(OWN_KEY);
 
-    expect(shellScrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' });
-    expect(shellScrollTo).not.toHaveBeenCalledWith({ top: 4200, left: 0, behavior: 'instant' });
-
-    // Re-ranged synchronously and without a measure, so the DOM holds the
-    // list's first card before the default focus resolves onto it.
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' });
+    // The document is shared with every page and may already be at the top, so
+    // no scroll event will correct the range the page left with. Re-ranged
+    // synchronously and without a measure, so the DOM holds the list's first
+    // card before the default focus resolves onto it.
     expect(viewport.setRenderedRange).toHaveBeenCalledWith({ start: 0, end: 11 });
     expect(viewport.setRenderedContentOffset).toHaveBeenCalledWith(0);
     expect(viewport.checkViewportSize).not.toHaveBeenCalled();
   });
 
-  it('re-ranges from the top on a forward entry in window mode too', () => {
-    const { component, attached$, detached$, navigatedBack } = createHarness('window');
-    const viewport = attachViewport(component);
-
-    detached$.next(OWN_KEY);
-    navigatedBack.set(false);
-    attached$.next(OWN_KEY);
-
-    // The document is shared with every page and already at the top, so no
-    // scroll event will correct the range the page left with.
-    expect(viewport.setRenderedRange).toHaveBeenCalledWith({ start: 0, end: 11 });
-    expect(viewport.setRenderedContentOffset).toHaveBeenCalledWith(0);
-  });
-
   it('re-ranges onto the restored row, not just onto the top', () => {
     const offset = 520 * 8;
-    const { component, attached$, detached$, navigatedBack } = createHarness('container', offset);
+    const { component, attached$, detached$, navigatedBack } = createHarness(offset);
     navigatedBack.set(true);
     component.libraryName.set('films'); // the memory key is per library
     component.list.setItems(manyRows(), (m) => m.title);
@@ -313,15 +239,17 @@ describe('LibraryComponent — container scroller', () => {
     detached$.next(OWN_KEY);
     attached$.next(OWN_KEY);
 
-    // Without this the range is whatever the page left with, and the poster
-    // morph coming back from a media detail has no card to land on.
+    // The page has no offset of its own — the shared scroll memory holds it,
+    // and its sticky restore only lands after the re-attach. Without this the
+    // range is whatever the page left with, and the poster morph coming back
+    // from a media detail has no card to land on.
     expect(viewport.setRenderedRange).toHaveBeenCalledWith({ start: 8, end: 19 });
     expect(viewport.setRenderedContentOffset).toHaveBeenCalledWith(offset);
   });
 
   it('leaves a range that already covers the restored row alone', () => {
     const offset = 520 * 50;
-    const { component, attached$, detached$, navigatedBack } = createHarness('container', offset);
+    const { component, attached$, detached$, navigatedBack } = createHarness(offset);
     navigatedBack.set(true);
     component.libraryName.set('films'); // the memory key is per library
     component.list.setItems(manyRows(), (m) => m.title);
@@ -336,32 +264,14 @@ describe('LibraryComponent — container scroller', () => {
     expect(viewport.setRenderedContentOffset).not.toHaveBeenCalled();
   });
 
-  it('re-ranges from the remembered offset on a window-mode return', () => {
-    const offset = 520 * 8;
-    const { component, attached$, detached$, navigatedBack } = createHarness('window', offset);
-    navigatedBack.set(true);
-    component.libraryName.set('films'); // the memory key is per library
-    component.list.setItems(manyRows(), (m) => m.title);
-    const viewport = attachViewport(component);
-
-    detached$.next(OWN_KEY);
-    attached$.next(OWN_KEY);
-
-    // Window mode has no shell offset of its own — the shared scroll memory
-    // holds it, and its sticky restore only lands after the re-attach.
-    expect(viewport.setRenderedRange).toHaveBeenCalledWith({ start: 8, end: 19 });
-    expect(viewport.setRenderedContentOffset).toHaveBeenCalledWith(offset);
-  });
-
-  it('keeps the active letter through the restore\'s own scroll event', async () => {
-    const { component, attached$, detached$, shellEl, navigatedBack } = createHarness();
+  it("keeps the active letter through the restore's own scroll event", async () => {
+    const { component, attached$, detached$, navigatedBack } = createHarness();
     navigatedBack.set(true);
     component.list.setItems(twoSections(), (m) => m.title);
     const viewport = attachViewport(component);
 
     viewport.measureScrollOffset.mockReturnValue(component.rowHeight());
-    shellEl.scrollTop = component.rowHeight();
-    shellEl.dispatchEvent(new Event('scroll'));
+    window.dispatchEvent(new Event('scroll'));
     await nextFrame();
     expect(component.list.activeLetter()).toBe('B');
 
@@ -375,87 +285,8 @@ describe('LibraryComponent — container scroller', () => {
     expect(component.list.activeLetter()).toBe('B');
   });
 
-  it('lands a letter jump on the first row below the fixed chrome', () => {
-    const { component, shellEl } = createHarness();
-    component.list.setItems(twoSections(), (m) => m.title);
-    component.rowHeight.set(200);
-    const viewport = attachViewport(component);
-
-    // The grid starts 300px below the shell's top edge, which is itself already
-    // scrolled 50px down, and 96px of fixed chrome overlap the scroller.
-    stubTop(shellEl, 100);
-    stubTop(viewport.elementRef.nativeElement, 400);
-    shellEl.scrollTop = 50;
-    shellEl.style.paddingTop = '96px';
-
-    component.scrollToLetter('B');
-
-    // The first B opens row 1, so 200px of rows, plus the grid's 350px offset
-    // inside the scroller, less the 96px of chrome the row has to clear.
-    expect(viewport.scrollToOffset).toHaveBeenCalledWith(454, 'instant');
-  });
-
-  it('resets its own scroll on a content swap, but not on a silent revalidation', async () => {
-    const { component, pageScroller, shellScrollTo } = createHarness();
-
-    await load(component, true);
-    expect(shellScrollTo).not.toHaveBeenCalled();
-
-    await load(component, false);
-    expect(shellScrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' });
-    // Its own element, never the ambient claim, which on TV points at whichever
-    // page is on screen by the time a background load lands.
-    expect(pageScroller.scrollTo).not.toHaveBeenCalled();
-  });
-
-  it('resets its own scroll on a view-mode change', () => {
-    const { component, pageScroller, shellScrollTo } = createHarness();
-    // `setViewMode` no-ops on the mode already active, so start off the target.
-    component.viewMode.set('genres');
-
-    component.setViewMode('all');
-
-    expect(shellScrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' });
-    expect(pageScroller.scrollTo).not.toHaveBeenCalled();
-  });
-});
-
-describe('LibraryComponent — window scroller (TV / desktop)', () => {
-  afterEach(() => TestBed.resetTestingModule());
-
-  it('never claims the shell as a scroller', () => {
-    const { pageScroller } = createHarness('window');
-    expect(pageScroller.claim).not.toHaveBeenCalled();
-  });
-
-  it('derives the active letter from a window scroll, not the shell', async () => {
-    const { component } = createHarness('window');
-    component.list.setItems(twoSections(), (m) => m.title);
-    const viewport = attachViewport(component);
-
-    viewport.measureScrollOffset.mockReturnValue(component.rowHeight());
-    window.dispatchEvent(new Event('scroll'));
-    await nextFrame();
-
-    expect(component.list.activeLetter()).toBe('B');
-  });
-
-  it("resets the window's own scroll on a content swap, never the ambient claim", async () => {
-    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-    try {
-      const { component, pageScroller } = createHarness('window');
-
-      await load(component, false);
-
-      expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' });
-      expect(pageScroller.scrollTo).not.toHaveBeenCalled();
-    } finally {
-      scrollTo.mockRestore();
-    }
-  });
-
   it('stops reading the window once detached, so the letter survives the trip', async () => {
-    const { component, detached$ } = createHarness('window');
+    const { component, detached$ } = createHarness();
     component.list.setItems(twoSections(), (m) => m.title);
     const viewport = attachViewport(component);
     viewport.measureScrollOffset.mockReturnValue(component.rowHeight());
@@ -473,7 +304,7 @@ describe('LibraryComponent — window scroller (TV / desktop)', () => {
   });
 
   it('reads the window again once reattached', async () => {
-    const { component, attached$, detached$, navigatedBack } = createHarness('window');
+    const { component, attached$, detached$, navigatedBack } = createHarness();
     component.list.setItems(twoSections(), (m) => m.title);
     const viewport = attachViewport(component);
     navigatedBack.set(true);
@@ -487,24 +318,35 @@ describe('LibraryComponent — window scroller (TV / desktop)', () => {
     await nextFrame();
 
     expect(component.list.activeLetter()).toBe('B');
-    vi.restoreAllMocks();
   });
 
-  it('does not touch the page scroller across a detach/attach cycle', () => {
-    const { pageScroller, attached$, detached$ } = createHarness('window');
+  it('resets the scroll on a content swap, but not on a silent revalidation', async () => {
+    const scrollTo = spyWindowScrollTo();
+    const { component } = createHarness();
 
-    detached$.next(OWN_KEY);
-    attached$.next(OWN_KEY);
+    await load(component, true);
+    expect(scrollTo).not.toHaveBeenCalled();
 
-    expect(pageScroller.release).not.toHaveBeenCalled();
-    expect(pageScroller.claim).not.toHaveBeenCalled();
+    await load(component, false);
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' });
   });
 
-  it('lands a letter jump on the first row below the chrome, measured from the document', () => {
+  it('resets the scroll on a view-mode change', () => {
+    const scrollTo = spyWindowScrollTo();
+    const { component } = createHarness();
+    // `setViewMode` no-ops on the mode already active, so start off the target.
+    component.viewMode.set('genres');
+
+    component.setViewMode('all');
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' });
+  });
+
+  it('lands a letter jump on the row measured from the document', () => {
     const original = Object.getOwnPropertyDescriptor(window, 'scrollY');
     Object.defineProperty(window, 'scrollY', { value: 50, configurable: true });
     try {
-      const { component } = createHarness('window');
+      const { component } = createHarness();
       component.list.setItems(twoSections(), (m) => m.title);
       component.rowHeight.set(200);
       const viewport = attachViewport(component);
