@@ -141,11 +141,6 @@ jobs:
           sudo apt-get install -y \
             build-essential python3 pkg-config patchelf \
             libsdl2-dev libgles2-mesa-dev libegl1-mesa-dev libmpv-dev
-          # The libs bundled next to the vendored libmpv. libmpv-dev's own
-          # closure does not cover all of them, and the list lives in the
-          # script that consumes it so the two can't drift.
-          bash desktop/scripts/vendor-libmpv-linux.sh --print-packages \
-            | xargs sudo apt-get install -y
 
       # macOS embeds in-process libmpv (no SDL/GLES addon). `mpv` provides the
       # libmpv headers the addon compiles against + the dylib the vendor script
