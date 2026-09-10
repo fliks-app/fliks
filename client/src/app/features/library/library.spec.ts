@@ -139,7 +139,7 @@ function createHarness(mode: PageScrollMode = 'container', remembered?: number) 
       { provide: LibrariesApiService, useValue: {} },
       { provide: PageScrollerService, useValue: pageScroller },
       { provide: PageScrollModeService, useValue: { mode: () => mode } },
-      { provide: BackgroundService, useValue: { url: signal(null), applyPool: vi.fn(), clear: vi.fn() } },
+      { provide: BackgroundService, useValue: { set: vi.fn(), release: vi.fn(), url: signal(null) } },
       { provide: DisplaySettingsService, useValue: { settings: signal({ homeBackground: false }) } },
       {
         provide: NavbarService,

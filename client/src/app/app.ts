@@ -13,6 +13,7 @@ import { BrowserDeviceProfileService } from './core/services/browser-device-prof
 import { TvService } from './core/services/tv.service';
 import { TvSpatialNavService } from './core/services/tv-spatial-nav.service';
 import { ToastContainerComponent } from './shared/components/toast-container';
+import { BackgroundComponent } from './shared/components/background/background';
 import { ConfirmationModalComponent } from './shared/components/confirmation-modal';
 import { ConfirmationService } from './core/services/confirmation.service';
 import { FolderPickerModalComponent } from './shared/components/folder-picker-modal/folder-picker-modal';
@@ -30,7 +31,9 @@ import { TranslateService } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, ToastContainerComponent, ConfirmationModalComponent, FolderPickerModalComponent, SelectPickerComponent, CastOverlayComponent],
+  imports: [
+    BackgroundComponent,
+    RouterOutlet, ToastContainerComponent, ConfirmationModalComponent, FolderPickerModalComponent, SelectPickerComponent, CastOverlayComponent],
   templateUrl: './app.html',
 })
 export class App implements OnInit, OnDestroy {

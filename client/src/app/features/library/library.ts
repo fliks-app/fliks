@@ -160,17 +160,14 @@ export class LibraryComponent implements OnInit, OnDestroy {
     },
   });
 
-  /** Same fanart backdrop as the home page, from this library's own titles, so
-   *  the topbar keeps its frosted look here too — but only to fill a gap.
-   *  Opening a library from the home page keeps the image already showing; it is
-   *  coming back from a detail page, which clears the background on its way out,
-   *  that leaves nothing behind to look at. */
+  /** Same fanart backdrop as the home page, drawn from this library's own
+   *  titles, so the topbar keeps its frosted look here too. */
   private applyBackground(): void {
-    if (this.background.url()) return;
-    this.background.applyPool(
-      fanartPool(this.list.all()),
-      this.displaySettings.settings().homeBackground,
-    );
+    if (!this.displaySettings.settings().homeBackground) return this.background.set(this, []);
+    // An empty list is a list still loading, which must hold the current image
+    // rather than declare this page has none.
+    const pool = fanartPool(this.list.all());
+    this.background.set(this, pool.length ? pool : null);
   }
   private queryParamSub?: Subscription;
   /** Set while a state-driven `syncQueryParams` is being applied to the
@@ -567,6 +564,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.background.release(this);
     this.list.destroy();
     if (this.onResize) window.removeEventListener('resize', this.onResize);
     this.scrollMemory.deactivate();

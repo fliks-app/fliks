@@ -286,19 +286,19 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   /** Backdrop pick held across a detach so the page comes back on the same
    *  image instead of re-randomising from the pool. */
-  private parkedBackground: string | null = null;
+  /** Last pool declared, so returning to a cached page can re-declare it. */
+  private fanartPool: readonly string[] | null = null;
 
   /** The hero navbar is global state, so a cached page hands it back on the way
-   *  out and reclaims it on return. The backdrop is parked rather than cleared:
-   *  whichever page arrives next decides what it shows, and blanking it here
-   *  would fade to nothing in between. */
+   *  out and reclaims it on return. The backdrop is not handed back: the
+   *  declaration stands until the page is destroyed, so a trip to the player
+   *  and back finds the same image rather than a blank that refills. */
   private releaseChrome(): void {
-    this.parkedBackground = this.backgroundService.url();
     this.navbarService.leaveHeroPage();
   }
 
   private restoreChrome(): void {
-    this.backgroundService.setBackground(this.parkedBackground);
+    this.backgroundService.set(this, this.fanartPool);
     const m = this.media();
     if (m) this.applyEpisodeFocus(m, this.route.snapshot.paramMap.get('episodeId'));
     else this.navbarService.enterHeroPage('');
@@ -345,16 +345,11 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
    */
   private readonly backgroundEffect = effect(() => {
     const m = this.media();
-    if (!m) {
-      this.backgroundService.clear();
-      return;
-    }
-    const pool = [m.fanartUrl, ...(m.additionalFanartUrls ?? [])].filter((u): u is string => !!u);
-    if (pool.length === 0) {
-      this.backgroundService.clear();
-      return;
-    }
-    this.backgroundService.setBackgrounds(pool);
+    // No media yet is not the same as no fanart: hold what is on screen.
+    this.fanartPool = m
+      ? [m.fanartUrl, ...(m.additionalFanartUrls ?? [])].filter((u): u is string => !!u)
+      : null;
+    this.backgroundService.set(this, this.fanartPool);
   });
 
   /** React to SSE rescan / import / metadata-refresh events for this media */
@@ -898,6 +893,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.backgroundService.release(this);
     // Evicted from the route cache while another page is on screen: the chrome
     // and scroll key already belong to that page, so leave them alone.
     if (this.routeFresh()) return;
