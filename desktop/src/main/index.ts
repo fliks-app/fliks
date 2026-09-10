@@ -76,7 +76,7 @@ function webDir(): string {
 // to resolve when running unpackaged from `desktop/`. Returns undefined if the
 // PNG is missing so Electron keeps its default rather than throwing.
 function windowIcon(): string | undefined {
-  const candidate = path.join(app.getAppPath(), 'build', 'icon.png');
+  const candidate = path.join(app.getAppPath(), 'build', 'icons', '512x512.png');
   return fs.existsSync(candidate) ? candidate : undefined;
 }
 
