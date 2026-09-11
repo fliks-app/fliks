@@ -144,19 +144,3 @@
     }
   </select>
 </label>
-
-<div class="divider my-0"></div>
-<h2 class="card-title text-lg">{{ 'settings.libraries.section_defaults' | translate }}</h2>
-
-<div class="flex flex-col gap-2">
-  <label class="label cursor-pointer justify-start gap-3 max-w-max">
-    <input type="checkbox" class="toggle"
-      [ngModel]="state.formDefaultMovies()" (ngModelChange)="state.formDefaultMovies.set($event)" />
-    <span class="label-text text-base">{{ 'settings.libraries.default_for_movies' | translate }}</span>
-  </label>
-  <label class="label cursor-pointer justify-start gap-3 max-w-max">
-    <input type="checkbox" class="toggle"
-      [ngModel]="state.formDefaultSeries()" (ngModelChange)="state.formDefaultSeries.set($event)" />
-    <span class="label-text text-base">{{ 'settings.libraries.default_for_series' | translate }}</span>
-  </label>
-</div>

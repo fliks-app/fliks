@@ -8,7 +8,6 @@ import { BaseEntity } from '../../../common/entities/base.entity';
  * Known keys:
  *   naming_movie_format   — e.g. "{Movie.Title} ({Movie.Year}) [{Quality.Name}]"
  *   naming_series_format        — e.g. "{Series Title} - S{season:00}E{episode:00} - {Episode Title}"
- *   (default_root_folder_movie/series removed — migrated to Library.isDefaultForMovies/Series)
  *   naming_movie_folder_format  — e.g. "{Movie Title} ({Release Year})"
  *   naming_series_folder_format — e.g. "{Series Title}"
  *   naming_season_folder_format — e.g. "Season {season:00}"

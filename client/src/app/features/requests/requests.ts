@@ -40,7 +40,7 @@ import {
 } from '../../core/services/download-progress.service';
 import { RequestStatusBadgeComponent } from './request-status-badge/request-status-badge.component';
 import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
-import { LucideEllipsisVertical, LucideLibrary, LucidePencil, LucideTrash2 } from '@lucide/angular';
+import { LucideEllipsisVertical, LucidePencil, LucideTrash2 } from '@lucide/angular';
 import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
 
 @Component({
@@ -58,7 +58,6 @@ import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
     RequestStatusBadgeComponent,
     DownloadDetailModalComponent,
     LucideEllipsisVertical,
-    LucideLibrary,
     LucidePencil,
     LucideTrash2,
   ],
@@ -396,18 +395,6 @@ export class RequestsComponent implements OnInit, OnDestroy {
       : ['/add', 'tv', row.tmdbId];
   }
 
-
-  /** Name of the request's target library when it differs from the type
-   *  default — surfaced as a badge so a non-default destination is visible at
-   *  a glance. Null when unassigned, unknown, or already the default. */
-  targetLibraryBadge(row: FliksRequestRow): string | null {
-    if (row.libraryId == null) return null;
-    const lib = this.libraries().find((l) => l.id === row.libraryId);
-    if (!lib) return null;
-    const isDefault =
-      row.mediaType === 'series' ? lib.isDefaultForSeries : lib.isDefaultForMovies;
-    return isDefault ? null : lib.name;
-  }
 
   qualityProfileDisplay(id: number | null): string {
     if (id == null) return '—';

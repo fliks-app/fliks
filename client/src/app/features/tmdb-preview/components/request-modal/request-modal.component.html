@@ -47,7 +47,6 @@
                 [ngModel]="libraryId()"
                 (ngModelChange)="libraryId.set($event ? +$event : null)"
               >
-                <option [ngValue]="null">—</option>
                 @for (l of compatibleLibraries(); track l.id) {
                   <option [ngValue]="l.id">{{ l.name }}</option>
                 }

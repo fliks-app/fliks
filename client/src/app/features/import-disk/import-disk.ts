@@ -110,13 +110,7 @@ export class ImportDiskComponent implements OnInit {
 
   private defaultLibraryForType(type: 'movie' | 'series' | null): number | null {
     if (!type) return null;
-    const def = this.libraries().find((l) =>
-      type === 'movie' ? l.isDefaultForMovies : l.isDefaultForSeries,
-    );
-    if (def && def.mediaTypes.includes(type)) return def.id;
-    // No default → first library accepting this type.
-    const first = this.libraries().find((l) => l.mediaTypes.includes(type));
-    return first?.id ?? null;
+    return this.libraries().find((l) => l.mediaTypes.includes(type))?.id ?? null;
   }
 
   async ngOnInit() {

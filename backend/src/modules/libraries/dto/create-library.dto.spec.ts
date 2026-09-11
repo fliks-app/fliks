@@ -25,8 +25,6 @@ describe('CreateLibraryDto', () => {
         metadataRegion: 'FR',
         defaultQualityProfileId: 1,
         defaultLanguageProfileId: 2,
-        isDefaultForMovies: true,
-        isDefaultForSeries: false,
         path: '/medias/movies',
         userIds: [3, 5],
       }),

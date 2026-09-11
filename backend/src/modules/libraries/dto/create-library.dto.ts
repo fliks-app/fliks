@@ -1,6 +1,5 @@
 import {
   IsArray,
-  IsBoolean,
   IsEnum,
   IsInt,
   IsOptional,
@@ -48,14 +47,6 @@ export class CreateLibraryDto {
   @IsOptional()
   @IsInt()
   defaultLanguageProfileId?: number | null;
-
-  @IsOptional()
-  @IsBoolean()
-  isDefaultForMovies?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  isDefaultForSeries?: boolean;
 
   /** Initial root path. Optional — admin can attach it later via update. */
   @IsOptional()

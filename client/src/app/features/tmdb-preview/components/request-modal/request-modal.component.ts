@@ -103,13 +103,11 @@ export class RequestModalComponent {
     this.languageProfileId.set(
       locked ? (params.lockedLanguageProfileId ?? null) : (this.languageProfiles()[0]?.id ?? null),
     );
-    const compatible = this.libraries().filter((l) => l.mediaTypes.includes(params.mediaType));
-    const defaultLib =
-      compatible.find((l) =>
-        params.mediaType === 'series' ? l.isDefaultForSeries : l.isDefaultForMovies,
-      ) ?? compatible[0];
-    // Only pre-select if multiple choices (select will be shown)
-    this.libraryId.set(compatible.length > 1 ? (defaultLib?.id ?? null) : null);
+    // Always carry a destination: the select is only shown when there is a
+    // choice to make, so a hidden one must still submit its single library.
+    this.libraryId.set(
+      this.libraries().find((l) => l.mediaTypes.includes(params.mediaType))?.id ?? null,
+    );
     this.seasons.set([]);
     this.selectedSeasons.set(new Set());
     this.seasonsFailed.set(false);

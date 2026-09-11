@@ -209,20 +209,11 @@ export class RequestsService {
       ? await this.fetchAutoApprovalMetadata(dto)
       : null;
 
-    // A request usually omits `libraryId` and lands in the default library for
-    // its type, so compare against that target rather than the raw dto.
-    const needsLibrary = rules.some((r) => r.criteria.libraryIds?.length);
-    const libraryId =
-      dto.libraryId ??
-      (needsLibrary
-        ? ((await this.libraries.getDefaultForType(dto.mediaType))?.id ?? null)
-        : null);
-
     const ctx = {
       userId: user.id,
       roleId: user.userRole?.id ?? null,
       mediaType: dto.mediaType,
-      libraryId,
+      libraryId: dto.libraryId ?? null,
       genreIds: metadata?.genreIds ?? [],
       year: metadata?.year ?? null,
       seasonCount: dto.seasons?.length ?? metadata?.seasonCount ?? null,
@@ -285,6 +276,11 @@ export class RequestsService {
     if (dto.libraryId != null) {
       await this.assertCanUseLibrary(user, dto.libraryId);
     }
+    // Resolved here, never at approval: an auto-approved request imports with
+    // nobody in front of it, and the library set can change in between.
+    const libraryId =
+      dto.libraryId ??
+      (await this.libraries.resolveSoleLibrary(dto.mediaType, user)).id;
 
     // Series share one profile set across seasons: a later-season request
     // inherits the quality and language profiles fixed by the first request
@@ -297,7 +293,7 @@ export class RequestsService {
       }
     }
 
-    const autoApprove = await this.shouldAutoApprove(user, dto);
+    const autoApprove = await this.shouldAutoApprove(user, { ...dto, libraryId });
 
     // Whenever we auto-approve we also ensure a Media row exists so the
     // auto-grab pipeline can actually pick up the title. Idempotent: if
@@ -310,7 +306,7 @@ export class RequestsService {
             tmdbId: dto.tmdbId,
             qualityProfileId: dto.qualityProfileId ?? null,
             languageProfileId: dto.languageProfileId ?? null,
-            libraryId: dto.libraryId ?? null,
+            libraryId,
             seasons: dto.seasons ?? null,
           },
           user.id,
@@ -330,7 +326,7 @@ export class RequestsService {
       languageProfile: dto.languageProfileId
         ? ({ id: dto.languageProfileId } as LanguageProfile)
         : null,
-      library: dto.libraryId ? ({ id: dto.libraryId } as Library) : null,
+      library: { id: libraryId } as Library,
       status: autoApprove ? RequestStatus.APPROVED : RequestStatus.PENDING,
       approvedBy: autoApprove ? user : null,
       media: media ?? null,

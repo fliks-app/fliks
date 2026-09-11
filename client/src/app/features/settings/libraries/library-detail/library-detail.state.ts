@@ -39,8 +39,6 @@ export class LibraryDetailState {
   readonly formMetadataRegion = signal<string | null>(null);
   readonly formQualityProfileId = signal<number | null>(null);
   readonly formLanguageProfileId = signal<number | null>(null);
-  readonly formDefaultMovies = signal(false);
-  readonly formDefaultSeries = signal(false);
   readonly formPath = signal('');
   readonly formUserIds = signal<ReadonlySet<number>>(new Set());
 
@@ -57,8 +55,6 @@ export class LibraryDetailState {
     this.formMetadataRegion.set(lib.metadataRegion);
     this.formQualityProfileId.set(lib.defaultQualityProfileId);
     this.formLanguageProfileId.set(lib.defaultLanguageProfileId);
-    this.formDefaultMovies.set(lib.isDefaultForMovies);
-    this.formDefaultSeries.set(lib.isDefaultForSeries);
     this.formPath.set(lib.path ?? '');
     this.formUserIds.set(new Set(lib.userIds));
     this.saveError.set('');
@@ -145,8 +141,6 @@ export class LibraryDetailState {
       metadataRegion: this.formMetadataRegion(),
       defaultQualityProfileId: this.formQualityProfileId(),
       defaultLanguageProfileId: this.formLanguageProfileId(),
-      isDefaultForMovies: this.formDefaultMovies(),
-      isDefaultForSeries: this.formDefaultSeries(),
       path: this.formPath().trim(),
     };
   }

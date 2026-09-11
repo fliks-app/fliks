@@ -264,14 +264,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly displayLibraries = computed(() =>
     this.libraryPrefs.present(this.libraries()),
   );
-  /** Libraries excluding the default Films / Séries — those have their own
-   *  shortcut elsewhere (or are deliberately omitted from the mobile More
-   *  menu to keep it short). Custom libraries (Anime, Docs, …) stay. */
-  readonly customLibraries = computed(() =>
-    this.displayLibraries().filter(
-      (lib) => !lib.isDefaultForMovies && !lib.isDefaultForSeries,
-    ),
-  );
   /** Media count per library ID. */
   readonly libraryCounts = signal<Record<number, number>>({});
   /** Badge counts by contribution `badgeKey` — the API's `badgeCounts` map
