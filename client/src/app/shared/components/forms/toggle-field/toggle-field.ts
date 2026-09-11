@@ -17,6 +17,9 @@ import { FormsModule } from '@angular/forms';
   selector: 'app-toggle-field',
   imports: [FormsModule],
   templateUrl: './toggle-field.html',
+  // An unstyled custom element is inline, so a parent `space-y-*` margin has no
+  // vertical effect on it.
+  host: { class: 'block' },
 })
 export class ToggleFieldComponent {
   readonly value = model.required<boolean>();
