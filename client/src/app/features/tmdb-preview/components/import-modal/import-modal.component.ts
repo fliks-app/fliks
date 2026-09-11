@@ -117,14 +117,8 @@ export class ImportModalComponent {
       if (qp.length) this.selectedQualityProfileId.set(qp[0].id);
       if (lp.length) this.selectedLanguageProfileId.set(lp[0].id);
 
-      // Pick the library flagged as default for this media type, falling back
-      // to the first compatible one.
       const compatible = libs.filter((l) => l.mediaTypes.includes(params.mediaType));
-      const defaultLib =
-        compatible.find((l) =>
-          params.mediaType === 'series' ? l.isDefaultForSeries : l.isDefaultForMovies,
-        ) ?? compatible[0];
-      if (defaultLib) this.selectedLibraryId.set(defaultLib.id);
+      if (compatible.length) this.selectedLibraryId.set(compatible[0].id);
     } catch {
       /* ignore — selects will just be empty */
     } finally {

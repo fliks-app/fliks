@@ -9,8 +9,6 @@ import {
 import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
-import { RouterLink } from '@angular/router';
-import { LucideChevronLeft } from '@lucide/angular';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ProfilesService, QualityProfile } from '../../../core/services/api/profiles.service';
@@ -25,8 +23,6 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
     ModalHeaderComponent,
     FormsModule,
     ToggleFieldComponent,
-    LucideChevronLeft,
-    RouterLink,
     TranslatePipe,
   ],
   templateUrl: './quality-profiles.html',

@@ -68,18 +68,6 @@ export const routes: Routes = [
           import('./features/library/library').then((m) => m.LibraryComponent),
         data: { reuse: true },
       },
-      // The app's only way to reach "my movies/series" without knowing the library's
-      // name: LibraryComponent resolves the sentinel to whichever library holds the flag.
-      {
-        path: 'movies',
-        redirectTo: '/libraries/__default_movies__',
-        pathMatch: 'full',
-      },
-      {
-        path: 'series',
-        redirectTo: '/libraries/__default_series__',
-        pathMatch: 'full',
-      },
       {
         path: 'downloads',
         canActivate: [noTvGuard],

@@ -59,14 +59,6 @@ export class Library extends BaseEntity {
   @RelationId((lib: Library) => lib.defaultLanguageProfile)
   defaultLanguageProfileId: number | null;
 
-  /** At most one library should carry this flag — enforced in service. */
-  @Column({ default: false })
-  isDefaultForMovies: boolean;
-
-  /** At most one library should carry this flag — enforced in service. */
-  @Column({ default: false })
-  isDefaultForSeries: boolean;
-
   /** Absolute path on the server where Fliks drops media in this library. */
   @Column({ type: 'varchar', nullable: true, default: null })
   path: string | null;

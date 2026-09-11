@@ -220,19 +220,6 @@
                class="popover-pop-in fixed bottom-20 right-2 mb-2 bg-base-100/70 backdrop-blur-sm rounded-box shadow-xl border border-base-200 min-w-48 z-50"
                style="bottom: calc(4rem + env(safe-area-inset-bottom, 0px) + 0.5rem); transform-origin: bottom right">
             <ul class="menu w-full p-2 gap-0.5">
-              @for (lib of customLibraries(); track lib.id) {
-                <li>
-                  <a [routerLink]="libraryUrl(lib)" routerLinkActive="menu-active" class="justify-between" [state]="{ rootEntry: true }">
-                    <span class="flex items-center gap-2">
-                      <app-lucide-icon [name]="libraryIcon(lib)" class="h-5 w-5" />
-                      {{ lib.name }}
-                    </span>
-                    @if (libraryCounts()[lib.id]) {
-                      <span class="badge badge-sm badge-ghost">{{ libraryCounts()[lib.id] }}</span>
-                    }
-                  </a>
-                </li>
-              }
               @for (item of sheetMainItems(); track item.id) {
                 <li>
                   <a [routerLink]="item.route" routerLinkActive="menu-active" [routerLinkActiveOptions]="{ exact: item.exact }" class="justify-between" [state]="{ rootEntry: true }">

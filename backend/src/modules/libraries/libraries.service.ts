@@ -81,7 +81,7 @@ export class LibrariesService {
   ): Promise<
     Pick<
       Library,
-      'id' | 'name' | 'mediaTypes' | 'isDefaultForMovies' | 'isDefaultForSeries'
+      'id' | 'name' | 'mediaTypes'
     >[]
   > {
     const accessible = await this.getAccessibleLibraryIds(user);
@@ -98,8 +98,6 @@ export class LibrariesService {
         'icon',
         'color',
         'mediaTypes',
-        'isDefaultForMovies',
-        'isDefaultForSeries',
       ],
     });
   }
@@ -134,12 +132,6 @@ export class LibrariesService {
     // threw "Library #X not found". Run the writes in the tx, then resolve
     // the enriched view from the committed state.
     const id = await this.dataSource.transaction(async (m) => {
-      // Enforce at-most-one default per type.
-      if (dto.isDefaultForMovies)
-        await this.clearDefaultFlag(m, 'isDefaultForMovies');
-      if (dto.isDefaultForSeries)
-        await this.clearDefaultFlag(m, 'isDefaultForSeries');
-
       const lib = await m.save(
         m.create(Library, {
           name: dto.name,
@@ -155,8 +147,6 @@ export class LibrariesService {
           defaultLanguageProfile: dto.defaultLanguageProfileId
             ? ({ id: dto.defaultLanguageProfileId } as LanguageProfile)
             : null,
-          isDefaultForMovies: dto.isDefaultForMovies ?? false,
-          isDefaultForSeries: dto.isDefaultForSeries ?? false,
         }),
       );
 
@@ -181,13 +171,6 @@ export class LibrariesService {
       const lib = await m.findOne(Library, { where: { id } });
       if (!lib) throw new NotFoundException(`Library #${id} not found`);
 
-      if (dto.isDefaultForMovies === true) {
-        await this.clearDefaultFlag(m, 'isDefaultForMovies');
-      }
-      if (dto.isDefaultForSeries === true) {
-        await this.clearDefaultFlag(m, 'isDefaultForSeries');
-      }
-
       const patch: Partial<Library> = {};
       if (dto.name !== undefined) patch.name = dto.name;
       if (dto.icon !== undefined) patch.icon = dto.icon;
@@ -210,10 +193,6 @@ export class LibrariesService {
           ? ({ id: dto.defaultLanguageProfileId } as LanguageProfile)
           : null;
       }
-      if (dto.isDefaultForMovies !== undefined)
-        patch.isDefaultForMovies = dto.isDefaultForMovies;
-      if (dto.isDefaultForSeries !== undefined)
-        patch.isDefaultForSeries = dto.isDefaultForSeries;
       if (Object.keys(patch).length) await m.update(Library, id, patch);
 
       // Replace the path column. `undefined` = no change; an empty string
@@ -370,13 +349,6 @@ export class LibrariesService {
     await m.save(rows);
   }
 
-  private async clearDefaultFlag(
-    m: import('typeorm').EntityManager,
-    flag: 'isDefaultForMovies' | 'isDefaultForSeries',
-  ): Promise<void> {
-    await m.update(Library, { [flag]: true }, { [flag]: false });
-  }
-
   /** Async on purpose: a statfs on a slow network mount would otherwise
    *  block the event loop for every other request. */
   private async diskInfo(
@@ -409,12 +381,29 @@ export class LibrariesService {
   }
 
   // Used by other modules wanting to filter on "is it the default lib for X type"
-  async getDefaultForType(type: MediaType): Promise<Library | null> {
-    const where =
-      type === MediaType.MOVIE
-        ? { isDefaultForMovies: true }
-        : { isDefaultForSeries: true };
-    return this.repo.findOne({ where });
+  /** Libraries accepting `type`, narrowed to what `user` may reach when given. */
+  async findAccepting(type: MediaType, user?: User): Promise<Library[]> {
+    const ids = user ? await this.getAccessibleLibraryIds(user) : null;
+    const libs = await this.repo.find({
+      where: ids ? { id: In(ids.length ? ids : [-1]) } : {},
+      order: { name: 'ASC' },
+    });
+    return libs.filter((l) => l.mediaTypes?.includes(type));
+  }
+
+  /**
+   * Destination for a caller that named none. Exactly one candidate answers
+   * for itself; anything else is the caller's choice to make, and guessing it
+   * here is what the removed default-library flags used to do.
+   */
+  async resolveSoleLibrary(type: MediaType, user?: User): Promise<Library> {
+    const candidates = await this.findAccepting(type, user);
+    if (candidates.length === 1) return candidates[0];
+    throw new BadRequestException(
+      candidates.length
+        ? `Several libraries accept ${type} — pass libraryId to choose one`
+        : `No library accepts ${type}`,
+    );
   }
 
   /**

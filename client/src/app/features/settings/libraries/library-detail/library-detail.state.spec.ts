@@ -26,8 +26,6 @@ function setup() {
         metadataRegion: body.metadataRegion ?? null,
         defaultQualityProfileId: body.defaultQualityProfileId ?? null,
         defaultLanguageProfileId: body.defaultLanguageProfileId ?? null,
-        isDefaultForMovies: !!body.isDefaultForMovies,
-        isDefaultForSeries: !!body.isDefaultForSeries,
         path: body.path ?? null,
         userIds: body.userIds ?? [],
       } as unknown as Library);

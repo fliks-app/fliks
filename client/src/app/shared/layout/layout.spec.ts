@@ -78,8 +78,6 @@ const lib = (id: number, name: string, opts: Partial<LibrarySummary> = {}): Libr
   icon: null,
   color: null,
   mediaTypes: ['movie'],
-  isDefaultForMovies: false,
-  isDefaultForSeries: false,
   ...opts,
 });
 
@@ -266,8 +264,8 @@ const ADMIN_WITH_LIBRARIES: Fixture = {
   isTv: false,
   isNative: false,
   libraries: [
-    lib(1, 'Movies', { isDefaultForMovies: true }),
-    lib(2, 'Series', { isDefaultForSeries: true }),
+    lib(1, 'Movies'),
+    lib(2, 'Series'),
     lib(3, 'Anime', { icon: 'swords' }),
   ],
   pendingRequests: 2,
@@ -289,7 +287,7 @@ const TV_FORM_FACTOR: Fixture = {
   device: { isTv: true },
   isTv: true,
   isNative: false,
-  libraries: [lib(1, 'Movies', { isDefaultForMovies: true })],
+  libraries: [lib(1, 'Movies')],
   pendingRequests: 0,
 };
 
@@ -300,8 +298,8 @@ const NATIVE_PHONE: Fixture = {
   isTv: false,
   isNative: true,
   libraries: [
-    lib(1, 'Movies', { isDefaultForMovies: true }),
-    lib(2, 'Series', { isDefaultForSeries: true }),
+    lib(1, 'Movies'),
+    lib(2, 'Series'),
     lib(3, 'Anime', { icon: 'swords' }),
   ],
   pendingRequests: 1,
@@ -384,9 +382,9 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    // Main items first, then acquisition items, each group ordered by weight.
+    // Libraries live on Home, never in the sheet: main items first, then
+    // acquisition items, each group ordered by weight.
     expect(sheetItems(fixture.nativeElement)).toEqual([
-      { label: 'Anime', icon: 'lucideSwords', badge: null, href: '/libraries/Anime' },
       { label: 'nav.playlists', icon: 'lucideListVideo', badge: null, href: '/playlists' },
       { label: 'nav.history', icon: 'lucideHistory', badge: null, href: '/history' },
       { label: 'nav.calendar', icon: 'lucideCalendar', badge: null, href: '/calendar' },

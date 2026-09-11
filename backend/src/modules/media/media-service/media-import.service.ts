@@ -515,8 +515,8 @@ export class MediaImportService {
   /**
    * Resolve the destination library for an import.
    *  - Explicit `libraryId` from DTO wins (validated against media type).
-   *  - Otherwise we fall back to the default library for the media type
-   *    (`isDefaultForMovies` / `isDefaultForSeries` flag).
+   *  - Otherwise the only library accepting the type answers for itself;
+   *    several candidates are the caller's choice to make, not ours.
    *
    * The library is also required to have a configured `path` — every
    * import flow needs to know where to drop files.
@@ -537,13 +537,7 @@ export class MediaImportService {
     }
 
     if (!library) {
-      library = await this.libraries.getDefaultForType(type);
-    }
-
-    if (!library) {
-      throw new BadRequestException(
-        'No compatible library found. Set a default library for this media type in settings.',
-      );
+      library = await this.libraries.resolveSoleLibrary(type);
     }
     if (!library.mediaTypes?.includes(type)) {
       throw new BadRequestException(

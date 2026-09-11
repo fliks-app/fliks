@@ -9,7 +9,6 @@ import { AutoApprovalCriteria } from './entities/auto-approval-rule.entity';
 function makeService(
   rules: { id: number; name: string; criteria: AutoApprovalCriteria }[],
   tmdb: Partial<{ getMovieDetails: jest.Mock; getTvShowDetails: jest.Mock }> = {},
-  defaultLibrary: { id: number } | null = null,
 ) {
   const ruleRepo = { find: jest.fn().mockResolvedValue(rules) };
   return new RequestsService(
@@ -22,7 +21,7 @@ function makeService(
     {} as never,
     {} as never,
     tmdb as never,
-    { getDefaultForType: jest.fn().mockResolvedValue(defaultLibrary) } as never,
+    {} as never,
     {} as never,
   );
 }
@@ -67,11 +66,9 @@ describe('auto-approval criteria', () => {
     const s = makeService(rules);
     await expect(decide(s, { ...movie, libraryId: 3 })).resolves.toBe(true);
     await expect(decide(s, { ...movie, libraryId: 5 })).resolves.toBe(false);
-    // No explicit target and no default library: the criterion cannot be satisfied.
+    // create() resolves the destination before evaluating rules, so an unset
+    // target here means there was none to resolve.
     await expect(decide(s, movie)).resolves.toBe(false);
-    // A request that will land in the default library matches on that library.
-    await expect(decide(makeService(rules, {}, { id: 3 }), movie)).resolves.toBe(true);
-    await expect(decide(makeService(rules, {}, { id: 9 }), movie)).resolves.toBe(false);
   });
 
   it('matches a genre by TMDB id and a release year inside the range', async () => {
@@ -196,7 +193,7 @@ describe('auto-approval rule DTO', () => {
 describe('auto-approval through create()', () => {
   function makeFullService(
     rules: { id: number; name: string; criteria: AutoApprovalCriteria }[],
-    libraries: { getDefaultForType?: jest.Mock } = {},
+    libraries: { resolveSoleLibrary?: jest.Mock } = {},
   ) {
     const requestRepo = {
       find: jest.fn().mockResolvedValue([]),
@@ -227,7 +224,7 @@ describe('auto-approval through create()', () => {
       { getMovieDetails: jest.fn() } as never,
       {
         getAccessibleLibraryIds: jest.fn().mockResolvedValue([3]),
-        getDefaultForType: jest.fn().mockResolvedValue(null),
+        resolveSoleLibrary: jest.fn().mockResolvedValue({ id: 3 }),
         ...libraries,
       } as never,
       events as never,
@@ -277,27 +274,37 @@ describe('auto-approval through create()', () => {
     expect(events.emitDomain.mock.calls.map((c) => c[0].type)).toEqual(['request.created']);
   });
 
-  it('matches a library rule against the default library when the request omits one', async () => {
-    const getDefaultForType = jest.fn().mockResolvedValue({ id: 3 });
+  it('matches a library rule against the sole compatible library when the request omits one', async () => {
+    const resolveSoleLibrary = jest.fn().mockResolvedValue({ id: 3 });
     const { service, requestRepo } = makeFullService(
       [{ id: 1, name: 'lib', criteria: { libraryIds: [3] } }],
-      { getDefaultForType },
+      { resolveSoleLibrary },
     );
 
     await service.create(user, addDto);
 
-    expect(getDefaultForType).toHaveBeenCalledWith(MediaType.MOVIE);
+    expect(resolveSoleLibrary).toHaveBeenCalledWith(MediaType.MOVIE, user);
     expect(requestRepo.save.mock.calls[0][0].status).toBe(RequestStatus.APPROVED);
   });
 
-  it('does not resolve the default library when no rule filters on one', async () => {
-    const getDefaultForType = jest.fn();
-    const { service } = makeFullService([{ id: 1, name: 'role', criteria: { roleIds: [2] } }], {
-      getDefaultForType,
-    });
+  it('persists the resolved destination, so approval never has to guess it later', async () => {
+    const { service, requestRepo, mediaService } = makeFullService([
+      { id: 1, name: 'role', criteria: { roleIds: [2] } },
+    ]);
 
     await service.create(user, addDto);
 
-    expect(getDefaultForType).not.toHaveBeenCalled();
+    expect(requestRepo.save.mock.calls[0][0].library).toEqual({ id: 3 });
+    expect(mediaService.importFromTmdb.mock.calls[0][0].libraryId).toBe(3);
+  });
+
+  it('refuses the request when no single library answers for the media type', async () => {
+    const { service, requestRepo } = makeFullService(
+      [{ id: 1, name: 'role', criteria: { roleIds: [2] } }],
+      { resolveSoleLibrary: jest.fn().mockRejectedValue(new BadRequestException('ambiguous')) },
+    );
+
+    await expect(service.create(user, addDto)).rejects.toBeInstanceOf(BadRequestException);
+    expect(requestRepo.save).not.toHaveBeenCalled();
   });
 });

@@ -431,19 +431,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
         this.allLibraries = await this.librariesApi.listMine();
       }
 
-      // Resolve the /movies and /series sentinels (__default_movies__ / __default_series__)
-      if (name === '__default_movies__' || name === '__default_series__') {
-        const flag = name === '__default_movies__' ? 'isDefaultForMovies' : 'isDefaultForSeries';
-        const defaultLib = this.allLibraries.find((l) => l[flag]) ?? this.allLibraries[0];
-        if (defaultLib) {
-          void this.router.navigate(
-            ['/libraries', encodeURIComponent(defaultLib.name)],
-            { replaceUrl: true },
-          );
-        }
-        return;
-      }
-
       const lib = this.allLibraries.find((l) => l.name === name);
       this.library.set(lib ?? null);
       if (!lib) {

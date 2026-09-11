@@ -10,8 +10,6 @@ export interface LibrarySummary {
   icon: string | null;
   color: string | null;
   mediaTypes: ('movie' | 'series')[];
-  isDefaultForMovies: boolean;
-  isDefaultForSeries: boolean;
 }
 
 export interface LibraryDiskMetrics {
@@ -31,8 +29,6 @@ export interface Library {
   metadataRegion: string | null;
   defaultQualityProfileId: number | null;
   defaultLanguageProfileId: number | null;
-  isDefaultForMovies: boolean;
-  isDefaultForSeries: boolean;
   path: string | null;
   label: string | null;
   disk: LibraryDiskMetrics | null;
@@ -49,8 +45,6 @@ export interface CreateLibraryBody {
   metadataRegion?: string | null;
   defaultQualityProfileId?: number | null;
   defaultLanguageProfileId?: number | null;
-  isDefaultForMovies?: boolean;
-  isDefaultForSeries?: boolean;
   path?: string;
   userIds?: number[];
 }

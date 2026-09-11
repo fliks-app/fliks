@@ -1,6 +1,5 @@
 import {
   IsArray,
-  IsBoolean,
   IsEnum,
   IsInt,
   IsOptional,
@@ -56,12 +55,4 @@ export class UpdateLibraryDto {
   @IsOptional()
   @IsInt()
   defaultLanguageProfileId?: number | null;
-
-  @IsOptional()
-  @IsBoolean()
-  isDefaultForMovies?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  isDefaultForSeries?: boolean;
 }

@@ -11,14 +11,6 @@
         </a>
         <div class="min-w-0">
           <h1 class="text-2xl font-bold truncate">{{ lib.name }}</h1>
-          <div class="flex items-center gap-2 mt-0.5 flex-wrap">
-            @if (lib.isDefaultForMovies) {
-              <span class="badge badge-sm badge-info">{{ 'settings.libraries.default_for_movies' | translate }}</span>
-            }
-            @if (lib.isDefaultForSeries) {
-              <span class="badge badge-sm badge-info">{{ 'settings.libraries.default_for_series' | translate }}</span>
-            }
-          </div>
         </div>
       </div>
       <div class="flex gap-2 shrink-0">

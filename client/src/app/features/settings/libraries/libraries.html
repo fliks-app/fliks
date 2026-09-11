@@ -24,12 +24,6 @@
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 flex-wrap">
                   <span class="font-medium">{{ lib.name }}</span>
-                  @if (lib.isDefaultForMovies) {
-                    <span class="badge badge-info badge-sm">{{ 'settings.libraries.default_for_movies' | translate }}</span>
-                  }
-                  @if (lib.isDefaultForSeries) {
-                    <span class="badge badge-info badge-sm">{{ 'settings.libraries.default_for_series' | translate }}</span>
-                  }
                 </div>
                 <div class="flex gap-1.5 mt-1">
                   @if (lib.mediaTypes.includes('movie')) {
