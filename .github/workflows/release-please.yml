@@ -13,6 +13,10 @@
 #   - `chore`, `docs`, … → no bump (they show in the changelog under
 #                         "Miscellaneous Chores" only if explicitly
 #                         configured to)
+#
+# A `Release-As: <X.Y.Z>` footer on any commit overrides the computed
+# version for the next release. It is the only way to correct a bump
+# once the commit that caused it is on a protected branch.
 name: Release please
 
 on:
