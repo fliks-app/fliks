@@ -123,7 +123,7 @@ function createFixture(opts: { isAdmin?: boolean; permissions?: string[]; entrie
   return fixture;
 }
 
-const ALL_PERMISSIONS = ['users.manage', 'media.read'];
+const ALL_PERMISSIONS = ['users.manage', 'roles.manage', 'media.read'];
 
 describe('AdminShellComponent — sidebar characterisation', () => {
   // An admin and a non-admin holding the same permissions see the same sidebar: entries gate on
@@ -146,11 +146,18 @@ describe('AdminShellComponent — sidebar characterisation', () => {
     ]);
   });
 
-  it('keeps the users pages for a viewer holding users.manage without being an admin', () => {
+  it('keeps a page per permission: users.manage alone opens Users, never Roles', () => {
     const sections = readSidebar(createFixture({ permissions: ['users.manage'] }));
 
     expect(sections.find((s) => s.label === 'admin.section_users')?.links.map((l) => l.href)).toEqual([
       '/admin/settings/users',
+    ]);
+  });
+
+  it('shows Roles alone to a viewer holding roles.manage without users.manage', () => {
+    const sections = readSidebar(createFixture({ permissions: ['roles.manage'] }));
+
+    expect(sections.find((s) => s.label === 'admin.section_users')?.links.map((l) => l.href)).toEqual([
       '/admin/settings/roles',
     ]);
   });

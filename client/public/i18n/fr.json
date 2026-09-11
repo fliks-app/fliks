@@ -154,7 +154,8 @@
     "requests.manage": "Gérer les demandes",
     "subtitles.manage": "Gérer les sous-titres",
     "settings.access": "Accès aux paramètres",
-    "users.manage": "Gérer les utilisateurs"
+    "users.manage": "Gérer les utilisateurs",
+    "roles.manage": "Gérer les rôles"
   },
   "account": {
     "title": "Mon compte",

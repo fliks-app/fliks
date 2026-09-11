@@ -149,7 +149,8 @@
     "requests.manage": "Anfragen verwalten",
     "subtitles.manage": "Untertitel verwalten",
     "settings.access": "Zugriff auf Einstellungen",
-    "users.manage": "Benutzer verwalten"
+    "users.manage": "Benutzer verwalten",
+    "roles.manage": "Rollen verwalten"
   },
   "account": {
     "title": "Mein Konto",

@@ -149,7 +149,8 @@
     "requests.manage": "Gestire le richieste",
     "subtitles.manage": "Gestire i sottotitoli",
     "settings.access": "Accesso alle impostazioni",
-    "users.manage": "Gestire gli utenti"
+    "users.manage": "Gestire gli utenti",
+    "roles.manage": "Gestire i ruoli"
   },
   "account": {
     "title": "Il mio account",

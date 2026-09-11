@@ -110,6 +110,7 @@
         <select
     appTvSelect
           class="select select-bordered select-sm w-full"
+          [disabled]="!canAssignRole"
           [ngModel]="formRoleId()"
           (ngModelChange)="formRoleId.set($event)"
         >

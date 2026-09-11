@@ -126,6 +126,7 @@
             </p>
           </div>
 
+          @if (canPickUsers) {
           <div class="form-control">
             <span class="label-text">{{ 'settings.auto_approval.users' | translate }}</span>
             <app-multi-select
@@ -139,7 +140,9 @@
           <div class="divider my-0 text-xs text-base-content/50">
             {{ 'settings.auto_approval.or' | translate }}
           </div>
+          }
 
+          @if (canPickRoles) {
           <div class="form-control">
             <span class="label-text">{{ 'settings.auto_approval.roles' | translate }}</span>
             <app-multi-select
@@ -149,6 +152,7 @@
               [placeholder]="'settings.auto_approval.any_role' | translate"
             />
           </div>
+          }
         </section>
 
         <div class="divider md:divider-horizontal my-2 md:my-0"></div>

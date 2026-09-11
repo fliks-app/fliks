@@ -129,14 +129,16 @@ export class AutoApprovalSettingsComponent implements OnInit {
     }
   }
 
-  /** The user and role lists are `users.manage`-gated; without it the two "who" pickers can only
-   *  render empty, so the criterion is hidden rather than shown as a select with no options. */
-  readonly canPickWho = this.auth.hasPermission('users.manage');
+  /** Each "who" picker reads a list of its own, behind its own permission: shown empty, a select
+   *  reads as "no users exist" rather than "you may not see them". */
+  readonly canPickUsers = this.auth.hasPermission('users.manage');
+  readonly canPickRoles = this.canPickUsers || this.auth.hasPermission('roles.manage');
+  readonly canPickWho = this.canPickUsers || this.canPickRoles;
 
   private async loadPickers() {
     const [users, roles, libraries, movieGenres, tvGenres] = await Promise.all([
-      this.canPickWho ? this.usersApi.list().catch(() => []) : Promise.resolve<UserRow[]>([]),
-      this.canPickWho ? this.rolesApi.list().catch(() => []) : Promise.resolve<RoleRow[]>([]),
+      this.canPickUsers ? this.usersApi.list().catch(() => []) : Promise.resolve<UserRow[]>([]),
+      this.canPickRoles ? this.rolesApi.list().catch(() => []) : Promise.resolve<RoleRow[]>([]),
       this.librariesApi.list().catch(() => []),
       this.metadata.getMovieGenres().catch(() => []),
       this.metadata.getTvGenres().catch(() => []),

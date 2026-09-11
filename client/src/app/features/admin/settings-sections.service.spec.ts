@@ -27,7 +27,7 @@ const entry = (pluginId: string, contributions: UiContribution[], extra: Partial
 });
 
 /** Every permission a core settings entry gates on today. */
-const ALL_PERMISSIONS = ['users.manage', 'media.read'];
+const ALL_PERMISSIONS = ['users.manage', 'roles.manage', 'media.read'];
 
 function createService(opts: { isAdmin?: boolean; permissions?: string[]; entries?: PluginUiEntry[]; url?: string } = {}) {
   TestBed.resetTestingModule();

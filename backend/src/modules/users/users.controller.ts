@@ -44,8 +44,8 @@ export class UsersController {
   /** Admin: create a new user */
   @Post()
   @CheckPolicies((ability) => ability.can(Action.Manage, User))
-  create(@Body() dto: CreateUserDto) {
-    return this.usersService.create(dto);
+  create(@Body() dto: CreateUserDto, @CurrentUser() requester: User) {
+    return this.usersService.create(dto, requester);
   }
 
   /** Self: upload a new avatar (cropped square JPEG). The target is always the

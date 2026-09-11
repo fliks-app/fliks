@@ -435,7 +435,7 @@ export const routes: Routes = [
             ],
           },
           { path: 'users', canActivate: [permissionGuard('users.manage')], loadComponent: () => import('./features/settings/users/users').then((m) => m.UsersSettingsComponent) },
-          { path: 'roles', canActivate: [permissionGuard('users.manage')], loadComponent: () => import('./features/settings/roles/roles').then((m) => m.RolesSettingsComponent) },
+          { path: 'roles', canActivate: [permissionGuard('roles.manage')], loadComponent: () => import('./features/settings/roles/roles').then((m) => m.RolesSettingsComponent) },
           { path: 'subtitle-providers', loadComponent: () => import('./features/settings/subtitle-providers/subtitle-providers').then((m) => m.SubtitleProvidersSettingsComponent) },
           { path: 'subtitles-activity', canActivate: [permissionGuard('media.read')], loadComponent: () => import('./features/settings/subtitles-activity/subtitles-activity').then((m) => m.SubtitlesActivityComponent) },
           {

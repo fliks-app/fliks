@@ -15,6 +15,7 @@ import { SubtitleFile } from '../../subtitles/entities/subtitle-file.entity';
 import { TranslationProvider } from '../../subtitles/entities/translation-provider.entity';
 import { Library } from '../../libraries/entities/library.entity';
 import { Playlist } from '../../playlists/entities/playlist.entity';
+import { Role } from '../../roles/entities/role.entity';
 import { Action } from './actions.enum';
 import { parsePluginPermissionGrant } from '../../../common/constants/plugin-permissions';
 
@@ -30,6 +31,7 @@ type Subjects =
       | typeof TranslationProvider
       | typeof Library
       | typeof Playlist
+      | typeof Role
     >
   | 'Settings'
   | 'all'
@@ -133,7 +135,10 @@ export class CaslAbilityFactory {
     // --- users ---
     if (perms.has('users.manage')) {
       can(Action.Manage, User);
+      // Assigning a role to a user means listing them; editing one does not follow.
+      can(Action.Read, Role);
     }
+    if (perms.has('roles.manage')) can(Action.Manage, Role);
 
     return build();
   }

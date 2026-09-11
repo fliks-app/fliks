@@ -154,7 +154,8 @@
     "requests.manage": "Manage requests",
     "subtitles.manage": "Manage subtitles",
     "settings.access": "Settings access",
-    "users.manage": "Manage users"
+    "users.manage": "Manage users",
+    "roles.manage": "Manage roles"
   },
   "account": {
     "title": "My account",

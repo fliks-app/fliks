@@ -40,6 +40,8 @@ export class UsersSettingsComponent implements OnInit {
 
   readonly rows = signal<UserRow[]>([]);
   readonly roles = signal<RoleRow[]>([]);
+  /** Choosing a role grants its permissions, so the server keeps it behind `roles.manage`. */
+  readonly canAssignRole = inject(AuthService).hasPermission('roles.manage');
   readonly libraries = signal<Library[]>([]);
   readonly loading = signal(true);
   readonly listError = signal('');
@@ -113,7 +115,7 @@ export class UsersSettingsComponent implements OnInit {
       const body: CreateUserBody = {
         username: this.formUsername().trim(),
         password: this.formPassword(),
-        roleId: this.formRoleId() ?? undefined,
+        roleId: this.canAssignRole ? (this.formRoleId() ?? undefined) : undefined,
         enabled: this.formEnabled(),
         libraryIds: [...this.formLibraryIds()],
       };

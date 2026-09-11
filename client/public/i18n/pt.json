@@ -149,7 +149,8 @@
     "requests.manage": "Gerir pedidos",
     "subtitles.manage": "Gerir legendas",
     "settings.access": "Acesso às definições",
-    "users.manage": "Gerir utilizadores"
+    "users.manage": "Gerir utilizadores",
+    "roles.manage": "Gerir funções"
   },
   "account": {
     "title": "A minha conta",
