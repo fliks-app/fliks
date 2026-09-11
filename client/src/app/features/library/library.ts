@@ -327,11 +327,15 @@ export class LibraryComponent implements OnInit, OnDestroy {
       Math.floor(Math.max(0, offset - this.rowsOffset()) / this.rowHeight()),
       Math.max(0, rows - span),
     ));
-    // Only when it has moved: re-rendering a range recycles its views, and a
-    // poster morph pairs with the very DOM node the click stamped.
-    if (first >= range.start && first < range.end) return;
-    vp.setRenderedRange({ start: first, end: first + span });
-    vp.setRenderedContentOffset(first * this.rowHeight());
+    const top = first * this.rowHeight();
+    if (first !== range.start) vp.setRenderedRange({ start: first, end: first + span });
+    vp.setRenderedContentOffset(top);
+    // The rows only sit where that offset says once CDK's own pass writes their
+    // wrapper transform, and a poster morph is captured before it.
+    const wrapper = vp.elementRef.nativeElement.querySelector<HTMLElement>(
+      '.cdk-virtual-scroll-content-wrapper',
+    );
+    if (wrapper) wrapper.style.transform = `translateY(${top}px)`;
   }
   /** The offset lives in the shared memory, whose sticky restore lands after
    *  this: range from the value it is about to write. */
