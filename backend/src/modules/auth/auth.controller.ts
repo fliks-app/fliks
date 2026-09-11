@@ -155,8 +155,9 @@ export class AuthController {
   }
 
   /**
-   * Cast JWT (4h) + the stream base URL (EXTERNAL_URL / Host). Called right
-   * before loadMedia so it can't drift from the receiver's own requests.
+   * Cast JWT (4h) + the stream base URL, from the public-URL setting or the
+   * Host header. Called right before loadMedia so it can't drift from the
+   * receiver's own requests.
    */
   @Post('cast-info')
   @UseGuards(JwtOrApiKeyGuard)
