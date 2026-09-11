@@ -153,9 +153,24 @@ export class CustomFormatsSettingsComponent implements OnInit {
     this.updateSpec(index, { type, value: this.valueOptions(type)?.[0] ?? '' });
   }
 
+  /** Only a pattern that cannot compile: an empty value is already named by `formError`,
+   *  and painting a freshly added condition red says nothing the user can act on. */
   specInvalid(spec: CustomFormatSpec): boolean {
-    if (!spec.value.trim()) return true;
-    return spec.type === 'title_regex' && !isValidRegex(spec.value);
+    return (
+      spec.type === 'title_regex' && spec.value.trim().length > 0 && !isValidRegex(spec.value)
+    );
+  }
+
+  /** `title_regex` is a substring search, so "contains" is literal; every other type
+   *  compares one parsed attribute for equality. */
+  operatorKey(type: CustomFormatSpecType, negate: boolean): string {
+    const verb = type === 'title_regex' ? 'contains' : 'is';
+    return `settings.custom_formats.operator.${negate ? 'not_' : ''}${verb}`;
+  }
+
+  /** Alone in its type group the flag changes nothing: the group has to match anyway. */
+  showRequired(type: CustomFormatSpecType): boolean {
+    return this.formSpecs().filter((s) => s.type === type).length > 1;
   }
 
   async save() {
