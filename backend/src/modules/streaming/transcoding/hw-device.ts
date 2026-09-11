@@ -18,14 +18,20 @@ export function setSelectedRenderNode(node: string | null | undefined): void {
   selectedRenderNode = v && v.length > 0 && v !== 'auto' ? v : null;
 }
 
+/** `FLIKS_VAAPI_RENDER_NODE`, or null when unset. The settings layer folds it
+ *  into `gpuRenderNode` so the admin form shows the node actually in use. */
+export function envRenderNode(): string | null {
+  const v = process.env.FLIKS_VAAPI_RENDER_NODE?.trim();
+  return v && v.length > 0 ? v : null;
+}
+
 /** DRI render node for the VAAPI/Linux-QSV device. Resolution order: the
  *  admin `streaming_gpu_render_node` selection, then the
- *  `FLIKS_VAAPI_RENDER_NODE` env override, then the default. Ignored on
+ *  `FLIKS_VAAPI_RENDER_NODE` env fallback, then the default. The env branch
+ *  only matters before the settings are readable at boot. Ignored on
  *  Windows (MFX/D3D11, no node). */
 export function vaapiRenderNode(): string {
-  if (selectedRenderNode) return selectedRenderNode;
-  const override = process.env.FLIKS_VAAPI_RENDER_NODE?.trim();
-  return override && override.length > 0 ? override : '/dev/dri/renderD128';
+  return selectedRenderNode ?? envRenderNode() ?? '/dev/dri/renderD128';
 }
 
 /** VAAPI device aliased `va` on the render node. Linux-only. */

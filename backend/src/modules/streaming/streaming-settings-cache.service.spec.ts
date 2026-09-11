@@ -47,6 +47,36 @@ describe('StreamingSettingsCache tuning resolution', () => {
     expect(s.ffmpegSlots).toBe(3);
   });
 
+  it('folds the env tonemap algo and render node into the resolved value', async () => {
+    process.env.TRANSCODE_TONEMAP_ALGO = '  QSV  ';
+    process.env.FLIKS_VAAPI_RENDER_NODE = '/dev/dri/renderD129';
+
+    const s = await build().get();
+    expect(s.tonemapAlgo).toBe('qsv');
+    expect(s.gpuRenderNode).toBe('/dev/dri/renderD129');
+  });
+
+  it('lets an explicit algo and node win over the env ones', async () => {
+    process.env.TRANSCODE_TONEMAP_ALGO = 'qsv';
+    process.env.FLIKS_VAAPI_RENDER_NODE = '/dev/dri/renderD129';
+
+    const s = await build({
+      streaming_tonemap_algo: 'opencl',
+      streaming_gpu_render_node: '/dev/dri/renderD128',
+    }).get();
+    expect(s.tonemapAlgo).toBe('opencl');
+    expect(s.gpuRenderNode).toBe('/dev/dri/renderD128');
+  });
+
+  it('stays on auto when neither the setting nor the env names a value', async () => {
+    delete process.env.TRANSCODE_TONEMAP_ALGO;
+    delete process.env.FLIKS_VAAPI_RENDER_NODE;
+
+    const s = await build().get();
+    expect(s.tonemapAlgo).toBe('auto');
+    expect(s.gpuRenderNode).toBe('auto');
+  });
+
   it('ignores a malformed or non-positive saved value', async () => {
     process.env.TRANSCODE_CACHE_MAX_BYTES = String(50 * 1024 ** 3);
     delete process.env.TRANSCODE_TONEMAP_CURVE;

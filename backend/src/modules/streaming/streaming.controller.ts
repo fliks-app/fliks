@@ -695,6 +695,8 @@ export class StreamingController {
   async effectiveSettingsInfo() {
     const ss = await this.getStreamingSettings();
     return {
+      tonemapAlgo: ss.tonemapAlgo,
+      gpuRenderNode: ss.gpuRenderNode,
       tonemapCurve: ss.tonemapCurve,
       cacheMaxGb: +(ss.cacheMaxBytes / 1024 ** 3).toFixed(1),
       cacheTtlHours: +(ss.cacheTtlMs / 3_600_000).toFixed(1),

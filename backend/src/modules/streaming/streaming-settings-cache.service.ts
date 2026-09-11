@@ -2,6 +2,8 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { SettingsService } from '../settings/settings.service';
 import { StreamLifetime } from './lifetime-constants';
 import { envTonemapCurve } from './transcoding/ffmpeg-filter-graph';
+import { envRenderNode } from './transcoding/hw-device';
+import { tonemapAlgoOverride } from './transcoding/tonemap-path';
 import type { TonemapCurve } from './transcoding/codec/types';
 import type { TonemapAlgo } from './transcoding/types';
 
@@ -17,8 +19,9 @@ export interface StreamingSettings {
     | 'slow'
     | 'slower'
     | 'veryslow';
-  /** HDR → SDR tone-mapping algorithm. See {@link TonemapAlgo}. Default
-   *  is `'auto'` which currently routes through tonemap_opencl. */
+  /** HDR → SDR tone-mapping algorithm. See {@link TonemapAlgo}. Falls back to
+   *  `TRANSCODE_TONEMAP_ALGO`, then `'auto'`, which resolves per host from the
+   *  boot probes. */
   tonemapAlgo: TonemapAlgo;
   /** HDR → SDR tone-map curve for the OpenCL/CPU paths (the vpp_qsv and
    *  tonemap_vaapi LUTs ignore it). Falls back to `TRANSCODE_TONEMAP_CURVE`,
@@ -49,9 +52,9 @@ export interface StreamingSettings {
    * Direct Play / remux with the black bars intact instead of transcoding.
    */
   autoCropEnabled: boolean;
-  /** Admin-selected GPU render node for hardware transcoding, or `'auto'`
-   *  (default) to let the host pick. On a multi-GPU box, pinning a specific
-   *  `/dev/dri/renderD*` keeps sessions off the wrong adapter. */
+  /** GPU render node for hardware transcoding, or `'auto'` to let the host
+   *  pick. On a multi-GPU box, pinning a specific `/dev/dri/renderD*` keeps
+   *  sessions off the wrong adapter. Falls back to `FLIKS_VAAPI_RENDER_NODE`. */
   gpuRenderNode: string;
   /**
    * When embedded subtitles get extracted to WebVTT. Pulling a subtitle out of
@@ -194,7 +197,9 @@ export class StreamingSettingsCache implements OnModuleInit {
     return {
       segmentDuration: parseFloat(duration ?? '3') || 3,
       qsvPreset: (qsvPreset ?? 'faster') as StreamingSettings['qsvPreset'],
-      tonemapAlgo: algo,
+      // Every value below is fully resolved: downstream reads one number or one
+      // string and never consults the environment again.
+      tonemapAlgo: algo === 'auto' ? (tonemapAlgoOverride() ?? 'auto') : algo,
       tonemapCurve: curve ?? envTonemapCurve() ?? 'hable',
       cacheMaxBytes:
         maxGb != null ? Math.round(maxGb * GB) : StreamLifetime.cacheMaxBytes(),
@@ -211,7 +216,7 @@ export class StreamingSettingsCache implements OnModuleInit {
       // Default on (preserve current behaviour); only the explicit string
       // 'false' disables cropping.
       autoCropEnabled: autoCropEnabled !== 'false',
-      gpuRenderNode: renderNode,
+      gpuRenderNode: renderNode === 'auto' ? (envRenderNode() ?? 'auto') : renderNode,
       subtitlePrewarm: SUBTITLE_PREWARMS.includes(
         subtitlePrewarm as SubtitlePrewarm,
       )
