@@ -75,6 +75,13 @@ export class ImportModalComponent {
     this.libraries().filter((l) => l.mediaTypes.includes(this.mediaType())),
   );
 
+  /** Nothing to submit to: the destination is resolved from this very list,
+   *  so an empty one can only end in a server-side refusal. Silent while the
+   *  list is still in flight, where empty means unknown. */
+  readonly noCompatibleLibrary = computed(
+    () => !this.loading() && this.compatibleLibraries().length === 0,
+  );
+
   /** A series with no season monitored would import and then sit idle, so the
    *  confirm button waits for a pick, same rule as the request modal. */
   protected readonly nothingToMonitor = computed(

@@ -708,6 +708,7 @@
     "hint": "Geben Sie einen Titel ein, um die TMDB-Suche zu starten.",
     "no_results": "Keine Ergebnisse",
     "add_to_library": "Hinzufügen",
+    "no_compatible_library": "Keine für dich zugängliche Bibliothek nimmt diesen Medientyp auf. Bitte einen Administrator um Zugriff.",
     "search_error": "Die Suche ist fehlgeschlagen. Überprüfen Sie den TMDB-Schlüssel auf der Serverseite.",
     "already_in_library": "Dieser Titel ist bereits in der Bibliothek.",
     "tmdb_not_configured": "TMDB ist auf dem Server nicht konfiguriert.",

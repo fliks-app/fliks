@@ -708,6 +708,7 @@
     "hint": "Introduzca un título para iniciar la búsqueda en TMDB.",
     "no_results": "Sin resultados",
     "add_to_library": "Añadir",
+    "no_compatible_library": "Ninguna biblioteca a la que tengas acceso admite este tipo de contenido. Pide acceso a un administrador.",
     "search_error": "La búsqueda ha fallado. Compruebe la clave TMDB en el servidor.",
     "already_in_library": "Este título ya está en la biblioteca.",
     "tmdb_not_configured": "TMDB no está configurado en el servidor.",

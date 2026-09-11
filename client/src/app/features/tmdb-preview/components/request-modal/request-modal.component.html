@@ -13,6 +13,12 @@
       </div>
     </app-modal-header>
 
+    @if (noCompatibleLibrary()) {
+      <div role="alert" class="alert alert-warning text-sm mt-4 py-2">
+        {{ 'discover.no_compatible_library' | translate }}
+      </div>
+    }
+
     @if (mediaType() === 'series') {
       @if (seasonsFailed()) {
         <div role="alert" class="alert alert-warning text-sm mt-4 py-2">
@@ -98,7 +104,7 @@
       <button
         type="button"
         class="btn btn-primary"
-        [disabled]="requesting() || nothingPicked()"
+        [disabled]="requesting() || nothingPicked() || noCompatibleLibrary()"
         (click)="confirm()"
       >
         @if (requesting()) {

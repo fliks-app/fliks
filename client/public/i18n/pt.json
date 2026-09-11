@@ -708,6 +708,7 @@
     "hint": "Introduza um título para iniciar a pesquisa TMDB.",
     "no_results": "Nenhum resultado",
     "add_to_library": "Adicionar",
+    "no_compatible_library": "Nenhuma biblioteca a que tenhas acesso aceita este tipo de media. Pede acesso a um administrador.",
     "search_error": "A pesquisa falhou. Verifique a chave TMDB no servidor.",
     "already_in_library": "Este título já está na biblioteca.",
     "tmdb_not_configured": "O TMDB não está configurado no servidor.",

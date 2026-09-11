@@ -41,6 +41,8 @@ export class RequestModalComponent {
   readonly qualityProfiles = input<{ id: number; name: string }[]>([]);
   readonly languageProfiles = input<{ id: number; name: string }[]>([]);
   readonly libraries = input<LibrarySummary[]>([]);
+  /** An empty `libraries` means "none" only once the parent has loaded them. */
+  readonly librariesLoading = input(false);
   readonly requested = output<void>();
 
   readonly compatibleLibraries = computed(() =>
@@ -69,6 +71,12 @@ export class RequestModalComponent {
   /** A series already has an active request: its profiles are fixed and the
    *  selectors are locked to them (all seasons share one profile set). */
   readonly profilesLocked = signal(false);
+
+  /** Nothing to submit to: the destination is resolved from this very list,
+   *  so an empty one can only end in a server-side refusal. */
+  readonly noCompatibleLibrary = computed(
+    () => !this.librariesLoading() && this.compatibleLibraries().length === 0,
+  );
 
   /** Series only: a pick is required, unless the season list never loaded. */
   readonly nothingPicked = computed(
