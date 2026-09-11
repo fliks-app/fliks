@@ -439,11 +439,13 @@ export interface TableConfigPage extends ConfigPageBase {
   /** Core SSE event types that re-fetch the list as they arrive, coalesced to at most one
    *  fetch per {@link TABLE_REFRESH_MIN_MS}. */
   refreshOn?: string[];
-  /** List-scope actions (clear-all and the like), distinct from `rowActions`. */
+  /** List-scope actions (clear-all and the like), distinct from `rowActions`. `when` gates on the
+   *  viewer exactly as a row action's does; an older client ignores it and renders the button. */
   listActions?: {
     labelKey: string;
     method: 'POST' | 'DELETE';
     path: string;
     confirmKey?: string;
+    when?: WhenPredicate[];
   }[];
 }

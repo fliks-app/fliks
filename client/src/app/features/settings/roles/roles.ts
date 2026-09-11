@@ -17,11 +17,14 @@ import { ToastService } from '../../../core/services/toast.service';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
+import { parsePluginGrant } from '../../../core/utils/plugin-grant';
 
-/** `read:plugin:fliks.download:queue`, or the bare subject, split into its parts. */
+/** `read:plugin:fliks.download:queue`, or the bare subject, split for display. */
 function parseGrant(value: string): { action?: string; pluginId: string; name: string } | null {
-  const match = /^(?:([a-z]+):)?plugin:([^:]+):(.+)$/.exec(value);
-  return match ? { action: match[1], pluginId: match[2], name: match[3] } : null;
+  const grant = parsePluginGrant(value);
+  if (!grant) return null;
+  const [, pluginId, ...rest] = grant.subject.split(':');
+  return { action: value.startsWith('plugin:') ? undefined : grant.action, pluginId, name: rest.join(':') };
 }
 
 @Component({

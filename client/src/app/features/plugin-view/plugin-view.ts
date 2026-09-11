@@ -352,19 +352,25 @@ export class PluginViewComponent implements OnDestroy {
    * rides through untouched — only the table holds a row.
    */
   tableRowActions(view: TableView): RowAction[] {
-    const ctx = {
+    return (view.rowActions ?? [])
+      .filter((a) => evaluateWhen(a.when, this.whenContext()))
+      .map((a) => (a.kind === 'proxy' ? { ...a, path: this.resourceUrl(a.path) } : a));
+  }
+
+  /** Same rule as a row action: a clear-all the viewer's routes refuse is a button that 403s. */
+  tableListActions(view: TableView): ListAction[] {
+    return (view.listActions ?? [])
+      .filter((a) => evaluateWhen(a.when, this.whenContext()))
+      .map((a) => ({ ...a, path: this.resourceUrl(a.path) }));
+  }
+
+  private whenContext() {
+    return {
       isAdmin: this.auth.user()?.isAdmin ?? false,
       hasPermission: (p: string) => this.auth.hasPermission(p),
       isTv: this.tv.isTv(),
       isTouch: this.device.isTouch(),
     };
-    return (view.rowActions ?? [])
-      .filter((a) => evaluateWhen(a.when, ctx))
-      .map((a) => (a.kind === 'proxy' ? { ...a, path: this.resourceUrl(a.path) } : a));
-  }
-
-  tableListActions(view: TableView): ListAction[] {
-    return (view.listActions ?? []).map((a) => ({ ...a, path: this.resourceUrl(a.path) }));
   }
 
   /** Merges a page's own wording over the generic provider-list chrome. */

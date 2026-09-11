@@ -12,6 +12,7 @@ import {
   type SessionTokens,
 } from './session-store.service';
 import { IS_STANDALONE_BUNDLE, restartApp } from '../utils/standalone-bundle';
+import { grantSatisfies, parsePluginGrant } from '../utils/plugin-grant';
 
 export interface User {
   id: number;
@@ -187,7 +188,11 @@ export class AuthService {
   hasPermission(perm: string): boolean {
     const u = this._user();
     if (u?.isAdmin) return true;
-    return u?.permissions?.includes(perm) ?? false;
+    const held = u?.permissions ?? [];
+    if (held.includes(perm)) return true;
+    // A plugin permission can be granted whole or for one action, so the strings need not match.
+    const wanted = parsePluginGrant(perm);
+    return !!wanted && held.some((grant) => grantSatisfies(grant, wanted));
   }
 
   /** Convenience: true if the user has settings.access permission. */
