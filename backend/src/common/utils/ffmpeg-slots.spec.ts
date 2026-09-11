@@ -8,16 +8,12 @@ describe('withFfmpegSlot', () => {
 
   function loadWith(
     opts: {
-      slots?: string;
       hostCores?: number;
       files?: Record<string, string>;
     } = {},
   ): typeof import('./ffmpeg-slots') {
     jest.resetModules();
-    const env = { ...OLD_ENV };
-    if (opts.slots != null) env.FLIKS_FFMPEG_SLOTS = opts.slots;
-    else delete env.FLIKS_FFMPEG_SLOTS;
-    process.env = env;
+    process.env = { ...OLD_ENV };
 
     jest.doMock('os', () => ({
       cpus: () => Array.from({ length: opts.hostCores ?? 4 }, () => ({})),
@@ -36,7 +32,8 @@ describe('withFfmpegSlot', () => {
   }
 
   it('never runs more than the configured slot count concurrently', async () => {
-    const { withFfmpegSlot } = loadWith({ slots: '2' });
+    const { withFfmpegSlot, setFfmpegSlots } = loadWith();
+    setFfmpegSlots(2);
     let concurrent = 0;
     let maxConcurrent = 0;
 
@@ -53,7 +50,8 @@ describe('withFfmpegSlot', () => {
   });
 
   it('releases the slot when fn rejects', async () => {
-    const { withFfmpegSlot } = loadWith({ slots: '1' });
+    const { withFfmpegSlot, setFfmpegSlots } = loadWith();
+    setFfmpegSlots(1);
 
     await expect(
       withFfmpegSlot(async () => {
@@ -66,26 +64,26 @@ describe('withFfmpegSlot', () => {
     expect(result).toBe('ok');
   });
 
-  it('ignores a non-positive-integer override', () => {
-    expect(loadWith({ slots: '0' }).ffmpegSlots()).toBeGreaterThan(0);
-    expect(loadWith({ slots: '-3' }).ffmpegSlots()).toBeGreaterThan(0);
-    expect(loadWith({ slots: 'nope' }).ffmpegSlots()).toBeGreaterThan(0);
-  });
-
-  it('honours a positive integer override', () => {
-    expect(loadWith({ slots: '5' }).ffmpegSlots()).toBe(5);
-  });
-
-  it('lets the admin budget override the env one, and null restore it', () => {
-    const mod = loadWith({ slots: '5' });
+  it('takes the admin budget, and restores the derived one when cleared', () => {
+    const mod = loadWith({ hostCores: 8 });
+    expect(mod.ffmpegSlots()).toBe(7);
     mod.setFfmpegSlots(2);
     expect(mod.ffmpegSlots()).toBe(2);
     mod.setFfmpegSlots(null);
-    expect(mod.ffmpegSlots()).toBe(5);
+    expect(mod.ffmpegSlots()).toBe(7);
+  });
+
+  it('ignores a non-positive admin budget', () => {
+    const mod = loadWith({ hostCores: 8 });
+    mod.setFfmpegSlots(0);
+    expect(mod.ffmpegSlots()).toBe(7);
+    mod.setFfmpegSlots(-3);
+    expect(mod.ffmpegSlots()).toBe(7);
   });
 
   it('drains down to a shrunk budget instead of stalling the queue', async () => {
-    const { withFfmpegSlot, setFfmpegSlots } = loadWith({ slots: '4' });
+    const { withFfmpegSlot, setFfmpegSlots } = loadWith();
+    setFfmpegSlots(4);
     let concurrent = 0;
     const seenAfterShrink: number[] = [];
     let shrunk = false;
@@ -110,7 +108,8 @@ describe('withFfmpegSlot', () => {
   });
 
   it('wakes the queue when the budget grows', async () => {
-    const { withFfmpegSlot, setFfmpegSlots } = loadWith({ slots: '1' });
+    const { withFfmpegSlot, setFfmpegSlots } = loadWith();
+    setFfmpegSlots(1);
     let concurrent = 0;
     let maxConcurrent = 0;
 
@@ -179,12 +178,12 @@ describe('withFfmpegSlot', () => {
       expect(ffmpegSlots()).toBe(3);
     });
 
-    it('an explicit override still wins over a tighter cgroup quota', () => {
-      const { ffmpegSlots } = loadWith({
-        slots: '6',
+    it('the admin budget still wins over a tighter cgroup quota', () => {
+      const { ffmpegSlots, setFfmpegSlots } = loadWith({
         hostCores: 8,
         files: { '/sys/fs/cgroup/cpu.max': '100000 100000' }, // 1 core
       });
+      setFfmpegSlots(6);
       expect(ffmpegSlots()).toBe(6);
     });
   });

@@ -78,7 +78,7 @@ describe('qsvScaleFilter8bit', () => {
     );
   });
 
-  it('honours TRANSCODE_TONEMAP_CURVE on the d3d11 OpenCL chain', () => {
+  it('honours the configured curve on the d3d11 OpenCL chain', () => {
     expect(
       qsvScaleFilter8bit(
         input({
@@ -91,7 +91,7 @@ describe('qsvScaleFilter8bit', () => {
     ).toContain('tonemap_opencl=tonemap=mobius:');
   });
 
-  it('honours TRANSCODE_TONEMAP_CURVE on the Linux OpenCL chain', () => {
+  it('honours the configured curve on the Linux OpenCL chain', () => {
     expect(
       qsvScaleFilter8bit(
         input({

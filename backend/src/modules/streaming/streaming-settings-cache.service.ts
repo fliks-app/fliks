@@ -1,9 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { SettingsService } from '../settings/settings.service';
 import { StreamLifetime } from './lifetime-constants';
-import { envTonemapCurve } from './transcoding/ffmpeg-filter-graph';
-import { envRenderNode } from './transcoding/hw-device';
-import { tonemapAlgoOverride } from './transcoding/tonemap-path';
 import type { TonemapCurve } from './transcoding/codec/types';
 import type { TonemapAlgo } from './transcoding/types';
 
@@ -19,19 +16,17 @@ export interface StreamingSettings {
     | 'slow'
     | 'slower'
     | 'veryslow';
-  /** HDR → SDR tone-mapping algorithm. See {@link TonemapAlgo}. Falls back to
-   *  `TRANSCODE_TONEMAP_ALGO`, then `'auto'`, which resolves per host from the
-   *  boot probes. */
+  /** HDR → SDR tone-mapping algorithm. See {@link TonemapAlgo}. `'auto'`
+   *  resolves per host from the boot probes. */
   tonemapAlgo: TonemapAlgo;
-  /** HDR → SDR tone-map curve for the OpenCL/CPU paths (the vpp_qsv and
-   *  tonemap_vaapi LUTs ignore it). Falls back to `TRANSCODE_TONEMAP_CURVE`,
-   *  then `hable`. */
+  /** HDR → SDR tone-map curve. Applied by the OpenCL, CPU and VideoToolbox
+   *  chains; the vpp_qsv and tonemap_vaapi fixed-function paths ignore it. */
   tonemapCurve: TonemapCurve;
   /** Transcode-cache disk budget in bytes, and how long an untouched entry
-   *  survives. Both fall back to the `TRANSCODE_CACHE_*` env defaults. */
+   *  survives. */
   cacheMaxBytes: number;
   cacheTtlMs: number;
-  /** Concurrent background ffmpeg jobs, or null to keep the cgroup/CPU-derived
+  /** Concurrent background ffmpeg jobs, or null for the cgroup/CPU-derived
    *  budget. Caps scans, thumbnails and marker detection, not playback. */
   ffmpegSlots: number | null;
   /**
@@ -54,7 +49,7 @@ export interface StreamingSettings {
   autoCropEnabled: boolean;
   /** GPU render node for hardware transcoding, or `'auto'` to let the host
    *  pick. On a multi-GPU box, pinning a specific `/dev/dri/renderD*` keeps
-   *  sessions off the wrong adapter. Falls back to `FLIKS_VAAPI_RENDER_NODE`. */
+   *  sessions off the wrong adapter. */
   gpuRenderNode: string;
   /**
    * When embedded subtitles get extracted to WebVTT. Pulling a subtitle out of
@@ -92,6 +87,17 @@ const TONEMAP_CURVES: TonemapCurve[] = ['hable', 'mobius', 'reinhard'];
 const GB = 1024 ** 3;
 const HOUR_MS = 60 * 60 * 1000;
 
+/** Retired in favour of the matching `streaming_*` settings. Only reported, so
+ *  an operator upgrading from a compose-configured install learns they moved. */
+const RETIRED_ENV_VARS = [
+  'TRANSCODE_TONEMAP_ALGO',
+  'TRANSCODE_TONEMAP_CURVE',
+  'TRANSCODE_CACHE_MAX_BYTES',
+  'TRANSCODE_CACHE_TTL_MS',
+  'FLIKS_FFMPEG_SLOTS',
+  'FLIKS_VAAPI_RENDER_NODE',
+];
+
 const AUTO_QUALITY_MODES: AutoQualityMode[] = ['directplay', 'abr'];
 const SUBTITLE_PREWARMS: SubtitlePrewarm[] = ['off', 'playback', 'import'];
 
@@ -125,18 +131,16 @@ export class StreamingSettingsCache implements OnModuleInit {
     });
   }
 
-  /** Says once per boot which env vars a saved setting now outranks. A
-   *  leftover compose entry that silently loses is worse than one that shouts.
-   *  Values are the resolved ones, so an ignored setting isn't reported. */
-  private warnEnvShadowed(shadowed: Record<string, string | number | null>): void {
+  /** Says once per boot which retired env vars are still set. A compose entry
+   *  that quietly stopped doing anything is worse than one that shouts. */
+  private warnRetiredEnv(): void {
     if (this.warnedEnvShadow) return;
     this.warnedEnvShadow = true;
-    for (const [env, value] of Object.entries(shadowed)) {
-      if (value == null || !process.env[env]) continue;
-      this.log.warn(
-        `${env} is set but ignored: the admin setting (${value}) wins. Remove it from your compose file.`,
-      );
-    }
+    const stale = RETIRED_ENV_VARS.filter((v) => process.env[v]);
+    if (stale.length === 0) return;
+    this.log.warn(
+      `${stale.join(', ')} no longer read: these live in Settings > Streaming. Remove them from your compose file.`,
+    );
   }
 
   async get(): Promise<StreamingSettings> {
@@ -185,22 +189,13 @@ export class StreamingSettingsCache implements OnModuleInit {
     // 'auto' (or unset) lets the host pick the default render node.
     const renderNode = gpuRenderNode?.trim() || 'auto';
 
-    this.warnEnvShadowed({
-      TRANSCODE_TONEMAP_ALGO: algo === 'auto' ? null : algo,
-      TRANSCODE_TONEMAP_CURVE: curve,
-      TRANSCODE_CACHE_MAX_BYTES: maxGb != null ? `${maxGb} GB` : null,
-      TRANSCODE_CACHE_TTL_MS: ttlHours != null ? `${ttlHours} h` : null,
-      FLIKS_FFMPEG_SLOTS: slots,
-      FLIKS_VAAPI_RENDER_NODE: renderNode === 'auto' ? null : renderNode,
-    });
+    this.warnRetiredEnv();
 
     return {
       segmentDuration: parseFloat(duration ?? '3') || 3,
       qsvPreset: (qsvPreset ?? 'faster') as StreamingSettings['qsvPreset'],
-      // Every value below is fully resolved: downstream reads one number or one
-      // string and never consults the environment again.
-      tonemapAlgo: algo === 'auto' ? (tonemapAlgoOverride() ?? 'auto') : algo,
-      tonemapCurve: curve ?? envTonemapCurve() ?? 'hable',
+      tonemapAlgo: algo,
+      tonemapCurve: curve ?? 'hable',
       cacheMaxBytes:
         maxGb != null ? Math.round(maxGb * GB) : StreamLifetime.cacheMaxBytes(),
       cacheTtlMs:
@@ -216,7 +211,7 @@ export class StreamingSettingsCache implements OnModuleInit {
       // Default on (preserve current behaviour); only the explicit string
       // 'false' disables cropping.
       autoCropEnabled: autoCropEnabled !== 'false',
-      gpuRenderNode: renderNode === 'auto' ? (envRenderNode() ?? 'auto') : renderNode,
+      gpuRenderNode: renderNode,
       subtitlePrewarm: SUBTITLE_PREWARMS.includes(
         subtitlePrewarm as SubtitlePrewarm,
       )

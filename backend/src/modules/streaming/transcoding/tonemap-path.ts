@@ -7,16 +7,6 @@ import { isQsvOpenclTonemapEnabled } from './codec/qsv-opencl-probe';
 import { hostHasVaapi } from './hw-device';
 import type { TonemapAlgo } from './types';
 
-/** `TRANSCODE_TONEMAP_ALGO` fallback (auto/qsv/vaapi/opencl), folded into the
- *  `tonemapAlgo` setting when the admin left it on `auto`. A value picked in
- *  the UI always wins. Invalid/unset → null (no fallback). */
-export function tonemapAlgoOverride(): TonemapAlgo | null {
-  const v = process.env.TRANSCODE_TONEMAP_ALGO?.trim().toLowerCase();
-  return v === 'auto' || v === 'qsv' || v === 'vaapi' || v === 'opencl'
-    ? (v as TonemapAlgo)
-    : null;
-}
-
 /** Concrete filter chain the session-time graph will actually use,
  *  derived from the admin `TonemapAlgo` setting + boot probe results.
  *

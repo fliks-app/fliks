@@ -74,24 +74,16 @@ services:
       # FLIKS_DISABLE_UPDATE_CHECK: '1'
 
       # ---- Streaming (optional) ----
-      # Session timings. No UI equivalent.
+      # Session timings. Everything an admin tunes day to day, including the
+      # transcode-cache budget, the GPU, the tone-map algorithm and curve and
+      # the background ffmpeg job count, lives in Settings > Streaming.
       # STREAM_LIVE_SESSION_TTL_MS: 30000        # viewer TTL without a heartbeat
       # STREAM_JOB_GRACE_MS: 60000               # encoder kill delay after the last viewer
       # STREAM_JOB_FALLBACK_TIMEOUT_MS: 1800000  # idle session timeout
       # STREAM_MAX_SESSIONS_PER_USER: 10
       # TRANSCODE_CACHE_GC_INTERVAL_MS: 300000
-      # Starting values only: Settings > Streaming wins once saved there, and
-      # the server logs a warning naming any of these it is ignoring.
-      # TRANSCODE_CACHE_TTL_MS: 14400000         # segment retention, 4 h
-      # TRANSCODE_CACHE_MAX_BYTES: 21474836480   # LRU cap, 20 GB
-      # FLIKS_FFMPEG_SLOTS: 4                    # concurrent background ffmpeg jobs
 
-      # ---- Hardware / HDR (optional) ----
-      # The GPU, the tone-map algorithm and the curve live in Settings >
-      # Streaming; the two vars below are starting values for them.
-      # TRANSCODE_TONEMAP_CURVE: hable           # hable | mobius | reinhard
-      # FLIKS_VAAPI_RENDER_NODE: /dev/dri/renderD128
-      # No UI equivalent:
+      # ---- Hardware (optional) ----
       # FLIKS_OPENCL_DEVICE: '0.0'               # pin platform.device for the OpenCL tone-map
       # THUMB_HWACCEL_DEVICE: off                # thumbnails: off, or a render node
     volumes:

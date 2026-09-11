@@ -1,9 +1,8 @@
 import { StreamingSettingsCache } from './streaming-settings-cache.service';
 import type { SettingsService } from '../settings/settings.service';
 
-/** The tuning settings resolve DB > env > derived default. A saved value must
- *  win over a leftover compose entry, and an absent one must never collapse the
- *  env budget to a hardcoded default. */
+/** The tuning settings come from the database or from a built-in default, never
+ *  from the environment: the compose overrides they replaced are retired. */
 describe('StreamingSettingsCache tuning resolution', () => {
   const OLD_ENV = { ...process.env };
 
@@ -19,75 +18,60 @@ describe('StreamingSettingsCache tuning resolution', () => {
     return new StreamingSettingsCache(settings);
   }
 
-  it('falls back to the env budget when nothing is saved', async () => {
-    process.env.TRANSCODE_CACHE_MAX_BYTES = String(50 * 1024 ** 3);
-    process.env.TRANSCODE_CACHE_TTL_MS = String(2 * 3_600_000);
-    process.env.TRANSCODE_TONEMAP_CURVE = 'mobius';
-
+  it('falls back to the built-in defaults when nothing is saved', async () => {
     const s = await build().get();
-    expect(s.cacheMaxBytes).toBe(50 * 1024 ** 3);
-    expect(s.cacheTtlMs).toBe(2 * 3_600_000);
-    expect(s.tonemapCurve).toBe('mobius');
+    expect(s.cacheMaxBytes).toBe(20 * 1024 ** 3);
+    expect(s.cacheTtlMs).toBe(4 * 3_600_000);
+    expect(s.tonemapCurve).toBe('hable');
+    expect(s.tonemapAlgo).toBe('auto');
+    expect(s.gpuRenderNode).toBe('auto');
     expect(s.ffmpegSlots).toBeNull();
   });
 
-  it('lets a saved value win over the env one', async () => {
-    process.env.TRANSCODE_CACHE_MAX_BYTES = String(50 * 1024 ** 3);
-    process.env.TRANSCODE_TONEMAP_CURVE = 'mobius';
-
+  it('takes every saved value', async () => {
     const s = await build({
       streaming_cache_max_gb: '10',
       streaming_cache_ttl_hours: '6',
       streaming_tonemap_curve: 'reinhard',
+      streaming_tonemap_algo: 'opencl',
+      streaming_gpu_render_node: '/dev/dri/renderD129',
       streaming_ffmpeg_slots: '3',
     }).get();
     expect(s.cacheMaxBytes).toBe(10 * 1024 ** 3);
     expect(s.cacheTtlMs).toBe(6 * 3_600_000);
     expect(s.tonemapCurve).toBe('reinhard');
+    expect(s.tonemapAlgo).toBe('opencl');
+    expect(s.gpuRenderNode).toBe('/dev/dri/renderD129');
     expect(s.ffmpegSlots).toBe(3);
   });
 
-  it('folds the env tonemap algo and render node into the resolved value', async () => {
-    process.env.TRANSCODE_TONEMAP_ALGO = '  QSV  ';
-    process.env.FLIKS_VAAPI_RENDER_NODE = '/dev/dri/renderD129';
-
-    const s = await build().get();
-    expect(s.tonemapAlgo).toBe('qsv');
-    expect(s.gpuRenderNode).toBe('/dev/dri/renderD129');
-  });
-
-  it('lets an explicit algo and node win over the env ones', async () => {
-    process.env.TRANSCODE_TONEMAP_ALGO = 'qsv';
-    process.env.FLIKS_VAAPI_RENDER_NODE = '/dev/dri/renderD129';
-
-    const s = await build({
-      streaming_tonemap_algo: 'opencl',
-      streaming_gpu_render_node: '/dev/dri/renderD128',
-    }).get();
-    expect(s.tonemapAlgo).toBe('opencl');
-    expect(s.gpuRenderNode).toBe('/dev/dri/renderD128');
-  });
-
-  it('stays on auto when neither the setting nor the env names a value', async () => {
-    delete process.env.TRANSCODE_TONEMAP_ALGO;
-    delete process.env.FLIKS_VAAPI_RENDER_NODE;
-
-    const s = await build().get();
-    expect(s.tonemapAlgo).toBe('auto');
-    expect(s.gpuRenderNode).toBe('auto');
-  });
-
   it('ignores a malformed or non-positive saved value', async () => {
-    process.env.TRANSCODE_CACHE_MAX_BYTES = String(50 * 1024 ** 3);
-    delete process.env.TRANSCODE_TONEMAP_CURVE;
-
     const s = await build({
       streaming_cache_max_gb: '0',
       streaming_ffmpeg_slots: '-2',
       streaming_tonemap_curve: 'nonsense',
+      streaming_tonemap_algo: 'nonsense',
     }).get();
-    expect(s.cacheMaxBytes).toBe(50 * 1024 ** 3);
+    expect(s.cacheMaxBytes).toBe(20 * 1024 ** 3);
     expect(s.ffmpegSlots).toBeNull();
     expect(s.tonemapCurve).toBe('hable');
+    expect(s.tonemapAlgo).toBe('auto');
+  });
+
+  it('never lets a retired env var reach the resolved settings', async () => {
+    process.env.TRANSCODE_TONEMAP_ALGO = 'qsv';
+    process.env.TRANSCODE_TONEMAP_CURVE = 'mobius';
+    process.env.FLIKS_VAAPI_RENDER_NODE = '/dev/dri/renderD129';
+    process.env.TRANSCODE_CACHE_MAX_BYTES = String(50 * 1024 ** 3);
+    process.env.TRANSCODE_CACHE_TTL_MS = String(2 * 3_600_000);
+    process.env.FLIKS_FFMPEG_SLOTS = '7';
+
+    const s = await build().get();
+    expect(s.tonemapAlgo).toBe('auto');
+    expect(s.tonemapCurve).toBe('hable');
+    expect(s.gpuRenderNode).toBe('auto');
+    expect(s.cacheMaxBytes).toBe(20 * 1024 ** 3);
+    expect(s.cacheTtlMs).toBe(4 * 3_600_000);
+    expect(s.ffmpegSlots).toBeNull();
   });
 });

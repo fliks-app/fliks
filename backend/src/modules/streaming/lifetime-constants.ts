@@ -11,9 +11,9 @@
  *   STREAM_MAX_SESSIONS_PER_USER       live-session.service.ts
  *   STREAM_JOB_GRACE_MS                transcoding/constants.ts
  *   STREAM_JOB_FALLBACK_TIMEOUT_MS     transcoding/constants.ts
- *   TRANSCODE_CACHE_TTL_MS             transcode-cache.service.ts
- *   TRANSCODE_CACHE_MAX_BYTES          transcode-cache.service.ts
  *   TRANSCODE_CACHE_GC_INTERVAL_MS     transcode-cache.service.ts
+ *
+ * Cache retention and size live in Settings > Streaming, not here.
  */
 
 const DEFAULT_LIVE_SESSION_TTL_MS = 30_000;
@@ -58,10 +58,8 @@ export const StreamLifetime = {
       'STREAM_JOB_FALLBACK_TIMEOUT_MS',
       DEFAULT_JOB_FALLBACK_TIMEOUT_MS,
     ),
-  cacheTtlMs: (): number =>
-    readEnvPositiveInt('TRANSCODE_CACHE_TTL_MS', DEFAULT_CACHE_TTL_MS),
-  cacheMaxBytes: (): number =>
-    readEnvPositiveInt('TRANSCODE_CACHE_MAX_BYTES', DEFAULT_CACHE_MAX_BYTES),
+  cacheTtlMs: (): number => DEFAULT_CACHE_TTL_MS,
+  cacheMaxBytes: (): number => DEFAULT_CACHE_MAX_BYTES,
   cacheGcIntervalMs: (): number =>
     readEnvPositiveInt(
       'TRANSCODE_CACHE_GC_INTERVAL_MS',

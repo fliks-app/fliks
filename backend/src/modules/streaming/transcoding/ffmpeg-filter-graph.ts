@@ -1,24 +1,17 @@
 import type { BurnInSubtitle } from './types';
 import type { EncoderInput, TonemapCurve } from './codec/types';
 
-/** `TRANSCODE_TONEMAP_CURVE` fallback, used when no admin curve is set. */
-export function envTonemapCurve(): TonemapCurve | null {
-  const v = process.env.TRANSCODE_TONEMAP_CURVE;
-  return v === 'mobius' || v === 'reinhard' || v === 'hable' ? v : null;
-}
-
 /** Admin-selected curve (`streaming_tonemap_curve`), pushed in by
- *  {@link setSelectedTonemapCurve}. Null = fall back to the env var. */
+ *  {@link setSelectedTonemapCurve}. */
 let selectedCurve: TonemapCurve | null = null;
 
 export function setSelectedTonemapCurve(curve: TonemapCurve | null): void {
   selectedCurve = curve;
 }
 
-/** Tone-map curve in force: admin setting > env var > `hable`. Shared by the
- *  CPU and GPU tone-map paths. */
+/** Tone-map curve in force. Shared by the CPU and GPU tone-map paths. */
 export function resolveTonemapCurve(): TonemapCurve {
-  return selectedCurve ?? envTonemapCurve() ?? 'hable';
+  return selectedCurve ?? 'hable';
 }
 
 export interface VideoFilterContext {
