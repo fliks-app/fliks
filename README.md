@@ -131,7 +131,7 @@ its own native SwiftUI app talking to the same backend.
 | Client | Where to get it | Minimum | Notes |
 |---|---|---|---|
 | **Web / PWA** | your browser, at the server URL | any current browser | installable to the home screen |
-| **iOS · iPadOS** | App Store | iOS 14 | |
+| **iOS · iPadOS** | App Store | iOS 16.6 | |
 | **Android** | Play Store | Android 6 (API 23) | phone + tablet |
 | **Android TV** | Play Store | Android 6 | 10-foot UI, D-pad navigation |
 | **Samsung TV (Tizen)** | sideload for now | Tizen 5.5 — 2020 sets and newer | works fully, not yet on Samsung Apps |
@@ -219,6 +219,32 @@ connects to your server like the mobile apps do, it doesn't host one.
   quality, on which hardware path, and why a transcode was needed.
 - **Images cached locally** — no hotlinking to external services while
   you browse.
+
+---
+
+## Plugins
+
+Fliks ships with no way to acquire media. You install what you want from
+**Settings > Plugins**: the official catalog is configured out of the
+box, and you can add other sources or import a `.fkplugin` archive by
+hand.
+
+- **The Download plugin** brings torrent indexer search,
+  download-client management and the grab pipeline. Install it and the
+  search, the clients and their settings pages appear in the interface.
+- **Archives are signed**, and the signature is checked before anything
+  is written to disk.
+- **A plugin that runs code runs apart.** There are two tiers: a `data`
+  plugin ships JSON and executes nothing at all, while a `process`
+  plugin gets its own child process under its own uid, plus its own
+  PostgreSQL role and schema. It cannot reach another plugin's tables,
+  or yours.
+- **Plugins extend the interface**, not just the backend. Their pages,
+  menu entries and settings appear where they belong and follow your
+  permissions like everything else.
+- **Updates** are checked daily, and you can turn that off.
+
+Writing one: [docs/plugins.md](docs/plugins.md).
 
 ---
 
