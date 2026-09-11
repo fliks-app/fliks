@@ -1,9 +1,15 @@
-import { Entity, Column } from 'typeorm';
+import { Entity, Column, Unique } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 
 @Entity('persons')
+@Unique(['provider', 'tmdbId'])
 export class Person extends BaseEntity {
-  @Column({ unique: true })
+  /** Provider that issued {@link tmdbId}: TVDB credits store a TVDB people id
+   *  in that column, so it is only a TMDB id when this says `tmdb`. */
+  @Column({ length: 16, default: 'tmdb' })
+  provider: string;
+
+  @Column()
   tmdbId: number;
 
   @Column()

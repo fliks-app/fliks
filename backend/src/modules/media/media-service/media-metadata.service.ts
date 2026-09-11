@@ -1078,7 +1078,8 @@ export class MediaMetadataService {
     if (uniqueIds.length > 0) {
       const existingPersons = await this.personRepo
         .createQueryBuilder('p')
-        .where('p.tmdbId IN (:...ids)', { ids: uniqueIds })
+        .where('p.provider = :provider', { provider: details.provider })
+        .andWhere('p.tmdbId IN (:...ids)', { ids: uniqueIds })
         .getMany();
       for (const p of existingPersons) personMap.set(p.tmdbId, p);
 
@@ -1091,7 +1092,11 @@ export class MediaMetadataService {
         .map((id) => allCredits.find((c) => c.externalId === id))
         .filter((c): c is (typeof allCredits)[number] => !!c)
         .map((c) =>
-          this.personRepo.create({ tmdbId: c.externalId, name: c.name }),
+          this.personRepo.create({
+            provider: details.provider,
+            tmdbId: c.externalId,
+            name: c.name,
+          }),
         );
       const inserted = newRows.length
         ? await this.personRepo.save(newRows)
@@ -1207,7 +1212,9 @@ export class MediaMetadataService {
         person.metadataRefreshedAt.getTime() < refreshThreshold;
       if (!needsRefresh) continue;
       try {
-        const pd = await this.tmdb.getPersonDetails(String(person.tmdbId));
+        const pd = await this.providerRegistry
+          .resolve(details.provider)
+          .getPersonDetails(String(person.tmdbId));
         let localAvatar: string | undefined;
         if (pd.avatarUrl) {
           const dl = await this.downloadPersonAvatar(person.id, pd.avatarUrl);
