@@ -42,9 +42,12 @@ export interface PersonProviderCreditItem {
   posterUrl: string | null;
   releaseDate: string | null;
   rating: number;
+  /** Id of the library media holding this work, null when it is not owned. */
+  mediaId: number | null;
 }
 
 export interface PersonProviderCredits {
+  provider: string;
   cast: PersonProviderCreditItem[];
   crew: PersonProviderCreditItem[];
 }

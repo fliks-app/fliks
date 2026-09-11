@@ -189,9 +189,18 @@ export interface TvdbArtwork {
   includesText: boolean;
 }
 
+export interface TvdbCharacterWork {
+  name: string;
+  image: string | null;
+  year?: string | null;
+}
+
 export interface TvdbCharacter {
   id: number;
   name: string;
+  /** The work the character belongs to — only the people endpoints expand it. */
+  series?: TvdbCharacterWork | null;
+  movie?: TvdbCharacterWork | null;
   seriesId: number | null;
   episodeId: number | null;
   movieId: number | null;

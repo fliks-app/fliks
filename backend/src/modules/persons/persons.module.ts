@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { Media } from '../media/entities/media.entity';
 import { Person } from '../media/entities/person.entity';
 import { MediaCast } from '../media/entities/media-cast.entity';
 import { MediaCrew } from '../media/entities/media-crew.entity';
@@ -10,7 +11,7 @@ import { PersonsController } from './persons.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Person, MediaCast, MediaCrew]),
+    TypeOrmModule.forFeature([Person, MediaCast, MediaCrew, Media]),
     MetadataProvidersModule,
     ImageModule,
   ],

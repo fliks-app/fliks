@@ -1,19 +1,16 @@
 import { Component, signal, inject, OnInit } from '@angular/core';
-import { SlicePipe } from '@angular/common';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideFilm } from '@lucide/angular';
-import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import {
   PersonsApiService,
   PersonProviderCredits,
+  PersonProviderCreditItem,
 } from '../../core/services/api/persons-api.service';
 import { PersonDetailComponent } from './person-detail';
-import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
+import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 
 @Component({
   selector: 'app-person-filmography',
-  imports: [
-    CachedSrcDirective,TranslatePipe, SlicePipe, ResolveUrlPipe, LucideFilm],
+  imports: [TranslatePipe, MediaCardComponent],
   templateUrl: './person-filmography.html',
 })
 export class PersonFilmographyComponent implements OnInit {
@@ -25,6 +22,27 @@ export class PersonFilmographyComponent implements OnInit {
 
   ngOnInit() {
     this.load();
+  }
+
+  /** Role first, release year when the provider gives none. */
+  subtitleFor(credit: PersonProviderCreditItem): string | undefined {
+    return (
+      credit.character || credit.job || credit.releaseDate?.slice(0, 4) || undefined
+    );
+  }
+
+  /** Owned works open in the library; the rest land on the provider preview
+   *  page, where they can be requested. */
+  linkFor(credit: PersonProviderCreditItem): string[] {
+    const series = credit.mediaType === 'series';
+    if (credit.mediaId) {
+      return [series ? '/series' : '/movies', String(credit.mediaId)];
+    }
+    return [
+      series ? '/add/tv' : '/add/movie',
+      this.credits()?.provider ?? 'tmdb',
+      String(credit.externalId),
+    ];
   }
 
   private async load() {

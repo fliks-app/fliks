@@ -458,29 +458,28 @@ export class TvdbProvider implements IMetadataProvider {
     );
     const chars = data.data?.characters ?? [];
 
+    const credit = (c: TvdbCharacter) => {
+      const work = c.series ?? c.movie;
+      return {
+        externalId: c.seriesId ?? c.movieId ?? 0,
+        title: work?.name ?? '',
+        mediaType: (c.movieId ? 'movie' : 'series') as 'movie' | 'series',
+        posterUrl: work?.image ?? c.image ?? null,
+        releaseDate: work?.year ? `${work.year}-01-01` : null,
+        rating: 0,
+      };
+    };
+
     const cast: PersonCreditItem[] = chars
       .filter((c) => c.peopleType === 'Actor' || c.peopleType === 'Guest Star')
-      .map((c) => ({
-        externalId: c.seriesId ?? c.movieId ?? 0,
-        title: '',
-        mediaType: c.movieId ? 'movie' : 'series',
-        character: c.name,
-        posterUrl: c.image ?? null,
-        releaseDate: null,
-        rating: 0,
-      }));
+      .map((c) => ({ ...credit(c), character: c.name }));
 
     const crew: PersonCreditItem[] = chars
       .filter((c) => c.peopleType !== 'Actor' && c.peopleType !== 'Guest Star')
       .map((c) => ({
-        externalId: c.seriesId ?? c.movieId ?? 0,
-        title: '',
-        mediaType: c.movieId ? 'movie' : 'series',
+        ...credit(c),
         job: c.peopleType,
         department: c.peopleType,
-        posterUrl: c.image ?? null,
-        releaseDate: null,
-        rating: 0,
       }));
 
     return { cast, crew };
