@@ -1,6 +1,14 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRouteSnapshot, DetachedRouteHandle, Route } from '@angular/router';
+import {
+  ActivatedRouteSnapshot,
+  DetachedRouteHandle,
+  NavigationCancel,
+  NavigationEnd,
+  Route,
+  Router,
+} from '@angular/router';
+import { Subject } from 'rxjs';
 import { vi } from 'vitest';
 import { CachingReuseStrategy } from './route-reuse.strategy';
 
@@ -20,8 +28,13 @@ function handleWithDestroy(): DetachedRouteHandle & FakeHandle {
 }
 
 describe('CachingReuseStrategy', () => {
+  let events: Subject<unknown>;
+
   function setup() {
-    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    events = new Subject<unknown>();
+    TestBed.configureTestingModule({
+      providers: [provideZonelessChangeDetection(), { provide: Router, useValue: { events } }],
+    });
     return TestBed.inject(CachingReuseStrategy);
   }
 
@@ -77,6 +90,26 @@ describe('CachingReuseStrategy', () => {
     expect(handles[1].destroy).toHaveBeenCalledTimes(1);
     expect(strategy.shouldAttach(snapshotFor(route, { libraryName: 'lib0' }))).toBe(true);
     expect(strategy.shouldAttach(snapshotFor(route, { libraryName: 'lib1' }))).toBe(false);
+  });
+
+  it('VERDICT: attach fires at NavigationEnd, never while retrieve builds the router state', () => {
+    const strategy = setup();
+    const route: Route = { path: 'movies/:id', data: { reuse: true } };
+    const snapshot = snapshotFor(route, { id: '7' });
+    const attached: string[] = [];
+    strategy.store(snapshot, handleWithDestroy());
+    strategy.attached$.subscribe((key) => attached.push(key));
+
+    strategy.retrieve(snapshot);
+    expect(attached).toEqual([]);
+
+    // A navigation that never activates attaches nothing.
+    events.next(new NavigationCancel(1, '/movies/7', ''));
+    expect(attached).toEqual([]);
+
+    strategy.retrieve(snapshot);
+    events.next(new NavigationEnd(2, '/movies/7', '/movies/7'));
+    expect(attached).toEqual([strategy.keyFor(snapshot)]);
   });
 
   it('VERDICT: re-storing the same handle under an existing key does not destroy it', () => {
