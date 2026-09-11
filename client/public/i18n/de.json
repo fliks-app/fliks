@@ -1739,8 +1739,7 @@
       "specs": "Bedingungen",
       "add_spec": "Bedingung hinzufügen",
       "no_specs": "Noch keine Bedingung. Ein Format braucht mindestens eine.",
-      "negate": "Verneinen",
-      "required": "Erforderlich",
+      "required": "Immer erforderlich",
       "name_required": "Der Name ist erforderlich.",
       "save_error": "Speichern nicht möglich.",
       "save": "Speichern",
@@ -1756,7 +1755,7 @@
       "regex_placeholder": "regulärer Ausdruck",
       "value_placeholder": "Wert",
       "test_freeleech": "Als Freeleech behandeln",
-      "match_rule_hint": "Bedingungen desselben Typs sind Alternativen; verschiedene Typen müssen alle zutreffen. Eine erforderliche Bedingung muss immer zutreffen.",
+      "match_rule_hint": "Bedingungen desselben Typs sind Alternativen; verschiedene Typen müssen alle zutreffen.",
       "spec_type": {
         "title_regex": "Release-Name (Regex)",
         "source": "Quelle",
@@ -1776,7 +1775,15 @@
         "remastered": "Remastered",
         "criterion": "Criterion",
         "imax": "IMAX"
-      }
+      },
+      "required_hint": "Bei mehreren Bedingungen desselben Typs genügt eine Übereinstimmung. Aktivieren, damit auch diese zutreffen muss.",
+      "operator": {
+        "contains": "enthält",
+        "not_contains": "enthält nicht",
+        "is": "ist",
+        "not_is": "ist nicht"
+      },
+      "remove_spec": "Bedingung entfernen"
     },
     "naming": {
       "title": "Dateibenennung",

@@ -1756,8 +1756,7 @@
       "specs": "Conditions",
       "add_spec": "Add a condition",
       "no_specs": "No condition yet. A format needs at least one.",
-      "negate": "Negate",
-      "required": "Required",
+      "required": "Always required",
       "name_required": "The name is required.",
       "save_error": "Unable to save.",
       "save": "Save",
@@ -1773,7 +1772,7 @@
       "regex_placeholder": "regular expression",
       "value_placeholder": "value",
       "test_freeleech": "Treat as freeleech",
-      "match_rule_hint": "Conditions of the same type are alternatives; different types must all hold. A required condition must always hold.",
+      "match_rule_hint": "Conditions of the same type are alternatives; different types must all hold.",
       "spec_type": {
         "title_regex": "Release name (regex)",
         "source": "Source",
@@ -1793,7 +1792,15 @@
         "remastered": "Remastered",
         "criterion": "Criterion",
         "imax": "IMAX"
-      }
+      },
+      "required_hint": "With several conditions of the same type, one match is enough. Tick this to require this one as well.",
+      "operator": {
+        "contains": "contains",
+        "not_contains": "does not contain",
+        "is": "is",
+        "not_is": "is not"
+      },
+      "remove_spec": "Remove the condition"
     },
     "naming": {
       "title": "File naming",

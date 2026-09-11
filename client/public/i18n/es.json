@@ -1739,8 +1739,7 @@
       "specs": "Condiciones",
       "add_spec": "Añadir una condición",
       "no_specs": "Sin condiciones. Un formato necesita al menos una.",
-      "negate": "Negar",
-      "required": "Requerido",
+      "required": "Siempre requerida",
       "name_required": "El nombre es obligatorio.",
       "save_error": "No se puede guardar.",
       "save": "Guardar",
@@ -1756,7 +1755,7 @@
       "regex_placeholder": "expresión regular",
       "value_placeholder": "valor",
       "test_freeleech": "Tratar como freeleech",
-      "match_rule_hint": "Las condiciones del mismo tipo son alternativas; los tipos distintos deben cumplirse todos. Una condición requerida debe cumplirse siempre.",
+      "match_rule_hint": "Las condiciones del mismo tipo son alternativas; los tipos distintos deben cumplirse todos.",
       "spec_type": {
         "title_regex": "Nombre de la release (regex)",
         "source": "Fuente",
@@ -1776,7 +1775,15 @@
         "remastered": "Remasterizada",
         "criterion": "Criterion",
         "imax": "IMAX"
-      }
+      },
+      "required_hint": "Con varias condiciones del mismo tipo basta una coincidencia. Marca esta casilla para exigir también esta.",
+      "operator": {
+        "contains": "contiene",
+        "not_contains": "no contiene",
+        "is": "es",
+        "not_is": "no es"
+      },
+      "remove_spec": "Eliminar la condición"
     },
     "naming": {
       "title": "Nomenclatura de los archivos",

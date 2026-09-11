@@ -12,6 +12,11 @@ import { QualityDefinitionItemDto } from './dto/update-quality-definitions.dto';
  *   720p: ~1000-3000 MB/h
  *   1080p: ~2000-8000 MB/h (WEB ~2-4 GB/h, Bluray ~4-8 GB/h, Remux ~15-25 GB/h)
  *   2160p: ~4000-20000 MB/h (WEB ~4-8 GB/h, Bluray ~10-20 GB/h, Remux ~30-60 GB/h)
+ *
+ * `min` is a floor against extras indexed under the feature's name (a making-of, a
+ * prologue, a trailer): those sit an order of magnitude below any real encode at the
+ * resolution they claim. Set well under the worst legitimate encode of each tier, and
+ * left at 0 below 720p where a real release genuinely is that small.
  */
 const DEFAULTS: Record<
   string,
@@ -22,22 +27,22 @@ const DEFAULTS: Record<
   // 480p
   '480': { min: 0, preferred: 800, max: 1500 },
   // 720p
-  '720-hdtv': { min: 0, preferred: 1200, max: 2500 },
-  '720-web': { min: 0, preferred: 1500, max: 3000 },
-  '720-bluray': { min: 0, preferred: 2500, max: 5000 },
-  '720': { min: 0, preferred: 1500, max: 3500 },
+  '720-hdtv': { min: 150, preferred: 1200, max: 2500 },
+  '720-web': { min: 150, preferred: 1500, max: 3000 },
+  '720-bluray': { min: 250, preferred: 2500, max: 5000 },
+  '720': { min: 150, preferred: 1500, max: 3500 },
   // 1080p
-  '1080-hdtv': { min: 0, preferred: 2000, max: 4000 },
-  '1080-web': { min: 0, preferred: 3000, max: 5000 },
-  '1080-bluray': { min: 0, preferred: 5000, max: 10000 },
-  '1080-remux': { min: 0, preferred: 18000, max: 30000 },
-  '1080': { min: 0, preferred: 3000, max: 6000 },
+  '1080-hdtv': { min: 250, preferred: 2000, max: 4000 },
+  '1080-web': { min: 250, preferred: 3000, max: 5000 },
+  '1080-bluray': { min: 400, preferred: 5000, max: 10000 },
+  '1080-remux': { min: 8000, preferred: 18000, max: 30000 },
+  '1080': { min: 250, preferred: 3000, max: 6000 },
   // 2160p
-  '2160-hdtv': { min: 0, preferred: 4000, max: 8000 },
-  '2160-web': { min: 0, preferred: 6000, max: 12000 },
-  '2160-bluray': { min: 0, preferred: 12000, max: 25000 },
-  '2160-remux': { min: 0, preferred: 35000, max: 60000 },
-  '2160': { min: 0, preferred: 8000, max: 20000 },
+  '2160-hdtv': { min: 600, preferred: 4000, max: 8000 },
+  '2160-web': { min: 600, preferred: 6000, max: 12000 },
+  '2160-bluray': { min: 1000, preferred: 12000, max: 25000 },
+  '2160-remux': { min: 15000, preferred: 35000, max: 60000 },
+  '2160': { min: 600, preferred: 8000, max: 20000 },
 };
 
 function getDefault(
