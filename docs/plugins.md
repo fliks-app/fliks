@@ -64,6 +64,10 @@ Optional beyond that:
 - `events[]` — domain events to receive. A `data` plugin gets an HTTPS POST from core; a `process`
   plugin gets a note over its socket.
 - `permissions[]` — raw names; core builds the CASL subject as `plugin:<id>:<name>`, so a plugin cannot claim another's or a core subject.
+  Every distinct `action:subject` policy your `routes[]` declare is offered as its own tick box in the
+  roles editor, so `read:plugin:<id>:queue` can be granted without `manage:plugin:<id>:queue`. A declared
+  name no route names is offered whole (it then allows every action). Nothing is granted by default:
+  until an admin ticks one, only admins pass the routes declared under it.
 - `ui.*` — see below.
 - `i18n` — every `labelKey` the plugin uses, per locale. Core merges them into the active language.
 
@@ -79,6 +83,13 @@ A plugin ships **no** Angular. It declares data; core renders it.
 predicate evaluates false, so a client that does not know a rule hides the entry rather than
 guessing. The action is either a route or a **core-declared `actionId`**: core keeps a closed
 catalogue per slot, and an id it does not know renders nothing.
+
+A contribution whose route opens one of your own views (`/plugins/<id>/<pageId>`, or
+`/admin/settings/plugins/<id>/<pageId>`) must name a page you declare in `ui.configPages[]`; anything
+else is refused at registration. Core then serves `GET /plugins/ui` per viewer: a `providers` or
+`table` page is sent only to a user whose ability satisfies the policy of the route it lists from,
+and the contributions opening a withheld page are withheld with it. So a nav entry never needs a
+`when` to restate its own route's policy; use `when` for what the policy cannot express.
 
 **`ui.configPages[]`** declares a page, discriminated on `kind`:
 
