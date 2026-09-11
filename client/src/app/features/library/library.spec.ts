@@ -71,6 +71,9 @@ function stubTop(el: HTMLElement, top: number): void {
  *  dispatched on it) plus spies for the CDK methods the component calls. */
 function fakeViewport() {
   const el = document.createElement('div');
+  const wrapper = document.createElement('div');
+  wrapper.className = 'cdk-virtual-scroll-content-wrapper';
+  el.appendChild(wrapper);
   return {
     elementRef: { nativeElement: el },
     measureScrollOffset: vi.fn(() => 0),
@@ -247,7 +250,7 @@ describe('LibraryComponent — page scroll', () => {
     expect(viewport.setRenderedContentOffset).toHaveBeenCalledWith(offset);
   });
 
-  it('leaves a range that already covers the restored row alone', () => {
+  it('VERDICT: puts the restored row at the top of the range, offset painted now', () => {
     const offset = 520 * 50;
     const { component, attached$, detached$, navigatedBack } = createHarness(offset);
     navigatedBack.set(true);
@@ -258,10 +261,16 @@ describe('LibraryComponent — page scroll', () => {
     detached$.next(OWN_KEY);
     attached$.next(OWN_KEY);
 
-    // Row 50 is inside the 47-58 range the page kept, and re-rendering it would
-    // recycle the card DOM node the poster morph was stamped on.
-    expect(viewport.setRenderedRange).not.toHaveBeenCalled();
-    expect(viewport.setRenderedContentOffset).not.toHaveBeenCalled();
+    // A window-scrolling viewport re-ranges off whatever page scrolls while this
+    // one is detached, so the range it comes back with can hold the restored row
+    // and still be drawn at another page's offset.
+    expect(viewport.setRenderedRange).toHaveBeenCalledWith({ start: 50, end: 61 });
+    expect(viewport.setRenderedContentOffset).toHaveBeenCalledWith(offset);
+    expect(
+      viewport.elementRef.nativeElement.querySelector<HTMLElement>(
+        '.cdk-virtual-scroll-content-wrapper',
+      )!.style.transform,
+    ).toBe(`translateY(${offset}px)`);
   });
 
   it("keeps the active letter through the restore's own scroll event", async () => {
