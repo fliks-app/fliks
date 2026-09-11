@@ -75,8 +75,9 @@ export interface BurnInSubtitle {
 }
 
 /** HDR → SDR tone-mapping algorithm (admin-selectable).
- *  - `auto`: tonemap_opencl with reinhard — best mid-tone restoration on
- *    Intel iGPUs whose fixed-function VPP HDR LUT under-exposes.
+ *  - `auto`: tonemap_opencl with the admin curve (`hable` by default) — best
+ *    mid-tone restoration on Intel iGPUs whose fixed-function VPP HDR LUT
+ *    under-exposes.
  *  - `vaapi`: scale_vaapi → tonemap_vaapi → hwmap=qsv (hybrid pipeline).
  *    Fastest cold start, lowest CPU; use when opencl bridge is broken
  *    or VPP HDR LUT renders correctly on the host iGPU.

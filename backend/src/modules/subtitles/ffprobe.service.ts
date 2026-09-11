@@ -8,7 +8,7 @@ import { subtitleFlagsFromTitle } from '../../common/constants/subtitle-flags';
 import { existsSync } from 'fs';
 import { vaapiRenderNode } from '../streaming/transcoding/hw-device';
 import { mapWithConcurrency } from '../../common/utils/concurrency';
-import { FFMPEG_SLOTS, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
+import { ffmpegSlots, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
 
 const execFileAsync = promisify(execFile);
 
@@ -776,7 +776,7 @@ export class FfprobeService {
 
       const rest = await mapWithConcurrency(
         timestamps.slice(1),
-        FFMPEG_SLOTS,
+        ffmpegSlots(),
         async (ss) => (await this.cropSample(videoPath, ss, hw)).sample,
       );
       this.logger.log(

@@ -105,10 +105,10 @@ describe('resolveTonemapPath', () => {
       );
     });
 
-    it('overrides an explicit setting too', () => {
+    it('never overrides an explicit admin setting', () => {
       process.env.TRANSCODE_TONEMAP_ALGO = 'opencl';
       expect(resolveTonemapPath('vaapi', { hasCrop: false }, 'win32')).toBe(
-        'opencl',
+        'vaapi',
       );
     });
 

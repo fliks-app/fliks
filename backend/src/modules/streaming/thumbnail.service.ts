@@ -17,7 +17,7 @@ import {
   type CropArea,
 } from './thumbnail-extractors';
 import { TranscodingService } from './transcoding';
-import { FFMPEG_SLOTS, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
+import { ffmpegSlots, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
 import {
   buildMediaProgressSubject,
   formatMediaProgressSubject,
@@ -86,7 +86,7 @@ export class ThumbnailService implements OnModuleInit {
     private readonly activityRegistry: ActivityRegistryService,
   ) {
     this.log.log(
-      `Thumbnail extraction backends: ${describeBackends()} (FFMPEG_SLOTS=${FFMPEG_SLOTS}, SPRITE_CONCURRENCY=${SPRITE_CONCURRENCY})`,
+      `Thumbnail extraction backends: ${describeBackends()} (ffmpegSlots=${ffmpegSlots()}, SPRITE_CONCURRENCY=${SPRITE_CONCURRENCY})`,
     );
   }
 
@@ -303,7 +303,7 @@ export class ThumbnailService implements OnModuleInit {
     // exactly what ffmpeg sees per frame.
     const decode = this.chooseExtractor(crop).describe();
     this.log.log(
-      `Sprite START for "${label}" (file #${mediaFileId}): ${count} thumbs @ ${interval}s interval, workers=${FFMPEG_SLOTS}, decode=${decode}, hdr=${hdr ? 'tonemap' : 'no'}, otherSprites=${otherRunning}, queued=${this.queue.length}, srcSize=${srcSizeMb ?? '?'}MB, crop=${
+      `Sprite START for "${label}" (file #${mediaFileId}): ${count} thumbs @ ${interval}s interval, workers=${ffmpegSlots()}, decode=${decode}, hdr=${hdr ? 'tonemap' : 'no'}, otherSprites=${otherRunning}, queued=${this.queue.length}, srcSize=${srcSizeMb ?? '?'}MB, crop=${
         crop ? `${crop.width}x${crop.height}+${crop.x},${crop.y}` : 'none'
       }, src=${absolutePath}`,
     );
@@ -560,7 +560,7 @@ export class ThumbnailService implements OnModuleInit {
       }
     };
 
-    const workers = Math.min(FFMPEG_SLOTS, count);
+    const workers = Math.min(ffmpegSlots(), count);
     await Promise.all(Array.from({ length: workers }, () => runOne()));
 
     const wallMs = Date.now() - extractStart;

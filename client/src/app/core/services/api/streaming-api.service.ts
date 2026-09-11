@@ -667,6 +667,20 @@ export class StreamingApiService {
   /** GPU render nodes the server detected, with a friendly label and
    *  accel kind. Drives the admin streaming-settings device picker so a
    *  multi-GPU host can pin transcoding to a specific adapter. */
+  /** Resolved tuning values for the admin form: the saved setting when there
+   *  is one, otherwise what the env vars / host resolve to. */
+  getEffectiveSettings() {
+    return firstValueFrom(
+      this.http.get<{
+        tonemapCurve: string;
+        cacheMaxGb: number;
+        cacheTtlHours: number;
+        ffmpegSlots: number | null;
+        ffmpegSlotsAuto: number;
+      }>('/api/stream/info/effective-settings'),
+    );
+  }
+
   getGpus() {
     return firstValueFrom(
       this.http.get<{ gpus: { renderNode: string; label: string; kind: string; accel: string }[]; defaultNode: string }>(

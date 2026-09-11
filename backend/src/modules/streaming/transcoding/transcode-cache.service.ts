@@ -39,8 +39,9 @@ const CACHE_LAYOUT_ROOT = path.join(TRANSCODE_DIR, 'cache');
  * at boot, tracks segment / init writes as `TranscodingService` fans
  * them out, evicts entries by TTL + LRU. `lookup` returns the
  * authoritative entry the streaming controller can serve from before
- * spawning a fresh ffmpeg. TTL / max-bytes / GC cadence come from
- * `TRANSCODE_CACHE_*` env vars — see lifetime-constants.ts.
+ * spawning a fresh ffmpeg. TTL and max-bytes come from the admin settings,
+ * falling back to the `TRANSCODE_CACHE_*` env vars; the GC cadence is env-only.
+ * See lifetime-constants.ts.
  */
 @Injectable()
 export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
@@ -53,9 +54,18 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
    *  {@link registerLiveDirProvider}) to avoid a circular import. */
   private liveDirProvider: (() => Set<string>) | null = null;
 
-  private readonly ttlMs = StreamLifetime.cacheTtlMs();
-  private readonly maxBytes = StreamLifetime.cacheMaxBytes();
+  /** Read by {@link runGc} on every tick, so an admin change applies to the
+   *  next sweep without a restart. */
+  private ttlMs = StreamLifetime.cacheTtlMs();
+  private maxBytes = StreamLifetime.cacheMaxBytes();
   private readonly gcIntervalMs = StreamLifetime.cacheGcIntervalMs();
+
+  /** Admin retention/budget (`streaming_cache_*`). Non-positive values keep the
+   *  env-derived default. */
+  setLimits(limits: { ttlMs?: number; maxBytes?: number }): void {
+    if (limits.ttlMs && limits.ttlMs > 0) this.ttlMs = limits.ttlMs;
+    if (limits.maxBytes && limits.maxBytes > 0) this.maxBytes = limits.maxBytes;
+  }
 
   async onModuleInit(): Promise<void> {
     await fsp.mkdir(this.cacheRoot(), { recursive: true });

@@ -17,6 +17,9 @@ import { BaseEntity } from '../../../common/entities/base.entity';
  *   sprites_auto_generate_on_import — "true" | "false" (seek sprites after an import)
  *   rss_sync_interval     — minutes, e.g. "15"
  *   streaming_auto_quality_mode — "directplay" | "abr" (how "Auto" quality resolves)
+ *   streaming_tonemap_curve — "hable" | "mobius" | "reinhard" (HDR→SDR curve)
+ *   streaming_cache_max_gb / streaming_cache_ttl_hours — transcode-cache budget
+ *   streaming_ffmpeg_slots — concurrent background ffmpeg jobs; absent = auto
  *   subtitle_translation_enabled — "true" | "false" (machine translation)
  *   subtitle_translation_engine — "gemini" | "openai" | "libretranslate"
  *   subtitle_translation_max_concurrency — parallel translation runs, e.g. "1"

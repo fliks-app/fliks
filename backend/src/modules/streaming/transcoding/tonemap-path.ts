@@ -7,9 +7,9 @@ import { isQsvOpenclTonemapEnabled } from './codec/qsv-opencl-probe';
 import { hostHasVaapi } from './hw-device';
 import type { TonemapAlgo } from './types';
 
-/** `TRANSCODE_TONEMAP_ALGO` override (auto/qsv/vaapi/opencl), applied on every
- *  platform before the `auto` resolution — pins the HDR→SDR tone-map without
- *  the admin UI (see docker-compose). Invalid/unset → null (no override). */
+/** `TRANSCODE_TONEMAP_ALGO` fallback (auto/qsv/vaapi/opencl), consulted only
+ *  when the admin setting is `auto`. A value picked in the UI always wins.
+ *  Invalid/unset → null (no override). */
 export function tonemapAlgoOverride(): TonemapAlgo | null {
   const v = process.env.TRANSCODE_TONEMAP_ALGO?.trim().toLowerCase();
   return v === 'auto' || v === 'qsv' || v === 'vaapi' || v === 'opencl'
@@ -30,7 +30,8 @@ export function tonemapAlgoOverride(): TonemapAlgo | null {
  *    all, so it would force the session onto a CPU encode. On Linux
  *    QSV is VAAPI-backed, so `'vaapi'` stays a valid on-GPU tone-map.
  *  - Explicit picks (`'vaapi'` / `'qsv'` / `'opencl'`) bypass the
- *    probe and trust the admin to know their hardware.
+ *    probe and the env fallback, and trust the admin to know their
+ *    hardware.
  *
  *  Shared between `ffmpeg-args` (which builds the filter chain) and
  *  the playback-info DTO (which surfaces the post-resolution value to
@@ -42,7 +43,7 @@ export function resolveTonemapPath(
   opts: { hasCrop: boolean } = { hasCrop: false },
   platform: NodeJS.Platform = process.platform,
 ): ResolvedTonemapPath {
-  const effective = tonemapAlgoOverride() ?? algo;
+  const effective = algo === 'auto' ? (tonemapAlgoOverride() ?? 'auto') : algo;
   if (effective === 'auto') {
     // Windows QSV OpenCL is the CPU-bounce path (its own probe); elsewhere it's
     // the VAAPI-derived bridge.
