@@ -35,6 +35,17 @@ export class StreamingSettingsComponent implements OnInit {
   readonly segmentDuration = signal('3');
   readonly qsvPreset = signal('faster');
   readonly tonemapAlgo = signal('auto');
+  /** HDR to SDR curve. Only the OpenCL and CPU paths apply it; the vpp_qsv and
+   *  tonemap_vaapi fixed-function LUTs ignore it. */
+  readonly tonemapCurve = signal('hable');
+  /** Transcode-cache budget and retention. Blank = keep the server default
+   *  (the env var, or 20 GB / 4 h). */
+  readonly cacheMaxGb = signal('');
+  readonly cacheTtlHours = signal('');
+  /** Concurrent background ffmpeg jobs (scans, thumbnails, marker detection).
+   *  Blank = the cgroup/CPU-derived budget shown in {@link ffmpegSlotsAuto}. */
+  readonly ffmpegSlots = signal('');
+  readonly ffmpegSlotsAuto = signal(0);
   /** When off, detected black bars are kept instead of cropped — avoids a
    *  forced re-encode on low-power servers. Default on. */
   readonly autoCropEnabled = signal(true);
@@ -62,10 +73,11 @@ export class StreamingSettingsComponent implements OnInit {
 
   async ngOnInit() {
     try {
-      const [all, algos, gpusResp] = await Promise.all([
+      const [all, algos, gpusResp, effective] = await Promise.all([
         this.api.getAll(),
         this.streamingApi.getTonemapAlgos().catch(() => ({ available: ['auto'] })),
         this.streamingApi.getGpus().catch(() => ({ gpus: [], defaultNode: '' })),
+        this.streamingApi.getEffectiveSettings().catch(() => null),
       ]);
       this.refreshCacheStats();
       this.segmentDuration.set(all['streaming_segment_duration'] ?? '3');
@@ -89,6 +101,16 @@ export class StreamingSettingsComponent implements OnInit {
       );
       this.gpus.set(gpusResp.gpus ?? []);
       this.gpuRenderNode.set(all['streaming_gpu_render_node'] ?? 'auto');
+      // Pre-fill from the resolved values, not the raw keys: an unset field
+      // must show what the server actually uses, or saving would silently
+      // replace an env-configured budget with a default.
+      if (effective) {
+        this.tonemapCurve.set(effective.tonemapCurve);
+        this.cacheMaxGb.set(String(effective.cacheMaxGb));
+        this.cacheTtlHours.set(String(effective.cacheTtlHours));
+        this.ffmpegSlots.set(effective.ffmpegSlots ? String(effective.ffmpegSlots) : '');
+        this.ffmpegSlotsAuto.set(effective.ffmpegSlotsAuto);
+      }
     } catch { /* interceptor */ }
     this.loading.set(false);
   }
@@ -100,6 +122,10 @@ export class StreamingSettingsComponent implements OnInit {
         streaming_segment_duration: this.segmentDuration(),
         streaming_qsv_preset: this.qsvPreset(),
         streaming_tonemap_algo: this.tonemapAlgo(),
+        streaming_tonemap_curve: this.tonemapCurve(),
+        streaming_cache_max_gb: this.cacheMaxGb(),
+        streaming_cache_ttl_hours: this.cacheTtlHours(),
+        streaming_ffmpeg_slots: this.ffmpegSlots(),
         streaming_gpu_render_node: this.gpuRenderNode(),
         streaming_auto_quality_mode: this.autoQualityMode(),
         streaming_subtitle_prewarm: this.subtitlePrewarm(),

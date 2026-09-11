@@ -53,7 +53,6 @@ import {
   secondsToSegmentIndex as boundarySecondsToIndex,
 } from './transcoding/segment-boundaries';
 import { copySourceCodecString } from './transcoding/codec/codec-strings';
-import { setSelectedRenderNode } from './transcoding/hw-device';
 import { LiveSessionRegistry } from './live-session.service';
 import * as path from 'path';
 import { SegmentPackagingService } from './services/segment-packaging.service';
@@ -66,6 +65,7 @@ import {
 } from './transcoding/iframe-trick-play';
 import { resolveTonemapPath } from './transcoding/tonemap-path';
 import { resolveTonemapCurve } from './transcoding/ffmpeg-filter-graph';
+import { autoFfmpegSlots } from '../../common/utils/ffmpeg-slots';
 import { isOpenclTonemapEnabled } from './transcoding/codec/opencl-tonemap-probe';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
@@ -687,6 +687,22 @@ export class StreamingController {
     };
   }
 
+  /** Values the admin streaming form pre-fills the tuning fields with: the
+   *  saved setting when there is one, otherwise what the env vars / host
+   *  actually resolve to, so saving can never silently downgrade a budget the
+   *  operator set in compose. */
+  @Get('info/effective-settings')
+  async effectiveSettingsInfo() {
+    const ss = await this.getStreamingSettings();
+    return {
+      tonemapCurve: ss.tonemapCurve,
+      cacheMaxGb: +(ss.cacheMaxBytes / 1024 ** 3).toFixed(1),
+      cacheTtlHours: +(ss.cacheTtlMs / 3_600_000).toFixed(1),
+      ffmpegSlots: ss.ffmpegSlots,
+      ffmpegSlotsAuto: autoFfmpegSlots(),
+    };
+  }
+
   /** Detected GPUs for the admin device picker. `defaultNode` is what the
    *  `'auto'` selection currently resolves to; an empty `gpus` list tells the
    *  UI to hide the picker (single/opaque device, Windows/macOS). */
@@ -771,9 +787,9 @@ export class StreamingController {
     this.activeStreamTracker.setSegmentDuration(ss.segmentDuration);
     this.activeStreamTracker.setTonemapAlgo(ss.tonemapAlgo);
     this.activeStreamTracker.setAutoCropEnabled(ss.autoCropEnabled);
-    // Pin HW transcoding to the admin-selected GPU (multi-GPU hosts); 'auto'
-    // clears the override and falls back to the env / detected default.
-    setSelectedRenderNode(ss.gpuRenderNode);
+    // Re-push the admin settings (GPU pin, tone-map curve, cache budget, job
+    // slots) so a change applies without a restart.
+    this.transcodingService.applyStreamingSettings(ss);
 
     // Different device profiles (codec / mux / audio layout) hash to
     // different session-map keys, so multi-device playback of the same

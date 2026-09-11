@@ -54,13 +54,38 @@ function resolveSlots(): number {
   return Math.max(1, Math.floor(cores) - 1);
 }
 
-export const FFMPEG_SLOTS = resolveSlots();
+let autoSlots: number | null = null;
+
+/** Memoised: the cgroup files are read once, not on every playback-info that
+ *  re-pushes the admin settings. */
+export function autoFfmpegSlots(): number {
+  return (autoSlots ??= resolveSlots());
+}
+
+let slots = autoFfmpegSlots();
+
+/** Current budget. Call it per use: the admin can change it at runtime, so a
+ *  captured constant would silently keep the boot-time value. */
+export function ffmpegSlots(): number {
+  return slots;
+}
 
 let active = 0;
 const waiters: (() => void)[] = [];
 
+/** Admin override (`streaming_ffmpeg_slots`); null or <1 restores the
+ *  env/cgroup-derived budget. Shrinking below `active` lets the running jobs
+ *  drain down to the new cap instead of killing them. */
+export function setFfmpegSlots(n: number | null): void {
+  slots = n != null && n > 0 ? Math.floor(n) : autoFfmpegSlots();
+  while (active < slots && waiters.length > 0) {
+    active++;
+    waiters.shift()?.();
+  }
+}
+
 function acquire(): Promise<void> {
-  if (active < FFMPEG_SLOTS) {
+  if (active < slots) {
     active++;
     return Promise.resolve();
   }
@@ -68,11 +93,18 @@ function acquire(): Promise<void> {
 }
 
 /** Hands the freed slot straight to the oldest waiter (FIFO) instead of
- *  decrementing `active`, otherwise a fast new acquirer could cut the queue. */
+ *  decrementing `active`, otherwise a fast new acquirer could cut the queue.
+ *  After a shrink `active` sits above the cap, so the slot is dropped rather
+ *  than handed on. */
 function release(): void {
-  const next = waiters.shift();
-  if (next) next();
-  else active--;
+  active--;
+  if (active < slots) {
+    const next = waiters.shift();
+    if (next) {
+      active++;
+      next();
+    }
+  }
 }
 
 export async function withFfmpegSlot<T>(fn: () => Promise<T>): Promise<T> {

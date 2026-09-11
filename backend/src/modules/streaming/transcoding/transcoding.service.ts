@@ -36,6 +36,8 @@ import {
 } from './ffmpeg-stderr';
 import { detectHwAccel } from './hw-detect';
 import { setSelectedRenderNode, vaapiRenderNode } from './hw-device';
+import { setSelectedTonemapCurve } from './ffmpeg-filter-graph';
+import { setFfmpegSlots } from '../../../common/utils/ffmpeg-slots';
 import { enumerateGpus, type GpuInfo } from './gpu-registry';
 import { ALL_DESCRIPTORS, encoderRegistry } from './codec/encoders';
 import { runEncoderProbes } from './codec/encoder-probe';
@@ -70,7 +72,10 @@ import {
   computeProfileHash,
 } from './profile-hash';
 import { TranscodeCacheService } from './transcode-cache.service';
-import { StreamingSettingsCache } from '../streaming-settings-cache.service';
+import {
+  StreamingSettingsCache,
+  type StreamingSettings,
+} from '../streaming-settings-cache.service';
 import {
   VARIANT_EARLY,
   VARIANT_MAIN,
@@ -128,13 +133,13 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     // Apply the admin GPU pin before the encoder/decoder probes so they run on
     // the selected adapter. Falls back to the default node on any read error.
     try {
-      const { gpuRenderNode } = await this.streamingSettings.get();
-      setSelectedRenderNode(gpuRenderNode);
-      if (gpuRenderNode && gpuRenderNode !== 'auto') {
-        this.log.log(`GPU pinned to ${gpuRenderNode} (admin setting)`);
+      const ss = await this.streamingSettings.get();
+      this.applyStreamingSettings(ss);
+      if (ss.gpuRenderNode && ss.gpuRenderNode !== 'auto') {
+        this.log.log(`GPU pinned to ${ss.gpuRenderNode} (admin setting)`);
       }
     } catch {
-      /* settings unavailable at boot — keep the default node */
+      /* settings unavailable at boot: keep the env/derived defaults */
     }
 
     // Probe every compiled-in encoder. Each runs a single black-frame
@@ -281,6 +286,19 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       if (session.process.exitCode === null) return true;
     }
     return false;
+  }
+
+  /** Push the admin streaming settings into the module-level state the ffmpeg
+   *  builders and the background-job semaphore read. Called at boot and on
+   *  every playback-info, so a change applies without a restart. */
+  applyStreamingSettings(ss: StreamingSettings): void {
+    setSelectedRenderNode(ss.gpuRenderNode);
+    setSelectedTonemapCurve(ss.tonemapCurve);
+    setFfmpegSlots(ss.ffmpegSlots);
+    this.cacheService.setLimits({
+      ttlMs: ss.cacheTtlMs,
+      maxBytes: ss.cacheMaxBytes,
+    });
   }
 
   /** List of tone-mapping algorithms the current host can run.

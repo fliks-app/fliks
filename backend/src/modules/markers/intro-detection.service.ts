@@ -10,7 +10,7 @@ import { Media } from '../media/entities/media.entity';
 import { Season } from '../media/entities/season.entity';
 import { EpisodeMarker } from './entities/episode-marker.entity';
 import { SettingsService } from '../settings/settings.service';
-import { FFMPEG_SLOTS, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
+import { ffmpegSlots, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
 
 const execFileAsync = promisify(execFile);
 
@@ -247,7 +247,7 @@ export class IntroDetectionService {
     // Fingerprint every remaining episode (+ the reference peer so we can
     // use its intro audio as a template search pattern).
     const fingerprints = new Map<number, Fingerprint>();
-    const concurrency = FFMPEG_SLOTS;
+    const concurrency = ffmpegSlots();
     let processed = 0;
     const toFingerprint = referencePeer
       ? [...needsFingerprint, referencePeer.episode]
@@ -631,7 +631,7 @@ export class IntroDetectionService {
     const toFingerprint = referencePeer
       ? [...needsFingerprint, referencePeer.episode]
       : needsFingerprint;
-    const concurrency = FFMPEG_SLOTS;
+    const concurrency = ffmpegSlots();
     let processed = 0;
     onProgress?.(
       0,

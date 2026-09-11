@@ -73,6 +73,17 @@
       <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.qsv_preset_help' | translate }}</span></label>
     </div>
 
+    <!-- Background ffmpeg budget (scans, thumbnails, marker detection).
+         Blank falls back to the cgroup/CPU-derived value. -->
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.ffmpeg_slots' | translate }}</span></label>
+      <input
+        type="number" min="1" step="1" class="input input-bordered w-full"
+        [placeholder]="'settings.streaming.ffmpeg_slots_auto' | translate: { count: ffmpegSlotsAuto() }"
+        [ngModel]="ffmpegSlots()" (ngModelChange)="ffmpegSlots.set($event)" />
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.ffmpeg_slots_help' | translate }}</span></label>
+    </div>
+
     <!-- HDR → SDR tone-mapping algorithm. Hidden when the server reports
          only 'auto' as available: nothing meaningful to choose. -->
     @if (tonemapAlgosAvailable().length > 1) {
@@ -87,6 +98,19 @@
         <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.tonemap_algo_help' | translate }}</span></label>
       </div>
     }
+
+    <!-- Tone-map curve. Only tonemap_opencl / the CPU chain apply it; the
+         vpp_qsv and tonemap_vaapi LUTs ignore the operator. -->
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.tonemap_curve' | translate }}</span></label>
+      <select
+    appTvSelect class="select select-bordered w-full" [ngModel]="tonemapCurve()" (ngModelChange)="tonemapCurve.set($event)">
+        <option value="hable">hable ({{ 'settings.streaming.default' | translate }})</option>
+        <option value="mobius">mobius</option>
+        <option value="reinhard">reinhard</option>
+      </select>
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.tonemap_curve_help' | translate }}</span></label>
+    </div>
 
     <!-- GPU device pinning. Hidden on single-GPU hosts: nothing to choose. -->
     @if (gpus().length > 1) {
@@ -103,6 +127,27 @@
       </div>
     }
 
+    <!-- Transcode cache footprint + manual purge -->
+    <div class="divider">{{ 'settings.streaming.cache_title' | translate }}</div>
+
+    <!-- Disk budget + retention. Blank keeps the server default (env var, or
+         20 GB / 4 h). The field is pre-filled with whatever is in force. -->
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.cache_max_gb' | translate }}</span></label>
+      <input
+        type="number" min="1" step="1" class="input input-bordered w-full"
+        [ngModel]="cacheMaxGb()" (ngModelChange)="cacheMaxGb.set($event)" />
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.cache_max_gb_help' | translate }}</span></label>
+    </div>
+
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.cache_ttl_hours' | translate }}</span></label>
+      <input
+        type="number" min="1" step="1" class="input input-bordered w-full"
+        [ngModel]="cacheTtlHours()" (ngModelChange)="cacheTtlHours.set($event)" />
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.cache_ttl_hours_help' | translate }}</span></label>
+    </div>
+
     <div class="card-actions justify-end">
       <button class="btn btn-primary" [disabled]="saving()" (click)="save()">
         @if (saving()) { <span class="loading loading-spinner loading-xs"></span> }
@@ -110,8 +155,6 @@
       </button>
     </div>
 
-    <!-- Transcode cache footprint + manual purge -->
-    <div class="divider">{{ 'settings.streaming.cache_title' | translate }}</div>
 
     <div class="form-control">
       <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.cache_usage' | translate }}</span></label>
