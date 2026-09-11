@@ -358,9 +358,11 @@ export class MediaMutationService {
     }
 
     const episodeId = file.episodeId;
+    // `remove()` blanks the entity's primary key, so read it first.
+    const removedFileId = file.id;
     await this.mediaFileRepo.remove(file);
-    void this.thumbnails.deleteForFile(file.id);
-    void this.subtitleStream.clearMediaFileSubtitleCache(file.id);
+    void this.thumbnails.deleteForFile(removedFileId);
+    void this.subtitleStream.clearMediaFileSubtitleCache(removedFileId);
     if (episodeId != null) {
       const remaining = await this.mediaFileRepo.count({
         where: { episode: { id: episodeId } },

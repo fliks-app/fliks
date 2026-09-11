@@ -526,10 +526,12 @@ export class MediaRescanService {
           );
         }
         const episodeId = dbFile.episodeId;
+        // `remove()` blanks the entity's primary key, so read it first.
+        const removedFileId = dbFile.id;
         try {
           await this.mediaFileRepo.remove(dbFile);
-          void this.thumbnailService.deleteForFile(dbFile.id);
-          void this.subtitleStream.clearMediaFileSubtitleCache(dbFile.id);
+          void this.thumbnailService.deleteForFile(removedFileId);
+          void this.subtitleStream.clearMediaFileSubtitleCache(removedFileId);
           removed++;
           this.log.log(
             `Rescan: removed missing file "${normPath}" for media #${mediaId}`,
