@@ -56,8 +56,7 @@ services:
       # TZ: Europe/Paris
 
       # ---- Access (optional) ----
-      # Public URL behind a reverse proxy. Settings > General wins over it.
-      # EXTERNAL_URL: https://fliks.example.com
+      # The public URL behind a reverse proxy lives in Settings > General.
       # Extra origins allowed to call the API (comma-separated).
       # CORS_ORIGIN: https://fliks.example.com
       # Session lifetime. Default 7d.

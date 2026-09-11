@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { SettingsService } from '../settings/settings.service';
 import { StreamLifetime } from './lifetime-constants';
 import type { TonemapCurve } from './transcoding/codec/types';
@@ -87,17 +87,6 @@ const TONEMAP_CURVES: TonemapCurve[] = ['hable', 'mobius', 'reinhard'];
 const GB = 1024 ** 3;
 const HOUR_MS = 60 * 60 * 1000;
 
-/** Retired in favour of the matching `streaming_*` settings. Only reported, so
- *  an operator upgrading from a compose-configured install learns they moved. */
-const RETIRED_ENV_VARS = [
-  'TRANSCODE_TONEMAP_ALGO',
-  'TRANSCODE_TONEMAP_CURVE',
-  'TRANSCODE_CACHE_MAX_BYTES',
-  'TRANSCODE_CACHE_TTL_MS',
-  'FLIKS_FFMPEG_SLOTS',
-  'FLIKS_VAAPI_RENDER_NODE',
-];
-
 const AUTO_QUALITY_MODES: AutoQualityMode[] = ['directplay', 'abr'];
 const SUBTITLE_PREWARMS: SubtitlePrewarm[] = ['off', 'playback', 'import'];
 
@@ -111,9 +100,6 @@ function positive(raw: string | null): number | null {
 @Injectable()
 export class StreamingSettingsCache implements OnModuleInit {
   constructor(private readonly settings: SettingsService) {}
-
-  private readonly log = new Logger(StreamingSettingsCache.name);
-  private warnedEnvShadow = false;
 
   private cache: StreamingSettings | null = null;
   private inflight: Promise<StreamingSettings> | null = null;
@@ -129,18 +115,6 @@ export class StreamingSettingsCache implements OnModuleInit {
         this.epoch++;
       }
     });
-  }
-
-  /** Says once per boot which retired env vars are still set. A compose entry
-   *  that quietly stopped doing anything is worse than one that shouts. */
-  private warnRetiredEnv(): void {
-    if (this.warnedEnvShadow) return;
-    this.warnedEnvShadow = true;
-    const stale = RETIRED_ENV_VARS.filter((v) => process.env[v]);
-    if (stale.length === 0) return;
-    this.log.warn(
-      `${stale.join(', ')} no longer read: these live in Settings > Streaming. Remove them from your compose file.`,
-    );
   }
 
   async get(): Promise<StreamingSettings> {
@@ -188,8 +162,6 @@ export class StreamingSettingsCache implements OnModuleInit {
     const slots = positive(ffmpegSlots);
     // 'auto' (or unset) lets the host pick the default render node.
     const renderNode = gpuRenderNode?.trim() || 'auto';
-
-    this.warnRetiredEnv();
 
     return {
       segmentDuration: parseFloat(duration ?? '3') || 3,
