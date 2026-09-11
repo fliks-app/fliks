@@ -8,6 +8,8 @@ import { PluginInstallException } from './plugin-install.exception';
 import { PluginStagingService } from './plugin-staging.service';
 import { PluginRegistryService } from './plugin-registry.service';
 import { PluginUiController } from './plugin-ui.controller';
+import { CaslAbilityFactory } from '../auth/casl/casl-ability.factory';
+import type { User } from '../users/entities/user.entity';
 import { PluginDatabaseService } from './plugin-database.service';
 import { fakeRegistrationRepo, fakeProcessService, fakePluginJobsService, fakeScheduledJobRegistry, fakeCountsCache } from './plugin-registry.test-helpers';
 import { PluginPackage } from './entities/plugin-package.entity';
@@ -849,12 +851,13 @@ describe('PluginInstallService', () => {
 
     it('excludes a disabled plugin from GET /plugins/ui — the controller reads the same registry membership', async () => {
       const manifest = await installData({ id: 'fliks.disableui' });
-      const ui = new PluginUiController(registry);
-      expect(ui.list().map((r) => r.pluginId)).toContain(manifest.id);
+      const ui = new PluginUiController(registry, new CaslAbilityFactory());
+      const admin = { isAdmin: true, permissions: ['manage:all'] } as User;
+      expect(ui.list(admin).map((r) => r.pluginId)).toContain(manifest.id);
 
       await service.disable(manifest.id);
 
-      expect(ui.list().map((r) => r.pluginId)).not.toContain(manifest.id);
+      expect(ui.list(admin).map((r) => r.pluginId)).not.toContain(manifest.id);
     });
   });
 

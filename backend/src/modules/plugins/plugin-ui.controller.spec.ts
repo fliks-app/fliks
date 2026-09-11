@@ -1,5 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { PluginUiController } from './plugin-ui.controller';
+import { CaslAbilityFactory } from '../auth/casl/casl-ability.factory';
+import type { User } from '../users/entities/user.entity';
 import type { RegisteredPlugin } from './plugin-registry.service';
 import type { TrustOutcome } from './archive';
 import { PLUGIN_API_VERSION } from '../../common/plugin-contract';
@@ -95,28 +97,44 @@ function processPlugin(pluginId: string): RegisteredPlugin {
   };
 }
 
-function makeController(plugins: RegisteredPlugin[], stateByPluginId: Record<string, string | null> = {}) {
+const ADMIN = { isAdmin: true, permissions: ['manage:all'] } as User;
+/** A role holding exactly these grants; `permissions` is a getter on the real entity. */
+function userWith(permissions: string[]): User {
+  return { isAdmin: false, permissions } as User;
+}
+
+function makeController(
+  plugins: RegisteredPlugin[],
+  stateByPluginId: Record<string, string | null> = {},
+  routes: Record<string, string> = {},
+) {
   const registry = {
     list: jest.fn().mockReturnValue(plugins),
     processStateOf: jest.fn((pluginId: string) => stateByPluginId[pluginId] ?? null),
     releasePickerFor: jest.fn().mockReturnValue(undefined),
+    resolveRoute: jest.fn((_pluginId: string, _method: string, path: string) =>
+      routes[path] ? { route: { method: 'GET', path, policy: routes[path] }, params: {} } : null,
+    ),
+    declaredPermissionsFor: jest.fn((pluginId: string) =>
+      new Set(Object.values(routes).map((policy) => policy.slice(policy.indexOf(':') + 1)).filter((s) => s.includes(pluginId))),
+    ),
   };
-  return { controller: new PluginUiController(registry as never), registry };
+  return { controller: new PluginUiController(registry as never, new CaslAbilityFactory()), registry };
 }
 
 describe('PluginUiController', () => {
   it('never calls a plugin — only reads the registry\'s cached manifest', () => {
     const { controller, registry } = makeController([dataPlugin('fliks.a')]);
 
-    controller.list();
+    controller.list(ADMIN);
 
-    expect(Object.keys(registry)).toEqual(['list', 'processStateOf', 'releasePickerFor']);
+    expect(Object.keys(registry)).toEqual(['list', 'processStateOf', 'releasePickerFor', 'resolveRoute', 'declaredPermissionsFor']);
     expect(registry.list).toHaveBeenCalledTimes(1);
   });
 
   it('includes a data plugin unconditionally — it has no process to be unhealthy', () => {
     const { controller } = makeController([dataPlugin('fliks.a')]);
-    const result = controller.list();
+    const result = controller.list(ADMIN);
     expect(result).toEqual([{ pluginId: 'fliks.a', name: expect.any(String), contributions: [], configPages: [], i18n: {} }]);
   });
 
@@ -125,7 +143,7 @@ describe('PluginUiController', () => {
     plugin.manifest.i18n = { en: { 'fliks.a.label': 'Label' }, fr: { 'fliks.a.label': 'Libellé' } };
     const { controller } = makeController([plugin]);
 
-    expect(controller.list()[0].i18n).toEqual({
+    expect(controller.list(ADMIN)[0].i18n).toEqual({
       en: { 'fliks.a.label': 'Label' },
       fr: { 'fliks.a.label': 'Libellé' },
     });
@@ -133,7 +151,7 @@ describe('PluginUiController', () => {
 
   it('includes a process plugin whose process is ready, with its contributions', () => {
     const { controller } = makeController([processPlugin('fliks.b')], { 'fliks.b': 'ready' });
-    const result = controller.list();
+    const result = controller.list(ADMIN);
     expect(result).toHaveLength(1);
     expect(result[0].pluginId).toBe('fliks.b');
     expect(result[0].contributions).toHaveLength(1);
@@ -148,13 +166,13 @@ describe('PluginUiController', () => {
     const { controller, registry } = makeController([processPlugin('fliks.b')], { 'fliks.b': 'ready' });
     registry.releasePickerFor.mockReturnValue(picker);
 
-    expect(controller.list()[0].releasePicker).toEqual(picker);
+    expect(controller.list(ADMIN)[0].releasePicker).toEqual(picker);
     expect(registry.releasePickerFor).toHaveBeenCalledWith('fliks.b');
   });
 
   it.each(['crashed', 'degraded', null])('filters out a process plugin whose state is "%s"', (state) => {
     const { controller } = makeController([processPlugin('fliks.b')], { 'fliks.b': state });
-    expect(controller.list()).toEqual([]);
+    expect(controller.list(ADMIN)).toEqual([]);
   });
 
   it('mixes a healthy process plugin and a data plugin, filtering only the unhealthy one', () => {
@@ -162,8 +180,53 @@ describe('PluginUiController', () => {
       [dataPlugin('fliks.a'), processPlugin('fliks.b'), processPlugin('fliks.c')],
       { 'fliks.b': 'ready', 'fliks.c': 'crashed' },
     );
-    const result = controller.list();
+    const result = controller.list(ADMIN);
     expect(result.map((r) => r.pluginId)).toEqual(['fliks.a', 'fliks.b']);
+  });
+
+  describe('per-viewer filtering', () => {
+    const ROUTES = { '/queue': 'read:plugin:fliks.download:queue' };
+
+    function queuePlugin(): RegisteredPlugin {
+      const plugin = processPlugin('fliks.download');
+      plugin.manifest.ui = {
+        contributions: [
+          { id: 'nav.queue', slot: 'nav.acquisition', weight: 100, labelKey: 'q', action: { kind: 'route', path: '/plugins/fliks.download/queue' } },
+          { id: 'media.grab', slot: 'media.actions', weight: 10, labelKey: 'g', action: { kind: 'action', actionId: 'media.grab-best' } },
+        ],
+        configPages: [
+          { id: 'queue', kind: 'table', labelKey: 'q', list: '/queue', columns: [] },
+          { id: 'general', labelKey: 'g', fields: [] },
+        ],
+      };
+      return plugin;
+    }
+
+    it('hides a table page, and the contribution opening it, from a viewer its route refuses', () => {
+      const { controller } = makeController([queuePlugin()], { 'fliks.download': 'ready' }, ROUTES);
+
+      const entry = controller.list(userWith(['media.read']))[0];
+
+      expect(entry.configPages.map((p) => p.id)).toEqual(['general']);
+      expect(entry.contributions.map((c) => c.id)).toEqual(['media.grab']);
+    });
+
+    it('keeps both for a viewer holding the grant the route was declared under', () => {
+      const { controller } = makeController([queuePlugin()], { 'fliks.download': 'ready' }, ROUTES);
+
+      const entry = controller.list(userWith(['plugin:fliks.download:queue']))[0];
+
+      expect(entry.configPages.map((p) => p.id)).toEqual(['queue', 'general']);
+      expect(entry.contributions.map((c) => c.id)).toEqual(['nav.queue', 'media.grab']);
+    });
+
+    it('hides a table page whose list route no longer resolves, rather than leaving it to 403', () => {
+      const { controller } = makeController([queuePlugin()], { 'fliks.download': 'ready' }, {});
+
+      const entry = controller.list(userWith(['plugin:fliks.download:queue']))[0];
+
+      expect(entry.configPages.map((p) => p.id)).toEqual(['general']);
+    });
   });
 
   describe('i18n collisions', () => {
@@ -182,7 +245,7 @@ describe('PluginUiController', () => {
       const b = dataPlugin('fliks.b', { i18n: { en: { 'b.label': 'B' } } });
       const { controller } = makeController([a, b]);
 
-      expect(controller.list().map((r) => r.pluginId)).toEqual(['fliks.a', 'fliks.b']);
+      expect(controller.list(ADMIN).map((r) => r.pluginId)).toEqual(['fliks.a', 'fliks.b']);
     });
 
     it('drops the plugin that sorts later by id when two plugins declare the exact same key', () => {
@@ -190,7 +253,7 @@ describe('PluginUiController', () => {
       const b = dataPlugin('fliks.b', { i18n: { en: { 'shared.label': 'B' } } });
       const { controller } = makeController([b, a]);
 
-      const result = controller.list();
+      const result = controller.list(ADMIN);
       expect(result.map((r) => r.pluginId)).toEqual(['fliks.a']);
     });
 
@@ -199,7 +262,7 @@ describe('PluginUiController', () => {
       const leaf = dataPlugin('fliks.b', { i18n: { en: { 'config.title': 'B leaf' } } });
       const { controller } = makeController([branch, leaf]);
 
-      expect(controller.list().map((r) => r.pluginId)).toEqual(['fliks.a']);
+      expect(controller.list(ADMIN).map((r) => r.pluginId)).toEqual(['fliks.a']);
     });
 
     it('keeps the official-signed plugin over a colliding non-official one, even when the official id sorts later', () => {
@@ -207,7 +270,7 @@ describe('PluginUiController', () => {
       const official = dataPlugin('fliks.official', { i18n: { en: { 'shared.label': 'real' } }, signature: 'official' });
       const { controller } = makeController([attacker, official]);
 
-      const result = controller.list();
+      const result = controller.list(ADMIN);
       expect(result.map((r) => r.pluginId)).toEqual(['fliks.official']);
     });
 
@@ -216,7 +279,7 @@ describe('PluginUiController', () => {
       const b = dataPlugin('fliks.b', { i18n: { en: { 'shared.label': 'B' } } });
       const { controller } = makeController([a, b]);
 
-      controller.list();
+      controller.list(ADMIN);
 
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('fliks.b'));
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('shared.label'));
@@ -227,7 +290,7 @@ describe('PluginUiController', () => {
       const a = dataPlugin('fliks.a', { i18n: { en: { 'a.deep.nested.key': 'value' } } });
       const { controller } = makeController([a]);
 
-      expect(controller.list()).toHaveLength(1);
+      expect(controller.list(ADMIN)).toHaveLength(1);
       expect(warnSpy).not.toHaveBeenCalled();
     });
 
@@ -236,7 +299,7 @@ describe('PluginUiController', () => {
       const download = dataPlugin('fliks.download', { i18n: { en: realKeyDict(REAL_DOWNLOAD_KEYS) } });
       const { controller } = makeController([webhooks, download]);
 
-      const result = controller.list();
+      const result = controller.list(ADMIN);
       expect(result.map((r) => r.pluginId).sort()).toEqual(['fliks.download', 'fliks.webhooks']);
       expect(warnSpy).not.toHaveBeenCalled();
     });
