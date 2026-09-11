@@ -1,6 +1,15 @@
-import { Injectable } from '@angular/core';
-import { ActivatedRouteSnapshot, DetachedRouteHandle, Route, RouteReuseStrategy } from '@angular/router';
-import { Observable, Subject } from 'rxjs';
+import { Injectable, Injector, inject } from '@angular/core';
+import {
+  ActivatedRouteSnapshot,
+  DetachedRouteHandle,
+  NavigationCancel,
+  NavigationEnd,
+  NavigationError,
+  Route,
+  Router,
+  RouteReuseStrategy,
+} from '@angular/router';
+import { filter, Observable, Subject, take } from 'rxjs';
 
 /** Cap on live detached trees; a handful of libraries visited in one tab, bounding the pathological per-param leak. */
 const MAX_CACHE_SIZE = 10;
@@ -32,6 +41,8 @@ export class CachingReuseStrategy implements RouteReuseStrategy {
 
   private readonly routeIds = new WeakMap<Route, string>();
   private nextRouteId = 0;
+
+  private readonly injector = inject(Injector);
 
   private readonly attachedSubject = new Subject<string>();
   private readonly detachedSubject = new Subject<string>();
@@ -112,11 +123,29 @@ export class CachingReuseStrategy implements RouteReuseStrategy {
       // Re-insert to mark most-recently-used for the LRU eviction in store().
       this.cache.delete(key);
       this.cache.set(key, handle);
-      // Microtask so the outlet has finished attaching before subscribers run
-      // their refresh / focus-restore work.
-      queueMicrotask(() => this.attachedSubject.next(key));
+      this.notifyWhenActivated(key);
     }
     return handle;
+  }
+
+  /** Attached means attached: `retrieve` runs a frame before the outlet swaps,
+   *  so reclaiming global chrome there moves the page still on screen. */
+  private notifyWhenActivated(key: string): void {
+    // Lazily resolved: the Router itself depends on this strategy.
+    this.injector
+      .get(Router)
+      .events.pipe(
+        filter(
+          (e) =>
+            e instanceof NavigationEnd ||
+            e instanceof NavigationCancel ||
+            e instanceof NavigationError,
+        ),
+        take(1),
+      )
+      .subscribe((e) => {
+        if (e instanceof NavigationEnd) this.attachedSubject.next(key);
+      });
   }
 
   shouldReuseRoute(future: ActivatedRouteSnapshot, current: ActivatedRouteSnapshot): boolean {
