@@ -1598,7 +1598,7 @@
       "ffmpeg_slots_auto": "Automático ({{count}})",
       "ffmpeg_slots_help": "Processos ffmpeg em paralelo para análises, miniaturas e marcadores. Vazio = deduzido dos núcleos de CPU.",
       "tonemap_algo": "Algoritmo de tone-mapping HDR → SDR",
-      "tonemap_algo_help": "Que filtro converte HDR em SDR. Auto serve na maioria; mude se a imagem sair demasiado escura.",
+      "tonemap_algo_help": "Que filtro converte HDR em SDR. Auto serve na maioria; as outras opções existem para quando a imagem sai demasiado escura.",
       "tonemap_algo_auto": "Auto (tonemap_opencl)",
       "tonemap_algo_vaapi": "tonemap_vaapi (VAAPI híbrido)",
       "tonemap_algo_qsv": "vpp_qsv (QSV single-pass)",
