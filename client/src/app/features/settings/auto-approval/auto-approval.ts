@@ -20,6 +20,7 @@ import { UsersApiService, UserRow } from '../../../core/services/api/users-api.s
 import { RolesApiService, RoleRow } from '../../../core/services/api/roles-api.service';
 import { LibrariesApiService, Library } from '../../../core/services/api/libraries-api.service';
 import { MetadataService, TmdbGenre } from '../../../core/services/api/metadata.service';
+import { AuthService } from '../../../core/services/auth.service';
 import {
   MultiSelectComponent,
   MultiSelectOption,
@@ -42,6 +43,7 @@ type RuleMediaType = '' | 'movie' | 'series';
 })
 export class AutoApprovalSettingsComponent implements OnInit {
   private readonly api = inject(AutoApprovalApiService);
+  private readonly auth = inject(AuthService);
   private readonly usersApi = inject(UsersApiService);
   private readonly rolesApi = inject(RolesApiService);
   private readonly librariesApi = inject(LibrariesApiService);
@@ -127,10 +129,14 @@ export class AutoApprovalSettingsComponent implements OnInit {
     }
   }
 
+  /** The user and role lists are `users.manage`-gated; without it the two "who" pickers can only
+   *  render empty, so the criterion is hidden rather than shown as a select with no options. */
+  readonly canPickWho = this.auth.hasPermission('users.manage');
+
   private async loadPickers() {
     const [users, roles, libraries, movieGenres, tvGenres] = await Promise.all([
-      this.usersApi.list().catch(() => []),
-      this.rolesApi.list().catch(() => []),
+      this.canPickWho ? this.usersApi.list().catch(() => []) : Promise.resolve<UserRow[]>([]),
+      this.canPickWho ? this.rolesApi.list().catch(() => []) : Promise.resolve<RoleRow[]>([]),
       this.librariesApi.list().catch(() => []),
       this.metadata.getMovieGenres().catch(() => []),
       this.metadata.getTvGenres().catch(() => []),

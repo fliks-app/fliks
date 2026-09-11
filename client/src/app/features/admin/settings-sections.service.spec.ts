@@ -26,14 +26,21 @@ const entry = (pluginId: string, contributions: UiContribution[], extra: Partial
   ...extra,
 });
 
-function createService(opts: { isAdmin?: boolean; entries?: PluginUiEntry[]; url?: string } = {}) {
+/** Every permission a core settings entry gates on today. */
+const ALL_PERMISSIONS = ['users.manage', 'media.read'];
+
+function createService(opts: { isAdmin?: boolean; permissions?: string[]; entries?: PluginUiEntry[]; url?: string } = {}) {
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
       {
         provide: AuthService,
-        useValue: { user: () => ({ id: 1, isAdmin: !!opts.isAdmin }), hasPermission: () => false },
+        useValue: {
+          user: () => ({ id: 1, isAdmin: !!opts.isAdmin }),
+          // Mirrors the real service: an admin holds every permission.
+          hasPermission: (p: string) => !!opts.isAdmin || (opts.permissions ?? []).includes(p),
+        },
       },
       { provide: TvService, useValue: { isTv: () => false } },
       { provide: DeviceService, useValue: { isTouch: () => false } },
@@ -47,14 +54,24 @@ function createService(opts: { isAdmin?: boolean; entries?: PluginUiEntry[]; url
 
 describe('SettingsSectionsService', () => {
   it('resolves the 7 core sections with 22 items total, and nothing else, with an empty registry', () => {
-    const svc = createService();
+    const svc = createService({ permissions: ALL_PERMISSIONS });
     const sections = svc.sections();
     expect(sections).toHaveLength(7);
     expect(sections.reduce((n, s) => n + s.items.length, 0)).toBe(22);
   });
 
+  it('drops the core entries whose own pages the viewer has no permission for', () => {
+    const ids = createService().sections().flatMap((s) => s.items.map((i) => i.id));
+    expect(ids).not.toContain('core.users');
+    expect(ids).not.toContain('core.roles');
+    expect(ids).not.toContain('core.subtitles_activity');
+    // Its own endpoints are Settings-gated, so it stays: the rule follows the policy, not the section.
+    expect(ids).toContain('core.auto_approval');
+  });
+
   it('sorts a plugin section\'s own items by weight then id, independent of core', () => {
     const svc = createService({
+      permissions: ALL_PERMISSIONS,
       entries: [entry('fliks.a', [contribution('z', 100), contribution('a', 100), contribution('b', 50)], { name: 'A' })],
     });
     const plugin = svc.sections().at(-1)!;
@@ -63,6 +80,7 @@ describe('SettingsSectionsService', () => {
 
   it('never lets a plugin contribution join a core section, however its id or weight looks', () => {
     const svc = createService({
+      permissions: ALL_PERMISSIONS,
       // Deliberately mimics a core id/weight to prove grouping is by plugin
       // entry, never by string-matching an item into an existing section.
       entries: [entry('fliks.a', [contribution('core.system', 50)], { name: 'A' })],
@@ -75,6 +93,7 @@ describe('SettingsSectionsService', () => {
 
   it('ignores a plugin contribution outside settings.page when building its section', () => {
     const svc = createService({
+      permissions: ALL_PERMISSIONS,
       entries: [entry('fliks.a', [contribution('nav', 100, { slot: 'nav.main' })], { name: 'A' })],
     });
     expect(svc.sections()).toHaveLength(7);
@@ -82,14 +101,15 @@ describe('SettingsSectionsService', () => {
 
   it('drops a plugin settings.page contribution with an unrecognised action kind', () => {
     const svc = createService({
+      permissions: ALL_PERMISSIONS,
       entries: [entry('fliks.a', [contribution('broken', 100, { action: { kind: 'bogus' } as never })], { name: 'A' })],
     });
     expect(svc.sections()).toHaveLength(7);
   });
 
-  it('produces the identical section list for an admin and a non-admin context', () => {
+  it('produces the identical section list for an admin and a non-admin holding the same permissions', () => {
     const withAdmin = createService({ isAdmin: true }).sections();
-    const withoutAdmin = createService({ isAdmin: false }).sections();
+    const withoutAdmin = createService({ isAdmin: false, permissions: ALL_PERMISSIONS }).sections();
     expect(withoutAdmin).toEqual(withAdmin);
   });
 });
