@@ -224,19 +224,14 @@ connects to your server like the mobile apps do, it doesn't host one.
 
 ## Plugins
 
-Fliks ships with no way to acquire media, on purpose. Searching indexers,
-talking to a download client, grabbing a release: none of it is built in,
-and the server holds no trace of a plugin it doesn't have. You add what
-you want.
+Fliks ships with no way to acquire media. You install what you want from
+**Settings > Plugins**: the official catalog is configured out of the
+box, and you can add other sources or import a `.fkplugin` archive by
+hand.
 
-It all happens in **Settings > Plugins**. The official catalog is
-configured out of the box, so you browse, install and update from there.
-You can add other sources, or import a `.fkplugin` archive by hand.
-
-- **The Download plugin**, for instance, brings indexer search,
+- **The Download plugin** brings torrent indexer search,
   download-client management and the grab pipeline. Install it and the
   search, the clients and their settings pages appear in the interface.
-  Remove it and they are gone, along with its data.
 - **Archives are signed**, and the signature is checked before anything
   is written to disk.
 - **A plugin that runs code runs apart.** There are two tiers: a `data`
