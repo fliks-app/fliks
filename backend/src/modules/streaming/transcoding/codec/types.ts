@@ -22,8 +22,8 @@ export type HdrFormat = 'HDR10' | 'HLG';
 /** HDR→SDR tone-map curve, shared by the CPU and GPU (tonemap_opencl) paths.
  *  `hable` is a filmic curve with a gentle highlight rolloff (retains specular
  *  detail on high-nit HDR10); `mobius` is punchier with a harder highlight knee;
- *  `reinhard` is the simplest global operator. Selected via
- *  `TRANSCODE_TONEMAP_CURVE`, default `hable`. */
+ *  `reinhard` is the simplest global operator. Selected in Settings >
+ *  Streaming, default `hable`. */
 export type TonemapCurve = 'hable' | 'mobius' | 'reinhard';
 
 /** Source HDR10 static metadata (SMPTE ST 2086 mastering display + CTA-861.3
@@ -116,7 +116,7 @@ export interface EncoderInput {
    *  meaningful when `tonemap` is true. */
   tonemapPath: 'vaapi' | 'opencl' | 'qsv';
   /** Tone-map curve for the qsv-native OpenCL path (`tonemap_opencl`).
-   *  Resolved from `TRANSCODE_TONEMAP_CURVE`; absent → `hable`. */
+   *  Resolved from the admin setting; absent → `hable`. */
   tonemapCurve?: TonemapCurve;
   hasBurnIn: boolean;
   hasCrop: boolean;

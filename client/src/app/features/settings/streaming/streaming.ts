@@ -91,19 +91,21 @@ export class StreamingSettingsComponent implements OnInit {
         prewarm === 'off' || prewarm === 'import' ? prewarm : 'playback',
       );
       this.tonemapAlgosAvailable.set(algos.available ?? ['auto']);
-      // If the persisted value isn't runnable on this host (e.g. opencl
-      // saved on a box where the probe failed after a driver change),
-      // collapse back to 'auto' so the select stays in sync with what
-      // the backend would actually do.
-      const saved = all['streaming_tonemap_algo'] ?? 'auto';
-      this.tonemapAlgo.set(
-        this.tonemapAlgosAvailable().includes(saved) ? saved : 'auto',
-      );
       this.gpus.set(gpusResp.gpus ?? []);
-      this.gpuRenderNode.set(all['streaming_gpu_render_node'] ?? 'auto');
       // Pre-fill from the resolved values, not the raw keys: an unset field
-      // must show what the server actually uses, or saving would silently
-      // replace an env-configured budget with a default.
+      // must show what the server actually uses, or the form would claim
+      // "auto" while an env var drives the session, and saving would replace
+      // an env-configured value with a default.
+      const algo = effective?.tonemapAlgo ?? all['streaming_tonemap_algo'] ?? 'auto';
+      // A value this host can't run (e.g. opencl after a driver change broke
+      // the probe) collapses back to 'auto', or the select would show an
+      // option it doesn't have.
+      this.tonemapAlgo.set(
+        this.tonemapAlgosAvailable().includes(algo) ? algo : 'auto',
+      );
+      this.gpuRenderNode.set(
+        effective?.gpuRenderNode ?? all['streaming_gpu_render_node'] ?? 'auto',
+      );
       if (effective) {
         this.tonemapCurve.set(effective.tonemapCurve);
         this.cacheMaxGb.set(String(effective.cacheMaxGb));

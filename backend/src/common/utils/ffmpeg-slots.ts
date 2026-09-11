@@ -44,10 +44,9 @@ function cgroupV1Cores(): number | null {
  *  weak host can't end up running one decoder per subsystem at once.
  *  `os.cpus()` reports the host's core count even inside a container, so a
  *  compose `cpus:` quota is read from the cgroup directly and takes priority
- *  when it is the tighter constraint. */
+ *  when it is the tighter constraint. Overridden by the admin setting via
+ *  {@link setFfmpegSlots}. */
 function resolveSlots(): number {
-  const override = Number(process.env.FLIKS_FFMPEG_SLOTS);
-  if (Number.isInteger(override) && override > 0) return override;
   const hostCores = cpus().length;
   const quotaCores = cgroupV2Cores() ?? cgroupV1Cores();
   const cores = quotaCores != null ? Math.min(hostCores, quotaCores) : hostCores;
@@ -74,7 +73,7 @@ let active = 0;
 const waiters: (() => void)[] = [];
 
 /** Admin override (`streaming_ffmpeg_slots`); null or <1 restores the
- *  env/cgroup-derived budget. Shrinking below `active` lets the running jobs
+ *  cgroup/CPU-derived budget. Shrinking below `active` lets the running jobs
  *  drain down to the new cap instead of killing them. */
 export function setFfmpegSlots(n: number | null): void {
   slots = n != null && n > 0 ? Math.floor(n) : autoFfmpegSlots();

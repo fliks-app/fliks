@@ -23,19 +23,12 @@ const vppQsv = isVppQsvTonemapEnabled as jest.Mock;
 const qsvOpencl = isQsvOpenclTonemapEnabled as jest.Mock;
 
 describe('resolveTonemapPath', () => {
-  const origEnv = process.env.TRANSCODE_TONEMAP_ALGO;
   beforeEach(() => {
     openclNoCrop.mockReturnValue(false);
     openclCrop.mockReturnValue(false);
     vppQsv.mockReturnValue(false);
     qsvOpencl.mockReturnValue(false);
-    delete process.env.TRANSCODE_TONEMAP_ALGO;
   });
-  afterEach(() => {
-    if (origEnv === undefined) delete process.env.TRANSCODE_TONEMAP_ALGO;
-    else process.env.TRANSCODE_TONEMAP_ALGO = origEnv;
-  });
-
   it('passes explicit picks through unchanged, on any platform', () => {
     expect(resolveTonemapPath('qsv', { hasCrop: false }, 'win32')).toBe('qsv');
     expect(resolveTonemapPath('vaapi', { hasCrop: false }, 'linux')).toBe(
@@ -94,37 +87,5 @@ describe('resolveTonemapPath', () => {
     openclNoCrop.mockReturnValue(true); // VAAPI probe — irrelevant on win32
     vppQsv.mockReturnValue(true);
     expect(resolveTonemapPath('auto', { hasCrop: false }, 'win32')).toBe('qsv');
-  });
-
-  describe('TRANSCODE_TONEMAP_ALGO override', () => {
-    it('forces the algo over the probe-driven auto, on any platform', () => {
-      openclNoCrop.mockReturnValue(true); // auto would pick opencl on Linux
-      process.env.TRANSCODE_TONEMAP_ALGO = 'qsv';
-      expect(resolveTonemapPath('auto', { hasCrop: false }, 'linux')).toBe(
-        'qsv',
-      );
-    });
-
-    it('never overrides an explicit admin setting', () => {
-      process.env.TRANSCODE_TONEMAP_ALGO = 'opencl';
-      expect(resolveTonemapPath('vaapi', { hasCrop: false }, 'win32')).toBe(
-        'vaapi',
-      );
-    });
-
-    it('is case-insensitive and trims whitespace', () => {
-      process.env.TRANSCODE_TONEMAP_ALGO = '  OpenCL  ';
-      expect(resolveTonemapPath('auto', { hasCrop: false }, 'linux')).toBe(
-        'opencl',
-      );
-    });
-
-    it('ignores an invalid value (falls back to the normal resolution)', () => {
-      process.env.TRANSCODE_TONEMAP_ALGO = 'nonsense';
-      vppQsv.mockReturnValue(true);
-      expect(resolveTonemapPath('auto', { hasCrop: false }, 'win32')).toBe(
-        'qsv',
-      );
-    });
   });
 });

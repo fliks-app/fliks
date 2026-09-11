@@ -7,7 +7,7 @@ export const QSV_DEVICE_ALIAS = 'qs';
 export const D3D11VA_DEVICE_ALIAS = 'dx';
 
 /** Admin-selected DRI render node (from the `streaming_gpu_render_node`
- *  setting). Null = "auto" → fall back to the env override, then the default.
+ *  setting). Null = "auto" → the default node.
  *  Set from the streaming settings on boot and on every playback-info, so a
  *  multi-GPU host can pin transcoding to a specific adapter. */
 let selectedRenderNode: string | null = null;
@@ -18,14 +18,11 @@ export function setSelectedRenderNode(node: string | null | undefined): void {
   selectedRenderNode = v && v.length > 0 && v !== 'auto' ? v : null;
 }
 
-/** DRI render node for the VAAPI/Linux-QSV device. Resolution order: the
- *  admin `streaming_gpu_render_node` selection, then the
- *  `FLIKS_VAAPI_RENDER_NODE` env override, then the default. Ignored on
- *  Windows (MFX/D3D11, no node). */
+/** DRI render node for the VAAPI/Linux-QSV device: the admin
+ *  `streaming_gpu_render_node` selection, or the first node otherwise. Ignored
+ *  on Windows (MFX/D3D11, no node). */
 export function vaapiRenderNode(): string {
-  if (selectedRenderNode) return selectedRenderNode;
-  const override = process.env.FLIKS_VAAPI_RENDER_NODE?.trim();
-  return override && override.length > 0 ? override : '/dev/dri/renderD128';
+  return selectedRenderNode ?? '/dev/dri/renderD128';
 }
 
 /** VAAPI device aliased `va` on the render node. Linux-only. */

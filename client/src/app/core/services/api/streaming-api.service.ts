@@ -672,6 +672,8 @@ export class StreamingApiService {
   getEffectiveSettings() {
     return firstValueFrom(
       this.http.get<{
+        tonemapAlgo: string;
+        gpuRenderNode: string;
         tonemapCurve: string;
         cacheMaxGb: number;
         cacheTtlHours: number;

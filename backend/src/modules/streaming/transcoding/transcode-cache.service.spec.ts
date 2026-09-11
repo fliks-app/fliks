@@ -252,28 +252,25 @@ describe('TranscodeCacheService', () => {
   });
 });
 
-describe('TranscodeCacheService env overrides', () => {
-  const ENV = process.env;
-  beforeEach(() => {
-    process.env = { ...ENV };
-  });
-  afterEach(() => {
-    process.env = ENV;
-  });
-
-  it('honours TRANSCODE_CACHE_TTL_MS', () => {
-    process.env.TRANSCODE_CACHE_TTL_MS = '1000';
-    const svc = new TranscodeCacheService();
-    // No public getter; assert by behaviour: a brand-new entry with
-    // lastAccess of 2 s ago should be evicted under the 1 s TTL.
-    expect((svc as unknown as { ttlMs: number }).ttlMs).toBe(1000);
+describe('TranscodeCacheService limits', () => {
+  it('defaults to the 4 h / 20 GB budget', () => {
+    const svc = new TranscodeCacheService() as unknown as {
+      ttlMs: number;
+      maxBytes: number;
+    };
+    expect(svc.ttlMs).toBe(4 * 60 * 60 * 1000);
+    expect(svc.maxBytes).toBe(20 * 1024 ** 3);
   });
 
-  it('falls back to default when env is unparseable', () => {
-    process.env.TRANSCODE_CACHE_TTL_MS = 'not-a-number';
+  it('takes the admin limits and ignores a non-positive one', () => {
     const svc = new TranscodeCacheService();
-    expect((svc as unknown as { ttlMs: number }).ttlMs).toBe(
-      4 * 60 * 60 * 1000,
-    );
+    svc.setLimits({ ttlMs: 1000, maxBytes: 5 * 1024 ** 3 });
+    const state = svc as unknown as { ttlMs: number; maxBytes: number };
+    expect(state.ttlMs).toBe(1000);
+    expect(state.maxBytes).toBe(5 * 1024 ** 3);
+
+    svc.setLimits({ ttlMs: 0, maxBytes: -1 });
+    expect(state.ttlMs).toBe(1000);
+    expect(state.maxBytes).toBe(5 * 1024 ** 3);
   });
 });

@@ -2,38 +2,37 @@ import {
   hostHasVaapi,
   openclTonemapInitArgs,
   qsvDeviceInitArgs,
+  setSelectedRenderNode,
   vaapiDeviceInitArgs,
   vaapiRenderNode,
 } from './hw-device';
 
 describe('hw-device', () => {
-  const original = process.env.FLIKS_VAAPI_RENDER_NODE;
   const originalOpencl = process.env.FLIKS_OPENCL_DEVICE;
   afterEach(() => {
-    if (original === undefined) delete process.env.FLIKS_VAAPI_RENDER_NODE;
-    else process.env.FLIKS_VAAPI_RENDER_NODE = original;
+    setSelectedRenderNode(null);
     if (originalOpencl === undefined) delete process.env.FLIKS_OPENCL_DEVICE;
     else process.env.FLIKS_OPENCL_DEVICE = originalOpencl;
   });
 
   describe('vaapiRenderNode', () => {
     it('defaults to /dev/dri/renderD128', () => {
-      delete process.env.FLIKS_VAAPI_RENDER_NODE;
       expect(vaapiRenderNode()).toBe('/dev/dri/renderD128');
     });
-    it('honours the FLIKS_VAAPI_RENDER_NODE override', () => {
-      process.env.FLIKS_VAAPI_RENDER_NODE = '/dev/dri/renderD129';
+    it('honours the admin selection', () => {
+      setSelectedRenderNode('/dev/dri/renderD129');
       expect(vaapiRenderNode()).toBe('/dev/dri/renderD129');
     });
-    it('ignores a blank override', () => {
-      process.env.FLIKS_VAAPI_RENDER_NODE = '   ';
+    it('treats auto and a blank selection as no pin', () => {
+      setSelectedRenderNode('auto');
+      expect(vaapiRenderNode()).toBe('/dev/dri/renderD128');
+      setSelectedRenderNode('   ');
       expect(vaapiRenderNode()).toBe('/dev/dri/renderD128');
     });
   });
 
   describe('vaapiDeviceInitArgs', () => {
     it('binds VAAPI to the render node', () => {
-      delete process.env.FLIKS_VAAPI_RENDER_NODE;
       expect(vaapiDeviceInitArgs()).toEqual([
         '-init_hw_device',
         'vaapi=va:/dev/dri/renderD128',
@@ -43,7 +42,6 @@ describe('hw-device', () => {
 
   describe('qsvDeviceInitArgs', () => {
     it('derives QSV from VAAPI on Linux', () => {
-      delete process.env.FLIKS_VAAPI_RENDER_NODE;
       expect(qsvDeviceInitArgs('linux')).toEqual([
         '-init_hw_device',
         'vaapi=va:/dev/dri/renderD128',
@@ -57,8 +55,8 @@ describe('hw-device', () => {
         'qsv=qs',
       ]);
     });
-    it('threads the render-node override into the Linux VAAPI device', () => {
-      process.env.FLIKS_VAAPI_RENDER_NODE = '/dev/dri/renderD129';
+    it('threads the pinned render node into the Linux VAAPI device', () => {
+      setSelectedRenderNode('/dev/dri/renderD129');
       expect(qsvDeviceInitArgs('linux')).toEqual([
         '-init_hw_device',
         'vaapi=va:/dev/dri/renderD129',
