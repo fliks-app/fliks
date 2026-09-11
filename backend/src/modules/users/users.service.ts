@@ -148,11 +148,18 @@ export class UsersService implements OnModuleInit {
     };
   }
 
-  async create(dto: CreateUserDto): Promise<PublicUser> {
+  async create(dto: CreateUserDto, requester: User): Promise<PublicUser> {
     const existing = await this.userRepo.findOne({
       where: { username: dto.username },
     });
     if (existing) throw new ConflictException('Username already taken');
+
+    // Picking a role is granting permissions, so it belongs to whoever manages roles.
+    if (dto.roleId !== undefined && !this.caslAbilityFactory.createForUser(requester).can(Action.Manage, Role)) {
+      throw new ForbiddenException(
+        'Only users with roles.manage permission can assign a role',
+      );
+    }
 
     let roleId = dto.roleId;
     let role: Role | null = null;
@@ -241,6 +248,11 @@ export class UsersService implements OnModuleInit {
 
     // Manager-only fields
     if (isManager) {
+      if (roleChanging && !ability.can(Action.Manage, Role)) {
+        throw new ForbiddenException(
+          'Only users with roles.manage permission can change a role',
+        );
+      }
       if (dto.roleId !== undefined) {
         target.roleId = dto.roleId;
         // Sync the eager-loaded relation too — otherwise TypeORM rewrites the

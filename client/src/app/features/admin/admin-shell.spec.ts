@@ -32,6 +32,7 @@ const BASELINE_SIDEBAR = [
     { label: 'settings.nav.language_profiles', href: '/admin/settings/language-profiles' },
     { label: 'settings.nav.quality_definitions', href: '/admin/settings/quality-definitions' },
     { label: 'settings.nav.custom_formats', href: '/admin/settings/custom-formats' },
+    { label: 'settings.nav.auto_approval', href: '/admin/settings/auto-approval' },
   ] },
   { label: 'admin.section_subtitles', links: [
     { label: 'settings.nav.subtitles', href: '/admin/settings/subtitles' },
@@ -46,7 +47,6 @@ const BASELINE_SIDEBAR = [
   { label: 'admin.section_users', links: [
     { label: 'settings.nav.users', href: '/admin/settings/users' },
     { label: 'settings.nav.roles', href: '/admin/settings/roles' },
-    { label: 'settings.nav.auto_approval', href: '/admin/settings/auto-approval' },
   ] },
   { label: 'admin.section_advanced', links: [
     { label: 'settings.nav.schedulers', href: '/admin/settings/schedulers' },
@@ -92,7 +92,7 @@ function readSidebar(fixture: ComponentFixture<AdminShellComponent>) {
   return sections;
 }
 
-function createFixture(opts: { isAdmin?: boolean; entries?: PluginUiEntry[] } = {}) {
+function createFixture(opts: { isAdmin?: boolean; permissions?: string[]; entries?: PluginUiEntry[] } = {}) {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -104,7 +104,11 @@ function createFixture(opts: { isAdmin?: boolean; entries?: PluginUiEntry[] } = 
       { provide: Title, useValue: { setTitle: () => {} } },
       {
         provide: AuthService,
-        useValue: { user: () => ({ id: 1, isAdmin: !!opts.isAdmin }), hasPermission: () => false },
+        useValue: {
+          user: () => ({ id: 1, isAdmin: !!opts.isAdmin }),
+          // Mirrors the real service: an admin holds every permission.
+          hasPermission: (p: string) => !!opts.isAdmin || (opts.permissions ?? []).includes(p),
+        },
       },
       { provide: TvService, useValue: { isTv: () => false, isAndroidTv: () => false } },
       { provide: DeviceService, useValue: { isTouch: () => false } },
@@ -119,20 +123,48 @@ function createFixture(opts: { isAdmin?: boolean; entries?: PluginUiEntry[] } = 
   return fixture;
 }
 
+const ALL_PERMISSIONS = ['users.manage', 'roles.manage', 'media.read'];
+
 describe('AdminShellComponent — sidebar characterisation', () => {
-  // Same fixture run under both an admin and a non-admin auth context: the
-  // sidebar has never gated any of its 23 links on isAdmin (only the /admin
-  // route guard does), and the refactor must not start doing so implicitly.
+  // An admin and a non-admin holding the same permissions see the same sidebar: entries gate on
+  // the permission their own pages need, never on isAdmin.
   it.each([['admin', true], ['non-admin', false]] as const)(
     'renders the unchanged 7-section, 23-link sidebar for a %s context',
     (_label, isAdmin) => {
-      const fixture = createFixture({ isAdmin });
+      const fixture = createFixture({ isAdmin, permissions: ALL_PERMISSIONS });
       expect(readSidebar(fixture)).toEqual(BASELINE_SIDEBAR);
     },
   );
 
+  it('hides the pages a viewer\'s permissions cannot open, and the section left empty', () => {
+    const sections = readSidebar(createFixture({ permissions: [] }));
+
+    expect(sections.map((s) => s.label)).not.toContain('admin.section_users');
+    expect(sections.find((s) => s.label === 'admin.section_subtitles')?.links.map((l) => l.href)).toEqual([
+      '/admin/settings/subtitles',
+      '/admin/settings/subtitle-providers',
+    ]);
+  });
+
+  it('keeps a page per permission: users.manage alone opens Users, never Roles', () => {
+    const sections = readSidebar(createFixture({ permissions: ['users.manage'] }));
+
+    expect(sections.find((s) => s.label === 'admin.section_users')?.links.map((l) => l.href)).toEqual([
+      '/admin/settings/users',
+    ]);
+  });
+
+  it('shows Roles alone to a viewer holding roles.manage without users.manage', () => {
+    const sections = readSidebar(createFixture({ permissions: ['roles.manage'] }));
+
+    expect(sections.find((s) => s.label === 'admin.section_users')?.links.map((l) => l.href)).toEqual([
+      '/admin/settings/roles',
+    ]);
+  });
+
   it('appends a plugin section after every core section, labelled by manifest name', () => {
     const fixture = createFixture({
+      permissions: ALL_PERMISSIONS,
       entries: [
         entry('fliks.b', [contribution('page', 100, { labelKey: 'b.page' })], { name: 'B Plugin' }),
       ],
@@ -144,6 +176,7 @@ describe('AdminShellComponent — sidebar characterisation', () => {
 
   it('orders plugin sections by plugin id, not install/array order', () => {
     const fixture = createFixture({
+      permissions: ALL_PERMISSIONS,
       entries: [
         entry('fliks.zeta', [contribution('z', 100)], { name: 'Zeta' }),
         entry('fliks.alpha', [contribution('a', 100)], { name: 'Alpha' }),
@@ -155,6 +188,7 @@ describe('AdminShellComponent — sidebar characterisation', () => {
 
   it('produces no section for a plugin with zero settings.page contributions', () => {
     const fixture = createFixture({
+      permissions: ALL_PERMISSIONS,
       entries: [entry('fliks.empty', [contribution('nav-item', 100, { slot: 'nav.main' })], { name: 'Empty' })],
     });
     expect(readSidebar(fixture)).toHaveLength(7);
@@ -162,6 +196,7 @@ describe('AdminShellComponent — sidebar characterisation', () => {
 
   it('produces no section for a plugin whose only contribution is hidden by `when`', () => {
     const fixture = createFixture({
+      permissions: ALL_PERMISSIONS,
       entries: [entry('fliks.hidden', [contribution('gone', 100, { when: ['isAdmin'] })], { name: 'Hidden' })],
     });
     // isAdmin is false in this fixture's default context, so the predicate fails.
@@ -170,6 +205,7 @@ describe('AdminShellComponent — sidebar characterisation', () => {
 
   it('falls back to the plugin id when the manifest name is not yet in the response', () => {
     const fixture = createFixture({
+      permissions: ALL_PERMISSIONS,
       entries: [entry('fliks.noname', [contribution('page', 100)])],
     });
     expect(readSidebar(fixture)[7].label).toBe('fliks.noname');

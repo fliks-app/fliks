@@ -16,6 +16,7 @@ import {
   Library,
 } from '../../../../core/services/api/libraries-api.service';
 import { UserDetailState } from './user-detail.state';
+import { AuthService } from '../../../../core/services/auth.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import { LucideIconComponent } from '../../../../shared/components/lucide-icon';
 
@@ -30,6 +31,8 @@ export class UserGeneralComponent implements OnInit {
   private readonly translate = inject(TranslateService);
   readonly state = inject(UserDetailState);
   private readonly toast = inject(ToastService);
+  /** Changing a role grants its permissions, so the server keeps it behind `roles.manage`. */
+  readonly canAssignRole = inject(AuthService).hasPermission('roles.manage');
 
   readonly saving = signal(false);
 
@@ -86,7 +89,7 @@ export class UserGeneralComponent implements OnInit {
     this.saving.set(true);
     const body: UpdateUserBody = {
       username: this.formUsername().trim() || undefined,
-      roleId: this.formRoleId() ?? undefined,
+      roleId: this.canAssignRole ? (this.formRoleId() ?? undefined) : undefined,
       isAdmin: this.formIsAdmin(),
       enabled: this.formEnabled(),
       requirePasswordChange: this.formRequirePasswordChange(),

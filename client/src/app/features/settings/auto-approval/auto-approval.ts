@@ -20,6 +20,7 @@ import { UsersApiService, UserRow } from '../../../core/services/api/users-api.s
 import { RolesApiService, RoleRow } from '../../../core/services/api/roles-api.service';
 import { LibrariesApiService, Library } from '../../../core/services/api/libraries-api.service';
 import { MetadataService, TmdbGenre } from '../../../core/services/api/metadata.service';
+import { AuthService } from '../../../core/services/auth.service';
 import {
   MultiSelectComponent,
   MultiSelectOption,
@@ -42,6 +43,7 @@ type RuleMediaType = '' | 'movie' | 'series';
 })
 export class AutoApprovalSettingsComponent implements OnInit {
   private readonly api = inject(AutoApprovalApiService);
+  private readonly auth = inject(AuthService);
   private readonly usersApi = inject(UsersApiService);
   private readonly rolesApi = inject(RolesApiService);
   private readonly librariesApi = inject(LibrariesApiService);
@@ -127,10 +129,16 @@ export class AutoApprovalSettingsComponent implements OnInit {
     }
   }
 
+  /** Each "who" picker reads a list of its own, behind its own permission: shown empty, a select
+   *  reads as "no users exist" rather than "you may not see them". */
+  readonly canPickUsers = this.auth.hasPermission('users.manage');
+  readonly canPickRoles = this.canPickUsers || this.auth.hasPermission('roles.manage');
+  readonly canPickWho = this.canPickUsers || this.canPickRoles;
+
   private async loadPickers() {
     const [users, roles, libraries, movieGenres, tvGenres] = await Promise.all([
-      this.usersApi.list().catch(() => []),
-      this.rolesApi.list().catch(() => []),
+      this.canPickUsers ? this.usersApi.list().catch(() => []) : Promise.resolve<UserRow[]>([]),
+      this.canPickRoles ? this.rolesApi.list().catch(() => []) : Promise.resolve<RoleRow[]>([]),
       this.librariesApi.list().catch(() => []),
       this.metadata.getMovieGenres().catch(() => []),
       this.metadata.getTvGenres().catch(() => []),

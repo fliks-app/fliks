@@ -149,7 +149,8 @@
     "requests.manage": "Gerir pedidos",
     "subtitles.manage": "Gerir legendas",
     "settings.access": "Acesso às definições",
-    "users.manage": "Gerir utilizadores"
+    "users.manage": "Gerir utilizadores",
+    "roles.manage": "Gerir funções"
   },
   "account": {
     "title": "A minha conta",
@@ -2089,7 +2090,9 @@
       "field_is_default": "Função predefinida (atribuída aos novos utilizadores)",
       "default_libraries": "Bibliotecas atribuídas por predefinição",
       "default_libraries_hint": "Os novos utilizadores criados com esta função herdarão o acesso a estas bibliotecas.",
-      "confirm_delete": "Eliminar a função «{{name}}»?"
+      "confirm_delete": "Eliminar a função «{{name}}»?",
+      "plugin_permissions": "Permissões de plugins",
+      "permission_unavailable": "já não declarada"
     },
     "auto_approval": {
       "title": "Regras de aprovação automática",

@@ -117,6 +117,7 @@
       }
 
       <div class="flex flex-col md:flex-row md:gap-2">
+        @if (canPickWho) {
         <section class="flex flex-col gap-3 flex-1 min-w-0">
           <div>
             <h3 class="font-semibold">{{ 'settings.auto_approval.who' | translate }}</h3>
@@ -125,6 +126,7 @@
             </p>
           </div>
 
+          @if (canPickUsers) {
           <div class="form-control">
             <span class="label-text">{{ 'settings.auto_approval.users' | translate }}</span>
             <app-multi-select
@@ -138,7 +140,9 @@
           <div class="divider my-0 text-xs text-base-content/50">
             {{ 'settings.auto_approval.or' | translate }}
           </div>
+          }
 
+          @if (canPickRoles) {
           <div class="form-control">
             <span class="label-text">{{ 'settings.auto_approval.roles' | translate }}</span>
             <app-multi-select
@@ -148,9 +152,11 @@
               [placeholder]="'settings.auto_approval.any_role' | translate"
             />
           </div>
+          }
         </section>
 
         <div class="divider md:divider-horizontal my-2 md:my-0"></div>
+        }
 
         <section class="flex flex-col gap-3 flex-1 min-w-0">
           <div>

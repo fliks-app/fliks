@@ -6,6 +6,7 @@ import { passwordChangeGuard } from './core/guards/password-change.guard';
 import { noTvGuard } from './core/guards/no-tv.guard';
 import { desktopGuard } from './core/guards/desktop.guard';
 import { pluginViewGuard } from './core/guards/plugin-view.guard';
+import { permissionGuard } from './core/guards/permission.guard';
 import { ProfileContextService } from './features/profile/profile-context.service';
 
 export const routes: Routes = [
@@ -382,6 +383,7 @@ export const routes: Routes = [
       { path: 'statistics', loadComponent: () => import('./features/dashboard/dashboard').then((m) => m.DashboardComponent) },
       {
         path: 'users/:id',
+        canActivate: [permissionGuard('users.manage')],
         loadComponent: () => import('./features/settings/users/user-detail/user-detail').then((m) => m.UserDetailComponent),
         children: [
           { path: '', loadComponent: () => import('./features/settings/users/user-detail/user-general').then((m) => m.UserGeneralComponent) },
@@ -432,10 +434,10 @@ export const routes: Routes = [
               { path: 'users', loadComponent: () => import('./features/settings/libraries/library-detail/library-users').then((m) => m.LibraryUsersComponent) },
             ],
           },
-          { path: 'users', loadComponent: () => import('./features/settings/users/users').then((m) => m.UsersSettingsComponent) },
-          { path: 'roles', loadComponent: () => import('./features/settings/roles/roles').then((m) => m.RolesSettingsComponent) },
+          { path: 'users', canActivate: [permissionGuard('users.manage')], loadComponent: () => import('./features/settings/users/users').then((m) => m.UsersSettingsComponent) },
+          { path: 'roles', canActivate: [permissionGuard('roles.manage')], loadComponent: () => import('./features/settings/roles/roles').then((m) => m.RolesSettingsComponent) },
           { path: 'subtitle-providers', loadComponent: () => import('./features/settings/subtitle-providers/subtitle-providers').then((m) => m.SubtitleProvidersSettingsComponent) },
-          { path: 'subtitles-activity', loadComponent: () => import('./features/settings/subtitles-activity/subtitles-activity').then((m) => m.SubtitlesActivityComponent) },
+          { path: 'subtitles-activity', canActivate: [permissionGuard('media.read')], loadComponent: () => import('./features/settings/subtitles-activity/subtitles-activity').then((m) => m.SubtitlesActivityComponent) },
           {
             path: 'subtitles',
             loadComponent: () => import('./features/settings/subtitles/subtitles-shell').then((m) => m.SubtitlesShellComponent),

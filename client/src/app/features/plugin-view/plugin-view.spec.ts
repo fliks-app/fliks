@@ -430,6 +430,36 @@ describe('PluginViewComponent', () => {
     http.verify();
   });
 
+  it('drops a list action the viewer has no permission for, and keeps the ungated one', async () => {
+    const { fixture, http } = createComponent(
+      { pluginId: 'fliks.a', view: 'queue' },
+      {
+        hasPlugin: () => true,
+        configPage: () => ({
+          kind: 'table',
+          id: 'x',
+          labelKey: 'x.title',
+          list: '/queue',
+          columns: [{ key: 'name', labelKey: 'x.col_name' }],
+          listActions: [
+            { labelKey: 'x.clear_all', method: 'DELETE', path: '/history/all', when: ['hasPermission:plugin:fliks.a:queue-control'] },
+            { labelKey: 'x.refresh_all', method: 'POST', path: '/refresh' },
+          ],
+        }),
+      },
+    );
+    fixture.detectChanges();
+    http.expectOne({ url: '/api/plugins/fliks.a/queue', method: 'GET' }).flush([{ id: 1, name: 'Torrent A' }]);
+    await settle(fixture);
+
+    const labels = (Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[]).map(
+      (b) => b.textContent ?? '',
+    );
+    expect(labels.some((l) => l.includes('x.refresh_all'))).toBe(true);
+    expect(labels.some((l) => l.includes('x.clear_all'))).toBe(false);
+    http.verify();
+  });
+
   it('VERDICT: a `table.open-media` row action renders a button and navigates using the row\'s mediaId/mediaType', async () => {
     const { fixture, http, navigateByUrl } = createComponent(
       { pluginId: 'fliks.a', view: 'queue' },

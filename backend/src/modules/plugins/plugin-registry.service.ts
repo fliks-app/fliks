@@ -35,6 +35,7 @@ import {
   type ReleasePickerRoutes,
   type PlayerDeclaration,
   type ConfigPage,
+  type UiContribution,
 } from '../../common/plugin-contract';
 import { OFFICIAL_KEYS, resolveTrust, readArchiveEntries, type TrustOutcome } from './archive';
 import { extractCachedDenyList, findDenial } from './catalog/catalog';
@@ -72,6 +73,9 @@ const EMPTY_SUBJECT_SET: ReadonlySet<string> = new Set();
 
 const CORE_JOB_NAME_SET: ReadonlySet<string> = new Set(RESERVED_CORE_JOB_NAMES);
 
+/** The two prefixes core mounts `plugin-view` under; any other path is a core page. */
+const PLUGIN_VIEW_PREFIXES: readonly string[] = ['/admin/settings/plugins/', '/plugins/'];
+
 const RELEASE_PICKER_CONTEXTS: readonly (keyof ReleasePickerRoutes)[] = ['movie', 'season', 'episode'];
 /** The method each `releasePicker` action's declared route must carry. */
 const RELEASE_PICKER_ACTIONS: readonly { key: keyof ReleasePickerPair; method: string }[] = [
@@ -108,6 +112,7 @@ export type PluginRegistrationFailureReason =
   | 'duplicate-route'
   | 'invalid-release-picker'
   | 'invalid-player'
+  | 'invalid-ui-contribution'
   | 'invalid-permission'
   | 'invalid-job-name'
   | 'invalid-job-cron'
@@ -307,6 +312,13 @@ export class PluginRegistryService implements OnModuleInit {
     const playerCheck = this.validatePlayer(manifest.ui?.player, manifest.kind === 'process' ? manifest.routes : []);
     if (!playerCheck.ok) return this.fail(pkg.pluginId, playerCheck.reason, playerCheck.detail);
 
+    const viewTargetsCheck = this.validateUiViewTargets(
+      pkg.pluginId,
+      manifest.ui?.contributions ?? [],
+      manifest.ui?.configPages ?? [],
+    );
+    if (!viewTargetsCheck.ok) return this.fail(pkg.pluginId, viewTargetsCheck.reason, viewTargetsCheck.detail);
+
     const i18nCheck = this.validateI18nNamespace(pkg.pluginId, manifest);
     if (!i18nCheck.ok) return this.fail(pkg.pluginId, i18nCheck.reason, i18nCheck.detail);
 
@@ -500,6 +512,26 @@ export class PluginRegistryService implements OnModuleInit {
    *  `PluginRouteGuard` scopes every check to exactly this, so a route never authorizes against another plugin's subject. */
   declaredPermissionsFor(pluginId: string): ReadonlySet<string> {
     return this.declaredPermissions.get(pluginId) ?? EMPTY_SUBJECT_SET;
+  }
+
+  /** Every grant an admin can tick on a role: each policy the plugins' routes declare, plus any
+   *  declared subject no route names. Authorizes nothing; `PluginRouteGuard` re-checks the grant. */
+  listGrantablePermissions(): string[] {
+    const grants = new Set<string>();
+    for (const plugin of this.registry.values()) {
+      const subjects = this.declaredPermissionsFor(plugin.pluginId);
+      if (subjects.size === 0) continue;
+      const covered = new Set<string>();
+      const routes = plugin.manifest.kind === 'process' ? plugin.manifest.routes : [];
+      for (const route of routes) {
+        const subject = route.policy.slice(route.policy.indexOf(':') + 1);
+        if (!subjects.has(subject)) continue;
+        grants.add(route.policy);
+        covered.add(subject);
+      }
+      for (const subject of subjects) if (!covered.has(subject)) grants.add(subject);
+    }
+    return [...grants].sort();
   }
 
   /** Every registered webhook subscribed to `eventType` — the dispatcher's fan-out list. */
@@ -787,6 +819,34 @@ export class PluginRegistryService implements OnModuleInit {
         reason: 'invalid-player',
         detail: `ui.player.preRollRoute "${player.preRollRoute}" is not declared as a POST route in routes[]`,
       };
+    }
+    return { ok: true };
+  }
+
+  /** A contribution routing into a plugin view must name one of this manifest's own `configPages`:
+   *  core renders "unavailable" for an id nobody declares, which reads as a broken plugin. */
+  private validateUiViewTargets(
+    pluginId: string,
+    contributions: UiContribution[],
+    configPages: ConfigPage[],
+  ): { ok: true } | { ok: false; reason: PluginRegistrationFailureReason; detail: string } {
+    const pageIds = new Set(configPages.map((page) => page.id));
+    const pending = [...contributions];
+    while (pending.length > 0) {
+      const contribution = pending.pop()!;
+      pending.push(...(contribution.children ?? []));
+      if (contribution.action?.kind !== 'route' || typeof contribution.action.path !== 'string') continue;
+      const path = contribution.action.path;
+      const prefix = PLUGIN_VIEW_PREFIXES.find((candidate) => path.startsWith(candidate));
+      if (!prefix) continue;
+      const segments = path.slice(prefix.length).split('/');
+      if (segments.length !== 2 || segments[0] !== pluginId || !pageIds.has(segments[1])) {
+        return {
+          ok: false,
+          reason: 'invalid-ui-contribution',
+          detail: `contribution "${contribution.id}" routes to "${path}", which is not one of this plugin's ui.configPages`,
+        };
+      }
     }
     return { ok: true };
   }

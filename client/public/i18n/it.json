@@ -149,7 +149,8 @@
     "requests.manage": "Gestire le richieste",
     "subtitles.manage": "Gestire i sottotitoli",
     "settings.access": "Accesso alle impostazioni",
-    "users.manage": "Gestire gli utenti"
+    "users.manage": "Gestire gli utenti",
+    "roles.manage": "Gestire i ruoli"
   },
   "account": {
     "title": "Il mio account",
@@ -2089,7 +2090,9 @@
       "field_is_default": "Ruolo predefinito (assegnato ai nuovi utenti)",
       "default_libraries": "Librerie assegnate per impostazione predefinita",
       "default_libraries_hint": "I nuovi utenti creati con questo ruolo erediteranno l'accesso a queste librerie.",
-      "confirm_delete": "Eliminare il ruolo « {{name}} »?"
+      "confirm_delete": "Eliminare il ruolo « {{name}} »?",
+      "plugin_permissions": "Permessi dei plugin",
+      "permission_unavailable": "non più dichiarato"
     },
     "auto_approval": {
       "title": "Regole di approvazione automatica",

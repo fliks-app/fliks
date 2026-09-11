@@ -154,7 +154,8 @@
     "requests.manage": "Gérer les demandes",
     "subtitles.manage": "Gérer les sous-titres",
     "settings.access": "Accès aux paramètres",
-    "users.manage": "Gérer les utilisateurs"
+    "users.manage": "Gérer les utilisateurs",
+    "roles.manage": "Gérer les rôles"
   },
   "account": {
     "title": "Mon compte",
@@ -2106,7 +2107,9 @@
       "field_is_default": "Rôle par défaut (attribué aux nouveaux utilisateurs)",
       "default_libraries": "Bibliothèques attribuées par défaut",
       "default_libraries_hint": "Les nouveaux utilisateurs créés avec ce rôle hériteront de l'accès à ces bibliothèques.",
-      "confirm_delete": "Supprimer le rôle « {{name}} » ?"
+      "confirm_delete": "Supprimer le rôle « {{name}} » ?",
+      "plugin_permissions": "Permissions des plugins",
+      "permission_unavailable": "n'est plus déclarée"
     },
     "auto_approval": {
       "title": "Règles d'approbation automatique",

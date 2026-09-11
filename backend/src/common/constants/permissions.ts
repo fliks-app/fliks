@@ -13,6 +13,7 @@ export const PERMISSIONS = [
   'subtitles.manage',
   'settings.access',
   'users.manage',
+  'roles.manage',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

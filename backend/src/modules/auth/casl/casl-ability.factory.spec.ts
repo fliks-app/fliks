@@ -1,6 +1,8 @@
 import { CaslAbilityFactory } from './casl-ability.factory';
 import { Action } from './actions.enum';
 import type { User } from '../../users/entities/user.entity';
+import { User as UserEntity } from '../../users/entities/user.entity';
+import { Role } from '../../roles/entities/role.entity';
 
 function fakeUser(permissions: string[], isAdmin = false): User {
   // `User.permissions` is a getter that overrides to `['manage:all']` when `isAdmin` — mirror
@@ -32,8 +34,44 @@ describe('CaslAbilityFactory — plugin-declared subjects', () => {
     expect(ability.can(Action.Read, 'plugin:fliks.myplugin:download')).toBe(true);
   });
 
+  it('narrows an action-prefixed grant to that action alone', () => {
+    const ability = factory.createForUser(fakeUser(['read:plugin:fliks.myplugin:download']));
+    expect(ability.can(Action.Read, 'plugin:fliks.myplugin:download')).toBe(true);
+    expect(ability.can(Action.Manage, 'plugin:fliks.myplugin:download')).toBe(false);
+    expect(ability.can(Action.Delete, 'plugin:fliks.myplugin:download')).toBe(false);
+  });
+
+  it('denies a grant prefixed with an action the enum does not know', () => {
+    const ability = factory.createForUser(fakeUser(['sudo:plugin:fliks.myplugin:download']));
+    expect(ability.can(Action.Read, 'plugin:fliks.myplugin:download')).toBe(false);
+    expect(ability.can(Action.Manage, 'plugin:fliks.myplugin:download')).toBe(false);
+  });
+
   it('ignores a permission string that is not shaped like a plugin subject', () => {
     const ability = factory.createForUser(fakeUser(['media.read']));
     expect(ability.can(Action.Read, 'plugin:fliks.myplugin:download')).toBe(false);
+  });
+});
+
+describe('CaslAbilityFactory: users and roles are separate permissions', () => {
+  const factory = new CaslAbilityFactory();
+
+  it('lets users.manage list roles without editing them', () => {
+    const ability = factory.createForUser(fakeUser(['users.manage']));
+    expect(ability.can(Action.Manage, UserEntity)).toBe(true);
+    expect(ability.can(Action.Read, Role)).toBe(true);
+    expect(ability.can(Action.Manage, Role)).toBe(false);
+  });
+
+  it('lets roles.manage edit roles without touching users', () => {
+    const ability = factory.createForUser(fakeUser(['roles.manage']));
+    expect(ability.can(Action.Manage, Role)).toBe(true);
+    expect(ability.can(Action.Manage, UserEntity)).toBe(false);
+  });
+
+  it('denies both to a role holding neither', () => {
+    const ability = factory.createForUser(fakeUser(['media.read']));
+    expect(ability.can(Action.Read, Role)).toBe(false);
+    expect(ability.can(Action.Manage, UserEntity)).toBe(false);
   });
 });
