@@ -6,9 +6,10 @@ import { RolesController } from './roles.controller';
 import { AuthModule } from '../auth/auth.module';
 import { User } from '../users/entities/user.entity';
 import { Library } from '../libraries/entities/library.entity';
+import { PluginsModule } from '../plugins/plugins.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Role, User, Library]), AuthModule],
+  imports: [TypeOrmModule.forFeature([Role, User, Library]), AuthModule, PluginsModule],
   controllers: [RolesController],
   providers: [RolesService],
   exports: [TypeOrmModule, RolesService],

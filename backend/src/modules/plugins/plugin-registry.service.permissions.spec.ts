@@ -153,3 +153,36 @@ describe('PluginRegistryService — a route may only authorize against its own p
     expect(service.declaredPermissionsFor('fliks.a').size).toBe(0);
   });
 });
+
+describe('PluginRegistryService.listGrantablePermissions', () => {
+  it('lists each policy the routes declare, so read and manage on one subject stay separate', async () => {
+    const manifest = processManifest('fliks.a', ['queue', 'indexers'], [
+      { method: 'GET', path: '/queue', policy: 'read:plugin:fliks.a:queue' },
+      { method: 'GET', path: '/indexers', policy: 'read:plugin:fliks.a:indexers' },
+      { method: 'POST', path: '/indexers', policy: 'manage:plugin:fliks.a:indexers' },
+    ]);
+    const service = makeService();
+    await service.register(makePackage(manifest));
+
+    expect(service.listGrantablePermissions()).toEqual([
+      'manage:plugin:fliks.a:indexers',
+      'read:plugin:fliks.a:indexers',
+      'read:plugin:fliks.a:queue',
+    ]);
+  });
+
+  it('falls back to the bare subject for a declared permission no route names', async () => {
+    const manifest = processManifest('fliks.a', ['reports']);
+    const service = makeService();
+    await service.register(makePackage(manifest));
+
+    expect(service.listGrantablePermissions()).toEqual(['plugin:fliks.a:reports']);
+  });
+
+  it('is empty for a plugin declaring no permission at all', async () => {
+    const service = makeService();
+    await service.register(makePackage(processManifest('fliks.a', [])));
+
+    expect(service.listGrantablePermissions()).toEqual([]);
+  });
+});

@@ -22,3 +22,13 @@ export function pluginPermissionSubject(pluginId: string, name: string): string 
 export function isPluginPermissionSubject(value: string): boolean {
   return value.startsWith(PLUGIN_SUBJECT_PREFIX) && value.length > PLUGIN_SUBJECT_PREFIX.length;
 }
+
+/** Splits a grant: a bare subject allows every action, `read:plugin:<id>:<name>` only that one.
+ *  The action comes back as written; judging it against a vocabulary is the caller's job. */
+export function parsePluginPermissionGrant(value: string): { action?: string; subject: string } | null {
+  if (isPluginPermissionSubject(value)) return { subject: value };
+  const sep = value.indexOf(':');
+  if (sep === -1) return null;
+  const subject = value.slice(sep + 1);
+  return isPluginPermissionSubject(subject) ? { action: value.slice(0, sep), subject } : null;
+}

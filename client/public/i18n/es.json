@@ -2089,7 +2089,9 @@
       "field_is_default": "Rol por defecto (asignado a los nuevos usuarios)",
       "default_libraries": "Bibliotecas asignadas por defecto",
       "default_libraries_hint": "Los nuevos usuarios creados con este rol heredarán el acceso a estas bibliotecas.",
-      "confirm_delete": "¿Eliminar el rol «{{name}}»?"
+      "confirm_delete": "¿Eliminar el rol «{{name}}»?",
+      "plugin_permissions": "Permisos de plugins",
+      "permission_unavailable": "ya no declarado"
     },
     "auto_approval": {
       "title": "Reglas de aprobación automática",

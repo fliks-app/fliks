@@ -2106,7 +2106,9 @@
       "field_is_default": "Rôle par défaut (attribué aux nouveaux utilisateurs)",
       "default_libraries": "Bibliothèques attribuées par défaut",
       "default_libraries_hint": "Les nouveaux utilisateurs créés avec ce rôle hériteront de l'accès à ces bibliothèques.",
-      "confirm_delete": "Supprimer le rôle « {{name}} » ?"
+      "confirm_delete": "Supprimer le rôle « {{name}} » ?",
+      "plugin_permissions": "Permissions des plugins",
+      "permission_unavailable": "n'est plus déclarée"
     },
     "auto_approval": {
       "title": "Règles d'approbation automatique",

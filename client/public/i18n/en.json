@@ -2106,7 +2106,9 @@
       "field_is_default": "Default role (assigned to new users)",
       "default_libraries": "Libraries assigned by default",
       "default_libraries_hint": "New users created with this role will inherit access to these libraries.",
-      "confirm_delete": "Delete the role \"{{name}}\"?"
+      "confirm_delete": "Delete the role \"{{name}}\"?",
+      "plugin_permissions": "Plugin permissions",
+      "permission_unavailable": "no longer declared"
     },
     "auto_approval": {
       "title": "Auto-approval rules",

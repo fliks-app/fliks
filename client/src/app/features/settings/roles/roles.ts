@@ -1,6 +1,7 @@
 import {
   Component,
   ElementRef,
+  computed,
   signal,
   viewChild,
   inject,
@@ -15,6 +16,13 @@ import { ConfirmationService } from '../../../core/services/confirmation.service
 import { ToastService } from '../../../core/services/toast.service';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
+import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
+
+/** `read:plugin:fliks.download:queue`, or the bare subject, split into its parts. */
+function parseGrant(value: string): { action?: string; pluginId: string; name: string } | null {
+  const match = /^(?:([a-z]+):)?plugin:([^:]+):(.+)$/.exec(value);
+  return match ? { action: match[1], pluginId: match[2], name: match[3] } : null;
+}
 
 @Component({
   selector: 'app-roles-settings',
@@ -27,6 +35,7 @@ export class RolesSettingsComponent implements OnInit {
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
+  private readonly plugins = inject(PluginUiRegistryService);
   private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
 
   readonly rows = signal<RoleRow[]>([]);
@@ -38,6 +47,33 @@ export class RolesSettingsComponent implements OnInit {
   readonly saving = signal(false);
 
   readonly editingRole = signal<RoleRow | null>(null);
+
+  readonly corePermissions = computed(() => this.availablePermissions().filter((perm) => !parseGrant(perm)));
+
+  /** Plugin grants, grouped under the plugin that declares them. A grant the edited role holds
+   *  but no installed plugin offers is still listed, so saving cannot drop it unnoticed. */
+  readonly pluginPermissionGroups = computed(() => {
+    const available = this.availablePermissions();
+    const orphans = (this.editingRole()?.permissions ?? []).filter(
+      (perm) => parseGrant(perm) && !available.includes(perm),
+    );
+    const groups = new Map<string, { pluginId: string; name: string; grants: { value: string; name: string; label: string; orphan: boolean }[] }>();
+    for (const value of [...available, ...orphans]) {
+      const grant = parseGrant(value);
+      if (!grant) continue;
+      const group = groups.get(grant.pluginId) ?? {
+        pluginId: grant.pluginId,
+        name: this.plugins.pluginEntries().find((e) => e.pluginId === grant.pluginId)?.name ?? grant.pluginId,
+        grants: [],
+      };
+      group.grants.push({ value, name: grant.name, label: this.grantLabel(value, grant), orphan: orphans.includes(value) });
+      groups.set(grant.pluginId, group);
+    }
+    for (const group of groups.values()) {
+      group.grants.sort((a, b) => a.name.localeCompare(b.name) || a.label.localeCompare(b.label));
+    }
+    return [...groups.values()];
+  });
 
   readonly libraries = signal<Library[]>([]);
 
@@ -171,5 +207,13 @@ export class RolesSettingsComponent implements OnInit {
     const key = 'permissions.' + perm;
     const translated = this.translate.instant(key);
     return translated !== key ? translated : perm;
+  }
+
+  /** A plugin may label its own grants; otherwise the raw name and the action it is limited to. */
+  private grantLabel(value: string, grant: { action?: string; name: string }): string {
+    const key = 'permissions.' + value;
+    const translated = this.translate.instant(key);
+    if (translated !== key) return translated;
+    return grant.action ? `${grant.name} (${grant.action})` : grant.name;
   }
 }

@@ -32,6 +32,19 @@ describe('CaslAbilityFactory — plugin-declared subjects', () => {
     expect(ability.can(Action.Read, 'plugin:fliks.myplugin:download')).toBe(true);
   });
 
+  it('narrows an action-prefixed grant to that action alone', () => {
+    const ability = factory.createForUser(fakeUser(['read:plugin:fliks.myplugin:download']));
+    expect(ability.can(Action.Read, 'plugin:fliks.myplugin:download')).toBe(true);
+    expect(ability.can(Action.Manage, 'plugin:fliks.myplugin:download')).toBe(false);
+    expect(ability.can(Action.Delete, 'plugin:fliks.myplugin:download')).toBe(false);
+  });
+
+  it('denies a grant prefixed with an action the enum does not know', () => {
+    const ability = factory.createForUser(fakeUser(['sudo:plugin:fliks.myplugin:download']));
+    expect(ability.can(Action.Read, 'plugin:fliks.myplugin:download')).toBe(false);
+    expect(ability.can(Action.Manage, 'plugin:fliks.myplugin:download')).toBe(false);
+  });
+
   it('ignores a permission string that is not shaped like a plugin subject', () => {
     const ability = factory.createForUser(fakeUser(['media.read']));
     expect(ability.can(Action.Read, 'plugin:fliks.myplugin:download')).toBe(false);

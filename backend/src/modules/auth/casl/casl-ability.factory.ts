@@ -16,7 +16,7 @@ import { TranslationProvider } from '../../subtitles/entities/translation-provid
 import { Library } from '../../libraries/entities/library.entity';
 import { Playlist } from '../../playlists/entities/playlist.entity';
 import { Action } from './actions.enum';
-import { isPluginPermissionSubject } from '../../../common/constants/plugin-permissions';
+import { parsePluginPermissionGrant } from '../../../common/constants/plugin-permissions';
 
 type Subjects =
   | InferSubjects<
@@ -38,6 +38,8 @@ type Subjects =
 
 export type AppAbility = MongoAbility<[Action, Subjects]>;
 
+const ACTIONS: ReadonlySet<string> = new Set(Object.values(Action));
+
 @Injectable()
 export class CaslAbilityFactory {
   createForUser(user: User): AppAbility {
@@ -54,7 +56,12 @@ export class CaslAbilityFactory {
     // Self-contained: `PluginRouteGuard` re-checks the subject against that same plugin's
     // declared set, so granting it here needs no live plugin registry at all.
     for (const perm of perms) {
-      if (isPluginPermissionSubject(perm)) can(Action.Manage, perm as `plugin:${string}`);
+      const grant = parsePluginPermissionGrant(perm);
+      if (!grant) continue;
+      // An action the enum doesn't know is denied outright rather than widened to `manage`.
+      const action = grant.action ?? Action.Manage;
+      if (!ACTIONS.has(action)) continue;
+      can(action as Action, grant.subject as `plugin:${string}`);
     }
 
     // Every authenticated user can read/update themselves

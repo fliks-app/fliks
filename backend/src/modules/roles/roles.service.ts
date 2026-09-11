@@ -13,6 +13,7 @@ import { UpdateRoleDto } from './dto/update-role.dto';
 import { DEFAULT_ROLES, PERMISSIONS } from '../../common/constants/permissions';
 import { User } from '../users/entities/user.entity';
 import { Library } from '../libraries/entities/library.entity';
+import { PluginRegistryService } from '../plugins/plugin-registry.service';
 
 @Injectable()
 export class RolesService implements OnModuleInit {
@@ -25,6 +26,7 @@ export class RolesService implements OnModuleInit {
     private readonly userRepo: Repository<User>,
     @InjectRepository(Library)
     private readonly libraryRepo: Repository<Library>,
+    private readonly plugins: PluginRegistryService,
   ) {}
 
   private async loadLibraries(ids?: number[]): Promise<Library[]> {
@@ -128,9 +130,10 @@ export class RolesService implements OnModuleInit {
     await this.roleRepo.remove(role);
   }
 
-  /** Return the list of all available permission keys. */
+  /** Core's keys plus every grant the installed plugins declare: without the second half a
+   *  plugin route is reachable by admins only, whatever policy it declares. */
   getAvailablePermissions(): string[] {
-    return [...PERMISSIONS];
+    return [...PERMISSIONS, ...this.plugins.listGrantablePermissions()];
   }
 
   async getDefaultRole(): Promise<Role | null> {

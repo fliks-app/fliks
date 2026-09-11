@@ -502,6 +502,26 @@ export class PluginRegistryService implements OnModuleInit {
     return this.declaredPermissions.get(pluginId) ?? EMPTY_SUBJECT_SET;
   }
 
+  /** Every grant an admin can tick on a role: each policy the plugins' routes declare, plus any
+   *  declared subject no route names. Authorizes nothing; `PluginRouteGuard` re-checks the grant. */
+  listGrantablePermissions(): string[] {
+    const grants = new Set<string>();
+    for (const plugin of this.registry.values()) {
+      const subjects = this.declaredPermissionsFor(plugin.pluginId);
+      if (subjects.size === 0) continue;
+      const covered = new Set<string>();
+      const routes = plugin.manifest.kind === 'process' ? plugin.manifest.routes : [];
+      for (const route of routes) {
+        const subject = route.policy.slice(route.policy.indexOf(':') + 1);
+        if (!subjects.has(subject)) continue;
+        grants.add(route.policy);
+        covered.add(subject);
+      }
+      for (const subject of subjects) if (!covered.has(subject)) grants.add(subject);
+    }
+    return [...grants].sort();
+  }
+
   /** Every registered webhook subscribed to `eventType` — the dispatcher's fan-out list. */
   listWebhooksForEvent(eventType: string): { pluginId: string; webhook: string }[] {
     const out: { pluginId: string; webhook: string }[] = [];

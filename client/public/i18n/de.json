@@ -2089,7 +2089,9 @@
       "field_is_default": "Standardrolle (neuen Benutzern zugewiesen)",
       "default_libraries": "Standardmäßig zugewiesene Bibliotheken",
       "default_libraries_hint": "Neue Benutzer, die mit dieser Rolle erstellt werden, erben den Zugriff auf diese Bibliotheken.",
-      "confirm_delete": "Rolle „{{name}}“ löschen?"
+      "confirm_delete": "Rolle „{{name}}“ löschen?",
+      "plugin_permissions": "Plugin-Berechtigungen",
+      "permission_unavailable": "nicht mehr deklariert"
     },
     "auto_approval": {
       "title": "Automatische Genehmigungsregeln",
