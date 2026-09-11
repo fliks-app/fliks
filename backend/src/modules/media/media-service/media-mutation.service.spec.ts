@@ -254,3 +254,40 @@ describe('MediaMutationService remove disk cleanup', () => {
     });
   });
 });
+
+describe('MediaMutationService deleteMediaFile cache cleanup', () => {
+  it('purges the sprite and subtitle caches with the id the row had', async () => {
+    const file = { id: 77, episodeId: null, relativePath: 'a.mkv' };
+    const thumbnails = { deleteForFile: jest.fn() };
+    const subtitleStream = { clearMediaFileSubtitleCache: jest.fn() };
+    const mediaFileRepo = {
+      findOne: jest.fn().mockResolvedValue(file),
+      // TypeORM blanks the primary key of a removed entity.
+      remove: jest.fn(() => {
+        (file as { id?: number }).id = undefined;
+      }),
+      count: jest.fn(),
+    };
+
+    const service = new MediaMutationService(
+      { findOne: jest.fn().mockResolvedValue({ id: 1, title: 'placeholder', path: null }) } as never,
+      {} as never,
+      {} as never,
+      mediaFileRepo as never,
+      {} as never,
+      {} as never,
+      { dispatch: jest.fn() } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { emitDomain: jest.fn() } as never,
+      thumbnails as never,
+      subtitleStream as never,
+    );
+
+    await service.deleteMediaFile(1, 77, false);
+
+    expect(thumbnails.deleteForFile).toHaveBeenCalledWith(77);
+    expect(subtitleStream.clearMediaFileSubtitleCache).toHaveBeenCalledWith(77);
+  });
+});

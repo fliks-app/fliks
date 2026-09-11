@@ -414,13 +414,13 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     return this.mediaFiles().find((f) => f.id === id) ?? null;
   });
 
-  /** Auto-select first file when mediaFiles change and no selection exists */
+  /** Keep the selection pointing at a file that still exists — validated against
+   *  every file (a series' selection is an episode file, absent from `mediaFiles`). */
   private readonly autoSelectFileEffect = effect(() => {
-    const files = this.mediaFiles();
+    const all = this.media()?.files ?? [];
     const current = this.selectedFileId();
-    if (files.length && (!current || !files.some((f) => f.id === current))) {
-      this.selectedFileId.set(files[0].id);
-    }
+    if (current != null && all.some((f) => f.id === current)) return;
+    this.selectedFileId.set(this.mediaFiles()[0]?.id ?? null);
   });
 
   // ── Episode full-page mode (when navigating to series/:id/episode/:episodeId) ──
