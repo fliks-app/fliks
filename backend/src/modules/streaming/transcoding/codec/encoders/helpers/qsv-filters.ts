@@ -7,7 +7,7 @@ import type { EncoderInput } from '../../types';
  *    `vpp_qsv` for crop + scale + format on the QSV device. End-to-end
  *    QSV pipeline, no hwmap, no fixed-pool quirk on crop.
  *  - tonemapVaapi: keep on VAAPI surfaces, tonemap on the VPP (1 device).
- *  - tonemapOpencl: reinhard via OpenCL, then hwmap to QSV.
+ *  - tonemapOpencl: the admin curve via OpenCL, then hwmap to QSV.
  *  - default (vaapi surfaces, no tonemap): scale_vaapi → hwmap to QSV.
  *
  *  scale_vaapi is preferred over scale_qsv for the vaapi-input paths
@@ -30,7 +30,7 @@ export function qsvScaleFilter8bit(input: EncoderInput): string {
     //    Intel VPP LUT under-exposes on some iGPUs, hence the admin
     //    override.
     //  - `tonemap=opencl`: vpp_qsv outputs p010le (HDR preserved),
-    //    then hwmap → opencl, reinhard tonemap, hwmap back to qsv,
+    //    then hwmap → opencl, curve tonemap, hwmap back to qsv,
     //    `format=qsv`. Two hwmaps but no CPU traffic — measured at
     //    ~3× the throughput of the vaapi-decode chain on cropped 4K
     //    HDR sources, with identical visual output.
