@@ -1,6 +1,7 @@
 import { Component, computed, input, linkedSignal } from '@angular/core';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { ImgFadeInDirective } from '../directives/img-fade-in.directive';
+import { viewTransitionRunning } from '../utils/view-transition';
 
 /**
  * Mobile-only hero image (series fanart, episode still, etc.) — extends under the transparent navbar
@@ -25,10 +26,14 @@ export class MobileFanartHeroComponent {
     return url ? [url] : [];
   });
 
-  /** The url this hero was showing before the current one. */
+  /** The url this hero was showing before the current one. Not while a
+   *  transition runs: the page is frozen to snapshots for its length, so the
+   *  fade would play unseen and the picture it holds up is the one the arriving
+   *  snapshot carries — the episode being left. */
   protected readonly outgoing = linkedSignal<string | null | undefined, string | null>({
     source: () => this.fanartUrl(),
-    computation: (next, previous) => (previous?.source && next ? previous.source : null),
+    computation: (next, previous) =>
+      previous?.source && next && !viewTransitionRunning() ? previous.source : null,
   });
 
   /** Reset by its source, so a swap landing mid-fade starts its own. */

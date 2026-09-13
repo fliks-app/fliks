@@ -55,7 +55,7 @@ import {
   swipeBackActive,
   WATCH_PATH,
 } from './shared/utils/view-transition';
-import { runPageSlide } from './shared/utils/page-slide';
+import { nextSlide, slidePage } from './shared/utils/page-slide';
 
 /** Read the persisted server URL, sessions and credentials before bootstrap:
  *  guards, interceptors and the first /auth/me all depend on them. Resolves
@@ -77,7 +77,6 @@ export function loadPersistedState(): Promise<unknown> {
     .catch(() => undefined);
 }
 
-const EPISODE_PATH = 'series/:id/episode/:episodeId';
 const PLAYER_CLOSE_CLASS = 'vt-player-close';
 const POSTER_IN_CLASS = 'vt-poster-in';
 const POSTER_OUT_CLASS = 'vt-poster-out';
@@ -112,8 +111,9 @@ export const appConfig: ApplicationConfig = {
               // rejects on Chromium's 4 s timeout, and the splash only hides once
               // the navigation does.
               skipInitialTransition: true,
-              // Episode → episode: the cross-fade keeps the old page (and its scroll
-              // offset) on screen, so the jump to top only lands once it ends.
+              // Which animation a navigation gets, in one place: the player's own,
+              // the poster morph, the stack slide, or none — in which case the
+              // transition is dropped rather than run empty.
               onViewTransitionCreated: ({ transition, from, to }) => {
                 if (swipeBackActive()) {
                   transition.skipTransition();
@@ -139,10 +139,6 @@ export const appConfig: ApplicationConfig = {
                   transition.skipTransition();
                   return;
                 }
-                if (leafRoutePath(from) === EPISODE_PATH && leafRoutePath(to) === EPISODE_PATH) {
-                  transition.skipTransition();
-                  return;
-                }
                 // Opening the player animates itself, and the root pair is off,
                 // so there is nothing to capture. Skipping keeps the stamp the
                 // eventual back morph pairs with, which clearing below would
@@ -157,15 +153,22 @@ export const appConfig: ApplicationConfig = {
                 // root pair: the closing player has to shrink over the page
                 // behind it, which only exists inside the transition.
                 if (closingPlayer) classUntilDone(transition, PLAYER_CLOSE_CLASS);
-                // Home and a library share nothing to morph, so that pair slides
-                // like a native stack instead.
-                runPageSlide(transition, from, to);
                 // The morph is tuned per direction: the box grows into a
                 // poster one way and collapses onto a card the other.
                 const posterTrip =
                   (leavingPosterPage(from, to) && POSTER_OUT_CLASS) ||
                   (enteringPosterPage(from, to) && POSTER_IN_CLASS);
                 if (posterTrip) classUntilDone(transition, posterTrip);
+                // What a pair with no morph of its own gets: the pages stack.
+                const direction = nextSlide(from, to, !!posterTrip);
+                const slid = !!direction && slidePage(transition, direction);
+                // Nothing would move. A transition still lifts every named hero
+                // out of its page, cross-fading it against a copy of itself and
+                // holding the page's own swap behind snapshots until it ends.
+                if (!posterTrip && !closingPlayer && !slid) {
+                  transition.skipTransition();
+                  return;
+                }
                 markViewTransition(transition);
               },
             }),

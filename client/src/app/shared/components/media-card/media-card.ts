@@ -14,6 +14,7 @@ import { TrackingModalService } from '../../../core/services/tracking-modal.serv
 import { CardActionsDirective } from '../../directives/card-actions.directive';
 import { SpoilerDirective } from '../../directives/spoiler.directive';
 import { clearPosterStamps, stampPoster } from '../../utils/view-transition';
+import { armPageSlide } from '../../utils/page-slide';
 import { ServerConfigService } from '../../../core/services/server-config.service';
 import { imageUrlWithSize } from '../../../core/pipes/resolve-url.pipe';
 import { CardAction, CardActionsService } from '../../../core/services/card-actions.service';
@@ -342,12 +343,23 @@ export class MediaCardComponent {
    *  by an earlier click would morph this card into the wrong image. */
   protected onTitleAnchorPointerdown() {
     clearPosterStamps();
-    if (this.replaceUrl()) this.navbar.markAsBackNavigation();
+    this.markNavigationIntent();
   }
 
   protected onAnchorPointerdown() {
     this.flagPosterForTransition();
+    this.markNavigationIntent();
+  }
+
+  /**
+   * What every way out of a card has to say: whether it stacks a page or takes
+   * the place of the one it sits on. The back stack and the slide read the same
+   * answer — a replaced URL must not be pushed onto the stack, and has nothing
+   * to slide out of either.
+   */
+  private markNavigationIntent(): void {
     if (this.replaceUrl()) this.navbar.markAsBackNavigation();
+    else armPageSlide();
   }
 
   private readonly serverConfig = inject(ServerConfigService);
@@ -360,14 +372,19 @@ export class MediaCardComponent {
    * poster instead. Decoding it here gives it the ~100 ms until the capture.
    */
   private prefetchHeroArtwork() {
-    const url = this.media()?.fanartUrl ?? this.fanartUrl();
+    // An episode page shows the still this card already carries, not the
+    // series fanart the media below would hand over.
+    const url =
+      this.episodeIdFromLink() != null
+        ? this._img()
+        : (this.media()?.fanartUrl ?? this.fanartUrl());
     if (!url) return;
     const img = new Image();
     img.decoding = 'async';
     img.src = this.serverConfig.resolveUrl(imageUrlWithSize(url, 'medium'));
   }
 
-  protected flagPosterForTransition() {
+  protected flagPosterForTransition(): void {
     // Pointless where the engine has no View Transitions (Chromium <111, Tizen 5.5
     // WebKit, webOS 5), and it costs a querySelectorAll per click.
     if (!('startViewTransition' in document)) return;
@@ -380,7 +397,6 @@ export class MediaCardComponent {
     const id = this.resolveMediaId();
     const img = this.imgRef()?.nativeElement;
     if (id == null || !img) return;
-    this.prefetchHeroArtwork();
     stampPoster(img, id, this.episodeIdFromLink(), this.overlayRef()?.nativeElement);
   }
   protected readonly _playable = computed(() => {
@@ -401,6 +417,7 @@ export class MediaCardComponent {
   });
 
   protected onCardClick() {
+    this.prefetchHeroArtwork();
     this.flagPosterForTransition();
     // When the parent owns the click ('play' intent), don't navigate to the
     // detail link here — the parent's (clicked) handler routes to /watch
@@ -413,7 +430,7 @@ export class MediaCardComponent {
         // history: when we replace the URL, the page we're leaving
         // must NOT be pushed onto the back stack — otherwise the
         // in-app "Retour" walks the chain of replaced entries.
-        if (this.replaceUrl()) this.navbar.markAsBackNavigation();
+        this.markNavigationIntent();
         void this.router.navigate(link, {
           state: this._navState(),
           replaceUrl: this.replaceUrl(),

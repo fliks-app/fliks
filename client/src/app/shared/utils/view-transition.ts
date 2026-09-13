@@ -68,7 +68,11 @@ export function leafRoutePath(root: RouteNode): string | undefined {
   return leaf.routeConfig?.path;
 }
 
-/** A card opening the page that carries the other half of its morph. */
+/**
+ * A card on a list opening the page that carries the other half of its morph.
+ * A card already on a poster page opens a sibling of the page it sits on, which
+ * is a step deeper into the same stack — the slide owns that pair.
+ */
 export function enteringPosterPage(from: RouteNode, to: RouteNode): boolean {
   return (
     POSTER_ROUTES.has(leafRoutePath(to)) &&

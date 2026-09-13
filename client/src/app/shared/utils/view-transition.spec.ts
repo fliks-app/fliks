@@ -123,7 +123,7 @@ describe('view-transition poster stamps', () => {
       // The tuned crop and easing only suit the card growing into the poster.
       expect(enteringPosterPage(route(''), route('movies/:id'))).toBe(true);
       expect(enteringPosterPage(route('movies/:id'), route(''))).toBe(false);
-      // Detail to detail keeps both sides on a poster: nothing to reshape.
+      // A card already on a poster page stacks a sibling: the slide owns that.
       expect(enteringPosterPage(route('movies/:id'), route('series/:id'))).toBe(false);
       // Closing the player back onto the detail page: its own shrink owns that.
       expect(enteringPosterPage(route('watch/:mediaFileId'), route('movies/:id'))).toBe(false);
