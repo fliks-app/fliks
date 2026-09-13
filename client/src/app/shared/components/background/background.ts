@@ -1,4 +1,4 @@
-import { Component, effect, inject, signal } from '@angular/core';
+import { Component, ElementRef, effect, inject, signal, viewChildren } from '@angular/core';
 import { BackgroundService } from '../../../core/services/background.service';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
@@ -32,6 +32,7 @@ export class BackgroundComponent {
   readonly previous = signal<number | null>(null);
   /** Layer whose image is still loading; promoted once it has decoded. */
   private pending: number | null = null;
+  private readonly layerImgs = viewChildren<ElementRef<HTMLImageElement>>('layerImg');
 
   constructor() {
     let last: string | null = null;
@@ -80,6 +81,22 @@ export class BackgroundComponent {
     if (index === this.active()) return;
     this.previous.set(this.active());
     this.active.set(index);
+    this.publish(index);
+  }
+
+  /**
+   * The picture, as a custom property any stylesheet can borrow. An element a
+   * view transition captures apart from the page — the sidebar — is a veil over
+   * nothing for as long as the trip lasts, and this is what it paints instead.
+   * Read off the element rather than rebuilt from the url: what reaches the
+   * <img> has been through the resolver and the cache.
+   */
+  private publish(index: number | null): void {
+    const src = index === null ? null : this.layerImgs()[index]?.nativeElement.currentSrc;
+    document.documentElement.style.setProperty(
+      '--app-bg-image',
+      src ? `url("${src}")` : 'none',
+    );
   }
 
   private freeLayer(): number {

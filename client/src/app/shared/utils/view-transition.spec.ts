@@ -1,4 +1,5 @@
 import {
+  classUntilDone,
   clearPosterStamps,
   clearStalePosterStamps,
   enteringPosterPage,
@@ -87,6 +88,20 @@ describe('view-transition poster stamps', () => {
     clearPosterStamps();
 
     expect(card.style.viewTransitionName).toBe('');
+  });
+
+  it('keeps a class the transition arriving asked for when the one before settles', async () => {
+    let settleFirst!: () => void;
+    const first = { finished: new Promise<void>((resolve) => (settleFirst = resolve)) };
+    const second = { finished: new Promise<void>(() => undefined) };
+
+    classUntilDone(first, 'vt-shared');
+    classUntilDone(second, 'vt-shared');
+    settleFirst();
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(document.documentElement.classList.contains('vt-shared')).toBe(true);
+    document.documentElement.classList.remove('vt-shared');
   });
 
   describe('enteringPosterPage', () => {

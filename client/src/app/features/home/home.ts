@@ -41,6 +41,7 @@ import { RequestDeclineModalComponent } from '../requests/request-decline-modal/
 import { libraryColorVar } from '../../core/constants/library-appearance';
 import { StorageScopeService } from '../../core/services/storage-scope.service';
 import { itemArtwork } from '../../shared/utils/media-artwork.util';
+import { armPageSlide } from '../../shared/utils/page-slide';
 
 /**
  * # Home page
@@ -293,6 +294,11 @@ export class HomeComponent implements OnInit, OnDestroy {
     }
     void this.loadFilteredSections();
   });
+
+  /** A library card stacks its page on this one; the rail switches root instead
+   *  and puts the stack down. Both read a tap, not a gesture the system takes
+   *  over — a pan across the row, or a swipe back, ends in no pointerup here. */
+  protected readonly armSlide = armPageSlide;
 
   libraryUrl(lib: LibrarySummary): string {
     return `/libraries/${encodeURIComponent(lib.name)}`;

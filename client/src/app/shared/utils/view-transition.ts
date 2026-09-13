@@ -45,7 +45,7 @@ export function stampPoster(
   }
 }
 
-interface RouteNode {
+export interface RouteNode {
   firstChild: RouteNode | null;
   routeConfig: { path?: string } | null;
 }
@@ -111,6 +111,29 @@ export function markViewTransition(transition: { finished: Promise<unknown> }): 
   const root = document.documentElement;
   root.classList.add(VIEW_TRANSITION_CLASS);
   const done = () => root.classList.remove(VIEW_TRANSITION_CLASS);
+  void transition.finished.then(done, done);
+}
+
+/** How many running transitions asked for each class. Starting a transition
+ *  skips the one before it, which then settles and cleans up — after the new one
+ *  has named itself, and they share these names. Counted, so the one arriving
+ *  keeps what it asked for and the one leaving takes back only its own. */
+const heldClasses = new Map<string, number>();
+
+/** Names the transition for the CSS that shapes it, for as long as it runs. */
+export function classUntilDone(
+  transition: { finished: Promise<unknown> },
+  ...classes: string[]
+): void {
+  const root = document.documentElement;
+  classes.forEach((cls) => heldClasses.set(cls, (heldClasses.get(cls) ?? 0) + 1));
+  root.classList.add(...classes);
+  const done = () =>
+    classes.forEach((cls) => {
+      const held = (heldClasses.get(cls) ?? 1) - 1;
+      heldClasses.set(cls, held);
+      if (held <= 0) root.classList.remove(cls);
+    });
   void transition.finished.then(done, done);
 }
 
