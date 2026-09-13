@@ -76,6 +76,9 @@ import {
         [style.min-width.px]="position().width"
         [style.max-height.px]="position().maxHeight"
       >
+        @if (heading()) {
+          <div class="px-2 pb-2 text-center text-base-content/60 text-sm font-medium truncate">{{ heading() }}</div>
+        }
         <ng-container *ngTemplateOutlet="content"></ng-container>
       </div>
     }
@@ -84,7 +87,7 @@ import {
            The sheet gates <ng-content> behind its own @if(visible()), so the
            projected content (and its bindings) is only instantiated while the
            sheet is on screen — safe to leave the outlet unguarded here. -->
-      <app-bottom-sheet [open]="open()" (closed)="close()">
+      <app-bottom-sheet [open]="open()" [heading]="heading()" (closed)="close()">
         <div
           data-tv-modal
           [attr.data-tv-submenu]="submenu() ? '' : null"
@@ -119,6 +122,8 @@ export class PopoverMenuComponent {
   >('bottom-end');
   /** Dropdown width in px (the sheet ignores it). */
   readonly width = input(240);
+  /** Title rendered above the content, in both the dropdown and the sheet. */
+  readonly heading = input('');
   /** Marks this menu as a flyout submenu: spatial nav traps up/down inside it
    *  and lets left/right return to the opener in the parent menu. */
   readonly submenu = input(false);

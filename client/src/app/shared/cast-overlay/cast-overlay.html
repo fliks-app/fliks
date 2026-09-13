@@ -184,7 +184,7 @@
             @for (p of pickers(); track p.kind; let i = $index) {
               <div class="min-w-0 space-y-1">
                 <span class="block text-sm text-base-content/50">{{ 'common.label_colon' | translate: { label: (p.labelKey | translate) } }}</span>
-                <app-dropdown-menu [placement]="placementFor(i)" maxHeight="max-h-[45vh]">
+                <app-dropdown-menu [placement]="placementFor(i)" maxHeight="max-h-[45vh]" [heading]="p.labelKey | translate">
                   <button trigger type="button"
                           class="select select-bordered select-sm w-fit min-w-28 max-w-full text-left truncate cursor-pointer transition-colors hover:bg-base-content/10">
                     {{ p.active }}

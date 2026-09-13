@@ -69,7 +69,7 @@ type Placement = 'bottom-end' | 'bottom-start' | 'top-end' | 'top-start';
       <div class="contents" (click)="open.set(true)">
         <ng-container *ngTemplateOutlet="triggerTpl"></ng-container>
       </div>
-      <app-bottom-sheet #sheet [open]="open()" (closed)="open.set(false)">
+      <app-bottom-sheet #sheet [open]="open()" [heading]="heading()" (closed)="open.set(false)">
         <div data-tv-modal class="px-2 pb-2" (click)="onItemsClick($event)">
           <ng-container *ngTemplateOutlet="itemsTpl"></ng-container>
         </div>
@@ -79,6 +79,8 @@ type Placement = 'bottom-end' | 'bottom-start' | 'top-end' | 'top-start';
 })
 export class DropdownMenuComponent {
   readonly placement = input<Placement>('bottom-end');
+  /** Title for the sheet variant (touch / TV). The desktop dropdown ignores it. */
+  readonly heading = input('');
   /** Height cap on the panel. A caller whose trigger sits low and opens upward
    *  needs a tighter one: the panel is anchored above the trigger, so a cap
    *  taller than the space there puts the first options off screen. */
