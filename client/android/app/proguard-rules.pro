@@ -19,3 +19,18 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Capacitor resolves plugins by class name from capacitor.plugins.json and
+# invokes @PluginMethod members reflectively, so R8 must not touch either.
+-keep public class * extends com.getcapacitor.Plugin
+-keepclassmembers class * extends com.getcapacitor.Plugin {
+    @com.getcapacitor.PluginMethod <methods>;
+}
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+-keepattributes *Annotation*
+
+# Readable crash reports in Play Console (the mapping file ships with the AAB).
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
