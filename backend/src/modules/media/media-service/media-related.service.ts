@@ -200,12 +200,13 @@ export class MediaRelatedService {
       .andWhere('m.tmdbCollectionId = :collectionId', {
         collectionId: source.tmdbCollectionId,
       })
-      .andWhere('m.id != :mediaId', { mediaId })
       .orderBy('m.releaseDate', 'ASC', 'NULLS LAST')
       .addOrderBy('m.year', 'ASC', 'NULLS LAST')
       .getMany();
 
-    if (!items.length) return null;
+    // The source film is part of the row, so a collection it is alone in has
+    // nothing to show.
+    if (items.length < 2) return null;
     return {
       id: source.tmdbCollectionId,
       name: source.tmdbCollectionName ?? '',

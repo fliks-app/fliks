@@ -139,7 +139,7 @@
     @if (showHoverOverlay()) {
       <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none group-hover:pointer-events-auto">
         @if (_link()) {
-          <a [routerLink]="_link()" [state]="_navState()" [replaceUrl]="replaceUrl()" class="absolute inset-0 z-0" [attr.aria-label]="_title()" (pointerdown)="onAnchorPointerdown()" (keydown.enter)="onAnchorPointerdown()" (click)="$event.stopPropagation()"></a>
+          <a [routerLink]="_link()" [state]="navState()" [replaceUrl]="replaceUrl()" class="absolute inset-0 z-0" [attr.aria-label]="_title()" (pointerdown)="onAnchorPointerdown()" (keydown.enter)="onAnchorPointerdown()" (click)="$event.stopPropagation()"></a>
         }
         @if (_playable()) {
           <button type="button" class="relative z-10 w-12 h-12 rounded-full bg-black/50 hover:bg-neutral-500/50 transition-colors flex items-center justify-center text-white cursor-pointer" (click)="onPlayClick($event)">
@@ -194,7 +194,7 @@
         <h3 class="text-sm md:text-base font-medium line-clamp-1 leading-snug">{{ _title() }}</h3>
       </a>
     } @else if (_link()) {
-      <a [routerLink]="_link()" [state]="_navState()" [replaceUrl]="replaceUrl()" class="hover:underline" [attr.tabindex]="innerTabindex" (pointerdown)="onAnchorPointerdown()" (keydown.enter)="onAnchorPointerdown()">
+      <a [routerLink]="_link()" [state]="navState()" [replaceUrl]="replaceUrl()" class="hover:underline" [attr.tabindex]="innerTabindex" (pointerdown)="onAnchorPointerdown()" (keydown.enter)="onAnchorPointerdown()">
         <h3 class="text-sm md:text-base font-medium line-clamp-1 leading-snug">{{ _title() }}</h3>
       </a>
     } @else {
@@ -202,7 +202,7 @@
     }
     @if (_subtitle()) {
       @if (_link()) {
-        <a [routerLink]="_link()" [state]="_navState()" [replaceUrl]="replaceUrl()" class="hover:underline" [attr.tabindex]="innerTabindex" (pointerdown)="onAnchorPointerdown()" (keydown.enter)="onAnchorPointerdown()">
+        <a [routerLink]="_link()" [state]="navState()" [replaceUrl]="replaceUrl()" class="hover:underline" [attr.tabindex]="innerTabindex" (pointerdown)="onAnchorPointerdown()" (keydown.enter)="onAnchorPointerdown()">
           <p class="text-xs md:text-sm text-base-content/50 line-clamp-1">{{ _subtitle() }}</p>
         </a>
       } @else {

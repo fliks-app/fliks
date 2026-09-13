@@ -121,6 +121,8 @@
           >
             <app-horizontal-scroller>
               @for (other of seasonsRow(); track other.id) {
+                <!-- Opens the page it sits on, so its picture has no hero to
+                     pair with: stamped, it would morph into itself. -->
                 <app-media-card
                   class="shrink-0 w-28 sm:w-32 lg:w-40"
                   [aspect]="'portrait'"
@@ -243,37 +245,9 @@
             [heading]="'media_detail.part_of' | translate: { name: coll.name }"
             persistKey="collection"
           >
-            @if (coll.items.length > 1) {
-              <ng-container *ngTemplateOutlet="movieRow; context: { $implicit: coll.items }" />
-            } @else if (coll.items[0]; as only) {
-              <a
-                [routerLink]="['/movies', '' + only.id]"
-                (pointerup)="armSlide()"
-                class="flex items-center gap-4 p-3 rounded-box bg-base-200/40 hover:bg-base-200 transition-colors max-w-md"
-              >
-                @if (only.posterUrl) {
-                  <img
-                    appImgFadeIn
-                    [cachedSrc]="only.posterUrl | resolveUrl: 'thumb'"
-                    [alt]="only.title"
-                    class="w-16 rounded-md shrink-0"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                }
-                <div class="min-w-0">
-                  <p class="font-semibold truncate">{{ only.title }}</p>
-                  @if (only.year) {
-                    <p class="text-sm text-base-content/60">{{ only.year }}</p>
-                  }
-                  @if (!only.hasFile) {
-                    <span class="badge badge-sm badge-warning mt-1">{{
-                      'media_card.missing_files' | translate
-                    }}</span>
-                  }
-                </div>
-              </a>
-            }
+            <ng-container
+              *ngTemplateOutlet="movieRow; context: { $implicit: coll.items, activeId: m.id }"
+            />
           </app-collapsible-section>
         }
 
@@ -439,7 +413,7 @@
   }
 </div>
 
-<ng-template #movieRow let-items>
+<ng-template #movieRow let-items let-activeId="activeId">
   <app-horizontal-scroller>
     @for (item of items; track item.id) {
       <app-media-card
@@ -451,6 +425,7 @@
         [subtitle]="item.year ? '' + item.year : ''"
         [rating]="item.rating ?? 0"
         [status]="item.hasFile ? null : 'missing'"
+        [highlighted]="item.id === activeId"
         [link]="['/movies', '' + item.id]"
       />
     }

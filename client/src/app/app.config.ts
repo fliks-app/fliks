@@ -48,14 +48,17 @@ import { ImageCacheService } from './core/services/image-cache.service';
 import {
   classUntilDone,
   clearStalePosterStamps,
+  betweenPosterPages,
   enteringPosterPage,
+  hasPosterStamp,
   leafRoutePath,
   leavingPosterPage,
   markViewTransition,
+  muteHeroUntilDone,
   swipeBackActive,
   WATCH_PATH,
 } from './shared/utils/view-transition';
-import { nextSlide, slidePage } from './shared/utils/page-slide';
+import { goingBack, nextSlide, pageSlideAvailable, slidePage } from './shared/utils/page-slide';
 
 /** Read the persisted server URL, sessions and credentials before bootstrap:
  *  guards, interceptors and the first /auth/me all depend on them. Resolves
@@ -155,10 +158,20 @@ export const appConfig: ApplicationConfig = {
                 if (closingPlayer) classUntilDone(transition, PLAYER_CLOSE_CLASS);
                 // The morph is tuned per direction: the box grows into a
                 // poster one way and collapses onto a card the other.
+                // A card on a poster page opening its sibling: the stack owns
+                // that pair where it slides, the morph wherever it does not. The
+                // stamp is what tells the two apart from a rail whose links open
+                // the page it sits on, which has no second half at all.
+                const sibling =
+                  betweenPosterPages(from, to) && !pageSlideAvailable() && hasPosterStamp();
                 const posterTrip =
-                  (leavingPosterPage(from, to) && POSTER_OUT_CLASS) ||
-                  (enteringPosterPage(from, to) && POSTER_IN_CLASS);
+                  ((leavingPosterPage(from, to) || (sibling && goingBack())) &&
+                    POSTER_OUT_CLASS) ||
+                  ((enteringPosterPage(from, to) || sibling) && POSTER_IN_CLASS);
                 if (posterTrip) classUntilDone(transition, posterTrip);
+                // Going the other way the hero is the half the stamped card
+                // pairs with, so only the trip in may take its name away.
+                if (sibling && !goingBack()) muteHeroUntilDone(transition);
                 // What a pair with no morph of its own gets: the pages stack.
                 const direction = nextSlide(from, to, !!posterTrip);
                 const slid = !!direction && slidePage(transition, direction);
