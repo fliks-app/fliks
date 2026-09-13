@@ -52,7 +52,7 @@ export function resetPageSlide(): void {
 
 /** Whether this navigation is a trip back, per the class NavbarService puts on
  *  the document for the length of one. */
-function goingBack(): boolean {
+export function goingBack(): boolean {
   return document.documentElement.classList.contains(BACK_CLASS);
 }
 
@@ -97,12 +97,17 @@ function dockInset(): number {
  * a caller with nothing else to animate drops the transition rather than run an
  * empty one.
  */
+/** Whether a stacked page would slide here at all. A pair the stack cannot
+ *  animate has to be given back to whatever else can. */
+export function pageSlideAvailable(): boolean {
+  return NATIVE_SHELL && dockInset() > 0;
+}
+
 export function slidePage(
   transition: { finished: Promise<unknown> },
   direction: Direction,
 ): boolean {
-  if (!NATIVE_SHELL) return false;
-  const dock = dockInset();
+  const dock = NATIVE_SHELL ? dockInset() : 0;
   if (!dock) return false;
   document.documentElement.style.setProperty(DOCK_PROPERTY, `${dock}px`);
   classUntilDone(transition, SLIDE_CLASS, DIRECTION_CLASS[direction], CHROME_CLASS);

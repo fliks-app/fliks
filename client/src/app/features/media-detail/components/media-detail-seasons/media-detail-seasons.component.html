@@ -255,11 +255,11 @@
               <!-- The tile is app-media-card with its caption dropped: the episode
                    badge, missing cross, progress, hover play and watched toggle all
                    come from the one implementation instead of a lookalike. -->
-              <app-media-card [aspect]="'landscape'"
+              <app-media-card #stillCard [aspect]="'landscape'"
                 class="sm:row-span-2"
+                [posterMorph]="episodeMorph()"
                 widthClass="shrink-0 w-28 sm:w-48 lg:w-56"
                 [id]="'episode-row-' + ep.id"
-                [posterMorph]="false"
                 [imageUrl]="ep.stillUrl ?? null"
                 [title]="episodeTitle(ep)"
                 [subtitle]="episodeCardSubtitle((ep.airDate | localeDate), ep.runtime)"
@@ -287,7 +287,8 @@
               <div class="min-w-0 flex flex-col gap-0.5 sm:gap-1">
                 <a
                   [routerLink]="episodeRoute(ep)"
-                  (pointerup)="armSlide()"
+                  [state]="stillCard.navState()"
+                  (pointerdown)="stillCard.onAnchorPointerdown()"
                   class="text-base sm:text-lg font-medium hover:underline line-clamp-2"
                 >{{ episodeTitle(ep) }}</a>
                 <span class="text-sm text-base-content/50 tabular-nums">
@@ -321,8 +322,8 @@
         <app-horizontal-scroller>
         @for (ep of filteredEpisodes(); track ep.id) {
           <app-media-card [aspect]="'landscape'"
+            [posterMorph]="episodeMorph()"
             [id]="'episode-' + ep.id"
-            [posterMorph]="false"
             [imageUrl]="ep.stillUrl ?? null"
             [title]="episodeTitle(ep)"
             [subtitle]="episodeCardSubtitle((ep.airDate | localeDate), ep.runtime)"

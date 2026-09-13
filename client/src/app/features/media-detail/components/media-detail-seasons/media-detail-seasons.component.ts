@@ -27,7 +27,6 @@ import {
   LucideX,
 } from '@lucide/angular';
 import { HorizontalScrollerComponent } from '../../../../shared/components/horizontal-scroller';
-import { armPageSlide } from '../../../../shared/utils/page-slide';
 import { centerRailOnCard } from '../../../../shared/utils/center-rail';
 import { MediaCardComponent } from '../../../../shared/components/media-card/media-card';
 import { DropdownMenuComponent } from '../../../../shared/components/dropdown-menu';
@@ -83,7 +82,6 @@ function readEpisodeViewFromStorage(): EpisodeView {
 })
 export class MediaDetailSeasonsComponent {
   /** A title link stacks the episode page the same way its card does. */
-  protected readonly armSlide = armPageSlide;
   private readonly playableMedia = inject(PlayableMediaService);
   private readonly addToPlaylist = inject(AddToPlaylistService);
   private readonly translate = inject(TranslateService);
@@ -126,6 +124,11 @@ export class MediaDetailSeasonsComponent {
   readonly sectionTitle = input<string | null>(null);
   /** Episode the page is already showing — its card is framed instead of hidden. */
   readonly activeEpisodeId = input<number | null>(null);
+  /** Siblings of the episode already on screen open a page whose hero is the
+   *  same still in the same place, so the morph would read as a jump rather
+   *  than a hand-off. From the series page it is the animation that carries it. */
+  protected readonly episodeMorph = computed(() => this.activeEpisodeId() == null);
+
   /** Season ids the viewer has liked — drives the season heart entry. */
   readonly likedSeasonIds = input<number[]>([]);
   readonly likedEpisodeIds = input<number[]>([]);

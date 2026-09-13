@@ -1471,6 +1471,12 @@ html.vt-poster-out nav.navbar {
 html.vt-poster-in app-media-info-header [data-hero-lead] {
   view-transition-name: vt-hero-lead;
 }
+/* Set for the length of one transition; see muteHeroUntilDone. Important, or
+   the hero's own inline name outranks it. */
+img[data-hero-muted] {
+  view-transition-name: none !important;
+}
+
 /* A page that slides carries its own hero, and the card that opened it travels
    with the page it sits on. Named, either is lifted out of its snapshot and
    stands still while the page moves under it. */

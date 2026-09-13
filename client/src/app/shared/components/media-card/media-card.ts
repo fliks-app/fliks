@@ -225,7 +225,7 @@ export class MediaCardComponent {
    * enough for the header to render. The detail page's background fetch
    * replaces it with the full Media a moment later.
    */
-  protected readonly _navState = computed(() => {
+  readonly navState = computed(() => {
     const episodeId = this.episodeIdFromLink();
     if (episodeId != null) {
       // With the series in hand the episode page resolves everything out of the
@@ -346,7 +346,10 @@ export class MediaCardComponent {
     this.markNavigationIntent();
   }
 
-  protected onAnchorPointerdown() {
+  /** Public: a link outside the card opening the same page — an episode row's
+   *  title beside its still — pairs with this card's picture, so it owes the
+   *  same stamp and the same stack intent. */
+  onAnchorPointerdown() {
     this.flagPosterForTransition();
     this.markNavigationIntent();
   }
@@ -432,7 +435,7 @@ export class MediaCardComponent {
         // in-app "Retour" walks the chain of replaced entries.
         this.markNavigationIntent();
         void this.router.navigate(link, {
-          state: this._navState(),
+          state: this.navState(),
           replaceUrl: this.replaceUrl(),
         });
       }
@@ -451,7 +454,7 @@ export class MediaCardComponent {
     this.flagPosterForTransition();
     if (this.replaceUrl()) this.navbar.markAsBackNavigation();
     void this.router.navigate(link, {
-      state: this._navState(),
+      state: this.navState(),
       replaceUrl: this.replaceUrl(),
     });
   }

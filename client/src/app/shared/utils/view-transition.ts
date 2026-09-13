@@ -24,6 +24,11 @@ export function clearPosterStamps(): void {
   });
 }
 
+/** Whether a card armed a morph for the navigation being started. */
+export function hasPosterStamp(): boolean {
+  return !!document.querySelector(`[${STAMPED}]`);
+}
+
 export function stampPoster(
   img: HTMLElement,
   mediaId: number,
@@ -43,6 +48,27 @@ export function stampPoster(
     overlay.style.viewTransitionName = CARD_OVERLAY_NAME;
     overlay.setAttribute(STAMPED, '');
   }
+}
+
+/**
+ * Hide the hero of the page being left for the length of one transition. On a
+ * trip between two poster pages it is named for the morph that opened it and
+ * nothing on the destination carries that name, so captured it would be a lone
+ * poster animating on its own over the new page.
+ *
+ * The hook runs before the old snapshot is taken and the elements are held by
+ * reference, so the page can be detached into the route cache and still be
+ * given its name back.
+ */
+const HERO_MUTED = 'data-hero-muted';
+
+export function muteHeroUntilDone(transition: { finished: Promise<unknown> }): void {
+  const heroes = [
+    ...document.querySelectorAll<HTMLElement>('app-media-info-header img'),
+  ];
+  heroes.forEach((el) => el.setAttribute(HERO_MUTED, ''));
+  const done = () => heroes.forEach((el) => el.removeAttribute(HERO_MUTED));
+  void transition.finished.then(done, done);
 }
 
 export interface RouteNode {
@@ -79,6 +105,14 @@ export function enteringPosterPage(from: RouteNode, to: RouteNode): boolean {
     !POSTER_ROUTES.has(leafRoutePath(from)) &&
     leafRoutePath(from) !== WATCH_PATH
   );
+}
+
+/**
+ * Two poster pages in a row: a rail on one opening another. The stack owns that
+ * pair where it slides, and the morph is what is left everywhere else.
+ */
+export function betweenPosterPages(from: RouteNode, to: RouteNode): boolean {
+  return POSTER_ROUTES.has(leafRoutePath(from)) && POSTER_ROUTES.has(leafRoutePath(to));
 }
 
 /** The way back: the page that owns the hero returns to a list of cards. */
