@@ -43,6 +43,8 @@ import { LibrariesApiService, LibrarySummary } from '../../core/services/api/lib
 import { NavbarService } from '../../core/services/navbar.service';
 import { BackgroundService } from '../../core/services/background.service';
 import { pickFanart } from '../../shared/utils/media-artwork.util';
+import { centerRailOnCard } from '../../shared/utils/center-rail';
+import { armPageSlide } from '../../shared/utils/page-slide';
 import {
   StreamingApiService,
   MediaResumeInfo,
@@ -310,10 +312,30 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const params = this.routeParams();
     if (!params) return;
     const id = Number(params.get('id'));
-    if (id === this.loadedId) return;
+    if (id === this.loadedId) {
+      this.trackScroll();
+      return;
+    }
     this.loadedId = id;
     void this.loadMedia(id);
   });
+
+  /**
+   * Move scroll memory onto the page the params now describe, and ask for its
+   * offset back when this is a return.
+   *
+   * One episode over another keeps this instance and never detaches the route,
+   * so neither {@link loadMedia} nor the reuse cache runs: this is the only
+   * pass that can retarget the key. Without it the offset saved on the way out
+   * lands under the episode left behind, and the trip back restores nothing —
+   * the page arrives at the top the router put it at, under a swipe that was
+   * sliding in a snapshot taken where the reader was.
+   */
+  private trackScroll(): void {
+    const key = this.scrollKey();
+    this.scrollMemory.activate(key);
+    if (untracked(() => this.navbarService.navigatedBack())) this.scrollMemory.restoreSticky(key);
+  }
 
   /**
    * Keep the episode-focus state in sync with the URL whenever either the
@@ -359,6 +381,10 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       );
     }
   });
+
+  /** Arms the page slide for the plain anchors of this page. A card does it
+   *  from its own click; a bare `routerLink` has nothing that would. */
+  protected readonly armSlide = armPageSlide;
 
   readonly media = signal<Media | null>(null);
   readonly cast = signal<MediaCastEntry[]>([]);
@@ -520,8 +546,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   /**
    * Episodes of the focused season — powers the "Plus de saison X" block on
-   * the episode detail page. Includes the current episode so the scroller
-   * can center on it via {@link scrollToFocusedEpisodeEffect}.
+   * the episode detail page. Includes the current episode, which is the card
+   * that block centres its own rail on.
    */
   readonly currentSeasonEpisodes = computed<Episode[]>(() => {
     const s = this.focusedSeason();
@@ -565,43 +591,25 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * When the focused episode changes on the episode detail page, center the
-   * "Plus de saison X" scroller on its card. The setTimeout lets the card and
-   * its scroll container mount through app-media-detail-seasons →
-   * app-horizontal-scroller → ng-content before we measure — they can take a
-   * change-detection pass or two to settle.
+   * Land the "Plus de saison X" rail on the episode the page opened on.
+   *
+   * The block centres its own rail as it renders; this is the pass that catches
+   * a page whose cards mount after that one — through app-media-detail-seasons
+   * → app-horizontal-scroller → ng-content, a change-detection pass or two
+   * later. Same call, so a rail a return has already put back where the reader
+   * left it is left where it is.
    */
   private readonly scrollToFocusedEpisodeEffect = effect(() => {
     const active = this.focusedEpisode();
+    const season = this.focusedSeason();
     if (!active || !this.episodeMode() || this.currentSeasonEpisodes().length < 2) {
       return;
     }
-    setTimeout(() => this.scrollToEpisode(active.id), 30);
+    setTimeout(
+      () => centerRailOnCard(`episode-${active.id}`, season ? `season-${season.id}` : undefined),
+      30,
+    );
   });
-
-  private scrollToEpisode(epId: number): void {
-    const el = document.getElementById(`episode-${epId}`);
-    if (!el) return;
-    const scroller = this.findHorizontalScrollParent(el);
-    if (!scroller) return;
-    const elRect = el.getBoundingClientRect();
-    const scrollerRect = scroller.getBoundingClientRect();
-    const target =
-      scroller.scrollLeft +
-      (elRect.left - scrollerRect.left) -
-      scroller.clientWidth / 2 +
-      el.offsetWidth / 2;
-    scroller.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
-  }
-
-  private findHorizontalScrollParent(el: HTMLElement): HTMLElement | null {
-    let cur: HTMLElement | null = el.parentElement;
-    while (cur) {
-      if (/(auto|scroll)/.test(getComputedStyle(cur).overflowX)) return cur;
-      cur = cur.parentElement;
-    }
-    return null;
-  }
 
   /**
    * Episode that the header's "Play" button will launch:
