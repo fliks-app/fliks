@@ -39,6 +39,10 @@ import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../../shared/directives/cached-src.directive';
 import { SelectedOptionDirective } from '../../../shared/directives/selected-option.directive';
 import {
+  PickerRow,
+  RemotePickerListComponent,
+} from '../../../shared/remote-picker/remote-picker-list';
+import {
   LucideCaptions,
   LucideCheck,
   LucideChevronLeft,
@@ -59,6 +63,9 @@ import {
   LucideVolume2,
   LucideVolumeX,
 } from '@lucide/angular';
+
+/** The click-driven panels: a desktop dropdown, or a bottom sheet on touch. */
+type PanelName = 'subtitles' | 'audio' | 'speed' | 'settings' | 'devices';
 
 /** Panels of the subtitles menu: the track list, the appearance summary, then
  *  one leaf list per appearance field. */
@@ -91,6 +98,7 @@ interface AppearanceRow {
   imports: [
     CachedSrcDirective,
     SelectedOptionDirective,
+    RemotePickerListComponent,
     TranslatePipe,
     LucideCaptions,
     LucideCheck,
@@ -311,7 +319,9 @@ export class PlayerControlsComponent {
   readonly pipAvailable = input(true);
   readonly canLockOrientation = input(false);
   readonly orientationLocked = input(false);
-  readonly castAvailable = input(false);
+  /** A destination can be picked: a Cast receiver is reachable, or a remote
+   *  target is online. Same gate as the top bar's picker. */
+  readonly canPickDevice = input(false);
   readonly castConnected = input(false);
   readonly castConnecting = input(false);
   readonly spriteUrl = input<string | null>(null);
@@ -377,7 +387,7 @@ export class PlayerControlsComponent {
     if (target?.closest('.player-floating-cue')) return;
     this.interacted.emit();
   }
-  readonly toggleCast = output<void>();
+  readonly pickDevice = output<PickerRow>();
   readonly toggleFillScreen = output<void>();
   readonly openMedia = output<void>();
   readonly seekDragChange = output<boolean>();
@@ -463,13 +473,13 @@ export class PlayerControlsComponent {
    * focus-within trigger so dropdowns no longer pop open just by D-pad
    * focusing their button — a click/Enter is required.
    */
-  readonly openDropdown = signal<'subtitles' | 'audio' | 'speed' | 'settings' | null>(null);
+  readonly openDropdown = signal<PanelName | null>(null);
 
   /** True when any desktop dropdown is open — prevents play/pause on backdrop click. */
   readonly hasOpenDropdown = computed(() => this.openDropdown() !== null);
 
   /** Mobile bottom sheet state */
-  readonly activeSheet = signal<'subtitles' | 'audio' | 'speed' | 'settings' | null>(null);
+  readonly activeSheet = signal<PanelName | null>(null);
 
   readonly seekbar = viewChild(SeekbarComponent);
 
@@ -517,7 +527,7 @@ export class PlayerControlsComponent {
   private readonly injector = inject(Injector);
   private dropdownTrigger: HTMLElement | null = null;
 
-  openSheet(sheet: 'subtitles' | 'audio' | 'speed' | 'settings') {
+  openSheet(sheet: PanelName) {
     if (sheet === 'settings') this.settingsPanel.set('main');
     if (sheet === 'subtitles') this.subtitlesPanel.set('tracks');
     this.activeSheet.set(sheet);
@@ -578,7 +588,7 @@ export class PlayerControlsComponent {
   }
 
   /** Toggle a click-driven dropdown. Closes any other open one. */
-  toggleDropdown(name: 'subtitles' | 'audio' | 'speed' | 'settings', event?: Event) {
+  toggleDropdown(name: PanelName, event?: Event) {
     event?.stopPropagation();
     if (name === 'settings') this.settingsPanel.set('main');
     if (name === 'subtitles') this.subtitlesPanel.set('tracks');
