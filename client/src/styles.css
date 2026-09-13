@@ -1413,50 +1413,38 @@ html.vt-pop::view-transition-new(root) {
   animation-name: vt-slide-from-left;
 }
 
-/* Where a sidebar is docked, the slide belongs to the content column alone: a
-   rail that travels with the page reads as the whole app sliding out of the
-   window. Nothing paints live under a transition — the root snapshot IS the
-   page — so the rail is captured as a layer of its own and held still above the
-   two that move. Two insets keep them off it: the first freezes the column, the
-   second trims the copy of the rail each snapshot carries, on whichever of them
-   crosses the column going right. On a phone both are `inset(0)`. */
+/* Nothing paints live under a transition — the root snapshot IS the page — so
+   the chrome held still above the two that move has to be trimmed out of both,
+   or each carries its own copy of it down the screen. */
 html.vt-slide::view-transition-group(root),
 html.vt-push::view-transition-new(root),
 html.vt-pop::view-transition-old(root) {
-  clip-path: inset(0 0 0 var(--vt-rail, 0px));
+  clip-path: inset(0 0 var(--vt-dock, 0px) 0);
 }
-html.vt-rail-docked .app-chrome-side {
-  view-transition-name: vt-rail;
+/* A slide that stays inside one tab keeps the bottom chrome: the same box on
+   both pages, held above them, and trimmed out of the snapshots that travel —
+   the dock is translucent, so a copy sliding behind it would read through. */
+html.vt-chrome-held .dock {
+  view-transition-name: vt-dock;
 }
-/* The same box on both sides, so it swaps rather than cross-fading: the two
-   copies stacked would show the leaving page's active entry through the
-   arriving one. */
-html.vt-rail-docked::view-transition-group(vt-rail),
-html.vt-rail-docked::view-transition-new(vt-rail) {
+html.vt-chrome-held [data-chrome-fab] {
+  view-transition-name: vt-fab;
+}
+html.vt-chrome-held::view-transition-group(vt-dock),
+html.vt-chrome-held::view-transition-new(vt-dock) {
+  z-index: 4;
   animation: none;
 }
-html.vt-rail-docked::view-transition-old(vt-rail) {
+html.vt-chrome-held::view-transition-group(vt-fab),
+html.vt-chrome-held::view-transition-new(vt-fab) {
+  z-index: 5;
+  animation: none;
+}
+html.vt-chrome-held::view-transition-old(vt-dock),
+html.vt-chrome-held::view-transition-old(vt-fab) {
   animation: none;
   opacity: 0;
 }
-
-/* The fanart is a fixed layer behind the whole app, so it travels inside the
-   pages — which is right for them, and leaves the rail, captured apart, a veil
-   over nothing. So the rail carries its own copy for the length of the trip:
-   `fixed` paints a background where the layer behind the app paints it, so the
-   strip it holds is the same picture, at the same place, under the same two
-   veils. Claimed only with a picture loaded to hold (see page-slide). */
-html.vt-backdrop-held .app-chrome-side {
-  background-color: transparent;
-  background-image:
-    linear-gradient(var(--sidebar-veil), var(--sidebar-veil)),
-    linear-gradient(var(--bg-veil), var(--bg-veil)),
-    var(--app-bg-image, none);
-  background-attachment: fixed;
-  background-position: 50% 25%;
-  background-size: cover;
-}
-
 @media (prefers-reduced-motion: reduce) {
   html.vt-slide::view-transition-old(root),
   html.vt-slide::view-transition-new(root) {
@@ -1482,6 +1470,13 @@ html.vt-poster-out nav.navbar {
 }
 html.vt-poster-in app-media-info-header [data-hero-lead] {
   view-transition-name: vt-hero-lead;
+}
+/* A page that slides carries its own hero, and the card that opened it travels
+   with the page it sits on. Named, either is lifted out of its snapshot and
+   stands still while the page moves under it. */
+html.vt-slide app-media-info-header img,
+html.vt-slide [data-poster-stamped] {
+  view-transition-name: none !important;
 }
 /* The scrim the title reads against, as a mask on the picture rather than a
    layer over it. An overlay is a second element: a view transition carries one,

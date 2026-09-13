@@ -27,6 +27,7 @@ import {
   LucideX,
 } from '@lucide/angular';
 import { HorizontalScrollerComponent } from '../../../../shared/components/horizontal-scroller';
+import { armPageSlide } from '../../../../shared/utils/page-slide';
 import { centerRailOnCard } from '../../../../shared/utils/center-rail';
 import { MediaCardComponent } from '../../../../shared/components/media-card/media-card';
 import { DropdownMenuComponent } from '../../../../shared/components/dropdown-menu';
@@ -81,6 +82,8 @@ function readEpisodeViewFromStorage(): EpisodeView {
   templateUrl: './media-detail-seasons.component.html',
 })
 export class MediaDetailSeasonsComponent {
+  /** A title link stacks the episode page the same way its card does. */
+  protected readonly armSlide = armPageSlide;
   private readonly playableMedia = inject(PlayableMediaService);
   private readonly addToPlaylist = inject(AddToPlaylistService);
   private readonly translate = inject(TranslateService);
