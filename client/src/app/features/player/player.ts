@@ -22,6 +22,8 @@ import { BrowserDeviceProfileService, DeviceProfile } from '../../core/services/
 import type { PreRollItem } from '@fliks/plugin-contract/ui';
 import { SseService, RemoteCommand, RemoteQualityRung } from '../../core/services/sse.service';
 import { RemoteService } from '../../core/services/remote.service';
+import { remoteOverlayOpen } from '../../core/services/remote-playback-target';
+import { PickerRow } from '../../shared/remote-picker/remote-picker-list';
 import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
 import { OfflineStorageService } from '../../core/services/offline-storage.service';
@@ -276,7 +278,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly mediaService = inject(MediaService);
   private readonly deviceProfileService = inject(BrowserDeviceProfileService);
   private readonly sseService = inject(SseService);
-  private readonly remoteService = inject(RemoteService);
+  readonly remoteService = inject(RemoteService);
   private readonly authService = inject(AuthService);
   readonly castService = inject(CastService);
   private readonly castPlayerService = inject(CastPlayerService);
@@ -3129,12 +3131,41 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     (locked ? Orientation.lock() : Orientation.unlock()).catch(() => {});
   }
 
-  async onToggleCast() {
-    if (this.castService.isConnected()) {
-      this.castService.disconnect();
+  /** A destination picked from the player's own list takes over the running
+   *  playback at its current position, then the player steps aside. */
+  async onPickDevice(row: PickerRow): Promise<void> {
+    if (row.kind === 'remote') {
+      this.handOffToRemote(row.id);
       return;
     }
+    await this.castHandoff(() =>
+      row.kind === 'cast'
+        ? void this.castService.selectCastDevice(row.id).catch((err) => {
+            console.warn('[player] selectCastDevice failed', row.id, err);
+            this.toast.error(this.translate.instant('remote.error_cast_select_failed'));
+          })
+        : this.castService.requestSession(),
+    );
+  }
 
+  /** Send the running file to a remote target at the current position and hand
+   *  the controls to the cast overlay, which lives outside the player route. */
+  private handOffToRemote(targetId: string): void {
+    const position = Math.floor(this.engine?.currentTime ?? 0);
+    if (this.engine) this.engine.pause().catch(() => {});
+    this.remoteService.selectTarget(targetId);
+    void this.remoteService.send(targetId, {
+      action: 'load',
+      mediaId: this.mediaId,
+      mediaFileId: this.mediaFileId,
+      episodeId: this.episodeId,
+      positionSeconds: position,
+    });
+    remoteOverlayOpen.set(true);
+    this.onBack();
+  }
+
+  private async castHandoff(connect: () => void): Promise<void> {
     // startCastFromPlayer builds from this.mediaFileId — drop straight to the
     // main item first so a Cast connect can never cast the trailer.
     if (this.preRollActive()) {
@@ -3146,7 +3177,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const currentPos = this.engine?.currentTime ?? 0;
     if (this.engine) this.engine.pause().catch(() => {});
 
-    this.castService.requestSession();
+    connect();
 
     // Wait for connection (poll for up to 30s)
     for (let i = 0; i < 60; i++) {

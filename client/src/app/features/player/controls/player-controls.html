@@ -66,15 +66,23 @@
           <svg lucidePictureInPicture2 [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
         </button>
       }
-      <!-- Cast -->
-      @if (castAvailable()) {
-        <button type="button" class="btn btn-ghost btn-circle btn-md" [class.text-info]="castConnected()" [class.text-white]="!castConnected() && !castConnecting()" [disabled]="castConnecting()" (click)="toggleCast.emit()">
-          @if (castConnecting()) {
-            <span class="loading loading-spinner loading-md"></span>
-          } @else {
-            <svg lucideCast [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+      <!-- Play on another device: the same unified list as the top bar, in the
+           player's own dropdown / sheet so it survives fullscreen. -->
+      @if (canPickDevice()) {
+        <div class="dropdown dropdown-end" [class.dropdown-open]="openDropdown() === 'devices'">
+          <button type="button" class="btn btn-ghost btn-circle btn-md" [class.text-info]="castConnected()" [class.text-white]="!castConnected() && !castConnecting()" [disabled]="castConnecting()" [attr.aria-label]="'remote.picker_title' | translate" (click)="isMobileTouch() ? openSheet('devices') : toggleDropdown('devices', $event)">
+            @if (castConnecting()) {
+              <span class="loading loading-spinner loading-md"></span>
+            } @else {
+              <svg lucideCast [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+            }
+          </button>
+          @if (!isMobileTouch()) {
+            <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl min-w-64 max-h-[60vh] overflow-y-auto p-1 mt-2">
+              <app-remote-picker-list [delegate]="true" (picked)="pickDevice.emit($event); closeDropdown()" />
+            </div>
           }
-        </button>
+        </div>
       }
     </div>
   </div>
@@ -342,28 +350,34 @@
 
 <!-- ===== Mobile bottom sheets ===== -->
 
+<app-bottom-sheet [open]="activeSheet() === 'devices'" [showBackdrop]="false" [rightAligned]="true" (closed)="closeSheet()">
+  <div class="px-2 pb-4">
+    <app-remote-picker-list [delegate]="true" (picked)="pickDevice.emit($event); closeSheet()" />
+  </div>
+</app-bottom-sheet>
+
 <app-bottom-sheet [open]="activeSheet() === 'subtitles'" [showBackdrop]="false" [rightAligned]="true" (closed)="closeSheet()">
-  <div class="px-4 pb-4">
+  <div class="px-4 pt-2 pb-4">
     <ng-container [ngTemplateOutlet]="subtitlesMenu"></ng-container>
   </div>
 </app-bottom-sheet>
 
 <app-bottom-sheet [open]="activeSheet() === 'audio'" [showBackdrop]="false" [rightAligned]="true" (closed)="closeSheet()">
-  <div class="px-4 pb-4">
+  <div class="px-4 pt-2 pb-4">
     <ng-container [ngTemplateOutlet]="audioMenu"></ng-container>
   </div>
 </app-bottom-sheet>
 
 <app-bottom-sheet [open]="activeSheet() === 'speed'" [showBackdrop]="false" [rightAligned]="true" (closed)="closeSheet()">
-  <div class="px-4 pb-4">
+  <div class="px-4 pt-2 pb-4">
     <ng-container [ngTemplateOutlet]="speedMenu"></ng-container>
   </div>
 </app-bottom-sheet>
 
 <app-bottom-sheet [open]="activeSheet() === 'settings'" [showBackdrop]="false" [rightAligned]="true" (closed)="closeSheet()">
-  <div class="px-4 pb-4">
+  <div class="px-4 pt-2 pb-4">
     @if (settingsPanel() === 'main') {
-      <div class="text-center text-white/60 text-xs font-medium mb-3">{{ 'player.settings' | translate }}</div>
+      <div class="text-center text-white/60 text-sm font-medium mb-3">{{ 'player.settings' | translate }}</div>
       @if (availableQualities().length > 1) {
         <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="openSettingsPanel('quality')">
           <span class="flex-1 text-left">{{ 'player.quality' | translate }}</span>
@@ -545,15 +559,15 @@
      -->
 <ng-template #subtitlesMenu>
   @if (subtitlesPanel() === 'tracks') {
-    <div class="relative mb-3">
-      <div class="text-center text-white/60 text-xs font-medium">{{ 'player.subtitles' | translate }}</div>
+    <div class="relative mb-3 flex h-6 items-center justify-center">
+      <div class="text-center text-white/60 text-sm font-medium">{{ 'player.subtitles' | translate }}</div>
       <!-- Appearance is a local-render setting: while casting the receiver style
            is fixed at LOAD time, so the entry point would be a dead end. -->
       @if (!castConnected()) {
         <button
           type="button"
           data-panel-row="appearance"
-          class="absolute -top-1.5 right-1 btn btn-ghost btn-xs btn-circle text-white/60 hover:text-white"
+          class="absolute top-0 right-1 btn btn-ghost btn-xs btn-circle text-white/60 hover:text-white"
           [attr.aria-label]="'player.appearance' | translate"
           (click)="openSubtitlesPanel('appearance')"
         >
@@ -621,7 +635,7 @@
 </ng-template>
 
 <ng-template #audioMenu>
-  <div class="text-center text-white/60 text-xs font-medium mb-3">{{ 'player.audio_track' | translate }}</div>
+  <div class="text-center text-white/60 text-sm font-medium mb-3">{{ 'player.audio_track' | translate }}</div>
   <!-- Only the options scroll; the title above stays visible. -->
   <div class="max-h-[40vh] overflow-y-auto scroll-ring-safe">
   @for (track of sortedAudioTracks(); track track.id) {
@@ -643,7 +657,7 @@
 </ng-template>
 
 <ng-template #speedMenu>
-  <div class="text-center text-white/60 text-xs font-medium mb-3">{{ 'player.speed' | translate }}</div>
+  <div class="text-center text-white/60 text-sm font-medium mb-3">{{ 'player.speed' | translate }}</div>
   <!-- Only the options scroll; the title above stays visible. -->
   <div class="max-h-[40vh] overflow-y-auto scroll-ring-safe">
   @for (r of speedOptions(); track r) {
