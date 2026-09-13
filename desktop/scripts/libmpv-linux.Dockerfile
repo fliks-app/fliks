@@ -48,6 +48,11 @@ RUN ./use-ffmpeg-custom "$FFMPEG_VERSION" \
  && ./use-libplacebo-custom "$LIBPLACEBO_VERSION" \
  && ./use-mpv-custom "$MPV_VERSION"
 
+# gnu_symbol_visibility only covers mpv's own objects: without this script the
+# static ffmpeg, libass and libplacebo archives re-export ~1400 symbols. It goes
+# on the libmpv target only, a global c_link_args fails meson's sanity check.
+RUN printf '{ global: mpv_*; local: *; };\n' > /build/libmpv.ver
+
 # FFmpeg: lean on purpose — every codec library would add a dynamic dependency
 # whose soname can churn. VAAPI and libdrm are the exceptions (hwdec), both
 # stable, and GnuTLS carries https (OpenSSL would force --enable-nonfree here).
@@ -64,4 +69,11 @@ RUN printf '%s\n' \
       -Dalsa=enabled -Dpulse=enabled \
       > mpv_options
 
-RUN ./rebuild -j"$JOBS" && cp -L mpv/build/libmpv.so.2 /libmpv.so.2
+# rebuild = update + clean + build; split so the version script can be patched
+# into the mpv tree the update step clones.
+RUN ./update \
+ && sed -i "s|'-Wl,-Bsymbolic'|'-Wl,-Bsymbolic', '-Wl,--version-script=/build/libmpv.ver'|" \
+      mpv/meson.build \
+ && grep -q 'version-script' mpv/meson.build \
+ && ./clean && ./build -j"$JOBS" \
+ && cp -L mpv/build/libmpv.so.2 /libmpv.so.2
