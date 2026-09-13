@@ -11,12 +11,14 @@ import {
   OnDestroy,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { NavigationEnd, NavigationStart, Router } from '@angular/router';
 import { LucideChevronLeft, LucideChevronRight } from '@lucide/angular';
 import { TvRowDirective } from '../directives/tv-row.directive';
 import { TvService } from '../../core/services/tv.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { NavbarService } from '../../core/services/navbar.service';
 import { rowTopOffset, snapRowOnFocus } from '../../core/utils/focus-snap.util';
+import { RAIL_RESTORED_ATTR } from '../utils/center-rail';
 
 @Component({
   selector: 'app-horizontal-scroller',
@@ -29,6 +31,7 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
   private readonly tv = inject(TvService);
   private readonly reuse = inject(CachingReuseStrategy);
   private readonly navbar = inject(NavbarService);
+  private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   readonly title = input('');
   readonly atStart = signal(true);
@@ -42,9 +45,12 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
 
   private readonly scrollerEl = viewChild<ElementRef<HTMLElement>>('scroller');
   private resizeObserver?: ResizeObserver;
-  /** Last offset the row was left at. A detached subtree loses its scroll, and
-   *  the instance outlives the detach, so the field is the whole store. */
-  private parkedScrollLeft = 0;
+  /** Last offset each page left this row at. A detached subtree loses its
+   *  scroll and the instance outlives the detach, so the instance is the store
+   *  — but one instance can span several pages, an episode page keeping it
+   *  across the param that names the episode, so it is one offset per page
+   *  rather than one for the row. */
+  private readonly parked = new Map<string, number>();
 
   @HostListener('focusin', ['$event'])
   protected onFocusIn(event: FocusEvent): void {
@@ -80,6 +86,15 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
           this.updateArrows();
         });
       });
+    // A page that keeps its instance across a param change — one episode over
+    // another — is never detached, so `attached$` says nothing about the trip
+    // back to it. The navigation itself is the only signal left.
+    this.router.events.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((e) => {
+      if (e instanceof NavigationStart) {
+        this.scrollerEl()?.nativeElement.removeAttribute(RAIL_RESTORED_ATTR);
+      }
+      if (e instanceof NavigationEnd) this.restoreScroll();
+    });
   }
 
   ngOnDestroy() {
@@ -91,9 +106,18 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
     // attached$ is not route-scoped, so rails of pages still held by the reuse
     // cache get here too — reading their extents is a forced layout for nothing.
     if (!el || !el.isConnected) return;
-    this.parkedScrollLeft = el.scrollLeft;
+    this.parked.set(this.pageKey(), el.scrollLeft);
     this.atStart.set(el.scrollLeft <= 0);
     this.atEnd.set(el.scrollLeft + el.clientWidth >= el.scrollWidth - 1);
+  }
+
+  /** The page this row's offset is filed under. Read off the document rather
+   *  than the router: a scroll event lands a task after the one that moved the
+   *  rail, and the router's own url is the first thing a navigation rewrites.
+   *  Query strings are in-page state (a library's tabs and filters), which the
+   *  row scrolls within, so the path alone names the page. */
+  private pageKey(): string {
+    return location.pathname;
   }
 
   /** `scrollTo`, not the property: the rail carries `scroll-behavior: smooth`,
@@ -105,9 +129,11 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
    *  user actually left. */
   private restoreScroll() {
     const el = this.scrollerEl()?.nativeElement;
-    if (!el || !el.isConnected || !this.parkedScrollLeft) return;
-    if (!this.navbar.navigatedBack()) return;
-    el.scrollTo({ left: this.parkedScrollLeft, behavior: 'instant' });
+    if (!el || !el.isConnected || !this.navbar.navigatedBack()) return;
+    const parked = this.parked.get(this.pageKey());
+    if (!parked) return;
+    el.scrollTo({ left: parked, behavior: 'instant' });
+    el.setAttribute(RAIL_RESTORED_ATTR, '');
   }
 
   scrollLeft() {

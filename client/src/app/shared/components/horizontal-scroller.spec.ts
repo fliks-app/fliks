@@ -1,6 +1,14 @@
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRouteSnapshot, DetachedRouteHandle, Route } from '@angular/router';
+import {
+  ActivatedRouteSnapshot,
+  DetachedRouteHandle,
+  Event as RouterEvent,
+  NavigationEnd,
+  Route,
+  Router,
+} from '@angular/router';
+import { Subject } from 'rxjs';
 import { vi } from 'vitest';
 import { HorizontalScrollerComponent } from './horizontal-scroller';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
@@ -51,6 +59,9 @@ describe('HorizontalScrollerComponent', () => {
     const snapshot = { routeConfig: route, params: {} } as unknown as ActivatedRouteSnapshot;
     reuse.store(snapshot, { componentRef: { destroy: () => {} } } as unknown as DetachedRouteHandle);
     reuse.retrieve(snapshot);
+    // The reattach is announced off the navigation that lands it, so nothing
+    // reaches the row until one ends.
+    (TestBed.inject(Router).events as Subject<RouterEvent>).next(new NavigationEnd(1, '/', '/'));
 
     // attached$ is emitted from a microtask inside retrieve().
     return Promise.resolve().then(() => scrollTo);

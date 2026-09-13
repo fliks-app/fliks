@@ -3,6 +3,11 @@
 const lastOffset = new Map<string, number>();
 const tracked = new WeakSet<Element>();
 
+/** Put on a rail a return has already placed, by the row that owns its offsets.
+ *  Centring runs a frame later, off an effect, and would otherwise pull the rail
+ *  off the card the reader left it on and onto the one the page is showing. */
+export const RAIL_RESTORED_ATTR = 'data-rail-restored';
+
 /**
  * Centre a horizontal rail on one of its cards, addressed by element id. No-op
  * when the card isn't there or the rail doesn't overflow: nothing to scroll.
@@ -15,6 +20,7 @@ export function centerRailOnCard(cardId: string, memoryKey?: string): void {
   const card = document.getElementById(cardId);
   const rail = card?.parentElement;
   if (!card || !rail || rail.scrollWidth <= rail.clientWidth) return;
+  if (rail.hasAttribute(RAIL_RESTORED_ATTR)) return;
   if (memoryKey !== undefined && !tracked.has(rail)) {
     tracked.add(rail);
     const previous = lastOffset.get(memoryKey);
