@@ -59,9 +59,17 @@ import {
         (touchmove)="onTouchMove($event)"
         (touchend)="onTouchEnd()"
       >
-        <!-- Drag handle -->
-        <div class="flex justify-center pt-3 pb-1 cursor-grab">
-          <div class="w-10 h-1 rounded-full bg-white/20"></div>
+        <!-- Drag handle + optional title. Sticky so the title survives
+             scrolling a long option list. -->
+        <div class="sticky top-0 z-10 bg-neutral pt-3 pb-1 cursor-grab">
+          <div class="flex justify-center">
+            <div class="w-10 h-1 rounded-full bg-white/20"></div>
+          </div>
+          @if (heading()) {
+            <div class="px-4 pt-2 text-center text-white/60 text-sm font-medium truncate">
+              {{ heading() }}
+            </div>
+          }
         </div>
         <!-- Content -->
         <ng-content></ng-content>
@@ -71,6 +79,8 @@ import {
 })
 export class BottomSheetComponent {
   readonly open = input(false);
+  /** Optional label shown above the content, sheet-only by construction. */
+  readonly heading = input('');
   readonly showBackdrop = input(true);
   readonly rightAligned = input(false);
   readonly closed = output<void>();

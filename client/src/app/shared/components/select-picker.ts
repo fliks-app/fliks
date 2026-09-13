@@ -17,11 +17,9 @@ import { PopoverMenuComponent } from './popover-menu';
       [open]="picker.open()"
       [anchor]="picker.anchor()"
       placement="bottom-start"
+      [heading]="picker.title()"
       (closed)="picker.close()"
     >
-      @if (picker.title()) {
-        <div class="px-4 py-2 text-white/60 text-sm font-medium truncate">{{ picker.title() }}</div>
-      }
       @for (opt of picker.options(); track opt.value) {
         <button
           type="button"
