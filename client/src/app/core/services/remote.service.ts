@@ -317,6 +317,11 @@ export class RemoteService {
    *  detail routes; anything else on the controller is its own to browse. */
   private mirrorRoute(url: string): void {
     if (!this.selectedTargetId()) return;
+    // A load we just sent is still on its way to the target's player: the
+    // target has not reached /watch yet, so `applyBrowse` would not refuse the
+    // mirror and would pull it back onto the detail page instead.
+    const pending = this.pendingAction();
+    if (pending && SLOW_ACK_ACTIONS.has(pending)) return;
     const m = /^\/(movies|series)\/(\d+)(?:\/episode\/(\d+))?/.exec(url.split('?')[0]);
     if (!m) return;
     void this.browse({
