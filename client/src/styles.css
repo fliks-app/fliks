@@ -129,7 +129,7 @@ html.tv-webos .table-zebra tbody tr.row-hover:where(:nth-child(2n)):hover {
    `bg-base-100/N` drops the alpha and yields a 100%-opaque veil).
    `#1d232a` matches daisyUI's dark theme `--color-base-100`. */
 .app-bg-veil {
-  background-color: rgba(29, 35, 42, 0.95);
+  background-color: var(--bg-veil);
 }
 
 /* Home library pill. The tint and border are an overlay dimmed by `opacity`
@@ -152,12 +152,19 @@ html.tv-webos .table-zebra tbody tr.row-hover:where(:nth-child(2n)):hover {
   position: relative;
 }
 
+/* The two veils the fanart is read through, named so an element captured apart
+   from the page can rebuild the same stack over its own copy of the picture. */
+:root {
+  --sidebar-veil: rgba(29, 35, 42, 0.4);
+  --bg-veil: rgba(29, 35, 42, 0.95);
+}
+
 /* Sidebar veil when a fanart background is showing — frosted
    look without depending on Tailwind's color-mix-based
    `bg-base-100/40`. Phones/tablets/desktop: 40 % alpha. TV: a
    little stronger so the menu text doesn't bleed into the fanart. */
 .app-sidebar-veil {
-  background-color: rgba(29, 35, 42, 0.4);
+  background-color: var(--sidebar-veil);
 }
 body.tv .app-sidebar-veil {
   background-color: rgba(29, 35, 42, 0.55);
@@ -1353,6 +1360,108 @@ html.vt-poster-out::view-transition-old(.poster),
 html.vt-poster-out::view-transition-new(.poster) {
   /* Crop rather than the UA's fill: the picture does not fit both boxes. */
   object-fit: cover;
+}
+
+/* Opening a library and coming back: the two screens slide over each other the
+   way a native navigation stack does. The whole screen moves — the fixed topbar
+   and dock are inside the root snapshot, so they travel with their own page.
+   Cheap despite the length of a library: the root snapshot is clipped to the
+   viewport, not to the 45 000 px the grid is tall. */
+@keyframes vt-slide-from-right {
+  from {
+    transform: translateX(100%);
+  }
+}
+@keyframes vt-slide-to-left {
+  to {
+    transform: translateX(-25%);
+  }
+}
+@keyframes vt-slide-from-left {
+  from {
+    transform: translateX(-25%);
+  }
+}
+@keyframes vt-slide-to-right {
+  to {
+    transform: translateX(100%);
+  }
+}
+html.vt-slide::view-transition-old(root),
+html.vt-slide::view-transition-new(root) {
+  animation-duration: 300ms;
+  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  animation-fill-mode: both;
+  /* The two pages occlude each other; the UA's additive cross-fade would show
+     one through the other for the whole slide. */
+  mix-blend-mode: normal;
+}
+html.vt-push::view-transition-old(root) {
+  animation-name: vt-slide-to-left;
+}
+html.vt-push::view-transition-new(root) {
+  animation-name: vt-slide-from-right;
+}
+/* Coming back, the page being left is the one that moves, so it has to sit
+   above the one it uncovers — the new snapshot paints above the old by default.
+   Same lift the player close relies on. */
+html.vt-pop::view-transition-old(root) {
+  z-index: 1;
+  animation-name: vt-slide-to-right;
+}
+html.vt-pop::view-transition-new(root) {
+  animation-name: vt-slide-from-left;
+}
+
+/* Where a sidebar is docked, the slide belongs to the content column alone: a
+   rail that travels with the page reads as the whole app sliding out of the
+   window. Nothing paints live under a transition — the root snapshot IS the
+   page — so the rail is captured as a layer of its own and held still above the
+   two that move. Two insets keep them off it: the first freezes the column, the
+   second trims the copy of the rail each snapshot carries, on whichever of them
+   crosses the column going right. On a phone both are `inset(0)`. */
+html.vt-slide::view-transition-group(root),
+html.vt-push::view-transition-new(root),
+html.vt-pop::view-transition-old(root) {
+  clip-path: inset(0 0 0 var(--vt-rail, 0px));
+}
+html.vt-rail-docked .app-chrome-side {
+  view-transition-name: vt-rail;
+}
+/* The same box on both sides, so it swaps rather than cross-fading: the two
+   copies stacked would show the leaving page's active entry through the
+   arriving one. */
+html.vt-rail-docked::view-transition-group(vt-rail),
+html.vt-rail-docked::view-transition-new(vt-rail) {
+  animation: none;
+}
+html.vt-rail-docked::view-transition-old(vt-rail) {
+  animation: none;
+  opacity: 0;
+}
+
+/* The fanart is a fixed layer behind the whole app, so it travels inside the
+   pages — which is right for them, and leaves the rail, captured apart, a veil
+   over nothing. So the rail carries its own copy for the length of the trip:
+   `fixed` paints a background where the layer behind the app paints it, so the
+   strip it holds is the same picture, at the same place, under the same two
+   veils. Claimed only with a picture loaded to hold (see page-slide). */
+html.vt-backdrop-held .app-chrome-side {
+  background-color: transparent;
+  background-image:
+    linear-gradient(var(--sidebar-veil), var(--sidebar-veil)),
+    linear-gradient(var(--bg-veil), var(--bg-veil)),
+    var(--app-bg-image, none);
+  background-attachment: fixed;
+  background-position: 50% 25%;
+  background-size: cover;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.vt-slide::view-transition-old(root),
+  html.vt-slide::view-transition-new(root) {
+    animation-name: none;
+  }
 }
 
 /* The root snapshot is what holds the chrome. Dropping it left the live page

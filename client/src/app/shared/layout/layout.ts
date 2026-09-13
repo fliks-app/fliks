@@ -32,6 +32,7 @@ import { DownloadManagerService } from '../../core/services/download-manager.ser
 import { NavigationHistoryService } from '../../core/services/navigation-history.service';
 import { NetworkService } from '../../core/services/network.service';
 import { PageScrollerService } from '../../core/services/page-scroller.service';
+import { resetPageSlide } from '../utils/page-slide';
 import { CardActionsPanelComponent } from '../components/card-actions-panel/card-actions-panel';
 import { AddToPlaylistModalComponent } from '../components/add-to-playlist-modal/add-to-playlist-modal.component';
 import { RecommendModalComponent } from '../components/recommend-modal/recommend-modal.component';
@@ -89,6 +90,10 @@ const SIDEBAR_COUNTS_DEBOUNCE_MS = 400;
   templateUrl: './layout.html',
 })
 export class LayoutComponent implements OnInit, OnDestroy {
+  /** The rail switches root rather than stacking a page, so a trip it starts
+   *  neither slides in nor slides back out. On pointerup, because the system
+   *  back gesture begins with a touch on this rail and never ends in one. */
+  protected readonly resetSlide = resetPageSlide;
   readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly librariesApi = inject(LibrariesApiService);

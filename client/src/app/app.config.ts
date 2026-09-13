@@ -46,14 +46,16 @@ import { PluginUiRegistryService } from './core/plugin-ui/plugin-ui-registry.ser
 import { PluginI18nService } from './core/plugin-ui/plugin-i18n.service';
 import { ImageCacheService } from './core/services/image-cache.service';
 import {
+  classUntilDone,
   clearStalePosterStamps,
   enteringPosterPage,
-  leavingPosterPage,
   leafRoutePath,
+  leavingPosterPage,
   markViewTransition,
   swipeBackActive,
   WATCH_PATH,
 } from './shared/utils/view-transition';
+import { runPageSlide } from './shared/utils/page-slide';
 
 /** Read the persisted server URL, sessions and credentials before bootstrap:
  *  guards, interceptors and the first /auth/me all depend on them. Resolves
@@ -154,23 +156,16 @@ export const appConfig: ApplicationConfig = {
                 // Leaving the player is the one navigation that re-enables the
                 // root pair: the closing player has to shrink over the page
                 // behind it, which only exists inside the transition.
-                if (closingPlayer) {
-                  const root = document.documentElement;
-                  root.classList.add(PLAYER_CLOSE_CLASS);
-                  const done = () => root.classList.remove(PLAYER_CLOSE_CLASS);
-                  void transition.finished.then(done, done);
-                }
+                if (closingPlayer) classUntilDone(transition, PLAYER_CLOSE_CLASS);
+                // Home and a library share nothing to morph, so that pair slides
+                // like a native stack instead.
+                runPageSlide(transition, from, to);
                 // The morph is tuned per direction: the box grows into a
                 // poster one way and collapses onto a card the other.
                 const posterTrip =
                   (leavingPosterPage(from, to) && POSTER_OUT_CLASS) ||
                   (enteringPosterPage(from, to) && POSTER_IN_CLASS);
-                if (posterTrip) {
-                  const root = document.documentElement;
-                  root.classList.add(posterTrip);
-                  const done = () => root.classList.remove(posterTrip);
-                  void transition.finished.then(done, done);
-                }
+                if (posterTrip) classUntilDone(transition, posterTrip);
                 markViewTransition(transition);
               },
             }),
