@@ -39,8 +39,8 @@ android {
     }
     buildTypes {
         release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             // Apply release signing only when the keystore file is
             // present — keeps `./gradlew assembleDebug` and any local
             // contributor build working out of the box.
