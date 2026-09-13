@@ -28,6 +28,10 @@ name: Desktop release
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to stamp (default: package.json + -dev.<sha>). Use to re-cut one platform installer for an existing release.'
+        required: false
   push:
     # release-please's `v*` tags ship the client installers on the main release
     # alongside the SwiftUI server-host DMG (macos-server-dmg.yml). `desktop-v*` stays
@@ -91,6 +95,8 @@ jobs:
             v="${GITHUB_REF#refs/tags/desktop-v}"
           elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             v="${GITHUB_REF#refs/tags/v}"
+          elif [[ -n "${{ inputs.version }}" ]]; then
+            v="${{ inputs.version }}"
           else
             base=$(node -p "require('./desktop/package.json').version")
             v="${base}-dev.$(git rev-parse --short HEAD)"
