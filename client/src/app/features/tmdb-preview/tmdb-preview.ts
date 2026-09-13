@@ -45,6 +45,7 @@ import { localizeLanguage } from '../../core/utils/language.utils';
 import { ClampToggleDirective } from '../../shared/directives/clamp-toggle.directive';
 import { CollapsibleSectionComponent } from '../../shared/components/collapsible-section/collapsible-section';
 import { PreviewSeasonsComponent } from './components/preview-seasons/preview-seasons.component';
+import { openTrailerExternally, trailerPlaysInline } from '../../shared/utils/trailer.util';
 
 @Component({
   selector: 'app-tmdb-preview',
@@ -226,6 +227,10 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
   openTrailer() {
     const key = this.trailerKey();
     if (!key) return;
+    if (!trailerPlaysInline) {
+      openTrailerExternally(key);
+      return;
+    }
     this.trailerEmbedUrl.set(
       this.sanitizer.bypassSecurityTrustResourceUrl(
         `https://www.youtube.com/embed/${key}?autoplay=1`,
