@@ -15,6 +15,7 @@ import { Media } from '../../../core/services/api/media.service';
 import { localizeLanguage } from '../../../core/utils/language.utils';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { CollapsibleSectionComponent } from '../collapsible-section/collapsible-section';
+import { openTrailerExternally, trailerPlaysInline } from '../../utils/trailer.util';
 
 /**
  * "Extra info" panel rendered on the media-detail page above the cast,
@@ -54,6 +55,10 @@ export class MediaInfoExtraComponent {
   openTrailer() {
     const key = this.trailerKey();
     if (!key) return;
+    if (!trailerPlaysInline) {
+      openTrailerExternally(key);
+      return;
+    }
     this.trailerEmbedUrl.set(
       this.sanitizer.bypassSecurityTrustResourceUrl(
         `https://www.youtube.com/embed/${key}?autoplay=1`,
