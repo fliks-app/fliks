@@ -44,6 +44,7 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { BackgroundService } from '../../core/services/background.service';
 import { pickFanart } from '../../shared/utils/media-artwork.util';
 import { centerRailOnCard } from '../../shared/utils/center-rail';
+import { armPageSlide } from '../../shared/utils/page-slide';
 import {
   StreamingApiService,
   MediaResumeInfo,
@@ -380,6 +381,10 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       );
     }
   });
+
+  /** Arms the page slide for the plain anchors of this page. A card does it
+   *  from its own click; a bare `routerLink` has nothing that would. */
+  protected readonly armSlide = armPageSlide;
 
   readonly media = signal<Media | null>(null);
   readonly cast = signal<MediaCastEntry[]>([]);

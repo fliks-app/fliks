@@ -248,6 +248,7 @@
             } @else if (coll.items[0]; as only) {
               <a
                 [routerLink]="['/movies', '' + only.id]"
+                (pointerup)="armSlide()"
                 class="flex items-center gap-4 p-3 rounded-box bg-base-200/40 hover:bg-base-200 transition-colors max-w-md"
               >
                 @if (only.posterUrl) {
@@ -464,6 +465,7 @@
           @for (c of cast(); track c.id) {
             <a
               [routerLink]="['/persons', c.person.id]"
+              (pointerup)="armSlide()"
               data-no-focus-ring
               class="shrink-0 w-20 sm:w-24 flex flex-col items-center gap-1.5 group"
             >
