@@ -34,114 +34,6 @@ create, no subscription, and nothing leaves the house.
 
 ---
 
-## Get started
-
-The server runs on one machine in the house — the one holding your video
-files. Everything else connects to it. Three ways to install it; they
-give you the same Fliks, so pick whichever suits the machine. All you
-need is a folder with your videos and about two minutes.
-
-### Windows
-
-Download the installer from the
-[latest release](https://github.com/fliks-app/fliks/releases) and run it.
-Fliks sits in the system tray and starts with the machine. Nothing else
-to install. Details in [`windows/`](windows/).
-
-### macOS
-
-Download the `.dmg` from the
-[latest release](https://github.com/fliks-app/fliks/releases) and drag it
-to Applications. Fliks sits in the menu bar. Apple Silicon, macOS 13
-Ventura or newer. Details in [`macos/`](macos/).
-
-### Docker — Linux, NAS, or a home server
-
-```bash
-curl -LO https://raw.githubusercontent.com/fliks-app/fliks/main/docker-compose.example.yml
-mv docker-compose.example.yml docker-compose.yml
-```
-
-Open the file and set three things:
-
-1. `POSTGRES_PASSWORD` and `DB_PASSWORD` — the same real password
-2. the `/path/to/your/media:/medias:ro` mount — where your files are
-3. `PORT` — only if `4848` is taken on the host
-
-```bash
-docker compose up -d
-```
-
-### First run
-
-Whichever you picked, open `http://<host>:4848` in a browser — on the
-machine itself that's `http://localhost:4848`. Sign in with the account
-Fliks creates on its first boot:
-
-| Username | Password |
-|---|---|
-| `admin` | `password` |
-
-Change that password right away — user menu → **Account**. Then add a
-library pointing at your video folder (`/medias` under Docker), and Fliks
-scans it and goes looking for the covers.
-
-Then install the app on your phone or TV, point it at the same address,
-and you're done.
-
----
-
-## Client compatibility
-
-Fliks runs on plenty of devices. Start a film on your phone and finish
-it on the TV: your place follows you from one to the other. Here is the
-full list of what it runs on.
-
-| Client | Where to get it | Minimum | Notes |
-|---|---|---|---|
-| **Web / PWA** | your browser, at the server URL | any current browser | installable to the home screen |
-| **iOS · iPadOS** | App Store | iOS 16.6 | |
-| **Android** | Play Store | Android 6 (API 23) | phone + tablet |
-| **Android TV** | Play Store | Android 6 | 10-foot UI, D-pad navigation |
-| **Samsung TV (Tizen)** | sideload for now | Tizen 5.5, 2020 sets and newer | works fully, not yet on Samsung Apps |
-| **LG TV (webOS)** | LG Content Store | built for Chromium 85 | approved, on the store |
-| **Desktop** | release assets | macOS: Apple Silicon | Windows `.exe`, macOS `.dmg`, Linux `.deb` / AppImage |
-| **Chromecast** | built in, cast from any client | any | custom receiver, same player engine |
-| **Apple TV** | App Store | tvOS 17 | native SwiftUI app |
-| **Nintendo Switch** | build the `.nro` from [switchfliks](https://github.com/fliks-app/switchfliks) | homebrew-enabled console | **beta**, native client with hardware decode |
-
----
-
-## Server compatibility
-
-| How you run it | Platforms | Hardware transcoding | Ships with |
-|---|---|---|---|
-| **Docker** *(recommended)* | `linux/amd64`, `linux/arm64` | Intel QSV · VAAPI · NVIDIA NVENC · AMD | backend, web client, FFmpeg |
-| **Windows** — tray app, NSIS installer | Windows x64 | Intel QSV · AMD AMF · NVIDIA NVENC, auto-detected | everything, no dependencies |
-| **macOS** — menu-bar app, `.dmg` | macOS 13 Ventura+, Apple Silicon | VideoToolbox | everything, no dependencies |
-| **From source** | anywhere Node runs | whatever your FFmpeg exposes | — |
-
-The image is a single container: NestJS backend, the built Angular
-client served as static assets, and a self-contained
-[jellyfin-ffmpeg](https://github.com/jellyfin/jellyfin-ffmpeg) build. A
-PostgreSQL container sits beside it (the example Compose pins 18.3).
-
-### Encoders
-
-Which hardware path is available depends on the machine, not on Fliks —
-it probes at startup and falls back to CPU when nothing else answers.
-
-| Codec | CPU | Intel QSV | VAAPI | NVIDIA NVENC | AMD AMF | VideoToolbox |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|
-| H.264 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| HEVC | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| AV1 | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-
-HDR10, HLG and Dolby Vision are tone-mapped to SDR when the receiving
-device can't render them.
-
----
-
 ## What you get
 
 ### Watching
@@ -245,80 +137,116 @@ Writing one: [docs/plugins.md](docs/plugins.md).
 
 ---
 
-## Hosting notes
+## Client compatibility
 
-### Pinning a version
+Fliks runs on plenty of devices. Start a film on your phone and finish
+it on the TV: your place follows you from one to the other. Here is the
+full list of what it runs on.
 
-`:latest` follows the most recent stable release. Pin a specific tag
-(`:1.2.3`) from the
-[package list](https://github.com/fliks-app/fliks/pkgs/container/fliks).
-
-### Hardware acceleration in Docker
-
-Intel QSV and VAAPI work out of the box once you uncomment the
-`/dev/dri` device mount in the example Compose. NVIDIA NVENC needs
-`nvidia-container-toolkit` on the host and a slightly different Compose
-snippet — the example Compose carries both, commented.
-
-### The data volume was renamed
-
-The volume that holds artwork, seek-preview sprites, extracted subtitles
-and uploaded avatars is now `/app/data` (`fliks_data`), not `/app/images`.
-It was never only images, and it is not a cache: the avatars in it cannot
-be re-fetched.
-
-**Existing installs need no change.** `FLIKS_IMAGES_DIR` still works, and
-a volume still mounted at `/app/images` is detected and used as-is — the
-boot log names it once so you know you are on the old path.
-
-To move onto the new name, copy before removing anything:
-
-```bash
-docker compose down
-docker volume create fliks_data
-docker run --rm -v fliks_images:/from -v fliks_data:/to alpine sh -c 'cp -a /from/. /to/'
-# in your Compose file: `- fliks_data:/app/data` replaces `- fliks_images:/app/images`
-docker compose up -d
-docker volume rm fliks_images   # only once the boot log stops naming the old path
-```
-
-With a bind mount instead of a named volume, `mv` the host directory and
-update the left side of the mapping.
-
-### Cache directory
-
-`FLIKS_CACHE_DIR` sets where regenerable content lives: extracted subtitles
-and seek-preview sprites. It defaults to `cache/` inside the data directory,
-so no action is needed unless you want it elsewhere, for example to exclude it
-from backups. Everything under it is safe to delete, it is rebuilt on demand.
-On first boot after upgrading, the old `subs/` and `thumbnails*/` folders that
-used to sit directly in the data directory are removed automatically.
-
-### Update checks
-
-Fliks asks the **public GitHub releases API** whether a newer version
-exists: the server does it to tell admins their install is behind, the
-desktop app to offer in-app updates. One unauthenticated read, cached
-for hours — no token, no telemetry, nothing sent about you.
-
-Set `FLIKS_DISABLE_UPDATE_CHECK=1` to turn it off; `/api/system/update`
-then always reports "up to date" and never contacts GitHub.
+| Client | Where to get it | Minimum | Notes |
+|---|---|---|---|
+| **Web / PWA** | your browser, at the server URL | any current browser | installable to the home screen |
+| **iOS · iPadOS** | App Store | iOS 16.6 | |
+| **Android** | Play Store | Android 6 (API 23) | phone + tablet |
+| **Android TV** | Play Store | Android 6 | |
+| **Samsung TV (Tizen)** | sideload for now | Tizen 5.5, 2020 sets and newer | works fully, not yet on Samsung Apps |
+| **LG TV (webOS)** | LG Content Store | built for Chromium 85 | approved, on the store |
+| **Desktop** | release assets | macOS: Apple Silicon | Windows `.exe`, macOS `.dmg`, Linux `.deb` / AppImage |
+| **Chromecast** | built in, cast from any client | any | custom receiver, same player engine |
+| **Apple TV** | App Store | tvOS 17 | native SwiftUI app |
+| **Nintendo Switch** | build the `.nro` from [switchfliks](https://github.com/fliks-app/switchfliks) | homebrew-enabled console | **beta**, native client with hardware decode |
 
 ---
 
-## Repository layout
+## Server compatibility
 
-| Path | What lives there |
+| How you run it | Platforms | Hardware transcoding | Ships with |
+|---|---|---|---|
+| **Docker** *(recommended)* | `linux/amd64`, `linux/arm64` | Intel QSV · VAAPI · NVIDIA NVENC · AMD | backend, web client, FFmpeg |
+| **Windows** — tray app, NSIS installer | Windows x64 | Intel QSV · AMD AMF · NVIDIA NVENC, auto-detected | everything, no dependencies |
+| **macOS** — menu-bar app, `.dmg` | macOS 13 Ventura+, Apple Silicon | VideoToolbox | everything, no dependencies |
+| **From source** | anywhere Node runs | whatever your FFmpeg exposes | — |
+
+The image is a single container: NestJS backend, the built Angular
+client served as static assets, and a self-contained
+[jellyfin-ffmpeg](https://github.com/jellyfin/jellyfin-ffmpeg) build. A
+PostgreSQL container sits beside it (the example Compose pins 18.3).
+
+### Encoders
+
+Which hardware path is available depends on the machine, not on Fliks —
+it probes at startup and falls back to CPU when nothing else answers.
+
+| Codec | CPU | Intel QSV | VAAPI | NVIDIA NVENC | AMD AMF | VideoToolbox |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| H.264 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| HEVC | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| AV1 | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+
+HDR10, HLG and Dolby Vision are tone-mapped to SDR when the receiving
+device can't render them.
+
+---
+
+## Get started
+
+The server runs on one machine in the house — the one holding your video
+files. Everything else connects to it. Three ways to install it; they
+give you the same Fliks, so pick whichever suits the machine. All you
+need is a folder with your videos and about two minutes.
+
+### Windows
+
+Download the installer from the
+[latest release](https://github.com/fliks-app/fliks/releases) and run it.
+Fliks sits in the system tray and starts with the machine. Nothing else
+to install. Details in [`windows/`](windows/).
+
+### macOS
+
+Download the `.dmg` from the
+[latest release](https://github.com/fliks-app/fliks/releases) and drag it
+to Applications. Fliks sits in the menu bar. Apple Silicon, macOS 13
+Ventura or newer. Details in [`macos/`](macos/).
+
+### Docker — Linux, NAS, or a home server
+
+```bash
+curl -LO https://raw.githubusercontent.com/fliks-app/fliks/main/docker-compose.example.yml
+mv docker-compose.example.yml docker-compose.yml
+```
+
+Open the file and set three things:
+
+1. `POSTGRES_PASSWORD` and `DB_PASSWORD` — the same real password
+2. the `/path/to/your/media:/medias:ro` mount — where your files are
+3. `PORT` — only if `4848` is taken on the host
+
+```bash
+docker compose up -d
+```
+
+### First run
+
+Whichever you picked, open `http://<host>:4848` in a browser — on the
+machine itself that's `http://localhost:4848`. Sign in with the account
+Fliks creates on its first boot:
+
+| Username | Password |
 |---|---|
-| `backend/` | NestJS, TypeORM, PostgreSQL, the FFmpeg pipeline |
-| `client/` | Angular + Tailwind / DaisyUI + Shaka Player — web, iOS, Android, Android TV (Capacitor), plus the Tizen and webOS packagers |
-| `desktop/` | Electron + libmpv thin client for Windows / macOS / Linux |
-| `windows/`, `macos/` | native server hosts (tray / menu bar) |
-| `appletv/` | native tvOS app (SwiftUI) |
-| `cast-receiver/` | custom Chromecast receiver |
-| `docs/plugins.md` | how the plugin system works, for whoever writes one |
+| `admin` | `password` |
+
+Change that password right away — user menu → **Account**. Then add a
+library pointing at your video folder (`/medias` under Docker), and Fliks
+scans it and goes looking for the covers.
+
+Then install the app on your phone or TV, point it at the same address,
+and you're done.
+
+---
 
 ## License
 
 [AGPL-3.0-or-later](LICENSE) — run a modified version on a network and
 you owe its users the modified source.
+
