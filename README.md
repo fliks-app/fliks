@@ -91,6 +91,32 @@ and you're done.
 
 ---
 
+## Client compatibility
+
+Wherever you open Fliks you get the same library, the same player and
+the same settings — only the controls change, depending on whether
+you're using a finger, a mouse or a remote. Apple TV and the Nintendo
+Switch have apps of their own, built for those devices; they connect to
+the same server and show you the same thing.
+
+| Client | Where to get it | Minimum | Notes |
+|---|---|---|---|
+| **Web / PWA** | your browser, at the server URL | any current browser | installable to the home screen |
+| **iOS · iPadOS** | App Store | iOS 16.6 | |
+| **Android** | Play Store | Android 6 (API 23) | phone + tablet |
+| **Android TV** | Play Store | Android 6 | 10-foot UI, D-pad navigation |
+| **Samsung TV (Tizen)** | sideload for now | Tizen 5.5 — 2020 sets and newer | works fully, not yet on Samsung Apps |
+| **LG TV (webOS)** | LG Content Store | built for Chromium 85 | approved, on the store |
+| **Desktop** | release assets | macOS: Apple Silicon | Windows `.exe`, macOS `.dmg`, Linux `.deb` / AppImage |
+| **Chromecast** | built in — cast from any client | — | custom receiver, same player engine |
+| **Apple TV** | App Store — same app record as iOS | tvOS 17 | native SwiftUI app, not the web client |
+| **Nintendo Switch** | build the `.nro` — [switchfliks](https://github.com/fliks-app/switchfliks) | homebrew-enabled console | **beta** — native deko3d client, hardware decode |
+
+The desktop app is a thin client with an mpv video pipeline — it
+connects to your server like the mobile apps do, it doesn't host one.
+
+---
+
 ## Server compatibility
 
 | How you run it | Platforms | Hardware transcoding | Ships with |
@@ -118,32 +144,6 @@ it probes at startup and falls back to CPU when nothing else answers.
 
 HDR10, HLG and Dolby Vision are tone-mapped to SDR when the receiving
 device can't render them.
-
----
-
-## Client compatibility
-
-One Angular codebase ships as the web app and as the mobile / TV apps,
-so every screen gets the same features — adapted to its input (touch,
-mouse, D-pad). Apple TV and the Nintendo Switch are the exceptions:
-neither can host a WebView, so each has its own native app talking to the
-same backend.
-
-| Client | Where to get it | Minimum | Notes |
-|---|---|---|---|
-| **Web / PWA** | your browser, at the server URL | any current browser | installable to the home screen |
-| **iOS · iPadOS** | App Store | iOS 16.6 | |
-| **Android** | Play Store | Android 6 (API 23) | phone + tablet |
-| **Android TV** | Play Store | Android 6 | 10-foot UI, D-pad navigation |
-| **Samsung TV (Tizen)** | sideload for now | Tizen 5.5 — 2020 sets and newer | works fully, not yet on Samsung Apps |
-| **LG TV (webOS)** | LG Content Store | built for Chromium 85 | approved, on the store |
-| **Desktop** | release assets | macOS: Apple Silicon | Windows `.exe`, macOS `.dmg`, Linux `.deb` / AppImage |
-| **Chromecast** | built in — cast from any client | — | custom receiver, same player engine |
-| **Apple TV** | App Store — same app record as iOS | tvOS 17 | native SwiftUI app, not the web client |
-| **Nintendo Switch** | build the `.nro` — [switchfliks](https://github.com/fliks-app/switchfliks) | homebrew-enabled console | **beta** — native deko3d client, hardware decode |
-
-The desktop app is a thin client with an mpv video pipeline — it
-connects to your server like the mobile apps do, it doesn't host one.
 
 ---
 
