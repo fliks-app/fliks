@@ -1,7 +1,10 @@
-/** The YouTube embed rejects any non-http(s) origin with player error 153:
- *  iOS is `capacitor:`, the desktop shell `fliks:`, the TV bundles `file:`. */
+/** The YouTube embed rejects any non-http(s) origin with player error 153, but the
+ *  fallback below only lands where a shell catches `window.open`: iOS and desktop.
+ *  The TV bundles (`file:`) have none, so they keep the embed. */
+const EXTERNAL_OPEN_SCHEMES = ['capacitor:', 'fliks:'];
+
 export const trailerPlaysInline =
-  typeof location !== 'undefined' && /^https?:$/.test(location.protocol);
+  typeof location === 'undefined' || !EXTERNAL_OPEN_SCHEMES.includes(location.protocol);
 
 /** Opens the watch page outside the app — the system browser or the YouTube app. */
 export function openTrailerExternally(key: string): void {
