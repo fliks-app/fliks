@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.1.1](https://github.com/fliks-app/fliks/compare/v4.1.0...v4.1.1) (2026-09-14)
+
+
+### Bug Fixes
+
+* **desktop:** open trailers outside the shell instead of a dead embed ([fb3674d](https://github.com/fliks-app/fliks/commit/fb3674dec9c490e1030c9559d1ac33ebf7dda9f3))
+* **desktop:** quit on the Linux compositor window close ([3774566](https://github.com/fliks-app/fliks/commit/3774566ae5fe6f5669c70bfe7c0b69e7cebd587b))
+
 ## [4.1.0](https://github.com/fliks-app/fliks/compare/v4.0.0...v4.1.0) (2026-09-13)
 
 
