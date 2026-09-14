@@ -28,6 +28,9 @@ if (process.platform === 'linux') {
   app.disableHardwareAcceleration();
   app.commandLine.appendSwitch('ozone-platform', 'x11');
 }
+// A second instance would open the same Chromium profile, whose Local Storage
+// is already locked: it boots with no server and no session.
+if (!app.requestSingleInstanceLock()) app.exit(0);
 registerAppSchemePrivileged();
 
 process.on('uncaughtException', (e) => console.error('[main:uncaughtException]', e?.stack ?? e));
@@ -431,6 +434,11 @@ app.whenReady().then(async () => {
         stopPositionTimer();
         setPlaybackKeepAwake(false);
         send({ type: 'error', payload: { code: -1, message: raw.message ?? 'error' } });
+        break;
+      // The compositor owns the only visible window, so its close is the app's
+      // close: the offscreen BrowserWindow never fires window-all-closed.
+      case 'closed':
+        app.quit();
         break;
     }
   });

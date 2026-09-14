@@ -314,6 +314,9 @@ void RenderThreadMain(GlState* s) {
     while (SDL_PollEvent(&ev)) {
       switch (ev.type) {
         case SDL_QUIT:
+          // Only the main process can quit Electron; without this the closed
+          // window leaves it running and a relaunch shares the same profile.
+          if (g_tsfnReady.load()) g_tsfn.BlockingCall(new std::string("{\"type\":\"closed\"}"));
           s->run.store(false);
           break;
         case SDL_MOUSEMOTION:
