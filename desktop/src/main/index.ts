@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -31,6 +31,15 @@ if (process.platform === 'linux') {
 // A second instance would open the same Chromium profile, whose Local Storage
 // is already locked: it boots with no server and no session.
 if (!app.requestSingleInstanceLock()) app.exit(0);
+
+// The UI only ever opens outside links (a trailer, a release page). A child
+// BrowserWindow would inherit the parent's offscreen prefs and never be seen.
+app.on('web-contents-created', (_e, contents) => {
+  contents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https://') || url.startsWith('http://')) void shell.openExternal(url);
+    return { action: 'deny' };
+  });
+});
 registerAppSchemePrivileged();
 
 process.on('uncaughtException', (e) => console.error('[main:uncaughtException]', e?.stack ?? e));
