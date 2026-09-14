@@ -1,14 +1,9 @@
-import { Capacitor } from '@capacitor/core';
+/** The YouTube embed rejects any non-http(s) origin with player error 153:
+ *  iOS is `capacitor:`, the desktop shell `fliks:`, the TV bundles `file:`. */
+export const trailerPlaysInline =
+  typeof location !== 'undefined' && /^https?:$/.test(location.protocol);
 
-/**
- * The iOS WebView serves the app from `capacitor://localhost`, an origin the
- * YouTube embed rejects (player error 153); `iosScheme` can't be set to http
- * because WKWebView reserves that scheme. Android runs on `http://localhost`
- * (see capacitor.config.ts) and embeds fine.
- */
-export const trailerPlaysInline = Capacitor.getPlatform() !== 'ios';
-
-/** Opens the watch page outside the WebView — Safari or the YouTube app. */
+/** Opens the watch page outside the app — the system browser or the YouTube app. */
 export function openTrailerExternally(key: string): void {
   window.open(`https://www.youtube.com/watch?v=${key}`, '_blank', 'noopener');
 }
