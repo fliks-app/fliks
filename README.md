@@ -93,11 +93,9 @@ and you're done.
 
 ## Client compatibility
 
-Wherever you open Fliks you get the same library, the same player and
-the same settings — only the controls change, depending on whether
-you're using a finger, a mouse or a remote. Apple TV and the Nintendo
-Switch have apps of their own, built for those devices; they connect to
-the same server and show you the same thing.
+Fliks runs on plenty of devices. Start a film on your phone and finish
+it on the TV: your place follows you from one to the other. Here is the
+full list of what it runs on.
 
 | Client | Where to get it | Minimum | Notes |
 |---|---|---|---|
