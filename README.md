@@ -125,8 +125,9 @@ device can't render them.
 
 One Angular codebase ships as the web app and as the mobile / TV apps,
 so every screen gets the same features — adapted to its input (touch,
-mouse, D-pad). Apple TV is the exception: tvOS has no WebView, so it has
-its own native SwiftUI app talking to the same backend.
+mouse, D-pad). Apple TV and the Nintendo Switch are the exceptions:
+neither can host a WebView, so each has its own native app talking to the
+same backend.
 
 | Client | Where to get it | Minimum | Notes |
 |---|---|---|---|
@@ -139,6 +140,7 @@ its own native SwiftUI app talking to the same backend.
 | **Desktop** | release assets | macOS: Apple Silicon | Windows `.exe`, macOS `.dmg`, Linux `.deb` / AppImage |
 | **Chromecast** | built in — cast from any client | — | custom receiver, same player engine |
 | **Apple TV** | App Store — same app record as iOS | tvOS 17 | native SwiftUI app, not the web client |
+| **Nintendo Switch** | build the `.nro` — [switchfliks](https://github.com/fliks-app/switchfliks) | homebrew-enabled console | **beta** — native deko3d client, hardware decode |
 
 The desktop app is a thin client with an mpv video pipeline — it
 connects to your server like the mobile apps do, it doesn't host one.
