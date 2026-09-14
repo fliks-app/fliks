@@ -103,15 +103,12 @@ full list of what it runs on.
 | **iOS · iPadOS** | App Store | iOS 16.6 | |
 | **Android** | Play Store | Android 6 (API 23) | phone + tablet |
 | **Android TV** | Play Store | Android 6 | 10-foot UI, D-pad navigation |
-| **Samsung TV (Tizen)** | sideload for now | Tizen 5.5 — 2020 sets and newer | works fully, not yet on Samsung Apps |
+| **Samsung TV (Tizen)** | sideload for now | Tizen 5.5, 2020 sets and newer | works fully, not yet on Samsung Apps |
 | **LG TV (webOS)** | LG Content Store | built for Chromium 85 | approved, on the store |
 | **Desktop** | release assets | macOS: Apple Silicon | Windows `.exe`, macOS `.dmg`, Linux `.deb` / AppImage |
-| **Chromecast** | built in — cast from any client | — | custom receiver, same player engine |
-| **Apple TV** | App Store — same app record as iOS | tvOS 17 | native SwiftUI app, not the web client |
-| **Nintendo Switch** | build the `.nro` — [switchfliks](https://github.com/fliks-app/switchfliks) | homebrew-enabled console | **beta** — native deko3d client, hardware decode |
-
-The desktop app is a thin client with an mpv video pipeline — it
-connects to your server like the mobile apps do, it doesn't host one.
+| **Chromecast** | built in, cast from any client | any | custom receiver, same player engine |
+| **Apple TV** | App Store | tvOS 17 | native SwiftUI app |
+| **Nintendo Switch** | build the `.nro` from [switchfliks](https://github.com/fliks-app/switchfliks) | homebrew-enabled console | **beta**, native client with hardware decode |
 
 ---
 
