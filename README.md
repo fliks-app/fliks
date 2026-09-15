@@ -149,8 +149,8 @@ full list of what it runs on.
 | **iOS · iPadOS** | App Store | iOS 16.6 | |
 | **Android** | Play Store | Android 6 (API 23) | phone + tablet |
 | **Android TV** | Play Store | Android 6 | |
-| **Samsung TV (Tizen)** | sideload for now | Tizen 5.5, 2020 sets and newer | works fully, not yet on Samsung Apps |
-| **LG TV (webOS)** | LG Content Store | built for Chromium 85 | approved, on the store |
+| **Samsung TV (Tizen)** | sideload for now | Tizen 5.5 | works fully, not yet on Samsung Apps |
+| **LG TV (webOS)** | LG Content Store | webOS 7.0 | approved, on the store |
 | **Desktop** | release assets | macOS: Apple Silicon | Windows `.exe`, macOS `.dmg`, Linux `.deb` / AppImage |
 | **Chromecast** | built in, cast from any client | any | custom receiver, same player engine |
 | **Apple TV** | App Store | tvOS 17 | native SwiftUI app |
