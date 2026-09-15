@@ -1,7 +1,11 @@
-# Builds an unsigned LG webOS `.ipk` of the Fliks client on every
+# Builds the unsigned LG webOS `.ipk`s of the Fliks client on every
 # release tag (`v*` produced by release-please) and on manual
-# `workflow_dispatch`. The artifact is uploaded to the matching GitHub
+# `workflow_dispatch`. The artifacts are uploaded to the matching GitHub
 # Release.
+#
+# Two packages, one bundle: LG only serves a 1920x1080 package to UHD
+# models and refuses it for FHD ones, so each resolution ships its own
+# `.ipk` differing only by `appinfo.json`.
 #
 # Production signing happens at LG Content Manager submission time;
 # `ares-package` is enough to produce a sideloadable `.ipk` for TVs in
@@ -34,20 +38,29 @@ jobs:
       - name: Install client dependencies
         run: npm ci
 
-      - name: Build webOS package
-        run: npm run webos:build
+      - name: Compile the webOS bundle
+        run: npm run webos:compile
 
-      - name: Resolve artifact path
+      - name: Package both resolutions
         id: art
         run: |
-          ipk=$(ls dist/*.ipk | head -n1)
-          echo "path=client/$ipk" >> "$GITHUB_OUTPUT"
-          echo "name=$(basename "$ipk")" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          for res in 1920x1080 1280x720; do
+            WEBOS_RESOLUTION="$res" node webos/build-ipk.mjs
+          done
+          mkdir -p dist/webos-release
+          mv "dist/webos-1920x1080/media.fliks.app_${version}_all.ipk" \
+             "dist/webos-release/media.fliks.app_${version}_uhd_1920x1080.ipk"
+          mv "dist/webos-1280x720/media.fliks.app_${version}_all.ipk" \
+             "dist/webos-release/media.fliks.app_${version}_fhd_1280x720.ipk"
+          ls -l dist/webos-release
+          echo "dir=client/dist/webos-release" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.art.outputs.name }}
-          path: ${{ steps.art.outputs.path }}
+          name: webos-ipk
+          path: ${{ steps.art.outputs.dir }}/*.ipk
 
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -57,5 +70,5 @@ jobs:
         # contents: write — attaching a file never needed it.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ github.ref_name }}" "${{ steps.art.outputs.path }}" --clobber
+        run: gh release upload "${{ github.ref_name }}" ${{ steps.art.outputs.dir }}/*.ipk --clobber
         working-directory: ${{ github.workspace }}
