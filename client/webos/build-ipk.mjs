@@ -35,6 +35,11 @@ const pkg = JSON.parse(readFileSync(resolve(clientRoot, 'package.json'), 'utf8')
 const appInfoPath = resolve(here, 'appinfo.json');
 const appInfo = JSON.parse(readFileSync(appInfoPath, 'utf8'));
 appInfo.version = pkg.version ?? appInfo.version;
+// LG only serves a 1920x1080 package to UHD models; FHD models need a
+// 1280x720 one. Same bundle either way - styles.css keys the 10-foot scale
+// on the viewport width, not the OS.
+const resolution = process.env.WEBOS_RESOLUTION;
+if (resolution) appInfo.resolution = resolution;
 writeFileSync(resolve(stage, 'appinfo.json'), JSON.stringify(appInfo, null, 2));
 
 const iconSrc = resolve(here, 'icon.png');
@@ -46,7 +51,7 @@ copyFileSync(existsSync(iconSrc) ? iconSrc : iconFallback, resolve(stage, 'icon.
 const splashSrc = resolve(here, 'splash.png');
 if (existsSync(splashSrc)) copyFileSync(splashSrc, resolve(stage, 'splash.png'));
 
-const distDir = resolve(clientRoot, 'dist');
+const distDir = resolve(clientRoot, resolution ? `dist/webos-${resolution}` : 'dist');
 mkdirSync(distDir, { recursive: true });
 // `ares-package` is the per-binary entry of `@webosose/ares-cli`
 // (not a subcommand of an `ares` umbrella). Resolve it from the local
