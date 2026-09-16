@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.2.0](https://github.com/fliks-app/fliks/compare/v4.1.1...v4.2.0) (2026-09-16)
+
+
+### Features
+
+* **livetv:** add live TV with channels, programme guide and playback ([#1386](https://github.com/fliks-app/fliks/issues/1386)) ([985919e](https://github.com/fliks-app/fliks/commit/985919e20dc4d5da8659bddee5f09f09fd9a7ab9))
+
 ## [4.1.1](https://github.com/fliks-app/fliks/compare/v4.1.0...v4.1.1) (2026-09-14)
 
 
