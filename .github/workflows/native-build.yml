@@ -53,10 +53,11 @@ jobs:
 
       # Only what `assembleDebug` compiles against. The default package set
       # pulls the emulator, whose archive has arrived corrupt on the runner and
-      # failed the job before a line of our code was built.
+      # failed the job before a line of our code was built. `tools` is gone from
+      # the SDK repository, and asking for it fails the whole step.
       - uses: android-actions/setup-android@v4
         with:
-          packages: 'tools platform-tools platforms;android-36'
+          packages: 'platform-tools platforms;android-36'
 
       - name: Install client dependencies
         run: npm ci
