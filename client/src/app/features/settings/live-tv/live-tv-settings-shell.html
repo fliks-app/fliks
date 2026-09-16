@@ -1,0 +1,51 @@
+<div class="flex flex-col gap-6">
+  <div>
+    <h1 class="text-2xl font-bold">{{ 'liveTv.admin.title' | translate }}</h1>
+    <p class="text-sm text-base-content/60 mt-1">{{ 'liveTv.admin.subtitle' | translate }}</p>
+  </div>
+
+  <div role="tablist" class="tabs tabs-bordered">
+    <a
+      role="tab"
+      class="tab"
+      routerLink="./sources"
+      routerLinkActive
+      #sourcesTab="routerLinkActive"
+      [class.tab-active]="sourcesTab.isActive && !showHealth()"
+      (click)="showHealth.set(false)"
+    >
+      {{ 'liveTv.admin.tab_sources' | translate }}
+    </a>
+    <a
+      role="tab"
+      class="tab"
+      routerLink="./channels"
+      routerLinkActive
+      #channelsTab="routerLinkActive"
+      [class.tab-active]="channelsTab.isActive && !showHealth()"
+      (click)="showHealth.set(false)"
+    >
+      {{ 'liveTv.admin.tab_channels' | translate }}
+    </a>
+    <a
+      role="tab"
+      class="tab"
+      routerLink="./guide"
+      routerLinkActive
+      #guideTab="routerLinkActive"
+      [class.tab-active]="guideTab.isActive && !showHealth()"
+      (click)="showHealth.set(false)"
+    >
+      {{ 'liveTv.admin.tab_guide' | translate }}
+    </a>
+    <button type="button" role="tab" class="tab" [class.tab-active]="showHealth()" (click)="showHealth.set(true)">
+      {{ 'liveTv.admin.tab_health' | translate }}
+    </button>
+  </div>
+
+  @if (showHealth()) {
+    <app-live-tv-health />
+  } @else {
+    <router-outlet />
+  }
+</div>

@@ -1,0 +1,264 @@
+<div class="flex flex-col lg:flex-row gap-4">
+  <!-- Group list -->
+  <div class="lg:w-48 shrink-0 flex flex-row lg:flex-col gap-1 overflow-x-auto lg:overflow-visible">
+    <button
+      type="button"
+      class="btn btn-sm justify-start"
+      [class.btn-primary]="groupFilter() === ''"
+      [class.btn-ghost]="groupFilter() !== ''"
+      (click)="onGroupPick('')"
+    >
+      {{ 'liveTv.admin.channels.all_groups' | translate }}
+    </button>
+    @for (g of groups(); track g.name) {
+      <button
+        type="button"
+        class="btn btn-sm justify-between gap-2"
+        [class.btn-primary]="groupFilter() === g.name"
+        [class.btn-ghost]="groupFilter() !== g.name"
+        (click)="onGroupPick(g.name)"
+      >
+        <span class="truncate">{{ g.name }}</span>
+        <span class="badge badge-ghost badge-xs">{{ g.count }}</span>
+      </button>
+    }
+  </div>
+
+  <div class="flex-1 min-w-0 flex flex-col gap-3">
+    <div class="flex flex-wrap items-center gap-2">
+      <input
+        type="text"
+        class="input input-bordered input-sm w-48"
+        [placeholder]="'common.search' | translate"
+        [ngModel]="query()"
+        (ngModelChange)="query.set($event); onFilterChange()"
+      />
+      <select appTvSelect class="select select-bordered select-sm w-auto" [ngModel]="sourceFilter()" (ngModelChange)="sourceFilter.set($event); onFilterChange()">
+        <option [ngValue]="null">{{ 'liveTv.admin.channels.all_sources' | translate }}</option>
+        @for (s of sources(); track s.id) {
+          <option [ngValue]="s.id">{{ s.name }}</option>
+        }
+      </select>
+      <select appTvSelect class="select select-bordered select-sm w-auto" [ngModel]="enabledFilter()" (ngModelChange)="enabledFilter.set($event); onFilterChange()">
+        <option value="">{{ 'liveTv.admin.channels.all_states' | translate }}</option>
+        <option value="true">{{ 'common.active' | translate }}</option>
+        <option value="false">{{ 'common.disabled' | translate }}</option>
+      </select>
+
+      <div class="grow"></div>
+
+      <button
+        type="button"
+        class="btn btn-ghost btn-sm"
+        [disabled]="bulkAllDisabled() || total() === 0"
+        [attr.title]="bulkAllDisabled() ? ('liveTv.admin.channels.bulk_by_filter_disabled_hint' | translate) : null"
+        (click)="bulkByFilter()"
+      >
+        {{ 'liveTv.admin.channels.bulk_by_filter' | translate: { count: total() } }}
+      </button>
+      <button
+        type="button"
+        class="btn btn-ghost btn-sm"
+        [disabled]="duplicatesLoading()"
+        (click)="loadDuplicates()"
+      >
+        @if (duplicatesLoading()) {
+          <span class="loading loading-spinner loading-xs"></span>
+        }
+        {{ 'liveTv.admin.channels.find_duplicates' | translate }}
+      </button>
+    </div>
+
+    @if (showDuplicates()) {
+      <div class="flex flex-col gap-2 p-3 rounded-lg bg-base-200">
+        @if (duplicatesLoading()) {
+          <div class="flex justify-center py-4">
+            <span class="loading loading-spinner loading-md"></span>
+          </div>
+        } @else if (duplicateGroups().length === 0) {
+          <p class="text-base-content/60">{{ 'liveTv.admin.channels.no_duplicates' | translate }}</p>
+        } @else {
+          <p class="text-sm text-base-content/60">{{ 'liveTv.admin.channels.duplicates_hint' | translate }}</p>
+          @for (group of duplicateGroups(); track group.key) {
+            <div class="flex flex-wrap items-center gap-2 p-2 rounded-lg border border-base-300 bg-base-100">
+              <div class="flex flex-wrap gap-1 flex-1 min-w-0">
+                @for (row of group.rows; track row.id) {
+                  <span class="badge badge-ghost badge-sm">{{ row.name }} ({{ row.number }})</span>
+                }
+              </div>
+              <button type="button" class="btn btn-xs btn-outline shrink-0" (click)="openMergeFor(group)">
+                {{ 'liveTv.admin.channels.merge' | translate }}
+              </button>
+            </div>
+          }
+        }
+      </div>
+    }
+
+    @if (showBulkBar()) {
+      <div class="flex flex-wrap items-center gap-2 p-2 rounded-lg bg-base-200">
+        <div class="join">
+          <button
+            type="button"
+            class="btn btn-xs join-item"
+            [class.btn-active]="bulkScope() === 'selection'"
+            (click)="bulkScope.set('selection')"
+          >
+            {{ 'liveTv.admin.channels.bulk_scope_selected' | translate: { count: selectedRows().length } }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-xs join-item"
+            [class.btn-active]="bulkScope() === 'all'"
+            [disabled]="bulkAllDisabled()"
+            (click)="bulkScope.set('all')"
+          >
+            {{ 'liveTv.admin.channels.bulk_scope_all' | translate: { count: total() } }}
+          </button>
+        </div>
+        <button type="button" class="btn btn-xs" [disabled]="bulkBusy()" (click)="bulkEnable()">{{ 'liveTv.admin.channels.bulk_enable' | translate }}</button>
+        <button type="button" class="btn btn-xs" [disabled]="bulkBusy()" (click)="bulkDisable()">{{ 'liveTv.admin.channels.bulk_disable' | translate }}</button>
+        <div class="join">
+          <input type="text" class="input input-bordered input-xs join-item w-32" [placeholder]="'liveTv.admin.channels.bulk_group_placeholder' | translate" [ngModel]="bulkGroupName()" (ngModelChange)="bulkGroupName.set($event)" />
+          <button type="button" class="btn btn-xs join-item" [disabled]="bulkBusy() || !bulkGroupName()" (click)="applyBulkGroup()">{{ 'liveTv.admin.channels.bulk_apply' | translate }}</button>
+        </div>
+        <div class="join">
+          <input type="number" class="input input-bordered input-xs join-item w-24" [placeholder]="'liveTv.admin.channels.bulk_start_number_placeholder' | translate" [ngModel]="bulkStartNumber()" (ngModelChange)="bulkStartNumber.set($event)" />
+          <button type="button" class="btn btn-xs join-item" [disabled]="bulkBusy() || bulkStartNumber() == null" (click)="applyBulkRenumber()">{{ 'liveTv.admin.channels.bulk_apply' | translate }}</button>
+        </div>
+        @if (bulkScope() === 'selection' && selectedRows().length >= 2) {
+          <button type="button" class="btn btn-xs btn-outline" (click)="openMerge()">{{ 'liveTv.admin.channels.merge' | translate }}</button>
+        }
+        <button type="button" class="btn btn-xs btn-ghost" (click)="clearSelection()">{{ 'common.cancel' | translate }}</button>
+      </div>
+    }
+
+    @if (loading()) {
+      <div class="flex justify-center py-16">
+        <span class="loading loading-spinner loading-lg"></span>
+      </div>
+    } @else if (rows().length === 0) {
+      <p class="text-center py-12 text-base-content/50">{{ 'liveTv.admin.channels.empty' | translate }}</p>
+    } @else {
+      <div class="overflow-x-auto rounded-lg border border-base-200">
+        <table class="table table-zebra">
+          <thead>
+            <tr>
+              <th class="w-8">
+                <input type="checkbox" class="checkbox checkbox-sm" [checked]="allSelected()" (change)="toggleAllSelected()" />
+              </th>
+              <th>{{ 'liveTv.admin.channels.col_number' | translate }}</th>
+              <th>{{ 'liveTv.admin.channels.col_name' | translate }}</th>
+              <th>{{ 'liveTv.admin.channels.col_group' | translate }}</th>
+              <th>{{ 'liveTv.admin.channels.col_guide_match' | translate }}</th>
+              <th class="text-center">{{ 'common.active' | translate }}</th>
+              <th class="text-end w-24"></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of rows(); track row.id) {
+              <tr>
+                <td>
+                  <input type="checkbox" class="checkbox checkbox-sm" [checked]="selectedIds().has(row.id)" (change)="toggleSelected(row.id)" />
+                </td>
+                <td>{{ row.number }}</td>
+                <td>
+                  <button type="button" class="link link-hover" (click)="openEdit(row)">{{ row.name }}</button>
+                  @if (row.consecutiveFailures > 0) {
+                    <span class="badge badge-error badge-sm ml-1">{{ row.consecutiveFailures }}</span>
+                  }
+                </td>
+                <td class="text-sm text-base-content/60">{{ row.groupName }}</td>
+                <td class="text-sm text-base-content/60">{{ matchLabel(row.guideMatchKind) }}</td>
+                <td class="text-center">
+                  @if (row.enabled) {
+                    <span class="badge badge-success badge-sm">{{ 'common.yes' | translate }}</span>
+                  } @else {
+                    <span class="badge badge-ghost badge-sm">{{ 'common.no' | translate }}</span>
+                  }
+                </td>
+                <td class="text-end">
+                  <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(row)">{{ 'common.edit' | translate }}</button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <app-pagination [current]="page()" [total]="totalPages()" (pageChange)="goToPage($event)" />
+    }
+  </div>
+</div>
+
+<dialog #editorDialog class="modal">
+  <div class="modal-box max-w-md p-0 gap-0 overflow-hidden">
+    <app-modal-header flush [title]="'liveTv.admin.channels.editor_title' | translate" />
+    <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'liveTv.admin.channels.field_name' | translate }}</span>
+        <input type="text" class="input input-bordered input-sm w-full" [ngModel]="editName()" (ngModelChange)="editName.set($event)" />
+      </label>
+      <div class="grid grid-cols-2 gap-3">
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'liveTv.admin.channels.field_number' | translate }}</span>
+          <input type="number" class="input input-bordered input-sm w-full" [ngModel]="editNumber()" (ngModelChange)="editNumber.set($event)" />
+        </label>
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'liveTv.admin.channels.field_group' | translate }}</span>
+          <input type="text" class="input input-bordered input-sm w-full" [ngModel]="editGroup()" (ngModelChange)="editGroup.set($event)" />
+        </label>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'liveTv.admin.channels.field_guide_id' | translate }}</span>
+          <input type="text" class="input input-bordered input-sm w-full" [ngModel]="editGuideId()" (ngModelChange)="editGuideId.set($event)" />
+        </label>
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'liveTv.admin.channels.field_guide_shift' | translate }}</span>
+          <input type="number" class="input input-bordered input-sm w-full" [ngModel]="editShiftMinutes()" (ngModelChange)="editShiftMinutes.set($event)" />
+        </label>
+      </div>
+      <label class="label cursor-pointer justify-start gap-3">
+        <input type="checkbox" class="toggle toggle-sm" [ngModel]="editEnabled()" (ngModelChange)="editEnabled.set($event)" />
+        <span class="label-text">{{ 'common.active' | translate }}</span>
+      </label>
+    </div>
+    <app-modal-footer flush>
+      <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">{{ 'common.cancel' | translate }}</button>
+      <button type="button" class="btn btn-primary" (click)="saveEdit()" [disabled]="saving()">
+        @if (saving()) {
+          <span class="loading loading-spinner loading-sm"></span>
+        }
+        {{ 'common.save' | translate }}
+      </button>
+    </app-modal-footer>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">{{ 'common.close' | translate }}</button>
+  </form>
+</dialog>
+
+<dialog #mergeDialog class="modal">
+  <div class="modal-box max-w-sm p-0 gap-0 overflow-hidden">
+    <app-modal-header flush [title]="'liveTv.admin.channels.merge_title' | translate" />
+    <div class="px-5 sm:px-6 py-4 flex flex-col gap-2 bg-base-100">
+      <p class="text-sm text-base-content/60">{{ 'liveTv.admin.channels.merge_hint' | translate }}</p>
+      @for (row of mergeCandidates(); track row.id) {
+        <label class="label cursor-pointer justify-start gap-3">
+          <input type="radio" name="mergeTarget" class="radio radio-sm" [checked]="mergeTargetId() === row.id" (change)="mergeTargetId.set(row.id)" />
+          <span class="label-text">{{ row.name }} ({{ row.number }})</span>
+        </label>
+      }
+    </div>
+    <app-modal-footer flush>
+      <button type="button" class="btn btn-ghost" (click)="closeMerge()">{{ 'common.cancel' | translate }}</button>
+      <button type="button" class="btn btn-primary" [disabled]="bulkBusy()" (click)="confirmMerge()">
+        {{ 'liveTv.admin.channels.merge' | translate }}
+      </button>
+    </app-modal-footer>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeMerge()" [attr.aria-label]="'common.close' | translate">{{ 'common.close' | translate }}</button>
+  </form>
+</dialog>

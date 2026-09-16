@@ -46,7 +46,30 @@
         }
       </div>
       <div class="flex-1 min-w-0">
-        @if (showHeroLogo()) {
+        @if (tv.isTv()) {
+          <!-- 10-foot primary nav: the drawer never opens on a TV, so the main
+               entries live here, one ↑ away from the first rail. -->
+          <div class="flex items-center gap-6 pl-2">
+            <img src="fliks-logo-ondark.svg" [alt]="'app.name' | translate" class="h-7 w-auto object-contain" />
+            <div class="ml-4 flex items-center gap-2">
+              @for (item of tvNavItems(); track item.id) {
+                <a
+                  [routerLink]="item.route"
+                  routerLinkActive
+                  #tab="routerLinkActive"
+                  [routerLinkActiveOptions]="{ exact: item.exact }"
+                  [state]="{ rootEntry: true }"
+                  class="btn btn-ghost h-11 gap-2.5 rounded-2xl px-4 text-base font-semibold"
+                  [class.bg-base-content/10]="tab.isActive"
+                  [class.text-base-content/70]="!tab.isActive"
+                >
+                  <app-nav-icon [name]="item.icon" class="h-5 w-5" />
+                  {{ item.labelKey | translate }}
+                </a>
+              }
+            </div>
+          </div>
+        } @else if (showHeroLogo()) {
           <!-- Hero clearlogo — kept whether the navbar is transparent (at top)
                or opaque (scrolled), so it doesn't revert to the title text. -->
           <img

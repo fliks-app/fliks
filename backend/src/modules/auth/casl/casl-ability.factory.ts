@@ -15,6 +15,7 @@ import { SubtitleFile } from '../../subtitles/entities/subtitle-file.entity';
 import { TranslationProvider } from '../../subtitles/entities/translation-provider.entity';
 import { Library } from '../../libraries/entities/library.entity';
 import { Playlist } from '../../playlists/entities/playlist.entity';
+import { LiveTvChannel } from '../../livetv/entities/livetv-channel.entity';
 import { Role } from '../../roles/entities/role.entity';
 import { Action } from './actions.enum';
 import { parsePluginPermissionGrant } from '../../../common/constants/plugin-permissions';
@@ -31,6 +32,7 @@ type Subjects =
       | typeof TranslationProvider
       | typeof Library
       | typeof Playlist
+      | typeof LiveTvChannel
       | typeof Role
     >
   | 'Settings'
@@ -77,6 +79,10 @@ export class CaslAbilityFactory {
     can(Action.Create, Playlist);
     can(Action.Update, Playlist);
     can(Action.Delete, Playlist);
+
+    // Watching Live TV is open to everyone; which channels a user sees is decided
+    // per user in the lineup, and configuring any of it needs Settings.
+    can(Action.Read, LiveTvChannel);
 
     // --- media ---
     if (perms.has('media.read')) {

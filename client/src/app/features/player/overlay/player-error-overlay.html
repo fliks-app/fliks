@@ -1,0 +1,28 @@
+@if (error(); as err) {
+  <div class="absolute inset-0 flex items-center justify-center z-50">
+    <div class="max-w-lg px-6 text-center text-white">
+      <svg lucideCircleAlert class="h-12 w-12 mx-auto mb-4 text-error"></svg>
+      <p class="text-lg font-medium">{{ 'player.error' | translate }}</p>
+      <p class="text-sm text-white/60 mt-1">{{ err.userMessage }}</p>
+      @if (hasDetails()) {
+        <details class="mt-3 text-left">
+          <summary class="cursor-pointer select-none text-xs text-white/50">
+            {{ 'player.error_details' | translate }}
+          </summary>
+          <pre class="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words rounded bg-black/40 p-2 text-[11px] leading-snug text-white/70">{{ diagnostics() }}</pre>
+        </details>
+      }
+      <div class="mt-4 flex items-center justify-center gap-2">
+        @if (canRetry()) {
+          <button class="btn btn-ghost btn-sm" (click)="retry.emit()">{{ 'common.retry' | translate }}</button>
+        }
+        @if (hasDetails()) {
+          <button class="btn btn-ghost btn-sm" (click)="copy()">
+            {{ (copied() ? 'player.copied' : 'player.copy_diagnostics') | translate }}
+          </button>
+        }
+        <button class="btn btn-ghost btn-sm" (click)="back.emit()">{{ 'player.back' | translate }}</button>
+      </div>
+    </div>
+  </div>
+}

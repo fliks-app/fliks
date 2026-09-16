@@ -30,6 +30,7 @@ import { Library } from '../libraries/entities/library.entity';
 import { PluginsModule } from '../plugins/plugins.module';
 import { ScheduledJobRegistryModule } from './scheduled-job-registry.module';
 import { LibraryIngestModule } from '../../common/library-ingest/library-ingest.module';
+import { LiveTvModule } from '../livetv/livetv.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { LibraryIngestModule } from '../../common/library-ingest/library-ingest.
     PluginsModule,
     ScheduledJobRegistryModule,
     forwardRef(() => LibraryIngestModule),
+    LiveTvModule,
   ],
   controllers: [CommandsController, SystemController, LivenessController],
   providers: [

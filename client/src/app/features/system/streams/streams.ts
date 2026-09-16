@@ -142,7 +142,20 @@ export class SystemStreamsComponent implements OnInit, OnDestroy {
     return `${m}:${String(s).padStart(2, '0')}`;
   }
 
+  /** Resolution and codec, whichever of the two the server actually knows. */
+  videoLabel(s: ActiveStream): string {
+    const parts = [s.videoResolution, s.videoCodec].filter(Boolean);
+    return parts.length ? parts.join(' ') : this.translate.instant('system.streams_unknown');
+  }
+
+  watchedFor(s: ActiveStream): string {
+    const started = new Date(s.startedAt).getTime();
+    if (!Number.isFinite(started)) return '';
+    return this.formatTime(Math.max(0, (Date.now() - started) / 1000));
+  }
+
   mediaLink(s: ActiveStream): string {
+    if (s.mediaType === 'livetv') return `/watch-live/${s.mediaId}`;
     const prefix = s.mediaType === 'movie' ? '/movies' : '/series';
     return `${prefix}/${s.mediaId}`;
   }

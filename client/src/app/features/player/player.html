@@ -4,12 +4,12 @@
   appDefaultFocus="[data-default-focus]"
   class="player-container"
   [class.closing]="closing()"
-  [class.hide-cursor]="!controlsVisible()"
+  [class.player-hide-cursor]="!chrome.visible()"
   [class.native-player]="!!nativeEngine"
   [class.hidden]="castService.isConnected()"
-  (mousemove)="device.isTouch() || device.isDpad() ? null : showControls()"
-  (wheel)="wakeControlsFromPointer()"
-  (click)="wakeControlsFromPointer()"
+  (mousemove)="chrome.onPointerMove()"
+  (wheel)="chrome.wakeFromPointerGesture()"
+  (click)="chrome.wakeFromPointerGesture()"
 >
   <!-- Backdrop until video renders its first frame. Rendered for both
        web (Shaka) and native (ExoPlayer) — on native the WebView is
@@ -50,39 +50,18 @@
     class="player-video"
     playsinline
     [class.opacity-0]="!videoStarted()"
-    [class.controls-visible]="controlsVisible()"
-    [class.controls-seek]="controlsVisible() && seekOsd()"
+    [class.controls-visible]="chrome.visible()"
+    [class.controls-seek]="chrome.visible() && chrome.seekOsd()"
     [style.object-fit]="fillScreen() ? 'cover' : 'contain'"
   ></video>
 
-  @if (error(); as err) {
-    <div class="absolute inset-0 flex items-center justify-center z-50">
-      <div class="max-w-lg px-6 text-center text-white">
-        <svg lucideCircleAlert class="h-12 w-12 mx-auto mb-4 text-error"></svg>
-        <p class="text-lg font-medium">{{ 'player.error' | translate }}</p>
-        <p class="text-sm text-white/60 mt-1">{{ err.userMessage }}</p>
-        @if (err.code != null || err.data?.length || err.variant || err.message) {
-          <details class="mt-3 text-left">
-            <summary class="cursor-pointer select-none text-xs text-white/50">
-              {{ 'player.error_details' | translate }}
-            </summary>
-            <pre class="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words rounded bg-black/40 p-2 text-[11px] leading-snug text-white/70">{{ errorDiagnostics() }}</pre>
-          </details>
-        }
-        <div class="mt-4 flex items-center justify-center gap-2">
-          @if (!videoStarted()) {
-            <button class="btn btn-ghost btn-sm" (click)="onRetry()">{{ 'common.retry' | translate }}</button>
-          }
-          @if (err.code != null || err.data?.length || err.variant || err.message) {
-            <button class="btn btn-ghost btn-sm" (click)="copyErrorDiagnostics()">
-              {{ (errorCopied() ? 'player.copied' : 'player.copy_diagnostics') | translate }}
-            </button>
-          }
-          <button class="btn btn-ghost btn-sm" (click)="onBack()">{{ 'player.back' | translate }}</button>
-        </div>
-      </div>
-    </div>
-  }
+  <app-player-error-overlay
+    [error]="error()"
+    [diagnostics]="errorDiagnostics()"
+    [canRetry]="!videoStarted()"
+    (retry)="onRetry()"
+    (back)="onBack()"
+  />
 
   @if (spinnerVisible()) {
     <div class="loading-overlay absolute inset-0 flex flex-col items-center justify-center gap-3 z-50 pointer-events-none">
@@ -117,9 +96,9 @@
 
   @if (!inPipMode()) {
   <app-player-controls
-    (interacted)="onControlsInteraction()"
-    [visible]="controlsVisible()"
-    [seekOsd]="seekOsd()"
+    (interacted)="chrome.onInteraction()"
+    [visible]="chrome.visible()"
+    [seekOsd]="chrome.seekOsd()"
     [paused]="paused()"
     [loading]="loading()"
     [buffering]="buffering()"
@@ -142,7 +121,7 @@
     [isNative]="isNative"
     [isDesktop]="isDesktopNative"
     (togglePlay)="onTogglePlay()"
-    (tapOverlay)="toggleControls()"
+    (tapOverlay)="chrome.toggle()"
     (seek)="onSeek($event)"
     (seekDragChange)="onSeekDragChange($event)"
     (volumeChange)="onVolumeChange($event)"
@@ -185,7 +164,7 @@
     (next)="advance()"
     [showPreRollSkip]="preRollSkippable()"
     (skipPreRoll)="skipPreRoll()"
-    (panelOpenChange)="onControlsPanelOpenChange($event)"
+    (panelOpenChange)="chrome.onPanelOpenChange($event)"
   />
   }
 

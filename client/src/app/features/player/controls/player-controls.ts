@@ -271,6 +271,9 @@ export class PlayerControlsComponent {
   readonly currentTime = input(0);
   readonly duration = input(0);
   readonly bufferedEnd = input(0);
+  /** Forwarded to the seekbar: the span a seek can land in. */
+  readonly seekableStart = input(0);
+  readonly seekableEnd = input(0);
   readonly volume = input(1);
   readonly muted = input(false);
   /** Effective slider position: drops to 0 while muted, so the thumb reflects

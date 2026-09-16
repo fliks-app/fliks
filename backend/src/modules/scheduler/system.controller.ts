@@ -32,6 +32,7 @@ import { BackupService } from './backup.service';
 import { LogBufferService } from './log-buffer.service';
 import { EventsService } from './events.service';
 import { ActivityRegistryService, type ActivityRow } from './activity-registry.service';
+import { LiveTvSessionService } from '../livetv/services/livetv-session.service';
 import { UpdateCheckService, type UpdateStatus } from './update-check.service';
 import { Observable } from 'rxjs';
 import {
@@ -211,6 +212,7 @@ export class SystemController {
     private readonly transcodingService: TranscodingService,
     private readonly transcodeCache: TranscodeCacheService,
     private readonly liveSessions: LiveSessionRegistry,
+    private readonly liveTvSessions: LiveTvSessionService,
     private readonly playbackService: PlaybackService,
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
@@ -654,6 +656,50 @@ export class SystemController {
       stream.containerReasons = reasons
         .filter((r) => r.flag.startsWith('Container'))
         .map((r) => r.message);
+    }
+
+    // Live TV keeps its own sessions: a channel has no media file, so it cannot
+    // live in the on-demand registry. Same dashboard, one row per viewer.
+    for (const row of this.liveTvSessions.listForActivity()) {
+      streams.push({
+        sessionId: row.sessionId,
+        userId: row.userId,
+        username: row.username,
+        mediaId: row.channelId,
+        mediaFileId: 0,
+        mediaTitle: row.channelName,
+        mediaType: 'livetv',
+        episodeId: null,
+        episodeLabel: null,
+        posterUrl: null,
+        mode: row.mode === 'direct' ? 'directplay' : row.mode,
+        quality: row.sourceName ?? 'Live',
+        hwAccel,
+        device: row.device,
+        systemName: null,
+        appVersion: null,
+        startedAt: new Date(row.startedAt).toISOString(),
+        lastActivity: new Date(row.lastSeenAt).toISOString(),
+        positionSeconds: 0,
+        durationSeconds: 0,
+        container: row.container,
+        videoCodec: row.videoCodec,
+        videoResolution: null,
+        videoBitrate: null,
+        audioCodec: row.audioCodec,
+        audioChannels: null,
+        audioLanguage: null,
+        outputContainer: row.container,
+        outputBitrate: null,
+        audioOutputCodec: null,
+        audioOutputBitrateBps: null,
+        audioMode: row.mode === 'transcode' ? 'transcode' : 'copy',
+        transcodePercent: null,
+        clientTonemap: false,
+        videoReasons: [],
+        audioReasons: [],
+        containerReasons: [],
+      });
     }
 
     return streams;

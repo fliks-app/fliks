@@ -28,6 +28,7 @@ import { SetupChecklistModule } from './modules/setup-checklist/setup-checklist.
 import { CountsModule } from './modules/counts/counts.module';
 import { PluginsModule } from './modules/plugins/plugins.module';
 import { PluginHostModule } from './modules/plugins/host/plugin-host.module';
+import { LiveTvModule } from './modules/livetv/livetv.module';
 import { CommonModule } from './common/common.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
@@ -105,6 +106,7 @@ import { join } from 'path';
     // @Global(): registered once here so PluginProcessService (in PluginsModule) can
     // inject PluginHostBindingService without an import edge back into this module.
     PluginHostModule,
+    LiveTvModule,
   ],
 })
 export class AppModule {}

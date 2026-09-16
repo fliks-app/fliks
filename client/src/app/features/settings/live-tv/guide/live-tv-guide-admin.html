@@ -1,0 +1,181 @@
+<div class="flex flex-col gap-8">
+  <div class="flex flex-col gap-3">
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+      <p class="text-sm text-base-content/60">{{ 'liveTv.admin.guide.subtitle' | translate }}</p>
+      <button type="button" class="btn btn-primary btn-sm self-start sm:self-auto" (click)="openCreate()">
+        {{ 'liveTv.admin.guide.new' | translate }}
+      </button>
+    </div>
+
+    @if (loading()) {
+      <div class="flex justify-center py-10">
+        <span class="loading loading-spinner loading-lg"></span>
+      </div>
+    } @else if (rows().length === 0) {
+      <p class="text-center py-8 text-base-content/50">{{ 'liveTv.admin.guide.empty' | translate }}</p>
+    } @else {
+      <div class="overflow-x-auto rounded-lg border border-base-200">
+        <table class="table table-zebra">
+          <thead>
+            <tr>
+              <th>{{ 'liveTv.admin.guide.col_name' | translate }}</th>
+              <th>{{ 'liveTv.admin.guide.col_kind' | translate }}</th>
+              <th>{{ 'liveTv.admin.guide.col_programs' | translate }}</th>
+              <th>{{ 'liveTv.admin.sources.col_last_sync' | translate }}</th>
+              <th class="text-end w-56"></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of rows(); track row.id) {
+              <tr>
+                <td>
+                  <button type="button" class="link link-hover font-medium" (click)="openEdit(row)">{{ row.name }}</button>
+                </td>
+                <td><span class="badge badge-ghost badge-sm">{{ row.kind }}</span></td>
+                <td>{{ row.programCount }}</td>
+                <td class="text-sm text-base-content/60">
+                  @if (row.lastSyncAt) {
+                    {{ row.lastSyncAt | localeDate:{ dateStyle: 'short', timeStyle: 'short' } }}
+                  } @else {
+                    {{ 'liveTv.admin.sources.never_synced' | translate }}
+                  }
+                </td>
+                <td class="text-end">
+                  <button type="button" class="btn btn-ghost btn-xs" [disabled]="syncingId() === row.id" (click)="syncNow(row)">
+                    @if (syncingId() === row.id) {
+                      <span class="loading loading-spinner loading-xs"></span>
+                    }
+                    {{ 'liveTv.admin.sources.sync_now' | translate }}
+                  </button>
+                  <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteRow(row)">{{ 'common.delete' | translate }}</button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+
+  <div class="flex flex-col gap-3">
+    <h2 class="text-lg font-semibold">{{ 'liveTv.admin.guide.match_report_title' | translate }}</h2>
+
+    @if (reportLoading()) {
+      <div class="flex justify-center py-10">
+        <span class="loading loading-spinner loading-lg"></span>
+      </div>
+    } @else if (report(); as r) {
+      <p class="text-sm text-base-content/70">
+        {{ 'liveTv.admin.guide.match_summary' | translate: { id: r.byKind.id, name: r.byKind.name, fuzzy: r.byKind.fuzzy, manual: r.byKind.manual } }}
+      </p>
+
+      @if (r.unmatched.length === 0) {
+        <p class="text-sm text-base-content/50">{{ 'liveTv.admin.guide.no_unmatched' | translate }}</p>
+      } @else {
+        <datalist id="liveTvGuideCandidates">
+          @for (c of r.candidates; track c.id) {
+            <option [value]="c.displayName"></option>
+          }
+        </datalist>
+        <div class="overflow-x-auto rounded-lg border border-base-200">
+          <table class="table table-zebra">
+            <thead>
+              <tr>
+                <th>{{ 'liveTv.admin.guide.col_channel' | translate }}</th>
+                <th>{{ 'liveTv.admin.guide.col_candidate' | translate }}</th>
+                <th class="w-24"></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (u of r.unmatched; track u.channelId) {
+                <tr>
+                  <td>{{ u.name }}</td>
+                  <td>
+                    <input
+                      type="text"
+                      list="liveTvGuideCandidates"
+                      class="input input-bordered input-sm w-full"
+                      [placeholder]="'liveTv.admin.guide.pick_candidate' | translate"
+                      [ngModel]="pickedDisplayName()[u.channelId] ?? ''"
+                      (ngModelChange)="setPickedDisplayName(u.channelId, $event)"
+                    />
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      class="btn btn-xs btn-primary"
+                      [disabled]="applyingChannelId() === u.channelId || !pickedDisplayName()[u.channelId]"
+                      (click)="applyManualMatch(u.channelId)"
+                    >
+                      {{ 'common.save' | translate }}
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    }
+  </div>
+</div>
+
+<dialog #editorDialog class="modal">
+  <div class="modal-box max-w-md p-0 gap-0 overflow-hidden">
+    <app-modal-header flush [title]="(editingId() === null ? 'liveTv.admin.guide.editor_create' : 'liveTv.admin.guide.editor_edit') | translate" />
+    <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'liveTv.admin.sources.field_name' | translate }}</span>
+        <input type="text" class="input input-bordered input-sm w-full" [ngModel]="formName()" (ngModelChange)="formName.set($event)" />
+      </label>
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'liveTv.admin.sources.field_kind' | translate }}</span>
+        <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="formKind()" (ngModelChange)="formKind.set($event)">
+          <option value="xmltv">{{ 'liveTv.admin.guide.kind_xmltv' | translate }}</option>
+          <option value="source">{{ 'liveTv.admin.guide.kind_source' | translate }}</option>
+        </select>
+      </label>
+      @if (formKind() === 'xmltv') {
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'liveTv.admin.sources.field_url' | translate }}</span>
+          <input type="url" class="input input-bordered input-sm w-full" [ngModel]="formUrl()" (ngModelChange)="formUrl.set($event)" />
+        </label>
+      } @else {
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'liveTv.admin.guide.field_source' | translate }}</span>
+          <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="formSourceId()" (ngModelChange)="formSourceId.set($event)">
+            @for (s of sources(); track s.id) {
+              <option [ngValue]="s.id">{{ s.name }}</option>
+            }
+          </select>
+        </label>
+      }
+      <div class="grid grid-cols-2 gap-3">
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'liveTv.admin.sources.field_refresh_hours' | translate }}</span>
+          <input type="number" min="1" class="input input-bordered input-sm w-full" [ngModel]="formRefreshHours()" (ngModelChange)="formRefreshHours.set($event)" />
+        </label>
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'liveTv.admin.guide.field_timezone_offset' | translate }}</span>
+          <input type="number" class="input input-bordered input-sm w-full" [ngModel]="formTimezoneOffset()" (ngModelChange)="formTimezoneOffset.set($event)" />
+        </label>
+      </div>
+      <label class="label cursor-pointer justify-start gap-3">
+        <input type="checkbox" class="toggle toggle-sm" [ngModel]="formEnabled()" (ngModelChange)="formEnabled.set($event)" />
+        <span class="label-text">{{ 'liveTv.admin.sources.field_enabled' | translate }}</span>
+      </label>
+    </div>
+    <app-modal-footer flush>
+      <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">{{ 'common.cancel' | translate }}</button>
+      <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
+        @if (saving()) {
+          <span class="loading loading-spinner loading-sm"></span>
+        }
+        {{ 'common.save' | translate }}
+      </button>
+    </app-modal-footer>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">{{ 'common.close' | translate }}</button>
+  </form>
+</dialog>

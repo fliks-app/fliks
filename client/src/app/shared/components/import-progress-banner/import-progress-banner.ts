@@ -28,7 +28,9 @@ const PHASES: { command: string; phase: ImportPhase }[] = [
   selector: 'app-import-progress-banner',
   imports: [TranslatePipe, ProgressBarComponent],
   templateUrl: './import-progress-banner.html',
-  host: { role: 'status', 'aria-live': 'polite' },
+  // Idle, the host is still a flex item and eats one `gap` from the page it
+  // sits in. Collapsed rather than emptied.
+  host: { role: 'status', 'aria-live': 'polite', '[class.hidden]': '!active()' },
 })
 export class ImportProgressBannerComponent {
   private readonly sse = inject(SseService);

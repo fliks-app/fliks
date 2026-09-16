@@ -55,14 +55,16 @@ import {
 } from '../../core/services/player-settings.service';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
-import { desktopBridgeOrNull } from '../../core/plugins/desktop-player.bridge';
 import { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
-import { ShakaEngine } from '../../core/services/playback-engine/shaka-engine';
-import { TizenEngine, isTizenAvplayAvailable } from '../../core/services/playback-engine/tizen-engine';
-import { WebOsEngine } from '../../core/services/playback-engine/webos-engine';
-import { NativePlayer } from '../../core/plugins/native-player.plugin';
+import {
+  createEngineSurface,
+  releaseEngineSurface,
+  type EngineSurfaceKind,
+} from '../../core/services/playback-engine/engine-surface';
 import { NativeEngine } from '../../core/services/playback-engine/native-engine';
 import { DesktopEngine } from '../../core/services/playback-engine/desktop-engine';
+import { TizenEngine, isTizenAvplayAvailable } from '../../core/services/playback-engine/tizen-engine';
+import { NativePlayer } from '../../core/plugins/native-player.plugin';
 import { PlayerStateService } from '../../core/services/player-state.service';
 import { TrackManagerService, SubtitleOption } from '../../core/services/track-manager.service';
 import { QualityManagerService } from '../../core/services/quality-manager.service';
@@ -93,8 +95,10 @@ interface OrientationPlugin {
 }
 const Orientation = registerPlugin<OrientationPlugin>('Orientation');
 
-import { LucideCircleAlert, LucideInfo, LucideX } from '@lucide/angular';
+import { LucideInfo, LucideX } from '@lucide/angular';
 import { PlayerControlsComponent } from './controls/player-controls';
+import { PlayerErrorOverlayComponent } from './overlay/player-error-overlay';
+import { ControlsVisibilityService } from './controls/controls-visibility';
 import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats-overlay';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 
@@ -150,8 +154,9 @@ class PausableTimeout {
 }
 
 @Component({
-  imports: [TranslatePipe, LucideCircleAlert, LucideInfo, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, DefaultFocusDirective],
+  imports: [TranslatePipe, LucideInfo, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, PlayerErrorOverlayComponent, DefaultFocusDirective],
   templateUrl: './player.html',
+  providers: [ControlsVisibilityService],
   encapsulation: ViewEncapsulation.None,
   styles: [`
     .player-container {
@@ -216,23 +221,8 @@ class PausableTimeout {
         }
       }
     }
-    /* When using native player, make WebView layers transparent so ExoPlayer/AVPlayer shows through */
-    .player-container.native-player {
-      background-color: transparent !important;
-    }
     .player-container.native-player > .player-video {
       display: none !important;
-    }
-    /* Hide the cursor with a transparent image, not cursor:none: on macOS the
-       latter maps to NSCursor hide, whose hide/unhide stack only rebalances when
-       the pointer crosses the window edge, so the OS cursor stays hidden when the
-       controls re-show. An image cursor is applied via NSCursor set, so reverting
-       to the default is balanced. */
-    .player-container.hide-cursor {
-      cursor:
-        url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=')
-          0 0,
-        none;
     }
     .player-video {
       position: absolute;
@@ -406,7 +396,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly videoStarted = this.state.videoStarted;
   readonly error = this.state.error;
   /** Transient "copied ✓" feedback for the error card's copy button. */
-  readonly errorCopied = signal(false);
   /** Buffering has lasted long enough to be worth a word on screen. */
   readonly preparing = signal(false);
   readonly paused = this.state.paused;
@@ -448,15 +437,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   // Component-owned signals (not delegated)
   readonly playbackRate = signal(1);
-  /** Controls start visible everywhere — the user is staring at a
-   *  paused / loading frame and expects to see the affordances. A
-   *  dedicated effect (see `playbackVisibilityEffect`) flips them
-   *  off the moment playback actually starts, and the auto-hide
-   *  timer takes over from there during the rest of the session. */
-  readonly controlsVisible = signal(true);
-  /** Controls reduced to the seekbar + times, raised by an arrow-key seek.
-   *  Any other input escalates back to the full bar via `showControls()`. */
-  readonly seekOsd = signal(false);
+  readonly chrome = inject(ControlsVisibilityService);
+  /** A seek still in flight pins the bar too: one slower than the hide delay
+   *  would otherwise retract it before the playhead landed. */
+  private readonly _chromePins = (this.chrome.configure({
+    pinned: computed(
+      () => this.paused() || this.buffering() || this.seekDragging() || this.state.seekLocked(),
+    ),
+  }), null);
   readonly inPipMode = signal(false);
   readonly pipAvailable = signal(true);
   readonly canLockOrientation = Capacitor.getPlatform() === 'ios';
@@ -465,47 +453,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly statsVisible = signal(false);
   readonly fillScreen = signal(false);
   private readonly statsRefreshTick = signal(0);
-  /** True when any panel inside <app-player-controls> (desktop dropdown or
-   *  mobile bottom sheet) is open — pins the controls open. */
-  private readonly controlsPanelOpen = signal(false);
-
-  /** Bumped on any interaction that should restart the hide countdown; the
-   *  auto-hide effect re-reads it to re-arm. */
-  private readonly controlsActivity = signal(0);
-  /** Reasons the controls stay pinned open (never auto-hide): playback paused
-   *  or buffering, an open picker / panel, an active seekbar drag, or a seek
-   *  still in flight — a seek slower than the hide delay would otherwise
-   *  retract the bar before the playhead landed. Reactive so the moment a
-   *  transient pin clears the auto-hide countdown restarts. */
-  private readonly keepControlsUp = computed(
-    () =>
-      this.paused() ||
-      this.buffering() ||
-      this.seekDragging() ||
-      this.state.seekLocked() ||
-      this.controlsPanelOpen(),
-  );
-  /** Single owner of the auto-hide countdown. Arms only while the bar is
-   *  visible and unpinned; a change in the pin state or an activity bump
-   *  re-runs it and re-arms. When a transient pin (buffering, a heavy quality
-   *  switch, a drag) clears, the countdown restarts on its own — the bar can't
-   *  get stuck open behind a timer that already fired while pinned. */
-  private readonly autoHideEffect = effect(onCleanup => {
-    if (!this.controlsVisible() || this.keepControlsUp()) return;
-    this.controlsActivity();
-    const delay = this.device.isTv() ? 5000 : 3000;
-    const id = setTimeout(() => this.hideControls(), delay);
-    onCleanup(() => clearTimeout(id));
-  });
-
-  /** The CSS cursor above only covers the page. Where the visible surface is
-   *  the native compositor's window (Linux), the pointer belongs to it, so the
-   *  same visibility has to be pushed down to it. */
-  private readonly nativeCursorEffect = effect(() => {
-    const visible = this.controlsVisible();
-    void desktopBridgeOrNull()?.setCursorVisible(visible).catch(() => {});
-  });
-
   // ── Skip-intro state ──
   /** Episode-level intro marker received in playback-info (null for movies / no marker). */
   readonly introMarker = signal<{ startSeconds: number; endSeconds: number } | null>(null);
@@ -653,7 +600,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly immersiveEffect = effect(() => {
     if (!this.isNative || this.inPipMode()) return;
     const landscape = this.isLandscape();
-    const shouldBeImmersive = landscape || (!this.paused() && !this.controlsVisible());
+    const shouldBeImmersive = landscape || (!this.paused() && !this.chrome.visible());
     if (shouldBeImmersive) {
       Immersive.enter({ displayBehindNotch: true }).catch(() => {});
       document.body.classList.add('immersive');
@@ -677,9 +624,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  second video would inherit `paused = false` from the previous
    *  session and the effect would fire before this video has even
    *  loaded.
-   *  `controlsVisible` is read through `untracked` so the effect
+   *  `chrome.visible` is read through `untracked` so the effect
    *  only reacts to videoStarted transitions — without it, the
-   *  user moving the mouse (which calls `showControls()`) would
+   *  user moving the mouse (which calls `chrome.show()`) would
    *  re-fire this effect and re-hide them immediately, making the
    *  cursor / bar impossible to keep visible. Subsequent pause /
    *  resume cycles fall through to the existing auto-hide timer +
@@ -711,7 +658,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Push appearance to the active renderer whenever the settings change, so the
       in-player subtitle appearance panel lands on the cue without a reload.
-      Untracked: the appliers also read controlsVisible(), whose margin bump the
+      Untracked: the appliers also read chrome.visible(), whose margin bump the
       effect above already owns — tracking it here would re-style on every toggle. */
   private readonly subtitleAppearanceEffect = effect(() => {
     this.playerSettings.settings();
@@ -1545,7 +1492,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       }
 
       // Hide controls after autoplay starts
-      this.resetHideTimer();
+      this.chrome.resetHideTimer();
 
       // Save position every 10s + immediately on seek
       this.saveInterval = setInterval(() => this.savePosition(), 10_000);
@@ -1610,7 +1557,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         // so the user can read what blew up instead of staring at the
         // pre-paint bg-base-200 plane.
         if ((this.isTizenEngine() || this.isDesktopNative || this.isNativeEngine()) && this.engine) {
-          document.documentElement.classList.remove('native-player-active');
+          releaseEngineSurface();
           const video = this.videoEl()?.nativeElement;
           if (video) video.style.display = '';
           try {
@@ -1674,7 +1621,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
     if (this.engine) {
       if (this.isNativeEngine()) {
-        document.documentElement.classList.remove('native-player-active');
+        releaseEngineSurface();
       }
       this.engine.destroy().catch(() => {});
       // Drop the reference so any late async (recovery / cast resume) can't
@@ -1808,9 +1755,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // ── Engine factories ──
 
   private async createShakaEngine(): Promise<void> {
-    const video = this.videoEl()!.nativeElement;
-    const engine = new ShakaEngine();
-    await engine.init(video);
+    const { engine } = await this.createSurface('shaka');
     this.engine = engine;
     this.isNativeEngine.set(false);
     this.state.bindEngine(engine);
@@ -1828,12 +1773,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   private async createWebOsEngine(): Promise<void> {
-    const video = this.videoEl()!.nativeElement;
     // webOS plays through the same visible <video> the Shaka path uses —
     // the platform pipeline decodes natively. No transparent hardware
     // plane (Tizen/Capacitor), so the Shaka UX (isNativeEngine=false) fits.
-    const engine = new WebOsEngine();
-    await engine.init(video);
+    const { engine } = await this.createSurface('webos');
     this.engine = engine;
     this.isNativeEngine.set(false);
     this.state.bindEngine(engine);
@@ -1846,19 +1789,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   private async createTizenEngine(): Promise<void> {
-    const video = this.videoEl()!.nativeElement;
-    // Hide the HTML5 <video> — AVPlay paints to its own hardware surface.
-    video.style.display = 'none';
-
-    const engine = new TizenEngine();
-    const container = this.containerEl()?.nativeElement ?? video.parentElement!;
-    await engine.init(container);
-
-    // Make the page transparent above the AVPlay surface — same trick as
-    // the Capacitor native engine on Android. `html.native-player-active`
-    // is the existing global hook the styles already key off.
-    document.documentElement.classList.add('native-player-active');
-
+    const { engine } = await this.createSurface('tizen');
     this.engine = engine;
     this.isTizenEngine.set(true);
     // Group with the native-engine UX (transparent overlay, controls hidden
@@ -1885,32 +1816,23 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   private async createNativeEngine(): Promise<void> {
-    const video = this.videoEl()!.nativeElement;
-    video.style.display = 'none';
-
-    const engine = new NativeEngine();
-    const container = this.containerEl()?.nativeElement ?? video.parentElement!;
-    await engine.init(container);
-
-    // Force transparent background so native player shows through
-    document.documentElement.classList.add('native-player-active');
-
+    const { engine } = await this.createSurface('native');
     this.wireNativePlayerEngine(engine);
   }
 
   private async createDesktopEngine(): Promise<void> {
-    const video = this.videoEl()!.nativeElement;
-    video.style.display = 'none';
-
-    const engine = new DesktopEngine();
-    const container = this.containerEl()?.nativeElement ?? video.parentElement!;
-    await engine.init(container);
-
-    // Transparent page above the mpv video window — same hook the Capacitor
-    // native engine uses to show the hardware surface through the WebView.
-    document.documentElement.classList.add('native-player-active');
-
+    const { engine } = await this.createSurface('desktop');
     this.wireNativePlayerEngine(engine);
+  }
+
+  /** Engine plus the surface contract that goes with it; the wiring below is
+   *  this player's own. */
+  private createSurface(kind: EngineSurfaceKind) {
+    return createEngineSurface({
+      kind,
+      video: this.videoEl()!.nativeElement,
+      container: this.containerEl()?.nativeElement,
+    });
   }
 
   /** Shared wiring for the transparent-overlay native engines (Capacitor
@@ -2009,97 +1931,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     });
   }
 
-  // ── Controls visibility ──
-
-  toggleControls() {
-    if (this.controlsVisible() && !this.isDropdownOpen()) {
-      this.hideControls();
-    } else {
-      this.showControls();
-    }
-  }
-
-  showControls(seekOsd = false) {
-    this.seekOsd.set(seekOsd);
-    this.controlsVisible.set(true);
-    this.resetHideTimer();
-  }
-
-  /** The webOS Magic Remote's scroll wheel and center-button press arrive as
-   *  `wheel` / `click` events at the pointer, not `keydown`, so the D-pad wake
-   *  path in `onKeyDown` never sees them — and `mousemove` is intentionally
-   *  muted on dpad input to avoid pointer-drift waking the bar. Wake the
-   *  controls for those discrete, intentional pointer gestures. */
-  wakeControlsFromPointer() {
-    if (this.device.isDpad() && !this.controlsVisible()) this.showControls();
-  }
-
   /** Extra bottom margin (vh) keeping native-renderer cues clear of the bar —
    *  halved for the seek OSD, which is a fraction of the full bar's height. */
   private nativeSubtitleBottomBump(): number {
-    if (!this.controlsVisible()) return 0;
-    return this.seekOsd() ? 5 : 10;
-  }
-
-  private hideControls() {
-    this.controlsVisible.set(false);
-    // Blur whatever was focused inside the controls so the next remote
-    // Enter/OK doesn't accidentally activate an invisible button
-    // (notably the back arrow at the top of the bar, which would quit
-    // the player). The next D-pad / OK press will fall through to the
-    // global key handler, show controls, and the user can navigate
-    // them deliberately.
-    if (typeof document !== 'undefined') {
-      const active = document.activeElement as HTMLElement | null;
-      // A floating cue outlives the bar's auto-hide — it stays on screen and
-      // operable — so keep its focus; only blur controls that are hiding.
-      if (
-        active &&
-        active.closest('app-player-controls') &&
-        !active.closest('.player-floating-cue')
-      ) {
-        active.blur();
-      }
-    }
-  }
-
-  /** Restart the auto-hide countdown by registering activity. The reactive
-   *  `autoHideEffect` owns the actual timer and re-arms off this bump and off
-   *  the live pin state ({@link keepControlsUp}). */
-  /** Focus moved inside the controls bar: restart the countdown so navigating
-   *  it with the D-pad can never let it retract mid-move. */
-  onControlsInteraction(): void {
-    // A focus move while the bar is down isn't the user navigating it — the
-    // hide itself blurs, and whatever picks the focus up next would otherwise
-    // re-arm the countdown forever.
-    if (!this.controlsVisible()) return;
-    this.resetHideTimer();
-  }
-
-  private resetHideTimer() {
-    this.controlsActivity.update(n => n + 1);
-  }
-
-  private isDropdownOpen(): boolean {
-    // Click-driven dropdowns / bottom sheets owned by <app-player-controls>.
-    // Reported via (panelOpenChange) so we don't depend on DOM focus.
-    if (this.controlsPanelOpen()) return true;
-    // Check via DOM (DaisyUI dropdowns use focus-within)
-    const container = this.containerEl()?.nativeElement;
-    if (container?.querySelector('.dropdown:focus-within')) return true;
-    const active = document.activeElement;
-    return !!active && !!active.closest('.dropdown');
-  }
-
-  /**
-   * Called by <app-player-controls> when its dropdown / bottom-sheet state
-   * changes. While open, we keep the controls visible. On close, re-arm
-   * the auto-hide so the bar fades back out in the normal delay.
-   */
-  onControlsPanelOpenChange(open: boolean): void {
-    this.controlsPanelOpen.set(open);
-    if (open) this.controlsVisible.set(true);
-    else this.resetHideTimer();
+    if (!this.chrome.visible()) return 0;
+    return this.chrome.seekOsd() ? 5 : 10;
   }
 
   // ── Player actions ──
@@ -2124,7 +1960,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.engine.paused) {
       this.state.paused.set(false);
       this.engine.play().catch(() => this.state.paused.set(this.engine?.paused ?? true));
-      this.resetHideTimer();
+      this.chrome.resetHideTimer();
     } else {
       this.state.paused.set(true);
       this.engine.pause().catch(() => this.state.paused.set(this.engine?.paused ?? true));
@@ -2138,10 +1974,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // scrubbing the seekbar — otherwise the player's `timeUpdate`
       // stream keeps pushing the bar back to the live position under
       // the user's finger / arrow keys. The drag itself pins the controls
-      // open via keepControlsUp.
+      // open through the chrome pin.
       this.state.seekLocked.set(true);
     } else {
-      this.resetHideTimer();
+      this.chrome.resetHideTimer();
       // Don't release the lock here: `onSeek` is about to fire with
       // the commit value and schedules its own release once the
       // engine catches up to the target.
@@ -2179,7 +2015,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Suppress auto-skip for 2s after a manual seek so the user can step back
     // into the intro on purpose without being kicked forward again.
     this.autoSkipSuppressedUntil = Date.now() + 2000;
-    this.resetHideTimer();
+    this.chrome.resetHideTimer();
   }
 
   /** Step one frame, pausing first. Falls back to 24 fps when the source rate
@@ -2328,7 +2164,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private revealCue(visible: WritableSignal<boolean>, cue: PausableTimeout): void {
     visible.set(true);
     cue.start(this.cueRevealMs);
-    if (untracked(this.controlsVisible)) cue.pause();
+    if (untracked(this.chrome.visible)) cue.pause();
   }
 
   /** Hide a cue and cancel its pending retract. */
@@ -2344,7 +2180,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  representations of the window stay in lockstep. */
   private readonly cueTimerPauseEffect = effect(() => {
     const engaged =
-      this.controlsVisible() || (this.controls()?.cueFocused() ?? false);
+      this.chrome.visible() || (this.controls()?.cueFocused() ?? false);
     if (engaged) {
       this.skipIntroCue.pause();
       this.nextEpisodeCue.pause();
@@ -2375,7 +2211,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       .then(() => this.restorePlaybackRate())
       .catch(() => {});
     this.state.currentTime.set(m.endSeconds);
-    this.resetHideTimer();
+    this.chrome.resetHideTimer();
   }
 
   /**
@@ -2666,7 +2502,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (!this.isNativeEngine()) this.engine.play().catch(() => {});
       // Reveal the controls across the switch so the new title/episode shows;
       // the auto-hide countdown retracts them on the usual delay.
-      this.showControls();
+      this.chrome.show();
     } catch (e: any) {
       // Map to a translated line (Shaka-shaped errors keep their category
       // message, a failed playback-info request its transport status) and
@@ -2905,12 +2741,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         }
         // A remote pause is a remote viewer stepping in, so surface the controls
         // the way a local pause does rather than freezing on a bare frame.
-        this.showControls();
+        this.chrome.show();
         break;
       case 'playpause':
         if (casting) this.castService.togglePlayPause();
         else this.onTogglePlay();
-        this.showControls();
+        this.chrome.show();
         break;
       case 'seek':
         if (cmd.positionSeconds === undefined) {
@@ -3526,17 +3362,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       .replace(/(Bearer\s+)[\w.-]+/gi, '$1<redacted>');
   }
 
-  async copyErrorDiagnostics(): Promise<void> {
-    const text = this.errorDiagnostics();
-    if (!text || !navigator.clipboard) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      this.errorCopied.set(true);
-      setTimeout(() => this.errorCopied.set(false), 2000);
-    } catch {
-      // Clipboard blocked (insecure context / denied permission) — no-op.
-    }
-  }
 
   /** True when the current media is Dolby Vision AND we're serving it untouched
    *  (DirectPlay / DirectStream): a decode failure is then a DV-capability
@@ -4130,7 +3955,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (trackId.startsWith('si-') || trackId.startsWith('audio-')) {
       this.activeAudioStreamIndex = parseAudioIndex(trackId);
     }
-    this.resetHideTimer();
+    this.chrome.resetHideTimer();
 
     // Save selection
     this.trackManager.saveAudioSelection(
@@ -4208,7 +4033,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   async selectSubtitle(sub: SubtitleOption | null) {
     if (!this.engine) return;
-    this.resetHideTimer();
+    this.chrome.resetHideTimer();
 
     if (!sub) {
       try { this.engine.setTextVisibility(false); } catch {}
@@ -4317,11 +4142,21 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // to the seekbar, which owns the scrub from there (accelerating step, one
     // deferred seek for the whole run) on keyboard and TV remote alike.
     const isSeekArrow = e.key === 'ArrowLeft' || e.key === 'ArrowRight';
-    if (!this.controlsVisible() && isSeekArrow) {
+    if (!this.chrome.visible() && isSeekArrow) {
       e.preventDefault();
       e.stopPropagation();
-      this.showControls(true);
+      this.chrome.show(true);
       this.controls()?.scrubFromKey(e);
+      return;
+    }
+
+    // OK on a hidden bar raises it instead of pressing the invisible button it
+    // holds, the back arrow being the first one. Every form factor, unlike the
+    // TV-only rule below: a keyboard reaches the same invisible button.
+    if (e.key === 'Enter' && !cueFocused && !this.chrome.visible()) {
+      this.chrome.show();
+      e.preventDefault();
+      e.stopPropagation();
       return;
     }
 
@@ -4329,8 +4164,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // activates the invisible focused button (e.g. OK would hit the back arrow
     // and quit). A focused cue is exempt: it's visible, so OK should act on it.
     // The back key bubbles to app.ts so the user can still exit.
-    if (!isBackKey && !cueFocused && !this.controlsVisible() && this.device.isTv()) {
-      this.showControls();
+    if (!isBackKey && !cueFocused && !this.chrome.visible() && this.device.isTv()) {
+      this.chrome.show();
       e.preventDefault();
       e.stopPropagation();
       return;
@@ -4352,7 +4187,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         if (
           e.key === ' ' &&
           (cueFocused ||
-            (this.controlsVisible() &&
+            (this.chrome.visible() &&
               activeEl &&
               activeEl !== document.body &&
               activeEl.closest('app-player-controls')))
@@ -4362,7 +4197,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         e.preventDefault();
         this.onTogglePlay();
         break;
-      // The trailing showControls() restarts the countdown for every seek
+      // The trailing chrome.show() restarts the countdown for every seek
       // below; without it a seek made while the stream is still loading lets
       // the first-frame effect snap the bar shut under the user.
       case 'ArrowLeft':
@@ -4403,9 +4238,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         break;
       case 'Escape':
         e.preventDefault();
-        if (this.controlsVisible()) {
-          this.hideControls();
-          return; // skip the trailing showControls() — we want them hidden
+        if (this.chrome.visible()) {
+          this.chrome.hide();
+          return; // skip the trailing chrome.show() — we want them hidden
         }
         this.onBack();
         break;
@@ -4426,11 +4261,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Don't wake controls for the back key — the user wants to LEAVE.
     // `app.ts` listens on `window` and dispatches `app:playerBack`,
     // which (with no controls shown) goes straight to `onBack()`.
-    // Without this guard, the trailing `showControls()` fired first,
+    // Without this guard, the trailing `chrome.show()` fired first,
     // `onPlayerBackEvent` then saw controls visible and only hid them
     // — so Return-on-TV looked stuck. A focused cue is likewise left
     // alone: acting on it shouldn't drag the whole bar onto the screen.
-    if (!isBackKey && !cueFocused) this.showControls(isSeekArrow && this.seekOsd());
+    if (!isBackKey && !cueFocused) this.chrome.show(isSeekArrow && this.chrome.seekOsd());
   };
 
   // ── Event handlers ──
@@ -4456,8 +4291,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // desktop this event only ever comes from Escape, a deliberate keyboard
     // press.) Phones and tablets get the direct exit: touch users dismiss the
     // controls by tapping the video surface, not via hardware back.
-    if ((this.device.isTv() || this.device.isDesktop()) && this.controlsVisible()) {
-      this.hideControls();
+    if ((this.device.isTv() || this.device.isDesktop()) && this.chrome.visible()) {
+      this.chrome.hide();
       return;
     }
     this.onBack();
@@ -4512,7 +4347,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // internally, but reloadStream() would still kill + re-mint the session
     // (ffmpeg stop, playback-info, full engine.load) for zero change.
     if (id === this.activeQualityId()) {
-      this.resetHideTimer();
+      this.chrome.resetHideTimer();
       return;
     }
     const mode = this.playbackMode();
@@ -4529,7 +4364,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       await this.reloadStream();
     }
 
-    this.resetHideTimer();
+    this.chrome.resetHideTimer();
   }
 
   async onSelectSubtitleById(id: string | null): Promise<void> {

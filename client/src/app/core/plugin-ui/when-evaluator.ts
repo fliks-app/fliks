@@ -16,6 +16,8 @@ export interface WhenContext {
   identified?: boolean;
   isTv: boolean;
   isTouch: boolean;
+  /** The signed-in user has at least one Live TV channel. */
+  liveTv?: boolean;
   /** Which menu is being built. Both surfaces read the same contribution
    *  lists, so an item only declares this when it genuinely belongs to one:
    *  Play and Open mean nothing on a detail page you are already on. */
@@ -37,6 +39,7 @@ function evaluateKnown(predicate: string, ctx: WhenContext): boolean | null {
   if (predicate === 'identified') return ctx.identified ?? true;
   if (predicate === 'isTv') return ctx.isTv;
   if (predicate === 'isTouch') return ctx.isTouch;
+  if (predicate === 'liveTv') return ctx.liveTv ?? false;
   if (predicate === 'surface:card') return ctx.surface === 'card';
   if (predicate === 'surface:detail') return ctx.surface === 'detail';
   return null;

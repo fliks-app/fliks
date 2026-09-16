@@ -278,6 +278,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly navContrib = inject(NavContributionsService);
   /** `nav.main` items before/after the library block, and `nav.acquisition` —
    *  the sidebar, the phone dock and the more-sheet all read these same lists. */
+  /** The TV tab row shows the whole `nav.main` list; the drawer never opens there. */
+  readonly tvNavItems = this.navContrib.mainItems;
   readonly mainItemsBeforeLibraries = this.navContrib.mainItemsBeforeLibraries;
   readonly mainItemsAfterLibraries = this.navContrib.mainItemsAfterLibraries;
   readonly acquisitionItems = this.navContrib.acquisitionItems;

@@ -5,6 +5,7 @@ import {
   EngineStats,
   PlaybackEngine,
   PlaybackState,
+  SeekRange,
 } from './playback-engine';
 import { normalizeLangCode } from '../../utils/language.utils';
 
@@ -199,6 +200,12 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
   get paused(): boolean {
     return this.video?.paused ?? true;
+  }
+
+  override get seekRange(): SeekRange {
+    const seekable = this.video?.seekable;
+    if (!seekable || seekable.length === 0) return { start: 0, end: this.currentTime };
+    return { start: seekable.start(0), end: seekable.end(seekable.length - 1) };
   }
 
   get buffered(): number {

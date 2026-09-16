@@ -2,6 +2,7 @@ import { Injectable, computed, inject } from '@angular/core';
 import { AuthService } from '../services/auth.service';
 import { DeviceService } from '../services/device.service';
 import { TvService } from '../services/tv.service';
+import { LiveTvAvailabilityService } from '../services/live-tv-availability.service';
 import { CORE_NAV_CONTRIBUTIONS, LIBRARIES_BLOCK_WEIGHT } from './core-contributions';
 import { PluginUiRegistryService } from './plugin-ui-registry.service';
 import { evaluateWhen, type WhenContext } from './when-evaluator';
@@ -46,6 +47,7 @@ export class NavContributionsService {
   private readonly auth = inject(AuthService);
   private readonly tv = inject(TvService);
   private readonly device = inject(DeviceService);
+  private readonly liveTv = inject(LiveTvAvailabilityService);
 
   readonly mainItems = computed(() => this.resolve('nav.main'));
   readonly acquisitionItems = computed(() => this.resolve('nav.acquisition'));
@@ -67,6 +69,7 @@ export class NavContributionsService {
       hasPermission: (p) => this.auth.hasPermission(p),
       isTv: this.tv.isTv(),
       isTouch: this.device.isTouch(),
+      liveTv: this.liveTv.available(),
     };
     const items: ResolvedNavItem[] = [];
     for (const c of merged) {

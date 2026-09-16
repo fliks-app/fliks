@@ -43,7 +43,11 @@
                 >
               }
               <div class="text-xs text-base-content/50 tabular-nums mt-1">
-                {{ formatTime(s.positionSeconds) }} / {{ formatTime(s.durationSeconds) }}
+                @if (s.mediaType === 'livetv') {
+                  {{ 'system.streams_watching_for' | translate: { duration: watchedFor(s) } }}
+                } @else {
+                  {{ formatTime(s.positionSeconds) }} / {{ formatTime(s.durationSeconds) }}
+                }
               </div>
             </div>
           </div>
@@ -101,9 +105,7 @@
                 'system.streams_label_video' | translate
               }}</span>
               <div>
-                <span class="font-medium"
-                  >{{ s.videoResolution ?? '?' }} {{ s.videoCodec ?? '?' }}</span
-                >
+                <span class="font-medium">{{ videoLabel(s) }}</span>
                 <div class="text-base-content/50">
                   &rarr;
                   @switch (s.mode) {
@@ -134,7 +136,7 @@
                   @if (s.audioLanguage) {
                     {{ s.audioLanguage }}
                   }
-                  {{ s.audioCodec ?? '?' }}
+                  {{ s.audioCodec ?? ('system.streams_unknown' | translate) }}
                   @if (s.audioChannels) {
                     {{ s.audioChannels }}
                   }
@@ -148,7 +150,7 @@
                     @case ('copy') {
                       {{
                         'system.streams_audio_copy'
-                          | translate: { codec: (s.audioCodec ?? '?').toUpperCase() }
+                          | translate: { codec: (s.audioCodec ?? '').toUpperCase() }
                       }}
                     }
                     @case ('transcode') {

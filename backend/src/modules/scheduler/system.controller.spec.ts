@@ -69,6 +69,7 @@ describe('SystemController.activeStreams recency filter', () => {
       transcodingService as never,
       {} as never, // transcodeCache
       liveSessions as never,
+      { listForActivity: () => [] } as never, // liveTvSessions
       playbackService as never,
       mediaFileRepo as never,
       {} as never, // episodeRepo
@@ -161,6 +162,7 @@ describe('SystemController.sendPlayerCommand', () => {
       transcodingService as never,
       {} as never,
       liveSessions as never,
+      { listForActivity: () => [] } as never, // liveTvSessions
       {} as never,
       {} as never,
       {} as never,
@@ -227,6 +229,7 @@ describe('SystemController.restart', () => {
 
   function makeController() {
     return new SystemController(
+      {} as never,
       {} as never,
       {} as never,
       {} as never,

@@ -77,7 +77,7 @@ import {
         [style.max-height.px]="position().maxHeight"
       >
         @if (heading()) {
-          <div class="px-2 pb-2 text-center text-base-content/60 text-sm font-medium truncate">{{ heading() }}</div>
+          <div class="menu-heading px-2 text-base-content/60">{{ heading() }}</div>
         }
         <ng-container *ngTemplateOutlet="content"></ng-container>
       </div>

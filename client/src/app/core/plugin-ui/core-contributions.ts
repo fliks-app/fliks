@@ -16,6 +16,7 @@ export const CORE_NAV_CONTRIBUTIONS: readonly UiContribution[] = [
   { id: 'core.home', slot: 'nav.main', weight: 100, labelKey: 'nav.home', icon: 'home', action: { kind: 'route', path: '/' } },
   { id: 'core.search', slot: 'nav.main', weight: 200, labelKey: 'search.title', icon: 'search', action: { kind: 'route', path: '/search' } },
   { id: 'core.my_profile', slot: 'nav.main', weight: 300, labelKey: 'nav.my_profile', icon: 'user-round', when: [not('isTv')], action: { kind: 'action', actionId: 'nav.my-profile' } },
+  { id: 'core.live_tv', slot: 'nav.main', weight: 900, labelKey: 'liveTv.title', icon: 'tv', when: ['liveTv'], action: { kind: 'route', path: '/live-tv' } },
   { id: 'core.playlists', slot: 'nav.main', weight: 2000, labelKey: 'nav.playlists', icon: 'list-video', action: { kind: 'route', path: '/playlists' } },
   { id: 'core.downloads', slot: 'nav.main', weight: 2100, labelKey: 'downloads.title', shortLabelKey: 'nav.downloads', icon: 'download', when: [not('isTv')], action: { kind: 'route', path: '/downloads' } },
   { id: 'core.history', slot: 'nav.main', weight: 2200, labelKey: 'nav.history', icon: 'history', action: { kind: 'route', path: '/history' } },
@@ -76,6 +77,12 @@ export const CORE_SETTINGS_SECTIONS: readonly CoreSettingsSection[] = [
       { id: 'core.subtitles', slot: 'settings.page', weight: 100, labelKey: 'settings.nav.subtitles', action: { kind: 'route', path: '/admin/settings/subtitles' } },
       { id: 'core.subtitle_providers', slot: 'settings.page', weight: 200, labelKey: 'settings.nav.subtitle_providers', action: { kind: 'route', path: '/admin/settings/subtitle-providers' } },
       { id: 'core.subtitles_activity', slot: 'settings.page', weight: 300, labelKey: 'settings.nav.subtitles_activity', when: ['hasPermission:media.read'], action: { kind: 'route', path: '/admin/settings/subtitles-activity' } },
+    ],
+  },
+  {
+    labelKey: 'admin.section_livetv',
+    items: [
+      { id: 'core.live_tv_settings', slot: 'settings.page', weight: 100, labelKey: 'liveTv.admin.title', action: { kind: 'route', path: '/admin/settings/live-tv' } },
     ],
   },
   {

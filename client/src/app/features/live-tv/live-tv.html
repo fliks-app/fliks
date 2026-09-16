@@ -1,0 +1,162 @@
+<div appDefaultFocus="[data-channel-focus]" focusKey="live-tv" focusIdAttr="data-channel-focus"
+     class="flex flex-col gap-4">
+  <div>
+    <h1 class="page-title">{{ 'liveTv.title' | translate }}</h1>
+  </div>
+
+  <nav appTvRow role="tablist" class="flex items-center gap-1 overflow-x-auto py-2 -my-2 px-2 -mx-2">
+    <button
+      type="button"
+      class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap"
+      [class.bg-base-300]="tab() === 'on-now'"
+      [class.text-base-content/70]="tab() !== 'on-now'"
+      [class.hover:bg-base-200]="tab() !== 'on-now'"
+      (click)="tab.set('on-now')"
+    >
+      {{ 'liveTv.tab_on_now' | translate }}
+    </button>
+    <button
+      type="button"
+      class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap"
+      [class.bg-base-300]="tab() === 'guide'"
+      [class.text-base-content/70]="tab() !== 'guide'"
+      [class.hover:bg-base-200]="tab() !== 'guide'"
+      (click)="tab.set('guide')"
+    >
+      {{ 'liveTv.tab_guide' | translate }}
+    </button>
+  </nav>
+
+  @if (tab() === 'guide') {
+    <app-live-tv-guide />
+  } @else if (loading()) {
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      @for (i of [1, 2, 3, 4, 5, 6]; track i) {
+        <div class="skeleton h-24 w-full rounded-lg"></div>
+      }
+    </div>
+  } @else if (isEmpty()) {
+    <div class="flex flex-col items-center gap-3 py-16 text-center">
+      <svg lucideTv class="h-10 w-10 text-base-content/30"></svg>
+      <p class="text-base-content/60 max-w-md">{{ 'liveTv.empty_no_channels' | translate }}</p>
+      @if (auth.user()?.isAdmin) {
+        <a routerLink="/admin/settings/live-tv" class="btn btn-primary btn-sm">
+          {{ 'liveTv.empty_go_to_settings' | translate }}
+        </a>
+      }
+    </div>
+  } @else {
+    <div appTvRow class="flex flex-wrap items-center gap-2">
+      <label class="input input-bordered input-sm flex items-center gap-2 w-auto">
+        <svg lucideSearch class="h-4 w-4 text-base-content/50"></svg>
+        <!-- The `.input` wrapper is what shows focus; the field's own ring
+             would draw a second one inside it. -->
+        <input
+          data-no-focus-ring
+          type="search"
+          class="grow"
+          [placeholder]="'common.search' | translate"
+          [attr.aria-label]="'common.search' | translate"
+          [ngModel]="query()"
+          (ngModelChange)="query.set($event)"
+        />
+      </label>
+      <select
+        class="select select-bordered select-sm w-auto"
+        [appTvSelect]="'liveTv.guide.filter_group' | translate"
+        [attr.aria-label]="'liveTv.guide.filter_group' | translate"
+        [ngModel]="groupFilter()"
+        (ngModelChange)="groupFilter.set($event)"
+      >
+        <option value="">{{ 'liveTv.guide.all_groups' | translate }}</option>
+        @for (g of groups(); track g) {
+          <option [value]="g">{{ g }}</option>
+        }
+      </select>
+    </div>
+
+    @if (favoriteEntries().length > 0) {
+      <div class="flex flex-col gap-2">
+        <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wide">
+          {{ 'liveTv.favorites' | translate }}
+        </h2>
+        <div appTvRow class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          @for (entry of favoriteEntries(); track entry.channel.id) {
+            <ng-container [ngTemplateOutlet]="card" [ngTemplateOutletContext]="{ $implicit: entry }" />
+          }
+        </div>
+      </div>
+    }
+
+    <div appTvSection class="flex flex-col gap-4">
+      @for (group of groupedEntries(); track group.groupName) {
+        <div class="flex flex-col gap-2">
+          <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wide">
+            {{ group.groupName || ('liveTv.ungrouped' | translate) }}
+          </h2>
+          <div appTvRow class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            @for (entry of group.items; track entry.channel.id) {
+              <ng-container [ngTemplateOutlet]="card" [ngTemplateOutletContext]="{ $implicit: entry }" />
+            }
+          </div>
+        </div>
+      }
+    </div>
+
+    @if (hasMore()) {
+      <div #sentinel class="flex justify-center py-2">
+        @if (loadingMore()) {
+          <span class="loading loading-spinner loading-sm"></span>
+        }
+      </div>
+    }
+  }
+</div>
+
+<ng-template #card let-entry>
+  <button
+    type="button"
+    [attr.data-channel-focus]="entry.channel.id"
+    class="flex items-center gap-3 p-3 rounded-lg border border-base-200 hover:border-primary/40 text-start bg-base-100"
+    (click)="watch(entry)"
+  >
+    <div class="w-12 h-12 rounded bg-base-200 flex items-center justify-center shrink-0 overflow-hidden">
+      @if (showLogo(entry)) {
+        <img
+          [cachedSrc]="entry.channel.logoPath | resolveUrl:'thumb'"
+          [alt]="entry.channel.name"
+          class="w-full h-full object-contain"
+          (error)="onLogoError(entry.channel.id)"
+        />
+      } @else {
+        <span class="text-sm font-bold text-base-content/60">{{ initials(entry.channel.name) }}</span>
+      }
+    </div>
+    <div class="min-w-0 flex-1">
+      <div class="flex items-center gap-1.5">
+        <span class="badge badge-ghost badge-xs">{{ entry.channel.number }}</span>
+        <span class="text-sm font-medium truncate">{{ entry.channel.name }}</span>
+      </div>
+      @if (entry.now) {
+        <p class="text-base-content/70 truncate mt-1">{{ entry.now.title }}</p>
+        <progress class="progress progress-primary h-1 mt-1" [value]="progressPercent(entry.now)" max="100"></progress>
+      } @else {
+        <p class="text-base-content/40 mt-1">{{ 'liveTv.guide.no_program' | translate }}</p>
+      }
+      @if (entry.next) {
+        <p class="text-base-content/40 truncate mt-0.5">
+          {{ 'liveTv.on_now.next_label' | translate }} {{ entry.next.title }}
+        </p>
+      }
+    </div>
+    <button
+      type="button"
+      class="btn btn-ghost btn-xs btn-circle shrink-0"
+      [class.text-warning]="entry.channel.favorite"
+      (click)="toggleFavorite(entry, $event)"
+      [attr.aria-label]="'liveTv.toggle_favorite' | translate"
+    >
+      <svg lucideStar class="h-4 w-4" [attr.fill]="entry.channel.favorite ? 'currentColor' : 'none'"></svg>
+    </button>
+  </button>
+</ng-template>

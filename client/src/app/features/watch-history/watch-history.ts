@@ -10,11 +10,13 @@ import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { PaginationComponent } from '../../shared/components/pagination/pagination';
 import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
+import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 
 @Component({
   selector: 'app-watch-history',
   imports: [
-    CachedSrcDirective,TranslatePipe, ResolveUrlPipe, PaginationComponent, DropdownMenuComponent, LucideHistory, LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck, LucideEllipsisVertical],
+    CachedSrcDirective,
+    TranslatePipe, ResolveUrlPipe, PaginationComponent, DropdownMenuComponent, LucideHistory, LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck, LucideEllipsisVertical, DefaultFocusDirective],
   templateUrl: './watch-history.html',
 })
 export class WatchHistoryComponent implements OnInit, OnDestroy {

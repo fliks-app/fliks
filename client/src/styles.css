@@ -233,8 +233,14 @@ html.native-player-active app-root,
 html.native-player-active app-layout,
 html.native-player-active main,
 html.native-player-active router-outlet + *,
-html.native-player-active app-player {
+html.native-player-active app-player,
+html.native-player-active app-live-player {
   background: transparent !important;
+}
+/* The decoder draws on a surface behind the WebView, so the player's own
+   backdrop has to get out of the way or it shows as a black picture. */
+.native-player {
+  background-color: transparent !important;
 }
 /* The backdrop reaches the player route from the app root, and its veil paints
    an opaque tint the video would sit behind. Hidden rather than undisplayed:
@@ -295,7 +301,12 @@ body.native.hero-page {
     padding-bottom: 150%;
   }
   app-media-card figure.aspect-video::before,
-  .animate-pulse .aspect-video::before {
+  .animate-pulse .aspect-video::before,
+  app-watch-history .aspect-video::before,
+  app-received-recommendations-card .aspect-video::before,
+  app-profile-recommendations .aspect-video::before,
+  app-playlist-detail .aspect-video::before,
+  app-media-info-extra .aspect-video::before {
     content: '';
     display: block;
     padding-bottom: 56.25%;
@@ -311,6 +322,10 @@ body.native.hero-page {
      every layer that filled the box has to be positioned instead. */
   app-media-card figure.aspect-2\/3 > img,
   app-media-card figure.aspect-video > img,
+  app-received-recommendations-card .aspect-video > img,
+  app-profile-recommendations .aspect-video > img,
+  app-playlist-detail .aspect-video > img,
+  app-media-info-extra .aspect-video > iframe,
   .mosaic-art > * {
     position: absolute;
     inset: 0;
@@ -611,6 +626,41 @@ app-player-controls :is(a, button, select, input, [role="button"], [tabindex]):f
   box-shadow: 0 0 0 3px var(--color-primary, #7a3ff2);
 }
 
+/* Tizen alone runs the CSS downlevel, and two "dimmed text" affordances do not
+   survive it. daisyUI dims an inactive tab through a `:not()` list holding
+   `:has()`, which Chromium 85 cannot parse, so the whole rule is stripped; and
+   both that rule and Tailwind's `::placeholder` reset express the dimming with
+   `color-mix()` alone, which the same engine ignores. Either way the text lands
+   at full contrast and reads as selected, or as typed. Opacity says the same
+   thing in syntax this engine has. */
+body.tv-tizen .tab:not(.tab-active) {
+  opacity: 0.5;
+}
+body.tv-tizen ::placeholder {
+  opacity: 0.5;
+}
+
+/* Same engine, worse outcome: daisyUI paints `.badge-soft`'s text AND background
+   the accent colour, then corrects the background with a `color-mix` down to an
+   8% tint over base-100. Chromium 85 drops that line, so the label is painted on
+   itself and disappears. base-100 is what the tint blends into. */
+body.tv-tizen .badge-soft {
+  background-color: var(--color-base-100);
+  border-color: var(--color-base-100);
+}
+
+/* A field wrapped in `.input` hands its focus affordance to the wrapper: the
+   field itself opts out with `data-no-focus-ring` so the ring isn't drawn inside
+   the box. Without this the wrapper kept only daisyUI's 1px outline, unreadable
+   from a couch next to the 4px ring every other control paints. `:focus-within`
+   rather than `:has(:focus-visible)` — Tizen runs Chromium 85, which has no
+   `:has()` — so the keyboard / TV modality gate stands in for `:focus-visible`. */
+html.keyboard-modality label.input:focus-within,
+html.tv-host label.input:focus-within {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 /* Default radius for the ring above, so a bare focusable (a section heading,
    a plain link) doesn't get a rectangle around it and no component has to
    remember its own. On an element with no background or border a radius paints
@@ -638,6 +688,20 @@ app-player-controls :is(a, button, select, input, [role="button"], [tabindex]):f
    ring instead of aligning the item flush with the clipped edge. */
 .scroll-ring-safe {
   @apply px-1 -mx-1 py-1 scroll-py-1;
+}
+
+/* A page's own heading. Narrow screens get the name from the chrome around the
+   page, so it stays announced but undrawn until there is room. Declared once:
+   nine templates each carried their own copy and two had already drifted. */
+.page-title {
+  @apply sr-only lg:not-sr-only text-2xl font-bold;
+}
+
+/* The title above a menu's items. Shared by the dropdown and the sheet, which
+   styled it separately and drifted: the dropdown had no top padding at all.
+   Each surface still owns its own colour and horizontal padding. */
+.menu-heading {
+  @apply pt-2 pb-2 text-center text-sm font-medium truncate;
 }
 
 /* Opt-out for focusables that paint their own focus affordance (e.g.
@@ -1652,3 +1716,13 @@ html.vt-player-close app-media-info-header img {
   }
 }
 
+/* Shared by every player surface: hides the pointer with a transparent image
+   rather than `cursor: none`. On macOS the latter maps to NSCursor hide, whose
+   stack only rebalances when the pointer crosses the window edge, so the cursor
+   would stay hidden when the controls come back. */
+.player-hide-cursor {
+  cursor:
+    url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=')
+      0 0,
+    none;
+}

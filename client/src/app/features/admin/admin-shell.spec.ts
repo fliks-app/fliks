@@ -39,6 +39,9 @@ const BASELINE_SIDEBAR = [
     { label: 'settings.nav.subtitle_providers', href: '/admin/settings/subtitle-providers' },
     { label: 'settings.nav.subtitles_activity', href: '/admin/settings/subtitles-activity' },
   ] },
+  { label: 'admin.section_livetv', links: [
+    { label: 'liveTv.admin.title', href: '/admin/settings/live-tv' },
+  ] },
   { label: 'admin.section_integrations', links: [
     { label: 'settings.nav.media_servers', href: '/admin/settings/media-servers' },
     { label: 'settings.nav.data_imports', href: '/admin/settings/data-imports' },
@@ -129,7 +132,7 @@ describe('AdminShellComponent — sidebar characterisation', () => {
   // An admin and a non-admin holding the same permissions see the same sidebar: entries gate on
   // the permission their own pages need, never on isAdmin.
   it.each([['admin', true], ['non-admin', false]] as const)(
-    'renders the unchanged 7-section, 23-link sidebar for a %s context',
+    'renders the unchanged 8-section, 24-link sidebar for a %s context',
     (_label, isAdmin) => {
       const fixture = createFixture({ isAdmin, permissions: ALL_PERMISSIONS });
       expect(readSidebar(fixture)).toEqual(BASELINE_SIDEBAR);
@@ -170,8 +173,8 @@ describe('AdminShellComponent — sidebar characterisation', () => {
       ],
     });
     const sections = readSidebar(fixture);
-    expect(sections).toHaveLength(8);
-    expect(sections[7]).toEqual({ label: 'B Plugin', links: [{ label: 'b.page', href: '/admin/settings/plugins/x/page' }] });
+    expect(sections).toHaveLength(9);
+    expect(sections[8]).toEqual({ label: 'B Plugin', links: [{ label: 'b.page', href: '/admin/settings/plugins/x/page' }] });
   });
 
   it('orders plugin sections by plugin id, not install/array order', () => {
@@ -183,7 +186,7 @@ describe('AdminShellComponent — sidebar characterisation', () => {
       ],
     });
     const sections = readSidebar(fixture);
-    expect(sections.slice(7).map((s) => s.label)).toEqual(['Alpha', 'Zeta']);
+    expect(sections.slice(8).map((s) => s.label)).toEqual(['Alpha', 'Zeta']);
   });
 
   it('produces no section for a plugin with zero settings.page contributions', () => {
@@ -191,7 +194,7 @@ describe('AdminShellComponent — sidebar characterisation', () => {
       permissions: ALL_PERMISSIONS,
       entries: [entry('fliks.empty', [contribution('nav-item', 100, { slot: 'nav.main' })], { name: 'Empty' })],
     });
-    expect(readSidebar(fixture)).toHaveLength(7);
+    expect(readSidebar(fixture)).toHaveLength(8);
   });
 
   it('produces no section for a plugin whose only contribution is hidden by `when`', () => {
@@ -200,7 +203,7 @@ describe('AdminShellComponent — sidebar characterisation', () => {
       entries: [entry('fliks.hidden', [contribution('gone', 100, { when: ['isAdmin'] })], { name: 'Hidden' })],
     });
     // isAdmin is false in this fixture's default context, so the predicate fails.
-    expect(readSidebar(fixture)).toHaveLength(7);
+    expect(readSidebar(fixture)).toHaveLength(8);
   });
 
   it('falls back to the plugin id when the manifest name is not yet in the response', () => {
@@ -208,6 +211,6 @@ describe('AdminShellComponent — sidebar characterisation', () => {
       permissions: ALL_PERMISSIONS,
       entries: [entry('fliks.noname', [contribution('page', 100)])],
     });
-    expect(readSidebar(fixture)[7].label).toBe('fliks.noname');
+    expect(readSidebar(fixture)[8].label).toBe('fliks.noname');
   });
 });

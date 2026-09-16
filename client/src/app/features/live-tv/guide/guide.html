@@ -1,0 +1,179 @@
+<div class="flex flex-col gap-3">
+  <div appTvRow class="flex flex-wrap items-center gap-2">
+    <select
+      class="select select-bordered select-sm w-auto"
+      [appTvSelect]="'liveTv.guide.filter_group' | translate"
+      [attr.aria-label]="'liveTv.guide.filter_group' | translate"
+      [ngModel]="groupFilter()"
+      (ngModelChange)="groupFilter.set($event); onFilterChange()"
+    >
+      <option value="">{{ 'liveTv.guide.all_groups' | translate }}</option>
+      @for (g of groups(); track g) {
+        <option [value]="g">{{ g }}</option>
+      }
+    </select>
+
+    <label class="label cursor-pointer gap-2">
+      <input
+        type="checkbox"
+        class="checkbox checkbox-sm"
+        [ngModel]="favoritesOnly()"
+        (ngModelChange)="favoritesOnly.set($event); onFilterChange()"
+      />
+      <span class="label-text">{{ 'liveTv.guide.favorites_only' | translate }}</span>
+    </label>
+
+    <div class="grow"></div>
+
+    <input
+      type="date"
+      class="input input-bordered input-sm w-auto"
+      [ngModel]="dayPickerValue"
+      (ngModelChange)="onDayPicked($event)"
+    />
+
+    <div class="join">
+      <button type="button" class="btn btn-sm join-item" (click)="jumpWindow(-4)" [attr.aria-label]="'liveTv.guide.jump_back' | translate">
+        <svg lucideChevronLeft class="h-4 w-4"></svg>
+      </button>
+      <button type="button" class="btn btn-sm join-item" (click)="jumpToNow()">
+        {{ 'liveTv.guide.now' | translate }}
+      </button>
+      <button type="button" class="btn btn-sm join-item" (click)="jumpWindow(4)" [attr.aria-label]="'liveTv.guide.jump_forward' | translate">
+        <svg lucideChevronRight class="h-4 w-4"></svg>
+      </button>
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="flex flex-col gap-1">
+      @for (i of [1, 2, 3, 4, 5, 6]; track i) {
+        <div class="skeleton h-16 w-full rounded-lg"></div>
+      }
+    </div>
+  } @else if (rows().length === 0) {
+    <p class="text-center py-12 text-base-content/50">{{ 'liveTv.guide.empty' | translate }}</p>
+  } @else {
+    <!-- Grid: hidden below md, a time grid is unreadable at phone width. -->
+    <div
+      #scrollArea
+      class="hidden md:block overflow-auto rounded-lg border border-base-200 max-h-[70vh]"
+      (scroll)="onScroll($event)"
+    >
+      <div class="relative" [style.width.px]="176 + timelineWidthPx()">
+        <!-- Time ruler -->
+        <div class="sticky top-0 z-20 flex h-8 bg-base-200 border-b border-base-300">
+          <div class="sticky left-0 z-30 w-44 shrink-0 bg-base-200"></div>
+          <div class="relative" [style.width.px]="timelineWidthPx()">
+            @for (mark of hourMarks(); track mark.getTime()) {
+              <span
+                class="absolute top-1/2 -translate-y-1/2 text-base-content/60 border-l border-base-300 pl-1"
+                [style.left.px]="(mark.getTime() - fetchFrom().getTime()) / 60000 * 4"
+              >
+                {{ mark | localeDate:{ hour: 'numeric', minute: '2-digit' } }}
+              </span>
+            }
+          </div>
+        </div>
+
+        <!-- Rows -->
+        <div appTvSection class="flex flex-col divide-y divide-base-200">
+          @for (row of rows(); track row.channel.id) {
+            <div class="flex h-16" style="content-visibility:auto;contain-intrinsic-size:0 64px">
+              <div class="sticky left-0 z-10 w-44 shrink-0 flex items-center gap-2 px-2 bg-base-100 border-r border-base-200">
+                <span class="badge badge-ghost badge-sm">{{ row.channel.number }}</span>
+                <span class="truncate text-sm font-medium">{{ row.channel.name }}</span>
+              </div>
+              <div appTvRow class="relative" [style.width.px]="timelineWidthPx()">
+                @if (showNowLine()) {
+                  <div class="absolute top-0 bottom-0 w-px bg-error z-10" [style.left.px]="nowOffsetPx()"></div>
+                }
+                @for (program of row.programs; track program.id) {
+                  <button
+                    type="button"
+                    class="absolute top-1 bottom-1 rounded px-2 text-start bg-base-200 hover:bg-base-300 overflow-hidden border border-base-300"
+                    [style.left]="programStyle(program).left"
+                    [style.width]="programStyle(program).width"
+                    (click)="openSheet(row.channel, program)"
+                  >
+                    <span class="block truncate font-medium">{{ program.title }}</span>
+                  </button>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+      @if (loadingMore()) {
+        <div class="flex justify-center py-2">
+          <span class="loading loading-spinner loading-sm"></span>
+        </div>
+      }
+    </div>
+
+    <!-- Mobile: vertical "now and next" list per channel. -->
+    <div class="md:hidden flex flex-col gap-2">
+      @for (row of rows(); track row.channel.id) {
+        <div class="flex items-center gap-3 p-2 rounded-lg border border-base-200">
+          <span class="badge badge-ghost badge-sm shrink-0">{{ row.channel.number }}</span>
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-medium truncate">{{ row.channel.name }}</p>
+            @if (nowProgram(row); as now) {
+              <button type="button" class="block text-start text-base-content/70 truncate" (click)="openSheet(row.channel, now)">
+                {{ now.title }}
+              </button>
+            } @else {
+              <p class="text-base-content/40">{{ 'liveTv.guide.no_program' | translate }}</p>
+            }
+            @if (nextProgram(row); as next) {
+              <p class="text-base-content/40 truncate">
+                {{ 'liveTv.on_now.next_label' | translate }} {{ next.title }}
+              </p>
+            }
+          </div>
+        </div>
+      }
+      @if (hasMore()) {
+        <button type="button" class="btn btn-ghost btn-sm" [disabled]="loadingMore()" (click)="loadWindow(false)">
+          @if (loadingMore()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ 'common.next' | translate }}
+        </button>
+      }
+    </div>
+  }
+</div>
+
+<dialog #sheetDialog class="modal">
+  <div class="modal-box max-w-md p-0 gap-0 overflow-hidden">
+    <app-modal-header flush [title]="selectedSheet()?.program?.title ?? ''" (closed)="closeSheet()" />
+    @if (selectedSheet(); as sheet) {
+      <div class="px-5 sm:px-6 py-4 flex flex-col gap-2">
+        <p class="text-sm text-base-content/60">
+          {{ sheet.program.startsAt | localeDate:{ hour: 'numeric', minute: '2-digit' } }}
+          -
+          {{ sheet.program.endsAt | localeDate:{ hour: 'numeric', minute: '2-digit' } }}
+          @if (episodeLabel(sheet.program); as ep) {
+            <span class="ml-2 badge badge-ghost badge-sm">{{ ep }}</span>
+          }
+        </p>
+        @if (sheet.program.subtitle) {
+          <p class="text-sm font-medium">{{ sheet.program.subtitle }}</p>
+        }
+        @if (sheet.program.description) {
+          <p class="text-sm text-base-content/80">{{ sheet.program.description }}</p>
+        }
+        <button type="button" class="btn btn-primary btn-sm mt-2 w-fit" (click)="watchFromSheet()">
+          <svg lucidePlay class="h-4 w-4"></svg>
+          {{ 'liveTv.watch' | translate }} {{ sheet.channel.name }}
+        </button>
+      </div>
+    }
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeSheet()" [attr.aria-label]="'common.close' | translate">
+      {{ 'common.close' | translate }}
+    </button>
+  </form>
+</dialog>

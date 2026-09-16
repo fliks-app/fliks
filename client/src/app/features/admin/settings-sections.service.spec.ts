@@ -53,11 +53,11 @@ function createService(opts: { isAdmin?: boolean; permissions?: string[]; entrie
 }
 
 describe('SettingsSectionsService', () => {
-  it('resolves the 7 core sections with 22 items total, and nothing else, with an empty registry', () => {
+  it('resolves the 8 core sections with 23 items total, and nothing else, with an empty registry', () => {
     const svc = createService({ permissions: ALL_PERMISSIONS });
     const sections = svc.sections();
-    expect(sections).toHaveLength(7);
-    expect(sections.reduce((n, s) => n + s.items.length, 0)).toBe(22);
+    expect(sections).toHaveLength(8);
+    expect(sections.reduce((n, s) => n + s.items.length, 0)).toBe(23);
   });
 
   it('drops the core entries whose own pages the viewer has no permission for', () => {
@@ -96,7 +96,7 @@ describe('SettingsSectionsService', () => {
       permissions: ALL_PERMISSIONS,
       entries: [entry('fliks.a', [contribution('nav', 100, { slot: 'nav.main' })], { name: 'A' })],
     });
-    expect(svc.sections()).toHaveLength(7);
+    expect(svc.sections()).toHaveLength(8);
   });
 
   it('drops a plugin settings.page contribution with an unrecognised action kind', () => {
@@ -104,7 +104,7 @@ describe('SettingsSectionsService', () => {
       permissions: ALL_PERMISSIONS,
       entries: [entry('fliks.a', [contribution('broken', 100, { action: { kind: 'bogus' } as never })], { name: 'A' })],
     });
-    expect(svc.sections()).toHaveLength(7);
+    expect(svc.sections()).toHaveLength(8);
   });
 
   it('produces the identical section list for an admin and a non-admin holding the same permissions', () => {

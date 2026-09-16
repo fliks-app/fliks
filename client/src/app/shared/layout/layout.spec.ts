@@ -30,6 +30,7 @@ import { CastService } from '../../core/services/cast.service';
 import { RemoteService } from '../../core/services/remote.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
+import { LiveTvAvailabilityService } from '../../core/services/live-tv-availability.service';
 import { DeviceService } from '../../core/services/device.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
@@ -155,6 +156,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
         provide: TvService,
         useValue: { isTv: () => f.isTv, isTizen: () => false, isAndroidTv: () => false, isWebOs: () => false },
       },
+      { provide: LiveTvAvailabilityService, useValue: { available: () => true } },
       {
         provide: DeviceService,
         useValue: {
@@ -317,6 +319,7 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
       { label: 'nav.home', icon: 'lucideHome', badge: null, href: '/' },
       { label: 'search.title', icon: 'lucideSearch', badge: null, href: '/search' },
       { label: 'nav.my_profile', icon: 'lucideUserRound', badge: null, href: '/profile/1' },
+      { label: 'liveTv.title', icon: 'lucideTv', badge: null, href: '/live-tv' },
       { label: 'Movies', icon: 'lucideLibrary', badge: null, href: '/libraries/Movies' },
       { label: 'Series', icon: 'lucideLibrary', badge: null, href: '/libraries/Series' },
       { label: 'Anime', icon: 'lucideSwords', badge: null, href: '/libraries/Anime' },
@@ -336,6 +339,7 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
       { label: 'nav.home', icon: 'lucideHome', badge: null, href: '/' },
       { label: 'search.title', icon: 'lucideSearch', badge: null, href: '/search' },
       { label: 'nav.my_profile', icon: 'lucideUserRound', badge: null, href: '/profile/2' },
+      { label: 'liveTv.title', icon: 'lucideTv', badge: null, href: '/live-tv' },
       { label: 'nav.playlists', icon: 'lucideListVideo', badge: null, href: '/playlists' },
       { label: 'downloads.title', icon: 'lucideDownload', badge: null, href: '/downloads' },
       { label: 'nav.history', icon: 'lucideHistory', badge: null, href: '/history' },
@@ -349,6 +353,7 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
     expect(sidebarItems(fixture.nativeElement)).toEqual([
       { label: 'nav.home', icon: 'lucideHome', badge: null, href: '/' },
       { label: 'search.title', icon: 'lucideSearch', badge: null, href: '/search' },
+      { label: 'liveTv.title', icon: 'lucideTv', badge: null, href: '/live-tv' },
       { label: 'Movies', icon: 'lucideLibrary', badge: null, href: '/libraries/Movies' },
       { label: 'nav.playlists', icon: 'lucideListVideo', badge: null, href: '/playlists' },
       { label: 'nav.history', icon: 'lucideHistory', badge: null, href: '/history' },
@@ -385,6 +390,7 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
     // Libraries live on Home, never in the sheet: main items first, then
     // acquisition items, each group ordered by weight.
     expect(sheetItems(fixture.nativeElement)).toEqual([
+      { label: 'liveTv.title', icon: 'lucideTv', badge: null, href: '/live-tv' },
       { label: 'nav.playlists', icon: 'lucideListVideo', badge: null, href: '/playlists' },
       { label: 'nav.history', icon: 'lucideHistory', badge: null, href: '/history' },
       { label: 'nav.calendar', icon: 'lucideCalendar', badge: null, href: '/calendar' },

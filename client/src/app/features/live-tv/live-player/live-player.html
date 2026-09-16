@@ -1,0 +1,183 @@
+<div
+  #container
+  appDefaultFocus="[data-default-focus]"
+  class="fixed inset-0 bg-black text-white"
+  [class.native-player]="nativeSurfaceClaimed()"
+  [class.player-hide-cursor]="!chrome.visible()"
+  (mousemove)="chrome.onPointerMove()"
+  (wheel)="chrome.wakeFromPointerGesture()"
+  (click)="chrome.wakeFromPointerGesture()"
+  (pointerdown)="chrome.show()"
+>
+  <!-- Any poster beats none: Android WebView paints its stock play icon, stretched, on a bare video. -->
+  <video
+    #video
+    class="w-full h-full object-contain"
+    playsinline
+    autoplay
+    poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+  ></video>
+
+  <app-player-error-overlay
+    [error]="playbackError()"
+    [diagnostics]="errorDiagnostics()"
+    (retry)="retryPlayback()"
+    (back)="goBack()"
+  />
+
+  @if (!playbackError() && loading()) {
+    <div class="absolute inset-0 flex items-center justify-center">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  }
+
+  <app-player-controls
+    [visible]="chrome.visible()"
+    [paused]="paused()"
+    [loading]="loading()"
+    [videoStarted]="true"
+    [currentTime]="dvrPosition()"
+    [duration]="dvrWindow()"
+    [seekableEnd]="liveBarPosition()"
+    [seekableStart]="seekableStart()"
+    [volume]="volume()"
+    [muted]="muted()"
+    [mediaTitle]="channelTitle()"
+    [episodeTitle]="programTitle()"
+    [logoUrl]="channelLogo()"
+    [isNative]="isNative"
+    [isDesktop]="isDesktopNative"
+    [pipAvailable]="pipAvailable()"
+    [statsVisible]="statsVisible()"
+    (interacted)="chrome.onInteraction()"
+    (togglePlay)="togglePlay()"
+    (tapOverlay)="chrome.toggle()"
+    (panelOpenChange)="chrome.onPanelOpenChange($event)"
+    (seek)="onSeek($event)"
+    (volumeChange)="onVolumeChange($event)"
+    (toggleMute)="onToggleMute()"
+    (toggleFullscreen)="onToggleFullscreen()"
+    (togglePip)="onTogglePip()"
+    (toggleStats)="toggleStats()"
+    (back)="goBack()"
+  />
+
+  <app-player-stats-overlay
+    [visible]="statsVisible()"
+    [stats]="playerStats()"
+    (close)="toggleStats()"
+  />
+
+  <!-- What the shared bar has no notion of. Same visibility, same daisyUI
+       vocabulary, anchored under the bar's own top row. -->
+  <div
+    class="live-player-strip pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-between gap-3 px-4 pt-16 transition-opacity duration-300 sm:pt-20"
+    [class.opacity-0]="!chrome.visible()"
+  >
+    <div class="flex items-center gap-2">
+      <span class="badge badge-error badge-sm gap-1 font-semibold uppercase tracking-wide">
+        {{ 'liveTv.player.live' | translate }}
+      </span>
+      @if (currentEntry()?.channel?.number) {
+        <span class="badge badge-neutral badge-sm font-mono">{{ currentEntry()?.channel?.number }}</span>
+      }
+      @if (numberBuffer()) {
+        <span class="badge badge-primary badge-sm font-mono">{{ numberBuffer() }}</span>
+      }
+      @if (!liveEdgeReached()) {
+        <button
+          type="button"
+          class="btn btn-xs btn-primary pointer-events-auto"
+          (click)="backToLive()"
+        >
+          {{ 'liveTv.player.back_to_live' | translate }}
+        </button>
+      }
+    </div>
+
+    <div class="join pointer-events-auto">
+      <button
+        type="button"
+        class="btn btn-sm join-item"
+        [attr.aria-label]="'liveTv.player.channel_up' | translate"
+        (click)="channelUp()"
+      >
+        <svg lucideChevronUp class="h-4 w-4"></svg>
+      </button>
+      <button
+        type="button"
+        class="btn btn-sm join-item"
+        [attr.aria-label]="'liveTv.player.channel_down' | translate"
+        (click)="channelDown()"
+      >
+        <svg lucideChevronDown class="h-4 w-4"></svg>
+      </button>
+      <button
+        #guideBtn
+        type="button"
+        class="btn btn-sm join-item gap-2"
+        [class.btn-active]="miniGuideOpen()"
+        (click)="toggleMiniGuide()"
+      >
+        <svg lucideListVideo class="h-4 w-4"></svg>
+        <span class="hidden sm:inline">{{ 'liveTv.player.channels' | translate }}</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mini guide: a column on the right, so the picture stays watchable while
+       the viewer scans channels. Mounted always, slid out, so the open state
+       animates and the list keeps its scroll position between openings. -->
+  <aside
+    #miniGuide
+    class="absolute inset-y-0 right-0 z-40 flex w-full max-w-sm flex-col bg-base-300/95 shadow-2xl backdrop-blur duration-200"
+    [class.transition-none]="!guideAnimates()"
+    [class.transition-transform]="guideAnimates()"
+    [class.translate-x-full]="!miniGuideOpen()"
+    [attr.aria-hidden]="!miniGuideOpen()"
+    [attr.inert]="miniGuideOpen() ? null : ''"
+    [attr.data-tv-modal]="miniGuideOpen() ? '' : null"
+  >
+    <div class="flex items-center justify-between gap-2 px-4 py-3">
+      <span class="font-semibold">{{ 'liveTv.player.channels' | translate }}</span>
+      <button
+        type="button"
+        class="btn btn-sm btn-circle btn-ghost"
+        [attr.aria-label]="'common.close' | translate"
+        (click)="toggleMiniGuide()"
+      >
+        <svg lucideX class="h-4 w-4"></svg>
+      </button>
+    </div>
+
+    <ul class="menu menu-vertical w-full flex-1 flex-nowrap gap-1 overflow-y-auto px-2 pb-4">
+      @for (entry of sortedChannels(); track entry.channel.id) {
+        <li [attr.data-channel-id]="entry.channel.id">
+          <button
+            type="button"
+            class="flex items-start gap-3 py-2"
+            [class.menu-active]="entry.channel.id === currentChannelId()"
+            (click)="selectFromMiniGuide(entry)"
+          >
+            <span class="w-8 shrink-0 pt-0.5 text-right tabular-nums opacity-60">
+              {{ entry.channel.number }}
+            </span>
+            <span class="flex min-w-0 flex-1 flex-col items-start gap-1">
+              <span class="w-full truncate font-medium">{{ entry.channel.name }}</span>
+              <span class="w-full truncate opacity-70">
+                {{ entry.now?.title ?? ('liveTv.guide.no_program' | translate) }}
+              </span>
+              @if (entry.now) {
+                <progress
+                  class="progress progress-primary h-1 w-full"
+                  [value]="progressPercent(entry.now)"
+                  max="100"
+                ></progress>
+              }
+            </span>
+          </button>
+        </li>
+      }
+    </ul>
+  </aside>
+</div>

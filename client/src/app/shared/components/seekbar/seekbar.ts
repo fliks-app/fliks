@@ -11,6 +11,10 @@ import {
 import { formatTime, calcDragTime, calcHoverPercent, SpriteMetadata } from '../../../core/utils/player.utils';
 import { TvService } from '../../../core/services/tv.service';
 
+/** How long the bar waits for a seek to land before following the
+ *  playhead again, whatever the player decided to do with it. */
+const SEEK_SETTLE_TIMEOUT_MS = 4000;
+
 @Component({
   selector: 'app-seekbar',
   templateUrl: './seekbar.html',
@@ -21,6 +25,10 @@ export class SeekbarComponent {
   readonly currentTime = input(0);
   readonly duration = input(0);
   readonly bufferedEnd = input(0);
+  /** The span a seek can land in. Both default to the whole bar; a live stream
+   *  narrows them, having neither the rolled-out past nor the unaired future. */
+  readonly seekableStart = input(0);
+  readonly seekableEnd = input(0);
   readonly spriteUrl = input<string | null>(null);
   readonly spriteMetadata = input<SpriteMetadata | null>(null);
   readonly variant = input<'player' | 'cast'>('player');
@@ -52,6 +60,10 @@ export class SeekbarComponent {
   readonly dragTime = signal(0);
   readonly seekPending = signal(false);
   private seekTarget = 0;
+  /** A seek is not always granted: a live player clamps one that falls outside
+   *  its window, so the playhead never reaches the target and the bar would sit
+   *  on the requested position for the rest of the session. */
+  private seekDeadline = 0;
 
   /** Keyboard / D-pad scrub holds the preview open: there is no cursor parked
    *  on the bar to keep it alive the way a pointer drag has, so it would blink
@@ -143,7 +155,8 @@ export class SeekbarComponent {
       // still buffering (loading), drops the determinate fill into the
       // indeterminate sweep for a frame — the white bar flickering away right
       // as the seek lands (very visible on Tizen, where the seek re-buffers).
-      if (Math.abs(this.currentTime() - this.seekTarget) < 2 && !this.loading()) {
+      const landed = Math.abs(this.currentTime() - this.seekTarget) < 2 && !this.loading();
+      if (landed || Date.now() > this.seekDeadline) {
         setTimeout(() => this.seekPending.set(false), 0);
         return this.currentTime();
       }
@@ -151,6 +164,36 @@ export class SeekbarComponent {
     }
     return this.currentTime();
   });
+
+  /** Left share of the bar that has rolled out of reach, as a percentage. */
+  readonly unreachablePercent = computed(() => {
+    const d = this.duration() || 0;
+    if (!d || this.seekableStart() <= 0) return 0;
+    return Math.min(100, (this.seekableStart() / d) * 100);
+  });
+
+  /** Right share of the bar that has not aired yet, as a percentage. */
+  readonly unairedPercent = computed(() => {
+    const d = this.duration() || 0;
+    const end = this.seekableEnd();
+    if (!d || end <= 0 || end >= d) return 0;
+    return Math.min(100, ((d - end) / d) * 100);
+  });
+
+  /** A live bar offers only a slice of its span. A pointer or key that runs
+   *  past either edge stops there instead of asking for a seek the player
+   *  would refuse. Inert on VOD, where both bounds are the whole bar. */
+  private clampToSeekable(seconds: number): number {
+    const d = this.duration() || 0;
+    const end = this.seekableEnd() > 0 ? Math.min(this.seekableEnd(), d) : d;
+    const start = Math.min(Math.max(0, this.seekableStart()), end);
+    return Math.max(start, Math.min(end, seconds));
+  }
+
+  private armSeekPending(): void {
+    this.seekPending.set(true);
+    this.seekDeadline = Date.now() + SEEK_SETTLE_TIMEOUT_MS;
+  }
 
   readonly displayPercent = computed(() => {
     const d = this.duration() || 1;
@@ -314,20 +357,24 @@ export class SeekbarComponent {
     this.dragging.set(false);
     this.dragChange.emit(false);
     this.seekTarget = this.dragTime();
-    this.seekPending.set(true);
+    this.armSeekPending();
     this.seek.emit(this.seekTarget);
   }
 
   private updateDragFromPointer(e: PointerEvent, bar: HTMLElement) {
-    this.dragTime.set(calcDragTime(e, bar, this.duration()));
+    this.dragTime.set(this.clampToSeekable(calcDragTime(e, bar, this.duration())));
   }
 
   onProgressHover(event: PointerEvent) {
     if (this.dragging()) return;
     const bar = event.currentTarget as HTMLElement;
     this.hovering.set(true);
-    this.hoverTime.set(calcDragTime(event, bar, this.duration()));
-    this.hoverPercent.set(calcHoverPercent(event, bar));
+    const hover = this.clampToSeekable(calcDragTime(event, bar, this.duration()));
+    this.hoverTime.set(hover);
+    // Position the preview from the clamped time, so it stops at either edge
+    // instead of drifting on past it with a frozen readout.
+    const d = this.duration() || 0;
+    this.hoverPercent.set(d ? (hover / d) * 100 : calcHoverPercent(event, bar));
   }
 
   onProgressLeave() {
@@ -397,7 +444,7 @@ export class SeekbarComponent {
       heldMs < 4000 ? 30 :
       heldMs < 8000 ? 60 : 300;
 
-    const next = Math.max(0, Math.min(dur, this.dragTime() + direction * step));
+    const next = this.clampToSeekable(this.dragTime() + direction * step);
     this.dragTime.set(next);
 
     this.scheduleScrubCommit();
@@ -460,7 +507,7 @@ export class SeekbarComponent {
         }
       }
     }
-    return Math.max(0, Math.min(this.duration() || 0, best));
+    return this.clampToSeekable(best);
   }
 
   private commitScrub() {
@@ -470,17 +517,18 @@ export class SeekbarComponent {
     this.dragging.set(false);
     this.dragChange.emit(false);
     this.seekTarget = target;
-    this.seekPending.set(true);
+    this.armSeekPending();
     this.seek.emit(target);
   }
 
-  private commitScrubTo(target: number) {
+  private commitScrubTo(rawTarget: number) {
+    const target = this.clampToSeekable(rawTarget);
     if (this.dragging()) {
       this.dragging.set(false);
       this.dragChange.emit(false);
     }
     this.seekTarget = target;
-    this.seekPending.set(true);
+    this.armSeekPending();
     this.seek.emit(target);
   }
 }

@@ -30,6 +30,25 @@ import { BaseEntity } from '../../../common/entities/base.entity';
  *     self-hosted LibreTranslate server
  *   plugins.auto_update  — "false" disables the daily plugin update pass; absent or
  *     anything else means on. Not a `plugin.<id>.*` key, so an uninstall never clears it.
+ *   livetv_guide_days_past / livetv_guide_days_future — guide retention window
+ *     in days (2 / 7). Programmes outside it are dropped on ingest and pruned.
+ *   livetv_segment_seconds — live HLS segment length (2)
+ *   livetv_timeshift_minutes — retained live window, the pause/rewind buffer (15).
+ *     Costs disk: a 2 s segment of a 2 Mbps channel is about 528 KB.
+ *   livetv_channel_idle_seconds — how long a viewerless live session stays warm
+ *     so zapping back is instant (30)
+ *   livetv_probe_seconds — ffmpeg input probe width (3). Below one source GOP,
+ *     ffmpeg cannot find the stream dimensions and the channel looks dead.
+ *   livetv_stale_stream_days — how long a stream absent from a refresh is kept
+ *     before deletion (7). Absence from one fetch is not proof it is gone, and
+ *     deleting cascades to channels, their numbering and every user's favourites.
+ *   livetv_slot_release_seconds — how long a closed upstream still counts against
+ *     the provider limit (15), which is how long panels take to free a slot.
+ *   livetv_restricted_groups — JSON array of channel groups that need an explicit
+ *     per-user grant. Adult groups are added here automatically on first sight.
+ *   livetv_fast_zap — "true"/"false" override. Unset, the server prefers a
+ *     transcode over a copy only where hardware encoding exists, because that
+ *     is the whole condition under which it reaches the first segment sooner.
  */
 @Entity('app_settings')
 export class AppSetting extends BaseEntity {
