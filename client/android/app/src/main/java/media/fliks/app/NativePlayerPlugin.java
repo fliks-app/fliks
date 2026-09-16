@@ -64,6 +64,8 @@ public class NativePlayerPlugin extends Plugin {
     /** Pending video height to force. -1 = none, 0 = auto (clear override). */
     private int pendingVideoHeight = -1;
     private SurfaceView surfaceView;
+    // Black view over the surface until the first frame; see create().
+    private View shutter;
     private SubtitleOverlay subtitles;
     private DefaultHttpDataSource.Factory httpFactory;
     private String currentHlsUrl;
@@ -118,11 +120,6 @@ public class NativePlayerPlugin extends Plugin {
             // playback on devices that strict-reject mis-tagged buffers
             // (Samsung S25 etc.).
             //
-            // SurfaceView starts out black before the first buffer is committed
-            // (its backing surface is BLACK by default), so the alpha-0 trick
-            // that hid the TextureView "stretched first frame" flash isn't
-            // needed — the AspectRatioFrameLayout sizes the SurfaceView to the
-            // video aspect via onVideoSizeChanged before any frame is shown.
             aspectFrame = new AspectRatioFrameLayout(getContext());
             aspectFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
 
@@ -135,6 +132,16 @@ public class NativePlayerPlugin extends Plugin {
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     Gravity.CENTER));
+
+            // The decoder commits its first buffer to the still full-size surface
+            // before onVideoSizeChanged reaches this thread, so the frame shows
+            // stretched until the next layout. Lifted in emitFirstFrame(), which
+            // is queued after the size event, so the same traversal fixes both.
+            shutter = new View(getContext());
+            shutter.setBackgroundColor(Color.BLACK);
+            wrapper.addView(shutter, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT));
 
             // Z-order: 0=wrapper (video) → 1/2=SubtitleOverlay layers
             //          → 3+=WebView (controls)
@@ -188,6 +195,7 @@ public class NativePlayerPlugin extends Plugin {
                 wrapper = null;
                 aspectFrame = null;
                 surfaceView = null;
+                shutter = null;
             }
             subtitleConfigs.clear();
             call.resolve();
@@ -475,6 +483,7 @@ public class NativePlayerPlugin extends Plugin {
             lastAudioTrackCount = -1; // Reset so emitTracksChanged fires for new media
             videoBootstrapDone = false; // Arm cold-prepare bug bootstrap
             firstFrameSignaled = false; // Re-arm the first-frame veil signal
+            if (shutter != null) shutter.setVisibility(View.VISIBLE);
             videoRendererEnabled = false; // Re-arm the cold-prepare renderer probe
 
             // Disable text tracks by default — user selects via UI
@@ -949,6 +958,7 @@ public class NativePlayerPlugin extends Plugin {
     private void emitFirstFrame() {
         if (firstFrameSignaled) return;
         firstFrameSignaled = true;
+        if (shutter != null) shutter.setVisibility(View.GONE);
         getBridge().getWebView().evaluateJavascript(
                 "window.dispatchEvent(new CustomEvent('nativePlayerFirstFrame'));", null);
     }

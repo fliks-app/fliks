@@ -116,7 +116,22 @@ export type EngineEventHandler<E extends EngineEvent> = (
  *  bridge code (video element listeners, Capacitor window events, Cast
  *  polling). Keeps the typed handler map identical across engines so
  *  divergence on event semantics can't sneak in by accident. */
+export interface SeekRange {
+  start: number;
+  end: number;
+}
+
 export abstract class AbstractPlaybackEngine {
+  /** Engines that own a `<video>` override this with its `seekable`; the rest
+   *  fall back to the whole of a known duration. */
+  get seekRange(): SeekRange {
+    const self = this as unknown as { currentTime?: number; duration?: number };
+    const end = Number.isFinite(self.duration) && (self.duration ?? 0) > 0
+      ? (self.duration as number)
+      : (self.currentTime ?? 0);
+    return { start: 0, end };
+  }
+
   private handlers = new Map<EngineEvent, Set<EngineEventHandler<any>>>();
 
   /** Whether `firstFrame` has been emitted for the current load. Subclasses
@@ -221,6 +236,10 @@ export interface PlaybackEngine {
   readonly duration: number;
   readonly paused: boolean;
   readonly buffered: number;
+  /** What the player will actually let a seek land on. On a live stream this is
+   *  the sliding window, and it is the only honest answer to how far back the
+   *  viewer can go: `duration` is infinite and `buffered` is a few seconds. */
+  readonly seekRange: SeekRange;
   playbackRate: number;
   volume: number;
   muted: boolean;

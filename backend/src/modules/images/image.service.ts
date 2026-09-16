@@ -45,7 +45,9 @@ export type ImageType =
   | 'episode'
   | 'season'
   | 'request'
-  | 'user';
+  | 'user'
+  /** A Live TV channel logo, cached so a client never hotlinks the provider. */
+  | 'livetv';
 /** Variant of a media image. `fanart-${N}` (N>=1) addresses the extra
  *  fanarts kept for randomised page backgrounds, sharing `fanart`'s size pipeline. */
 export type MediaImageVariant =
@@ -442,6 +444,9 @@ export class ImageService {
           String(id),
           `${variant ?? 'poster'}${suffix}.jpg`,
         );
+      case 'livetv':
+        // Channel logos are overwhelmingly PNG with transparency.
+        return path.join(this.baseDir, 'livetv', `${id}${suffix}.png`);
       case 'person':
         return path.join(this.baseDir, 'persons', `${id}${suffix}.jpg`);
       case 'episode':
@@ -489,6 +494,8 @@ export class ImageService {
         return `/api/images/media/${id}/${variant ?? 'poster'}`;
       case 'request':
         return `/api/images/request/${id}/${variant ?? 'poster'}`;
+      case 'livetv':
+        return `/api/images/livetv/${id}`;
       case 'person':
         return `/api/images/person/${id}`;
       case 'episode':

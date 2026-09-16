@@ -8,6 +8,7 @@ import {
   LucideHistory,
   LucideClipboardList,
   LucideCalendar,
+  LucideTv,
   LucideCircle,
 } from '@lucide/angular';
 
@@ -20,7 +21,7 @@ import {
   standalone: true,
   imports: [
     LucideHome, LucideSearch, LucideUserRound, LucideListVideo,
-    LucideDownload, LucideHistory, LucideClipboardList, LucideCalendar, LucideCircle,
+    LucideDownload, LucideHistory, LucideClipboardList, LucideCalendar, LucideTv, LucideCircle,
   ],
   templateUrl: './nav-icon.html',
   styles: [`:host { display: inline-flex; } svg { width: 100%; height: 100%; }`],

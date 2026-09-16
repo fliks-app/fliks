@@ -14,7 +14,9 @@
       <section class="mb-3 sm:mb-4">
         <div class="font-bold text-white/90 mb-0.5 text-xs sm:text-sm">{{ 'player.stats_stream' | translate }}</div>
         <div class="text-white/80 pl-2 space-y-0.5">
-          <div class="font-semibold">{{ s.container | uppercase }} ({{ s.containerBitrate }})</div>
+          <div class="font-semibold">
+            {{ s.container | uppercase }}@if (s.containerBitrate) { ({{ s.containerBitrate }}) }
+          </div>
           <div class="text-white/60">&rarr; {{ s.streamTypeKey | translate }}</div>
           @if (s.outputFormat) {
             <div class="text-white/60">&rarr; {{ s.outputFormat | uppercase }}@if (s.outputFps) { ({{ s.outputFps }}) }</div>
@@ -46,6 +48,23 @@
         </div>
       </section>
 
+      @if (s.live; as live) {
+        <section class="mb-3 sm:mb-4">
+          <div class="font-bold text-white/90 mb-0.5 text-xs sm:text-sm">{{ 'player.stats_live' | translate }}</div>
+          <div class="text-white/80 pl-2 space-y-0.5">
+            <div>
+              {{ 'player.stats_behind_live' | translate }}&nbsp;&nbsp;<span class="font-semibold tabular-nums">{{ live.behindLive }}</span>
+            </div>
+            <div>
+              {{ 'player.stats_rewind_window' | translate }}&nbsp;&nbsp;<span class="font-semibold tabular-nums">{{ live.rewindWindow }}</span>
+            </div>
+            <div class="text-white/70 text-[10px] sm:text-xs">
+              {{ 'player.stats_segment_duration' | translate }}&nbsp;&nbsp;{{ live.segmentDuration }}
+            </div>
+          </div>
+        </section>
+      }
+
       <section>
         <div class="font-bold text-white/90 mb-0.5 text-xs sm:text-sm">{{ 'player.stats_audio' | translate }}</div>
         <div class="text-white/80 pl-2 space-y-0.5">
@@ -55,7 +74,9 @@
               {{ 'player.stats_stream' | translate }}&nbsp;&nbsp;<span class="font-semibold tabular-nums">{{ s.audioStreamBitrate }}</span>
             </div>
           }
-          <div class="text-white/70 text-[10px] sm:text-xs">{{ 'player.stats_sample_rate' | translate }}&nbsp;&nbsp;{{ s.audioDetailLine }}</div>
+          @if (s.audioDetailLine) {
+            <div class="text-white/70 text-[10px] sm:text-xs">{{ 'player.stats_sample_rate' | translate }}&nbsp;&nbsp;{{ s.audioDetailLine }}</div>
+          }
           <div class="text-white/60">&rarr; {{ s.audioPlaybackMode }}</div>
           @if (s.audioTranscodeReasons.length) {
             <div class="text-white/60">{{ 'player.stats_reasons' | translate }}&nbsp;&nbsp;<span class="font-semibold">{{ s.audioTranscodeReasons.join(', ') }}</span></div>

@@ -1,0 +1,97 @@
+<div class="flex flex-col gap-8">
+  <div class="flex flex-col gap-3">
+    <h2 class="text-lg font-semibold">{{ 'liveTv.admin.health.sources_title' | translate }}</h2>
+
+    @if (sourcesLoading()) {
+      <div class="flex justify-center py-10">
+        <span class="loading loading-spinner loading-lg"></span>
+      </div>
+    } @else if (sources().length === 0) {
+      <p class="text-center py-8 text-base-content/50">{{ 'liveTv.admin.sources.empty' | translate }}</p>
+    } @else {
+      <div class="flex flex-col gap-2">
+        @for (s of sourcesSorted(); track s.id) {
+          <div class="flex flex-wrap items-center gap-2 p-3 rounded-lg border border-base-200">
+            <span class="font-medium">{{ s.name }}</span>
+            @if (s.lastSyncStatus === 'error') {
+              <span class="badge badge-error badge-sm">{{ 'common.error' | translate }}</span>
+            } @else if (s.lastSyncStatus === 'never') {
+              <span class="badge badge-ghost badge-sm">{{ 'liveTv.admin.sources.never_synced' | translate }}</span>
+            } @else {
+              <span class="badge badge-success badge-sm">{{ 'liveTv.admin.health.ok' | translate }}</span>
+            }
+            @if (s.lastSyncAt) {
+              <span class="text-sm text-base-content/60">
+                {{ s.lastSyncAt | localeDate:{ dateStyle: 'short', timeStyle: 'short' } }}
+              </span>
+            }
+            @if (s.lastSyncStatus === 'error' && s.lastSyncError) {
+              <span class="text-sm text-error/80 basis-full truncate">{{ s.lastSyncError }}</span>
+            }
+          </div>
+        }
+      </div>
+    }
+  </div>
+
+  <div class="flex flex-col gap-3">
+    <div>
+      <h2 class="text-lg font-semibold">{{ 'liveTv.admin.health.channels_title' | translate }}</h2>
+      <p class="text-sm text-base-content/60 mt-1">{{ 'liveTv.admin.health.channels_subtitle' | translate }}</p>
+    </div>
+
+    @if (channelsLoading()) {
+      <div class="flex justify-center py-10">
+        <span class="loading loading-spinner loading-lg"></span>
+      </div>
+    } @else if (channelRows().length === 0) {
+      <p class="text-center py-8 text-base-content/50">{{ 'liveTv.admin.channels.empty' | translate }}</p>
+    } @else {
+      <div class="flex flex-col gap-2">
+        @for (row of pageRows(); track row.channel.id) {
+          <div class="flex flex-col gap-2 p-3 rounded-lg border border-base-200">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="badge badge-ghost badge-sm">{{ row.channel.number }}</span>
+              <span class="font-medium">{{ row.channel.name }}</span>
+              @if (row.channel.consecutiveFailures > 0) {
+                <span class="badge badge-error badge-sm">
+                  {{ 'liveTv.admin.health.failures' | translate: { count: row.channel.consecutiveFailures } }}
+                </span>
+                @if (row.channel.lastErrorAt) {
+                  <span class="text-sm text-base-content/60">
+                    {{ row.channel.lastErrorAt | localeDate:{ dateStyle: 'short', timeStyle: 'short' } }}
+                  </span>
+                }
+              } @else {
+                <span class="badge badge-success badge-sm">{{ 'liveTv.admin.health.ok' | translate }}</span>
+              }
+            </div>
+
+            @if (row.streams.length > 0) {
+              <div class="flex flex-col gap-1 pl-1">
+                @for (s of row.streams; track s.stream.id) {
+                  <div class="flex flex-wrap items-center gap-2 text-sm">
+                    <span class="font-medium text-base-content/70">{{ s.sourceName }}</span>
+                    @if (s.stream.lastOkAt) {
+                      <span class="text-base-content/60">
+                        {{ 'liveTv.admin.health.last_ok' | translate }}
+                        {{ s.stream.lastOkAt | localeDate:{ dateStyle: 'short', timeStyle: 'short' } }}
+                      </span>
+                    } @else {
+                      <span class="text-base-content/40">{{ 'liveTv.admin.health.never_ok' | translate }}</span>
+                    }
+                    @if (s.stream.lastError) {
+                      <span class="text-error/80 basis-full truncate">{{ s.stream.lastError }}</span>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
+      </div>
+
+      <app-pagination [current]="page()" [total]="totalPages()" (pageChange)="goToPage($event)" />
+    }
+  </div>
+</div>

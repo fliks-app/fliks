@@ -66,9 +66,7 @@ import {
             <div class="w-10 h-1 rounded-full bg-white/20"></div>
           </div>
           @if (heading()) {
-            <div class="px-4 pt-2 text-center text-white/60 text-sm font-medium truncate">
-              {{ heading() }}
-            </div>
+            <div class="menu-heading px-4 text-white/60">{{ heading() }}</div>
           }
         </div>
         <!-- Content -->

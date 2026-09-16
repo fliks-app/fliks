@@ -50,6 +50,15 @@ export const routes: Routes = [
       import('./features/player/player').then((m) => m.PlayerComponent),
   },
   {
+    path: 'watch-live/:channelId',
+    canActivate: [serverConfigGuard, authGuard, passwordChangeGuard],
+    loadComponent: () =>
+      import('./features/live-tv/live-player/live-player').then((m) => m.LivePlayerComponent),
+    // Channel up/down only moves the param on a page that keeps its own engine instance,
+    // so zapping doesn't tear down and recreate the player on every channel change.
+    data: { reuseOnParamChange: true },
+  },
+  {
     path: '',
     loadComponent: () =>
       import('./shared/layout/layout').then((m) => m.LayoutComponent),
@@ -230,6 +239,12 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/calendar/calendar').then((m) => m.CalendarComponent),
         data: { titleKey: 'calendar.title' },
+      },
+      {
+        path: 'live-tv',
+        loadComponent: () =>
+          import('./features/live-tv/live-tv').then((m) => m.LiveTvComponent),
+        data: { titleKey: 'liveTv.title' },
       },
       {
         path: 'history',
@@ -437,6 +452,17 @@ export const routes: Routes = [
           { path: 'schedulers', loadComponent: () => import('./features/settings/schedulers/schedulers').then((m) => m.SchedulersComponent) },
           { path: 'auto-approval', loadComponent: () => import('./features/settings/auto-approval/auto-approval').then((m) => m.AutoApprovalSettingsComponent) },
           { path: 'streaming', loadComponent: () => import('./features/settings/streaming/streaming').then((m) => m.StreamingSettingsComponent) },
+          {
+            path: 'live-tv',
+            loadComponent: () =>
+              import('./features/settings/live-tv/live-tv-settings-shell').then((m) => m.LiveTvSettingsShellComponent),
+            children: [
+              { path: '', pathMatch: 'full', redirectTo: 'sources' },
+              { path: 'sources', loadComponent: () => import('./features/settings/live-tv/sources/live-tv-sources').then((m) => m.LiveTvSourcesComponent) },
+              { path: 'channels', loadComponent: () => import('./features/settings/live-tv/channels/live-tv-channels').then((m) => m.LiveTvChannelsComponent) },
+              { path: 'guide', loadComponent: () => import('./features/settings/live-tv/guide/live-tv-guide-admin').then((m) => m.LiveTvGuideAdminComponent) },
+            ],
+          },
         ],
       },
     ],

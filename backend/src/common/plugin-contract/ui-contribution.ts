@@ -30,6 +30,8 @@ export type WhenPredicateName =
   | 'identified'
   | 'isTv'
   | 'isTouch'
+  /** The signed-in user has at least one Live TV channel to watch. */
+  | 'liveTv'
   /** Which menu is being built. The card menu and the media detail menu read the
    *  same contributions, so a row only names this when it belongs to one of
    *  them — 'Play' means nothing on a detail page you are already on. */

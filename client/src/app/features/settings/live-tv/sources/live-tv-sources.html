@@ -1,0 +1,262 @@
+<div class="flex flex-col gap-6">
+  <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+    <p class="text-sm text-base-content/60">{{ 'liveTv.admin.sources.subtitle' | translate }}</p>
+    <button type="button" class="btn btn-primary self-start sm:self-auto" (click)="openCreate()">
+      {{ 'liveTv.admin.sources.new' | translate }}
+    </button>
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (rows().length === 0) {
+    <p class="text-center py-12 text-base-content/50">{{ 'liveTv.admin.sources.empty' | translate }}</p>
+  } @else {
+    <div class="overflow-x-auto rounded-lg border border-base-200">
+      <table class="table table-zebra">
+        <thead>
+          <tr>
+            <th>{{ 'liveTv.admin.sources.col_name' | translate }}</th>
+            <th>{{ 'liveTv.admin.sources.col_kind' | translate }}</th>
+            <th>{{ 'liveTv.admin.sources.col_channels' | translate }}</th>
+            <th>{{ 'liveTv.admin.sources.col_last_sync' | translate }}</th>
+            <th class="text-center">{{ 'common.active' | translate }}</th>
+            <th class="text-end w-56"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of rows(); track row.id) {
+            <tr>
+              <td>
+                <button type="button" class="link link-hover font-medium" (click)="openEdit(row)">{{ row.name }}</button>
+                @if (row.accountStatus || row.expiresAt) {
+                  <div class="flex flex-wrap items-center gap-1.5 mt-0.5">
+                    @if (row.accountStatus) {
+                      <span class="badge badge-sm" [class.badge-success]="row.accountStatus === 'active'" [class.badge-ghost]="row.accountStatus !== 'active'">
+                        {{ row.accountStatus }}
+                      </span>
+                    }
+                    @if (row.expiresAt) {
+                      <span class="text-sm text-base-content/60">
+                        {{ 'liveTv.admin.sources.expires_on' | translate }}
+                        {{ row.expiresAt | localeDate:{ dateStyle: 'short' } }}
+                      </span>
+                    }
+                  </div>
+                }
+              </td>
+              <td><span class="badge badge-ghost badge-sm">{{ row.kind }}</span></td>
+              <td>{{ row.channelCount }}</td>
+              <td class="text-sm text-base-content/60">
+                @if (row.lastSyncAt) {
+                  {{ row.lastSyncAt | localeDate:{ dateStyle: 'short', timeStyle: 'short' } }}
+                  @if (row.lastSyncStatus === 'error') {
+                    <span class="badge badge-error badge-xs ml-1">{{ 'common.error' | translate }}</span>
+                  }
+                } @else {
+                  {{ 'liveTv.admin.sources.never_synced' | translate }}
+                }
+              </td>
+              <td class="text-center">
+                @if (row.enabled) {
+                  <span class="badge badge-success badge-sm">{{ 'common.yes' | translate }}</span>
+                } @else {
+                  <span class="badge badge-ghost badge-sm">{{ 'common.no' | translate }}</span>
+                }
+              </td>
+              <td class="text-end">
+                <button type="button" class="btn btn-ghost btn-xs" [disabled]="syncingId() === row.id" (click)="syncNow(row)">
+                  @if (syncingId() === row.id) {
+                    <span class="loading loading-spinner loading-xs"></span>
+                  }
+                  {{ 'liveTv.admin.sources.sync_now' | translate }}
+                </button>
+                <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteRow(row)">
+                  {{ 'common.delete' | translate }}
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>
+
+<dialog #editorDialog class="modal">
+  <div class="modal-box max-w-lg max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
+    <app-modal-header
+      flush
+      [title]="(editingId() === null ? 'liveTv.admin.sources.editor_create' : 'liveTv.admin.sources.editor_edit') | translate"
+    />
+
+    <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'liveTv.admin.sources.field_name' | translate }}</span>
+        <input type="text" class="input input-bordered input-sm w-full" [ngModel]="formName()" (ngModelChange)="formName.set($event)" />
+      </label>
+
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'liveTv.admin.sources.field_kind' | translate }}</span>
+        <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="formKind()" (ngModelChange)="formKind.set($event)">
+          <option value="m3u">{{ 'liveTv.admin.sources.kind_m3u' | translate }}</option>
+          <option value="xtream">{{ 'liveTv.admin.sources.kind_xtream' | translate }}</option>
+        </select>
+      </label>
+
+      <label class="form-control w-full">
+        <span class="label-text">
+          {{
+            (formKind() === 'xtream'
+              ? 'liveTv.admin.sources.field_url_xtream'
+              : 'liveTv.admin.sources.field_url_m3u'
+            ) | translate
+          }}
+        </span>
+        <input type="text" class="input input-bordered input-sm w-full" [ngModel]="formUrl()" (ngModelChange)="formUrl.set($event)" />
+        @if (formKind() === 'xtream') {
+          <span class="label-text-alt mt-1 opacity-70">
+            {{ 'liveTv.admin.sources.url_hint_xtream' | translate }}
+          </span>
+        } @else if (urlIsFile()) {
+          <span class="label-text-alt mt-1 opacity-70">
+            {{ 'liveTv.admin.sources.file_no_refresh' | translate }}
+          </span>
+        }
+      </label>
+
+      <!-- An Xtream account is reached by credentials, not by a file: picking
+           one here would silently switch the source back to a playlist. -->
+      @if (formKind() === 'm3u') {
+        <div class="flex flex-wrap items-center gap-2">
+          <label class="btn btn-outline btn-sm w-fit" [class.btn-disabled]="uploading()">
+            @if (uploading()) {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            {{ 'liveTv.admin.sources.upload_playlist' | translate }}
+            <input type="file" class="hidden" accept=".m3u,.m3u8,audio/x-mpegurl" (change)="onPlaylistPicked($event)" />
+          </label>
+          <span class="label-text-alt opacity-70">
+            {{ 'liveTv.admin.sources.upload_hint' | translate }}
+          </span>
+        </div>
+      }
+
+      @if (formKind() === 'xtream') {
+        <div class="grid grid-cols-2 gap-3">
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'liveTv.admin.sources.field_username' | translate }}</span>
+            <input type="text" class="input input-bordered input-sm w-full" [ngModel]="formUsername()" (ngModelChange)="formUsername.set($event)" />
+          </label>
+          <label class="form-control w-full">
+            <span class="label-text">{{ 'liveTv.admin.sources.field_password' | translate }}</span>
+            <input type="password" class="input input-bordered input-sm w-full" [ngModel]="formPassword()" (ngModelChange)="formPassword.set($event)" [placeholder]="editingId() !== null ? ('liveTv.admin.sources.password_unchanged' | translate) : ''" />
+          </label>
+        </div>
+      }
+
+      <div class="grid grid-cols-2 gap-3">
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'liveTv.admin.sources.field_user_agent' | translate }}</span>
+          <input type="text" class="input input-bordered input-sm w-full" [ngModel]="formUserAgent()" (ngModelChange)="formUserAgent.set($event)" />
+        </label>
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'liveTv.admin.sources.field_referer' | translate }}</span>
+          <input type="text" class="input input-bordered input-sm w-full" [ngModel]="formReferer()" (ngModelChange)="formReferer.set($event)" />
+        </label>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'liveTv.admin.sources.field_max_streams' | translate }}</span>
+          <input
+            type="number"
+            min="0"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="formMaxStreams()"
+            (ngModelChange)="formMaxStreams.set($event)"
+            [readonly]="maxStreamsLocked()"
+          />
+          @if (maxStreamsLocked()) {
+            <span class="label-text-alt flex items-center gap-1 mt-1">
+              {{ 'liveTv.admin.sources.max_streams_auto_hint' | translate }}
+              <button type="button" class="link link-hover" (click)="maxStreamsOverride.set(true)">
+                {{ 'liveTv.admin.sources.override' | translate }}
+              </button>
+            </span>
+          }
+        </label>
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'liveTv.admin.sources.field_refresh_hours' | translate }}</span>
+          <input type="number" min="1" class="input input-bordered input-sm w-full" [ngModel]="formRefreshHours()" (ngModelChange)="formRefreshHours.set($event)" />
+        </label>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'liveTv.admin.sources.field_group_include' | translate }}</span>
+          <input type="text" class="input input-bordered input-sm w-full" [ngModel]="formGroupInclude()" (ngModelChange)="formGroupInclude.set($event)" />
+        </label>
+        <label class="form-control w-full">
+          <span class="label-text">{{ 'liveTv.admin.sources.field_group_exclude' | translate }}</span>
+          <input type="text" class="input input-bordered input-sm w-full" [ngModel]="formGroupExclude()" (ngModelChange)="formGroupExclude.set($event)" />
+        </label>
+      </div>
+      <p class="text-sm text-base-content/50 -mt-2">{{ 'liveTv.admin.sources.group_pattern_hint' | translate }}</p>
+
+      <label class="label cursor-pointer justify-start gap-3">
+        <input type="checkbox" class="toggle toggle-sm" [ngModel]="formEnabled()" (ngModelChange)="formEnabled.set($event)" />
+        <span class="label-text">{{ 'liveTv.admin.sources.field_enabled' | translate }}</span>
+      </label>
+
+      <div class="flex flex-col gap-2 pt-2 border-t border-base-200">
+        <button type="button" class="btn btn-outline btn-sm w-fit" (click)="testConnection()" [disabled]="testLoading() || !formUrl()">
+          @if (testLoading()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ 'liveTv.admin.sources.test_connection' | translate }}
+        </button>
+
+        @if (testResult(); as tr) {
+          <div role="alert" class="alert text-sm py-2 flex-col items-start gap-1" [class.alert-success]="tr.ok" [class.alert-error]="!tr.ok">
+            @if (tr.ok) {
+              <p>{{ 'liveTv.admin.sources.test_ok' | translate: { count: tr.channelCount, groups: tr.groups.length } }}</p>
+              @if (tr.guideUrl) {
+                <p class="opacity-70">{{ 'liveTv.admin.sources.test_guide_found' | translate }}</p>
+              }
+              @if (tr.maxConnections != null) {
+                <p class="opacity-70">{{ 'liveTv.admin.sources.test_max_connections' | translate: { count: tr.maxConnections } }}</p>
+              }
+            } @else {
+              <p>{{ 'liveTv.admin.sources.test_failed' | translate }}</p>
+            }
+            @if (tr.suggestion) {
+              <button type="button" class="btn btn-xs btn-primary mt-1" (click)="useSuggestion()">
+                {{ 'liveTv.admin.sources.use_xtream_suggestion' | translate }}
+              </button>
+            }
+            @if (tr.playlistUrlFromFile) {
+              <button type="button" class="btn btn-xs btn-outline mt-1" (click)="useLivePlaylistLink()">
+                {{ 'liveTv.admin.sources.use_live_playlist_link' | translate }}
+              </button>
+            }
+          </div>
+        }
+      </div>
+    </div>
+
+    <app-modal-footer flush>
+      <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">{{ 'common.cancel' | translate }}</button>
+      <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
+        @if (saving()) {
+          <span class="loading loading-spinner loading-sm"></span>
+        }
+        {{ 'common.save' | translate }}
+      </button>
+    </app-modal-footer>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">{{ 'common.close' | translate }}</button>
+  </form>
+</dialog>

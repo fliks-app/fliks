@@ -1,0 +1,48 @@
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
+import { JwtOrApiKeyGuard } from '../../auth/guards/jwt-or-api-key.guard';
+import { PoliciesGuard } from '../../auth/casl/policies.guard';
+import { CheckPolicies } from '../../auth/casl/check-policies.decorator';
+import { Action } from '../../auth/casl/actions.enum';
+import { LiveTvAccessService } from '../services/livetv-access.service';
+import { SetRestrictedGroupsDto } from '../dto/set-restricted-groups.dto';
+import { SetGroupAccessDto } from '../dto/set-group-access.dto';
+
+/** Who may see which channel groups. Administrators only, by construction. */
+@Controller('livetv/admin/access')
+@UseGuards(JwtOrApiKeyGuard, PoliciesGuard)
+@CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
+export class LiveTvAccessController {
+  constructor(private readonly access: LiveTvAccessService) {}
+
+  @Get('restricted-groups')
+  restrictedGroups() {
+    return this.access.restrictedGroups();
+  }
+
+  @Put('restricted-groups')
+  setRestrictedGroups(@Body() dto: SetRestrictedGroupsDto) {
+    return this.access.setRestrictedGroups(dto.groups);
+  }
+
+  @Get('users/:userId')
+  async grants(@Param('userId', ParseIntPipe) userId: number) {
+    const rows = await this.access.grantsFor(userId);
+    return rows.map((row) => row.groupName);
+  }
+
+  @Put('users/:userId')
+  setGrants(
+    @Param('userId', ParseIntPipe) userId: number,
+    @Body() dto: SetGroupAccessDto,
+  ) {
+    return this.access.setGrants(userId, dto.groups);
+  }
+}

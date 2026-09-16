@@ -5,6 +5,7 @@ import { PluginUiRegistryService } from './plugin-ui-registry.service';
 import { AuthService } from '../services/auth.service';
 import { TvService } from '../services/tv.service';
 import { DeviceService } from '../services/device.service';
+import { LiveTvAvailabilityService } from '../services/live-tv-availability.service';
 import type { SlotId, UiContribution } from '@fliks/plugin-contract/ui';
 
 const contribution = (id: string, weight: number, overrides: Partial<UiContribution> = {}): UiContribution => ({
@@ -20,6 +21,7 @@ function createService(opts: {
   registry?: Partial<Record<SlotId, UiContribution[]>>;
   isAdmin?: boolean;
   isTv?: boolean;
+  liveTv?: boolean;
   userId?: number | null;
 } = {}) {
   TestBed.configureTestingModule({
@@ -38,12 +40,18 @@ function createService(opts: {
       },
       { provide: TvService, useValue: { isTv: () => !!opts.isTv } },
       { provide: DeviceService, useValue: { isTouch: () => false } },
+      { provide: LiveTvAvailabilityService, useValue: { available: () => opts.liveTv ?? true } },
     ],
   });
   return TestBed.inject(NavContributionsService);
 }
 
 describe('NavContributionsService', () => {
+  it('hides Live TV everywhere while the user has no channel', () => {
+    const svc = createService({ liveTv: false });
+    expect(svc.mainItems().map((i) => i.id)).not.toContain('core.live_tv');
+  });
+
   it('merges core with plugin contributions and sorts ascending by weight, ties break on id', () => {
     const svc = createService({
       registry: {
@@ -53,7 +61,7 @@ describe('NavContributionsService', () => {
     const ids = svc.mainItems().map((i) => i.id);
     // Both plugin items tie core's "My profile" (weight 300) — id order wins,
     // and stays the same regardless of which plugin installed first.
-    expect(ids).toEqual(['core.home', 'core.search', 'a-plugin', 'core.my_profile', 'z-plugin', 'core.playlists', 'core.downloads', 'core.history']);
+    expect(ids).toEqual(['core.home', 'core.search', 'a-plugin', 'core.my_profile', 'z-plugin', 'core.live_tv', 'core.playlists', 'core.downloads', 'core.history']);
   });
 
   it('drops a contribution with an unknown action.kind — fails closed, never a broken item', () => {
@@ -119,7 +127,7 @@ describe('NavContributionsService', () => {
 
   it('splits nav.main around the library block at weight 1000', () => {
     const svc = createService();
-    expect(svc.mainItemsBeforeLibraries().map((i) => i.id)).toEqual(['core.home', 'core.search', 'core.my_profile']);
+    expect(svc.mainItemsBeforeLibraries().map((i) => i.id)).toEqual(['core.home', 'core.search', 'core.my_profile', 'core.live_tv']);
     expect(svc.mainItemsAfterLibraries().map((i) => i.id)).toEqual(['core.playlists', 'core.downloads', 'core.history']);
   });
 

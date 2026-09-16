@@ -113,6 +113,21 @@
         [style.width.%]="displayPercent()"
       ></div>
     }
+    <!-- Out of reach, dimmed over the fills rather than under them: the played
+         side of a live bar covers the whole retained window otherwise. What is
+         left bright between the two is exactly where a seek can land. -->
+    @if (unreachablePercent()) {
+      <div
+        class="absolute inset-y-0 left-0 bg-black/55 rounded-l-full pointer-events-none"
+        [style.width.%]="unreachablePercent()"
+      ></div>
+    }
+    @if (unairedPercent()) {
+      <div
+        class="absolute inset-y-0 right-0 bg-black/55 rounded-r-full pointer-events-none"
+        [style.width.%]="unairedPercent()"
+      ></div>
+    }
     <!-- Indeterminate loading sweep — a soft highlight that travels across the
          track whenever the engine is buffering, painted over the bars (later in
          the DOM). It reads only on the darker, unfilled track to the right of

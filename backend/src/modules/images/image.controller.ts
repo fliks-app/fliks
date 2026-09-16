@@ -56,6 +56,7 @@ export class ImageController {
       'season',
       'request',
       'user',
+      'livetv',
     ];
     if (!validTypes.includes(type)) throw new NotFoundException();
 

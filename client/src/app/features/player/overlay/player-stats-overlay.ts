@@ -37,6 +37,13 @@ export interface PlayerStats {
   /** `transcodeReasons` flags that drive the audio re-encode (any
    *  `Audio*` flag). Empty when the audio stream is copied. */
   audioTranscodeReasons: string[];
+
+  /** Live only: facts an on-demand stream has no equivalent for. */
+  live?: {
+    behindLive: string;
+    rewindWindow: string;
+    segmentDuration: string;
+  };
 }
 
 @Component({

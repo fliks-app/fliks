@@ -3,6 +3,7 @@ import {
   AudioTrack,
   EngineStats,
   PlaybackEngine,
+  SeekRange,
 } from './playback-engine';
 import { SubtitleOverlay } from './subtitle-overlay.util';
 import { WEBOS_CUE_SIZE_BOOST } from '../../utils/subtitle-presets';
@@ -398,6 +399,12 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
   }
   get duration(): number { return this._duration || this.video?.duration || 0; }
   get paused(): boolean { return this.video?.paused ?? true; }
+  override get seekRange(): SeekRange {
+    const seekable = this.video?.seekable;
+    if (!seekable || seekable.length === 0) return { start: 0, end: this.currentTime };
+    return { start: seekable.start(0), end: seekable.end(seekable.length - 1) };
+  }
+
   get buffered(): number { return this.bufferedEnd(); }
   get playbackRate(): number { return this.video?.playbackRate ?? 1; }
   set playbackRate(rate: number) { if (this.video) this.video.playbackRate = rate; }

@@ -1,5 +1,6 @@
-<div class="flex min-w-0 max-w-full flex-col gap-3">
-  <h1 class="sr-only lg:not-sr-only text-2xl font-bold">{{ 'history.title' | translate }}</h1>
+<div appDefaultFocus="[data-history-focus]" focusKey="history" focusIdAttr="data-history-focus"
+     class="flex min-w-0 max-w-full flex-col gap-3">
+  <h1 class="page-title">{{ 'history.title' | translate }}</h1>
 
   @if (loading()) {
     <div class="flex justify-center py-12">
@@ -18,13 +19,15 @@
             class="relative shrink-0 cursor-pointer rounded-md bg-base-300 shadow-sm group/thumb w-32 sm:w-full max-w-54 md:max-w-64 aspect-video"
             (click)="goToMedia(item)"
           >
+            <!-- Cover, never contain: a poster fallback in a 16:9 frame would
+                 letterbox into two grey bands. Matches app-media-card. -->
             <div class="absolute inset-0 overflow-hidden rounded-md">
               @if (item.stillUrl) {
-                <img [cachedSrc]="item.stillUrl | resolveUrl:'thumb'" [alt]="item.mediaTitle" class="h-full w-full object-contain" loading="lazy" />
+                <img [cachedSrc]="item.stillUrl | resolveUrl:'thumb'" [alt]="item.mediaTitle" class="h-full w-full object-cover" loading="lazy" />
               } @else if (item.fanartUrl) {
-                <img [cachedSrc]="item.fanartUrl | resolveUrl:'thumb'" [alt]="item.mediaTitle" class="h-full w-full object-contain" loading="lazy" />
+                <img [cachedSrc]="item.fanartUrl | resolveUrl:'thumb'" [alt]="item.mediaTitle" class="h-full w-full object-cover" loading="lazy" />
               } @else if (item.posterUrl) {
-                <img [cachedSrc]="item.posterUrl | resolveUrl:'thumb'" [alt]="item.mediaTitle" class="h-full w-full object-contain" loading="lazy" />
+                <img [cachedSrc]="item.posterUrl | resolveUrl:'thumb'" [alt]="item.mediaTitle" class="h-full w-full object-cover" loading="lazy" />
               } @else {
                 <div class="flex h-full w-full items-center justify-center text-base-content/30">
                   @if (item.mediaType === 'series') {
@@ -61,7 +64,7 @@
 
           <!-- Info -->
           <div class="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
-            <button type="button" (click)="goToMedia(item)" class="group cursor-pointer text-left w-fit">
+            <button type="button" [attr.data-history-focus]="item.id" (click)="goToMedia(item)" class="group cursor-pointer text-left w-fit">
               <p class="text-sm sm:text-lg font-semibold leading-tight line-clamp-2 group-hover:underline">{{ item.mediaTitle }}</p>
             </button>
             @if (item.episodeLabel) {

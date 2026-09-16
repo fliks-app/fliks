@@ -593,8 +593,8 @@ describe('PlayerComponent seek OSD', () => {
     const scrubFromKey = vi.fn();
     h.component.controls = () => ({ scrubFromKey });
     h.component.onSeek = vi.fn();
-    h.component.controlsVisible.set(false);
-    h.component.seekOsd.set(false);
+    h.component.chrome.visible.set(false);
+    h.component.chrome.seekOsd.set(false);
     return { ...h, scrubFromKey };
   }
 
@@ -603,8 +603,8 @@ describe('PlayerComponent seek OSD', () => {
 
     h.component.onKeyDown(press('ArrowRight'));
 
-    expect(h.component.controlsVisible()).toBe(true);
-    expect(h.component.seekOsd()).toBe(true);
+    expect(h.component.chrome.visible()).toBe(true);
+    expect(h.component.chrome.seekOsd()).toBe(true);
     // The seekbar owns the scrub: no per-key seek fired from the player.
     expect(h.scrubFromKey).toHaveBeenCalledTimes(1);
     expect(h.component.onSeek).not.toHaveBeenCalled();
@@ -615,24 +615,36 @@ describe('PlayerComponent seek OSD', () => {
 
     h.component.onKeyDown(press('ArrowLeft'));
     h.component.onKeyDown(press('ArrowLeft'));
-    expect(h.component.seekOsd()).toBe(true);
+    expect(h.component.chrome.seekOsd()).toBe(true);
 
     h.component.onKeyDown(press('a'));
-    expect(h.component.seekOsd()).toBe(false);
-    expect(h.component.controlsVisible()).toBe(true);
+    expect(h.component.chrome.seekOsd()).toBe(false);
+    expect(h.component.chrome.visible()).toBe(true);
   });
 
   it('hiding from the OSD fades out as-is, without flashing the full bar in', () => {
     const h = hiddenBar();
 
     h.component.onKeyDown(press('ArrowRight'));
-    h.component.hideControls();
+    h.component.chrome.hide();
 
-    expect(h.component.controlsVisible()).toBe(false);
+    expect(h.component.chrome.visible()).toBe(false);
     // The tier survives the hide: clearing it here would remount every full-bar
     // row for the length of the fade-out.
-    expect(h.component.seekOsd()).toBe(true);
+    expect(h.component.chrome.seekOsd()).toBe(true);
     expect(h.component.nativeSubtitleBottomBump()).toBe(0);
+  });
+
+  it('OK on a hidden bar raises it instead of pressing the button it holds', () => {
+    const h = hiddenBar();
+    const e = press('Enter');
+
+    h.component.onKeyDown(e);
+
+    expect(h.component.chrome.visible()).toBe(true);
+    // Swallowed: the first focusable in the bar is the back arrow, and
+    // activating it would quit the player.
+    expect(e.preventDefault).toHaveBeenCalled();
   });
 
   it('cues clear a smaller bar in OSD mode, and sit flush once it hides', () => {
@@ -642,7 +654,7 @@ describe('PlayerComponent seek OSD', () => {
     h.component.onKeyDown(press('ArrowRight'));
     expect(h.component.nativeSubtitleBottomBump()).toBe(5);
 
-    h.component.showControls();
+    h.component.chrome.show();
     expect(h.component.nativeSubtitleBottomBump()).toBe(10);
   });
 });
