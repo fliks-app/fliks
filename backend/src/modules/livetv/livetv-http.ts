@@ -1,4 +1,37 @@
 import axios, { type AxiosRequestConfig, type RawAxiosRequestHeaders } from 'axios';
+import * as dns from 'dns';
+import { isInternalAddress } from '../plugins/internal-address';
+
+/** A published XMLTV guide can run to hundreds of megabytes; this only stops
+ *  an unbounded response (a runaway or hostile server), not a large one. */
+const MAX_RESPONSE_BYTES = 512 * 1024 * 1024;
+
+/**
+ * Re-resolved on every call, not cached: a hostname that was external when a
+ * source was configured can be repointed at an internal address later (DNS
+ * rebinding). Narrows but does not eliminate the gap — axios re-resolves the
+ * same name to actually connect, leaving a window between this check and that
+ * connect(). A source deliberately on the LAN (a set-top box) is refused too;
+ * `isInternalAddress` has no per-source exception.
+ */
+async function assertNotInternal(rawUrl: string): Promise<void> {
+  let hostname: string;
+  try {
+    hostname = new URL(rawUrl).hostname;
+  } catch {
+    return; // Let axios raise its own error for a URL it cannot parse either.
+  }
+  let addresses: string[];
+  try {
+    addresses = (await dns.promises.lookup(hostname, { all: true })).map((a) => a.address);
+  } catch (err) {
+    throw new Error(`Could not resolve "${hostname}": ${(err as Error).message}`);
+  }
+  const internal = addresses.find(isInternalAddress);
+  if (internal) {
+    throw new Error(`Refused: "${hostname}" resolves to an internal address (${internal})`);
+  }
+}
 
 /**
  * The agent every outbound Live TV request identifies as. Providers block the
@@ -79,9 +112,12 @@ export async function liveTvGet<T>(
   config: AxiosRequestConfig = {},
   validators?: HttpCacheValidators | null,
 ) {
+  await assertNotInternal(url);
   return axios.get<T>(url, {
     timeout: 30_000,
     maxRedirects: 5,
+    maxContentLength: MAX_RESPONSE_BYTES,
+    maxBodyLength: MAX_RESPONSE_BYTES,
     ...config,
     headers: liveTvHeaders(identity, {
       ...conditionalHeaders(validators),
