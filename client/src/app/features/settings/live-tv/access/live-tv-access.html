@@ -54,7 +54,7 @@
                   <td class="text-center">
                     <app-enabled-switch
                       [enabled]="restricted().has(group.name)"
-                      [busy]="togglingGroup() === group.name"
+                      [busy]="togglingGroups().has(group.name)"
                       [ariaLabelKey]="'liveTv.admin.access.col_restricted'"
                       (toggle)="toggleRestricted(group.name)"
                     />

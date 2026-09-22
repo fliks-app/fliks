@@ -45,7 +45,11 @@ export class LiveTvAccessComponent implements OnInit {
   readonly autoRestricted = signal<Set<string>>(new Set());
   /** Restricted groups missing from the live lineup, mapped to when their access clears. */
   readonly vanishing = signal<Map<string, string>>(new Map());
-  readonly togglingGroup = signal<string | null>(null);
+  readonly togglingGroups = signal<Set<string>>(new Set());
+  /** Chains every save after the one before it: two toggles fired before the
+   *  first resolves must not both read the same stale snapshot, or the second
+   *  full-list replacement silently drops the first toggle's change. */
+  private pendingSave: Promise<void> = Promise.resolve();
 
   /** The restricted-groups setting can outlive the group itself (source removed,
    *  provider renamed it): shown with a 0 count rather than silently dropped. */
@@ -101,26 +105,34 @@ export class LiveTvAccessComponent implements OnInit {
     }
   }
 
-  async toggleRestricted(name: string): Promise<void> {
-    const next = new Set(this.restricted());
-    const isUnrestricting = next.delete(name);
-    if (!isUnrestricting) next.add(name);
-    this.togglingGroup.set(name);
-    try {
-      const saved = await this.api.setRestrictedGroups([...next]);
-      this.restricted.set(new Set(saved));
-      if (isUnrestricting && !saved.includes(name)) {
-        // The server just dropped every grant for this group; mirror that here
-        // instead of an extra listUserAccess() round trip.
-        this.users.update((list) =>
-          list.map((u) => ({ ...u, groups: u.groups.filter((g) => g !== name) })),
-        );
+  toggleRestricted(name: string): Promise<void> {
+    this.togglingGroups.update((s) => new Set(s).add(name));
+    const run = this.pendingSave.then(async () => {
+      const next = new Set(this.restricted());
+      const isUnrestricting = next.delete(name);
+      if (!isUnrestricting) next.add(name);
+      try {
+        const saved = await this.api.setRestrictedGroups([...next]);
+        this.restricted.set(new Set(saved));
+        if (isUnrestricting && !saved.includes(name)) {
+          // The server just dropped every grant for this group; mirror that here
+          // instead of an extra listUserAccess() round trip.
+          this.users.update((list) =>
+            list.map((u) => ({ ...u, groups: u.groups.filter((g) => g !== name) })),
+          );
+        }
+      } catch {
+        // handled by global error interceptor
+      } finally {
+        this.togglingGroups.update((s) => {
+          const next = new Set(s);
+          next.delete(name);
+          return next;
+        });
       }
-    } catch {
-      // handled by global error interceptor
-    } finally {
-      this.togglingGroup.set(null);
-    }
+    });
+    this.pendingSave = run;
+    return run;
   }
 
   openGrants(user: LiveTvUserAccess): void {
@@ -148,9 +160,17 @@ export class LiveTvAccessComponent implements OnInit {
     try {
       const saved = await this.api.setUserGroupGrants(user.id, [...this.grantedGroups()]);
       this.users.update((list) =>
-        list.map((u) => (u.id === user.id ? { ...u, groups: saved } : u)),
+        list.map((u) => (u.id === user.id ? { ...u, groups: saved.groups } : u)),
       );
-      this.toast.success(this.translate.instant('liveTv.admin.access.grants_saved'));
+      if (saved.ignored.length) {
+        this.toast.warning(
+          this.translate.instant('liveTv.admin.access.grants_ignored', {
+            groups: saved.ignored.join(', '),
+          }),
+        );
+      } else {
+        this.toast.success(this.translate.instant('liveTv.admin.access.grants_saved'));
+      }
       this.closeGrants();
     } catch {
       // handled by global error interceptor

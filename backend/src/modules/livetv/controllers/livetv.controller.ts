@@ -18,6 +18,7 @@ import type { Request, Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import { JwtOrApiKeyGuard } from '../../auth/guards/jwt-or-api-key.guard';
+import { SessionTokenGuard } from '../../auth/guards/session-token.guard';
 import { PoliciesGuard } from '../../auth/casl/policies.guard';
 import { CheckPolicies } from '../../auth/casl/check-policies.decorator';
 import { Action } from '../../auth/casl/actions.enum';
@@ -41,7 +42,10 @@ import { SetChannelPrefsDto } from '../dto/set-channel-prefs.dto';
  *  `%05d` is a minimum width, so ffmpeg keeps writing 6+ digit names past segment 99999. */
 export const SEGMENT_NAME_RE = /^(init\.mp4|seg-\d{5,}\.(m4s|ts))$/;
 
-function firstQueryString(query: Request['query'], key: string): string | undefined {
+function firstQueryString(
+  query: Request['query'],
+  key: string,
+): string | undefined {
   const v = query[key];
   if (typeof v === 'string') return v;
   if (Array.isArray(v) && typeof v[0] === 'string') return v[0];
@@ -61,7 +65,10 @@ function withToken(raw: string, token: string | undefined): string {
     .split('\n')
     .map((line) => {
       if (line.startsWith('#EXT-X-MAP')) {
-        return line.replace(/URI="([^"]+)"/, (_m, uri: string) => `URI="${uri}${suffix}"`);
+        return line.replace(
+          /URI="([^"]+)"/,
+          (_m, uri: string) => `URI="${uri}${suffix}"`,
+        );
       }
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) return line;
@@ -89,7 +96,10 @@ export class LivetvController {
 
   @Get('channels')
   @CheckPolicies((ability) => ability.can(Action.Read, LiveTvChannel))
-  listChannels(@Query() query: LiveTvChannelsQueryDto, @CurrentUser() user: User) {
+  listChannels(
+    @Query() query: LiveTvChannelsQueryDto,
+    @CurrentUser() user: User,
+  ) {
     return this.channels.listForUser(user, query);
   }
 
@@ -132,6 +142,7 @@ export class LivetvController {
 
   @Post('channels/:id/play')
   @CheckPolicies((ability) => ability.can(Action.Read, LiveTvChannel))
+  @UseGuards(SessionTokenGuard)
   async play(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: PlayChannelDto,
@@ -144,11 +155,15 @@ export class LivetvController {
       userAgent: req.headers['user-agent'] ?? null,
     });
     const token = this.auth.generateStreamToken(user);
-    return { ...result, url: `${result.url}?token=${encodeURIComponent(token)}` };
+    return {
+      ...result,
+      url: `${result.url}?token=${encodeURIComponent(token)}`,
+    };
   }
 
   @Delete('sessions/:sessionId')
   @CheckPolicies((ability) => ability.can(Action.Read, LiveTvChannel))
+  @UseGuards(SessionTokenGuard)
   async leave(@Param('sessionId') sessionId: string) {
     await this.sessions.leave(sessionId);
     return { ok: true };
@@ -158,14 +173,19 @@ export class LivetvController {
   @CheckPolicies((ability) => ability.can(Action.Read, LiveTvChannel))
   async servePlaylist(
     @Param('sessionId') sessionId: string,
+    @CurrentUser() user: User,
     @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
     const session = this.sessions.getForServe(sessionId);
     if (!session) throw new NotFoundException('Live TV session not found');
+    // Same rule as `play`: the manifest is polled continuously, so a group
+    // restriction or a disabled channel takes effect on the next poll.
+    await this.channels.findPlayable(session.channelId, user);
 
     const playlistPath = path.join(session.dir, 'index.m3u8');
-    if (!fs.existsSync(playlistPath)) throw new NotFoundException('Playlist not ready yet');
+    if (!fs.existsSync(playlistPath))
+      throw new NotFoundException('Playlist not ready yet');
     const raw = fs.readFileSync(playlistPath, 'utf-8');
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Cache-Control', 'no-store');
@@ -178,11 +198,17 @@ export class LivetvController {
    *  be handed `.m3u8` for a raw stream. */
   @Get('sessions/:sessionId/direct.ts')
   @CheckPolicies((ability) => ability.can(Action.Read, LiveTvChannel))
-  serveDirect(@Param('sessionId') sessionId: string, @Res() res: Response): void {
+  async serveDirect(
+    @Param('sessionId') sessionId: string,
+    @CurrentUser() user: User,
+    @Res() res: Response,
+  ): Promise<void> {
     const session = this.sessions.getForServe(sessionId);
     if (!session || session.mode !== 'direct') {
       throw new NotFoundException('Live TV session not found');
     }
+    // Only catches a reconnect: an already-flowing socket is never re-checked.
+    await this.channels.findPlayable(session.channelId, user);
     const tee = this.sessions.attachDirectViewer(session, sessionId);
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Content-Type', session.directContentType ?? 'video/mp2t');
@@ -205,13 +231,18 @@ export class LivetvController {
       throw new BadRequestException(`Invalid segment name: ${segment}`);
     }
     const filePath = path.join(session.dir, segment);
-    if (!fs.existsSync(filePath)) throw new NotFoundException('Live TV segment not found');
-    res.setHeader('Content-Type', segment.endsWith('.ts') ? 'video/mp2t' : 'video/mp4');
+    if (!fs.existsSync(filePath))
+      throw new NotFoundException('Live TV segment not found');
+    res.setHeader(
+      'Content-Type',
+      segment.endsWith('.ts') ? 'video/mp2t' : 'video/mp4',
+    );
     res.sendFile(filePath);
   }
 
   @Put('channels/:id/prefs')
   @CheckPolicies((ability) => ability.can(Action.Read, LiveTvChannel))
+  @UseGuards(SessionTokenGuard)
   setPrefs(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: SetChannelPrefsDto,
