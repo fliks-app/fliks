@@ -59,6 +59,10 @@ create, no subscription, and nothing leaves the house.
   opacity, margins.
 - **Skip intro, next episode, chapter markers** and thumbnail previews
   when you scrub.
+- **Live TV**, from your own IPTV subscription — add an M3U playlist or
+  an Xtream account and channels line up next to your library, with a
+  program guide and a rewind buffer to pause live and jump back a few
+  minutes. Setting one up: [docs/livetv.md](docs/livetv.md).
 
 ### Browsing
 
