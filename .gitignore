@@ -67,6 +67,7 @@ plans/
 # Scratch documentation stays local; the plugin contract is shared, so it is tracked.
 /docs/*
 !/docs/plugins.md
+!/docs/livetv.md
 docker-compose.yml
 
 # Dev-stack bind mounts (media library, downloads, images, transcode cache).
