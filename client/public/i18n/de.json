@@ -2939,7 +2939,8 @@
         "ok": "Unauffällig",
         "failures": "{{count}} Fehlschläge",
         "last_ok": "Letzter Erfolg:",
-        "never_ok": "Nie erfolgreich"
+        "never_ok": "Nie erfolgreich",
+        "adult_guard_failed": "Einschränkung für Erwachseneninhalte fehlgeschlagen"
       }
     }
   }

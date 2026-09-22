@@ -20,6 +20,13 @@
             } @else {
               <span class="badge badge-success badge-sm">{{ 'liveTv.admin.health.ok' | translate }}</span>
             }
+            @if (s.lastAdultGuardError) {
+              <app-error-badge
+                [error]="s.lastAdultGuardError"
+                [label]="'liveTv.admin.health.adult_guard_failed' | translate"
+                [badgeClass]="'badge-warning'"
+              />
+            }
             @if (s.lastSyncAt) {
               <span class="text-sm text-base-content/60">
                 {{ s.lastSyncAt | localeDate:{ dateStyle: 'short', timeStyle: 'short' } }}

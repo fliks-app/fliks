@@ -2966,7 +2966,8 @@
         "ok": "Healthy",
         "failures": "{{count}} failures",
         "last_ok": "Last success:",
-        "never_ok": "Never succeeded"
+        "never_ok": "Never succeeded",
+        "adult_guard_failed": "Adult-content restriction failed"
       }
     }
   }

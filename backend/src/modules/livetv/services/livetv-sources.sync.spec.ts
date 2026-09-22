@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { Logger } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import {
   LiveTvSourcesService,
@@ -283,6 +284,117 @@ describe('LiveTvSourcesService.sync (m3u)', () => {
     expect(access.restrictAdultGroups).toHaveBeenCalledWith(
       expect.arrayContaining(['News', 'XXX Adult']),
     );
+  });
+
+  describe('a failing adult-group restriction pass', () => {
+    const playlist =
+      '#EXTM3U\n#EXTINF:-1 group-title="XXX Adult",One\nhttp://provider/live/1.ts\n';
+
+    it('still returns a successful sync and leaves lastSyncStatus at "ok"', async () => {
+      mockedLiveTvGet.mockResolvedValue({
+        status: 200,
+        data: playlist,
+        headers: {},
+      });
+      const { service, sourceRepo, access } = setup();
+      access.restrictAdultGroups.mockRejectedValue(
+        new Error('connection terminated'),
+      );
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+      const result = await service.sync(1);
+
+      expect(result.ok).toBe(true);
+      expect(sourceRepo.update).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ lastSyncStatus: 'ok', lastSyncError: null }),
+      );
+    });
+
+    it('logs at error level and records the failure on lastAdultGuardError, apart from lastSyncError', async () => {
+      mockedLiveTvGet.mockResolvedValue({
+        status: 200,
+        data: playlist,
+        headers: {},
+      });
+      const { service, sourceRepo, access } = setup();
+      access.restrictAdultGroups.mockRejectedValue(
+        new Error('connection terminated'),
+      );
+      const error = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+
+      await service.sync(1);
+
+      expect(error).toHaveBeenCalledWith(
+        expect.stringContaining('connection terminated'),
+      );
+      expect(warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('Adult-group'),
+      );
+      expect(sourceRepo.update).toHaveBeenCalledWith(1, {
+        lastAdultGuardError: 'connection terminated',
+      });
+    });
+
+    it('dispatches livetv.adult_guard_failed', async () => {
+      mockedLiveTvGet.mockResolvedValue({
+        status: 200,
+        data: playlist,
+        headers: {},
+      });
+      const { service, access, notifications } = setup();
+      access.restrictAdultGroups.mockRejectedValue(
+        new Error('connection terminated'),
+      );
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+      await service.sync(1);
+
+      expect(notifications.dispatch).toHaveBeenCalledWith(
+        'livetv.adult_guard_failed',
+        expect.objectContaining({ sourceName: 'Test' }),
+      );
+    });
+
+    it('never writes lastAdultGuardError when the pass already succeeds', async () => {
+      mockedLiveTvGet.mockResolvedValue({
+        status: 200,
+        data: playlist,
+        headers: {},
+      });
+      const { service, sourceRepo, access } = setup();
+      access.restrictAdultGroups.mockResolvedValue([]);
+
+      await service.sync(1);
+
+      expect(sourceRepo.update).not.toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ lastAdultGuardError: expect.anything() }),
+      );
+    });
+
+    it('clears a previous lastAdultGuardError once the pass succeeds again', async () => {
+      mockedLiveTvGet.mockResolvedValue({
+        status: 200,
+        data: playlist,
+        headers: {},
+      });
+      const { service, sourceRepo, access } = setup({
+        lastAdultGuardError: 'connection terminated',
+      });
+      access.restrictAdultGroups.mockResolvedValue([]);
+
+      await service.sync(1);
+
+      expect(sourceRepo.update).toHaveBeenCalledWith(1, {
+        lastAdultGuardError: null,
+      });
+    });
   });
 
   describe('group realignment on an existing channel', () => {
