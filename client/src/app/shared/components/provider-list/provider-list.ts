@@ -321,6 +321,18 @@ export class ProviderListComponent implements OnInit {
     this.editorDialog()?.nativeElement.showModal();
   }
 
+  /** Strips columns no update DTO declares — the global pipe rejects any that survive (whitelist + forbidNonWhitelisted). */
+  private payload(row: ProviderInstance, patch: Record<string, unknown>): Record<string, unknown> {
+    const {
+      id: _id,
+      createdAt: _createdAt,
+      updatedAt: _updatedAt,
+      cooldown: _cooldown,
+      ...rest
+    } = row;
+    return { ...rest, ...patch };
+  }
+
   private storedSecrets(row: ProviderInstance): readonly string[] {
     const set = (row.settings as Record<string, unknown> | undefined)?.[SECRETS_SET_KEY];
     return Array.isArray(set) ? set.map(String) : [];
@@ -460,10 +472,16 @@ export class ProviderListComponent implements OnInit {
     const other = ordered[swapIdx];
     try {
       await firstValueFrom(
-        this.http.put(`${this.listUrl()}/${row.id}`, { ...row, priority: other.priority }),
+        this.http.put(
+          `${this.listUrl()}/${row.id}`,
+          this.payload(row, { priority: other.priority }),
+        ),
       );
       await firstValueFrom(
-        this.http.put(`${this.listUrl()}/${other.id}`, { ...other, priority: row.priority }),
+        this.http.put(
+          `${this.listUrl()}/${other.id}`,
+          this.payload(other, { priority: row.priority }),
+        ),
       );
       await this.reload();
     } catch {
@@ -511,13 +529,13 @@ export class ProviderListComponent implements OnInit {
       : 'provider_list.cooldown_failures';
   }
 
-  /** Persists the whole row, as `moveRow` does: the resource merges secrets on update, so
-   *  echoing a redacted settings bag back never overwrites the stored one. */
+  /** Persists the row minus its entity metadata, as `moveRow` does: the resource merges secrets
+   *  on update, so echoing a redacted settings bag back never overwrites the stored one. */
   async toggleEnabled(row: ProviderInstance): Promise<void> {
     this.togglingId.set(row.id);
     try {
       await firstValueFrom(
-        this.http.put(`${this.listUrl()}/${row.id}`, { ...row, enabled: !row.enabled }),
+        this.http.put(`${this.listUrl()}/${row.id}`, this.payload(row, { enabled: !row.enabled })),
       );
       await this.reload();
     } catch {
@@ -603,11 +621,17 @@ export class ProviderListComponent implements OnInit {
     return { context: new HttpContext().set(SKIP_ERROR_TOAST, true) };
   }
 
-  /** Persists the whole row with `enabled` forced, the convention `toggleEnabled` already uses. */
+  /** Persists the row minus its entity metadata, with `enabled` forced, the convention `toggleEnabled` already uses. */
   async bulkSetEnabled(enabled: boolean): Promise<void> {
     await this.runOverSelection(
       (row) =>
-        firstValueFrom(this.http.put(`${this.listUrl()}/${row.id}`, { ...row, enabled }, this.silent())),
+        firstValueFrom(
+          this.http.put(
+            `${this.listUrl()}/${row.id}`,
+            this.payload(row, { enabled }),
+            this.silent(),
+          ),
+        ),
       enabled ? 'provider_list.bulk_enabled_done' : 'provider_list.bulk_disabled_done',
     );
   }
@@ -657,9 +681,9 @@ export class ProviderListComponent implements OnInit {
   readonly bulkNothingApplied = computed(() => this.bulkApply().size === 0);
 
   /**
-   * Applies only the ticked fields to every selected row. Each row is persisted whole, with its
-   * own settings spread under the changes: a field nobody ticked keeps whatever that row had,
-   * which is the difference between a bulk edit and twelve identical rows.
+   * Applies only the ticked fields to every selected row. Each row is persisted minus its entity
+   * metadata, with its own settings spread under the changes: a field nobody ticked keeps
+   * whatever that row had, which is the difference between a bulk edit and twelve identical rows.
    */
   async saveBulkEdit(): Promise<void> {
     const applied = this.bulkApply();
@@ -679,12 +703,11 @@ export class ProviderListComponent implements OnInit {
         firstValueFrom(
           this.http.put(
             `${this.listUrl()}/${row.id}`,
-            {
-              ...row,
+            this.payload(row, {
               ...topLevel,
               ...(priority === null ? {} : { priority }),
               settings: { ...(row.settings ?? {}), ...settings },
-            },
+            }),
             this.silent(),
           ),
         ),
