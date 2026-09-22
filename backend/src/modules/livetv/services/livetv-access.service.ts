@@ -281,14 +281,13 @@ export class LiveTvAccessService {
   }
 
   /** Every user with the restricted groups they were individually granted,
-   *  for the access tab's overview table. */
+   *  for the access tab's overview table. `hasFullAccess` mirrors the same
+   *  short-circuit {@link deniedGroups} uses, so the table can show why an
+   *  admin account's grants don't matter instead of rendering it empty. */
   async listUserAccess(): Promise<
-    { id: number; username: string; groups: string[] }[]
+    { id: number; username: string; groups: string[]; hasFullAccess: boolean }[]
   > {
-    const users = await this.userRepo.find({
-      select: ['id', 'username'],
-      order: { username: 'ASC' },
-    });
+    const users = await this.userRepo.find({ order: { username: 'ASC' } });
     if (!users.length) return [];
     const rows = await this.accessRepo
       .createQueryBuilder('a')
@@ -305,6 +304,7 @@ export class LiveTvAccessService {
       id: u.id,
       username: u.username,
       groups: byUser.get(u.id) ?? [],
+      hasFullAccess: ADMIN_PERMISSIONS.some((p) => u.permissions.includes(p)),
     }));
   }
 

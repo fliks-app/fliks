@@ -22,9 +22,16 @@ import { SetGroupAccessDto } from '../dto/set-group-access.dto';
 export class LiveTvAccessController {
   constructor(private readonly access: LiveTvAccessService) {}
 
+  /** `exempt` names groups an admin deliberately unrestricted after an
+   *  automatic match: they carry no badge of their own once out of `groups`,
+   *  so this is the only way a second admin can see one was ever restricted. */
   @Get('restricted-groups')
-  restrictedGroups() {
-    return this.access.restrictedGroupsView();
+  async restrictedGroups() {
+    const [groups, exempt] = await Promise.all([
+      this.access.restrictedGroupsView(),
+      this.access.exemptGroups(),
+    ]);
+    return { groups, exempt };
   }
 
   @Put('restricted-groups')

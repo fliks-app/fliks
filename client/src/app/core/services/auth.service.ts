@@ -162,6 +162,13 @@ export class AuthService {
    *  sure it isn't near expiry. */
   readonly streamToken = this._streamToken.asReadonly();
 
+  /** Best token to embed in a URL query param for a request that can't carry
+   *  a header (HLS manifest/segment URLs, a native `<img>` fetched cross-origin):
+   *  the long-lived stream token when present, else the regular access token. */
+  get playbackToken(): string | null {
+    return this._streamToken() ?? this._accessToken;
+  }
+
   readonly user = this._user.asReadonly();
   readonly isAuthenticated = computed(() => !!this._user());
   /** Incremented whenever the signed-in session changes (login, resume, switch,

@@ -119,7 +119,11 @@ export class ImageCacheService {
   /** Only the server's own art. A TMDB URL rendered straight from a search
    *  result has nothing to do with offline use and would just churn the LRU. */
   private cacheable(url: string): boolean {
-    return this.enabled && !!url && url.includes('/api/images/');
+    return (
+      this.enabled &&
+      !!url &&
+      (url.includes('/api/images/') || url.includes('/api/livetv/channels/'))
+    );
   }
 
   private pump(): void {
@@ -220,15 +224,29 @@ export class ImageCacheService {
   }
 }
 
-/** FNV-1a over the full URL — the size param and the server host both matter,
- *  and the digest keeps the result safe as a filename. */
-function cacheKey(url: string): string {
+/** FNV-1a over the URL with any `token` query param stripped first — a Live
+ *  TV logo's auth token rotates with the session, but it's the same image, and
+ *  hashing it in would churn the cache on every rotation. The size param and
+ *  the server host both still matter, and the digest keeps the result safe as
+ *  a filename. */
+export function cacheKey(url: string): string {
+  const stable = stripToken(url);
   let hash = 0x811c9dc5;
-  for (let i = 0; i < url.length; i++) {
-    hash ^= url.charCodeAt(i);
+  for (let i = 0; i < stable.length; i++) {
+    hash ^= stable.charCodeAt(i);
     hash = Math.imul(hash, 0x01000193);
   }
-  return `${(hash >>> 0).toString(16)}-${url.length.toString(16)}`;
+  return `${(hash >>> 0).toString(16)}-${stable.length.toString(16)}`;
+}
+
+function stripToken(url: string): string {
+  try {
+    const u = new URL(url);
+    u.searchParams.delete('token');
+    return u.toString();
+  } catch {
+    return url;
+  }
 }
 
 function extensionFor(mime: string): string {

@@ -43,6 +43,9 @@ export class LiveTvAccessComponent implements OnInit {
   readonly restricted = signal<Set<string>>(new Set());
   /** Restricted groups whose name still matches the server's automatic adult-content pattern. */
   readonly autoRestricted = signal<Set<string>>(new Set());
+  /** Auto-matched groups an admin deliberately unrestricted: open today, but the
+   *  next sync still won't touch them — distinct from a plain unchecked group. */
+  readonly exempt = signal<Set<string>>(new Set());
   /** Restricted groups missing from the live lineup, mapped to when their access clears. */
   readonly vanishing = signal<Map<string, string>>(new Map());
   readonly togglingGroups = signal<Set<string>>(new Set());
@@ -58,7 +61,7 @@ export class LiveTvAccessComponent implements OnInit {
     const byName = new Map(
       this.groups().map((g) => [g.name, { ...g, cleanupAt: vanishing.get(g.name) ?? null }]),
     );
-    for (const name of this.restricted()) {
+    for (const name of new Set([...this.restricted(), ...this.exempt()])) {
       if (!byName.has(name)) {
         byName.set(name, { name, count: 0, cleanupAt: vanishing.get(name) ?? null });
       }
@@ -80,23 +83,24 @@ export class LiveTvAccessComponent implements OnInit {
   async ngOnInit(): Promise<void> {
     this.loading.set(true);
     try {
-      const [channelsPage, restrictedGroups, users] = await Promise.all([
+      const [channelsPage, accessView, users] = await Promise.all([
         this.api.listAdminChannels({ page: 1, pageSize: 1 }),
         this.api.getRestrictedGroups(),
         this.api.listUserAccess(),
       ]);
       this.groups.set(channelsPage.groups ?? []);
-      this.restricted.set(new Set(restrictedGroups.map((g) => g.name)));
+      this.restricted.set(new Set(accessView.groups.map((g) => g.name)));
       this.autoRestricted.set(
-        new Set(restrictedGroups.filter((g) => g.automatic).map((g) => g.name)),
+        new Set(accessView.groups.filter((g) => g.automatic).map((g) => g.name)),
       );
       this.vanishing.set(
         new Map(
-          restrictedGroups
+          accessView.groups
             .filter((g) => g.cleanupAt != null)
             .map((g) => [g.name, g.cleanupAt as string]),
         ),
       );
+      this.exempt.set(new Set(accessView.exempt));
       this.users.set(users);
     } catch {
       // handled by global error interceptor
