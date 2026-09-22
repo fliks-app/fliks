@@ -1,10 +1,7 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-/**
- * Postgres never indexes a foreign key on its own, and `channelId` is joined
- * or filtered on every admin channel list, every source sync, and the
- * `ON DELETE CASCADE` from a channel delete: all a sequential scan without it.
- */
+/** Postgres never indexes a foreign key on its own; `channelId` is joined or
+ *  filtered on every admin list, source sync and cascade delete. */
 export class IndexLivetvChannelStreamsChannel1785500000000 implements MigrationInterface {
   name = 'IndexLivetvChannelStreamsChannel1785500000000';
 

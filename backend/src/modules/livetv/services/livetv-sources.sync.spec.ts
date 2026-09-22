@@ -3,6 +3,7 @@ import { plainToInstance } from 'class-transformer';
 import { LiveTvSourcesService } from './livetv-sources.service';
 import { LiveTvChannel } from '../entities/livetv-channel.entity';
 import { LiveTvChannelStream } from '../entities/livetv-channel-stream.entity';
+import { LiveTvSource } from '../entities/livetv-source.entity';
 import { assertNotInternal, liveTvGet } from '../livetv-http';
 import type { TestLiveTvSourceDto } from '../dto/test-livetv-source.dto';
 import { UpdateLiveTvSourceDto } from '../dto/update-livetv-source.dto';
@@ -17,7 +18,7 @@ const mockedAssertNotInternal = assertNotInternal as jest.Mock;
 /** Chainable TypeORM query-builder stand-in; every method returns itself. */
 function makeQueryBuilder(overrides: Record<string, unknown> = {}) {
   const qb: Record<string, jest.Mock> = {};
-  for (const m of ['select', 'delete', 'innerJoin', 'where', 'andWhere', 'groupBy']) {
+  for (const m of ['select', 'delete', 'innerJoin', 'where', 'andWhere', 'groupBy', 'whereInIds']) {
     qb[m] = jest.fn(() => qb);
   }
   qb.execute = jest.fn().mockResolvedValue({ affected: 0 });
@@ -100,7 +101,7 @@ function setup(sourceOverrides: Record<string, unknown> = {}) {
     transaction: jest.fn(async (cb: (manager: unknown) => unknown) =>
       cb({
         getRepository: (entity: unknown) =>
-          entity === LiveTvChannel ? channelRepo : streamRepo,
+          entity === LiveTvChannel ? channelRepo : entity === LiveTvSource ? sourceRepo : streamRepo,
       }),
     ),
   };
@@ -328,6 +329,40 @@ describe('LiveTvSourcesService.resolveGuideUrl', () => {
   });
 });
 
+describe('LiveTvSourcesService.remove', () => {
+  afterEach(() => jest.resetAllMocks());
+
+  it('deletes only channels orphaned by the removed source, scoped to its own streams', async () => {
+    const { service, source, sourceRepo, channelRepo, streamRepo } = setup({ id: 3 });
+    const channelQb = makeQueryBuilder();
+    channelRepo.createQueryBuilder.mockReturnValue(channelQb);
+    const streamQb = makeQueryBuilder({
+      getRawMany: jest.fn().mockResolvedValue([{ channelId: 5 }, { channelId: 6 }]),
+    });
+    streamRepo.createQueryBuilder.mockReturnValue(streamQb);
+
+    await service.remove(3);
+
+    expect(sourceRepo.remove).toHaveBeenCalledWith(source);
+    // The candidate list comes only from this source's own streams, never every channel.
+    expect(streamQb.where).toHaveBeenCalledWith('s."sourceId" = :sourceId', { sourceId: 3 });
+    expect(channelQb.whereInIds).toHaveBeenCalledWith([5, 6]);
+    expect(channelQb.andWhere).toHaveBeenCalledWith(expect.stringContaining('NOT EXISTS'));
+    expect(channelQb.execute).toHaveBeenCalled();
+  });
+
+  it('never touches the channel table when the removed source had no streams', async () => {
+    const { service, channelRepo, streamRepo } = setup({ id: 4 });
+    streamRepo.createQueryBuilder.mockReturnValue(
+      makeQueryBuilder({ getRawMany: jest.fn().mockResolvedValue([]) }),
+    );
+
+    await service.remove(4);
+
+    expect(channelRepo.createQueryBuilder).not.toHaveBeenCalled();
+  });
+});
+
 describe('LiveTvSourcesService.update', () => {
   afterEach(() => jest.resetAllMocks());
 
@@ -343,9 +378,8 @@ describe('LiveTvSourcesService.update', () => {
       enabled: true,
     });
 
-    // A plain object literal never reproduces the bug: only a real class
-    // instance ([[Define]] semantics) stamps the untouched fields as
-    // `undefined`, exactly like the global ValidationPipe hands the service.
+    // A real class instance ([[Define]] semantics), not a plain object literal:
+    // matches what the global ValidationPipe actually hands the service.
     const dto = plainToInstance(UpdateLiveTvSourceDto, { enabled: false });
     const result = await service.update(1, dto);
 

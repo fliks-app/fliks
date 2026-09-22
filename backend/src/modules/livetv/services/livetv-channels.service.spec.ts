@@ -109,14 +109,28 @@ describe('LiveTvChannelsService', () => {
     });
   });
 
-  describe('authorizedGuideChannelIds', () => {
-    it('collects the distinct, non-null guide channel ids visible to the user', async () => {
-      builder.getRawMany = async () => [
-        { guideChannelId: 'bbc1' },
-        { guideChannelId: 'bbc1' },
-        { guideChannelId: null },
-      ];
-      await expect(service.authorizedGuideChannelIds(makeUser())).resolves.toEqual(['bbc1']);
+  describe('scopeToAuthorizedGuideChannels', () => {
+    it('adds a correlated EXISTS condition against the given column, not an IN list', async () => {
+      const target = { andWhere: jest.fn() };
+      await service.scopeToAuthorizedGuideChannels(
+        target as never,
+        makeUser(7),
+        'p."guideChannelId"',
+      );
+      expect(target.andWhere).toHaveBeenCalledTimes(1);
+      const [sql, params] = target.andWhere.mock.calls[0];
+      expect(sql).toContain('EXISTS');
+      expect(sql).toContain('c."guideChannelId" = p."guideChannelId"');
+      expect(params).toEqual({ guideAuthUserId: 7 });
+    });
+
+    it('excludes denied groups the same way the list does', async () => {
+      access.deniedGroups.mockResolvedValue(['XXX']);
+      const target = { andWhere: jest.fn() };
+      await service.scopeToAuthorizedGuideChannels(target as never, makeUser(), 'p."guideChannelId"');
+      const [sql, params] = target.andWhere.mock.calls[0];
+      expect(sql).toContain('NOT IN (:...guideAuthDenied)');
+      expect(params).toEqual({ guideAuthUserId: 1, guideAuthDenied: ['XXX'] });
     });
   });
 

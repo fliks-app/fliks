@@ -168,9 +168,8 @@ export class LiveTvSourcesService {
     const source = await this.findOne(id);
     compileGroupPattern(dto.includeGroupsPattern ?? source.includeGroupsPattern, 'includeGroupsPattern');
     compileGroupPattern(dto.excludeGroupsPattern ?? source.excludeGroupsPattern, 'excludeGroupsPattern');
-    // A field left out of a partial PATCH is `undefined`, not absent: TS class
-    // fields ([[Define]] semantics) still declare it, so Object.assign would
-    // stamp `undefined` onto the returned entity even though the row is untouched.
+    // Explicit copy, not Object.assign: an omitted PATCH field is still
+    // `undefined` on the instance ([[Define]] semantics), which would stamp it onto the row.
     if (dto.name !== undefined) source.name = dto.name;
     if (dto.kind !== undefined) source.kind = dto.kind;
     if (dto.url !== undefined) source.url = dto.url;
@@ -192,6 +191,7 @@ export class LiveTvSourcesService {
 
   async remove(id: number): Promise<void> {
     const source = await this.findOne(id);
+    const sourceId = source.id; // repo.remove() below clears source.id
     // Scoped to this source's own channels, and atomic with the source delete:
     // a crash between the two used to leave streamless channels in the lineup.
     await this.dataSource.transaction(async (manager) => {
@@ -203,7 +203,7 @@ export class LiveTvSourcesService {
         await streamRepo
           .createQueryBuilder('s')
           .select('DISTINCT s."channelId"', 'channelId')
-          .where('s."sourceId" = :sourceId', { sourceId: source.id })
+          .where('s."sourceId" = :sourceId', { sourceId })
           .getRawMany<{ channelId: number }>()
       ).map((r) => r.channelId);
 
@@ -225,7 +225,7 @@ export class LiveTvSourcesService {
 
     // An uploaded playlist belongs to its source and goes with it.
     await removeStoredPlaylist(source.url).catch((err) =>
-      this.log.warn(`Failed to remove stored playlist for source #${source.id}: ${errorMessage(err)}`),
+      this.log.warn(`Failed to remove stored playlist for source #${sourceId}: ${errorMessage(err)}`),
     );
   }
 

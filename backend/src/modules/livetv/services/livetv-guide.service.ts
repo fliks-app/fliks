@@ -125,9 +125,8 @@ export class LiveTvGuideService {
 
   async update(id: number, dto: UpdateLiveTvGuideSourceDto): Promise<LiveTvGuideSource> {
     const row = await this.findOne(id);
-    // A field left out of a partial PATCH is `undefined`, not absent: TS class
-    // fields ([[Define]] semantics) still declare it, so Object.assign would
-    // stamp `undefined` onto the returned entity even though the row is untouched.
+    // Explicit copy, not Object.assign: an omitted PATCH field is still
+    // `undefined` on the instance ([[Define]] semantics), which would stamp it onto the row.
     if (dto.name !== undefined) row.name = dto.name;
     if (dto.kind !== undefined) row.kind = dto.kind;
     if (dto.url !== undefined) row.url = dto.url;
@@ -191,9 +190,8 @@ export class LiveTvGuideService {
         const assignedGuideId = new Map(
           matchResult.assignments.map((a) => [a.channelId, a.guideChannelId]),
         );
-        // One UPDATE per (guideChannelId, kind) pair, not one per channel: a
-        // 15k-channel lineup would otherwise serialize 15k round trips inside
-        // the request that is still streaming the feed.
+        // One UPDATE per (guideChannelId, kind) pair: a 15k-channel lineup
+        // would otherwise serialize 15k round trips mid-request.
         const byAssignment = new Map<
           string,
           { guideChannelId: string; kind: GuideAssignment['kind']; channelIds: number[] }
@@ -526,18 +524,15 @@ export class LiveTvGuideService {
 
     // Scoped to the caller's own lineup, exactly like the channel search just
     // above: an unfiltered program search leaks every denied group's titles.
-    const guideChannelIds = await this.channels.authorizedGuideChannelIds(user);
-    const programs = guideChannelIds.length
-      ? await this.programRepo
-          .createQueryBuilder('p')
-          .where('p."guideChannelId" IN (:...guideChannelIds)', { guideChannelIds })
-          .andWhere('p.title ILIKE :q', { q: `%${q}%` })
-          .andWhere('p."startsAt" < :to', { to })
-          .andWhere('p."endsAt" > :from', { from })
-          .orderBy('p."startsAt"', 'ASC')
-          .take(50)
-          .getMany()
-      : [];
+    const programsQb = this.programRepo
+      .createQueryBuilder('p')
+      .where('p.title ILIKE :q', { q: `%${q}%` })
+      .andWhere('p."startsAt" < :to', { to })
+      .andWhere('p."endsAt" > :from', { from })
+      .orderBy('p."startsAt"', 'ASC')
+      .take(50);
+    await this.channels.scopeToAuthorizedGuideChannels(programsQb, user, 'p."guideChannelId"');
+    const programs = await programsQb.getMany();
 
     return { channels, programs };
   }

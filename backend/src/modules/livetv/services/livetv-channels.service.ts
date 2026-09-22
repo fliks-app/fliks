@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository, SelectQueryBuilder } from 'typeorm';
+import { DataSource, In, ObjectLiteral, Repository, SelectQueryBuilder } from 'typeorm';
 import { LiveTvChannel } from '../entities/livetv-channel.entity';
 import { LiveTvChannelStream } from '../entities/livetv-channel-stream.entity';
 import { LiveTvUserChannelPref } from '../entities/livetv-user-channel-pref.entity';
@@ -92,14 +92,29 @@ export class LiveTvChannelsService {
     return (await qb.getCount()) > 0;
   }
 
-  /** Every guide channel id this user may see, unpaginated: scopes a program
-   *  search to the caller's lineup instead of the whole guide. */
-  async authorizedGuideChannelIds(user: User): Promise<string[]> {
-    const qb = await this.userChannelsQuery(user, {});
-    const rows = await qb
-      .select('channel."guideChannelId"', 'guideChannelId')
-      .getRawMany<{ guideChannelId: string | null }>();
-    return [...new Set(rows.map((r) => r.guideChannelId).filter((v): v is string => v != null))];
+  /** Same visibility rule as the list, as a correlated EXISTS against
+   *  `livetv_channels`: scopes another query's guide-channel column without
+   *  materializing the authorized set or growing its bound-parameter count
+   *  with the catalog size (a 15k-channel lineup would otherwise mean a
+   *  15k-placeholder IN list, over Postgres's 65535-parameter cap). */
+  async scopeToAuthorizedGuideChannels(
+    qb: SelectQueryBuilder<ObjectLiteral>,
+    user: User,
+    guideChannelIdColumn: string,
+  ): Promise<void> {
+    const denied = await this.access.deniedGroups(user);
+    qb.andWhere(
+      `EXISTS (
+        SELECT 1 FROM livetv_channels c
+        LEFT JOIN livetv_user_channel_prefs pref
+          ON pref."channelId" = c.id AND pref."userId" = :guideAuthUserId
+        WHERE c."guideChannelId" = ${guideChannelIdColumn}
+          AND c.enabled = true
+          AND (pref.hidden IS NULL OR pref.hidden = false)
+          ${denied.length ? 'AND (c."groupName" IS NULL OR c."groupName" NOT IN (:...guideAuthDenied))' : ''}
+      )`,
+      { guideAuthUserId: user.id, ...(denied.length ? { guideAuthDenied: denied } : {}) },
+    );
   }
 
   private async runChannelQuery(

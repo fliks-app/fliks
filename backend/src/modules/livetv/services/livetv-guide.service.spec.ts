@@ -35,7 +35,7 @@ describe('LiveTvGuideService', () => {
   let programRepo: { findOne: jest.Mock; createQueryBuilder: jest.Mock };
   let channels: {
     isGuideChannelVisibleToUser: jest.Mock;
-    authorizedGuideChannelIds: jest.Mock;
+    scopeToAuthorizedGuideChannels: jest.Mock;
     listPageForUser: jest.Mock;
   };
   let settings: { get: jest.Mock };
@@ -46,7 +46,7 @@ describe('LiveTvGuideService', () => {
     programRepo = { findOne: jest.fn(), createQueryBuilder: jest.fn() };
     channels = {
       isGuideChannelVisibleToUser: jest.fn(),
-      authorizedGuideChannelIds: jest.fn(),
+      scopeToAuthorizedGuideChannels: jest.fn(),
       listPageForUser: jest.fn().mockResolvedValue({ items: [], total: 0 }),
     };
     settings = { get: jest.fn().mockResolvedValue(null) };
@@ -92,26 +92,32 @@ describe('LiveTvGuideService', () => {
   });
 
   describe('search', () => {
-    it('scopes the program query to guide channel ids authorized for the caller', async () => {
-      channels.authorizedGuideChannelIds.mockResolvedValue(['bbc1', 'itv1']);
+    it('scopes the program query through the shared authorization helper', async () => {
       const builder = fakeProgramQueryBuilder([]);
       programRepo.createQueryBuilder.mockReturnValue(builder);
 
       await service.search(makeUser(), 'news');
 
-      const clause = builder.conditions.find((c) => c.sql.includes('"guideChannelId" IN'));
-      expect(clause?.params).toEqual({ guideChannelIds: ['bbc1', 'itv1'] });
+      expect(channels.scopeToAuthorizedGuideChannels).toHaveBeenCalledWith(
+        builder,
+        expect.anything(),
+        'p."guideChannelId"',
+      );
     });
 
-    // Same IDOR shape as `program`: an empty q ("ILIKE '%%'") must not fall
-    // back to scanning every channel's programs.
-    it('returns no programs, and never queries the table, when nothing is authorized', async () => {
-      channels.authorizedGuideChannelIds.mockResolvedValue([]);
+    // Same IDOR shape as `program`: an empty q ("ILIKE '%%'") must not skip
+    // scoping and fall back to scanning every channel's programs.
+    it('scopes the query even for an empty q', async () => {
+      const builder = fakeProgramQueryBuilder([]);
+      programRepo.createQueryBuilder.mockReturnValue(builder);
 
-      const result = await service.search(makeUser(), '');
+      await service.search(makeUser(), '');
 
-      expect(result.programs).toEqual([]);
-      expect(programRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(channels.scopeToAuthorizedGuideChannels).toHaveBeenCalledWith(
+        builder,
+        expect.anything(),
+        'p."guideChannelId"',
+      );
     });
   });
 
@@ -130,9 +136,8 @@ describe('LiveTvGuideService', () => {
         source: null,
       });
 
-      // A plain object literal never reproduces the bug: only a real class
-      // instance ([[Define]] semantics) stamps the untouched fields as
-      // `undefined`, exactly like the global ValidationPipe hands the service.
+      // A real class instance ([[Define]] semantics), not a plain object literal:
+      // matches what the global ValidationPipe actually hands the service.
       const dto = plainToInstance(UpdateLiveTvGuideSourceDto, { enabled: false });
       const result = await service.update(1, dto);
 

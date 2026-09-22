@@ -4,6 +4,7 @@ import { validate } from 'class-validator';
 import {
   LiveTvOnNowQueryDto,
   LiveTvMatchReportQueryDto,
+  LiveTvSearchQueryDto,
 } from './livetv-lookup-query.dto';
 
 /** Mirrors the global pipe (whitelist + forbidNonWhitelisted + transform) from main.ts. */
@@ -36,6 +37,34 @@ describe('LiveTvOnNowQueryDto', () => {
 
   it('rejects a non-numeric pageSize', async () => {
     expect(await check(LiveTvOnNowQueryDto, { pageSize: 'abc' })).not.toEqual([]);
+  });
+
+  // A megabyte-long `q` used to reach the database in an unbounded ILIKE.
+  it('rejects a query over 200 characters', async () => {
+    expect(await check(LiveTvOnNowQueryDto, { query: 'a'.repeat(201) })).not.toEqual([]);
+  });
+
+  it('accepts a query at exactly 200 characters', async () => {
+    expect(await check(LiveTvOnNowQueryDto, { query: 'a'.repeat(200) })).toEqual([]);
+  });
+
+  // The service already clamps to 50 internally; the DTO must say so too.
+  it('rejects a pageSize above the server-side cap', async () => {
+    expect(await check(LiveTvOnNowQueryDto, { pageSize: '51' })).not.toEqual([]);
+  });
+
+  it('accepts pageSize at the cap', async () => {
+    expect(await check(LiveTvOnNowQueryDto, { pageSize: '50' })).toEqual([]);
+  });
+});
+
+describe('LiveTvSearchQueryDto', () => {
+  it('rejects a q over 200 characters', async () => {
+    expect(await check(LiveTvSearchQueryDto, { q: 'a'.repeat(201) })).not.toEqual([]);
+  });
+
+  it('accepts a short q', async () => {
+    expect(await check(LiveTvSearchQueryDto, { q: 'bbc' })).toEqual([]);
   });
 });
 
