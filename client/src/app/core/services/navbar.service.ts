@@ -62,6 +62,9 @@ export class NavbarService {
    *  treated as a "pop" (don't push the URL we're leaving back onto the
    *  stack — that would create a forward/back loop). */
   private isPoppingBack = false;
+  /** Claims the very next NavigationStart as this goBack()'s own, closed there
+   *  so a push starting in the same window isn't misread as a return too. */
+  private backNavPending = false;
   /** Capacitor native platform — exposed so templates can branch on it. */
   readonly isNativePlatform = Capacitor.isNativePlatform();
   private get isNative() { return this.isNativePlatform; }
@@ -86,7 +89,10 @@ export class NavbarService {
         // entries set that too, and opening a screen from the sidebar is not a
         // return. The class drives the CSS side of that (the artwork reveal
         // replays whenever a cached subtree is re-inserted).
-        const back = e.navigationTrigger === 'popstate' || this.lastWasBack();
+        // backNavPending, not lastWasBack: it must not survive into a push that
+        // starts before lastWasBack's later, .then()-driven reset.
+        const back = e.navigationTrigger === 'popstate' || this.backNavPending;
+        this.backNavPending = false;
         this.navigatedBack.set(back);
         document.documentElement.classList.toggle('nav-back', back);
         // The router restores the offset with the two-argument `scrollTo`,
@@ -191,7 +197,12 @@ export class NavbarService {
    *  but a later programmatic nav from that page sees `false`. Runs on
    *  rejection too — a resolver error must not leave this stuck. */
   private resetLastWasBack(): void {
-    setTimeout(() => this.lastWasBack.set(false), 0);
+    // backNavPending is normally already closed by its own NavigationStart;
+    // cleared here too as a backstop if that navigation never started one.
+    setTimeout(() => {
+      this.lastWasBack.set(false);
+      this.backNavPending = false;
+    }, 0);
   }
 
   goBack(fallback?: readonly (string | number)[]): void {
@@ -199,6 +210,7 @@ export class NavbarService {
     if (prev) {
       this.isPoppingBack = true;
       this.lastWasBack.set(true);
+      this.backNavPending = true;
       void this.router
         .navigateByUrl(prev)
         .then(() => this.resetLastWasBack(), () => this.resetLastWasBack());
@@ -207,6 +219,7 @@ export class NavbarService {
     if (!this.isNative && window.history.length > 1) {
       this.isPoppingBack = true;
       this.lastWasBack.set(true);
+      this.backNavPending = true;
       const sub = this.router.events.subscribe((e) => {
         if (e instanceof NavigationEnd) {
           sub.unsubscribe();

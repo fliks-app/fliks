@@ -60,10 +60,12 @@ import {
   WATCH_PATH,
 } from './shared/utils/view-transition';
 import {
+  confirmPush,
   consumeArmed,
   goingBack,
   nextSlide,
   pageSlideAvailable,
+  releaseStackedPop,
   resetStack,
   slidePage,
 } from './shared/utils/page-slide';
@@ -143,6 +145,9 @@ export const appConfig: ApplicationConfig = {
                   return;
                 }
                 if (swipeBackActive()) {
+                  // The native gesture already animated the trip and nothing
+                  // below this runs, so the counter has to settle here.
+                  releaseStackedPop(from, to);
                   transition.skipTransition();
                   return;
                 }
@@ -199,6 +204,9 @@ export const appConfig: ApplicationConfig = {
                 // What a pair with no morph of its own gets: the pages stack.
                 const direction = nextSlide(from, to, armed, !!posterTrip);
                 const slid = !!direction && slidePage(transition, direction);
+                // Counted only once its slide actually ran, or a push skipped
+                // for want of a dock would owe a pop that never showed.
+                if (direction === 'push') confirmPush(slid);
                 // Nothing would move. A transition still lifts every named hero
                 // out of its page, cross-fading it against a copy of itself and
                 // holding the page's own swap behind snapshots until it ends.

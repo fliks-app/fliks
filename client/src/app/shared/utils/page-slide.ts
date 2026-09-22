@@ -13,7 +13,13 @@
  * whole app moving.
  */
 import { Capacitor } from '@capacitor/core';
-import { WATCH_PATH, classUntilDone, leafRoutePath, type RouteNode } from './view-transition';
+import {
+  WATCH_PATH,
+  classUntilDone,
+  leafRoutePath,
+  leavingPosterPage,
+  type RouteNode,
+} from './view-transition';
 
 /** The app shells are the only places a stack is what the viewer is holding. In
  *  a browser tab, and in the desktop window, a page that slides in from the edge
@@ -85,18 +91,29 @@ export function nextSlide(
   // The player covers the whole screen and animates its own open and close.
   if (leafRoutePath(from) === WATCH_PATH || leafRoutePath(to) === WATCH_PATH) return null;
   if (morphed) return null;
-  // Asked before the arming: a pointerdown that never navigated — a scroll or a
+  // Asked before the arming: a tap that never navigated — a scroll or a
   // long press started on a card — must not turn the way back around.
   if (goingBack()) {
     if (stacked === 0) return null;
     stacked--;
     return 'pop';
   }
-  if (armed) {
-    stacked++;
-    return 'push';
-  }
+  if (armed) return 'push';
   return null;
+}
+
+/** A push only earns a pop once its slide actually played — one skipped for
+ *  want of a dock (e.g. keyboard open) must not owe a pop that never showed. */
+export function confirmPush(slid: boolean): void {
+  if (slid) stacked++;
+}
+
+/** Gives back a page the slide stacked when nothing else in the hook will —
+ *  a swipe-back animates the trip itself and returns before {@link nextSlide}
+ *  ever runs. Skips a pair the morph owns: that push was never counted, so
+ *  this trip must not spend a budget that belongs to an earlier slide push. */
+export function releaseStackedPop(from: RouteNode, to: RouteNode): void {
+  if (stacked > 0 && !leavingPosterPage(from, to)) stacked--;
 }
 
 /** Where the bottom chrome starts, the FAB standing out of its cradle
