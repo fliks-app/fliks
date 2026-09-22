@@ -181,21 +181,13 @@
                           [title]="cellLabel(col, row[col.key])"
                           >{{ cellLabel(col, row[col.key]) }}</span
                         >
-                      } @else if (detailText(col, row); as detail) {
-                        <button
-                          type="button"
-                          class="link link-hover"
-                          (click)="openDetail(col, row)"
-                          [attr.aria-label]="col.detailTitleKey ?? col.labelKey | translate"
-                        >
-                          @if (badgeClass(col, row[col.key]); as badge) {
-                            <span class="badge badge-sm" [class]="badge">{{
-                              cellLabel(col, row[col.key])
-                            }}</span>
-                          } @else {
-                            {{ cellLabel(col, row[col.key]) }}
-                          }
-                        </button>
+                      } @else if (detailValue(col, row)) {
+                        <app-error-badge
+                          [error]="detailValue(col, row)"
+                          [label]="cellLabel(col, row[col.key])"
+                          [badgeClass]="badgeClass(col, row[col.key])"
+                          [titleKey]="col.detailTitleKey ?? col.labelKey"
+                        />
                       } @else if (badgeClass(col, row[col.key]); as badge) {
                         <app-progress-badge
                           [label]="cellLabel(col, row[col.key])"
@@ -318,28 +310,6 @@
   }
   <form method="dialog" class="modal-backdrop">
     <button type="button" (click)="closeRowDetail()" [attr.aria-label]="'common.close' | translate">
-      close
-    </button>
-  </form>
-</dialog>
-
-<dialog #detailDialog class="modal">
-  @if (detail(); as open) {
-    <div class="modal-box max-w-2xl">
-      <app-modal-header [title]="open.titleKey | translate" (closed)="closeDetail()" />
-      <pre
-        class="text-sm whitespace-pre-wrap break-words bg-base-200 rounded p-3 max-h-[60vh] overflow-auto"
-        >{{ open.text }}</pre
-      >
-      <app-modal-footer>
-        <button type="button" class="btn btn-ghost" (click)="closeDetail()">
-          {{ 'common.close' | translate }}
-        </button>
-      </app-modal-footer>
-    </div>
-  }
-  <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeDetail()" [attr.aria-label]="'common.close' | translate">
       close
     </button>
   </form>

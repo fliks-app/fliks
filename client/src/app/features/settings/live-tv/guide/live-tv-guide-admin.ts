@@ -11,12 +11,21 @@ import {
 } from '../../../../core/services/api/livetv-api.service';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
+import { ErrorBadgeComponent } from '../../../../shared/components/error-badge';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
 
 @Component({
   selector: 'app-live-tv-guide-admin',
-  imports: [FormsModule, TranslatePipe, LocaleDatePipe, TvSelectDirective, ModalHeaderComponent, ModalFooterComponent],
+  imports: [
+    FormsModule,
+    TranslatePipe,
+    LocaleDatePipe,
+    TvSelectDirective,
+    ModalHeaderComponent,
+    ModalFooterComponent,
+    ErrorBadgeComponent,
+  ],
   templateUrl: './live-tv-guide-admin.html',
 })
 export class LiveTvGuideAdminComponent implements OnInit {

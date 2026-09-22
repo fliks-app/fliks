@@ -37,6 +37,13 @@
                 <td class="text-sm text-base-content/60">
                   @if (row.lastSyncAt) {
                     {{ row.lastSyncAt | localeDate:{ dateStyle: 'short', timeStyle: 'short' } }}
+                    @if (row.lastSyncStatus === 'error') {
+                      <app-error-badge
+                        class="ml-1"
+                        [error]="row.lastSyncError"
+                        [label]="'common.error' | translate"
+                      />
+                    }
                   } @else {
                     {{ 'liveTv.admin.sources.never_synced' | translate }}
                   }

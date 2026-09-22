@@ -1,0 +1,20 @@
+@if (errorText()) {
+  <button
+    type="button"
+    class="link link-hover"
+    (click)="open()"
+    [attr.aria-label]="titleKey() | translate"
+  >
+    @if (badgeClass(); as bc) {
+      <span class="badge badge-sm" [ngClass]="bc">{{ label() }}</span>
+    } @else {
+      {{ label() }}
+    }
+  </button>
+} @else {
+  @if (badgeClass(); as bc) {
+    <span class="badge badge-sm" [ngClass]="bc">{{ label() }}</span>
+  } @else {
+    {{ label() }}
+  }
+}

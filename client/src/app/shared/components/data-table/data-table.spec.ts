@@ -1,8 +1,9 @@
 import { WritableSignal, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { TranslateLoader, TranslateService, provideTranslateService } from '@ngx-translate/core';
+import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { Subject, of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { DataTableComponent } from './data-table';
@@ -395,7 +396,7 @@ describe('DataTableComponent — declared filters', () => {
     expect(badges[0].className).toContain('badge-error');
   });
 
-  it('VERDICT: a cell with a detail opens a dialog showing it, and one without is not a button', async () => {
+  it('VERDICT: a cell with a detail renders app-error-badge, one without is not a button', async () => {
     const fixture = await createComponent({
       http: {
         get: () =>
@@ -418,28 +419,17 @@ describe('DataTableComponent — declared filters', () => {
     const [status] = c.columns();
     const rows = c.rows();
 
-    expect(c.detailText(status, rows[0])).toBe('tracker refused: 403');
-    // Nothing to show: the badge stays inert rather than opening an empty dialog.
-    expect(c.detailText(status, rows[1])).toBe('');
+    expect(c.detailValue(status, rows[0])).toBe('tracker refused: 403');
+    // Nothing to show: the cell falls through to its plain badge instead of a button.
+    expect(c.detailValue(status, rows[1])).toBeNull();
     expect(fixture.nativeElement.querySelectorAll('tbody button').length).toBe(1);
+    expect(fixture.nativeElement.querySelectorAll('app-error-badge').length).toBe(1);
 
-    c.openDetail(status, rows[1]);
-    expect(c.detail()).toBeNull();
-
-    c.openDetail(status, rows[0]);
-    expect(c.detail()).toEqual({ titleKey: 'x.detail_title', text: 'tracker refused: 403' });
-    fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('dialog pre').textContent).toContain('403');
-    const dialog = Array.from(
-      fixture.nativeElement.querySelectorAll('dialog') as NodeListOf<HTMLDialogElement>,
-    ).find((d) => d.querySelector('pre'))!;
-    expect(dialog.hasAttribute('open')).toBe(true);
-
-    c.closeDetail();
-    fixture.detectChanges();
-    // The element stays mounted so daisyUI can animate the close; `open` is what shows it.
-    expect(dialog.hasAttribute('open')).toBe(false);
-    expect(dialog.isConnected).toBe(true);
+    const badge = fixture.debugElement.query(By.css('app-error-badge')).componentInstance;
+    expect(badge.error()).toBe('tracker refused: 403');
+    expect(badge.label()).toBe('failed');
+    expect(badge.badgeClass()).toBe('badge-error');
+    expect(badge.titleKey()).toBe('x.detail_title');
   });
 
   it('renders declared sub-values under the cell, skipping the ones the row has no value for', async () => {
@@ -885,39 +875,6 @@ describe('DataTableComponent — a cell that links', () => {
   it('a column declaring no linkActionId never links', async () => {
     const fixture = await createComponent({ http: { get: () => of([]) }, resolveAction: () => vi.fn() });
     expect(fixture.componentInstance.cellLink({ key: 'name', labelKey: 'x' }, { id: 1 })).toBeUndefined();
-  });
-});
-
-describe('DataTableComponent — a plugin message that is an i18n key', () => {
-  // `detailField` and a `detail` field both carry whatever the plugin put on the row: sometimes
-  // one of its own keys, sometimes raw text from a filesystem or an HTTP client.
-  const TRANSLATED = 'plugin.msg.removed';
-  const COL: TableColumn = { key: 'status', labelKey: 'x.status', detailField: 'statusMessage' };
-
-  async function withTranslation(row: TableRow) {
-    const fixture = await createComponent({ http: { get: () => of([row]) }, columns: [COL] });
-    // `instant` echoes an unknown key back, which is what the fallback keys off.
-    const translate = TestBed.inject(TranslateService);
-    translate.setTranslation('en', { [TRANSLATED]: 'Removed by an operator' }, true);
-    return fixture;
-  }
-
-  it('VERDICT: renders the declared wording, not the raw key', async () => {
-    const row = { id: 1, status: 'failed', statusMessage: TRANSLATED };
-    const fixture = await withTranslation(row);
-    expect(fixture.componentInstance.detailText(COL, row)).toBe('Removed by an operator');
-  });
-
-  it('leaves raw text alone — a filesystem error is not a key', async () => {
-    const row = { id: 1, status: 'failed', statusMessage: 'ENOENT: no such file' };
-    const fixture = await withTranslation(row);
-    expect(fixture.componentInstance.detailText(COL, row)).toBe('ENOENT: no such file');
-  });
-
-  it('a row with no message opens nothing', async () => {
-    const row = { id: 1, status: 'failed', statusMessage: '' };
-    const fixture = await withTranslation(row);
-    expect(fixture.componentInstance.detailText(COL, row)).toBe('');
   });
 });
 

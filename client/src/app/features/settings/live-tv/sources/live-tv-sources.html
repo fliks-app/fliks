@@ -52,7 +52,11 @@
                 @if (row.lastSyncAt) {
                   {{ row.lastSyncAt | localeDate:{ dateStyle: 'short', timeStyle: 'short' } }}
                   @if (row.lastSyncStatus === 'error') {
-                    <span class="badge badge-error badge-xs ml-1">{{ 'common.error' | translate }}</span>
+                    <app-error-badge
+                      class="ml-1"
+                      [error]="row.lastSyncError"
+                      [label]="'common.error' | translate"
+                    />
                   }
                 } @else {
                   {{ 'liveTv.admin.sources.never_synced' | translate }}

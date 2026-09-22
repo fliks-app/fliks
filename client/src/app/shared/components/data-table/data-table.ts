@@ -20,6 +20,7 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { formatBytes, formatSpeed } from '../../utils/download-format';
 import { safeExternalUrl } from '../../utils/safe-url';
+import { translatedServerMessage } from '../../../core/utils/server-message';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { SKIP_ERROR_TOAST } from '../../../core/interceptors/error.interceptor';
 import { ToastService } from '../../../core/services/toast.service';
@@ -42,6 +43,7 @@ import {
 import { ModalHeaderComponent } from '../modal-header';
 import { PopoverMenuComponent } from '../popover-menu';
 import { ModalFooterComponent } from '../modal-footer';
+import { ErrorBadgeComponent } from '../error-badge';
 
 /** Keystroke-to-request debounce for a `search` filter — see `onSearchInput`. */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -71,7 +73,8 @@ const BADGE_CLASSES: Readonly<Record<BadgeTone, string>> = {
  */
 @Component({
   selector: 'app-data-table',
-  imports: [TvSelectDirective, 
+  imports: [
+    TvSelectDirective,
     PopoverMenuComponent,
     LucideEllipsisVertical,
     ModalFooterComponent,
@@ -80,6 +83,7 @@ const BADGE_CLASSES: Readonly<Record<BadgeTone, string>> = {
     LocaleDatePipe,
     PaginationComponent,
     ProgressBadgeComponent,
+    ErrorBadgeComponent,
   ],
   providers: [LocaleDatePipe],
   templateUrl: './data-table.html',
@@ -132,14 +136,9 @@ export class DataTableComponent implements OnInit {
   readonly selectedIds = signal<ReadonlySet<TableRow['id']>>(new Set());
   readonly bulkBusy = signal(false);
 
-  /** Both dialogs stay mounted and are driven by `showModal()`/`close()`: an `@if` around the
-   *  element unmounts it on close, and daisyUI animates the exit on the element that remains. */
+  /** Stays mounted and is driven by `showModal()`/`close()`: an `@if` around the element
+   *  unmounts it on close, and daisyUI animates the exit on the element that remains. */
   private readonly rowDetailDialog = viewChild<ElementRef<HTMLDialogElement>>('rowDetailDialog');
-  private readonly detailDialog = viewChild<ElementRef<HTMLDialogElement>>('detailDialog');
-
-  /** The detail dialog's title key and text. Kept after a close so the box has something to
-   *  render while it animates out. */
-  readonly detail = signal<{ titleKey: string; text: string } | null>(null);
 
   /** The `detail` row action's dialog: its title and the lines that had a value. */
   readonly rowDetail = signal<{
@@ -328,7 +327,10 @@ export class DataTableComponent implements OnInit {
         continue;
       }
       const text = this.subValueText(field, value);
-      lines.push({ labelKey: field.labelKey, text: field.format ? text : this.resolveMessage(text) });
+      // A plugin's row message is sometimes one of its own i18n keys, sometimes raw text from
+      // whatever it talks to; a key resolves, anything else is shown as it came.
+      const resolved = field.format ? text : (translatedServerMessage(text, this.translate) ?? text);
+      lines.push({ labelKey: field.labelKey, text: resolved });
     }
     return lines;
   }
@@ -349,34 +351,13 @@ export class DataTableComponent implements OnInit {
     return percent >= 100 ? null : percent;
   }
 
-  /**
-   * A message a plugin puts on a row is sometimes one of its own i18n keys ("removed by an
-   * operator") and sometimes raw text from whatever it talks to (a filesystem error). A key
-   * resolves through the plugin's manifest dictionary, merged into the active language at boot;
-   * anything else is shown as it came, which is the same fallback the provider pages use.
-   */
-  private resolveMessage(text: string): string {
-    const translated = this.translate.instant(text);
-    return translated === text ? text : translated;
-  }
 
-  /** The row's detail text for this column, or '' when there is none to open. A cell only
-   *  becomes a button when it has something to show. */
-  detailText(col: TableColumn, row: TableRow): string {
-    if (!col.detailField) return '';
+  /** The row's raw detail text for this column, or null when there is none — `app-error-badge`
+   *  resolves and trims it itself, this only decides whether the cell becomes a button. */
+  detailValue(col: Pick<TableColumn, 'detailField'>, row: TableRow): string | null {
+    if (!col.detailField) return null;
     const raw = String(row[col.detailField] ?? '').trim();
-    return raw ? this.resolveMessage(raw) : '';
-  }
-
-  openDetail(col: TableColumn, row: TableRow): void {
-    const text = this.detailText(col, row);
-    if (!text) return;
-    this.detail.set({ titleKey: col.detailTitleKey ?? col.labelKey, text });
-    this.detailDialog()?.nativeElement.showModal();
-  }
-
-  closeDetail(): void {
-    this.detailDialog()?.nativeElement.close();
+    return raw || null;
   }
 
   /** Sub-values render as their own badge or text, reusing the column rules one level down. */

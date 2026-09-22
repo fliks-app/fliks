@@ -7,6 +7,7 @@ import {
   AdminChannelStream,
 } from '../../../../core/services/api/livetv-api.service';
 import { PaginationComponent } from '../../../../shared/components/pagination/pagination';
+import { ErrorBadgeComponent } from '../../../../shared/components/error-badge';
 import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
 
 const PAGE_SIZE = 25;
@@ -31,7 +32,7 @@ function channelHealthScore(c: AdminChannel): number {
 
 @Component({
   selector: 'app-live-tv-health',
-  imports: [TranslatePipe, PaginationComponent, LocaleDatePipe],
+  imports: [TranslatePipe, PaginationComponent, LocaleDatePipe, ErrorBadgeComponent],
   templateUrl: './live-tv-health.html',
 })
 export class LiveTvHealthComponent implements OnInit {

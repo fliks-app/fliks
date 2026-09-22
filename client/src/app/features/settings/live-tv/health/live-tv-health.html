@@ -14,7 +14,7 @@
           <div class="flex flex-wrap items-center gap-2 p-3 rounded-lg border border-base-200">
             <span class="font-medium">{{ s.name }}</span>
             @if (s.lastSyncStatus === 'error') {
-              <span class="badge badge-error badge-sm">{{ 'common.error' | translate }}</span>
+              <app-error-badge [error]="s.lastSyncError" [label]="'common.error' | translate" />
             } @else if (s.lastSyncStatus === 'never') {
               <span class="badge badge-ghost badge-sm">{{ 'liveTv.admin.sources.never_synced' | translate }}</span>
             } @else {
@@ -24,9 +24,6 @@
               <span class="text-sm text-base-content/60">
                 {{ s.lastSyncAt | localeDate:{ dateStyle: 'short', timeStyle: 'short' } }}
               </span>
-            }
-            @if (s.lastSyncStatus === 'error' && s.lastSyncError) {
-              <span class="text-sm text-error/80 basis-full truncate">{{ s.lastSyncError }}</span>
             }
           </div>
         }
@@ -81,7 +78,10 @@
                       <span class="text-base-content/40">{{ 'liveTv.admin.health.never_ok' | translate }}</span>
                     }
                     @if (s.stream.lastError) {
-                      <span class="text-error/80 basis-full truncate">{{ s.stream.lastError }}</span>
+                      <app-error-badge
+                        [error]="s.stream.lastError"
+                        [label]="'common.error' | translate"
+                      />
                     }
                   </div>
                 }
