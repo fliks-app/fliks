@@ -2727,7 +2727,8 @@
     "toggle_favorite": "Favorit umschalten",
     "watch": "Ansehen",
     "on_now": {
-      "next_label": "Danach:"
+      "next_label": "Danach:",
+      "load_error": "Die Senderliste konnte nicht geladen werden."
     },
     "guide": {
       "filter_group": "Gruppe",

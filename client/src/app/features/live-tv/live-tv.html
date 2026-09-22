@@ -35,6 +35,13 @@
         <div class="skeleton h-24 w-full rounded-lg"></div>
       }
     </div>
+  } @else if (loadError()) {
+    <div class="flex flex-col items-center gap-3 py-16 text-center">
+      <p class="text-base-content/50">{{ 'liveTv.on_now.load_error' | translate }}</p>
+      <button type="button" class="btn btn-sm" (click)="load(true)">
+        {{ 'common.retry' | translate }}
+      </button>
+    </div>
   } @else if (isEmpty()) {
     <div class="flex flex-col items-center gap-3 py-16 text-center">
       <svg lucideTv class="h-10 w-10 text-base-content/30"></svg>
@@ -55,10 +62,11 @@
           data-no-focus-ring
           type="search"
           class="grow"
+          maxlength="200"
           [placeholder]="'common.search' | translate"
           [attr.aria-label]="'common.search' | translate"
           [ngModel]="query()"
-          (ngModelChange)="query.set($event)"
+          (ngModelChange)="onQueryInput($event)"
         />
       </label>
       <select
@@ -66,7 +74,7 @@
         [appTvSelect]="'liveTv.guide.filter_group' | translate"
         [attr.aria-label]="'liveTv.guide.filter_group' | translate"
         [ngModel]="groupFilter()"
-        (ngModelChange)="groupFilter.set($event)"
+        (ngModelChange)="onGroupChange($event)"
       >
         <option value="">{{ 'liveTv.guide.all_groups' | translate }}</option>
         @for (g of groups(); track g) {
@@ -114,11 +122,15 @@
 </div>
 
 <ng-template #card let-entry>
-  <button
-    type="button"
+  <div
     [attr.data-channel-focus]="entry.channel.id"
-    class="flex items-center gap-3 p-3 rounded-lg border border-base-200 hover:border-primary/40 text-start bg-base-100"
+    class="flex items-center gap-3 p-3 rounded-lg border border-base-200 hover:border-primary/40 text-start bg-base-100 cursor-pointer"
+    role="button"
+    tabindex="0"
+    [attr.aria-label]="entry.channel.name"
     (click)="watch(entry)"
+    (keydown.enter)="watch(entry)"
+    (keydown.space)="watch(entry); $event.preventDefault()"
   >
     <div class="w-12 h-12 rounded bg-base-200 flex items-center justify-center shrink-0 overflow-hidden">
       @if (showLogo(entry)) {
@@ -158,5 +170,5 @@
     >
       <svg lucideStar class="h-4 w-4" [attr.fill]="entry.channel.favorite ? 'currentColor' : 'none'"></svg>
     </button>
-  </button>
+  </div>
 </ng-template>

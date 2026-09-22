@@ -2754,7 +2754,8 @@
     "toggle_favorite": "Toggle favorite",
     "watch": "Watch",
     "on_now": {
-      "next_label": "Next:"
+      "next_label": "Next:",
+      "load_error": "Unable to load the channel list."
     },
     "guide": {
       "filter_group": "Group",

@@ -22,6 +22,8 @@ interface OnNowGroup {
 
 /** Cards per fetch, matching the endpoint's own page-size cap. */
 const PAGE_SIZE = 50;
+/** Same debounce as the free-text search field elsewhere (search.ts). */
+const QUERY_DEBOUNCE_MS = 350;
 
 @Component({
   selector: 'app-live-tv',
@@ -49,39 +51,26 @@ export class LiveTvComponent implements OnInit, OnDestroy {
 
   private readonly sentinel = viewChild<ElementRef<HTMLElement>>('sentinel');
   private observer?: IntersectionObserver;
-  private loadingAll = false;
+  private loadSeq = 0;
+  private queryDebounce: ReturnType<typeof setTimeout> | null = null;
 
   readonly tab = signal<'on-now' | 'guide'>('on-now');
   readonly loading = signal(true);
   readonly loadingMore = signal(false);
+  readonly loadError = signal(false);
   readonly entries = signal<OnNowEntry[]>([]);
   readonly page = signal(1);
   readonly total = signal(0);
   readonly query = signal('');
   readonly groupFilter = signal('');
+  readonly groups = signal<string[]>([]);
 
   readonly hasMore = computed(() => this.entries().length < this.total());
 
-  readonly groups = computed(() => {
-    const set = new Set<string>();
-    for (const e of this.entries()) if (e.channel.groupName) set.add(e.channel.groupName);
-    return [...set].sort();
-  });
-
-  private readonly filteredEntries = computed(() => {
-    const q = this.query().trim().toLowerCase();
-    const group = this.groupFilter();
-    return this.entries().filter((e) => {
-      if (group && e.channel.groupName !== group) return false;
-      if (q && !e.channel.name.toLowerCase().includes(q)) return false;
-      return true;
-    });
-  });
-
-  readonly favoriteEntries = computed(() => this.filteredEntries().filter((e) => e.channel.favorite));
+  readonly favoriteEntries = computed(() => this.entries().filter((e) => e.channel.favorite));
 
   readonly groupedEntries = computed<OnNowGroup[]>(() => {
-    const rest = this.filteredEntries().filter((e) => !e.channel.favorite);
+    const rest = this.entries().filter((e) => !e.channel.favorite);
     const map = new Map<string, OnNowEntry[]>();
     for (const e of rest) {
       const key = e.channel.groupName ?? '';
@@ -93,7 +82,9 @@ export class LiveTvComponent implements OnInit, OnDestroy {
       .map(([groupName, items]) => ({ groupName, items }));
   });
 
-  readonly isEmpty = computed(() => !this.loading() && this.entries().length === 0);
+  readonly isEmpty = computed(
+    () => !this.loading() && !this.loadError() && this.entries().length === 0,
+  );
 
   readonly failedLogos = signal<ReadonlySet<number>>(new Set());
 
@@ -105,18 +96,14 @@ export class LiveTvComponent implements OnInit, OnDestroy {
     return !!entry.channel.logoPath && !this.failedLogos().has(entry.channel.id);
   }
 
-  /** A typed search or a picked group only ever matches loaded cards, so a
-   *  filter in play pulls in the rest of the lineup page by page. */
-  private readonly autoLoadForFilter = effect(() => {
-    if (this.query().trim() || this.groupFilter()) void this.loadAllRemaining();
-  });
-
   ngOnInit(): void {
-    void this.load();
+    void this.loadGroups();
+    void this.load(true);
   }
 
   ngOnDestroy(): void {
     this.observer?.disconnect();
+    if (this.queryDebounce) clearTimeout(this.queryDebounce);
   }
 
   private readonly bindSentinel = effect(() => {
@@ -125,51 +112,65 @@ export class LiveTvComponent implements OnInit, OnDestroy {
     if (!el) return;
     this.observer = new IntersectionObserver(
       (observed) => {
-        if (observed[0]?.isIntersecting) void this.loadMore();
+        if (observed[0]?.isIntersecting) void this.load(false);
       },
       { rootMargin: '600px' },
     );
     this.observer.observe(el);
   });
 
-  private async load(): Promise<void> {
-    this.loading.set(true);
-    this.page.set(1);
+  private async loadGroups(): Promise<void> {
     try {
-      this.applyPage(await this.api.getOnNow({ page: 1, pageSize: PAGE_SIZE }), true);
+      const channels = await this.api.getChannels();
+      const set = new Set<string>();
+      for (const c of channels) if (c.groupName) set.add(c.groupName);
+      this.groups.set([...set].sort());
     } catch {
-      // handled by the global error interceptor
-    } finally {
-      this.loading.set(false);
+      // filter dropdown stays empty; not fatal
     }
   }
 
-  async loadMore(): Promise<void> {
-    if (!this.hasMore() || this.loadingMore() || this.loading()) return;
-    this.loadingMore.set(true);
-    const nextPage = this.page() + 1;
+  onQueryInput(value: string): void {
+    this.query.set(value);
+    if (this.queryDebounce) clearTimeout(this.queryDebounce);
+    this.queryDebounce = setTimeout(() => void this.load(true), QUERY_DEBOUNCE_MS);
+  }
+
+  onGroupChange(value: string): void {
+    this.groupFilter.set(value);
+    void this.load(true);
+  }
+
+  async load(reset: boolean): Promise<void> {
+    if (reset) {
+      this.page.set(1);
+      this.entries.set([]);
+      this.total.set(0);
+      this.loadingMore.set(false); // a reset supersedes any pagination fetch in flight
+    } else if (!this.hasMore() || this.loadingMore() || this.loading()) {
+      return;
+    }
+    const seq = ++this.loadSeq;
+    const requestedPage = reset ? 1 : this.page() + 1;
+    (reset ? this.loading : this.loadingMore).set(true);
     try {
-      const res = await this.api.getOnNow({ page: nextPage, pageSize: PAGE_SIZE });
-      this.page.set(nextPage);
-      this.applyPage(res, false);
+      const res = await this.api.getOnNow({
+        page: requestedPage,
+        pageSize: PAGE_SIZE,
+        query: this.query().trim() || undefined,
+        group: this.groupFilter() || undefined,
+      });
+      if (seq !== this.loadSeq) return;
+      if (!reset) this.page.set(requestedPage);
+      this.applyPage(res, reset);
+      this.loadError.set(false);
     } catch {
-      // handled by the global error interceptor
+      if (seq === this.loadSeq) this.loadError.set(true);
     } finally {
-      this.loadingMore.set(false);
+      if (seq === this.loadSeq) (reset ? this.loading : this.loadingMore).set(false);
     }
   }
 
-  private async loadAllRemaining(): Promise<void> {
-    if (this.loadingAll) return;
-    this.loadingAll = true;
-    try {
-      while (this.hasMore() && !this.loading()) await this.loadMore();
-    } finally {
-      this.loadingAll = false;
-    }
-  }
-
-  /** Narrow fallback for the old bare-array response, kept for one release. */
   private applyPage(res: OnNowPage, reset: boolean): void {
     this.total.set(res.total);
     this.entries.update((cur) => (reset ? res.entries : [...cur, ...res.entries]));
