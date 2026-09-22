@@ -5,6 +5,7 @@ import {
   inject,
   signal,
   computed,
+  effect,
   viewChild,
   ElementRef,
   DestroyRef,
@@ -13,7 +14,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   LiveTvApiService,
@@ -35,6 +36,7 @@ import {
   releaseEngineSurface,
 } from '../../../core/services/playback-engine/engine-surface';
 import {
+  classifyPlaybackError,
   formatErrorDiagnostics,
   userMessageKeyFor,
   type PlaybackError,
@@ -50,13 +52,28 @@ import {
 } from '../../player/overlay/player-stats-overlay';
 import { programmeProgressPercent } from '../programme-progress';
 
+/** Same native plugins as the VOD player (player.ts), duplicated rather than shared. */
+interface ImmersivePlugin {
+  enter(options?: { displayBehindNotch?: boolean }): Promise<void>;
+  exit(): Promise<void>;
+  setLightStatusBar(options: { light: boolean }): Promise<void>;
+}
+const Immersive = registerPlugin<ImmersivePlugin>('Immersive');
+
+interface OrientationPlugin {
+  lock(): Promise<void>;
+  unlock(): Promise<void>;
+}
+const Orientation = registerPlugin<OrientationPlugin>('Orientation');
+
 /** How far back a rewind press steps, inside the DVR window. */
 const REWIND_STEP_SECONDS = 10;
 /** Rewind below this reads as "at live": it is measured against the live point,
  *  not the manifest edge, so it needs no room for the player's own latency. */
 const LIVE_EDGE_TOLERANCE_SECONDS = 1;
-/** Refreshes the on-now overlay (progress bar, next line) without a per-second timer. */
-const CHANNEL_REFRESH_MS = 30_000;
+/** A full 500-channel page each tick, so this stays minutes apart, not seconds;
+ *  the mini guide forces its own refresh when opened. */
+const CHANNEL_REFRESH_MS = 120_000;
 const NUMBER_ENTRY_COMMIT_MS = 1_500;
 /** Channel up and down walk the whole lineup, not one screen of it. */
 const ZAP_LIST_PAGE_SIZE = 500;
@@ -98,6 +115,10 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     this.isDesktopNative,
   );
   private readonly isIosNative = Capacitor.getPlatform() === 'ios';
+  /** Orientation.lock() (native iOS) has no Android counterpart — same gate as player.ts. */
+  readonly canLockOrientation = this.isIosNative;
+  readonly orientationLocked = signal(false);
+  private readonly isLandscape = signal(screen.orientation?.type?.startsWith('landscape') ?? false);
   private readonly surfaceKind = engineSurfaceKind({
     tvPlatform: this.device.tvPlatform(),
     isDesktopNative: this.device.desktopPlatform() === 'electron',
@@ -213,6 +234,20 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   readonly isNative = this.serverConfig.isNative;
   readonly pipAvailable = computed(() => !this.device.isTv() && !this.serverConfig.isNative);
 
+  // Immersive mode: landscape=always, portrait=only while playing with controls hidden.
+  private readonly immersiveEffect = effect(() => {
+    if (!this.isNative) return;
+    const shouldBeImmersive = this.isLandscape() || (!this.paused() && !this.chrome.visible());
+    if (shouldBeImmersive) {
+      Immersive.enter({ displayBehindNotch: true }).catch(() => {});
+      document.body.classList.add('immersive');
+    } else {
+      Immersive.exit().catch(() => {});
+      document.body.classList.remove('immersive');
+      Immersive.setLightStatusBar({ light: false }).catch(() => {});
+    }
+  });
+
   readonly currentEntry = computed<OnNowEntry | null>(
     () => this.channels().find((e) => e.channel.id === this.currentChannelId()) ?? null,
   );
@@ -225,6 +260,11 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
 
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
   private numberBufferTimer: ReturnType<typeof setTimeout> | null = null;
+  private miniGuideScrollTimer: ReturnType<typeof setTimeout> | null = null;
+  private tuneSeq = 0;
+  /** Mirrors `session()?.sessionId`, but a concurrent `tune()` never nulls it
+   *  early, so the next call can still find and stop the session it replaces. */
+  private currentSessionId: string | null = null;
 
   ngOnInit(): void {
     window.addEventListener('keydown', this.onKeydownCapture, true);
@@ -241,6 +281,19 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     window.addEventListener('pagehide', this.releaseOnUnload);
     window.addEventListener('app:playerBack', this.onPlayerBackEvent);
     this.refreshTimer = setInterval(() => void this.refreshChannels(), CHANNEL_REFRESH_MS);
+    if (this.isNative) {
+      screen.orientation?.addEventListener('change', this.onOrientationChange);
+    }
+  }
+
+  private readonly onOrientationChange = (): void => {
+    this.isLandscape.set(screen.orientation?.type?.startsWith('landscape') ?? false);
+  };
+
+  onToggleOrientationLock(): void {
+    const locked = !this.orientationLocked();
+    this.orientationLocked.set(locked);
+    (locked ? Orientation.lock() : Orientation.unlock()).catch(() => {});
   }
 
   /** Hardware back and desktop Escape reach every player through app.ts, which
@@ -261,25 +314,36 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   /** The browser gives no async time on a tab close, so the release goes out
    *  through a keepalive request rather than the Angular client. */
   private readonly releaseOnUnload = (): void => {
-    const id = this.session()?.sessionId;
+    const id = this.currentSessionId ?? this.session()?.sessionId;
     if (id) this.api.stopSessionOnUnload(id);
   };
 
   ngOnDestroy(): void {
+    // Supersede any in-flight tune(): its late session must release itself,
+    // not land in a destroyed engine.
+    this.tuneSeq++;
     window.removeEventListener('keydown', this.onKeydownCapture, true);
     window.removeEventListener('pagehide', this.releaseOnUnload);
     window.removeEventListener('app:playerBack', this.onPlayerBackEvent);
     if (this.refreshTimer) clearInterval(this.refreshTimer);
     if (this.numberBufferTimer) clearTimeout(this.numberBufferTimer);
+    if (this.miniGuideScrollTimer) clearTimeout(this.miniGuideScrollTimer);
     if (this.statsTimer) clearInterval(this.statsTimer);
     void this.teardownSession();
     void this.engine?.destroy();
     releaseEngineSurface();
+    if (this.isNative) {
+      screen.orientation?.removeEventListener('change', this.onOrientationChange);
+      if (this.isIosNative) Orientation.unlock().catch(() => {});
+      Immersive.exit().catch(() => {});
+      document.body.classList.remove('immersive');
+    }
   }
 
   private async bootstrap(): Promise<void> {
-    await this.refreshChannels();
-    await this.tune(this.currentChannelId());
+    // The zap list's now/next payload is only for the overlay; video start
+    // shouldn't wait behind it on a slow connection.
+    await Promise.all([this.tune(this.currentChannelId()), this.refreshChannels()]);
   }
 
   private async refreshChannels(): Promise<void> {
@@ -294,52 +358,72 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   }
 
   private async tune(channelId: number): Promise<void> {
+    // A zap fired while a previous one is still awaiting release/play must not
+    // let a late resolution overwrite a more recent one's session or engine load.
+    const seq = ++this.tuneSeq;
     this.loading.set(true);
     // The next channel brings its own timeline; carrying the mapping over would
     // show the previous one's clock until the drift check caught up.
     this.playbackError.set(null);
     this.clockAnchor = null;
     this.baselineLatencyMs = Number.POSITIVE_INFINITY;
-    const previousSessionId = this.session()?.sessionId;
+    // Read from a field, not `this.session()`: a concurrent call may already
+    // have nulled the signal, which would hide the session this one must stop.
+    const outgoingSessionId = this.currentSessionId;
     this.currentChannelId.set(channelId);
     // Released before tuning, not after: a subscription capped at one connection
     // answers 409 to every zap while the outgoing channel still holds the slot.
-    if (previousSessionId) {
+    if (outgoingSessionId) {
       this.session.set(null);
-      await this.api.stopSession(previousSessionId).catch(() => {});
+      await this.api.stopSession(outgoingSessionId).catch(() => {});
+      this.currentSessionId = null;
+      if (seq !== this.tuneSeq) return;
     }
     try {
       const session = await this.api.play(channelId, {
         directPlay: supportsLiveDirectPlay(this.engineKind, this.isIosNative),
         useTs: liveNeedsTs(this.engineKind),
       });
+      if (seq !== this.tuneSeq) {
+        // A later zap already won; don't leak this session or fight over the engine.
+        void this.api.stopSession(session.sessionId).catch(() => {});
+        return;
+      }
+      this.currentSessionId = session.sessionId;
       this.session.set(session);
       await this.loadIntoEngine(session);
+      if (seq !== this.tuneSeq) return;
       this.liveEdgeReached.set(true);
     } catch (err) {
-      this.handlePlayError(err);
+      if (seq === this.tuneSeq) this.handlePlayError(err);
       return;
     } finally {
-      this.loading.set(false);
+      if (seq === this.tuneSeq) this.loading.set(false);
     }
   }
 
+  /** Only a channel that genuinely can't be played (gone, or out of reach)
+   *  sends the viewer back; everything else — capacity, a transient 5xx, a
+   *  timeout — surfaces on the retry overlay instead, same as an engine error. */
   private handlePlayError(err: unknown): void {
+    if (err instanceof HttpErrorResponse && (err.status === 404 || err.status === 403)) {
+      this.toast.error(this.translate.instant('liveTv.error_play_failed'));
+      void this.router.navigate(['/live-tv'], { state: { rootEntry: true } });
+      return;
+    }
     const body =
       err instanceof HttpErrorResponse
         ? (err.error as { code?: string; sourceName?: string; limit?: number } | null)
         : null;
-    if (err instanceof HttpErrorResponse && err.status === 409 && body?.code === 'livetv_source_at_capacity') {
-      this.toast.error(
-        this.translate.instant('liveTv.error_at_capacity', {
-          sourceName: body.sourceName ?? '',
-          limit: body.limit ?? 0,
-        }),
-      );
-    } else {
-      this.toast.error(this.translate.instant('liveTv.error_play_failed'));
-    }
-    void this.router.navigate(['/live-tv'], { state: { rootEntry: true } });
+    const userMessage =
+      err instanceof HttpErrorResponse && err.status === 409 && body?.code === 'livetv_source_at_capacity'
+        ? this.translate.instant('liveTv.error_at_capacity', {
+            sourceName: body.sourceName ?? '',
+            limit: body.limit ?? 0,
+          })
+        : this.translate.instant('liveTv.error_play_failed');
+    const { source, code } = classifyPlaybackError(err);
+    this.playbackError.set({ userMessage, source, code });
   }
 
   private async ensureEngine(): Promise<PlaybackEngine> {
@@ -511,8 +595,11 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     }
     this.miniGuideOpen.set(true);
     this.chrome.show();
+    void this.refreshChannels();
+    if (this.miniGuideScrollTimer) clearTimeout(this.miniGuideScrollTimer);
     // A hundred channels in: open on the one being watched, not on the top.
-    setTimeout(() => {
+    this.miniGuideScrollTimer = setTimeout(() => {
+      this.miniGuideScrollTimer = null;
       const row = this.miniGuideEl()?.nativeElement.querySelector(
         `[data-channel-id="${this.currentChannelId()}"]`,
       );
@@ -524,6 +611,10 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   /** The panel goes inert on close, so focus has to leave it or the next
    *  D-pad press starts from an element no one can see. */
   private closeMiniGuide(): void {
+    if (this.miniGuideScrollTimer) {
+      clearTimeout(this.miniGuideScrollTimer);
+      this.miniGuideScrollTimer = null;
+    }
     this.miniGuideOpen.set(false);
     const inPanel = document.activeElement?.closest('[data-channel-id]');
     if (inPanel) this.guideBtn()?.nativeElement.focus({ preventScroll: true });
@@ -689,7 +780,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   }
 
   private async teardownSession(): Promise<void> {
-    const id = this.session()?.sessionId;
+    const id = this.currentSessionId ?? this.session()?.sessionId;
     if (id) await this.api.stopSession(id).catch(() => {});
   }
 
