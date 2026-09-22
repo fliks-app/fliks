@@ -13,18 +13,14 @@ export class EnabledSwitchComponent {
   readonly ariaLabelKey = input('common.active');
   readonly toggle = output<void>();
 
-  private readonly checkbox = viewChild.required<ElementRef<HTMLInputElement>>('checkbox');
-  private wasBusy = false;
+  private readonly checkbox = viewChild<ElementRef<HTMLInputElement>>('checkbox');
 
   constructor() {
     // A failed toggle leaves `enabled` unchanged, so [checked] has nothing to diff;
-    // write `.checked` directly once `busy` clears, bypassing that binding.
+    // write `.checked` directly whenever nothing is in flight, bypassing that binding.
     effect(() => {
-      const busy = this.busy();
-      if (this.wasBusy && !busy) {
-        this.checkbox().nativeElement.checked = this.enabled();
-      }
-      this.wasBusy = busy;
+      const box = this.checkbox();
+      if (box && !this.busy()) box.nativeElement.checked = this.enabled();
     });
   }
 

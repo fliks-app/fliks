@@ -49,20 +49,27 @@ describe('EnabledSwitchComponent', () => {
     expect(checkbox.checked).toBe(true);
     expect(emitted.length).toBe(1);
 
-    // Parent's request fails: busy clears without `enabled` ever changing.
+    // Parent's request fails: busy clears without `enabled` ever changing. No
+    // settle in between — a request that resolves in microtasks never renders busy.
     fixture.componentRef.setInput('busy', true);
-    await settle(fixture);
     fixture.componentRef.setInput('busy', false);
     await settle(fixture);
 
     expect(checkbox.checked).toBe(false);
   });
 
-  it('leaves the checkbox alone while busy stays false with no toggle', async () => {
+  it('VERDICT: keeps the new state when the parent accepts the toggle', async () => {
     const fixture = createFixture();
     await settle(fixture);
     const checkbox = checkboxOf(fixture);
-    expect(checkbox.checked).toBe(false);
+
+    checkbox.click();
+    fixture.componentRef.setInput('busy', true);
+    fixture.componentRef.setInput('enabled', true);
+    fixture.componentRef.setInput('busy', false);
+    await settle(fixture);
+
+    expect(checkbox.checked).toBe(true);
   });
 
   it('disables the checkbox while busy', async () => {
