@@ -7,6 +7,7 @@ import {
   Min,
 } from 'class-validator';
 import type { LiveTvSourceKind } from '../entities/livetv-source.entity';
+import { IsPlaylistLocation } from './playlist-location.validator';
 
 export class CreateLiveTvSourceDto {
   @IsString()
@@ -15,7 +16,7 @@ export class CreateLiveTvSourceDto {
   @IsIn(['m3u', 'xtream'])
   kind: LiveTvSourceKind;
 
-  @IsString()
+  @IsPlaylistLocation()
   url: string;
 
   @IsOptional()

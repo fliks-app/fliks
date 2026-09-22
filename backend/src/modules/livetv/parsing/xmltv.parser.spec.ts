@@ -168,4 +168,12 @@ describe('decodeXmlText', () => {
     expect(decodeXmlText('<![CDATA[a & b]]>')).toBe('a & b');
     expect(decodeXmlText('&#x41;&#66;&amp;')).toBe('AB&');
   });
+
+  it('leaves an out-of-range numeric entity untouched instead of throwing', () => {
+    expect(() => decodeXmlText('&#xFFFFFF;')).not.toThrow();
+    expect(decodeXmlText('&#xFFFFFF;')).toBe('&#xFFFFFF;');
+    expect(decodeXmlText('&#99999999;')).toBe('&#99999999;');
+    // A valid entity elsewhere in the same string still decodes.
+    expect(decodeXmlText('ok &#65; &#xFFFFFF; end')).toBe('ok A &#xFFFFFF; end');
+  });
 });

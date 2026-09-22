@@ -45,7 +45,12 @@ export interface LocalPlaylist {
   version: string;
 }
 
+/** Refuses anything outside `playlistDir()`: without this, a source's `url`
+ *  becomes an arbitrary local file read (path traversal / existence oracle). */
 export async function readLocalPlaylist(location: string): Promise<LocalPlaylist> {
+  if (!isManagedUpload(location)) {
+    throw new Error('Not an uploaded playlist');
+  }
   const [body, stat] = await Promise.all([
     fs.readFile(location, 'utf8'),
     fs.stat(location),

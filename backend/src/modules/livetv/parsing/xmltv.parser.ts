@@ -41,13 +41,19 @@ const ENTITIES: Record<string, string> = {
   nbsp: ' ',
 };
 
+/** `String.fromCodePoint` throws outside the Unicode range; an out-of-range entity
+ *  is left as-is, the same fallback already used for an unknown named entity. */
+function decodeCodePoint(whole: string, code: number): string {
+  return code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
+}
+
 export function decodeXmlText(raw: string): string {
   return raw
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) =>
-      String.fromCodePoint(Number.parseInt(hex, 16)),
+    .replace(/&#x([0-9a-fA-F]+);/g, (whole, hex) =>
+      decodeCodePoint(whole, Number.parseInt(hex, 16)),
     )
-    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number.parseInt(dec, 10)))
+    .replace(/&#(\d+);/g, (whole, dec) => decodeCodePoint(whole, Number.parseInt(dec, 10)))
     .replace(/&([a-zA-Z]+);/g, (whole, name) => ENTITIES[name] ?? whole)
     .trim();
 }

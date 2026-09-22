@@ -1,4 +1,31 @@
 import axios, { type AxiosRequestConfig, type RawAxiosRequestHeaders } from 'axios';
+import * as dns from 'dns';
+import { isInternalAddress } from '../plugins/internal-address';
+
+/** A published XMLTV guide can run to hundreds of megabytes; this only stops
+ *  an unbounded response (a runaway or hostile server), not a large one. */
+const MAX_RESPONSE_BYTES = 512 * 1024 * 1024;
+
+/** Only the source-test probe calls this — its answer returns straight to the
+ *  caller, the real SSRF surface; a registered source's sync/playback never does. */
+export async function assertNotInternal(rawUrl: string): Promise<void> {
+  let hostname: string;
+  try {
+    hostname = new URL(rawUrl).hostname;
+  } catch {
+    return; // Let axios raise its own error for a URL it cannot parse either.
+  }
+  let addresses: string[];
+  try {
+    addresses = (await dns.promises.lookup(hostname, { all: true })).map((a) => a.address);
+  } catch (err) {
+    throw new Error(`Could not resolve "${hostname}": ${(err as Error).message}`);
+  }
+  const internal = addresses.find(isInternalAddress);
+  if (internal) {
+    throw new Error(`Refused: "${hostname}" resolves to an internal address (${internal})`);
+  }
+}
 
 /**
  * The agent every outbound Live TV request identifies as. Providers block the
@@ -82,6 +109,8 @@ export async function liveTvGet<T>(
   return axios.get<T>(url, {
     timeout: 30_000,
     maxRedirects: 5,
+    maxContentLength: MAX_RESPONSE_BYTES,
+    maxBodyLength: MAX_RESPONSE_BYTES,
     ...config,
     headers: liveTvHeaders(identity, {
       ...conditionalHeaders(validators),

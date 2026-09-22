@@ -1,4 +1,4 @@
-import { normalizeChannelName, nameSimilarity } from './channel-name';
+import { normalizeChannelName, nameTokens, tokenSimilarity } from './channel-name';
 import type { GuideMatchKind } from '../entities/livetv-channel.entity';
 
 export interface GuideCandidate {
@@ -39,12 +39,28 @@ export function matchGuideChannels(
 ): GuideMatchReport {
   const byId = new Map<string, string>();
   const byName = new Map<string, string>();
+  // Fuzzy pass index: each candidate display name tokenised once (not once per
+  // channel), plus a token -> entry lookup so a channel only scores the
+  // candidates it shares at least one token with, instead of the full product.
+  const fuzzyEntries: { id: string; tokens: Set<string> }[] = [];
+  const fuzzyByToken = new Map<string, number[]>();
   for (const candidate of candidates) {
     byId.set(candidate.id.toLowerCase(), candidate.id);
     for (const name of [candidate.id, ...candidate.displayNames]) {
       const key = normalizeChannelName(name);
       // First feed entry wins: a later duplicate is the ambiguous one.
       if (key && !byName.has(key)) byName.set(key, candidate.id);
+    }
+    for (const name of candidate.displayNames) {
+      const tokens = nameTokens(name);
+      if (!tokens.size) continue;
+      const entryIndex = fuzzyEntries.length;
+      fuzzyEntries.push({ id: candidate.id, tokens });
+      for (const token of tokens) {
+        const entries = fuzzyByToken.get(token);
+        if (entries) entries.push(entryIndex);
+        else fuzzyByToken.set(token, [entryIndex]);
+      }
     }
   }
 
@@ -75,11 +91,16 @@ export function matchGuideChannels(
       continue;
     }
 
+    const channelTokens = nameTokens(channel.name);
     let best: { id: string; score: number } | null = null;
-    for (const candidate of candidates) {
-      for (const name of candidate.displayNames) {
-        const score = nameSimilarity(channel.name, name);
-        if (score > (best?.score ?? 0)) best = { id: candidate.id, score };
+    const scored = new Set<number>();
+    for (const token of channelTokens) {
+      for (const entryIndex of fuzzyByToken.get(token) ?? []) {
+        if (scored.has(entryIndex)) continue;
+        scored.add(entryIndex);
+        const entry = fuzzyEntries[entryIndex];
+        const score = tokenSimilarity(channelTokens, entry.tokens);
+        if (score > (best?.score ?? 0)) best = { id: entry.id, score };
       }
     }
     if (best && best.score >= FUZZY_THRESHOLD) {

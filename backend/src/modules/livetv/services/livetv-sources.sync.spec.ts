@@ -1,13 +1,15 @@
 import { LiveTvSourcesService } from './livetv-sources.service';
 import { LiveTvChannel } from '../entities/livetv-channel.entity';
 import { LiveTvChannelStream } from '../entities/livetv-channel-stream.entity';
-import { liveTvGet } from '../livetv-http';
+import { assertNotInternal, liveTvGet } from '../livetv-http';
+import type { TestLiveTvSourceDto } from '../dto/test-livetv-source.dto';
 
 jest.mock('../livetv-http', () => {
   const actual = jest.requireActual('../livetv-http');
-  return { ...actual, liveTvGet: jest.fn() };
+  return { ...actual, liveTvGet: jest.fn(), assertNotInternal: jest.fn() };
 });
 const mockedLiveTvGet = liveTvGet as jest.Mock;
+const mockedAssertNotInternal = assertNotInternal as jest.Mock;
 
 /** Chainable TypeORM query-builder stand-in; every method returns itself. */
 function makeQueryBuilder(overrides: Record<string, unknown> = {}) {
@@ -60,8 +62,16 @@ function setup(sourceOverrides: Record<string, unknown> = {}) {
   const source = makeSource(sourceOverrides);
   let nextChannelId = 100;
 
+  /** Stands in for the real `findOne` query builder: `getOne` is the only
+   *  thing that needs to resolve, but `addSelect`/`where` stay spy-able so a
+   *  test can assert the password column was explicitly re-requested. */
+  const sourceQueryBuilder = {
+    where: jest.fn().mockReturnThis(),
+    addSelect: jest.fn().mockReturnThis(),
+    getOne: jest.fn().mockResolvedValue(source),
+  };
   const sourceRepo = {
-    findOne: jest.fn().mockResolvedValue(source),
+    createQueryBuilder: jest.fn(() => sourceQueryBuilder),
     update: jest.fn().mockResolvedValue({ affected: 1 }),
   };
   const channelRepo = {
@@ -103,7 +113,17 @@ function setup(sourceOverrides: Record<string, unknown> = {}) {
     access as never,
   );
 
-  return { service, source, sourceRepo, channelRepo, streamRepo, settings, logos, access };
+  return {
+    service,
+    source,
+    sourceRepo,
+    sourceQueryBuilder,
+    channelRepo,
+    streamRepo,
+    settings,
+    logos,
+    access,
+  };
 }
 
 describe('LiveTvSourcesService.sync (m3u)', () => {
@@ -239,5 +259,66 @@ describe('LiveTvSourcesService.sync (m3u)', () => {
     expect(access.restrictAdultGroups).toHaveBeenCalledWith(
       expect.arrayContaining(['News', 'XXX Adult']),
     );
+  });
+
+  it('re-requests the password column explicitly, since the entity marks it select:false', async () => {
+    mockedLiveTvGet.mockResolvedValue({ status: 304, data: '', headers: {} });
+    const { service, sourceQueryBuilder } = setup();
+
+    await service.sync(1);
+
+    // Proves the code takes the addSelect path; TypeORM actually honouring
+    // select:false + addSelect against a real column is the library's own
+    // documented contract, not something this mock can exercise.
+    expect(sourceQueryBuilder.addSelect).toHaveBeenCalledWith('source.password');
+    expect(sourceQueryBuilder.getOne).toHaveBeenCalled();
+  });
+});
+
+describe('LiveTvSourcesService.test (SSRF guard placement)', () => {
+  afterEach(() => jest.resetAllMocks());
+
+  it('refuses to probe a source whose address resolves inside the network', async () => {
+    mockedAssertNotInternal.mockRejectedValue(
+      new Error('Refused: "x" resolves to an internal address (169.254.169.254)'),
+    );
+    const { service } = setup();
+    const dto = { kind: 'm3u', url: 'http://x/playlist.m3u' } as TestLiveTvSourceDto;
+
+    const result = await service.test(dto);
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/internal address/);
+    expect(mockedLiveTvGet).not.toHaveBeenCalled();
+  });
+
+  it('never guards a registered source refresh, so a LAN provider keeps syncing', async () => {
+    mockedLiveTvGet.mockResolvedValue({ status: 200, data: '#EXTM3U\n', headers: {} });
+    const { service } = setup({ url: 'http://192.168.1.50/playlist.m3u' });
+
+    const result = await service.sync(1);
+
+    expect(result.ok).toBe(true);
+    expect(mockedAssertNotInternal).not.toHaveBeenCalled();
+  });
+});
+
+describe('LiveTvSourcesService.resolveGuideUrl', () => {
+  afterEach(() => jest.resetAllMocks());
+
+  it('reloads the source by id, so an xtream guide link carries the real password', async () => {
+    const { service, sourceRepo } = setup({
+      kind: 'xtream',
+      url: 'http://panel.example',
+      username: 'joe',
+      password: 's3cret',
+    });
+
+    const url = await service.resolveGuideUrl(1);
+
+    // A `LiveTvGuideSource.source` relation load never carries the select:false
+    // password column either; only a fresh `findOne` does.
+    expect(sourceRepo.createQueryBuilder).toHaveBeenCalled();
+    expect(url).toBe('http://panel.example/xmltv.php?username=joe&password=s3cret');
   });
 });

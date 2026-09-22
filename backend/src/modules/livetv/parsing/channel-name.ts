@@ -29,12 +29,16 @@ export function nameTokens(raw: string): Set<string> {
   return new Set(normalizeChannelName(raw).split(' ').filter(Boolean));
 }
 
-/** Jaccard similarity over name tokens, 0 to 1. */
-export function nameSimilarity(a: string, b: string): number {
-  const ta = nameTokens(a);
-  const tb = nameTokens(b);
+/** Jaccard similarity over pre-tokenised names, 0 to 1. Split out so a caller
+ *  matching one name against many can tokenise each side once. */
+export function tokenSimilarity(ta: ReadonlySet<string>, tb: ReadonlySet<string>): number {
   if (!ta.size || !tb.size) return 0;
   let shared = 0;
   for (const t of ta) if (tb.has(t)) shared++;
   return shared / (ta.size + tb.size - shared);
+}
+
+/** Jaccard similarity over name tokens, 0 to 1. */
+export function nameSimilarity(a: string, b: string): number {
+  return tokenSimilarity(nameTokens(a), nameTokens(b));
 }
