@@ -16,6 +16,7 @@ import { LiveTvSource } from './livetv-source.entity';
 @Index('UQ_livetv_stream_source_external', ['source', 'externalId'], {
   unique: true,
 })
+@Index('IDX_livetv_channel_streams_channelId', ['channel'])
 export class LiveTvChannelStream extends BaseEntity {
   @ManyToOne(() => LiveTvChannel, (c) => c.streams, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'channelId' })

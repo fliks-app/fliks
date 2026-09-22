@@ -8,7 +8,11 @@ import { LiveTvGuideChannel } from '../entities/livetv-guide-channel.entity';
 import { LiveTvChannel } from '../entities/livetv-channel.entity';
 import { LiveTvProgram } from '../entities/livetv-program.entity';
 import { parseXmltvStream, type XmltvChannel } from '../parsing/xmltv.parser';
-import { matchGuideChannels, pickHighestPriorityRows } from '../parsing/guide-match';
+import {
+  matchGuideChannels,
+  pickHighestPriorityRows,
+  type GuideAssignment,
+} from '../parsing/guide-match';
 import {
   liveTvGet,
   isNotModified,
@@ -121,7 +125,16 @@ export class LiveTvGuideService {
 
   async update(id: number, dto: UpdateLiveTvGuideSourceDto): Promise<LiveTvGuideSource> {
     const row = await this.findOne(id);
-    Object.assign(row, dto);
+    // Explicit copy, not Object.assign: an omitted PATCH field is still
+    // `undefined` on the instance ([[Define]] semantics), which would stamp it onto the row.
+    if (dto.name !== undefined) row.name = dto.name;
+    if (dto.kind !== undefined) row.kind = dto.kind;
+    if (dto.url !== undefined) row.url = dto.url;
+    if (dto.refreshIntervalHours !== undefined) row.refreshIntervalHours = dto.refreshIntervalHours;
+    if (dto.timezoneOffsetMinutes !== undefined) row.timezoneOffsetMinutes = dto.timezoneOffsetMinutes;
+    if (dto.language !== undefined) row.language = dto.language;
+    if (dto.priority !== undefined) row.priority = dto.priority;
+    if (dto.enabled !== undefined) row.enabled = dto.enabled;
     if (dto.sourceId !== undefined) {
       row.source = dto.sourceId != null ? ({ id: dto.sourceId } as never) : null;
     }
@@ -177,10 +190,28 @@ export class LiveTvGuideService {
         const assignedGuideId = new Map(
           matchResult.assignments.map((a) => [a.channelId, a.guideChannelId]),
         );
+        // One UPDATE per (guideChannelId, kind) pair: a 15k-channel lineup
+        // would otherwise serialize 15k round trips mid-request.
+        const byAssignment = new Map<
+          string,
+          { guideChannelId: string; kind: GuideAssignment['kind']; channelIds: number[] }
+        >();
         for (const assignment of matchResult.assignments) {
-          await this.channelRepo.update(assignment.channelId, {
-            guideChannelId: assignment.guideChannelId,
-            guideMatchKind: assignment.kind,
+          const key = `${assignment.kind}:${assignment.guideChannelId}`;
+          const group = byAssignment.get(key);
+          if (group) group.channelIds.push(assignment.channelId);
+          else {
+            byAssignment.set(key, {
+              guideChannelId: assignment.guideChannelId,
+              kind: assignment.kind,
+              channelIds: [assignment.channelId],
+            });
+          }
+        }
+        for (const { guideChannelId, kind, channelIds } of byAssignment.values()) {
+          await this.channelRepo.update(channelIds, {
+            guideChannelId,
+            guideMatchKind: kind,
           });
         }
 
@@ -413,11 +444,16 @@ export class LiveTvGuideService {
 
   /** Paginated the same way as the guide grid, favourites first: this is the
    *  page a household actually uses, and it must never return the whole lineup. */
-  async onNow(user: User, page = 1, pageSize = DEFAULT_PAGE_SIZE): Promise<LiveTvOnNowResult> {
+  async onNow(
+    user: User,
+    filters: { group?: string; query?: string } = {},
+    page = 1,
+    pageSize = DEFAULT_PAGE_SIZE,
+  ): Promise<LiveTvOnNowResult> {
     const size = Math.min(pageSize, DEFAULT_PAGE_SIZE);
     const { items: pageChannels, total } = await this.channels.listPageForUser(
       user,
-      {},
+      filters,
       page,
       size,
     );
@@ -456,9 +492,16 @@ export class LiveTvGuideService {
     return { entries, page, pageSize: size, total };
   }
 
-  async program(id: number): Promise<LiveTvProgram> {
+  /** Ids are sequential, so the lookup must gate on the same visibility rule
+   *  as every list: a program on a denied-group channel is a 404, not a leak. */
+  async program(id: number, user: User): Promise<LiveTvProgram> {
     const program = await this.programRepo.findOne({ where: { id } });
     if (!program) throw new NotFoundException(`Program #${id} not found`);
+    const visible = await this.channels.isGuideChannelVisibleToUser(
+      user,
+      program.guideChannelId,
+    );
+    if (!visible) throw new NotFoundException(`Program #${id} not found`);
     return program;
   }
 
@@ -479,14 +522,17 @@ export class LiveTvGuideService {
     const from = new Date(now - pastDays * MS_PER_DAY);
     const to = new Date(now + futureDays * MS_PER_DAY);
 
-    const programs = await this.programRepo
+    // Scoped to the caller's own lineup, exactly like the channel search just
+    // above: an unfiltered program search leaks every denied group's titles.
+    const programsQb = this.programRepo
       .createQueryBuilder('p')
       .where('p.title ILIKE :q', { q: `%${q}%` })
       .andWhere('p."startsAt" < :to', { to })
       .andWhere('p."endsAt" > :from', { from })
       .orderBy('p."startsAt"', 'ASC')
-      .take(50)
-      .getMany();
+      .take(50);
+    await this.channels.scopeToAuthorizedGuideChannels(programsQb, user, 'p."guideChannelId"');
+    const programs = await programsQb.getMany();
 
     return { channels, programs };
   }
