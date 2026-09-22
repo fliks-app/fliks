@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { LiveTvGroupAccess } from '../entities/livetv-group-access.entity';
 import { SettingsService } from '../../settings/settings.service';
 import { User } from '../../users/entities/user.entity';
@@ -79,11 +79,17 @@ export class LiveTvAccessService {
     const previous = await this.restrictedGroups();
     const unique = await this.writeGroupSet(RESTRICTED_GROUPS_KEY, groups);
 
+    // A group leaving the restricted set must not leave its grants behind: they would
+    // silently resurrect for whoever held them if the group is restricted again later.
+    // `restrictAdultGroups` only ever grows the set, so `dropped` is always empty there.
+    const dropped = previous.filter((g) => !unique.includes(g));
+    if (dropped.length) {
+      await this.accessRepo.delete({ groupName: In(dropped) });
+    }
+
     // An auto-matched group leaving the set is an explicit exemption (otherwise the
     // next sync restricts it again); one re-added here retires that exemption.
-    const removed = previous.filter(
-      (g) => !unique.includes(g) && ADULT_GROUP_PATTERN.test(g),
-    );
+    const removed = dropped.filter((g) => ADULT_GROUP_PATTERN.test(g));
     const readded = unique.filter((g) => ADULT_GROUP_PATTERN.test(g));
     if (removed.length || readded.length) {
       const exempt = new Set(await this.exemptGroups());
