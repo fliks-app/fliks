@@ -2415,7 +2415,6 @@
       },
       "status_disabled": "Desactivado",
       "status_unavailable": "No disponible",
-      "status_message_toggle": "Ver los detalles",
       "settings": {
         "title": "Ajustes",
         "subtitle": "Gestión de los plugins instalados por Fliks.",

@@ -25,6 +25,7 @@ import { PluginInstallConsentComponent } from './plugin-install-consent/plugin-i
 import { PluginSourcesComponent } from './plugin-sources/plugin-sources';
 import { PluginSettingsComponent } from './plugin-settings/plugin-settings';
 import { PluginMetricsPanelComponent } from './plugin-metrics-panel/plugin-metrics-panel';
+import { ErrorBadgeComponent } from '../../../shared/components/error-badge';
 import { trustBadgeFor } from './plugin-trust';
 
 @Component({
@@ -39,6 +40,7 @@ import { trustBadgeFor } from './plugin-trust';
     PluginSettingsComponent,
     PluginSourcesComponent,
     PluginMetricsPanelComponent,
+    ErrorBadgeComponent,
   ],
   templateUrl: './plugins.html',
 })
@@ -155,6 +157,13 @@ export class PluginsSettingsComponent implements OnInit {
       return { labelKey: 'settings.plugins.status_unavailable', cssClass: 'badge-warning' };
     }
     return { labelKey: 'settings.plugins.status_active', cssClass: 'badge-success' };
+  }
+
+  /** Why the badge reads what it reads: the boot failure, then the process stderr tail. */
+  statusDetail(row: PluginSummary): string | null {
+    const parts = [row.status === 'failed' ? row.statusReason : null, row.statusMessage];
+    const detail = parts.filter((p) => p?.trim()).join('\n\n');
+    return detail || null;
   }
 
   async toggleEnabled(row: PluginSummary, enabled: boolean): Promise<void> {

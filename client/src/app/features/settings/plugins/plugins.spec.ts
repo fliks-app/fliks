@@ -136,18 +136,24 @@ describe('PluginsSettingsComponent — enable/disable toggle', () => {
     expect(badges).not.toContain('settings.plugins.status_active');
   });
 
-  it('a row carrying a statusMessage renders the stderr tail', async () => {
+  it('a row carrying a statusMessage opens the stderr tail from its badge', async () => {
     const { fixture } = await createComponent([
       { ...ROW, kind: 'process', processState: 'backoff', statusMessage: 'bad hello token\nexiting' },
     ]);
 
-    const pre = (fixture.nativeElement as HTMLElement).querySelector('tbody details pre');
-    expect(pre?.textContent).toContain('bad hello token');
+    const badge = fixture.nativeElement.querySelector('tbody app-error-badge button') as HTMLElement;
+    expect(badge).not.toBeNull();
+    expect(
+      fixture.componentInstance.statusDetail({
+        ...ROW,
+        statusMessage: 'bad hello token\nexiting',
+      } as PluginSummary),
+    ).toContain('bad hello token');
   });
 
-  it('a row with no statusMessage renders no status-message details toggle', async () => {
+  it('VERDICT: a row with nothing to explain leaves its badge unclickable', async () => {
     const { fixture } = await createComponent([{ ...ROW, statusMessage: '' }]);
 
-    expect((fixture.nativeElement as HTMLElement).querySelector('tbody details.status-message-details')).toBeNull();
+    expect(fixture.nativeElement.querySelector('tbody app-error-badge button')).toBeNull();
   });
 });
