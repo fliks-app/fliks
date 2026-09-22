@@ -2792,6 +2792,7 @@
       "tab_guide": "Guide",
       "tab_settings": "Settings",
       "tab_health": "Health",
+      "tab_access": "Access",
       "sources": {
         "subtitle": "Connect an M3U playlist or an Xtream account.",
         "new": "New source",
@@ -2938,6 +2939,24 @@
         "fast_zap_true_help": "Forces a transcode on every zap, even without hardware encoding. Use it only if zapping feels slow and the CPU can absorb it.",
         "fast_zap_false_help": "Forces a remux on every zap. Use it to save CPU on a software-only server, at the cost of a slower channel change.",
         "saved": "Live TV settings saved."
+      },
+      "access": {
+        "groups_title": "Restricted groups",
+        "groups_subtitle": "Checked groups are only visible to users granted access below.",
+        "col_group": "Group",
+        "col_channels": "Channels",
+        "col_restricted": "Restricted",
+        "empty_groups": "No channel group available.",
+        "auto_adult_badge": "Adult (auto)",
+        "auto_adult_hint": "This group's name matches the automatic adult-content pattern. If you uncheck it, the next sync will restrict it again as long as it still matches.",
+        "users_title": "Access by user",
+        "users_subtitle": "Grant a user visibility into restricted groups.",
+        "no_restricted_groups": "No group is restricted right now: there is nothing to grant.",
+        "no_users": "No user is accessible with your current permissions.",
+        "manage": "Manage access",
+        "grants_title": "Access for {{username}}",
+        "grants_empty": "No restricted group to grant.",
+        "grants_saved": "Access updated."
       },
       "health": {
         "sources_title": "Sources",
