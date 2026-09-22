@@ -24,12 +24,19 @@ export class LiveTvAccessController {
 
   @Get('restricted-groups')
   restrictedGroups() {
-    return this.access.restrictedGroups();
+    return this.access.restrictedGroupsView();
   }
 
   @Put('restricted-groups')
   setRestrictedGroups(@Body() dto: SetRestrictedGroupsDto) {
     return this.access.setRestrictedGroups(dto.groups);
+  }
+
+  /** Every user with their granted groups, for the overview table. Lives here
+   *  rather than behind `GET /users` so the tab needs only its own permission. */
+  @Get('users')
+  listUserAccess() {
+    return this.access.listUserAccess();
   }
 
   @Get('users/:userId')
