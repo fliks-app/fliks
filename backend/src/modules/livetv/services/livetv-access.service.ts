@@ -2,11 +2,16 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { LiveTvGroupAccess } from '../entities/livetv-group-access.entity';
-import { SettingsService } from '../../settings/settings.service';
+import {
+  OWN_MODULE_ORIGIN,
+  SettingsService,
+} from '../../settings/settings.service';
 import { User } from '../../users/entities/user.entity';
 
-/** Groups a provider ships that must never be visible by default. */
-const ADULT_GROUP_PATTERN = /\b(xxx|adult|porn|erotic|18\+|hot)\b/i;
+/** Groups a provider ships that must never be visible by default, across the app's
+ *  languages (en/fr/es/de/it/pt). Heuristic, not exhaustive; excludes "Adult Swim". */
+const ADULT_GROUP_PATTERN =
+  /\b(?:xxx|sex[eo]?|porn\w*|erot(?:ic|iqu|ik)\w*|x[- ]?rated|adult(?!\s*swim\b)\w*)\b|(?<![a-z0-9])(?:\+18|18\+)(?![a-z0-9])/i;
 
 const RESTRICTED_GROUPS_KEY = 'livetv_restricted_groups';
 /** Auto-matched groups an admin explicitly unrestricted; skipped by `restrictAdultGroups`. */
@@ -49,14 +54,16 @@ export class LiveTvAccessService {
     }
   }
 
+  private normalizeGroupSet(groups: string[]): string[] {
+    return [...new Set(groups.map((g) => g.trim()).filter(Boolean))].sort();
+  }
+
   private async writeGroupSet(
     key: string,
     groups: string[],
   ): Promise<string[]> {
-    const unique = [
-      ...new Set(groups.map((g) => g.trim()).filter(Boolean)),
-    ].sort();
-    await this.settings.set(key, JSON.stringify(unique));
+    const unique = this.normalizeGroupSet(groups);
+    await this.settings.set(key, JSON.stringify(unique), OWN_MODULE_ORIGIN);
     return unique;
   }
 
@@ -89,7 +96,25 @@ export class LiveTvAccessService {
   }
 
   private async writeVanishedMap(map: Record<string, string>): Promise<void> {
-    await this.settings.set(VANISHED_GROUPS_KEY, JSON.stringify(map));
+    await this.settings.set(
+      VANISHED_GROUPS_KEY,
+      JSON.stringify(map),
+      OWN_MODULE_ORIGIN,
+    );
+  }
+
+  private lock: Promise<void> = Promise.resolve();
+
+  /** Serializes restricted/exempt/vanished read-modify-write sequences so a sync pass and
+   *  an admin edit can't interleave on a stale read.
+   *  ponytail: in-process mutex; move to pg_advisory_xact_lock if this ever runs multi-instance. */
+  private withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.lock.then(fn);
+    this.lock = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }
 
   private async graceDays(): Promise<number> {
@@ -130,16 +155,23 @@ export class LiveTvAccessService {
   }
 
   async setRestrictedGroups(groups: string[]): Promise<string[]> {
+    return this.withWriteLock(() => this.setRestrictedGroupsLocked(groups));
+  }
+
+  private async setRestrictedGroupsLocked(groups: string[]): Promise<string[]> {
     const previous = await this.restrictedGroups();
-    const unique = await this.writeGroupSet(RESTRICTED_GROUPS_KEY, groups);
+    const unique = this.normalizeGroupSet(groups);
 
     // A group leaving the restricted set must not leave its grants behind: they would
     // silently resurrect for whoever held them if the group is restricted again later.
     // `restrictAdultGroups` only ever grows the set, so `dropped` is always empty there.
+    // Grants are dropped before the setting is written: a failure here leaves the group
+    // still restricted (safe) instead of open with its grants dangling (unsafe).
     const dropped = previous.filter((g) => !unique.includes(g));
     if (dropped.length) {
       await this.accessRepo.delete({ groupName: In(dropped) });
     }
+    await this.writeGroupSet(RESTRICTED_GROUPS_KEY, unique);
 
     // An auto-matched group leaving the set is an explicit exemption (otherwise the
     // next sync restricts it again); one re-added here retires that exemption.
@@ -159,16 +191,18 @@ export class LiveTvAccessService {
    *  alternative is that it is visible to every account until someone notices. A
    *  group an admin exempted (unchecked) is left alone across syncs. */
   async restrictAdultGroups(groupNames: readonly string[]): Promise<string[]> {
-    const current = await this.restrictedGroups();
-    const exempt = await this.exemptGroups();
-    const additions = groupNames.filter(
-      (name) =>
-        ADULT_GROUP_PATTERN.test(name) &&
-        !current.includes(name) &&
-        !exempt.includes(name),
-    );
-    if (!additions.length) return current;
-    return this.setRestrictedGroups([...current, ...additions]);
+    return this.withWriteLock(async () => {
+      const current = await this.restrictedGroups();
+      const exempt = await this.exemptGroups();
+      const additions = groupNames.filter(
+        (name) =>
+          ADULT_GROUP_PATTERN.test(name) &&
+          !current.includes(name) &&
+          !exempt.includes(name),
+      );
+      if (!additions.length) return current;
+      return this.setRestrictedGroupsLocked([...current, ...additions]);
+    });
   }
 
   /** Trusts that `liveGroupNames` is complete — verifying that is the caller's job.
@@ -176,6 +210,14 @@ export class LiveTvAccessService {
    *  moment it reappears; only past `livetv_stale_stream_days` does it actually
    *  lose its grants and its list entries. */
   async expireVanishedGroups(
+    liveGroupNames: readonly string[],
+  ): Promise<string[]> {
+    return this.withWriteLock(() =>
+      this.expireVanishedGroupsLocked(liveGroupNames),
+    );
+  }
+
+  private async expireVanishedGroupsLocked(
     liveGroupNames: readonly string[],
   ): Promise<string[]> {
     const live = new Set(liveGroupNames);
@@ -266,19 +308,29 @@ export class LiveTvAccessService {
     }));
   }
 
-  async setGrants(userId: number, groupNames: string[]): Promise<string[]> {
-    const unique = [
+  /** A grant only ever applies to a currently-restricted group: granting anything else
+   *  would sit dormant and silently activate the day someone restricts that name (the
+   *  resurrection this closes from the other end). `ignored` names what was dropped. */
+  async setGrants(
+    userId: number,
+    groupNames: string[],
+  ): Promise<{ groups: string[]; ignored: string[] }> {
+    const requested = [
       ...new Set(groupNames.map((g) => g.trim()).filter(Boolean)),
     ];
+    const restricted = new Set(await this.restrictedGroups());
+    const groups = requested.filter((g) => restricted.has(g));
+    const ignored = requested.filter((g) => !restricted.has(g));
+
     await this.accessRepo.delete({ user: { id: userId } });
-    if (unique.length) {
+    if (groups.length) {
       await this.accessRepo.save(
-        unique.map((groupName) =>
+        groups.map((groupName) =>
           this.accessRepo.create({ user: { id: userId } as User, groupName }),
         ),
       );
     }
-    return unique;
+    return { groups, ignored };
   }
 
   /**
