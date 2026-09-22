@@ -30,7 +30,7 @@
             <th>{{ 'settings.media_servers.col_type' | translate }}</th>
             <th>{{ 'settings.media_servers.col_url' | translate }}</th>
             <th>{{ 'settings.media_servers.col_events' | translate }}</th>
-            <th class="text-center">{{ 'settings.media_servers.col_enabled' | translate }}</th>
+            <th class="text-center">{{ 'common.active' | translate }}</th>
             <th class="text-end w-40"></th>
           </tr>
         </thead>
@@ -51,7 +51,7 @@
                 <app-enabled-switch
                   [enabled]="row.enabled"
                   [busy]="togglingId() === row.id"
-                  ariaLabelKey="settings.media_servers.col_enabled"
+                  ariaLabelKey="common.active"
                   (toggle)="toggleEnabled(row)"
                 />
               </td>

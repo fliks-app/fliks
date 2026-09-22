@@ -51,7 +51,16 @@
                   </div>
                 }
               </td>
-              <td><span class="badge badge-ghost badge-sm">{{ row.kind }}</span></td>
+              <td>
+                <span class="badge badge-ghost badge-sm">
+                  {{
+                    (row.kind === 'xtream'
+                      ? 'liveTv.admin.sources.kind_xtream'
+                      : 'liveTv.admin.sources.kind_m3u'
+                    ) | translate
+                  }}
+                </span>
+              </td>
               <td>{{ row.channelCount }}</td>
               <td class="text-sm text-base-content/60">
                 @if (row.lastSyncAt) {
