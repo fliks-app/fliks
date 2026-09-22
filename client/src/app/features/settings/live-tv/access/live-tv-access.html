@@ -37,6 +37,18 @@
                         {{ 'liveTv.admin.access.auto_adult_badge' | translate }}
                       </span>
                     }
+                    @if (group.cleanupAt) {
+                      <span
+                        class="badge badge-outline badge-warning badge-sm ml-2 tooltip tooltip-right"
+                        [attr.data-tip]="
+                          'liveTv.admin.access.vanishing_hint'
+                            | translate
+                              : { date: (group.cleanupAt | localeDate: { dateStyle: 'short' }) }
+                        "
+                      >
+                        {{ 'liveTv.admin.access.vanishing_badge' | translate }}
+                      </span>
+                    }
                   </td>
                   <td class="text-right text-base-content/70">{{ group.count }}</td>
                   <td class="text-center">

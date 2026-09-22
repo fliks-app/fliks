@@ -248,6 +248,10 @@ export interface RestrictedGroup {
   name: string;
   /** Still matches the server's automatic adult-content pattern. */
   automatic: boolean;
+  /** ISO date it first went missing from a full, successful sync; null while seen. */
+  vanishedSince: string | null;
+  /** ISO date its access is dropped if it stays missing; null while seen. */
+  cleanupAt: string | null;
 }
 
 export interface LiveTvUserAccess {

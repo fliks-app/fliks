@@ -2949,6 +2949,8 @@
         "empty_groups": "Aucun groupe de chaînes disponible.",
         "auto_adult_badge": "Adulte (auto)",
         "auto_adult_hint": "Le nom de ce groupe correspond au motif de restriction automatique du contenu adulte. Le décocher l'exempte durablement : les prochaines synchronisations ne le restreindront plus, sauf si vous le recochez.",
+        "vanishing_badge": "En expiration",
+        "vanishing_hint": "Plus aucune source ne propose ce groupe. Ses accès seront supprimés le {{date}}, sauf s'il réapparaît avant.",
         "users_title": "Accès par utilisateur",
         "users_subtitle": "Accordez à un utilisateur la visibilité sur des groupes restreints.",
         "no_restricted_groups": "Aucun groupe n'est restreint pour le moment : il n'y a rien à accorder.",
