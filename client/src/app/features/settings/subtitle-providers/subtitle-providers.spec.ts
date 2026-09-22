@@ -6,13 +6,11 @@ import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { SubtitleProvidersSettingsComponent } from './subtitle-providers';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
+import { TranslationProviderRow } from '../../../core/services/api/translation-providers-api.service';
 
 /**
- * Drives the download-providers section through its rendered DOM and the
- * real HTTP wire, not internal component methods — the seam that survives
- * migrating that CRUD list off hand-rolled signals onto the shared
- * `providers` renderer. The AI-translation section is untouched by this
- * migration and is not exercised here.
+ * Drives the subtitle-providers page through its rendered DOM and the real HTTP wire, not
+ * internal methods — covers the download-provider form and the translation-provider switch.
  */
 beforeAll(() => {
   if (!HTMLDialogElement.prototype.showModal) {
@@ -83,7 +81,7 @@ async function clickAndSettle(el: HTMLElement, fixture: ComponentFixture<unknown
 
 const ROW = { id: 1, name: 'OpenSubtitles', type: 'opensubtitles', enabled: true, priority: 25, settings: {} };
 
-async function createComponent() {
+async function createComponent(translationRows: TranslationProviderRow[] = []) {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -101,7 +99,9 @@ async function createComponent() {
   fixture.detectChanges();
   http.expectOne({ url: '/api/subtitles/providers', method: 'GET' }).flush([]);
   http.expectOne({ url: '/api/settings', method: 'GET' }).flush({});
-  http.expectOne({ url: '/api/subtitles/translation-providers', method: 'GET' }).flush([]);
+  http
+    .expectOne({ url: '/api/subtitles/translation-providers', method: 'GET' })
+    .flush(translationRows);
   // Rate limits are fetched reactively off the provider list's own reload, one tick later.
   await new Promise((r) => setTimeout(r, 0));
   http.expectOne({ url: '/api/subtitles/providers/rate-limits', method: 'GET' }).flush([]);
@@ -185,5 +185,35 @@ describe('SubtitleProvidersSettingsComponent — provider editor settings payloa
     expect(req.request.body).toMatchObject({ settings: { username: 'bob', password: '' } });
     req.flush({ ...ROW, id: 5 });
     await flushReload(http, fixture);
+  });
+});
+
+describe('SubtitleProvidersSettingsComponent — translation provider enabled switch', () => {
+  afterEach(() => TestBed.inject(HttpTestingController).verify());
+
+  it('toggles a translation provider via a PUT with the flipped enabled flag, then reloads', async () => {
+    const trRow: TranslationProviderRow = {
+      id: 7,
+      name: 'Gemini',
+      engine: 'gemini',
+      enabled: true,
+      isDefault: true,
+      settings: {},
+    };
+    const { fixture, http } = await createComponent([trRow]);
+
+    const toggle = fixture.nativeElement.querySelector('.toggle-success') as HTMLInputElement;
+    toggle.checked = false;
+    toggle.dispatchEvent(new Event('change'));
+
+    const req = http.expectOne({ url: '/api/subtitles/translation-providers/7', method: 'PUT' });
+    expect(req.request.body).toEqual({ enabled: false });
+    req.flush({ ...trRow, enabled: false });
+
+    await new Promise((r) => setTimeout(r, 0));
+    http
+      .expectOne({ url: '/api/subtitles/translation-providers', method: 'GET' })
+      .flush([{ ...trRow, enabled: false }]);
+    await settle(fixture);
   });
 });

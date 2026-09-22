@@ -2166,7 +2166,6 @@
       "col_type": "Tipo",
       "col_priority": "Prioridad",
       "col_enabled": "Activo",
-      "col_status": "Estado",
       "rate_limited": "Rate-limited",
       "rate_limited_hint": "Este proveedor está temporalmente limitado, las peticiones se reanudarán automáticamente.",
       "actions": "Acciones",
