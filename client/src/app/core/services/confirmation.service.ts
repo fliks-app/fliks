@@ -10,6 +10,8 @@ export interface ConfirmOptions {
   /** Third button label — when set, clicking outside or this button resolves to null. */
   dismissLabel?: string;
   variant?: ConfirmVariant;
+  /** Renders `message` in a scrollable monospace block instead of prose — for raw error text. */
+  monospace?: boolean;
 }
 
 /** A confirm carrying one checkbox — a decision the confirmation itself has to capture,

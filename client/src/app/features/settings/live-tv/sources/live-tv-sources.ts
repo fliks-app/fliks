@@ -16,7 +16,15 @@ import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
 
 @Component({
   selector: 'app-live-tv-sources',
-  imports: [FormsModule, TranslatePipe, LocaleDatePipe, TvSelectDirective, ModalHeaderComponent, ModalFooterComponent, ErrorBadgeComponent],
+  imports: [
+    FormsModule,
+    TranslatePipe,
+    LocaleDatePipe,
+    TvSelectDirective,
+    ModalHeaderComponent,
+    ModalFooterComponent,
+    ErrorBadgeComponent,
+  ],
   templateUrl: './live-tv-sources.html',
 })
 export class LiveTvSourcesComponent implements OnInit {

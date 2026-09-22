@@ -42,6 +42,7 @@ import {
 import { ModalHeaderComponent } from '../modal-header';
 import { PopoverMenuComponent } from '../popover-menu';
 import { ModalFooterComponent } from '../modal-footer';
+import { ErrorBadgeComponent } from '../error-badge';
 
 /** Keystroke-to-request debounce for a `search` filter — see `onSearchInput`. */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -71,7 +72,8 @@ const BADGE_CLASSES: Readonly<Record<BadgeTone, string>> = {
  */
 @Component({
   selector: 'app-data-table',
-  imports: [TvSelectDirective, 
+  imports: [
+    TvSelectDirective,
     PopoverMenuComponent,
     LucideEllipsisVertical,
     ModalFooterComponent,
@@ -80,6 +82,7 @@ const BADGE_CLASSES: Readonly<Record<BadgeTone, string>> = {
     LocaleDatePipe,
     PaginationComponent,
     ProgressBadgeComponent,
+    ErrorBadgeComponent,
   ],
   providers: [LocaleDatePipe],
   templateUrl: './data-table.html',
@@ -132,14 +135,9 @@ export class DataTableComponent implements OnInit {
   readonly selectedIds = signal<ReadonlySet<TableRow['id']>>(new Set());
   readonly bulkBusy = signal(false);
 
-  /** Both dialogs stay mounted and are driven by `showModal()`/`close()`: an `@if` around the
-   *  element unmounts it on close, and daisyUI animates the exit on the element that remains. */
+  /** Stays mounted and is driven by `showModal()`/`close()`: an `@if` around the element
+   *  unmounts it on close, and daisyUI animates the exit on the element that remains. */
   private readonly rowDetailDialog = viewChild<ElementRef<HTMLDialogElement>>('rowDetailDialog');
-  private readonly detailDialog = viewChild<ElementRef<HTMLDialogElement>>('detailDialog');
-
-  /** The detail dialog's title key and text. Kept after a close so the box has something to
-   *  render while it animates out. */
-  readonly detail = signal<{ titleKey: string; text: string } | null>(null);
 
   /** The `detail` row action's dialog: its title and the lines that had a value. */
   readonly rowDetail = signal<{
@@ -360,23 +358,12 @@ export class DataTableComponent implements OnInit {
     return translated === text ? text : translated;
   }
 
-  /** The row's detail text for this column, or '' when there is none to open. A cell only
-   *  becomes a button when it has something to show. */
-  detailText(col: TableColumn, row: TableRow): string {
-    if (!col.detailField) return '';
+  /** The row's raw detail text for this column, or null when there is none — `app-error-badge`
+   *  resolves and trims it itself, this only decides whether the cell becomes a button. */
+  detailValue(col: Pick<TableColumn, 'detailField'>, row: TableRow): string | null {
+    if (!col.detailField) return null;
     const raw = String(row[col.detailField] ?? '').trim();
-    return raw ? this.resolveMessage(raw) : '';
-  }
-
-  openDetail(col: TableColumn, row: TableRow): void {
-    const text = this.detailText(col, row);
-    if (!text) return;
-    this.detail.set({ titleKey: col.detailTitleKey ?? col.labelKey, text });
-    this.detailDialog()?.nativeElement.showModal();
-  }
-
-  closeDetail(): void {
-    this.detailDialog()?.nativeElement.close();
+    return raw || null;
   }
 
   /** Sub-values render as their own badge or text, reusing the column rules one level down. */

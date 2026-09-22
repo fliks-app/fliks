@@ -45,6 +45,7 @@ export class ConfirmationModalComponent {
   readonly variant = computed(() => this.view()?.variant ?? 'default');
 
   readonly alertOnly = computed(() => this.view()?.alertOnly ?? false);
+  readonly monospace = computed(() => this.view()?.monospace ?? false);
   readonly toggleLabel = computed(() => this.view()?.toggleLabel ?? null);
   readonly toggleHint = computed(() => this.view()?.toggleHint ?? null);
   readonly dismissLabel = computed(() => this.view()?.dismissLabel ?? null);

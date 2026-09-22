@@ -1,32 +1,20 @@
-@if (errorText(); as text) {
+@if (errorText()) {
   <button
     type="button"
     class="link link-hover"
     (click)="open()"
-    [attr.aria-label]="'activity.error_detail_title' | translate"
+    [attr.aria-label]="titleKey() | translate"
   >
-    <span class="badge badge-sm" [ngClass]="badgeClass()">{{ label() }}</span>
+    @if (badgeClass(); as bc) {
+      <span class="badge badge-sm" [ngClass]="bc">{{ label() }}</span>
+    } @else {
+      {{ label() }}
+    }
   </button>
 } @else {
-  <span class="badge badge-sm" [ngClass]="badgeClass()">{{ label() }}</span>
+  @if (badgeClass(); as bc) {
+    <span class="badge badge-sm" [ngClass]="bc">{{ label() }}</span>
+  } @else {
+    {{ label() }}
+  }
 }
-
-<dialog #dialog class="modal">
-  <div class="modal-box max-w-2xl">
-    <app-modal-header [title]="'activity.error_detail_title' | translate" (closed)="close()" />
-    <pre
-      class="text-sm whitespace-pre-wrap break-all bg-base-200 rounded p-3 max-h-[60vh] overflow-auto"
-      >{{ errorDetail() }}</pre
-    >
-    <app-modal-footer>
-      <button type="button" class="btn btn-ghost" (click)="close()">
-        {{ 'common.close' | translate }}
-      </button>
-    </app-modal-footer>
-  </div>
-  <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="close()" [attr.aria-label]="'common.close' | translate">
-      close
-    </button>
-  </form>
-</dialog>

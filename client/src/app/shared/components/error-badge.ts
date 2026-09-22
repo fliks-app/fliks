@@ -1,27 +1,27 @@
-import { Component, ElementRef, computed, inject, input, signal, viewChild } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { ModalHeaderComponent } from './modal-header';
-import { ModalFooterComponent } from './modal-footer';
+import { ConfirmationService } from '../../core/services/confirmation.service';
 
 /**
- * Status badge that opens a modal with the full error text when one exists,
- * and renders as a plain (non-clickable) badge otherwise. Same `badge-sm`
- * size everywhere so callers don't each pick their own.
+ * Status badge that opens the app's shared alert modal with the full error text when one
+ * exists, and renders as a plain (non-clickable) badge otherwise. Same `badge-sm` size
+ * everywhere so callers don't each pick their own.
  */
 @Component({
   selector: 'app-error-badge',
-  imports: [NgClass, TranslatePipe, ModalHeaderComponent, ModalFooterComponent],
+  imports: [NgClass, TranslatePipe],
   templateUrl: './error-badge.html',
 })
 export class ErrorBadgeComponent {
   private readonly translate = inject(TranslateService);
+  private readonly confirm = inject(ConfirmationService);
 
   readonly error = input<string | null>(null);
   readonly label = input.required<string>();
-  readonly badgeClass = input('badge-error');
-
-  private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  /** `null` renders the label as plain text instead of a badge pill. */
+  readonly badgeClass = input<string | null>('badge-error');
+  readonly titleKey = input('activity.error_detail_title');
 
   /** A translation key resolves; a raw engine/provider error passes through as-is. */
   readonly errorText = computed(() => {
@@ -31,16 +31,13 @@ export class ErrorBadgeComponent {
     return translated === raw ? raw : translated;
   });
 
-  readonly errorDetail = signal('');
-
   open(): void {
-    const text = this.errorText();
-    if (!text) return;
-    this.errorDetail.set(text);
-    this.dialog()?.nativeElement.showModal();
-  }
-
-  close(): void {
-    this.dialog()?.nativeElement.close();
+    const message = this.errorText();
+    if (!message) return;
+    void this.confirm.alert({
+      title: this.translate.instant(this.titleKey()),
+      message,
+      monospace: true,
+    });
   }
 }

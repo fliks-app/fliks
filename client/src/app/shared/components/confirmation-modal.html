@@ -1,7 +1,14 @@
 <dialog #dialog class="modal" role="dialog" aria-modal="true" (close)="onDialogClose()">
-  <div class="modal-box">
+  <div class="modal-box" [class.max-w-2xl]="monospace()">
     <app-modal-header [title]="title()" />
-    <p class="py-4 whitespace-pre-line">{{ message() }}</p>
+    @if (monospace()) {
+      <pre
+        class="text-sm whitespace-pre-wrap break-words bg-base-200 rounded p-3 max-h-[60vh] overflow-auto"
+        >{{ message() }}</pre
+      >
+    } @else {
+      <p class="py-4 whitespace-pre-line">{{ message() }}</p>
+    }
     @if (toggleLabel(); as tl) {
       <label class="label cursor-pointer items-start justify-start gap-3 pb-4">
         <input
