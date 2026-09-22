@@ -2,6 +2,8 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
+import { ServerConfigService } from '../server-config.service';
+import { AuthService } from '../auth.service';
 
 export interface LiveChannel {
   id: number;
@@ -254,6 +256,8 @@ function queryParams(obj: Record<string, string | number | boolean | undefined>)
 @Injectable({ providedIn: 'root' })
 export class LiveTvApiService {
   private readonly http = inject(HttpClient);
+  private readonly serverConfig = inject(ServerConfigService);
+  private readonly auth = inject(AuthService);
 
   // ── User routes ──
 
@@ -329,12 +333,18 @@ export class LiveTvApiService {
 
   /** Release path for a page that is going away: an Angular request is dropped
    *  mid-flight there, and the provider connection then waits out the idle
-   *  timer, which answers 409 to the next tune on a one-connection account. */
+   *  timer, which answers 409 to the next tune on a one-connection account.
+   *  Bypasses HttpClient (its interceptors don't run on a bare `fetch`), so the
+   *  URL and the Bearer header are resolved here the same way they do. */
   stopSessionOnUnload(sessionId: string): void {
-    void fetch(`/api/livetv/sessions/${sessionId}`, {
+    const path = `/api/livetv/sessions/${sessionId}`;
+    const url = this.serverConfig.isNative ? this.serverConfig.resolveUrl(path) : path;
+    const token = this.serverConfig.isNative ? this.auth.accessToken : null;
+    void fetch(url, {
       method: 'DELETE',
       keepalive: true,
       credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     }).catch(() => {});
   }
 
