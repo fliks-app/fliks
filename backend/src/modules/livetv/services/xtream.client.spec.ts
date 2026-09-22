@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { XtreamClient, detectXtreamFromUrl, pickOutputFormat } from './xtream.client';
+import { UNGROUPED_SENTINEL } from '../parsing/group-name';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -76,6 +77,27 @@ describe('XtreamClient', () => {
     const streams = await new XtreamClient(creds).liveStreams();
     expect(streams[0].directSource).toBe('http://cdn/one.m3u8');
     expect(streams[1].directSource).toBeNull();
+  });
+
+  it('trims a padded category name and sentinels a missing one', async () => {
+    mockedAxios.get
+      .mockResolvedValueOnce({
+        data: [
+          { category_id: '1', category_name: '  XXX  ' },
+          { category_id: '2', category_name: '' },
+        ],
+      })
+      .mockResolvedValueOnce({
+        data: [
+          { stream_id: 1, name: 'One', category_id: '1' },
+          { stream_id: 2, name: 'Two', category_id: '2' },
+          { stream_id: 3, name: 'Three' },
+        ],
+      });
+    const streams = await new XtreamClient(creds).liveStreams();
+    expect(streams[0].categoryName).toBe('XXX');
+    expect(streams[1].categoryName).toBe(UNGROUPED_SENTINEL);
+    expect(streams[2].categoryName).toBe(UNGROUPED_SENTINEL);
   });
 
   it('builds the stream url with the chosen format', () => {

@@ -9,6 +9,20 @@ import { User } from '../../users/entities/user.entity';
 import { BulkUpdateChannelsDto } from '../dto/bulk-update-channels.dto';
 import { UpdateLiveTvChannelDto } from '../dto/update-livetv-channel.dto';
 import { SetChannelPrefsDto } from '../dto/set-channel-prefs.dto';
+import { normalizeGroupName } from '../parsing/group-name';
+
+/** Comparison key for a restriction match: whitespace and case both fold,
+ *  since a provider spells the same category inconsistently across entries.
+ *  Accents are left alone; folding them risks merging two languages' names. */
+function foldGroupKey(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+function isGroupDenied(groupName: string | null, denied: readonly string[]): boolean {
+  if (!groupName || !denied.length) return false;
+  const key = foldGroupKey(groupName);
+  return denied.some((g) => foldGroupKey(g) === key);
+}
 
 export interface LiveTvChannelListItem {
   id: number;
@@ -111,9 +125,12 @@ export class LiveTvChannelsService {
         WHERE c."guideChannelId" = ${guideChannelIdColumn}
           AND c.enabled = true
           AND (pref.hidden IS NULL OR pref.hidden = false)
-          ${denied.length ? 'AND (c."groupName" IS NULL OR c."groupName" NOT IN (:...guideAuthDenied))' : ''}
+          ${denied.length ? 'AND (c."groupName" IS NULL OR lower(btrim(c."groupName")) NOT IN (:...guideAuthDenied))' : ''}
       )`,
-      { guideAuthUserId: user.id, ...(denied.length ? { guideAuthDenied: denied } : {}) },
+      {
+        guideAuthUserId: user.id,
+        ...(denied.length ? { guideAuthDenied: denied.map(foldGroupKey) } : {}),
+      },
     );
   }
 
@@ -152,9 +169,10 @@ export class LiveTvChannelsService {
     // hiding is the viewer's own preference and they can undo it.
     const denied = await this.access.deniedGroups(user);
     if (denied.length) {
-      qb.andWhere('(channel."groupName" IS NULL OR channel."groupName" NOT IN (:...denied))', {
-        denied,
-      });
+      qb.andWhere(
+        '(channel."groupName" IS NULL OR lower(btrim(channel."groupName")) NOT IN (:...denied))',
+        { denied: denied.map(foldGroupKey) },
+      );
     }
 
     if (filters.group) qb.andWhere('channel."groupName" = :group', { group: filters.group });
@@ -241,7 +259,6 @@ export class LiveTvChannelsService {
       .createQueryBuilder('channel')
       .select('channel."groupName"', 'name')
       .addSelect('COUNT(*)', 'count')
-      .where('channel."groupName" IS NOT NULL')
       .groupBy('channel."groupName"');
     if (sourceId != null) {
       qb.andWhere(
@@ -277,12 +294,18 @@ export class LiveTvChannelsService {
         .execute();
     }
     if (dto.groupName !== undefined) {
+      const groupName = normalizeGroupName(dto.groupName);
       await this.channelRepo
         .createQueryBuilder()
         .update(LiveTvChannel)
-        .set({ groupName: dto.groupName })
+        .set({ groupName })
         .whereInIds(ids)
         .execute();
+      // Stamped outside the entity: a later sync must not overwrite this bulk retitle.
+      await this.dataSource.query(
+        `UPDATE livetv_channels SET "groupNameSource" = 'manual' WHERE id = ANY($1)`,
+        [ids],
+      );
     }
     if (dto.startNumber !== undefined) {
       const orderedIds = dto.selection.channelIds?.length
@@ -334,7 +357,7 @@ export class LiveTvChannelsService {
     });
     if (!channel) throw new NotFoundException(`Live TV channel #${id} not found`);
     const denied = await this.access.deniedGroups(user);
-    if (channel.groupName && denied.includes(channel.groupName)) {
+    if (isGroupDenied(channel.groupName, denied)) {
       throw new NotFoundException(`Live TV channel #${id} not found`);
     }
     return channel;
@@ -379,14 +402,22 @@ export class LiveTvChannelsService {
 
     if (dto.name !== undefined) channel.name = dto.name;
     if (dto.number !== undefined) channel.number = dto.number;
-    if (dto.groupName !== undefined) channel.groupName = dto.groupName;
+    if (dto.groupName !== undefined) channel.groupName = normalizeGroupName(dto.groupName);
     if (dto.enabled !== undefined) channel.enabled = dto.enabled;
     if (dto.guideShiftMinutes !== undefined) channel.guideShiftMinutes = dto.guideShiftMinutes;
     if (dto.guideChannelId !== undefined) {
       channel.guideChannelId = dto.guideChannelId;
       channel.guideMatchKind = 'manual';
     }
-    return this.channelRepo.save(channel);
+    const saved = await this.channelRepo.save(channel);
+    if (dto.groupName !== undefined) {
+      // Stamped outside the entity: a later sync must not overwrite this retitle.
+      await this.dataSource.query(
+        `UPDATE livetv_channels SET "groupNameSource" = 'manual' WHERE id = $1`,
+        [id],
+      );
+    }
+    return saved;
   }
 
   async setGuideChannel(channelId: number, guideChannelId: string): Promise<void> {
@@ -398,6 +429,15 @@ export class LiveTvChannelsService {
   }
 
   async setPrefs(user: User, channelId: number, dto: SetChannelPrefsDto): Promise<void> {
+    // Same visibility rule as the list: a favourite/hide on a channel this
+    // caller cannot see must fail the same way playing it does.
+    const channel = await this.channelRepo.findOne({ where: { id: channelId, enabled: true } });
+    if (!channel) throw new NotFoundException(`Live TV channel #${channelId} not found`);
+    const denied = await this.access.deniedGroups(user);
+    if (isGroupDenied(channel.groupName, denied)) {
+      throw new NotFoundException(`Live TV channel #${channelId} not found`);
+    }
+
     let pref = await this.prefRepo.findOne({
       where: { user: { id: user.id }, channel: { id: channelId } },
     });

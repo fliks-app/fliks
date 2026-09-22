@@ -24,6 +24,10 @@ export class LiveTvChannel extends BaseEntity {
   @Column({ type: 'varchar', nullable: true, default: null })
   groupName: string | null;
 
+  /** `manual` once an admin retitled the group, so a sync stops realigning it. */
+  @Column({ type: 'varchar', length: 16, default: 'provider' })
+  groupNameSource: 'provider' | 'manual';
+
   @Column({ type: 'boolean', default: false })
   enabled: boolean;
 

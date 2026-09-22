@@ -1,4 +1,5 @@
 import { parseM3u, deriveExternalId, isOnDemandUrl } from './m3u.parser';
+import { UNGROUPED_SENTINEL } from './group-name';
 
 describe('parseM3u', () => {
   it('reads the header guide url and the usual attributes', () => {
@@ -40,6 +41,18 @@ describe('parseM3u', () => {
       ['#EXTINF:-1,Two', '#EXTGRP:Sport', 'http://provider/2.ts'].join('\n'),
     );
     expect(playlist.entries[0].groupName).toBe('Sport');
+  });
+
+  it('trims the edge whitespace a provider group-title commonly carries', () => {
+    const playlist = parseM3u(
+      ['#EXTINF:-1 group-title="XXX  ",One', 'http://provider/1.ts'].join('\n'),
+    );
+    expect(playlist.entries[0].groupName).toBe('XXX');
+  });
+
+  it('gives a channel with no group at all a real, restrictable sentinel', () => {
+    const playlist = parseM3u(['#EXTINF:-1,One', 'http://provider/1.ts'].join('\n'));
+    expect(playlist.entries[0].groupName).toBe(UNGROUPED_SENTINEL);
   });
 
   it('keeps fractional tvg-shift in minutes', () => {

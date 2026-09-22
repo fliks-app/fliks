@@ -6,6 +6,7 @@ import { LiveTvChannel } from '../entities/livetv-channel.entity';
 import { LiveTvChannelStream } from '../entities/livetv-channel-stream.entity';
 import { parseM3u, isOnDemandUrl, type M3uEntry } from '../parsing/m3u.parser';
 import { normalizeChannelName } from '../parsing/channel-name';
+import { normalizeGroupName } from '../parsing/group-name';
 import {
   XtreamClient,
   detectXtreamFromUrl,
@@ -83,7 +84,7 @@ interface NormalizedEntry {
   name: string;
   url: string;
   logo: string | null;
-  groupName: string | null;
+  groupName: string;
   tvgId: string | null;
   number: number | null;
   qualityLabel: string | null;
@@ -588,8 +589,7 @@ export class LiveTvSourcesService {
     const rows = await this.channelRepo
       .createQueryBuilder('channel')
       .select('DISTINCT channel."groupName"', 'name')
-      .where('channel."groupName" IS NOT NULL')
-      .andWhere(
+      .where(
         'EXISTS (SELECT 1 FROM livetv_channel_streams s2 ' +
           'INNER JOIN livetv_sources src2 ON src2.id = s2."sourceId" ' +
           'WHERE s2."channelId" = channel.id AND src2.enabled = true)',
@@ -637,6 +637,19 @@ export class LiveTvSourcesService {
       }
       const foldPriority = new Map<number, number>();
 
+      // Not on the entity: an admin edit stamps it 'manual' via raw SQL (see
+      // `updateOne`/`bulkUpdate`) so a later sync never overwrites their retitle.
+      const groupSourceById = new Map<number, string>(
+        allChannels.length
+          ? (
+              await manager.query<{ id: number; groupNameSource: string }[]>(
+                `SELECT id, "groupNameSource" FROM livetv_channels WHERE id = ANY($1)`,
+                [allChannels.map((c) => c.id)],
+              )
+            ).map((r) => [r.id, r.groupNameSource])
+          : [],
+      );
+
       const seenExternalIds = new Set<string>();
       const newChannels: LiveTvChannel[] = [];
       /** Parallel to `newChannels`: the entry each one still needs a stream for. */
@@ -657,8 +670,10 @@ export class LiveTvSourcesService {
           existing.lastSeenAt = now;
           updatedStreams.push(existing);
           const channel = channelById.get(existing.channelId);
-          if (channel && backfillGuideId(channel, entry.tvgId)) {
-            channelsToTouch.push(channel);
+          if (channel) {
+            let touched = backfillGuideId(channel, entry.tvgId);
+            if (realignGroupName(channel, entry.groupName, groupSourceById)) touched = true;
+            if (touched) channelsToTouch.push(channel);
           }
           continue;
         }
@@ -684,7 +699,9 @@ export class LiveTvSourcesService {
               lastSeenAt: now,
             }),
           );
-          if (backfillGuideId(foldTarget, entry.tvgId)) channelsToTouch.push(foldTarget);
+          let touched = backfillGuideId(foldTarget, entry.tvgId);
+          if (realignGroupName(foldTarget, entry.groupName, groupSourceById)) touched = true;
+          if (touched) channelsToTouch.push(foldTarget);
           continue;
         }
 
@@ -813,16 +830,15 @@ export function classifyEntries(
       continue;
     }
     candidateLive.push(entry);
-    const group = entry.groupName ?? '';
-    groupCounts.set(group, (groupCounts.get(group) ?? 0) + 1);
+    groupCounts.set(entry.groupName, (groupCounts.get(entry.groupName) ?? 0) + 1);
   }
 
   const groups = [...groupCounts.entries()]
-    .map(([name, count]) => ({ name: name || '(none)', count }))
+    .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count);
 
   const live = candidateLive.filter((entry) => {
-    const group = entry.groupName ?? '';
+    const group = entry.groupName;
     if (excludePattern?.test(group)) return false;
     if (includePattern && !includePattern.test(group)) return false;
     return true;
@@ -884,6 +900,21 @@ function connOf(source: LiveTvSource): ConnDescriptor {
 
 function credsOf(source: LiveTvSource): XtreamCredentials {
   return { baseUrl: source.url, username: source.username ?? '', password: source.password ?? '' };
+}
+
+/** Realigns a channel's group with the provider's current category, so a
+ *  provider-side move (e.g. "Sport" to "XXX") actually reaches an existing
+ *  channel instead of leaving it under its stale, unrestricted label. Skips a
+ *  channel the admin retitled by hand, which a sync must never overwrite. */
+function realignGroupName(
+  channel: LiveTvChannel,
+  groupName: string,
+  groupSourceById: ReadonlyMap<number, string>,
+): boolean {
+  if (groupSourceById.get(channel.id) === 'manual') return false;
+  if (channel.groupName === groupName) return false;
+  channel.groupName = groupName;
+  return true;
 }
 
 /** Never overwrites a guide id the channel already carries. */
