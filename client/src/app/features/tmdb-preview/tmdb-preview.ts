@@ -341,11 +341,19 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     if (m) void this.loadPendingRequests(m.tmdbId);
   }
 
+  /** Approval imports the title, so this page's "not in the library yet" view
+   *  is stale: leave for the media, as importing from here already does. */
   async approveRequest(id: number) {
     this.actionBusyId.set(id);
     try {
-      await this.requestsApi.approve(id);
-      this.refreshPendingRequests();
+      const approved = await this.requestsApi.approve(id);
+      const mediaId = approved.media?.id;
+      if (mediaId == null) {
+        this.refreshPendingRequests();
+        return;
+      }
+      const prefix = approved.mediaType === 'movie' ? '/movies' : '/series';
+      void this.router.navigate([prefix, mediaId]);
     } finally {
       this.actionBusyId.set(null);
     }
