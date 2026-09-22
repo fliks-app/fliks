@@ -111,9 +111,11 @@ export function confirmPush(slid: boolean): void {
 /** Gives back a page the slide stacked when nothing else in the hook will —
  *  a swipe-back animates the trip itself and returns before {@link nextSlide}
  *  ever runs. Skips a pair the morph owns: that push was never counted, so
- *  this trip must not spend a budget that belongs to an earlier slide push. */
+ *  this trip must not spend a budget that belongs to an earlier slide push.
+ *  Gated on {@link goingBack}: the native flag this runs under can still be up
+ *  for a push, e.g. one right after a swipe that armed but never navigated. */
 export function releaseStackedPop(from: RouteNode, to: RouteNode): void {
-  if (stacked > 0 && !leavingPosterPage(from, to)) stacked--;
+  if (goingBack() && stacked > 0 && !leavingPosterPage(from, to)) stacked--;
 }
 
 /** Where the bottom chrome starts, the FAB standing out of its cradle

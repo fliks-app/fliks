@@ -2,6 +2,7 @@ import {
   armPageSlide,
   confirmPush,
   consumeArmed,
+  goingBack,
   nextSlide,
   releaseStackedPop,
   resetStack,
@@ -135,17 +136,34 @@ describe('page slide', () => {
     expect(nextSlide(library(), home(), consumeArmed())).toBeNull();
   });
 
-  it('gives its pop back on a swipe-back, which never reaches nextSlide', () => {
+  it('gives its pop back on a swipe-back that never reaches nextSlide, backgrounded or not', () => {
     armPageSlide();
     expect(nextSlide(home(), library(), consumeArmed())).toBe('push');
     confirmPush(true);
 
-    // The gesture animates itself; the hook that would have called nextSlide
-    // returns before it, so this is the only place the counter can settle.
+    // nav-back is set at NavigationStart, ahead of the hook — same order here.
+    back(true);
+    // The gesture animates itself and the hook skips before nextSlide runs, be it
+    // for the gesture itself or for the app backgrounding mid-trip — either way
+    // this is the only place the counter can settle.
+    releaseStackedPop(library(), home());
+
+    expect(nextSlide(library(), home(), consumeArmed())).toBeNull();
+  });
+
+  it('leaves the stack alone for an armed swipe-back that never went back', () => {
+    armPageSlide();
+    expect(nextSlide(home(), library(), consumeArmed())).toBe('push');
+    confirmPush(true);
+
+    // The gesture committed (native flag up) but handleBackButton() closed a
+    // layer instead of navigating — select/dialog/sheet/overlay — so nav-back
+    // was never set. Nothing here is a pop to give back.
+    expect(goingBack()).toBe(false);
     releaseStackedPop(library(), home());
 
     back(true);
-    expect(nextSlide(library(), home(), consumeArmed())).toBeNull();
+    expect(nextSlide(library(), home(), consumeArmed())).toBe('pop');
   });
 
   it('leaves a morph-owned trip for a swipe-back to skip', () => {

@@ -139,15 +139,16 @@ export const appConfig: ApplicationConfig = {
                 // root rather than stacking, so it spends the arming without using it.
                 const armed = consumeArmed() && !rootEntry;
                 if (rootEntry) resetStack();
+                // The native gesture already animated the trip; settle its pop before
+                // any guard below can return early and strand it — backgrounding mid-
+                // gesture included.
+                if (swipeBackActive()) releaseStackedPop(from, to);
                 // A transition begun while backgrounded can resume on the next dock tap.
                 if (document.hidden) {
                   transition.skipTransition();
                   return;
                 }
                 if (swipeBackActive()) {
-                  // The native gesture already animated the trip and nothing
-                  // below this runs, so the counter has to settle here.
-                  releaseStackedPop(from, to);
                   transition.skipTransition();
                   return;
                 }
