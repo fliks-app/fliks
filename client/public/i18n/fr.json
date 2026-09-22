@@ -2966,7 +2966,8 @@
         "ok": "En bonne santé",
         "failures": "{{count}} échecs",
         "last_ok": "Dernier succès :",
-        "never_ok": "Jamais réussi"
+        "never_ok": "Jamais réussi",
+        "adult_guard_failed": "Restriction du contenu adulte échouée"
       }
     }
   }

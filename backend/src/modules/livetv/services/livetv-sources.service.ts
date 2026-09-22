@@ -415,8 +415,23 @@ export class LiveTvSourcesService {
 
     try {
       await this.access.restrictAdultGroups(groups.map((g) => g.name));
+      if (source.lastAdultGuardError) {
+        await this.sourceRepo.update(source.id, { lastAdultGuardError: null });
+      }
     } catch (err) {
-      this.log.warn(`Adult-group restriction pass failed: ${errorMessage(err)}`);
+      const message = errorMessage(err);
+      // A group silently staying visible is a content-safety gap, not routine noise.
+      this.log.error(
+        `Adult-group restriction pass failed for "${source.name}": ${message}`,
+      );
+      void this.notifications.dispatch('livetv.adult_guard_failed', {
+        sourceName: source.name,
+      });
+      // lastSyncStatus stays 'ok': the import above already succeeded. Best-effort,
+      // since the only way this pass fails is a DB error, which can also break this write.
+      await this.sourceRepo
+        .update(source.id, { lastAdultGuardError: message })
+        .catch(() => undefined);
     }
     await this.maybeExpireVanishedGroups();
 

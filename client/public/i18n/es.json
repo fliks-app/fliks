@@ -2939,7 +2939,8 @@
         "ok": "Saludable",
         "failures": "{{count}} fallos",
         "last_ok": "Último éxito:",
-        "never_ok": "Nunca tuvo éxito"
+        "never_ok": "Nunca tuvo éxito",
+        "adult_guard_failed": "Restricción de contenido adulto fallida"
       }
     }
   }

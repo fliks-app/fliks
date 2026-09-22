@@ -91,6 +91,11 @@ export class LiveTvSource extends BaseEntity {
   @Column({ type: 'text', nullable: true, default: null })
   lastSyncError: string | null;
 
+  /** Set when the post-sync adult-group restriction pass fails; kept apart from
+   *  `lastSyncStatus`, which stays 'ok' since the channel import itself succeeded. */
+  @Column({ type: 'text', nullable: true, default: null })
+  lastAdultGuardError: string | null;
+
   @Column({ type: 'int', default: 0 })
   channelCount: number;
 }

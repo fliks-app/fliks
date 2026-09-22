@@ -295,6 +295,8 @@ export class NotificationsService {
         return `Live TV source "${String(payload.sourceName ?? '')}" account expires soon`;
       case 'livetv.account_expired':
         return `Live TV source "${String(payload.sourceName ?? '')}" account has expired`;
+      case 'livetv.adult_guard_failed':
+        return `Live TV source "${String(payload.sourceName ?? '')}" adult-group restriction pass failed`;
       default:
         return `${event}: ${JSON.stringify(payload)}`;
     }

@@ -2939,7 +2939,8 @@
         "ok": "In buono stato",
         "failures": "{{count}} errori",
         "last_ok": "Ultimo successo:",
-        "never_ok": "Mai riuscito"
+        "never_ok": "Mai riuscito",
+        "adult_guard_failed": "Restrizione contenuti per adulti non riuscita"
       }
     }
   }

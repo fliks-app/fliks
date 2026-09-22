@@ -97,6 +97,7 @@ export interface AdminSource {
   lastSyncAt: string | null;
   lastSyncStatus: string | null;
   lastSyncError: string | null;
+  lastAdultGuardError: string | null;
   channelCount: number;
   /** Below: reported by the provider panel. Absent until that lands server-side. */
   accountStatus?: string | null;
