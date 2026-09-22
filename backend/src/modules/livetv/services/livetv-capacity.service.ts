@@ -12,6 +12,19 @@ export class LiveTvCapacityService {
   private readonly probesInFlight = new Map<number, number>();
   /** sourceId -> ms timestamps of upstreams closed recently but still busy. */
   private readonly recentReleases = new Map<number, number[]>();
+  /** sourceId -> opens that passed the capacity check but haven't registered a
+   *  session yet: closes the gap two concurrent opens would otherwise race through. */
+  private readonly pendingOpens = new Map<number, number>();
+
+  reserve(sourceId: number): void {
+    this.pendingOpens.set(sourceId, (this.pendingOpens.get(sourceId) ?? 0) + 1);
+  }
+
+  releaseReservation(sourceId: number): void {
+    const remaining = (this.pendingOpens.get(sourceId) ?? 1) - 1;
+    if (remaining > 0) this.pendingOpens.set(sourceId, remaining);
+    else this.pendingOpens.delete(sourceId);
+  }
 
   beginProbe(sourceId: number): void {
     this.probesInFlight.set(sourceId, (this.probesInFlight.get(sourceId) ?? 0) + 1);
@@ -38,7 +51,12 @@ export class LiveTvCapacityService {
     const stillHeld = (this.recentReleases.get(sourceId) ?? []).filter((t) => t > cutoff);
     if (stillHeld.length) this.recentReleases.set(sourceId, stillHeld);
     else this.recentReleases.delete(sourceId);
-    return (this.probesInFlight.get(sourceId) ?? 0) + liveHolds + stillHeld.length;
+    return (
+      (this.probesInFlight.get(sourceId) ?? 0) +
+      (this.pendingOpens.get(sourceId) ?? 0) +
+      liveHolds +
+      stillHeld.length
+    );
   }
 
   assertBelowLimit(
