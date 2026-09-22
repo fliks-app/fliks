@@ -22,7 +22,7 @@
           <tr>
             <th>{{ 'settings.users.col_username' | translate }}</th>
             <th>{{ 'settings.users.col_role' | translate }}</th>
-            <th>{{ 'settings.users.col_status' | translate }}</th>
+            <th class="text-center">{{ 'common.active' | translate }}</th>
             <th>{{ 'settings.users.col_last_login' | translate }}</th>
           </tr>
         </thead>
@@ -42,16 +42,15 @@
               <td>
                 <span class="badge badge-sm badge-ghost">{{ user.role ?? '—' }}</span>
               </td>
-              <td>
-                @if (user.enabled) {
-                  <span class="badge badge-success badge-sm">{{
-                    'common.active' | translate
-                  }}</span>
-                } @else {
-                  <span class="badge badge-ghost badge-sm">{{
-                    'common.disabled' | translate
-                  }}</span>
-                }
+              <td class="text-center">
+                <input
+                  type="checkbox"
+                  class="toggle toggle-sm toggle-success"
+                  [checked]="user.enabled"
+                  [disabled]="togglingId() === user.id || auth.user()?.id === user.id"
+                  [attr.aria-label]="'common.active' | translate"
+                  (change)="toggleEnabled(user)"
+                />
               </td>
               <td class="text-base-content/70 text-sm">
                 @if (user.lastLogin) {

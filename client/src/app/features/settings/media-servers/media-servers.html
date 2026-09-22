@@ -48,11 +48,14 @@
               <td class="text-sm text-base-content/60 truncate max-w-[12rem]">{{ row.url }}</td>
               <td class="text-sm text-base-content/60">{{ row.events.length }} event(s)</td>
               <td class="text-center">
-                @if (row.enabled) {
-                  <span class="badge badge-success badge-sm">{{ 'common.yes' | translate }}</span>
-                } @else {
-                  <span class="badge badge-ghost badge-sm">{{ 'common.no' | translate }}</span>
-                }
+                <input
+                  type="checkbox"
+                  class="toggle toggle-sm toggle-success"
+                  [checked]="row.enabled"
+                  [disabled]="togglingId() === row.id"
+                  [attr.aria-label]="'settings.media_servers.col_enabled' | translate"
+                  (change)="toggleEnabled(row)"
+                />
               </td>
               <td class="text-end">
                 <button

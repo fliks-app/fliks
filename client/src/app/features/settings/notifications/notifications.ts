@@ -57,6 +57,7 @@ export class NotificationsSettingsComponent implements OnInit {
   readonly loading = signal(true);
   readonly listError = signal('');
   readonly saving = signal(false);
+  readonly togglingId = signal<number | null>(null);
 
   readonly editingId = signal<number | null>(null);
   readonly testLoading = signal(false);
@@ -227,6 +228,28 @@ export class NotificationsSettingsComponent implements OnInit {
       // handled by global error interceptor
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  /** Full DTO required server-side; `settings` echoes the redacted GET value so the
+   *  stored secret merges back in unchanged instead of being wiped. */
+  async toggleEnabled(nc: NotificationConnection): Promise<void> {
+    this.togglingId.set(nc.id);
+    try {
+      await firstValueFrom(
+        this.http.put(`/api/notifications/${nc.id}`, {
+          name: nc.name,
+          type: nc.type,
+          settings: nc.settings ?? {},
+          events: nc.events,
+          enabled: !nc.enabled,
+        }),
+      );
+      await this.reloadAll();
+    } catch {
+      // handled by global error interceptor
+    } finally {
+      this.togglingId.set(null);
     }
   }
 

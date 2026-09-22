@@ -2042,7 +2042,6 @@
       "load_error": "Unable to load the users.",
       "col_username": "Username",
       "col_role": "Role",
-      "col_status": "Status",
       "col_last_login": "Last activity",
       "actions": "Actions",
       "you": "you",

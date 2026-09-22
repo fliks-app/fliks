@@ -29,7 +29,7 @@
             <th>{{ 'settings.notifications.col_name' | translate }}</th>
             <th>{{ 'settings.notifications.col_type' | translate }}</th>
             <th>{{ 'settings.notifications.col_events' | translate }}</th>
-            <th>{{ 'settings.notifications.col_enabled' | translate }}</th>
+            <th class="text-center">{{ 'settings.notifications.col_enabled' | translate }}</th>
             <th class="text-end w-40"></th>
           </tr>
         </thead>
@@ -45,12 +45,15 @@
                 <span class="badge badge-ghost badge-sm">{{ nc.type }}</span>
               </td>
               <td class="text-sm text-base-content/60">{{ nc.events.length }} event(s)</td>
-              <td>
-                @if (nc.enabled) {
-                  <span class="badge badge-success badge-sm">{{ 'common.yes' | translate }}</span>
-                } @else {
-                  <span class="badge badge-ghost badge-sm">{{ 'common.no' | translate }}</span>
-                }
+              <td class="text-center">
+                <input
+                  type="checkbox"
+                  class="toggle toggle-sm toggle-success"
+                  [checked]="nc.enabled"
+                  [disabled]="togglingId() === nc.id"
+                  [attr.aria-label]="'settings.notifications.col_enabled' | translate"
+                  (change)="toggleEnabled(nc)"
+                />
               </td>
               <td class="text-end">
                 <button

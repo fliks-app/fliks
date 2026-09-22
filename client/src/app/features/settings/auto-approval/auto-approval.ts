@@ -63,6 +63,7 @@ export class AutoApprovalSettingsComponent implements OnInit {
 
   private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
   readonly saving = signal(false);
+  readonly togglingId = signal<number | null>(null);
   readonly editingId = signal<number | null>(null);
 
   readonly formName = signal('');
@@ -258,6 +259,24 @@ export class AutoApprovalSettingsComponent implements OnInit {
       // handled by global error interceptor
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  /** `enabled` defaults to true server-side when omitted, so it must always ride along
+   *  with `name`/`criteria` — a bare `{ enabled }` patch would also reset the criteria. */
+  async toggleEnabled(rule: AutoApprovalRule): Promise<void> {
+    this.togglingId.set(rule.id);
+    try {
+      await this.api.update(rule.id, {
+        name: rule.name,
+        enabled: !rule.enabled,
+        criteria: rule.criteria,
+      });
+      await this.reload();
+    } catch {
+      // handled by global error interceptor
+    } finally {
+      this.togglingId.set(null);
     }
   }
 

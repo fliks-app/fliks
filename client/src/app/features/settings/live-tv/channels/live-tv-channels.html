@@ -171,11 +171,14 @@
                 <td class="text-sm text-base-content/60">{{ row.groupName }}</td>
                 <td class="text-sm text-base-content/60">{{ matchLabel(row.guideMatchKind) }}</td>
                 <td class="text-center">
-                  @if (row.enabled) {
-                    <span class="badge badge-success badge-sm">{{ 'common.yes' | translate }}</span>
-                  } @else {
-                    <span class="badge badge-ghost badge-sm">{{ 'common.no' | translate }}</span>
-                  }
+                  <input
+                    type="checkbox"
+                    class="toggle toggle-sm toggle-success"
+                    [checked]="row.enabled"
+                    [disabled]="togglingId() === row.id"
+                    [attr.aria-label]="'common.active' | translate"
+                    (change)="toggleEnabled(row)"
+                  />
                 </td>
                 <td class="text-end">
                   <button type="button" class="btn btn-ghost btn-xs" (click)="openEdit(row)">{{ 'common.edit' | translate }}</button>

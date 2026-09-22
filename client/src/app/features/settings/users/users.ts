@@ -47,6 +47,7 @@ export class UsersSettingsComponent implements OnInit {
   readonly listError = signal('');
 
   readonly saving = signal(false);
+  readonly togglingId = signal<number | null>(null);
 
   readonly formUsername = signal('');
   readonly formPassword = signal('');
@@ -106,6 +107,18 @@ export class UsersSettingsComponent implements OnInit {
 
   formatLastLogin(iso: string): string {
     return formatRelativeTime(iso, this.translate.currentLang() ?? 'fr');
+  }
+
+  async toggleEnabled(user: UserRow): Promise<void> {
+    this.togglingId.set(user.id);
+    try {
+      await this.api.update(user.id, { enabled: !user.enabled });
+      await this.reloadAll();
+    } catch {
+      // handled by global error interceptor
+    } finally {
+      this.togglingId.set(null);
+    }
   }
 
   /** Modal is create-only — edits go through the dedicated /admin/users/:id page. */

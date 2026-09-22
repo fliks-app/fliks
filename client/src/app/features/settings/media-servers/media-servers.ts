@@ -37,6 +37,7 @@ export class MediaServersSettingsComponent implements OnInit {
   readonly listError = signal('');
 
   readonly saving = signal(false);
+  readonly togglingId = signal<number | null>(null);
 
   readonly editingId = signal<number | null>(null);
   readonly testLoading = signal(false);
@@ -165,6 +166,26 @@ export class MediaServersSettingsComponent implements OnInit {
       // handled by global error interceptor
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  /** name/type/url are required by the DTO even on update, so the row's own values ride along. */
+  async toggleEnabled(row: MediaServerRow): Promise<void> {
+    this.togglingId.set(row.id);
+    try {
+      await this.api.update(row.id, {
+        name: row.name,
+        type: row.type,
+        url: row.url,
+        apiKey: row.apiKey,
+        events: row.events,
+        enabled: !row.enabled,
+      });
+      await this.reloadAll();
+    } catch {
+      // handled by global error interceptor
+    } finally {
+      this.togglingId.set(null);
     }
   }
 
