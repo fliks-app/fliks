@@ -44,6 +44,25 @@ describe('matchGuideChannels', () => {
     expect(report.unmatchedChannelIds).toEqual([4]);
   });
 
+  it('still finds the right fuzzy match among many unrelated candidates', () => {
+    // The indexed fuzzy pass only scores candidates sharing a token with the
+    // channel; this proves it still reaches the correct one, not just a fast one.
+    const manyCandidates = [
+      ...candidates,
+      ...Array.from({ length: 500 }, (_, i) => ({
+        id: `filler${i}.fr`,
+        displayNames: [`Filler Channel ${i}`, `Unrelated Show ${i}`],
+      })),
+    ];
+    const report = matchGuideChannels(
+      [{ id: 6, name: 'World News Channel Europe', guideChannelId: null, guideMatchKind: null }],
+      manyCandidates,
+    );
+    expect(report.assignments).toEqual([
+      { channelId: 6, guideChannelId: 'news.fr', kind: 'fuzzy' },
+    ]);
+  });
+
   it('never revisits a manual assignment', () => {
     const report = matchGuideChannels(
       [{ id: 5, name: 'One', guideChannelId: 'sport.fr', guideMatchKind: 'manual' }],
