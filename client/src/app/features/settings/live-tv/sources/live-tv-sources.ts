@@ -29,6 +29,7 @@ export class LiveTvSourcesComponent implements OnInit {
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly syncingId = signal<number | null>(null);
+  readonly togglingId = signal<number | null>(null);
 
   readonly editingId = signal<number | null>(null);
   readonly testLoading = signal(false);
@@ -239,6 +240,18 @@ export class LiveTvSourcesComponent implements OnInit {
       // handled by the global error interceptor
     } finally {
       this.syncingId.set(null);
+    }
+  }
+
+  async toggleEnabled(row: AdminSource): Promise<void> {
+    this.togglingId.set(row.id);
+    try {
+      await this.api.updateSource(row.id, { enabled: !row.enabled });
+      await this.reload();
+    } catch {
+      // handled by the global error interceptor
+    } finally {
+      this.togglingId.set(null);
     }
   }
 

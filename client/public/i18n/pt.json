@@ -2026,7 +2026,6 @@
       "load_error": "Não foi possível carregar os utilizadores.",
       "col_username": "Nome de utilizador",
       "col_role": "Função",
-      "col_status": "Estado",
       "col_last_login": "Última atividade",
       "actions": "Ações",
       "you": "você",

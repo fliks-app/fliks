@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { HttpClient } from '@angular/common/http';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
+import { vi } from 'vitest';
 import { NotificationsSettingsComponent } from './notifications';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 
@@ -129,6 +130,55 @@ describe('NotificationsSettingsComponent — endpoint settings key', () => {
       url: 'https://legacy.example.com',
       topic: 'old',
     });
+  });
+});
+
+describe('NotificationsSettingsComponent — toggle enabled', () => {
+  it('sends the full DTO with settings echoed back so the stored token survives', async () => {
+    const put = vi.fn(() => of({}));
+    const row = {
+      id: 1,
+      name: 'Ntfy',
+      type: 'ntfy',
+      enabled: true,
+      events: ['health.issue'],
+      settings: { url: 'https://ntfy.example.com', topic: 'media' },
+    };
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTranslateService({
+          lang: 'en',
+          loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
+        }),
+        {
+          provide: HttpClient,
+          useValue: {
+            get: (url: string) => of(url.endsWith('/events') ? [] : [row]),
+            put,
+          } as unknown as HttpClient,
+        },
+        {
+          provide: ConfirmationService,
+          useValue: { confirm: () => Promise.resolve(true), alert: () => Promise.resolve() },
+        },
+      ],
+    });
+    const fixture = TestBed.createComponent(NotificationsSettingsComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const c = fixture.componentInstance;
+
+    await c.toggleEnabled(c.rows()[0]);
+
+    expect(put).toHaveBeenCalledWith('/api/notifications/1', {
+      name: 'Ntfy',
+      type: 'ntfy',
+      settings: { url: 'https://ntfy.example.com', topic: 'media' },
+      events: ['health.issue'],
+      enabled: false,
+    });
+    expect(c.togglingId()).toBeNull();
   });
 });
 

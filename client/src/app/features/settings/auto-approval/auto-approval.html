@@ -30,7 +30,7 @@
           <tr>
             <th>{{ 'settings.auto_approval.col_name' | translate }}</th>
             <th>{{ 'settings.auto_approval.col_criteria' | translate }}</th>
-            <th>{{ 'settings.auto_approval.col_enabled' | translate }}</th>
+            <th class="text-center">{{ 'settings.auto_approval.col_enabled' | translate }}</th>
             <th></th>
           </tr>
         </thead>
@@ -49,13 +49,15 @@
                   }
                 </div>
               </td>
-              <td>
-                <span
-                  class="badge badge-sm"
-                  [class]="rule.enabled ? 'badge-success' : 'badge-ghost'"
-                >
-                  {{ (rule.enabled ? 'common.yes' : 'common.no') | translate }}
-                </span>
+              <td class="text-center">
+                <input
+                  type="checkbox"
+                  class="toggle toggle-sm toggle-success"
+                  [checked]="rule.enabled"
+                  [disabled]="togglingId() === rule.id"
+                  [attr.aria-label]="'settings.auto_approval.col_enabled' | translate"
+                  (change)="toggleEnabled(rule)"
+                />
               </td>
               <td class="text-end">
                 <button

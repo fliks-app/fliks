@@ -61,6 +61,7 @@ export class LiveTvChannelsComponent implements OnInit {
   readonly enabledFilter = signal<'' | 'true' | 'false'>('');
 
   readonly selectedIds = signal<ReadonlySet<number>>(new Set());
+  readonly togglingId = signal<number | null>(null);
   readonly bulkBusy = signal(false);
   readonly bulkScope = signal<'selection' | 'all'>('selection');
   readonly bulkGroupName = signal('');
@@ -295,6 +296,18 @@ export class LiveTvChannelsComponent implements OnInit {
       // handled by the global error interceptor
     } finally {
       this.duplicatesLoading.set(false);
+    }
+  }
+
+  async toggleEnabled(row: AdminChannel): Promise<void> {
+    this.togglingId.set(row.id);
+    try {
+      await this.api.updateChannel(row.id, { enabled: !row.enabled });
+      await this.load();
+    } catch {
+      // handled by the global error interceptor
+    } finally {
+      this.togglingId.set(null);
     }
   }
 
