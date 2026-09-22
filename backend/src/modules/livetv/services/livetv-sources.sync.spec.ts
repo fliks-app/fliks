@@ -1,8 +1,11 @@
+import 'reflect-metadata';
+import { plainToInstance } from 'class-transformer';
 import { LiveTvSourcesService } from './livetv-sources.service';
 import { LiveTvChannel } from '../entities/livetv-channel.entity';
 import { LiveTvChannelStream } from '../entities/livetv-channel-stream.entity';
 import { assertNotInternal, liveTvGet } from '../livetv-http';
 import type { TestLiveTvSourceDto } from '../dto/test-livetv-source.dto';
+import { UpdateLiveTvSourceDto } from '../dto/update-livetv-source.dto';
 
 jest.mock('../livetv-http', () => {
   const actual = jest.requireActual('../livetv-http');
@@ -73,6 +76,8 @@ function setup(sourceOverrides: Record<string, unknown> = {}) {
   const sourceRepo = {
     createQueryBuilder: jest.fn(() => sourceQueryBuilder),
     update: jest.fn().mockResolvedValue({ affected: 1 }),
+    save: jest.fn(async (row: unknown) => row),
+    remove: jest.fn(async (row: unknown) => row),
   };
   const channelRepo = {
     find: jest.fn().mockResolvedValue([]),
@@ -320,5 +325,41 @@ describe('LiveTvSourcesService.resolveGuideUrl', () => {
     // password column either; only a fresh `findOne` does.
     expect(sourceRepo.createQueryBuilder).toHaveBeenCalled();
     expect(url).toBe('http://panel.example/xmltv.php?username=joe&password=s3cret');
+  });
+});
+
+describe('LiveTvSourcesService.update', () => {
+  afterEach(() => jest.resetAllMocks());
+
+  it('keeps every field a partial PATCH left out (no Object.assign amputation)', async () => {
+    const { service, sourceRepo } = setup({
+      name: 'Provider',
+      kind: 'm3u',
+      url: 'http://provider/playlist.m3u',
+      username: 'bob',
+      password: 'secret',
+      userAgent: 'Custom/1.0',
+      referer: 'http://portal/',
+      enabled: true,
+    });
+
+    // A plain object literal never reproduces the bug: only a real class
+    // instance ([[Define]] semantics) stamps the untouched fields as
+    // `undefined`, exactly like the global ValidationPipe hands the service.
+    const dto = plainToInstance(UpdateLiveTvSourceDto, { enabled: false });
+    const result = await service.update(1, dto);
+
+    expect(sourceRepo.save).toHaveBeenCalled();
+    expect(result).toMatchObject({
+      url: 'http://provider/playlist.m3u',
+      username: 'bob',
+      password: 'secret',
+      userAgent: 'Custom/1.0',
+      referer: 'http://portal/',
+      kind: 'm3u',
+      enabled: false,
+    });
+    expect(result.url).not.toBeUndefined();
+    expect(result.username).not.toBeUndefined();
   });
 });

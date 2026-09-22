@@ -31,6 +31,7 @@ import { MergeChannelsDto } from '../dto/merge-channels.dto';
 import { UpdateLiveTvChannelDto } from '../dto/update-livetv-channel.dto';
 import { CreateLiveTvGuideSourceDto } from '../dto/create-livetv-guide-source.dto';
 import { UpdateLiveTvGuideSourceDto } from '../dto/update-livetv-guide-source.dto';
+import { LiveTvMatchReportQueryDto } from '../dto/livetv-lookup-query.dto';
 
 /** A real subscription playlist runs to tens of megabytes of text. */
 const MAX_PLAYLIST_BYTES = 128 * 1024 * 1024;
@@ -157,7 +158,7 @@ export class LivetvAdminController {
   }
 
   @Get('guide/match-report')
-  matchReport(@Query('guideSourceId') guideSourceId?: string) {
-    return this.guide.matchReport(guideSourceId != null ? Number(guideSourceId) : undefined);
+  matchReport(@Query() query: LiveTvMatchReportQueryDto) {
+    return this.guide.matchReport(query.guideSourceId);
   }
 }

@@ -30,6 +30,10 @@ import { LiveTvGuideService } from '../services/livetv-guide.service';
 import { LiveTvSessionService } from '../services/livetv-session.service';
 import { LiveTvChannelsQueryDto } from '../dto/livetv-channels-query.dto';
 import { LiveTvGuideQueryDto } from '../dto/livetv-guide-query.dto';
+import {
+  LiveTvOnNowQueryDto,
+  LiveTvSearchQueryDto,
+} from '../dto/livetv-lookup-query.dto';
 import { PlayChannelDto } from '../dto/play-channel.dto';
 import { SetChannelPrefsDto } from '../dto/set-channel-prefs.dto';
 
@@ -91,15 +95,12 @@ export class LivetvController {
 
   @Get('channels/on-now')
   @CheckPolicies((ability) => ability.can(Action.Read, LiveTvChannel))
-  onNow(
-    @Query('page') page: string | undefined,
-    @Query('pageSize') pageSize: string | undefined,
-    @CurrentUser() user: User,
-  ) {
+  onNow(@Query() query: LiveTvOnNowQueryDto, @CurrentUser() user: User) {
     return this.guide.onNow(
       user,
-      page ? Number.parseInt(page, 10) : undefined,
-      pageSize ? Number.parseInt(pageSize, 10) : undefined,
+      { group: query.group, query: query.query },
+      query.page,
+      query.pageSize,
     );
   }
 
@@ -119,14 +120,14 @@ export class LivetvController {
 
   @Get('programs/:id')
   @CheckPolicies((ability) => ability.can(Action.Read, LiveTvChannel))
-  program(@Param('id', ParseIntPipe) id: number) {
-    return this.guide.program(id);
+  program(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: User) {
+    return this.guide.program(id, user);
   }
 
   @Get('search')
   @CheckPolicies((ability) => ability.can(Action.Read, LiveTvChannel))
-  search(@Query('q') q: string | undefined, @CurrentUser() user: User) {
-    return this.guide.search(user, q ?? '');
+  search(@Query() query: LiveTvSearchQueryDto, @CurrentUser() user: User) {
+    return this.guide.search(user, query.q ?? '');
   }
 
   @Post('channels/:id/play')

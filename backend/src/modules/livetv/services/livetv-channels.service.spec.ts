@@ -15,6 +15,7 @@ function fakeQueryBuilder(entities: Partial<LiveTvChannel>[]) {
     conditions,
     leftJoin: () => qb,
     addSelect: () => qb,
+    select: () => qb,
     where: (sql: string, params?: Record<string, unknown>) => {
       conditions.push({ sql, params });
       return qb;
@@ -27,6 +28,8 @@ function fakeQueryBuilder(entities: Partial<LiveTvChannel>[]) {
     addOrderBy: () => qb,
     getRawAndEntities: async () => ({ entities, raw: entities.map(() => ({})) }),
     getCount: async () => entities.length,
+    getRawMany: async () =>
+      entities.map((e) => ({ guideChannelId: e.guideChannelId ?? null })),
   };
   return qb;
 }
@@ -83,6 +86,37 @@ describe('LiveTvChannelsService', () => {
       await service.listForUser(makeUser(), {});
       const clause = builder.conditions.find((c) => c.sql.includes('NOT IN (:...denied)'));
       expect(clause?.sql).toContain('"groupName" IS NULL');
+    });
+  });
+
+  describe('isGuideChannelVisibleToUser', () => {
+    it('reuses the same group restriction as the list', async () => {
+      access.deniedGroups.mockResolvedValue(['XXX']);
+      builder.getCount = async () => 0;
+      await expect(
+        service.isGuideChannelVisibleToUser(makeUser(), 'bbc1'),
+      ).resolves.toBe(false);
+      expect(
+        builder.conditions.some((c) => c.sql.includes('"guideChannelId" = :guideChannelId')),
+      ).toBe(true);
+    });
+
+    it('is visible when a matching channel passes the filters', async () => {
+      builder.getCount = async () => 1;
+      await expect(
+        service.isGuideChannelVisibleToUser(makeUser(), 'bbc1'),
+      ).resolves.toBe(true);
+    });
+  });
+
+  describe('authorizedGuideChannelIds', () => {
+    it('collects the distinct, non-null guide channel ids visible to the user', async () => {
+      builder.getRawMany = async () => [
+        { guideChannelId: 'bbc1' },
+        { guideChannelId: 'bbc1' },
+        { guideChannelId: null },
+      ];
+      await expect(service.authorizedGuideChannelIds(makeUser())).resolves.toEqual(['bbc1']);
     });
   });
 

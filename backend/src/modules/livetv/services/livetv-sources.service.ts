@@ -168,25 +168,65 @@ export class LiveTvSourcesService {
     const source = await this.findOne(id);
     compileGroupPattern(dto.includeGroupsPattern ?? source.includeGroupsPattern, 'includeGroupsPattern');
     compileGroupPattern(dto.excludeGroupsPattern ?? source.excludeGroupsPattern, 'excludeGroupsPattern');
-    Object.assign(source, dto);
-    if (dto.maxStreams != null) source.maxStreamsIsManual = true;
+    // A field left out of a partial PATCH is `undefined`, not absent: TS class
+    // fields ([[Define]] semantics) still declare it, so Object.assign would
+    // stamp `undefined` onto the returned entity even though the row is untouched.
+    if (dto.name !== undefined) source.name = dto.name;
+    if (dto.kind !== undefined) source.kind = dto.kind;
+    if (dto.url !== undefined) source.url = dto.url;
+    if (dto.username !== undefined) source.username = dto.username;
+    if (dto.password !== undefined) source.password = dto.password;
+    if (dto.userAgent !== undefined) source.userAgent = dto.userAgent;
+    if (dto.referer !== undefined) source.referer = dto.referer;
+    if (dto.maxStreams !== undefined) {
+      source.maxStreams = dto.maxStreams;
+      source.maxStreamsIsManual = true;
+    }
+    if (dto.refreshIntervalHours !== undefined) source.refreshIntervalHours = dto.refreshIntervalHours;
+    if (dto.enabled !== undefined) source.enabled = dto.enabled;
+    if (dto.priority !== undefined) source.priority = dto.priority;
+    if (dto.includeGroupsPattern !== undefined) source.includeGroupsPattern = dto.includeGroupsPattern;
+    if (dto.excludeGroupsPattern !== undefined) source.excludeGroupsPattern = dto.excludeGroupsPattern;
     return this.sourceRepo.save(source);
   }
 
   async remove(id: number): Promise<void> {
     const source = await this.findOne(id);
-    await this.sourceRepo.remove(source);
+    // Scoped to this source's own channels, and atomic with the source delete:
+    // a crash between the two used to leave streamless channels in the lineup.
+    await this.dataSource.transaction(async (manager) => {
+      const channelRepo = manager.getRepository(LiveTvChannel);
+      const streamRepo = manager.getRepository(LiveTvChannelStream);
+      const sourceRepo = manager.getRepository(LiveTvSource);
+
+      const candidateIds = (
+        await streamRepo
+          .createQueryBuilder('s')
+          .select('DISTINCT s."channelId"', 'channelId')
+          .where('s."sourceId" = :sourceId', { sourceId: source.id })
+          .getRawMany<{ channelId: number }>()
+      ).map((r) => r.channelId);
+
+      await sourceRepo.remove(source);
+
+      // The streams cascade with the source; a channel left with none would
+      // otherwise linger in the lineup with nothing to play.
+      if (candidateIds.length) {
+        await channelRepo
+          .createQueryBuilder()
+          .delete()
+          .whereInIds(candidateIds)
+          .andWhere(
+            'NOT EXISTS (SELECT 1 FROM livetv_channel_streams s WHERE s."channelId" = "livetv_channels"."id")',
+          )
+          .execute();
+      }
+    });
+
     // An uploaded playlist belongs to its source and goes with it.
-    await removeStoredPlaylist(source.url).catch(() => undefined);
-    // The streams cascade with the source; a channel left with none would
-    // otherwise linger in the lineup with nothing to play.
-    await this.channelRepo
-      .createQueryBuilder()
-      .delete()
-      .where(
-        'NOT EXISTS (SELECT 1 FROM livetv_channel_streams s WHERE s."channelId" = "livetv_channels"."id")',
-      )
-      .execute();
+    await removeStoredPlaylist(source.url).catch((err) =>
+      this.log.warn(`Failed to remove stored playlist for source #${source.id}: ${errorMessage(err)}`),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -304,7 +344,17 @@ export class LiveTvSourcesService {
     }
 
     const includePattern = tryCompilePattern(source.includeGroupsPattern);
+    if (source.includeGroupsPattern && !includePattern) {
+      this.log.warn(
+        `Source #${source.id} includeGroupsPattern "${source.includeGroupsPattern}" is invalid, ignoring it (every group imports)`,
+      );
+    }
     const excludePattern = tryCompilePattern(source.excludeGroupsPattern);
+    if (source.excludeGroupsPattern && !excludePattern) {
+      this.log.warn(
+        `Source #${source.id} excludeGroupsPattern "${source.excludeGroupsPattern}" is invalid, ignoring it (nothing is excluded)`,
+      );
+    }
     const { live, onDemandCount, groups } = classifyEntries(
       fetched.entries,
       includePattern,
@@ -509,6 +559,9 @@ export class LiveTvSourcesService {
       // Every channel, not just the enabled ones: a channel is created disabled,
       // so folding a second source onto it has to work before anyone enables it.
       const allChannels = await channelRepo.find({ relations: ['streams'] });
+      // A 20k-channel lineup makes this the hot path of every incremental sync:
+      // a linear .find() per entry turns into O(n²) comparisons.
+      const channelById = new Map(allChannels.map((c) => [c.id, c]));
       const channelsWithSourceStream = new Set(
         allChannels
           .filter((c) => c.streams.some((s) => s.sourceId === source.id))
@@ -542,7 +595,7 @@ export class LiveTvSourcesService {
           existing.referer = entry.referer;
           existing.lastSeenAt = now;
           updatedStreams.push(existing);
-          const channel = allChannels.find((c) => c.id === existing.channelId);
+          const channel = channelById.get(existing.channelId);
           if (channel && backfillGuideId(channel, entry.tvgId)) {
             channelsToTouch.push(channel);
           }

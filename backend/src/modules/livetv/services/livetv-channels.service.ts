@@ -84,6 +84,24 @@ export class LiveTvChannelsService {
     return { items: await this.runChannelQuery(qb), total };
   }
 
+  /** Same visibility rule as the list: authorizes a single program lookup by
+   *  the guide channel id it airs on, without duplicating the group filter. */
+  async isGuideChannelVisibleToUser(user: User, guideChannelId: string): Promise<boolean> {
+    const qb = await this.userChannelsQuery(user, {});
+    qb.andWhere('channel."guideChannelId" = :guideChannelId', { guideChannelId });
+    return (await qb.getCount()) > 0;
+  }
+
+  /** Every guide channel id this user may see, unpaginated: scopes a program
+   *  search to the caller's lineup instead of the whole guide. */
+  async authorizedGuideChannelIds(user: User): Promise<string[]> {
+    const qb = await this.userChannelsQuery(user, {});
+    const rows = await qb
+      .select('channel."guideChannelId"', 'guideChannelId')
+      .getRawMany<{ guideChannelId: string | null }>();
+    return [...new Set(rows.map((r) => r.guideChannelId).filter((v): v is string => v != null))];
+  }
+
   private async runChannelQuery(
     qb: SelectQueryBuilder<LiveTvChannel>,
   ): Promise<LiveTvChannelListItem[]> {
