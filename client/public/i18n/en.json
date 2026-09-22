@@ -2441,7 +2441,6 @@
       },
       "status_disabled": "Disabled",
       "status_unavailable": "Unavailable",
-      "status_message_toggle": "View details",
       "settings": {
         "title": "Settings",
         "subtitle": "How Fliks manages installed plugins.",
