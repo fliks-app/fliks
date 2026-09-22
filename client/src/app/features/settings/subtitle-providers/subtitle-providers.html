@@ -69,9 +69,7 @@
               <tr>
                 <th>{{ 'settings.subtitle_providers.col_name' | translate }}</th>
                 <th>{{ 'settings.subtitle_providers.translation_col_engine' | translate }}</th>
-                <th class="text-center">
-                  {{ 'settings.subtitle_providers.col_status' | translate }}
-                </th>
+                <th class="text-center">{{ 'common.active' | translate }}</th>
                 <th class="text-end w-32">
                   {{ 'settings.subtitle_providers.actions' | translate }}
                 </th>
@@ -98,11 +96,14 @@
                   </td>
                   <td class="text-sm">{{ translationEngineLabel(row.engine) }}</td>
                   <td class="text-center">
-                    @if (row.enabled) {
-                      <span class="badge badge-success badge-sm">ON</span>
-                    } @else {
-                      <span class="badge badge-ghost badge-sm">OFF</span>
-                    }
+                    <input
+                      type="checkbox"
+                      class="toggle toggle-sm toggle-success"
+                      [checked]="row.enabled"
+                      [disabled]="togglingTranslationId() === row.id"
+                      [attr.aria-label]="'common.active' | translate"
+                      (change)="toggleTranslationEnabled(row)"
+                    />
                   </td>
                   <td class="text-end">
                     <div class="flex justify-end gap-1">

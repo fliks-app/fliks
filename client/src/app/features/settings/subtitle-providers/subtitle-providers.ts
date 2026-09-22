@@ -149,6 +149,7 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   readonly savingConcurrency = signal(false);
   readonly translationRows = signal<TranslationProviderRow[]>([]);
   readonly translationLoading = signal(true);
+  readonly togglingTranslationId = signal<number | null>(null);
 
   readonly trEditingId = signal<number | null>(null);
   readonly trSaving = signal(false);
@@ -229,6 +230,18 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
 
   translationEngineLabel(engine: string): string {
     return TRANSLATION_ENGINES.find((e) => e.value === engine)?.label ?? engine;
+  }
+
+  async toggleTranslationEnabled(row: TranslationProviderRow) {
+    this.togglingTranslationId.set(row.id);
+    try {
+      await this.translationApi.update(row.id, { enabled: !row.enabled });
+      await this.reloadTranslationProviders();
+    } catch {
+      // handled by global error interceptor
+    } finally {
+      this.togglingTranslationId.set(null);
+    }
   }
 
   openCreateTranslation() {
