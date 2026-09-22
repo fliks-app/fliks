@@ -86,7 +86,7 @@ const LABELS: ProviderListLabels = {
   colNameKey: 'settings.subtitle_providers.col_name',
   colImplementationKey: 'settings.subtitle_providers.col_type',
   colPriorityKey: 'settings.subtitle_providers.col_priority',
-  colEnabledKey: 'settings.subtitle_providers.col_enabled',
+  colEnabledKey: 'common.active',
   actionsKey: 'settings.subtitle_providers.actions',
   editKey: 'settings.subtitle_providers.edit',
   deleteKey: 'settings.subtitle_providers.delete',

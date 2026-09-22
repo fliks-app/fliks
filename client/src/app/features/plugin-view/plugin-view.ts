@@ -90,7 +90,7 @@ const PLUGIN_PROVIDER_LABELS: ProviderListLabels = {
   colNameKey: 'provider_list.col_name',
   colImplementationKey: 'provider_list.col_implementation',
   colPriorityKey: 'provider_list.col_priority',
-  colEnabledKey: 'provider_list.col_enabled',
+  colEnabledKey: 'common.active',
   actionsKey: 'common.actions',
   editKey: 'common.edit',
   deleteKey: 'common.delete',

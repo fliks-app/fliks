@@ -30,7 +30,7 @@
           <tr>
             <th>{{ 'settings.auto_approval.col_name' | translate }}</th>
             <th>{{ 'settings.auto_approval.col_criteria' | translate }}</th>
-            <th class="text-center">{{ 'settings.auto_approval.col_enabled' | translate }}</th>
+            <th class="text-center">{{ 'common.active' | translate }}</th>
             <th></th>
           </tr>
         </thead>
@@ -53,7 +53,7 @@
                 <app-enabled-switch
                   [enabled]="rule.enabled"
                   [busy]="togglingId() === rule.id"
-                  ariaLabelKey="settings.auto_approval.col_enabled"
+                  ariaLabelKey="common.active"
                   (toggle)="toggleEnabled(rule)"
                 />
               </td>

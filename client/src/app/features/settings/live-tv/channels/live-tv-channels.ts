@@ -119,9 +119,13 @@ export class LiveTvChannelsComponent implements OnInit {
       });
       // Defaulted: a payload missing a list must not take the whole page down
       // through the computeds that read it.
-      this.rows.set(res.items ?? []);
+      const items = res.items ?? [];
+      this.rows.set(items);
       this.total.set(res.total ?? 0);
       this.groups.set(res.groups ?? []);
+      // A bulk action must never target a row that dropped out of the result set.
+      const live = new Set(items.map((r) => r.id));
+      this.selectedIds.update((ids) => new Set([...ids].filter((id) => live.has(id))));
     } catch {
       // handled by the global error interceptor
     } finally {

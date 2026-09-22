@@ -29,7 +29,7 @@
             <th>{{ 'settings.notifications.col_name' | translate }}</th>
             <th>{{ 'settings.notifications.col_type' | translate }}</th>
             <th>{{ 'settings.notifications.col_events' | translate }}</th>
-            <th class="text-center">{{ 'settings.notifications.col_enabled' | translate }}</th>
+            <th class="text-center">{{ 'common.active' | translate }}</th>
             <th class="text-end w-40"></th>
           </tr>
         </thead>
@@ -49,7 +49,7 @@
                 <app-enabled-switch
                   [enabled]="nc.enabled"
                   [busy]="togglingId() === nc.id"
-                  ariaLabelKey="settings.notifications.col_enabled"
+                  ariaLabelKey="common.active"
                   (toggle)="toggleEnabled(nc)"
                 />
               </td>
