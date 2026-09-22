@@ -2727,7 +2727,8 @@
     "toggle_favorite": "Alternar favorito",
     "watch": "Ver",
     "on_now": {
-      "next_label": "A seguir:"
+      "next_label": "A seguir:",
+      "load_error": "Não foi possível carregar a lista de canais."
     },
     "guide": {
       "filter_group": "Grupo",

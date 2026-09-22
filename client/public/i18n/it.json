@@ -2727,7 +2727,8 @@
     "toggle_favorite": "Attiva/disattiva preferito",
     "watch": "Guarda",
     "on_now": {
-      "next_label": "A seguire:"
+      "next_label": "A seguire:",
+      "load_error": "Impossibile caricare l'elenco dei canali."
     },
     "guide": {
       "filter_group": "Gruppo",

@@ -2754,7 +2754,8 @@
     "toggle_favorite": "Basculer en favori",
     "watch": "Regarder",
     "on_now": {
-      "next_label": "Ensuite :"
+      "next_label": "Ensuite :",
+      "load_error": "Impossible de charger la liste des chaînes."
     },
     "guide": {
       "filter_group": "Groupe",

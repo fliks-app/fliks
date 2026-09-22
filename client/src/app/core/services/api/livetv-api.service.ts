@@ -276,7 +276,7 @@ export class LiveTvApiService {
     );
   }
 
-  getOnNow(opts: { page?: number; pageSize?: number } = {}) {
+  getOnNow(opts: { page?: number; pageSize?: number; group?: string; query?: string } = {}) {
     return firstValueFrom(
       this.http.get<OnNowPage>('/api/livetv/channels/on-now', {
         params: queryParams(opts),
