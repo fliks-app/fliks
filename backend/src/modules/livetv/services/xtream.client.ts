@@ -1,4 +1,5 @@
 import { liveTvGet, type LiveTvRequestIdentity } from '../livetv-http';
+import { normalizeGroupName } from '../parsing/group-name';
 
 export interface XtreamAccount {
   status: string | null;
@@ -15,7 +16,7 @@ export interface XtreamLiveStream {
   number: number | null;
   logo: string | null;
   guideChannelId: string | null;
-  categoryName: string | null;
+  categoryName: string;
   archiveDays: number;
   /** A ready-made URL the panel supplies for this stream; wins over our own. */
   directSource: string | null;
@@ -146,7 +147,7 @@ export class XtreamClient {
     ]);
     const categoryNames = new Map<string, string>();
     for (const c of categories ?? []) {
-      categoryNames.set(String(c.category_id), String(c.category_name ?? ''));
+      categoryNames.set(String(c.category_id), String(c.category_name ?? '').trim());
     }
     return (streams ?? [])
       .filter((s) => s.stream_id != null)
@@ -156,7 +157,7 @@ export class XtreamClient {
         number: toInt(s.num) || null,
         logo: toStringOrNull(s.stream_icon),
         guideChannelId: toStringOrNull(s.epg_channel_id),
-        categoryName: categoryNames.get(String(s.category_id)) ?? null,
+        categoryName: normalizeGroupName(categoryNames.get(String(s.category_id))),
         archiveDays: toInt(s.tv_archive) ? toInt(s.tv_archive_duration) : 0,
         directSource: toStringOrNull(s.direct_source),
       }))

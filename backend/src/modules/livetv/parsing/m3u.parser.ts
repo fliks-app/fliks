@@ -1,4 +1,5 @@
 import { normalizeChannelName } from './channel-name';
+import { normalizeGroupName } from './group-name';
 
 export interface M3uEntry {
   /** Stable per source: what a refresh matches an existing stream row on. */
@@ -6,7 +7,7 @@ export interface M3uEntry {
   name: string;
   url: string;
   logo: string | null;
-  groupName: string | null;
+  groupName: string;
   tvgId: string | null;
   number: number | null;
   shiftMinutes: number;
@@ -232,7 +233,7 @@ export function parseM3u(text: string): M3uPlaylist {
       name: displayName,
       url: line,
       logo: attrs['tvg-logo'] || null,
-      groupName: attrs['group-title'] || pendingGroup,
+      groupName: normalizeGroupName(attrs['group-title'] || pendingGroup),
       tvgId: attrs['tvg-id'] || null,
       number: intOrNull(attrs['tvg-chno'] ?? attrs['channel-number']),
       shiftMinutes: shiftMinutes(attrs['tvg-shift']),

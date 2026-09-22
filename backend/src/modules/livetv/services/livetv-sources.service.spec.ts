@@ -4,6 +4,7 @@ import {
   compileGroupPattern,
   tryCompilePattern,
 } from './livetv-sources.service';
+import { UNGROUPED_SENTINEL } from '../parsing/group-name';
 
 function entry(overrides: Partial<Parameters<typeof classifyEntries>[0][number]> = {}) {
   return {
@@ -54,9 +55,11 @@ describe('classifyEntries', () => {
     ]);
   });
 
-  it('labels a missing group-title as (none) rather than dropping it', () => {
-    const result = classifyEntries([entry({ groupName: null })], null, null);
-    expect(result.groups).toEqual([{ name: '(none)', count: 1 }]);
+  it('tallies the ungrouped sentinel like any other group rather than dropping it', () => {
+    // Ingestion (m3u/xtream) never emits null/'' anymore; ungrouped entries
+    // already carry the sentinel by the time they reach classifyEntries.
+    const result = classifyEntries([entry({ groupName: UNGROUPED_SENTINEL })], null, null);
+    expect(result.groups).toEqual([{ name: UNGROUPED_SENTINEL, count: 1 }]);
   });
 
   it('applies the include pattern against group-title', () => {

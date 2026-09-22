@@ -104,11 +104,15 @@ function setup(sourceOverrides: Record<string, unknown> = {}) {
     delete: jest.fn().mockResolvedValue({ affected: 0 }),
     createQueryBuilder: jest.fn(() => makeQueryBuilder()),
   };
+  // Backs the raw `groupNameSource` lookup in `upsert`: no channel is
+  // admin-overridden unless a test says so.
+  const managerQuery = jest.fn().mockResolvedValue([]);
   const dataSource = {
     transaction: jest.fn(async (cb: (manager: unknown) => unknown) =>
       cb({
         getRepository: (entity: unknown) =>
           entity === LiveTvChannel ? channelRepo : entity === LiveTvSource ? sourceRepo : streamRepo,
+        query: managerQuery,
       }),
     ),
   };
@@ -138,6 +142,7 @@ function setup(sourceOverrides: Record<string, unknown> = {}) {
     sourceQueryBuilder,
     channelRepo,
     streamRepo,
+    managerQuery,
     settings,
     logos,
     access,
@@ -278,6 +283,56 @@ describe('LiveTvSourcesService.sync (m3u)', () => {
     expect(access.restrictAdultGroups).toHaveBeenCalledWith(
       expect.arrayContaining(['News', 'XXX Adult']),
     );
+  });
+
+  describe('group realignment on an existing channel', () => {
+    function existingChannelFixture(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 100,
+        name: 'One',
+        groupName: 'Sport',
+        guideChannelId: null,
+        streams: [{ id: 1, channelId: 100, sourceId: 1, externalId: 'x' }],
+        ...overrides,
+      };
+    }
+    const movedPlaylist = [
+      '#EXTINF:-1 group-title="XXX Adult",One',
+      'http://provider/live/u/p/x.ts',
+    ].join('\n');
+
+    it("follows the channel when the provider moves it into a new category", async () => {
+      mockedLiveTvGet.mockResolvedValue({ status: 200, data: movedPlaylist, headers: {} });
+      const { service, channelRepo, streamRepo, managerQuery } = setup();
+      channelRepo.find.mockResolvedValue([existingChannelFixture()]);
+      streamRepo.find.mockResolvedValue([
+        makeStream({ id: 1, channelId: 100, externalId: 'x', lastSeenAt: new Date() }),
+      ]);
+      managerQuery.mockResolvedValue([{ id: 100, groupNameSource: 'provider' }]);
+
+      await service.sync(1);
+
+      expect(channelRepo.save).toHaveBeenCalledWith(
+        [expect.objectContaining({ id: 100, groupName: 'XXX Adult' })],
+        expect.anything(),
+      );
+    });
+
+    it('never overwrites a group the admin retitled by hand', async () => {
+      mockedLiveTvGet.mockResolvedValue({ status: 200, data: movedPlaylist, headers: {} });
+      const { service, channelRepo, streamRepo, managerQuery } = setup();
+      const channel = existingChannelFixture({ groupName: 'My Sports' });
+      channelRepo.find.mockResolvedValue([channel]);
+      streamRepo.find.mockResolvedValue([
+        makeStream({ id: 1, channelId: 100, externalId: 'x', lastSeenAt: new Date() }),
+      ]);
+      managerQuery.mockResolvedValue([{ id: 100, groupNameSource: 'manual' }]);
+
+      await service.sync(1);
+
+      expect(channelRepo.save).not.toHaveBeenCalled();
+      expect(channel.groupName).toBe('My Sports');
+    });
   });
 
   describe('vanished-group sweep gate', () => {
