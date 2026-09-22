@@ -111,12 +111,16 @@ export interface LiveTvSessionEntry {
   probeSeconds: number;
   /** The codec baked into the current fMP4 init segment while `mode === 'remux'`. */
   activeVideoCodec: string | null;
-  /** Direct mode only: one PassThrough per viewer, fed by the single shared upstream. */
-  directTees: Set<PassThrough> | null;
+  /** Direct mode only: one PassThrough per viewer, keyed by its viewer token so a
+   *  flowing tee can refresh that viewer's `lastSeenAt`. */
+  directTees: Map<PassThrough, string> | null;
   directAbort: (() => void) | null;
   directContentType: string | null;
   /** Set when the upstream turned out to be a manifest, so direct play is off. */
   directNotStreamable: boolean;
+  /** The real reason `connectDirect` failed to open the upstream; recover() reports
+   *  it instead of the generic startup-timeout message when it's set. */
+  lastConnectError: string | null;
 }
 
 const FIRST_SEGMENT_TIMEOUT_MS = 20_000;
@@ -244,7 +248,7 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
     for (const session of this.sessions.values()) {
       this.clearWatchers(session);
       this.stopTransport(session);
-      for (const tee of session.directTees ?? []) tee.destroy();
+      for (const tee of session.directTees?.keys() ?? []) tee.destroy();
     }
     this.sessions.clear();
     this.viewerIndex.clear();
@@ -308,64 +312,77 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
       this.reportActivity(existing);
       return this.describe(existing, sessionId);
     }
+    const grace = await this.settingInt('livetv_slot_release_seconds', 15);
+    // Check-then-reserve with nothing async in between: two concurrent opens for
+    // the same source would otherwise both pass the check before either is
+    // registered in `this.sessions`, and both proceed past `maxStreams`.
     try {
-      await this.assertCapacity(streams[0]);
+      this.assertCapacity(streams[0], grace);
     } catch (err) {
       this.viewerIndex.delete(sessionId);
       throw err;
     }
+    this.capacity.reserve(streams[0].sourceId);
 
-    // The key stays on the requested mode: two viewers asking the same thing
-    // share a session even when the probe downgrades both to a transcode.
-    if (mode !== 'direct') await this.ensureProbed(streams[0]);
-    const effectiveMode =
-      mode === 'remux' && !REMUXABLE_VIDEO.has(streams[0].probedVideoCodec ?? '')
-        ? 'transcode'
-        : mode;
+    let session: LiveTvSessionEntry;
+    try {
+      // The key stays on the requested mode: two viewers asking the same thing
+      // share a session even when the probe downgrades both to a transcode.
+      if (mode !== 'direct') await this.ensureProbed(streams[0]);
+      const effectiveMode =
+        mode === 'remux' && !REMUXABLE_VIDEO.has(streams[0].probedVideoCodec ?? '')
+          ? 'transcode'
+          : mode;
 
-    const [segmentSeconds, windowMinutes, probeSeconds] = await Promise.all([
-      this.settingInt('livetv_segment_seconds', 2),
-      this.settingInt('livetv_timeshift_minutes', 15),
-      this.settingInt('livetv_probe_seconds', 3),
-    ]);
+      const [segmentSeconds, windowMinutes, probeSeconds] = await Promise.all([
+        this.settingInt('livetv_segment_seconds', 2),
+        this.settingInt('livetv_timeshift_minutes', 15),
+        this.settingInt('livetv_probe_seconds', 3),
+      ]);
 
-    const session: LiveTvSessionEntry = {
-      key,
-      channelId: channel.id,
-      channelName: channel.name,
-      mode: effectiveMode,
-      streamId: streams[0].id,
-      streamUrl: streams[0].url,
-      sourceId: streams[0].sourceId,
-      dir: effectiveMode === 'direct' ? '' : path.join(this.liveRoot, key.replace(/[^a-z0-9-]/gi, '_')),
-      proc: null,
-      viewers: new Map([[sessionId, viewer]]),
-      createdAt: Date.now(),
-      lastAccessAt: Date.now(),
-      idleTimer: null,
-      watcher: null,
-      stallTimer: null,
-      lastSegmentAt: Date.now(),
-      failoverIndex: 0,
-      streamFailures: new Map(),
-      restarts: 0,
-      intentionallyKilled: false,
-      starting: true,
-      streams,
-      segmentSeconds,
-      windowMinutes,
-      useTs: caps.useTs === true,
-      videoBitrateBps: caps.maxBitrateBps,
-      probeSeconds,
-      activeVideoCodec: effectiveMode === 'remux' ? (streams[0].probedVideoCodec ?? null) : null,
-      directTees: effectiveMode === 'direct' ? new Set() : null,
-      directAbort: null,
-      directContentType: null,
-      directNotStreamable: false,
-    };
+      session = {
+        key,
+        channelId: channel.id,
+        channelName: channel.name,
+        mode: effectiveMode,
+        streamId: streams[0].id,
+        streamUrl: streams[0].url,
+        sourceId: streams[0].sourceId,
+        dir: effectiveMode === 'direct' ? '' : path.join(this.liveRoot, key.replace(/[^a-z0-9-]/gi, '_')),
+        proc: null,
+        viewers: new Map([[sessionId, viewer]]),
+        createdAt: Date.now(),
+        lastAccessAt: Date.now(),
+        idleTimer: null,
+        watcher: null,
+        stallTimer: null,
+        lastSegmentAt: Date.now(),
+        failoverIndex: 0,
+        streamFailures: new Map(),
+        restarts: 0,
+        intentionallyKilled: false,
+        starting: true,
+        streams,
+        segmentSeconds,
+        windowMinutes,
+        useTs: caps.useTs === true,
+        videoBitrateBps: caps.maxBitrateBps,
+        probeSeconds,
+        activeVideoCodec: effectiveMode === 'remux' ? (streams[0].probedVideoCodec ?? null) : null,
+        directTees: effectiveMode === 'direct' ? new Map() : null,
+        directAbort: null,
+        directContentType: null,
+        directNotStreamable: false,
+        lastConnectError: null,
+      };
 
-    if (session.dir) fs.mkdirSync(session.dir, { recursive: true });
-    this.sessions.set(key, session);
+      if (session.dir) fs.mkdirSync(session.dir, { recursive: true });
+      this.sessions.set(key, session);
+    } finally {
+      // Registered in `this.sessions` (or never will be): either way `upstreamsOn`
+      // now reflects reality on its own, so the temporary hold is no longer needed.
+      this.capacity.releaseReservation(streams[0].sourceId);
+    }
 
     const started = await this.recover(session, false);
     if (!started) {
@@ -439,9 +456,9 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
 
   /** One PassThrough per viewer of a direct session; the shared upstream itself
    *  is opened once in {@link open} and is never re-opened here. */
-  attachDirectViewer(session: LiveTvSessionEntry): PassThrough {
+  attachDirectViewer(session: LiveTvSessionEntry, viewerId: string): PassThrough {
     const tee = new PassThrough({ highWaterMark: DIRECT_TEE_HIGH_WATER_MARK });
-    session.directTees?.add(tee);
+    session.directTees?.set(tee, viewerId);
     return tee;
   }
 
@@ -530,8 +547,7 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  private async assertCapacity(primary: LiveTvChannelStream): Promise<void> {
-    const grace = await this.settingInt('livetv_slot_release_seconds', 15);
+  private assertCapacity(primary: LiveTvChannelStream, grace: number): void {
     this.capacity.assertBelowLimit(primary.source, grace, this.upstreamsOn(primary.sourceId));
   }
 
@@ -603,7 +619,9 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
       }
 
       this.stopTransport(session);
-      void this.streamRepo.update(stream.id, { lastError: 'no segment produced within the startup window' });
+      const detail = session.lastConnectError ?? 'no segment produced within the startup window';
+      session.lastConnectError = null;
+      void this.streamRepo.update(stream.id, { lastError: detail });
       session.streamFailures.set(stream.id, (session.streamFailures.get(stream.id) ?? 0) + 1);
       session.failoverIndex++;
       session.restarts++;
@@ -720,12 +738,17 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
           sniffTimer = setTimeout(() => settle(true), DIRECT_SNIFF_MS);
 
           res.data.on('data', (chunk: Buffer) => {
-            session.lastSegmentAt = Date.now();
+            const now = Date.now();
+            session.lastSegmentAt = now;
             if (!settled) {
               settle(!isManifestPayload(chunk));
               if (session.directNotStreamable) return;
             }
-            for (const tee of session.directTees ?? []) {
+            for (const [tee, viewerId] of session.directTees ?? []) {
+              // A tee that's still draining proves its viewer alive; throttled to
+              // once a second, so a busy stream isn't timestamping every chunk.
+              const viewer = session.viewers.get(viewerId);
+              if (viewer && now - viewer.lastSeenAt >= 1000) viewer.lastSeenAt = now;
               // A tee that cannot drain fast enough is dropped, never the upstream.
               if (!tee.write(chunk)) {
                 tee.destroy();
@@ -740,7 +763,12 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
           res.data.on('error', onDown);
           res.data.on('end', onDown);
         })
-        .catch(() => resolve(false));
+        .catch((err: unknown) => {
+          const detail = err instanceof Error ? err.message : String(err);
+          this.log.warn(`Live TV direct connect failed for stream #${stream.id}: ${detail}`);
+          session.lastConnectError = detail;
+          resolve(false);
+        });
     });
   }
 
@@ -883,7 +911,7 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
     this.clearWatchers(session);
     this.stopTransport(session);
     this.capacity.recordRelease(session.sourceId);
-    for (const tee of session.directTees ?? []) tee.destroy();
+    for (const tee of session.directTees?.keys() ?? []) tee.destroy();
     session.directTees?.clear();
     if (session.dir) fs.rm(session.dir, { recursive: true, force: true }, () => undefined);
     this.reportActivity(session, true);

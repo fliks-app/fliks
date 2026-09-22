@@ -33,8 +33,9 @@ import { LiveTvGuideQueryDto } from '../dto/livetv-guide-query.dto';
 import { PlayChannelDto } from '../dto/play-channel.dto';
 import { SetChannelPrefsDto } from '../dto/set-channel-prefs.dto';
 
-/** `seg-00000.m4s` / `seg-00000.ts` / `init.mp4`: our own live output naming. */
-const SEGMENT_NAME_RE = /^(init\.mp4|seg-\d{5}\.(m4s|ts))$/;
+/** `seg-00000.m4s` / `seg-00000.ts` / `init.mp4`: our own live output naming.
+ *  `%05d` is a minimum width, so ffmpeg keeps writing 6+ digit names past segment 99999. */
+export const SEGMENT_NAME_RE = /^(init\.mp4|seg-\d{5,}\.(m4s|ts))$/;
 
 function firstQueryString(query: Request['query'], key: string): string | undefined {
   const v = query[key];
@@ -181,7 +182,7 @@ export class LivetvController {
     if (!session || session.mode !== 'direct') {
       throw new NotFoundException('Live TV session not found');
     }
-    const tee = this.sessions.attachDirectViewer(session);
+    const tee = this.sessions.attachDirectViewer(session, sessionId);
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Content-Type', session.directContentType ?? 'video/mp2t');
     res.on('close', () => this.sessions.detachDirectViewer(session, tee));

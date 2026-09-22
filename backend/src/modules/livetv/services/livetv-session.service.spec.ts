@@ -509,8 +509,8 @@ describe('LiveTvSessionService', () => {
     const sessionB = service.getForServe(second.sessionId)!;
     expect(sessionA).toBe(sessionB);
 
-    const teeA = service.attachDirectViewer(sessionA);
-    const teeB = service.attachDirectViewer(sessionB);
+    const teeA = service.attachDirectViewer(sessionA, first.sessionId);
+    const teeB = service.attachDirectViewer(sessionB, second.sessionId);
     const gotA: Buffer[] = [];
     const gotB: Buffer[] = [];
     teeA.on('data', (c: Buffer) => gotA.push(c));
@@ -531,7 +531,7 @@ describe('LiveTvSessionService', () => {
 
     const result = await service.open(channel, makeUser(1), { directPlay: true });
     const session = service.getForServe(result.sessionId)!;
-    const slowTee = service.attachDirectViewer(session);
+    const slowTee = service.attachDirectViewer(session, result.sessionId);
     const destroyed = jest.fn();
     slowTee.on('close', destroyed);
     // Simulate a full buffer: the very next write reports backpressure.
@@ -543,5 +543,39 @@ describe('LiveTvSessionService', () => {
     expect(destroyed).toHaveBeenCalled();
     expect(session.directTees?.has(slowTee)).toBe(false);
     expect(upstream.destroyed).toBe(false);
+  });
+
+  it('keeps a direct viewer whose tee is flowing, even past the TTL', async () => {
+    const upstream = new PassThrough();
+    mockedAxiosGet.mockResolvedValue({ data: upstream, headers: { 'content-type': 'video/mp2t' } });
+    const channel = makeChannel([makeStream()]);
+
+    const result = await service.open(channel, makeUser(1), { directPlay: true });
+    const session = service.getForServe(result.sessionId)!;
+    service.attachDirectViewer(session, result.sessionId);
+
+    // Simulate the TTL having elapsed with no getForServe call in between: a
+    // direct client makes one long GET and never polls a playlist again.
+    session.viewers.get(result.sessionId)!.lastSeenAt = Date.now() - 10 * 60 * 1000;
+
+    upstream.emit('data', Buffer.from('x'));
+    await new Promise((r) => setImmediate(r));
+
+    (service as never as { sweepAbandoned: () => void }).sweepAbandoned();
+
+    expect(service.getForServe(result.sessionId)).toBeDefined();
+  });
+
+  it('records the real upstream-open failure in lastError, not the generic startup message', async () => {
+    mockedAxiosGet.mockRejectedValue(new Error('connect ECONNREFUSED 203.0.113.1:443'));
+    const channel = makeChannel([makeStream({ id: 1 })]);
+
+    await expect(service.open(channel, makeUser(1), { directPlay: true })).rejects.toMatchObject({
+      response: { code: 'livetv_channel_unavailable' },
+    });
+
+    expect(streamRepo.update).toHaveBeenCalledWith(1, {
+      lastError: expect.stringContaining('ECONNREFUSED'),
+    });
   });
 });
