@@ -52,8 +52,7 @@ import {
 } from '../../player/overlay/player-stats-overlay';
 import { programmeProgressPercent } from '../programme-progress';
 
-/** Same native plugins the VOD player (player.ts) drives, duplicated rather than
- *  shared: this PR's scope excludes touching files outside live-tv/live-player. */
+/** Same native plugins as the VOD player (player.ts), duplicated rather than shared. */
 interface ImmersivePlugin {
   enter(options?: { displayBehindNotch?: boolean }): Promise<void>;
   exit(): Promise<void>;
@@ -72,9 +71,8 @@ const REWIND_STEP_SECONDS = 10;
 /** Rewind below this reads as "at live": it is measured against the live point,
  *  not the manifest edge, so it needs no room for the player's own latency. */
 const LIVE_EDGE_TOLERANCE_SECONDS = 1;
-/** Refreshes the on-now overlay (progress bar, next line, current title) without a
- *  per-second timer. A full 500-channel page each tick, so this stays a few minutes
- *  apart rather than seconds; the mini guide forces its own refresh when opened. */
+/** A full 500-channel page each tick, so this stays minutes apart, not seconds;
+ *  the mini guide forces its own refresh when opened. */
 const CHANNEL_REFRESH_MS = 120_000;
 const NUMBER_ENTRY_COMMIT_MS = 1_500;
 /** Channel up and down walk the whole lineup, not one screen of it. */
@@ -316,11 +314,14 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   /** The browser gives no async time on a tab close, so the release goes out
    *  through a keepalive request rather than the Angular client. */
   private readonly releaseOnUnload = (): void => {
-    const id = this.session()?.sessionId;
+    const id = this.currentSessionId ?? this.session()?.sessionId;
     if (id) this.api.stopSessionOnUnload(id);
   };
 
   ngOnDestroy(): void {
+    // Supersede any in-flight tune(): its late session must release itself,
+    // not land in a destroyed engine.
+    this.tuneSeq++;
     window.removeEventListener('keydown', this.onKeydownCapture, true);
     window.removeEventListener('pagehide', this.releaseOnUnload);
     window.removeEventListener('app:playerBack', this.onPlayerBackEvent);
@@ -375,6 +376,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     if (outgoingSessionId) {
       this.session.set(null);
       await this.api.stopSession(outgoingSessionId).catch(() => {});
+      this.currentSessionId = null;
       if (seq !== this.tuneSeq) return;
     }
     try {
@@ -778,7 +780,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   }
 
   private async teardownSession(): Promise<void> {
-    const id = this.session()?.sessionId;
+    const id = this.currentSessionId ?? this.session()?.sessionId;
     if (id) await this.api.stopSession(id).catch(() => {});
   }
 
