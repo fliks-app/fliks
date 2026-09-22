@@ -47,7 +47,7 @@
                   type="checkbox"
                   class="toggle toggle-sm toggle-success"
                   [checked]="user.enabled"
-                  [disabled]="togglingId() === user.id"
+                  [disabled]="togglingId() === user.id || auth.user()?.id === user.id"
                   [attr.aria-label]="'common.active' | translate"
                   (change)="toggleEnabled(user)"
                 />
