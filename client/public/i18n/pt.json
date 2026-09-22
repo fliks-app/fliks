@@ -2726,7 +2726,6 @@
     "ungrouped": "Sem grupo",
     "toggle_favorite": "Alternar favorito",
     "watch": "Ver",
-    "live_badge": "DIRETO",
     "on_now": {
       "next_label": "A seguir:"
     },
@@ -2738,13 +2737,14 @@
       "jump_forward": "Avançar",
       "now": "Agora",
       "empty": "Nenhum canal corresponde aos filtros atuais.",
-      "no_program": "Sem informação do programa"
+      "no_program": "Sem informação do programa",
+      "load_error": "Não foi possível carregar o guia.",
+      "date": "Data"
     },
     "player": {
       "channels": "Canais",
       "channel_up": "Canal seguinte",
       "channel_down": "Canal anterior",
-      "rewind": "Recuar 10 segundos",
       "live": "Ao vivo",
       "back_to_live": "Voltar ao direto"
     },

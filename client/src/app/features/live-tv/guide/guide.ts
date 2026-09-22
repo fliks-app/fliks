@@ -33,9 +33,19 @@ const CHANNEL_PAGE_SIZE = 50;
 /** Rows near the bottom that trigger the next channel page. */
 const LOAD_MORE_THRESHOLD_PX = 400;
 
+interface PositionedProgram extends LiveProgram {
+  left: string;
+  width: string;
+}
+
 interface GuideRow {
   channel: LiveChannel;
-  programs: LiveProgram[];
+  programs: PositionedProgram[];
+}
+
+interface DisplayRow extends GuideRow {
+  nowProgram: PositionedProgram | null;
+  nextProgram: PositionedProgram | null;
 }
 
 @Component({
@@ -64,10 +74,14 @@ export class LiveTvGuideComponent implements OnInit, OnDestroy {
   readonly rows = signal<GuideRow[]>([]);
   readonly loading = signal(true);
   readonly loadingMore = signal(false);
+  readonly loadError = signal(false);
   readonly total = signal(0);
   readonly groups = signal<string[]>([]);
   readonly groupFilter = signal('');
   readonly favoritesOnly = signal(false);
+
+  /** Ticks every minute so the now line and the mobile now/next markers stay live without a reload. */
+  private readonly clock = signal(Date.now());
 
   readonly hasMore = computed(() => this.rows().length < this.total());
 
@@ -84,24 +98,45 @@ export class LiveTvGuideComponent implements OnInit, OnDestroy {
     return marks;
   });
 
-  readonly nowOffsetPx = computed(() => this.minutesFromStart(new Date()) * PX_PER_MINUTE);
+  readonly nowOffsetPx = computed(
+    () => this.minutesFromStart(new Date(this.clock())) * PX_PER_MINUTE,
+  );
   readonly showNowLine = computed(() => {
-    const now = Date.now();
+    const now = this.clock();
     return now >= this.fetchFrom().getTime() && now <= this.fetchTo().getTime();
+  });
+
+  /** now/next per row, re-derived from the clock so a finished program doesn't stay "now" until the next fetch. */
+  readonly displayRows = computed<DisplayRow[]>(() => {
+    const now = this.clock();
+    return this.rows().map((row) => ({
+      ...row,
+      nowProgram:
+        row.programs.find(
+          (p) => new Date(p.startsAt).getTime() <= now && now < new Date(p.endsAt).getTime(),
+        ) ?? null,
+      nextProgram:
+        row.programs
+          .filter((p) => new Date(p.startsAt).getTime() > now)
+          .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())[0] ??
+        null,
+    }));
   });
 
   readonly selectedSheet = signal<{ channel: LiveChannel; program: LiveProgram } | null>(null);
 
   private page = 1;
   private loadSeq = 0;
+  private clockTimer?: ReturnType<typeof setInterval>;
 
   ngOnInit(): void {
     void this.loadGroups();
     void this.loadWindow(true);
+    this.clockTimer = setInterval(() => this.clock.set(Date.now()), 60_000);
   }
 
   ngOnDestroy(): void {
-    // no timers/listeners held beyond the template-bound (scroll) handler
+    clearInterval(this.clockTimer);
   }
 
   /** Recenters the horizontal scroll on the visible window after a jump or the first load. */
@@ -133,11 +168,12 @@ export class LiveTvGuideComponent implements OnInit, OnDestroy {
       this.page = 1;
       this.rows.set([]);
       this.total.set(0);
-    } else {
-      if (!this.hasMore() || this.loadingMore()) return;
-      this.page += 1;
+      this.loadingMore.set(false); // a reset supersedes any pagination fetch in flight
+    } else if (!this.hasMore() || this.loadingMore()) {
+      return;
     }
     const seq = ++this.loadSeq;
+    const requestedPage = reset ? 1 : this.page + 1;
     (reset ? this.loading : this.loadingMore).set(true);
     try {
       const res = await this.api.getGuide({
@@ -145,18 +181,22 @@ export class LiveTvGuideComponent implements OnInit, OnDestroy {
         to: this.fetchTo().toISOString(),
         group: this.groupFilter() || undefined,
         favoritesOnly: this.favoritesOnly() || undefined,
-        page: this.page,
+        page: requestedPage,
         pageSize: CHANNEL_PAGE_SIZE,
       });
       if (seq !== this.loadSeq) return;
-      const newRows: GuideRow[] = (res.channels ?? []).map((channel) => ({
-        channel,
-        programs: (channel.guideChannelId && res.programs?.[channel.guideChannelId]) || [],
-      }));
+      if (!reset) this.page = requestedPage;
+      const newRows: GuideRow[] = (res.channels ?? []).map((channel) =>
+        this.buildRow(
+          channel,
+          (channel.guideChannelId && res.programs?.[channel.guideChannelId]) || [],
+        ),
+      );
       this.rows.update((r) => (reset ? newRows : [...r, ...newRows]));
       this.total.set(res.total ?? 0);
+      this.loadError.set(false);
     } catch {
-      // handled by the global error interceptor
+      if (seq === this.loadSeq) this.loadError.set(true);
     } finally {
       if (seq === this.loadSeq) (reset ? this.loading : this.loadingMore).set(false);
     }
@@ -180,6 +220,7 @@ export class LiveTvGuideComponent implements OnInit, OnDestroy {
 
   jumpToNow(): void {
     this.windowStart.set(this.roundToHalfHour(new Date()));
+    this.clock.set(Date.now());
     void this.loadWindow(true);
   }
 
@@ -200,28 +241,16 @@ export class LiveTvGuideComponent implements OnInit, OnDestroy {
     return (d.getTime() - this.fetchFrom().getTime()) / 60_000;
   }
 
-  programStyle(program: LiveProgram): { left: string; width: string } {
-    const startMin = Math.max(0, this.minutesFromStart(new Date(program.startsAt)));
-    const endMin = Math.min(this.totalMinutes(), this.minutesFromStart(new Date(program.endsAt)));
-    const width = Math.max(24, (endMin - startMin) * PX_PER_MINUTE);
-    return { left: `${startMin * PX_PER_MINUTE}px`, width: `${width}px` };
-  }
-
-  /** The programme playing now among a channel's loaded programs, or null. */
-  nowProgram(row: GuideRow): LiveProgram | null {
-    const now = Date.now();
-    return (
-      row.programs.find((p) => new Date(p.startsAt).getTime() <= now && now < new Date(p.endsAt).getTime()) ?? null
-    );
-  }
-
-  /** The programme right after `nowProgram`, for the mobile list. */
-  nextProgram(row: GuideRow): LiveProgram | null {
-    const now = Date.now();
-    const upcoming = row.programs
-      .filter((p) => new Date(p.startsAt).getTime() > now)
-      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
-    return upcoming[0] ?? null;
+  /** Positions programs once per fetch; left/width are absolute against `fetchFrom` so a later clock tick can't move them. */
+  private buildRow(channel: LiveChannel, programs: LiveProgram[]): GuideRow {
+    const totalMinutes = this.totalMinutes();
+    const positioned: PositionedProgram[] = programs.map((p) => {
+      const startMin = Math.max(0, this.minutesFromStart(new Date(p.startsAt)));
+      const endMin = Math.min(totalMinutes, this.minutesFromStart(new Date(p.endsAt)));
+      const width = Math.max(24, (endMin - startMin) * PX_PER_MINUTE);
+      return { ...p, left: `${startMin * PX_PER_MINUTE}px`, width: `${width}px` };
+    });
+    return { channel, programs: positioned };
   }
 
   openSheet(channel: LiveChannel, program: LiveProgram): void {

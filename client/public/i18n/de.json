@@ -2726,7 +2726,6 @@
     "ungrouped": "Ohne Gruppe",
     "toggle_favorite": "Favorit umschalten",
     "watch": "Ansehen",
-    "live_badge": "LIVE",
     "on_now": {
       "next_label": "Danach:"
     },
@@ -2738,13 +2737,14 @@
       "jump_forward": "Vorspringen",
       "now": "Jetzt",
       "empty": "Kein Sender entspricht den aktuellen Filtern.",
-      "no_program": "Keine Programminformationen"
+      "no_program": "Keine Programminformationen",
+      "load_error": "Der Programmführer konnte nicht geladen werden.",
+      "date": "Datum"
     },
     "player": {
       "channels": "Sender",
       "channel_up": "Sender aufwärts",
       "channel_down": "Sender abwärts",
-      "rewind": "10 Sekunden zurückspulen",
       "live": "Live",
       "back_to_live": "Zurück zum Live-Signal"
     },

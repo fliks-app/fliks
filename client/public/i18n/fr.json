@@ -2753,7 +2753,6 @@
     "ungrouped": "Sans groupe",
     "toggle_favorite": "Basculer en favori",
     "watch": "Regarder",
-    "live_badge": "DIRECT",
     "on_now": {
       "next_label": "Ensuite :"
     },
@@ -2765,13 +2764,14 @@
       "jump_forward": "Avancer",
       "now": "Maintenant",
       "empty": "Aucune chaîne ne correspond aux filtres actuels.",
-      "no_program": "Aucune information de programme"
+      "no_program": "Aucune information de programme",
+      "load_error": "Impossible de charger la grille des programmes.",
+      "date": "Date"
     },
     "player": {
       "channels": "Chaînes",
       "channel_up": "Chaîne suivante",
       "channel_down": "Chaîne précédente",
-      "rewind": "Reculer de 10 secondes",
       "live": "Direct",
       "back_to_live": "Revenir au direct"
     },
