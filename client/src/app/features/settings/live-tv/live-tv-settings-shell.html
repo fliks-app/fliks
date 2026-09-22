@@ -38,6 +38,17 @@
     >
       {{ 'liveTv.admin.tab_guide' | translate }}
     </a>
+    <a
+      role="tab"
+      class="tab"
+      routerLink="./settings"
+      routerLinkActive
+      #settingsTab="routerLinkActive"
+      [class.tab-active]="settingsTab.isActive && !showHealth()"
+      (click)="showHealth.set(false)"
+    >
+      {{ 'liveTv.admin.tab_settings' | translate }}
+    </a>
     <button type="button" role="tab" class="tab" [class.tab-active]="showHealth()" (click)="showHealth.set(true)">
       {{ 'liveTv.admin.tab_health' | translate }}
     </button>

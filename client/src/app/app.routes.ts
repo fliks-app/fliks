@@ -461,6 +461,7 @@ export const routes: Routes = [
               { path: 'sources', loadComponent: () => import('./features/settings/live-tv/sources/live-tv-sources').then((m) => m.LiveTvSourcesComponent) },
               { path: 'channels', loadComponent: () => import('./features/settings/live-tv/channels/live-tv-channels').then((m) => m.LiveTvChannelsComponent) },
               { path: 'guide', loadComponent: () => import('./features/settings/live-tv/guide/live-tv-guide-admin').then((m) => m.LiveTvGuideAdminComponent) },
+              { path: 'settings', loadComponent: () => import('./features/settings/live-tv/settings/live-tv-settings').then((m) => m.LiveTvSettingsComponent) },
             ],
           },
         ],

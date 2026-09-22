@@ -1,0 +1,100 @@
+@if (loading()) {
+  <div class="flex justify-center py-16"><span class="loading loading-spinner loading-lg"></span></div>
+} @else {
+  <div class="space-y-6 max-w-xl">
+    <p class="text-base-content/60">{{ 'liveTv.admin.settings.description' | translate }}</p>
+
+    <div class="divider">{{ 'liveTv.admin.settings.section_guide' | translate }}</div>
+
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'liveTv.admin.settings.guide_days_past' | translate }}</span></label>
+      <input
+        type="number" min="0" step="1" class="input input-bordered w-full"
+        [ngModel]="guideDaysPast()" (ngModelChange)="setInt(guideDaysPast, 'livetv_guide_days_past', $event)" />
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'liveTv.admin.settings.guide_days_past_help' | translate }}</span></label>
+    </div>
+
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'liveTv.admin.settings.guide_days_future' | translate }}</span></label>
+      <input
+        type="number" min="0" step="1" class="input input-bordered w-full"
+        [ngModel]="guideDaysFuture()" (ngModelChange)="setInt(guideDaysFuture, 'livetv_guide_days_future', $event)" />
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'liveTv.admin.settings.guide_days_future_help' | translate }}</span></label>
+    </div>
+
+    <div class="divider">{{ 'liveTv.admin.settings.section_session' | translate }}</div>
+
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'liveTv.admin.settings.segment_seconds' | translate }}</span></label>
+      <input
+        type="number" min="0" step="1" class="input input-bordered w-full"
+        [ngModel]="segmentSeconds()" (ngModelChange)="setInt(segmentSeconds, 'livetv_segment_seconds', $event)" />
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'liveTv.admin.settings.segment_seconds_help' | translate }}</span></label>
+    </div>
+
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'liveTv.admin.settings.timeshift_minutes' | translate }}</span></label>
+      <input
+        type="number" min="0" step="1" class="input input-bordered w-full"
+        [ngModel]="timeshiftMinutes()" (ngModelChange)="setInt(timeshiftMinutes, 'livetv_timeshift_minutes', $event)" />
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'liveTv.admin.settings.timeshift_minutes_help' | translate }}</span></label>
+    </div>
+
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'liveTv.admin.settings.channel_idle_seconds' | translate }}</span></label>
+      <input
+        type="number" min="0" step="1" class="input input-bordered w-full"
+        [ngModel]="channelIdleSeconds()" (ngModelChange)="setInt(channelIdleSeconds, 'livetv_channel_idle_seconds', $event)" />
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'liveTv.admin.settings.channel_idle_seconds_help' | translate }}</span></label>
+    </div>
+
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'liveTv.admin.settings.probe_seconds' | translate }}</span></label>
+      <input
+        type="number" min="0" step="1" class="input input-bordered w-full"
+        [ngModel]="probeSeconds()" (ngModelChange)="setInt(probeSeconds, 'livetv_probe_seconds', $event)" />
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'liveTv.admin.settings.probe_seconds_help' | translate }}</span></label>
+    </div>
+
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'liveTv.admin.settings.slot_release_seconds' | translate }}</span></label>
+      <input
+        type="number" min="0" step="1" class="input input-bordered w-full"
+        [ngModel]="slotReleaseSeconds()" (ngModelChange)="setInt(slotReleaseSeconds, 'livetv_slot_release_seconds', $event)" />
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'liveTv.admin.settings.slot_release_seconds_help' | translate }}</span></label>
+    </div>
+
+    <div class="divider">{{ 'liveTv.admin.settings.section_maintenance' | translate }}</div>
+
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'liveTv.admin.settings.stale_stream_days' | translate }}</span></label>
+      <input
+        type="number" min="0" step="1" class="input input-bordered w-full"
+        [ngModel]="staleStreamDays()" (ngModelChange)="setInt(staleStreamDays, 'livetv_stale_stream_days', $event)" />
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'liveTv.admin.settings.stale_stream_days_help' | translate }}</span></label>
+    </div>
+
+    <div class="divider">{{ 'liveTv.admin.settings.section_zap' | translate }}</div>
+
+    <!-- Unset on the server is not "off": it means the backend decides from
+         detected hardware acceleration. The select spells that out as "auto"
+         instead of collapsing it into a boolean. -->
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'liveTv.admin.settings.fast_zap' | translate }}</span></label>
+      <select
+    appTvSelect class="select select-bordered w-full" [ngModel]="fastZap()" (ngModelChange)="setFastZap($event)">
+        <option value="auto">{{ 'liveTv.admin.settings.fast_zap_auto' | translate }} ({{ 'settings.streaming.default' | translate }})</option>
+        <option value="true">{{ 'liveTv.admin.settings.fast_zap_on' | translate }}</option>
+        <option value="false">{{ 'liveTv.admin.settings.fast_zap_off' | translate }}</option>
+      </select>
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ ('liveTv.admin.settings.fast_zap_' + fastZap() + '_help') | translate }}</span></label>
+    </div>
+
+    <div class="card-actions justify-end">
+      <button class="btn btn-primary" [disabled]="saving()" (click)="save()">
+        @if (saving()) { <span class="loading loading-spinner loading-xs"></span> }
+        {{ 'common.save' | translate }}
+      </button>
+    </div>
+  </div>
+}
