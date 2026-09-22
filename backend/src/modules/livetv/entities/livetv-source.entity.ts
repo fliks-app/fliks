@@ -1,4 +1,5 @@
 import { Entity, Column } from 'typeorm';
+import { Exclude } from 'class-transformer';
 import { BaseEntity } from '../../../common/entities/base.entity';
 
 export type LiveTvSourceKind = 'm3u' | 'xtream';
@@ -23,7 +24,12 @@ export class LiveTvSource extends BaseEntity {
   @Column({ type: 'varchar', nullable: true, default: null })
   username: string | null;
 
-  @Column({ type: 'varchar', nullable: true, default: null })
+  /** Double-locked like `User.passwordHash`: `select: false` keeps it out of
+   *  every default load, `@Exclude` strips it from anything that still
+   *  reaches the global ClassSerializerInterceptor. Callers that need the
+   *  real value must `addSelect` it explicitly. */
+  @Column({ type: 'varchar', nullable: true, default: null, select: false })
+  @Exclude()
   password: string | null;
 
   @Column({ type: 'varchar', nullable: true, default: null })
