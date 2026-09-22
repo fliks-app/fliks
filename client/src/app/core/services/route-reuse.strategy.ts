@@ -77,6 +77,19 @@ export class CachingReuseStrategy implements RouteReuseStrategy {
     }
   }
 
+  /** `dialog[open]` survives detach without emitting `close`, so a cached tree reopens it on retrieve. */
+  private closeOpenDialogs(handle: DetachedRouteHandle): void {
+    try {
+      const el = (handle as { componentRef?: { location: { nativeElement: Element } } })
+        .componentRef?.location.nativeElement;
+      el?.querySelectorAll('dialog[open]').forEach((dialog) =>
+        (dialog as HTMLDialogElement).close(),
+      );
+    } catch {
+      // Shape mismatch must not break navigation.
+    }
+  }
+
   private idFor(route: Route): string {
     let id = this.routeIds.get(route);
     if (!id) {
@@ -94,6 +107,7 @@ export class CachingReuseStrategy implements RouteReuseStrategy {
     const key = this.keyFor(route);
     if (!key) return;
     if (handle) {
+      this.closeOpenDialogs(handle);
       const existing = this.cache.get(key);
       if (existing && existing !== handle) this.destroyHandle(existing);
       this.cache.delete(key);

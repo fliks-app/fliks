@@ -112,6 +112,25 @@ describe('CachingReuseStrategy', () => {
     expect(attached).toEqual([strategy.keyFor(snapshot)]);
   });
 
+  it('VERDICT: store() closes open dialogs left in the detached tree', () => {
+    const strategy = setup();
+    const route: Route = { path: 'libraries/:libraryName' };
+    const host = document.createElement('div');
+    const dialog = document.createElement('dialog');
+    dialog.setAttribute('open', '');
+    // jsdom has no HTMLDialogElement.close(); stub it as the browser would (drops `open`).
+    dialog.close = vi.fn(() => dialog.removeAttribute('open'));
+    host.appendChild(dialog);
+    const handle = {
+      componentRef: { destroy: vi.fn(), location: { nativeElement: host } },
+    } as unknown as DetachedRouteHandle;
+
+    strategy.store(snapshotFor(route, { libraryName: 'Movies' }), handle);
+
+    expect(dialog.close).toHaveBeenCalledTimes(1);
+    expect(dialog.hasAttribute('open')).toBe(false);
+  });
+
   it('VERDICT: re-storing the same handle under an existing key does not destroy it', () => {
     const strategy = setup();
     const route: Route = { path: 'libraries/:libraryName' };
