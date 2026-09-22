@@ -439,4 +439,26 @@ export class LiveTvApiService {
   getMatchReport() {
     return firstValueFrom(this.http.get<GuideMatchReport>('/api/livetv/admin/guide/match-report'));
   }
+
+  // ── Admin: access ──
+
+  getRestrictedGroups() {
+    return firstValueFrom(this.http.get<string[]>('/api/livetv/admin/access/restricted-groups'));
+  }
+
+  setRestrictedGroups(groups: string[]) {
+    return firstValueFrom(
+      this.http.put<string[]>('/api/livetv/admin/access/restricted-groups', { groups }),
+    );
+  }
+
+  getUserGroupGrants(userId: number) {
+    return firstValueFrom(this.http.get<string[]>(`/api/livetv/admin/access/users/${userId}`));
+  }
+
+  setUserGroupGrants(userId: number, groups: string[]) {
+    return firstValueFrom(
+      this.http.put<string[]>(`/api/livetv/admin/access/users/${userId}`, { groups }),
+    );
+  }
 }

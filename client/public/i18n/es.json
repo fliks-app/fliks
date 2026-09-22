@@ -2764,6 +2764,7 @@
       "tab_guide": "Guía",
       "tab_settings": "Ajustes",
       "tab_health": "Estado",
+      "tab_access": "Acceso",
       "sources": {
         "subtitle": "Conecta una lista M3U o una cuenta Xtream.",
         "new": "Nueva fuente",
@@ -2905,6 +2906,24 @@
         "fast_zap_true_help": "Fuerza una transcodificación en cada zapeo, incluso sin aceleración por hardware. Úsalo solo si el zapeo se nota lento y la CPU puede asumirlo.",
         "fast_zap_false_help": "Fuerza un remux en cada zapeo. Úsalo para ahorrar CPU en un servidor sin aceleración por hardware, a costa de un cambio de canal más lento.",
         "saved": "Ajustes de TV en directo guardados."
+      },
+      "access": {
+        "groups_title": "Grupos restringidos",
+        "groups_subtitle": "Los grupos marcados solo son visibles para los usuarios a quienes se concede acceso abajo.",
+        "col_group": "Grupo",
+        "col_channels": "Canales",
+        "col_restricted": "Restringido",
+        "empty_groups": "No hay ningún grupo de canales disponible.",
+        "auto_adult_badge": "Adultos (auto)",
+        "auto_adult_hint": "El nombre de este grupo coincide con el patrón de restricción automática de contenido para adultos. Si lo desmarca, la próxima sincronización volverá a restringirlo mientras siga coincidiendo.",
+        "users_title": "Acceso por usuario",
+        "users_subtitle": "Conceda a un usuario visibilidad sobre grupos restringidos.",
+        "no_restricted_groups": "Ningún grupo está restringido por ahora: no hay nada que conceder.",
+        "no_users": "Ningún usuario es accesible con sus permisos actuales.",
+        "manage": "Gestionar acceso",
+        "grants_title": "Acceso de {{username}}",
+        "grants_empty": "Ningún grupo restringido que conceder.",
+        "grants_saved": "Acceso actualizado."
       },
       "health": {
         "sources_title": "Fuentes",

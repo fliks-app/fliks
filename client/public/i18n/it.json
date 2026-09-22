@@ -2764,6 +2764,7 @@
       "tab_guide": "Guida",
       "tab_settings": "Impostazioni",
       "tab_health": "Stato",
+      "tab_access": "Accesso",
       "sources": {
         "subtitle": "Collega una playlist M3U o un account Xtream.",
         "new": "Nuova fonte",
@@ -2905,6 +2906,24 @@
         "fast_zap_true_help": "Forza una transcodifica a ogni zap, anche senza accelerazione hardware. Usala solo se lo zap sembra lento e la CPU può sostenerlo.",
         "fast_zap_false_help": "Forza un remux a ogni zap. Usala per risparmiare CPU su un server senza accelerazione hardware, al costo di un cambio canale più lento.",
         "saved": "Impostazioni Live TV salvate."
+      },
+      "access": {
+        "groups_title": "Gruppi limitati",
+        "groups_subtitle": "I gruppi selezionati sono visibili solo agli utenti a cui è stato concesso l'accesso qui sotto.",
+        "col_group": "Gruppo",
+        "col_channels": "Canali",
+        "col_restricted": "Limitato",
+        "empty_groups": "Nessun gruppo di canali disponibile.",
+        "auto_adult_badge": "Adulti (auto)",
+        "auto_adult_hint": "Il nome di questo gruppo corrisponde al modello di restrizione automatica dei contenuti per adulti. Se lo deselezioni, la prossima sincronizzazione lo limiterà di nuovo finché continua a corrispondere.",
+        "users_title": "Accesso per utente",
+        "users_subtitle": "Concedi a un utente la visibilità sui gruppi limitati.",
+        "no_restricted_groups": "Al momento nessun gruppo è limitato: non c’è nulla da concedere.",
+        "no_users": "Nessun utente è accessibile con i tuoi permessi attuali.",
+        "manage": "Gestisci accesso",
+        "grants_title": "Accesso di {{username}}",
+        "grants_empty": "Nessun gruppo limitato da concedere.",
+        "grants_saved": "Accesso aggiornato."
       },
       "health": {
         "sources_title": "Fonti",
