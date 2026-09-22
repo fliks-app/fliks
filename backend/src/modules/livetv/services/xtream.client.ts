@@ -1,5 +1,4 @@
-import axios from 'axios';
-import { liveTvHeaders, type LiveTvRequestIdentity } from '../livetv-http';
+import { liveTvGet, type LiveTvRequestIdentity } from '../livetv-http';
 
 export interface XtreamAccount {
   status: string | null;
@@ -113,10 +112,9 @@ export class XtreamClient {
     url.searchParams.set('username', this.creds.username);
     url.searchParams.set('password', this.creds.password);
     if (action) url.searchParams.set('action', action);
-    const res = await axios.get<T>(url.toString(), {
+    // Panels answer 200 with an error body; a redirect to a login page is not data.
+    const res = await liveTvGet<T>(url.toString(), this.identity(), {
       timeout: REQUEST_TIMEOUT_MS,
-      headers: liveTvHeaders(this.identity()),
-      // Panels answer 200 with an error body; a redirect to a login page is not data.
       maxRedirects: 2,
     });
     return res.data;

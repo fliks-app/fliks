@@ -82,4 +82,18 @@ describe('XtreamClient', () => {
     const url = new XtreamClient(creds).streamUrl('42', 'ts');
     expect(url).toBe('http://host/live/u/p/42.ts');
   });
+
+  it('carries the shared response-size limit through the panel call', async () => {
+    mockedAxios.get.mockResolvedValue({ data: { user_info: { auth: 1 } } });
+
+    await new XtreamClient(creds).account();
+
+    expect(mockedAxios.get).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        maxContentLength: 512 * 1024 * 1024,
+        maxBodyLength: 512 * 1024 * 1024,
+      }),
+    );
+  });
 });

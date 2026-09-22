@@ -18,6 +18,7 @@ import { LiveTvLogoService } from './livetv-logo.service';
 import { LiveTvAccessService } from './livetv-access.service';
 import { SettingsService } from '../../settings/settings.service';
 import {
+  assertNotInternal,
   liveTvGet,
   liveTvIdentityOf,
   isNotModified,
@@ -142,8 +143,15 @@ export class LiveTvSourcesService {
     return this.sourceRepo.find({ order: { priority: 'ASC', name: 'ASC' } });
   }
 
+  /** `password` is `select: false` on the entity; a plain `findOne` leaves it
+   *  undefined, so every real caller (sync, the xtream client) goes through
+   *  here and gets it back explicitly. */
   async findOne(id: number): Promise<LiveTvSource> {
-    const source = await this.sourceRepo.findOne({ where: { id } });
+    const source = await this.sourceRepo
+      .createQueryBuilder('source')
+      .addSelect('source.password')
+      .where('source.id = :id', { id })
+      .getOne();
     if (!source) throw new NotFoundException(`Live TV source #${id} not found`);
     return source;
   }
@@ -193,6 +201,8 @@ export class LiveTvSourcesService {
       : undefined;
 
     try {
+      // The probe's result returns straight to the caller: the real SSRF surface.
+      await assertNotInternal(dto.url);
       const includePattern = compileGroupPattern(dto.includeGroupsPattern, 'includeGroupsPattern');
       const excludePattern = compileGroupPattern(dto.excludeGroupsPattern, 'excludeGroupsPattern');
       const fetched = await this.fetchLineup({
@@ -367,8 +377,11 @@ export class LiveTvSourcesService {
 
   /** The guide URL for a source: the panel API for Xtream, the stored
    *  `x-tvg-url` for m3u (re-fetching the playlist is a last resort, only
-   *  before the first successful sync has captured it). */
-  async resolveGuideUrl(source: LiveTvSource): Promise<string> {
+   *  before the first successful sync has captured it). Reloads by id rather
+   *  than trusting a passed-in entity, since `source.password` is only ever
+   *  real when it comes back through `findOne`. */
+  async resolveGuideUrl(sourceId: number): Promise<string> {
+    const source = await this.findOne(sourceId);
     if (source.kind === 'xtream') {
       return new XtreamClient(credsOf(source), source.userAgent, source.referer).guideUrl();
     }

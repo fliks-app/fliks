@@ -6,15 +6,9 @@ import { isInternalAddress } from '../plugins/internal-address';
  *  an unbounded response (a runaway or hostile server), not a large one. */
 const MAX_RESPONSE_BYTES = 512 * 1024 * 1024;
 
-/**
- * Re-resolved on every call, not cached: a hostname that was external when a
- * source was configured can be repointed at an internal address later (DNS
- * rebinding). Narrows but does not eliminate the gap — axios re-resolves the
- * same name to actually connect, leaving a window between this check and that
- * connect(). A source deliberately on the LAN (a set-top box) is refused too;
- * `isInternalAddress` has no per-source exception.
- */
-async function assertNotInternal(rawUrl: string): Promise<void> {
+/** Only the source-test probe calls this — its answer returns straight to the
+ *  caller, the real SSRF surface; a registered source's sync/playback never does. */
+export async function assertNotInternal(rawUrl: string): Promise<void> {
   let hostname: string;
   try {
     hostname = new URL(rawUrl).hostname;
@@ -112,7 +106,6 @@ export async function liveTvGet<T>(
   config: AxiosRequestConfig = {},
   validators?: HttpCacheValidators | null,
 ) {
-  await assertNotInternal(url);
   return axios.get<T>(url, {
     timeout: 30_000,
     maxRedirects: 5,

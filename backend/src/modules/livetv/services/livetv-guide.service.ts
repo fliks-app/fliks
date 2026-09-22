@@ -319,10 +319,10 @@ export class LiveTvGuideService {
       if (!guideSource.url) throw new BadRequestException('Guide source has no URL');
       return guideSource.url;
     }
-    if (!guideSource.source) {
+    if (guideSource.sourceId == null) {
       throw new BadRequestException('Guide source has no parent Live TV source');
     }
-    return this.sources.resolveGuideUrl(guideSource.source);
+    return this.sources.resolveGuideUrl(guideSource.sourceId);
   }
 
   /** Full replace: the persisted list only ever needs to reflect the latest feed. */
