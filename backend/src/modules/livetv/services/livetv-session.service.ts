@@ -228,8 +228,11 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
     const cutoff = Date.now() - StreamLifetime.liveSessionTtlMs();
     for (const session of [...this.sessions.values()]) {
       let dropped = 0;
+      // A direct viewer polls nothing: its open response is the liveness signal,
+      // and backpressure already drops the tee of a client that stopped reading.
+      const streaming = new Set(session.directTees?.values() ?? []);
       for (const [viewerId, viewer] of [...session.viewers]) {
-        if (viewer.lastSeenAt > cutoff) continue;
+        if (viewer.lastSeenAt > cutoff || streaming.has(viewerId)) continue;
         session.viewers.delete(viewerId);
         this.viewerIndex.delete(viewerId);
         dropped++;
@@ -744,11 +747,7 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
               settle(!isManifestPayload(chunk));
               if (session.directNotStreamable) return;
             }
-            for (const [tee, viewerId] of session.directTees ?? []) {
-              // A tee that's still draining proves its viewer alive; throttled to
-              // once a second, so a busy stream isn't timestamping every chunk.
-              const viewer = session.viewers.get(viewerId);
-              if (viewer && now - viewer.lastSeenAt >= 1000) viewer.lastSeenAt = now;
+            for (const [tee] of session.directTees ?? []) {
               // A tee that cannot drain fast enough is dropped, never the upstream.
               if (!tee.write(chunk)) {
                 tee.destroy();
