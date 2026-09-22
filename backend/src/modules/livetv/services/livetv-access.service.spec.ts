@@ -28,6 +28,8 @@ describe('LiveTvAccessService', () => {
     create: jest.Mock;
     createQueryBuilder: jest.Mock;
   };
+  let settingsService: { get: jest.Mock; set: jest.Mock };
+  let calls: string[];
   let service: LiveTvAccessService;
 
   beforeEach(() => {
@@ -35,16 +37,26 @@ describe('LiveTvAccessService', () => {
     grants = [];
     users = [];
     accessRows = [];
+    calls = [];
     accessRepo = {
       find: jest.fn(() => Promise.resolve(grants)),
-      // `where.groupName` is whatever `In(dropped)` produces: a `FindOperator`
-      // exposing `.value`.
-      delete: jest.fn(({ groupName }: { groupName: { value: string[] } }) => {
-        const dropped = new Set(groupName.value);
-        accessRows = accessRows.filter((r) => !dropped.has(r.groupName));
-        grants = grants.filter((g) => !dropped.has(g.groupName));
-        return Promise.resolve({});
-      }),
+      // Either `{ groupName: In(dropped) }` (a `FindOperator` exposing `.value`)
+      // or `{ user: { id } }`, whichever write path called `delete`.
+      delete: jest.fn(
+        (where: { groupName?: { value: string[] }; user?: { id: number } }) => {
+          if (where.groupName) {
+            calls.push('delete:groups');
+            const dropped = new Set(where.groupName.value);
+            accessRows = accessRows.filter((r) => !dropped.has(r.groupName));
+            grants = grants.filter((g) => !dropped.has(g.groupName));
+          } else if (where.user) {
+            calls.push('delete:user');
+            const uid = where.user.id;
+            accessRows = accessRows.filter((r) => r.userId !== uid);
+          }
+          return Promise.resolve({});
+        },
+      ),
       save: jest.fn(() => Promise.resolve({})),
       create: jest.fn((row: unknown) => row),
       createQueryBuilder: jest.fn(() => ({
@@ -56,9 +68,10 @@ describe('LiveTvAccessService', () => {
     const userRepo = {
       find: jest.fn(() => Promise.resolve(users)),
     };
-    const settingsService = {
+    settingsService = {
       get: jest.fn((key: string) => Promise.resolve(settings[key] ?? null)),
       set: jest.fn((key: string, value: string) => {
+        calls.push(`set:${key}`);
         settings[key] = value;
         return Promise.resolve();
       }),
@@ -338,6 +351,117 @@ describe('LiveTvAccessService', () => {
       users = [{ id: 1, username: 'alice' }];
       const [row] = await service.listUserAccess();
       expect(Object.keys(row).sort()).toEqual(['groups', 'id', 'username']);
+    });
+  });
+
+  describe('ADULT_GROUP_PATTERN coverage', () => {
+    // Exercised through `restrictAdultGroups`, since the pattern itself isn't exported:
+    // a name is "positive" if a sync restricts it, "negative" if it stays untouched.
+    it.each([
+      'ADULTES',
+      'Adulte',
+      'Adultes FR',
+      'FOR ADULTS',
+      'PORNO',
+      'Eroticos',
+      'Erotik',
+      'SEX',
+      'X-RATED',
+      '+18',
+      '18+',
+    ])('restricts %s', async (name) => {
+      expect(await service.restrictAdultGroups([name])).toEqual([name]);
+    });
+
+    it.each([
+      'HOT',
+      'HOT TV Israel',
+      'Hot Hits',
+      'Adult Swim',
+      'News',
+      'FR | SPORT',
+    ])('leaves %s alone', async (name) => {
+      expect(await service.restrictAdultGroups([name])).toEqual([]);
+    });
+  });
+
+  describe('setGrants', () => {
+    it('grants only the requested groups that are currently restricted', async () => {
+      settings[RESTRICTED_KEY] = JSON.stringify(['News', 'XXX FR']);
+
+      const result = await service.setGrants(1, ['News', 'XXX FR']);
+
+      expect(result).toEqual({ groups: ['News', 'XXX FR'], ignored: [] });
+      expect(accessRepo.save).toHaveBeenCalledWith([
+        { user: { id: 1 }, groupName: 'News' },
+        { user: { id: 1 }, groupName: 'XXX FR' },
+      ]);
+    });
+
+    it('drops a requested group that is not restricted and reports it as ignored', async () => {
+      settings[RESTRICTED_KEY] = JSON.stringify(['News']);
+
+      const result = await service.setGrants(1, ['News', 'Adulte']);
+
+      expect(result).toEqual({ groups: ['News'], ignored: ['Adulte'] });
+      expect(accessRepo.save).toHaveBeenCalledWith([
+        { user: { id: 1 }, groupName: 'News' },
+      ]);
+    });
+
+    it('grants nothing and ignores everything when no group is restricted', async () => {
+      const result = await service.setGrants(1, ['Adulte']);
+      expect(result).toEqual({ groups: [], ignored: ['Adulte'] });
+      expect(accessRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('write ordering', () => {
+    it("drops a removed group's grants before writing the restricted-groups setting", async () => {
+      settings[RESTRICTED_KEY] = JSON.stringify(['News']);
+      accessRows = [{ userId: 1, groupName: 'News' }];
+
+      await service.setRestrictedGroups([]);
+
+      expect(calls).toEqual(['delete:groups', `set:${RESTRICTED_KEY}`]);
+    });
+  });
+
+  describe('concurrency between a sync pass and an admin edit', () => {
+    it('holds an admin setRestrictedGroups call until an in-flight sync pass finishes', async () => {
+      settings[RESTRICTED_KEY] = JSON.stringify(['News']);
+      let releaseSyncWrite: () => void;
+      const syncWriteGate = new Promise<void>((resolve) => {
+        releaseSyncWrite = resolve;
+      });
+      // Gate only the sync pass's own write (its distinct value), not the admin's.
+      const syncValue = JSON.stringify(['News', 'XXX FR']);
+      const originalSet = settingsService.set.getMockImplementation()!;
+      // Reassigning the property is enough: `service` holds this same object by
+      // reference, so its next `this.settings.set(...)` call picks this up.
+      settingsService.set = jest.fn(async (key: string, value: string) => {
+        if (key === RESTRICTED_KEY && value === syncValue) await syncWriteGate;
+        return originalSet(key, value);
+      });
+
+      const syncPromise = service.restrictAdultGroups(['News', 'XXX FR']);
+      const adminPromise = service.setRestrictedGroups([]);
+      let adminSettled = false;
+      adminPromise.then(() => {
+        adminSettled = true;
+      });
+
+      // However many microtasks run, the admin call is queued behind the lock and
+      // cannot even start its own read while the sync pass is stuck on the gate.
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+      expect(adminSettled).toBe(false);
+
+      releaseSyncWrite!();
+      await syncPromise;
+      await adminPromise;
+
+      expect(adminSettled).toBe(true);
+      expect(await service.restrictedGroups()).toEqual([]);
     });
   });
 });

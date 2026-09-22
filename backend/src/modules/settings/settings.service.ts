@@ -1,8 +1,25 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AppSetting } from './entities/app-setting.entity';
 import { EventsService } from '../scheduler/events.service';
+
+/** Passed as `set()`'s `origin` by a protected key's own owning service to bypass its guard. */
+export const OWN_MODULE_ORIGIN = 'own-module-write';
+
+/** Keys with their own write path: writing them through the generic settings API would skip
+ *  that path's validation and side effects (grant cleanup, exemption bookkeeping, ...). */
+const PROTECTED_KEYS = new Map<string, string>([
+  ['livetv_restricted_groups', 'PUT /livetv/admin/access/restricted-groups'],
+  [
+    'livetv_restricted_groups_exempt',
+    'PUT /livetv/admin/access/restricted-groups',
+  ],
+  [
+    'livetv_restricted_groups_vanished',
+    'PUT /livetv/admin/access/restricted-groups',
+  ],
+]);
 
 @Injectable()
 export class SettingsService {
@@ -12,7 +29,9 @@ export class SettingsService {
     private readonly events: EventsService,
   ) {}
 
-  private readonly changeListeners: Array<(key: string, origin?: string) => void> = [];
+  private readonly changeListeners: Array<
+    (key: string, origin?: string) => void
+  > = [];
 
   /** `origin` names whoever wrote the key, so a listener can skip echoing a change back to it. */
   addChangeListener(listener: (key: string, origin?: string) => void): void {
@@ -40,7 +59,17 @@ export class SettingsService {
     return row?.value ?? null;
   }
 
-  async set(key: string, value: string | null, origin?: string): Promise<AppSetting> {
+  async set(
+    key: string,
+    value: string | null,
+    origin?: string,
+  ): Promise<AppSetting> {
+    const ownPath = PROTECTED_KEYS.get(key);
+    if (ownPath && origin !== OWN_MODULE_ORIGIN) {
+      throw new BadRequestException(
+        `"${key}" is managed by its own endpoint: ${ownPath}`,
+      );
+    }
     let row = await this.repo.findOne({ where: { key } });
     if (row) {
       row.value = value;
