@@ -5,7 +5,10 @@ import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { vi } from 'vitest';
 import { LiveTvAccessComponent } from './live-tv-access';
-import { UserRow } from '../../../../core/services/api/users-api.service';
+import {
+  LiveTvUserAccess,
+  RestrictedGroup,
+} from '../../../../core/services/api/livetv-api.service';
 
 beforeAll(() => {
   if (!HTMLDialogElement.prototype.showModal) {
@@ -25,22 +28,15 @@ const GROUPS = [
   { name: 'XXX Uncut', count: 3 },
 ];
 
-const USER: UserRow = {
-  id: 7,
-  username: 'alice',
-  roleId: 1,
-  role: 'Viewer',
-  isAdmin: false,
-  enabled: true,
-  requirePasswordChange: false,
-  createdAt: '2026-01-01T00:00:00.000Z',
-  lastLogin: null,
-  libraryIds: [],
-};
+/** Mirrors which of the fixed test group names the server would flag automatic. */
+const AUTO_GROUPS = new Set(['XXX Uncut']);
+function asRestrictedGroups(names: string[]): RestrictedGroup[] {
+  return names.map((name) => ({ name, automatic: AUTO_GROUPS.has(name) }));
+}
 
 function createFixture(opts: {
   restricted?: string[];
-  userGrants?: string[];
+  users?: LiveTvUserAccess[];
   get?: ReturnType<typeof vi.fn>;
   put?: ReturnType<typeof vi.fn>;
 }): {
@@ -52,9 +48,9 @@ function createFixture(opts: {
     opts.get ??
     vi.fn((url: string) => {
       if (url === '/api/livetv/admin/channels') return of({ items: [], total: 0, groups: GROUPS });
-      if (url === '/api/livetv/admin/access/restricted-groups') return of(opts.restricted ?? []);
-      if (url === '/api/users') return of([USER]);
-      if (url === `/api/livetv/admin/access/users/${USER.id}`) return of(opts.userGrants ?? []);
+      if (url === '/api/livetv/admin/access/restricted-groups')
+        return of(asRestrictedGroups(opts.restricted ?? []));
+      if (url === '/api/livetv/admin/access/users') return of(opts.users ?? []);
       throw new Error(`unexpected GET ${url}`);
     });
   const put = opts.put ?? vi.fn((_url: string, body: { groups: string[] }) => of(body.groups));
@@ -114,39 +110,56 @@ describe('LiveTvAccessComponent - restricted groups', () => {
 });
 
 describe('LiveTvAccessComponent - auto-restricted adult groups', () => {
-  it('flags a group whose name matches the automatic adult-content pattern', async () => {
-    const { component } = await ready({});
+  it('flags a group the server marked as matching the automatic pattern', async () => {
+    const { component } = await ready({ restricted: ['News', 'XXX Uncut'] });
 
-    expect(component.isAdultMatch('XXX Uncut')).toBe(true);
-    expect(component.isAdultMatch('News')).toBe(false);
+    expect(component.autoRestricted()).toEqual(new Set(['XXX Uncut']));
+  });
+});
+
+describe('LiveTvAccessComponent - access overview', () => {
+  it('shows granted groups from the overview response, with no per-row request', async () => {
+    const { component, get } = await ready({
+      restricted: ['News', 'XXX Uncut'],
+      users: [{ id: 7, username: 'alice', groups: ['News'] }],
+    });
+
+    expect(get).toHaveBeenCalledWith('/api/livetv/admin/access/users');
+    expect(component.users()).toEqual([{ id: 7, username: 'alice', groups: ['News'] }]);
+    expect(get).not.toHaveBeenCalledWith('/api/livetv/admin/access/users/7');
+  });
+
+  it('never falls back to the generic users endpoint', async () => {
+    const { get } = await ready({ restricted: ['News'], users: [] });
+
+    expect(get).not.toHaveBeenCalledWith('/api/users');
   });
 });
 
 describe('LiveTvAccessComponent - per-user grants', () => {
   it('grants a user access to a restricted group', async () => {
-    const { component, put, fixture } = await ready({
+    const { component, put } = await ready({
       restricted: ['News', 'XXX Uncut'],
-      userGrants: [],
+      users: [{ id: 7, username: 'alice', groups: [] }],
     });
 
-    component.openGrants(USER);
-    await fixture.whenStable();
+    component.openGrants(component.users()[0]);
     expect(component.grantedGroups()).toEqual(new Set());
 
     component.toggleGrant('News');
     await component.saveGrants();
 
     expect(put).toHaveBeenCalledWith('/api/livetv/admin/access/users/7', { groups: ['News'] });
+    expect(component.users()[0].groups).toEqual(['News']);
   });
 
   it('revokes a previously granted group', async () => {
-    const { component, put, fixture } = await ready({
+    const { component, put } = await ready({
       restricted: ['News', 'XXX Uncut'],
-      userGrants: ['News', 'XXX Uncut'],
+      users: [{ id: 7, username: 'alice', groups: ['News', 'XXX Uncut'] }],
     });
 
-    component.openGrants(USER);
-    await fixture.whenStable();
+    component.openGrants(component.users()[0]);
     expect(component.grantedGroups()).toEqual(new Set(['News', 'XXX Uncut']));
 
     component.toggleGrant('XXX Uncut');

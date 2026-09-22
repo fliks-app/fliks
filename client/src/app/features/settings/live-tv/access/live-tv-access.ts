@@ -1,15 +1,13 @@
 import { Component, ElementRef, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ToastService } from '../../../../core/services/toast.service';
-import { LiveTvApiService } from '../../../../core/services/api/livetv-api.service';
-import { UsersApiService, UserRow } from '../../../../core/services/api/users-api.service';
+import {
+  LiveTvApiService,
+  LiveTvUserAccess,
+} from '../../../../core/services/api/livetv-api.service';
 import { EnabledSwitchComponent } from '../../../../shared/components/enabled-switch';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
-
-/** Mirrors the backend's own heuristic (`ADULT_GROUP_PATTERN` in
- *  livetv-access.service.ts): a display hint only, never authoritative. */
-const ADULT_GROUP_PATTERN = /\b(xxx|adult|porn|erotic|18\+|hot)\b/i;
 
 interface GroupFacet {
   name: string;
@@ -23,7 +21,6 @@ interface GroupFacet {
 })
 export class LiveTvAccessComponent implements OnInit {
   private readonly api = inject(LiveTvApiService);
-  private readonly usersApi = inject(UsersApiService);
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
   private readonly grantsDialog = viewChild<ElementRef<HTMLDialogElement>>('grantsDialog');
@@ -31,6 +28,8 @@ export class LiveTvAccessComponent implements OnInit {
   readonly loading = signal(true);
   private readonly groups = signal<GroupFacet[]>([]);
   readonly restricted = signal<Set<string>>(new Set());
+  /** Restricted groups whose name still matches the server's automatic adult-content pattern. */
+  readonly autoRestricted = signal<Set<string>>(new Set());
   readonly togglingGroup = signal<string | null>(null);
 
   /** The restricted-groups setting can outlive the group itself (source removed,
@@ -48,31 +47,31 @@ export class LiveTvAccessComponent implements OnInit {
     [...this.restricted()].sort((a, b) => a.localeCompare(b)),
   );
 
-  readonly users = signal<UserRow[]>([]);
+  readonly users = signal<LiveTvUserAccess[]>([]);
 
-  readonly grantsUser = signal<UserRow | null>(null);
-  readonly grantsLoading = signal(false);
+  readonly grantsUser = signal<LiveTvUserAccess | null>(null);
   readonly grantsSaving = signal(false);
   readonly grantedGroups = signal<Set<string>>(new Set());
 
   async ngOnInit(): Promise<void> {
     this.loading.set(true);
-    // allSettled: an admin who can manage Live TV but not Users still gets the
-    // restricted-groups half; only the per-user grants stay empty for them.
-    const [groupsResult, restrictedResult, usersResult] = await Promise.allSettled([
-      this.api.listAdminChannels({ page: 1, pageSize: 1 }),
-      this.api.getRestrictedGroups(),
-      this.usersApi.list(),
-    ]);
-    if (groupsResult.status === 'fulfilled') this.groups.set(groupsResult.value.groups ?? []);
-    if (restrictedResult.status === 'fulfilled')
-      this.restricted.set(new Set(restrictedResult.value));
-    if (usersResult.status === 'fulfilled') this.users.set(usersResult.value);
-    this.loading.set(false);
-  }
-
-  isAdultMatch(name: string): boolean {
-    return ADULT_GROUP_PATTERN.test(name);
+    try {
+      const [channelsPage, restrictedGroups, users] = await Promise.all([
+        this.api.listAdminChannels({ page: 1, pageSize: 1 }),
+        this.api.getRestrictedGroups(),
+        this.api.listUserAccess(),
+      ]);
+      this.groups.set(channelsPage.groups ?? []);
+      this.restricted.set(new Set(restrictedGroups.map((g) => g.name)));
+      this.autoRestricted.set(
+        new Set(restrictedGroups.filter((g) => g.automatic).map((g) => g.name)),
+      );
+      this.users.set(users);
+    } catch {
+      // handled by global error interceptor
+    } finally {
+      this.loading.set(false);
+    }
   }
 
   async toggleRestricted(name: string): Promise<void> {
@@ -89,18 +88,10 @@ export class LiveTvAccessComponent implements OnInit {
     }
   }
 
-  openGrants(user: UserRow): void {
+  openGrants(user: LiveTvUserAccess): void {
     this.grantsUser.set(user);
-    this.grantedGroups.set(new Set());
+    this.grantedGroups.set(new Set(user.groups));
     this.grantsDialog()?.nativeElement.showModal();
-    this.grantsLoading.set(true);
-    this.api
-      .getUserGroupGrants(user.id)
-      .then((groups) => this.grantedGroups.set(new Set(groups)))
-      .catch(() => {
-        // handled by global error interceptor
-      })
-      .finally(() => this.grantsLoading.set(false));
   }
 
   closeGrants(): void {
@@ -120,7 +111,10 @@ export class LiveTvAccessComponent implements OnInit {
     if (!user) return;
     this.grantsSaving.set(true);
     try {
-      await this.api.setUserGroupGrants(user.id, [...this.grantedGroups()]);
+      const saved = await this.api.setUserGroupGrants(user.id, [...this.grantedGroups()]);
+      this.users.update((list) =>
+        list.map((u) => (u.id === user.id ? { ...u, groups: saved } : u)),
+      );
       this.toast.success(this.translate.instant('liveTv.admin.access.grants_saved'));
       this.closeGrants();
     } catch {

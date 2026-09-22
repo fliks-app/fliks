@@ -244,8 +244,22 @@ export interface GuideMatchReport {
   candidates: { id: string; displayName: string; guideSourceId: number }[];
 }
 
+export interface RestrictedGroup {
+  name: string;
+  /** Still matches the server's automatic adult-content pattern. */
+  automatic: boolean;
+}
+
+export interface LiveTvUserAccess {
+  id: number;
+  username: string;
+  groups: string[];
+}
+
 /** Drops undefined/empty values. `HttpClient` stringifies every remaining key as a query param. */
-function queryParams(obj: Record<string, string | number | boolean | undefined>): Record<string, string> {
+function queryParams(
+  obj: Record<string, string | number | boolean | undefined>,
+): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(obj)) {
     if (value !== undefined && value !== '') out[key] = String(value);
@@ -407,9 +421,7 @@ export class LiveTvApiService {
   }
 
   updateChannel(id: number, body: UpdateAdminChannelBody) {
-    return firstValueFrom(
-      this.http.patch<AdminChannel>(`/api/livetv/admin/channels/${id}`, body),
-    );
+    return firstValueFrom(this.http.patch<AdminChannel>(`/api/livetv/admin/channels/${id}`, body));
   }
 
   // ── Admin: guide ──
@@ -443,7 +455,9 @@ export class LiveTvApiService {
   // ── Admin: access ──
 
   getRestrictedGroups() {
-    return firstValueFrom(this.http.get<string[]>('/api/livetv/admin/access/restricted-groups'));
+    return firstValueFrom(
+      this.http.get<RestrictedGroup[]>('/api/livetv/admin/access/restricted-groups'),
+    );
   }
 
   setRestrictedGroups(groups: string[]) {
@@ -452,8 +466,8 @@ export class LiveTvApiService {
     );
   }
 
-  getUserGroupGrants(userId: number) {
-    return firstValueFrom(this.http.get<string[]>(`/api/livetv/admin/access/users/${userId}`));
+  listUserAccess() {
+    return firstValueFrom(this.http.get<LiveTvUserAccess[]>('/api/livetv/admin/access/users'));
   }
 
   setUserGroupGrants(userId: number, groups: string[]) {

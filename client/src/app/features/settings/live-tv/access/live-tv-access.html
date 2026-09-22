@@ -29,7 +29,7 @@
                 <tr>
                   <td class="font-medium">
                     {{ group.name }}
-                    @if (isAdultMatch(group.name)) {
+                    @if (autoRestricted().has(group.name)) {
                       <span
                         class="badge badge-warning badge-sm ml-2 tooltip tooltip-right"
                         [attr.data-tip]="'liveTv.admin.access.auto_adult_hint' | translate"
@@ -75,7 +75,7 @@
             <thead>
               <tr>
                 <th>{{ 'settings.users.col_username' | translate }}</th>
-                <th>{{ 'settings.users.col_role' | translate }}</th>
+                <th>{{ 'liveTv.admin.access.col_access' | translate }}</th>
                 <th class="text-right">{{ 'common.actions' | translate }}</th>
               </tr>
             </thead>
@@ -84,7 +84,15 @@
                 <tr>
                   <td class="font-medium">{{ user.username }}</td>
                   <td>
-                    <span class="badge badge-sm badge-ghost">{{ user.role ?? '—' }}</span>
+                    @if (user.groups.length === 0) {
+                      <span class="text-base-content/40">-</span>
+                    } @else {
+                      <div class="flex flex-wrap gap-1">
+                        @for (name of user.groups; track name) {
+                          <span class="badge badge-sm badge-ghost">{{ name }}</span>
+                        }
+                      </div>
+                    }
                   </td>
                   <td class="text-right">
                     <button type="button" class="btn btn-ghost btn-sm" (click)="openGrants(user)">
@@ -111,11 +119,7 @@
     />
 
     <div class="px-5 sm:px-6 py-4 flex flex-col gap-1 overflow-y-auto flex-1 min-h-0 bg-base-100">
-      @if (grantsLoading()) {
-        <div class="flex justify-center py-8">
-          <span class="loading loading-spinner loading-md"></span>
-        </div>
-      } @else if (restrictedList().length === 0) {
+      @if (restrictedList().length === 0) {
         <p class="text-sm text-base-content/60">
           {{ 'liveTv.admin.access.grants_empty' | translate }}
         </p>
@@ -147,7 +151,7 @@
         type="button"
         class="btn btn-primary"
         (click)="saveGrants()"
-        [disabled]="grantsSaving() || grantsLoading()"
+        [disabled]="grantsSaving()"
       >
         @if (grantsSaving()) {
           <span class="loading loading-spinner loading-sm"></span>
