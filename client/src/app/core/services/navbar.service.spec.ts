@@ -120,6 +120,36 @@ describe('NavbarService', () => {
     expect(navbar.lastWasBack()).toBe(false);
   });
 
+  /** goBack() only closes `lastWasBack` a macrotask after its own navigation
+   *  settles; a push that starts inside that window must not read as a return
+   *  too, or the page-slide stack spends a pop the push never earned. */
+  it("does not read a push started during goBack()'s own window as a return", async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([
+          { path: '', component: PageStub },
+          { path: 'library', component: PageStub },
+          { path: 'movies', component: PageStub },
+          { path: 'search', component: PageStub },
+        ]),
+      ],
+    });
+
+    const navbar = TestBed.inject(NavbarService);
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/');
+    await router.navigateByUrl('/library');
+    await router.navigateByUrl('/movies');
+
+    navbar.goBack();
+    // No await in between: this push starts while goBack()'s own navigation to
+    // /library is still in flight, superseding it before lastWasBack resets.
+    await router.navigateByUrl('/search');
+
+    expect(router.url).toBe('/search');
+    expect(document.documentElement.classList.contains('nav-back')).toBe(false);
+  });
+
   it('records a back entry once a real in-app navigation happens', async () => {
     TestBed.configureTestingModule({
       providers: [
