@@ -4,9 +4,9 @@ import { User } from '../../users/entities/user.entity';
 
 /**
  * Which channel groups a user may see, mirroring `LibraryUserAccess`. A user
- * with no row here sees every group that is not restricted; a user with rows
- * sees only those. Hiding a channel is the viewer's own preference and is not
- * a control: this is.
+ * sees every group that is not restricted, plus whichever restricted groups
+ * they hold a row for here. Hiding a channel is the viewer's own preference
+ * and is not a control: this is.
  */
 @Entity('livetv_group_access')
 @Index('UQ_livetv_group_access_user_group', ['user', 'groupName'], { unique: true })

@@ -76,11 +76,19 @@ export class LiveTvAccessComponent implements OnInit {
 
   async toggleRestricted(name: string): Promise<void> {
     const next = new Set(this.restricted());
-    if (!next.delete(name)) next.add(name);
+    const isUnrestricting = next.delete(name);
+    if (!isUnrestricting) next.add(name);
     this.togglingGroup.set(name);
     try {
       const saved = await this.api.setRestrictedGroups([...next]);
       this.restricted.set(new Set(saved));
+      if (isUnrestricting && !saved.includes(name)) {
+        // The server just dropped every grant for this group; mirror that here
+        // instead of an extra listUserAccess() round trip.
+        this.users.update((list) =>
+          list.map((u) => ({ ...u, groups: u.groups.filter((g) => g !== name) })),
+        );
+      }
     } catch {
       // handled by global error interceptor
     } finally {

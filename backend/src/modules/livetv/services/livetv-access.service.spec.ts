@@ -12,6 +12,13 @@ describe('LiveTvAccessService', () => {
   let grants: { groupName: string }[];
   let users: { id: number; username: string }[];
   let accessRows: { userId: number; groupName: string }[];
+  let accessRepo: {
+    find: jest.Mock;
+    delete: jest.Mock;
+    save: jest.Mock;
+    create: jest.Mock;
+    createQueryBuilder: jest.Mock;
+  };
   let service: LiveTvAccessService;
 
   beforeEach(() => {
@@ -19,9 +26,16 @@ describe('LiveTvAccessService', () => {
     grants = [];
     users = [];
     accessRows = [];
-    const accessRepo = {
+    accessRepo = {
       find: jest.fn(() => Promise.resolve(grants)),
-      delete: jest.fn(() => Promise.resolve({})),
+      // `where.groupName` is whatever `In(dropped)` produces: a `FindOperator`
+      // exposing `.value`.
+      delete: jest.fn(({ groupName }: { groupName: { value: string[] } }) => {
+        const dropped = new Set(groupName.value);
+        accessRows = accessRows.filter((r) => !dropped.has(r.groupName));
+        grants = grants.filter((g) => !dropped.has(g.groupName));
+        return Promise.resolve({});
+      }),
       save: jest.fn(() => Promise.resolve({})),
       create: jest.fn((row: unknown) => row),
       createQueryBuilder: jest.fn(() => ({
@@ -119,6 +133,54 @@ describe('LiveTvAccessService', () => {
       await service.setRestrictedGroups(['XXX FR']);
       expect(await service.restrictedGroups()).toEqual(['XXX FR']);
       expect(await service.exemptGroups()).toEqual([]);
+    });
+  });
+
+  describe('grants when a group leaves the restricted set', () => {
+    it("drops that group's grants, and only that group's", async () => {
+      settings[RESTRICTED_KEY] = JSON.stringify(['News', 'XXX FR']);
+      users = [
+        { id: 1, username: 'alice' },
+        { id: 2, username: 'bob' },
+      ];
+      accessRows = [
+        { userId: 1, groupName: 'News' },
+        { userId: 1, groupName: 'XXX FR' },
+        { userId: 2, groupName: 'XXX FR' },
+      ];
+
+      await service.setRestrictedGroups(['XXX FR']);
+
+      expect(await service.listUserAccess()).toEqual([
+        { id: 1, username: 'alice', groups: ['XXX FR'] },
+        { id: 2, username: 'bob', groups: ['XXX FR'] },
+      ]);
+    });
+
+    it('does not resurrect a dropped grant when the group is restricted again later', async () => {
+      settings[RESTRICTED_KEY] = JSON.stringify(['XXX FR']);
+      users = [{ id: 1, username: 'alice' }];
+      accessRows = [{ userId: 1, groupName: 'XXX FR' }];
+
+      await service.setRestrictedGroups([]);
+      await service.setRestrictedGroups(['XXX FR']);
+
+      expect(await service.listUserAccess()).toEqual([
+        { id: 1, username: 'alice', groups: [] },
+      ]);
+    });
+
+    it('never deletes a grant when a sync adds newly seen adult groups', async () => {
+      settings[RESTRICTED_KEY] = JSON.stringify(['News']);
+      users = [{ id: 1, username: 'alice' }];
+      accessRows = [{ userId: 1, groupName: 'News' }];
+
+      await service.restrictAdultGroups(['News', 'XXX FR']);
+
+      expect(accessRepo.delete).not.toHaveBeenCalled();
+      expect(await service.listUserAccess()).toEqual([
+        { id: 1, username: 'alice', groups: ['News'] },
+      ]);
     });
   });
 

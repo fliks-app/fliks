@@ -107,6 +107,25 @@ describe('LiveTvAccessComponent - restricted groups', () => {
       groups: ['XXX Uncut'],
     });
   });
+
+  it('drops the unrestricted group from the users table without an extra request', async () => {
+    const { component, get } = await ready({
+      restricted: ['News', 'XXX Uncut'],
+      users: [
+        { id: 7, username: 'alice', groups: ['News'] },
+        { id: 8, username: 'bob', groups: ['News', 'XXX Uncut'] },
+      ],
+    });
+    get.mockClear();
+
+    await component.toggleRestricted('News');
+
+    expect(component.users()).toEqual([
+      { id: 7, username: 'alice', groups: [] },
+      { id: 8, username: 'bob', groups: ['XXX Uncut'] },
+    ]);
+    expect(get).not.toHaveBeenCalled();
+  });
 });
 
 describe('LiveTvAccessComponent - auto-restricted adult groups', () => {
