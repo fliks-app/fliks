@@ -2753,7 +2753,6 @@
     "ungrouped": "Ungrouped",
     "toggle_favorite": "Toggle favorite",
     "watch": "Watch",
-    "live_badge": "LIVE",
     "on_now": {
       "next_label": "Next:"
     },
@@ -2765,13 +2764,14 @@
       "jump_forward": "Jump forward",
       "now": "Now",
       "empty": "No channel matches the current filters.",
-      "no_program": "No program information"
+      "no_program": "No program information",
+      "load_error": "Unable to load the guide.",
+      "date": "Date"
     },
     "player": {
       "channels": "Channels",
       "channel_up": "Channel up",
       "channel_down": "Channel down",
-      "rewind": "Rewind 10 seconds",
       "live": "Live",
       "back_to_live": "Back to live"
     },

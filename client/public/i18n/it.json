@@ -2726,7 +2726,6 @@
     "ungrouped": "Senza gruppo",
     "toggle_favorite": "Attiva/disattiva preferito",
     "watch": "Guarda",
-    "live_badge": "DIRETTA",
     "on_now": {
       "next_label": "A seguire:"
     },
@@ -2738,13 +2737,14 @@
       "jump_forward": "Avanti",
       "now": "Adesso",
       "empty": "Nessun canale corrisponde ai filtri attuali.",
-      "no_program": "Nessuna informazione sul programma"
+      "no_program": "Nessuna informazione sul programma",
+      "load_error": "Impossibile caricare la guida.",
+      "date": "Data"
     },
     "player": {
       "channels": "Canali",
       "channel_up": "Canale successivo",
       "channel_down": "Canale precedente",
-      "rewind": "Riavvolgi di 10 secondi",
       "live": "In diretta",
       "back_to_live": "Torna alla diretta"
     },

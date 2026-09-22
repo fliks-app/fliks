@@ -28,6 +28,7 @@
     <input
       type="date"
       class="input input-bordered input-sm w-auto"
+      [attr.aria-label]="'liveTv.guide.date' | translate"
       [ngModel]="dayPickerValue"
       (ngModelChange)="onDayPicked($event)"
     />
@@ -50,6 +51,13 @@
       @for (i of [1, 2, 3, 4, 5, 6]; track i) {
         <div class="skeleton h-16 w-full rounded-lg"></div>
       }
+    </div>
+  } @else if (loadError() && rows().length === 0) {
+    <div class="flex flex-col items-center gap-3 py-12">
+      <p class="text-base-content/50">{{ 'liveTv.guide.load_error' | translate }}</p>
+      <button type="button" class="btn btn-sm" (click)="loadWindow(true)">
+        {{ 'common.retry' | translate }}
+      </button>
     </div>
   } @else if (rows().length === 0) {
     <p class="text-center py-12 text-base-content/50">{{ 'liveTv.guide.empty' | translate }}</p>
@@ -92,8 +100,8 @@
                   <button
                     type="button"
                     class="absolute top-1 bottom-1 rounded px-2 text-start bg-base-200 hover:bg-base-300 overflow-hidden border border-base-300"
-                    [style.left]="programStyle(program).left"
-                    [style.width]="programStyle(program).width"
+                    [style.left]="program.left"
+                    [style.width]="program.width"
                     (click)="openSheet(row.channel, program)"
                   >
                     <span class="block truncate font-medium">{{ program.title }}</span>
@@ -118,14 +126,14 @@
           <span class="badge badge-ghost badge-sm shrink-0">{{ row.channel.number }}</span>
           <div class="min-w-0 flex-1">
             <p class="text-sm font-medium truncate">{{ row.channel.name }}</p>
-            @if (nowProgram(row); as now) {
+            @if (row.nowProgram; as now) {
               <button type="button" class="block text-start text-base-content/70 truncate" (click)="openSheet(row.channel, now)">
                 {{ now.title }}
               </button>
             } @else {
               <p class="text-base-content/40">{{ 'liveTv.guide.no_program' | translate }}</p>
             }
-            @if (nextProgram(row); as next) {
+            @if (row.nextProgram; as next) {
               <p class="text-base-content/40 truncate">
                 {{ 'liveTv.on_now.next_label' | translate }} {{ next.title }}
               </p>
