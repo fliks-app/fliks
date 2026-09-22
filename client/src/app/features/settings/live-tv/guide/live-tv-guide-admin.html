@@ -22,6 +22,7 @@
               <th>{{ 'liveTv.admin.guide.col_kind' | translate }}</th>
               <th>{{ 'liveTv.admin.guide.col_programs' | translate }}</th>
               <th>{{ 'liveTv.admin.sources.col_last_sync' | translate }}</th>
+              <th class="text-center">{{ 'common.active' | translate }}</th>
               <th class="text-end w-56"></th>
             </tr>
           </thead>
@@ -39,6 +40,16 @@
                   } @else {
                     {{ 'liveTv.admin.sources.never_synced' | translate }}
                   }
+                </td>
+                <td class="text-center">
+                  <input
+                    type="checkbox"
+                    class="toggle toggle-sm toggle-success"
+                    [checked]="row.enabled"
+                    [disabled]="togglingId() === row.id"
+                    [attr.aria-label]="'common.active' | translate"
+                    (change)="toggleEnabled(row)"
+                  />
                 </td>
                 <td class="text-end">
                   <button type="button" class="btn btn-ghost btn-xs" [disabled]="syncingId() === row.id" (click)="syncNow(row)">

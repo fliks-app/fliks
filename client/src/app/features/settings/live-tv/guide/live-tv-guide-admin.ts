@@ -31,6 +31,7 @@ export class LiveTvGuideAdminComponent implements OnInit {
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly syncingId = signal<number | null>(null);
+  readonly togglingId = signal<number | null>(null);
 
   readonly report = signal<GuideMatchReport | null>(null);
   readonly reportLoading = signal(true);
@@ -125,6 +126,18 @@ export class LiveTvGuideAdminComponent implements OnInit {
       // handled by the global error interceptor
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  async toggleEnabled(row: GuideSource): Promise<void> {
+    this.togglingId.set(row.id);
+    try {
+      await this.api.updateGuideSource(row.id, { enabled: !row.enabled });
+      await this.reload();
+    } catch {
+      // handled by the global error interceptor
+    } finally {
+      this.togglingId.set(null);
     }
   }
 
