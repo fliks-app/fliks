@@ -41,6 +41,9 @@ interface PositionedProgram extends LiveProgram {
 interface GuideRow {
   channel: LiveChannel;
   programs: PositionedProgram[];
+}
+
+interface DisplayRow extends GuideRow {
   nowProgram: PositionedProgram | null;
   nextProgram: PositionedProgram | null;
 }
@@ -77,7 +80,7 @@ export class LiveTvGuideComponent implements OnInit, OnDestroy {
   readonly groupFilter = signal('');
   readonly favoritesOnly = signal(false);
 
-  /** Ticks every minute so the "now" line and row markers stay live without a reload. */
+  /** Ticks every minute so the now line and the mobile now/next markers stay live without a reload. */
   private readonly clock = signal(Date.now());
 
   readonly hasMore = computed(() => this.rows().length < this.total());
@@ -101,6 +104,23 @@ export class LiveTvGuideComponent implements OnInit, OnDestroy {
   readonly showNowLine = computed(() => {
     const now = this.clock();
     return now >= this.fetchFrom().getTime() && now <= this.fetchTo().getTime();
+  });
+
+  /** now/next per row, re-derived from the clock so a finished program doesn't stay "now" until the next fetch. */
+  readonly displayRows = computed<DisplayRow[]>(() => {
+    const now = this.clock();
+    return this.rows().map((row) => ({
+      ...row,
+      nowProgram:
+        row.programs.find(
+          (p) => new Date(p.startsAt).getTime() <= now && now < new Date(p.endsAt).getTime(),
+        ) ?? null,
+      nextProgram:
+        row.programs
+          .filter((p) => new Date(p.startsAt).getTime() > now)
+          .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())[0] ??
+        null,
+    }));
   });
 
   readonly selectedSheet = signal<{ channel: LiveChannel; program: LiveProgram } | null>(null);
@@ -148,6 +168,7 @@ export class LiveTvGuideComponent implements OnInit, OnDestroy {
       this.page = 1;
       this.rows.set([]);
       this.total.set(0);
+      this.loadingMore.set(false); // a reset supersedes any pagination fetch in flight
     } else if (!this.hasMore() || this.loadingMore()) {
       return;
     }
@@ -175,10 +196,9 @@ export class LiveTvGuideComponent implements OnInit, OnDestroy {
       this.total.set(res.total ?? 0);
       this.loadError.set(false);
     } catch {
-      this.loadError.set(true);
+      if (seq === this.loadSeq) this.loadError.set(true);
     } finally {
-      // flags always clear here; only the row/total write above is gated by `seq`
-      (reset ? this.loading : this.loadingMore).set(false);
+      if (seq === this.loadSeq) (reset ? this.loading : this.loadingMore).set(false);
     }
   }
 
@@ -200,6 +220,7 @@ export class LiveTvGuideComponent implements OnInit, OnDestroy {
 
   jumpToNow(): void {
     this.windowStart.set(this.roundToHalfHour(new Date()));
+    this.clock.set(Date.now());
     void this.loadWindow(true);
   }
 
@@ -220,25 +241,16 @@ export class LiveTvGuideComponent implements OnInit, OnDestroy {
     return (d.getTime() - this.fetchFrom().getTime()) / 60_000;
   }
 
-  /** Positions programs and picks now/next once per fetch, instead of per template cycle. */
+  /** Positions programs once per fetch; left/width are absolute against `fetchFrom` so a later clock tick can't move them. */
   private buildRow(channel: LiveChannel, programs: LiveProgram[]): GuideRow {
     const totalMinutes = this.totalMinutes();
-    const now = Date.now();
     const positioned: PositionedProgram[] = programs.map((p) => {
       const startMin = Math.max(0, this.minutesFromStart(new Date(p.startsAt)));
       const endMin = Math.min(totalMinutes, this.minutesFromStart(new Date(p.endsAt)));
       const width = Math.max(24, (endMin - startMin) * PX_PER_MINUTE);
       return { ...p, left: `${startMin * PX_PER_MINUTE}px`, width: `${width}px` };
     });
-    const nowProgram =
-      positioned.find(
-        (p) => new Date(p.startsAt).getTime() <= now && now < new Date(p.endsAt).getTime(),
-      ) ?? null;
-    const nextProgram =
-      positioned
-        .filter((p) => new Date(p.startsAt).getTime() > now)
-        .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())[0] ?? null;
-    return { channel, programs: positioned, nowProgram, nextProgram };
+    return { channel, programs: positioned };
   }
 
   openSheet(channel: LiveChannel, program: LiveProgram): void {

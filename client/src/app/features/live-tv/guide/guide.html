@@ -121,7 +121,7 @@
 
     <!-- Mobile: vertical "now and next" list per channel. -->
     <div class="md:hidden flex flex-col gap-2">
-      @for (row of rows(); track row.channel.id) {
+      @for (row of displayRows(); track row.channel.id) {
         <div class="flex items-center gap-3 p-2 rounded-lg border border-base-200">
           <span class="badge badge-ghost badge-sm shrink-0">{{ row.channel.number }}</span>
           <div class="min-w-0 flex-1">
