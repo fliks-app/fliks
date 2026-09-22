@@ -33,15 +33,20 @@
                 @if (row.accountStatus || row.expiresAt) {
                   <div class="flex flex-wrap items-center gap-1.5 mt-0.5">
                     @if (row.accountStatus) {
-                      <span class="badge badge-sm" [class.badge-success]="row.accountStatus === 'active'" [class.badge-ghost]="row.accountStatus !== 'active'">
-                        {{ row.accountStatus }}
-                      </span>
+                      @if (accountStatusBadge(row.accountStatus); as status) {
+                        <span class="badge badge-sm" [ngClass]="status.cls">{{ status.label }}</span>
+                      } @else {
+                        <span class="badge badge-sm badge-ghost">{{ row.accountStatus }}</span>
+                      }
                     }
                     @if (row.expiresAt) {
                       <span class="text-sm text-base-content/60">
                         {{ 'liveTv.admin.sources.expires_on' | translate }}
                         {{ row.expiresAt | localeDate:{ dateStyle: 'short' } }}
                       </span>
+                      @if (expiryBadge(row.expiresAt); as expiry) {
+                        <span class="badge badge-sm" [ngClass]="expiry.cls">{{ expiry.label }}</span>
+                      }
                     }
                   </div>
                 }

@@ -24,6 +24,7 @@ import { SettingsModule } from '../settings/settings.module';
 import { StreamingModule } from '../streaming/streaming.module';
 import { ScheduledJobRegistryModule } from '../scheduler/scheduled-job-registry.module';
 import { ImageModule } from '../images/image.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { ImageModule } from '../images/image.module';
     StreamingModule,
     ScheduledJobRegistryModule,
     ImageModule,
+    NotificationsModule,
   ],
   controllers: [LivetvController, LivetvAdminController, LiveTvAccessController],
   providers: [

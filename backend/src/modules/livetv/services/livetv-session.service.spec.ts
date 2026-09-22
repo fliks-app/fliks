@@ -252,6 +252,27 @@ describe('LiveTvSessionService', () => {
     expect(spawn).toHaveBeenCalledTimes(2); // one stream, tried twice
   });
 
+  it('names the expired account instead of the generic message once every stream on it has failed', async () => {
+    spawn.mockImplementation((_cmd: string, args: string[]) => {
+      const dir = path.dirname(args[args.indexOf('-hls_segment_filename') + 1]);
+      fs.mkdirSync(dir, { recursive: true });
+      const proc = new FakeProc();
+      setImmediate(() => {
+        proc.exitCode = 1;
+        proc.emit('exit', 1);
+      });
+      return proc as unknown as ReturnType<typeof spawn>;
+    });
+
+    const source = makeSource({ id: 20, accountStatus: 'Expired' });
+    const channel = makeChannel([makeStream({ id: 1, sourceId: 20, source })]);
+
+    await expect(service.open(channel, makeUser(1), {})).rejects.toMatchObject({
+      response: { code: 'livetv_account_expired', sourceName: 'Test source' },
+    });
+    expect(streamRepo.update).toHaveBeenCalledWith(1, { lastError: 'account expired' });
+  });
+
   it('kills the process after the idle window once the last viewer leaves', async () => {
     settings.get.mockImplementation((key: string) =>
       Promise.resolve(key === 'livetv_channel_idle_seconds' ? '0' : null),

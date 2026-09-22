@@ -1,6 +1,10 @@
 import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
-import { LiveTvSourcesService } from './livetv-sources.service';
+import {
+  LiveTvSourcesService,
+  liveTvAccountStateOf,
+  LIVETV_EXPIRY_WARNING_DAYS,
+} from './livetv-sources.service';
 import { LiveTvChannel } from '../entities/livetv-channel.entity';
 import { LiveTvChannelStream } from '../entities/livetv-channel-stream.entity';
 import { LiveTvSource } from '../entities/livetv-source.entity';
@@ -45,8 +49,8 @@ function makeSource(overrides: Record<string, unknown> = {}) {
     guideUrls: [],
     playlistEtag: null,
     playlistLastModified: null,
-    expiresAt: null,
-    accountStatus: null,
+    expiresAt: null as Date | null,
+    accountStatus: null as string | null,
     ...overrides,
   };
 }
@@ -108,6 +112,7 @@ function setup(sourceOverrides: Record<string, unknown> = {}) {
   const settings = { get: jest.fn().mockResolvedValue(null) };
   const logos = { cacheLogos: jest.fn().mockResolvedValue(undefined) };
   const access = { restrictAdultGroups: jest.fn().mockResolvedValue([]) };
+  const notifications = { dispatch: jest.fn().mockResolvedValue(undefined) };
 
   const service = new LiveTvSourcesService(
     sourceRepo as never,
@@ -117,6 +122,7 @@ function setup(sourceOverrides: Record<string, unknown> = {}) {
     settings as never,
     logos as never,
     access as never,
+    notifications as never,
   );
 
   return {
@@ -129,6 +135,7 @@ function setup(sourceOverrides: Record<string, unknown> = {}) {
     settings,
     logos,
     access,
+    notifications,
   };
 }
 
@@ -278,6 +285,77 @@ describe('LiveTvSourcesService.sync (m3u)', () => {
     // documented contract, not something this mock can exercise.
     expect(sourceQueryBuilder.addSelect).toHaveBeenCalledWith('source.password');
     expect(sourceQueryBuilder.getOne).toHaveBeenCalled();
+  });
+
+  it('dispatches livetv.account_expired once on the transition, then stays silent while still expired', async () => {
+    const playlist = '#EXTM3U billed-till="2000-01-01"\n#EXTINF:-1,One\nhttp://provider/live/1.ts\n';
+    mockedLiveTvGet.mockResolvedValue({ status: 200, data: playlist, headers: {} });
+    const { service, source, notifications } = setup();
+
+    await service.sync(1);
+
+    expect(notifications.dispatch).toHaveBeenCalledTimes(1);
+    expect(notifications.dispatch).toHaveBeenCalledWith(
+      'livetv.account_expired',
+      expect.objectContaining({ sourceName: 'Test' }),
+    );
+
+    // The real sync() reloads the source from the DB, so the second call has
+    // to see what the first one actually persisted, not the object as it was
+    // before the write.
+    source.expiresAt = new Date('2000-01-01');
+    notifications.dispatch.mockClear();
+
+    await service.sync(1);
+
+    expect(notifications.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('re-arms the notification after the account goes back to valid and later nears expiry again', async () => {
+    const { service, source, notifications } = setup({ expiresAt: new Date('2000-01-01') });
+
+    const healthy = '#EXTM3U billed-till="2099-01-01"\n#EXTINF:-1,One\nhttp://provider/live/1.ts\n';
+    mockedLiveTvGet.mockResolvedValue({ status: 200, data: healthy, headers: {} });
+    await service.sync(1);
+
+    expect(notifications.dispatch).not.toHaveBeenCalled();
+
+    source.expiresAt = new Date('2099-01-01');
+    notifications.dispatch.mockClear();
+
+    const soonIso = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
+    const soon = `#EXTM3U billed-till="${soonIso}"\n#EXTINF:-1,One\nhttp://provider/live/1.ts\n`;
+    mockedLiveTvGet.mockResolvedValue({ status: 200, data: soon, headers: {} });
+    await service.sync(1);
+
+    expect(notifications.dispatch).toHaveBeenCalledWith(
+      'livetv.account_expiring',
+      expect.objectContaining({ sourceName: 'Test' }),
+    );
+  });
+});
+
+describe('liveTvAccountStateOf', () => {
+  it('reads "expired" off accountStatus case-insensitively, regardless of the date', () => {
+    expect(liveTvAccountStateOf(new Date('2099-01-01'), 'EXPIRED')).toBe('expired');
+    expect(liveTvAccountStateOf(null, 'expired')).toBe('expired');
+  });
+
+  it('treats a null expiresAt as ok when the status says nothing is wrong', () => {
+    expect(liveTvAccountStateOf(null, null)).toBe('ok');
+    expect(liveTvAccountStateOf(null, 'Active')).toBe('ok');
+  });
+
+  it('flags a past expiresAt as expired even with no accountStatus at all (the m3u case)', () => {
+    expect(liveTvAccountStateOf(new Date(Date.now() - 1000), null)).toBe('expired');
+  });
+
+  it('flags the warning window but not a day further out', () => {
+    const now = new Date('2030-06-01T00:00:00Z');
+    const inWindow = new Date(now.getTime() + (LIVETV_EXPIRY_WARNING_DAYS - 1) * 86_400_000);
+    const beyond = new Date(now.getTime() + (LIVETV_EXPIRY_WARNING_DAYS + 1) * 86_400_000);
+    expect(liveTvAccountStateOf(inWindow, null, now)).toBe('expiring');
+    expect(liveTvAccountStateOf(beyond, null, now)).toBe('ok');
   });
 });
 
