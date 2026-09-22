@@ -20,6 +20,7 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { formatBytes, formatSpeed } from '../../utils/download-format';
 import { safeExternalUrl } from '../../utils/safe-url';
+import { translatedServerMessage } from '../../../core/utils/server-message';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { SKIP_ERROR_TOAST } from '../../../core/interceptors/error.interceptor';
 import { ToastService } from '../../../core/services/toast.service';
@@ -326,7 +327,10 @@ export class DataTableComponent implements OnInit {
         continue;
       }
       const text = this.subValueText(field, value);
-      lines.push({ labelKey: field.labelKey, text: field.format ? text : this.resolveMessage(text) });
+      // A plugin's row message is sometimes one of its own i18n keys, sometimes raw text from
+      // whatever it talks to; a key resolves, anything else is shown as it came.
+      const resolved = field.format ? text : (translatedServerMessage(text, this.translate) ?? text);
+      lines.push({ labelKey: field.labelKey, text: resolved });
     }
     return lines;
   }
@@ -347,16 +351,6 @@ export class DataTableComponent implements OnInit {
     return percent >= 100 ? null : percent;
   }
 
-  /**
-   * A message a plugin puts on a row is sometimes one of its own i18n keys ("removed by an
-   * operator") and sometimes raw text from whatever it talks to (a filesystem error). A key
-   * resolves through the plugin's manifest dictionary, merged into the active language at boot;
-   * anything else is shown as it came, which is the same fallback the provider pages use.
-   */
-  private resolveMessage(text: string): string {
-    const translated = this.translate.instant(text);
-    return translated === text ? text : translated;
-  }
 
   /** The row's raw detail text for this column, or null when there is none — `app-error-badge`
    *  resolves and trims it itself, this only decides whether the cell becomes a button. */

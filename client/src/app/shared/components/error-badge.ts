@@ -2,6 +2,7 @@ import { Component, computed, inject, input } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../core/services/confirmation.service';
+import { translatedServerMessage } from '../../core/utils/server-message';
 
 /**
  * Status badge that opens the app's shared alert modal with the full error text when one
@@ -26,9 +27,7 @@ export class ErrorBadgeComponent {
   /** A translation key resolves; a raw engine/provider error passes through as-is. */
   readonly errorText = computed(() => {
     const raw = (this.error() ?? '').trim();
-    if (!raw) return '';
-    const translated = this.translate.instant(raw);
-    return translated === raw ? raw : translated;
+    return raw ? (translatedServerMessage(raw, this.translate) ?? raw) : '';
   });
 
   open(): void {
