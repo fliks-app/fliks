@@ -187,16 +187,21 @@ export class NavbarService {
    *  goBack(). */
   readonly navigatedBack = signal(false);
 
+  /** A macrotask later, so the destination's ngOnInit still observes `true`,
+   *  but a later programmatic nav from that page sees `false`. Runs on
+   *  rejection too — a resolver error must not leave this stuck. */
+  private resetLastWasBack(): void {
+    setTimeout(() => this.lastWasBack.set(false), 0);
+  }
+
   goBack(fallback?: readonly (string | number)[]): void {
     const prev = this.history.pop();
     if (prev) {
       this.isPoppingBack = true;
       this.lastWasBack.set(true);
-      void this.router.navigateByUrl(prev).then(() => {
-        // Reset on the next macrotask so the destination ngOnInit observes
-        // it as `true`, but later programmatic navs from that page see `false`.
-        setTimeout(() => this.lastWasBack.set(false), 0);
-      });
+      void this.router
+        .navigateByUrl(prev)
+        .then(() => this.resetLastWasBack(), () => this.resetLastWasBack());
       return;
     }
     if (!this.isNative && window.history.length > 1) {
@@ -205,7 +210,7 @@ export class NavbarService {
       const sub = this.router.events.subscribe((e) => {
         if (e instanceof NavigationEnd) {
           sub.unsubscribe();
-          setTimeout(() => this.lastWasBack.set(false), 0);
+          this.resetLastWasBack();
         }
       });
       window.history.back();

@@ -45,8 +45,17 @@ export function armPageSlide(): void {
   armed = true;
 }
 
-export function resetPageSlide(): void {
+/** Takes the arming for the navigation now starting. Called once, up front —
+ *  before any guard can return early and strand it for a navigation that never asked for it. */
+export function consumeArmed(): boolean {
+  const wasArmed = armed;
   armed = false;
+  return wasArmed;
+}
+
+/** A root entry starts from an empty stack: the rail and the dock switch root
+ *  rather than stacking a page, so nothing they open ever owes a pop. */
+export function resetStack(): void {
   stacked = 0;
 }
 
@@ -57,21 +66,25 @@ export function goingBack(): boolean {
 }
 
 /**
- * Which half of the slide this navigation is, if any. Consumes the arming, held
- * or not: one left behind would slide a later trip that never asked for it.
+ * Which half of the slide this navigation is, if any. `armed` is whatever
+ * {@link consumeArmed} returned for this navigation, taken once rather than
+ * reread here — a guard that swallowed it already spent the arming.
  *
  * `morphed` is a pair with a better animation of its own, in either direction.
  * It stacks a page all the same, but the stack neither animated it nor may
  * spend a pop on the way back: that trip is the morph's, and the page under it
  * is still one the slide put there.
  */
-export function nextSlide(from: RouteNode, to: RouteNode, morphed = false): Direction | null {
-  const arming = armed;
-  armed = false;
+export function nextSlide(
+  from: RouteNode,
+  to: RouteNode,
+  armed: boolean,
+  morphed = false,
+): Direction | null {
   // The player covers the whole screen and animates its own open and close.
   if (leafRoutePath(from) === WATCH_PATH || leafRoutePath(to) === WATCH_PATH) return null;
   if (morphed) return null;
-  if (arming) {
+  if (armed) {
     stacked++;
     return 'push';
   }

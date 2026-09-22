@@ -95,6 +95,31 @@ describe('NavbarService', () => {
     expect(document.documentElement.classList.contains('nav-back')).toBe(false);
   });
 
+  /** A resolver error or an unloaded lazy chunk around a background/resume
+   *  gap rejects the return navigate — this must not strand the flag `true`. */
+  it('clears lastWasBack even when the return navigation rejects', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([
+          { path: '', component: PageStub },
+          { path: 'library', component: PageStub },
+        ]),
+      ],
+    });
+
+    const navbar = TestBed.inject(NavbarService);
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/');
+    await router.navigateByUrl('/library');
+
+    vi.spyOn(router, 'navigateByUrl').mockReturnValue(Promise.reject(new Error('boom')));
+
+    navbar.goBack();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(navbar.lastWasBack()).toBe(false);
+  });
+
   it('records a back entry once a real in-app navigation happens', async () => {
     TestBed.configureTestingModule({
       providers: [
