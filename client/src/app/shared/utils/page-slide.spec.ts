@@ -89,6 +89,14 @@ describe('page slide', () => {
     expect(nextSlide(library(), home())).toBeNull();
   });
 
+  it('drops an arming stranded by an early return once a root entry resets it', () => {
+    armPageSlide();
+    // The hook resets on a root-entry nav before ever reaching nextSlide().
+    resetPageSlide();
+
+    expect(nextSlide(home(), library())).toBeNull();
+  });
+
   it('forgets an arming the navigation it starts does not use', () => {
     armPageSlide();
     nextSlide(home(), library());

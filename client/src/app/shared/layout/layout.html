@@ -296,7 +296,6 @@
   <div class="drawer-side z-40" [class.hidden]="isNative && device.isPhone()">
     <label for="sidebar" [attr.aria-label]="'nav.close_menu' | translate" class="drawer-overlay"></label>
     <aside class="app-chrome-side w-64 min-h-full flex flex-col"
-           (pointerup)="resetSlide()"
            [class.bg-base-100]="!background.url()"
            [class.app-sidebar-veil]="!!background.url()"
            [class.backdrop-blur-sm]="!!background.url()"

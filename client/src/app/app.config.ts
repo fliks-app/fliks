@@ -18,6 +18,7 @@ import { Capacitor } from '@capacitor/core';
 import { provideServiceWorker } from '@angular/service-worker';
 import {
   provideRouter,
+  Router,
   RouteReuseStrategy,
   withInMemoryScrolling,
   withRouterConfig,
@@ -58,7 +59,13 @@ import {
   swipeBackActive,
   WATCH_PATH,
 } from './shared/utils/view-transition';
-import { goingBack, nextSlide, pageSlideAvailable, slidePage } from './shared/utils/page-slide';
+import {
+  goingBack,
+  nextSlide,
+  pageSlideAvailable,
+  resetPageSlide,
+  slidePage,
+} from './shared/utils/page-slide';
 
 /** Read the persisted server URL, sessions and credentials before bootstrap:
  *  guards, interceptors and the first /auth/me all depend on them. Resolves
@@ -118,6 +125,16 @@ export const appConfig: ApplicationConfig = {
               // the poster morph, the stack slide, or none — in which case the
               // transition is dropped rather than run empty.
               onViewTransitionCreated: ({ transition, from, to }) => {
+                // getCurrentNavigation(), not history.state: under deferred
+                // urlUpdateStrategy the browser state isn't swapped in here yet.
+                if (inject(Router).getCurrentNavigation()?.extras.state?.['rootEntry']) {
+                  resetPageSlide();
+                }
+                // A transition begun while backgrounded can resume on the next dock tap.
+                if (document.hidden) {
+                  transition.skipTransition();
+                  return;
+                }
                 if (swipeBackActive()) {
                   transition.skipTransition();
                   return;
