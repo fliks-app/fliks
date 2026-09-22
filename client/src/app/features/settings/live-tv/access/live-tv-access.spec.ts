@@ -9,6 +9,7 @@ import {
   LiveTvUserAccess,
   RestrictedGroup,
 } from '../../../../core/services/api/livetv-api.service';
+import { ToastService } from '../../../../core/services/toast.service';
 
 beforeAll(() => {
   if (!HTMLDialogElement.prototype.showModal) {
@@ -62,7 +63,11 @@ function createFixture(opts: {
       if (url === '/api/livetv/admin/access/users') return of(opts.users ?? []);
       throw new Error(`unexpected GET ${url}`);
     });
-  const put = opts.put ?? vi.fn((_url: string, body: { groups: string[] }) => of(body.groups));
+  const put =
+    opts.put ??
+    vi.fn((url: string, body: { groups: string[] }) =>
+      url.includes('/users/') ? of({ groups: body.groups, ignored: [] }) : of(body.groups),
+    );
 
   TestBed.configureTestingModule({
     providers: [
@@ -134,6 +139,31 @@ describe('LiveTvAccessComponent - restricted groups', () => {
       { id: 8, username: 'bob', groups: ['XXX Uncut'] },
     ]);
     expect(get).not.toHaveBeenCalled();
+  });
+});
+
+describe('LiveTvAccessComponent - concurrent toggles', () => {
+  it('does not let a second toggle overwrite the first with a stale snapshot', async () => {
+    const { component, put } = await ready({ restricted: ['News', 'Sport'] });
+
+    const first = component.toggleRestricted('Sport');
+    const second = component.toggleRestricted('Adult');
+    await Promise.all([first, second]);
+
+    const lastBody = put.mock.calls[put.mock.calls.length - 1][1] as { groups: string[] };
+    expect([...lastBody.groups].sort()).toEqual(['Adult', 'News']);
+    expect([...component.restricted()].sort()).toEqual(['Adult', 'News']);
+  });
+
+  it('shows every in-flight group as busy, not only the most recent one', async () => {
+    const { component } = await ready({ restricted: ['News', 'Sport'] });
+
+    const first = component.toggleRestricted('Sport');
+    const second = component.toggleRestricted('Adult');
+    expect(component.togglingGroups()).toEqual(new Set(['Sport', 'Adult']));
+
+    await Promise.all([first, second]);
+    expect(component.togglingGroups()).toEqual(new Set());
   });
 });
 
@@ -213,5 +243,27 @@ describe('LiveTvAccessComponent - per-user grants', () => {
     await component.saveGrants();
 
     expect(put).toHaveBeenCalledWith('/api/livetv/admin/access/users/7', { groups: ['News'] });
+  });
+
+  it('warns instead of granting a group the server says is no longer restricted', async () => {
+    const put = vi.fn((url: string) =>
+      url.includes('/users/')
+        ? of({ groups: ['News'], ignored: ['Sport'] })
+        : of(['News', 'XXX Uncut']),
+    );
+    const { component } = await ready({
+      restricted: ['News', 'XXX Uncut'],
+      users: [{ id: 7, username: 'alice', groups: [] }],
+      put,
+    });
+    const toast = TestBed.inject(ToastService);
+
+    component.openGrants(component.users()[0]);
+    component.toggleGrant('News');
+    component.toggleGrant('Sport');
+    await component.saveGrants();
+
+    expect(component.users()[0].groups).toEqual(['News']);
+    expect(toast.toasts().at(-1)).toMatchObject({ type: 'warning' });
   });
 });

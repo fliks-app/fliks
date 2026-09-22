@@ -5,9 +5,9 @@ or panel becomes a lineup with its own program guide, and pausing or jumping bac
 a live channel works the same way it does on the rest of the library. Fliks does not sell or supply
 any channels itself — you need a subscription from a provider before any of this is useful.
 
-Everything below lives under **Settings > Live TV**, admin-only, across four tabs: **Sources**,
-**Channels**, **Guide** and **Health**. The *Live TV* entry only appears in the main navigation once
-at least one channel is enabled and visible to your account.
+Everything below lives under **Settings > Live TV**, admin-only, across six tabs: **Sources**,
+**Channels**, **Guide**, **Settings**, **Access** and **Health**. The *Live TV* entry only appears in
+the main navigation once at least one channel is enabled and visible to your account.
 
 ## Adding a source
 
@@ -130,13 +130,17 @@ or search by name.
 
 ## Access control by channel group
 
-There is no settings page for this yet — it's reached through the API directly, with an admin
-session or API key:
+**Settings > Live TV > Access.** The same operations are also reachable directly through the API,
+with an admin session:
 
 - `GET`/`PUT /api/livetv/admin/access/restricted-groups`, body `{ "groups": ["Adult", "PPV"] }` —
   the list of channel group names that are invisible by default.
-- `GET`/`PUT /api/livetv/admin/access/users/:userId`, same body shape — which of those restricted
-  groups this one user is granted. Each `PUT` replaces the whole set for that user.
+- `GET /api/livetv/admin/access/users` — every user, with the restricted groups each was granted;
+  what the Access tab's overview table itself reads.
+- `GET`/`PUT /api/livetv/admin/access/users/:userId`, same body shape as above — which of those
+  restricted groups this one user is granted. Each `PUT` replaces the whole set for that user and
+  answers `{ "groups": [...], "ignored": [...] }`: a requested name that isn't currently restricted
+  is never granted, and comes back in `ignored` instead.
 
 ```bash
 curl -X PUT https://<host>/api/livetv/admin/access/restricted-groups \
@@ -150,15 +154,16 @@ restricted list means no filtering happens for anyone. Whoever administers Live 
 group, regardless of grants.
 
 **Adult groups are restricted automatically.** Every sync checks each live group's name against a
-built-in pattern (whole-word, case-insensitive: `xxx`, `adult`, `porn`, `erotic`, `18+`, `hot`) and
-adds a newly-seen match to the restricted list. This runs again on every sync, so removing a group
-from the list by hand doesn't stick if its name still matches the pattern — the next sync restricts
-it again.
+built-in pattern, covering the app's six languages (whole-word: `xxx`, `sex`/`sexo`/`sexe`, `porn*`,
+`erotic`/`erotique`/`erotik`, `x-rated`, `adult*` other than "Adult Swim", `18+`/`+18`) and adds a
+newly-seen match to the restricted list. Unchecking one by hand keeps it exempt from then on: the
+next sync won't restrict it again unless you recheck it yourself in the Access tab.
 
 ## Settings
 
-These are tuning values, not exposed on any settings page — read and write them through the generic
-settings API:
+**Settings > Live TV > Settings** exposes most of these tuning values directly. They're still just
+settings keys under the hood, readable (and, for the ones below, writable) through the generic
+settings API if you'd rather script them:
 
 ```
 GET  /api/settings/<key>
@@ -174,7 +179,7 @@ PUT  /api/settings/<key>          body: { "value": "<string>" }
 | `livetv_probe_seconds` | `3` (seconds) | How wide a window ffmpeg gets to probe a new stream before Fliks gives up on it. | Raise it for a slow provider or a stream with a wide GOP — too narrow a probe and Fliks reports a working channel as dead. |
 | `livetv_stale_stream_days` | `7` (days) | A stream absent from a sync for longer than this is deleted, along with anything only it fed. | Lower it if a flaky provider leaves stale entries you want cleared faster; raise it if a provider's sync drops channels that reappear a few days later. |
 | `livetv_slot_release_seconds` | `15` (seconds) | How long a just-closed upstream connection still counts against the source's own **Max simultaneous streams** limit. | Raise it if you keep hitting "at capacity" errors right after closing a stream — it means the provider takes longer than this to actually free the slot. |
-| `livetv_restricted_groups` | `[]` (JSON array) | The same list the access-control endpoints above read and write. | Use those endpoints instead; this key exists mainly so the value has somewhere to live. |
+| `livetv_restricted_groups` | `[]` (JSON array) | The same list the access-control endpoints above read and write. | Read-only from here: a direct write is refused (`400`) since it would skip grant cleanup and exemption bookkeeping — use those endpoints instead. |
 | `livetv_fast_zap` | unset | `"true"`/`"false"` override. Unset, Fliks only prefers a fast transcode start over a byte-exact copy where hardware encoding is actually available on the server, since that's the only case where it's free. | Set it explicitly to force one behavior regardless of hardware. |
 
 ## What won't work, and why

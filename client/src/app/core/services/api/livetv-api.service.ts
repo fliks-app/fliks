@@ -260,6 +260,12 @@ export interface LiveTvUserAccess {
   groups: string[];
 }
 
+export interface SetUserGroupGrantsResult {
+  groups: string[];
+  /** Requested names that don't name a currently-restricted group: never granted. */
+  ignored: string[];
+}
+
 /** Drops undefined/empty values. `HttpClient` stringifies every remaining key as a query param. */
 function queryParams(
   obj: Record<string, string | number | boolean | undefined>,
@@ -476,7 +482,9 @@ export class LiveTvApiService {
 
   setUserGroupGrants(userId: number, groups: string[]) {
     return firstValueFrom(
-      this.http.put<string[]>(`/api/livetv/admin/access/users/${userId}`, { groups }),
+      this.http.put<SetUserGroupGrantsResult>(`/api/livetv/admin/access/users/${userId}`, {
+        groups,
+      }),
     );
   }
 }

@@ -2942,7 +2942,7 @@
       },
       "access": {
         "groups_title": "Restricted groups",
-        "groups_subtitle": "Checked groups are only visible to users granted access below.",
+        "groups_subtitle": "Checked groups are hidden from every user except those granted access below — an account that manages Live TV always sees every group.",
         "col_group": "Group",
         "col_channels": "Channels",
         "col_restricted": "Restricted",
@@ -2952,14 +2952,15 @@
         "vanishing_badge": "Vanishing",
         "vanishing_hint": "No source carries this group anymore. Its access is dropped on {{date}} unless it reappears before then.",
         "users_title": "Access by user",
-        "users_subtitle": "Grant a user visibility into restricted groups.",
+        "users_subtitle": "Grant a user visibility into restricted groups. An account that manages Live TV has full access regardless of what this table shows for it.",
         "no_restricted_groups": "No group is restricted right now: there is nothing to grant.",
         "no_users": "No user found.",
         "col_access": "Access",
         "manage": "Manage access",
         "grants_title": "Access for {{username}}",
         "grants_empty": "No restricted group to grant.",
-        "grants_saved": "Access updated."
+        "grants_saved": "Access updated.",
+        "grants_ignored": "Not granted, no longer restricted: {{groups}}."
       },
       "health": {
         "sources_title": "Sources",

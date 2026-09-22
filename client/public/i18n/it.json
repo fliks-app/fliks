@@ -2915,7 +2915,7 @@
       },
       "access": {
         "groups_title": "Gruppi limitati",
-        "groups_subtitle": "I gruppi selezionati sono visibili solo agli utenti a cui è stato concesso l'accesso qui sotto.",
+        "groups_subtitle": "I gruppi selezionati sono nascosti a tutti gli utenti, tranne quelli a cui è stato concesso l'accesso qui sotto — un account che amministra la Live TV vede sempre tutti i gruppi.",
         "col_group": "Gruppo",
         "col_channels": "Canali",
         "col_restricted": "Limitato",
@@ -2925,14 +2925,15 @@
         "vanishing_badge": "In scadenza",
         "vanishing_hint": "Nessuna fonte include più questo gruppo. I suoi accessi verranno rimossi il {{date}}, a meno che non ricompaia prima.",
         "users_title": "Accesso per utente",
-        "users_subtitle": "Concedi a un utente la visibilità sui gruppi limitati.",
+        "users_subtitle": "Concedi a un utente la visibilità sui gruppi limitati. Un account che amministra la Live TV ha accesso completo, indipendentemente da ciò che questa tabella mostra per lui.",
         "no_restricted_groups": "Al momento nessun gruppo è limitato: non c’è nulla da concedere.",
         "no_users": "Nessun utente trovato.",
         "col_access": "Accesso",
         "manage": "Gestisci accesso",
         "grants_title": "Accesso di {{username}}",
         "grants_empty": "Nessun gruppo limitato da concedere.",
-        "grants_saved": "Accesso aggiornato."
+        "grants_saved": "Accesso aggiornato.",
+        "grants_ignored": "Non concessi, non più limitati: {{groups}}."
       },
       "health": {
         "sources_title": "Fonti",

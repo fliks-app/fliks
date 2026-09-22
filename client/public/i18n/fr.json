@@ -2942,7 +2942,7 @@
       },
       "access": {
         "groups_title": "Groupes restreints",
-        "groups_subtitle": "Les groupes cochés ne sont visibles que par les utilisateurs à qui l'accès a été accordé ci-dessous.",
+        "groups_subtitle": "Les groupes cochés sont masqués à tous les utilisateurs, sauf ceux à qui l'accès a été accordé ci-dessous — un compte qui administre la Live TV voit toujours tous les groupes.",
         "col_group": "Groupe",
         "col_channels": "Chaînes",
         "col_restricted": "Restreint",
@@ -2952,14 +2952,15 @@
         "vanishing_badge": "En expiration",
         "vanishing_hint": "Plus aucune source ne propose ce groupe. Ses accès seront supprimés le {{date}}, sauf s'il réapparaît avant.",
         "users_title": "Accès par utilisateur",
-        "users_subtitle": "Accordez à un utilisateur la visibilité sur des groupes restreints.",
+        "users_subtitle": "Accordez à un utilisateur la visibilité sur des groupes restreints. Un compte qui administre la Live TV a un accès complet, quoi qu'indique ce tableau pour lui.",
         "no_restricted_groups": "Aucun groupe n'est restreint pour le moment : il n'y a rien à accorder.",
         "no_users": "Aucun utilisateur trouvé.",
         "col_access": "Accès",
         "manage": "Gérer l'accès",
         "grants_title": "Accès de {{username}}",
         "grants_empty": "Aucun groupe restreint à accorder.",
-        "grants_saved": "Accès mis à jour."
+        "grants_saved": "Accès mis à jour.",
+        "grants_ignored": "Non accordés, plus restreints : {{groups}}."
       },
       "health": {
         "sources_title": "Sources",
