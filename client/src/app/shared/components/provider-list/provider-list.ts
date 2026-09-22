@@ -321,6 +321,18 @@ export class ProviderListComponent implements OnInit {
     this.editorDialog()?.nativeElement.showModal();
   }
 
+  /** Strips columns no update DTO declares — the global pipe rejects any that survive (whitelist + forbidNonWhitelisted). */
+  private payload(row: ProviderInstance, patch: Record<string, unknown>): Record<string, unknown> {
+    const {
+      id: _id,
+      createdAt: _createdAt,
+      updatedAt: _updatedAt,
+      cooldown: _cooldown,
+      ...rest
+    } = row;
+    return { ...rest, ...patch };
+  }
+
   private storedSecrets(row: ProviderInstance): readonly string[] {
     const set = (row.settings as Record<string, unknown> | undefined)?.[SECRETS_SET_KEY];
     return Array.isArray(set) ? set.map(String) : [];
@@ -460,10 +472,16 @@ export class ProviderListComponent implements OnInit {
     const other = ordered[swapIdx];
     try {
       await firstValueFrom(
-        this.http.put(`${this.listUrl()}/${row.id}`, { ...row, priority: other.priority }),
+        this.http.put(
+          `${this.listUrl()}/${row.id}`,
+          this.payload(row, { priority: other.priority }),
+        ),
       );
       await firstValueFrom(
-        this.http.put(`${this.listUrl()}/${other.id}`, { ...other, priority: row.priority }),
+        this.http.put(
+          `${this.listUrl()}/${other.id}`,
+          this.payload(other, { priority: row.priority }),
+        ),
       );
       await this.reload();
     } catch {
@@ -517,7 +535,7 @@ export class ProviderListComponent implements OnInit {
     this.togglingId.set(row.id);
     try {
       await firstValueFrom(
-        this.http.put(`${this.listUrl()}/${row.id}`, { ...row, enabled: !row.enabled }),
+        this.http.put(`${this.listUrl()}/${row.id}`, this.payload(row, { enabled: !row.enabled })),
       );
       await this.reload();
     } catch {
@@ -607,7 +625,13 @@ export class ProviderListComponent implements OnInit {
   async bulkSetEnabled(enabled: boolean): Promise<void> {
     await this.runOverSelection(
       (row) =>
-        firstValueFrom(this.http.put(`${this.listUrl()}/${row.id}`, { ...row, enabled }, this.silent())),
+        firstValueFrom(
+          this.http.put(
+            `${this.listUrl()}/${row.id}`,
+            this.payload(row, { enabled }),
+            this.silent(),
+          ),
+        ),
       enabled ? 'provider_list.bulk_enabled_done' : 'provider_list.bulk_disabled_done',
     );
   }
@@ -679,12 +703,11 @@ export class ProviderListComponent implements OnInit {
         firstValueFrom(
           this.http.put(
             `${this.listUrl()}/${row.id}`,
-            {
-              ...row,
+            this.payload(row, {
               ...topLevel,
               ...(priority === null ? {} : { priority }),
               settings: { ...(row.settings ?? {}), ...settings },
-            },
+            }),
             this.silent(),
           ),
         ),

@@ -9,7 +9,12 @@ import { ConfirmationService } from '../../../core/services/confirmation.service
 import { ToastService } from '../../../core/services/toast.service';
 import { SKIP_ERROR_TOAST } from '../../../core/interceptors/error.interceptor';
 import { HttpContext } from '@angular/common/http';
-import { ProviderImplementation, ProviderListAction, ProviderListLabels, ProviderRowAction } from './provider-list.types';
+import {
+  ProviderImplementation,
+  ProviderListAction,
+  ProviderListLabels,
+  ProviderRowAction,
+} from './provider-list.types';
 
 beforeAll(() => {
   if (!HTMLDialogElement.prototype.showModal) {
@@ -83,7 +88,10 @@ async function createComponent(
     listActions: ProviderListAction[];
     rowActions: ProviderRowAction[];
     /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-    confirmation: { confirm: (...a: any[]) => Promise<boolean>; alert: (...a: any[]) => Promise<void> };
+    confirmation: {
+      confirm: (...a: any[]) => Promise<boolean>;
+      alert: (...a: any[]) => Promise<void>;
+    };
     labels: ProviderListLabels;
     cooldownAction: ProviderRowAction | null;
     bulkSelect: boolean;
@@ -101,7 +109,10 @@ async function createComponent(
       { provide: HttpClient, useValue: http as unknown as HttpClient },
       {
         provide: ConfirmationService,
-        useValue: opts.confirmation ?? { confirm: () => Promise.resolve(true), alert: () => Promise.resolve() },
+        useValue: opts.confirmation ?? {
+          confirm: () => Promise.resolve(true),
+          alert: () => Promise.resolve(),
+        },
       },
       { provide: ToastService, useValue: opts.toast ?? { success: () => {}, error: () => {} } },
     ],
@@ -114,7 +125,8 @@ async function createComponent(
   if (opts.reorderable) fixture.componentRef.setInput('reorderable', opts.reorderable);
   if (opts.listActions) fixture.componentRef.setInput('listActions', opts.listActions);
   if (opts.rowActions) fixture.componentRef.setInput('rowActions', opts.rowActions);
-  if (opts.cooldownAction !== undefined) fixture.componentRef.setInput('cooldownAction', opts.cooldownAction);
+  if (opts.cooldownAction !== undefined)
+    fixture.componentRef.setInput('cooldownAction', opts.cooldownAction);
   if (opts.bulkSelect) fixture.componentRef.setInput('bulkSelect', opts.bulkSelect);
   fixture.detectChanges();
   await fixture.whenStable();
@@ -125,12 +137,21 @@ async function createComponent(
 
 describe('ProviderListComponent — characterisation', () => {
   it('loads rows from the declared route', async () => {
-    const fixture = await createComponent({ get: () => of([{ id: 1, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]) });
+    const fixture = await createComponent({
+      get: () =>
+        of([
+          { id: 1, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} },
+        ]),
+    });
     expect(fixture.componentInstance.rows()).toHaveLength(1);
   });
 
   it('renders a translated message when the list fails', async () => {
-    const fixture = await createComponent({ get: () => { throw new Error('boom'); } });
+    const fixture = await createComponent({
+      get: () => {
+        throw new Error('boom');
+      },
+    });
     expect(fixture.componentInstance.listError()).not.toBe('');
   });
 
@@ -183,7 +204,17 @@ describe('ProviderListComponent — characterisation', () => {
   it('VERDICT: testing an edit sends the row id and no blank secret, so the stored one is reusable', async () => {
     const run = vi.fn(() => Promise.resolve({ ok: true, message: 'ok' }));
     const fixture = await createComponent({
-      get: () => of([{ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: { url: 'http://x' } }]),
+      get: () =>
+        of([
+          {
+            id: 7,
+            name: 'A',
+            implementation: 'demo',
+            enabled: true,
+            priority: 1,
+            settings: { url: 'http://x' },
+          },
+        ]),
     });
     fixture.componentRef.setInput('testConnection', run);
     fixture.detectChanges();
@@ -191,7 +222,11 @@ describe('ProviderListComponent — characterisation', () => {
 
     await fixture.componentInstance.runTestConnection();
 
-    expect(run).toHaveBeenCalledWith({ implementation: 'demo', settings: { url: 'http://x' }, id: 7 });
+    expect(run).toHaveBeenCalledWith({
+      implementation: 'demo',
+      settings: { url: 'http://x' },
+      id: 7,
+    });
   });
 
   it('carries the erase of a stored secret through to the save body as an explicit null', async () => {
@@ -223,7 +258,13 @@ describe('ProviderListComponent — characterisation', () => {
   it('deletes after confirmation and reloads', async () => {
     const del = vi.fn(() => of(undefined));
     const fixture = await createComponent({ get: () => of([]), delete: del });
-    await fixture.componentInstance.deleteRow({ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1 });
+    await fixture.componentInstance.deleteRow({
+      id: 7,
+      name: 'A',
+      implementation: 'demo',
+      enabled: true,
+      priority: 1,
+    });
     expect(del).toHaveBeenCalledWith('/api/x/7');
   });
 
@@ -249,7 +290,14 @@ describe('ProviderListComponent — characterisation', () => {
       {
         get: () =>
           of([
-            { id: 1, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: { useFor: ['search'] } },
+            {
+              id: 1,
+              name: 'A',
+              implementation: 'demo',
+              enabled: true,
+              priority: 1,
+              settings: { useFor: ['search'] },
+            },
             { id: 2, name: 'B', implementation: 'demo', enabled: true, priority: 2, settings: {} },
           ]),
       },
@@ -287,7 +335,16 @@ describe('ProviderListComponent — characterisation', () => {
     const fixture = await createComponent(
       {
         get: () =>
-          of([{ id: 1, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: { useFor: ['rss'] } }]),
+          of([
+            {
+              id: 1,
+              name: 'A',
+              implementation: 'demo',
+              enabled: true,
+              priority: 1,
+              settings: { useFor: ['rss'] },
+            },
+          ]),
       },
       { implementations: impls },
     );
@@ -335,20 +392,48 @@ describe('ProviderListComponent — characterisation', () => {
   it('VERDICT: editing seeds a topLevel field from the row itself, not from settings', async () => {
     const fixture = await createComponent({
       get: () =>
-        of([{ id: 1, name: 'A', implementation: 'demo', enabled: true, priority: 1, delay: 9, settings: { delay: 999 } }]),
+        of([
+          {
+            id: 1,
+            name: 'A',
+            implementation: 'demo',
+            enabled: true,
+            priority: 1,
+            delay: 9,
+            settings: { delay: 999 },
+          },
+        ]),
     });
     fixture.componentInstance.openEdit(fixture.componentInstance.rows()[0]);
     expect(fixture.componentInstance.draftValue()['delay']).toBe(9);
   });
 
   it('sorts rows by priority and swaps two rows on move, persisting both priorities', async () => {
-    const put = vi.fn(() => of({}));
+    const put = vi.fn((_url: string, _body: unknown) => of({}));
     const fixture = await createComponent(
       {
         get: () =>
           of([
-            { id: 1, name: 'A', implementation: 'demo', enabled: true, priority: 20, settings: {} },
-            { id: 2, name: 'B', implementation: 'demo', enabled: true, priority: 10, settings: {} },
+            {
+              id: 1,
+              name: 'A',
+              implementation: 'demo',
+              enabled: true,
+              priority: 20,
+              settings: {},
+              createdAt: '2026-01-01',
+              updatedAt: '2026-01-02',
+            },
+            {
+              id: 2,
+              name: 'B',
+              implementation: 'demo',
+              enabled: true,
+              priority: 10,
+              settings: {},
+              createdAt: '2026-01-01',
+              updatedAt: '2026-01-02',
+            },
           ]),
         put,
       },
@@ -360,13 +445,22 @@ describe('ProviderListComponent — characterisation', () => {
     await fixture.componentInstance.moveRow(fixture.componentInstance.orderedRows()[1], -1);
     expect(put).toHaveBeenCalledWith('/api/x/1', expect.objectContaining({ priority: 10 }));
     expect(put).toHaveBeenCalledWith('/api/x/2', expect.objectContaining({ priority: 20 }));
+    for (const call of put.mock.calls as [string, Record<string, unknown>][]) {
+      expect(call[1]).not.toHaveProperty('id');
+      expect(call[1]).not.toHaveProperty('createdAt');
+      expect(call[1]).not.toHaveProperty('updatedAt');
+    }
   });
 
   it('renders a listAction once above the rows, and running it reloads', async () => {
-    const get = vi.fn(() => of([{ id: 1, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]));
+    const get = vi.fn(() =>
+      of([{ id: 1, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]),
+    );
     const run = vi.fn(() => Promise.resolve());
     const fixture = await createComponent({ get }, { listActions: [{ labelKey: 'x.sync', run }] });
-    const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
+    const buttons = Array.from(
+      fixture.nativeElement.querySelectorAll('button'),
+    ) as HTMLButtonElement[];
     expect(buttons.filter((b) => b.textContent?.includes('x.sync'))).toHaveLength(1);
 
     await fixture.componentInstance.runListAction({ labelKey: 'x.sync', run });
@@ -375,19 +469,25 @@ describe('ProviderListComponent — characterisation', () => {
   });
 
   it('renders one button per `scope: "row"` action — stats and clear-cooldown both reachable, not just the first', async () => {
-    const get = vi.fn(() => of([{ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]));
+    const get = vi.fn(() =>
+      of([{ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]),
+    );
     const rowActions: ProviderRowAction[] = [
       { labelKey: 'x.stats', method: 'GET', route: '/api/x/:id/stats', result: STATS_RESULT },
       { labelKey: 'x.clear_cooldown', method: 'DELETE', route: '/api/x/:id/cooldown' },
     ];
     const fixture = await createComponent({ get }, { rowActions });
-    const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
+    const buttons = Array.from(
+      fixture.nativeElement.querySelectorAll('button'),
+    ) as HTMLButtonElement[];
     expect(buttons.some((b) => b.textContent?.includes('x.stats'))).toBe(true);
     expect(buttons.some((b) => b.textContent?.includes('x.clear_cooldown'))).toBe(true);
   });
 
   it("substitutes the row id into a GET row action's route and hands it to its declared table", async () => {
-    const get = vi.fn(() => of([{ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]));
+    const get = vi.fn(() =>
+      of([{ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]),
+    );
     const request = vi.fn(() => of({ some: 'stats' }));
     const fixture = await createComponent({ get, request });
 
@@ -405,21 +505,32 @@ describe('ProviderListComponent — characterisation', () => {
   });
 
   it('VERDICT: renders no button for a GET row action that declares no result, and opens nothing', async () => {
-    const get = vi.fn(() => of([{ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]));
+    const get = vi.fn(() =>
+      of([{ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]),
+    );
     const request = vi.fn(() => of({ some: 'stats' }));
-    const rowActions: ProviderRowAction[] = [{ labelKey: 'x.stats', method: 'GET', route: '/api/x/:id/stats' }];
+    const rowActions: ProviderRowAction[] = [
+      { labelKey: 'x.stats', method: 'GET', route: '/api/x/:id/stats' },
+    ];
     const fixture = await createComponent({ get, request }, { rowActions });
 
-    const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
+    const buttons = Array.from(
+      fixture.nativeElement.querySelectorAll('button'),
+    ) as HTMLButtonElement[];
     expect(buttons.some((b) => b.textContent?.includes('x.stats'))).toBe(false);
 
-    await fixture.componentInstance.runRowAction(fixture.componentInstance.rows()[0], rowActions[0]);
+    await fixture.componentInstance.runRowAction(
+      fixture.componentInstance.rows()[0],
+      rowActions[0],
+    );
     expect(fixture.componentInstance.resultView()).toBeNull();
     expect(request).not.toHaveBeenCalled();
   });
 
   it('reloads (rather than alerting) after a mutating row action succeeds', async () => {
-    const get = vi.fn(() => of([{ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]));
+    const get = vi.fn(() =>
+      of([{ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]),
+    );
     const request = vi.fn(() => of({}));
     const fixture = await createComponent({ get, request });
     await fixture.componentInstance.runRowAction(fixture.componentInstance.rows()[0], {
@@ -432,7 +543,9 @@ describe('ProviderListComponent — characterisation', () => {
   });
 
   it('skips the request entirely when the confirm prompt is declined', async () => {
-    const get = vi.fn(() => of([{ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]));
+    const get = vi.fn(() =>
+      of([{ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]),
+    );
     const request = vi.fn(() => of({}));
     const fixture = await createComponent(
       { get, request },
@@ -448,7 +561,9 @@ describe('ProviderListComponent — characterisation', () => {
   });
 
   it('VERDICT: never requests a row action route whose placeholder survives id substitution', async () => {
-    const get = vi.fn(() => of([{ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]));
+    const get = vi.fn(() =>
+      of([{ id: 7, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]),
+    );
     const request = vi.fn(() => of({}));
     const fixture = await createComponent({ get, request });
     await fixture.componentInstance.runRowAction(fixture.componentInstance.rows()[0], {
@@ -462,7 +577,9 @@ describe('ProviderListComponent — characterisation', () => {
 
 describe('resolveRowActionRoute', () => {
   it('substitutes the row id for :id', () => {
-    expect(resolveRowActionRoute('/api/plugins/x/indexers/:id/stats', 7)).toBe('/api/plugins/x/indexers/7/stats');
+    expect(resolveRowActionRoute('/api/plugins/x/indexers/:id/stats', 7)).toBe(
+      '/api/plugins/x/indexers/7/stats',
+    );
   });
 
   it('returns null — never a request — when a placeholder survives substitution', () => {
@@ -476,7 +593,9 @@ describe('resolveRowActionRoute', () => {
 
 describe('ProviderListComponent — editor dialog chrome', () => {
   it('names the dialog from the page, and closes on the ✕ without saving', async () => {
-    const get = vi.fn(() => of([{ id: 1, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]));
+    const get = vi.fn(() =>
+      of([{ id: 1, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {} }]),
+    );
     const post = vi.fn(() => of({}));
     const fixture = await createComponent(
       { get, post },
@@ -508,21 +627,38 @@ const RESET: ProviderRowAction = {
 };
 
 function row(over: Record<string, unknown> = {}) {
-  return { id: 1, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: {}, ...over };
+  return {
+    id: 1,
+    name: 'A',
+    implementation: 'demo',
+    enabled: true,
+    priority: 1,
+    settings: {},
+    createdAt: '2026-01-01',
+    updatedAt: '2026-01-02',
+    ...over,
+  };
 }
 
 describe('ProviderListComponent — cooldown column', () => {
   it('VERDICT: a cooling row reports it, instead of only offering to clear something invisible', async () => {
-    const cooling = row({ cooldown: { reason: 'failures', remainingMs: 90_000, until: 'x', failureCount: 2 } });
+    const cooling = row({
+      cooldown: { reason: 'failures', remainingMs: 90_000, until: 'x', failureCount: 2 },
+    });
     const fixture = await createComponent({ get: () => of([cooling]) }, { cooldownAction: RESET });
 
     expect(fixture.componentInstance.showCooldown()).toBe(true);
-    expect(fixture.componentInstance.cooldownOf(fixture.componentInstance.rows()[0])).not.toBeNull();
+    expect(
+      fixture.componentInstance.cooldownOf(fixture.componentInstance.rows()[0]),
+    ).not.toBeNull();
     expect(fixture.nativeElement.querySelector('svg[lucideRotateCcw]')).not.toBeNull();
   });
 
   it('a healthy row keeps the column but offers nothing to reset', async () => {
-    const fixture = await createComponent({ get: () => of([row({ cooldown: null })]) }, { cooldownAction: RESET });
+    const fixture = await createComponent(
+      { get: () => of([row({ cooldown: null })]) },
+      { cooldownAction: RESET },
+    );
     expect(fixture.componentInstance.showCooldown()).toBe(true);
     expect(fixture.componentInstance.cooldownOf(fixture.componentInstance.rows()[0])).toBeNull();
     expect(fixture.nativeElement.querySelector('svg[lucideRotateCcw]')).toBeNull();
@@ -538,15 +674,23 @@ describe('ProviderListComponent — cooldown column', () => {
   it('reads a long backoff in hours rather than as hundreds of minutes', async () => {
     const fixture = await createComponent({ get: () => of([row()]) });
     const c = fixture.componentInstance;
-    expect(c.cooldownRemaining({ reason: 'failures', remainingMs: 90_000, until: 'x' })).toContain('minutes');
-    expect(c.cooldownRemaining({ reason: 'failures', remainingMs: 6 * 3_600_000, until: 'x' })).toContain('hours');
+    expect(c.cooldownRemaining({ reason: 'failures', remainingMs: 90_000, until: 'x' })).toContain(
+      'minutes',
+    );
+    expect(
+      c.cooldownRemaining({ reason: 'failures', remainingMs: 6 * 3_600_000, until: 'x' }),
+    ).toContain('hours');
   });
 
   it('names the reason, so a rate limit is not read as a broken indexer', async () => {
     const fixture = await createComponent({ get: () => of([row()]) });
     const c = fixture.componentInstance;
-    expect(c.cooldownReasonKey({ reason: 'rate-limit', remainingMs: 1, until: 'x' })).toContain('rate_limit');
-    expect(c.cooldownReasonKey({ reason: 'failures', remainingMs: 1, until: 'x' })).toContain('failures');
+    expect(c.cooldownReasonKey({ reason: 'rate-limit', remainingMs: 1, until: 'x' })).toContain(
+      'rate_limit',
+    );
+    expect(c.cooldownReasonKey({ reason: 'failures', remainingMs: 1, until: 'x' })).toContain(
+      'failures',
+    );
   });
 });
 
@@ -560,12 +704,24 @@ describe('ProviderListComponent — row controls', () => {
   });
 
   it('the enabled toggle persists the whole row, so a redacted secret is never written as a value', async () => {
-    const put = vi.fn(() => of({}));
-    const stored = row({ enabled: true, settings: { apiKey: '***' } });
+    const put = vi.fn((_url: string, _body: unknown) => of({}));
+    const stored = row({
+      enabled: true,
+      settings: { apiKey: '***' },
+      cooldown: { reason: 'failures', remainingMs: 1, until: 'x' },
+    });
     const fixture = await createComponent({ get: () => of([stored]), put });
     await fixture.componentInstance.toggleEnabled(fixture.componentInstance.rows()[0]);
 
-    expect(put).toHaveBeenCalledWith('/api/x/1', expect.objectContaining({ enabled: false, settings: { apiKey: '***' } }));
+    expect(put).toHaveBeenCalledWith(
+      '/api/x/1',
+      expect.objectContaining({ enabled: false, settings: { apiKey: '***' } }),
+    );
+    const body = put.mock.calls[0]![1] as Record<string, unknown>;
+    expect(body).not.toHaveProperty('id');
+    expect(body).not.toHaveProperty('createdAt');
+    expect(body).not.toHaveProperty('updatedAt');
+    expect(body).not.toHaveProperty('cooldown');
   });
 
   it('hides the implementation column when there is only one to tell apart', async () => {
@@ -576,7 +732,12 @@ describe('ProviderListComponent — row controls', () => {
   it('keeps the implementation column as soon as rows can differ', async () => {
     const fixture = await createComponent(
       { get: () => of([row()]) },
-      { implementations: [...IMPLS, { implementation: 'other', labelKey: 'x.impl_other', fields: [] }] },
+      {
+        implementations: [
+          ...IMPLS,
+          { implementation: 'other', labelKey: 'x.impl_other', fields: [] },
+        ],
+      },
     );
     expect(fixture.componentInstance.showImplementation()).toBe(true);
   });
@@ -584,9 +745,30 @@ describe('ProviderListComponent — row controls', () => {
 
 describe('ProviderListComponent: bulk selection', () => {
   const THREE = [
-    { id: 1, name: 'A', implementation: 'demo', enabled: true, priority: 1, settings: { url: 'http://a', minSeeders: 1 } },
-    { id: 2, name: 'B', implementation: 'demo', enabled: true, priority: 2, settings: { url: 'http://b', minSeeders: 2 } },
-    { id: 3, name: 'C', implementation: 'other', enabled: false, priority: 3, settings: { url: 'http://c' } },
+    {
+      id: 1,
+      name: 'A',
+      implementation: 'demo',
+      enabled: true,
+      priority: 1,
+      settings: { url: 'http://a', minSeeders: 1 },
+    },
+    {
+      id: 2,
+      name: 'B',
+      implementation: 'demo',
+      enabled: true,
+      priority: 2,
+      settings: { url: 'http://b', minSeeders: 2 },
+    },
+    {
+      id: 3,
+      name: 'C',
+      implementation: 'other',
+      enabled: false,
+      priority: 3,
+      settings: { url: 'http://c' },
+    },
   ];
 
   const listOf = (rows: unknown[]) => ({ get: () => of(rows) });
@@ -631,7 +813,10 @@ describe('ProviderListComponent: bulk selection', () => {
   it('VERDICT: bulk enable writes every selected row whole, silences the per-call toast, and reports once', async () => {
     const put = vi.fn((_url: string, _body: unknown, _opts?: unknown) => of({}));
     const toast = { success: vi.fn(), error: vi.fn() };
-    const fixture = await createComponent({ get: () => of(THREE), put }, { bulkSelect: true, toast });
+    const fixture = await createComponent(
+      { get: () => of(THREE), put },
+      { bulkSelect: true, toast },
+    );
     const c = fixture.componentInstance;
     c.toggleSelected(1);
     c.toggleSelected(3);
@@ -656,7 +841,10 @@ describe('ProviderListComponent: bulk selection', () => {
       url.endsWith('/2') ? throwError(() => new Error('nope')) : of({}),
     );
     const toast = { success: vi.fn(), error: vi.fn() };
-    const fixture = await createComponent({ get: () => of(THREE), delete: failing }, { bulkSelect: true, toast });
+    const fixture = await createComponent(
+      { get: () => of(THREE), delete: failing },
+      { bulkSelect: true, toast },
+    );
     const c = fixture.componentInstance;
     c.toggleAllSelected();
     await c.bulkDelete();
@@ -671,7 +859,10 @@ describe('ProviderListComponent: bulk selection', () => {
     const failing = vi.fn(() => of({}));
     const fixture = await createComponent(
       { get: () => of(THREE), delete: failing },
-      { bulkSelect: true, confirmation: { confirm: () => Promise.resolve(false), alert: () => Promise.resolve() } },
+      {
+        bulkSelect: true,
+        confirmation: { confirm: () => Promise.resolve(false), alert: () => Promise.resolve() },
+      },
     );
     const c = fixture.componentInstance;
     c.toggleAllSelected();
@@ -750,9 +941,30 @@ describe('ProviderListComponent: bulk selection', () => {
 
 describe('ProviderListComponent: filter, sort and the shared toolbar', () => {
   const ROWS = [
-    { id: 1, name: 'Zeta tracker', implementation: 'demo', enabled: true, priority: 1, settings: {} },
-    { id: 2, name: 'alpha tracker', implementation: 'demo', enabled: true, priority: 2, settings: {} },
-    { id: 3, name: 'Mid tracker', implementation: 'demo', enabled: true, priority: 3, settings: {} },
+    {
+      id: 1,
+      name: 'Zeta tracker',
+      implementation: 'demo',
+      enabled: true,
+      priority: 1,
+      settings: {},
+    },
+    {
+      id: 2,
+      name: 'alpha tracker',
+      implementation: 'demo',
+      enabled: true,
+      priority: 2,
+      settings: {},
+    },
+    {
+      id: 3,
+      name: 'Mid tracker',
+      implementation: 'demo',
+      enabled: true,
+      priority: 3,
+      settings: {},
+    },
   ];
 
   it('filters on the name, ignoring case, and leaves the real order alone', async () => {
@@ -775,7 +987,11 @@ describe('ProviderListComponent: filter, sort and the shared toolbar', () => {
 
     expect(c.visibleRows().map((r) => r.id)).toEqual([1, 2, 3]);
     c.sortBy.set('name');
-    expect(c.visibleRows().map((r) => r.name)).toEqual(['alpha tracker', 'Mid tracker', 'Zeta tracker']);
+    expect(c.visibleRows().map((r) => r.name)).toEqual([
+      'alpha tracker',
+      'Mid tracker',
+      'Zeta tracker',
+    ]);
   });
 
   it('VERDICT: the header box covers the rows on screen and leaves a hidden selection untouched', async () => {
@@ -825,7 +1041,10 @@ describe('ProviderListComponent: filter, sort and the shared toolbar', () => {
   });
 
   it('the reorder arrows follow the real priority order, not the filtered view', async () => {
-    const fixture = await createComponent({ get: () => of(ROWS) }, { bulkSelect: true, reorderable: true });
+    const fixture = await createComponent(
+      { get: () => of(ROWS) },
+      { bulkSelect: true, reorderable: true },
+    );
     const c = fixture.componentInstance;
     c.filterText.set('mid');
 
