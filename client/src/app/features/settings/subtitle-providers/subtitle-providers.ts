@@ -32,6 +32,7 @@ import {
 } from '../../../shared/components/provider-list/provider-list.types';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
+import { EnabledSwitchComponent } from '../../../shared/components/enabled-switch';
 
 const DEFAULT_TRANSLATION_MODEL = 'gemini-2.0-flash';
 
@@ -106,12 +107,13 @@ const LABELS: ProviderListLabels = {
 
 @Component({
   selector: 'app-subtitle-providers-settings',
-  imports: [TvSelectDirective, 
+  imports: [TvSelectDirective,
     ModalFooterComponent,
     ModalHeaderComponent,
     FormsModule,
     TranslatePipe,
     ProviderListComponent,
+    EnabledSwitchComponent,
   ],
   templateUrl: './subtitle-providers.html',
 })

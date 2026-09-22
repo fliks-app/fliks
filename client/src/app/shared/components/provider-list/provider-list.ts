@@ -36,6 +36,7 @@ import {
 import { DataTableComponent } from '../data-table/data-table';
 import { ModalHeaderComponent } from '../modal-header';
 import { ModalFooterComponent } from '../modal-footer';
+import { EnabledSwitchComponent } from '../enabled-switch';
 
 interface RowActionResultView {
   url: string;
@@ -71,6 +72,7 @@ export function resolveRowActionRoute(route: string, id: number | string): strin
     SelectFieldComponent,
     SchemaFormComponent,
     DataTableComponent,
+    EnabledSwitchComponent,
     LucideArrowUp,
     LucideArrowDown,
     LucideRotateCcw,

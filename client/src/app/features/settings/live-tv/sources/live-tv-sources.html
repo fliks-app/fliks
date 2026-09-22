@@ -63,13 +63,10 @@
                 }
               </td>
               <td class="text-center">
-                <input
-                  type="checkbox"
-                  class="toggle toggle-sm toggle-success"
-                  [checked]="row.enabled"
-                  [disabled]="togglingId() === row.id"
-                  [attr.aria-label]="'common.active' | translate"
-                  (change)="toggleEnabled(row)"
+                <app-enabled-switch
+                  [enabled]="row.enabled"
+                  [busy]="togglingId() === row.id"
+                  (toggle)="toggleEnabled(row)"
                 />
               </td>
               <td class="text-end">

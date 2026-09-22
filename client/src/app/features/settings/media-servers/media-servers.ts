@@ -19,10 +19,18 @@ import {
 } from '../../../core/services/api/media-servers-api.service';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
+import { EnabledSwitchComponent } from '../../../shared/components/enabled-switch';
 
 @Component({
   selector: 'app-media-servers-settings',
-  imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
+  imports: [
+    TvSelectDirective,
+    ModalFooterComponent,
+    ModalHeaderComponent,
+    FormsModule,
+    TranslatePipe,
+    EnabledSwitchComponent,
+  ],
   templateUrl: './media-servers.html',
 })
 export class MediaServersSettingsComponent implements OnInit {

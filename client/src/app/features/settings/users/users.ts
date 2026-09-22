@@ -23,10 +23,19 @@ import { ToastService } from '../../../core/services/toast.service';
 import { formatRelativeTime } from '../../../core/utils/relative-time';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
+import { EnabledSwitchComponent } from '../../../shared/components/enabled-switch';
 
 @Component({
   selector: 'app-users-settings',
-  imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, RouterLink, TranslatePipe],
+  imports: [
+    TvSelectDirective,
+    ModalFooterComponent,
+    ModalHeaderComponent,
+    FormsModule,
+    RouterLink,
+    TranslatePipe,
+    EnabledSwitchComponent,
+  ],
   templateUrl: './users.html',
 })
 export class UsersSettingsComponent implements OnInit {

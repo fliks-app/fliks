@@ -46,13 +46,11 @@
               </td>
               <td class="text-sm text-base-content/60">{{ nc.events.length }} event(s)</td>
               <td class="text-center">
-                <input
-                  type="checkbox"
-                  class="toggle toggle-sm toggle-success"
-                  [checked]="nc.enabled"
-                  [disabled]="togglingId() === nc.id"
-                  [attr.aria-label]="'settings.notifications.col_enabled' | translate"
-                  (change)="toggleEnabled(nc)"
+                <app-enabled-switch
+                  [enabled]="nc.enabled"
+                  [busy]="togglingId() === nc.id"
+                  ariaLabelKey="settings.notifications.col_enabled"
+                  (toggle)="toggleEnabled(nc)"
                 />
               </td>
               <td class="text-end">

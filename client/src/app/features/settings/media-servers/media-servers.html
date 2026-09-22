@@ -48,13 +48,11 @@
               <td class="text-sm text-base-content/60 truncate max-w-[12rem]">{{ row.url }}</td>
               <td class="text-sm text-base-content/60">{{ row.events.length }} event(s)</td>
               <td class="text-center">
-                <input
-                  type="checkbox"
-                  class="toggle toggle-sm toggle-success"
-                  [checked]="row.enabled"
-                  [disabled]="togglingId() === row.id"
-                  [attr.aria-label]="'settings.media_servers.col_enabled' | translate"
-                  (change)="toggleEnabled(row)"
+                <app-enabled-switch
+                  [enabled]="row.enabled"
+                  [busy]="togglingId() === row.id"
+                  ariaLabelKey="settings.media_servers.col_enabled"
+                  (toggle)="toggleEnabled(row)"
                 />
               </td>
               <td class="text-end">
