@@ -68,7 +68,8 @@ export function goingBack(): boolean {
 /**
  * Which half of the slide this navigation is, if any. `armed` is whatever
  * {@link consumeArmed} returned for this navigation, taken once rather than
- * reread here — a guard that swallowed it already spent the arming.
+ * reread here — a guard that swallowed it already spent the arming. A trip back
+ * is read from the document before it, since only one of the two can be stale.
  *
  * `morphed` is a pair with a better animation of its own, in either direction.
  * It stacks a page all the same, but the stack neither animated it nor may
@@ -84,13 +85,16 @@ export function nextSlide(
   // The player covers the whole screen and animates its own open and close.
   if (leafRoutePath(from) === WATCH_PATH || leafRoutePath(to) === WATCH_PATH) return null;
   if (morphed) return null;
+  // Asked before the arming: a pointerdown that never navigated — a scroll or a
+  // long press started on a card — must not turn the way back around.
+  if (goingBack()) {
+    if (stacked === 0) return null;
+    stacked--;
+    return 'pop';
+  }
   if (armed) {
     stacked++;
     return 'push';
-  }
-  if (stacked > 0 && goingBack()) {
-    stacked--;
-    return 'pop';
   }
   return null;
 }

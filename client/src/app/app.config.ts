@@ -126,16 +126,17 @@ export const appConfig: ApplicationConfig = {
               // the poster morph, the stack slide, or none — in which case the
               // transition is dropped rather than run empty.
               onViewTransitionCreated: ({ transition, from, to }) => {
-                // Consumed first, before any guard below can return early and
-                // strand it for a tap that never asked for it.
-                const armed = consumeArmed();
                 // getCurrentNavigation(), not history.state: with Angular's default
                 // (deferred) URL update, the browser state isn't swapped in here yet.
-                if (inject(Router).getCurrentNavigation()?.extras.state?.['rootEntry']) {
-                  // Also true on a popstate back to a root page: extras.state is
-                  // restored from history.state there, so this flattens the stack too.
-                  resetStack();
-                }
+                // Also true on a popstate back to a root page: extras.state is
+                // restored from history.state there, so this flattens the stack too.
+                const rootEntry =
+                  !!inject(Router).getCurrentNavigation()?.extras.state?.['rootEntry'];
+                // Consumed first, before any guard below can return early and
+                // strand it for a tap that never asked for it. Root chrome switches
+                // root rather than stacking, so it spends the arming without using it.
+                const armed = consumeArmed() && !rootEntry;
+                if (rootEntry) resetStack();
                 // A transition begun while backgrounded can resume on the next dock tap.
                 if (document.hidden) {
                   transition.skipTransition();

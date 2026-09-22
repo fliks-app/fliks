@@ -106,4 +106,20 @@ describe('page slide', () => {
 
     expect(nextSlide(library(), episode(), consumeArmed())).toBeNull();
   });
+
+  it('pops on the way back out of a page an arming is still stranded on', () => {
+    armPageSlide();
+    expect(nextSlide(home(), library(), consumeArmed())).toBe('push');
+
+    // A pointerdown on a card the scroll took over: armed, but nothing navigated.
+    armPageSlide();
+    back(true);
+    expect(nextSlide(library(), home(), consumeArmed())).toBe('pop');
+  });
+
+  it('does not slide back out of a page it never stacked', () => {
+    armPageSlide();
+    back(true);
+    expect(nextSlide(library(), home(), consumeArmed())).toBeNull();
+  });
 });
