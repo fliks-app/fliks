@@ -33,6 +33,8 @@ export const NOTIFICATION_EVENTS = [
   'subtitle.upgraded',
   'subtitle.failed',
   'subtitle.synced',
+  'livetv.account_expiring',
+  'livetv.account_expired',
 ] as const;
 
 export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number];

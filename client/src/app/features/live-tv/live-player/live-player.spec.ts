@@ -187,4 +187,18 @@ describe('LivePlayerComponent — handlePlayError', () => {
     expect(component.playbackError()).not.toBeNull();
     expect(router.navigate).not.toHaveBeenCalled();
   });
+
+  it('surfaces an expired-account 503 on the retry overlay without navigating away', () => {
+    const { component, router } = createComponent();
+
+    component.handlePlayError(
+      new HttpErrorResponse({
+        status: 503,
+        error: { code: 'livetv_account_expired', channelName: 'Channel 1', sourceName: 'Source' },
+      }),
+    );
+
+    expect(component.playbackError()).not.toBeNull();
+    expect(router.navigate).not.toHaveBeenCalled();
+  });
 });

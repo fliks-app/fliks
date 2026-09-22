@@ -291,6 +291,10 @@ export class NotificationsService {
       // Dispatched from the sync path, which knows the subtitle, not the media it belongs to.
       case 'subtitle.synced':
         return `Subtitle synced [${String(payload.language ?? '')}]`;
+      case 'livetv.account_expiring':
+        return `Live TV source "${String(payload.sourceName ?? '')}" account expires soon`;
+      case 'livetv.account_expired':
+        return `Live TV source "${String(payload.sourceName ?? '')}" account has expired`;
       default:
         return `${event}: ${JSON.stringify(payload)}`;
     }

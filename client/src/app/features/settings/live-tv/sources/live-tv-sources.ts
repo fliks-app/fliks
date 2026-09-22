@@ -1,4 +1,5 @@
 import { Component, ElementRef, OnInit, inject, signal, computed, viewChild } from '@angular/core';
+import { NgClass } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../../core/services/confirmation.service';
@@ -15,10 +16,25 @@ import { TvSelectDirective } from '../../../../shared/directives/tv-select.direc
 import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
 import { EnabledSwitchComponent } from '../../../../shared/components/enabled-switch';
 
+/** Xtream panels answer a free-form `status` string, never validated against an
+ *  enum; only these four values are known across the providers seen in the wild.
+ *  Anything else still displays, untranslated, rather than being hidden. */
+const ACCOUNT_STATUS_BADGES: Record<string, { labelKey: string; cls: string }> = {
+  active: { labelKey: 'liveTv.admin.sources.account_status_active', cls: 'badge-success' },
+  expired: { labelKey: 'liveTv.admin.sources.account_status_expired', cls: 'badge-error' },
+  banned: { labelKey: 'liveTv.admin.sources.account_status_banned', cls: 'badge-error' },
+  disabled: { labelKey: 'liveTv.admin.sources.account_status_disabled', cls: 'badge-ghost' },
+};
+
+/** Mirrors the backend's `LIVETV_EXPIRY_WARNING_DAYS`: a week's notice to flag an
+ *  expiry date before it actually lapses. */
+const EXPIRY_WARNING_DAYS = 7;
+
 @Component({
   selector: 'app-live-tv-sources',
   imports: [
     FormsModule,
+    NgClass,
     TranslatePipe,
     LocaleDatePipe,
     TvSelectDirective,
@@ -75,6 +91,32 @@ export class LiveTvSourcesComponent implements OnInit {
   private editingRowSnapshot(): AdminSource | null {
     const id = this.editingId();
     return id == null ? null : (this.rows().find((r) => r.id === id) ?? null);
+  }
+
+  /** `null` for an unrecognised provider string: the raw value still shows in
+   *  the template, just without a color or a translated label. */
+  accountStatusBadge(status: string): { label: string; cls: string } | null {
+    const known = ACCOUNT_STATUS_BADGES[status.toLowerCase()];
+    return known ? { label: this.translate.instant(known.labelKey), cls: known.cls } : null;
+  }
+
+  /** `null` once the date is further out than the warning window: the plain
+   *  date text (already in the template) is enough at that point. */
+  expiryBadge(expiresAt: string): { label: string; cls: string } | null {
+    const msLeft = new Date(expiresAt).getTime() - Date.now();
+    if (msLeft <= 0) {
+      return {
+        label: this.translate.instant('liveTv.admin.sources.account_status_expired'),
+        cls: 'badge-error',
+      };
+    }
+    if (msLeft <= EXPIRY_WARNING_DAYS * 86_400_000) {
+      return {
+        label: this.translate.instant('liveTv.admin.sources.expiring_soon'),
+        cls: 'badge-warning',
+      };
+    }
+    return null;
   }
 
   ngOnInit(): void {

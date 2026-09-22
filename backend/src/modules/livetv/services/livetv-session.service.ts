@@ -23,6 +23,7 @@ import { SettingsService } from '../../settings/settings.service';
 import { ActivityRegistryService } from '../../scheduler/activity-registry.service';
 import { buildLiveFfmpegArgs } from './live-ffmpeg-args';
 import { liveTvFfmpegHeaderArgs, liveTvGet, liveTvIdentityOf } from '../livetv-http';
+import { liveTvAccountStateOf } from './livetv-sources.service';
 
 export type LiveTvPlayMode = 'direct' | 'remux' | 'transcode';
 
@@ -395,6 +396,19 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
         this.log.log(`Channel ${channel.name} serves a manifest, packaging it instead`);
         return this.open(channel, user, { ...caps, directPlay: false });
       }
+      // Every stream just failed; a source whose account is expired is worth
+      // naming, since the generic message would send the viewer chasing a
+      // network problem that isn't the real cause.
+      const expiredStream = streams.find(
+        (s) => liveTvAccountStateOf(s.source.expiresAt, s.source.accountStatus) === 'expired',
+      );
+      if (expiredStream) {
+        throw new ServiceUnavailableException({
+          code: 'livetv_account_expired',
+          channelName: channel.name,
+          sourceName: expiredStream.source.name,
+        });
+      }
       throw new ServiceUnavailableException({
         code: 'livetv_channel_unavailable',
         channelName: channel.name,
@@ -622,7 +636,11 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
       }
 
       this.stopTransport(session);
-      const detail = session.lastConnectError ?? 'no segment produced within the startup window';
+      const expired =
+        liveTvAccountStateOf(stream.source.expiresAt, stream.source.accountStatus) === 'expired';
+      const detail = expired
+        ? 'account expired'
+        : (session.lastConnectError ?? 'no segment produced within the startup window');
       session.lastConnectError = null;
       void this.streamRepo.update(stream.id, { lastError: detail });
       session.streamFailures.set(stream.id, (session.streamFailures.get(stream.id) ?? 0) + 1);

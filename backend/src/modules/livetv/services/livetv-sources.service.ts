@@ -17,6 +17,7 @@ import {
 import { LiveTvLogoService } from './livetv-logo.service';
 import { LiveTvAccessService } from './livetv-access.service';
 import { SettingsService } from '../../settings/settings.service';
+import { NotificationsService } from '../../notifications/notifications.service';
 import {
   assertNotInternal,
   liveTvGet,
@@ -133,6 +134,7 @@ export class LiveTvSourcesService {
     private readonly settings: SettingsService,
     private readonly logos: LiveTvLogoService,
     private readonly access: LiveTvAccessService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -386,6 +388,9 @@ export class LiveTvSourcesService {
 
     const staleDays = await this.settingInt('livetv_stale_stream_days', 7);
     const { added, updated, removed } = await this.upsert(source, live, staleDays);
+    const newExpiresAt = fetched.expiresAt ?? source.expiresAt;
+    const newAccountStatus = fetched.accountStatus ?? source.accountStatus;
+    this.notifyAccountStateChange(source, newExpiresAt, newAccountStatus);
     await this.sourceRepo.update(source.id, {
       lastSyncAt: new Date(),
       lastSyncStatus: 'ok',
@@ -394,8 +399,8 @@ export class LiveTvSourcesService {
       guideUrls: fetched.guideUrls,
       playlistEtag: fetched.playlistEtag,
       playlistLastModified: fetched.playlistLastModified,
-      expiresAt: fetched.expiresAt ?? source.expiresAt,
-      accountStatus: fetched.accountStatus ?? source.accountStatus,
+      expiresAt: newExpiresAt,
+      accountStatus: newAccountStatus,
       maxStreams:
         !source.maxStreamsIsManual && fetched.maxConnections
           ? fetched.maxConnections
@@ -423,6 +428,22 @@ export class LiveTvSourcesService {
       .catch((err) => this.log.warn(`Logo cache pass failed: ${errorMessage(err)}`));
 
     return { ok: true, added, updated, removed, channelCount: live.length };
+  }
+
+  /** Compares the account state the row was last written with against what this
+   *  sync would write, and dispatches only on an actual transition: an hourly
+   *  re-sync of the same still-expired account must stay silent. */
+  private notifyAccountStateChange(
+    source: LiveTvSource,
+    newExpiresAt: Date | null,
+    newAccountStatus: string | null,
+  ): void {
+    const previous = liveTvAccountStateOf(source.expiresAt, source.accountStatus);
+    const next = liveTvAccountStateOf(newExpiresAt, newAccountStatus);
+    if (next === previous) return;
+    const payload = { sourceName: source.name, expiresAt: newExpiresAt?.toISOString() ?? null };
+    if (next === 'expired') void this.notifications.dispatch('livetv.account_expired', payload);
+    else if (next === 'expiring') void this.notifications.dispatch('livetv.account_expiring', payload);
   }
 
   /** The guide URL for a source: the panel API for Xtream, the stored
@@ -705,6 +726,33 @@ export class LiveTvSourcesService {
       };
     });
   }
+}
+
+export type LiveTvAccountState = 'ok' | 'expiring' | 'expired';
+
+/** A week gives an admin time to notice and renew before the provider actually
+ *  cuts the connection, without being so early it fires long before anyone cares.
+ *  Not worth a setting for one heuristic threshold on a value the panel itself
+ *  may misreport. */
+export const LIVETV_EXPIRY_WARNING_DAYS = 7;
+
+/** `accountStatus` is a free-form string straight off the panel ("Active",
+ *  "Expired", "Banned", "Disabled" across providers seen in the wild, never
+ *  validated): only "expired" is matched, case-insensitively, and everything
+ *  else falls through to the date. A source with no `expiresAt` (every m3u
+ *  source, and an Xtream account that omits `exp_date`) is never flagged from
+ *  the date alone. */
+export function liveTvAccountStateOf(
+  expiresAt: Date | null,
+  accountStatus: string | null,
+  now: Date = new Date(),
+): LiveTvAccountState {
+  if (accountStatus?.toLowerCase() === 'expired') return 'expired';
+  if (!expiresAt) return 'ok';
+  const msLeft = expiresAt.getTime() - now.getTime();
+  if (msLeft <= 0) return 'expired';
+  if (msLeft <= LIVETV_EXPIRY_WARNING_DAYS * MS_PER_DAY) return 'expiring';
+  return 'ok';
 }
 
 /** Splits a fetch into what would import as a channel and what would not,
