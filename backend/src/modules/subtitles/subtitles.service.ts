@@ -290,10 +290,10 @@ export class SubtitlesService {
    *  to one media can act on any other's subtitles. */
   async assertBelongsToMedia(subtitleId: number, mediaId: number): Promise<void> {
     const sub = await this.repo.findOne({
-      where: { id: subtitleId },
-      select: { id: true, mediaId: true },
+      where: { id: subtitleId, media: { id: mediaId } },
+      select: { id: true },
     });
-    if (!sub || sub.mediaId !== mediaId) {
+    if (!sub) {
       throw new NotFoundException(`Subtitle #${subtitleId} not found`);
     }
   }
