@@ -342,6 +342,7 @@ export class LiveTvSourcesService {
         lastSyncError: null,
       });
       this.log.log(`Sync "${source.name}": not modified, lineup unchanged`);
+      await this.maybeExpireVanishedGroups();
       return { ok: true, added: 0, updated: 0, removed: 0, channelCount: source.channelCount };
     }
 
@@ -416,6 +417,7 @@ export class LiveTvSourcesService {
     } catch (err) {
       this.log.warn(`Adult-group restriction pass failed: ${errorMessage(err)}`);
     }
+    await this.maybeExpireVanishedGroups();
 
     const touchedChannels = await this.channelRepo
       .createQueryBuilder('c')
@@ -556,6 +558,44 @@ export class LiveTvSourcesService {
     const raw = await this.settings.get(key);
     const n = raw != null ? Number.parseInt(raw, 10) : Number.NaN;
     return Number.isFinite(n) ? n : fallback;
+  }
+
+  /** Only sweeps once every enabled source's last sync succeeded (the suspicious-
+   *  shrink refusal above also lands on 'error', so it is covered too): a partial
+   *  view must never look like a group actually vanished. Re-derives the live set
+   *  from the DB rather than this sync's own entries, so a group orphaned by
+   *  disabling its only source is caught too, not just one dropped from a playlist. */
+  private async maybeExpireVanishedGroups(): Promise<void> {
+    try {
+      const enabledSources = await this.sourceRepo.find({
+        where: { enabled: true },
+      });
+      if (
+        !enabledSources.length ||
+        enabledSources.some((s) => s.lastSyncStatus !== 'ok')
+      ) {
+        return;
+      }
+      await this.access.expireVanishedGroups(await this.liveGroupNames());
+    } catch (err) {
+      this.log.warn(`Vanished-group cleanup pass failed: ${errorMessage(err)}`);
+    }
+  }
+
+  /** Distinct groups an enabled source still carries a channel for: the "known
+   *  good" lineup a vanished-group sweep compares the restricted/exempt sets against. */
+  private async liveGroupNames(): Promise<string[]> {
+    const rows = await this.channelRepo
+      .createQueryBuilder('channel')
+      .select('DISTINCT channel."groupName"', 'name')
+      .where('channel."groupName" IS NOT NULL')
+      .andWhere(
+        'EXISTS (SELECT 1 FROM livetv_channel_streams s2 ' +
+          'INNER JOIN livetv_sources src2 ON src2.id = s2."sourceId" ' +
+          'WHERE s2."channelId" = channel.id AND src2.enabled = true)',
+      )
+      .getRawMany<{ name: string }>();
+    return rows.map((r) => r.name);
   }
 
   // ---------------------------------------------------------------------------

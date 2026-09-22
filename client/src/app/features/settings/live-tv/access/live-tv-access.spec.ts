@@ -30,12 +30,21 @@ const GROUPS = [
 
 /** Mirrors which of the fixed test group names the server would flag automatic. */
 const AUTO_GROUPS = new Set(['XXX Uncut']);
-function asRestrictedGroups(names: string[]): RestrictedGroup[] {
-  return names.map((name) => ({ name, automatic: AUTO_GROUPS.has(name) }));
+function asRestrictedGroups(
+  names: string[],
+  cleanupAt: Record<string, string> = {},
+): RestrictedGroup[] {
+  return names.map((name) => ({
+    name,
+    automatic: AUTO_GROUPS.has(name),
+    vanishedSince: cleanupAt[name] ?? null,
+    cleanupAt: cleanupAt[name] ?? null,
+  }));
 }
 
 function createFixture(opts: {
   restricted?: string[];
+  vanishing?: Record<string, string>;
   users?: LiveTvUserAccess[];
   get?: ReturnType<typeof vi.fn>;
   put?: ReturnType<typeof vi.fn>;
@@ -49,7 +58,7 @@ function createFixture(opts: {
     vi.fn((url: string) => {
       if (url === '/api/livetv/admin/channels') return of({ items: [], total: 0, groups: GROUPS });
       if (url === '/api/livetv/admin/access/restricted-groups')
-        return of(asRestrictedGroups(opts.restricted ?? []));
+        return of(asRestrictedGroups(opts.restricted ?? [], opts.vanishing ?? {}));
       if (url === '/api/livetv/admin/access/users') return of(opts.users ?? []);
       throw new Error(`unexpected GET ${url}`);
     });
@@ -125,6 +134,25 @@ describe('LiveTvAccessComponent - restricted groups', () => {
       { id: 8, username: 'bob', groups: ['XXX Uncut'] },
     ]);
     expect(get).not.toHaveBeenCalled();
+  });
+});
+
+describe('LiveTvAccessComponent - vanishing groups', () => {
+  it('surfaces a restricted group missing from the live lineup with its cleanup date', async () => {
+    const { component } = await ready({
+      restricted: ['News'],
+      vanishing: { News: '2030-01-08T00:00:00.000Z' },
+    });
+
+    expect(component.displayGroups().find((g) => g.name === 'News')?.cleanupAt).toBe(
+      '2030-01-08T00:00:00.000Z',
+    );
+  });
+
+  it('leaves a restricted group alone while it is still seen', async () => {
+    const { component } = await ready({ restricted: ['News'] });
+
+    expect(component.displayGroups().find((g) => g.name === 'News')?.cleanupAt).toBeNull();
   });
 });
 

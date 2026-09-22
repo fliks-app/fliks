@@ -2922,6 +2922,8 @@
         "empty_groups": "Keine Sendergruppe verfügbar.",
         "auto_adult_badge": "Erwachsene (auto)",
         "auto_adult_hint": "Der Name dieser Gruppe entspricht dem automatischen Muster für Erwachseneninhalte. Wenn Sie sie abwählen, bleibt sie dauerhaft ausgenommen: künftige Synchronisierungen schränken sie nicht erneut ein, außer Sie wählen sie wieder aus.",
+        "vanishing_badge": "Läuft aus",
+        "vanishing_hint": "Keine Quelle liefert diese Gruppe mehr. Der Zugriff wird am {{date}} entfernt, falls sie nicht vorher wieder erscheint.",
         "users_title": "Zugriff pro Benutzer",
         "users_subtitle": "Gewähren Sie einem Benutzer Einblick in eingeschränkte Gruppen.",
         "no_restricted_groups": "Derzeit ist keine Gruppe eingeschränkt: Es gibt nichts zu gewähren.",

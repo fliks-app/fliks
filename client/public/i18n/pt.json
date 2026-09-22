@@ -2922,6 +2922,8 @@
         "empty_groups": "Nenhum grupo de canais disponível.",
         "auto_adult_badge": "Adultos (auto)",
         "auto_adult_hint": "O nome deste grupo corresponde ao padrão de restrição automática de conteúdo adulto. Ao desmarcá-lo, ele fica isento de forma duradoura: as próximas sincronizações não voltarão a restringi-lo, a menos que o marque novamente.",
+        "vanishing_badge": "A expirar",
+        "vanishing_hint": "Nenhuma fonte fornece mais este grupo. O acesso será removido em {{date}}, a menos que reapareça antes.",
         "users_title": "Acesso por utilizador",
         "users_subtitle": "Conceda a um utilizador visibilidade sobre grupos restritos.",
         "no_restricted_groups": "Nenhum grupo está restrito neste momento: não há nada para conceder.",

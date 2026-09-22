@@ -2949,6 +2949,8 @@
         "empty_groups": "No channel group available.",
         "auto_adult_badge": "Adult (auto)",
         "auto_adult_hint": "This group's name matches the automatic adult-content pattern. Unchecking it keeps it exempt: future syncs won't restrict it again unless you recheck it.",
+        "vanishing_badge": "Vanishing",
+        "vanishing_hint": "No source carries this group anymore. Its access is dropped on {{date}} unless it reappears before then.",
         "users_title": "Access by user",
         "users_subtitle": "Grant a user visibility into restricted groups.",
         "no_restricted_groups": "No group is restricted right now: there is nothing to grant.",

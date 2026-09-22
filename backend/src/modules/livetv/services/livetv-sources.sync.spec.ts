@@ -83,6 +83,9 @@ function setup(sourceOverrides: Record<string, unknown> = {}) {
     update: jest.fn().mockResolvedValue({ affected: 1 }),
     save: jest.fn(async (row: unknown) => row),
     remove: jest.fn(async (row: unknown) => row),
+    // Empty by default: the vanished-group sweep's gate then finds nothing
+    // enabled and stays closed, so most tests never touch it.
+    find: jest.fn().mockResolvedValue([]),
   };
   const channelRepo = {
     find: jest.fn().mockResolvedValue([]),
@@ -111,7 +114,10 @@ function setup(sourceOverrides: Record<string, unknown> = {}) {
   };
   const settings = { get: jest.fn().mockResolvedValue(null) };
   const logos = { cacheLogos: jest.fn().mockResolvedValue(undefined) };
-  const access = { restrictAdultGroups: jest.fn().mockResolvedValue([]) };
+  const access = {
+    restrictAdultGroups: jest.fn().mockResolvedValue([]),
+    expireVanishedGroups: jest.fn().mockResolvedValue([]),
+  };
   const notifications = { dispatch: jest.fn().mockResolvedValue(undefined) };
 
   const service = new LiveTvSourcesService(
@@ -272,6 +278,72 @@ describe('LiveTvSourcesService.sync (m3u)', () => {
     expect(access.restrictAdultGroups).toHaveBeenCalledWith(
       expect.arrayContaining(['News', 'XXX Adult']),
     );
+  });
+
+  describe('vanished-group sweep gate', () => {
+    const okPlaylist =
+      '#EXTM3U\n#EXTINF:-1 group-title="News",One\nhttp://provider/live/1.ts\n';
+
+    it('sweeps once every enabled source last synced ok', async () => {
+      mockedLiveTvGet.mockResolvedValue({
+        status: 200,
+        data: okPlaylist,
+        headers: {},
+      });
+      const { service, source, sourceRepo, access } = setup();
+      sourceRepo.find.mockResolvedValue([
+        { ...source, enabled: true, lastSyncStatus: 'ok' },
+      ]);
+
+      await service.sync(1);
+
+      expect(access.expireVanishedGroups).toHaveBeenCalledTimes(1);
+    });
+
+    it('never sweeps while another enabled source is still in error', async () => {
+      mockedLiveTvGet.mockResolvedValue({
+        status: 200,
+        data: okPlaylist,
+        headers: {},
+      });
+      const { service, source, sourceRepo, access } = setup();
+      sourceRepo.find.mockResolvedValue([
+        { ...source, id: 1, enabled: true, lastSyncStatus: 'ok' },
+        { ...source, id: 2, enabled: true, lastSyncStatus: 'error' },
+      ]);
+
+      await service.sync(1);
+
+      expect(access.expireVanishedGroups).not.toHaveBeenCalled();
+    });
+
+    it('never sweeps when no source is enabled at all', async () => {
+      mockedLiveTvGet.mockResolvedValue({
+        status: 200,
+        data: okPlaylist,
+        headers: {},
+      });
+      const { service, sourceRepo, access } = setup();
+      sourceRepo.find.mockResolvedValue([]);
+
+      await service.sync(1);
+
+      expect(access.expireVanishedGroups).not.toHaveBeenCalled();
+    });
+
+    it('also sweeps on a 304, since a stale enabled source needs no new fetch to matter', async () => {
+      mockedLiveTvGet.mockResolvedValue({ status: 304, data: '', headers: {} });
+      const { service, source, sourceRepo, access } = setup({
+        playlistEtag: '"abc"',
+      });
+      sourceRepo.find.mockResolvedValue([
+        { ...source, enabled: true, lastSyncStatus: 'ok' },
+      ]);
+
+      await service.sync(1);
+
+      expect(access.expireVanishedGroups).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('re-requests the password column explicitly, since the entity marks it select:false', async () => {

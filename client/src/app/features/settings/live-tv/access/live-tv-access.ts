@@ -8,15 +8,28 @@ import {
 import { EnabledSwitchComponent } from '../../../../shared/components/enabled-switch';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
+import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
 
 interface GroupFacet {
   name: string;
   count: number;
 }
 
+interface DisplayGroupFacet extends GroupFacet {
+  /** Set once the group is missing from a confirmed-complete sync: when its
+   *  access actually gets dropped if it stays gone. */
+  cleanupAt: string | null;
+}
+
 @Component({
   selector: 'app-live-tv-access',
-  imports: [TranslatePipe, EnabledSwitchComponent, ModalHeaderComponent, ModalFooterComponent],
+  imports: [
+    TranslatePipe,
+    LocaleDatePipe,
+    EnabledSwitchComponent,
+    ModalHeaderComponent,
+    ModalFooterComponent,
+  ],
   templateUrl: './live-tv-access.html',
 })
 export class LiveTvAccessComponent implements OnInit {
@@ -30,14 +43,21 @@ export class LiveTvAccessComponent implements OnInit {
   readonly restricted = signal<Set<string>>(new Set());
   /** Restricted groups whose name still matches the server's automatic adult-content pattern. */
   readonly autoRestricted = signal<Set<string>>(new Set());
+  /** Restricted groups missing from the live lineup, mapped to when their access clears. */
+  readonly vanishing = signal<Map<string, string>>(new Map());
   readonly togglingGroup = signal<string | null>(null);
 
   /** The restricted-groups setting can outlive the group itself (source removed,
    *  provider renamed it): shown with a 0 count rather than silently dropped. */
-  readonly displayGroups = computed<GroupFacet[]>(() => {
-    const byName = new Map(this.groups().map((g) => [g.name, g]));
+  readonly displayGroups = computed<DisplayGroupFacet[]>(() => {
+    const vanishing = this.vanishing();
+    const byName = new Map(
+      this.groups().map((g) => [g.name, { ...g, cleanupAt: vanishing.get(g.name) ?? null }]),
+    );
     for (const name of this.restricted()) {
-      if (!byName.has(name)) byName.set(name, { name, count: 0 });
+      if (!byName.has(name)) {
+        byName.set(name, { name, count: 0, cleanupAt: vanishing.get(name) ?? null });
+      }
     }
     return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
   });
@@ -65,6 +85,13 @@ export class LiveTvAccessComponent implements OnInit {
       this.restricted.set(new Set(restrictedGroups.map((g) => g.name)));
       this.autoRestricted.set(
         new Set(restrictedGroups.filter((g) => g.automatic).map((g) => g.name)),
+      );
+      this.vanishing.set(
+        new Map(
+          restrictedGroups
+            .filter((g) => g.cleanupAt != null)
+            .map((g) => [g.name, g.cleanupAt as string]),
+        ),
       );
       this.users.set(users);
     } catch {

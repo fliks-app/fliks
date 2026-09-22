@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { LiveTvGroupAccess } from '../entities/livetv-group-access.entity';
@@ -11,6 +11,10 @@ const ADULT_GROUP_PATTERN = /\b(xxx|adult|porn|erotic|18\+|hot)\b/i;
 const RESTRICTED_GROUPS_KEY = 'livetv_restricted_groups';
 /** Auto-matched groups an admin explicitly unrestricted; skipped by `restrictAdultGroups`. */
 const EXEMPT_GROUPS_KEY = 'livetv_restricted_groups_exempt';
+/** JSON map of group name to the ISO date it was first missing from a full,
+ *  successful sync; cleared the moment the group is seen again. */
+const VANISHED_GROUPS_KEY = 'livetv_restricted_groups_vanished';
+const MS_PER_DAY = 86_400_000;
 
 /** Either of these means the account administers Live TV itself. */
 const ADMIN_PERMISSIONS = ['manage:all', 'settings.access'];
@@ -22,6 +26,8 @@ const ADMIN_PERMISSIONS = ['manage:all', 'settings.access'];
  */
 @Injectable()
 export class LiveTvAccessService {
+  private readonly log = new Logger(LiveTvAccessService.name);
+
   constructor(
     @InjectRepository(LiveTvGroupAccess)
     private readonly accessRepo: Repository<LiveTvGroupAccess>,
@@ -63,16 +69,64 @@ export class LiveTvAccessService {
     return this.readGroupSet(EXEMPT_GROUPS_KEY);
   }
 
+  private async readVanishedMap(): Promise<Record<string, string>> {
+    const raw = await this.settings.get(VANISHED_GROUPS_KEY);
+    if (!raw) return {};
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+        return {};
+      const out: Record<string, string> = {};
+      for (const [name, since] of Object.entries(
+        parsed as Record<string, unknown>,
+      )) {
+        if (typeof since === 'string') out[name] = since;
+      }
+      return out;
+    } catch {
+      return {};
+    }
+  }
+
+  private async writeVanishedMap(map: Record<string, string>): Promise<void> {
+    await this.settings.set(VANISHED_GROUPS_KEY, JSON.stringify(map));
+  }
+
+  private async graceDays(): Promise<number> {
+    const raw = await this.settings.get('livetv_stale_stream_days');
+    const n = raw != null ? Number.parseInt(raw, 10) : Number.NaN;
+    return Number.isFinite(n) ? n : 7;
+  }
+
   /** Restricted groups plus whether each still matches the automatic adult-content
-   *  pattern, so the client can show the hint without duplicating the pattern. */
+   *  pattern, and since when it has been missing from a live lineup (if at all),
+   *  so the client can show the grace-period countdown without a second call. */
   async restrictedGroupsView(): Promise<
-    { name: string; automatic: boolean }[]
+    {
+      name: string;
+      automatic: boolean;
+      vanishedSince: string | null;
+      cleanupAt: string | null;
+    }[]
   > {
-    const groups = await this.restrictedGroups();
-    return groups.map((name) => ({
-      name,
-      automatic: ADULT_GROUP_PATTERN.test(name),
-    }));
+    const [groups, vanished, graceDays] = await Promise.all([
+      this.restrictedGroups(),
+      this.readVanishedMap(),
+      this.graceDays(),
+    ]);
+    return groups.map((name) => {
+      const vanishedSince = vanished[name] ?? null;
+      return {
+        name,
+        automatic: ADULT_GROUP_PATTERN.test(name),
+        vanishedSince,
+        cleanupAt: vanishedSince
+          ? new Date(
+              new Date(vanishedSince).getTime() + graceDays * MS_PER_DAY,
+            ).toISOString()
+          : null,
+      };
+    });
   }
 
   async setRestrictedGroups(groups: string[]): Promise<string[]> {
@@ -115,6 +169,69 @@ export class LiveTvAccessService {
     );
     if (!additions.length) return current;
     return this.setRestrictedGroups([...current, ...additions]);
+  }
+
+  /** Trusts that `liveGroupNames` is complete — verifying that is the caller's job.
+   *  A restricted or exempted group missing from it is timestamped, cleared the
+   *  moment it reappears; only past `livetv_stale_stream_days` does it actually
+   *  lose its grants and its list entries. */
+  async expireVanishedGroups(
+    liveGroupNames: readonly string[],
+  ): Promise<string[]> {
+    const live = new Set(liveGroupNames);
+    const candidates = new Set([
+      ...(await this.restrictedGroups()),
+      ...(await this.exemptGroups()),
+    ]);
+
+    const vanished = await this.readVanishedMap();
+    let changed = false;
+    const now = new Date().toISOString();
+    for (const name of candidates) {
+      if (live.has(name)) {
+        if (name in vanished) {
+          delete vanished[name];
+          changed = true;
+        }
+        continue;
+      }
+      if (!(name in vanished)) {
+        vanished[name] = now;
+        changed = true;
+      }
+    }
+    // Bookkeeping for a group nobody tracks anymore (already unrestricted and unexempted).
+    for (const name of Object.keys(vanished)) {
+      if (!candidates.has(name)) {
+        delete vanished[name];
+        changed = true;
+      }
+    }
+
+    const cutoff = Date.now() - (await this.graceDays()) * MS_PER_DAY;
+    const expired = Object.entries(vanished)
+      .filter(([, since]) => new Date(since).getTime() <= cutoff)
+      .map(([name]) => name);
+
+    if (expired.length) {
+      await this.accessRepo.delete({ groupName: In(expired) });
+      await this.writeGroupSet(
+        RESTRICTED_GROUPS_KEY,
+        (await this.restrictedGroups()).filter((g) => !expired.includes(g)),
+      );
+      await this.writeGroupSet(
+        EXEMPT_GROUPS_KEY,
+        (await this.exemptGroups()).filter((g) => !expired.includes(g)),
+      );
+      expired.forEach((name) => delete vanished[name]);
+      changed = true;
+      this.log.warn(
+        `Dropped Live TV access for vanished channel group(s): ${expired.join(', ')}`,
+      );
+    }
+
+    if (changed) await this.writeVanishedMap(vanished);
+    return expired;
   }
 
   grantsFor(userId: number): Promise<LiveTvGroupAccess[]> {
