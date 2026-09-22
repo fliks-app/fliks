@@ -49,6 +49,9 @@ export class ImageController {
     sizeRaw: string | undefined,
     res: Response,
   ) {
+    // 'livetv' is deliberately absent: a channel logo can belong to a
+    // restricted group and is served by LivetvController instead, which can
+    // apply the same per-user access check as the rest of Live TV.
     const validTypes = [
       'media',
       'person',
@@ -56,7 +59,6 @@ export class ImageController {
       'season',
       'request',
       'user',
-      'livetv',
     ];
     if (!validTypes.includes(type)) throw new NotFoundException();
 

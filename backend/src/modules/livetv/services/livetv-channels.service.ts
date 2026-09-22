@@ -363,6 +363,22 @@ export class LiveTvChannelsService {
     return channel;
   }
 
+  /** Same group-visibility check as {@link findPlayable}, without the streams
+   *  join a logo fetch has no use for — this runs once per channel every time
+   *  a list of them renders. */
+  async assertVisible(id: number, user: User): Promise<void> {
+    const channel = await this.channelRepo.findOne({
+      where: { id },
+      select: ['id', 'groupName'],
+    });
+    if (!channel)
+      throw new NotFoundException(`Live TV channel #${id} not found`);
+    const denied = await this.access.deniedGroups(user);
+    if (isGroupDenied(channel.groupName, denied)) {
+      throw new NotFoundException(`Live TV channel #${id} not found`);
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Merge / single update / prefs / guide assignment
   // ---------------------------------------------------------------------------

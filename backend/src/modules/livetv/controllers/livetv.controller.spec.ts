@@ -47,6 +47,7 @@ describe('LivetvController — revocation reaches an in-progress session', () =>
       {} as never,
       sessions as never,
       {} as never,
+      {} as never,
     );
     const req = { query: {} } as unknown as Request;
     const res = {} as Response;
@@ -70,6 +71,7 @@ describe('LivetvController — revocation reaches an in-progress session', () =>
       {} as never,
       sessions as never,
       {} as never,
+      {} as never,
     );
     const res = {} as Response;
 
@@ -85,4 +87,29 @@ describe('LivetvController — revocation reaches an in-progress session', () =>
       expect(guardsFor(method)).toContain(SessionTokenGuard);
     },
   );
+});
+
+describe('LivetvController — channel logo', () => {
+  const user = { id: 1 } as User;
+
+  it('answers not found for a restricted channel the caller cannot see, without touching the disk', async () => {
+    const assertVisible = jest
+      .fn()
+      .mockRejectedValue(new NotFoundException('Live TV channel #5 not found'));
+    const channels = { assertVisible };
+    const getDiskPath = jest.fn();
+    const controller = new LivetvController(
+      channels as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { getDiskPath } as never,
+    );
+    const res = {} as Response;
+
+    await expect(
+      controller.serveLogo(5, undefined, user, res),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(getDiskPath).not.toHaveBeenCalled();
+  });
 });

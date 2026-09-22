@@ -242,7 +242,7 @@ export class StreamingApiService {
    * a thumbnail fetched from a list view).
    */
   private get playbackToken(): string | null {
-    return this.auth.streamToken() ?? this.auth.accessToken;
+    return this.auth.playbackToken;
   }
 
   /**

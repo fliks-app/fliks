@@ -46,7 +46,8 @@ function asRestrictedGroups(
 function createFixture(opts: {
   restricted?: string[];
   vanishing?: Record<string, string>;
-  users?: LiveTvUserAccess[];
+  exempt?: string[];
+  users?: Array<Omit<LiveTvUserAccess, 'hasFullAccess'> & { hasFullAccess?: boolean }>;
   get?: ReturnType<typeof vi.fn>;
   put?: ReturnType<typeof vi.fn>;
 }): {
@@ -59,8 +60,12 @@ function createFixture(opts: {
     vi.fn((url: string) => {
       if (url === '/api/livetv/admin/channels') return of({ items: [], total: 0, groups: GROUPS });
       if (url === '/api/livetv/admin/access/restricted-groups')
-        return of(asRestrictedGroups(opts.restricted ?? [], opts.vanishing ?? {}));
-      if (url === '/api/livetv/admin/access/users') return of(opts.users ?? []);
+        return of({
+          groups: asRestrictedGroups(opts.restricted ?? [], opts.vanishing ?? {}),
+          exempt: opts.exempt ?? [],
+        });
+      if (url === '/api/livetv/admin/access/users')
+        return of((opts.users ?? []).map((u) => ({ hasFullAccess: false, ...u })));
       throw new Error(`unexpected GET ${url}`);
     });
   const put =
@@ -135,8 +140,8 @@ describe('LiveTvAccessComponent - restricted groups', () => {
     await component.toggleRestricted('News');
 
     expect(component.users()).toEqual([
-      { id: 7, username: 'alice', groups: [] },
-      { id: 8, username: 'bob', groups: ['XXX Uncut'] },
+      { id: 7, username: 'alice', groups: [], hasFullAccess: false },
+      { id: 8, username: 'bob', groups: ['XXX Uncut'], hasFullAccess: false },
     ]);
     expect(get).not.toHaveBeenCalled();
   });
@@ -194,6 +199,23 @@ describe('LiveTvAccessComponent - auto-restricted adult groups', () => {
   });
 });
 
+describe('LiveTvAccessComponent - exempt groups', () => {
+  it('flags a group the server reports as exempt, distinct from a restricted one', async () => {
+    const { component } = await ready({ restricted: ['News'], exempt: ['Vanished Adult'] });
+
+    expect(component.exempt()).toEqual(new Set(['Vanished Adult']));
+    expect(component.restricted().has('Vanished Adult')).toBe(false);
+    // Not in any channel facet either — still surfaced via the exempt set alone.
+    expect(component.displayGroups().map((g) => g.name)).toContain('Vanished Adult');
+  });
+
+  it('leaves the exempt set empty when the server reports none', async () => {
+    const { component } = await ready({ restricted: ['News'] });
+
+    expect(component.exempt()).toEqual(new Set());
+  });
+});
+
 describe('LiveTvAccessComponent - access overview', () => {
   it('shows granted groups from the overview response, with no per-row request', async () => {
     const { component, get } = await ready({
@@ -202,7 +224,9 @@ describe('LiveTvAccessComponent - access overview', () => {
     });
 
     expect(get).toHaveBeenCalledWith('/api/livetv/admin/access/users');
-    expect(component.users()).toEqual([{ id: 7, username: 'alice', groups: ['News'] }]);
+    expect(component.users()).toEqual([
+      { id: 7, username: 'alice', groups: ['News'], hasFullAccess: false },
+    ]);
     expect(get).not.toHaveBeenCalledWith('/api/livetv/admin/access/users/7');
   });
 
@@ -210,6 +234,21 @@ describe('LiveTvAccessComponent - access overview', () => {
     const { get } = await ready({ restricted: ['News'], users: [] });
 
     expect(get).not.toHaveBeenCalledWith('/api/users');
+  });
+
+  it('carries the server-computed full-access flag through untouched', async () => {
+    const { component } = await ready({
+      restricted: ['News'],
+      users: [
+        { id: 7, username: 'alice', groups: [], hasFullAccess: true },
+        { id: 8, username: 'bob', groups: [], hasFullAccess: false },
+      ],
+    });
+
+    expect(component.users()).toEqual([
+      { id: 7, username: 'alice', groups: [], hasFullAccess: true },
+      { id: 8, username: 'bob', groups: [], hasFullAccess: false },
+    ]);
   });
 });
 

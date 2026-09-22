@@ -258,6 +258,17 @@ export interface LiveTvUserAccess {
   id: number;
   username: string;
   groups: string[];
+  /** Account manages Live TV itself: sees every restricted group regardless
+   *  of the grants above, computed server-side from the same permission list
+   *  the access check uses. */
+  hasFullAccess: boolean;
+}
+
+export interface RestrictedGroupsView {
+  groups: RestrictedGroup[];
+  /** Auto-matched groups an admin deliberately unrestricted: no longer in
+   *  `groups`, but the next sync won't re-add them either. */
+  exempt: string[];
 }
 
 export interface SetUserGroupGrantsResult {
@@ -466,7 +477,7 @@ export class LiveTvApiService {
 
   getRestrictedGroups() {
     return firstValueFrom(
-      this.http.get<RestrictedGroup[]>('/api/livetv/admin/access/restricted-groups'),
+      this.http.get<RestrictedGroupsView>('/api/livetv/admin/access/restricted-groups'),
     );
   }
 

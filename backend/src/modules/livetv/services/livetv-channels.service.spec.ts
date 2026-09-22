@@ -204,6 +204,30 @@ describe('LiveTvChannelsService', () => {
     });
   });
 
+  describe('assertVisible', () => {
+    it('resolves when the group is not restricted', async () => {
+      channelRepo.findOne.mockResolvedValue({ id: 7, groupName: 'News' });
+      await expect(
+        service.assertVisible(7, makeUser()),
+      ).resolves.toBeUndefined();
+    });
+
+    it('answers not found for a restricted group the caller was not granted', async () => {
+      channelRepo.findOne.mockResolvedValue({ id: 8, groupName: 'XXX' });
+      access.deniedGroups.mockResolvedValue(['XXX']);
+      await expect(service.assertVisible(8, makeUser())).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('answers not found for a missing channel', async () => {
+      channelRepo.findOne.mockResolvedValue(null);
+      await expect(service.assertVisible(9, makeUser())).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+  });
+
   describe('groupCounts (via listForAdmin)', () => {
     it('no longer excludes any group from the facet, including the ungrouped sentinel', async () => {
       builder.getRawMany = async () => [{ name: UNGROUPED_SENTINEL, count: '3' }];

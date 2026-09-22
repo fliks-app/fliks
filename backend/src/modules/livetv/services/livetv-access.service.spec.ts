@@ -19,7 +19,7 @@ const parseVanished = (raw: string | null): Record<string, string> =>
 describe('LiveTvAccessService', () => {
   let settings: Record<string, string | null>;
   let grants: { groupName: string }[];
-  let users: { id: number; username: string }[];
+  let users: { id: number; username: string; permissions?: string[] }[];
   let accessRows: { userId: number; groupName: string }[];
   let accessRepo: {
     find: jest.Mock;
@@ -66,7 +66,9 @@ describe('LiveTvAccessService', () => {
       })),
     };
     const userRepo = {
-      find: jest.fn(() => Promise.resolve(users)),
+      find: jest.fn(() =>
+        Promise.resolve(users.map((u) => ({ permissions: [], ...u }))),
+      ),
     };
     settingsService = {
       get: jest.fn((key: string) => Promise.resolve(settings[key] ?? null)),
@@ -198,7 +200,7 @@ describe('LiveTvAccessService', () => {
       expect(accessRepo.delete).not.toHaveBeenCalled();
       expect(parseVanished(settings[VANISHED_KEY])).toEqual({});
       expect(await service.listUserAccess()).toEqual([
-        { id: 1, username: 'alice', groups: ['News'] },
+        { id: 1, username: 'alice', groups: ['News'], hasFullAccess: false },
       ]);
     });
 
@@ -223,7 +225,7 @@ describe('LiveTvAccessService', () => {
       expect(await service.restrictedGroups()).toEqual(['XXX FR']);
       expect(await service.exemptGroups()).toEqual([]);
       expect(await service.listUserAccess()).toEqual([
-        { id: 1, username: 'alice', groups: ['XXX FR'] },
+        { id: 1, username: 'alice', groups: ['XXX FR'], hasFullAccess: false },
       ]);
       expect(parseVanished(settings[VANISHED_KEY])).toEqual({});
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('News'));
@@ -299,8 +301,8 @@ describe('LiveTvAccessService', () => {
       await service.setRestrictedGroups(['XXX FR']);
 
       expect(await service.listUserAccess()).toEqual([
-        { id: 1, username: 'alice', groups: ['XXX FR'] },
-        { id: 2, username: 'bob', groups: ['XXX FR'] },
+        { id: 1, username: 'alice', groups: ['XXX FR'], hasFullAccess: false },
+        { id: 2, username: 'bob', groups: ['XXX FR'], hasFullAccess: false },
       ]);
     });
 
@@ -313,7 +315,7 @@ describe('LiveTvAccessService', () => {
       await service.setRestrictedGroups(['XXX FR']);
 
       expect(await service.listUserAccess()).toEqual([
-        { id: 1, username: 'alice', groups: [] },
+        { id: 1, username: 'alice', groups: [], hasFullAccess: false },
       ]);
     });
 
@@ -326,7 +328,7 @@ describe('LiveTvAccessService', () => {
 
       expect(accessRepo.delete).not.toHaveBeenCalled();
       expect(await service.listUserAccess()).toEqual([
-        { id: 1, username: 'alice', groups: ['News'] },
+        { id: 1, username: 'alice', groups: ['News'], hasFullAccess: false },
       ]);
     });
   });
@@ -342,15 +344,43 @@ describe('LiveTvAccessService', () => {
         { userId: 1, groupName: 'Adult Movies' },
       ];
       expect(await service.listUserAccess()).toEqual([
-        { id: 1, username: 'alice', groups: ['XXX FR', 'Adult Movies'] },
-        { id: 2, username: 'bob', groups: [] },
+        {
+          id: 1,
+          username: 'alice',
+          groups: ['XXX FR', 'Adult Movies'],
+          hasFullAccess: false,
+        },
+        { id: 2, username: 'bob', groups: [], hasFullAccess: false },
       ]);
     });
 
-    it('exposes no user field beyond id, username and groups', async () => {
+    it('exposes no user field beyond id, username, groups and hasFullAccess', async () => {
       users = [{ id: 1, username: 'alice' }];
       const [row] = await service.listUserAccess();
-      expect(Object.keys(row).sort()).toEqual(['groups', 'id', 'username']);
+      expect(Object.keys(row).sort()).toEqual([
+        'groups',
+        'hasFullAccess',
+        'id',
+        'username',
+      ]);
+    });
+
+    it('flags an admin-permission account as full access, by either permission spelling', async () => {
+      users = [
+        { id: 1, username: 'alice', permissions: ['manage:all'] },
+        { id: 2, username: 'bob', permissions: ['settings.access'] },
+      ];
+      expect(await service.listUserAccess()).toEqual([
+        { id: 1, username: 'alice', groups: [], hasFullAccess: true },
+        { id: 2, username: 'bob', groups: [], hasFullAccess: true },
+      ]);
+    });
+
+    it('does not flag an ordinary account', async () => {
+      users = [{ id: 1, username: 'alice', permissions: ['livetv.read'] }];
+      expect(await service.listUserAccess()).toEqual([
+        { id: 1, username: 'alice', groups: [], hasFullAccess: false },
+      ]);
     });
   });
 

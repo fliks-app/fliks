@@ -495,7 +495,10 @@ export class ImageService {
       case 'request':
         return `/api/images/request/${id}/${variant ?? 'poster'}`;
       case 'livetv':
-        return `/api/images/livetv/${id}`;
+        // Served by LivetvController, not ImageController: a channel logo can
+        // belong to a restricted group and needs the same per-user access check
+        // as the rest of Live TV, which the generic image route can't apply.
+        return `/api/livetv/channels/${id}/logo`;
       case 'person':
         return `/api/images/person/${id}`;
       case 'episode':

@@ -25,6 +25,7 @@ import { Action } from '../../auth/casl/actions.enum';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { AuthService } from '../../auth/auth.service';
 import { User } from '../../users/entities/user.entity';
+import { ImageService, ImageSize } from '../../images/image.service';
 import { LiveTvChannel } from '../entities/livetv-channel.entity';
 import { LiveTvChannelsService } from '../services/livetv-channels.service';
 import { LiveTvGuideService } from '../services/livetv-guide.service';
@@ -85,6 +86,7 @@ export class LivetvController {
     private readonly guide: LiveTvGuideService,
     private readonly sessions: LiveTvSessionService,
     private readonly auth: AuthService,
+    private readonly images: ImageService,
   ) {}
 
   /** Read is open to everyone, so "configured" means this user's lineup is not empty. */
@@ -101,6 +103,37 @@ export class LivetvController {
     @CurrentUser() user: User,
   ) {
     return this.channels.listForUser(user, query);
+  }
+
+  /** A restricted group's channel logo needs the same per-user check as the
+   *  channel itself — plain unauthenticated hotlinking (`/api/images/...`)
+   *  would otherwise expose it regardless of who is asking. `private` because
+   *  the response depends on the caller's own grants, not just the id. */
+  @Get('channels/:id/logo')
+  @CheckPolicies((ability) => ability.can(Action.Read, LiveTvChannel))
+  async serveLogo(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('size') size: string | undefined,
+    @CurrentUser() user: User,
+    @Res() res: Response,
+  ): Promise<void> {
+    await this.channels.assertVisible(id, user);
+    const validSizes: ImageSize[] = ['thumb', 'medium', 'full'];
+    const sz: ImageSize = (validSizes as string[]).includes(size ?? '')
+      ? (size as ImageSize)
+      : 'full';
+
+    let filePath = this.images.getDiskPath('livetv', id, undefined, sz);
+    let servedSize = sz;
+    if (!fs.existsSync(filePath) && sz !== 'full') {
+      filePath = this.images.getDiskPath('livetv', id, undefined, 'full');
+      servedSize = 'full';
+    }
+    if (!fs.existsSync(filePath)) throw new NotFoundException();
+
+    res.set('Cache-Control', 'private, max-age=86400');
+    if (servedSize !== sz) res.set('X-Image-Size-Served', servedSize);
+    res.sendFile(filePath);
   }
 
   @Get('channels/on-now')
