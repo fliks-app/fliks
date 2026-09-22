@@ -529,8 +529,8 @@ export class ProviderListComponent implements OnInit {
       : 'provider_list.cooldown_failures';
   }
 
-  /** Persists the whole row, as `moveRow` does: the resource merges secrets on update, so
-   *  echoing a redacted settings bag back never overwrites the stored one. */
+  /** Persists the row minus its entity metadata, as `moveRow` does: the resource merges secrets
+   *  on update, so echoing a redacted settings bag back never overwrites the stored one. */
   async toggleEnabled(row: ProviderInstance): Promise<void> {
     this.togglingId.set(row.id);
     try {
@@ -621,7 +621,7 @@ export class ProviderListComponent implements OnInit {
     return { context: new HttpContext().set(SKIP_ERROR_TOAST, true) };
   }
 
-  /** Persists the whole row with `enabled` forced, the convention `toggleEnabled` already uses. */
+  /** Persists the row minus its entity metadata, with `enabled` forced, the convention `toggleEnabled` already uses. */
   async bulkSetEnabled(enabled: boolean): Promise<void> {
     await this.runOverSelection(
       (row) =>
@@ -681,9 +681,9 @@ export class ProviderListComponent implements OnInit {
   readonly bulkNothingApplied = computed(() => this.bulkApply().size === 0);
 
   /**
-   * Applies only the ticked fields to every selected row. Each row is persisted whole, with its
-   * own settings spread under the changes: a field nobody ticked keeps whatever that row had,
-   * which is the difference between a bulk edit and twelve identical rows.
+   * Applies only the ticked fields to every selected row. Each row is persisted minus its entity
+   * metadata, with its own settings spread under the changes: a field nobody ticked keeps
+   * whatever that row had, which is the difference between a bulk edit and twelve identical rows.
    */
   async saveBulkEdit(): Promise<void> {
     const applied = this.bulkApply();

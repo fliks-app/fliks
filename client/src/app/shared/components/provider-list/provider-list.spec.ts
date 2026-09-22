@@ -752,6 +752,8 @@ describe('ProviderListComponent: bulk selection', () => {
       enabled: true,
       priority: 1,
       settings: { url: 'http://a', minSeeders: 1 },
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-02',
     },
     {
       id: 2,
@@ -760,6 +762,8 @@ describe('ProviderListComponent: bulk selection', () => {
       enabled: true,
       priority: 2,
       settings: { url: 'http://b', minSeeders: 2 },
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-02',
     },
     {
       id: 3,
@@ -768,6 +772,8 @@ describe('ProviderListComponent: bulk selection', () => {
       enabled: false,
       priority: 3,
       settings: { url: 'http://c' },
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-02',
     },
   ];
 
@@ -828,6 +834,9 @@ describe('ProviderListComponent: bulk selection', () => {
     expect(body['enabled']).toBe(false);
     expect(body['name']).toBe('A');
     expect(body['settings']).toEqual({ url: 'http://a', minSeeders: 1 });
+    expect(body).not.toHaveProperty('id');
+    expect(body).not.toHaveProperty('createdAt');
+    expect(body).not.toHaveProperty('updatedAt');
     const ctx = (put.mock.calls[0]![2] as { context: HttpContext }).context;
     expect(ctx.get(SKIP_ERROR_TOAST)).toBe(true);
     expect(toast.success).toHaveBeenCalledTimes(1);
@@ -892,6 +901,9 @@ describe('ProviderListComponent: bulk selection', () => {
     expect(second['delay']).toBe(9);
     expect(first['settings']).toEqual({ url: 'http://a', minSeeders: 1 });
     expect(second['settings']).toEqual({ url: 'http://b', minSeeders: 2 });
+    expect(first).not.toHaveProperty('id');
+    expect(first).not.toHaveProperty('createdAt');
+    expect(first).not.toHaveProperty('updatedAt');
   });
 
   it('VERDICT: offers no url and no credential, whatever the implementation declares', async () => {
