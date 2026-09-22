@@ -27,17 +27,19 @@ import {
 } from '../../../shared/components/forms/multi-select/multi-select';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
+import { EnabledSwitchComponent } from '../../../shared/components/enabled-switch';
 
 type RuleMediaType = '' | 'movie' | 'series';
 
 @Component({
   selector: 'app-auto-approval',
-  imports: [TvSelectDirective, 
+  imports: [TvSelectDirective,
     ModalFooterComponent,
     ModalHeaderComponent,
     MultiSelectComponent,
     FormsModule,
     TranslatePipe,
+    EnabledSwitchComponent,
   ],
   templateUrl: './auto-approval.html',
 })

@@ -18,6 +18,7 @@ import { ConfirmationService } from '../../../core/services/confirmation.service
 import { SECRET_MASK } from '../../../shared/components/schema-form/schema-form';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
+import { EnabledSwitchComponent } from '../../../shared/components/enabled-switch';
 
 /** The types this editor knows how to render fields for — adding one server-side is not enough,
  *  each needs its own field set below. */
@@ -44,7 +45,14 @@ interface CreateNotificationBody {
 
 @Component({
   selector: 'app-notifications-settings',
-  imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
+  imports: [
+    TvSelectDirective,
+    ModalFooterComponent,
+    ModalHeaderComponent,
+    FormsModule,
+    TranslatePipe,
+    EnabledSwitchComponent,
+  ],
   templateUrl: './notifications.html',
 })
 export class NotificationsSettingsComponent implements OnInit {

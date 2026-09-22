@@ -14,6 +14,7 @@ import { ModalFooterComponent } from '../../../../shared/components/modal-footer
 import { ErrorBadgeComponent } from '../../../../shared/components/error-badge';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
+import { EnabledSwitchComponent } from '../../../../shared/components/enabled-switch';
 
 @Component({
   selector: 'app-live-tv-guide-admin',
@@ -25,6 +26,7 @@ import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
     ModalHeaderComponent,
     ModalFooterComponent,
     ErrorBadgeComponent,
+    EnabledSwitchComponent,
   ],
   templateUrl: './live-tv-guide-admin.html',
 })

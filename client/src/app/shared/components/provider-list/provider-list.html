@@ -167,13 +167,11 @@
                 <td class="text-end tabular-nums">{{ row.priority }}</td>
               }
               <td class="text-center">
-                <input
-                  type="checkbox"
-                  class="toggle toggle-sm toggle-success"
-                  [checked]="row.enabled"
-                  [disabled]="togglingId() === row.id"
-                  [attr.aria-label]="labels().colEnabledKey | translate"
-                  (change)="toggleEnabled(row)"
+                <app-enabled-switch
+                  [enabled]="row.enabled"
+                  [busy]="togglingId() === row.id"
+                  [ariaLabelKey]="labels().colEnabledKey"
+                  (toggle)="toggleEnabled(row)"
                 />
               </td>
               @if (showCooldown()) {

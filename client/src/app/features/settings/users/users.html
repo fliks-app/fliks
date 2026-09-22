@@ -43,13 +43,11 @@
                 <span class="badge badge-sm badge-ghost">{{ user.role ?? '—' }}</span>
               </td>
               <td class="text-center">
-                <input
-                  type="checkbox"
-                  class="toggle toggle-sm toggle-success"
-                  [checked]="user.enabled"
-                  [disabled]="togglingId() === user.id || auth.user()?.id === user.id"
-                  [attr.aria-label]="'common.active' | translate"
-                  (change)="toggleEnabled(user)"
+                <app-enabled-switch
+                  [enabled]="user.enabled"
+                  [busy]="togglingId() === user.id"
+                  [disabled]="auth.user()?.id === user.id"
+                  (toggle)="toggleEnabled(user)"
                 />
               </td>
               <td class="text-base-content/70 text-sm">
