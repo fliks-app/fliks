@@ -7,6 +7,7 @@ import {
   Min,
 } from 'class-validator';
 import type { LiveTvSourceKind } from '../entities/livetv-source.entity';
+import { IsPlaylistLocation } from './playlist-location.validator';
 
 export class UpdateLiveTvSourceDto {
   @IsOptional()
@@ -18,7 +19,7 @@ export class UpdateLiveTvSourceDto {
   kind?: LiveTvSourceKind;
 
   @IsOptional()
-  @IsString()
+  @IsPlaylistLocation()
   url?: string;
 
   @IsOptional()

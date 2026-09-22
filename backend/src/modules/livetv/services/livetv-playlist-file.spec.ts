@@ -44,6 +44,10 @@ describe('livetv playlist files', () => {
     expect(a).not.toBe(b);
   });
 
+  it('refuses to read a path it did not manage itself', async () => {
+    await expect(readLocalPlaylist('/etc/passwd')).rejects.toThrow();
+  });
+
   it('only ever deletes a file it stored itself', async () => {
     const outsider = path.join(playlistDir(), '..', 'not-ours.m3u');
     expect(isManagedUpload('/etc/passwd')).toBe(false);

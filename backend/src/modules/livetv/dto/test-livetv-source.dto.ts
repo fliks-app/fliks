@@ -1,12 +1,13 @@
 import { IsIn, IsOptional, IsString } from 'class-validator';
 import type { LiveTvSourceKind } from '../entities/livetv-source.entity';
+import { IsPlaylistLocation } from './playlist-location.validator';
 
 /** Probes a URL or Xtream login without persisting anything. */
 export class TestLiveTvSourceDto {
   @IsIn(['m3u', 'xtream'])
   kind: LiveTvSourceKind;
 
-  @IsString()
+  @IsPlaylistLocation()
   url: string;
 
   @IsOptional()

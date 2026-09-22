@@ -4,6 +4,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUrl,
 } from 'class-validator';
 import type { GuideSourceKind } from '../entities/livetv-guide-source.entity';
 
@@ -15,7 +16,7 @@ export class CreateLiveTvGuideSourceDto {
   kind: GuideSourceKind;
 
   @IsOptional()
-  @IsString()
+  @IsUrl({ require_tld: false, require_protocol: true })
   url?: string;
 
   /** Required when `kind: 'source'`: the Live TV source whose own guide to read. */
