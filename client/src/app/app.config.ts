@@ -60,10 +60,11 @@ import {
   WATCH_PATH,
 } from './shared/utils/view-transition';
 import {
+  consumeArmed,
   goingBack,
   nextSlide,
   pageSlideAvailable,
-  resetPageSlide,
+  resetStack,
   slidePage,
 } from './shared/utils/page-slide';
 
@@ -125,10 +126,15 @@ export const appConfig: ApplicationConfig = {
               // the poster morph, the stack slide, or none — in which case the
               // transition is dropped rather than run empty.
               onViewTransitionCreated: ({ transition, from, to }) => {
-                // getCurrentNavigation(), not history.state: under deferred
-                // urlUpdateStrategy the browser state isn't swapped in here yet.
+                // Consumed first, before any guard below can return early and
+                // strand it for a tap that never asked for it.
+                const armed = consumeArmed();
+                // getCurrentNavigation(), not history.state: with Angular's default
+                // (deferred) URL update, the browser state isn't swapped in here yet.
                 if (inject(Router).getCurrentNavigation()?.extras.state?.['rootEntry']) {
-                  resetPageSlide();
+                  // Also true on a popstate back to a root page: extras.state is
+                  // restored from history.state there, so this flattens the stack too.
+                  resetStack();
                 }
                 // A transition begun while backgrounded can resume on the next dock tap.
                 if (document.hidden) {
@@ -190,7 +196,7 @@ export const appConfig: ApplicationConfig = {
                 // pairs with, so only the trip in may take its name away.
                 if (sibling && !goingBack()) muteHeroUntilDone(transition);
                 // What a pair with no morph of its own gets: the pages stack.
-                const direction = nextSlide(from, to, !!posterTrip);
+                const direction = nextSlide(from, to, armed, !!posterTrip);
                 const slid = !!direction && slidePage(transition, direction);
                 // Nothing would move. A transition still lifts every named hero
                 // out of its page, cross-fading it against a copy of itself and

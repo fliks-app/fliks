@@ -1,13 +1,6 @@
 import { Location } from '@angular/common';
 import { Injectable, computed, inject, signal } from '@angular/core';
-import {
-  NavigationCancel,
-  NavigationEnd,
-  NavigationError,
-  NavigationStart,
-  Router,
-  Scroll,
-} from '@angular/router';
+import { NavigationEnd, NavigationStart, Router, Scroll } from '@angular/router';
 import { Capacitor } from '@capacitor/core';
 import { DeviceService } from './device.service';
 
@@ -194,8 +187,9 @@ export class NavbarService {
    *  goBack(). */
   readonly navigatedBack = signal(false);
 
-  /** A macrotask later, so the destination's ngOnInit still observes `true`.
-   *  Runs on rejection too — a resolver error must not leave this stuck. */
+  /** A macrotask later, so the destination's ngOnInit still observes `true`,
+   *  but a later programmatic nav from that page sees `false`. Runs on
+   *  rejection too — a resolver error must not leave this stuck. */
   private resetLastWasBack(): void {
     setTimeout(() => this.lastWasBack.set(false), 0);
   }
@@ -214,7 +208,7 @@ export class NavbarService {
       this.isPoppingBack = true;
       this.lastWasBack.set(true);
       const sub = this.router.events.subscribe((e) => {
-        if (e instanceof NavigationEnd || e instanceof NavigationCancel || e instanceof NavigationError) {
+        if (e instanceof NavigationEnd) {
           sub.unsubscribe();
           this.resetLastWasBack();
         }
