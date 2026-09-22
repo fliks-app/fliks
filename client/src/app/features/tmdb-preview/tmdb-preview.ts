@@ -244,7 +244,11 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     this.trailerEmbedUrl.set(null);
   }
 
+  // Guards navbar/navigate writes from a slow await that outlives the component.
+  private destroyed = false;
+
   ngOnDestroy() {
+    this.destroyed = true;
     this.backgroundService.release(this);
     this.navbar.leaveHeroPage();
   }
@@ -269,6 +273,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
 
     try {
       const details = await this.metadata.getDetails(provider, type, externalId);
+      if (this.destroyed) return;
       this.media.set(details);
       this.navbar.enterHeroPage(details.title, details.logoUrl);
       // Only relevant when the Request button could show: admins who can
@@ -347,6 +352,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     this.actionBusyId.set(id);
     try {
       const approved = await this.requestsApi.approve(id);
+      if (this.destroyed) return;
       const mediaId = approved.media?.id;
       if (mediaId == null) {
         this.refreshPendingRequests();
@@ -354,6 +360,8 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
       }
       const prefix = approved.mediaType === 'movie' ? '/movies' : '/series';
       void this.router.navigate([prefix, mediaId]);
+    } catch {
+      /* surfaced by the global HTTP error interceptor */
     } finally {
       this.actionBusyId.set(null);
     }
