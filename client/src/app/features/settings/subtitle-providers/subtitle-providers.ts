@@ -34,16 +34,7 @@ import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { EnabledSwitchComponent } from '../../../shared/components/enabled-switch';
 
-const DEFAULT_TRANSLATION_MODEL = 'gemini-2.0-flash';
-
-const GEMINI_MODELS = [
-  'gemini-2.5-flash',
-  'gemini-2.5-pro',
-  'gemini-2.0-flash',
-  'gemini-2.0-flash-lite',
-  'gemini-1.5-flash',
-  'gemini-1.5-pro',
-];
+const DEFAULT_TRANSLATION_MODEL = 'gemini-3.6-flash';
 
 const TRANSLATION_ENGINES: { value: TranslationEngine; label: string }[] = [
   { value: 'gemini', label: 'Gemini' },
@@ -143,7 +134,6 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
 
   // Machine-translation — a list of admin-configured providers plus the global
   // on/off master switch (still an app key/value setting).
-  readonly geminiModels = GEMINI_MODELS;
   readonly translationEngines = TRANSLATION_ENGINES;
   readonly translationEnabled = signal(false);
   readonly savingTranslationEnabled = signal(false);

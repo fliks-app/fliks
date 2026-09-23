@@ -11,9 +11,10 @@ export interface LibreTranslateConfig {
   apiKey: string;
 }
 
-/** Cues per LibreTranslate request — it translates an array 1:1, so no prompt
- *  or numbered re-map is needed; chunking just bounds the payload size. */
-const CHUNK = 100;
+/** Cues per LibreTranslate request. It translates an array 1:1, so no prompt or
+ *  numbered re-map is needed, and the chunk is what the progress bar advances by:
+ *  large chunks leave it on one number for minutes against a slow instance. */
+const CHUNK = 25;
 
 /**
  * Translate cue texts with a (self-hosted) LibreTranslate server. Unlike the LLM
