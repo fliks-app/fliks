@@ -11,6 +11,8 @@ import { TvSelectDirective } from '../../../shared/directives/tv-select.directiv
 import { firstValueFrom } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { SECRETS_SET_KEY } from '@fliks/plugin-contract/ui';
+import { SECRET_MASK } from '../../../shared/components/schema-form/schema-form';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import {
@@ -150,6 +152,9 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   readonly trFormEnabled = signal(true);
   readonly trFormDefault = signal(false);
   readonly trFormApiKey = signal('');
+  readonly secretMask = SECRET_MASK;
+  readonly trApiKeyStored = signal(false);
+  readonly trApiKeyCleared = signal(false);
   readonly trFormModel = signal(DEFAULT_TRANSLATION_MODEL);
   readonly trFormBaseUrl = signal('');
   readonly trFormUrl = signal('');
@@ -245,6 +250,8 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     this.trFormEnabled.set(true);
     this.trFormDefault.set(this.translationRows().length === 0);
     this.trFormApiKey.set('');
+    this.trApiKeyStored.set(false);
+    this.trApiKeyCleared.set(false);
     this.trFormModel.set(DEFAULT_TRANSLATION_MODEL);
     this.trFormBaseUrl.set('');
     this.trFormUrl.set('');
@@ -261,7 +268,13 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     this.trFormEnabled.set(row.enabled);
     this.trFormDefault.set(row.isDefault);
     const s = row.settings ?? {};
-    this.trFormApiKey.set(String(s['apiKey'] ?? ''));
+    // The key never leaves the server; the response only says whether one is set.
+    this.trFormApiKey.set('');
+    const secretsSet = s[SECRETS_SET_KEY];
+    this.trApiKeyStored.set(
+      Array.isArray(secretsSet) && secretsSet.includes('apiKey'),
+    );
+    this.trApiKeyCleared.set(false);
     this.trFormModel.set(String(s['model'] ?? '') || DEFAULT_TRANSLATION_MODEL);
     this.trFormBaseUrl.set(String(s['baseUrl'] ?? ''));
     this.trFormUrl.set(String(s['url'] ?? ''));
@@ -282,10 +295,23 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     this.translationEditorDialog()?.nativeElement.close();
   }
 
+  onTrApiKeyInput(value: string) {
+    this.trFormApiKey.set(value);
+    if (value.trim()) this.trApiKeyCleared.set(false);
+  }
+
+  /** Blank leaves the stored key alone, `null` erases it, as the API defines. */
+  private trApiKeyValue(): string | null | undefined {
+    if (this.trApiKeyCleared()) return null;
+    const typed = this.trFormApiKey().trim();
+    if (typed) return typed;
+    return this.trApiKeyStored() ? undefined : '';
+  }
+
   private buildTranslationSettings(): Record<string, unknown> {
     const engine = this.trFormEngine();
     if (engine === 'libretranslate') {
-      return { url: this.trFormUrl().trim(), apiKey: this.trFormApiKey().trim() };
+      return { url: this.trFormUrl().trim(), apiKey: this.trApiKeyValue() };
     }
     const budget = {
       maxTokensPerRequest: Math.max(0, Number(this.trFormMaxTokensPerRequest()) || 0),
@@ -294,13 +320,13 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     if (engine === 'openai') {
       return {
         baseUrl: this.trFormBaseUrl().trim(),
-        apiKey: this.trFormApiKey().trim(),
+        apiKey: this.trApiKeyValue(),
         model: this.trFormModel().trim(),
         ...budget,
       };
     }
     return {
-      apiKey: this.trFormApiKey().trim(),
+      apiKey: this.trApiKeyValue(),
       model: this.trFormModel().trim() || DEFAULT_TRANSLATION_MODEL,
       ...budget,
     };
@@ -313,6 +339,8 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
       const res = await this.translationApi.testConnection({
         engine: this.trFormEngine(),
         settings: this.buildTranslationSettings(),
+        // Lets the server resolve a stored key the editor never received.
+        ...(this.trEditingId() !== null ? { id: this.trEditingId()! } : {}),
       });
       this.trTestResult.set({
         ok: res.ok,

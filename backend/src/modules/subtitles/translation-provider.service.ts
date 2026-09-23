@@ -6,6 +6,27 @@ import { CreateTranslationProviderDto } from './dto/create-translation-provider.
 import { UpdateTranslationProviderDto } from './dto/update-translation-provider.dto';
 import { TranslationProviderFactory } from './providers/translation-provider.factory';
 import { TranslationEngine } from '../../common/enums';
+import {
+  mergeSecretFields,
+  redactSecretFields,
+} from '../../common/utils/secret-fields.util';
+
+const TRANSLATION_PROVIDER_SECRET_FIELDS = [
+  { key: 'apiKey', secret: true },
+] as const;
+
+/** Strips the stored key from a provider before it reaches an HTTP response. */
+export function redactTranslationProviderSecrets(
+  provider: TranslationProvider,
+): TranslationProvider {
+  return {
+    ...provider,
+    settings: redactSecretFields(
+      provider.settings,
+      TRANSLATION_PROVIDER_SECRET_FIELDS,
+    ),
+  };
+}
 
 /** Trigger-facing projection of an enabled provider — never carries `settings`
  *  (API keys), so it is safe to hand to a non-admin at translate time. */
@@ -28,7 +49,11 @@ export class TranslationProviderService {
     const provider = this.repo.create({
       name: dto.name,
       engine: dto.engine,
-      settings: dto.settings ?? {},
+      settings: mergeSecretFields(
+        undefined,
+        dto.settings ?? {},
+        TRANSLATION_PROVIDER_SECRET_FIELDS,
+      ),
       enabled: dto.enabled ?? true,
       isDefault: dto.isDefault ?? false,
     });
@@ -79,7 +104,13 @@ export class TranslationProviderService {
     const provider = await this.findOne(id);
     if (dto.name !== undefined) provider.name = dto.name;
     if (dto.engine !== undefined) provider.engine = dto.engine;
-    if (dto.settings !== undefined) provider.settings = dto.settings;
+    if (dto.settings !== undefined) {
+      provider.settings = mergeSecretFields(
+        provider.settings,
+        dto.settings,
+        TRANSLATION_PROVIDER_SECRET_FIELDS,
+      );
+    }
     if (dto.enabled !== undefined) provider.enabled = dto.enabled;
     if (dto.isDefault !== undefined) provider.isDefault = dto.isDefault;
     const saved = await this.repo.save(provider);
@@ -106,7 +137,19 @@ export class TranslationProviderService {
   async testConnection(
     engine: TranslationEngine,
     settings: Record<string, unknown>,
+    providerId?: number,
   ): Promise<{ ok: boolean; error?: string }> {
+    // The editor never receives the stored key, so a test on an untouched one
+    // arrives blank: fall back to what is saved rather than fail on a secret
+    // the admin never had a chance to retype.
+    if (providerId != null) {
+      const stored = await this.repo.findOne({ where: { id: providerId } });
+      settings = mergeSecretFields(
+        stored?.settings,
+        settings,
+        TRANSLATION_PROVIDER_SECRET_FIELDS,
+      );
+    }
     try {
       this.factory.validateConfig(engine, settings);
       const out = await this.factory.translate(
