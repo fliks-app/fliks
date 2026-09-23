@@ -219,6 +219,9 @@ export class SubtitleTranslationService {
         });
       };
       const texts = cues.map((c) => c.text);
+      // Seed the bar before the first round-trip: with retries and rate pacing
+      // a first batch can take minutes, and a spinner says nothing meanwhile.
+      onProgress(0, texts.length);
 
       await this.acquireSlot(maxConcurrency);
       let translated: string[];
