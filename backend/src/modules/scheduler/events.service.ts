@@ -737,10 +737,10 @@ export class EventsService {
         subscriber.next({ data: JSON.stringify(env.event) } as MessageEvent);
       });
 
-      // Named and data-less: no client dispatches it (the spec drops an event with
-      // an empty data buffer), but the write still surfaces a dead socket.
+      // Named, so it never reaches the domain-event handler, but carrying data:
+      // the spec drops an empty buffer, and the client times the silence out.
       const ping = setInterval(() => {
-        subscriber.next({ type: 'ping', data: '' } as MessageEvent);
+        subscriber.next({ type: 'ping', data: String(PING_INTERVAL_MS) } as MessageEvent);
       }, PING_INTERVAL_MS);
 
       return () => {

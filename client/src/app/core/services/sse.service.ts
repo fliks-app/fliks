@@ -77,6 +77,10 @@ export interface RemoteState {
 
 /** `sessionStorage` key for the per-tab half of this device's target id. */
 const TAB_NONCE_KEY = 'fliks.remote.tabNonce';
+/** Silence worth reconnecting on: the server pings every 30s, so this is two
+ *  missed keepalives plus slack for a throttled timer. */
+const LIVENESS_TIMEOUT_MS = 80_000;
+const LIVENESS_CHECK_MS = 20_000;
 
 /** Series/movie title plus episode identity, kept as separate fields so a season
  *  import can lay them out rather than parsing a flattened string. `seasonNumber`
@@ -153,6 +157,8 @@ export class SseService implements OnDestroy {
   private generation = 0;
   private retryDelay = 5000;
   private retryHandle: ReturnType<typeof setTimeout> | null = null;
+  private lastMessageAt = 0;
+  private livenessHandle: ReturnType<typeof setInterval> | null = null;
   private readonly onOnline = () => void this.connect();
 
   constructor() {
@@ -185,6 +191,10 @@ export class SseService implements OnDestroy {
       this.retryHandle = null;
     }
     window.removeEventListener('online', this.onOnline);
+    if (this.livenessHandle) {
+      clearInterval(this.livenessHandle);
+      this.livenessHandle = null;
+    }
     this.generation++;
     this.eventSource?.close();
     this.eventSource = null;
@@ -227,7 +237,25 @@ export class SseService implements OnDestroy {
     const url = `${base}?${params.toString()}`;
 
     this.eventSource = new EventSource(url);
+    this.lastMessageAt = Date.now();
+    // A half-open socket keeps readyState OPEN and raises no error, so silence
+    // past a few keepalives is the only symptom there is.
+    this.eventSource.addEventListener('ping', () => {
+      this.lastMessageAt = Date.now();
+    });
+    // The error path drops the source without clearing this, so a reconnect
+    // would otherwise stack one watchdog per attempt.
+    if (this.livenessHandle) clearInterval(this.livenessHandle);
+    this.livenessHandle = setInterval(() => {
+      // Only an open stream is ours to time out: the error path already owns
+      // its own backoff, and a throttled tab has no silence to measure.
+      if (this.eventSource?.readyState !== EventSource.OPEN) return;
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() - this.lastMessageAt < LIVENESS_TIMEOUT_MS) return;
+      this.reconnect();
+    }, LIVENESS_CHECK_MS);
     this.eventSource.onmessage = (event) => {
+      this.lastMessageAt = Date.now();
       try {
         const data = JSON.parse(event.data) as SseEvent;
         if (data.type === 'sse.connected') {
