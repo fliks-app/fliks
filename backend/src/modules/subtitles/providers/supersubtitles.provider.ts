@@ -223,38 +223,30 @@ export class SupersubtitlesProvider implements SubtitleProviderInterface {
   ): SubtitleSearchResult[] {
     const results: SubtitleSearchResult[] = [];
 
-    // Match subtitle download links and their surrounding context
-    // Pattern: <a href="...action=letolt&felirat=NNNN..." ...>...</a>
-    const linkRegex = /action=letolt&(?:amp;)?felirat=(\d+)/g;
-    const langRegex = /(?:Magyar|Hungarian|Angol|English)/gi;
+    // The id is the last parameter of the download link, after the filename:
+    // /index.php?action=letolt&fnev=Name.en.srt&felirat=1756650761
+    const linkRegex = /action=letolt[^"']*?[&?](?:amp;)?felirat=(\d+)/;
+    // The row carries its language in a cell of its own. Scanning the whole row
+    // instead reads the CSS class on the Hungarian-title div as a language.
+    const langCellRegex = /class="lang"[^>]*>\s*<small>([^<]+)<\/small>/i;
+    const releaseRegex = /class="eredeti"[^>]*>([^<]*)</i;
 
     // Split HTML into table rows for context
     const rows = html.split(/<tr[^>]*>/i);
 
     for (const row of rows) {
       const linkMatch = linkRegex.exec(row);
-      linkRegex.lastIndex = 0; // Reset for next row
-
       if (!linkMatch) continue;
 
       const subtitleId = linkMatch[1];
-
-      // Detect language from row content
-      let lang = 'hu';
-      const langMatches = row.match(langRegex);
-      if (langMatches) {
-        const lastLang = langMatches[langMatches.length - 1].toLowerCase();
-        if (lastLang === 'angol' || lastLang === 'english') {
-          lang = 'en';
-        }
-      }
+      const langCell = row.match(langCellRegex)?.[1];
+      const lang = langCell ? this.mapLanguage(langCell.trim()) : 'hu';
 
       // Filter by language if specified
       if (language && lang !== language) continue;
 
-      // Extract release name from the row
-      const titleMatch = row.match(/title="([^"]+)"/i);
-      const label = titleMatch?.[1] || `Movie subtitle #${subtitleId}`;
+      const release = row.match(releaseRegex)?.[1]?.trim();
+      const label = release || `Movie subtitle #${subtitleId}`;
       const forced =
         row.toLowerCase().includes('forced') || row.includes('szinkronoshoz');
 

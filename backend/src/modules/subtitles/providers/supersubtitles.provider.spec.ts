@@ -84,3 +84,75 @@ describe('SupersubtitlesProvider episode search', () => {
     await expect(search()).resolves.toEqual([]);
   });
 });
+
+/** Two rows copied from a live search page, trimmed of the cells the parser
+ *  ignores. The download id is the LAST parameter, after the filename. */
+const MOVIE_PAGE = `
+<table>
+<tr>
+  <td align="center" class="lang"><small>Angol</small></td>
+  <td align="left"><div class="magyar">Eredet</div>
+  <div class="eredeti">Inception (2010) (NF.WEBRip)</div></td>
+  <td align="center"><a href="/index.php?action=letolt&fnev=Inception.2010.NF.WEB-DL.en.srt&felirat=1756650761">
+  <img src="img/download.png" /></a></td>
+</tr>
+<tr>
+  <td align="center" class="lang"><small>Magyar</small></td>
+  <td align="left"><div class="magyar">Eredet</div>
+  <div class="eredeti">Inception (2010) (WEBRip.1080p-HiDt)</div></td>
+  <td align="center"><a href="/index.php?action=letolt&fnev=Inception.2010.hu.srt&felirat=1728736777">
+  <img src="img/download.png" /></a></td>
+</tr>
+</table>`;
+
+describe('SupersubtitlesProvider movie search', () => {
+  beforeEach(() => mockedFetch.mockReset());
+
+  const movie = { title: 'Inception', year: 2010, mediaType: 'movie' } as never;
+
+  it('reads the id, the release and the language of each row', async () => {
+    mockedFetch.mockResolvedValueOnce(textResponse(MOVIE_PAGE));
+
+    const out = await new SupersubtitlesProvider({}).search(movie);
+
+    expect(out).toHaveLength(2);
+    expect(out[0]).toMatchObject({
+      providerFileId: '1756650761',
+      language: 'en',
+      title: 'Inception (2010) (NF.WEBRip)',
+    });
+    expect(out[1]).toMatchObject({
+      providerFileId: '1728736777',
+      language: 'hu',
+    });
+  });
+
+  it('does not read the Hungarian-title CSS class as a language', async () => {
+    mockedFetch.mockResolvedValueOnce(textResponse(MOVIE_PAGE));
+
+    const [english] = await new SupersubtitlesProvider({}).search(movie);
+
+    expect(english.language).toBe('en');
+  });
+
+  it('filters on the requested language', async () => {
+    mockedFetch.mockResolvedValueOnce(textResponse(MOVIE_PAGE));
+
+    const out = await new SupersubtitlesProvider({}).search({
+      ...(movie as object),
+      language: 'en',
+    } as never);
+
+    expect(out.map((r) => r.providerFileId)).toEqual(['1756650761']);
+  });
+
+  it('returns nothing for a page with no download link', async () => {
+    mockedFetch.mockResolvedValueOnce(
+      textResponse('<table><tr><td>Nothing</td></tr></table>'),
+    );
+
+    await expect(new SupersubtitlesProvider({}).search(movie)).resolves.toEqual(
+      [],
+    );
+  });
+});
