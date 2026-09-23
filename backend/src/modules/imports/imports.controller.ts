@@ -7,6 +7,8 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
@@ -18,6 +20,8 @@ import { RelinkOrphansDto } from './dto/relink-orphans.dto';
 import { PreviewOrphansDto } from './dto/preview-orphans.dto';
 import { RelinkOrphansBatchDto } from './dto/relink-orphans-batch.dto';
 import { EventsService } from '../scheduler/events.service';
+import { Command } from '../scheduler/entities/command.entity';
+import { runAuditedCommand } from '../scheduler/command-audit.util';
 import { ImportRadarrService, ApiImportResult } from './radarr.service';
 import { ImportSonarrService } from './sonarr.service';
 import { SeerrService } from './seerr.service';
@@ -41,6 +45,8 @@ export class ImportsController {
     private readonly seerrImporter: SeerrRequestImportService,
     private readonly diskImport: DiskImportService,
     private readonly events: EventsService,
+    @InjectRepository(Command)
+    private readonly commandRepo: Repository<Command>,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -121,29 +127,43 @@ export class ImportsController {
   @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
   importSeerrRequests() {
     this.events.emit({ type: 'seerr.import.started' });
-    void this.seerrImporter.importFromSeerr().then(
-      (stats) => {
-        this.events.emit({
-          type: 'seerr.import.completed',
-          users: stats.users,
-          usersCreated: stats.usersCreated,
-          imported: stats.imported,
-          updated: stats.updated,
-          skipped: stats.skipped,
-        });
+    // Wrapped in a Command row so a restart mid-import surfaces as failed
+    // instead of leaving no trace anywhere.
+    void runAuditedCommand(
+      this.commandRepo,
+      this.events,
+      'ImportSeerrRequests',
+      'manual',
+      async () => {
+        try {
+          const stats = await this.seerrImporter.importFromSeerr();
+          this.events.emit({
+            type: 'seerr.import.completed',
+            users: stats.users,
+            usersCreated: stats.usersCreated,
+            imported: stats.imported,
+            updated: stats.updated,
+            skipped: stats.skipped,
+          });
+        } catch (err) {
+          const message = (err as Error).message;
+          this.log.error(
+            `Seerr import failed — ${message}`,
+            err instanceof Error ? err.stack : err,
+          );
+          this.events.emit({
+            type: 'seerr.import.failed',
+            error: message,
+          });
+          throw err;
+        }
       },
-      (err) => {
-        const message = (err as Error).message;
-        this.log.error(
-          `Seerr import failed — ${message}`,
-          err instanceof Error ? err.stack : err,
-        );
-        this.events.emit({
-          type: 'seerr.import.failed',
-          error: message,
-        });
-      },
-    );
+      this.log,
+    ).catch(() => {
+      // The audit row is written before the work starts, so its failure would
+      // otherwise leave the client waiting on a result that never comes.
+      this.events.emit({ type: 'seerr.import.failed', error: '' });
+    });
     return { ok: true };
   }
 

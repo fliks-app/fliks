@@ -166,6 +166,7 @@ export class SseService implements OnDestroy {
         // stream that fed it also stops the sweep timer of a session nobody
         // is watching any more.
         this.downloadProgress.reset();
+        this.activeProgress.set(new Map());
       });
     });
   }
@@ -239,6 +240,9 @@ export class SseService implements OnDestroy {
           // while we were disconnected: nothing announces that, and a leaf kept
           // here shows a download badge that never goes away.
           this.downloadProgress.reset();
+          this.activeProgress.set(new Map());
+          // A reconnect means we don't know what we missed while disconnected.
+          void invalidatePrefix('/api/media');
           return;
         }
         if (data.type === 'remote.command') {

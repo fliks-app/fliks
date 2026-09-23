@@ -108,6 +108,7 @@ describe('SubtitleSchedulerService.upgradeSubtitles — walking a shrinking set'
       {} as never,
       {} as never,
       { dispatch: jest.fn() } as never,
+      { upsertRunning: jest.fn(), remove: jest.fn() } as never,
     );
     return { service, seen, table };
   }

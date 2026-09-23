@@ -143,4 +143,9 @@ export class SubtitleFile extends BaseEntity {
    *  label. Snapshotted so it survives a later rename or removal. */
   @Column({ type: 'varchar', nullable: true })
   translationProviderName: string | null;
+
+  /** Percentage of an in-flight translation, filled on read from the running
+   *  service. Not a column: a run lives in the process, so a restart must not
+   *  leave a number behind claiming work nobody is doing. */
+  translationProgress?: number;
 }

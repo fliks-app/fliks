@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { MediaType } from '../../enums/media-type.enum';
+import { CACHE_BYPASS_HEADER } from '../../interceptors/cache.interceptor';
 
 export interface SubtitleFileRow {
   id: number;
@@ -24,6 +25,9 @@ export interface SubtitleFileRow {
   syncOffset?: number;
   streamIndex?: number | null;
   codec?: string | null;
+  /** Percentage of a translation the server is running right now. Absent once
+   *  the run ends, or when no process is translating this row. */
+  translationProgress?: number | null;
   /** For TRANSLATED subs: the provider name/engine/model that produced them. */
   translationProviderName?: string | null;
   translationEngine?: string | null;
@@ -53,8 +57,15 @@ export class SubtitlesApiService {
     );
   }
 
-  getForMedia(mediaId: number) {
-    return firstValueFrom(this.http.get<SubtitleFileRow[]>(`/api/media/${mediaId}/subtitles`));
+  /** `force` bypasses the SWR cache — the modal wants the true run state on open,
+   *  not a stale body served while a reconnect-driven revalidation catches up. */
+  getForMedia(mediaId: number, opts: { force?: boolean } = {}) {
+    return firstValueFrom(
+      this.http.get<SubtitleFileRow[]>(`/api/media/${mediaId}/subtitles`, opts.force
+        ? { headers: { [CACHE_BYPASS_HEADER]: '1' } }
+        : {},
+      ),
+    );
   }
 
   search(mediaId: number, language?: string, episodeId?: number) {

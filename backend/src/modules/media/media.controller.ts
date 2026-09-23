@@ -45,6 +45,8 @@ import { SubtitleSyncService } from '../subtitles/subtitle-sync.service';
 import { FfprobeService } from '../subtitles/ffprobe.service';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { EventsService } from '../scheduler/events.service';
+import { ActivityRegistryService } from '../scheduler/activity-registry.service';
+import { buildMediaProgressSubject } from '../../common/utils/media-progress-subject.util';
 import { SubtitleSchedulerService } from '../scheduler/subtitle-scheduler.service';
 import { LibrariesService } from '../libraries/libraries.service';
 import type { User } from '../users/entities/user.entity';
@@ -64,6 +66,7 @@ export class MediaController {
     private readonly eventsService: EventsService,
     private readonly subtitleScheduler: SubtitleSchedulerService,
     private readonly libraries: LibrariesService,
+    private readonly activityRegistry: ActivityRegistryService,
   ) {}
 
   /**
@@ -269,8 +272,15 @@ export class MediaController {
     const title = media.title;
 
     this.eventsService.emit({ type: 'metadata.started', mediaId: id, title });
+    const activityId = `Identify:${id}`;
+    this.activityRegistry.upsertRunning(
+      activityId,
+      'Identify',
+      buildMediaProgressSubject(media),
+    );
     void this.mediaService.finishIdentify(id).then(
       (refreshed) => {
+        this.activityRegistry.remove(activityId);
         this.eventsService.emit({
           type: 'metadata.refreshed',
           mediaId: id,
@@ -278,6 +288,7 @@ export class MediaController {
         });
       },
       (err) => {
+        this.activityRegistry.remove(activityId);
         const message = (err as Error).message;
         this.logger.error(
           `Identification failed after the ids were written — id=${id} error=${message}`,
@@ -306,10 +317,17 @@ export class MediaController {
     const title = media.title;
 
     this.eventsService.emit({ type: 'metadata.started', mediaId: id, title });
+    const activityId = `RefreshMetadata:${id}`;
+    this.activityRegistry.upsertRunning(
+      activityId,
+      'RefreshMetadata',
+      buildMediaProgressSubject(media),
+    );
     // Fire-and-forget so the client doesn't sit waiting on TMDB + image
     // downloads. SSE event signals completion.
     void this.mediaService.refreshMetadata(id).then(
       () => {
+        this.activityRegistry.remove(activityId);
         this.eventsService.emit({
           type: 'metadata.refreshed',
           mediaId: id,
@@ -317,6 +335,7 @@ export class MediaController {
         });
       },
       (err) => {
+        this.activityRegistry.remove(activityId);
         const message = (err as Error).message;
         this.logger.error(
           `Metadata refresh failed — id=${id} title="${title}" error=${message}`,
@@ -346,8 +365,15 @@ export class MediaController {
     const title = media.title;
 
     this.eventsService.emit({ type: 'metadata.started', mediaId: id, title });
+    const activityId = `RefreshEpisodeMetadata:${episodeId}`;
+    this.activityRegistry.upsertRunning(
+      activityId,
+      'RefreshEpisodeMetadata',
+      buildMediaProgressSubject(media),
+    );
     void this.mediaService.refreshEpisodeMetadata(id, episodeId).then(
       () => {
+        this.activityRegistry.remove(activityId);
         this.eventsService.emit({
           type: 'metadata.refreshed',
           mediaId: id,
@@ -355,6 +381,7 @@ export class MediaController {
         });
       },
       (err) => {
+        this.activityRegistry.remove(activityId);
         const message = (err as Error).message;
         this.logger.error(
           `Episode metadata refresh failed — id=${id} ep=${episodeId} error=${message}`,
@@ -389,10 +416,17 @@ export class MediaController {
       title,
     });
 
+    const activityId = `Rescan:${id}`;
+    this.activityRegistry.upsertRunning(
+      activityId,
+      'Rescan',
+      buildMediaProgressSubject(media),
+    );
     // Fire-and-forget: don't await. skipWarmup=true — rescan should be fast,
     // subtitle cache will warm lazily when the user actually plays the file.
     void this.mediaService.rescanFiles(id, { skipWarmup: true }).then(
       (result) => {
+        this.activityRegistry.remove(activityId);
         this.eventsService.emitToUser(user.id, {
           type: 'rescan.completed',
           mediaId: id,
@@ -413,6 +447,7 @@ export class MediaController {
         }
       },
       (err) => {
+        this.activityRegistry.remove(activityId);
         const message = (err as Error).message;
         this.logger.error(
           `Media rescan failed — id=${id} title="${title}" error=${message}`,
@@ -459,7 +494,13 @@ export class MediaController {
     @CurrentUser() user: User,
   ) {
     await this.assertMediaAccessible(id, user);
-    return this.subtitlesService.getSubtitlesForMedia(id);
+    const subtitles = await this.subtitlesService.getSubtitlesForMedia(id);
+    // A client that opens the list mid-run would otherwise wait for the next
+    // progress event, which is minutes away on a slow engine.
+    for (const sub of subtitles) {
+      sub.translationProgress = this.subtitleTranslation.progressFor(sub.id);
+    }
+    return subtitles;
   }
 
   @Get(':id/subtitles/search')

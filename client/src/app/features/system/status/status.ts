@@ -1,5 +1,5 @@
 import {
-  Component, signal, inject, OnInit, OnDestroy, effect, computed,
+  Component, signal, inject, OnInit, OnDestroy, effect, computed, untracked,
 } from '@angular/core';
 import { DecimalPipe, NgClass } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
@@ -127,6 +127,13 @@ export class SystemStatusComponent implements OnInit, OnDestroy {
     { name: 'PostImportEnrich', label: 'system.cmd_post_import_enrich' },
     { name: 'PostImportEnrichQueue', label: 'system.cmd_post_import_enrich_queue' },
     { name: 'OrphanImport', label: 'system.cmd_orphan_import' },
+    { name: 'OrphanScan', label: 'system.cmd_orphan_scan' },
+    { name: 'Identify', label: 'system.cmd_identify' },
+    { name: 'RefreshEpisodeMetadata', label: 'system.cmd_refresh_episode_metadata' },
+    { name: 'Rescan', label: 'system.cmd_rescan' },
+    { name: 'SubtitleSync', label: 'system.cmd_subtitle_sync' },
+    { name: 'ImportSeerrRequests', label: 'system.cmd_import_seerr_requests' },
+    { name: 'ImportWatchHistory', label: 'system.cmd_import_watch_history' },
   ]);
 
   constructor() {
@@ -138,6 +145,15 @@ export class SystemStatusComponent implements OnInit, OnDestroy {
       if (event?.type === 'activity.changed') {
         this.scheduleActivityRefetch();
       }
+    });
+    // A new connection id says the stream we were on is gone, and the registry
+    // behind these rows lives in the process that may have just restarted.
+    effect(() => {
+      if (!this.sse.connectionId()) return;
+      untracked(() => {
+        void this.loadActivity();
+        void this.loadCommands(this.commandsPage());
+      });
     });
   }
 

@@ -311,33 +311,35 @@ export class MarkersService {
     mediaTitle: string,
   ): Promise<void> {
     this.inFlight.add(seasonId);
-    await this.commandRepo.update(cmdId, {
-      status: 'running',
-      startedOn: new Date(),
-    });
-    this.events.emit({ type: 'command.started', name: 'IntroDetection' });
-
-    // Season-wide subject: detection scans every episode of the season, so the
-    // per-tick `message` (fingerprint phase text) stays free-form.
-    const subject = buildMediaProgressSubject(
-      { id: mediaId, title: mediaTitle, type: MediaType.SERIES },
-      { seasonNumber },
-    );
     const activityId = `IntroDetection:${seasonId}`;
-    this.activityRegistry.upsertRunning(activityId, 'IntroDetection', subject);
-    const onProgress = (current: number, total: number, message: string) => {
-      this.events.emit({
-        type: 'task.progress',
-        command: 'IntroDetection',
-        current,
-        total,
-        message,
-        subject,
-      });
-      this.activityRegistry.upsertRunning(activityId, 'IntroDetection', subject, current, total);
-    };
-
+    // Added before the first await so a concurrent entry point cannot slip
+    // past the guard that reads it, and released by this block's finally.
     try {
+      await this.commandRepo.update(cmdId, {
+        status: 'running',
+        startedOn: new Date(),
+      });
+      this.events.emit({ type: 'command.started', name: 'IntroDetection' });
+
+      // Season-wide subject: detection scans every episode of the season, so the
+      // per-tick `message` (fingerprint phase text) stays free-form.
+      const subject = buildMediaProgressSubject(
+        { id: mediaId, title: mediaTitle, type: MediaType.SERIES },
+        { seasonNumber },
+      );
+      this.activityRegistry.upsertRunning(activityId, 'IntroDetection', subject);
+      const onProgress = (current: number, total: number, message: string) => {
+        this.events.emit({
+          type: 'task.progress',
+          command: 'IntroDetection',
+          current,
+          total,
+          message,
+          subject,
+        });
+        this.activityRegistry.upsertRunning(activityId, 'IntroDetection', subject, current, total);
+      };
+
       const result = await this.detectIntrosAndOutros(seasonId, onProgress);
       await this.commandRepo.update(cmdId, {
         status: 'completed',

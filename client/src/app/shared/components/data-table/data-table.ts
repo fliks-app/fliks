@@ -157,6 +157,13 @@ export class DataTableComponent implements OnInit {
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
   private trailingRefresh: ReturnType<typeof setTimeout> | null = null;
   private lastRefreshAt = 0;
+  /** Set when a trigger arrives while hidden, so becoming visible again doesn't just drop it. */
+  private refreshPendingOnVisible = false;
+  private readonly onVisible = () => {
+    if (document.visibilityState !== 'visible' || !this.refreshPendingOnVisible) return;
+    this.refreshPendingOnVisible = false;
+    this.requestRefresh();
+  };
 
   constructor() {
     const sse = inject(SseService);
@@ -165,10 +172,16 @@ export class DataTableComponent implements OnInit {
       if (!event || !this.refreshOn().includes(event.type)) return;
       untracked(() => this.requestRefresh());
     });
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', this.onVisible);
+    }
     inject(DestroyRef).onDestroy(() => {
       if (this.searchDebounce) clearTimeout(this.searchDebounce);
       if (this.refreshTimer) clearInterval(this.refreshTimer);
       if (this.trailingRefresh) clearTimeout(this.trailingRefresh);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', this.onVisible);
+      }
     });
   }
 
@@ -196,7 +209,10 @@ export class DataTableComponent implements OnInit {
    * Nothing fires while the tab is hidden: a backgrounded queue is not being read.
    */
   private requestRefresh(): void {
-    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+      this.refreshPendingOnVisible = true;
+      return;
+    }
     const waitMs = REFRESH_MIN_MS - (Date.now() - this.lastRefreshAt);
     if (waitMs > 0) {
       if (!this.trailingRefresh) {

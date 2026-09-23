@@ -9,6 +9,7 @@ import { LiveTvUserChannelPref } from './entities/livetv-user-channel-pref.entit
 import { LiveTvGroupAccess } from './entities/livetv-group-access.entity';
 import { LiveTvGuideChannel } from './entities/livetv-guide-channel.entity';
 import { User } from '../users/entities/user.entity';
+import { Command } from '../scheduler/entities/command.entity';
 import { LiveTvSourcesService } from './services/livetv-sources.service';
 import { LiveTvChannelsService } from './services/livetv-channels.service';
 import { LiveTvGuideService } from './services/livetv-guide.service';
@@ -39,6 +40,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       LiveTvGroupAccess,
       LiveTvGuideChannel,
       User,
+      Command,
     ]),
     forwardRef(() => AuthModule),
     SettingsModule,

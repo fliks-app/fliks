@@ -5,6 +5,7 @@ import {
   effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
@@ -50,6 +51,12 @@ export class SchedulersComponent implements OnInit {
       ) {
         this.refreshList();
       }
+    });
+    // A new connection id says the stream we were on is gone, so a "running"
+    // pill may belong to a process that is not there any more.
+    effect(() => {
+      if (!this.sse.connectionId()) return;
+      untracked(() => void this.refreshList());
     });
   }
 

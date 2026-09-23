@@ -11,6 +11,8 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { MediaServersService } from './media-servers.service';
 import { CreateMediaServerDto } from './dto/create-media-server.dto';
 import { EmbyWatchHistoryImportService } from './emby-watch-history-import.service';
@@ -19,6 +21,8 @@ import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
 import { Action } from '../auth/casl/actions.enum';
 import { EventsService } from '../scheduler/events.service';
+import { Command } from '../scheduler/entities/command.entity';
+import { runAuditedCommand } from '../scheduler/command-audit.util';
 import { MediaServerType } from '../../common/enums';
 
 @Controller('media-servers')
@@ -30,6 +34,8 @@ export class MediaServersController {
     private readonly service: MediaServersService,
     private readonly embyHistoryImport: EmbyWatchHistoryImportService,
     private readonly events: EventsService,
+    @InjectRepository(Command)
+    private readonly commandRepo: Repository<Command>,
   ) {}
 
   @Get('types')
@@ -96,33 +102,51 @@ export class MediaServersController {
       serverName,
     });
 
-    // Fire-and-forget — SSE delivers the final result.
-    void this.embyHistoryImport.importForServer(server).then(
-      (stats) => {
-        this.events.emit({
-          type: 'watch-history.import.completed',
-          serverId,
-          serverName,
-          users: stats.users,
-          usersCreated: stats.usersCreated,
-          imported: stats.imported,
-          skipped: stats.skipped,
-        });
+    // Fire-and-forget: SSE delivers the result, and the Command row is what a
+    // restart mid-import has left to surface as failed.
+    void runAuditedCommand(
+      this.commandRepo,
+      this.events,
+      'ImportWatchHistory',
+      'manual',
+      async () => {
+        try {
+          const stats = await this.embyHistoryImport.importForServer(server);
+          this.events.emit({
+            type: 'watch-history.import.completed',
+            serverId,
+            serverName,
+            users: stats.users,
+            usersCreated: stats.usersCreated,
+            imported: stats.imported,
+            skipped: stats.skipped,
+          });
+        } catch (err) {
+          const message = (err as Error).message;
+          this.log.error(
+            `Watch-history import failed — server=${serverId} "${serverName}" error=${message}`,
+            err instanceof Error ? err.stack : err,
+          );
+          this.events.emit({
+            type: 'watch-history.import.failed',
+            serverId,
+            serverName,
+            error: message,
+          });
+          throw err;
+        }
       },
-      (err) => {
-        const message = (err as Error).message;
-        this.log.error(
-          `Watch-history import failed — server=${serverId} "${serverName}" error=${message}`,
-          err instanceof Error ? err.stack : err,
-        );
-        this.events.emit({
-          type: 'watch-history.import.failed',
-          serverId,
-          serverName,
-          error: message,
-        });
-      },
-    );
+      this.log,
+    ).catch(() => {
+      // The audit row is written before the work starts, so its failure would
+      // otherwise leave the client waiting on a result that never comes.
+      this.events.emit({
+        type: 'watch-history.import.failed',
+        serverId,
+        serverName,
+        error: '',
+      });
+    });
     return { ok: true };
   }
 }

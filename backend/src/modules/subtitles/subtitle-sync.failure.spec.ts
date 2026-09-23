@@ -26,6 +26,7 @@ describe('SubtitleSyncService — a failed sync', () => {
       { dispatch: jest.fn() } as never,
       { detectStreams: jest.fn().mockResolvedValue([]) } as never,
       { emit: jest.fn() } as never,
+      { upsertPending: jest.fn(), upsertRunning: jest.fn(), remove: jest.fn() } as never,
       { dispatch: jest.fn() } as never,
     );
     return { service, subtitle, save };

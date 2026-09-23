@@ -5,6 +5,7 @@ import {
   effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
@@ -257,6 +258,16 @@ export class DataImportsSettingsComponent implements OnInit {
       return next;
     });
   }
+
+  // A reconnect cannot prove an import is still running, and an enabled button
+  // with no toast beats a spinner that never stops.
+  private readonly reconnectClearsImporting = effect(() => {
+    if (!this.sse.connectionId()) return;
+    untracked(() => {
+      this.embyImportingIds.set(new Set());
+      this.seerrImporting.set(false);
+    });
+  });
 
   async importEmbyWatchHistory(server: MediaServerRow) {
     if (this.embyImportingIds().has(server.id)) return;

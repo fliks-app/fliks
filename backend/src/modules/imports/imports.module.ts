@@ -10,6 +10,7 @@ import { User } from '../users/entities/user.entity';
 import { FliksRequest } from '../requests/entities/request.entity';
 import { LibraryUserAccess } from '../libraries/entities/library-user-access.entity';
 import { Role } from '../roles/entities/role.entity';
+import { Command } from '../scheduler/entities/command.entity';
 import { ImportRadarrService } from './radarr.service';
 import { ImportSonarrService } from './sonarr.service';
 import { SeerrService } from './seerr.service';
@@ -38,6 +39,7 @@ import { MediaServersModule } from '../media-servers/media-servers.module';
       FliksRequest,
       LibraryUserAccess,
       Role,
+      Command,
     ]),
     AuthModule,
     SettingsModule,

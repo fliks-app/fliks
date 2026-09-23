@@ -463,19 +463,19 @@ export class SubtitlesModalComponent {
    *  progress, surfaced by the detail page as a "traduction en cours" progress
    *  bar. `percent` is null until the first batch reports. */
   readonly translationInProgress = computed<{ language: string; percent: number | null }[]>(() => {
-    const progress = this.sse.translationProgress();
     return this.filteredSubtitles()
       .filter((s) => s.status === 'processing' && s.providerType === 'translated')
       .map((s) => ({
         language: localizeLanguage(s.language, this.translate),
-        percent: progress[s.id] ?? null,
+        percent: this.translationPercent(s),
       }));
   });
 
-  /** Live translation percentage for a PROCESSING row, or null before the first
-   *  batch reports. */
-  protected translationPercent(id: number): number | null {
-    return this.sse.translationProgress()[id] ?? null;
+  /** Translation percentage for a PROCESSING row: the live event when one has
+   *  arrived, else what the server reported when the list was fetched, so a
+   *  client that joined mid-run still shows a bar. */
+  protected translationPercent(sub: SubtitleFileRow): number | null {
+    return this.sse.translationProgress()[sub.id] ?? sub.translationProgress ?? null;
   }
 
   /** Formatted subtitles for the media-info-header dropdown */
@@ -672,7 +672,7 @@ export class SubtitlesModalComponent {
   async loadSubtitles(mediaId: number) {
     this.subtitlesLoading.set(true);
     try {
-      this.subtitles.set(await this.subtitlesApi.getForMedia(mediaId));
+      this.subtitles.set(await this.subtitlesApi.getForMedia(mediaId, { force: true }));
       // Drop progress entries for translations that finished/failed so the map
       // never keeps stale rows across runs.
       this.sse.retainTranslationProgress(
