@@ -114,6 +114,26 @@ describe('translateWithBatching token budget', () => {
     expect(seen).toEqual([2, 4]);
   });
 
+  it('shrinks later batches to what the endpoint proved it accepts', async () => {
+    const sizes: number[] = [];
+    const out = await translateWithBatching(
+      Array.from({ length: 800 }, (_, i) => `cue ${i}`),
+      async (batch) => {
+        sizes.push(batch.length);
+        // Stands in for an endpoint that cuts anything over 100 cues.
+        if (batch.length > 100) throw new TranslationPayloadTooLargeError('truncated');
+        return batch;
+      },
+      { ...unlimited(), batchCeiling: 400 },
+      SYSTEM,
+    );
+    expect(out).toHaveLength(800);
+    // 400 is cut, so are both halves of the split already committed to, and from
+    // then on every top-level batch starts under the limit instead of finding it
+    // again. Without the shrink the second 400 would repeat the whole descent.
+    expect(sizes.filter((n) => n > 100)).toEqual([400, 200, 200]);
+  });
+
   it('propagates a non-size failure instead of splitting', async () => {
     await expect(
       translateWithBatching(

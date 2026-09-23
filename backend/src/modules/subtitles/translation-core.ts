@@ -344,11 +344,13 @@ async function translateBatchWithSplit(
   systemTokens: number,
   limits: TranslationLimits,
   report: (cues: number) => void,
+  shrink: (attempted: number) => void,
 ): Promise<string[]> {
   if (texts.length === 0) return [];
   const prompt = promptTokens(texts, systemTokens);
   const output = reserveOutput(prompt, limits);
   let result: string[] | null = null;
+  let truncated = false;
   try {
     await reserveRate(limits, prompt + output);
     result = await callBatch(texts, output);
@@ -360,6 +362,9 @@ async function translateBatchWithSplit(
     ) {
       throw err;
     }
+    log.warn(`${err.message}; retrying in two halves`);
+    truncated = true;
+    shrink(texts.length);
   }
   if (result && result.length === texts.length) {
     report(texts.length);
@@ -371,9 +376,12 @@ async function translateBatchWithSplit(
     report(1);
     return [texts[0]];
   }
-  log.warn(
-    `Response did not map back to ${texts.length} cues, splitting: each half is another request`,
-  );
+  if (!truncated) {
+    log.warn(
+      `Response did not map back to ${texts.length} cues, splitting: each half is another request`,
+    );
+    shrink(texts.length);
+  }
   const mid = Math.floor(texts.length / 2);
   const [left, right] = [
     await translateBatchWithSplit(
@@ -382,6 +390,7 @@ async function translateBatchWithSplit(
       systemTokens,
       limits,
       report,
+      shrink,
     ),
     await translateBatchWithSplit(
       texts.slice(mid),
@@ -389,6 +398,7 @@ async function translateBatchWithSplit(
       systemTokens,
       limits,
       report,
+      shrink,
     ),
   ];
   return [...left, ...right];
@@ -410,6 +420,12 @@ export async function translateWithBatching(
   onProgress?: (done: number, total: number) => void,
 ): Promise<string[]> {
   const systemTokens = estimateTokens(systemInstruction);
+  // A batch the endpoint cut names its real ceiling. Keeping it means every
+  // later batch pays one wasted request to rediscover the same limit.
+  let ceiling = limits.batchCeiling;
+  const shrink = (attempted: number) => {
+    ceiling = Math.max(1, Math.min(ceiling, Math.floor(attempted / 2)));
+  };
   const out: string[] = [];
   let done = 0;
   const report = (cues: number) => {
@@ -418,7 +434,10 @@ export async function translateWithBatching(
   };
   let i = 0;
   while (i < texts.length) {
-    const end = batchEnd(texts, i, systemTokens, limits);
+    const end = batchEnd(texts, i, systemTokens, {
+      ...limits,
+      batchCeiling: ceiling,
+    });
     out.push(
       ...(await translateBatchWithSplit(
         texts.slice(i, end),
@@ -426,6 +445,7 @@ export async function translateWithBatching(
         systemTokens,
         limits,
         report,
+        shrink,
       )),
     );
     i = end;
