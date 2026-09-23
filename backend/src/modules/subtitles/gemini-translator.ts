@@ -6,6 +6,7 @@ import {
   TranslationRequest,
   buildPayload,
   buildSystemInstruction,
+  withRegister,
   parseNumbered,
   postWithRetry,
   translateWithBatching,
@@ -37,7 +38,33 @@ export async function translateWithGemini(
   cfg: GeminiConfig,
   onProgress?: (done: number, total: number) => void,
 ): Promise<string[]> {
-  const system = buildSystemInstruction(req);
+  const ask = async (system: string, user: string): Promise<string> => {
+    const res = await postWithRetry(
+      `${GEMINI_BASE}/${encodeURIComponent(cfg.model)}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ role: 'user', parts: [{ text: user }] }],
+          generationConfig: {
+            temperature: 0,
+            maxOutputTokens: 16,
+            ...(/^gemini-3/.test(cfg.model)
+              ? { thinkingConfig: { thinkingLevel: 'low' } }
+              : {}),
+          },
+        }),
+      },
+      'Gemini',
+    );
+    const data: any = await res.json();
+    const parts = data?.candidates?.[0]?.content?.parts;
+    return Array.isArray(parts)
+      ? parts.map((p: any) => p?.text ?? '').join('')
+      : '';
+  };
+  const system = buildSystemInstruction(await withRegister(req, texts, ask));
   const limits: TranslationLimits = {
     maxTokensPerRequest: cfg.maxTokensPerRequest,
     tokensPerMinute: cfg.tokensPerMinute,

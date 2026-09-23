@@ -8,6 +8,7 @@ import {
   buildPayload,
   buildSystemInstruction,
   parseNumbered,
+  withRegister,
   postWithRetry,
   translateWithBatching,
 } from './translation-core';
@@ -35,12 +36,34 @@ export async function translateWithOpenAi(
   cfg: OpenAiConfig,
   onProgress?: (done: number, total: number) => void,
 ): Promise<string[]> {
-  const system = buildSystemInstruction(req);
   const url = `${cfg.baseUrl.replace(/\/+$/, '')}/chat/completions`;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
   if (cfg.apiKey) headers['Authorization'] = `Bearer ${cfg.apiKey}`;
+
+  const ask = async (system: string, user: string): Promise<string> => {
+    const res = await postWithRetry(
+      url,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model: cfg.model,
+          temperature: 0,
+          max_tokens: 16,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
+        }),
+      },
+      'OpenAI-compatible',
+    );
+    const data: any = await res.json();
+    return String(data?.choices?.[0]?.message?.content ?? '');
+  };
+  const system = buildSystemInstruction(await withRegister(req, texts, ask));
   const limits: TranslationLimits = {
     maxTokensPerRequest: cfg.maxTokensPerRequest,
     tokensPerMinute: cfg.tokensPerMinute,

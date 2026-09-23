@@ -27,6 +27,9 @@ export interface TranslationRequest {
   /** ISO 639-1 target code. */
   targetLanguage: string;
   context: TranslationContext;
+  /** The second-person form to address characters with, detected once per run.
+   *  Unset, a model picks per segment and mixes the two inside one scene. */
+  register?: string;
 }
 
 /** Ceiling on the output reservation of a single request, when an engine names
@@ -193,6 +196,107 @@ export function isUnknownLanguageCode(iso: string | null | undefined): boolean {
   return !iso || iso === 'und' || iso === 'xx';
 }
 
+/** The pronouns of a language that distinguishes them. Naming the actual words
+ *  is what makes the instruction land: phrased abstractly it measured as ignored. */
+const SECOND_PERSON: Record<string, { informal: string; formal: string }> = {
+  fr: { informal: 'tu', formal: 'vous' },
+  de: { informal: 'du', formal: 'Sie' },
+  es: { informal: 'tú', formal: 'usted' },
+  it: { informal: 'tu', formal: 'Lei' },
+  pt: { informal: 'tu', formal: 'você' },
+  nl: { informal: 'je', formal: 'u' },
+  ru: { informal: 'ты', formal: 'вы' },
+};
+
+/** Whether asking the engine for a register is worth a request at all. */
+export function hasRegisterChoice(targetLanguage: string): boolean {
+  return targetLanguage in SECOND_PERSON;
+}
+
+/** One cheap call that reads a sample of the dialogue and names the register the
+ *  speakers use. The model judges this well; what it will not do is hold to its
+ *  own answer, so the answer has to come back as an instruction. */
+export function buildRegisterProbe(
+  req: TranslationRequest,
+  sample: string[],
+): { system: string; user: string } | null {
+  const forms = SECOND_PERSON[req.targetLanguage];
+  if (!forms) return null;
+  return {
+    system: `These are subtitles from a ${req.context.mediaType === 'series' ? 'series' : 'film'} being translated into ${languageName(req.targetLanguage)}. Judging from how the characters speak to each other, answer with exactly one word, "${forms.informal}" or "${forms.formal}", naming the second-person form they would use. Answer with that word alone.`,
+    user: sample.join('\n'),
+  };
+}
+
+/** The probe's answer, or null when it did not name one of the two forms. */
+export function parseRegister(
+  answer: string,
+  targetLanguage: string,
+): string | null {
+  const forms = SECOND_PERSON[targetLanguage];
+  if (!forms) return null;
+  const words: string[] = answer.toLowerCase().match(/[\p{L}]+/gu) ?? [];
+  for (const form of [forms.informal, forms.formal]) {
+    if (words.includes(form.toLowerCase())) return form;
+  }
+  return null;
+}
+
+/** Unbroken runs of dialogue taken from a few points in the file. Every Nth cue
+ *  would cover the film evenly but read as strangers talking, which is exactly
+ *  what the probe is trying to judge. */
+export function registerSample(
+  texts: string[],
+  windows = 3,
+  perWindow = 12,
+): string[] {
+  if (texts.length <= windows * perWindow) return texts;
+  const out: string[] = [];
+  for (let w = 0; w < windows; w++) {
+    const start = Math.floor(((w + 1) * texts.length) / (windows + 1));
+    out.push(...texts.slice(start, start + perWindow), '');
+  }
+  return out;
+}
+
+/**
+ * Resolve the register once for the whole run. The engines judge it well from a
+ * sample of the dialogue, but will not hold to their own answer across segments,
+ * so it comes back as an instruction rather than as a hint.
+ */
+export async function withRegister(
+  req: TranslationRequest,
+  texts: string[],
+  ask: (system: string, user: string) => Promise<string>,
+): Promise<TranslationRequest> {
+  if (req.register || !hasRegisterChoice(req.targetLanguage)) return req;
+  const probe = buildRegisterProbe(req, registerSample(texts));
+  if (!probe) return req;
+  try {
+    const register = parseRegister(
+      await ask(probe.system, probe.user),
+      req.targetLanguage,
+    );
+    if (!register) {
+      log.warn('Register probe named neither form; leaving it to each segment');
+      return req;
+    }
+    log.log(`Register for ${req.targetLanguage}: "${register}"`);
+    return { ...req, register };
+  } catch (err) {
+    // One failed probe must not cost the translation itself.
+    log.warn(`Register probe failed, continuing without it: ${String(err)}`);
+    return req;
+  }
+}
+
+function registerInstruction(req: TranslationRequest): string {
+  const forms = SECOND_PERSON[req.targetLanguage];
+  if (!forms || !req.register) return '';
+  const other = req.register === forms.informal ? forms.formal : forms.informal;
+  return ` Address the characters with "${req.register}" throughout, never "${other}", set phrases included.`;
+}
+
 function languageName(iso: string): string {
   if (isUnknownLanguageCode(iso)) return 'the original language';
   return APP_LANGUAGES.find((l) => l.isoCode === iso)?.name ?? iso;
@@ -219,11 +323,14 @@ export function buildSystemInstruction(req: TranslationRequest): string {
   const synopsis = context.overview?.trim()
     ? ` Synopsis: ${context.overview.trim().slice(0, 300)}`
     : '';
+  const register = registerInstruction(req);
   return [
-    `You are a professional subtitle translator. Translate the subtitle segments from ${languageName(req.sourceLanguage)} to ${languageName(req.targetLanguage)}.${contextLine}${synopsis}`,
+    `You are a professional subtitle translator. Translate the subtitle segments from ${languageName(req.sourceLanguage)} to ${languageName(req.targetLanguage)}.${contextLine}${synopsis}${register}`,
     'Each input segment is introduced by a line "#N#" where N is its number.',
     'Return every translation introduced by the same "#N#" line, in the same order, using the exact same set of numbers.',
-    'Preserve line breaks within a segment. Keep proper nouns and names. Keep it concise and natural for on-screen subtitles.',
+    'A segment may run across several lines: translate it as one whole sentence, never line by line.',
+    'The translation must be no longer in characters than the source segment, so it can be read in the same time. Shorten the wording if needed.',
+    'Keep proper nouns and names. Keep it concise and natural for on-screen subtitles.',
     'Output only the numbered translations — no notes, no explanations, no code fences.',
   ].join('\n');
 }
