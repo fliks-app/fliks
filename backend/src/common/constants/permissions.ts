@@ -8,6 +8,7 @@ export const PERMISSIONS = [
   'media.edit',
   'media.delete',
   'media.grab',
+  'livetv.read',
   'requests.create',
   'requests.manage',
   'subtitles.manage',
@@ -21,10 +22,10 @@ export type Permission = (typeof PERMISSIONS)[number];
 /** Default permission sets for seeded roles. */
 export const DEFAULT_ROLES = {
   Admin: [...PERMISSIONS] as string[],
-  // Minimal viewer role: browse the library and submit requests for
-  // missing titles. Admin-side actions (create/edit/grab/delete,
+  // Minimal viewer role: browse the library, watch Live TV and submit
+  // requests for missing titles. Admin-side actions (create/edit/grab/delete,
   // manage subs/requests, settings access, user admin) are intentionally
   // off — an admin promotes per-user as needed.
-  User: ['media.read', 'requests.create'],
-  Readonly: ['media.read'],
+  User: ['media.read', 'livetv.read', 'requests.create'],
+  Readonly: ['media.read', 'livetv.read'],
 };

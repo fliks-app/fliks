@@ -154,6 +154,7 @@
     "media.edit": "Edit media",
     "media.delete": "Delete media",
     "media.grab": "Download releases",
+    "livetv.read": "Watch Live TV",
     "requests.create": "Create requests",
     "requests.manage": "Manage requests",
     "subtitles.manage": "Manage subtitles",

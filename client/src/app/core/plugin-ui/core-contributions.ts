@@ -16,7 +16,7 @@ export const CORE_NAV_CONTRIBUTIONS: readonly UiContribution[] = [
   { id: 'core.home', slot: 'nav.main', weight: 100, labelKey: 'nav.home', icon: 'home', action: { kind: 'route', path: '/' } },
   { id: 'core.search', slot: 'nav.main', weight: 200, labelKey: 'search.title', icon: 'search', action: { kind: 'route', path: '/search' } },
   { id: 'core.my_profile', slot: 'nav.main', weight: 300, labelKey: 'nav.my_profile', icon: 'user-round', when: [not('isTv')], action: { kind: 'action', actionId: 'nav.my-profile' } },
-  { id: 'core.live_tv', slot: 'nav.main', weight: 900, labelKey: 'liveTv.title', icon: 'tv', when: ['liveTv'], action: { kind: 'route', path: '/live-tv' } },
+  { id: 'core.live_tv', slot: 'nav.main', weight: 900, labelKey: 'liveTv.title', icon: 'tv', when: ['hasPermission:livetv.read', 'liveTv'], action: { kind: 'route', path: '/live-tv' } },
   { id: 'core.playlists', slot: 'nav.main', weight: 2000, labelKey: 'nav.playlists', icon: 'list-video', action: { kind: 'route', path: '/playlists' } },
   { id: 'core.downloads', slot: 'nav.main', weight: 2100, labelKey: 'downloads.title', shortLabelKey: 'nav.downloads', icon: 'download', when: [not('isTv')], action: { kind: 'route', path: '/downloads' } },
   { id: 'core.history', slot: 'nav.main', weight: 2200, labelKey: 'nav.history', icon: 'history', action: { kind: 'route', path: '/history' } },

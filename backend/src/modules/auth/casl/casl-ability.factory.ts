@@ -80,10 +80,6 @@ export class CaslAbilityFactory {
     can(Action.Update, Playlist);
     can(Action.Delete, Playlist);
 
-    // Watching Live TV is open to everyone; which channels a user sees is decided
-    // per user in the lineup, and configuring any of it needs Settings.
-    can(Action.Read, LiveTvChannel);
-
     // --- media ---
     if (perms.has('media.read')) {
       can(Action.Read, Media);
@@ -97,6 +93,11 @@ export class CaslAbilityFactory {
     if (perms.has('media.edit')) can(Action.Update, Media);
     if (perms.has('media.delete')) can(Action.Delete, Media);
     if (perms.has('media.grab')) can(Action.Grab, Media);
+
+    // --- live tv ---
+    // Which channels a user sees within that is decided per user in the
+    // lineup (group restrictions), and configuring any of it needs Settings.
+    if (perms.has('livetv.read')) can(Action.Read, LiveTvChannel);
 
     // --- read-only acquisition-progress access for users who can add/request media ---
     if (perms.has('media.create') || perms.has('requests.create')) {

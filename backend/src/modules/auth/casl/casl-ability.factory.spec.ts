@@ -3,6 +3,7 @@ import { Action } from './actions.enum';
 import type { User } from '../../users/entities/user.entity';
 import { User as UserEntity } from '../../users/entities/user.entity';
 import { Role } from '../../roles/entities/role.entity';
+import { LiveTvChannel } from '../../livetv/entities/livetv-channel.entity';
 
 function fakeUser(permissions: string[], isAdmin = false): User {
   // `User.permissions` is a getter that overrides to `['manage:all']` when `isAdmin` — mirror
@@ -73,5 +74,24 @@ describe('CaslAbilityFactory: users and roles are separate permissions', () => {
     const ability = factory.createForUser(fakeUser(['media.read']));
     expect(ability.can(Action.Read, Role)).toBe(false);
     expect(ability.can(Action.Manage, UserEntity)).toBe(false);
+  });
+});
+
+describe('CaslAbilityFactory: livetv.read gates Live TV reads', () => {
+  const factory = new CaslAbilityFactory();
+
+  it('denies reading Live TV channels to a role without livetv.read', () => {
+    const ability = factory.createForUser(fakeUser(['media.read']));
+    expect(ability.can(Action.Read, LiveTvChannel)).toBe(false);
+  });
+
+  it('grants reading Live TV channels to a role holding livetv.read', () => {
+    const ability = factory.createForUser(fakeUser(['livetv.read']));
+    expect(ability.can(Action.Read, LiveTvChannel)).toBe(true);
+  });
+
+  it('manage:all still grants it regardless of livetv.read', () => {
+    const ability = factory.createForUser(fakeUser([], true));
+    expect(ability.can(Action.Read, LiveTvChannel)).toBe(true);
   });
 });
