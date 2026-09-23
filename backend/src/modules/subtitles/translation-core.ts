@@ -290,11 +290,18 @@ export async function withRegister(
   }
 }
 
+/** A default, not an override. Forcing the register outright made the model
+ *  tutoyer a judge; leaving it out let polite set phrases drag a whole intimate
+ *  scene back to the formal form. This wording measured best on both. */
 function registerInstruction(req: TranslationRequest): string {
   const forms = SECOND_PERSON[req.targetLanguage];
   if (!forms || !req.register) return '';
   const other = req.register === forms.informal ? forms.formal : forms.informal;
-  return ` Address the characters with "${req.register}" throughout, never "${other}", set phrases included.`;
+  return (
+    ` These speakers use "${req.register}" with each other. Use it wherever a line` +
+    ` gives no clear indication of its own, set phrases included; where a line` +
+    ` clearly shows a different relationship, use "${other}" instead.`
+  );
 }
 
 function languageName(iso: string): string {
