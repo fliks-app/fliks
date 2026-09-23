@@ -2450,6 +2450,7 @@
     "403": "Accesso negato",
     "404": "Risorsa non trovata",
     "409": "Conflitto — la risorsa esiste già",
+    "already_running": "Questa operazione è già in corso.",
     "media_already_in_playlist": "Questo file multimediale è già nella playlist",
     "playlist_add_target_required": "Nessun file multimediale, episodio o stagione indicato",
     "422": "Dati non validi",
@@ -2761,6 +2762,7 @@
     "error_account_expired": "L’abbonamento di {{sourceName}} è scaduto.",
     "jobs": {
       "sourceRefresh": "Aggiornamento delle fonti TV in diretta",
+      "sourceSync": "Sincronizzazione sorgente Live TV",
       "guideRefresh": "Aggiornamento della guida TV in diretta",
       "guidePrune": "Pulizia della guida TV in diretta"
     },

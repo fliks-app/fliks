@@ -2450,6 +2450,7 @@
     "403": "Zugriff verweigert",
     "404": "Ressource nicht gefunden",
     "409": "Konflikt — die Ressource existiert bereits",
+    "already_running": "Das läuft bereits.",
     "media_already_in_playlist": "Dieses Medium ist bereits in der Liste",
     "playlist_add_target_required": "Kein Medium, keine Folge oder Staffel angegeben",
     "422": "Ungültige Daten",
@@ -2761,6 +2762,7 @@
     "error_account_expired": "Das Abonnement von {{sourceName}} ist abgelaufen.",
     "jobs": {
       "sourceRefresh": "Aktualisierung der Live-TV-Quellen",
+      "sourceSync": "Live-TV-Quelle synchronisieren",
       "guideRefresh": "Aktualisierung des Live-TV-Programmführers",
       "guidePrune": "Bereinigung des Live-TV-Programmführers"
     },

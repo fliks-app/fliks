@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   Controller,
   Get,
   Post,
@@ -273,6 +274,11 @@ export class MediaController {
 
     this.eventsService.emit({ type: 'metadata.started', mediaId: id, title });
     const activityId = `Identify:${id}`;
+    // A second click would otherwise run the same walk twice and let the
+    // first to finish retire the other's row.
+    if (this.activityRegistry.has(activityId)) {
+      throw new ConflictException('errors.already_running');
+    }
     this.activityRegistry.upsertRunning(
       activityId,
       'Identify',
@@ -318,6 +324,9 @@ export class MediaController {
 
     this.eventsService.emit({ type: 'metadata.started', mediaId: id, title });
     const activityId = `RefreshMetadata:${id}`;
+    if (this.activityRegistry.has(activityId)) {
+      throw new ConflictException('errors.already_running');
+    }
     this.activityRegistry.upsertRunning(
       activityId,
       'RefreshMetadata',
@@ -366,6 +375,9 @@ export class MediaController {
 
     this.eventsService.emit({ type: 'metadata.started', mediaId: id, title });
     const activityId = `RefreshEpisodeMetadata:${episodeId}`;
+    if (this.activityRegistry.has(activityId)) {
+      throw new ConflictException('errors.already_running');
+    }
     this.activityRegistry.upsertRunning(
       activityId,
       'RefreshEpisodeMetadata',
@@ -417,6 +429,9 @@ export class MediaController {
     });
 
     const activityId = `Rescan:${id}`;
+    if (this.activityRegistry.has(activityId)) {
+      throw new ConflictException('errors.already_running');
+    }
     this.activityRegistry.upsertRunning(
       activityId,
       'Rescan',

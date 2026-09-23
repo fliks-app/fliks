@@ -2476,6 +2476,7 @@
     "403": "Access forbidden",
     "404": "Resource not found",
     "409": "Conflict — the resource already exists",
+    "already_running": "This is already running.",
     "media_already_in_playlist": "This media is already in the playlist",
     "playlist_add_target_required": "No media, episode or season specified",
     "422": "Invalid data",
@@ -2788,6 +2789,7 @@
     "error_account_expired": "The {{sourceName}} subscription has expired.",
     "jobs": {
       "sourceRefresh": "Live TV source refresh",
+      "sourceSync": "Live TV source sync",
       "guideRefresh": "Live TV guide refresh",
       "guidePrune": "Live TV guide cleanup"
     },

@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import 'reflect-metadata';
 import { Logger } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
@@ -124,6 +125,11 @@ function setup(sourceOverrides: Record<string, unknown> = {}) {
     expireVanishedGroups: jest.fn().mockResolvedValue([]),
   };
   const notifications = { dispatch: jest.fn().mockResolvedValue(undefined) };
+  const activityRegistry = {
+    has: jest.fn().mockReturnValue(false),
+    upsertRunning: jest.fn(),
+    remove: jest.fn(),
+  };
 
   const service = new LiveTvSourcesService(
     sourceRepo as never,
@@ -134,6 +140,7 @@ function setup(sourceOverrides: Record<string, unknown> = {}) {
     logos as never,
     access as never,
     notifications as never,
+    activityRegistry as never,
   );
 
   return {
@@ -148,11 +155,30 @@ function setup(sourceOverrides: Record<string, unknown> = {}) {
     logos,
     access,
     notifications,
+    activityRegistry,
   };
 }
 
 describe('LiveTvSourcesService.sync (m3u)', () => {
   afterEach(() => jest.resetAllMocks());
+
+  // The hourly cron and an admin's manual sync both come through here.
+  it('refuses a source another run already holds, and releases it after', async () => {
+    mockedLiveTvGet.mockResolvedValue({ status: 304, data: '', headers: {} });
+    const { service, activityRegistry } = setup({ playlistEtag: '"abc"', channelCount: 3 });
+
+    activityRegistry.has.mockReturnValueOnce(true);
+    await expect(service.sync(1)).rejects.toThrow(ConflictException);
+    expect(activityRegistry.upsertRunning).not.toHaveBeenCalled();
+
+    activityRegistry.has.mockReturnValue(false);
+    await service.sync(1);
+    expect(activityRegistry.upsertRunning).toHaveBeenCalledWith(
+      'LiveTvSourceSync:1',
+      'LiveTvSourceSync',
+    );
+    expect(activityRegistry.remove).toHaveBeenCalledWith('LiveTvSourceSync:1');
+  });
 
   it('records a no-op success on a 304 and touches nothing else', async () => {
     mockedLiveTvGet.mockResolvedValue({ status: 304, data: '', headers: {} });

@@ -91,6 +91,12 @@ export class ActivityRegistryService {
     );
   }
 
+  /** Whether this exact work is already registered, so a producer can refuse a
+   *  duplicate rather than run it twice. */
+  has(id: string): boolean {
+    return this.entries.has(id);
+  }
+
   remove(id: string): void {
     if (!this.entries.delete(id)) return;
     this.scheduleBroadcast();
