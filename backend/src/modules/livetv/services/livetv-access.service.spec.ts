@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { LiveTvAccessService } from './livetv-access.service';
-import type { User } from '../../users/entities/user.entity';
+import { User } from '../../users/entities/user.entity';
 
 function makeUser(id: number, permissions: string[] = []): User {
   return { id, permissions } as User;
@@ -65,9 +65,24 @@ describe('LiveTvAccessService', () => {
         getRawMany: jest.fn(() => Promise.resolve(accessRows)),
       })),
     };
+    // Mirrors a real TypeORM repo closely enough to exercise `User.permissions`,
+    // a getter reading `userRole?.permissions`: it only attaches `userRole` when
+    // the caller actually asked for that relation, same as a real find() would.
     const userRepo = {
-      find: jest.fn(() =>
-        Promise.resolve(users.map((u) => ({ permissions: [], ...u }))),
+      find: jest.fn((opts?: { relations?: string[] }) =>
+        Promise.resolve(
+          users.map((u) => {
+            const withRole = opts?.relations?.includes('userRole') ?? false;
+            return Object.assign(new User(), {
+              id: u.id,
+              username: u.username,
+              userRole:
+                withRole && u.permissions
+                  ? { permissions: u.permissions }
+                  : null,
+            });
+          }),
+        ),
       ),
     };
     settingsService = {
@@ -93,6 +108,15 @@ describe('LiveTvAccessService', () => {
     settings[RESTRICTED_KEY] = JSON.stringify(['XXX', 'Adult']);
     grants = [{ groupName: 'Adult' }];
     expect(await service.deniedGroups(makeUser(2))).toEqual(['XXX']);
+  });
+
+  it('a grant on one spelling covers every case/whitespace variant of the same group', async () => {
+    // Simulates data written before the fold fix landed: the same group listed
+    // twice under different casing, exactly what a provider's inconsistent
+    // group-title spelling produces via `groupCounts`.
+    settings[RESTRICTED_KEY] = JSON.stringify(['XXX', 'xxx']);
+    grants = [{ groupName: 'XXX' }];
+    expect(await service.deniedGroups(makeUser(2))).toEqual([]);
   });
 
   it('never denies an administrator, by either permission spelling', async () => {
@@ -163,6 +187,17 @@ describe('LiveTvAccessService', () => {
       expect(await service.restrictedGroups()).toEqual(['XXX FR']);
       expect(await service.exemptGroups()).toEqual([]);
     });
+
+    it('keeps an exemption when the provider resends the same group under a different case', async () => {
+      await service.restrictAdultGroups(['XXX FR']);
+      await service.setRestrictedGroups([]);
+      expect(await service.exemptGroups()).toEqual(['XXX FR']);
+
+      // The next sync sees the provider's casing changed, not a new group.
+      const afterSync = await service.restrictAdultGroups(['xxx fr']);
+      expect(afterSync).toEqual([]);
+      expect(await service.restrictedGroups()).toEqual([]);
+    });
   });
 
   describe('expireVanishedGroups', () => {
@@ -188,6 +223,27 @@ describe('LiveTvAccessService', () => {
       expect(settings[VANISHED_KEY]).toBeUndefined();
     });
 
+    it('does not start a vanish timer when only the case/whitespace changed', async () => {
+      settings[RESTRICTED_KEY] = JSON.stringify(['News']);
+
+      await service.expireVanishedGroups([' NEWS ']);
+
+      expect(settings[VANISHED_KEY]).toBeUndefined();
+    });
+
+    it('never expires a group in the same pass that first notices its absence, even with zero grace days', async () => {
+      settings[RESTRICTED_KEY] = JSON.stringify(['News']);
+      settings[STALE_DAYS_KEY] = '0';
+
+      const firstPass = await service.expireVanishedGroups([]);
+      expect(firstPass).toEqual([]);
+      expect(await service.restrictedGroups()).toEqual(['News']);
+
+      // The following sweep is what actually expires it, one full pass later.
+      const secondPass = await service.expireVanishedGroups([]);
+      expect(secondPass).toEqual(['News']);
+    });
+
     it('clears the absence timer the moment a group reappears, keeping its grants', async () => {
       settings[RESTRICTED_KEY] = JSON.stringify(['News']);
       settings[VANISHED_KEY] = JSON.stringify({ News: isoDaysAgo(5) });
@@ -204,13 +260,16 @@ describe('LiveTvAccessService', () => {
       ]);
     });
 
-    it('drops grants, the restricted entry and the exempt entry once the grace period elapses', async () => {
+    it('drops grants and the restricted entry once the grace period elapses, but keeps an exemption', async () => {
       const warn = jest
         .spyOn(Logger.prototype, 'warn')
         .mockImplementation(() => undefined);
       settings[RESTRICTED_KEY] = JSON.stringify(['News', 'XXX FR']);
-      settings[EXEMPT_KEY] = JSON.stringify(['News']);
-      settings[VANISHED_KEY] = JSON.stringify({ News: isoDaysAgo(8) });
+      settings[EXEMPT_KEY] = JSON.stringify(['Kids']);
+      settings[VANISHED_KEY] = JSON.stringify({
+        News: isoDaysAgo(8),
+        Kids: isoDaysAgo(8),
+      });
       settings[STALE_DAYS_KEY] = '7';
       users = [{ id: 1, username: 'alice' }];
       accessRows = [
@@ -218,16 +277,21 @@ describe('LiveTvAccessService', () => {
         { userId: 1, groupName: 'XXX FR' },
       ];
 
-      // 'XXX FR' is still live: only 'News' is under test here.
+      // 'XXX FR' is still live: 'News' (restricted) and 'Kids' (merely
+      // exempted) are the two under test.
       const expired = await service.expireVanishedGroups(['XXX FR']);
 
       expect(expired).toEqual(['News']);
       expect(await service.restrictedGroups()).toEqual(['XXX FR']);
-      expect(await service.exemptGroups()).toEqual([]);
+      // An exemption is a deliberate admin decision, not the automatic-restriction
+      // default: it outlives the group's absence instead of quietly resetting.
+      expect(await service.exemptGroups()).toEqual(['Kids']);
       expect(await service.listUserAccess()).toEqual([
         { id: 1, username: 'alice', groups: ['XXX FR'], hasFullAccess: false },
       ]);
-      expect(parseVanished(settings[VANISHED_KEY])).toEqual({});
+      expect(Object.keys(parseVanished(settings[VANISHED_KEY]))).toEqual([
+        'Kids',
+      ]);
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('News'));
     });
 
@@ -246,6 +310,34 @@ describe('LiveTvAccessService', () => {
       const expired = await service.expireVanishedGroups(['News']);
       expect(expired).toEqual([]);
       expect(accessRepo.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('a re-affirmed group is not silently expired later', () => {
+    it('clears the vanish timer when an admin restricts the group again', async () => {
+      settings[RESTRICTED_KEY] = JSON.stringify(['News']);
+      settings[VANISHED_KEY] = JSON.stringify({ News: isoDaysAgo(8) });
+      settings[STALE_DAYS_KEY] = '7';
+
+      await service.setRestrictedGroups(['News']);
+
+      // Still absent at the next sweep: without the reset, the day-8 timestamp
+      // would already be past the 7-day grace and expire it immediately.
+      const expired = await service.expireVanishedGroups([]);
+      expect(expired).toEqual([]);
+      expect(await service.restrictedGroups()).toEqual(['News']);
+    });
+
+    it('clears the vanish timer when an admin grants access to the group', async () => {
+      settings[RESTRICTED_KEY] = JSON.stringify(['News']);
+      settings[VANISHED_KEY] = JSON.stringify({ News: isoDaysAgo(8) });
+      settings[STALE_DAYS_KEY] = '7';
+
+      await service.setGrants(1, ['News']);
+
+      const expired = await service.expireVanishedGroups([]);
+      expect(expired).toEqual([]);
+      expect(await service.restrictedGroups()).toEqual(['News']);
     });
   });
 
@@ -304,6 +396,16 @@ describe('LiveTvAccessService', () => {
         { id: 1, username: 'alice', groups: ['XXX FR'], hasFullAccess: false },
         { id: 2, username: 'bob', groups: ['XXX FR'], hasFullAccess: false },
       ]);
+    });
+
+    it('does not drop grants when the same restricted group is resubmitted under a different case', async () => {
+      settings[RESTRICTED_KEY] = JSON.stringify(['XXX FR']);
+      accessRows = [{ userId: 1, groupName: 'XXX FR' }];
+
+      await service.setRestrictedGroups(['xxx fr']);
+
+      expect(accessRepo.delete).not.toHaveBeenCalled();
+      expect(await service.restrictedGroups()).toEqual(['xxx fr']);
     });
 
     it('does not resurrect a dropped grant when the group is restricted again later', async () => {
@@ -424,6 +526,17 @@ describe('LiveTvAccessService', () => {
       expect(result).toEqual({ groups: ['News', 'XXX FR'], ignored: [] });
       expect(accessRepo.save).toHaveBeenCalledWith([
         { user: { id: 1 }, groupName: 'News' },
+        { user: { id: 1 }, groupName: 'XXX FR' },
+      ]);
+    });
+
+    it('matches a requested grant to the restricted group regardless of case, and stores its spelling', async () => {
+      settings[RESTRICTED_KEY] = JSON.stringify(['XXX FR']);
+
+      const result = await service.setGrants(1, ['xxx fr']);
+
+      expect(result).toEqual({ groups: ['XXX FR'], ignored: [] });
+      expect(accessRepo.save).toHaveBeenCalledWith([
         { user: { id: 1 }, groupName: 'XXX FR' },
       ]);
     });

@@ -10,13 +10,7 @@ import { BulkUpdateChannelsDto } from '../dto/bulk-update-channels.dto';
 import { UpdateLiveTvChannelDto } from '../dto/update-livetv-channel.dto';
 import { SetChannelPrefsDto } from '../dto/set-channel-prefs.dto';
 import { normalizeGroupName } from '../parsing/group-name';
-
-/** Comparison key for a restriction match: whitespace and case both fold,
- *  since a provider spells the same category inconsistently across entries.
- *  Accents are left alone; folding them risks merging two languages' names. */
-function foldGroupKey(name: string): string {
-  return name.trim().toLowerCase();
-}
+import { foldGroupKey } from '../parsing/group-key';
 
 function isGroupDenied(groupName: string | null, denied: readonly string[]): boolean {
   if (!groupName || !denied.length) return false;
