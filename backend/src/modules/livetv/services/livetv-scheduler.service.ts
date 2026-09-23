@@ -41,21 +41,21 @@ export class LiveTvSchedulerService implements OnModuleInit {
         name: 'LiveTvSourceRefresh',
         cron: CronExpression.EVERY_HOUR,
         triggerable: true,
-        labelKey: 'livetv.jobs.sourceRefresh',
+        labelKey: 'liveTv.jobs.sourceRefresh',
         run: () => this.refreshSources(),
       },
       {
         name: 'LiveTvGuideRefresh',
         cron: CronExpression.EVERY_HOUR,
         triggerable: true,
-        labelKey: 'livetv.jobs.guideRefresh',
+        labelKey: 'liveTv.jobs.guideRefresh',
         run: () => this.refreshGuides(),
       },
       {
         name: 'LiveTvGuidePrune',
         cron: CronExpression.EVERY_DAY_AT_1AM,
         triggerable: true,
-        labelKey: 'livetv.jobs.guidePrune',
+        labelKey: 'liveTv.jobs.guidePrune',
         run: () => this.pruneGuide(),
       },
     ]);
@@ -70,7 +70,13 @@ export class LiveTvSchedulerService implements OnModuleInit {
     const sources = await this.sources.findAll();
     for (const source of sources) {
       if (!source.enabled || !this.isDue(source.lastSyncAt, source.refreshIntervalHours)) continue;
-      await this.sources.sync(source.id);
+      try {
+        await this.sources.sync(source.id);
+      } catch (err) {
+        // One source refusing (an admin is already syncing it) or failing must
+        // not cost the sweep the sources after it.
+        this.log.warn(`Source #${source.id} sync skipped: ${String(err)}`);
+      }
     }
   }
 

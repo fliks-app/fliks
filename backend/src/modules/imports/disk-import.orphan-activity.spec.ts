@@ -51,18 +51,32 @@ describe('orphan batch activity', () => {
     await service.relinkOrphansBatch([group('A Folder'), group('B Folder')], null);
 
     expect(pending).toHaveBeenCalledTimes(2);
+    const parents = new Set<string>();
     for (const [id, type, subject, parentId] of pending.mock.calls) {
       expect(type).toBe(ORPHAN_IMPORT_PROGRESS);
-      expect(parentId).toBe(ORPHAN_IMPORT_PROGRESS);
+      expect(parentId).toMatch(new RegExp(`^${ORPHAN_IMPORT_PROGRESS}:`));
       expect(id).toContain(subject?.title);
+      parents.add(parentId as string);
     }
+    expect(parents.size).toBe(1);
+  });
+
+  it('gives each batch its own parent row', async () => {
+    const pending = jest.spyOn(registry, 'upsertPending');
+    await service.relinkOrphansBatch([group('A Folder')], null);
+    await service.relinkOrphansBatch([group('A Folder')], null);
+
+    const [first, second] = pending.mock.calls.map(([, , , parentId]) => parentId);
+    expect(first).not.toBe(second);
   });
 
   it('reports the group the batch is on against the total', async () => {
     const running = jest.spyOn(registry, 'upsertRunning');
     await service.relinkOrphansBatch([group('A Folder'), group('B Folder')], null);
 
-    const batchRows = running.mock.calls.filter(([id]) => id === ORPHAN_IMPORT_PROGRESS);
+    const batchRows = running.mock.calls.filter(
+      ([id, , , current]) => current !== undefined && !id.includes('Folder'),
+    );
     expect(batchRows.map(([, , , current, total]) => [current, total])).toEqual([
       [1, 2],
       [2, 2],

@@ -2450,6 +2450,7 @@
     "403": "Acceso denegado",
     "404": "Recurso no encontrado",
     "409": "Conflicto — el recurso ya existe",
+    "already_running": "Esto ya se está ejecutando.",
     "media_already_in_playlist": "Este medio ya está en la lista",
     "playlist_add_target_required": "No se indicó ningún medio, episodio o temporada",
     "422": "Datos no válidos",
@@ -2761,6 +2762,7 @@
     "error_account_expired": "La suscripción de {{sourceName}} ha caducado.",
     "jobs": {
       "sourceRefresh": "Actualización de fuentes de TV en directo",
+      "sourceSync": "Sincronización de fuente de Live TV",
       "guideRefresh": "Actualización de la guía de TV en directo",
       "guidePrune": "Limpieza de la guía de TV en directo"
     },

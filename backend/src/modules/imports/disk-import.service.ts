@@ -10,6 +10,7 @@ import { IsNull, Repository } from 'typeorm';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
+import { randomUUID } from 'crypto';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 import { sanitizeFsPath } from '../../common/utils/fs-path.util';
 import { Media } from '../media/entities/media.entity';
@@ -364,8 +365,11 @@ export class DiskImportService {
     let linked = 0;
     let failed = 0;
     let index = 0;
+    // Per call: two batches running at once would otherwise share a parent row,
+    // and the first to finish would retire the other's.
+    const batchId = `${ORPHAN_IMPORT_PROGRESS}:${randomUUID()}`;
     const activityId = (item: RelinkOrphansDto) =>
-      `${ORPHAN_IMPORT_PROGRESS}:${item.type}:${item.folderName}`;
+      `${batchId}:${item.type}:${item.folderName}`;
     // The whole backlog up front: this loop runs for hours on a large series, and
     // the queued groups are the part the user can't otherwise see.
     for (const item of items) {
@@ -373,7 +377,7 @@ export class DiskImportService {
         activityId(item),
         ORPHAN_IMPORT_PROGRESS,
         { title: item.folderName },
-        ORPHAN_IMPORT_PROGRESS,
+        batchId,
       );
     }
     try {
@@ -386,7 +390,7 @@ export class DiskImportService {
           message: item.folderName,
         });
         this.activityRegistry.upsertRunning(
-          ORPHAN_IMPORT_PROGRESS,
+          batchId,
           ORPHAN_IMPORT_PROGRESS,
           { title: item.folderName },
           index,
@@ -398,7 +402,7 @@ export class DiskImportService {
           { title: item.folderName },
           undefined,
           undefined,
-          ORPHAN_IMPORT_PROGRESS,
+          batchId,
         );
         try {
           const res = await this.relinkOrphans(item, userId);
@@ -416,7 +420,7 @@ export class DiskImportService {
       }
     } finally {
       for (const item of items) this.activityRegistry.remove(activityId(item));
-      this.activityRegistry.remove(ORPHAN_IMPORT_PROGRESS);
+      this.activityRegistry.remove(batchId);
     }
     this.events.emit({
       type: 'task.progress',

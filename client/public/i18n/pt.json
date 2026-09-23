@@ -2450,6 +2450,7 @@
     "403": "Acesso proibido",
     "404": "Recurso não encontrado",
     "409": "Conflito — o recurso já existe",
+    "already_running": "Isto já está em execução.",
     "media_already_in_playlist": "Este media já está na lista",
     "playlist_add_target_required": "Nenhum media, episódio ou temporada indicado",
     "422": "Dados inválidos",
@@ -2761,6 +2762,7 @@
     "error_account_expired": "A subscrição de {{sourceName}} expirou.",
     "jobs": {
       "sourceRefresh": "Atualização das fontes de TV em direto",
+      "sourceSync": "Sincronização de fonte de Live TV",
       "guideRefresh": "Atualização do guia de TV em direto",
       "guidePrune": "Limpeza do guia de TV em direto"
     },

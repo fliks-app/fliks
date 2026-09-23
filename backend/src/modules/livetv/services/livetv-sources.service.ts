@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { LiveTvSource } from '../entities/livetv-source.entity';
@@ -19,6 +25,7 @@ import { LiveTvLogoService } from './livetv-logo.service';
 import { LiveTvAccessService } from './livetv-access.service';
 import { SettingsService } from '../../settings/settings.service';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { ActivityRegistryService } from '../../scheduler/activity-registry.service';
 import {
   assertNotInternal,
   liveTvGet,
@@ -136,6 +143,7 @@ export class LiveTvSourcesService {
     private readonly logos: LiveTvLogoService,
     private readonly access: LiveTvAccessService,
     private readonly notifications: NotificationsService,
+    private readonly activityRegistry: ActivityRegistryService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -308,7 +316,22 @@ export class LiveTvSourcesService {
   // Sync
   // ---------------------------------------------------------------------------
 
+  /** The hourly cron and an admin's manual sync both land here, so without this
+   *  one source could be resynced twice at once, in a non-deterministic order. */
   async sync(sourceId: number): Promise<LiveTvSyncResult> {
+    const activityId = `LiveTvSourceSync:${sourceId}`;
+    if (this.activityRegistry.has(activityId)) {
+      throw new ConflictException('errors.already_running');
+    }
+    this.activityRegistry.upsertRunning(activityId, 'LiveTvSourceSync');
+    try {
+      return await this.runSync(sourceId);
+    } finally {
+      this.activityRegistry.remove(activityId);
+    }
+  }
+
+  private async runSync(sourceId: number): Promise<LiveTvSyncResult> {
     const source = await this.findOne(sourceId);
 
     let fetched: FetchedLineup | { notModified: true };

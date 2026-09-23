@@ -134,6 +134,7 @@ export class SystemStatusComponent implements OnInit, OnDestroy {
     { name: 'SubtitleSync', label: 'system.cmd_subtitle_sync' },
     { name: 'ImportSeerrRequests', label: 'system.cmd_import_seerr_requests' },
     { name: 'ImportWatchHistory', label: 'system.cmd_import_watch_history' },
+    { name: 'LiveTvSourceSync', label: 'liveTv.jobs.sourceSync' },
   ]);
 
   constructor() {
