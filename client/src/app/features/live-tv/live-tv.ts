@@ -6,6 +6,7 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { LiveTvApiService, OnNowEntry, OnNowPage } from '../../core/services/api/livetv-api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
+import { LiveTvGroupLabelPipe } from '../../core/pipes/live-tv-group-label.pipe';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
@@ -33,6 +34,7 @@ const QUERY_DEBOUNCE_MS = 350;
     FormsModule,
     TranslatePipe,
     ResolveUrlPipe,
+    LiveTvGroupLabelPipe,
     CachedSrcDirective,
     TvSectionDirective,
     TvRowDirective,

@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { HttpClient } from '@angular/common/http';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { LiveTvAccessComponent } from './live-tv-access';
 import {
@@ -55,13 +55,16 @@ function createFixture(opts: {
   get: ReturnType<typeof vi.fn>;
   put: ReturnType<typeof vi.fn>;
 } {
+  // Mutated by the default `put` below so a post-toggle refetch (the fix under
+  // test) sees the server's new state instead of the fixture's original one.
+  let restrictedState = opts.restricted ?? [];
   const get =
     opts.get ??
     vi.fn((url: string) => {
       if (url === '/api/livetv/admin/channels') return of({ items: [], total: 0, groups: GROUPS });
       if (url === '/api/livetv/admin/access/restricted-groups')
         return of({
-          groups: asRestrictedGroups(opts.restricted ?? [], opts.vanishing ?? {}),
+          groups: asRestrictedGroups(restrictedState, opts.vanishing ?? {}),
           exempt: opts.exempt ?? [],
         });
       if (url === '/api/livetv/admin/access/users')
@@ -70,9 +73,11 @@ function createFixture(opts: {
     });
   const put =
     opts.put ??
-    vi.fn((url: string, body: { groups: string[] }) =>
-      url.includes('/users/') ? of({ groups: body.groups, ignored: [] }) : of(body.groups),
-    );
+    vi.fn((url: string, body: { groups: string[] }) => {
+      if (url.includes('/users/')) return of({ groups: body.groups, ignored: [] });
+      restrictedState = body.groups;
+      return of(body.groups);
+    });
 
   TestBed.configureTestingModule({
     providers: [
@@ -127,7 +132,7 @@ describe('LiveTvAccessComponent - restricted groups', () => {
     });
   });
 
-  it('drops the unrestricted group from the users table without an extra request', async () => {
+  it('drops the unrestricted group from the users table without re-fetching the user list', async () => {
     const { component, get } = await ready({
       restricted: ['News', 'XXX Uncut'],
       users: [
@@ -143,7 +148,7 @@ describe('LiveTvAccessComponent - restricted groups', () => {
       { id: 7, username: 'alice', groups: [], hasFullAccess: false },
       { id: 8, username: 'bob', groups: ['XXX Uncut'], hasFullAccess: false },
     ]);
-    expect(get).not.toHaveBeenCalled();
+    expect(get).not.toHaveBeenCalledWith('/api/livetv/admin/access/users');
   });
 });
 
@@ -213,6 +218,32 @@ describe('LiveTvAccessComponent - exempt groups', () => {
     const { component } = await ready({ restricted: ['News'] });
 
     expect(component.exempt()).toEqual(new Set());
+  });
+});
+
+describe('LiveTvAccessComponent - state refresh after a toggle', () => {
+  it('picks up the exempt badge the server sets when unrestricting an auto-matched group', async () => {
+    let restrictedGroupsCalls = 0;
+    const get = vi.fn((url: string) => {
+      if (url === '/api/livetv/admin/channels') return of({ items: [], total: 0, groups: GROUPS });
+      if (url === '/api/livetv/admin/access/restricted-groups') {
+        restrictedGroupsCalls++;
+        // First load: still restricted. After the toggle: the server moved it to exempt.
+        return restrictedGroupsCalls === 1
+          ? of({ groups: asRestrictedGroups(['XXX Uncut']), exempt: [] })
+          : of({ groups: asRestrictedGroups([]), exempt: ['XXX Uncut'] });
+      }
+      if (url === '/api/livetv/admin/access/users') return of([]);
+      throw new Error(`unexpected GET ${url}`);
+    });
+    const { component } = await ready({ get });
+    expect(component.exempt().has('XXX Uncut')).toBe(false);
+
+    await component.toggleRestricted('XXX Uncut');
+
+    expect(component.restricted().has('XXX Uncut')).toBe(false);
+    expect(component.exempt().has('XXX Uncut')).toBe(true);
+    expect(get).toHaveBeenCalledWith('/api/livetv/admin/access/restricted-groups');
   });
 });
 
@@ -304,5 +335,35 @@ describe('LiveTvAccessComponent - per-user grants', () => {
 
     expect(component.users()[0].groups).toEqual(['News']);
     expect(toast.toasts().at(-1)).toMatchObject({ type: 'warning' });
+  });
+});
+
+describe('LiveTvAccessComponent - load failure', () => {
+  it('keeps the error state distinct from a genuinely empty screen', async () => {
+    const get = vi.fn(() => throwError(() => new Error('network down')));
+    const { component } = await ready({ get });
+
+    expect(component.loadError()).toBe(true);
+    expect(component.loading()).toBe(false);
+  });
+
+  it('clears the error and reloads on retry', async () => {
+    let shouldFail = true;
+    const get = vi.fn((url: string) => {
+      if (shouldFail) return throwError(() => new Error('network down'));
+      if (url === '/api/livetv/admin/channels') return of({ items: [], total: 0, groups: GROUPS });
+      if (url === '/api/livetv/admin/access/restricted-groups')
+        return of({ groups: asRestrictedGroups(['News']), exempt: [] });
+      if (url === '/api/livetv/admin/access/users') return of([]);
+      throw new Error(`unexpected GET ${url}`);
+    });
+    const { component } = await ready({ get });
+    expect(component.loadError()).toBe(true);
+
+    shouldFail = false;
+    await component.load();
+
+    expect(component.loadError()).toBe(false);
+    expect(component.restricted()).toEqual(new Set(['News']));
   });
 });

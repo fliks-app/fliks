@@ -25,6 +25,7 @@ export class LiveTvSettingsComponent implements OnInit {
   private readonly toast = inject(ToastService);
 
   readonly loading = signal(true);
+  readonly loadError = signal(false);
   readonly saving = signal(false);
 
   readonly guideDaysPast = signal(2);
@@ -42,6 +43,12 @@ export class LiveTvSettingsComponent implements OnInit {
   private readonly dirtyKeys = new Set<string>();
 
   async ngOnInit() {
+    await this.load();
+  }
+
+  async load(): Promise<void> {
+    this.loading.set(true);
+    this.loadError.set(false);
     try {
       const map = await this.api.getAll();
       this.guideDaysPast.set(parseIntOr(map['livetv_guide_days_past'], 2));
@@ -54,8 +61,11 @@ export class LiveTvSettingsComponent implements OnInit {
       this.slotReleaseSeconds.set(parseIntOr(map['livetv_slot_release_seconds'], 15));
       const rawFastZap = map['livetv_fast_zap'];
       this.fastZap.set(rawFastZap === 'true' || rawFastZap === 'false' ? rawFastZap : 'auto');
-    } catch { /* interceptor */ }
-    this.loading.set(false);
+    } catch {
+      this.loadError.set(true);
+    } finally {
+      this.loading.set(false);
+    }
   }
 
   touch(key: string): void {

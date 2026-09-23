@@ -18,7 +18,7 @@
         [class.btn-ghost]="groupFilter() !== g.name"
         (click)="onGroupPick(g.name)"
       >
-        <span class="truncate">{{ g.name }}</span>
+        <span class="truncate">{{ g.name | liveTvGroupLabel }}</span>
         <span class="badge badge-ghost badge-xs">{{ g.count }}</span>
       </button>
     }
@@ -168,7 +168,7 @@
                     <span class="badge badge-error badge-sm ml-1">{{ row.consecutiveFailures }}</span>
                   }
                 </td>
-                <td class="text-sm text-base-content/60">{{ row.groupName }}</td>
+                <td class="text-sm text-base-content/60">{{ row.groupName | liveTvGroupLabel }}</td>
                 <td class="text-sm text-base-content/60">{{ matchLabel(row.guideMatchKind) }}</td>
                 <td class="text-center">
                   <app-enabled-switch

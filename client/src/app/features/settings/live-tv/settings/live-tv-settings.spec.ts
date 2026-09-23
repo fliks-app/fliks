@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { HttpClient } from '@angular/common/http';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { LiveTvSettingsComponent } from './live-tv-settings';
 
@@ -145,5 +145,50 @@ describe('LiveTvSettingsComponent - fast zap tri-state', () => {
     const { component } = await ready({});
     component.setFastZap('false');
     expect(changesOf(component)).toEqual({ livetv_fast_zap: 'false' });
+  });
+});
+
+describe('LiveTvSettingsComponent - load failure', () => {
+  function readyMaybeFailing(shouldFail: () => boolean, map: Record<string, string | null> = {}) {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTranslateService({
+          lang: 'en',
+          loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
+        }),
+        {
+          provide: HttpClient,
+          useValue: {
+            get: () => (shouldFail() ? throwError(() => new Error('network down')) : of(map)),
+            put: vi.fn(() => of({ ok: true })),
+          } as unknown as HttpClient,
+        },
+      ],
+    });
+    const fixture = TestBed.createComponent(LiveTvSettingsComponent);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('keeps the error state distinct from a genuinely empty screen', async () => {
+    const fixture = readyMaybeFailing(() => true);
+    await fixture.whenStable();
+
+    expect(fixture.componentInstance.loadError()).toBe(true);
+    expect(fixture.componentInstance.loading()).toBe(false);
+  });
+
+  it('clears the error and reloads on retry', async () => {
+    let fail = true;
+    const fixture = readyMaybeFailing(() => fail, { livetv_probe_seconds: '9' });
+    await fixture.whenStable();
+    expect(fixture.componentInstance.loadError()).toBe(true);
+
+    fail = false;
+    await fixture.componentInstance.load();
+
+    expect(fixture.componentInstance.loadError()).toBe(false);
+    expect(fixture.componentInstance.probeSeconds()).toBe(9);
   });
 });
