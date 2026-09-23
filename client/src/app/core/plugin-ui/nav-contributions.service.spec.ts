@@ -23,6 +23,7 @@ function createService(opts: {
   isTv?: boolean;
   liveTv?: boolean;
   userId?: number | null;
+  hasPermission?: boolean;
 } = {}) {
   TestBed.configureTestingModule({
     providers: [
@@ -35,7 +36,7 @@ function createService(opts: {
         provide: AuthService,
         useValue: {
           user: () => (opts.userId === null ? null : { id: opts.userId ?? 1, isAdmin: !!opts.isAdmin }),
-          hasPermission: () => false,
+          hasPermission: () => opts.hasPermission ?? true,
         },
       },
       { provide: TvService, useValue: { isTv: () => !!opts.isTv } },
@@ -49,6 +50,11 @@ function createService(opts: {
 describe('NavContributionsService', () => {
   it('hides Live TV everywhere while the user has no channel', () => {
     const svc = createService({ liveTv: false });
+    expect(svc.mainItems().map((i) => i.id)).not.toContain('core.live_tv');
+  });
+
+  it('hides Live TV for a user without the livetv.read permission', () => {
+    const svc = createService({ hasPermission: false });
     expect(svc.mainItems().map((i) => i.id)).not.toContain('core.live_tv');
   });
 

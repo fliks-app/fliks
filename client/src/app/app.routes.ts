@@ -242,6 +242,7 @@ export const routes: Routes = [
       },
       {
         path: 'live-tv',
+        canActivate: [permissionGuard('livetv.read', '/')],
         loadComponent: () =>
           import('./features/live-tv/live-tv').then((m) => m.LiveTvComponent),
         data: { titleKey: 'liveTv.title' },

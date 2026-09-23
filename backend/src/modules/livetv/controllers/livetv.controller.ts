@@ -89,7 +89,7 @@ export class LivetvController {
     private readonly images: ImageService,
   ) {}
 
-  /** Read is open to everyone, so "configured" means this user's lineup is not empty. */
+  /** "Configured" means this user's lineup is not empty, not just that they can read it. */
   @Get('status')
   @CheckPolicies((ability) => ability.can(Action.Read, LiveTvChannel))
   async status(@CurrentUser() user: User): Promise<{ available: boolean }> {
