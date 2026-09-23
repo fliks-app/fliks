@@ -25,6 +25,8 @@ import {
 import { EmbeddedSubtitleService } from '../subtitles/embedded-subtitle.service';
 import { SubtitleOcrService } from '../subtitles/subtitle-ocr.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
+import { ActivityRegistryService } from './activity-registry.service';
+import { buildMediaProgressSubject } from '../../common/utils/media-progress-subject.util';
 
 interface SearchOpts {
   minScore: number;
@@ -58,6 +60,7 @@ export class SubtitleSchedulerService {
     private readonly embeddedSubtitle: EmbeddedSubtitleService,
     private readonly subtitleOcr: SubtitleOcrService,
     private readonly mediaServers: MediaServersService,
+    private readonly activityRegistry: ActivityRegistryService,
   ) {}
 
   /** Every 6 hours, run the search/upgrade passes whose configured interval
@@ -146,10 +149,27 @@ export class SubtitleSchedulerService {
   ): Promise<string[]> {
     if (this.filesSearching.has(file.id)) return [];
     this.filesSearching.add(file.id);
+    const activityId = `SubtitleSearch:${file.id}`;
+    this.activityRegistry.upsertRunning(
+      activityId,
+      'SubtitleSearch',
+      buildMediaProgressSubject(
+        media,
+        file.episode
+          ? {
+              id: file.episode.id,
+              seasonNumber: file.episode.season?.seasonNumber,
+              episodeNumber: file.episode.episodeNumber,
+              title: file.episode.title,
+            }
+          : null,
+      ),
+    );
     try {
       return await this.doSearchMissingForFile(media, file, opts, skipEmbeddedDetect);
     } finally {
       this.filesSearching.delete(file.id);
+      this.activityRegistry.remove(activityId);
     }
   }
 

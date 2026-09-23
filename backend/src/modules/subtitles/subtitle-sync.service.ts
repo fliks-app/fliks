@@ -17,8 +17,13 @@ import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 import { NotificationsService } from '../notifications/notifications.service';
 import { FfprobeService } from './ffprobe.service';
 import { EventsService } from '../scheduler/events.service';
+import { ActivityRegistryService } from '../scheduler/activity-registry.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
 import { resolveSubtitleAbsolutePath } from './subtitle-path.util';
+import {
+  buildMediaProgressSubject,
+  type MediaProgressSubject,
+} from '../../common/utils/media-progress-subject.util';
 
 const execFileAsync = promisify(execFile);
 const SYNC_TOOL_TIMEOUT_MS = 900_000;
@@ -49,6 +54,7 @@ export interface SyncQueueItem {
   queuedAt: number;
   startedAt?: number;
   completedAt?: number;
+  subject: MediaProgressSubject;
 }
 
 @Injectable()
@@ -67,6 +73,7 @@ export class SubtitleSyncService {
     private readonly notifications: NotificationsService,
     private readonly ffprobe: FfprobeService,
     private readonly events: EventsService,
+    private readonly activityRegistry: ActivityRegistryService,
     private readonly mediaServers: MediaServersService,
   ) {}
 
@@ -80,7 +87,10 @@ export class SubtitleSyncService {
     id: number,
     options: SyncOptions = {},
   ): Promise<SyncQueueItem> {
-    const subtitle = await this.repo.findOne({ where: { id } });
+    const subtitle = await this.repo.findOne({
+      where: { id },
+      relations: ['media', 'episode', 'episode.season'],
+    });
     if (!subtitle) throw new NotFoundException(`SubtitleFile #${id} not found`);
     if (subtitle.providerType === SubtitleProviderType.EMBEDDED) {
       throw new BadRequestException('Cannot sync an embedded subtitle');
@@ -98,12 +108,29 @@ export class SubtitleSyncService {
     );
     if (existing) return existing;
 
+    const subject = buildMediaProgressSubject(
+      subtitle.media,
+      subtitle.episode
+        ? {
+            id: subtitle.episode.id,
+            seasonNumber: subtitle.episode.season?.seasonNumber,
+            episodeNumber: subtitle.episode.episodeNumber,
+            title: subtitle.episode.title,
+          }
+        : null,
+    );
     const item: SyncQueueItem = {
       subtitleId: id,
       status: 'queued',
       queuedAt: Date.now(),
+      subject,
     };
     this.queue.push(item);
+    this.activityRegistry.upsertPending(
+      `SubtitleSync:${id}`,
+      'SubtitleSync',
+      subject,
+    );
     this.logger.log(
       `Sync queued for subtitle #${id} (queue size: ${this.queue.filter((q) => q.status === 'queued').length})`,
     );
@@ -130,6 +157,11 @@ export class SubtitleSyncService {
     this.running++;
     next.status = 'running';
     next.startedAt = Date.now();
+    this.activityRegistry.upsertRunning(
+      `SubtitleSync:${next.subtitleId}`,
+      'SubtitleSync',
+      next.subject,
+    );
     this.logger.log(`Sync starting for subtitle #${next.subtitleId}`);
 
     try {
@@ -148,6 +180,7 @@ export class SubtitleSyncService {
     } finally {
       next.completedAt = Date.now();
       this.running--;
+      this.activityRegistry.remove(`SubtitleSync:${next.subtitleId}`);
       void this.processQueue(options);
     }
   }

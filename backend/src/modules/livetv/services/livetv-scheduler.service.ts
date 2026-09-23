@@ -1,6 +1,11 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { ScheduledJobRegistry } from '../../scheduler/scheduled-job-registry.service';
+import { Command } from '../../scheduler/entities/command.entity';
+import { EventsService } from '../../scheduler/events.service';
+import { runAuditedCommand } from '../../scheduler/command-audit.util';
 import { LiveTvSourcesService } from './livetv-sources.service';
 import { LiveTvGuideService } from './livetv-guide.service';
 
@@ -19,7 +24,16 @@ export class LiveTvSchedulerService implements OnModuleInit {
     private readonly jobRegistry: ScheduledJobRegistry,
     private readonly sources: LiveTvSourcesService,
     private readonly guide: LiveTvGuideService,
+    @InjectRepository(Command)
+    private readonly commandRepo: Repository<Command>,
+    private readonly events: EventsService,
   ) {}
+
+  /** Cron-only wrapper: a manual trigger already gets its own Command row
+   *  around `run()` (see {@link ScheduledJobRegistry}), so wrapping it here too would double it. */
+  private runAudited(name: string, fn: () => Promise<void>): Promise<void> {
+    return runAuditedCommand(this.commandRepo, this.events, name, 'scheduled', fn, this.log);
+  }
 
   onModuleInit(): void {
     this.jobRegistry.register([
@@ -48,6 +62,10 @@ export class LiveTvSchedulerService implements OnModuleInit {
   }
 
   @Cron(CronExpression.EVERY_HOUR)
+  async refreshSourcesCron(): Promise<void> {
+    return this.runAudited('LiveTvSourceRefresh', () => this.refreshSources());
+  }
+
   async refreshSources(): Promise<void> {
     const sources = await this.sources.findAll();
     for (const source of sources) {
@@ -57,6 +75,10 @@ export class LiveTvSchedulerService implements OnModuleInit {
   }
 
   @Cron(CronExpression.EVERY_HOUR)
+  async refreshGuidesCron(): Promise<void> {
+    return this.runAudited('LiveTvGuideRefresh', () => this.refreshGuides());
+  }
+
   async refreshGuides(): Promise<void> {
     const guideSources = await this.guide.findAll();
     for (const guideSource of guideSources) {
@@ -71,6 +93,10 @@ export class LiveTvSchedulerService implements OnModuleInit {
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_1AM)
+  async pruneGuideCron(): Promise<void> {
+    return this.runAudited('LiveTvGuidePrune', () => this.pruneGuide());
+  }
+
   async pruneGuide(): Promise<void> {
     const { removed } = await this.guide.prune();
     this.log.log(`Guide prune: removed ${removed} stale program(s)`);
