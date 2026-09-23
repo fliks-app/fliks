@@ -31,6 +31,17 @@ const GEMINI_OUTPUT_CEILING = 65_536;
  *  one call is the point; the cap only keeps the bar moving a few times. */
 const GEMINI_BATCH_CEILING = 500;
 
+/** Thinking is on by default and its tokens come out of maxOutputTokens, which
+ *  starves the translation and empties the response. The two families take
+ *  different values for the lowest setting. */
+function thinkingConfig(model: string): Record<string, unknown> {
+  if (/^gemini-3/.test(model))
+    return { thinkingConfig: { thinkingLevel: 'low' } };
+  if (/^gemma-4/.test(model))
+    return { thinkingConfig: { thinkingLevel: 'minimal' } };
+  return {};
+}
+
 /** Translate cue texts via the native Gemini generateContent endpoint. */
 export async function translateWithGemini(
   texts: string[],
@@ -50,9 +61,7 @@ export async function translateWithGemini(
           generationConfig: {
             temperature: 0,
             maxOutputTokens: 16,
-            ...(/^gemini-3/.test(cfg.model)
-              ? { thinkingConfig: { thinkingLevel: 'low' } }
-              : {}),
+            ...thinkingConfig(cfg.model),
           },
         }),
       },
@@ -85,11 +94,7 @@ export async function translateWithGemini(
           generationConfig: {
             temperature: 0.3,
             maxOutputTokens,
-            // Thinking is on by default and its tokens come out of the same
-            // budget, which starves the translation and empties the response.
-            ...(/^gemini-3/.test(cfg.model)
-              ? { thinkingConfig: { thinkingLevel: 'low' } }
-              : {}),
+            ...thinkingConfig(cfg.model),
           },
         }),
       },
