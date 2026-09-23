@@ -24,6 +24,9 @@ export interface SubtitleFileRow {
   syncOffset?: number;
   streamIndex?: number | null;
   codec?: string | null;
+  /** Percentage of a translation the server is running right now. Absent once
+   *  the run ends, or when no process is translating this row. */
+  translationProgress?: number | null;
   /** For TRANSLATED subs: the provider name/engine/model that produced them. */
   translationProviderName?: string | null;
   translationEngine?: string | null;

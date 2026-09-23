@@ -459,7 +459,13 @@ export class MediaController {
     @CurrentUser() user: User,
   ) {
     await this.assertMediaAccessible(id, user);
-    return this.subtitlesService.getSubtitlesForMedia(id);
+    const subtitles = await this.subtitlesService.getSubtitlesForMedia(id);
+    // A client that opens the list mid-run would otherwise wait for the next
+    // progress event, which is minutes away on a slow engine.
+    for (const sub of subtitles) {
+      sub.translationProgress = this.subtitleTranslation.progressFor(sub.id);
+    }
+    return subtitles;
   }
 
   @Get(':id/subtitles/search')

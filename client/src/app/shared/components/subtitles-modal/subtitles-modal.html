@@ -136,16 +136,16 @@
                     <td class="text-center text-sm">
                       @if (sub.status === 'processing') {
                         @if (
-                          sub.providerType === 'translated' && translationPercent(sub.id) !== null
+                          sub.providerType === 'translated' && translationPercent(sub) !== null
                         ) {
                           <span class="inline-flex items-center gap-1 align-middle">
                             <progress
                               class="progress progress-warning w-16 h-1.5 align-middle"
-                              [value]="translationPercent(sub.id)"
+                              [value]="translationPercent(sub)"
                               max="100"
                             ></progress>
                             <span class="tabular-nums text-[10px]"
-                              >{{ translationPercent(sub.id) }}%</span
+                              >{{ translationPercent(sub) }}%</span
                             >
                           </span>
                         } @else {

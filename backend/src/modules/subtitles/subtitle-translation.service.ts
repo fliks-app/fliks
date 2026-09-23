@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -45,9 +46,13 @@ const execFileAsync = promisify(execFile);
  * on, plus a per-batch progress event.
  */
 @Injectable()
-export class SubtitleTranslationService {
+export class SubtitleTranslationService implements OnModuleInit {
   private readonly log = new Logger(SubtitleTranslationService.name);
   private readonly tmpDir = '/tmp/fliks-translate';
+
+  /** Percentage of each run in flight, keyed by placeholder id. Lives here, not
+   *  in the row: it is only true while this process is the one translating. */
+  private readonly progress = new Map<number, number>();
 
   // Translation fans out to a paid API; a library-wide sweep could claim a
   // PROCESSING row for every subtitle at once. This gate bounds how many runs
@@ -67,6 +72,30 @@ export class SubtitleTranslationService {
     private readonly translationFactory: TranslationProviderFactory,
   ) {
     fs.mkdir(this.tmpDir, { recursive: true }).catch(() => {});
+  }
+
+  /** No run survives a restart, so any PROCESSING row is a corpse: it would
+   *  otherwise claim its language forever and hide its own actions. */
+  async onModuleInit(): Promise<void> {
+    const { affected } = await this.repo.update(
+      {
+        providerType: SubtitleProviderType.TRANSLATED,
+        status: SubtitleStatus.PROCESSING,
+      },
+      {
+        status: SubtitleStatus.FAILED,
+        errorMessage: 'activity.subtitle_error_interrupted',
+      },
+    );
+    if (affected) {
+      this.log.warn(`Marked ${affected} interrupted translation run(s) as failed`);
+    }
+  }
+
+  /** Progress of the runs this process is executing, so a client that joins
+   *  mid-run reads it from the list instead of waiting for the next event. */
+  progressFor(subtitleId: number): number | undefined {
+    return this.progress.get(subtitleId);
   }
 
   /**
@@ -211,11 +240,13 @@ export class SubtitleTranslationService {
         },
       };
       const onProgress = (done: number, total: number) => {
+        const progress = total > 0 ? Math.round((done / total) * 100) : 0;
+        this.progress.set(placeholderId, progress);
         this.events.emit({
           type: 'subtitle.translation_progress',
           subtitleId: placeholderId,
           mediaId: source.mediaId,
-          progress: total > 0 ? Math.round((done / total) * 100) : 0,
+          progress,
         });
       };
       const texts = cues.map((c) => c.text);
@@ -313,6 +344,7 @@ export class SubtitleTranslationService {
         errorMessage: String(err).slice(0, 2000),
       });
     } finally {
+      this.progress.delete(placeholderId);
       await this.cleanupTemp(base);
     }
   }
