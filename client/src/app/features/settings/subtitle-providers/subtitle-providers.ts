@@ -465,6 +465,7 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
           {
             type: draft.implementation,
             settings: this.trimSettings(draft.settings),
+            ...(draft.id == null ? {} : { id: draft.id }),
           },
         ),
       );
