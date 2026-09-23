@@ -643,10 +643,12 @@ export class SubtitlesModalComponent {
     } else if (event.type === 'subtitle.downloaded') {
       if (!automatic) {
         this.toast.success(
-          this.translate.instant('sse.subtitle_downloaded', {
-            title: event['title'] ?? '',
-            lang: event['language'] ?? '',
-          }),
+          this.translate.instant(
+            event['reason'] === 'translation'
+              ? 'sse.subtitle_translated'
+              : 'sse.subtitle_downloaded',
+            { title: event['title'] ?? '', lang: event['language'] ?? '' },
+          ),
         );
       }
       void this.loadSubtitles(mediaId);

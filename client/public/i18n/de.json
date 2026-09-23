@@ -135,6 +135,7 @@
   "sse": {
     "subtitle_synced": "Untertitel erfolgreich synchronisiert.",
     "subtitle_downloaded": "Untertitel heruntergeladen: {{title}} [{{lang}}]",
+    "subtitle_translated": "Untertitel übersetzt: {{title}} [{{lang}}]",
     "subtitle_failed": "OCR-Extraktion fehlgeschlagen ({{lang}})",
     "translation_failed": "Übersetzung fehlgeschlagen ({{lang}})",
     "rescan_started": "Scan läuft: {{title}}",

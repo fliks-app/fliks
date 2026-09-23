@@ -140,6 +140,7 @@
   "sse": {
     "subtitle_synced": "Sous-titre synchronisé avec succès.",
     "subtitle_downloaded": "Sous-titre téléchargé : {{title}} [{{lang}}]",
+    "subtitle_translated": "Sous-titre traduit : {{title}} [{{lang}}]",
     "subtitle_failed": "Échec de l'extraction OCR ({{lang}})",
     "translation_failed": "Échec de la traduction ({{lang}})",
     "rescan_started": "Scan en cours : {{title}}",

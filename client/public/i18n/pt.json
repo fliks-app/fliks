@@ -135,6 +135,7 @@
   "sse": {
     "subtitle_synced": "Legenda sincronizada com sucesso.",
     "subtitle_downloaded": "Legenda transferida: {{title}} [{{lang}}]",
+    "subtitle_translated": "Legenda traduzida: {{title}} [{{lang}}]",
     "subtitle_failed": "Falha na extração OCR ({{lang}})",
     "translation_failed": "Falha na tradução ({{lang}})",
     "rescan_started": "Análise em curso: {{title}}",
