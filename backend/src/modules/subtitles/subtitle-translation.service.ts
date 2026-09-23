@@ -340,6 +340,7 @@ export class SubtitleTranslationService implements OnModuleInit {
         language: target,
         provider: provider.name,
         subtitleId: placeholderId,
+        reason: 'translation',
       });
     } catch (err) {
       this.log.warn(

@@ -35,6 +35,9 @@ export type SseEvent =
       /** Set for translation results so a client can target the finished row
        *  (e.g. add just that track) instead of a blind refetch. */
       subtitleId?: number;
+      /** 'translation' when the file was produced rather than fetched, so the
+       *  client does not announce a download. Same vocabulary as the failure. */
+      reason?: string;
       /** Unattended scheduler run — client skips the confirmation toast */
       automatic?: boolean;
     }
