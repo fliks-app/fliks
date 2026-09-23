@@ -4,6 +4,10 @@ import { APP_LANGUAGES } from '../../common/constants/app-languages';
  *  retries — lets the caller surface a specific message to the client. */
 export class TranslationRateLimitError extends Error {}
 
+/** Thrown when an engine rejects a request as too large (context window or a
+ *  per-minute token allowance) — the caller halves the batch and retries. */
+export class TranslationPayloadTooLargeError extends Error {}
+
 /** Minimal media context injected into the LLM prompt to improve translation. */
 export interface TranslationContext {
   title?: string | null;
@@ -22,17 +26,38 @@ export interface TranslationRequest {
   context: TranslationContext;
 }
 
-/** Cues sent per LLM request. Large batches keep the total request count (and
- *  thus quota consumption) low; a response that outgrows the output-token budget
- *  re-maps as a mismatch and is split, so this stays safe. */
+/** Upper bound on cues per LLM request. The token budget usually cuts a batch
+ *  shorter; this only stops a file of very short cues from making huge batches. */
 export const BATCH_SIZE = 150;
+/** Ceiling on the output reservation of a single request. */
 export const MAX_OUTPUT_TOKENS = 8192;
+/** Chars per token — close enough for Latin subtitle text, and being off only
+ *  shifts where a batch is cut. */
+const CHARS_PER_TOKEN = 4;
+/** The "#N#\n" line that introduces each segment, both ways. */
+const MARKER_TOKENS = 4;
 /** Per-request cap so a stalled connection can't hold a translation slot open. */
 const REQUEST_TIMEOUT_MS = 120_000;
 /** Attempts (1 initial + retries) for transient failures before giving up. */
 const MAX_ATTEMPTS = 4;
 /** Statuses worth retrying with backoff (rate limits + transient server errors). */
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+
+export function estimateTokens(text: string): number {
+  return Math.ceil(text.length / CHARS_PER_TOKEN);
+}
+
+/** Per-provider token budget. Both values default to 0, meaning "no cap beyond
+ *  the engine's own" — they exist so a free tier with a small per-minute
+ *  allowance can be made to fit. */
+export interface TranslationLimits {
+  /** Prompt + reserved output ceiling for one request. */
+  maxTokensPerRequest: number;
+  /** Token allowance per minute, shared by every run against `key`. */
+  tokensPerMinute: number;
+  /** Endpoint + model the `tokensPerMinute` allowance belongs to. */
+  key: string;
+}
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -50,7 +75,9 @@ function parseRetryDelayMs(body: string): number | null {
     const details = JSON.parse(body)?.error?.details;
     if (Array.isArray(details)) {
       for (const d of details) {
-        const m = typeof d?.retryDelay === 'string' && d.retryDelay.match(/^([\d.]+)s$/);
+        const m =
+          typeof d?.retryDelay === 'string' &&
+          d.retryDelay.match(/^([\d.]+)s$/);
         if (m) return Math.round(parseFloat(m[1]) * 1000);
       }
     }
@@ -73,7 +100,10 @@ export async function postWithRetry(
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     let res: Awaited<ReturnType<typeof fetch>>;
     try {
-      res = await fetch(url, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+      res = await fetch(url, {
+        ...init,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
     } catch (err) {
       if (attempt >= MAX_ATTEMPTS) {
         throw new Error(
@@ -87,13 +117,25 @@ export async function postWithRetry(
     if (res.ok) return res;
 
     const errText = await res.text().catch(() => '');
+    if (
+      res.status === 413 ||
+      /context[_ ]length|too large|max_tokens/i.test(errText)
+    ) {
+      throw new TranslationPayloadTooLargeError(
+        `${engineLabel} rejected the request as too large: ${errText}`,
+      );
+    }
     if (RETRYABLE_STATUS.has(res.status) && attempt < MAX_ATTEMPTS) {
       const headerRetry = Number(res.headers.get('retry-after'));
       const suggested =
         parseRetryDelayMs(errText) ??
-        (Number.isFinite(headerRetry) && headerRetry > 0 ? headerRetry * 1000 : null);
+        (Number.isFinite(headerRetry) && headerRetry > 0
+          ? headerRetry * 1000
+          : null);
       // Honour the server's hint (capped) but never wait less than the backoff.
-      await sleep(Math.min(Math.max(suggested ?? 0, backoffDelay(attempt)), 60_000));
+      await sleep(
+        Math.min(Math.max(suggested ?? 0, backoffDelay(attempt)), 60_000),
+      );
       continue;
     }
     if (res.status === 429) {
@@ -132,10 +174,14 @@ export function buildSystemInstruction(req: TranslationRequest): string {
   const kind = context.mediaType === 'series' ? 'series' : 'movie';
   const bits: string[] = [];
   if (context.title) {
-    bits.push(`titled "${context.title}"${context.year ? ` (${context.year})` : ''}`);
+    bits.push(
+      `titled "${context.title}"${context.year ? ` (${context.year})` : ''}`,
+    );
   }
   if (context.genres?.length) bits.push(`genres: ${context.genres.join(', ')}`);
-  const contextLine = bits.length ? ` This is a ${kind} ${bits.join(', ')}.` : '';
+  const contextLine = bits.length
+    ? ` This is a ${kind} ${bits.join(', ')}.`
+    : '';
   const synopsis = context.overview?.trim()
     ? ` Synopsis: ${context.overview.trim().slice(0, 300)}`
     : '';
@@ -154,7 +200,10 @@ export function buildPayload(texts: string[]): string {
 
 /** Re-map a numbered LLM response back to an ordered array. Returns null when
  *  any segment is missing (truncated/garbled output) so the caller can split. */
-export function parseNumbered(response: string, count: number): string[] | null {
+export function parseNumbered(
+  response: string,
+  count: number,
+): string[] | null {
   const map = new Map<number, string[]>();
   let current: number | null = null;
   for (const line of response.replace(/\r\n/g, '\n').split('\n')) {
@@ -179,41 +228,151 @@ export function parseNumbered(response: string, count: number): string[] | null 
 }
 
 /** One batch call for an LLM engine: returns the translations in order, or null
- *  on a count mismatch so the batch can be split and retried. */
-export type BatchTranslator = (texts: string[]) => Promise<string[] | null>;
+ *  on a count mismatch so the batch can be split and retried. `maxOutputTokens`
+ *  is the reservation the engine should be told about for this batch. */
+export type BatchTranslator = (
+  texts: string[],
+  maxOutputTokens: number,
+) => Promise<string[] | null>;
+
+function promptTokens(texts: string[], systemTokens: number): number {
+  return texts.reduce(
+    (n, t) => n + estimateTokens(t) + MARKER_TOKENS,
+    systemTokens,
+  );
+}
+
+/**
+ * Output reservation for one batch. Sizing it from the batch instead of always
+ * asking for {@link MAX_OUTPUT_TOKENS} is what keeps a request inside a small
+ * per-minute allowance: providers bill the reservation, not the actual answer,
+ * so a flat 8192 alone overshoots an 8k/min tier on every single call.
+ */
+function reserveOutput(prompt: number, limits: TranslationLimits): number {
+  const room = limits.maxTokensPerRequest
+    ? limits.maxTokensPerRequest - prompt
+    : MAX_OUTPUT_TOKENS;
+  // Translations run longer than their source, so budget twice the prompt.
+  return Math.max(256, Math.min(MAX_OUTPUT_TOKENS, room, prompt * 2));
+}
+
+/** How many cues fit in one request under `maxTokensPerRequest`, prompt and
+ *  reservation together (hence the third). */
+function batchEnd(
+  texts: string[],
+  from: number,
+  systemTokens: number,
+  limits: TranslationLimits,
+): number {
+  const max = Math.min(from + BATCH_SIZE, texts.length);
+  if (!limits.maxTokensPerRequest) return max;
+  const budget = Math.max(1, (limits.maxTokensPerRequest - systemTokens) / 3);
+  let used = 0;
+  for (let i = from; i < max; i++) {
+    used += estimateTokens(texts[i]) + MARKER_TOKENS;
+    if (used > budget && i > from) return i;
+  }
+  return max;
+}
+
+// ponytail: fixed one-minute window per process, not a rolling one — a cluster
+// or a rolling budget would need the counter to live outside the process.
+const buckets = new Map<string, { start: number; used: number }>();
+
+/** Hold the request until `tokensPerMinute` has room, so a three-hour film
+ *  spreads over the allowance instead of failing halfway through. */
+async function reserveRate(
+  limits: TranslationLimits,
+  tokens: number,
+): Promise<void> {
+  if (!limits.tokensPerMinute) return;
+  for (;;) {
+    const now = Date.now();
+    const bucket = buckets.get(limits.key) ?? { start: now, used: 0 };
+    if (now - bucket.start >= 60_000) {
+      bucket.start = now;
+      bucket.used = 0;
+    }
+    if (bucket.used === 0 || bucket.used + tokens <= limits.tokensPerMinute) {
+      bucket.used += tokens;
+      buckets.set(limits.key, bucket);
+      return;
+    }
+    await sleep(bucket.start + 60_000 - now);
+  }
+}
 
 async function translateBatchWithSplit(
   texts: string[],
   callBatch: BatchTranslator,
+  systemTokens: number,
+  limits: TranslationLimits,
 ): Promise<string[]> {
   if (texts.length === 0) return [];
-  const result = await callBatch(texts);
+  const prompt = promptTokens(texts, systemTokens);
+  const output = reserveOutput(prompt, limits);
+  let result: string[] | null = null;
+  try {
+    await reserveRate(limits, prompt + output);
+    result = await callBatch(texts, output);
+  } catch (err) {
+    // Too large is the one failure a smaller batch can still recover from.
+    if (
+      !(err instanceof TranslationPayloadTooLargeError) ||
+      texts.length === 1
+    ) {
+      throw err;
+    }
+  }
   if (result && result.length === texts.length) return result;
   // A single segment that still won't map keeps its source text.
   if (texts.length === 1) return [texts[0]];
   const mid = Math.floor(texts.length / 2);
   const [left, right] = [
-    await translateBatchWithSplit(texts.slice(0, mid), callBatch),
-    await translateBatchWithSplit(texts.slice(mid), callBatch),
+    await translateBatchWithSplit(
+      texts.slice(0, mid),
+      callBatch,
+      systemTokens,
+      limits,
+    ),
+    await translateBatchWithSplit(
+      texts.slice(mid),
+      callBatch,
+      systemTokens,
+      limits,
+    ),
   ];
   return [...left, ...right];
 }
 
 /**
  * Translate cue texts through an LLM `callBatch`, preserving order and count.
- * Batches of {@link BATCH_SIZE}; a count mismatch splits the batch down to
- * single cues. `onProgress(done, total)` fires after each top-level batch.
+ * Batches are cut by {@link BATCH_SIZE} and by the provider's token budget; a
+ * count mismatch or a too-large rejection splits the batch down to single cues.
+ * `onProgress(done, total)` fires after each top-level batch.
  */
 export async function translateWithBatching(
   texts: string[],
   callBatch: BatchTranslator,
+  limits: TranslationLimits,
+  systemInstruction: string,
   onProgress?: (done: number, total: number) => void,
 ): Promise<string[]> {
+  const systemTokens = estimateTokens(systemInstruction);
   const out: string[] = [];
-  for (let i = 0; i < texts.length; i += BATCH_SIZE) {
-    const batch = texts.slice(i, i + BATCH_SIZE);
-    out.push(...(await translateBatchWithSplit(batch, callBatch)));
-    onProgress?.(Math.min(i + BATCH_SIZE, texts.length), texts.length);
+  let i = 0;
+  while (i < texts.length) {
+    const end = batchEnd(texts, i, systemTokens, limits);
+    out.push(
+      ...(await translateBatchWithSplit(
+        texts.slice(i, end),
+        callBatch,
+        systemTokens,
+        limits,
+      )),
+    );
+    i = end;
+    onProgress?.(i, texts.length);
   }
   return out;
 }

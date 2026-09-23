@@ -301,7 +301,7 @@ export class SubtitleTranslationService {
         title: media?.title ?? '',
         language: target,
         error: String(err),
-        ...(err instanceof TranslationRateLimitError ? { reason: 'rate_limit' } : {}),
+        reason: err instanceof TranslationRateLimitError ? 'rate_limit' : 'translation',
       });
       // Kept, not deleted: the row is the only trace of the run, and translation
       // is manual-only, so a FAILED one can't feed an automatic retry loop.

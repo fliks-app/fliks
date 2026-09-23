@@ -8,7 +8,9 @@ import type { TranslationEngine } from '../../../common/enums';
  * Gemini key, an OpenAI-compatible endpoint, a self-hosted LibreTranslate); the
  * user picks one at translate time. `settings` holds the engine-specific config
  * opaquely (gemini `{apiKey, model}`, openai `{baseUrl, apiKey, model}`,
- * libretranslate `{url, apiKey}`), mirroring {@link SubtitleProvider}.
+ * libretranslate `{url, apiKey}`), mirroring {@link SubtitleProvider}. The LLM
+ * engines also take `{maxTokensPerRequest, tokensPerMinute}` to fit a tier's
+ * token allowance.
  */
 @Entity('translation_providers')
 export class TranslationProvider extends BaseEntity {

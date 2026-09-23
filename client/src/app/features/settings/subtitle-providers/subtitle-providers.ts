@@ -163,6 +163,8 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   readonly trFormModel = signal(DEFAULT_TRANSLATION_MODEL);
   readonly trFormBaseUrl = signal('');
   readonly trFormUrl = signal('');
+  readonly trFormMaxTokensPerRequest = signal(0);
+  readonly trFormTokensPerMinute = signal(0);
   readonly trTestLoading = signal(false);
   readonly trTestResult = signal<{ ok: boolean; message: string } | null>(null);
 
@@ -256,6 +258,8 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     this.trFormModel.set(DEFAULT_TRANSLATION_MODEL);
     this.trFormBaseUrl.set('');
     this.trFormUrl.set('');
+    this.trFormMaxTokensPerRequest.set(0);
+    this.trFormTokensPerMinute.set(0);
     this.trTestResult.set(null);
     this.translationEditorDialog()?.nativeElement.showModal();
   }
@@ -271,6 +275,8 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     this.trFormModel.set(String(s['model'] ?? '') || DEFAULT_TRANSLATION_MODEL);
     this.trFormBaseUrl.set(String(s['baseUrl'] ?? ''));
     this.trFormUrl.set(String(s['url'] ?? ''));
+    this.trFormMaxTokensPerRequest.set(Number(s['maxTokensPerRequest'] ?? 0) || 0);
+    this.trFormTokensPerMinute.set(Number(s['tokensPerMinute'] ?? 0) || 0);
     this.trTestResult.set(null);
     this.translationEditorDialog()?.nativeElement.showModal();
   }
@@ -288,19 +294,25 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
 
   private buildTranslationSettings(): Record<string, unknown> {
     const engine = this.trFormEngine();
+    if (engine === 'libretranslate') {
+      return { url: this.trFormUrl().trim(), apiKey: this.trFormApiKey().trim() };
+    }
+    const budget = {
+      maxTokensPerRequest: Math.max(0, Number(this.trFormMaxTokensPerRequest()) || 0),
+      tokensPerMinute: Math.max(0, Number(this.trFormTokensPerMinute()) || 0),
+    };
     if (engine === 'openai') {
       return {
         baseUrl: this.trFormBaseUrl().trim(),
         apiKey: this.trFormApiKey().trim(),
         model: this.trFormModel().trim(),
+        ...budget,
       };
-    }
-    if (engine === 'libretranslate') {
-      return { url: this.trFormUrl().trim(), apiKey: this.trFormApiKey().trim() };
     }
     return {
       apiKey: this.trFormApiKey().trim(),
       model: this.trFormModel().trim() || DEFAULT_TRANSLATION_MODEL,
+      ...budget,
     };
   }
 

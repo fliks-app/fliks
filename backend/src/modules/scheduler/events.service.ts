@@ -44,8 +44,8 @@ export type SseEvent =
       title: string;
       language: string;
       error: string;
-      /** Set to 'rate_limit' when a translation failed on a Gemini quota/rate
-       *  limit, so the client can show a specific message. */
+      /** What failed, so the client picks the right message: 'translation',
+       *  'rate_limit' for an engine quota, unset for an OCR run. */
       reason?: string;
       /** Unattended scheduler run — client skips the confirmation toast */
       automatic?: boolean;

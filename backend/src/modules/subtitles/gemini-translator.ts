@@ -1,6 +1,6 @@
 import {
   BatchTranslator,
-  MAX_OUTPUT_TOKENS,
+  TranslationLimits,
   TranslationRequest,
   buildPayload,
   buildSystemInstruction,
@@ -12,6 +12,10 @@ import {
 export interface GeminiConfig {
   apiKey: string;
   model: string;
+  /** Prompt + reserved output ceiling per request; 0 = engine maximum. */
+  maxTokensPerRequest: number;
+  /** Token allowance per minute for this model; 0 = unpaced. */
+  tokensPerMinute: number;
 }
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -24,7 +28,12 @@ export async function translateWithGemini(
   onProgress?: (done: number, total: number) => void,
 ): Promise<string[]> {
   const system = buildSystemInstruction(req);
-  const callBatch: BatchTranslator = async (batch) => {
+  const limits: TranslationLimits = {
+    maxTokensPerRequest: cfg.maxTokensPerRequest,
+    tokensPerMinute: cfg.tokensPerMinute,
+    key: `gemini:${cfg.model}`,
+  };
+  const callBatch: BatchTranslator = async (batch, maxOutputTokens) => {
     const url = `${GEMINI_BASE}/${encodeURIComponent(cfg.model)}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`;
     const res = await postWithRetry(
       url,
@@ -34,7 +43,7 @@ export async function translateWithGemini(
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: system }] },
           contents: [{ role: 'user', parts: [{ text: buildPayload(batch) }] }],
-          generationConfig: { temperature: 0.3, maxOutputTokens: MAX_OUTPUT_TOKENS },
+          generationConfig: { temperature: 0.3, maxOutputTokens },
         }),
       },
       'Gemini',
@@ -42,7 +51,10 @@ export async function translateWithGemini(
     const data: any = await res.json();
     const parts = data?.candidates?.[0]?.content?.parts;
     if (!Array.isArray(parts)) return null;
-    return parseNumbered(parts.map((p: any) => p?.text ?? '').join(''), batch.length);
+    return parseNumbered(
+      parts.map((p: any) => p?.text ?? '').join(''),
+      batch.length,
+    );
   };
-  return translateWithBatching(texts, callBatch, onProgress);
+  return translateWithBatching(texts, callBatch, limits, system, onProgress);
 }

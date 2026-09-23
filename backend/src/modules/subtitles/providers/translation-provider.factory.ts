@@ -27,10 +27,18 @@ export class TranslationProviderFactory {
     return typeof v === 'string' ? v.trim() : '';
   }
 
+  /** Optional positive integer knob; anything else means "no limit". */
+  private num(settings: Record<string, unknown>, key: string): number {
+    const v = Number(settings?.[key]);
+    return Number.isFinite(v) && v > 0 ? Math.floor(v) : 0;
+  }
+
   private geminiConfig(settings: Record<string, unknown>): GeminiConfig {
     return {
       apiKey: this.str(settings, 'apiKey'),
       model: this.str(settings, 'model') || DEFAULT_TRANSLATION_MODEL,
+      maxTokensPerRequest: this.num(settings, 'maxTokensPerRequest'),
+      tokensPerMinute: this.num(settings, 'tokensPerMinute'),
     };
   }
 
@@ -39,6 +47,8 @@ export class TranslationProviderFactory {
       baseUrl: this.str(settings, 'baseUrl'),
       apiKey: this.str(settings, 'apiKey'),
       model: this.str(settings, 'model'),
+      maxTokensPerRequest: this.num(settings, 'maxTokensPerRequest'),
+      tokensPerMinute: this.num(settings, 'tokensPerMinute'),
     };
   }
 
@@ -94,7 +104,12 @@ export class TranslationProviderFactory {
     onProgress?: ProgressCb,
   ): Promise<string[]> {
     if (engine === 'openai') {
-      return translateWithOpenAi(texts, req, this.openAiConfig(settings), onProgress);
+      return translateWithOpenAi(
+        texts,
+        req,
+        this.openAiConfig(settings),
+        onProgress,
+      );
     }
     if (engine === 'libretranslate') {
       return translateWithLibreTranslate(
@@ -104,6 +119,11 @@ export class TranslationProviderFactory {
         onProgress,
       );
     }
-    return translateWithGemini(texts, req, this.geminiConfig(settings), onProgress);
+    return translateWithGemini(
+      texts,
+      req,
+      this.geminiConfig(settings),
+      onProgress,
+    );
   }
 }
