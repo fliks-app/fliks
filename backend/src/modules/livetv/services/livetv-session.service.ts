@@ -191,11 +191,20 @@ export function isManifestPayload(chunk: Buffer): boolean {
  *  buffered forever; the shared upstream itself is never slowed down for it. */
 const DIRECT_TEE_HIGH_WATER_MARK = 4 * 1024 * 1024;
 
+/** Thrown by {@link LiveTvSessionService.openNewSession} when the upstream turned
+ *  out to be a manifest: every caller sharing the attempt retries non-direct. */
+class LiveTvDirectUnstreamable extends Error {}
+
 @Injectable()
 export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger(LiveTvSessionService.name);
   private readonly liveRoot = path.join(TRANSCODE_DIR, 'live');
   private readonly sessions = new Map<string, LiveTvSessionEntry>();
+  /** Key → in-flight {@link openNewSession} attempt, so concurrent opens for the
+   *  same key share one upstream instead of each winning a `sessions.set` and
+   *  orphaning the loser's ffmpeg/connection. ponytail: per-key promise map,
+   *  in-process only; a second instance still double-opens. */
+  private readonly opening = new Map<string, Promise<LiveTvSessionEntry>>();
   /** Per-viewer token (returned as `sessionId`) → the shared session's key. */
   private readonly viewerIndex = new Map<string, string>();
   private sweepTimer: NodeJS.Timeout | null = null;
@@ -297,35 +306,88 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
       }
     }
     const key = this.buildSessionKey(channel.id, mode, caps);
+
+    let session: LiveTvSessionEntry;
+    try {
+      session = await this.acquireLiveSession(key, channel, streams, mode, caps);
+    } catch (err) {
+      if (err instanceof LiveTvDirectUnstreamable) {
+        this.log.log(`Channel ${channel.name} serves a manifest, packaging it instead`);
+        return this.open(channel, user, { ...caps, directPlay: false });
+      }
+      throw err;
+    }
+
     const sessionId = randomUUID();
     this.viewerIndex.set(sessionId, key);
-
-    const viewer: LiveTvViewer = {
+    this.clearIdleTimer(session);
+    session.viewers.set(sessionId, {
       userId: user?.id ?? null,
       username: user?.username ?? null,
       device: caps.userAgent ?? null,
       startedAt: Date.now(),
       lastSeenAt: Date.now(),
-    };
+    });
+    session.lastAccessAt = Date.now();
+    this.reportActivity(session);
+    return this.describe(session, sessionId);
+  }
 
-    const existing = this.sessions.get(key);
-    if (existing) {
-      this.clearIdleTimer(existing);
-      existing.viewers.set(sessionId, viewer);
-      existing.lastAccessAt = Date.now();
-      this.reportActivity(existing);
-      return this.describe(existing, sessionId);
+  /** Resolves the shared session for `key`, retrying if it was torn down (e.g. the
+   *  last viewer left first) between an in-flight attempt settling and this caller
+   *  reading it: a dead session is never handed back, the key is reopened instead. */
+  private async acquireLiveSession(
+    key: string,
+    channel: LiveTvChannel,
+    streams: LiveTvChannelStream[],
+    mode: LiveTvPlayMode,
+    caps: ClientPlaybackCaps,
+  ): Promise<LiveTvSessionEntry> {
+    for (;;) {
+      const session = await this.acquireSession(key, channel, streams, mode, caps);
+      if (this.sessions.get(key) === session) return session;
     }
+  }
+
+  /** Coalesces concurrent opens for `key` onto one in-flight {@link openNewSession}
+   *  attempt. The check for an existing session and the registration of a new
+   *  attempt happen with no `await` between them, so two racing callers can't both
+   *  fall through to create their own session for the same key. */
+  private acquireSession(
+    key: string,
+    channel: LiveTvChannel,
+    streams: LiveTvChannelStream[],
+    mode: LiveTvPlayMode,
+    caps: ClientPlaybackCaps,
+  ): Promise<LiveTvSessionEntry> {
+    const existing = this.sessions.get(key);
+    if (existing) return Promise.resolve(existing);
+
+    let attempt = this.opening.get(key);
+    if (!attempt) {
+      attempt = this.openNewSession(key, channel, streams, mode, caps).finally(() => {
+        if (this.opening.get(key) === attempt) this.opening.delete(key);
+      });
+      this.opening.set(key, attempt);
+    }
+    return attempt;
+  }
+
+  /** Actually spawns/connects a fresh session for `key` and registers it. Never
+   *  called directly outside {@link acquireSession}, which ensures only one runs
+   *  per key at a time; a failure here must leave `key` free for the next caller. */
+  private async openNewSession(
+    key: string,
+    channel: LiveTvChannel,
+    streams: LiveTvChannelStream[],
+    mode: LiveTvPlayMode,
+    caps: ClientPlaybackCaps,
+  ): Promise<LiveTvSessionEntry> {
     const grace = await this.settingInt('livetv_slot_release_seconds', 15);
     // Check-then-reserve with nothing async in between: two concurrent opens for
     // the same source would otherwise both pass the check before either is
     // registered in `this.sessions`, and both proceed past `maxStreams`.
-    try {
-      this.assertCapacity(streams[0], grace);
-    } catch (err) {
-      this.viewerIndex.delete(sessionId);
-      throw err;
-    }
+    this.assertCapacity(streams[0], grace);
     this.capacity.reserve(streams[0].sourceId);
 
     let session: LiveTvSessionEntry;
@@ -354,7 +416,7 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
         sourceId: streams[0].sourceId,
         dir: effectiveMode === 'direct' ? '' : path.join(this.liveRoot, key.replace(/[^a-z0-9-]/gi, '_')),
         proc: null,
-        viewers: new Map([[sessionId, viewer]]),
+        viewers: new Map(),
         createdAt: Date.now(),
         lastAccessAt: Date.now(),
         idleTimer: null,
@@ -390,12 +452,8 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
 
     const started = await this.recover(session, false);
     if (!started) {
-      this.viewerIndex.delete(sessionId);
       this.sessions.delete(key);
-      if (session.directNotStreamable) {
-        this.log.log(`Channel ${channel.name} serves a manifest, packaging it instead`);
-        return this.open(channel, user, { ...caps, directPlay: false });
-      }
+      if (session.directNotStreamable) throw new LiveTvDirectUnstreamable();
       // Every stream just failed; a source whose account is expired is worth
       // naming, since the generic message would send the viewer chasing a
       // network problem that isn't the real cause.
@@ -414,8 +472,7 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
         channelName: channel.name,
       });
     }
-    this.reportActivity(session);
-    return this.describe(session, sessionId);
+    return session;
   }
 
   async leave(sessionId: string): Promise<void> {
@@ -924,6 +981,9 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
   private teardown(session: LiveTvSessionEntry): void {
     if (this.sessions.get(session.key) !== session) return;
     this.sessions.delete(session.key);
+    // A viewer only ever clears its own entry via `leave()`; one still attached
+    // when every stream dies would otherwise dangle here forever.
+    for (const viewerId of session.viewers.keys()) this.viewerIndex.delete(viewerId);
     this.clearIdleTimer(session);
     this.clearWatchers(session);
     this.stopTransport(session);
