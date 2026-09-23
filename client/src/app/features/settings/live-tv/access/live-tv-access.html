@@ -2,6 +2,13 @@
   <div class="flex justify-center py-16">
     <span class="loading loading-spinner loading-lg"></span>
   </div>
+} @else if (loadError()) {
+  <div class="flex flex-col items-center gap-3 py-16 text-center">
+    <p class="text-base-content/50">{{ 'liveTv.on_now.load_error' | translate }}</p>
+    <button type="button" class="btn btn-sm" (click)="load()">
+      {{ 'common.retry' | translate }}
+    </button>
+  </div>
 } @else {
   <div class="flex flex-col gap-8">
     <div class="flex flex-col gap-3">
@@ -28,7 +35,7 @@
               @for (group of displayGroups(); track group.name) {
                 <tr>
                   <td class="font-medium">
-                    {{ group.name }}
+                    {{ group.name | liveTvGroupLabel }}
                     @if (autoRestricted().has(group.name)) {
                       <span
                         class="badge badge-warning badge-sm ml-2 tooltip tooltip-right"
@@ -116,7 +123,9 @@
                     } @else {
                       <div class="flex flex-wrap gap-1">
                         @for (name of user.groups; track name) {
-                          <span class="badge badge-sm badge-ghost">{{ name }}</span>
+                          <span class="badge badge-sm badge-ghost">{{
+                            name | liveTvGroupLabel
+                          }}</span>
                         }
                       </div>
                     }
@@ -159,7 +168,7 @@
               [checked]="grantedGroups().has(name)"
               (change)="toggleGrant(name)"
             />
-            <span class="label-text text-sm">{{ name }}</span>
+            <span class="label-text text-sm">{{ name | liveTvGroupLabel }}</span>
           </label>
         }
       }

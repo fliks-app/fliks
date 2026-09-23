@@ -4,11 +4,13 @@ import { ToastService } from '../../../../core/services/toast.service';
 import {
   LiveTvApiService,
   LiveTvUserAccess,
+  RestrictedGroupsView,
 } from '../../../../core/services/api/livetv-api.service';
 import { EnabledSwitchComponent } from '../../../../shared/components/enabled-switch';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
 import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
+import { LiveTvGroupLabelPipe } from '../../../../core/pipes/live-tv-group-label.pipe';
 
 interface GroupFacet {
   name: string;
@@ -29,6 +31,7 @@ interface DisplayGroupFacet extends GroupFacet {
     EnabledSwitchComponent,
     ModalHeaderComponent,
     ModalFooterComponent,
+    LiveTvGroupLabelPipe,
   ],
   templateUrl: './live-tv-access.html',
 })
@@ -39,6 +42,7 @@ export class LiveTvAccessComponent implements OnInit {
   private readonly grantsDialog = viewChild<ElementRef<HTMLDialogElement>>('grantsDialog');
 
   readonly loading = signal(true);
+  readonly loadError = signal(false);
   private readonly groups = signal<GroupFacet[]>([]);
   readonly restricted = signal<Set<string>>(new Set());
   /** Restricted groups whose name still matches the server's automatic adult-content pattern. */
@@ -81,7 +85,12 @@ export class LiveTvAccessComponent implements OnInit {
   readonly grantedGroups = signal<Set<string>>(new Set());
 
   async ngOnInit(): Promise<void> {
+    await this.load();
+  }
+
+  async load(): Promise<void> {
     this.loading.set(true);
+    this.loadError.set(false);
     try {
       const [channelsPage, accessView, users] = await Promise.all([
         this.api.listAdminChannels({ page: 1, pageSize: 1 }),
@@ -89,24 +98,30 @@ export class LiveTvAccessComponent implements OnInit {
         this.api.listUserAccess(),
       ]);
       this.groups.set(channelsPage.groups ?? []);
-      this.restricted.set(new Set(accessView.groups.map((g) => g.name)));
-      this.autoRestricted.set(
-        new Set(accessView.groups.filter((g) => g.automatic).map((g) => g.name)),
-      );
-      this.vanishing.set(
-        new Map(
-          accessView.groups
-            .filter((g) => g.cleanupAt != null)
-            .map((g) => [g.name, g.cleanupAt as string]),
-        ),
-      );
-      this.exempt.set(new Set(accessView.exempt));
+      this.applyAccessView(accessView);
       this.users.set(users);
     } catch {
-      // handled by global error interceptor
+      this.loadError.set(true);
     } finally {
       this.loading.set(false);
     }
+  }
+
+  /** Single point of truth for the restricted/auto/vanishing/exempt signals,
+   *  shared by the initial load and a post-toggle refresh. */
+  private applyAccessView(accessView: RestrictedGroupsView): void {
+    this.restricted.set(new Set(accessView.groups.map((g) => g.name)));
+    this.autoRestricted.set(
+      new Set(accessView.groups.filter((g) => g.automatic).map((g) => g.name)),
+    );
+    this.vanishing.set(
+      new Map(
+        accessView.groups
+          .filter((g) => g.cleanupAt != null)
+          .map((g) => [g.name, g.cleanupAt as string]),
+      ),
+    );
+    this.exempt.set(new Set(accessView.exempt));
   }
 
   toggleRestricted(name: string): Promise<void> {
@@ -117,7 +132,9 @@ export class LiveTvAccessComponent implements OnInit {
       if (!isUnrestricting) next.add(name);
       try {
         const saved = await this.api.setRestrictedGroups([...next]);
-        this.restricted.set(new Set(saved));
+        // The PUT only echoes back the restricted names, not exempt/automatic/
+        // vanishing — refetch so those badges match what the server just did.
+        this.applyAccessView(await this.api.getRestrictedGroups());
         if (isUnrestricting && !saved.includes(name)) {
           // The server just dropped every grant for this group; mirror that here
           // instead of an extra listUserAccess() round trip.

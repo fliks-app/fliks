@@ -135,3 +135,44 @@ describe('LiveTvComponent — on-now search', () => {
     expect(component.isEmpty()).toBe(false);
   });
 });
+
+describe('LiveTvComponent — ungrouped sentinel display', () => {
+  it('translates the sentinel for display but keeps it as the filter value', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideTranslateService({
+          lang: 'en',
+          loader: {
+            provide: TranslateLoader,
+            useValue: { getTranslation: () => of({ liveTv: { ungrouped: 'Ungrouped' } }) },
+          },
+        }),
+      ],
+    });
+    const http = TestBed.inject(HttpTestingController);
+    const fixture = TestBed.createComponent(LiveTvComponent);
+    fixture.detectChanges();
+    await tick();
+
+    const ungroupedEntry = entry(1, 'CNN');
+    ungroupedEntry.channel.groupName = '__livetv_ungrouped__';
+    http.expectOne({ url: '/api/livetv/channels', method: 'GET' }).flush([ungroupedEntry.channel]);
+    http
+      .expectOne((r) => r.url === '/api/livetv/channels/on-now' && r.params.get('page') === '1')
+      .flush(onNowPage([ungroupedEntry], 1));
+    await tick();
+    fixture.detectChanges();
+
+    const option = [...fixture.nativeElement.querySelectorAll('option')].find(
+      (o: HTMLOptionElement) => o.value === '__livetv_ungrouped__',
+    );
+    expect(option?.textContent?.trim()).toBe('Ungrouped');
+
+    const heading = fixture.nativeElement.querySelector('h2');
+    expect(heading?.textContent?.trim()).toBe('Ungrouped');
+  });
+});

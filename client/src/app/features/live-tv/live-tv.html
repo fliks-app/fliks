@@ -78,7 +78,7 @@
       >
         <option value="">{{ 'liveTv.guide.all_groups' | translate }}</option>
         @for (g of groups(); track g) {
-          <option [value]="g">{{ g }}</option>
+          <option [value]="g">{{ g | liveTvGroupLabel }}</option>
         }
       </select>
     </div>
@@ -100,7 +100,7 @@
       @for (group of groupedEntries(); track group.groupName) {
         <div class="flex flex-col gap-2">
           <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wide">
-            {{ group.groupName || ('liveTv.ungrouped' | translate) }}
+            {{ group.groupName | liveTvGroupLabel }}
           </h2>
           <div appTvRow class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             @for (entry of group.items; track entry.channel.id) {

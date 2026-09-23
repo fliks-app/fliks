@@ -14,6 +14,7 @@ import { ModalHeaderComponent } from '../../../../shared/components/modal-header
 import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 import { EnabledSwitchComponent } from '../../../../shared/components/enabled-switch';
+import { LiveTvGroupLabelPipe } from '../../../../core/pipes/live-tv-group-label.pipe';
 
 const PAGE_SIZE = 25;
 /** Above this row count, a bulk-by-filter action asks for confirmation first. */
@@ -45,6 +46,7 @@ function normalizeChannelName(name: string): string {
     ModalFooterComponent,
     TvSelectDirective,
     EnabledSwitchComponent,
+    LiveTvGroupLabelPipe,
   ],
   templateUrl: './live-tv-channels.html',
 })

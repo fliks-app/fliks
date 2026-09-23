@@ -18,6 +18,7 @@ import {
   LiveProgram,
 } from '../../../core/services/api/livetv-api.service';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
+import { LiveTvGroupLabelPipe } from '../../../core/pipes/live-tv-group-label.pipe';
 import { TvSectionDirective } from '../../../shared/directives/tv-section.directive';
 import { TvRowDirective } from '../../../shared/directives/tv-row.directive';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
@@ -54,6 +55,7 @@ interface DisplayRow extends GuideRow {
     FormsModule,
     TranslatePipe,
     LocaleDatePipe,
+    LiveTvGroupLabelPipe,
     TvSectionDirective,
     TvRowDirective,
     ModalHeaderComponent,

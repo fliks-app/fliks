@@ -1,5 +1,12 @@
 @if (loading()) {
   <div class="flex justify-center py-16"><span class="loading loading-spinner loading-lg"></span></div>
+} @else if (loadError()) {
+  <div class="flex flex-col items-center gap-3 py-16 text-center">
+    <p class="text-base-content/50">{{ 'liveTv.on_now.load_error' | translate }}</p>
+    <button type="button" class="btn btn-sm" (click)="load()">
+      {{ 'common.retry' | translate }}
+    </button>
+  </div>
 } @else {
   <div class="space-y-6 max-w-xl">
     <p class="text-base-content/60">{{ 'liveTv.admin.settings.description' | translate }}</p>

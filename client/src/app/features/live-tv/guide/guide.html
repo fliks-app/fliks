@@ -9,7 +9,7 @@
     >
       <option value="">{{ 'liveTv.guide.all_groups' | translate }}</option>
       @for (g of groups(); track g) {
-        <option [value]="g">{{ g }}</option>
+        <option [value]="g">{{ g | liveTvGroupLabel }}</option>
       }
     </select>
 
