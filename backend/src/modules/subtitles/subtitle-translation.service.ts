@@ -154,8 +154,12 @@ export class SubtitleTranslationService implements OnModuleInit {
     });
     if (running) throw new ConflictException('errors.already_running');
 
+    const model = this.translationFactory.resolveModel(
+      provider.engine,
+      provider.settings,
+    );
     this.log.log(
-      `Translate start — sub #${subtitleId} "${source.media?.title ?? '?'}" [${source.language} → ${target}]`,
+      `Translate start — sub #${subtitleId} "${source.media?.title ?? '?'}" [${source.language} → ${target}] via ${provider.name} (${provider.engine}${model ? `, ${model}` : ''})`,
     );
 
     const placeholder = await this.repo.save({
@@ -172,10 +176,7 @@ export class SubtitleTranslationService implements OnModuleInit {
       translationProvider: { id: provider.id },
       translationProviderName: provider.name,
       translationEngine: provider.engine,
-      translationModel: this.translationFactory.resolveModel(
-        provider.engine,
-        provider.settings,
-      ),
+      translationModel: model,
     } as any);
 
     void this.runTranslation(

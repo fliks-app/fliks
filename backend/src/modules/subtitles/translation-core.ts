@@ -281,7 +281,6 @@ export async function withRegister(
       log.warn('Register probe named neither form; leaving it to each segment');
       return req;
     }
-    log.log(`Register for ${req.targetLanguage}: "${register}"`);
     return { ...req, register };
   } catch (err) {
     // One failed probe must not cost the translation itself.
