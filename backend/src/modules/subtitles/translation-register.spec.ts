@@ -19,11 +19,12 @@ const req = (
 });
 
 describe('second-person register', () => {
-  it('names both forms so the instruction is concrete', () => {
-    expect(buildSystemInstruction(req('fr', 'tu'))).toContain(
-      'Address the characters with "tu" throughout, never "vous"',
-    );
-    expect(buildSystemInstruction(req('de', 'Sie'))).toContain('never "du"');
+  it('names both forms, and offers the other one for lines that ask for it', () => {
+    const fr = buildSystemInstruction(req('fr', 'tu'));
+    expect(fr).toContain('These speakers use "tu" with each other');
+    // Not an override: a judge must still be addressed as one.
+    expect(fr).toContain('use "vous" instead');
+    expect(buildSystemInstruction(req('de', 'Sie'))).toContain('use "du" instead');
   });
 
   it('says nothing when no register was resolved', () => {
