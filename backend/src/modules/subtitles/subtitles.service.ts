@@ -504,17 +504,25 @@ export class SubtitlesService {
     return resolveSubtitleAbsolutePath(media?.path ?? null, sub.relativePath);
   }
 
+  /** Ties broken by id so two subtitles of the same language and score keep one
+   *  order between requests instead of whatever the planner returns. */
+  private readonly listOrder = {
+    language: 'ASC',
+    score: 'DESC',
+    id: 'ASC',
+  } as const;
+
   async getSubtitlesForMedia(mediaId: number): Promise<SubtitleFile[]> {
     return this.repo.find({
       where: { media: { id: mediaId } },
-      order: { language: 'ASC', score: 'DESC' },
+      order: this.listOrder,
     });
   }
 
   async getSubtitlesForMediaFile(mediaFileId: number): Promise<SubtitleFile[]> {
     return this.repo.find({
       where: { mediaFile: { id: mediaFileId } },
-      order: { language: 'ASC', score: 'DESC' },
+      order: this.listOrder,
     });
   }
 
