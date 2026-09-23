@@ -182,6 +182,102 @@ describe('LiveTvSessionService', () => {
     );
   });
 
+  it('coalesces two concurrent opens on the same key into one session, one ffmpeg', async () => {
+    mockSpawnAlwaysSucceeds();
+    // Distinct id: isolates this test's transcode dir from its neighbours.
+    const channel = makeChannel([makeStream({ id: 101, channelId: 101 })], { id: 101 });
+
+    const [first, second] = await Promise.all([
+      service.open(channel, makeUser(1), {}),
+      service.open(channel, makeUser(2), {}),
+    ]);
+
+    expect(spawn).toHaveBeenCalledTimes(1);
+    expect(first.sessionId).not.toBe(second.sessionId);
+    const sessionA = service.getForServe(first.sessionId);
+    const sessionB = service.getForServe(second.sessionId);
+    expect(sessionA).toBe(sessionB);
+    expect(sessionA?.viewers.size).toBe(2);
+  });
+
+  it('leaves no orphan session when two opens race: every spawned process gets killed', async () => {
+    settings.get.mockImplementation((key: string) =>
+      Promise.resolve(key === 'livetv_channel_idle_seconds' ? '0' : null),
+    );
+    const procs = mockSpawnAlwaysSucceeds();
+    const channel = makeChannel([makeStream({ id: 102, channelId: 102 })], { id: 102 });
+
+    const [first, second] = await Promise.all([
+      service.open(channel, makeUser(1), {}),
+      service.open(channel, makeUser(2), {}),
+    ]);
+    await service.leave(first.sessionId);
+    await service.leave(second.sessionId);
+    await new Promise((r) => setTimeout(r, 50)); // idle timeout (0s) tears the session down
+
+    // A second, un-deduped session would spawn its own ffmpeg and never get killed:
+    // nothing left in `sessions` points back to it once the surviving one wins.
+    expect(procs.length).toBe(1);
+    expect(procs.every((p) => p.kill.mock.calls.length > 0)).toBe(true);
+  });
+
+  it('lets a later caller retry after every concurrent opener saw the same failure', async () => {
+    spawn.mockImplementation((_cmd: string, args: string[]) => {
+      const dir = path.dirname(args[args.indexOf('-hls_segment_filename') + 1]);
+      fs.mkdirSync(dir, { recursive: true });
+      const proc = new FakeProc();
+      setImmediate(() => {
+        proc.exitCode = 1;
+        proc.emit('exit', 1);
+      });
+      return proc as unknown as ReturnType<typeof spawn>;
+    });
+    const channel = makeChannel([makeStream({ id: 103, channelId: 103 })], { id: 103 });
+
+    await expect(
+      Promise.all([service.open(channel, makeUser(1), {}), service.open(channel, makeUser(2), {})]),
+    ).rejects.toMatchObject({ response: { code: 'livetv_channel_unavailable' } });
+    // One shared attempt tried the only stream twice (MAX_FAILURES_PER_STREAM), not four times.
+    expect(spawn).toHaveBeenCalledTimes(2);
+
+    mockSpawnAlwaysSucceeds();
+    const result = await service.open(channel, makeUser(3), {});
+    expect(result.channelId).toBe(103);
+    // Lets this test's own fire-and-forget teardown fs.rm settle before the next test reuses the dir.
+    await new Promise((r) => setTimeout(r, 50));
+  });
+
+  it('purges viewerIndex entries when a running session exhausts every stream', async () => {
+    let calls = 0;
+    spawn.mockImplementation((_cmd: string, args: string[]) => {
+      calls++;
+      const dir = path.dirname(args[args.indexOf('-hls_segment_filename') + 1]);
+      fs.mkdirSync(dir, { recursive: true });
+      const proc = new FakeProc();
+      if (calls === 1) {
+        setImmediate(() => fs.writeFileSync(path.join(dir, 'seg-00000.m4s'), 'x'));
+      } else {
+        setImmediate(() => {
+          proc.exitCode = 1;
+          proc.emit('exit', 1);
+        });
+      }
+      return proc as unknown as ReturnType<typeof spawn>;
+    });
+    const channel = makeChannel([makeStream({ id: 104, channelId: 104 })], { id: 104 });
+
+    const result = await service.open(channel, makeUser(1), {});
+    const runningProc = spawn.mock.results[0].value as FakeProc;
+    runningProc.exitCode = 1;
+    runningProc.emit('exit', 1); // upstream dies while the viewer is still attached
+    await new Promise((r) => setTimeout(r, 700)); // handleFailure -> recover's 300ms poll, twice over
+
+    expect(service.getForServe(result.sessionId)).toBeUndefined();
+    expect(
+      (service as never as { viewerIndex: Map<string, string> }).viewerIndex.has(result.sessionId),
+    ).toBe(false);
+  });
+
   it('rejects a new session when the source is already at capacity', async () => {
     mockSpawnAlwaysSucceeds();
     const source = makeSource({ id: 10, maxStreams: 1 });
