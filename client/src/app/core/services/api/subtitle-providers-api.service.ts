@@ -22,6 +22,8 @@ export interface CreateSubtitleProviderBody {
 export interface TestSubtitleProviderBody {
   type: string;
   settings?: Record<string, unknown>;
+  /** The row being edited, so the server resolves secrets it never sent out. */
+  id?: number;
 }
 
 export interface ProviderRateLimit {

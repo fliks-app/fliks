@@ -90,7 +90,18 @@ export class SubtitleProviderService {
   async testConnection(
     type: import('../../common/enums').SubtitleProviderType,
     settings: Record<string, unknown>,
+    providerId?: number,
   ): Promise<SubtitleProviderTestResult> {
+    // The editor never receives stored credentials, so a test on an untouched
+    // one arrives blank: resolve it rather than report a missing credential.
+    if (providerId != null) {
+      const stored = await this.repo.findOne({ where: { id: providerId } });
+      settings = mergeSecretFields(
+        stored?.settings,
+        settings,
+        SUBTITLE_PROVIDER_SECRET_FIELDS,
+      );
+    }
     try {
       const result = await this.factory
         .create(type, settings)
