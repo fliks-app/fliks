@@ -272,11 +272,34 @@
             'settings.subtitle_providers.translation_api_key' | translate
           }}</span>
           <input
-            type="text"
+            type="password"
             class="input input-bordered input-sm w-full font-mono"
+            [placeholder]="trApiKeyStored() && !trApiKeyCleared() ? secretMask : ''"
             [ngModel]="trFormApiKey()"
-            (ngModelChange)="trFormApiKey.set($event)"
+            (ngModelChange)="onTrApiKeyInput($event)"
           />
+          @if (trApiKeyStored()) {
+            @if (trApiKeyCleared()) {
+              <span class="label-text-alt text-warning">
+                {{ 'common.secret_will_clear' | translate }}
+                <button
+                  type="button"
+                  class="link link-hover font-medium"
+                  (click)="trApiKeyCleared.set(false)"
+                >
+                  {{ 'common.secret_keep' | translate }}
+                </button>
+              </span>
+            } @else {
+              <button
+                type="button"
+                class="link link-hover label-text-alt self-start text-base-content/60"
+                (click)="trApiKeyCleared.set(true)"
+              >
+                {{ 'common.secret_clear' | translate }}
+              </button>
+            }
+          }
         </label>
         <label class="form-control w-full">
           <span class="label-text">{{
@@ -311,11 +334,34 @@
             'settings.subtitle_providers.translation_api_key_optional' | translate
           }}</span>
           <input
-            type="text"
+            type="password"
             class="input input-bordered input-sm w-full font-mono"
+            [placeholder]="trApiKeyStored() && !trApiKeyCleared() ? secretMask : ''"
             [ngModel]="trFormApiKey()"
-            (ngModelChange)="trFormApiKey.set($event)"
+            (ngModelChange)="onTrApiKeyInput($event)"
           />
+          @if (trApiKeyStored()) {
+            @if (trApiKeyCleared()) {
+              <span class="label-text-alt text-warning">
+                {{ 'common.secret_will_clear' | translate }}
+                <button
+                  type="button"
+                  class="link link-hover font-medium"
+                  (click)="trApiKeyCleared.set(false)"
+                >
+                  {{ 'common.secret_keep' | translate }}
+                </button>
+              </span>
+            } @else {
+              <button
+                type="button"
+                class="link link-hover label-text-alt self-start text-base-content/60"
+                (click)="trApiKeyCleared.set(true)"
+              >
+                {{ 'common.secret_clear' | translate }}
+              </button>
+            }
+          }
         </label>
         <label class="form-control w-full">
           <span class="label-text">{{
@@ -350,11 +396,34 @@
             'settings.subtitle_providers.translation_api_key_optional' | translate
           }}</span>
           <input
-            type="text"
+            type="password"
             class="input input-bordered input-sm w-full font-mono"
+            [placeholder]="trApiKeyStored() && !trApiKeyCleared() ? secretMask : ''"
             [ngModel]="trFormApiKey()"
-            (ngModelChange)="trFormApiKey.set($event)"
+            (ngModelChange)="onTrApiKeyInput($event)"
           />
+          @if (trApiKeyStored()) {
+            @if (trApiKeyCleared()) {
+              <span class="label-text-alt text-warning">
+                {{ 'common.secret_will_clear' | translate }}
+                <button
+                  type="button"
+                  class="link link-hover font-medium"
+                  (click)="trApiKeyCleared.set(false)"
+                >
+                  {{ 'common.secret_keep' | translate }}
+                </button>
+              </span>
+            } @else {
+              <button
+                type="button"
+                class="link link-hover label-text-alt self-start text-base-content/60"
+                (click)="trApiKeyCleared.set(true)"
+              >
+                {{ 'common.secret_clear' | translate }}
+              </button>
+            }
+          }
         </label>
       }
 

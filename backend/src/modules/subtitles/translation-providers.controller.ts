@@ -9,7 +9,10 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common';
-import { TranslationProviderService } from './translation-provider.service';
+import {
+  TranslationProviderService,
+  redactTranslationProviderSecrets,
+} from './translation-provider.service';
 import { CreateTranslationProviderDto } from './dto/create-translation-provider.dto';
 import { UpdateTranslationProviderDto } from './dto/update-translation-provider.dto';
 import { TestTranslationProviderDto } from './dto/test-translation-provider.dto';
@@ -37,34 +40,34 @@ export class TranslationProvidersController {
   @Post('test-connection')
   @CheckPolicies((ability) => ability.can(Action.Read, TranslationProvider))
   testConnection(@Body() dto: TestTranslationProviderDto) {
-    return this.service.testConnection(dto.engine, dto.settings ?? {});
+    return this.service.testConnection(dto.engine, dto.settings ?? {}, dto.id);
   }
 
   @Post()
   @CheckPolicies((ability) => ability.can(Action.Create, TranslationProvider))
-  create(@Body() dto: CreateTranslationProviderDto) {
-    return this.service.create(dto);
+  async create(@Body() dto: CreateTranslationProviderDto) {
+    return redactTranslationProviderSecrets(await this.service.create(dto));
   }
 
   @Get()
   @CheckPolicies((ability) => ability.can(Action.Read, TranslationProvider))
-  findAll() {
-    return this.service.findAll();
+  async findAll() {
+    return (await this.service.findAll()).map(redactTranslationProviderSecrets);
   }
 
   @Get(':id')
   @CheckPolicies((ability) => ability.can(Action.Read, TranslationProvider))
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.service.findOne(id);
+  async findOne(@Param('id', ParseIntPipe) id: number) {
+    return redactTranslationProviderSecrets(await this.service.findOne(id));
   }
 
   @Put(':id')
   @CheckPolicies((ability) => ability.can(Action.Update, TranslationProvider))
-  update(
+  async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateTranslationProviderDto,
   ) {
-    return this.service.update(id, dto);
+    return redactTranslationProviderSecrets(await this.service.update(id, dto));
   }
 
   @Delete(':id')
