@@ -9,6 +9,7 @@ export type GuideMatchKind = 'id' | 'name' | 'fuzzy' | 'manual';
  * reshuffle or a second source never renumbers the lineup.
  */
 @Entity('livetv_channels')
+@Index('IDX_livetv_channels_group_norm', { synchronize: false })
 export class LiveTvChannel extends BaseEntity {
   @Column()
   name: string;

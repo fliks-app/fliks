@@ -18,7 +18,7 @@ export class NormaliseLivetvGroupNames1785600000000 implements MigrationInterfac
     // Tracks whether a channel's group came from the provider or an admin
     // edit, so a sync can realign the former without ever touching the latter.
     await queryRunner.query(
-      `ALTER TABLE "livetv_channels" ADD COLUMN "groupNameSource" character varying(16) NOT NULL DEFAULT 'provider'`,
+      `ALTER TABLE "livetv_channels" ADD COLUMN IF NOT EXISTS "groupNameSource" character varying(16) NOT NULL DEFAULT 'provider'`,
     );
 
     await queryRunner.query(
@@ -66,7 +66,7 @@ export class NormaliseLivetvGroupNames1785600000000 implements MigrationInterfac
       `DROP INDEX IF EXISTS "IDX_livetv_channels_group_norm"`,
     );
     await queryRunner.query(
-      `ALTER TABLE "livetv_channels" DROP COLUMN "groupNameSource"`,
+      `ALTER TABLE "livetv_channels" DROP COLUMN IF EXISTS "groupNameSource"`,
     );
     // The trim/sentinel rewrite and the grant-row merge above are lossy (original
     // whitespace, NULL/'' state and the dropped duplicate rows are gone); left as-is.
