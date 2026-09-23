@@ -57,6 +57,22 @@ describe('postWithRetry', () => {
     expect(err).toBeInstanceOf(TranslationRateLimitError);
   });
 
+  it('gives up at once on a per-day quota rather than spending the rest of it', async () => {
+    const PER_DAY = JSON.stringify({
+      error: {
+        code: 429,
+        message: 'Quota exceeded for metric: generate_content_free_tier_requests, limit: 20',
+        details: [{ '@type': 'type.googleapis.com/google.rpc.QuotaFailure',
+          violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier' }] }],
+      },
+    });
+    fetchMock.mockResolvedValue(reply(429, PER_DAY));
+    const err = await settle(postWithRetry('http://x', {}, 'Gemini'));
+    expect(err).toBeInstanceOf(TranslationRateLimitError);
+    expect(String(err)).toContain('daily');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('reports a context-length 413 as too large so the batch splits', async () => {
     fetchMock.mockResolvedValue(reply(413, CONTEXT_413));
     const err = await settle(postWithRetry('http://x', {}, 'Groq'));

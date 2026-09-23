@@ -1,4 +1,7 @@
+import { Logger } from '@nestjs/common';
 import { APP_LANGUAGES } from '../../common/constants/app-languages';
+
+const log = new Logger('SubtitleTranslation');
 
 /** Thrown when an engine returns 429 (quota exhausted / rate limited) after
  *  retries — lets the caller surface a specific message to the client. */
@@ -26,18 +29,19 @@ export interface TranslationRequest {
   context: TranslationContext;
 }
 
-/** Upper bound on cues per LLM request. The token budget usually cuts a batch
- *  shorter; this only stops a file of very short cues from making huge batches. */
-export const BATCH_SIZE = 150;
-/** Ceiling on the output reservation of a single request. */
+/** Ceiling on the output reservation of a single request, when an engine names
+ *  no better figure. */
 export const MAX_OUTPUT_TOKENS = 8192;
+/** Cues per request when an engine names no better figure. */
+export const BATCH_SIZE = 150;
 /** Chars per token — close enough for Latin subtitle text, and being off only
  *  shifts where a batch is cut. */
 const CHARS_PER_TOKEN = 4;
 /** The "#N#\n" line that introduces each segment, both ways. */
 const MARKER_TOKENS = 4;
-/** Per-request cap so a stalled connection can't hold a translation slot open. */
-const REQUEST_TIMEOUT_MS = 120_000;
+/** Per-request cap so a stalled connection can't hold a translation slot open.
+ *  Measured: 600 long cues take ~85s against Gemini, so this is not generous. */
+const REQUEST_TIMEOUT_MS = 240_000;
 /** Attempts (1 initial + retries) for transient failures before giving up. */
 const MAX_ATTEMPTS = 4;
 /** Statuses worth retrying with backoff (rate limits + transient server errors). */
@@ -59,6 +63,12 @@ export interface TranslationLimits {
   tokensPerMinute: number;
   /** Endpoint + model the `tokensPerMinute` allowance belongs to. */
   key: string;
+  /** What the model will actually return in one response. Free tiers meter
+   *  requests per day, so the bigger this is the more of a file one buys. */
+  outputCeiling: number;
+  /** Cues per request, so a file of short cues still reports progress a few
+   *  times instead of going silent until the whole thing lands. */
+  batchCeiling: number;
 }
 
 export function sleep(ms: number): Promise<void> {
@@ -125,6 +135,7 @@ export async function postWithRetry(
     const quota =
       res.status === 429 ||
       /rate.?limit|per minute|\bTPM\b|quota/i.test(errText);
+    const daily = quota && /PerDay|per day|requests per day/i.test(errText);
     if (
       !quota &&
       (res.status === 413 ||
@@ -134,13 +145,20 @@ export async function postWithRetry(
         `${engineLabel} rejected the request as too large: ${errText}`,
       );
     }
-    if ((quota || RETRYABLE_STATUS.has(res.status)) && attempt < MAX_ATTEMPTS) {
+    if (
+      !daily &&
+      (quota || RETRYABLE_STATUS.has(res.status)) &&
+      attempt < MAX_ATTEMPTS
+    ) {
       const headerRetry = Number(res.headers.get('retry-after'));
       const suggested =
         parseRetryDelayMs(errText) ??
         (Number.isFinite(headerRetry) && headerRetry > 0
           ? headerRetry * 1000
           : null);
+      log.warn(
+        `${engineLabel} answered ${res.status} on attempt ${attempt}/${MAX_ATTEMPTS}, waiting: ${errText.slice(0, 200)}`,
+      );
       // Honour the server's hint (capped) but never wait less than the backoff.
       await sleep(
         Math.min(
@@ -156,7 +174,7 @@ export async function postWithRetry(
     }
     if (quota) {
       const retryMs = parseRetryDelayMs(errText);
-      const scope = /PerDay/i.test(errText)
+      const scope = daily
         ? 'daily'
         : /PerMinute/i.test(errText)
           ? 'per-minute'
@@ -260,16 +278,16 @@ function promptTokens(texts: string[], systemTokens: number): number {
 
 /**
  * Output reservation for one batch. Sizing it from the batch instead of always
- * asking for {@link MAX_OUTPUT_TOKENS} is what keeps a request inside a small
- * per-minute allowance: providers bill the reservation, not the actual answer,
- * so a flat 8192 alone overshoots an 8k/min tier on every single call.
+ * asking for the ceiling is what keeps a request inside a small per-minute
+ * allowance: providers bill the reservation, not the actual answer, so a flat
+ * maximum alone overshoots an 8k/min tier on every single call.
  */
 function reserveOutput(prompt: number, limits: TranslationLimits): number {
   const room = limits.maxTokensPerRequest
     ? limits.maxTokensPerRequest - prompt
-    : MAX_OUTPUT_TOKENS;
+    : limits.outputCeiling;
   // Translations run longer than their source, so budget twice the prompt.
-  return Math.max(256, Math.min(MAX_OUTPUT_TOKENS, room, prompt * 2));
+  return Math.max(256, Math.min(limits.outputCeiling, room, prompt * 2));
 }
 
 /** How many cues fit in one request under `maxTokensPerRequest`, prompt and
@@ -280,9 +298,11 @@ function batchEnd(
   systemTokens: number,
   limits: TranslationLimits,
 ): number {
-  const max = Math.min(from + BATCH_SIZE, texts.length);
-  if (!limits.maxTokensPerRequest) return max;
-  const budget = Math.max(1, (limits.maxTokensPerRequest - systemTokens) / 3);
+  const max = Math.min(from + limits.batchCeiling, texts.length);
+  // Without a configured budget the model's own output ceiling is the bound.
+  const budget = limits.maxTokensPerRequest
+    ? (limits.maxTokensPerRequest - systemTokens) / 3
+    : limits.outputCeiling / 2;
   let used = 0;
   for (let i = from; i < max; i++) {
     used += estimateTokens(texts[i]) + MARKER_TOKENS;
@@ -347,9 +367,13 @@ async function translateBatchWithSplit(
   }
   // A single segment that still won't map keeps its source text.
   if (texts.length === 1) {
+    log.warn('A single cue would not map back; keeping its source text');
     report(1);
     return [texts[0]];
   }
+  log.warn(
+    `Response did not map back to ${texts.length} cues, splitting: each half is another request`,
+  );
   const mid = Math.floor(texts.length / 2);
   const [left, right] = [
     await translateBatchWithSplit(
@@ -372,7 +396,8 @@ async function translateBatchWithSplit(
 
 /**
  * Translate cue texts through an LLM `callBatch`, preserving order and count.
- * Batches are cut by {@link BATCH_SIZE} and by the provider's token budget; a
+ * Batches are cut by the engine's cue and token ceilings and by any configured
+ * budget; a
  * count mismatch or a too-large rejection splits the batch down to single cues.
  * `onProgress(done, total)` fires as soon as any group of cues comes back, split
  * halves included, so a batch that takes several round-trips still moves.
