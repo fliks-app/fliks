@@ -467,6 +467,12 @@ export class RemoteService {
         // lands after any local clear and would then sit there forever. Let the
         // server settle it: a live playback reports every 10s, so a silent
         // target the listing shows as empty really has stopped.
+        // The listing rebuilds playback from the live sessions, so it is the
+        // only state a client that just picked an already-playing target has.
+        if (listed?.nowPlaying && !this.reportedState()) {
+          this.reportedState.set(listed.nowPlaying);
+          this.stateAt = Date.now();
+        }
         const silentFor = Date.now() - this.stateAt;
         if (listed && !listed.nowPlaying && this.reportedState() && silentFor > 15_000) {
           console.debug('[remote] target reports nothing playing, clearing its state');
