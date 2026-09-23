@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { SubtitleTranslationService } from './subtitle-translation.service';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 
@@ -30,6 +31,40 @@ describe('SubtitleTranslationService — run state across restarts and clients',
     });
     expect(patch.status).toBe(SubtitleStatus.FAILED);
     expect(patch.errorMessage).toBe('activity.subtitle_error_interrupted');
+  });
+
+  it('refuses a second run for a track one is already translating', async () => {
+    const source = {
+      id: 7,
+      mediaId: 1,
+      mediaFileId: 3,
+      episodeId: null,
+      language: 'en',
+      relativePath: 'a.srt',
+      forced: false,
+      hearingImpaired: false,
+    };
+    const findOne = jest
+      .fn()
+      .mockResolvedValueOnce(source)
+      .mockResolvedValueOnce({ id: 99, status: SubtitleStatus.PROCESSING });
+    const save = jest.fn();
+    const service = new SubtitleTranslationService(
+      { findOne, save } as never,
+      {} as never,
+      {} as never,
+      { emit: jest.fn() } as never,
+      { get: jest.fn().mockResolvedValue({ enabled: true, maxConcurrency: 1 }) } as never,
+      {
+        findDefault: jest
+          .fn()
+          .mockResolvedValue({ id: 1, name: 'LT', engine: 'libretranslate', settings: {} }),
+      } as never,
+      { validateConfig: jest.fn(), resolveModel: jest.fn() } as never,
+    );
+
+    await expect(service.translateSubtitle(7, 'fr')).rejects.toThrow(ConflictException);
+    expect(save).not.toHaveBeenCalled();
   });
 
   it('leaves no progress behind once a run ends', async () => {

@@ -282,19 +282,13 @@
           <span class="label-text">{{
             'settings.subtitle_providers.translation_model' | translate
           }}</span>
-          <select
-    appTvSelect
-            class="select select-bordered select-sm w-full font-mono"
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full font-mono"
+            placeholder="gemini-3.6-flash"
             [ngModel]="trFormModel()"
             (ngModelChange)="trFormModel.set($event)"
-          >
-            @if (!geminiModels.includes(trFormModel())) {
-              <option [value]="trFormModel()">{{ trFormModel() }}</option>
-            }
-            @for (m of geminiModels; track m) {
-              <option [value]="m">{{ m }}</option>
-            }
-          </select>
+          />
         </label>
       } @else if (trFormEngine() === 'openai') {
         <label class="form-control w-full">

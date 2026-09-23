@@ -7,7 +7,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { execFile } from 'child_process';
@@ -138,6 +138,21 @@ export class SubtitleTranslationService implements OnModuleInit {
         'Source and target languages are identical',
       );
     }
+
+    // The PROCESSING row is the marker: a second click would otherwise run the
+    // engine twice and write two files for the same track.
+    const running = await this.repo.findOne({
+      where: {
+        mediaFile: { id: source.mediaFileId },
+        episode: source.episodeId ? { id: source.episodeId } : IsNull(),
+        language: target,
+        forced: source.forced,
+        hearingImpaired: source.hearingImpaired,
+        providerType: SubtitleProviderType.TRANSLATED,
+        status: SubtitleStatus.PROCESSING,
+      },
+    });
+    if (running) throw new ConflictException('errors.already_running');
 
     this.log.log(
       `Translate start — sub #${subtitleId} "${source.media?.title ?? '?'}" [${source.language} → ${target}]`,
