@@ -672,7 +672,7 @@ export class SubtitlesModalComponent {
   async loadSubtitles(mediaId: number) {
     this.subtitlesLoading.set(true);
     try {
-      this.subtitles.set(await this.subtitlesApi.getForMedia(mediaId));
+      this.subtitles.set(await this.subtitlesApi.getForMedia(mediaId, { force: true }));
       // Drop progress entries for translations that finished/failed so the map
       // never keeps stale rows across runs.
       this.sse.retainTranslationProgress(

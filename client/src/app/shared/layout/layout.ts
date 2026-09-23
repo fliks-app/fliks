@@ -4,6 +4,7 @@ import {
   signal,
   computed,
   effect,
+  untracked,
   OnInit,
   OnDestroy,
   DestroyRef,
@@ -315,6 +316,13 @@ export class LayoutComponent implements OnInit, OnDestroy {
         this.debouncedRefreshSidebarCounts();
         break;
     }
+  });
+
+  // The shell is instantiated once, so ngOnInit's boot fetch never repeats: a
+  // reconnect after backgrounding is the only later signal that counts may be stale.
+  private readonly reconnectCountsEffect = effect(() => {
+    if (!this.sse.connectionId()) return;
+    untracked(() => void this.refreshCounts());
   });
 
   ngOnInit() {
