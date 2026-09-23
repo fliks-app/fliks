@@ -114,11 +114,19 @@ export class SupersubtitlesProvider implements SubtitleProviderInterface {
       return [];
     }
 
-    const body = (await res.json()) as Record<string, EpisodeSubtitle>;
+    // Measured: an episode with nothing answers 200 with an empty body, and a
+    // bad series id answers 200 with the plain text "Nincs SorozatID!".
+    const body = await this.parseJson<Record<string, EpisodeSubtitle>>(res);
+    if (!body || typeof body !== 'object') {
+      this.logger.debug(
+        `Supersubtitles: no subtitles for "${params.title}" S${params.season ?? 1}E${params.episode ?? 1}`,
+      );
+      return [];
+    }
 
     const results: SubtitleSearchResult[] = [];
-    for (const [, item] of Object.entries(body)) {
-      if (!item.felirat) continue;
+    for (const item of Object.values(body)) {
+      if (!item?.felirat) continue;
 
       // Skip season packs
       if (item.evadpakk === '1') continue;
@@ -157,14 +165,31 @@ export class SupersubtitlesProvider implements SubtitleProviderInterface {
     });
     if (!res || !res.ok) return null;
 
-    const body = (await res.json()) as { name: string; ID: string }[];
+    const body = await this.parseJson<{ name: string; ID: string }[]>(res);
     if (!Array.isArray(body) || !body.length) return null;
 
-    // Try exact match first, then first result
+    // Try exact match first, then first result. The autocomplete never answers
+    // empty: a miss comes back as one row carrying a non-numeric sentinel id.
     const normalized = title.toLowerCase().trim();
     const match =
-      body.find((s) => s.name.toLowerCase().trim() === normalized) ?? body[0];
-    return match?.ID ?? null;
+      body.find((s) => s?.name?.toLowerCase().trim() === normalized) ?? body[0];
+    const id = match?.ID;
+    return id && /^\d+$/.test(id) ? id : null;
+  }
+
+  /** The API answers 200 with an empty body, or with a plain-text message, for
+   *  cases it has no data for, so `res.json()` would throw on both. */
+  private async parseJson<T>(res: Response): Promise<T | null> {
+    const text = await res.text();
+    if (!text.trim()) return null;
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      this.logger.debug(
+        `Supersubtitles answered no JSON: ${text.slice(0, 80)}`,
+      );
+      return null;
+    }
   }
 
   // ---------------------------------------------------------------------------
