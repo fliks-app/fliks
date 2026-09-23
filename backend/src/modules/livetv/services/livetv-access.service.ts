@@ -7,6 +7,7 @@ import {
   SettingsService,
 } from '../../settings/settings.service';
 import { User } from '../../users/entities/user.entity';
+import { foldGroupKey } from '../parsing/group-key';
 
 /** Groups a provider ships that must never be visible by default, across the app's
  *  languages (en/fr/es/de/it/pt). Heuristic, not exhaustive; excludes "Adult Swim". */
@@ -54,8 +55,18 @@ export class LiveTvAccessService {
     }
   }
 
+  /** Dedupes by {@link foldGroupKey}, not exact text: a provider (or years-old
+   *  stored settings, predating this fold) can carry the same group under two
+   *  castings. The first spelling encountered is what the admin sees. */
   private normalizeGroupSet(groups: string[]): string[] {
-    return [...new Set(groups.map((g) => g.trim()).filter(Boolean))].sort();
+    const byKey = new Map<string, string>();
+    for (const raw of groups) {
+      const trimmed = raw.trim();
+      if (!trimmed) continue;
+      const key = foldGroupKey(trimmed);
+      if (!byKey.has(key)) byKey.set(key, trimmed);
+    }
+    return [...byKey.values()].sort();
   }
 
   private async writeGroupSet(
@@ -161,28 +172,38 @@ export class LiveTvAccessService {
   private async setRestrictedGroupsLocked(groups: string[]): Promise<string[]> {
     const previous = await this.restrictedGroups();
     const unique = this.normalizeGroupSet(groups);
+    const uniqueKeys = new Set(unique.map(foldGroupKey));
 
     // A group leaving the restricted set must not leave its grants behind: they would
     // silently resurrect for whoever held them if the group is restricted again later.
     // `restrictAdultGroups` only ever grows the set, so `dropped` is always empty there.
     // Grants are dropped before the setting is written: a failure here leaves the group
     // still restricted (safe) instead of open with its grants dangling (unsafe).
-    const dropped = previous.filter((g) => !unique.includes(g));
+    // Compared by fold key: resubmitting the same group under a different casing must
+    // not read as "removed, then re-added" and churn its grants.
+    const dropped = previous.filter((g) => !uniqueKeys.has(foldGroupKey(g)));
     if (dropped.length) {
       await this.accessRepo.delete({ groupName: In(dropped) });
     }
     await this.writeGroupSet(RESTRICTED_GROUPS_KEY, unique);
 
     // An auto-matched group leaving the set is an explicit exemption (otherwise the
-    // next sync restricts it again); one re-added here retires that exemption.
+    // next sync restricts it again); one re-added here retires that exemption. Tracked
+    // by fold key so a stored exempt spelling is found and replaced, not duplicated.
     const removed = dropped.filter((g) => ADULT_GROUP_PATTERN.test(g));
     const readded = unique.filter((g) => ADULT_GROUP_PATTERN.test(g));
     if (removed.length || readded.length) {
-      const exempt = new Set(await this.exemptGroups());
-      removed.forEach((g) => exempt.add(g));
-      readded.forEach((g) => exempt.delete(g));
-      await this.writeGroupSet(EXEMPT_GROUPS_KEY, [...exempt]);
+      const exempt = new Map(
+        (await this.exemptGroups()).map((g) => [foldGroupKey(g), g] as const),
+      );
+      removed.forEach((g) => exempt.set(foldGroupKey(g), g));
+      readded.forEach((g) => exempt.delete(foldGroupKey(g)));
+      await this.writeGroupSet(EXEMPT_GROUPS_KEY, [...exempt.values()]);
     }
+
+    // A group the admin just (re)restricted is a fresh confirmation: it must not
+    // still expire off a vanish timer some earlier, unrelated sweep started.
+    await this.clearVanished(unique);
 
     return unique;
   }
@@ -194,11 +215,12 @@ export class LiveTvAccessService {
     return this.withWriteLock(async () => {
       const current = await this.restrictedGroups();
       const exempt = await this.exemptGroups();
+      // Fold key: a group already restricted or exempted under a different
+      // casing must not read as newly discovered and override the exemption.
+      const known = new Set([...current, ...exempt].map(foldGroupKey));
       const additions = groupNames.filter(
         (name) =>
-          ADULT_GROUP_PATTERN.test(name) &&
-          !current.includes(name) &&
-          !exempt.includes(name),
+          ADULT_GROUP_PATTERN.test(name) && !known.has(foldGroupKey(name)),
       );
       if (!additions.length) return current;
       return this.setRestrictedGroupsLocked([...current, ...additions]);
@@ -207,8 +229,9 @@ export class LiveTvAccessService {
 
   /** Trusts that `liveGroupNames` is complete — verifying that is the caller's job.
    *  A restricted or exempted group missing from it is timestamped, cleared the
-   *  moment it reappears; only past `livetv_stale_stream_days` does it actually
-   *  lose its grants and its list entries. */
+   *  moment it reappears; only a *restricted* group past `livetv_stale_stream_days`
+   *  actually loses its grants and its list entry — an exemption is a deliberate
+   *  admin decision and never expires this way. */
   async expireVanishedGroups(
     liveGroupNames: readonly string[],
   ): Promise<string[]> {
@@ -220,17 +243,22 @@ export class LiveTvAccessService {
   private async expireVanishedGroupsLocked(
     liveGroupNames: readonly string[],
   ): Promise<string[]> {
-    const live = new Set(liveGroupNames);
-    const candidates = new Set([
-      ...(await this.restrictedGroups()),
-      ...(await this.exemptGroups()),
-    ]);
+    // Fold key: a provider rename (only casing/whitespace changed) is still the
+    // same group and must clear, not restart, its absence timer.
+    const liveKeys = new Set(liveGroupNames.map(foldGroupKey));
+    const restricted = await this.restrictedGroups();
+    const exempt = await this.exemptGroups();
+    const candidates = new Set([...restricted, ...exempt]);
 
     const vanished = await this.readVanishedMap();
+    // A group first marked absent in this very pass must survive to the next
+    // one before it can expire — otherwise a 0-day grace period expires it in
+    // the same pass that discovers it, with no window to see or undo it.
+    const previouslyVanished = new Set(Object.keys(vanished));
     let changed = false;
     const now = new Date().toISOString();
     for (const name of candidates) {
-      if (live.has(name)) {
+      if (liveKeys.has(foldGroupKey(name))) {
         if (name in vanished) {
           delete vanished[name];
           changed = true;
@@ -250,9 +278,18 @@ export class LiveTvAccessService {
       }
     }
 
+    // Only a *restriction* lapses on its own: it is the automatic default. An
+    // exemption is a deliberate admin decision and survives the group's absence
+    // indefinitely, so a returning group doesn't silently flip back to restricted.
+    const restrictedKeys = new Set(restricted.map(foldGroupKey));
     const cutoff = Date.now() - (await this.graceDays()) * MS_PER_DAY;
     const expired = Object.entries(vanished)
-      .filter(([, since]) => new Date(since).getTime() <= cutoff)
+      .filter(
+        ([name, since]) =>
+          previouslyVanished.has(name) &&
+          restrictedKeys.has(foldGroupKey(name)) &&
+          new Date(since).getTime() <= cutoff,
+      )
       .map(([name]) => name);
 
     if (expired.length) {
@@ -260,10 +297,6 @@ export class LiveTvAccessService {
       await this.writeGroupSet(
         RESTRICTED_GROUPS_KEY,
         (await this.restrictedGroups()).filter((g) => !expired.includes(g)),
-      );
-      await this.writeGroupSet(
-        EXEMPT_GROUPS_KEY,
-        (await this.exemptGroups()).filter((g) => !expired.includes(g)),
       );
       expired.forEach((name) => delete vanished[name]);
       changed = true;
@@ -274,6 +307,22 @@ export class LiveTvAccessService {
 
     if (changed) await this.writeVanishedMap(vanished);
     return expired;
+  }
+
+  /** Clears any pending absence timer for `names`: an admin restricting or granting
+   *  a group is a fresh confirmation, not something a stale absence should undo later. */
+  private async clearVanished(names: readonly string[]): Promise<void> {
+    if (!names.length) return;
+    const keys = new Set(names.map(foldGroupKey));
+    const vanished = await this.readVanishedMap();
+    let changed = false;
+    for (const name of Object.keys(vanished)) {
+      if (keys.has(foldGroupKey(name))) {
+        delete vanished[name];
+        changed = true;
+      }
+    }
+    if (changed) await this.writeVanishedMap(vanished);
   }
 
   grantsFor(userId: number): Promise<LiveTvGroupAccess[]> {
@@ -287,7 +336,12 @@ export class LiveTvAccessService {
   async listUserAccess(): Promise<
     { id: number; username: string; groups: string[]; hasFullAccess: boolean }[]
   > {
-    const users = await this.userRepo.find({ order: { username: 'ASC' } });
+    // `permissions` reads `userRole?.permissions`: without the relation every
+    // non-admin role resolves to no permissions, and `hasFullAccess` is wrong.
+    const users = await this.userRepo.find({
+      order: { username: 'ASC' },
+      relations: ['userRole'],
+    });
     if (!users.length) return [];
     const rows = await this.accessRepo
       .createQueryBuilder('a')
@@ -318,9 +372,20 @@ export class LiveTvAccessService {
     const requested = [
       ...new Set(groupNames.map((g) => g.trim()).filter(Boolean)),
     ];
-    const restricted = new Set(await this.restrictedGroups());
-    const groups = requested.filter((g) => restricted.has(g));
-    const ignored = requested.filter((g) => !restricted.has(g));
+    // Matched by fold key, and stored under the restricted list's own spelling:
+    // a grant must agree with `deniedGroups`'s comparison regardless of which
+    // casing the caller sent.
+    const restrictedByKey = new Map(
+      (await this.restrictedGroups()).map((g) => [foldGroupKey(g), g] as const),
+    );
+    const matched = new Map<string, string>();
+    const ignored: string[] = [];
+    for (const g of requested) {
+      const canonical = restrictedByKey.get(foldGroupKey(g));
+      if (canonical) matched.set(foldGroupKey(g), canonical);
+      else ignored.push(g);
+    }
+    const groups = [...matched.values()];
 
     await this.accessRepo.delete({ user: { id: userId } });
     if (groups.length) {
@@ -330,6 +395,8 @@ export class LiveTvAccessService {
         ),
       );
     }
+    // A grant is an admin confirmation the group still matters, same as restricting it.
+    await this.withWriteLock(() => this.clearVanished(groups));
     return { groups, ignored };
   }
 
@@ -344,9 +411,11 @@ export class LiveTvAccessService {
     // Whoever configures the lineup is never filtered out of it. The seeded
     // Admin role carries `settings.access` rather than `manage:all`.
     if (ADMIN_PERMISSIONS.some((p) => user.permissions.includes(p))) return [];
-    const granted = new Set(
-      (await this.grantsFor(user.id)).map((g) => g.groupName),
+    // Fold key: a grant on one casing of a restricted group must cover every
+    // other casing the same group is stored or rediscovered under.
+    const grantedKeys = new Set(
+      (await this.grantsFor(user.id)).map((g) => foldGroupKey(g.groupName)),
     );
-    return restricted.filter((group) => !granted.has(group));
+    return restricted.filter((group) => !grantedKeys.has(foldGroupKey(group)));
   }
 }
