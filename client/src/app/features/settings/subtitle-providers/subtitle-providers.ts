@@ -34,7 +34,7 @@ import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { EnabledSwitchComponent } from '../../../shared/components/enabled-switch';
 
-const DEFAULT_TRANSLATION_MODEL = 'gemini-3.6-flash';
+const DEFAULT_TRANSLATION_MODEL = 'gemini-3.5-flash-lite';
 
 const TRANSLATION_ENGINES: { value: TranslationEngine; label: string }[] = [
   { value: 'gemini', label: 'Gemini' },

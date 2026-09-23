@@ -1,5 +1,7 @@
 import {
+  BATCH_SIZE,
   BatchTranslator,
+  MAX_OUTPUT_TOKENS,
   TranslationLimits,
   TranslationRequest,
   buildPayload,
@@ -42,6 +44,8 @@ export async function translateWithOpenAi(
     maxTokensPerRequest: cfg.maxTokensPerRequest,
     tokensPerMinute: cfg.tokensPerMinute,
     key: `openai:${url}:${cfg.model}`,
+    outputCeiling: MAX_OUTPUT_TOKENS,
+    batchCeiling: BATCH_SIZE,
   };
 
   const callBatch: BatchTranslator = async (batch, maxOutputTokens) => {
