@@ -3,6 +3,7 @@ import {
   BatchTranslator,
   MAX_OUTPUT_TOKENS,
   TranslationLimits,
+  TranslationPayloadTooLargeError,
   TranslationRequest,
   buildPayload,
   buildSystemInstruction,
@@ -67,7 +68,15 @@ export async function translateWithOpenAi(
       'OpenAI-compatible',
     );
     const data: any = await res.json();
-    const text = data?.choices?.[0]?.message?.content;
+    const choice = data?.choices?.[0];
+    // Ollama caps the whole exchange at its own num_ctx, which no OpenAI field
+    // can raise, so a batch too big for it comes back cut rather than refused.
+    if (choice?.finish_reason === 'length') {
+      throw new TranslationPayloadTooLargeError(
+        `OpenAI-compatible endpoint truncated ${batch.length} cues at its context limit (usage=${JSON.stringify(data?.usage)}); set maxTokensPerRequest to what it actually accepts`,
+      );
+    }
+    const text = choice?.message?.content;
     if (typeof text !== 'string') return null;
     return parseNumbered(text, batch.length);
   };

@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import {
   BatchTranslator,
   TranslationLimits,
+  TranslationPayloadTooLargeError,
   TranslationRequest,
   buildPayload,
   buildSystemInstruction,
@@ -69,6 +70,11 @@ export async function translateWithGemini(
     );
     const data: any = await res.json();
     const candidate = data?.candidates?.[0];
+    if (candidate?.finishReason === 'MAX_TOKENS') {
+      throw new TranslationPayloadTooLargeError(
+        `Gemini truncated ${batch.length} cues at the output budget (usage=${JSON.stringify(data?.usageMetadata)})`,
+      );
+    }
     const parts = candidate?.content?.parts;
     if (!Array.isArray(parts)) {
       log.warn(
