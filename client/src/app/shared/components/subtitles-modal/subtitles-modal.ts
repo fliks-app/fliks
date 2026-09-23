@@ -54,6 +54,7 @@ import { MediaDetailSubtitleSearchModalComponent } from '../../../features/media
 import type { MediaInfoHeaderSubtitle } from '../media-info-header/media-info-header';
 import { ModalHeaderComponent } from '../modal-header';
 import { ModalFooterComponent } from '../modal-footer';
+import { ErrorBadgeComponent } from '../error-badge';
 
 interface SubtitleRow {
   sub?: SubtitleFileRow;
@@ -78,6 +79,7 @@ interface SubtitleRow {
     SubtitleStatusPipe,
     SubtitleFilenamePipe,
     PaginationComponent,
+    ErrorBadgeComponent,
     MediaDetailSubtitleSearchModalComponent,
     SubtitleViewerModalComponent,
     LucideChevronDown,
@@ -654,7 +656,9 @@ export class SubtitlesModalComponent {
           this.translate.instant(
             event['reason'] === 'rate_limit'
               ? 'media_detail.translation_rate_limited'
-              : 'sse.subtitle_failed',
+              : event['reason'] === 'translation'
+                ? 'sse.translation_failed'
+                : 'sse.subtitle_failed',
             { lang: event['language'] ?? '' },
           ),
         );

@@ -1,6 +1,6 @@
 import {
   BatchTranslator,
-  MAX_OUTPUT_TOKENS,
+  TranslationLimits,
   TranslationRequest,
   buildPayload,
   buildSystemInstruction,
@@ -16,6 +16,10 @@ export interface OpenAiConfig {
   /** Optional bearer token (omitted for keyless local servers like Ollama). */
   apiKey: string;
   model: string;
+  /** Prompt + reserved output ceiling per request; 0 = engine maximum. */
+  maxTokensPerRequest: number;
+  /** Token allowance per minute for this endpoint; 0 = unpaced. */
+  tokensPerMinute: number;
 }
 
 /**
@@ -30,10 +34,17 @@ export async function translateWithOpenAi(
 ): Promise<string[]> {
   const system = buildSystemInstruction(req);
   const url = `${cfg.baseUrl.replace(/\/+$/, '')}/chat/completions`;
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
   if (cfg.apiKey) headers['Authorization'] = `Bearer ${cfg.apiKey}`;
+  const limits: TranslationLimits = {
+    maxTokensPerRequest: cfg.maxTokensPerRequest,
+    tokensPerMinute: cfg.tokensPerMinute,
+    key: `openai:${url}:${cfg.model}`,
+  };
 
-  const callBatch: BatchTranslator = async (batch) => {
+  const callBatch: BatchTranslator = async (batch, maxOutputTokens) => {
     const res = await postWithRetry(
       url,
       {
@@ -42,7 +53,7 @@ export async function translateWithOpenAi(
         body: JSON.stringify({
           model: cfg.model,
           temperature: 0.3,
-          max_tokens: MAX_OUTPUT_TOKENS,
+          max_tokens: maxOutputTokens,
           messages: [
             { role: 'system', content: system },
             { role: 'user', content: buildPayload(batch) },
@@ -56,5 +67,5 @@ export async function translateWithOpenAi(
     if (typeof text !== 'string') return null;
     return parseNumbered(text, batch.length);
   };
-  return translateWithBatching(texts, callBatch, onProgress);
+  return translateWithBatching(texts, callBatch, limits, system, onProgress);
 }

@@ -161,9 +161,11 @@
                         }
                       }
                       @if (sub.status === 'failed') {
-                        <span class="badge badge-sm badge-error mr-1">{{
-                          'media_detail.subtitle_failed' | translate
-                        }}</span>
+                        <app-error-badge
+                          class="mr-1"
+                          [error]="sub.errorMessage ?? null"
+                          [label]="'media_detail.subtitle_failed' | translate"
+                        />
                       }
                       @if (sub.forced) {
                         <span class="badge badge-sm badge-outline mr-1">F</span>
@@ -177,11 +179,12 @@
                         }}</span>
                       }
                       @if (sub.syncFailed) {
-                        <span
-                          class="badge badge-sm badge-warning ml-1"
-                          [title]="sub.errorMessage ?? ''"
-                          >{{ 'media_detail.subtitle_sync_failed' | translate }}</span
-                        >
+                        <app-error-badge
+                          class="ml-1"
+                          [error]="sub.errorMessage ?? null"
+                          [label]="'media_detail.subtitle_sync_failed' | translate"
+                          badgeClass="badge-warning"
+                        />
                       }
                       @if (sub.codec) {
                         <span class="badge badge-sm badge-ghost ml-1">{{ sub.codec }}</span>

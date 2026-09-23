@@ -364,6 +364,43 @@
         </label>
       }
 
+      @if (trFormEngine() !== 'libretranslate') {
+        <div class="grid grid-cols-2 gap-3">
+          <label class="form-control w-full">
+            <span class="label-text">{{
+              'settings.subtitle_providers.translation_max_tokens_per_request' | translate
+            }}</span>
+            <input
+              type="number"
+              min="0"
+              step="256"
+              class="input input-bordered input-sm w-full"
+              [ngModel]="trFormMaxTokensPerRequest()"
+              (ngModelChange)="trFormMaxTokensPerRequest.set($event)"
+            />
+            <span class="text-xs text-base-content/50 mt-1">{{
+              'settings.subtitle_providers.translation_max_tokens_per_request_hint' | translate
+            }}</span>
+          </label>
+          <label class="form-control w-full">
+            <span class="label-text">{{
+              'settings.subtitle_providers.translation_tokens_per_minute' | translate
+            }}</span>
+            <input
+              type="number"
+              min="0"
+              step="1000"
+              class="input input-bordered input-sm w-full"
+              [ngModel]="trFormTokensPerMinute()"
+              (ngModelChange)="trFormTokensPerMinute.set($event)"
+            />
+            <span class="text-xs text-base-content/50 mt-1">{{
+              'settings.subtitle_providers.translation_tokens_per_minute_hint' | translate
+            }}</span>
+          </label>
+        </div>
+      }
+
       <div class="flex gap-6">
         <label class="flex items-center gap-2">
           <input
