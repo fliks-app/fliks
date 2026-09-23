@@ -1,3 +1,4 @@
+import { translateWithGemini } from './gemini-translator';
 import {
   buildRegisterProbe,
   buildSystemInstruction,
@@ -24,7 +25,9 @@ describe('second-person register', () => {
     expect(fr).toContain('These speakers use "tu" with each other');
     // Not an override: a judge must still be addressed as one.
     expect(fr).toContain('use "vous" instead');
-    expect(buildSystemInstruction(req('de', 'Sie'))).toContain('use "du" instead');
+    expect(buildSystemInstruction(req('de', 'Sie'))).toContain(
+      'use "du" instead',
+    );
   });
 
   it('says nothing when no register was resolved', () => {
@@ -74,5 +77,47 @@ describe('second-person register', () => {
     const ask = jest.fn();
     await withRegister(req('fr', 'tu'), ['a'], ask);
     expect(ask).not.toHaveBeenCalled();
+  });
+});
+
+describe('thinking is disabled per model family', () => {
+  /** Captures the request body of the first call, answering a valid batch. */
+  async function firstBody(model: string): Promise<Record<string, any>> {
+    const seen: string[] = [];
+    globalThis.fetch = (async (_url: string, init: { body: string }) => {
+      seen.push(init.body);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          candidates: [
+            {
+              finishReason: 'STOP',
+              content: { parts: [{ text: '#1#\nbonjour' }] },
+            },
+          ],
+        }),
+      };
+    }) as never;
+    await translateWithGemini(
+      ['hello'],
+      // A target with no register distinction, so no probe call comes first.
+      { sourceLanguage: 'en', targetLanguage: 'ja', context: {} },
+      { apiKey: 'k', model, maxTokensPerRequest: 0, tokensPerMinute: 0 },
+    );
+    return JSON.parse(seen[0]);
+  }
+
+  it.each([
+    ['gemini-3.5-flash-lite', 'low'],
+    ['gemma-4-26b-a4b-it', 'minimal'],
+  ])('%s asks for "%s"', async (model, level) => {
+    const body = await firstBody(model);
+    expect(body.generationConfig.thinkingConfig.thinkingLevel).toBe(level);
+  });
+
+  it('sends nothing for a family that takes neither value', async () => {
+    const body = await firstBody('gemini-2.5-flash');
+    expect(body.generationConfig.thinkingConfig).toBeUndefined();
   });
 });
