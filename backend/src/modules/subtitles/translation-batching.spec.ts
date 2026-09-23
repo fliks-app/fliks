@@ -71,6 +71,24 @@ describe('translateWithBatching token budget', () => {
     expect(seen).toEqual([4, 2, 1, 1, 2, 1, 1]);
   });
 
+  it('reports progress for each split half, not just whole batches', async () => {
+    const seen: number[] = [];
+    await translateWithBatching(
+      ['a', 'b', 'c', 'd'],
+      async (batch) => {
+        if (batch.length > 2) throw new TranslationPayloadTooLargeError('too large');
+        return batch;
+      },
+      unlimited(),
+      SYSTEM,
+      (done, total) => {
+        expect(total).toBe(4);
+        seen.push(done);
+      },
+    );
+    expect(seen).toEqual([2, 4]);
+  });
+
   it('propagates a non-size failure instead of splitting', async () => {
     await expect(
       translateWithBatching(

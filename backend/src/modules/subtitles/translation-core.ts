@@ -42,6 +42,8 @@ const REQUEST_TIMEOUT_MS = 120_000;
 const MAX_ATTEMPTS = 4;
 /** Statuses worth retrying with backoff (rate limits + transient server errors). */
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+/** A spent per-minute allowance needs a real pause, not the first backoff step. */
+const QUOTA_RETRY_MS = 20_000;
 
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / CHARS_PER_TOKEN);
@@ -117,15 +119,22 @@ export async function postWithRetry(
     if (res.ok) return res;
 
     const errText = await res.text().catch(() => '');
+    // A 413 means either the payload, which a smaller batch fixes, or a spent
+    // per-minute token allowance, which only time fixes. Groq reports the second
+    // as a 413 too, and splitting that one just burns the rest of the quota.
+    const quota =
+      res.status === 429 ||
+      /rate.?limit|per minute|\bTPM\b|quota/i.test(errText);
     if (
-      res.status === 413 ||
-      /context[_ ]length|too large|max_tokens/i.test(errText)
+      !quota &&
+      (res.status === 413 ||
+        /context[_ ]length|too large|max_tokens/i.test(errText))
     ) {
       throw new TranslationPayloadTooLargeError(
         `${engineLabel} rejected the request as too large: ${errText}`,
       );
     }
-    if (RETRYABLE_STATUS.has(res.status) && attempt < MAX_ATTEMPTS) {
+    if ((quota || RETRYABLE_STATUS.has(res.status)) && attempt < MAX_ATTEMPTS) {
       const headerRetry = Number(res.headers.get('retry-after'));
       const suggested =
         parseRetryDelayMs(errText) ??
@@ -134,11 +143,18 @@ export async function postWithRetry(
           : null);
       // Honour the server's hint (capped) but never wait less than the backoff.
       await sleep(
-        Math.min(Math.max(suggested ?? 0, backoffDelay(attempt)), 60_000),
+        Math.min(
+          Math.max(
+            suggested ?? 0,
+            backoffDelay(attempt),
+            quota ? QUOTA_RETRY_MS : 0,
+          ),
+          60_000,
+        ),
       );
       continue;
     }
-    if (res.status === 429) {
+    if (quota) {
       const retryMs = parseRetryDelayMs(errText);
       const scope = /PerDay/i.test(errText)
         ? 'daily'
@@ -307,6 +323,7 @@ async function translateBatchWithSplit(
   callBatch: BatchTranslator,
   systemTokens: number,
   limits: TranslationLimits,
+  report: (cues: number) => void,
 ): Promise<string[]> {
   if (texts.length === 0) return [];
   const prompt = promptTokens(texts, systemTokens);
@@ -324,9 +341,15 @@ async function translateBatchWithSplit(
       throw err;
     }
   }
-  if (result && result.length === texts.length) return result;
+  if (result && result.length === texts.length) {
+    report(texts.length);
+    return result;
+  }
   // A single segment that still won't map keeps its source text.
-  if (texts.length === 1) return [texts[0]];
+  if (texts.length === 1) {
+    report(1);
+    return [texts[0]];
+  }
   const mid = Math.floor(texts.length / 2);
   const [left, right] = [
     await translateBatchWithSplit(
@@ -334,12 +357,14 @@ async function translateBatchWithSplit(
       callBatch,
       systemTokens,
       limits,
+      report,
     ),
     await translateBatchWithSplit(
       texts.slice(mid),
       callBatch,
       systemTokens,
       limits,
+      report,
     ),
   ];
   return [...left, ...right];
@@ -349,7 +374,8 @@ async function translateBatchWithSplit(
  * Translate cue texts through an LLM `callBatch`, preserving order and count.
  * Batches are cut by {@link BATCH_SIZE} and by the provider's token budget; a
  * count mismatch or a too-large rejection splits the batch down to single cues.
- * `onProgress(done, total)` fires after each top-level batch.
+ * `onProgress(done, total)` fires as soon as any group of cues comes back, split
+ * halves included, so a batch that takes several round-trips still moves.
  */
 export async function translateWithBatching(
   texts: string[],
@@ -360,6 +386,11 @@ export async function translateWithBatching(
 ): Promise<string[]> {
   const systemTokens = estimateTokens(systemInstruction);
   const out: string[] = [];
+  let done = 0;
+  const report = (cues: number) => {
+    done += cues;
+    onProgress?.(done, texts.length);
+  };
   let i = 0;
   while (i < texts.length) {
     const end = batchEnd(texts, i, systemTokens, limits);
@@ -369,10 +400,10 @@ export async function translateWithBatching(
         callBatch,
         systemTokens,
         limits,
+        report,
       )),
     );
     i = end;
-    onProgress?.(i, texts.length);
   }
   return out;
 }
