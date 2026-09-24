@@ -107,7 +107,7 @@
         @for (t of translations(); track t.language) {
           <div class="flex items-center gap-2">
             <span>{{ 'media_detail.translation_in_progress' | translate:{ langs: t.language } }}</span>
-            @if (t.percent !== null) {
+            @if (t.percent) {
               <progress class="progress progress-primary w-40" [value]="t.percent" max="100"></progress>
               <span class="tabular-nums">{{ t.percent }}%</span>
             } @else {

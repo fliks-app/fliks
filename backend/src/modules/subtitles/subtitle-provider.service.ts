@@ -6,7 +6,11 @@ import { CreateSubtitleProviderDto } from './dto/create-subtitle-provider.dto';
 import { UpdateSubtitleProviderDto } from './dto/update-subtitle-provider.dto';
 import { SubtitleProviderFactory } from './providers/subtitle-provider.factory';
 import { SubtitleProviderTestResult } from './providers/subtitle-provider.interface';
-import { mergeSecretFields, redactSecretFields } from '../../common/utils/secret-fields.util';
+import {
+  mergeSecretFields,
+  redactSecretFields,
+  resolveStoredSecrets,
+} from '../../common/utils/secret-fields.util';
 
 /** The credential keys the provider implementations read; `username` is an identifier, not a secret. */
 export const SUBTITLE_PROVIDER_SECRET_FIELDS = [
@@ -92,16 +96,12 @@ export class SubtitleProviderService {
     settings: Record<string, unknown>,
     providerId?: number,
   ): Promise<SubtitleProviderTestResult> {
-    // The editor never receives stored credentials, so a test on an untouched
-    // one arrives blank: resolve it rather than report a missing credential.
-    if (providerId != null) {
-      const stored = await this.repo.findOne({ where: { id: providerId } });
-      settings = mergeSecretFields(
-        stored?.settings,
-        settings,
-        SUBTITLE_PROVIDER_SECRET_FIELDS,
-      );
-    }
+    settings = await resolveStoredSecrets(
+      this.repo,
+      providerId,
+      settings,
+      SUBTITLE_PROVIDER_SECRET_FIELDS,
+    );
     try {
       const result = await this.factory
         .create(type, settings)

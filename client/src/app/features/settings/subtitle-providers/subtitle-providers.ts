@@ -1,12 +1,14 @@
 import {
   Component,
   ElementRef,
+  effect,
   signal,
   inject,
   OnInit,
   viewChild,
 } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { NgTemplateOutlet } from '@angular/common';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { firstValueFrom } from 'rxjs';
 import { FormsModule } from '@angular/forms';
@@ -37,6 +39,15 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { EnabledSwitchComponent } from '../../../shared/components/enabled-switch';
 
 const DEFAULT_TRANSLATION_MODEL = 'gemini-3.5-flash-lite';
+
+/** Curated so a TV user picks from a list instead of typing a model id on a
+ *  D-pad; Google retires ids over time, so this needs occasional upkeep. */
+const GEMINI_MODELS = [
+  'gemini-3.5-flash-lite',
+  'gemini-3.6-flash',
+  'gemini-3.5-flash',
+  'gemma-4-26b-a4b-it',
+];
 
 const TRANSLATION_ENGINES: { value: TranslationEngine; label: string }[] = [
   { value: 'gemini', label: 'Gemini' },
@@ -101,6 +112,7 @@ const LABELS: ProviderListLabels = {
 @Component({
   selector: 'app-subtitle-providers-settings',
   imports: [TvSelectDirective,
+    NgTemplateOutlet,
     ModalFooterComponent,
     ModalHeaderComponent,
     FormsModule,
@@ -137,6 +149,7 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   // Machine-translation — a list of admin-configured providers plus the global
   // on/off master switch (still an app key/value setting).
   readonly translationEngines = TRANSLATION_ENGINES;
+  readonly geminiModels = GEMINI_MODELS;
   readonly translationEnabled = signal(false);
   readonly savingTranslationEnabled = signal(false);
   readonly translationMaxConcurrency = signal(1);
@@ -146,6 +159,9 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   readonly togglingTranslationId = signal<number | null>(null);
 
   readonly trEditingId = signal<number | null>(null);
+  /** The saved row's engine at open time, so a test after switching engines
+   *  mid-edit doesn't send `id` and merge the old engine's stored key in. */
+  readonly trEditingEngine = signal<TranslationEngine | null>(null);
   readonly trSaving = signal(false);
   readonly trFormName = signal('');
   readonly trFormEngine = signal<TranslationEngine>('gemini');
@@ -162,6 +178,17 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   readonly trFormTokensPerMinute = signal(0);
   readonly trTestLoading = signal(false);
   readonly trTestResult = signal<{ ok: boolean; message: string } | null>(null);
+
+  // A saved verdict only describes the config it ran against; changing any of
+  // it (engine and API key clear themselves elsewhere) must clear the badge.
+  private readonly clearTrTestOnFieldChange = effect(() => {
+    this.trFormModel();
+    this.trFormBaseUrl();
+    this.trFormUrl();
+    this.trFormMaxTokensPerRequest();
+    this.trFormTokensPerMinute();
+    this.trTestResult.set(null);
+  });
 
   ngOnInit() {
     void this.loadTranslationSettings();
@@ -245,6 +272,7 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
 
   openCreateTranslation() {
     this.trEditingId.set(null);
+    this.trEditingEngine.set(null);
     this.trFormName.set(this.translationEngineLabel('gemini'));
     this.trFormEngine.set('gemini');
     this.trFormEnabled.set(true);
@@ -263,6 +291,7 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
 
   openEditTranslation(row: TranslationProviderRow) {
     this.trEditingId.set(row.id);
+    this.trEditingEngine.set(row.engine);
     this.trFormName.set(row.name);
     this.trFormEngine.set(row.engine);
     this.trFormEnabled.set(row.enabled);
@@ -289,6 +318,7 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     if (this.trEditingId() === null) {
       this.trFormName.set(this.translationEngineLabel(engine));
     }
+    this.trTestResult.set(null);
   }
 
   closeTranslationEditor() {
@@ -298,6 +328,7 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   onTrApiKeyInput(value: string) {
     this.trFormApiKey.set(value);
     if (value.trim()) this.trApiKeyCleared.set(false);
+    this.trTestResult.set(null);
   }
 
   /** Blank leaves the stored key alone, `null` erases it, as the API defines. */
@@ -336,11 +367,14 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     this.trTestResult.set(null);
     this.trTestLoading.set(true);
     try {
+      // Lets the server resolve a stored key the editor never received, but only when
+      // the engine hasn't changed; a switched engine would merge the wrong key in.
+      const sameEngine =
+        this.trEditingId() !== null && this.trFormEngine() === this.trEditingEngine();
       const res = await this.translationApi.testConnection({
         engine: this.trFormEngine(),
         settings: this.buildTranslationSettings(),
-        // Lets the server resolve a stored key the editor never received.
-        ...(this.trEditingId() !== null ? { id: this.trEditingId()! } : {}),
+        ...(sameEngine ? { id: this.trEditingId()! } : {}),
       });
       this.trTestResult.set({
         ok: res.ok,

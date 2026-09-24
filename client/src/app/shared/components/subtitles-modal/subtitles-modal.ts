@@ -160,6 +160,19 @@ export class SubtitlesModalComponent {
    *  actions panel: it renders the anchored dropdown on desktop and the sheet
    *  (submenus swapping in place) on touch and TV. */
   private buildSubActions(sub: SubtitleFileRow): CardAction[] {
+    // No cancel endpoint exists: Delete is the only way out of a stuck run, and it
+    // doubles as the retry path since the row is the run's own marker.
+    if (sub.status === 'processing') {
+      return [
+        {
+          labelKey: 'media_detail.action_delete',
+          icon: 'trash-2',
+          tone: 'danger',
+          section: 'remove',
+          run: () => this.deleteSubtitle(sub.id, true),
+        },
+      ];
+    }
     const run = (fn: (s: SubtitleFileRow) => void) => () => fn(sub);
     const embedded = sub.providerType === 'embedded';
     const image = isImageBasedSubtitleCodec(sub.codec);
@@ -442,8 +455,11 @@ export class SubtitlesModalComponent {
 
   readonly hasMissing = computed(() => this.rows().some((r) => r.missing));
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.rows().length / this.pageSize)));
+  /** `page` itself can point past the end once rows shrink; this is the page
+   *  actually shown, so the slice and the pager never disagree. */
+  readonly currentPage = computed(() => Math.min(this.page(), this.totalPages() - 1));
   readonly pagedRows = computed(() => {
-    const start = this.page() * this.pageSize;
+    const start = this.currentPage() * this.pageSize;
     return this.rows().slice(start, start + this.pageSize);
   });
 
@@ -654,16 +670,15 @@ export class SubtitlesModalComponent {
       void this.loadSubtitles(mediaId);
     } else if (event.type === 'subtitle.failed') {
       if (!automatic) {
-        this.toast.error(
-          this.translate.instant(
-            event['reason'] === 'rate_limit'
-              ? 'media_detail.translation_rate_limited'
-              : event['reason'] === 'translation'
-                ? 'sse.translation_failed'
-                : 'sse.subtitle_failed',
-            { lang: event['language'] ?? '' },
-          ),
-        );
+        const key =
+          event['reason'] === 'rate_limit'
+            ? event['scope'] === 'daily'
+              ? 'media_detail.translation_rate_limited_daily'
+              : 'media_detail.translation_rate_limited'
+            : event['reason'] === 'translation'
+              ? 'sse.translation_failed'
+              : 'sse.subtitle_failed';
+        this.toast.error(this.translate.instant(key, { lang: event['language'] ?? '' }));
       }
       void this.loadSubtitles(mediaId);
     }
@@ -920,11 +935,17 @@ export class SubtitlesModalComponent {
     this.toast.info(this.translate.instant('media_detail.translation_started'));
   }
 
-  async deleteSubtitle(subtitleId: number) {
+  /** `processing` is a live run: the row is its own duplicate-run guard, so
+   *  deleting it needs its own warning that the run itself keeps going. */
+  async deleteSubtitle(subtitleId: number, processing = false) {
     if (
       !(await this.confirmation.confirm({
         title: this.translate.instant('common.confirm'),
-        message: this.translate.instant('media_detail.confirm_delete_subtitle'),
+        message: this.translate.instant(
+          processing
+            ? 'media_detail.confirm_delete_subtitle_processing'
+            : 'media_detail.confirm_delete_subtitle',
+        ),
         variant: 'danger',
       }))
     )

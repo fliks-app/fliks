@@ -5,7 +5,14 @@ const log = new Logger('SubtitleTranslation');
 
 /** Thrown when an engine returns 429 (quota exhausted / rate limited) after
  *  retries — lets the caller surface a specific message to the client. */
-export class TranslationRateLimitError extends Error {}
+export class TranslationRateLimitError extends Error {
+  constructor(
+    message: string,
+    readonly scope: 'daily' | 'per-minute' | 'unknown' = 'unknown',
+  ) {
+    super(message);
+  }
+}
 
 /** Thrown when an engine rejects a request as too large (context window or a
  *  per-minute token allowance) — the caller halves the batch and retries. */
@@ -37,6 +44,9 @@ export interface TranslationRequest {
 export const MAX_OUTPUT_TOKENS = 8192;
 /** Cues per request when an engine names no better figure. */
 export const BATCH_SIZE = 150;
+/** Floor for a configured `maxTokensPerRequest`. Below this the system prompt
+ *  (up to ~310 tokens with full context) leaves no room for a useful batch. */
+export const MIN_TOKENS_PER_REQUEST = 2048;
 /** Chars per token — close enough for Latin subtitle text, and being off only
  *  shifts where a batch is cut. */
 const CHARS_PER_TOKEN = 4;
@@ -184,6 +194,7 @@ export async function postWithRetry(
           : 'unknown';
       throw new TranslationRateLimitError(
         `${engineLabel} quota/rate limit exceeded (scope=${scope}${retryMs ? `, retryDelay=${Math.round(retryMs / 1000)}s` : ''}): ${errText}`,
+        scope,
       );
     }
     throw new Error(`${engineLabel} API error ${res.status}: ${errText}`);
@@ -213,6 +224,11 @@ export function hasRegisterChoice(targetLanguage: string): boolean {
   return targetLanguage in SECOND_PERSON;
 }
 
+/** Answer budget for the register probe. A bare word would do, but a model that
+ *  thinks by default (not disabled for it) spends this same budget on thinking
+ *  first, so it needs enough room to still land the word after. */
+export const REGISTER_PROBE_MAX_OUTPUT_TOKENS = 500;
+
 /** One cheap call that reads a sample of the dialogue and names the register the
  *  speakers use. The model judges this well; what it will not do is hold to its
  *  own answer, so the answer has to come back as an instruction. */
@@ -228,18 +244,24 @@ export function buildRegisterProbe(
   };
 }
 
-/** The probe's answer, or null when it did not name one of the two forms. */
+/** The probe's answer, or null when it names neither form. Naming both — a
+ *  chatty explanation almost always does — is resolved by taking whichever
+ *  form was named last, since a reasoned answer states its conclusion at the end. */
 export function parseRegister(
   answer: string,
   targetLanguage: string,
 ): string | null {
   const forms = SECOND_PERSON[targetLanguage];
   if (!forms) return null;
-  const words: string[] = answer.toLowerCase().match(/[\p{L}]+/gu) ?? [];
-  for (const form of [forms.informal, forms.formal]) {
-    if (words.includes(form.toLowerCase())) return form;
-  }
-  return null;
+  // A local reasoning model emits its <think> block straight into the content.
+  const body = answer.replace(/^\s*<think>[\s\S]*?(<\/think>|$)/i, '');
+  const words: string[] = body.toLowerCase().match(/[\p{L}]+/gu) ?? [];
+  const informal = words.includes(forms.informal.toLowerCase());
+  const formal = words.includes(forms.formal.toLowerCase());
+  // An answer naming both is refused rather than guessed: "vous, not tu" and
+  // "not tu, but vous" mean the same thing and end on opposite words.
+  if (informal === formal) return null;
+  return informal ? forms.informal : forms.formal;
 }
 
 /** Unbroken runs of dialogue taken from a few points in the file. Every Nth cue
@@ -289,9 +311,8 @@ export async function withRegister(
   }
 }
 
-/** A default, not an override. Forcing the register outright made the model
- *  tutoyer a judge; leaving it out let polite set phrases drag a whole intimate
- *  scene back to the formal form. This wording measured best on both. */
+/** A default, not an override: a line that clearly addresses someone
+ *  differently (e.g. a judge) can still switch to the other form. */
 function registerInstruction(req: TranslationRequest): string {
   const forms = SECOND_PERSON[req.targetLanguage];
   if (!forms || !req.register) return '';
@@ -458,6 +479,7 @@ async function translateBatchWithSplit(
   limits: TranslationLimits,
   report: (cues: number) => void,
   shrink: (attempted: number) => void,
+  keepSource: (cues: number, err: Error) => void,
 ): Promise<string[]> {
   if (texts.length === 0) return [];
   const prompt = promptTokens(texts, systemTokens);
@@ -468,12 +490,14 @@ async function translateBatchWithSplit(
     await reserveRate(limits, prompt + output);
     result = await callBatch(texts, output);
   } catch (err) {
-    // Too large is the one failure a smaller batch can still recover from.
-    if (
-      !(err instanceof TranslationPayloadTooLargeError) ||
-      texts.length === 1
-    ) {
-      throw err;
+    if (!(err instanceof TranslationPayloadTooLargeError)) throw err;
+    // A single cue can't be split further; keep it untranslated rather than
+    // losing every cue already translated around it.
+    if (texts.length === 1) {
+      log.warn(`${err.message}; keeping its source text`);
+      report(1);
+      keepSource(1, err);
+      return [texts[0]];
     }
     log.warn(`${err.message}; retrying in two halves`);
     truncated = true;
@@ -485,8 +509,10 @@ async function translateBatchWithSplit(
   }
   // A single segment that still won't map keeps its source text.
   if (texts.length === 1) {
+    const err = new Error("the engine's response did not map back to the source cue");
     log.warn('A single cue would not map back; keeping its source text');
     report(1);
+    keepSource(1, err);
     return [texts[0]];
   }
   if (!truncated) {
@@ -504,6 +530,7 @@ async function translateBatchWithSplit(
       limits,
       report,
       shrink,
+      keepSource,
     ),
     await translateBatchWithSplit(
       texts.slice(mid),
@@ -512,6 +539,7 @@ async function translateBatchWithSplit(
       limits,
       report,
       shrink,
+      keepSource,
     ),
   ];
   return [...left, ...right];
@@ -523,7 +551,9 @@ async function translateBatchWithSplit(
  * budget; a
  * count mismatch or a too-large rejection splits the batch down to single cues.
  * `onProgress(done, total)` fires as soon as any group of cues comes back, split
- * halves included, so a batch that takes several round-trips still moves.
+ * halves included, so a batch that takes several round-trips still moves. Throws
+ * the last such rejection when every cue ends up kept as source text, rather
+ * than reporting an untranslated file as a success.
  */
 export async function translateWithBatching(
   texts: string[],
@@ -533,9 +563,18 @@ export async function translateWithBatching(
   onProgress?: (done: number, total: number) => void,
 ): Promise<string[]> {
   const systemTokens = estimateTokens(systemInstruction);
+  if (
+    limits.maxTokensPerRequest &&
+    limits.maxTokensPerRequest < MIN_TOKENS_PER_REQUEST
+  ) {
+    log.warn(
+      `maxTokensPerRequest=${limits.maxTokensPerRequest} leaves no room after the system prompt; raising it to ${MIN_TOKENS_PER_REQUEST}`,
+    );
+    limits = { ...limits, maxTokensPerRequest: MIN_TOKENS_PER_REQUEST };
+  }
   // A batch the endpoint cut names its real ceiling. Keeping it means every
   // later batch pays one wasted request to rediscover the same limit.
-  let ceiling = limits.batchCeiling;
+  let ceiling = Math.max(1, limits.batchCeiling);
   const shrink = (attempted: number) => {
     ceiling = Math.max(1, Math.min(ceiling, Math.floor(attempted / 2)));
   };
@@ -544,6 +583,12 @@ export async function translateWithBatching(
   const report = (cues: number) => {
     done += cues;
     onProgress?.(done, texts.length);
+  };
+  let kept = 0;
+  let lastKeepError: Error | null = null;
+  const keepSource = (cues: number, err: Error) => {
+    kept += cues;
+    lastKeepError = err;
   };
   let i = 0;
   while (i < texts.length) {
@@ -559,9 +604,14 @@ export async function translateWithBatching(
         limits,
         report,
         shrink,
+        keepSource,
       )),
     );
     i = end;
+  }
+  // Every cue kept, none translated: a mangled config, not a partial result.
+  if (texts.length > 0 && kept === texts.length) {
+    throw lastKeepError ?? new Error('translation produced no translated cues');
   }
   return out;
 }

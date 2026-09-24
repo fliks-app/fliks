@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import {
   BatchTranslator,
+  REGISTER_PROBE_MAX_OUTPUT_TOKENS,
   TranslationLimits,
   TranslationPayloadTooLargeError,
   TranslationRequest,
@@ -42,6 +43,13 @@ function thinkingConfig(model: string): Record<string, unknown> {
   return {};
 }
 
+/** Joins a Gemini response's text parts into one string. */
+function joinParts(parts: unknown): string {
+  return Array.isArray(parts)
+    ? parts.map((p: any) => p?.text ?? '').join('')
+    : '';
+}
+
 /** Translate cue texts via the native Gemini generateContent endpoint. */
 export async function translateWithGemini(
   texts: string[],
@@ -49,9 +57,10 @@ export async function translateWithGemini(
   cfg: GeminiConfig,
   onProgress?: (done: number, total: number) => void,
 ): Promise<string[]> {
+  const url = `${GEMINI_BASE}/${encodeURIComponent(cfg.model)}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`;
   const ask = async (system: string, user: string): Promise<string> => {
     const res = await postWithRetry(
-      `${GEMINI_BASE}/${encodeURIComponent(cfg.model)}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`,
+      url,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -60,7 +69,7 @@ export async function translateWithGemini(
           contents: [{ role: 'user', parts: [{ text: user }] }],
           generationConfig: {
             temperature: 0,
-            maxOutputTokens: 16,
+            maxOutputTokens: REGISTER_PROBE_MAX_OUTPUT_TOKENS,
             ...thinkingConfig(cfg.model),
           },
         }),
@@ -68,10 +77,7 @@ export async function translateWithGemini(
       'Gemini',
     );
     const data: any = await res.json();
-    const parts = data?.candidates?.[0]?.content?.parts;
-    return Array.isArray(parts)
-      ? parts.map((p: any) => p?.text ?? '').join('')
-      : '';
+    return joinParts(data?.candidates?.[0]?.content?.parts);
   };
   const system = buildSystemInstruction(await withRegister(req, texts, ask));
   const limits: TranslationLimits = {
@@ -82,7 +88,6 @@ export async function translateWithGemini(
     batchCeiling: GEMINI_BATCH_CEILING,
   };
   const callBatch: BatchTranslator = async (batch, maxOutputTokens) => {
-    const url = `${GEMINI_BASE}/${encodeURIComponent(cfg.model)}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`;
     const res = await postWithRetry(
       url,
       {
@@ -114,10 +119,7 @@ export async function translateWithGemini(
       );
       return null;
     }
-    return parseNumbered(
-      parts.map((p: any) => p?.text ?? '').join(''),
-      batch.length,
-    );
+    return parseNumbered(joinParts(parts), batch.length);
   };
   return translateWithBatching(texts, callBatch, limits, system, onProgress);
 }

@@ -1,6 +1,7 @@
 import {
   BATCH_SIZE,
   MAX_OUTPUT_TOKENS,
+  MIN_TOKENS_PER_REQUEST,
   TranslationLimits,
   TranslationPayloadTooLargeError,
   translateWithBatching,
@@ -95,6 +96,33 @@ describe('translateWithBatching token budget', () => {
     expect(seen).toEqual([4, 2, 1, 1, 2, 1, 1]);
   });
 
+  it('keeps source text for a single cue the engine rejects, instead of failing the whole run', async () => {
+    const out = await translateWithBatching(
+      ['a', 'b', 'c', 'd'],
+      async (batch) => {
+        if (batch.includes('c'))
+          throw new TranslationPayloadTooLargeError('truncated');
+        return batch.map((t) => `${t}!`);
+      },
+      unlimited(),
+      SYSTEM,
+    );
+    expect(out).toEqual(['a!', 'b!', 'c', 'd!']);
+  });
+
+  it('fails the run when every cue is rejected as too large, instead of reporting an untranslated file as done', async () => {
+    await expect(
+      translateWithBatching(
+        ['hello', 'world', 'goodbye'],
+        async () => {
+          throw new TranslationPayloadTooLargeError('always too large');
+        },
+        unlimited(),
+        SYSTEM,
+      ),
+    ).rejects.toThrow('always too large');
+  });
+
   it('reports progress for each split half, not just whole batches', async () => {
     const seen: number[] = [];
     await translateWithBatching(
@@ -134,6 +162,46 @@ describe('translateWithBatching token budget', () => {
     expect(sizes.filter((n) => n > 100)).toEqual([400, 200, 200]);
   });
 
+  it('clamps a maxTokensPerRequest too small for the system prompt instead of forcing one cue per batch', async () => {
+    const bigSystem = 'x'.repeat(900); // ~225 tokens
+    const texts = Array.from({ length: 6 }, (_, i) => `cue ${i}`);
+    const sizes: number[] = [];
+    await translateWithBatching(
+      texts,
+      async (batch) => {
+        sizes.push(batch.length);
+        return batch;
+      },
+      { ...unlimited(), maxTokensPerRequest: 100 },
+      bigSystem,
+    );
+    expect(Math.max(...sizes)).toBeGreaterThan(1);
+  });
+
+  it('leaves a generous maxTokensPerRequest untouched', async () => {
+    const sizes: number[] = [];
+    await translateWithBatching(
+      ['a', 'b'],
+      async (batch) => {
+        sizes.push(batch.length);
+        return batch;
+      },
+      { ...unlimited(), maxTokensPerRequest: MIN_TOKENS_PER_REQUEST * 4 },
+      SYSTEM,
+    );
+    expect(sizes).toEqual([2]);
+  });
+
+  it('clamps a zero batchCeiling instead of spinning forever', async () => {
+    const out = await translateWithBatching(
+      ['a', 'b'],
+      async (batch) => batch.map((t) => `${t}!`),
+      { ...unlimited(), batchCeiling: 0 },
+      SYSTEM,
+    );
+    expect(out).toEqual(['a!', 'b!']);
+  }, 10_000);
+
   it('propagates a non-size failure instead of splitting', async () => {
     await expect(
       translateWithBatching(
@@ -151,11 +219,13 @@ describe('translateWithBatching token budget', () => {
     jest.useFakeTimers();
     try {
       const limits: TranslationLimits = {
-        maxTokensPerRequest: 600,
+        maxTokensPerRequest: 0,
         tokensPerMinute: 900,
         key: `pace-${Date.now()}`,
         outputCeiling: MAX_OUTPUT_TOKENS,
-        batchCeiling: BATCH_SIZE,
+        // Forces one cue per request, independent of the token-budget math, so
+        // the pacing itself is what's under test here.
+        batchCeiling: 1,
       };
       const starts: number[] = [];
       const texts = Array.from({ length: 6 }, () => 'z'.repeat(400));

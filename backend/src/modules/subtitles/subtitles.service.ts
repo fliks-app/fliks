@@ -43,6 +43,14 @@ import {
   scoreSubtitle,
 } from './subtitle-scorer';
 
+/** Ties broken by id so two subtitles of the same language and score keep one
+ *  order between requests instead of whatever the planner returns. */
+const LIST_ORDER = {
+  language: 'ASC',
+  score: 'DESC',
+  id: 'ASC',
+} as const;
+
 @Injectable()
 export class SubtitlesService {
   private readonly logger = new Logger(SubtitlesService.name);
@@ -504,25 +512,17 @@ export class SubtitlesService {
     return resolveSubtitleAbsolutePath(media?.path ?? null, sub.relativePath);
   }
 
-  /** Ties broken by id so two subtitles of the same language and score keep one
-   *  order between requests instead of whatever the planner returns. */
-  private readonly listOrder = {
-    language: 'ASC',
-    score: 'DESC',
-    id: 'ASC',
-  } as const;
-
   async getSubtitlesForMedia(mediaId: number): Promise<SubtitleFile[]> {
     return this.repo.find({
       where: { media: { id: mediaId } },
-      order: this.listOrder,
+      order: LIST_ORDER,
     });
   }
 
   async getSubtitlesForMediaFile(mediaFileId: number): Promise<SubtitleFile[]> {
     return this.repo.find({
       where: { mediaFile: { id: mediaFileId } },
-      order: this.listOrder,
+      order: LIST_ORDER,
     });
   }
 

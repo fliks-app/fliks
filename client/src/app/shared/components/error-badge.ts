@@ -1,6 +1,6 @@
 import { Component, computed, inject, input } from '@angular/core';
-import { NgClass } from '@angular/common';
-import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { translatedServerMessage } from '../../core/utils/server-message';
 
@@ -11,7 +11,7 @@ import { translatedServerMessage } from '../../core/utils/server-message';
  */
 @Component({
   selector: 'app-error-badge',
-  imports: [NgClass, TranslatePipe],
+  imports: [NgTemplateOutlet],
   templateUrl: './error-badge.html',
 })
 export class ErrorBadgeComponent {

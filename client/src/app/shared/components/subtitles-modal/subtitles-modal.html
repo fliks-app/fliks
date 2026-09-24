@@ -135,18 +135,15 @@
                     </td>
                     <td class="text-center text-sm">
                       @if (sub.status === 'processing') {
-                        @if (
-                          sub.providerType === 'translated' && translationPercent(sub) !== null
-                        ) {
+                        @let percent = translationPercent(sub);
+                        @if (sub.providerType === 'translated' && percent) {
                           <span class="inline-flex items-center gap-1 align-middle">
                             <progress
                               class="progress progress-warning w-16 h-1.5 align-middle"
-                              [value]="translationPercent(sub)"
+                              [value]="percent"
                               max="100"
                             ></progress>
-                            <span class="tabular-nums text-[10px]"
-                              >{{ translationPercent(sub) }}%</span
-                            >
+                            <span class="tabular-nums text-[10px]">{{ percent }}%</span>
                           </span>
                         } @else {
                           <span class="badge badge-sm badge-warning gap-1">
@@ -191,7 +188,11 @@
                       }
                     </td>
                     <td class="text-end">
-                      @if (canManage() && rowHasActions(sub) && sub.status !== 'processing') {
+                      @if (
+                        canManage() &&
+                        rowHasActions(sub) &&
+                        (sub.status !== 'processing' || sub.providerType === 'translated')
+                      ) {
                         <button
                           #actionsTrigger
                           type="button"
@@ -213,7 +214,7 @@
         @if (totalPages() > 1) {
           <app-pagination
             class="mt-2"
-            [current]="page() + 1"
+            [current]="currentPage() + 1"
             [total]="totalPages()"
             (pageChange)="goToPage($event - 1)"
           />

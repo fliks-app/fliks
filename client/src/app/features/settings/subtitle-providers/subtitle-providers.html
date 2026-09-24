@@ -88,7 +88,7 @@
                         {{ row.name }}
                       </button>
                     </div>
-                    @if (row.isDefault) {
+                    @if (row.isDefault && row.enabled) {
                       <span class="badge badge-primary badge-sm mt-1">{{
                         'settings.subtitle_providers.translation_default' | translate
                       }}</span>
@@ -267,51 +267,29 @@
       </label>
 
       @if (trFormEngine() === 'gemini') {
-        <label class="form-control w-full">
-          <span class="label-text">{{
-            'settings.subtitle_providers.translation_api_key' | translate
-          }}</span>
-          <input
-            type="password"
-            class="input input-bordered input-sm w-full font-mono"
-            [placeholder]="trApiKeyStored() && !trApiKeyCleared() ? secretMask : ''"
-            [ngModel]="trFormApiKey()"
-            (ngModelChange)="onTrApiKeyInput($event)"
-          />
-          @if (trApiKeyStored()) {
-            @if (trApiKeyCleared()) {
-              <span class="label-text-alt text-warning">
-                {{ 'common.secret_will_clear' | translate }}
-                <button
-                  type="button"
-                  class="link link-hover font-medium"
-                  (click)="trApiKeyCleared.set(false)"
-                >
-                  {{ 'common.secret_keep' | translate }}
-                </button>
-              </span>
-            } @else {
-              <button
-                type="button"
-                class="link link-hover label-text-alt self-start text-base-content/60"
-                (click)="trApiKeyCleared.set(true)"
-              >
-                {{ 'common.secret_clear' | translate }}
-              </button>
-            }
-          }
-        </label>
+        <ng-container
+          *ngTemplateOutlet="
+            secretField;
+            context: { labelKey: 'settings.subtitle_providers.translation_api_key' }
+          "
+        />
         <label class="form-control w-full">
           <span class="label-text">{{
             'settings.subtitle_providers.translation_model' | translate
           }}</span>
-          <input
-            type="text"
-            class="input input-bordered input-sm w-full font-mono"
-            placeholder="gemini-3.5-flash-lite"
+          <select
+            appTvSelect
+            class="select select-bordered select-sm w-full"
             [ngModel]="trFormModel()"
             (ngModelChange)="trFormModel.set($event)"
-          />
+          >
+            @if (!geminiModels.includes(trFormModel())) {
+              <option [value]="trFormModel()">{{ trFormModel() }}</option>
+            }
+            @for (m of geminiModels; track m) {
+              <option [value]="m">{{ m }}</option>
+            }
+          </select>
         </label>
       } @else if (trFormEngine() === 'openai') {
         <label class="form-control w-full">
@@ -329,40 +307,12 @@
             'settings.subtitle_providers.translation_openai_base_url_hint' | translate
           }}</span>
         </label>
-        <label class="form-control w-full">
-          <span class="label-text">{{
-            'settings.subtitle_providers.translation_api_key_optional' | translate
-          }}</span>
-          <input
-            type="password"
-            class="input input-bordered input-sm w-full font-mono"
-            [placeholder]="trApiKeyStored() && !trApiKeyCleared() ? secretMask : ''"
-            [ngModel]="trFormApiKey()"
-            (ngModelChange)="onTrApiKeyInput($event)"
-          />
-          @if (trApiKeyStored()) {
-            @if (trApiKeyCleared()) {
-              <span class="label-text-alt text-warning">
-                {{ 'common.secret_will_clear' | translate }}
-                <button
-                  type="button"
-                  class="link link-hover font-medium"
-                  (click)="trApiKeyCleared.set(false)"
-                >
-                  {{ 'common.secret_keep' | translate }}
-                </button>
-              </span>
-            } @else {
-              <button
-                type="button"
-                class="link link-hover label-text-alt self-start text-base-content/60"
-                (click)="trApiKeyCleared.set(true)"
-              >
-                {{ 'common.secret_clear' | translate }}
-              </button>
-            }
-          }
-        </label>
+        <ng-container
+          *ngTemplateOutlet="
+            secretField;
+            context: { labelKey: 'settings.subtitle_providers.translation_api_key_optional' }
+          "
+        />
         <label class="form-control w-full">
           <span class="label-text">{{
             'settings.subtitle_providers.translation_openai_model' | translate
@@ -391,10 +341,17 @@
             'settings.subtitle_providers.translation_libretranslate_url_hint' | translate
           }}</span>
         </label>
+        <ng-container
+          *ngTemplateOutlet="
+            secretField;
+            context: { labelKey: 'settings.subtitle_providers.translation_api_key_optional' }
+          "
+        />
+      }
+
+      <ng-template #secretField let-labelKey="labelKey">
         <label class="form-control w-full">
-          <span class="label-text">{{
-            'settings.subtitle_providers.translation_api_key_optional' | translate
-          }}</span>
+          <span class="label-text">{{ labelKey | translate }}</span>
           <input
             type="password"
             class="input input-bordered input-sm w-full font-mono"
@@ -425,7 +382,7 @@
             }
           }
         </label>
-      }
+      </ng-template>
 
       @if (trFormEngine() !== 'libretranslate') {
         <div class="grid grid-cols-2 gap-3">

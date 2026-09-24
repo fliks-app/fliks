@@ -50,6 +50,9 @@ export type SseEvent =
       /** What failed, so the client picks the right message: 'translation',
        *  'rate_limit' for an engine quota, unset for an OCR run. */
       reason?: string;
+      /** Set when `reason` is 'rate_limit': 'daily' quota needs a different
+       *  message than a 'per-minute' one, since retrying now won't help. */
+      scope?: string;
       /** Unattended scheduler run — client skips the confirmation toast */
       automatic?: boolean;
     }
