@@ -31,8 +31,9 @@ services:
     # /app/conf, /app/data and /app/transcode are group-writable by root.
     # user: '568:568'
     # group_add: ['0']
-    # mDNS doesn't cross a bridge network, so Chromecast auto-discovery needs
-    # `network_mode: host` — then drop `ports:` and set DB_HOST to 127.0.0.1.
+    # Chromecast discovery happens on the sender (browser/app), not here, so
+    # bridge networking is fine: the cast device just needs to reach this
+    # server (set Settings > General > Public address if it isn't obvious).
     ports:
       - '4848:4848'
     # Set this on a small box. Node reads the cgroup limit and sizes its heap
@@ -59,8 +60,10 @@ services:
       # The public URL behind a reverse proxy lives in Settings > General.
       # Extra origins allowed to call the API (comma-separated).
       # CORS_ORIGIN: https://fliks.example.com
-      # Session lifetime. Default 7d.
-      # JWT_EXPIRATION: 7d
+      # Access-token / cookie lifetime, default 1h. Not the session length:
+      # a separate refresh token (REFRESH_TOKEN_TTL_DAYS, default 60d) keeps
+      # you signed in past this window.
+      # JWT_EXPIRATION: 1h
       # Playback-token lifetime. Default 12h.
       # STREAM_TOKEN_TTL: 12h
       # Signing key. Generated into /app/conf on first start when unset.
