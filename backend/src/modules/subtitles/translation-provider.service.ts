@@ -16,6 +16,26 @@ const TRANSLATION_PROVIDER_SECRET_FIELDS = [
   { key: 'apiKey', secret: true },
 ] as const;
 
+/** The setting holding an engine's endpoint, so a key stored for one host can be told
+ *  apart from a key for another; gemini has a fixed endpoint, so none applies. */
+function endpointField(engine: TranslationEngine): 'baseUrl' | 'url' | null {
+  if (engine === 'openai') return 'baseUrl';
+  if (engine === 'libretranslate') return 'url';
+  return null;
+}
+
+/** A stored key must not answer for a different engine, nor follow an edited host. */
+function sameEndpoint(
+  storedEngine: TranslationEngine,
+  storedSettings: Record<string, unknown> | null | undefined,
+  engine: TranslationEngine,
+  settings: Record<string, unknown>,
+): boolean {
+  if (engine !== storedEngine) return false;
+  const field = endpointField(engine);
+  return !field || settings[field] === (storedSettings ?? {})[field];
+}
+
 /** Strips the stored key from a provider before it reaches an HTTP response. */
 export function redactTranslationProviderSecrets(
   provider: TranslationProvider,
@@ -104,14 +124,21 @@ export class TranslationProviderService {
   ): Promise<TranslationProvider> {
     const provider = await this.findOne(id);
     if (dto.name !== undefined) provider.name = dto.name;
-    if (dto.engine !== undefined) provider.engine = dto.engine;
     if (dto.settings !== undefined) {
-      provider.settings = mergeSecretFields(
+      const nextEngine = dto.engine ?? provider.engine;
+      const carryOver = sameEndpoint(
+        provider.engine,
         provider.settings,
+        nextEngine,
+        dto.settings,
+      );
+      provider.settings = mergeSecretFields(
+        carryOver ? provider.settings : undefined,
         dto.settings,
         TRANSLATION_PROVIDER_SECRET_FIELDS,
       );
     }
+    if (dto.engine !== undefined) provider.engine = dto.engine;
     if (dto.enabled !== undefined) provider.enabled = dto.enabled;
     if (dto.isDefault !== undefined) provider.isDefault = dto.isDefault;
     const saved = await this.repo.save(provider);
@@ -145,6 +172,7 @@ export class TranslationProviderService {
       providerId,
       settings,
       TRANSLATION_PROVIDER_SECRET_FIELDS,
+      (stored) => sameEndpoint(stored.engine, stored.settings, engine, settings),
     );
     try {
       this.factory.validateConfig(engine, settings);
