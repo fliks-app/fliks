@@ -106,8 +106,8 @@ create, no subscription, and nothing leaves the house.
 ### Running it
 
 - **Multi-user**, each with their own history, progress and preferences.
-- **Pairing by QR code or short code** — the TV picks up the session
-  from your phone.
+- **Quick Connect for TVs**: pick your account on the screen, then
+  approve the request from the Login requests page on your phone.
 - **Live transcode dashboard** for admins: who's watching what, at which
   quality, on which hardware path, and why a transcode was needed.
 - **Images cached locally** — no hotlinking to external services while

@@ -76,30 +76,39 @@ export class LibrariesService {
   // ---------------------------------------------------------------------------
 
   /** Lightweight projection for non-admin users (sidebar, route resolution). */
-  async findAccessibleSummaries(
-    user: User,
-  ): Promise<
-    Pick<
-      Library,
-      'id' | 'name' | 'mediaTypes'
-    >[]
+  async findAccessibleSummaries(user: User): Promise<
+    (Pick<Library, 'id' | 'name' | 'icon' | 'color' | 'mediaTypes'> & {
+      defaultQualityProfileId: number | null;
+      defaultLanguageProfileId: number | null;
+    })[]
   > {
     const accessible = await this.getAccessibleLibraryIds(user);
     const where =
       accessible == null
         ? {}
         : { id: In(accessible.length ? accessible : [-1]) };
-    return this.repo.find({
+    // A partial `select` drops the @RelationId columns, so the ids come from the joins.
+    const rows = await this.repo.find({
       where,
       order: { name: 'ASC' },
-      select: [
-        'id',
-        'name',
-        'icon',
-        'color',
-        'mediaTypes',
-      ],
+      select: {
+        id: true,
+        name: true,
+        icon: true,
+        color: true,
+        mediaTypes: true,
+        defaultQualityProfile: { id: true },
+        defaultLanguageProfile: { id: true },
+      },
+      relations: { defaultQualityProfile: true, defaultLanguageProfile: true },
     });
+    return rows.map(
+      ({ defaultQualityProfile, defaultLanguageProfile, ...lib }) => ({
+        ...lib,
+        defaultQualityProfileId: defaultQualityProfile?.id ?? null,
+        defaultLanguageProfileId: defaultLanguageProfile?.id ?? null,
+      }),
+    );
   }
 
   async findAllForUser(user: User): Promise<LibraryWithDetails[]> {

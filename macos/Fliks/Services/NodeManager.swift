@@ -193,8 +193,9 @@ struct BackendEnvironment {
     let dbPort: UInt16
 
     var asEnvironment: [String: String] {
-        // Build PATH: resolved ffmpeg + resolved node + Homebrew + system essentials.
+        // Build PATH: resolved ffmpeg + pg_dump/psql + resolved node + Homebrew + system essentials.
         let ffmpegBin = Paths.ffmpegDir.path
+        let pgBin = Paths.pgBinDir.path
         let nodeBin = Paths.nodeBinary.deletingLastPathComponent().path
         let systemPath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
@@ -208,7 +209,7 @@ struct BackendEnvironment {
             "DB_NAME": "fliks",
             "SERVE_STATIC_PATH": Paths.effectiveClientDir.path,
             "FLIKS_CONF_DIR": Paths.confDir.path,
-            "PATH": "\(ffmpegBin):\(nodeBin):\(systemPath)",
+            "PATH": "\(ffmpegBin):\(pgBin):\(nodeBin):\(systemPath)",
             "UV_THREADPOOL_SIZE": "16",
         ]
         // API keys baked at build time via SWIFT_ACTIVE_COMPILATION_CONDITIONS.

@@ -18,8 +18,8 @@
     <div class="min-w-[640px]">
       <!-- Day headers -->
       <div class="grid grid-cols-7 gap-px mb-px">
-        @for (day of ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']; track day) {
-          <div class="text-center text-sm font-medium text-base-content/50 py-2">{{ day }}</div>
+        @for (day of weekdayReference; track $index) {
+          <div class="text-center text-sm font-medium text-base-content/50 py-2 capitalize">{{ day | localeDate:{ weekday: 'short' } }}</div>
         }
       </div>
 

@@ -121,16 +121,34 @@ export class ImportModalComponent {
       this.languageProfiles.set(lp.map((p) => ({ id: p.id, name: p.name })));
       this.libraries.set(libs);
 
-      if (qp.length) this.selectedQualityProfileId.set(qp[0].id);
-      if (lp.length) this.selectedLanguageProfileId.set(lp[0].id);
-
-      const compatible = libs.filter((l) => l.mediaTypes.includes(params.mediaType));
-      if (compatible.length) this.selectedLibraryId.set(compatible[0].id);
+      const target = libs.find((l) => l.mediaTypes.includes(params.mediaType));
+      this.selectedLibraryId.set(target?.id ?? null);
+      const prefill = this.profilePrefill(target?.id ?? null);
+      this.selectedQualityProfileId.set(prefill.qp);
+      this.selectedLanguageProfileId.set(prefill.lp);
     } catch {
       /* ignore — selects will just be empty */
     } finally {
       this.loading.set(false);
     }
+  }
+
+  /** A profile still on the previous library's pre-fill follows the new library. */
+  selectLibrary(id: number | null) {
+    const prev = this.profilePrefill(this.selectedLibraryId());
+    const next = this.profilePrefill(id);
+    this.selectedLibraryId.set(id);
+    if (this.selectedQualityProfileId() === prev.qp) this.selectedQualityProfileId.set(next.qp);
+    if (this.selectedLanguageProfileId() === prev.lp) this.selectedLanguageProfileId.set(next.lp);
+  }
+
+  /** The library's own defaults, else the first profile of each kind. */
+  private profilePrefill(libraryId: number | null) {
+    const lib = this.libraries().find((l) => l.id === libraryId);
+    return {
+      qp: lib?.defaultQualityProfileId ?? this.qualityProfiles()[0]?.id ?? null,
+      lp: lib?.defaultLanguageProfileId ?? this.languageProfiles()[0]?.id ?? null,
+    };
   }
 
   /** Specials start unticked: season 0 is only ever monitored on purpose, which

@@ -430,7 +430,7 @@
     "cast_audio": "Audio",
     "cast_audio_hint": "Anzahl der Audiokanäle. Stereo, wenn Ihr Fernseher kein Surround-System hat.",
     "remote_show_household": "Haushaltsgeräte anzeigen",
-    "remote_show_household_hint": "Zeigt Geräte von Personen, denen Sie gegenseitig folgen, neben Ihren eigenen an.",
+    "remote_show_household_hint": "Zeigt Geräte an, die Sie steuern dürfen, neben Ihren eigenen.",
     "tab_player": "Player",
     "player_preferred_lang": "Bevorzugte Audiosprache",
     "player_preferred_lang_hint": "Der Player wählt automatisch eine Audiospur in dieser Sprache aus, falls verfügbar.",

@@ -430,7 +430,7 @@
     "cast_audio": "Áudio",
     "cast_audio_hint": "Número de canais de áudio. Estéreo se a sua TV não tiver sistema surround.",
     "remote_show_household": "Mostrar os dispositivos da casa",
-    "remote_show_household_hint": "Lista os dispositivos das pessoas que segue mutuamente, ao lado dos seus.",
+    "remote_show_household_hint": "Mostra os dispositivos que tem permissão para controlar, ao lado dos seus.",
     "tab_player": "Leitor",
     "player_preferred_lang": "Idioma de áudio preferido",
     "player_preferred_lang_hint": "O leitor selecionará automaticamente uma faixa de áudio neste idioma, se disponível.",
