@@ -435,7 +435,7 @@
     "cast_audio": "Audio",
     "cast_audio_hint": "Nombre de canaux audio. Stéréo si votre TV n'a pas de système surround.",
     "remote_show_household": "Afficher les appareils du foyer",
-    "remote_show_household_hint": "Liste les appareils partagés par les personnes que vous suivez mutuellement, à côté des vôtres.",
+    "remote_show_household_hint": "Affiche les appareils que vous êtes autorisé à contrôler, à côté des vôtres.",
     "tab_player": "Lecteur",
     "player_preferred_lang": "Langue audio préférée",
     "player_preferred_lang_hint": "Le lecteur sélectionnera automatiquement une piste audio dans cette langue si disponible.",
