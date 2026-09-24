@@ -32,12 +32,8 @@ export class CalendarComponent implements OnInit {
   private readonly mediaService = inject(MediaService);
 
   readonly currentDate = signal(new Date());
-  /** Monday-Sunday reference week for the day headers, formatted through
-   *  `localeDate` so the labels follow the active language, not a fixed one. */
-  readonly weekdayReference: Date[] = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(2024, 0, 1 + i); // 2024-01-01 is a Monday
-    return d;
-  });
+  /** Monday-first like the grid; 2024-01-01 is a Monday. */
+  readonly weekdayReference = Array.from({ length: 7 }, (_, i) => new Date(2024, 0, 1 + i));
   readonly entries = signal<CalendarEntry[]>([]);
   readonly loading = signal(true);
   readonly error = signal('');
