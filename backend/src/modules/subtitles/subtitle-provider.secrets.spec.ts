@@ -156,4 +156,23 @@ describe('testing a saved provider', () => {
 
     expect(seen[0]).toEqual({ username: 'x' });
   });
+
+  it('does not resolve a stored credential into a test against a different provider type', async () => {
+    const row = provider({ username: 'someone', password: 'stored-secret' });
+    const seen: Record<string, unknown>[] = [];
+    const factory = {
+      create: (_t: unknown, s: Record<string, unknown>) => {
+        seen.push(s);
+        return { testConnection: async () => ({ ok: true }) };
+      },
+    };
+    const service = new SubtitleProviderService(
+      fakeRepo(row) as never,
+      factory as never,
+    );
+
+    await service.testConnection('subdl' as never, { apiKey: '' }, 1);
+
+    expect(seen[0]).toEqual({ apiKey: '' });
+  });
 });
