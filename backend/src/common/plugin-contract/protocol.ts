@@ -48,7 +48,8 @@ export const SUPPORTED_PLUGIN_API_VERSIONS: readonly number[] = [1];
 /**
  * Environment core sets on every spawn (see `supervisor/spawn-plan.ts`) — the only way in
  * for a `process` plugin, since core never passes `...process.env`. Every value here is a
- * plain string; only `FLIKS_API_VERSION` has a typed counterpart ({@link PLUGIN_API_VERSION}).
+ * plain string; only `FLIKS_API_VERSION` carries a value with a dedicated type elsewhere
+ * (the manifest's own `pluginApi: number`, one of {@link SUPPORTED_PLUGIN_API_VERSIONS}).
  */
 export interface PluginSpawnEnv {
   /** Random per spawn, known only to core and this child. Echo it back as `hello`'s `token` —
@@ -64,7 +65,7 @@ export interface PluginSpawnEnv {
   FLIKS_DB_URL: string;
   /** This manifest's `id`, verbatim. */
   FLIKS_PLUGIN_ID: string;
-  /** {@link PLUGIN_API_VERSION}, stringified — compared for exact equality, never a range. */
+  /** The manifest's own `pluginApi`, stringified. Compared for exact equality, never a range. */
   FLIKS_API_VERSION: string;
   /** `${dir}/data` — the child's cwd, and the one path its sandbox may write to. */
   HOME: string;

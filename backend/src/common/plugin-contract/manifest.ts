@@ -105,7 +105,7 @@ export interface ProcessPluginManifest extends PluginManifestBase {
   kind: 'process';
   /** The only legal value; not omittable. */
   runtime: 'node';
-  /** `--max-old-space-size`; core caps at 1024. */
+  /** `--max-old-space-size`, passed through as declared; core enforces no upper bound. */
   memoryMb: number;
   /** sha256 of every archive entry but the manifest and its signature. */
   files: Record<string, string>;
