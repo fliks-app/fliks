@@ -2776,7 +2776,7 @@
     "watch": "Regarder",
     "on_now": {
       "next_label": "Ensuite :",
-      "load_error": "Impossible de charger la liste des chaînes."
+      "no_results": "Aucune chaîne ne correspond aux filtres actuels."
     },
     "guide": {
       "filter_group": "Groupe",

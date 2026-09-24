@@ -2750,7 +2750,7 @@
     "watch": "Ver",
     "on_now": {
       "next_label": "A seguir:",
-      "load_error": "Não foi possível carregar a lista de canais."
+      "no_results": "Nenhum canal corresponde aos filtros atuais."
     },
     "guide": {
       "filter_group": "Grupo",

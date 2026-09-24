@@ -31,7 +31,7 @@
         class="input input-bordered input-sm w-48"
         [placeholder]="'common.search' | translate"
         [ngModel]="query()"
-        (ngModelChange)="query.set($event); onFilterChange()"
+        (ngModelChange)="onQueryInput($event)"
       />
       <select appTvSelect class="select select-bordered select-sm w-auto" [ngModel]="sourceFilter()" (ngModelChange)="sourceFilter.set($event); onFilterChange()">
         <option [ngValue]="null">{{ 'liveTv.admin.channels.all_sources' | translate }}</option>

@@ -72,10 +72,10 @@ export class LiveTvSettingsComponent implements OnInit {
     this.dirtyKeys.add(key);
   }
 
-  /** Mirrors the backend parse: a fraction is truncated and NaN falls back, so
-   *  clamping here means Save can never write a value the server would ignore. */
-  setInt(target: WritableSignal<number>, key: string, raw: number | null): void {
-    if (raw == null || !Number.isFinite(raw) || raw < 0) return;
+  /** Mirrors the backend parse (fraction truncated, NaN falls back). `min`
+   *  defaults to 0; segment length and timeshift pass 1, since 0 breaks playback. */
+  setInt(target: WritableSignal<number>, key: string, raw: number | null, min = 0): void {
+    if (raw == null || !Number.isFinite(raw) || raw < min) return;
     target.set(Math.trunc(raw));
     this.touch(key);
   }

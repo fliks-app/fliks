@@ -1,12 +1,5 @@
 @if (loading()) {
   <div class="flex justify-center py-16"><span class="loading loading-spinner loading-lg"></span></div>
-} @else if (loadError()) {
-  <div class="flex flex-col items-center gap-3 py-16 text-center">
-    <p class="text-base-content/50">{{ 'liveTv.on_now.load_error' | translate }}</p>
-    <button type="button" class="btn btn-sm" (click)="load()">
-      {{ 'common.retry' | translate }}
-    </button>
-  </div>
 } @else {
   <div class="space-y-6 max-w-xl">
     <p class="text-base-content/60">{{ 'liveTv.admin.settings.description' | translate }}</p>
@@ -34,16 +27,16 @@
     <div class="form-control">
       <label class="label"><span class="label-text font-medium">{{ 'liveTv.admin.settings.segment_seconds' | translate }}</span></label>
       <input
-        type="number" min="0" step="1" class="input input-bordered w-full"
-        [ngModel]="segmentSeconds()" (ngModelChange)="setInt(segmentSeconds, 'livetv_segment_seconds', $event)" />
+        type="number" min="1" step="1" class="input input-bordered w-full"
+        [ngModel]="segmentSeconds()" (ngModelChange)="setInt(segmentSeconds, 'livetv_segment_seconds', $event, 1)" />
       <label class="label"><span class="label-text-alt text-base-content/50">{{ 'liveTv.admin.settings.segment_seconds_help' | translate }}</span></label>
     </div>
 
     <div class="form-control">
       <label class="label"><span class="label-text font-medium">{{ 'liveTv.admin.settings.timeshift_minutes' | translate }}</span></label>
       <input
-        type="number" min="0" step="1" class="input input-bordered w-full"
-        [ngModel]="timeshiftMinutes()" (ngModelChange)="setInt(timeshiftMinutes, 'livetv_timeshift_minutes', $event)" />
+        type="number" min="1" step="1" class="input input-bordered w-full"
+        [ngModel]="timeshiftMinutes()" (ngModelChange)="setInt(timeshiftMinutes, 'livetv_timeshift_minutes', $event, 1)" />
       <label class="label"><span class="label-text-alt text-base-content/50">{{ 'liveTv.admin.settings.timeshift_minutes_help' | translate }}</span></label>
     </div>
 

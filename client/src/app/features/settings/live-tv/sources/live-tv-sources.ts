@@ -182,13 +182,21 @@ export class LiveTvSourcesComponent implements OnInit {
     this.testLoading.set(true);
     this.testResult.set(null);
     try {
+      const row = this.editingRowSnapshot();
+      // The stored password never repopulates the form; the id lets the
+      // server fall back to it, as long as the type/URL still match the row.
+      const testedId =
+        row && row.kind === this.formKind() && row.url === url ? row.id : undefined;
       const result = await this.api.testSource({
+        ...(testedId != null ? { id: testedId } : {}),
         kind: this.formKind(),
         url,
         username: this.formUsername().trim() || undefined,
         password: this.formPassword().trim() || undefined,
         userAgent: this.formUserAgent().trim() || undefined,
         referer: this.formReferer().trim() || undefined,
+        includeGroupsPattern: this.formGroupInclude().trim() || undefined,
+        excludeGroupsPattern: this.formGroupExclude().trim() || undefined,
       });
       this.testResult.set(result);
       // Only on a still-untouched field: a value the admin already typed wins.
@@ -256,23 +264,29 @@ export class LiveTvSourcesComponent implements OnInit {
     const name = this.formName().trim();
     const url = this.formUrl().trim();
     if (!name || !url) return;
+    const id = this.editingId();
+    const maxStreams = this.formMaxStreams();
+    // The backend locks it to manual just for being present: skip it at the
+    // untouched default on create, and while still panel-locked on edit.
+    const sendMaxStreams = id == null ? maxStreams > 0 : !this.maxStreamsLocked();
     const body = {
       name,
       kind: this.formKind(),
       url,
-      username: this.formUsername().trim() || undefined,
+      // '' clears the field on edit; the DTOs and the group-pattern compiler
+      // both treat a blank string the same as absent.
+      username: this.formUsername().trim(),
       ...(this.formPassword().trim() ? { password: this.formPassword().trim() } : {}),
-      userAgent: this.formUserAgent().trim() || undefined,
-      referer: this.formReferer().trim() || undefined,
-      maxStreams: this.formMaxStreams(),
+      userAgent: this.formUserAgent().trim(),
+      referer: this.formReferer().trim(),
+      ...(sendMaxStreams ? { maxStreams } : {}),
       refreshIntervalHours: this.formRefreshHours(),
       enabled: this.formEnabled(),
-      includeGroupsPattern: this.formGroupInclude().trim() || undefined,
-      excludeGroupsPattern: this.formGroupExclude().trim() || undefined,
+      includeGroupsPattern: this.formGroupInclude().trim(),
+      excludeGroupsPattern: this.formGroupExclude().trim(),
     };
     this.saving.set(true);
     try {
-      const id = this.editingId();
       await (id == null ? this.api.createSource(body) : this.api.updateSource(id, body));
       this.toast.success(this.translate.instant('liveTv.admin.sources.saved_toast'));
       this.closeEditor();

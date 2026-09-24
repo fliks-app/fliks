@@ -2776,7 +2776,7 @@
     "watch": "Watch",
     "on_now": {
       "next_label": "Next:",
-      "load_error": "Unable to load the channel list."
+      "no_results": "No channel matches the current filters."
     },
     "guide": {
       "filter_group": "Group",

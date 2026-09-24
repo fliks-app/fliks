@@ -2750,7 +2750,7 @@
     "watch": "Ansehen",
     "on_now": {
       "next_label": "Danach:",
-      "load_error": "Die Senderliste konnte nicht geladen werden."
+      "no_results": "Kein Sender entspricht den aktuellen Filtern."
     },
     "guide": {
       "filter_group": "Gruppe",
