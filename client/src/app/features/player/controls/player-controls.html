@@ -177,7 +177,9 @@
               <svg lucideHeadphones class="h-5 w-5"></svg>
             </button>
           }
-          <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.speed' | translate" (click)="openSheet('speed')">{{ playbackRate() }}x</button>
+          @if (speedOptions().length > 1) {
+            <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.speed' | translate" (click)="openSheet('speed')">{{ playbackRate() }}x</button>
+          }
           <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.settings' | translate" (click)="openSheet('settings')">
             <svg lucideSettings class="h-5 w-5"></svg>
           </button>
@@ -265,12 +267,14 @@
           </div>
         }
         <!-- Speed dropdown -->
-        <div class="dropdown dropdown-top dropdown-end" [class.dropdown-open]="openDropdown() === 'speed'">
-          <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" [attr.aria-label]="'player.speed' | translate" (click)="toggleDropdown('speed', $event)">{{ playbackRate() }}x</button>
-          <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-48 mb-2">
-            <ng-container [ngTemplateOutlet]="speedMenu"></ng-container>
+        @if (speedOptions().length > 1) {
+          <div class="dropdown dropdown-top dropdown-end" [class.dropdown-open]="openDropdown() === 'speed'">
+            <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" [attr.aria-label]="'player.speed' | translate" (click)="toggleDropdown('speed', $event)">{{ playbackRate() }}x</button>
+            <div class="dropdown-content bg-neutral/95 backdrop-blur-sm rounded-2xl shadow-2xl py-4 px-2 min-w-48 mb-2">
+              <ng-container [ngTemplateOutlet]="speedMenu"></ng-container>
+            </div>
           </div>
-        </div>
+        }
         <!-- Settings dropdown -->
         <div class="dropdown dropdown-top dropdown-end" [class.dropdown-open]="openDropdown() === 'settings'">
           <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" [attr.aria-label]="'player.settings' | translate" (click)="toggleDropdown('settings', $event)">
