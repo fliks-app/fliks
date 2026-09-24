@@ -131,7 +131,12 @@ export function buildLiveFfmpegArgs(opts: LiveFfmpegArgsOptions): string[] {
     args.push('-c:a', 'aac', '-ac', '2', '-b:a', '128k');
   }
 
-  const listSize = Math.ceil((opts.windowMinutes * 60) / opts.segmentSeconds);
+  // Floored at 1: a 0 here (bad segment/window settings) would tell ffmpeg to
+  // keep every segment forever instead of sliding the live window.
+  const listSize = Math.max(
+    1,
+    Math.ceil((opts.windowMinutes * 60) / opts.segmentSeconds),
+  );
   const segExt = opts.useTs ? 'ts' : 'm4s';
   const hlsFlags = [
     'delete_segments',
