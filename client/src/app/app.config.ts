@@ -145,6 +145,10 @@ export const appConfig: ApplicationConfig = {
                 if (swipeBackActive()) releaseStackedPop(from, to);
                 // A transition begun while backgrounded can resume on the next dock tap.
                 if (document.hidden) {
+                  // Still a trip back: spend its pop as nextSlide would have.
+                  const watchPair =
+                    leafRoutePath(from) === WATCH_PATH || leafRoutePath(to) === WATCH_PATH;
+                  if (!swipeBackActive() && !watchPair) releaseStackedPop(from, to);
                   transition.skipTransition();
                   return;
                 }

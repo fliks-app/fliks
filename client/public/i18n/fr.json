@@ -1449,6 +1449,7 @@
     "copy": "Copier",
     "copied": "Copié",
     "saved": "Enregistré",
+    "success": "Succès",
     "selections_cleared": "Sélections effacées",
     "retry": "Réessayer",
     "offline_banner": "Mode hors-ligne — les données affichées peuvent ne pas être à jour",
@@ -2963,7 +2964,7 @@
       },
       "access": {
         "groups_title": "Groupes restreints",
-        "groups_subtitle": "Les groupes cochés sont masqués à tous les utilisateurs, sauf ceux à qui l'accès a été accordé ci-dessous — un compte qui administre la Live TV voit toujours tous les groupes.",
+        "groups_subtitle": "Les groupes cochés sont masqués à tous les utilisateurs, sauf ceux à qui l'accès a été accordé ci-dessous. Un compte qui administre la Live TV voit toujours tous les groupes.",
         "col_group": "Groupe",
         "col_channels": "Chaînes",
         "col_restricted": "Restreint",
