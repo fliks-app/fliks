@@ -229,6 +229,40 @@ describe('ProviderListComponent — characterisation', () => {
     });
   });
 
+  it('drops the row id from a test once the edit dialog switches implementation', async () => {
+    const run = vi.fn(() => Promise.resolve({ ok: true, message: 'ok' }));
+    const impls: ProviderImplementation[] = [
+      ...IMPLS,
+      { implementation: 'other', labelKey: 'x.impl_other', fields: [] },
+    ];
+    const fixture = await createComponent(
+      {
+        get: () =>
+          of([
+            {
+              id: 7,
+              name: 'A',
+              implementation: 'demo',
+              enabled: true,
+              priority: 1,
+              settings: { url: 'http://x' },
+            },
+          ]),
+      },
+      { implementations: impls },
+    );
+    fixture.componentRef.setInput('testConnection', run);
+    fixture.detectChanges();
+    fixture.componentInstance.openEdit(fixture.componentInstance.rows()[0]);
+    fixture.componentInstance.onImplementationChange('other');
+
+    await fixture.componentInstance.runTestConnection();
+
+    // Switching drivers must not carry the old row's id: its stored secret belongs
+    // to "demo", not to whatever "other" turns out to need.
+    expect(run).toHaveBeenCalledWith({ implementation: 'other', settings: {} });
+  });
+
   it('carries the erase of a stored secret through to the save body as an explicit null', async () => {
     const put = vi.fn((_url: string, _body: unknown) => of({}));
     const fixture = await createComponent({

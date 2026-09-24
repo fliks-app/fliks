@@ -383,11 +383,17 @@ export class ProviderListComponent implements OnInit {
     try {
       const { settings } = this.splitDraft();
       const id = this.editingId();
+      // A switched implementation names a different driver: sending the old row's id
+      // would merge its stored secret into a test against that other driver.
+      const savedImplementation = this.rows().find((r) => r.id === id)?.[
+        this.implementationKey()
+      ];
+      const sameImplementation = id != null && this.draftImplementation() === savedImplementation;
       this.testResult.set(
         await run({
           implementation: this.draftImplementation(),
           settings: this.withoutBlankSecrets(settings),
-          ...(id == null ? {} : { id }),
+          ...(sameImplementation ? { id } : {}),
         }),
       );
     } catch {
