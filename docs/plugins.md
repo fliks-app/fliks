@@ -19,8 +19,8 @@ plugin that needs to answer one route is a `process` plugin.
 ## The manifest
 
 One `plugin.json` at the archive root, validated before anything is written. Every manifest,
-`data` or `process`, must carry all of: `id`, `pluginApi`, `name`, `version`, `fliks` (a semver
-range with a mandatory upper bound, e.g. `">=2.1.0 <3.0.0"`), `author`, `description`, `license`,
+`data` or `process`, must carry all of: `id`, `pluginApi`, `name`, `version`, `fliks` (a non-empty
+semver range, conventionally with an upper bound, e.g. `">=2.1.0 <3.0.0"`), `author`, `description`, `license`,
 `logo`, and `kind` (`data` or `process`) — the install fails if any one is missing. `homepage` is
 the only identity field that's optional.
 
@@ -32,8 +32,10 @@ A `process` manifest additionally requires these seven keys — reference `fk-pl
 - `pluginApi` — the contract revision this plugin is written against. Core accepts every value in
   its own `SUPPORTED_PLUGIN_API_VERSIONS`, so a bump does not orphan your plugin the day it lands:
   the older value keeps working until a later release drops it, and that window is when to republish.
-- `fliks` — the core versions this plugin runs on, as a semver range with a mandatory upper bound
-  (`>=3.0.0 <4.0.0`). A prerelease core matches as its own release would, so a `3.0.0-rc` runs the
+- `fliks` — the core versions this plugin runs on, as a semver range that should carry an upper
+  bound (`>=3.0.0 <4.0.0`). Core itself only checks the range is non-empty and satisfied by the
+  running version; the official catalogue's CI is what refuses an unbounded range before publishing.
+  A prerelease core matches as its own release would, so a `3.0.0-rc` runs the
   plugins that declare `>=3.0.0` — which is how a major upgrade gets rehearsed before it ships.
 - `files` — sha256 of every archive entry but the manifest and its own signature.
 - `database` — `{ schema: boolean, coreRefs: string[] }`: whether it wants its own schema, and
@@ -220,8 +222,9 @@ That split matters because the code directory does not survive: core re-extracts
 from the signed archive on every ordinary start — boot, enable, an admin restart, install and
 upgrade alike, not just a crash respawn — so nothing written there outlives the next start. The
 data directory is never touched by that sweep, so it is the only place worth writing anything a
-restart, an upgrade, or a disable/re-enable needs to survive. Uninstall removes the code directory
-and (for a schema-owning plugin) the database schema; the data directory is not part of either.
+restart, an upgrade, or a disable/re-enable needs to survive. Uninstall removes both the code
+directory and the data directory, along with this plugin's `plugin.<id>.*` settings and its
+registration, and (for a schema-owning plugin) the database schema.
 
 ### The handshake
 
@@ -319,9 +322,9 @@ reads like a healthy process. For a running `process` plugin it carries:
   plugin that has been up for weeks still reports a bounded, recent figure. `null` before the first call.
 - `restartCount` — crash-triggered respawns since this plugin's supervisor last started.
 - `eventDropCount` — notes core could not deliver because the outbound ring to this plugin was full.
-- `residentSetSizeBytes` — the child's resident memory, read from `/proc/<pid>/statm` when the
-  endpoint is called, not polled in the background. `null`, never `0`, off Linux or if the child
-  isn't up — a gauge that always silently reads zero is worse than one that admits it can't answer.
+- `residentSetSizeBytes` — the child's resident memory, read from `VmRSS` in `/proc/<pid>/status`
+  when the endpoint is called, not polled in the background. `null`, never `0`, off Linux or if the
+  child isn't up — a gauge that always silently reads zero is worse than one that admits it can't answer.
 
 ## Trust and installation
 
@@ -394,7 +397,7 @@ down rather than left answering 503, because a revocation withdraws the authorit
 it is not reporting an outage.
 
 Latency: a revocation reaches an already-running plugin the moment the catalogue that names it
-refreshes — the daily 4am cron, or immediately on a manual refresh — never waiting for a reboot. The
+refreshes — the daily 3am cron, or immediately on a manual refresh — never waiting for a reboot. The
 refresh that lands a new deny-list entry stops any matching installed package's process and marks
 its row `failed` with the publisher's reason right there, rather than merely blocking the next
 install.
@@ -403,7 +406,8 @@ install.
 
 - **Disable** stops the process and drops every live registration — routes, contributions, jobs,
   webhooks — while the row, the archive, the role and the schema stand.
-- **Uninstall** destroys the schema and its data.
+- **Uninstall** destroys the schema and its data, the plugin's data directory, its
+  `plugin.<id>.*` settings, and its registration.
 - **An upgrade over a disabled plugin stays disabled.**
 - A plugin that goes unreachable has its contributions filtered out server-side, so a frozen
   client never has to know about plugin health.
