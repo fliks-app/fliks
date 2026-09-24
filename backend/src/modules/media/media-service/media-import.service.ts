@@ -82,20 +82,22 @@ export class MediaImportService {
       throw new ConflictException('This title is already in the library');
     }
 
+    const { libraryId, library } = await this.resolveImportTarget(dto.type, {
+      libraryId: dto.libraryId,
+    });
+    const override = this.libraryMetadataOverride(library);
+
     const qualityProfileId =
       await this.profiles.resolveQualityProfileIdForImport(
         dto.qualityProfileId,
+        library.defaultQualityProfileId,
       );
 
     const languageProfileId =
       await this.profiles.resolveLanguageProfileIdForImport(
         dto.languageProfileId,
+        library.defaultLanguageProfileId,
       );
-
-    const { libraryId, library } = await this.resolveImportTarget(dto.type, {
-      libraryId: dto.libraryId,
-    });
-    const override = this.libraryMetadataOverride(library);
 
     const fmtKeys = [
       'naming_movie_folder_format',
@@ -197,19 +199,21 @@ export class MediaImportService {
       }
     }
 
-    const qualityProfileId =
-      await this.profiles.resolveQualityProfileIdForImport(
-        dto.qualityProfileId,
-      );
-    const languageProfileId =
-      await this.profiles.resolveLanguageProfileIdForImport(
-        dto.languageProfileId,
-      );
-
     const { libraryId, library } = await this.resolveImportTarget(dto.type, {
       libraryId: dto.libraryId,
     });
     const override = this.libraryMetadataOverride(library);
+
+    const qualityProfileId =
+      await this.profiles.resolveQualityProfileIdForImport(
+        dto.qualityProfileId,
+        library.defaultQualityProfileId,
+      );
+    const languageProfileId =
+      await this.profiles.resolveLanguageProfileIdForImport(
+        dto.languageProfileId,
+        library.defaultLanguageProfileId,
+      );
 
     const fmtKeys = [
       'naming_movie_folder_format',
@@ -395,6 +399,8 @@ export class MediaImportService {
       folderName: string;
       qualityProfileId?: number;
       languageProfileId?: number;
+      libraryDefaultQualityProfileId?: number | null;
+      libraryDefaultLanguageProfileId?: number | null;
       nfo?: NfoData;
       artwork?: { poster?: string; fanart?: string; logo?: string };
     },
@@ -403,10 +409,12 @@ export class MediaImportService {
     const qualityProfileId =
       await this.profiles.resolveQualityProfileIdForImport(
         dto.qualityProfileId,
+        dto.libraryDefaultQualityProfileId,
       );
     const languageProfileId =
       await this.profiles.resolveLanguageProfileIdForImport(
         dto.languageProfileId,
+        dto.libraryDefaultLanguageProfileId,
       );
 
     const nfo = dto.nfo;

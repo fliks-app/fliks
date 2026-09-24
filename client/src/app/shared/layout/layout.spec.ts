@@ -79,6 +79,8 @@ const lib = (id: number, name: string, opts: Partial<LibrarySummary> = {}): Libr
   icon: null,
   color: null,
   mediaTypes: ['movie'],
+  defaultQualityProfileId: null,
+  defaultLanguageProfileId: null,
   ...opts,
 });
 

@@ -23,8 +23,11 @@ export class ProfilesService {
     private readonly lpRepo: Repository<LanguageProfile>,
   ) {}
 
+  /** `libraryDefaultId` (the destination library's own default) wins over the
+   *  global first-by-id fallback, but never over an explicit `requested`. */
   async resolveQualityProfileIdForImport(
     requested?: number,
+    libraryDefaultId?: number | null,
   ): Promise<number | null> {
     if (requested != null) {
       const p = await this.qpRepo.findOne({ where: { id: requested } });
@@ -34,6 +37,10 @@ export class ProfilesService {
         );
       }
       return p.id;
+    }
+    if (libraryDefaultId != null) {
+      const p = await this.qpRepo.findOne({ where: { id: libraryDefaultId } });
+      if (p) return p.id;
     }
     const [first] = await this.qpRepo.find({
       order: { id: 'ASC' },
@@ -87,8 +94,11 @@ export class ProfilesService {
     return sets;
   }
 
+  /** `libraryDefaultId` (the destination library's own default) wins over the
+   *  global first-by-id fallback, but never over an explicit `requested`. */
   async resolveLanguageProfileIdForImport(
     requested?: number,
+    libraryDefaultId?: number | null,
   ): Promise<number | null> {
     if (requested != null) {
       const p = await this.lpRepo.findOne({ where: { id: requested } });
@@ -98,6 +108,10 @@ export class ProfilesService {
         );
       }
       return p.id;
+    }
+    if (libraryDefaultId != null) {
+      const p = await this.lpRepo.findOne({ where: { id: libraryDefaultId } });
+      if (p) return p.id;
     }
     const [first] = await this.lpRepo.find({
       order: { id: 'ASC' },

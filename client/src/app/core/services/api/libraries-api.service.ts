@@ -10,6 +10,8 @@ export interface LibrarySummary {
   icon: string | null;
   color: string | null;
   mediaTypes: ('movie' | 'series')[];
+  defaultQualityProfileId: number | null;
+  defaultLanguageProfileId: number | null;
 }
 
 export interface LibraryDiskMetrics {

@@ -81,7 +81,11 @@ export class LibrariesService {
   ): Promise<
     Pick<
       Library,
-      'id' | 'name' | 'mediaTypes'
+      | 'id'
+      | 'name'
+      | 'mediaTypes'
+      | 'defaultQualityProfileId'
+      | 'defaultLanguageProfileId'
     >[]
   > {
     const accessible = await this.getAccessibleLibraryIds(user);
@@ -89,6 +93,8 @@ export class LibrariesService {
       accessible == null
         ? {}
         : { id: In(accessible.length ? accessible : [-1]) };
+    // defaultQualityProfileId/defaultLanguageProfileId are @RelationId columns:
+    // TypeORM loads them via their own subquery regardless of `select`.
     return this.repo.find({
       where,
       order: { name: 'ASC' },

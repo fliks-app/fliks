@@ -105,16 +105,20 @@ export class RequestModalComponent {
     this.alreadyRequestedSeasons.set(new Set(params.alreadyRequestedSeasons ?? []));
     const locked = !!params.profilesLocked;
     this.profilesLocked.set(locked);
-    this.qualityProfileId.set(
-      locked ? (params.lockedQualityProfileId ?? null) : (this.qualityProfiles()[0]?.id ?? null),
-    );
-    this.languageProfileId.set(
-      locked ? (params.lockedLanguageProfileId ?? null) : (this.languageProfiles()[0]?.id ?? null),
-    );
     // Always carry a destination: the select is only shown when there is a
     // choice to make, so a hidden one must still submit its single library.
-    this.libraryId.set(
-      this.libraries().find((l) => l.mediaTypes.includes(params.mediaType))?.id ?? null,
+    const target = this.libraries().find((l) => l.mediaTypes.includes(params.mediaType));
+    this.libraryId.set(target?.id ?? null);
+    // The library's own default wins; only fall back to the first profile when it has none.
+    this.qualityProfileId.set(
+      locked
+        ? (params.lockedQualityProfileId ?? null)
+        : (target?.defaultQualityProfileId ?? this.qualityProfiles()[0]?.id ?? null),
+    );
+    this.languageProfileId.set(
+      locked
+        ? (params.lockedLanguageProfileId ?? null)
+        : (target?.defaultLanguageProfileId ?? this.languageProfiles()[0]?.id ?? null),
     );
     this.seasons.set([]);
     this.selectedSeasons.set(new Set());

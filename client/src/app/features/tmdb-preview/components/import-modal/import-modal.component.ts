@@ -121,11 +121,15 @@ export class ImportModalComponent {
       this.languageProfiles.set(lp.map((p) => ({ id: p.id, name: p.name })));
       this.libraries.set(libs);
 
-      if (qp.length) this.selectedQualityProfileId.set(qp[0].id);
-      if (lp.length) this.selectedLanguageProfileId.set(lp[0].id);
-
       const compatible = libs.filter((l) => l.mediaTypes.includes(params.mediaType));
-      if (compatible.length) this.selectedLibraryId.set(compatible[0].id);
+      const target = compatible[0];
+      if (target) this.selectedLibraryId.set(target.id);
+
+      // The library's own default wins; only fall back to the first profile when it has none.
+      const defaultQp = target?.defaultQualityProfileId ?? qp[0]?.id;
+      const defaultLp = target?.defaultLanguageProfileId ?? lp[0]?.id;
+      if (defaultQp != null) this.selectedQualityProfileId.set(defaultQp);
+      if (defaultLp != null) this.selectedLanguageProfileId.set(defaultLp);
     } catch {
       /* ignore — selects will just be empty */
     } finally {

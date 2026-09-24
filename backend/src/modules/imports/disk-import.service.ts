@@ -726,6 +726,8 @@ export class DiskImportService {
         folderName: dto.folderName,
         qualityProfileId: dto.qualityProfileId,
         languageProfileId: dto.languageProfileId,
+        libraryDefaultQualityProfileId: library.defaultQualityProfileId,
+        libraryDefaultLanguageProfileId: library.defaultLanguageProfileId,
         nfo: nfo ?? undefined,
         artwork,
       },
