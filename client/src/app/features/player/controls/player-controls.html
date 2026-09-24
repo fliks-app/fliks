@@ -95,8 +95,8 @@
      tappable. -->
 <div
   class="absolute inset-0 z-30 flex items-center justify-center"
-  (click)="isMobileTouch() ? tapOverlay.emit() : hasOpenDropdown() ? closeDropdown($event) : togglePlay.emit()"
-  (dblclick)="isMobileTouch() ? null : toggleFullscreen.emit()"
+  (click)="onSurfaceClick($event)"
+  (dblclick)="onSurfaceDblClick()"
 ></div>
 
 <!-- Mobile: big center controls (rewind / play / forward).
