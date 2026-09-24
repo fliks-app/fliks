@@ -9,7 +9,7 @@ internal sealed record BackendEnvironment(ushort Port, ushort DbPort)
 {
     public IReadOnlyDictionary<string, string> AsEnvironment()
     {
-        // ffmpeg + pg_dump/psql first on PATH — the backend spawns them by name.
+        // ffmpeg + pg_dump/psql first on PATH: the backend spawns them by name.
         var nodeDir = Path.GetDirectoryName(AppPaths.NodeExe) ?? "";
         var systemPath = Environment.GetEnvironmentVariable("PATH") ?? "";
         var path = string.Join(Path.PathSeparator,
