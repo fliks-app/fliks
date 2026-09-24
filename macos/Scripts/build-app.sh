@@ -111,7 +111,7 @@ echo "    [postgres] Copying PostgreSQL..."
 mkdir -p "$RESOURCES/postgres/bin" "$RESOURCES/postgres/lib" "$RESOURCES/postgres/share"
 
 # Only copy the binaries we actually use.
-for pgbin in initdb pg_ctl postgres pg_isready createdb psql; do
+for pgbin in initdb pg_ctl postgres pg_isready createdb psql pg_dump; do
     cp "$PG_PREFIX/bin/$pgbin" "$RESOURCES/postgres/bin/"
 done
 
