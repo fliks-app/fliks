@@ -1001,7 +1001,7 @@ export class SubtitlesService {
         content = postProcess.fixOcr(content);
         break;
       case 'commonFixes':
-        content = postProcess.commonFixes(content);
+        content = postProcess.commonFixes(content, sub.language);
         break;
       case 'fixUppercase':
         content = postProcess.fixUppercase(content);

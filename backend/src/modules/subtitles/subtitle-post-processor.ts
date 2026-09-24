@@ -49,14 +49,18 @@ export function fixOcr(content: string): string {
 // ---------------------------------------------------------------------------
 // Common fixes: double spaces, empty lines, punctuation
 // ---------------------------------------------------------------------------
-export function commonFixes(content: string): string {
+export function commonFixes(content: string, language?: string): string {
+  // French typography keeps a space before ? ! ; :
+  const spaceBeforePunct = language === 'fr' ? / +([,.])/g : / +([,.!?;:])/g;
   return content
     .replace(/  +/g, ' ') // double spaces
     .replace(/\. \./g, '..') // ". ." → ".."
     .replace(/\.\.\.\./g, '...') // four dots → three
-    .replace(/ +([,.!?;:])/g, '$1') // space before punctuation
+    .replace(spaceBeforePunct, '$1')
     .replace(/([.!?])\1{3,}/g, '$1$1$1') // excessive punctuation
-    .replace(/^\s*\n/gm, ''); // empty lines within text
+    .replace(/^[ \t]+$/gm, '') // whitespace-only lines
+    .replace(/^(\r?\n)+/, '')
+    .replace(/(\r?\n){3,}/g, '$1$1'); // a blank line is the SRT cue separator: collapse, never drop
 }
 
 // ---------------------------------------------------------------------------
@@ -70,12 +74,16 @@ export function fixUppercase(content: string): string {
       if (lines.length < 3) return block;
 
       // Only fix text lines (skip index + timestamp)
-      const textLines = lines.slice(2).map((line) => {
+      const textLines = lines.slice(2).map((line, i, all) => {
         // Check if line is ALL CAPS (ignoring punctuation/spaces)
         const letters = line.replace(/[^a-zA-Z]/g, '');
         if (letters.length > 1 && letters === letters.toUpperCase()) {
-          // Convert to sentence case
-          return line.charAt(0).toUpperCase() + line.slice(1).toLowerCase();
+          const lower = line.toLowerCase();
+          // A line continuing the previous one's sentence stays lowercase
+          const startsSentence = i === 0 || /[.!?…]\s*$/.test(all[i - 1]);
+          return startsSentence
+            ? lower.charAt(0).toUpperCase() + lower.slice(1)
+            : lower;
         }
         return line;
       });

@@ -1,4 +1,4 @@
-import { assToSrt } from './subtitle-post-processor';
+import { assToSrt, commonFixes, fixUppercase } from './subtitle-post-processor';
 
 // The `.ass` → `.srt` rename in applyPostProcessing keys on assToSrt returning
 // something different from its input, so the no-op paths have to stay exact.
@@ -23,5 +23,35 @@ describe('assToSrt', () => {
   it('returns the original when no dialogue line is usable', () => {
     const ass = '[Events]\nDialogue: 0,0:01:23.45,0:01:26.78,Default,,0,0,0,,';
     expect(assToSrt(ass)).toBe(ass);
+  });
+});
+
+describe('commonFixes', () => {
+  it('keeps the blank line between cues', () => {
+    const srt =
+      '\n1\n00:00:01,000 --> 00:00:02,000\nHello  there .\n \n\n\n2\n00:00:03,000 --> 00:00:04,000\nBye\n';
+    expect(commonFixes(srt)).toBe(
+      '1\n00:00:01,000 --> 00:00:02,000\nHello there.\n\n2\n00:00:03,000 --> 00:00:04,000\nBye\n',
+    );
+  });
+
+  it('keeps CRLF separators', () => {
+    const srt = '1\r\n00:00:01,000 --> 00:00:02,000\r\nA\r\n\r\n2\r\n00:00:03,000 --> 00:00:04,000\r\nB\r\n';
+    expect(commonFixes(srt)).toBe(srt);
+  });
+
+  it('keeps the space before ? ! ; : in French', () => {
+    const line = 'Tu rentres quand ? Vite , là !';
+    expect(commonFixes(line, 'fr')).toBe('Tu rentres quand ? Vite, là !');
+    expect(commonFixes(line, 'en')).toBe('Tu rentres quand? Vite, là!');
+  });
+});
+
+describe('fixUppercase', () => {
+  it('capitalises only lines that start a sentence', () => {
+    const srt = '1\n00:00:01,000 --> 00:00:02,000\nSAVES THE CITY\nFROM THE BLAST. AND\nTHEN LEAVES';
+    expect(fixUppercase(srt)).toBe(
+      '1\n00:00:01,000 --> 00:00:02,000\nSaves the city\nfrom the blast. and\nthen leaves',
+    );
   });
 });
