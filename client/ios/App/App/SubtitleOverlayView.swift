@@ -98,6 +98,7 @@ final class SubtitleOverlayView: UIView {
     private let label = UILabel()
     private var style = SubtitleStyle()
     private var cues: [[SubtitleRun]] = []
+    private var top = false
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -118,8 +119,9 @@ final class SubtitleOverlayView: UIView {
     }
 
     /// Replace the displayed cues. Empty array clears the overlay.
-    func render(_ cues: [[SubtitleRun]]) {
+    func render(_ cues: [[SubtitleRun]], top: Bool = false) {
         self.cues = cues
+        self.top = top
         rebuild()
     }
 
@@ -209,7 +211,7 @@ final class SubtitleOverlayView: UIView {
         let bottomInset = bounds.height * style.bottomMarginFraction
         label.frame = CGRect(
             x: (bounds.width - w) / 2,
-            y: max(0, bounds.height - bottomInset - fit.height),
+            y: top ? bottomInset : max(0, bounds.height - bottomInset - fit.height),
             width: w,
             height: fit.height
         )

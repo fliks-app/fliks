@@ -18,6 +18,8 @@ export interface VttCue {
   start: number;
   end: number;
   text: string;
+  /** From the cue's `line:` setting (an SRT `{\an8}` upstream). */
+  top?: boolean;
 }
 
 export class SubtitleOverlay {
@@ -28,6 +30,8 @@ export class SubtitleOverlay {
   private cursor = 0;
   private visible = false;
   private lastText = '';
+  private lastTop = false;
+  private bottom = '10vh';
   private disposed = false;
 
   /** Multiplies every preset on the ladder, so a platform can shift the whole
@@ -82,8 +86,8 @@ export class SubtitleOverlay {
       this.cursor--;
     }
     const cue = this.cues[this.cursor];
-    const active = cue && timeSec >= cue.start && timeSec <= cue.end ? cue.text : '';
-    this.render(active);
+    const active = cue && timeSec >= cue.start && timeSec <= cue.end;
+    this.render(active ? cue.text : '', active && !!cue.top);
   }
 
   /** Same preset enums Shaka consumes from `player-settings.service`. */
@@ -110,7 +114,8 @@ export class SubtitleOverlay {
       el.style.background = SUBTITLE_BG_MAP[style.background] ?? SUBTITLE_BG_MAP['transparent'];
     }
     if (typeof style.bottomMargin === 'number') {
-      el.style.bottom = `${Math.max(0, style.bottomMargin)}vh`;
+      this.bottom = `${Math.max(0, style.bottomMargin)}vh`;
+      this.place(el, this.lastTop);
     }
   }
 
@@ -122,6 +127,12 @@ export class SubtitleOverlay {
     this.cursor = 0;
     this.visible = false;
     this.lastText = '';
+    this.lastTop = false;
+  }
+
+  private place(el: HTMLDivElement, top: boolean): void {
+    el.style.top = top ? this.bottom : '';
+    el.style.bottom = top ? 'auto' : this.bottom;
   }
 
   private ensureEl(): HTMLDivElement | null {
@@ -162,11 +173,13 @@ export class SubtitleOverlay {
     return el;
   }
 
-  private render(text: string): void {
+  private render(text: string, top = false): void {
     const el = this.ensureEl();
     if (!el) return;
-    if (text === this.lastText) return;
+    if (text === this.lastText && top === this.lastTop) return;
     this.lastText = text;
+    if (top !== this.lastTop) this.place(el, top);
+    this.lastTop = top;
     if (text) {
       el.innerHTML = text;
       el.style.display = 'block';
@@ -194,7 +207,11 @@ export function parseVtt(raw: string): VttCue[] {
       if (/^<\/?(b|i|u|br)\s*\/?>$/i.test(tag)) return tag;
       return '';
     });
-    if (text) cues.push({ start, end, text });
+    // Line numbers count from the top when non-negative; a percentage is a
+    // share of the height, and only the upper band counts as top.
+    const line = /\bline:(-?[\d.]+)(%?)/.exec(timeLine);
+    const top = !!line && (line[2] ? +line[1] < 40 : +line[1] >= 0);
+    if (text) cues.push({ start, end, text, top });
   }
   return cues;
 }

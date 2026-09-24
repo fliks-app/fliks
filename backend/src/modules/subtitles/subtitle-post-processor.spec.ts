@@ -36,7 +36,8 @@ describe('commonFixes', () => {
   });
 
   it('keeps CRLF separators', () => {
-    const srt = '1\r\n00:00:01,000 --> 00:00:02,000\r\nA\r\n\r\n2\r\n00:00:03,000 --> 00:00:04,000\r\nB\r\n';
+    const srt =
+      '1\r\n00:00:01,000 --> 00:00:02,000\r\nA\r\n\r\n2\r\n00:00:03,000 --> 00:00:04,000\r\nB\r\n';
     expect(commonFixes(srt)).toBe(srt);
   });
 
@@ -49,7 +50,8 @@ describe('commonFixes', () => {
 
 describe('fixUppercase', () => {
   it('capitalises only lines that start a sentence', () => {
-    const srt = '1\n00:00:01,000 --> 00:00:02,000\nSAVES THE CITY\nFROM THE BLAST. AND\nTHEN LEAVES';
+    const srt =
+      '1\n00:00:01,000 --> 00:00:02,000\nSAVES THE CITY\nFROM THE BLAST. AND\nTHEN LEAVES';
     expect(fixUppercase(srt)).toBe(
       '1\n00:00:01,000 --> 00:00:02,000\nSaves the city\nfrom the blast. and\nthen leaves',
     );
