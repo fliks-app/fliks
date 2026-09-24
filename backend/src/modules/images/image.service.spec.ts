@@ -82,6 +82,18 @@ describe('ImageService.downloadAndStore caching', () => {
     expect(mockedAxios.get).toHaveBeenCalledTimes(2);
   });
 
+  it('returns null when the downloaded bytes are not a decodable image', async () => {
+    mockedAxios.get.mockResolvedValueOnce({ data: Buffer.from('this is not image bytes') });
+
+    const result = await service.downloadAndStore(
+      'https://image.tmdb.org/t/p/original/not-an-image.jpg',
+      'person',
+      6,
+    );
+
+    expect(result).toBeNull();
+  });
+
   it('serializes two concurrent calls for the same target so the bytes and sidecar agree', async () => {
     const urlA = 'https://image.tmdb.org/t/p/original/race-a.jpg';
     const urlB = 'https://image.tmdb.org/t/p/original/race-b.jpg';
