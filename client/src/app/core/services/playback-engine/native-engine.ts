@@ -141,6 +141,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     backgroundColor: string;
     edgeType: string;
     bottomMarginPercent: number;
+    topMarginPercent?: number;
   } | null = null;
 
   /** Set subtitle appearance. Call before load() or anytime after. */
@@ -150,6 +151,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     shadow: string;
     background: string;
     bottomMargin: number;
+    topMargin?: number;
   }): void {
     this._subtitleStyle = {
       fontScale: NATIVE_SUBTITLE_SIZE_SCALE[settings.size] ?? 1.0,
@@ -157,6 +159,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
       backgroundColor: SUBTITLE_BG_ARGB[settings.background] ?? 'transparent',
       edgeType: SUBTITLE_EDGE_KEY[settings.shadow] ?? 'drop_shadow',
       bottomMarginPercent: settings.bottomMargin,
+      topMarginPercent: settings.topMargin,
     };
 
     if (this._initialized) {

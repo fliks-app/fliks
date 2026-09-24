@@ -67,6 +67,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     backgroundColor: string;
     edgeType: string;
     bottomMarginPercent: number;
+    topMarginPercent?: number;
   } | null = null;
   private _fillScreen = false;
 
@@ -293,6 +294,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     shadow: string;
     background: string;
     bottomMargin: number;
+    topMargin?: number;
   }): void {
     this._subtitleStyle = {
       fontScale: NATIVE_SUBTITLE_SIZE_SCALE[settings.size] ?? 1.0,
@@ -300,6 +302,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
       backgroundColor: SUBTITLE_BG_ARGB[settings.background] ?? 'transparent',
       edgeType: SUBTITLE_EDGE_KEY[settings.shadow] ?? 'drop_shadow',
       bottomMarginPercent: settings.bottomMargin,
+      topMarginPercent: settings.topMargin,
     };
     if (this._initialized) {
       this.bridge.setSubtitleStyle(this._subtitleStyle).catch(() => {});

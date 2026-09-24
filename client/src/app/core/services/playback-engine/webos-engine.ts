@@ -479,6 +479,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
     shadow?: string;
     background?: string;
     bottomMargin?: number;
+    topMargin?: number;
   }): void {
     this.subtitles.setStyle(style);
   }

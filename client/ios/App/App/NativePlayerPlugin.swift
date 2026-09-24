@@ -529,7 +529,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             foregroundHex: call.getString("foregroundColor") ?? "#FFFFFF",
             backgroundHex: call.getString("backgroundColor") ?? "transparent",
             edgeType: call.getString("edgeType") ?? "none",
-            bottomMarginPercent: CGFloat(call.getFloat("bottomMarginPercent") ?? 8.0)
+            bottomMarginPercent: CGFloat(call.getFloat("bottomMarginPercent") ?? 8.0),
+            topMarginPercent: CGFloat(call.getFloat("topMarginPercent") ?? 5.0)
         )
         DispatchQueue.main.async { [weak self] in
             guard let self = self else {
