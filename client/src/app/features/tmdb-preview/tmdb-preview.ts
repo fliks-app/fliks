@@ -347,7 +347,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
   }
 
   /** Approval imports the title, so this page's "not in the library yet" view
-   *  is stale: leave for the media, as importing from here already does. */
+   *  is stale: replace it with the media, so Back can't return to it. */
   async approveRequest(id: number) {
     this.actionBusyId.set(id);
     try {
@@ -359,7 +359,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
         return;
       }
       const prefix = approved.mediaType === 'movie' ? '/movies' : '/series';
-      void this.router.navigate([prefix, mediaId]);
+      void this.router.navigate([prefix, mediaId], { replaceUrl: true });
     } catch {
       /* surfaced by the global HTTP error interceptor */
     } finally {
