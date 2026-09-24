@@ -99,6 +99,8 @@ export interface NativePlayerPlugin {
     backgroundColor: string; // hex #AARRGGBB or 'transparent'
     edgeType: string;        // 'none' | 'drop_shadow' | 'outline' | 'raised'
     bottomMarginPercent: number;
+    /** Inset of top-aligned cues (a WebVTT `line:` near the top). */
+    topMarginPercent?: number;
   }): Promise<void>;
 
   // ── Display ──

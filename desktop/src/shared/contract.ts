@@ -41,6 +41,8 @@ export interface DesktopSubtitleStyle {
   backgroundColor: string;
   edgeType?: string;
   bottomMarginPercent: number;
+  /** Inset of top-aligned cues ({\an8}); bottomMarginPercent covers the rest. */
+  topMarginPercent?: number;
 }
 
 export interface DesktopRect {

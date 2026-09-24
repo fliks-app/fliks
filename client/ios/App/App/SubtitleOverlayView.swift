@@ -14,6 +14,8 @@ struct SubtitleStyle {
     var edgeType: String = "none"
     /// Distance from the bottom edge as a fraction of view height.
     var bottomMarginFraction: CGFloat = 0.08
+    /// Distance from the top edge for top-aligned cues.
+    var topMarginFraction: CGFloat = 0.05
 }
 
 extension SubtitleStyle {
@@ -23,7 +25,8 @@ extension SubtitleStyle {
         foregroundHex: String,
         backgroundHex: String,
         edgeType: String,
-        bottomMarginPercent: CGFloat
+        bottomMarginPercent: CGFloat,
+        topMarginPercent: CGFloat
     ) {
         self.init()
         self.fontScale = fontScale
@@ -35,6 +38,7 @@ extension SubtitleStyle {
             : SubtitleStyle.color(fromHex: backgroundHex)
         self.edgeType = edgeType
         self.bottomMarginFraction = max(0, min(0.45, bottomMarginPercent / 100.0))
+        self.topMarginFraction = max(0, min(0.45, topMarginPercent / 100.0))
     }
 
     /// Parse a hex colour string (#RRGGBB or #AARRGGBB) into a UIColor.
@@ -211,7 +215,9 @@ final class SubtitleOverlayView: UIView {
         let bottomInset = bounds.height * style.bottomMarginFraction
         label.frame = CGRect(
             x: (bounds.width - w) / 2,
-            y: top ? bottomInset : max(0, bounds.height - bottomInset - fit.height),
+            y: top
+                ? bounds.height * style.topMarginFraction + safeAreaInsets.top
+                : max(0, bounds.height - bottomInset - fit.height),
             width: w,
             height: fit.height
         )

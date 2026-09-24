@@ -41,6 +41,7 @@ class SubtitleOverlay {
     private ImageView imageView;
     private final SurfaceView surfaceView;
     private float bottomMargin;
+    private float topMargin = 0.05f;
 
     SubtitleOverlay(Context ctx, ViewGroup webViewParent, FrameLayout wrapper, SurfaceView surfaceView) {
         this.surfaceView = surfaceView;
@@ -52,7 +53,6 @@ class SubtitleOverlay {
                 ViewGroup.LayoutParams.MATCH_PARENT));
         subtitleView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or_, ob) -> {
             applyTextSize();
-            applyBottomMargin();
         });
         // Added to `wrapper` (a FrameLayout we own) so the gravity-bearing
         // FrameLayout.LayoutParams cast stays valid regardless of the host
@@ -70,7 +70,10 @@ class SubtitleOverlay {
         Cue bitmapCue = null;
         for (Cue c : cueGroup.cues) {
             if (c.bitmap != null) { if (bitmapCue == null) bitmapCue = c; }
-            else textCues.add(c);
+            else textCues.add(isTopCue(c) ? c.buildUpon()
+                    .setLine(topMargin, Cue.LINE_TYPE_FRACTION)
+                    .setLineAnchor(Cue.ANCHOR_TYPE_START)
+                    .build() : c);
         }
         if (subtitleView != null) subtitleView.setCues(textCues);
         renderImageCue(bitmapCue);
@@ -92,15 +95,23 @@ class SubtitleOverlay {
 
     private float fontScale = 1f;
 
-    /** The lift translates the whole view rather than padding it, so the cue
-     *  layout is untouched and only its position moves. */
-    void applyStyle(CaptionStyleCompat style, float fontScale, float bottomMarginFraction) {
+    /** Bottom padding only moves cues without a `line:`; top cues are re-anchored
+     *  in onCues, so each group keeps its own margin. */
+    void applyStyle(CaptionStyleCompat style, float fontScale, float bottomMarginFraction,
+                    float topMarginFraction) {
         if (subtitleView == null) return;
         subtitleView.setStyle(style);
         this.fontScale = fontScale;
         bottomMargin = bottomMarginFraction;
+        topMargin = topMarginFraction;
         applyTextSize();
-        applyBottomMargin();
+        subtitleView.setBottomPaddingFraction(
+                SubtitleView.DEFAULT_BOTTOM_PADDING_FRACTION + bottomMargin);
+    }
+
+    private static boolean isTopCue(Cue c) {
+        if (c.line == Cue.DIMEN_UNSET) return false;
+        return c.lineType == Cue.LINE_TYPE_FRACTION ? c.line < 0.4f : c.line >= 0;
     }
 
     private void applyTextSize() {
@@ -111,11 +122,6 @@ class SubtitleOverlay {
         int shortSide = Math.min(subtitleView.getWidth(), subtitleView.getHeight());
         subtitleView.setFixedTextSize(TypedValue.COMPLEX_UNIT_PX,
                 Math.max(shortSide * TEXT_SIZE_FRACTION * fontScale, minPx));
-    }
-
-    private void applyBottomMargin() {
-        if (subtitleView == null || subtitleView.getHeight() <= 0) return;
-        subtitleView.setTranslationY(-subtitleView.getHeight() * bottomMargin);
     }
 
     /** Dim text cues when the screen is at max brightness (HDR mode). */

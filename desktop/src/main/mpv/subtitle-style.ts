@@ -19,18 +19,18 @@ export const MPV_BASE_SUB_FONT_SIZE = 26;
  *  setProperty and the subprocess JSON-IPC set_property. */
 export function mpvSubtitleProps(s: DesktopSubtitleStyle): Array<[string, string]> {
   const hasBox = !!s.backgroundColor && s.backgroundColor !== 'transparent';
+  const bottom = Math.max(0, Math.min(100, s.bottomMarginPercent || 0));
+  const top = Math.max(0, Math.min(45, s.topMarginPercent || 0));
   const props: Array<[string, string]> = [
     ['sub-ass-override', 'force'],
     ['sub-font-size', String(Math.round(MPV_BASE_SUB_FONT_SIZE * (s.fontScale || 1)))],
     ['sub-color', s.foregroundColor || '#FFFFFF'],
     ['sub-border-style', hasBox ? 'background-box' : 'outline-and-shadow'],
     ['sub-back-color', hasBox ? s.backgroundColor : '#00000000'],
-    ['sub-pos', String(Math.max(0, Math.min(100, 100 - (s.bottomMarginPercent || 0))))],
-    // mpv's default bottom margin (sub-margin-y ~22) parks subtitles well above
-    // the bottom edge, so at 0% bottom-margin they sat much higher than the web
-    // player (whose 0% is the near-edge browser default). Shrink it so sub-pos
-    // 100 is "almost glued to the bottom", matching Shaka.
-    ['sub-margin-y', '6'],
+    // sub-margin-y (720p-scaled pixels) insets both edges, sub-pos only the
+    // bottom: margin-y carries the top margin, sub-pos makes up the difference.
+    ['sub-pos', String(Math.max(0, Math.min(150, 100 - bottom + top)))],
+    ['sub-margin-y', String(Math.round(6 + 7.2 * top))],
   ];
   // Every branch sets outline-size / shadow-offset / blur explicitly: these are
   // sticky mpv properties, so a preset that omits one would inherit a stale

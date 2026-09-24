@@ -641,6 +641,7 @@ public class NativePlayerPlugin extends Plugin {
         String bgColor = call.getString("backgroundColor", "transparent");
         String edgeType = call.getString("edgeType", "drop_shadow");
         int bottomMargin = call.getInt("bottomMarginPercent", 10);
+        int topMargin = call.getInt("topMarginPercent", 5);
 
         mainHandler.post(() -> {
             if (subtitles == null) { call.resolve(); return; }
@@ -663,7 +664,7 @@ public class NativePlayerPlugin extends Plugin {
                     Color.BLACK,                     // edge color
                     null);                           // typeface (null = default)
 
-            subtitles.applyStyle(style, fontScale, bottomMargin / 100f);
+            subtitles.applyStyle(style, fontScale, bottomMargin / 100f, topMargin / 100f);
 
             call.resolve();
         });

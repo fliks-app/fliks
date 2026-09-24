@@ -32,6 +32,7 @@ export class SubtitleOverlay {
   private lastText = '';
   private lastTop = false;
   private bottom = '10vh';
+  private top = '5vh';
   private disposed = false;
 
   /** Multiplies every preset on the ladder, so a platform can shift the whole
@@ -97,6 +98,7 @@ export class SubtitleOverlay {
     shadow?: string;
     background?: string;
     bottomMargin?: number;
+    topMargin?: number;
   }): void {
     const el = this.ensureEl();
     if (!el) return;
@@ -115,8 +117,11 @@ export class SubtitleOverlay {
     }
     if (typeof style.bottomMargin === 'number') {
       this.bottom = `${Math.max(0, style.bottomMargin)}vh`;
-      this.place(el, this.lastTop);
     }
+    if (typeof style.topMargin === 'number') {
+      this.top = `${Math.max(0, style.topMargin)}vh`;
+    }
+    this.place(el, this.lastTop);
   }
 
   destroy(): void {
@@ -131,7 +136,7 @@ export class SubtitleOverlay {
   }
 
   private place(el: HTMLDivElement, top: boolean): void {
-    el.style.top = top ? this.bottom : '';
+    el.style.top = top ? this.top : '';
     el.style.bottom = top ? 'auto' : this.bottom;
   }
 

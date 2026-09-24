@@ -1938,6 +1938,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return this.chrome.seekOsd() ? 5 : 10;
   }
 
+  /** Clears the top bar, which the seek OSD hides. */
+  private nativeSubtitleTopBump(): number {
+    return this.chrome.visible() && !this.chrome.seekOsd() ? 10 : 0;
+  }
+
   // ── Player actions ──
 
   onTogglePlay() {
@@ -3832,6 +3837,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       shadow: s.subtitleShadow,
       background: s.subtitleBackground,
       bottomMargin: s.subtitleBottomMargin + extraMargin,
+      topMargin: s.subtitleTopMargin + this.nativeSubtitleTopBump(),
     });
   }
 
