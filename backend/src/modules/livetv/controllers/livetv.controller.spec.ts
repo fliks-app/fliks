@@ -37,10 +37,12 @@ describe('LivetvController — revocation reaches an in-progress session', () =>
   it('re-runs the same play-time access check on every manifest poll', async () => {
     const findPlayable = jest.fn().mockRejectedValue(new NotFoundException());
     const channels = { findPlayable };
+    const leave = jest.fn().mockResolvedValue(undefined);
     const sessions = {
       getForServe: jest
         .fn()
         .mockReturnValue({ channelId: 42, dir: '/tmp/does-not-matter' }),
+      leave,
     };
     const controller = new LivetvController(
       channels as never,
@@ -56,15 +58,19 @@ describe('LivetvController — revocation reaches an in-progress session', () =>
       controller.servePlaylist('sess-1', user, req, res),
     ).rejects.toThrow(NotFoundException);
     expect(findPlayable).toHaveBeenCalledWith(42, user);
+    // A failed re-check must not leave this viewer registered: serveSegment never re-checks.
+    expect(leave).toHaveBeenCalledWith('sess-1');
   });
 
   it('re-runs the access check before attaching a direct-mode viewer', async () => {
     const findPlayable = jest.fn().mockRejectedValue(new NotFoundException());
     const channels = { findPlayable };
     const attachDirectViewer = jest.fn();
+    const leave = jest.fn().mockResolvedValue(undefined);
     const sessions = {
       getForServe: jest.fn().mockReturnValue({ channelId: 7, mode: 'direct' }),
       attachDirectViewer,
+      leave,
     };
     const controller = new LivetvController(
       channels as never,
@@ -79,6 +85,7 @@ describe('LivetvController — revocation reaches an in-progress session', () =>
       NotFoundException,
     );
     expect(attachDirectViewer).not.toHaveBeenCalled();
+    expect(leave).toHaveBeenCalledWith('sess-2');
   });
 
   it.each(['play' as const, 'leave' as const, 'setPrefs' as const])(

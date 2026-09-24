@@ -18,7 +18,6 @@ const parseVanished = (raw: string | null): Record<string, string> =>
 
 describe('LiveTvAccessService', () => {
   let settings: Record<string, string | null>;
-  let grants: { groupName: string }[];
   let users: { id: number; username: string; permissions?: string[] }[];
   let accessRows: { userId: number; groupName: string }[];
   let accessRepo: {
@@ -34,12 +33,17 @@ describe('LiveTvAccessService', () => {
 
   beforeEach(() => {
     settings = {};
-    grants = [];
     users = [];
     accessRows = [];
     calls = [];
     accessRepo = {
-      find: jest.fn(() => Promise.resolve(grants)),
+      // `grantsFor` passes `{ where: { user: { id } } }`; `deleteGrantsForGroups`
+      // calls with no argument at all and expects every user's grants back.
+      find: jest.fn((opts?: { where?: { user?: { id: number } } }) => {
+        const uid = opts?.where?.user?.id;
+        const rows = uid != null ? accessRows.filter((r) => r.userId === uid) : accessRows;
+        return Promise.resolve(rows.map((r) => ({ groupName: r.groupName })));
+      }),
       // Either `{ groupName: In(dropped) }` (a `FindOperator` exposing `.value`)
       // or `{ user: { id } }`, whichever write path called `delete`.
       delete: jest.fn(
@@ -48,7 +52,6 @@ describe('LiveTvAccessService', () => {
             calls.push('delete:groups');
             const dropped = new Set(where.groupName.value);
             accessRows = accessRows.filter((r) => !dropped.has(r.groupName));
-            grants = grants.filter((g) => !dropped.has(g.groupName));
           } else if (where.user) {
             calls.push('delete:user');
             const uid = where.user.id;
@@ -106,7 +109,7 @@ describe('LiveTvAccessService', () => {
 
   it('denies a restricted group the user was not granted', async () => {
     settings[RESTRICTED_KEY] = JSON.stringify(['XXX', 'Adult']);
-    grants = [{ groupName: 'Adult' }];
+    accessRows = [{ userId: 2, groupName: 'Adult' }];
     expect(await service.deniedGroups(makeUser(2))).toEqual(['XXX']);
   });
 
@@ -115,7 +118,7 @@ describe('LiveTvAccessService', () => {
     // twice under different casing, exactly what a provider's inconsistent
     // group-title spelling produces via `groupCounts`.
     settings[RESTRICTED_KEY] = JSON.stringify(['XXX', 'xxx']);
-    grants = [{ groupName: 'XXX' }];
+    accessRows = [{ userId: 2, groupName: 'XXX' }];
     expect(await service.deniedGroups(makeUser(2))).toEqual([]);
   });
 
@@ -395,6 +398,18 @@ describe('LiveTvAccessService', () => {
       expect(await service.listUserAccess()).toEqual([
         { id: 1, username: 'alice', groups: ['XXX FR'], hasFullAccess: false },
         { id: 2, username: 'bob', groups: ['XXX FR'], hasFullAccess: false },
+      ]);
+    });
+
+    it("drops a grant stored under a spelling that differs from the restricted list's own casing", async () => {
+      settings[RESTRICTED_KEY] = JSON.stringify(['XXX FR']);
+      users = [{ id: 1, username: 'alice' }];
+      accessRows = [{ userId: 1, groupName: 'xxx fr' }];
+
+      await service.setRestrictedGroups([]);
+
+      expect(await service.listUserAccess()).toEqual([
+        { id: 1, username: 'alice', groups: [], hasFullAccess: false },
       ]);
     });
 

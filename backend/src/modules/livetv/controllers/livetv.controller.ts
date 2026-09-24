@@ -194,6 +194,22 @@ export class LivetvController {
     };
   }
 
+  /** A denied re-check must not leave this viewer registered on the session:
+   *  `serveSegment` never re-checks access, so a lingering entry would keep
+   *  serving segments to someone `findPlayable` just refused. */
+  private async assertStillPlayable(
+    sessionId: string,
+    channelId: number,
+    user: User,
+  ): Promise<void> {
+    try {
+      await this.channels.findPlayable(channelId, user);
+    } catch (err) {
+      await this.sessions.leave(sessionId);
+      throw err;
+    }
+  }
+
   @Delete('sessions/:sessionId')
   @CheckPolicies((ability) => ability.can(Action.Read, LiveTvChannel))
   @UseGuards(SessionTokenGuard)
@@ -214,7 +230,7 @@ export class LivetvController {
     if (!session) throw new NotFoundException('Live TV session not found');
     // Same rule as `play`: the manifest is polled continuously, so a group
     // restriction or a disabled channel takes effect on the next poll.
-    await this.channels.findPlayable(session.channelId, user);
+    await this.assertStillPlayable(sessionId, session.channelId, user);
 
     const playlistPath = path.join(session.dir, 'index.m3u8');
     if (!fs.existsSync(playlistPath))
@@ -241,7 +257,7 @@ export class LivetvController {
       throw new NotFoundException('Live TV session not found');
     }
     // Only catches a reconnect: an already-flowing socket is never re-checked.
-    await this.channels.findPlayable(session.channelId, user);
+    await this.assertStillPlayable(sessionId, session.channelId, user);
     const tee = this.sessions.attachDirectViewer(session, sessionId);
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Content-Type', session.directContentType ?? 'video/mp2t');

@@ -182,9 +182,7 @@ export class LiveTvAccessService {
     // Compared by fold key: resubmitting the same group under a different casing must
     // not read as "removed, then re-added" and churn its grants.
     const dropped = previous.filter((g) => !uniqueKeys.has(foldGroupKey(g)));
-    if (dropped.length) {
-      await this.accessRepo.delete({ groupName: In(dropped) });
-    }
+    await this.deleteGrantsForGroups(dropped);
     await this.writeGroupSet(RESTRICTED_GROUPS_KEY, unique);
 
     // An auto-matched group leaving the set is an explicit exemption (otherwise the
@@ -293,7 +291,7 @@ export class LiveTvAccessService {
       .map(([name]) => name);
 
     if (expired.length) {
-      await this.accessRepo.delete({ groupName: In(expired) });
+      await this.deleteGrantsForGroups(expired);
       await this.writeGroupSet(
         RESTRICTED_GROUPS_KEY,
         (await this.restrictedGroups()).filter((g) => !expired.includes(g)),
@@ -323,6 +321,19 @@ export class LiveTvAccessService {
       }
     }
     if (changed) await this.writeVanishedMap(vanished);
+  }
+
+  /** Deletes every grant whose fold key matches one of `names`, whatever spelling
+   *  it is actually stored under: everything else here compares by fold key, and
+   *  an exact `groupName IN` match would leave a differently-cased grant behind. */
+  private async deleteGrantsForGroups(names: readonly string[]): Promise<void> {
+    if (!names.length) return;
+    const keys = new Set(names.map(foldGroupKey));
+    const grants = await this.accessRepo.find();
+    const stored = [...new Set(grants.map((g) => g.groupName))].filter((g) =>
+      keys.has(foldGroupKey(g)),
+    );
+    if (stored.length) await this.accessRepo.delete({ groupName: In(stored) });
   }
 
   grantsFor(userId: number): Promise<LiveTvGroupAccess[]> {
@@ -372,32 +383,40 @@ export class LiveTvAccessService {
     const requested = [
       ...new Set(groupNames.map((g) => g.trim()).filter(Boolean)),
     ];
-    // Matched by fold key, and stored under the restricted list's own spelling:
-    // a grant must agree with `deniedGroups`'s comparison regardless of which
-    // casing the caller sent.
-    const restrictedByKey = new Map(
-      (await this.restrictedGroups()).map((g) => [foldGroupKey(g), g] as const),
-    );
-    const matched = new Map<string, string>();
-    const ignored: string[] = [];
-    for (const g of requested) {
-      const canonical = restrictedByKey.get(foldGroupKey(g));
-      if (canonical) matched.set(foldGroupKey(g), canonical);
-      else ignored.push(g);
-    }
-    const groups = [...matched.values()];
-
-    await this.accessRepo.delete({ user: { id: userId } });
-    if (groups.length) {
-      await this.accessRepo.save(
-        groups.map((groupName) =>
-          this.accessRepo.create({ user: { id: userId } as User, groupName }),
+    // Read, delete, save and the vanish-clear all share one lock pass: reading
+    // restrictedGroups here must not interleave with a concurrent restrict/expire
+    // write. clearVanished runs directly (not through another withWriteLock call),
+    // since nesting it would await a lock this same pass already holds and deadlock.
+    return this.withWriteLock(async () => {
+      // Matched by fold key, and stored under the restricted list's own spelling:
+      // a grant must agree with `deniedGroups`'s comparison regardless of which
+      // casing the caller sent.
+      const restrictedByKey = new Map(
+        (await this.restrictedGroups()).map(
+          (g) => [foldGroupKey(g), g] as const,
         ),
       );
-    }
-    // A grant is an admin confirmation the group still matters, same as restricting it.
-    await this.withWriteLock(() => this.clearVanished(groups));
-    return { groups, ignored };
+      const matched = new Map<string, string>();
+      const ignored: string[] = [];
+      for (const g of requested) {
+        const canonical = restrictedByKey.get(foldGroupKey(g));
+        if (canonical) matched.set(foldGroupKey(g), canonical);
+        else ignored.push(g);
+      }
+      const groups = [...matched.values()];
+
+      await this.accessRepo.delete({ user: { id: userId } });
+      if (groups.length) {
+        await this.accessRepo.save(
+          groups.map((groupName) =>
+            this.accessRepo.create({ user: { id: userId } as User, groupName }),
+          ),
+        );
+      }
+      // A grant is an admin confirmation the group still matters, same as restricting it.
+      await this.clearVanished(groups);
+      return { groups, ignored };
+    });
   }
 
   /**
