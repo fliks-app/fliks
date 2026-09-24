@@ -84,6 +84,25 @@ export class RequestModalComponent {
       this.mediaType() === 'series' && !this.seasonsFailed() && this.selectedSeasons().size === 0,
   );
 
+  /** A profile still on the previous library's pre-fill follows the new library. */
+  selectLibrary(id: number | null) {
+    const prev = this.profilePrefill(this.libraryId());
+    const next = this.profilePrefill(id);
+    this.libraryId.set(id);
+    if (this.profilesLocked()) return;
+    if (this.qualityProfileId() === prev.qp) this.qualityProfileId.set(next.qp);
+    if (this.languageProfileId() === prev.lp) this.languageProfileId.set(next.lp);
+  }
+
+  /** The library's own defaults, else the first profile of each kind. */
+  private profilePrefill(libraryId: number | null) {
+    const lib = this.libraries().find((l) => l.id === libraryId);
+    return {
+      qp: lib?.defaultQualityProfileId ?? this.qualityProfiles()[0]?.id ?? null,
+      lp: lib?.defaultLanguageProfileId ?? this.languageProfiles()[0]?.id ?? null,
+    };
+  }
+
   open(params: {
     title: string;
     mediaType: MediaType;
@@ -109,17 +128,9 @@ export class RequestModalComponent {
     // choice to make, so a hidden one must still submit its single library.
     const target = this.libraries().find((l) => l.mediaTypes.includes(params.mediaType));
     this.libraryId.set(target?.id ?? null);
-    // The library's own default wins; only fall back to the first profile when it has none.
-    this.qualityProfileId.set(
-      locked
-        ? (params.lockedQualityProfileId ?? null)
-        : (target?.defaultQualityProfileId ?? this.qualityProfiles()[0]?.id ?? null),
-    );
-    this.languageProfileId.set(
-      locked
-        ? (params.lockedLanguageProfileId ?? null)
-        : (target?.defaultLanguageProfileId ?? this.languageProfiles()[0]?.id ?? null),
-    );
+    const prefill = this.profilePrefill(target?.id ?? null);
+    this.qualityProfileId.set(locked ? (params.lockedQualityProfileId ?? null) : prefill.qp);
+    this.languageProfileId.set(locked ? (params.lockedLanguageProfileId ?? null) : prefill.lp);
     this.seasons.set([]);
     this.selectedSeasons.set(new Set());
     this.seasonsFailed.set(false);

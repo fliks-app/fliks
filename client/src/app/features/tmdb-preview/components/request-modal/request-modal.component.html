@@ -51,7 +51,7 @@
                 appTvSelect
                 class="select select-bordered select-sm w-full"
                 [ngModel]="libraryId()"
-                (ngModelChange)="libraryId.set($event ? +$event : null)"
+                (ngModelChange)="selectLibrary($event ? +$event : null)"
               >
                 @for (l of compatibleLibraries(); track l.id) {
                   <option [ngValue]="l.id">{{ l.name }}</option>
