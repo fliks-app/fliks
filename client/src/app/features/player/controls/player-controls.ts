@@ -1,5 +1,6 @@
 import {
   Component,
+  DestroyRef,
   ElementRef,
   HostListener,
   Injector,
@@ -146,6 +147,7 @@ export class PlayerControlsComponent {
   );
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => clearTimeout(this.surfaceClickTimer));
     // Mirror the open dropdown into the global dismissable stack so the
     // Capacitor hardware back button (which never reaches our keydown
     // listener — it's intercepted by the App plugin in app.ts) closes the
@@ -611,6 +613,24 @@ export class PlayerControlsComponent {
    *  Item-selection handlers in dropdowns deliberately do NOT call this — the
    *  user can change a setting (subtitle / audio / speed / quality) and then
    *  dismiss the menu themselves with a click outside. */
+  private surfaceClickTimer?: ReturnType<typeof setTimeout>;
+
+  /** Play/pause waits out the double-click window, so a double click only
+   *  toggles fullscreen. */
+  onSurfaceClick(event: MouseEvent) {
+    if (this.isMobileTouch()) return this.tapOverlay.emit();
+    if (this.hasOpenDropdown()) return this.closeDropdown(event);
+    clearTimeout(this.surfaceClickTimer);
+    if (event.detail > 1) return;
+    this.surfaceClickTimer = setTimeout(() => this.togglePlay.emit(), 250);
+  }
+
+  onSurfaceDblClick() {
+    if (this.isMobileTouch()) return;
+    clearTimeout(this.surfaceClickTimer);
+    this.toggleFullscreen.emit();
+  }
+
   closeDropdown(event?: Event) {
     event?.stopPropagation();
     this.openDropdown.set(null);
