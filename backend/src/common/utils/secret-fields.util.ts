@@ -1,3 +1,4 @@
+import type { FindOptionsWhere, Repository } from 'typeorm';
 import { FieldDef, SECRETS_SET_KEY } from '../plugin-contract/ui-contribution';
 
 type SecretKeyed = Pick<FieldDef, 'key' | 'secret'>;
@@ -34,4 +35,21 @@ export function mergeSecretFields(
     else if (!out[field.key]) out[field.key] = (existing ?? {})[field.key];
   }
   return out;
+}
+
+/** On a test-connection call for a saved provider, resolves its stored secrets into
+ *  `settings`: the editor never receives them, so an untouched field arrives blank. */
+export async function resolveStoredSecrets<
+  T extends { id: number; settings: Record<string, unknown> },
+>(
+  repo: Repository<T>,
+  providerId: number | undefined,
+  settings: Record<string, unknown>,
+  fields: readonly SecretKeyed[],
+): Promise<Record<string, unknown>> {
+  if (providerId == null) return settings;
+  const stored = await repo.findOne({
+    where: { id: providerId } as FindOptionsWhere<T>,
+  });
+  return mergeSecretFields(stored?.settings, settings, fields);
 }

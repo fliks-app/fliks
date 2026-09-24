@@ -2,6 +2,7 @@ import {
   BATCH_SIZE,
   BatchTranslator,
   MAX_OUTPUT_TOKENS,
+  REGISTER_PROBE_MAX_OUTPUT_TOKENS,
   TranslationLimits,
   TranslationPayloadTooLargeError,
   TranslationRequest,
@@ -51,7 +52,7 @@ export async function translateWithOpenAi(
         body: JSON.stringify({
           model: cfg.model,
           temperature: 0,
-          max_tokens: 16,
+          max_tokens: REGISTER_PROBE_MAX_OUTPUT_TOKENS,
           messages: [
             { role: 'system', content: system },
             { role: 'user', content: user },

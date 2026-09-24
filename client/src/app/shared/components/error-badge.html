@@ -3,18 +3,17 @@
     type="button"
     class="link link-hover"
     (click)="open()"
-    [attr.aria-label]="titleKey() | translate"
   >
-    @if (badgeClass(); as bc) {
-      <span class="badge badge-sm" [ngClass]="bc">{{ label() }}</span>
-    } @else {
-      {{ label() }}
-    }
+    <ng-container *ngTemplateOutlet="badgeOrLabel" />
   </button>
 } @else {
+  <ng-container *ngTemplateOutlet="badgeOrLabel" />
+}
+
+<ng-template #badgeOrLabel>
   @if (badgeClass(); as bc) {
-    <span class="badge badge-sm" [ngClass]="bc">{{ label() }}</span>
+    <span class="badge badge-sm" [class]="bc">{{ label() }}</span>
   } @else {
     {{ label() }}
   }
-}
+</ng-template>

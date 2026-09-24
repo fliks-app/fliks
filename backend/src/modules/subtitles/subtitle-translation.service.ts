@@ -18,6 +18,7 @@ import { SettingsService } from '../settings/settings.service';
 import { EventsService } from '../scheduler/events.service';
 import { SubtitleTranslationSettingsCache } from './subtitle-translation-settings-cache.service';
 import {
+  TranslationPayloadTooLargeError,
   TranslationRateLimitError,
   type TranslationRequest,
 } from './translation-core';
@@ -34,6 +35,23 @@ import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 import { normalizeLanguageCode } from '../../common/constants/app-languages';
 
 const execFileAsync = promisify(execFile);
+
+/** A blank or missing translation both fall back to the source text. */
+export function mergeTranslated(source: string, translated: string): string {
+  return translated || source;
+}
+
+/** The message a FAILED run stores: a translation key for a shape the error
+ *  badge recognises, the raw cause verbatim for anything else. */
+export function translationErrorMessage(err: unknown): string {
+  if (err instanceof TranslationRateLimitError) {
+    return err.scope === 'daily'
+      ? 'errors.translation_rate_limited_daily'
+      : 'errors.translation_rate_limited';
+  }
+  if (err instanceof TranslationPayloadTooLargeError) return 'errors.translation_too_large';
+  return String(err).slice(0, 2000);
+}
 
 /**
  * Machine-translates an existing text subtitle into another language via the
@@ -110,7 +128,7 @@ export class SubtitleTranslationService implements OnModuleInit {
   ): Promise<SubtitleFile> {
     const settings = await this.translationSettings.get();
     if (!settings.enabled) {
-      throw new BadRequestException('Subtitle translation is disabled');
+      throw new BadRequestException('errors.translation_disabled');
     }
     const provider = await this.resolveProvider(providerId);
     this.translationFactory.validateConfig(provider.engine, provider.settings);
@@ -121,23 +139,25 @@ export class SubtitleTranslationService implements OnModuleInit {
     });
     if (!source) throw new NotFoundException(`Subtitle #${subtitleId} not found`);
     if (isImageBasedSubtitleCodec(source.codec)) {
-      throw new BadRequestException(
-        'Image-based subtitles must be OCR’d to text before translation',
-      );
+      throw new BadRequestException('errors.subtitle_needs_ocr');
     }
     if (!source.relativePath && source.streamIndex == null) {
-      throw new BadRequestException('Subtitle has no readable text to translate');
+      throw new BadRequestException('errors.subtitle_no_readable_text');
     }
 
     const target = normalizeLanguageCode(targetLanguage);
     if (!target || target === 'und') {
-      throw new BadRequestException('A target language is required');
+      throw new BadRequestException('errors.target_language_required');
     }
     if (target === source.language) {
-      throw new BadRequestException(
-        'Source and target languages are identical',
-      );
+      throw new BadRequestException('errors.source_target_language_same');
     }
+
+    // Matches the langSuffix logic below: with HI tags stripped, the output no
+    // longer warrants the tag, so a hi and a non-hi source collide on one file.
+    const removeHiTags =
+      (await this.settings.get('subtitle_remove_hi_tags')) === 'true';
+    const hearingImpaired = source.hearingImpaired && !removeHiTags;
 
     // The PROCESSING row is the marker: a second click would otherwise run the
     // engine twice and write two files for the same track.
@@ -147,7 +167,7 @@ export class SubtitleTranslationService implements OnModuleInit {
         episode: source.episodeId ? { id: source.episodeId } : IsNull(),
         language: target,
         forced: source.forced,
-        hearingImpaired: source.hearingImpaired,
+        hearingImpaired,
         providerType: SubtitleProviderType.TRANSLATED,
         status: SubtitleStatus.PROCESSING,
       },
@@ -168,7 +188,7 @@ export class SubtitleTranslationService implements OnModuleInit {
       episode: source.episodeId ? { id: source.episodeId } : null,
       language: target,
       forced: source.forced,
-      hearingImpaired: source.hearingImpaired,
+      hearingImpaired,
       providerType: SubtitleProviderType.TRANSLATED,
       status: SubtitleStatus.PROCESSING,
       codec: 'subrip',
@@ -199,15 +219,13 @@ export class SubtitleTranslationService implements OnModuleInit {
     if (providerId != null) {
       const provider = await this.translationProviders.findOne(providerId);
       if (!provider.enabled) {
-        throw new ConflictException(
-          'The selected translation provider is disabled',
-        );
+        throw new ConflictException('errors.translation_provider_disabled');
       }
       return provider;
     }
     const fallback = await this.translationProviders.findDefault();
     if (!fallback) {
-      throw new BadRequestException('No translation provider is configured');
+      throw new BadRequestException('errors.no_translation_provider');
     }
     return fallback;
   }
@@ -286,7 +304,7 @@ export class SubtitleTranslationService implements OnModuleInit {
 
       const outCues = cues.map((c, i) => ({
         timing: c.timing,
-        text: translated[i] ?? c.text,
+        text: mergeTranslated(c.text, translated[i]),
       }));
       const removeHiTags =
         (await this.settings.get('subtitle_remove_hi_tags')) === 'true';
@@ -353,12 +371,13 @@ export class SubtitleTranslationService implements OnModuleInit {
         language: target,
         error: String(err),
         reason: err instanceof TranslationRateLimitError ? 'rate_limit' : 'translation',
+        scope: err instanceof TranslationRateLimitError ? err.scope : undefined,
       });
       // Kept, not deleted: the row is the only trace of the run, and translation
       // is manual-only, so a FAILED one can't feed an automatic retry loop.
       await this.repo.update(placeholderId, {
         status: SubtitleStatus.FAILED,
-        errorMessage: String(err).slice(0, 2000),
+        errorMessage: translationErrorMessage(err),
       });
     } finally {
       this.progress.delete(placeholderId);

@@ -58,7 +58,7 @@ describe('EnabledSwitchComponent', () => {
     expect(checkbox.checked).toBe(false);
   });
 
-  it('VERDICT: keeps the new state when the parent accepts the toggle', async () => {
+  it('keeps the new state when the parent accepts the toggle', async () => {
     const fixture = createFixture();
     await settle(fixture);
     const checkbox = checkboxOf(fixture);

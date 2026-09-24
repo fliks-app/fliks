@@ -9,6 +9,7 @@ import { TranslationEngine } from '../../common/enums';
 import {
   mergeSecretFields,
   redactSecretFields,
+  resolveStoredSecrets,
 } from '../../common/utils/secret-fields.util';
 
 const TRANSLATION_PROVIDER_SECRET_FIELDS = [
@@ -139,17 +140,12 @@ export class TranslationProviderService {
     settings: Record<string, unknown>,
     providerId?: number,
   ): Promise<{ ok: boolean; error?: string }> {
-    // The editor never receives the stored key, so a test on an untouched one
-    // arrives blank: fall back to what is saved rather than fail on a secret
-    // the admin never had a chance to retype.
-    if (providerId != null) {
-      const stored = await this.repo.findOne({ where: { id: providerId } });
-      settings = mergeSecretFields(
-        stored?.settings,
-        settings,
-        TRANSLATION_PROVIDER_SECRET_FIELDS,
-      );
-    }
+    settings = await resolveStoredSecrets(
+      this.repo,
+      providerId,
+      settings,
+      TRANSLATION_PROVIDER_SECRET_FIELDS,
+    );
     try {
       this.factory.validateConfig(engine, settings);
       const out = await this.factory.translate(
