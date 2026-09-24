@@ -237,7 +237,10 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     // `sub-add` is idempotent per URL (main passes `cached`), so re-selecting the
     // same subtitle doesn't duplicate the track. mpv then surfaces it in the
     // track list; selection resolves against that list (see resolveSubtitle).
-    if (url) await this.bridge.subAdd(url, label, language).catch(() => {});
+    // Sidecars load as the stored file: mpv's VTT reader drops cue placement,
+    // its SRT/ASS readers keep `{\an8}` and every other positioning tag.
+    const source = url?.replace(/(\/subtitles\/\d+)(?=[?#]|$)/, '$1/download');
+    if (source) await this.bridge.subAdd(source, label, language).catch(() => {});
     return { language, forced };
   }
 

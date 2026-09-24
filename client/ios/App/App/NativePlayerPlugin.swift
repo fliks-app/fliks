@@ -1033,8 +1033,13 @@ extension NativePlayerPlugin: AVPlayerItemLegibleOutputPushDelegate {
         forItemTime itemTime: CMTime
     ) {
         let cues = strings.map { SubtitleRun.runs(from: $0) }
+        // A WebVTT `line:` setting (`{\an8}` upstream) arrives as this percentage.
+        let lineKey = NSAttributedString.Key(kCMTextMarkupAttribute_OrthogonalLinePositionPercentageRelativeToWritingDirection as String)
+        let top = strings.contains { s in
+            s.length > 0 && ((s.attribute(lineKey, at: 0, effectiveRange: nil) as? NSNumber)?.doubleValue ?? 100) < 40
+        }
         DispatchQueue.main.async { [weak self] in
-            self?.subtitleOverlay?.render(cues)
+            self?.subtitleOverlay?.render(cues, top: top)
         }
     }
 }

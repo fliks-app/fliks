@@ -28,6 +28,7 @@ import { Command } from '../scheduler/entities/command.entity';
 import { resolveSubtitleAbsolutePath } from '../subtitles/subtitle-path.util';
 import { normalizeLanguageCode } from '../../common/constants/app-languages';
 import type { SubtitleRenditionMeta } from './transcoding/types';
+import { assToVtt, srtToVtt } from './subtitle-vtt.util';
 import { withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
 import { getCacheDir, getDataDir } from '../../common/constants/paths';
 import {
@@ -191,8 +192,8 @@ export class SubtitleStreamService implements OnModuleInit {
       ext === '.vtt'
         ? content
         : ext === '.ass' || ext === '.ssa'
-          ? this.assToVtt(content)
-          : this.srtToVtt(content); // .srt + unknown fallback
+          ? assToVtt(content)
+          : srtToVtt(content); // .srt + unknown fallback
     return { vtt, startTimeSeconds };
   }
 
@@ -699,9 +700,9 @@ export class SubtitleStreamService implements OnModuleInit {
         '-map',
         `0:${out.idx}`,
         '-c:s',
-        'webvtt',
+        'ass',
         '-f',
-        'webvtt',
+        'ass',
         '-y',
         out.tmp,
       );
@@ -746,6 +747,7 @@ export class SubtitleStreamService implements OnModuleInit {
       await Promise.all(
         outputs.map(async (out) => {
           await this.assertExtracted(out.tmp);
+          await this.convertExtractToVtt(out.tmp);
           await fs.rename(out.tmp, out.final).catch((err) => {
             this.log.warn(
               `Failed to promote subtitle cache "${out.tmp}" → "${out.final}": ${err instanceof Error ? err.message : err}`,
@@ -790,9 +792,9 @@ export class SubtitleStreamService implements OnModuleInit {
             '-map',
             `0:${streamIndex}`,
             '-c:s',
-            'webvtt',
+            'ass',
             '-f',
-            'webvtt',
+            'ass',
             '-y',
             tmpPath,
           ],
@@ -821,6 +823,7 @@ export class SubtitleStreamService implements OnModuleInit {
       if (background) await withFfmpegSlot(runFfmpeg);
       else await runFfmpeg();
       await this.assertExtracted(tmpPath);
+      await this.convertExtractToVtt(tmpPath);
       await fs.rename(tmpPath, cachePath);
     } catch (err) {
       await fs.rm(tmpPath, { force: true }).catch(() => {});
@@ -831,7 +834,7 @@ export class SubtitleStreamService implements OnModuleInit {
   /** ffmpeg can exit 0 having written nothing (a mislabelled track, a stream it
    *  could not decode). Promoting that caches an empty track forever, and the
    *  player shows a subtitle that renders nothing. A track with no cues is
-   *  legitimate and still carries its WEBVTT header, so only zero bytes is a
+   *  legitimate and still carries its ASS header, so only zero bytes is a
    *  failure. */
   private async assertExtracted(tmpPath: string): Promise<void> {
     const { size } = await fs.stat(tmpPath);
@@ -840,51 +843,10 @@ export class SubtitleStreamService implements OnModuleInit {
     }
   }
 
-  private srtToVtt(srt: string): string {
-    // Replace SRT timestamp format (00:00:00,000) with VTT format (00:00:00.000)
-    const body = srt
-      .replace(/\r\n/g, '\n')
-      .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
-    return `WEBVTT\n\n${body}`;
-  }
-
-  private assToVtt(ass: string): string {
-    const lines: string[] = ['WEBVTT', ''];
-    const dialogueRegex =
-      /^Dialogue:\s*\d+,(\d+:\d{2}:\d{2}\.\d{2}),(\d+:\d{2}:\d{2}\.\d{2}),([^,]*),([^,]*),\d+,\d+,\d+,([^,]*),(.*)/;
-
-    let cueIndex = 1;
-    for (const line of ass.split(/\r?\n/)) {
-      const match = dialogueRegex.exec(line);
-      if (!match) continue;
-
-      const start = this.assTimeToVtt(match[1]);
-      const end = this.assTimeToVtt(match[2]);
-      // Strip ASS tags like {\b1}, {\i0}, {\an8}, etc.
-      const text = match[6]
-        .replace(/\{[^}]*\}/g, '')
-        .replace(/\\N/g, '\n')
-        .replace(/\\n/g, '\n')
-        .trim();
-
-      if (!text) continue;
-
-      lines.push(String(cueIndex++));
-      lines.push(`${start} --> ${end}`);
-      lines.push(text);
-      lines.push('');
-    }
-
-    return lines.join('\n');
-  }
-
-  private assTimeToVtt(assTime: string): string {
-    // ASS: H:MM:SS.CS → VTT: HH:MM:SS.MMS
-    const parts = assTime.split(/[:.]/);
-    const h = parts[0].padStart(2, '0');
-    const m = parts[1];
-    const s = parts[2];
-    const cs = parts[3];
-    return `${h}:${m}:${s}.${cs}0`;
+  /** ffmpeg's webvtt encoder drops `\an` placement; its ASS output keeps both
+   *  inline and style-level alignment, which assToVtt turns into cue settings. */
+  private async convertExtractToVtt(tmpPath: string): Promise<void> {
+    const ass = await fs.readFile(tmpPath, 'utf-8');
+    await fs.writeFile(tmpPath, assToVtt(ass), 'utf-8');
   }
 }
