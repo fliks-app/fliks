@@ -78,6 +78,10 @@ export class SubtitleTranslationService implements OnModuleInit {
   private active = 0;
   private readonly waiters: Array<() => void> = [];
 
+  // The duplicate-run check below is two awaits apart from the row that would block
+  // it; this closes that race for two requests landing in the same tick.
+  private readonly starting = new Set<string>();
+
   constructor(
     @InjectRepository(SubtitleFile)
     private readonly repo: Repository<SubtitleFile>,
@@ -160,44 +164,61 @@ export class SubtitleTranslationService implements OnModuleInit {
     const hearingImpaired = source.hearingImpaired && !removeHiTags;
 
     // The PROCESSING row is the marker: a second click would otherwise run the
-    // engine twice and write two files for the same track.
-    const running = await this.repo.findOne({
-      where: {
+    // engine twice and write two files for the same track. The row only exists
+    // after an await, so the check-and-create is guarded synchronously first.
+    const dedupeKey = [
+      source.mediaFileId,
+      source.episodeId ?? '',
+      target,
+      source.forced,
+      hearingImpaired,
+    ].join(':');
+    if (this.starting.has(dedupeKey)) {
+      throw new ConflictException('errors.already_running');
+    }
+    this.starting.add(dedupeKey);
+    let placeholder: SubtitleFile;
+    try {
+      const running = await this.repo.findOne({
+        where: {
+          mediaFile: { id: source.mediaFileId },
+          episode: source.episodeId ? { id: source.episodeId } : IsNull(),
+          language: target,
+          forced: source.forced,
+          hearingImpaired,
+          providerType: SubtitleProviderType.TRANSLATED,
+          status: SubtitleStatus.PROCESSING,
+        },
+      });
+      if (running) throw new ConflictException('errors.already_running');
+
+      const model = this.translationFactory.resolveModel(
+        provider.engine,
+        provider.settings,
+      );
+      this.log.log(
+        `Translate start: sub #${subtitleId} "${source.media?.title ?? '?'}" [${source.language} → ${target}] via ${provider.name} (${provider.engine}${model ? `, ${model}` : ''})`,
+      );
+
+      placeholder = await this.repo.save({
+        media: { id: source.mediaId },
         mediaFile: { id: source.mediaFileId },
-        episode: source.episodeId ? { id: source.episodeId } : IsNull(),
+        episode: source.episodeId ? { id: source.episodeId } : null,
         language: target,
         forced: source.forced,
         hearingImpaired,
         providerType: SubtitleProviderType.TRANSLATED,
         status: SubtitleStatus.PROCESSING,
-      },
-    });
-    if (running) throw new ConflictException('errors.already_running');
-
-    const model = this.translationFactory.resolveModel(
-      provider.engine,
-      provider.settings,
-    );
-    this.log.log(
-      `Translate start — sub #${subtitleId} "${source.media?.title ?? '?'}" [${source.language} → ${target}] via ${provider.name} (${provider.engine}${model ? `, ${model}` : ''})`,
-    );
-
-    const placeholder = await this.repo.save({
-      media: { id: source.mediaId },
-      mediaFile: { id: source.mediaFileId },
-      episode: source.episodeId ? { id: source.episodeId } : null,
-      language: target,
-      forced: source.forced,
-      hearingImpaired,
-      providerType: SubtitleProviderType.TRANSLATED,
-      status: SubtitleStatus.PROCESSING,
-      codec: 'subrip',
-      score: source.score,
-      translationProvider: { id: provider.id },
-      translationProviderName: provider.name,
-      translationEngine: provider.engine,
-      translationModel: model,
-    } as any);
+        codec: 'subrip',
+        score: source.score,
+        translationProvider: { id: provider.id },
+        translationProviderName: provider.name,
+        translationEngine: provider.engine,
+        translationModel: model,
+      } as any);
+    } finally {
+      this.starting.delete(dedupeKey);
+    }
 
     void this.runTranslation(
       placeholder.id,
