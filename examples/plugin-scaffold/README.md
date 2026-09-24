@@ -21,6 +21,13 @@ Types are erased, so the barrel is fine for them. For *values*, import the leaf 
 re-exports the one helper that needs `semver`, and pulling it in takes the bundle from 4 KB to
 72 KB for constants you could have inlined.
 
+## Using it outside this repo
+
+Copy this folder anywhere. `package.json` points at core through three `../../backend` paths
+(the `@fliks/plugin-contract` dependency, and the `ts-node`/`package-plugin.ts` calls in
+`npm run package`); edit all three to the relative or absolute path of a Fliks core checkout on
+your machine, then `npm install` again.
+
 ## Dev loop
 
 ```bash
@@ -57,7 +64,7 @@ Core answers with a `reason` and a `detail` naming the field, visible on the plu
   `requests:progress`, `ingest:write`, `events:emit`, `config:rw`) and may not be empty.
 - A route `policy` is `action:subject`, in that order — `read:Settings`, not `Settings:read`.
 - `i18n` keys must share a single root, and no key may be a prefix of another.
-- `fliks` needs an upper bound: `">=3.0.0 <4.0.0"`, never `">=3.0.0"`. Bump it when a new Fliks major ships and the plugin has been checked against it.
+- `fliks` needs an upper bound: `">=4.0.0 <5.0.0"`, never `">=4.0.0"`. Bump it when a new Fliks major ships and the plugin has been checked against it.
 
 ## Logging and failure
 
