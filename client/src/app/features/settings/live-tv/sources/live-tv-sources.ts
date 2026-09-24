@@ -204,7 +204,7 @@ export class LiveTvSourcesComponent implements OnInit {
         groups: [],
         guideUrl: null,
         guideUrls: [],
-        maxConnections: 0,
+        maxConnections: null,
         expiresAt: null,
         accountStatus: null,
       });

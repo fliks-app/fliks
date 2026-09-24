@@ -146,7 +146,8 @@ export interface TestSourceResult {
   guideUrls: string[];
   /** A self-refreshing link rebuilt from an uploaded file's own entries. */
   playlistUrlFromFile?: string | null;
-  maxConnections: number;
+  /** `null` when the provider didn't report a limit. */
+  maxConnections: number | null;
   expiresAt: string | null;
   accountStatus: string | null;
   suggestion?: {

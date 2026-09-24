@@ -63,7 +63,9 @@ export interface LiveTvSourceTestResult {
   guideUrls: string[];
   /** A self-refreshing playlist link rebuilt from an uploaded file's entries. */
   playlistUrlFromFile?: string | null;
-  maxConnections: number;
+  /** `null` when the provider didn't report one (plain M3U with no `max-conn`
+   *  header, or an Xtream account that omits it). Never coerced to 0. */
+  maxConnections: number | null;
   expiresAt: Date | null;
   accountStatus: string | null;
   /** A pasted "m3u" URL that is really an Xtream panel link in disguise. */
@@ -289,7 +291,7 @@ export class LiveTvSourcesService {
         playlistUrlFromFile: suggestionField ? xtreamPlaylistUrl(suggestionField) : null,
         guideUrl: fetched.guideUrls[0] ?? null,
         guideUrls: fetched.guideUrls,
-        maxConnections: fetched.maxConnections ?? 0,
+        maxConnections: fetched.maxConnections,
         expiresAt: fetched.expiresAt,
         accountStatus: fetched.accountStatus,
         suggestion: suggestionField,
@@ -303,7 +305,7 @@ export class LiveTvSourcesService {
         groups: [],
         guideUrl: null,
         guideUrls: [],
-        maxConnections: 0,
+        maxConnections: null,
         expiresAt: null,
         accountStatus: null,
         suggestion: suggestionField,
