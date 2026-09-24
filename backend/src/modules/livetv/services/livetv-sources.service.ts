@@ -247,6 +247,7 @@ export class LiveTvSourcesService {
   // ---------------------------------------------------------------------------
 
   async test(dto: TestLiveTvSourceDto): Promise<LiveTvSourceTestResult> {
+    dto = await this.resolveTestSecrets(dto);
     const suggestion =
       dto.kind === 'm3u' ? (detectXtreamFromUrl(dto.url) ?? undefined) : undefined;
     let suggestionField = suggestion
@@ -312,6 +313,30 @@ export class LiveTvSourcesService {
         error: errorMessage(err),
       };
     }
+  }
+
+  /** On re-testing an already-saved source, the editor sends every secret field
+   *  blank: fills each one left blank from the stored row, so the probe uses the
+   *  real password instead of failing on an empty one. Skipped once the kind or
+   *  url no longer match what's stored, since that is no longer the same connection. */
+  private async resolveTestSecrets(
+    dto: TestLiveTvSourceDto,
+  ): Promise<TestLiveTvSourceDto> {
+    if (dto.id == null) return dto;
+    const stored = await this.sourceRepo
+      .createQueryBuilder('source')
+      .addSelect('source.password')
+      .where('source.id = :id', { id: dto.id })
+      .getOne();
+    if (!stored || stored.kind !== dto.kind || stored.url !== dto.url)
+      return dto;
+    return {
+      ...dto,
+      username: dto.username || stored.username || undefined,
+      password: dto.password || stored.password || undefined,
+      userAgent: dto.userAgent || stored.userAgent || undefined,
+      referer: dto.referer || stored.referer || undefined,
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -623,16 +648,16 @@ export class LiveTvSourcesService {
     }
   }
 
-  /** Distinct groups an enabled source still carries a channel for: the "known
-   *  good" lineup a vanished-group sweep compares the restricted/exempt sets against. */
+  /** Distinct groups any source still carries a channel for, enabled or not: the
+   *  user-facing lineup (`LiveTvChannelsService`) never checks `source.enabled`,
+   *  so a disabled source's channels must still count as present here or the
+   *  vanished-group sweep drops their group's restriction and grants. */
   private async liveGroupNames(): Promise<string[]> {
     const rows = await this.channelRepo
       .createQueryBuilder('channel')
       .select('DISTINCT channel."groupName"', 'name')
       .where(
-        'EXISTS (SELECT 1 FROM livetv_channel_streams s2 ' +
-          'INNER JOIN livetv_sources src2 ON src2.id = s2."sourceId" ' +
-          'WHERE s2."channelId" = channel.id AND src2.enabled = true)',
+        'EXISTS (SELECT 1 FROM livetv_channel_streams s2 WHERE s2."channelId" = channel.id)',
       )
       .getRawMany<{ name: string }>();
     return rows.map((r) => r.name);

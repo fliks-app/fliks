@@ -473,6 +473,19 @@ describe('LiveTvSourcesService.sync (m3u)', () => {
     });
   });
 
+  describe('liveGroupNames (feeding the vanished-group sweep)', () => {
+    it("counts a disabled source's channels as still present, since the user-facing lineup never checks source.enabled", async () => {
+      const { service, channelRepo } = setup();
+      const qb = makeQueryBuilder();
+      channelRepo.createQueryBuilder.mockReturnValue(qb);
+
+      await (service as unknown as { liveGroupNames(): Promise<string[]> }).liveGroupNames();
+
+      const whereArg = qb.where.mock.calls[0][0] as string;
+      expect(whereArg).not.toMatch(/enabled/);
+    });
+  });
+
   describe('vanished-group sweep gate', () => {
     const okPlaylist =
       '#EXTM3U\n#EXTINF:-1 group-title="News",One\nhttp://provider/live/1.ts\n';
@@ -649,6 +662,59 @@ describe('LiveTvSourcesService.test (SSRF guard placement)', () => {
 
     expect(result.ok).toBe(true);
     expect(mockedAssertNotInternal).not.toHaveBeenCalled();
+  });
+});
+
+describe('LiveTvSourcesService.test (resolving stored secrets)', () => {
+  afterEach(() => jest.resetAllMocks());
+
+  it('fills a blank field from the stored source when its id, kind and url are unchanged', async () => {
+    mockedLiveTvGet.mockResolvedValue({ status: 200, data: '#EXTM3U\n', headers: {} });
+    const { service } = setup({
+      id: 7,
+      kind: 'm3u',
+      url: 'http://provider/playlist.m3u',
+      userAgent: 'StoredAgent/1.0',
+      referer: 'http://stored-referer/',
+    });
+    const dto = {
+      id: 7,
+      kind: 'm3u',
+      url: 'http://provider/playlist.m3u',
+    } as TestLiveTvSourceDto;
+
+    await service.test(dto);
+
+    expect(mockedLiveTvGet).toHaveBeenCalledWith(
+      'http://provider/playlist.m3u',
+      { userAgent: 'StoredAgent/1.0', referer: 'http://stored-referer/' },
+      expect.anything(),
+      undefined,
+    );
+  });
+
+  it('never resolves stored secrets once the url no longer matches', async () => {
+    mockedLiveTvGet.mockResolvedValue({ status: 200, data: '#EXTM3U\n', headers: {} });
+    const { service } = setup({
+      id: 7,
+      kind: 'm3u',
+      url: 'http://provider/playlist.m3u',
+      userAgent: 'StoredAgent/1.0',
+    });
+    const dto = {
+      id: 7,
+      kind: 'm3u',
+      url: 'http://provider/other.m3u',
+    } as TestLiveTvSourceDto;
+
+    await service.test(dto);
+
+    expect(mockedLiveTvGet).toHaveBeenCalledWith(
+      'http://provider/other.m3u',
+      { userAgent: null, referer: null },
+      expect.anything(),
+      undefined,
+    );
   });
 });
 
