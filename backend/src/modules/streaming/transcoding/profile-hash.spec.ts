@@ -168,6 +168,52 @@ describe('buildPlaybackProfileFromContext', () => {
       computeProfileHash(buildPlaybackProfileFromContext(ctx(false), 3000)),
     );
   });
+
+  it('separates a var_stream_map rendition re-encoded to a different channel count', () => {
+    const ctx = (outputChannels: number): SessionContext => ({
+      videoOnly: true,
+      audioStreams: [{ language: 'eng' }, { language: 'eng' }],
+      audioTrackPlans: [
+        { copy: false, outputCodec: 'aac', outputChannels },
+        { copy: true, outputCodec: 'aac' },
+      ],
+    });
+    expect(
+      computeProfileHash(buildPlaybackProfileFromContext(ctx(2), 3000)),
+    ).not.toBe(
+      computeProfileHash(buildPlaybackProfileFromContext(ctx(6), 3000)),
+    );
+  });
+
+  it('ignores the per-track mask on the inline layout, which never reads it', () => {
+    const profile = buildPlaybackProfileFromContext(
+      {
+        audioStreams: [{ language: 'eng' }],
+        audioTrackPlans: [{ copy: true, outputCodec: 'aac' }],
+      },
+      3000,
+    );
+    expect(profile.audioLayout).toBe('inline');
+    expect(computeProfileHash(profile)).toBe(
+      computeProfileHash({ ...profile, audioTrackModes: undefined }),
+    );
+  });
+
+  it('separates an inline transcode that keeps surround from a stereo one', () => {
+    const ctx = (channels?: number): SessionContext => ({
+      audioPlan: {
+        mode: 'transcode',
+        codec: 'aac',
+        bitrateBps: 192_000,
+        channels,
+      },
+    });
+    expect(
+      computeProfileHash(buildPlaybackProfileFromContext(ctx(6), 3000)),
+    ).not.toBe(
+      computeProfileHash(buildPlaybackProfileFromContext(ctx(undefined), 3000)),
+    );
+  });
 });
 
 describe('computeProfileHash — golden values (characterization)', () => {
@@ -178,7 +224,7 @@ describe('computeProfileHash — golden values (characterization)', () => {
   // on every refresh. If one of these changes, it is an intentional cache-key
   // migration — bump it deliberately, don't let it drift.
   it('locks the hash for the SDR H.264 baseline', () => {
-    expect(computeProfileHash(BASE)).toMatchInlineSnapshot(`"7632fb8a6b"`);
+    expect(computeProfileHash(BASE)).toMatchInlineSnapshot(`"58e27b30fa"`);
   });
 
   it('locks the hash for HEVC HDR10 10-bit', () => {
@@ -189,7 +235,7 @@ describe('computeProfileHash — golden values (characterization)', () => {
         videoBitDepth: 10,
         hdr: 'HDR10',
       }),
-    ).toMatchInlineSnapshot(`"45ca132b43"`);
+    ).toMatchInlineSnapshot(`"d49b3bdda2"`);
   });
 
   it('locks the hash for a multi-audio E-AC-3 copy var-stream-map session', () => {
@@ -202,7 +248,7 @@ describe('computeProfileHash — golden values (characterization)', () => {
         audioMode: 'copy',
         audioLayout: 'var-stream-map',
       }),
-    ).toMatchInlineSnapshot(`"85e3c3ba0b"`);
+    ).toMatchInlineSnapshot(`"cba0e45c58"`);
   });
 
   it('locks the hash for a Tizen TS 6s-segment session', () => {
@@ -213,6 +259,6 @@ describe('computeProfileHash — golden values (characterization)', () => {
         segmentDurationMs: 6000,
         tvPlatform: 'tizen',
       }),
-    ).toMatchInlineSnapshot(`"ec2be88848"`);
+    ).toMatchInlineSnapshot(`"72437c09ac"`);
   });
 });

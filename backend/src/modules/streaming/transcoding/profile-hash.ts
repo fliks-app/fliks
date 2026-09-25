@@ -34,13 +34,18 @@ export interface PlaybackProfile {
   audioCodec: string;
   audioChannels: number;
   audioMode: 'copy' | 'transcode';
-  /** Per-rendition copy (`c`) / transcode (`t`) mask of a var_stream_map group. */
+  /** Per-rendition copy (`c`) / transcode (`t<channels>`) mask of a
+   *  var_stream_map group. */
   audioTrackModes?: string;
   muxFlavour: 'ts' | 'fmp4';
   audioLayout: 'inline' | 'var-stream-map';
   segmentDurationMs: number;
   tvPlatform: TvPlatform;
 }
+
+/** Segment timeline layout (edit lists, tfdt origin, audio alignment). Raised
+ *  whenever it changes so cached segments of the old layout never mix in. */
+export const SEGMENT_TIMELINE_VERSION = 3;
 
 /**
  * Stable, order-independent serialisation of a {@link PlaybackProfile}.
@@ -56,13 +61,14 @@ function canonicalise(profile: PlaybackProfile): string {
     `a=${profile.audioCodec}`,
     `ac=${profile.audioChannels}`,
     `am=${profile.audioMode}`,
-    `atm=${profile.audioTrackModes ?? ''}`,
+    ...(profile.audioLayout === 'var-stream-map'
+      ? [`atm=${profile.audioTrackModes ?? ''}`]
+      : []),
     `mux=${profile.muxFlavour}`,
     `al=${profile.audioLayout}`,
     `sd=${profile.segmentDurationMs}`,
     `tv=${profile.tvPlatform}`,
-    // Segment timeline layout (edit lists, tfdt origin): bump so old caches never mix in.
-    'tl=2',
+    `tl=${SEGMENT_TIMELINE_VERSION}`,
   ].join('|');
 }
 
@@ -102,7 +108,7 @@ export function buildPlaybackProfileFromContext(
     audioChannels,
     audioMode,
     audioTrackModes: ctx?.audioTrackPlans
-      ?.map((p) => (p.copy ? 'c' : 't'))
+      ?.map((p) => (p.copy ? 'c' : `t${p.outputChannels ?? ''}`))
       .join(''),
     muxFlavour: ctx?.useTs ? 'ts' : 'fmp4',
     audioLayout: pickAudioLayout(ctx),
@@ -112,12 +118,13 @@ export function buildPlaybackProfileFromContext(
 }
 
 function pickAudioChannels(ctx: SessionContext | undefined): number {
-  // SessionContext doesn't carry channel count today; default to 2 for
-  // transcode (always downmixed to stereo for AAC) and 6 for surround
-  // copy paths (EAC-3/AC-3/DTS/TrueHD copy preserves the source layout,
-  // which is 5.1 in the overwhelming majority of releases that pick the
-  // surround copy branch). A more precise channel count will be plumbed
-  // through once SessionContext exposes it.
+  // The planned transcode channels when the plan carries them; otherwise 2 for
+  // transcode (AAC stereo downmix) and 6 for surround copy paths (EAC-3/AC-3/
+  // DTS/TrueHD copy preserves the source layout, which is 5.1 in the
+  // overwhelming majority of releases that pick the surround copy branch).
+  if (ctx?.audioPlan?.mode === 'transcode' && ctx.audioPlan.channels != null) {
+    return ctx.audioPlan.channels;
+  }
   if (ctx?.audioPlan?.mode === 'copy') {
     const codec = ctx.audioPlan.codec.toLowerCase();
     if (
