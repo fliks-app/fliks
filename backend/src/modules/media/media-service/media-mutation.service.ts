@@ -28,6 +28,7 @@ import { MediaQueryService } from './media-query.service';
 import { MediaMetadataService } from './media-metadata.service';
 import { ThumbnailService } from '../../streaming/thumbnail.service';
 import { SubtitleStreamService } from '../../streaming/subtitle-stream.service';
+import { SubtitlesService } from '../../subtitles/subtitles.service';
 
 @Injectable()
 export class MediaMutationService {
@@ -53,6 +54,7 @@ export class MediaMutationService {
     private readonly events: EventsService,
     private readonly thumbnails: ThumbnailService,
     private readonly subtitleStream: SubtitleStreamService,
+    private readonly subtitles: SubtitlesService,
   ) {}
 
   async update(id: number, dto: UpdateMediaDto): Promise<Media> {
@@ -355,6 +357,7 @@ export class MediaMutationService {
         if (code !== 'ENOENT') throw err;
         this.log.warn(`File not found on disk (already deleted?): ${fullPath}`);
       }
+      await this.subtitles.deleteSubtitleFilesOnDisk(mediaId, file.id);
     }
 
     const episodeId = file.episodeId;

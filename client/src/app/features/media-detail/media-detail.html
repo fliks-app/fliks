@@ -151,7 +151,6 @@
         <app-subtitles-modal
           [mediaId]="m.id"
           [episodeId]="ep.id"
-          [files]="m.files ?? []"
           [selectedFileId]="episodeActiveFileId()"
           [canManage]="canManageSubtitles()"
           [searchDisabled]="!ep.hasFile"
@@ -269,7 +268,6 @@
         @if (m.type === 'movie') {
           <app-subtitles-modal
             [mediaId]="m.id"
-            [files]="mediaFiles()"
             [selectedFileId]="activeFileId()"
             [canManage]="canManageSubtitles()"
             [languageProfileId]="m.languageProfile?.id ?? null"

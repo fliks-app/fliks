@@ -864,15 +864,44 @@ export class SubtitlesService {
     }
 
     const abs = await this.resolveSubtitleAbsolute(subtitle);
-    if (abs) {
-      try {
-        await fs.unlink(abs);
-      } catch {
-        this.logger.warn(`Could not delete file: ${abs}`);
-      }
-    }
+    if (abs) await this.unlinkSubtitle(abs);
 
     await this.repo.remove(subtitle);
+  }
+
+  /** Unlink the on-disk subtitles of a video file about to be deleted; its rows go with the FK cascade. */
+  async deleteSubtitleFilesOnDisk(mediaId: number, mediaFileId: number): Promise<void> {
+    const media = await this.mediaRepo.findOne({ where: { id: mediaId } });
+    if (!media?.path) return;
+    const rows = await this.repo.find({ where: { media: { id: mediaId } } });
+    const norm = (p: string) => p.replace(/\\/g, '/');
+    // Never pull a file out from under another video that still lists it.
+    const keep = new Set(
+      rows
+        .filter((r) => r.mediaFileId !== mediaFileId && r.relativePath)
+        .map((r) => norm(r.relativePath!)),
+    );
+    for (const sub of rows) {
+      if (sub.mediaFileId !== mediaFileId) continue;
+      if (sub.providerType === SubtitleProviderType.EMBEDDED || !sub.relativePath) continue;
+      if (keep.has(norm(sub.relativePath))) continue;
+      const abs = resolveSubtitleAbsolutePath(media.path, sub.relativePath);
+      if (abs && (await this.unlinkSubtitle(abs))) {
+        this.logger.log(`Deleted subtitle on disk with its video: ${abs}`);
+      }
+    }
+  }
+
+  /** False when the file could not be removed; a file already gone counts as removed. */
+  private async unlinkSubtitle(abs: string): Promise<boolean> {
+    try {
+      await fs.unlink(abs);
+      return true;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return true;
+      this.logger.warn(`Could not delete subtitle ${abs}: ${(err as Error).message}`);
+      return false;
+    }
   }
 
   async upgradeSubtitle(
@@ -904,13 +933,7 @@ export class SubtitlesService {
 
     // Replacement is persisted — now drop the old file and row.
     const oldAbs = await this.resolveSubtitleAbsolute(existing);
-    if (oldAbs) {
-      try {
-        await fs.unlink(oldAbs);
-      } catch {
-        this.logger.warn(`Could not delete old file: ${oldAbs}`);
-      }
-    }
+    if (oldAbs) await this.unlinkSubtitle(oldAbs);
     await this.repo.remove(existing);
     return updated;
   }

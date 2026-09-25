@@ -103,8 +103,6 @@ export class SubtitlesModalComponent {
   // ── Inputs ──
   readonly mediaId = input.required<number>();
   readonly episodeId = input<number | undefined>(undefined);
-  /** All files for this media (or episode files) — used to filter subtitles + find active file */
-  readonly files = input<{ id: number; episodeId?: number | null; streamInfo?: any }[]>([]);
   readonly selectedFileId = input<number | null>(null);
   readonly canManage = input(false);
   readonly searchDisabled = input(false);
@@ -397,6 +395,7 @@ export class SubtitlesModalComponent {
 
   /** Open the subtitles modal. Called from parent via viewChild. */
   show(): void {
+    void this.loadSubtitles(this.mediaId());
     this.modal()?.nativeElement.showModal();
   }
 
@@ -410,26 +409,10 @@ export class SubtitlesModalComponent {
   readonly pageSize = 10;
   readonly page = signal(0);
 
-  /** Subtitles filtered for the current episode (if set) */
-  private readonly episodeSubtitles = computed(() => {
-    const epId = this.episodeId();
-    const all = this.subtitles();
-    if (!epId) return all;
-    const fileIds = new Set(
-      this.files()
-        .filter((f) => f.episodeId != null && Number(f.episodeId) === epId)
-        .map((f) => f.id),
-    );
-    return all.filter((s) => s.episodeId === epId || fileIds.has(s.mediaFileId));
-  });
-
-  /** Subtitles filtered by selected file when multiple files exist */
+  /** Only the active file's subtitles: a media's other files carry their own. */
   readonly filteredSubtitles = computed(() => {
-    const all = this.episodeSubtitles();
     const fileId = this.selectedFileId();
-    const files = this.files();
-    if (!fileId || files.length <= 1) return all;
-    return all.filter((s) => s.mediaFileId === fileId);
+    return fileId == null ? [] : this.subtitles().filter((s) => s.mediaFileId === fileId);
   });
 
   /** Required subtitle languages from language profile */
@@ -687,7 +670,8 @@ export class SubtitlesModalComponent {
   // ── Actions ──
 
   async loadSubtitles(mediaId: number) {
-    this.subtitlesLoading.set(true);
+    // A refresh keeps the rows on screen; the spinner is for an empty list only.
+    this.subtitlesLoading.set(this.filteredSubtitles().length === 0);
     try {
       this.subtitles.set(await this.subtitlesApi.getForMedia(mediaId, { force: true }));
       // Drop progress entries for translations that finished/failed so the map
