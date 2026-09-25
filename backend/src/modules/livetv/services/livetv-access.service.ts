@@ -383,10 +383,8 @@ export class LiveTvAccessService {
     const requested = [
       ...new Set(groupNames.map((g) => g.trim()).filter(Boolean)),
     ];
-    // Read, delete, save and the vanish-clear all share one lock pass: reading
-    // restrictedGroups here must not interleave with a concurrent restrict/expire
-    // write. clearVanished runs directly (not through another withWriteLock call),
-    // since nesting it would await a lock this same pass already holds and deadlock.
+    // One lock pass against a concurrent restrict/expire; clearVanished is called
+    // directly, since a nested withWriteLock would wait on this very pass.
     return this.withWriteLock(async () => {
       // Matched by fold key, and stored under the restricted list's own spelling:
       // a grant must agree with `deniedGroups`'s comparison regardless of which
