@@ -58,6 +58,8 @@ function canonicalise(profile: PlaybackProfile): string {
     `al=${profile.audioLayout}`,
     `sd=${profile.segmentDurationMs}`,
     `tv=${profile.tvPlatform}`,
+    // Segment timeline layout (edit lists, tfdt origin): bump so old caches never mix in.
+    'tl=2',
   ].join('|');
 }
 

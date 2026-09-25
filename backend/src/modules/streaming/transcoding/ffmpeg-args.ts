@@ -56,6 +56,10 @@ import { buildImageBurnInFilterComplex } from './subtitle-overlay-filter';
  */
 const TRUSTED_PROBE_SIZE = '5000000';
 
+/** Past ffmpeg's 3/23 s B-frame seek pull-back, short of any real next keyframe.
+ *  ponytail: an all-intra source starts a few frames late; gate on B-frames if one matters. */
+const REMUX_SEEK_LEAD = 0.15;
+
 /** Join an HLS output path with forward slashes. ffmpeg's HLS muxer derives
  *  the fmp4 init directory with POSIX separators, so a backslash path (what
  *  path.join yields on Windows) makes it silently skip writing init_%v.mp4 —
@@ -80,9 +84,19 @@ function hlsMuxerArgs(o: {
   varStreamMap?: string;
   segmentFilename: string;
   indexPath: string;
+  /** Start the fMP4 decode timeline at the run's first source PTS instead of 0. */
+  absoluteTimeline?: boolean;
 }): string[] {
   return [
-    ...(o.useTs ? [] : ['-movflags', '+cmaf']),
+    // A B-frame or primed-audio track starts at a negative DTS; the default
+    // shift delays every track by it, where `disabled` keeps it in the edit list.
+    ...(o.useTs
+      ? []
+      : ['-movflags', '+cmaf', '-avoid_negative_ts', 'disabled']),
+    // Without it the run's start lands in an empty edit, which MSE and ExoPlayer ignore.
+    ...(o.absoluteTimeline
+      ? ['-hls_segment_options', 'movflags=+frag_discont']
+      : []),
     // The muxer restarts its output timeline near zero on every run, so a
     // seeked run's segments contradict the playlist that places them at
     // `index · realSeg`. fMP4 is re-anchored on serve by `rewriteSegmentTfdt`;
@@ -1376,7 +1390,9 @@ export function buildRemuxArgs(
         segmentIndexToSeconds(startSegment, segmentDuration))
       : 0;
   if (startSegment > 0) {
-    args.push('-ss', String(remuxSeekSeconds));
+    // ffmpeg pulls a B-frame seek target back by 3/23 s on formats that don't
+    // seek by PTS (MKV), which lands an exact keyframe time on the GOP before.
+    args.push('-ss', (remuxSeekSeconds + REMUX_SEEK_LEAD).toFixed(3));
   }
 
   args.push('-i', inputPath);
@@ -1458,6 +1474,9 @@ export function buildRemuxArgs(
       initFilename: 'init.mp4',
       segmentFilename: ffOutPath(outputDir, 'seg-%04d.m4s'),
       indexPath: ffOutPath(outputDir, 'index.m3u8'),
+      // Seeked runs only: from the file start a primed AAC track has a negative
+      // first PTS, which frag_discont would write as a wrapped tfdt.
+      absoluteTimeline: startSegment > 0,
     }),
   );
 
