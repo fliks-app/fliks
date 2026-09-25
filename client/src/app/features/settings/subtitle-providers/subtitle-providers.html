@@ -283,10 +283,10 @@
             [ngModel]="trFormModel()"
             (ngModelChange)="trFormModel.set($event)"
           >
-            @if (!geminiModels.includes(trFormModel())) {
+            @if (!trModels().includes(trFormModel())) {
               <option [value]="trFormModel()">{{ trFormModel() }}</option>
             }
-            @for (m of geminiModels; track m) {
+            @for (m of trModels(); track m) {
               <option [value]="m">{{ m }}</option>
             }
           </select>
@@ -302,6 +302,7 @@
             placeholder="https://api.groq.com/openai/v1"
             [ngModel]="trFormBaseUrl()"
             (ngModelChange)="trFormBaseUrl.set($event)"
+            (change)="loadTrModels()"
           />
           <span class="text-xs text-base-content/50 mt-1">{{
             'settings.subtitle_providers.translation_openai_base_url_hint' | translate
@@ -321,9 +322,15 @@
             type="text"
             class="input input-bordered input-sm w-full font-mono"
             placeholder="llama-3.3-70b-versatile"
+            list="tr-models"
             [ngModel]="trFormModel()"
             (ngModelChange)="trFormModel.set($event)"
           />
+          <datalist id="tr-models">
+            @for (m of trModels(); track m) {
+              <option [value]="m"></option>
+            }
+          </datalist>
         </label>
       } @else {
         <label class="form-control w-full">
@@ -358,6 +365,7 @@
             [placeholder]="trApiKeyStored() && !trApiKeyCleared() ? secretMask : ''"
             [ngModel]="trFormApiKey()"
             (ngModelChange)="onTrApiKeyInput($event)"
+            (change)="loadTrModels()"
           />
           @if (trApiKeyStored()) {
             @if (trApiKeyCleared()) {

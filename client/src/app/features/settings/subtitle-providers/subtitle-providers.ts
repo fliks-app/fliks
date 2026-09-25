@@ -40,15 +40,6 @@ import { EnabledSwitchComponent } from '../../../shared/components/enabled-switc
 
 const DEFAULT_TRANSLATION_MODEL = 'gemini-3.5-flash-lite';
 
-/** Curated so a TV user picks from a list instead of typing a model id on a
- *  D-pad; Google retires ids over time, so this needs occasional upkeep. */
-const GEMINI_MODELS = [
-  'gemini-3.5-flash-lite',
-  'gemini-3.6-flash',
-  'gemini-3.5-flash',
-  'gemma-4-26b-a4b-it',
-];
-
 const TRANSLATION_ENGINES: { value: TranslationEngine; label: string }[] = [
   { value: 'gemini', label: 'Gemini' },
   { value: 'openai', label: 'OpenAI-compatible' },
@@ -149,7 +140,6 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   // Machine-translation — a list of admin-configured providers plus the global
   // on/off master switch (still an app key/value setting).
   readonly translationEngines = TRANSLATION_ENGINES;
-  readonly geminiModels = GEMINI_MODELS;
   readonly translationEnabled = signal(false);
   readonly savingTranslationEnabled = signal(false);
   readonly translationMaxConcurrency = signal(1);
@@ -176,6 +166,10 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   readonly trFormUrl = signal('');
   readonly trFormMaxTokensPerRequest = signal(0);
   readonly trFormTokensPerMinute = signal(0);
+  /** What the engine offers with the credentials in the form, so a TV user picks
+   *  rather than types a model id on a D-pad. */
+  readonly trModels = signal<string[]>([]);
+  private trModelsGen = 0;
   readonly trTestLoading = signal(false);
   readonly trTestResult = signal<{ ok: boolean; message: string } | null>(null);
 
@@ -287,6 +281,7 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     this.trFormTokensPerMinute.set(0);
     this.trTestResult.set(null);
     this.translationEditorDialog()?.nativeElement.showModal();
+    void this.loadTrModels();
   }
 
   openEditTranslation(row: TranslationProviderRow) {
@@ -311,6 +306,7 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     this.trFormTokensPerMinute.set(Number(s['tokensPerMinute'] ?? 0) || 0);
     this.trTestResult.set(null);
     this.translationEditorDialog()?.nativeElement.showModal();
+    void this.loadTrModels();
   }
 
   onTranslationEngineChange(engine: TranslationEngine) {
@@ -319,6 +315,7 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
       this.trFormName.set(this.translationEngineLabel(engine));
     }
     this.trTestResult.set(null);
+    void this.loadTrModels();
   }
 
   closeTranslationEditor() {
@@ -363,19 +360,40 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
     };
   }
 
+  /** Lets the server resolve a stored key the editor never received, but only when
+   *  the engine hasn't changed; a switched engine would merge the wrong key in. */
+  private trProbeBody() {
+    const sameEngine =
+      this.trEditingId() !== null && this.trFormEngine() === this.trEditingEngine();
+    return {
+      engine: this.trFormEngine(),
+      settings: this.buildTranslationSettings(),
+      ...(sameEngine ? { id: this.trEditingId()! } : {}),
+    };
+  }
+
+  /** Called once the credentials settle, not per keystroke: a half-typed key would fail. */
+  async loadTrModels() {
+    const gen = ++this.trModelsGen;
+    this.trModels.set([]);
+    const engine = this.trFormEngine();
+    const ready =
+      engine === 'gemini'
+        ? !!this.trFormApiKey().trim() || (this.trApiKeyStored() && !this.trApiKeyCleared())
+        : engine === 'openai' && !!this.trFormBaseUrl().trim();
+    if (!ready) return;
+    // A failure is toasted by the error interceptor; the select keeps the current model.
+    const res = await this.translationApi.listModels(this.trProbeBody()).catch(() => null);
+    if (res && gen === this.trModelsGen) this.trModels.set(res.models);
+  }
+
   async testTranslation() {
     this.trTestResult.set(null);
     this.trTestLoading.set(true);
     try {
       // Lets the server resolve a stored key the editor never received, but only when
       // the engine hasn't changed; a switched engine would merge the wrong key in.
-      const sameEngine =
-        this.trEditingId() !== null && this.trFormEngine() === this.trEditingEngine();
-      const res = await this.translationApi.testConnection({
-        engine: this.trFormEngine(),
-        settings: this.buildTranslationSettings(),
-        ...(sameEngine ? { id: this.trEditingId()! } : {}),
-      });
+      const res = await this.translationApi.testConnection(this.trProbeBody());
       this.trTestResult.set({
         ok: res.ok,
         message: res.ok

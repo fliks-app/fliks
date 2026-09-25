@@ -7,6 +7,7 @@ import {
   TranslationRequest,
   buildPayload,
   buildSystemInstruction,
+  getModelListing,
   withRegister,
   parseNumbered,
   postWithRetry,
@@ -41,6 +42,19 @@ function thinkingConfig(model: string): Record<string, unknown> {
   if (/^gemma-4/.test(model))
     return { thinkingConfig: { thinkingLevel: 'minimal' } };
   return {};
+}
+
+/** The models this key can call generateContent on, ids without the `models/` prefix. */
+export async function listGeminiModels(apiKey: string): Promise<string[]> {
+  const data = await getModelListing(
+    `${GEMINI_BASE}?pageSize=1000&key=${encodeURIComponent(apiKey)}`,
+    {},
+    'Gemini',
+  );
+  return (Array.isArray(data?.models) ? data.models : [])
+    .filter((m: any) => m?.supportedGenerationMethods?.includes('generateContent'))
+    .map((m: any) => String(m.name).replace(/^models\//, ''))
+    .sort();
 }
 
 /** Joins a Gemini response's text parts into one string. */

@@ -120,6 +120,20 @@ function parseRetryDelayMs(body: string): number | null {
  * successful Response (unconsumed); throws {@link TranslationRateLimitError} on
  * a 429 after retries and a plain Error otherwise, so a run fails cleanly.
  */
+/** GETs an engine's model listing; one attempt, since the admin is waiting on it. */
+export async function getModelListing(
+  url: string,
+  headers: Record<string, string>,
+  engineLabel: string,
+): Promise<any> {
+  const res = await fetch(url, { headers, signal: AbortSignal.timeout(15_000) });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`${engineLabel} model list failed (${res.status}): ${errText.slice(0, 300)}`);
+  }
+  return res.json();
+}
+
 export async function postWithRetry(
   url: string,
   init: RequestInit,

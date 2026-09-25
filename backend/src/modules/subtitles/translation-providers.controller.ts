@@ -43,6 +43,12 @@ export class TranslationProvidersController {
     return this.service.testConnection(dto.engine, dto.settings ?? {}, dto.id);
   }
 
+  @Post('models')
+  @CheckPolicies((ability) => ability.can(Action.Read, TranslationProvider))
+  listModels(@Body() dto: TestTranslationProviderDto) {
+    return this.service.listModels(dto.engine, dto.settings ?? {}, dto.id);
+  }
+
   @Post()
   @CheckPolicies((ability) => ability.can(Action.Create, TranslationProvider))
   async create(@Body() dto: CreateTranslationProviderDto) {
