@@ -46,14 +46,14 @@ Both bundle the programs below, also run as separate processes.
 
 The desktop client plays media through **mpv**. On Linux and macOS, libmpv is
 loaded **into the Fliks process**; mpv's GPL-2.0-or-later terms are compatible
-with Fliks' AGPL-3.0. The Linux build enables FFmpeg's `version3`, so that
-library is distributed under GPL-3.0.
+with Fliks' AGPL-3.0. Every build below links an FFmpeg configured with
+`--enable-gpl --enable-version3`, so each is distributed under GPL-3.0.
 
 | Component | License | Source |
 |---|---|---|
 | libmpv (Linux: built with `-Dgpl=true`, FFmpeg, libass, libplacebo and libunibreak linked statically) | GPL-3.0 | https://github.com/mpv-player/mpv |
-| libmpv and its dylibs (macOS, from Homebrew) | GPL-2.0-or-later | https://github.com/mpv-player/mpv |
-| mpv.exe and its DLLs (Windows, zhongfly/mpv-winbuild) | GPL-2.0-or-later | https://github.com/zhongfly/mpv-winbuild |
+| libmpv and its dylibs (macOS, from Homebrew) | GPL-3.0 | https://github.com/mpv-player/mpv |
+| mpv.exe and its DLLs (Windows, zhongfly/mpv-winbuild, GPL variant) | GPL-3.0 | https://github.com/zhongfly/mpv-winbuild |
 | Electron (bundles Chromium) | MIT (Chromium: BSD-3-Clause and others) | https://github.com/electron/electron |
 
 ## Package-manager dependencies
