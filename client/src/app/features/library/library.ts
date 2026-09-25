@@ -43,6 +43,7 @@ import { CardSkeletonComponent } from '../../shared/components/card-skeleton';
 import { ImportProgressBannerComponent } from '../../shared/components/import-progress-banner/import-progress-banner';
 import { NgTemplateOutlet } from '@angular/common';
 import { itemArtwork } from '../../shared/utils/media-artwork.util';
+import { viewTransitionDone } from '../../shared/utils/view-transition';
 import { PlayableMediaService } from '../../core/services/playable-media.service';
 import {
   CdkVirtualScrollViewport,
@@ -467,7 +468,11 @@ export class LibraryComponent implements OnInit, OnDestroy {
       const collId = qp.get('collectionId');
       this.selectedCollectionId.set(collId ? Number(collId) : null);
 
-      this.syncQueryParams();
+      // Navigating now would skip the slide that is bringing this page in.
+      const path = this.router.url.split('?')[0];
+      void viewTransitionDone().then(() => {
+        if (this.router.url.split('?')[0] === path) this.syncQueryParams();
+      });
       await this.load(lib.id);
       if (scrollKey) this.scrollMemory.restore(scrollKey, this.injector);
       void this.loadLikes();
@@ -868,10 +873,12 @@ export class LibraryComponent implements OnInit, OnDestroy {
         this.mediaService.getAll(params),
         this.streamingApi.getWatchedMediaIds().catch(() => [] as number[]),
       ]);
+      // A slower answer to an earlier query must not replace a later one.
+      if (gen !== this.loadGen) return;
       this.list.setItems(res.data, (m) => m.title);
       this.watchedIds.set(new Set(watchedIds));
     } finally {
-      if (!silent) this.loading.set(false);
+      if (gen === this.loadGen) this.loading.set(false);
     }
     queueMicrotask(() => {
       // Cached lists paint instantly; revalidate so a media imported / files

@@ -15,7 +15,9 @@ import android.view.Window;
 import android.view.WindowManager;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.BridgeActivity;
 
@@ -25,6 +27,7 @@ public class MainActivity extends BridgeActivity {
     private boolean lightStatusBar = false;
     private android.app.PictureInPictureParams pipParams = null;
     private BroadcastReceiver pipActionReceiver;
+    private boolean imeVisible = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -72,6 +75,7 @@ public class MainActivity extends BridgeActivity {
         }
 
         applyEdgeToEdge();
+        watchImeVisibility();
 
         // Set initial status bar icon color — post to run after Capacitor setup
         getWindow().getDecorView().post(() -> setLightStatusBar(false));
@@ -238,6 +242,21 @@ public class MainActivity extends BridgeActivity {
         // once the rotated layout has settled.
         reapplyEdgeToEdge();
         getWindow().getDecorView().post(this::reapplyEdgeToEdge);
+    }
+
+    /** Reports the soft keyboard's settled visibility: the Keyboard plugin only reads insets
+     *  animations, and a cancelled back gesture brings the keyboard back without one. */
+    private void watchImeVisibility() {
+        android.webkit.WebView webView = getBridge().getWebView();
+        webView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(v);
+            if (insets == null) return;
+            boolean visible = insets.isVisible(WindowInsetsCompat.Type.ime());
+            if (visible == imeVisible) return;
+            imeVisible = visible;
+            String js = "window.dispatchEvent(new CustomEvent('imeVisibility', { detail: { visible: " + visible + " } }));";
+            webView.evaluateJavascript(js, null);
+        });
     }
 
     /** True when the device is in television (leanback) UI mode. */

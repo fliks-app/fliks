@@ -1,3 +1,4 @@
+import { fromEvent, startWith } from 'rxjs';
 import {
   Component,
   inject,
@@ -158,6 +159,9 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly topSentinel = viewChild<ElementRef<HTMLElement>>('topSentinel');
   readonly bottomMenuOpen = signal(false);
   readonly keyboardOpen = signal(false);
+  private readonly keyboardClass = effect(() =>
+    document.documentElement.classList.toggle('keyboard-open', this.keyboardOpen()),
+  );
   readonly navbarHidden = signal(false);
   readonly navbarTransparent = this.navbar.navbarTransparent;
   /** The hero logo URL whose image failed to load. The backend can hand back a
@@ -341,6 +345,18 @@ export class LayoutComponent implements OnInit, OnDestroy {
     if (this.isNative) {
       Keyboard.addListener('keyboardWillShow', () => this.keyboardOpen.set(true));
       Keyboard.addListener('keyboardWillHide', () => this.keyboardOpen.set(false));
+      // Android's settled state (MainActivity), which the plugin misses when a back
+      // gesture over the keyboard is cancelled.
+      fromEvent<CustomEvent<{ visible: boolean }>>(window, 'imeVisibility')
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe((e) => this.keyboardOpen.set(e.detail.visible));
+      // The height before the keyboard took its share, for what must hold still over it.
+      fromEvent(window, 'resize')
+        .pipe(startWith(null), takeUntilDestroyed(this.destroyRef))
+        .subscribe(() => {
+          if (this.keyboardOpen()) return;
+          document.documentElement.style.setProperty('--keyboard-closed-height', `${window.innerHeight}px`);
+        });
     }
     this.translate.onLangChange.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.langTick.update((n) => n + 1);
