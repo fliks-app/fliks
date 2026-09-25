@@ -61,6 +61,9 @@ const MAX_ATTEMPTS = 4;
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 /** A spent per-minute allowance needs a real pause, not the first backoff step. */
 const QUOTA_RETRY_MS = 20_000;
+/** Consecutive single-cue mapping failures (not size rejections) before a run gives up: a
+ *  batch-wide formatting problem would otherwise re-fail down to one request per cue. */
+const MAX_CONSECUTIVE_MISMATCHES = 3;
 
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / CHARS_PER_TOKEN);
@@ -480,6 +483,7 @@ async function translateBatchWithSplit(
   report: (cues: number) => void,
   shrink: (attempted: number) => void,
   keepSource: (cues: number, err: Error) => void,
+  trackMismatch: (mapped: boolean) => void,
 ): Promise<string[]> {
   if (texts.length === 0) return [];
   const prompt = promptTokens(texts, systemTokens);
@@ -505,21 +509,24 @@ async function translateBatchWithSplit(
   }
   if (result && result.length === texts.length) {
     report(texts.length);
+    trackMismatch(true);
     return result;
   }
   // A single segment that still won't map keeps its source text.
   if (texts.length === 1) {
     const err = new Error("the engine's response did not map back to the source cue");
     log.warn('A single cue would not map back; keeping its source text');
+    trackMismatch(false);
     report(1);
     keepSource(1, err);
     return [texts[0]];
   }
+  // Only a size rejection means the ceiling itself is wrong; a mismatch is local
+  // to this batch and must not drag down every later one for the rest of the run.
   if (!truncated) {
     log.warn(
       `Response did not map back to ${texts.length} cues, splitting: each half is another request`,
     );
-    shrink(texts.length);
   }
   const mid = Math.floor(texts.length / 2);
   const [left, right] = [
@@ -531,6 +538,7 @@ async function translateBatchWithSplit(
       report,
       shrink,
       keepSource,
+      trackMismatch,
     ),
     await translateBatchWithSplit(
       texts.slice(mid),
@@ -540,6 +548,7 @@ async function translateBatchWithSplit(
       report,
       shrink,
       keepSource,
+      trackMismatch,
     ),
   ];
   return [...left, ...right];
@@ -590,6 +599,19 @@ export async function translateWithBatching(
     kept += cues;
     lastKeepError = err;
   };
+  let consecutiveMismatches = 0;
+  const trackMismatch = (mapped: boolean) => {
+    if (mapped) {
+      consecutiveMismatches = 0;
+      return;
+    }
+    consecutiveMismatches++;
+    if (consecutiveMismatches >= MAX_CONSECUTIVE_MISMATCHES) {
+      throw new Error(
+        `${MAX_CONSECUTIVE_MISMATCHES} consecutive cues failed to map back to the engine's response, aborting the run`,
+      );
+    }
+  };
   let i = 0;
   while (i < texts.length) {
     const end = batchEnd(texts, i, systemTokens, {
@@ -605,6 +627,7 @@ export async function translateWithBatching(
         report,
         shrink,
         keepSource,
+        trackMismatch,
       )),
     );
     i = end;

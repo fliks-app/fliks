@@ -39,7 +39,7 @@ export class SubtitlesController {
   }
 
   @Post('test-connection')
-  @CheckPolicies((ability) => ability.can(Action.Read, SubtitleProvider))
+  @CheckPolicies((ability) => ability.can(Action.Update, SubtitleProvider))
   testConnection(@Body() dto: TestSubtitleProviderDto) {
     return this.providerService.testConnection(
       dto.type,

@@ -82,4 +82,48 @@ describe('translation provider credentials', () => {
       apiKey: 'stored',
     });
   });
+
+  it('drops the stored key on save when the engine changes underneath it', async () => {
+    const row = provider({ apiKey: 'gemini-key', model: 'old' });
+    const { service, repo } = serviceWith(row);
+
+    await service.update(1, {
+      engine: 'openai',
+      settings: { baseUrl: 'http://ollama:11434', model: 'llama' },
+    } as never);
+
+    expect(repo.save.mock.calls[0][0].settings).toEqual({
+      baseUrl: 'http://ollama:11434',
+      model: 'llama',
+    });
+  });
+
+  it('drops the stored key on save when the host changes under the same engine', async () => {
+    const row = {
+      ...provider({ apiKey: 'k', baseUrl: 'http://old-host', model: 'm' }),
+      engine: 'openai',
+    } as TranslationProvider;
+    const { service, repo } = serviceWith(row);
+
+    await service.update(1, {
+      settings: { baseUrl: 'http://new-host', model: 'm' },
+    } as never);
+
+    expect(repo.save.mock.calls[0][0].settings).toEqual({
+      baseUrl: 'http://new-host',
+      model: 'm',
+    });
+  });
+
+  it('does not resolve a stored key into a test against a different engine', async () => {
+    const row = provider({ apiKey: 'gemini-key', model: 'm' });
+    const { service, factory } = serviceWith(row);
+
+    await service.testConnection('openai', { baseUrl: 'http://ollama:11434', model: 'llama' }, 1);
+
+    expect(factory.translate.mock.calls[0][3]).toEqual({
+      baseUrl: 'http://ollama:11434',
+      model: 'llama',
+    });
+  });
 });

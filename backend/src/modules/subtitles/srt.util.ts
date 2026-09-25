@@ -6,10 +6,12 @@ export interface SrtCue {
   text: string;
 }
 
+const TIMING_LINE = (l: string) => l.includes('-->');
+
 /**
- * Parse an SRT document into text-bearing cues. Tolerant of a BOM, CRLF/CR line
- * endings, and blocks with or without a leading index. Blocks without a timing
- * line or with empty text are dropped (they carry nothing to translate).
+ * Parse an SRT document into text-bearing cues. Tolerant of a BOM, CRLF/CR line endings, blocks
+ * with or without a leading index, and a cue separator that's missing or carries stray whitespace
+ * (the next timing line always starts a new cue). Blocks without text or a timing line are dropped.
  */
 export function parseSrt(content: string): SrtCue[] {
   const normalized = content
@@ -17,17 +19,24 @@ export function parseSrt(content: string): SrtCue[] {
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n');
   const cues: SrtCue[] = [];
-  for (const block of normalized.split(/\n{2,}/)) {
+  for (const block of normalized.split(/\n[ \t]*\n/)) {
     const lines = block.split('\n');
-    const timingIdx = lines.findIndex((l) => l.includes('-->'));
-    if (timingIdx === -1) continue;
-    const timing = lines[timingIdx].trim();
-    const text = lines
-      .slice(timingIdx + 1)
-      .join('\n')
-      .trim();
-    if (!text) continue;
-    cues.push({ timing, text });
+    let start = lines.findIndex(TIMING_LINE);
+    while (start !== -1) {
+      const timing = lines[start].trim();
+      const next = lines.findIndex((l, i) => i > start && TIMING_LINE(l));
+      // A block missing its blank-line separator holds another cue; stop the
+      // text there and drop the bare index line that introduces it, if any.
+      const textEnd =
+        next === -1
+          ? lines.length
+          : /^\d+$/.test(lines[next - 1]?.trim() ?? '')
+            ? next - 1
+            : next;
+      const text = lines.slice(start + 1, textEnd).join('\n').trim();
+      if (text) cues.push({ timing, text });
+      start = next;
+    }
   }
   return cues;
 }

@@ -58,7 +58,7 @@ export function commonFixes(content: string, language?: string): string {
     .replace(/\.\.\.\./g, '...') // four dots → three
     .replace(spaceBeforePunct, '$1')
     .replace(/([.!?])\1{3,}/g, '$1$1$1') // excessive punctuation
-    .replace(/^[ \t]+$/gm, '') // whitespace-only lines
+    .replace(/^[ \t]+(?=\r?$)/gm, '') // whitespace-only lines, CRLF included
     .replace(/^(\r?\n)+/, '')
     .replace(/(\r?\n){3,}/g, '$1$1'); // a blank line is the SRT cue separator: collapse, never drop
 }
