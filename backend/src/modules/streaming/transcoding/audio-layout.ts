@@ -15,6 +15,17 @@ export function varStreamMapLayout(
   return videoOnly && audioCount > 0;
 }
 
+/** Segment container of a transcode session: MPEG-TS when the profile forces it,
+ *  or asks for it on single-audio sources (AVPlay, issue #148); fMP4 otherwise. */
+export function resolveMuxFlavour(
+  profile: { useTs?: boolean; useTsOnSingleAudio?: boolean },
+  audioCount: number,
+): 'ts' | 'fmp4' {
+  return profile.useTs || (profile.useTsOnSingleAudio && audioCount <= 1)
+    ? 'ts'
+    : 'fmp4';
+}
+
 /** Decide whether ffmpeg emits muxed segments (`inline`) or the EXT-X-MEDIA
  *  layout (`var-stream-map`: a video-only main + audio served as separate
  *  renditions). The controller asks this once and signals it by setting

@@ -58,7 +58,7 @@ import * as path from 'path';
 import { SegmentPackagingService } from './services/segment-packaging.service';
 import { SessionRouter } from './services/session-router.service';
 import { SessionContextBuilder } from './services/session-context-builder.service';
-import { pickAudioLayout } from './transcoding/audio-layout';
+import { pickAudioLayout, resolveMuxFlavour } from './transcoding/audio-layout';
 import {
   buildIFrameSegmentArgs,
   iframeResolution,
@@ -772,19 +772,12 @@ export class StreamingController {
       ss.autoQualityMode,
     );
     const { response, useHdrLadder, videoVariant } = evaluateResult;
-    // Resolve the effective `useTs`. The explicit profile flag wins as
-    // an admin / debug hard override. Otherwise Tizen-style profiles
-    // opt into TS only when the source has zero or one audio track
-    // (single-audio fmp4 hits AVPlay's missing-rendition-probe stall;
-    // see DTO docstring and issue #148).
     const sourceAudioCount = resolved.mediaFile.streamInfo?.audio?.length ?? 0;
-    const effectiveUseTs =
-      !!deviceProfile.useTs ||
-      (!!deviceProfile.useTsOnSingleAudio && sourceAudioCount <= 1);
+    const muxFlavour = resolveMuxFlavour(deviceProfile, sourceAudioCount);
+    const effectiveUseTs = muxFlavour === 'ts';
     const deviceType = deviceProfile.deviceType ?? 'desktop';
     const useExtXMedia =
-      pickAudioLayout(sourceAudioCount, effectiveUseTs ? 'ts' : 'fmp4') ===
-      'var-stream-map';
+      pickAudioLayout(sourceAudioCount, muxFlavour) === 'var-stream-map';
 
     this.activeStreamTracker.setSegmentDuration(ss.segmentDuration);
     this.activeStreamTracker.setTonemapAlgo(ss.tonemapAlgo);
@@ -1949,7 +1942,8 @@ export class StreamingController {
         ctx.spawnReason = 'variant-prespawn';
         if (quality === 'remux') {
           const copyAudio =
-            firstQueryString(req.query, 'copyAudio') !== 'false';
+            this.sessionRouter.findRequestSession(req, mediaFileId)
+              ?.canCopyAudio ?? false;
           // Copied video is keyframe-cut, so map the resume time to a segment
           // (and seek) via the real keyframe boundaries, not the uniform grid.
           const boundaries = await this.remuxBoundaries(
