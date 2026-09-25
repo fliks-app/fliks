@@ -18,7 +18,7 @@ Fliks rather than linked into it.
 |---|---|---|
 | jellyfin-ffmpeg (ffmpeg / ffprobe, bundles libva, Intel iHD driver, oneVPL) | GPL-3.0-or-later | https://github.com/jellyfin/jellyfin-ffmpeg |
 | intel-opencl-icd (amd64 only, Ubuntu archive) | MIT | https://github.com/intel/compute-runtime |
-| MKVToolNix (`mkvextract`) | GPL-2.0 | https://mkvtoolnix.download |
+| MKVToolNix (`mkvextract`) | GPL-2.0-or-later | https://mkvtoolnix.download |
 | Tesseract OCR | Apache-2.0 | https://github.com/tesseract-ocr/tesseract |
 | Tesseract trained data (`tesseract-ocr-*` language packs) | Apache-2.0 | https://github.com/tesseract-ocr/tessdata |
 | subtile-ocr (compiled from crates.io) | GPL-3.0 | https://github.com/gwen-lg/subtile-ocr |
