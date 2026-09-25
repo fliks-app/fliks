@@ -152,6 +152,22 @@ describe('buildPlaybackProfileFromContext', () => {
     // Bitrate is not part of the profile — both should hash to the same dir.
     expect(computeProfileHash(a)).toBe(computeProfileHash(b));
   });
+
+  it('separates a var_stream_map group whose per-track copy/transcode split differs', () => {
+    const ctx = (copy: boolean): SessionContext => ({
+      videoOnly: true,
+      audioStreams: [{ language: 'eng' }, { language: 'eng' }],
+      audioTrackPlans: [
+        { copy, outputCodec: 'aac' },
+        { copy: true, outputCodec: 'aac' },
+      ],
+    });
+    expect(
+      computeProfileHash(buildPlaybackProfileFromContext(ctx(true), 3000)),
+    ).not.toBe(
+      computeProfileHash(buildPlaybackProfileFromContext(ctx(false), 3000)),
+    );
+  });
 });
 
 describe('computeProfileHash — golden values (characterization)', () => {
@@ -162,7 +178,7 @@ describe('computeProfileHash — golden values (characterization)', () => {
   // on every refresh. If one of these changes, it is an intentional cache-key
   // migration — bump it deliberately, don't let it drift.
   it('locks the hash for the SDR H.264 baseline', () => {
-    expect(computeProfileHash(BASE)).toMatchInlineSnapshot(`"4a5eec36c1"`);
+    expect(computeProfileHash(BASE)).toMatchInlineSnapshot(`"7632fb8a6b"`);
   });
 
   it('locks the hash for HEVC HDR10 10-bit', () => {
@@ -173,7 +189,7 @@ describe('computeProfileHash — golden values (characterization)', () => {
         videoBitDepth: 10,
         hdr: 'HDR10',
       }),
-    ).toMatchInlineSnapshot(`"5ac1d8c379"`);
+    ).toMatchInlineSnapshot(`"45ca132b43"`);
   });
 
   it('locks the hash for a multi-audio E-AC-3 copy var-stream-map session', () => {
@@ -186,7 +202,7 @@ describe('computeProfileHash — golden values (characterization)', () => {
         audioMode: 'copy',
         audioLayout: 'var-stream-map',
       }),
-    ).toMatchInlineSnapshot(`"650169ec66"`);
+    ).toMatchInlineSnapshot(`"85e3c3ba0b"`);
   });
 
   it('locks the hash for a Tizen TS 6s-segment session', () => {
@@ -197,6 +213,6 @@ describe('computeProfileHash — golden values (characterization)', () => {
         segmentDurationMs: 6000,
         tvPlatform: 'tizen',
       }),
-    ).toMatchInlineSnapshot(`"a4e399e555"`);
+    ).toMatchInlineSnapshot(`"ec2be88848"`);
   });
 });

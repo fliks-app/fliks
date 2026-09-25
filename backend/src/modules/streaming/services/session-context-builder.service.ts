@@ -93,6 +93,7 @@ export class SessionContextBuilder {
       audioTrackPlans: live?.audioTrackPlans ?? undefined,
       sourceVideoCodec:
         (si?.video?.[0]?.codec ?? '').toLowerCase() || undefined,
+      sourceHasBFrames: si?.video?.[0]?.hasBFrames,
       sourceWidth: si?.video?.[0]?.width,
       sourceHeight: si?.video?.[0]?.height,
       sourceVideoBitrateBps: resolveSourceVideoBitrateBps(

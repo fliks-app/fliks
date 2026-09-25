@@ -56,8 +56,7 @@ import { buildImageBurnInFilterComplex } from './subtitle-overlay-filter';
  */
 const TRUSTED_PROBE_SIZE = '5000000';
 
-/** Past ffmpeg's 3/23 s B-frame seek pull-back, short of any real next keyframe.
- *  ponytail: an all-intra source starts a few frames late; gate on B-frames if one matters. */
+/** Past ffmpeg's 3/23 s B-frame seek pull-back, short of any real next keyframe. */
 const REMUX_SEEK_LEAD = 0.15;
 
 /** Join an HLS output path with forward slashes. ffmpeg's HLS muxer derives
@@ -478,6 +477,7 @@ function buildAudioAndMuxerArgs(opts: {
   startSegment: number;
   outputDir: string;
   sourceStartPts?: number;
+  audioCopy: boolean;
 }): string[] {
   const {
     videoMapSpec,
@@ -495,6 +495,7 @@ function buildAudioAndMuxerArgs(opts: {
     startSegment,
     outputDir,
     sourceStartPts,
+    audioCopy,
   } = opts;
   const args: string[] = [];
   // Content time this run starts at, matching the playlist's placement of
@@ -528,25 +529,12 @@ function buildAudioAndMuxerArgs(opts: {
       audioBitrate,
     );
     args.push(...(perStream ?? audioArgs));
-    if (perStream) {
-      audioTrackPlans!.forEach((p, i) => {
-        if (!p.copy)
-          args.push(
-            ...audioStartAlignArgs(
-              `:${i}`,
-              startSegment,
-              sourceStartPts,
-              audioStreams![i].sampleRate,
-            ),
-          );
-      });
-    } else if (audioArgs[1] !== 'copy') {
-      audioStreams!.forEach((a, i) =>
-        args.push(
-          ...audioStartAlignArgs(`:${i}`, startSegment, sourceStartPts, a.sampleRate),
-        ),
+    audioStreams!.forEach((a, i) => {
+      if (perStream ? audioTrackPlans![i].copy : audioCopy) return;
+      args.push(
+        ...audioStartAlignArgs(`:${i}`, startSegment, sourceStartPts, a.sampleRate),
       );
-    }
+    });
 
     // Build var_stream_map: "v:0,agroup:audio a:0,agroup:audio,language:fre ..."
     const varParts = ['v:0,agroup:audio'];
@@ -1211,6 +1199,7 @@ export function buildFfmpegArgs(
       startSegment,
       outputDir,
       sourceStartPts: opts.sourceStartPts,
+      audioCopy: audioPlan?.mode === 'copy',
     }),
   );
 
@@ -1342,6 +1331,8 @@ export interface BuildRemuxArgsOptions {
    *  in the bitstream (`hev1`). Without this, iOS AVPlayer fails the
    *  variant with error -12927 on the first segment fetch. */
   sourceVideoCodec?: string;
+  /** Unknown (not probed) is treated as true: the seek lead only matters then. */
+  sourceHasBFrames?: boolean;
   /** Cached streamInfo audio array. See {@link AudioStreamMeta}. */
   audioStreams?: AudioStreamMeta[];
   /** Keyframe-aligned segment start times (`boundaries[i]` = start of seg-`i`).
@@ -1368,6 +1359,7 @@ export function buildRemuxArgs(
     trustedStreamInfo = false,
     audioStreamIndex,
     sourceVideoCodec,
+    sourceHasBFrames = true,
     audioStreams,
     segmentBoundaries,
     segmentDuration = DEFAULT_SEGMENT_DURATION,
@@ -1392,7 +1384,8 @@ export function buildRemuxArgs(
   if (startSegment > 0) {
     // ffmpeg pulls a B-frame seek target back by 3/23 s on formats that don't
     // seek by PTS (MKV), which lands an exact keyframe time on the GOP before.
-    args.push('-ss', (remuxSeekSeconds + REMUX_SEEK_LEAD).toFixed(3));
+    const lead = sourceHasBFrames ? REMUX_SEEK_LEAD : 0;
+    args.push('-ss', (remuxSeekSeconds + lead).toFixed(3));
   }
 
   args.push('-i', inputPath);

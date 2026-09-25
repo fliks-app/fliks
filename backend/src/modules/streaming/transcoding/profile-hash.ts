@@ -34,6 +34,8 @@ export interface PlaybackProfile {
   audioCodec: string;
   audioChannels: number;
   audioMode: 'copy' | 'transcode';
+  /** Per-rendition copy (`c`) / transcode (`t`) mask of a var_stream_map group. */
+  audioTrackModes?: string;
   muxFlavour: 'ts' | 'fmp4';
   audioLayout: 'inline' | 'var-stream-map';
   segmentDurationMs: number;
@@ -54,6 +56,7 @@ function canonicalise(profile: PlaybackProfile): string {
     `a=${profile.audioCodec}`,
     `ac=${profile.audioChannels}`,
     `am=${profile.audioMode}`,
+    `atm=${profile.audioTrackModes ?? ''}`,
     `mux=${profile.muxFlavour}`,
     `al=${profile.audioLayout}`,
     `sd=${profile.segmentDurationMs}`,
@@ -98,6 +101,9 @@ export function buildPlaybackProfileFromContext(
     audioCodec,
     audioChannels,
     audioMode,
+    audioTrackModes: ctx?.audioTrackPlans
+      ?.map((p) => (p.copy ? 'c' : 't'))
+      .join(''),
     muxFlavour: ctx?.useTs ? 'ts' : 'fmp4',
     audioLayout: pickAudioLayout(ctx),
     segmentDurationMs,

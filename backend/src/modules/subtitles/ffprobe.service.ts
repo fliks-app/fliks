@@ -128,6 +128,8 @@ export interface VideoStreamInfo {
    *  rips; the `-copyts` transcode keeps the first frame at this time, so
    *  0-based sidecar/embedded subtitle cues must be shifted by it. */
   startTimeSeconds?: number;
+  /** ffprobe `has_b_frames` > 0: frames are reordered, so decode starts before PTS 0. */
+  hasBFrames?: boolean;
   bitRate?: number;
   bitDepth?: number;
   colorSpace?: string;
@@ -210,6 +212,7 @@ interface FfprobeStream {
   r_frame_rate?: string;
   avg_frame_rate?: string;
   start_time?: string;
+  has_b_frames?: number;
   bit_rate?: string;
   bits_per_raw_sample?: string;
   color_space?: string;
@@ -493,6 +496,8 @@ export class FfprobeService {
               path.basename(videoPath),
             ),
             startTimeSeconds: s.start_time ? Number(s.start_time) : undefined,
+            hasBFrames:
+              s.has_b_frames != null ? s.has_b_frames > 0 : undefined,
             bitRate: s.bit_rate ? Number(s.bit_rate) : undefined,
             bitDepth: s.bits_per_raw_sample
               ? Number(s.bits_per_raw_sample)

@@ -1358,6 +1358,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         trustedStreamInfo: ctx?.trustedStreamInfo,
         audioStreamIndex: ctx?.audioStreamIndex,
         sourceVideoCodec: ctx?.sourceVideoCodec,
+        sourceHasBFrames: ctx?.sourceHasBFrames,
         audioStreams: ctx?.audioStreams,
         segmentBoundaries,
         segmentDuration: ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION,

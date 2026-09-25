@@ -1474,6 +1474,27 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
     expect(args).toContain('-sn');
   });
 
+  it('remux: seeks exactly on the keyframe when the source has no B-frames', () => {
+    const seekOf = (sourceHasBFrames?: boolean) => {
+      const args = buildRemuxArgs(
+        {
+          inputPath: '/media/in.mkv',
+          outputDir: '/cache/out',
+          copyAudio: true,
+          startSegment: 2,
+          trustedStreamInfo: true,
+          sourceHasBFrames,
+          segmentBoundaries: [0, 3.003, 6.006],
+        },
+        silentLog,
+      );
+      return args[args.indexOf('-ss') + 1];
+    };
+    expect(seekOf(false)).toBe('6.006');
+    expect(seekOf(true)).toBe('6.156');
+    expect(seekOf(undefined)).toBe('6.156');
+  });
+
   it('audio-only: resume applies a single input -ss', () => {
     expect(
       buildAudioOnlyFfmpegArgs(

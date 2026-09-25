@@ -214,6 +214,8 @@ export interface SessionContext {
    * HLS variants written with the default `hev1` codec tag.
    */
   sourceVideoCodec?: string;
+  /** Source video reorders frames (ffprobe `has_b_frames`); undefined when not probed. */
+  sourceHasBFrames?: boolean;
   /**
    * Source frame dimensions (post container crop / SAR). Drive the
    * aspect-preserving output sizing in `buildFfmpegArgs` — required
