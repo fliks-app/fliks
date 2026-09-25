@@ -665,59 +665,6 @@ describe('LiveTvSourcesService.test (SSRF guard placement)', () => {
   });
 });
 
-describe('LiveTvSourcesService.test (resolving stored secrets)', () => {
-  afterEach(() => jest.resetAllMocks());
-
-  it('fills a blank field from the stored source when its id, kind and url are unchanged', async () => {
-    mockedLiveTvGet.mockResolvedValue({ status: 200, data: '#EXTM3U\n', headers: {} });
-    const { service } = setup({
-      id: 7,
-      kind: 'm3u',
-      url: 'http://provider/playlist.m3u',
-      userAgent: 'StoredAgent/1.0',
-      referer: 'http://stored-referer/',
-    });
-    const dto = {
-      id: 7,
-      kind: 'm3u',
-      url: 'http://provider/playlist.m3u',
-    } as TestLiveTvSourceDto;
-
-    await service.test(dto);
-
-    expect(mockedLiveTvGet).toHaveBeenCalledWith(
-      'http://provider/playlist.m3u',
-      { userAgent: 'StoredAgent/1.0', referer: 'http://stored-referer/' },
-      expect.anything(),
-      undefined,
-    );
-  });
-
-  it('never resolves stored secrets once the url no longer matches', async () => {
-    mockedLiveTvGet.mockResolvedValue({ status: 200, data: '#EXTM3U\n', headers: {} });
-    const { service } = setup({
-      id: 7,
-      kind: 'm3u',
-      url: 'http://provider/playlist.m3u',
-      userAgent: 'StoredAgent/1.0',
-    });
-    const dto = {
-      id: 7,
-      kind: 'm3u',
-      url: 'http://provider/other.m3u',
-    } as TestLiveTvSourceDto;
-
-    await service.test(dto);
-
-    expect(mockedLiveTvGet).toHaveBeenCalledWith(
-      'http://provider/other.m3u',
-      { userAgent: null, referer: null },
-      expect.anything(),
-      undefined,
-    );
-  });
-});
-
 describe('LiveTvSourcesService.resolveGuideUrl', () => {
   afterEach(() => jest.resetAllMocks());
 

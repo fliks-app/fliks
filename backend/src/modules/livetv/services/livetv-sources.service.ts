@@ -247,7 +247,6 @@ export class LiveTvSourcesService {
   // ---------------------------------------------------------------------------
 
   async test(dto: TestLiveTvSourceDto): Promise<LiveTvSourceTestResult> {
-    dto = await this.resolveTestSecrets(dto);
     const suggestion =
       dto.kind === 'm3u' ? (detectXtreamFromUrl(dto.url) ?? undefined) : undefined;
     let suggestionField = suggestion
@@ -313,30 +312,6 @@ export class LiveTvSourcesService {
         error: errorMessage(err),
       };
     }
-  }
-
-  /** On re-testing an already-saved source, the editor sends every secret field
-   *  blank: fills each one left blank from the stored row, so the probe uses the
-   *  real password instead of failing on an empty one. Skipped once the kind or
-   *  url no longer match what's stored, since that is no longer the same connection. */
-  private async resolveTestSecrets(
-    dto: TestLiveTvSourceDto,
-  ): Promise<TestLiveTvSourceDto> {
-    if (dto.id == null) return dto;
-    const stored = await this.sourceRepo
-      .createQueryBuilder('source')
-      .addSelect('source.password')
-      .where('source.id = :id', { id: dto.id })
-      .getOne();
-    if (!stored || stored.kind !== dto.kind || stored.url !== dto.url)
-      return dto;
-    return {
-      ...dto,
-      username: dto.username || stored.username || undefined,
-      password: dto.password || stored.password || undefined,
-      userAgent: dto.userAgent || stored.userAgent || undefined,
-      referer: dto.referer || stored.referer || undefined,
-    };
   }
 
   // ---------------------------------------------------------------------------
