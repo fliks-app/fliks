@@ -317,6 +317,8 @@ export interface BuildFfmpegArgsOptions {
     outputCodec: string;
     outputChannels?: number;
   }[];
+  /** Source video `start_time` (seconds). */
+  sourceStartPts?: number;
   encoderPreset?: string;
   /** HDR → SDR tone-mapping algorithm (admin override). Defaults to `'auto'`
    *  which preserves the historical vaapi-when-available preference. */
@@ -359,6 +361,25 @@ function audioMapSpec(
 ): string {
   const abs = streams?.[relIndex]?.streamIndex;
   return abs != null ? `0:${abs}` : `0:a:${relIndex}?`;
+}
+
+/** Pad (or trim) a separate audio rendition's leading gap so it starts with the
+ *  video: MSE sequence mode (Shaka HLS) drops the gap and plays audio early. */
+function audioStartAlignArgs(
+  streamSpec: string,
+  startSegment: number,
+  sourceStartPts = 0,
+  sampleRate?: number,
+): string[] {
+  if (startSegment > 0) return [];
+  // first_pts counts samples; without the rate only a zero video start is exact.
+  const firstPts = sampleRate
+    ? Math.round(sourceStartPts * sampleRate)
+    : Math.abs(sourceStartPts) < 0.001
+      ? 0
+      : null;
+  if (firstPts === null) return [];
+  return [`-filter:a${streamSpec}`, `aresample=async=1:first_pts=${firstPts}`];
 }
 
 /** True iff the cached streamInfo explicitly reports zero audio streams. */
@@ -442,6 +463,7 @@ function buildAudioAndMuxerArgs(opts: {
   segmentDuration: number;
   startSegment: number;
   outputDir: string;
+  sourceStartPts?: number;
 }): string[] {
   const {
     videoMapSpec,
@@ -458,6 +480,7 @@ function buildAudioAndMuxerArgs(opts: {
     segmentDuration,
     startSegment,
     outputDir,
+    sourceStartPts,
   } = opts;
   const args: string[] = [];
   // Content time this run starts at, matching the playlist's placement of
@@ -491,6 +514,25 @@ function buildAudioAndMuxerArgs(opts: {
       audioBitrate,
     );
     args.push(...(perStream ?? audioArgs));
+    if (perStream) {
+      audioTrackPlans!.forEach((p, i) => {
+        if (!p.copy)
+          args.push(
+            ...audioStartAlignArgs(
+              `:${i}`,
+              startSegment,
+              sourceStartPts,
+              audioStreams![i].sampleRate,
+            ),
+          );
+      });
+    } else if (audioArgs[1] !== 'copy') {
+      audioStreams!.forEach((a, i) =>
+        args.push(
+          ...audioStartAlignArgs(`:${i}`, startSegment, sourceStartPts, a.sampleRate),
+        ),
+      );
+    }
 
     // Build var_stream_map: "v:0,agroup:audio a:0,agroup:audio,language:fre ..."
     const varParts = ['v:0,agroup:audio'];
@@ -1154,6 +1196,7 @@ export function buildFfmpegArgs(
       segmentDuration,
       startSegment,
       outputDir,
+      sourceStartPts: opts.sourceStartPts,
     }),
   );
 
@@ -1166,6 +1209,8 @@ export interface BuildAudioOnlyArgsOptions {
   audioStreamIndex: number;
   audioBitrate?: string;
   startSegment?: number;
+  /** Source video `start_time` (seconds). */
+  sourceStartPts?: number;
   trustedStreamInfo?: boolean;
   useTs?: boolean;
   /** Cached streamInfo audio array. Used to resolve `audioStreamIndex`
@@ -1238,6 +1283,14 @@ export function buildAudioOnlyFfmpegArgs(
   args.push('-map', audioMapSpec(audioStreams, audioStreamIndex));
   args.push('-vn');
   args.push('-c:a', 'aac', '-b:a', audioBitrate, '-ac', '2');
+  args.push(
+    ...audioStartAlignArgs(
+      '',
+      startSegment,
+      opts.sourceStartPts,
+      audioStreams?.[audioStreamIndex]?.sampleRate,
+    ),
+  );
 
   args.push(
     ...hlsMuxerArgs({

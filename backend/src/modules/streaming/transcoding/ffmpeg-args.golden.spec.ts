@@ -1543,6 +1543,8 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
        "192k",
        "-ac",
        "2",
+       "-filter:a",
+       "aresample=async=1:first_pts=0",
        "-f",
        "hls",
        "-hls_time",

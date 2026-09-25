@@ -27,6 +27,7 @@ export interface AudioStreamMeta {
    *  CHANNELS attribute for copy / AC-3 / E-AC-3 renditions, which keep the
    *  source layout; AAC renditions are downmixed to 2 regardless. */
   channels?: number;
+  sampleRate?: number;
 }
 
 /**
