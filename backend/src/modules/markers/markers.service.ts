@@ -137,24 +137,33 @@ export class MarkersService {
         `Detection already running for season #${seasonId}`,
       );
     }
-    const season = await this.seasonRepo.findOne({
-      where: { id: seasonId },
-      relations: ['media'],
-    });
-    if (!season) throw new NotFoundException(`Season #${seasonId} not found`);
-
-    const cmd = await this.commandRepo.save(
-      this.commandRepo.create({
-        name: 'IntroDetection',
-        status: 'queued',
-        trigger,
-        body: {
-          seasonId,
-          mediaId: season.mediaId,
-          seasonNumber: season.seasonNumber,
-        },
-      }),
-    );
+    // Held across the lookups below so a concurrent call is refused; runDetection
+    // takes it over and releases it.
+    this.inFlight.add(seasonId);
+    let season: Season | null;
+    let cmd: Command;
+    try {
+      season = await this.seasonRepo.findOne({
+        where: { id: seasonId },
+        relations: ['media'],
+      });
+      if (!season) throw new NotFoundException(`Season #${seasonId} not found`);
+      cmd = await this.commandRepo.save(
+        this.commandRepo.create({
+          name: 'IntroDetection',
+          status: 'queued',
+          trigger,
+          body: {
+            seasonId,
+            mediaId: season.mediaId,
+            seasonNumber: season.seasonNumber,
+          },
+        }),
+      );
+    } catch (err) {
+      this.inFlight.delete(seasonId);
+      throw err;
+    }
     this.log.log(
       `IntroDetection enqueued (cmd #${cmd.id}, ${trigger}) — season #${seasonId} (S${String(season.seasonNumber).padStart(2, '0')})`,
     );
@@ -312,8 +321,7 @@ export class MarkersService {
   ): Promise<void> {
     this.inFlight.add(seasonId);
     const activityId = `IntroDetection:${seasonId}`;
-    // Added before the first await so a concurrent entry point cannot slip
-    // past the guard that reads it, and released by this block's finally.
+    // Released by this block's finally.
     try {
       await this.commandRepo.update(cmdId, {
         status: 'running',

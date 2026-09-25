@@ -1449,6 +1449,7 @@
     "copy": "Copy",
     "copied": "Copied",
     "saved": "Saved",
+    "success": "Success",
     "selections_cleared": "Selections cleared",
     "retry": "Retry",
     "offline_banner": "Offline mode — the data shown may be out of date",
@@ -2963,7 +2964,7 @@
       },
       "access": {
         "groups_title": "Restricted groups",
-        "groups_subtitle": "Checked groups are hidden from every user except those granted access below — an account that manages Live TV always sees every group.",
+        "groups_subtitle": "Checked groups are hidden from every user except those granted access below. An account that manages Live TV always sees every group.",
         "col_group": "Group",
         "col_channels": "Channels",
         "col_restricted": "Restricted",

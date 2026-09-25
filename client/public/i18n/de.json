@@ -1441,6 +1441,7 @@
     "copy": "Kopieren",
     "copied": "Kopiert",
     "saved": "Gespeichert",
+    "success": "Erfolg",
     "selections_cleared": "Auswahl gelöscht",
     "retry": "Erneut versuchen",
     "offline_banner": "Offline-Modus — die angezeigten Daten sind möglicherweise nicht aktuell",
@@ -2937,7 +2938,7 @@
       },
       "access": {
         "groups_title": "Eingeschränkte Gruppen",
-        "groups_subtitle": "Markierte Gruppen sind für alle Benutzer verborgen, außer für jene, denen unten Zugriff gewährt wurde — ein Konto, das Live TV verwaltet, sieht immer alle Gruppen.",
+        "groups_subtitle": "Markierte Gruppen sind für alle Benutzer verborgen, außer für jene, denen unten Zugriff gewährt wurde. Ein Konto, das Live TV verwaltet, sieht immer alle Gruppen.",
         "col_group": "Gruppe",
         "col_channels": "Sender",
         "col_restricted": "Eingeschränkt",

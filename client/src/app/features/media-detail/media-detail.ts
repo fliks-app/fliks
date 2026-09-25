@@ -1625,8 +1625,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       }
       this.toast.success(this.translate.instant('media_detail.analyze_launched'));
       this.closeAnalyzeModal();
-    } catch {
-      this.toast.error(this.translate.instant('media_detail.analyze_launch_error'));
+    } catch (err) {
+      this.toast.error(serverMessage(err, this.translate, 'media_detail.analyze_launch_error'));
     } finally {
       this.analyzeRunning.set(false);
     }
