@@ -98,6 +98,8 @@ export interface PlaybackInfoResponse {
         mode: 'transcode';
         codec: 'aac' | 'ac3' | 'eac3';
         bitrateBps: number;
+        /** Absent: AAC stereo, AC-3/E-AC-3 5.1. */
+        channels?: number;
       };
 
   /** Output container format */

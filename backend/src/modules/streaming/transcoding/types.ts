@@ -27,11 +27,6 @@ export interface AudioStreamMeta {
    *  CHANNELS attribute for copy / AC-3 / E-AC-3 renditions, which keep the
    *  source layout; AAC renditions are downmixed to 2 regardless. */
   channels?: number;
-  sampleRate?: number;
-  /** Container start PTS of the audio stream (seconds). Used upstream (see
-   *  `StreamBuilderService.buildAudioTracks`) to force a copy rendition to
-   *  transcode when it starts off from the video. */
-  startTimeSeconds?: number;
 }
 
 /**
@@ -184,6 +179,7 @@ export interface SessionContext {
         mode: 'transcode';
         codec: 'aac' | 'ac3' | 'eac3';
         bitrateBps: number;
+        channels?: number;
       };
   /**
    * Per-rendition audio decision for the multi-audio `var_stream_map` path,
@@ -311,6 +307,7 @@ export interface TranscodeSession {
         mode: 'transcode';
         codec: 'aac' | 'ac3' | 'eac3';
         bitrateBps: number;
+        channels?: number;
       };
   /** Video variant the session was spawned for. Same role as
    *  `audioPlan` above: any divergence between a fresh playback-info

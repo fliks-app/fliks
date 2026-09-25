@@ -1,4 +1,9 @@
-import { parseInitTracks, rewriteSegmentTfdt } from './timeline';
+import {
+  parseInitTracks,
+  rewriteSegmentTfdt,
+  shiftSegmentTfdt,
+  timelineOrigin,
+} from './timeline';
 
 // Minimal ISO-BMFF box builders — just enough structure for parseInitTracks /
 // collectTfdts to walk (moov>trak>[tkhd, mdia>[mdhd, hdlr]] and moof>traf>[tfhd,
@@ -98,25 +103,16 @@ describe('rewriteSegmentTfdt', () => {
   });
 
   /**
-   * A source whose video starts at a non-zero PTS (TS captures, PVR rips). The
-   * run spawned at 0 keeps that origin — ffmpeg's `-copyts` passes absolute PTS
-   * through — so a run spawned mid-file has to be anchored onto it as well, or
-   * the two disagree by exactly `start_time`. The WebVTT `X-TIMESTAMP-MAP` adds
-   * `start_time` unconditionally, so it can only ever be right for one of them:
-   * subtitles ran `start_time` late on every seeked or resumed session.
+   * A source whose video starts at a non-zero PTS (TS captures, PVR rips).
+   * Every run's output starts at 0, so both the run from the file start and a
+   * mid-file run are moved onto the `start_time` origin, the one the WebVTT
+   * `X-TIMESTAMP-MAP` adds.
    */
   describe('a source with a non-zero start_time', () => {
     const START = 2.8;
 
-    it('leaves a run started at 0 exactly where ffmpeg put it', () => {
-      // seg-25 of an absolute run decodes at 100 + 2.8 = its own tfdt already.
-      const out = rewriteSegmentTfdt(
-        buildSeg((100 + START) * TS),
-        tracks,
-        25,
-        SEG,
-        START,
-      );
+    it('moves a run started at 0 onto the origin', () => {
+      const out = rewriteSegmentTfdt(buildSeg(100 * TS), tracks, 25, SEG, START);
       expect(readTfdt(out)).toBe((100 + START) * TS);
     });
 
@@ -125,25 +121,17 @@ describe('rewriteSegmentTfdt', () => {
       expect(readTfdt(out)).toBe((100 + START) * TS);
     });
 
-    it('puts both runs on one timeline — the whole point', () => {
-      const fromZero = rewriteSegmentTfdt(
-        buildSeg((100 + START) * TS),
-        tracks,
-        25,
-        SEG,
-        START,
-      );
+    it('puts both runs on one timeline', () => {
+      const fromZero = rewriteSegmentTfdt(buildSeg(100 * TS), tracks, 25, SEG, START);
       const seeked = rewriteSegmentTfdt(buildSeg(0), tracks, 25, SEG, START);
       expect(readTfdt(seeked)).toBe(readTfdt(fromZero));
     });
 
-    // The absolute run lands within a frame of the grid, never exactly on it.
-    // `runStart <= 0` used to catch that; an epsilon has to, or a segment
-    // nothing asked to move gets nudged by the rounding.
-    it('does not nudge an absolute run that is a frame off the grid', () => {
-      const off = Math.round((100 + START) * TS) + 0.04 * TS;
-      const out = rewriteSegmentTfdt(buildSeg(off), tracks, 25, SEG, START);
-      expect(readTfdt(out)).toBe(off);
+    // Under half a segment the origin is indistinguishable from grid jitter, so
+    // any "already absolute" shortcut would leave seg-0 of the first run at 0.
+    it('moves a start_time shorter than half a segment too', () => {
+      const out = rewriteSegmentTfdt(buildSeg(0), tracks, 0, SEG, 1.4);
+      expect(readTfdt(out)).toBe(1.4 * TS);
     });
   });
 
@@ -187,23 +175,48 @@ describe('rewriteSegmentTfdt', () => {
       expect(a).toBe((100 + START) * TS);
     });
 
-    it('leaves an absolute audio rendition alone rather than inventing a shift', () => {
-      const at = Math.round((100 + START) * TS);
-      const out = rewriteSegmentTfdt(buildSeg(at, 2), audioOnly, 25, SEG, START);
-      expect(readTfdt(out)).toBe(at);
+    it('moves an audio rendition of the run from 0 onto the origin', () => {
+      // Its first fragment trails the grid by the encoder priming.
+      const out = rewriteSegmentTfdt(buildSeg(21, 2), audioOnly, 0, SEG, START);
+      expect(readTfdt(out)).toBe(21 + START * TS);
     });
 
-    // The pre-existing behaviour, unchanged: with no start_time the snap is a
-    // plain grid round and a run at 0 is left alone.
-    it('behaves exactly as before when start_time is 0', () => {
+    // With no start_time the snap is a plain grid round and a run at 0 stays.
+    it('leaves a start_time 0 run from the file start in place', () => {
       // Run-relative: snapped to a 100s run origin, fragment keeps its 20ms.
       expect(readTfdt(rewriteSegmentTfdt(buildSeg(0.02 * TS, 2), audioOnly, 25, SEG))).toBe(
         100.02 * TS,
       );
-      // Absolute: left alone.
+      // From the file start: left alone.
       expect(readTfdt(rewriteSegmentTfdt(buildSeg(100 * TS, 2), audioOnly, 25, SEG))).toBe(
         100 * TS,
       );
     });
+  });
+});
+
+describe('shiftSegmentTfdt', () => {
+  const both = parseInitTracks(buildInitAv());
+
+  it('moves every track of a keyframe-cut segment by the origin, off-grid times kept', () => {
+    const seg = Buffer.concat([buildSeg(98 * TS, 1), buildSeg(97.979 * TS, 2)]);
+    const out = shiftSegmentTfdt(seg, both, 2.8);
+    const i = out.indexOf(Buffer.from('tfdt', 'latin1'));
+    const j = out.indexOf(Buffer.from('tfdt', 'latin1'), i + 1);
+    expect(out.readUInt32BE(i + 8)).toBe(100.8 * TS);
+    expect(out.readUInt32BE(j + 8)).toBe(Math.round(100.779 * TS));
+  });
+
+  it('returns the same buffer for a zero origin', () => {
+    const seg = buildSeg(98 * TS, 1);
+    expect(shiftSegmentTfdt(seg, both, 0)).toBe(seg);
+  });
+});
+
+describe('timelineOrigin', () => {
+  it('keeps a positive start and clamps a negative one to 0', () => {
+    expect(timelineOrigin(2.8)).toBe(2.8);
+    expect(timelineOrigin(-0.042)).toBe(0);
+    expect(timelineOrigin(undefined)).toBe(0);
   });
 });

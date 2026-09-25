@@ -1,4 +1,4 @@
-import { perStreamAudioArgs } from './ffmpeg-args';
+import { audioStartAlignFilter, perStreamAudioArgs } from './ffmpeg-args';
 import type { AudioStreamMeta } from './types';
 
 /**
@@ -23,6 +23,7 @@ describe('perStreamAudioArgs', () => {
         { copy: false, outputCodec: 'aac', outputChannels: 2 },
       ],
       '128k',
+      0,
     );
 
     const joined = args!.join(' ');
@@ -42,6 +43,7 @@ describe('perStreamAudioArgs', () => {
         { copy: false, outputCodec: 'eac3', outputChannels: 6 },
       ],
       '128k',
+      0,
     );
 
     const joined = args!.join(' ');
@@ -61,6 +63,7 @@ describe('perStreamAudioArgs', () => {
         { copy: false, outputCodec: 'aac', outputChannels: 2 },
       ],
       '128k',
+      0,
     );
 
     expect(args).toEqual([
@@ -72,7 +75,40 @@ describe('perStreamAudioArgs', () => {
       '128k',
       '-ac:a:1',
       '2',
+      '-filter:a:1',
+      'asetpts=PTS-0/TB,aresample=async=1:first_pts=0,asetpts=PTS+0/TB',
     ]);
+  });
+
+  it('keeps the planned channels of an AAC rendition re-encoded only for its offset', () => {
+    const args = perStreamAudioArgs(
+      twoSurround,
+      [
+        { copy: false, outputCodec: 'aac', outputChannels: 6 },
+        { copy: false, outputCodec: 'aac' },
+      ],
+      '128k',
+      0,
+    );
+    const joined = args!.join(' ');
+    expect(joined).toContain('-ac:a:0 6');
+    expect(joined).toContain('-ac:a:1 2');
+  });
+
+  it('aligns every re-encoded rendition to the run start, never a copied one', () => {
+    const args = perStreamAudioArgs(
+      twoSurround,
+      [
+        { copy: true, outputCodec: 'opus' },
+        { copy: false, outputCodec: 'opus', outputChannels: 6 },
+      ],
+      '128k',
+      11.8,
+    );
+    expect(args).not.toContain('-filter:a:0');
+    expect(args!.join(' ')).toContain(
+      '-filter:a:1 asetpts=PTS-11.8/TB,aresample=async=1:first_pts=0,asetpts=PTS+11.8/TB',
+    );
   });
 
   it('returns null when the plan count does not match the stream count', () => {
@@ -81,8 +117,23 @@ describe('perStreamAudioArgs', () => {
         twoSurround,
         [{ copy: false, outputCodec: 'aac', outputChannels: 2 }],
         '128k',
+        0,
       ),
     ).toBeNull();
-    expect(perStreamAudioArgs(twoSurround, undefined, '128k')).toBeNull();
+    expect(perStreamAudioArgs(twoSurround, undefined, '128k', 0)).toBeNull();
+  });
+});
+
+describe('audioStartAlignFilter', () => {
+  it('shifts by seconds, so the sample rate never enters the filter', () => {
+    expect(audioStartAlignFilter(2.8)).toBe(
+      'asetpts=PTS-2.8/TB,aresample=async=1:first_pts=0,asetpts=PTS+2.8/TB',
+    );
+  });
+
+  it('handles a negative start without a double sign', () => {
+    expect(audioStartAlignFilter(-0.005)).toBe(
+      'asetpts=PTS+0.005/TB,aresample=async=1:first_pts=0,asetpts=PTS-0.005/TB',
+    );
   });
 });

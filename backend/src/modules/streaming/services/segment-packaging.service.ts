@@ -3,7 +3,12 @@ import type { Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import { readAndRewriteCmaf } from '../transcoding/cmaf-rewrite';
-import { parseInitTracks, rewriteSegmentTfdt } from '../transcoding/timeline';
+import {
+  parseInitTracks,
+  rewriteSegmentTfdt,
+  shiftSegmentTfdt,
+  timelineOrigin,
+} from '../transcoding/timeline';
 
 /**
  * Turns an on-disk cache-dir segment into a wire-ready HLS response: TS verbatim,
@@ -25,12 +30,11 @@ export class SegmentPackagingService {
   >();
 
   /**
-   * Serve a segment (or init) file onto `res`. `skipTimelineRewrite` is set for
-   * remux (`-c:v copy`) output, which carries its own absolute GOP-aligned
-   * `-copyts` timeline that the grid tfdt anchor would shift (#349).
-   * `segDuration` is the active HLS segment duration in seconds, threaded from
-   * the caller (the StreamingSettingsCache-backed value) rather than a module
-   * global.
+   * Serve a segment (or init) file onto `res`. `keyframeCut` is set for remux
+   * (`-c:v copy`) output, whose segments follow the source keyframes rather
+   * than the grid (#349), so it only gets the origin shift. `segDuration` is
+   * the active HLS segment duration in seconds, threaded from the caller (the
+   * StreamingSettingsCache-backed value) rather than a module global.
    */
   async serve(
     res: Response,
@@ -40,7 +44,7 @@ export class SegmentPackagingService {
       segDuration: number;
       /** Source video `start_time`, the origin every run is anchored onto. */
       startPts?: number;
-      skipTimelineRewrite?: boolean;
+      keyframeCut?: boolean;
     },
   ): Promise<void> {
     // TS segments aren't fMP4/CMAF — the CMAF rewrite and tfdt anchoring are
@@ -72,19 +76,13 @@ export class SegmentPackagingService {
       if (!res.headersSent) res.status(404).end();
       return;
     }
-    // Remux carries an absolute, GOP-aligned -copyts timeline; the grid tfdt
-    // anchor assumes forced-keyframe transcode output (seg-N decodes at N*SEG)
-    // and would shift each remux segment by its own IDR-vs-grid offset, breaking
-    // the single monotonic timeline (#349). Transcode output is grid-aligned so
-    // the anchor is a no-op — only remux must skip it.
-    const out = opts.skipTimelineRewrite
-      ? buf
-      : await this.anchorSegmentTimeline(
-          filePath,
-          buf,
-          opts.segDuration,
-          opts.startPts ?? 0,
-        );
+    const out = await this.anchorSegmentTimeline(
+      filePath,
+      buf,
+      opts.segDuration,
+      timelineOrigin(opts.startPts),
+      opts.keyframeCut ?? false,
+    );
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Length', String(out.length));
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -99,20 +97,23 @@ export class SegmentPackagingService {
 
   /** Anchor a media segment onto the single absolute presentation timeline:
    *  rewrite its `tfdt` so `seg-N` decodes at its true presentation time
-   *  `N · segDuration + startPts` (per-track timescale), instead of FFmpeg's
-   *  per-run 0-based reset. Init segments and MPEG-TS segments carry no `tfdt` and pass
-   *  through unchanged. */
+   *  `N · segDuration + origin` (per-track timescale), instead of FFmpeg's
+   *  per-run 0-based reset. A keyframe-cut segment keeps its own times, moved
+   *  by the origin. Init segments carry no `tfdt` and pass through unchanged. */
   private async anchorSegmentTimeline(
     filePath: string,
     buf: Buffer,
     segDuration: number,
-    startPts: number,
+    origin: number,
+    keyframeCut: boolean,
   ): Promise<Buffer> {
     const m = /(?:^|\/)seg-(\d+)\.m4s$/.exec(filePath);
     if (!m) return buf;
     const tracks = await this.tracksForDir(path.dirname(filePath));
     if (tracks.size === 0) return buf;
-    return rewriteSegmentTfdt(buf, tracks, Number(m[1]), segDuration, startPts);
+    return keyframeCut
+      ? shiftSegmentTfdt(buf, tracks, origin)
+      : rewriteSegmentTfdt(buf, tracks, Number(m[1]), segDuration, origin);
   }
 
   private async tracksForDir(

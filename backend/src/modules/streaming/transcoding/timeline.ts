@@ -142,6 +142,13 @@ function collectTfdts(buf: Buffer): FragTfdt[] {
   return out;
 }
 
+/** Source time an fMP4 run's output starts from. A negative video start (MP4
+ *  edit lists) stays in the output, where ffmpeg writes it as an edit, since a
+ *  tfdt can't go below 0. */
+export function timelineOrigin(startPts = 0): number {
+  return Math.max(0, startPts);
+}
+
 /**
  * Shift every fragment's `tfdt` so the segment sits at its true content time
  * on the shared absolute timeline. Returns a new Buffer; box sizes unchanged.
@@ -165,22 +172,15 @@ export function rewriteSegmentTfdt(
   const frags = collectTfdts(segBuf);
   if (frags.length === 0) return segBuf;
 
-  // The source's own start_time is part of the origin: a run spawned at 0 keeps
-  // it (ffmpeg's -copyts passes absolute PTS through), so a run spawned mid-file
-  // must be anchored onto it too or the two disagree by exactly start_time —
-  // and the WebVTT X-TIMESTAMP-MAP, which adds it unconditionally, is only
-  // right for one of them.
+  // Every run's output starts at 0 (see `originSeconds` in ffmpeg-args), so the
+  // source start_time is part of the shift; the WebVTT X-TIMESTAMP-MAP adds it
+  // too.
   const segStart = segIndex * segDuration + startPts;
   const video = frags.find((f) => tracks.get(f.trackId)?.isVideo);
   const ref = video ?? frags[0];
   const refTs = tracks.get(ref.trackId)?.timescale;
   if (!refTs) return segBuf;
   const refTime = ref.original / refTs;
-
-  // Already absolute: the run started at 0, so ffmpeg's timeline is the one we
-  // want. Tested before any snapping — the snap below assumes a run-relative
-  // fragment, and applied to an absolute one it would invent a shift.
-  if (Math.abs(segStart - refTime) < segDuration / 2) return segBuf;
 
   let runStart = segStart - refTime;
   if (!video) {
@@ -193,12 +193,31 @@ export function rewriteSegmentTfdt(
     runStart =
       Math.round((runStart - startPts) / segDuration) * segDuration + startPts;
   }
+  return shiftTfdts(segBuf, frags, tracks, runStart);
+}
 
+/** Shift every fragment's `tfdt` by `seconds`. Moves a keyframe-cut (remux)
+ *  run, whose output starts at 0, back onto the source timeline. */
+export function shiftSegmentTfdt(
+  segBuf: Buffer,
+  tracks: Map<number, TrackInfo>,
+  seconds: number,
+): Buffer {
+  if (tracks.size === 0 || seconds === 0) return segBuf;
+  return shiftTfdts(segBuf, collectTfdts(segBuf), tracks, seconds);
+}
+
+function shiftTfdts(
+  segBuf: Buffer,
+  frags: FragTfdt[],
+  tracks: Map<number, TrackInfo>,
+  seconds: number,
+): Buffer {
   const buf = Buffer.from(segBuf);
   for (const f of frags) {
     const ts = tracks.get(f.trackId)?.timescale;
     if (!ts) continue;
-    const value = f.original + Math.round(runStart * ts);
+    const value = f.original + Math.round(seconds * ts);
     if (f.version === 1) {
       buf.writeBigUInt64BE(BigInt(value), f.valueOffset);
     } else if (value <= 0xffffffff) {

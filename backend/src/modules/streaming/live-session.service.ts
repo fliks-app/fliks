@@ -20,6 +20,7 @@ export type AudioPlan =
       mode: 'transcode';
       codec: 'aac' | 'ac3' | 'eac3';
       bitrateBps: number;
+      channels?: number;
     };
 
 /**

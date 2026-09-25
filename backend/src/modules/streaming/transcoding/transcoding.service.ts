@@ -1362,6 +1362,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         audioStreams: ctx?.audioStreams,
         segmentBoundaries,
         segmentDuration: ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION,
+        sourceStartPts: ctx?.sourceStartPts,
+        audioPlan: ctx?.audioPlan,
       },
       this.log,
     );
@@ -1482,7 +1484,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         audioStreams: ctx?.audioStreams,
         sourceFps: ctx?.sourceFps,
         segmentDuration: ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION,
-        sourceStartPts: ctx?.sourceStartPts,
       },
       this.log,
     );

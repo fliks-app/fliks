@@ -34,6 +34,7 @@ import {
 import { normaliseSourceCodec } from './codec/normalise';
 import { hevcMainTierCapBps } from './codec/codec-strings';
 import { varStreamMapLayout } from './audio-layout';
+import { timelineOrigin } from './timeline';
 import { resolveEncodePipeline } from './encode-pipeline';
 import { openclTonemapInitArgs } from './hw-device';
 import { buildVideoFilters, resolveTonemapCurve } from './ffmpeg-filter-graph';
@@ -56,8 +57,9 @@ import { buildImageBurnInFilterComplex } from './subtitle-overlay-filter';
  */
 const TRUSTED_PROBE_SIZE = '5000000';
 
-/** Past ffmpeg's 3/23 s B-frame seek pull-back, short of any real next keyframe. */
-const REMUX_SEEK_LEAD = 0.15;
+/** ffmpeg's 3/23 s B-frame seek pull-back plus a 20 ms (one 50 fps frame) margin,
+ *  far short of any real next keyframe. */
+const REMUX_SEEK_LEAD = 3 / 23 + 0.02;
 
 /** Join an HLS output path with forward slashes. ffmpeg's HLS muxer derives
  *  the fmp4 init directory with POSIX separators, so a backslash path (what
@@ -66,6 +68,22 @@ const REMUX_SEEK_LEAD = 0.15;
  *  on Windows, and this matches path.join's output on POSIX. */
 function ffOutPath(...parts: string[]): string {
   return parts.join('/').replace(/\\/g, '/');
+}
+
+/** Seconds as an ffmpeg duration / expression literal, microsecond precision. */
+function formatSeconds(seconds: number): string {
+  return String(Number(seconds.toFixed(6)));
+}
+
+/**
+ * Pad or trim the audio so its first sample sits at `startSeconds` (source
+ * time), the video's first frame, whatever the sample rate. A late track
+ * otherwise starts in an empty edit, which MSE ignores, and plays early.
+ */
+export function audioStartAlignFilter(startSeconds: number): string {
+  const s = formatSeconds(Math.abs(startSeconds));
+  const [to, back] = startSeconds < 0 ? ['+', '-'] : ['-', '+'];
+  return `asetpts=PTS${to}${s}/TB,aresample=async=1:first_pts=0,asetpts=PTS${back}${s}/TB`;
 }
 
 /** The shared fMP4/TS HLS muxer tail. Every output path (transcode single /
@@ -85,7 +103,10 @@ function hlsMuxerArgs(o: {
   indexPath: string;
   /** Start the fMP4 decode timeline at the run's first source PTS instead of 0. */
   absoluteTimeline?: boolean;
+  /** Source time the fMP4 output timeline starts from (the video `start_time`). */
+  originSeconds?: number;
 }): string[] {
+  const origin = o.useTs ? 0 : timelineOrigin(o.originSeconds);
   return [
     // A B-frame or primed-audio track starts at a negative DTS; the default
     // shift delays every track by it, where `disabled` keeps it in the edit list.
@@ -96,6 +117,9 @@ function hlsMuxerArgs(o: {
     ...(o.absoluteTimeline
       ? ['-hls_segment_options', 'movflags=+frag_discont']
       : []),
+    // A video starting after 0 lands in an empty edit, which MSE ignores; a
+    // 0-based output leaves none, and serving adds the origin back (timeline.ts).
+    ...(origin !== 0 ? ['-output_ts_offset', formatSeconds(-origin)] : []),
     // The muxer restarts its output timeline near zero on every run, so a
     // seeked run's segments contradict the playlist that places them at
     // `index · realSeg`. fMP4 is re-anchored on serve by `rewriteSegmentTfdt`;
@@ -206,24 +230,26 @@ export function buildSegmentGrid(
 
 /** Audio output args from the stream-builder decision — emitted verbatim, no
  *  re-derivation. Copy passes through; a transcode plan re-encodes to its codec
- *  (EAC-3/AC-3 downmixed to the 6-channel encoder ceiling); the fallback for a
- *  missing plan is AAC stereo. */
+ *  and channel count (default AAC stereo, EAC-3/AC-3 at the 6-channel encoder
+ *  ceiling), aligned to `alignStartSeconds`. A missing plan is AAC stereo. */
 function buildAudioOutputArgs(
-  profile: TranscodeProfile,
+  aacBitrate: string,
   audioPlan: BuildFfmpegArgsOptions['audioPlan'],
+  alignStartSeconds: number,
 ): string[] {
   if (audioPlan?.mode === 'copy') return ['-c:a', 'copy'];
-  const codec = audioPlan?.mode === 'transcode' ? audioPlan.codec : 'aac';
-  if (codec === 'aac') {
-    return ['-c:a', 'aac', '-b:a', profile.audioBitrate, '-ac', '2'];
-  }
+  const plan = audioPlan?.mode === 'transcode' ? audioPlan : undefined;
+  const codec = plan?.codec ?? 'aac';
+  const aac = codec === 'aac';
   return [
     '-c:a',
     codec,
     '-b:a',
-    `${SURROUND_TRANSCODE_BITRATE_BPS / 1000}k`,
+    aac ? aacBitrate : `${SURROUND_TRANSCODE_BITRATE_BPS / 1000}k`,
     '-ac',
-    '6',
+    String(plan?.channels ?? (aac ? 2 : 6)),
+    '-filter:a',
+    audioStartAlignFilter(alignStartSeconds),
   ];
 }
 
@@ -319,6 +345,7 @@ export interface BuildFfmpegArgsOptions {
         mode: 'transcode';
         codec: 'aac' | 'ac3' | 'eac3';
         bitrateBps: number;
+        channels?: number;
       };
   /** Per-rendition audio decision for the multi-audio `var_stream_map` path,
    *  one entry per `audioStreams[]` track in the same order. The group shares
@@ -330,7 +357,8 @@ export interface BuildFfmpegArgsOptions {
     outputCodec: string;
     outputChannels?: number;
   }[];
-  /** Source video `start_time` (seconds). */
+  /** Source video `start_time` (seconds): the output timeline origin and the
+   *  point transcoded audio is aligned to. */
   sourceStartPts?: number;
   encoderPreset?: string;
   /** HDR → SDR tone-mapping algorithm (admin override). Defaults to `'auto'`
@@ -376,25 +404,6 @@ function audioMapSpec(
   return abs != null ? `0:${abs}` : `0:a:${relIndex}?`;
 }
 
-/** Pad (or trim) a separate audio rendition's leading gap so it starts with the
- *  video: MSE sequence mode (Shaka HLS) drops the gap and plays audio early. */
-function audioStartAlignArgs(
-  streamSpec: string,
-  startSegment: number,
-  sourceStartPts = 0,
-  sampleRate?: number,
-): string[] {
-  if (startSegment > 0) return [];
-  // first_pts counts samples; without the rate only a zero video start is exact.
-  const firstPts = sampleRate
-    ? Math.round(sourceStartPts * sampleRate)
-    : Math.abs(sourceStartPts) < 0.001
-      ? 0
-      : null;
-  if (firstPts === null) return [];
-  return [`-filter:a${streamSpec}`, `aresample=async=1:first_pts=${firstPts}`];
-}
-
 /** True iff the cached streamInfo explicitly reports zero audio streams. */
 function hasNoAudio(streams: AudioStreamMeta[] | undefined): boolean {
   return streams != null && streams.length === 0;
@@ -411,7 +420,8 @@ function hasNoAudio(streams: AudioStreamMeta[] | undefined): boolean {
  * Every per-stream option uses the audio-relative specifier (`-c:a:i`,
  * `-b:a:i`, `-ac:a:i`): the muxed output carries the video at stream 0, so a
  * bare `-ac:i` would target the wrong output stream and leave the last
- * rendition at its source channel count.
+ * rendition at its source channel count. Every re-encoded rendition is aligned
+ * to `alignStartSeconds`.
  */
 export function perStreamAudioArgs(
   audioStreams: AudioStreamMeta[],
@@ -419,6 +429,7 @@ export function perStreamAudioArgs(
     | { copy: boolean; outputCodec: string; outputChannels?: number }[]
     | undefined,
   aacBitrate: string,
+  alignStartSeconds: number,
 ): string[] | null {
   if (!plans || plans.length !== audioStreams.length) return null;
   const out: string[] = [];
@@ -428,28 +439,23 @@ export function perStreamAudioArgs(
       return;
     }
     if (p.outputCodec === 'aac') {
-      out.push(`-c:a:${i}`, 'aac', `-b:a:${i}`, aacBitrate, `-ac:a:${i}`, '2');
-      return;
-    }
-    if (p.outputCodec === 'opus') {
-      // libopus, downmixed to the planned channel count. 256k is transparent
-      // for 5.1 (Opus is far more efficient than EAC-3 at the same quality).
+      out.push(`-c:a:${i}`, 'aac', `-b:a:${i}`, aacBitrate);
+    } else if (p.outputCodec === 'opus') {
+      // 256k is transparent for 5.1 (Opus is far more efficient than EAC-3).
       out.push(`-c:a:${i}`, 'libopus', `-b:a:${i}`, '256k');
-      if (p.outputChannels != null) {
-        out.push(`-ac:a:${i}`, String(p.outputChannels));
-      }
-      return;
+    } else {
+      // EAC-3 / AC-3 at the surround ceiling, downmixed to the planned count (≤ 5.1).
+      out.push(
+        `-c:a:${i}`,
+        p.outputCodec,
+        `-b:a:${i}`,
+        `${SURROUND_TRANSCODE_BITRATE_BPS / 1000}k`,
+      );
     }
-    // EAC-3 / AC-3 at the surround ceiling, downmixed to the planned count (≤ 5.1).
-    out.push(
-      `-c:a:${i}`,
-      p.outputCodec,
-      `-b:a:${i}`,
-      `${SURROUND_TRANSCODE_BITRATE_BPS / 1000}k`,
-    );
-    if (p.outputChannels != null) {
-      out.push(`-ac:a:${i}`, String(p.outputChannels));
-    }
+    const channels =
+      p.outputChannels ?? (p.outputCodec === 'aac' ? 2 : undefined);
+    if (channels != null) out.push(`-ac:a:${i}`, String(channels));
+    out.push(`-filter:a:${i}`, audioStartAlignFilter(alignStartSeconds));
   });
   return out;
 }
@@ -476,8 +482,8 @@ function buildAudioAndMuxerArgs(opts: {
   segmentDuration: number;
   startSegment: number;
   outputDir: string;
-  sourceStartPts?: number;
-  audioCopy: boolean;
+  alignStartSeconds: number;
+  originSeconds: number;
 }): string[] {
   const {
     videoMapSpec,
@@ -494,8 +500,8 @@ function buildAudioAndMuxerArgs(opts: {
     segmentDuration,
     startSegment,
     outputDir,
-    sourceStartPts,
-    audioCopy,
+    alignStartSeconds,
+    originSeconds,
   } = opts;
   const args: string[] = [];
   // Content time this run starts at, matching the playlist's placement of
@@ -527,14 +533,9 @@ function buildAudioAndMuxerArgs(opts: {
       audioStreams!,
       audioTrackPlans,
       audioBitrate,
+      alignStartSeconds,
     );
     args.push(...(perStream ?? audioArgs));
-    audioStreams!.forEach((a, i) => {
-      if (perStream ? audioTrackPlans![i].copy : audioCopy) return;
-      args.push(
-        ...audioStartAlignArgs(`:${i}`, startSegment, sourceStartPts, a.sampleRate),
-      );
-    });
 
     // Build var_stream_map: "v:0,agroup:audio a:0,agroup:audio,language:fre ..."
     const varParts = ['v:0,agroup:audio'];
@@ -559,6 +560,7 @@ function buildAudioAndMuxerArgs(opts: {
         varStreamMap: varParts.join(' '),
         segmentFilename: ffOutPath(outputDir, '%v', `seg-%04d.${segExt}`),
         indexPath: ffOutPath(outputDir, '%v', 'index.m3u8'),
+        originSeconds,
       }),
     );
     return args;
@@ -597,6 +599,7 @@ function buildAudioAndMuxerArgs(opts: {
       initFilename: 'init.mp4',
       segmentFilename: ffOutPath(outputDir, `seg-%04d.${segExt}`),
       indexPath: ffOutPath(outputDir, 'index.m3u8'),
+      originSeconds,
     }),
   );
   return args;
@@ -841,6 +844,7 @@ export function buildFfmpegArgs(
     audioStreams,
     audioPlan,
     audioTrackPlans,
+    sourceStartPts = 0,
     encoderPreset = 'faster',
     sourceFps,
     sourceColorSpace,
@@ -870,10 +874,16 @@ export function buildFfmpegArgs(
   const segType = useTs ? 'mpegts' : 'fmp4';
   const segExt = useTs ? 'ts' : 'm4s';
 
-  const audioArgs = buildAudioOutputArgs(profile, audioPlan);
-
   const { fps, gopSize, realSeg, seekSeconds, forceKeyframesExpr } =
     buildSegmentGrid(segmentDuration, sourceFps, startSegment);
+  // The input seek adds the file's start time and -copyts keeps source time in
+  // the filters, so this is the run's first video frame.
+  const alignStartSeconds = seekSeconds + sourceStartPts;
+  const audioArgs = buildAudioOutputArgs(
+    profile.audioBitrate,
+    audioPlan,
+    alignStartSeconds,
+  );
   // Closed-GOP, deterministic IDR placement on h264_qsv:
   //  - `-forced_idr 1` : every `force_key_frames` tick lands as a real
   //    IDR (without it, qsvenc emits some as plain I, breaking HLS
@@ -1198,8 +1208,8 @@ export function buildFfmpegArgs(
       segmentDuration,
       startSegment,
       outputDir,
-      sourceStartPts: opts.sourceStartPts,
-      audioCopy: audioPlan?.mode === 'copy',
+      alignStartSeconds,
+      originSeconds: sourceStartPts,
     }),
   );
 
@@ -1212,8 +1222,6 @@ export interface BuildAudioOnlyArgsOptions {
   audioStreamIndex: number;
   audioBitrate?: string;
   startSegment?: number;
-  /** Source video `start_time` (seconds). */
-  sourceStartPts?: number;
   trustedStreamInfo?: boolean;
   useTs?: boolean;
   /** Cached streamInfo audio array. Used to resolve `audioStreamIndex`
@@ -1286,14 +1294,6 @@ export function buildAudioOnlyFfmpegArgs(
   args.push('-map', audioMapSpec(audioStreams, audioStreamIndex));
   args.push('-vn');
   args.push('-c:a', 'aac', '-b:a', audioBitrate, '-ac', '2');
-  args.push(
-    ...audioStartAlignArgs(
-      '',
-      startSegment,
-      opts.sourceStartPts,
-      audioStreams?.[audioStreamIndex]?.sampleRate,
-    ),
-  );
 
   args.push(
     ...hlsMuxerArgs({
@@ -1343,6 +1343,10 @@ export interface BuildRemuxArgsOptions {
   /** Nominal segment duration (seconds) for `-hls_time` and the uniform-grid
    *  seek fallback. Defaults to {@link DEFAULT_SEGMENT_DURATION}. */
   segmentDuration?: number;
+  /** Source video `start_time` (seconds): the output timeline origin. */
+  sourceStartPts?: number;
+  /** Transcode target when `copyAudio` is false; AAC stereo when absent. */
+  audioPlan?: BuildFfmpegArgsOptions['audioPlan'];
 }
 
 export function buildRemuxArgs(
@@ -1363,6 +1367,8 @@ export function buildRemuxArgs(
     audioStreams,
     segmentBoundaries,
     segmentDuration = DEFAULT_SEGMENT_DURATION,
+    sourceStartPts = 0,
+    audioPlan,
   } = opts;
 
   const args = ['-hide_banner', '-loglevel', 'warning'];
@@ -1376,17 +1382,31 @@ export function buildRemuxArgs(
     args.push('-analyzeduration', '1000000', '-probesize', '1000000');
   }
 
-  const remuxSeekSeconds =
+  // Source time of the run's first video frame: the keyframe boundaries are
+  // absolute, hence `-seek_timestamp`.
+  const runStartSeconds =
     startSegment > 0
       ? (segmentBoundaries?.[startSegment] ??
-        segmentIndexToSeconds(startSegment, segmentDuration))
-      : 0;
+        segmentIndexToSeconds(startSegment, segmentDuration) + sourceStartPts)
+      : sourceStartPts;
   if (startSegment > 0) {
     // ffmpeg pulls a B-frame seek target back by 3/23 s on formats that don't
     // seek by PTS (MKV), which lands an exact keyframe time on the GOP before.
     const lead = sourceHasBFrames ? REMUX_SEEK_LEAD : 0;
-    args.push('-ss', (remuxSeekSeconds + lead).toFixed(3));
+    // The accurate-seek trim ignores `-seek_timestamp` and adds the file start
+    // again; the alignment filter trims decoded audio instead.
+    args.push('-noaccurate_seek', '-seek_timestamp', '1');
+    args.push('-ss', (runStartSeconds + lead).toFixed(3));
   }
+  const userPickedAudio = audioStreamIndex != null && audioStreamIndex > 0;
+  // The plan describes the default track; a picked one keeps the AAC fallback.
+  const audioArgs = copyAudio
+    ? ['-c:a', 'copy']
+    : buildAudioOutputArgs(
+        audioBitrate,
+        audioPlan?.mode === 'transcode' && !userPickedAudio ? audioPlan : undefined,
+        runStartSeconds,
+      );
 
   args.push('-i', inputPath);
 
@@ -1404,7 +1424,6 @@ export function buildRemuxArgs(
   // pre-`-i` seek above lands on the source IDR cleanly via demuxer
   // index lookup; that's all remux needs.
 
-  const userPickedAudio = audioStreamIndex != null && audioStreamIndex > 0;
   if ((videoOnly && !userPickedAudio) || hasNoAudio(audioStreams)) {
     // Video-only remux: var_stream_map (audio served separately) OR a
     // source with zero audio streams in the cached streamInfo.
@@ -1417,21 +1436,12 @@ export function buildRemuxArgs(
       audioMapSpec(audioStreams, audioStreamIndex!),
       '-c:v',
       'copy',
+      ...audioArgs,
     );
-    if (copyAudio) {
-      args.push('-c:a', 'copy');
-    } else {
-      args.push('-c:a', 'aac', '-b:a', audioBitrate, '-ac', '2');
-    }
   } else {
     // No explicit `-map` here, so ffmpeg's default stream selection
     // picks video+audio itself; `-sn` stops it also grabbing a subtitle.
-    args.push('-c:v', 'copy', '-sn');
-    if (copyAudio) {
-      args.push('-c:a', 'copy');
-    } else {
-      args.push('-c:a', 'aac', '-b:a', audioBitrate, '-ac', '2');
-    }
+    args.push('-c:v', 'copy', '-sn', ...audioArgs);
   }
 
   // HEVC needs Apple HLS conformance:
@@ -1470,6 +1480,7 @@ export function buildRemuxArgs(
       // Seeked runs only: from the file start a primed AAC track has a negative
       // first PTS, which frag_discont would write as a wrapped tfdt.
       absoluteTimeline: startSegment > 0,
+      originSeconds: sourceStartPts,
     }),
   );
 
