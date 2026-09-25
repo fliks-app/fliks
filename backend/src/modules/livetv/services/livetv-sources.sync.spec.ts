@@ -473,6 +473,19 @@ describe('LiveTvSourcesService.sync (m3u)', () => {
     });
   });
 
+  describe('liveGroupNames (feeding the vanished-group sweep)', () => {
+    it("counts a disabled source's channels as still present, since the user-facing lineup never checks source.enabled", async () => {
+      const { service, channelRepo } = setup();
+      const qb = makeQueryBuilder();
+      channelRepo.createQueryBuilder.mockReturnValue(qb);
+
+      await (service as unknown as { liveGroupNames(): Promise<string[]> }).liveGroupNames();
+
+      const whereArg = qb.where.mock.calls[0][0] as string;
+      expect(whereArg).not.toMatch(/enabled/);
+    });
+  });
+
   describe('vanished-group sweep gate', () => {
     const okPlaylist =
       '#EXTM3U\n#EXTINF:-1 group-title="News",One\nhttp://provider/live/1.ts\n';
