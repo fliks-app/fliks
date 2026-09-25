@@ -39,7 +39,6 @@ const CHROME_CLASS = 'vt-chrome-held';
 /** Put on the document by NavbarService for the length of a back navigation —
  *  read here rather than re-deriving which triggers count as one. */
 const BACK_CLASS = 'nav-back';
-const DOCK_PROPERTY = '--vt-dock';
 
 /** The click being handled stacks a page. Consumed by the navigation it starts,
  *  so it can never outlive the gesture that set it. */
@@ -143,9 +142,7 @@ export function slidePage(
   transition: { finished: Promise<unknown> },
   direction: Direction,
 ): boolean {
-  const dock = NATIVE_SHELL ? dockInset() : 0;
-  if (!dock) return false;
-  document.documentElement.style.setProperty(DOCK_PROPERTY, `${dock}px`);
+  if (!pageSlideAvailable()) return false;
   classUntilDone(transition, SLIDE_CLASS, DIRECTION_CLASS[direction], CHROME_CLASS);
   return true;
 }

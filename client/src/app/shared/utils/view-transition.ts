@@ -145,11 +145,19 @@ const VIEW_TRANSITION_CLASS = 'view-transitioning';
  * that would otherwise stack on top of the morph (see ImgFadeInDirective) can
  * sit it out.
  */
+let running: Promise<void> = Promise.resolve();
+
 export function markViewTransition(transition: { finished: Promise<unknown> }): void {
   const root = document.documentElement;
   root.classList.add(VIEW_TRANSITION_CLASS);
   const done = () => root.classList.remove(VIEW_TRANSITION_CLASS);
-  void transition.finished.then(done, done);
+  running = transition.finished.then(done, done);
+}
+
+/** Settles once the running transition has. A navigation started before then
+ *  starts a transition of its own, which skips the one on screen. */
+export function viewTransitionDone(): Promise<void> {
+  return running;
 }
 
 /** How many running transitions asked for each class. Starting a transition

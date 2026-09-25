@@ -1319,6 +1319,12 @@ body.tablet [data-touch-only] {
 }
 
 
+/* Held where they were: centred in what the keyboard leaves, the letters ride up under the topbar. */
+html.keyboard-open [data-alpha-index] {
+  bottom: auto;
+  height: var(--keyboard-closed-height, 100%);
+}
+
 /* Dock cradle — a circular bump painted in the dock's own colour rises
    above the dock's top edge to wrap the lower half of the Search FAB.
    The pseudo is concentric with the FAB so its visible protrusion
@@ -1479,17 +1485,9 @@ html.vt-pop::view-transition-new(root) {
   animation-name: vt-slide-from-left;
 }
 
-/* Nothing paints live under a transition — the root snapshot IS the page — so
-   the chrome held still above the two that move has to be trimmed out of both,
-   or each carries its own copy of it down the screen. */
-html.vt-slide::view-transition-group(root),
-html.vt-push::view-transition-new(root),
-html.vt-pop::view-transition-old(root) {
-  clip-path: inset(0 0 var(--vt-dock, 0px) 0);
-}
-/* A slide that stays inside one tab keeps the bottom chrome: the same box on
-   both pages, held above them, and trimmed out of the snapshots that travel —
-   the dock is translucent, so a copy sliding behind it would read through. */
+/* A slide keeps the bottom chrome still: the same box on both pages, held above
+   them. Captured, it is already out of the root snapshots, so the pages slide
+   on under its translucent bar as they scroll under it. */
 html.vt-chrome-held .dock {
   view-transition-name: vt-dock;
 }

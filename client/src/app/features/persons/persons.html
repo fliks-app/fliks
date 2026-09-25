@@ -67,11 +67,11 @@
       </div>
 
       <!-- Alphabet sidebar -->
-      <nav class="fixed right-3 top-1/2 -translate-y-1/2 z-20 flex flex-col items-center gap-0 select-none">
+      <nav data-alpha-index class="fixed inset-y-0 right-3 z-20 flex flex-col items-center justify-center gap-0 select-none pointer-events-none">
         @for (letter of alphabet; track letter) {
           <button
             type="button"
-            class="text-[10px] font-medium w-4 h-4 flex items-center justify-center rounded transition-colors"
+            class="text-[10px] font-medium w-4 h-4 flex items-center justify-center rounded transition-colors pointer-events-auto"
             [class.bg-primary]="list.activeLetter() === letter"
             [class.text-primary-content]="list.activeLetter() === letter"
             [class.text-base-content/60]="list.activeLetter() !== letter && list.availableLetters().has(letter)"
