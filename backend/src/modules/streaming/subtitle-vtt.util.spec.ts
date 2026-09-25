@@ -12,6 +12,22 @@ describe('srtToVtt', () => {
     );
   });
 
+  it('does not merge the next cue when the blank separator carries stray whitespace', () => {
+    const srt =
+      '1\n00:00:01,000 --> 00:00:02,000\nA\n \n2\n00:00:03,000 --> 00:00:04,000\nB\n';
+    expect(srtToVtt(srt)).toBe(
+      'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nA\n\n00:00:03.000 --> 00:00:04.000\nB\n',
+    );
+  });
+
+  it('starts a new cue at the next timing line when the blank separator is missing entirely', () => {
+    const srt =
+      '1\n00:00:01,000 --> 00:00:02,000\nA\n2\n00:00:03,000 --> 00:00:04,000\nB\n';
+    expect(srtToVtt(srt)).toBe(
+      'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nA\n\n00:00:03.000 --> 00:00:04.000\nB\n',
+    );
+  });
+
   it('maps corner alignments', () => {
     const srt =
       '1\n00:00:01,000 --> 00:00:02,000\n{\\an1}A\n\n2\n00:00:03,000 --> 00:00:04,000\n{\\an9}B\n';

@@ -136,7 +136,7 @@
                     <td class="text-center text-sm">
                       @if (sub.status === 'processing') {
                         @let percent = translationPercent(sub);
-                        @if (sub.providerType === 'translated' && percent) {
+                        @if (sub.providerType === 'translated' && percent !== null) {
                           <span class="inline-flex items-center gap-1 align-middle">
                             <progress
                               class="progress progress-warning w-16 h-1.5 align-middle"

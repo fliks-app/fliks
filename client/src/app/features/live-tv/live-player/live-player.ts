@@ -75,8 +75,9 @@ const LIVE_EDGE_TOLERANCE_SECONDS = 1;
  *  the mini guide forces its own refresh when opened. */
 const CHANNEL_REFRESH_MS = 120_000;
 const NUMBER_ENTRY_COMMIT_MS = 1_500;
-/** Channel up and down walk the whole lineup, not one screen of it. */
-const ZAP_LIST_PAGE_SIZE = 500;
+/** Channel up and down walk the whole lineup, paged at the backend's own
+ *  `@Max` on `on-now` rather than fetched as one oversized, rejected request. */
+const ZAP_LIST_PAGE_SIZE = 50;
 
 /** Playhead-to-clock drift that means the timeline was rebased, not merely that
  *  the manifest has yet to refresh. Well above one refresh interval. */
@@ -262,9 +263,14 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   private numberBufferTimer: ReturnType<typeof setTimeout> | null = null;
   private miniGuideScrollTimer: ReturnType<typeof setTimeout> | null = null;
   private tuneSeq = 0;
+  private refreshSeq = 0;
   /** Mirrors `session()?.sessionId`, but a concurrent `tune()` never nulls it
    *  early, so the next call can still find and stop the session it replaces. */
   private currentSessionId: string | null = null;
+  /** Set once ngOnDestroy runs, so an engine created after that point is torn
+   *  down instead of being adopted by a component nobody will clean up again. */
+  private destroyed = false;
+  private engineCreation: Promise<PlaybackEngine> | null = null;
 
   ngOnInit(): void {
     window.addEventListener('keydown', this.onKeydownCapture, true);
@@ -322,6 +328,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     // Supersede any in-flight tune(): its late session must release itself,
     // not land in a destroyed engine.
     this.tuneSeq++;
+    this.destroyed = true;
     window.removeEventListener('keydown', this.onKeydownCapture, true);
     window.removeEventListener('pagehide', this.releaseOnUnload);
     window.removeEventListener('app:playerBack', this.onPlayerBackEvent);
@@ -347,11 +354,20 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   }
 
   private async refreshChannels(): Promise<void> {
+    const seq = ++this.refreshSeq;
     try {
-      // The zap list needs every channel, so it asks for one large page rather
-      // than the default the On now grid uses.
-      const answer = await this.api.getOnNow({ pageSize: ZAP_LIST_PAGE_SIZE });
-      this.channels.set(answer.entries);
+      // The zap list needs every channel, so it pages through the whole
+      // lineup rather than asking for the single oversized page the backend rejects.
+      const entries: OnNowEntry[] = [];
+      let page = 1;
+      for (;;) {
+        const answer = await this.api.getOnNow({ page, pageSize: ZAP_LIST_PAGE_SIZE });
+        if (seq !== this.refreshSeq) return;
+        entries.push(...answer.entries);
+        if (answer.entries.length === 0 || entries.length >= answer.total) break;
+        page++;
+      }
+      this.channels.set(entries);
     } catch {
       // keep the last known list; the overlay just goes a bit stale
     }
@@ -428,14 +444,31 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     this.playbackError.set({ userMessage, source, code });
   }
 
-  private async ensureEngine(): Promise<PlaybackEngine> {
-    if (this.engine) return this.engine;
+  /** Two overlapping `tune()` calls must share one creation, not race two
+   *  engines onto the same surface; the promise is cleared once it settles. */
+  private ensureEngine(): Promise<PlaybackEngine> {
+    if (this.engine) return Promise.resolve(this.engine);
+    if (!this.engineCreation) {
+      this.engineCreation = this.createEngine().finally(() => {
+        this.engineCreation = null;
+      });
+    }
+    return this.engineCreation;
+  }
+
+  private async createEngine(): Promise<PlaybackEngine> {
     const surface = await createEngineSurface({
       kind: this.surfaceKind,
       video: this.videoEl()!.nativeElement,
       container: this.containerEl()?.nativeElement,
     });
     const engine = surface.engine;
+    if (this.destroyed) {
+      // ngOnDestroy ran while the surface was still being created; nothing
+      // will ever call destroy() on this one otherwise.
+      void engine.destroy();
+      throw new Error('live player destroyed during engine creation');
+    }
     this.nativeSurfaceClaimed.set(surface.usesNativeSurface);
     engine.on('error', (e) => {
       // Same taxonomy and same panel as on-demand playback.

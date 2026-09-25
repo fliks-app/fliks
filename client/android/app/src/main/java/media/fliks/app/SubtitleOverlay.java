@@ -70,10 +70,7 @@ class SubtitleOverlay {
         Cue bitmapCue = null;
         for (Cue c : cueGroup.cues) {
             if (c.bitmap != null) { if (bitmapCue == null) bitmapCue = c; }
-            else textCues.add(isTopCue(c) ? c.buildUpon()
-                    .setLine(topMargin, Cue.LINE_TYPE_FRACTION)
-                    .setLineAnchor(Cue.ANCHOR_TYPE_START)
-                    .build() : c);
+            else textCues.add(placed(c));
         }
         if (subtitleView != null) subtitleView.setCues(textCues);
         renderImageCue(bitmapCue);
@@ -107,6 +104,22 @@ class SubtitleOverlay {
         applyTextSize();
         subtitleView.setBottomPaddingFraction(
                 SubtitleView.DEFAULT_BOTTOM_PADDING_FRACTION + bottomMargin);
+    }
+
+    /** A decoder that pins bottom cues to a line (SSA, tx3g) bypasses the bottom
+     *  padding, so those are re-anchored against the margin too. */
+    private Cue placed(Cue c) {
+        if (isTopCue(c)) {
+            return c.buildUpon().setLine(topMargin, Cue.LINE_TYPE_FRACTION)
+                    .setLineAnchor(Cue.ANCHOR_TYPE_START).build();
+        }
+        boolean pinnedBottom = c.line != Cue.DIMEN_UNSET
+                && (c.lineType == Cue.LINE_TYPE_FRACTION ? c.line > 0.6f : c.line < 0);
+        if (!pinnedBottom) return c;
+        return c.buildUpon()
+                .setLine(1f - SubtitleView.DEFAULT_BOTTOM_PADDING_FRACTION - bottomMargin,
+                        Cue.LINE_TYPE_FRACTION)
+                .setLineAnchor(Cue.ANCHOR_TYPE_END).build();
     }
 
     private static boolean isTopCue(Cue c) {

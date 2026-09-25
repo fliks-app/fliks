@@ -37,8 +37,8 @@ export function mergeSecretFields(
   return out;
 }
 
-/** On a test-connection call for a saved provider, resolves its stored secrets into
- *  `settings`: the editor never receives them, so an untouched field arrives blank. */
+/** On a test-connection call for a saved provider, resolves its stored secrets into `settings`
+ *  (blank means untouched); `isCompatible` refuses the carry-over when the id names a different target. */
 export async function resolveStoredSecrets<
   T extends { id: number; settings: Record<string, unknown> },
 >(
@@ -46,10 +46,12 @@ export async function resolveStoredSecrets<
   providerId: number | undefined,
   settings: Record<string, unknown>,
   fields: readonly SecretKeyed[],
+  isCompatible?: (stored: T) => boolean,
 ): Promise<Record<string, unknown>> {
   if (providerId == null) return settings;
   const stored = await repo.findOne({
     where: { id: providerId } as FindOptionsWhere<T>,
   });
+  if (stored && isCompatible && !isCompatible(stored)) return settings;
   return mergeSecretFields(stored?.settings, settings, fields);
 }

@@ -1441,6 +1441,7 @@
     "copy": "Copiar",
     "copied": "Copiado",
     "saved": "Guardado",
+    "success": "Sucesso",
     "selections_cleared": "Seleções limpas",
     "retry": "Tentar novamente",
     "offline_banner": "Modo offline — os dados apresentados podem não estar atualizados",
@@ -2750,7 +2751,7 @@
     "watch": "Ver",
     "on_now": {
       "next_label": "A seguir:",
-      "load_error": "Não foi possível carregar a lista de canais."
+      "no_results": "Nenhum canal corresponde aos filtros atuais."
     },
     "guide": {
       "filter_group": "Grupo",
@@ -2937,7 +2938,7 @@
       },
       "access": {
         "groups_title": "Grupos restritos",
-        "groups_subtitle": "Os grupos marcados ficam ocultos para todos os utilizadores, exceto aqueles a quem o acesso foi concedido abaixo — uma conta que administra a Live TV vê sempre todos os grupos.",
+        "groups_subtitle": "Os grupos marcados ficam ocultos para todos os utilizadores, exceto aqueles a quem o acesso foi concedido abaixo. Uma conta que administra a Live TV vê sempre todos os grupos.",
         "col_group": "Grupo",
         "col_channels": "Canais",
         "col_restricted": "Restrito",

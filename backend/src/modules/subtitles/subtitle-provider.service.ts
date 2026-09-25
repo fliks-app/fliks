@@ -101,6 +101,7 @@ export class SubtitleProviderService {
       providerId,
       settings,
       SUBTITLE_PROVIDER_SECRET_FIELDS,
+      (stored) => stored.type === type,
     );
     try {
       const result = await this.factory

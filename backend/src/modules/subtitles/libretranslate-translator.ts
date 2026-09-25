@@ -1,8 +1,11 @@
+import { Logger } from '@nestjs/common';
 import {
   TranslationRequest,
   isUnknownLanguageCode,
   postWithRetry,
 } from './translation-core';
+
+const log = new Logger('LibreTranslateTranslator');
 
 export interface LibreTranslateConfig {
   /** Base URL of the LibreTranslate server, e.g. http://libretranslate:5000. */
@@ -33,6 +36,7 @@ export async function translateWithLibreTranslate(
     ? 'auto'
     : req.sourceLanguage;
   const out: string[] = [];
+  let translatedChunks = 0;
   for (let i = 0; i < texts.length; i += CHUNK) {
     const chunk = texts.slice(i, i + CHUNK);
     const res = await postWithRetry(
@@ -59,11 +63,17 @@ export async function translateWithLibreTranslate(
         : null;
     if (arr && arr.length === chunk.length) {
       out.push(...arr.map((x: any) => String(x)));
+      translatedChunks++;
     } else {
-      // Unexpected shape — keep the source text so timings stay aligned.
+      log.warn(
+        `Unexpected LibreTranslate response shape for a ${chunk.length}-cue chunk; keeping source text`,
+      );
       out.push(...chunk);
     }
     onProgress?.(Math.min(i + CHUNK, texts.length), texts.length);
+  }
+  if (texts.length > 0 && translatedChunks === 0) {
+    throw new Error('LibreTranslate returned no usable translation for any chunk');
   }
   return out;
 }

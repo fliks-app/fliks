@@ -225,6 +225,7 @@ export class SseService implements OnDestroy {
     // A name its owner chose beats anything derivable from the User-Agent, and
     // it is a proper noun, so it travels verbatim like the browser and OS do.
     await this.systemInfo.ready();
+    if (generation !== this.generation || this.eventSource) return;
     const deviceName = this.systemInfo.deviceName();
     if (deviceName) params.set('name', deviceName);
 

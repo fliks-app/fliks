@@ -105,7 +105,7 @@ export class QualityDefinitionsComponent implements OnInit {
       }));
       this.definitions.set(await this.api.updateAll(items));
       this.dirty.set(false);
-      this.toast.success(this.translate.instant('settings.quality_definitions.saved'));
+      this.toast.success(this.translate.instant('common.saved'));
     } catch {
       // handled by global error interceptor
     } finally {

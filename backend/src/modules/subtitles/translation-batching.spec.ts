@@ -215,6 +215,42 @@ describe('translateWithBatching token budget', () => {
     ).rejects.toThrow('engine down');
   });
 
+  it('keeps one bad cue from collapsing every later batch to size 1', async () => {
+    const BAD_INDEX = 700;
+    const texts = Array.from({ length: 1500 }, (_, i) => `cue ${i}`);
+    let calls = 0;
+    const out = await translateWithBatching(
+      texts,
+      async (batch) => {
+        calls++;
+        // The bad cue never maps back, whatever else shares its batch:
+        // a formatting quirk, not a size problem, so the engine never throws.
+        if (batch.includes(texts[BAD_INDEX])) return null;
+        return batch;
+      },
+      { ...unlimited(), batchCeiling: 150 },
+      SYSTEM,
+    );
+    expect(out[BAD_INDEX]).toBe(texts[BAD_INDEX]); // kept as source, never translated
+    expect(out.filter((_, i) => i !== BAD_INDEX)).toEqual(
+      texts.filter((_, i) => i !== BAD_INDEX),
+    );
+    // Isolating the bad cue costs a handful of splits; a sticky ceiling would
+    // instead force every remaining batch in the 1500-cue run down to size 1.
+    expect(calls).toBeLessThan(50);
+  });
+
+  it('aborts instead of grinding through one request per cue when nothing maps back', async () => {
+    await expect(
+      translateWithBatching(
+        Array.from({ length: 500 }, (_, i) => `cue ${i}`),
+        async () => null,
+        { ...unlimited(), batchCeiling: 150 },
+        SYSTEM,
+      ),
+    ).rejects.toThrow(/consecutive cues failed to map back/);
+  });
+
   it('paces requests against tokensPerMinute', async () => {
     jest.useFakeTimers();
     try {

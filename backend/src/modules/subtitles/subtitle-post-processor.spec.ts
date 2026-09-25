@@ -41,6 +41,11 @@ describe('commonFixes', () => {
     expect(commonFixes(srt)).toBe(srt);
   });
 
+  it('strips a whitespace-only line before a CRLF ending', () => {
+    const srt = '1\r\nA\r\n   \r\n\r\nB\r\n';
+    expect(commonFixes(srt)).toBe('1\r\nA\r\n\r\nB\r\n');
+  });
+
   it('keeps the space before ? ! ; : in French', () => {
     const line = 'Tu rentres quand ? Vite , là !';
     expect(commonFixes(line, 'fr')).toBe('Tu rentres quand ? Vite, là !');

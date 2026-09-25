@@ -269,16 +269,23 @@ export class MediaController {
     @CurrentUser() user: User,
   ) {
     await this.assertMediaAccessible(id, user);
-    const media = await this.mediaService.identify(id, dto);
-    const title = media.title;
-
-    this.eventsService.emit({ type: 'metadata.started', mediaId: id, title });
     const activityId = `Identify:${id}`;
-    // A second click would otherwise run the same walk twice and let the
-    // first to finish retire the other's row.
+    // Refused and reserved before the ids are written: a second identify would
+    // otherwise commit its ids under the first walk and answer 409.
     if (this.activityRegistry.has(activityId)) {
       throw new ConflictException('errors.already_running');
     }
+    this.activityRegistry.upsertRunning(activityId, 'Identify');
+    let media: Awaited<ReturnType<MediaService['identify']>>;
+    try {
+      media = await this.mediaService.identify(id, dto);
+    } catch (err) {
+      this.activityRegistry.remove(activityId);
+      throw err;
+    }
+    const title = media.title;
+
+    this.eventsService.emit({ type: 'metadata.started', mediaId: id, title });
     this.activityRegistry.upsertRunning(
       activityId,
       'Identify',

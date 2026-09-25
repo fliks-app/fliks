@@ -359,6 +359,8 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
         return;
       }
       const prefix = approved.mediaType === 'movie' ? '/movies' : '/series';
+      // Both histories: the browser's (replaceUrl) and the in-app back stack.
+      this.navbar.markAsBackNavigation();
       void this.router.navigate([prefix, mediaId], { replaceUrl: true });
     } catch {
       /* surfaced by the global HTTP error interceptor */

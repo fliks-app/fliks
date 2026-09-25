@@ -127,12 +127,17 @@ export interface CreateAdminSourceBody {
 export type UpdateAdminSourceBody = Partial<CreateAdminSourceBody>;
 
 export interface TestSourceBody {
+  /** Names the saved source being edited, so the server can fall back to its
+   *  stored password instead of the blank the form always shows. */
+  id?: number;
   kind: 'm3u' | 'xtream';
   url: string;
   username?: string;
   password?: string;
   userAgent?: string;
   referer?: string;
+  includeGroupsPattern?: string;
+  excludeGroupsPattern?: string;
 }
 
 export interface TestSourceResult {
