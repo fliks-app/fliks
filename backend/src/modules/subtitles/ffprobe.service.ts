@@ -163,6 +163,9 @@ export interface AudioStreamInfo {
   sampleRate?: number;
   bitRate?: number;
   isDefault?: boolean;
+  /** Container start PTS of the audio stream (seconds). Compared against the
+   *  video's to detect a leading gap a separate HLS rendition would keep. */
+  startTimeSeconds?: number;
 }
 
 export interface SubtitleStreamInfo {
@@ -529,6 +532,7 @@ export class FfprobeService {
           sampleRate: s.sample_rate ? Number(s.sample_rate) : undefined,
           bitRate: s.bit_rate ? Number(s.bit_rate) : undefined,
           isDefault: s.disposition?.default === 1,
+          startTimeSeconds: s.start_time ? Number(s.start_time) : undefined,
         }));
 
       const subtitles: SubtitleStreamInfo[] = streams

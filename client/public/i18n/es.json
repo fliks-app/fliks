@@ -128,7 +128,8 @@
       "VideoAbr": "Tasa de bits adaptativa (ABR)",
       "SubtitleBurnIn": "Subtítulos incrustados",
       "AudioCodecNotSupported": "Códec de audio no compatible",
-      "AudioChannelsNotSupported": "Demasiados canales de audio"
+      "AudioChannelsNotSupported": "Demasiados canales de audio",
+      "AudioStartOffset": "Desfase de sincronización audio/vídeo"
     },
     "preparing": "Preparando la transmisión…"
   },

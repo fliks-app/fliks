@@ -128,7 +128,8 @@
       "VideoAbr": "Bitrate adattivo (ABR)",
       "SubtitleBurnIn": "Sottotitoli incorporati",
       "AudioCodecNotSupported": "Codec audio non supportato",
-      "AudioChannelsNotSupported": "Troppi canali audio"
+      "AudioChannelsNotSupported": "Troppi canali audio",
+      "AudioStartOffset": "Sfasamento di sincronizzazione audio/video"
     },
     "preparing": "Preparazione del flusso…"
   },

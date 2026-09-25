@@ -128,7 +128,8 @@
       "VideoAbr": "Débito adaptativo (ABR)",
       "SubtitleBurnIn": "Legendas incrustadas",
       "AudioCodecNotSupported": "Codec de áudio não suportado",
-      "AudioChannelsNotSupported": "Demasiados canais de áudio"
+      "AudioChannelsNotSupported": "Demasiados canais de áudio",
+      "AudioStartOffset": "Desvio de sincronização áudio/vídeo"
     },
     "preparing": "A preparar a transmissão…"
   },

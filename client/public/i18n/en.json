@@ -133,7 +133,8 @@
       "VideoAbr": "Adaptive bitrate (ABR)",
       "SubtitleBurnIn": "Burned-in subtitles",
       "AudioCodecNotSupported": "Audio codec not supported",
-      "AudioChannelsNotSupported": "Too many audio channels"
+      "AudioChannelsNotSupported": "Too many audio channels",
+      "AudioStartOffset": "Audio/video timing offset"
     },
     "preparing": "Preparing the stream…"
   },

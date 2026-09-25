@@ -28,6 +28,10 @@ export interface AudioStreamMeta {
    *  source layout; AAC renditions are downmixed to 2 regardless. */
   channels?: number;
   sampleRate?: number;
+  /** Container start PTS of the audio stream (seconds). Used upstream (see
+   *  `StreamBuilderService.buildAudioTracks`) to force a copy rendition to
+   *  transcode when it starts off from the video. */
+  startTimeSeconds?: number;
 }
 
 /**
