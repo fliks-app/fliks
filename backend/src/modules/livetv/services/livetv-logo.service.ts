@@ -6,10 +6,7 @@ import { LiveTvChannel } from '../entities/livetv-channel.entity';
 
 const CONCURRENCY = 4;
 const REMOTE_URL = /^https?:\/\//i;
-
-// 'livetv' isn't a registered ImageType yet (needs a case in image.service.ts);
-// until then every call below throws, caught per-channel, remote URL kept.
-const LIVETV_IMAGE_TYPE = 'livetv' as unknown as ImageType;
+const LIVETV_IMAGE_TYPE: ImageType = 'livetv';
 
 /** Caches each channel's provider-hosted logo locally so playback never
  *  hotlinks the source; a failed download leaves the remote URL in place. */

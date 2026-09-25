@@ -39,6 +39,10 @@ class Semaphore {
 
 const downloadSemaphore = new Semaphore(3);
 
+/** Caps a single image download: a provider-controlled URL (Live TV logos
+ *  point at whatever the admin configured) must never stream unbounded bytes. */
+const MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024;
+
 export type ImageType =
   | 'media'
   | 'person'
@@ -182,10 +186,18 @@ export class ImageService {
         const res = await axios.get<ArrayBuffer>(fullUrl, {
           responseType: 'arraybuffer',
           timeout: 15000,
+          maxContentLength: MAX_DOWNLOAD_BYTES,
+          maxBodyLength: MAX_DOWNLOAD_BYTES,
         });
         buffer = Buffer.from(res.data);
       } catch (err) {
         this.logger.warn(`Failed to download image ${remoteUrl}: ${err.message}`);
+        return null;
+      }
+      try {
+        await sharp(buffer).metadata();
+      } catch (err) {
+        this.logger.warn(`Downloaded file is not a decodable image ${remoteUrl}: ${err.message}`);
         return null;
       }
       return await this.storeBuffer(buffer, type, id, variant, remoteUrl);

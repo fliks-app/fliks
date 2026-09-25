@@ -135,8 +135,17 @@ const MAX_FAILURES_PER_STREAM = 2;
  *  viewer gets a black screen while the server logs look healthy. */
 const REMUXABLE_VIDEO = new Set(['h264']);
 const PROBE_TIMEOUT_MS = 15_000;
-/** Content types that describe a stream instead of being one. */
-const MANIFEST_CONTENT_TYPES = ['mpegurl', 'dash+xml', 'application/xml', 'text/xml'];
+/** Content types that never carry playable media: a manifest, or a page an
+ *  SSRF-redirected/misconfigured source served instead of a stream. */
+const MANIFEST_CONTENT_TYPES = [
+  'mpegurl',
+  'dash+xml',
+  'application/xml',
+  'text/xml',
+  'text/html',
+  'application/json',
+  'text/plain',
+];
 /** ffprobe format names that describe a stream instead of being one. */
 const MANIFEST_CONTAINERS = ['hls', 'applehttp', 'dash'];
 /** Last field of an ffprobe csv line when it describes a stream, not the format. */
@@ -190,6 +199,17 @@ export function isManifestPayload(chunk: Buffer): boolean {
 /** A direct viewer whose socket can't drain this much gets dropped rather than
  *  buffered forever; the shared upstream itself is never slowed down for it. */
 const DIRECT_TEE_HIGH_WATER_MARK = 4 * 1024 * 1024;
+
+/** Bitrate rungs a transcode may target: an arbitrary requested value would let
+ *  one viewer key a distinct ffmpeg process for every bitrate they can invent. */
+const BITRATE_RUNGS = [1_500_000, 3_000_000, 6_000_000, 10_000_000, 20_000_000];
+
+function snapBitrate(bps: number): number {
+  return (
+    BITRATE_RUNGS.find((rung) => rung >= bps) ??
+    BITRATE_RUNGS[BITRATE_RUNGS.length - 1]
+  );
+}
 
 /** Thrown by {@link LiveTvSessionService.openNewSession} when the upstream turned
  *  out to be a manifest: every caller sharing the attempt retries non-direct. */
@@ -285,6 +305,11 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
     user: User,
     caps: ClientPlaybackCaps,
   ): Promise<LiveTvPlayResult> {
+    // Snapped once, here, so the session key and the ffmpeg bitrate below always
+    // agree on the same value regardless of what the client actually requested.
+    if (caps.maxBitrateBps != null) {
+      caps = { ...caps, maxBitrateBps: snapBitrate(caps.maxBitrateBps) };
+    }
     const streams = [...channel.streams].sort(
       (a, b) => a.priority - b.priority || this.compareHealth(a, b),
     );
@@ -350,9 +375,12 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Coalesces concurrent opens for `key` onto one in-flight {@link openNewSession}
-   *  attempt. The check for an existing session and the registration of a new
-   *  attempt happen with no `await` between them, so two racing callers can't both
-   *  fall through to create their own session for the same key. */
+   *  attempt. `opening` is checked first: `openNewSession` registers into
+   *  `sessions` before its `recover()` finishes, so a session found there can
+   *  still fail, and a racing caller must wait on the same attempt rather than
+   *  hand back that not-yet-confirmed entry. The check for an existing session
+   *  and the registration of a new attempt happen with no `await` between them,
+   *  so two racing callers can't both fall through to create their own session. */
   private acquireSession(
     key: string,
     channel: LiveTvChannel,
@@ -360,17 +388,23 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
     mode: LiveTvPlayMode,
     caps: ClientPlaybackCaps,
   ): Promise<LiveTvSessionEntry> {
+    const attempt = this.opening.get(key);
+    if (attempt) return attempt;
+
     const existing = this.sessions.get(key);
     if (existing) return Promise.resolve(existing);
 
-    let attempt = this.opening.get(key);
-    if (!attempt) {
-      attempt = this.openNewSession(key, channel, streams, mode, caps).finally(() => {
-        if (this.opening.get(key) === attempt) this.opening.delete(key);
-      });
-      this.opening.set(key, attempt);
-    }
-    return attempt;
+    const started = this.openNewSession(
+      key,
+      channel,
+      streams,
+      mode,
+      caps,
+    ).finally(() => {
+      if (this.opening.get(key) === started) this.opening.delete(key);
+    });
+    this.opening.set(key, started);
+    return started;
   }
 
   /** Actually spawns/connects a fresh session for `key` and registers it. Never
@@ -400,11 +434,16 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
           ? 'transcode'
           : mode;
 
-      const [segmentSeconds, windowMinutes, probeSeconds] = await Promise.all([
-        this.settingInt('livetv_segment_seconds', 2),
-        this.settingInt('livetv_timeshift_minutes', 15),
-        this.settingInt('livetv_probe_seconds', 3),
-      ]);
+      const [rawSegmentSeconds, rawWindowMinutes, probeSeconds] =
+        await Promise.all([
+          this.settingInt('livetv_segment_seconds', 2),
+          this.settingInt('livetv_timeshift_minutes', 15),
+          this.settingInt('livetv_probe_seconds', 3),
+        ]);
+      // A 0 here divides by zero (hls_list_size) or keeps every segment forever
+      // (list size 0): both are an admin typo, never an intended live-TV mode.
+      const segmentSeconds = Math.max(1, rawSegmentSeconds);
+      const windowMinutes = Math.max(1, rawWindowMinutes);
 
       session = {
         key,

@@ -133,6 +133,13 @@ describe('buildLiveFfmpegArgs', () => {
     expect(flagValue(args, '-hls_list_size')).toBe('150');
   });
 
+  it('floors hls_list_size at 1 rather than passing 0 or Infinity through to ffmpeg', () => {
+    // A 0 window would ask ffmpeg to keep no segments; passing it straight
+    // through drops the flag to 0, which ffmpeg reads as "keep everything".
+    const zeroWindow = buildLiveFfmpegArgs(base({ segmentSeconds: 2, windowMinutes: 0 }));
+    expect(flagValue(zeroWindow, '-hls_list_size')).toBe('1');
+  });
+
   it('never emits -start_number, even on an append respawn', () => {
     const args = buildLiveFfmpegArgs(base({ append: true }));
     expect(args).not.toContain('-start_number');

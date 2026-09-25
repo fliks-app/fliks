@@ -182,6 +182,37 @@ describe('LiveTvSessionService', () => {
     );
   });
 
+  it('waits on an in-flight opening attempt rather than handing back a session not yet confirmed', async () => {
+    // `openNewSession` registers into `sessions` before its own `recover()` settles,
+    // so a caller landing between those two must still resolve from `opening`,
+    // not from the placeholder entry `sessions` already carries for the same key.
+    const svc = service as unknown as {
+      sessions: Map<string, unknown>;
+      opening: Map<string, Promise<unknown>>;
+      acquireSession(
+        key: string,
+        channel: unknown,
+        streams: unknown[],
+        mode: string,
+        caps: unknown,
+      ): Promise<unknown>;
+    };
+    const key = 'race-key';
+    let resolveOpening!: (v: unknown) => void;
+    svc.opening.set(
+      key,
+      new Promise((resolve) => {
+        resolveOpening = resolve;
+      }),
+    );
+    svc.sessions.set(key, { placeholder: true });
+
+    const result = svc.acquireSession(key, {}, [], 'remux', {});
+    resolveOpening({ real: true });
+
+    await expect(result).resolves.toEqual({ real: true });
+  });
+
   it('coalesces two concurrent opens on the same key into one session, one ffmpeg', async () => {
     mockSpawnAlwaysSucceeds();
     // Distinct id: isolates this test's transcode dir from its neighbours.
@@ -457,6 +488,20 @@ describe('LiveTvSessionService', () => {
 
     // webOS (TS) and a browser (fMP4) must never share one ffmpeg output.
     expect(spawn).toHaveBeenCalledTimes(2);
+  });
+
+  it('snaps a requested bitrate to a fixed rung, so nearby values share one session', async () => {
+    mockSpawnAlwaysSucceeds();
+    const channel = makeChannel([makeStream()]);
+
+    await service.open(channel, makeUser(1), { maxBitrateBps: 2_000_000 });
+    await service.open(channel, makeUser(2), { maxBitrateBps: 2_900_000 });
+
+    // Both requests round up to the same 3 Mbps rung: one shared ffmpeg, not two,
+    // and an unbounded requested value can never key its own distinct process.
+    expect(spawn).toHaveBeenCalledTimes(1);
+    const args = spawn.mock.calls[0][1] as string[];
+    expect(args[args.indexOf('-b:v') + 1]).toBe('3000000');
   });
 
   it('orders same-priority streams by health, a clean stream before an errored one', async () => {
