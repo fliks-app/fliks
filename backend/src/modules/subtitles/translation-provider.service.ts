@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  HttpException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TranslationProvider } from './entities/translation-provider.entity';
@@ -186,6 +191,28 @@ export class TranslationProviderService {
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  /** Same stored-key resolution as {@link testConnection}, so an edited provider lists
+   *  with the key the editor never received. */
+  async listModels(
+    engine: TranslationEngine,
+    settings: Record<string, unknown>,
+    providerId?: number,
+  ): Promise<{ models: string[] }> {
+    settings = await resolveStoredSecrets(
+      this.repo,
+      providerId,
+      settings,
+      TRANSLATION_PROVIDER_SECRET_FIELDS,
+      (stored) => sameEndpoint(stored.engine, stored.settings, engine, settings),
+    );
+    try {
+      return { models: await this.factory.listModels(engine, settings) };
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      throw new BadGatewayException(err instanceof Error ? err.message : String(err));
     }
   }
 

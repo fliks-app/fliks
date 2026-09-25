@@ -71,6 +71,10 @@ export class TranslationProvidersApiService {
     );
   }
 
+  listModels(body: TestTranslationProviderBody) {
+    return firstValueFrom(this.http.post<{ models: string[] }>(`${BASE}/models`, body));
+  }
+
   testProvider(id: number) {
     return firstValueFrom(
       this.http.post<TranslationTestResult>(`${BASE}/${id}/test`, {}),

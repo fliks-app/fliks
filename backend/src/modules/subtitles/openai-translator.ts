@@ -8,6 +8,7 @@ import {
   TranslationRequest,
   buildPayload,
   buildSystemInstruction,
+  getModelListing,
   parseNumbered,
   withRegister,
   postWithRetry,
@@ -25,6 +26,21 @@ export interface OpenAiConfig {
   maxTokensPerRequest: number;
   /** Token allowance per minute for this endpoint; 0 = unpaced. */
   tokensPerMinute: number;
+}
+
+/** The endpoint's `GET /models` ids. */
+export async function listOpenAiModels(baseUrl: string, apiKey: string): Promise<string[]> {
+  const headers: Record<string, string> = {};
+  if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+  const data = await getModelListing(
+    `${baseUrl.replace(/\/+$/, '')}/models`,
+    headers,
+    'OpenAI-compatible',
+  );
+  return (Array.isArray(data?.data) ? data.data : [])
+    .map((m: any) => String(m?.id ?? ''))
+    .filter(Boolean)
+    .sort();
 }
 
 /**

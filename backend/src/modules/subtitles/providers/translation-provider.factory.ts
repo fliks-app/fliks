@@ -4,8 +4,16 @@ import {
   TranslationEngine,
 } from '../../../common/enums';
 import { TranslationRequest } from '../translation-core';
-import { GeminiConfig, translateWithGemini } from '../gemini-translator';
-import { OpenAiConfig, translateWithOpenAi } from '../openai-translator';
+import {
+  GeminiConfig,
+  listGeminiModels,
+  translateWithGemini,
+} from '../gemini-translator';
+import {
+  OpenAiConfig,
+  listOpenAiModels,
+  translateWithOpenAi,
+} from '../openai-translator';
 import {
   LibreTranslateConfig,
   translateWithLibreTranslate,
@@ -94,6 +102,26 @@ export class TranslationProviderFactory {
     if (engine === 'gemini') return this.geminiConfig(settings).model;
     if (engine === 'openai') return this.openAiConfig(settings).model;
     return null;
+  }
+
+  /** The models the engine offers with these credentials; LibreTranslate has none to pick. */
+  async listModels(
+    engine: TranslationEngine,
+    settings: Record<string, unknown>,
+  ): Promise<string[]> {
+    if (engine === 'gemini') {
+      const { apiKey } = this.geminiConfig(settings);
+      if (!apiKey) throw new BadRequestException('Gemini API key is not set');
+      return listGeminiModels(apiKey);
+    }
+    if (engine === 'openai') {
+      const { baseUrl, apiKey } = this.openAiConfig(settings);
+      if (!baseUrl) {
+        throw new BadRequestException('An OpenAI-compatible base URL is required');
+      }
+      return listOpenAiModels(baseUrl, apiKey);
+    }
+    return [];
   }
 
   async translate(
