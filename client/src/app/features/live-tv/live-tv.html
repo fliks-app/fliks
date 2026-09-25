@@ -29,30 +29,15 @@
 
   @if (tab() === 'guide') {
     <app-live-tv-guide />
-  } @else if (loading()) {
+  } @else if (loading() && entries().length === 0) {
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
       @for (i of [1, 2, 3, 4, 5, 6]; track i) {
         <div class="skeleton h-24 w-full rounded-lg"></div>
       }
     </div>
-  } @else if (loadError()) {
-    <div class="flex flex-col items-center gap-3 py-16 text-center">
-      <p class="text-base-content/50">{{ 'liveTv.on_now.load_error' | translate }}</p>
-      <button type="button" class="btn btn-sm" (click)="load(true)">
-        {{ 'common.retry' | translate }}
-      </button>
-    </div>
-  } @else if (isEmpty()) {
-    <div class="flex flex-col items-center gap-3 py-16 text-center">
-      <svg lucideTv class="h-10 w-10 text-base-content/30"></svg>
-      <p class="text-base-content/60 max-w-md">{{ 'liveTv.empty_no_channels' | translate }}</p>
-      @if (auth.user()?.isAdmin) {
-        <a routerLink="/admin/settings/live-tv" class="btn btn-primary btn-sm">
-          {{ 'liveTv.empty_go_to_settings' | translate }}
-        </a>
-      }
-    </div>
   } @else {
+    <!-- Stays visible through a reload, unlike the branches below: losing
+         it would drop focus on every keystroke. -->
     <div appTvRow class="flex flex-wrap items-center gap-2">
       <label class="input input-bordered input-sm flex items-center gap-2 w-auto">
         <svg lucideSearch class="h-4 w-4 text-base-content/50"></svg>
@@ -81,42 +66,62 @@
           <option [value]="g">{{ g | liveTvGroupLabel }}</option>
         }
       </select>
+      @if (loading()) {
+        <span class="loading loading-spinner loading-sm"></span>
+      }
     </div>
 
-    @if (favoriteEntries().length > 0) {
-      <div class="flex flex-col gap-2">
-        <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wide">
-          {{ 'liveTv.favorites' | translate }}
-        </h2>
-        <div appTvRow class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          @for (entry of favoriteEntries(); track entry.channel.id) {
-            <ng-container [ngTemplateOutlet]="card" [ngTemplateOutletContext]="{ $implicit: entry }" />
-          }
-        </div>
+    @if (noResults()) {
+      <div class="flex flex-col items-center gap-3 py-16 text-center">
+        <svg lucideSearch class="h-10 w-10 text-base-content/30"></svg>
+        <p class="text-base-content/60 max-w-md">{{ 'liveTv.on_now.no_results' | translate }}</p>
       </div>
-    }
-
-    <div appTvSection class="flex flex-col gap-4">
-      @for (group of groupedEntries(); track group.groupName) {
+    } @else if (isEmpty()) {
+      <div class="flex flex-col items-center gap-3 py-16 text-center">
+        <svg lucideTv class="h-10 w-10 text-base-content/30"></svg>
+        <p class="text-base-content/60 max-w-md">{{ 'liveTv.empty_no_channels' | translate }}</p>
+        @if (auth.user()?.isAdmin) {
+          <a routerLink="/admin/settings/live-tv" class="btn btn-primary btn-sm">
+            {{ 'liveTv.empty_go_to_settings' | translate }}
+          </a>
+        }
+      </div>
+    } @else {
+      @if (favoriteEntries().length > 0) {
         <div class="flex flex-col gap-2">
           <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wide">
-            {{ group.groupName | liveTvGroupLabel }}
+            {{ 'liveTv.favorites' | translate }}
           </h2>
           <div appTvRow class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            @for (entry of group.items; track entry.channel.id) {
+            @for (entry of favoriteEntries(); track entry.channel.id) {
               <ng-container [ngTemplateOutlet]="card" [ngTemplateOutletContext]="{ $implicit: entry }" />
             }
           </div>
         </div>
       }
-    </div>
 
-    @if (hasMore()) {
-      <div #sentinel class="flex justify-center py-2">
-        @if (loadingMore()) {
-          <span class="loading loading-spinner loading-sm"></span>
+      <div appTvSection class="flex flex-col gap-4">
+        @for (group of groupedEntries(); track group.groupName) {
+          <div class="flex flex-col gap-2">
+            <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wide">
+              {{ group.groupName | liveTvGroupLabel }}
+            </h2>
+            <div appTvRow class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              @for (entry of group.items; track entry.channel.id) {
+                <ng-container [ngTemplateOutlet]="card" [ngTemplateOutletContext]="{ $implicit: entry }" />
+              }
+            </div>
+          </div>
         }
       </div>
+
+      @if (hasMore()) {
+        <div #sentinel class="flex justify-center py-2">
+          @if (loadingMore()) {
+            <span class="loading loading-spinner loading-sm"></span>
+          }
+        </div>
+      }
     }
   }
 </div>

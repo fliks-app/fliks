@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnInit, inject, signal, computed, viewChild } from '@angular/core';
+import { Component, ElementRef, OnInit, OnDestroy, inject, signal, computed, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ToastService } from '../../../../core/services/toast.service';
@@ -8,6 +8,7 @@ import {
   AdminChannel,
   AdminSource,
   BulkChannelSelection,
+  UpdateAdminChannelBody,
 } from '../../../../core/services/api/livetv-api.service';
 import { PaginationComponent } from '../../../../shared/components/pagination/pagination';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
@@ -17,6 +18,8 @@ import { EnabledSwitchComponent } from '../../../../shared/components/enabled-sw
 import { LiveTvGroupLabelPipe } from '../../../../core/pipes/live-tv-group-label.pipe';
 
 const PAGE_SIZE = 25;
+/** Same debounce as the on-now search field (live-tv.ts). */
+const QUERY_DEBOUNCE_MS = 300;
 /** Above this row count, a bulk-by-filter action asks for confirmation first. */
 const BULK_CONFIRM_THRESHOLD = 50;
 /** One request big enough to cover a real lineup for duplicate detection. */
@@ -50,13 +53,15 @@ function normalizeChannelName(name: string): string {
   ],
   templateUrl: './live-tv-channels.html',
 })
-export class LiveTvChannelsComponent implements OnInit {
+export class LiveTvChannelsComponent implements OnInit, OnDestroy {
   private readonly api = inject(LiveTvApiService);
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
   private readonly mergeDialog = viewChild<ElementRef<HTMLDialogElement>>('mergeDialog');
+  private loadSeq = 0;
+  private queryDebounce: ReturnType<typeof setTimeout> | null = null;
 
   readonly sources = signal<AdminSource[]>([]);
   readonly rows = signal<AdminChannel[]>([]);
@@ -108,7 +113,12 @@ export class LiveTvChannelsComponent implements OnInit {
     void this.load();
   }
 
+  ngOnDestroy(): void {
+    if (this.queryDebounce) clearTimeout(this.queryDebounce);
+  }
+
   async load(): Promise<void> {
+    const seq = ++this.loadSeq;
     this.loading.set(true);
     try {
       const res = await this.api.listAdminChannels({
@@ -119,6 +129,7 @@ export class LiveTvChannelsComponent implements OnInit {
         page: this.page(),
         pageSize: PAGE_SIZE,
       });
+      if (seq !== this.loadSeq) return; // a newer search/filter already landed
       // Defaulted: a payload missing a list must not take the whole page down
       // through the computeds that read it.
       const items = res.items ?? [];
@@ -131,8 +142,24 @@ export class LiveTvChannelsComponent implements OnInit {
     } catch {
       // handled by the global error interceptor
     } finally {
-      this.loading.set(false);
+      if (seq === this.loadSeq) this.loading.set(false);
     }
+  }
+
+  /** After a bulk action, a shrunk result set can leave the current page past
+   *  the end; land on the last real page instead of showing it empty. */
+  private async reload(): Promise<void> {
+    await this.load();
+    if (this.page() > this.totalPages()) {
+      this.page.set(this.totalPages());
+      await this.load();
+    }
+  }
+
+  onQueryInput(value: string): void {
+    this.query.set(value);
+    if (this.queryDebounce) clearTimeout(this.queryDebounce);
+    this.queryDebounce = setTimeout(() => this.onFilterChange(), QUERY_DEBOUNCE_MS);
   }
 
   onFilterChange(): void {
@@ -211,7 +238,7 @@ export class LiveTvChannelsComponent implements OnInit {
       await this.api.bulkUpdateChannels({ selection: this.buildSelection(), ...patch });
       this.toast.success(this.translate.instant('bulk.done', { count }));
       this.clearSelection();
-      await this.load();
+      await this.reload();
     } catch {
       // handled by the global error interceptor
     } finally {
@@ -276,7 +303,7 @@ export class LiveTvChannelsComponent implements OnInit {
         this.duplicateGroups.update((groups) => groups.filter((g) => g.key !== key));
         this.mergingDuplicateKey = null;
       }
-      await this.load();
+      await this.reload();
     } catch {
       // handled by the global error interceptor
     } finally {
@@ -318,7 +345,7 @@ export class LiveTvChannelsComponent implements OnInit {
     this.togglingId.set(row.id);
     try {
       await this.api.updateChannel(row.id, { enabled: !row.enabled });
-      await this.load();
+      await this.reload();
     } catch {
       // handled by the global error interceptor
     } finally {
@@ -344,18 +371,26 @@ export class LiveTvChannelsComponent implements OnInit {
   async saveEdit(): Promise<void> {
     const row = this.editingRow();
     if (!row) return;
+    const name = this.editName().trim();
+    if (!name) return;
+    // Only send what changed: the backend marks groupName/guideChannelId
+    // manual just for being present, and neither can be cleared back to auto.
+    const patch: UpdateAdminChannelBody = {};
+    if (name !== row.name) patch.name = name;
+    if (this.editNumber() !== row.number) patch.number = this.editNumber();
+    const group = this.editGroup().trim();
+    if (group && group !== (row.groupName ?? '')) patch.groupName = group;
+    if (this.editEnabled() !== row.enabled) patch.enabled = this.editEnabled();
+    const guideId = this.editGuideId().trim();
+    if (guideId && guideId !== (row.guideChannelId ?? '')) patch.guideChannelId = guideId;
+    if (this.editShiftMinutes() !== row.guideShiftMinutes) {
+      patch.guideShiftMinutes = this.editShiftMinutes();
+    }
     this.saving.set(true);
     try {
-      await this.api.updateChannel(row.id, {
-        name: this.editName().trim(),
-        number: this.editNumber(),
-        groupName: this.editGroup().trim() || undefined,
-        enabled: this.editEnabled(),
-        guideChannelId: this.editGuideId().trim() || undefined,
-        guideShiftMinutes: this.editShiftMinutes(),
-      });
+      await this.api.updateChannel(row.id, patch);
       this.closeEditor();
-      await this.load();
+      await this.reload();
     } catch {
       // handled by the global error interceptor
     } finally {

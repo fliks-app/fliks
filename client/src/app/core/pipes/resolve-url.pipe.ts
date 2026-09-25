@@ -42,7 +42,9 @@ export class ResolveUrlPipe implements PipeTransform {
   transform(url: string | null | undefined, size?: ImageSize): string | null {
     if (!url) return null;
     let resolved = size ? imageUrlWithSize(url, size) : url;
-    resolved = withLiveTvLogoToken(resolved, this.auth.playbackToken);
+    // Web already carries the auth cookie same-origin; only a native/TV client
+    // needs the token riding in the query.
+    if (this.config.isNative) resolved = withLiveTvLogoToken(resolved, this.auth.playbackToken);
     return this.config.resolveUrl(resolved);
   }
 }

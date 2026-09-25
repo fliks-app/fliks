@@ -3,7 +3,12 @@ import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LiveTvApiService, OnNowEntry, OnNowPage } from '../../core/services/api/livetv-api.service';
+import {
+  LiveTvApiService,
+  LiveProgram,
+  OnNowEntry,
+  OnNowPage,
+} from '../../core/services/api/livetv-api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { LiveTvGroupLabelPipe } from '../../core/pipes/live-tv-group-label.pipe';
@@ -55,6 +60,10 @@ export class LiveTvComponent implements OnInit, OnDestroy {
   private observer?: IntersectionObserver;
   private loadSeq = 0;
   private queryDebounce: ReturnType<typeof setTimeout> | null = null;
+  /** Ticks every minute so a finished "now" programme and its progress bar
+   *  don't sit stale until the next unrelated reload. */
+  private readonly clock = signal(Date.now());
+  private clockTimer: ReturnType<typeof setInterval> | null = null;
 
   readonly tab = signal<'on-now' | 'guide'>('on-now');
   readonly loading = signal(true);
@@ -87,6 +96,8 @@ export class LiveTvComponent implements OnInit, OnDestroy {
   readonly isEmpty = computed(
     () => !this.loading() && !this.loadError() && this.entries().length === 0,
   );
+  readonly hasFilters = computed(() => this.query().trim() !== '' || this.groupFilter() !== '');
+  readonly noResults = computed(() => this.isEmpty() && this.hasFilters());
 
   readonly failedLogos = signal<ReadonlySet<number>>(new Set());
 
@@ -101,11 +112,22 @@ export class LiveTvComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     void this.loadGroups();
     void this.load(true);
+    this.clockTimer = setInterval(() => this.onClockTick(), 60_000);
   }
 
   ngOnDestroy(): void {
     this.observer?.disconnect();
     if (this.queryDebounce) clearTimeout(this.queryDebounce);
+    if (this.clockTimer) clearInterval(this.clockTimer);
+  }
+
+  /** A programme that ended since the last fetch would otherwise sit "now"
+   *  forever: reload once any visible entry's programme has lapsed. */
+  private onClockTick(): void {
+    const now = Date.now();
+    this.clock.set(now);
+    const stale = this.entries().some((e) => e.now && new Date(e.now.endsAt).getTime() <= now);
+    if (stale && !this.loading() && !this.loadingMore()) void this.load(true);
   }
 
   private readonly bindSentinel = effect(() => {
@@ -146,9 +168,9 @@ export class LiveTvComponent implements OnInit, OnDestroy {
   async load(reset: boolean): Promise<void> {
     if (reset) {
       this.page.set(1);
-      this.entries.set([]);
-      this.total.set(0);
       this.loadingMore.set(false); // a reset supersedes any pagination fetch in flight
+      // The previous list stays on screen (see `applyPage`) until the new page
+      // lands, so a reload never drops back to the loading skeleton.
     } else if (!this.hasMore() || this.loadingMore() || this.loading()) {
       return;
     }
@@ -167,7 +189,11 @@ export class LiveTvComponent implements OnInit, OnDestroy {
       this.applyPage(res, reset);
       this.loadError.set(false);
     } catch {
-      if (seq === this.loadSeq) this.loadError.set(true);
+      if (seq !== this.loadSeq) return;
+      if (reset) this.loadError.set(true);
+      // A "load more" failure keeps what's already loaded and just stops the
+      // sentinel from retrying; the global interceptor already toasted.
+      else this.total.set(this.entries().length);
     } finally {
       if (seq === this.loadSeq) (reset ? this.loading : this.loadingMore).set(false);
     }
@@ -199,7 +225,12 @@ export class LiveTvComponent implements OnInit, OnDestroy {
     void this.router.navigate(['/watch-live', entry.channel.id]);
   }
 
-  readonly progressPercent = programmeProgressPercent;
+  /** Reads the clock signal so the progress bar re-renders on every tick,
+   *  not just when a fresh page of entries arrives. */
+  progressPercent(program: LiveProgram | null | undefined): number {
+    this.clock();
+    return programmeProgressPercent(program);
+  }
 
   initials(name: string): string {
     return name

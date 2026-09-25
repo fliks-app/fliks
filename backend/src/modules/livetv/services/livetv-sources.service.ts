@@ -262,7 +262,7 @@ export class LiveTvSourcesService {
         kind: dto.kind,
         url: dto.url,
         username: dto.username,
-        password: dto.password,
+        password: await this.resolveTestPassword(dto),
         userAgent: dto.userAgent,
         referer: dto.referer,
       });
@@ -312,6 +312,20 @@ export class LiveTvSourcesService {
         error: errorMessage(err),
       };
     }
+  }
+
+  /** The stored secret never round-trips to the client; fall back to it as
+   *  long as `id` still names a source with this same type and URL. */
+  private async resolveTestPassword(dto: TestLiveTvSourceDto): Promise<string | undefined> {
+    if (dto.password || dto.id == null) return dto.password;
+    const source = await this.sourceRepo
+      .createQueryBuilder('source')
+      .addSelect('source.password')
+      .where('source.id = :id', { id: dto.id })
+      .getOne();
+    return source && source.kind === dto.kind && source.url === dto.url
+      ? (source.password ?? undefined)
+      : dto.password;
   }
 
   // ---------------------------------------------------------------------------

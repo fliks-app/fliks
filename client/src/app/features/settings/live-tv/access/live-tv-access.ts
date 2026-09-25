@@ -132,6 +132,9 @@ export class LiveTvAccessComponent implements OnInit {
       if (!isUnrestricting) next.add(name);
       try {
         const saved = await this.api.setRestrictedGroups([...next]);
+        // Applied before the refetch below: if that one fails, the toggle
+        // itself (already persisted) still shows, instead of snapping back.
+        this.restricted.set(new Set(saved));
         // The PUT only echoes back the restricted names, not exempt/automatic/
         // vanishing — refetch so those badges match what the server just did.
         this.applyAccessView(await this.api.getRestrictedGroups());
