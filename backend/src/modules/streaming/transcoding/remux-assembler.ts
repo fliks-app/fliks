@@ -203,6 +203,7 @@ export class RemuxSegmentAssembler {
   }
 
   private async pump(): Promise<void> {
+    if (this.stopped) return;
     if (!this.delta && !(await this.openRun())) return;
     for (;;) {
       const gops = gopsOf(this.plan, this.next);
