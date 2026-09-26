@@ -928,6 +928,7 @@ export class StreamingController {
         : sessionProfileHash(
             sessionLayout,
             resolved.mediaFile.streamInfo,
+            resolved.absolutePath,
             ss.segmentDuration,
           );
     const kind =

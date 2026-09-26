@@ -41,6 +41,10 @@ export interface PlaybackProfile {
   audioLayout: 'inline' | 'var-stream-map';
   segmentDurationMs: number;
   tvPlatform: TvPlatform;
+  /** Source timeline every run is cut against (`sourceTimeline`): a rescan
+   *  that moves it must not reuse segments timed against the old one. */
+  origin: number;
+  formatStart: number;
 }
 
 /** Segment timeline layout (edit lists, tfdt origin, audio alignment). Raised
@@ -69,6 +73,8 @@ function canonicalise(profile: PlaybackProfile): string {
     `sd=${profile.segmentDurationMs}`,
     `tv=${profile.tvPlatform}`,
     `tl=${SEGMENT_TIMELINE_VERSION}`,
+    `o=${profile.origin}`,
+    `fs=${profile.formatStart}`,
   ].join('|');
 }
 
@@ -114,6 +120,8 @@ export function buildPlaybackProfileFromContext(
     audioLayout: pickAudioLayout(ctx),
     segmentDurationMs,
     tvPlatform: 'browser',
+    origin: ctx?.sourceStartPts ?? 0,
+    formatStart: ctx?.sourceFormatStart ?? ctx?.sourceStartPts ?? 0,
   };
 }
 

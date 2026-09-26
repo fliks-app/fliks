@@ -16,6 +16,8 @@ const BASE: PlaybackProfile = {
   audioLayout: 'inline',
   segmentDurationMs: 3000,
   tvPlatform: 'browser',
+  origin: 0,
+  formatStart: 0,
 };
 
 describe('computeProfileHash', () => {
@@ -26,6 +28,18 @@ describe('computeProfileHash', () => {
 
   it('is deterministic for the same input', () => {
     expect(computeProfileHash(BASE)).toBe(computeProfileHash({ ...BASE }));
+  });
+
+  it('separates sessions cut against a different source timeline', () => {
+    const hash = (ctx: SessionContext) =>
+      computeProfileHash(buildPlaybackProfileFromContext(ctx, 3000));
+    const base = hash({ sourceStartPts: 1.4, sourceFormatStart: 1.4 });
+    expect(hash({ sourceStartPts: 1.483, sourceFormatStart: 1.4 })).not.toBe(
+      base,
+    );
+    expect(hash({ sourceStartPts: 1.4, sourceFormatStart: 1.2 })).not.toBe(
+      base,
+    );
   });
 
   it('changes when any single field changes', () => {
@@ -238,7 +252,7 @@ describe('computeProfileHash — golden values (characterization)', () => {
   // on every refresh. If one of these changes, it is an intentional cache-key
   // migration — bump it deliberately, don't let it drift.
   it('locks the hash for the SDR H.264 baseline', () => {
-    expect(computeProfileHash(BASE)).toMatchInlineSnapshot(`"c77a958170"`);
+    expect(computeProfileHash(BASE)).toMatchInlineSnapshot(`"891457a75c"`);
   });
 
   it('locks the hash for HEVC HDR10 10-bit', () => {
@@ -249,7 +263,7 @@ describe('computeProfileHash — golden values (characterization)', () => {
         videoBitDepth: 10,
         hdr: 'HDR10',
       }),
-    ).toMatchInlineSnapshot(`"657951b5e4"`);
+    ).toMatchInlineSnapshot(`"f3f80612f9"`);
   });
 
   it('locks the hash for a multi-audio E-AC-3 copy var-stream-map session', () => {
@@ -262,7 +276,7 @@ describe('computeProfileHash — golden values (characterization)', () => {
         audioMode: 'copy',
         audioLayout: 'var-stream-map',
       }),
-    ).toMatchInlineSnapshot(`"9f5cf3453e"`);
+    ).toMatchInlineSnapshot(`"33293afb65"`);
   });
 
   it('locks the hash for a Tizen TS 6s-segment session', () => {
@@ -273,6 +287,6 @@ describe('computeProfileHash — golden values (characterization)', () => {
         segmentDurationMs: 6000,
         tvPlatform: 'tizen',
       }),
-    ).toMatchInlineSnapshot(`"108c313c3a"`);
+    ).toMatchInlineSnapshot(`"5726149ad8"`);
   });
 });

@@ -142,7 +142,12 @@ describe('SessionContextBuilder.build', () => {
       username: 'u',
       kind: 'transcode',
       mediaFileId: 1,
-      profileHash: sessionProfileHash(layout(2), file.mediaFile.streamInfo, 3),
+      profileHash: sessionProfileHash(
+        layout(2),
+        file.mediaFile.streamInfo,
+        'f',
+        3,
+      ),
       ...layout(2),
     });
     sessionRouter.findRequestSession.mockReturnValue(live);
@@ -154,7 +159,7 @@ describe('SessionContextBuilder.build', () => {
     );
     expect(live.profileHash).toBe(requestHash);
     expect(
-      sessionProfileHash(layout(6), file.mediaFile.streamInfo, 3),
+      sessionProfileHash(layout(6), file.mediaFile.streamInfo, 'f', 3),
     ).not.toBe(requestHash);
     registry.onModuleDestroy();
   });

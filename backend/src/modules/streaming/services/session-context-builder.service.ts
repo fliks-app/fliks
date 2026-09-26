@@ -28,6 +28,7 @@ export function sessionLayoutContext(
     | null
     | undefined,
   si: MediaFileInfo | null | undefined,
+  label: string,
 ): Pick<
   SessionContext,
   | 'useTs'
@@ -36,8 +37,12 @@ export function sessionLayoutContext(
   | 'audioPlan'
   | 'audioTrackPlans'
   | 'videoVariant'
+  | 'sourceStartPts'
+  | 'sourceFormatStart'
+  | 'sourceEndSeconds'
 > {
   const useTs = live?.useTs ?? false;
+  const timeline = sourceTimeline(si, label);
   return {
     useTs,
     // Multi-audio: produce video-only segments and let ffmpeg's var_stream_map
@@ -55,6 +60,12 @@ export function sessionLayoutContext(
     // Variant chosen by stream-builder's codec selector; undefined only before
     // a sid exists (routes through the userId-based findCurrent fallback).
     videoVariant: live?.videoVariant ?? undefined,
+    sourceStartPts: timeline.origin,
+    sourceFormatStart: timeline.formatStart,
+    sourceEndSeconds:
+      si?.durationSeconds != null
+        ? timeline.formatStart + si.durationSeconds
+        : undefined,
   };
 }
 
@@ -63,11 +74,12 @@ export function sessionLayoutContext(
 export function sessionProfileHash(
   live: Parameters<typeof sessionLayoutContext>[0],
   si: MediaFileInfo | null | undefined,
+  label: string,
   segmentDurationSeconds: number,
 ): string {
   return computeProfileHash(
     buildPlaybackProfileFromContext(
-      sessionLayoutContext(live, si),
+      sessionLayoutContext(live, si, label),
       segmentDurationSeconds * 1000,
     ),
   );
@@ -95,9 +107,8 @@ export class SessionContextBuilder {
     const user = req.user as User | undefined;
     const si = resolved.mediaFile.streamInfo;
     const live = this.sessionRouter.findRequestSession(req, mediaFileId);
-    const timeline = sourceTimeline(si, resolved.absolutePath);
     return {
-      ...sessionLayoutContext(live, si),
+      ...sessionLayoutContext(live, si, resolved.absolutePath),
       userId: user?.id,
       username: user?.username,
       instanceSuffix: live?.instanceId ?? undefined,
@@ -121,12 +132,6 @@ export class SessionContextBuilder {
       // accurate GOP so IDR frames fall on the same boundary regardless of
       // source fps. Falls back to 24 when unknown.
       sourceFps: parseSourceFps(si?.video?.[0]?.frameRate),
-      sourceStartPts: timeline.origin,
-      sourceFormatStart: timeline.formatStart,
-      sourceEndSeconds:
-        si?.durationSeconds != null
-          ? timeline.formatStart + si.durationSeconds
-          : undefined,
       videoStreamIndex: si?.video?.[0]?.streamIndex,
       // Source colorimetry — preserved through an SDR transcode so the output
       // signals the source's real matrix/primaries/transfer, not a forced BT.709.
