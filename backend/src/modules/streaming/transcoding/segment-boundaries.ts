@@ -118,6 +118,41 @@ export function parseVideoPackets(
   };
 }
 
+/** The MPEG-TS demuxer seeks to a byte position and decoding picks up at the
+ *  next keyframe, so a seek lands up to a GOP after its target; the others
+ *  land on the keyframe at or before it. Unknown formats are assumed to. */
+export function seeksPastKeyframe(formatName: string | undefined): boolean {
+  return formatName == null || formatName.split(',').includes('mpegts');
+}
+
+/** Longest GOP a keyframe is looked for behind a seek target. */
+const MAX_GOP_SECONDS = 64;
+
+/** The last video keyframe presented at or before `seconds` (source time),
+ *  read from a widening window of packets ahead of it. */
+export async function keyframeAtOrBefore(
+  filePath: string,
+  videoStreamIndex: number | undefined,
+  seconds: number,
+): Promise<Keyframe | null> {
+  const select = videoStreamIndex != null ? String(videoStreamIndex) : 'v:0';
+  for (let window = 4; window <= MAX_GOP_SECONDS; window *= 2) {
+    const { stdout } = await execFileAsync(
+      'ffprobe',
+      [
+        '-v', 'error', '-select_streams', select,
+        '-read_intervals', `${seconds - window}%${seconds}`,
+        '-show_entries', 'packet=pts_time,dts_time,duration_time,flags',
+        '-of', 'csv=p=0', filePath,
+      ],
+      { maxBuffer: 64 * 1024 * 1024, timeout: 30_000 },
+    );
+    const before = parseVideoPackets(stdout).keyframes.filter((k) => k.pts <= seconds);
+    if (before.length) return before[before.length - 1];
+  }
+  return null;
+}
+
 /**
  * Group the keyframes into segments of about `segDur`: a segment ends at the
  * first keyframe at or past a target that starts one `segDur` after the first

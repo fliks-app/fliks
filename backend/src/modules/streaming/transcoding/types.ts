@@ -131,7 +131,9 @@ export interface SessionContext {
   sourceStartPts?: number;
   /** Container start the input `-ss` counts from (`sourceTimeline`). */
   sourceFormatStart?: number;
-  /** Source time the container ends at: transcoded audio is padded up to it. */
+  /** ffprobe `format_name`: how the demuxer seeks (`seeksPastKeyframe`). */
+  sourceFormatName?: string;
+  /** Source time the video ends at: transcoded audio is padded up to it. */
   sourceEndSeconds?: number;
   /** Absolute index of the programme video stream. */
   videoStreamIndex?: number;

@@ -29,7 +29,11 @@ import {
   type BuildFfmpegArgsOptions,
 } from './ffmpeg-args';
 import { RemuxSegmentAssembler, remuxAssemblyPlan } from './remux-assembler';
-import type { SegmentGrid } from './segment-boundaries';
+import {
+  keyframeAtOrBefore,
+  seeksPastKeyframe,
+  type SegmentGrid,
+} from './segment-boundaries';
 import { varStreamMapLayout } from './audio-layout';
 import {
   matchTimingWarnings,
@@ -632,7 +636,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         // this run's at the boundary and stalls the player. Keeps the cache to
         // a single timeline forward of the restart point.
         await purgeSegmentsFrom(dir, restartAt);
-        const restarted = this.startSeekSession(
+        const restarted = await this.startSeekSession(
           key,
           mediaFileId,
           quality,
@@ -672,7 +676,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     // start so the forward path never crosses a backward tfdt jump (see
     // purgeSegmentsFrom). A cold first play finds nothing to drop.
     await purgeSegmentsFrom(sessionDir, requestedSegment);
-    const session = this.startFfmpeg(
+    const session = await this.startFfmpeg(
       key,
       mediaFileId,
       quality,
@@ -752,7 +756,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           });
         }
       }
-      const cpuSession = this.startFfmpeg(
+      const cpuSession = await this.startFfmpeg(
         key,
         mediaFileId,
         quality,
@@ -1163,7 +1167,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return session;
   }
 
-  private startFfmpeg(
+  private async startFfmpeg(
     sessionId: string,
     mediaFileId: number,
     quality: string,
@@ -1173,20 +1177,23 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     hwAccel: HwAccelType,
     startSegment = 0,
     ctx?: SessionContext,
-  ): TranscodeSession {
+  ): Promise<TranscodeSession> {
     const isVideoOnly = ctx?.videoOnly ?? false;
     const audioStreams = ctx?.audioStreams;
 
     const args = buildFfmpegArgs(
-      this.buildArgsOptionsFromCtx(ctx, {
-        inputPath: absolutePath,
-        outputDir: sessionDir,
-        profile,
-        hwAccel,
-        startSegment,
-        videoOnly: isVideoOnly,
-        audioStreams,
-      }),
+      {
+        ...this.buildArgsOptionsFromCtx(ctx, {
+          inputPath: absolutePath,
+          outputDir: sessionDir,
+          profile,
+          hwAccel,
+          startSegment,
+          videoOnly: isVideoOnly,
+          audioStreams,
+        }),
+        seekKeyframeDts: await this.seekKeyframeDts(absolutePath, startSegment, ctx),
+      },
       this.log,
     );
 
@@ -1209,7 +1216,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return session;
   }
 
-  private startSeekSession(
+  private async startSeekSession(
     sessionId: string,
     mediaFileId: number,
     quality: string,
@@ -1217,12 +1224,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     sessionDir: string,
     startSegment: number,
     ctx?: SessionContext,
-  ): TranscodeSession {
+  ): Promise<TranscodeSession> {
     const ladder = isHdrProfile(quality)
       ? getHdrLadderForDevice(ctx?.deviceType)
       : getLadderForDevice(ctx?.deviceType);
     const profile = ladder.find((p) => p.name === quality) ?? ladder[0];
-    const session = this.startFfmpeg(
+    const session = await this.startFfmpeg(
       sessionId,
       mediaFileId,
       quality,
@@ -1539,6 +1546,32 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
    *  paths; only the call-specific fields below differ. One source keeps the two
    *  spawns from drifting when a field is added (the "fix one, miss the other"
    *  trap). */
+  /** Where a demuxer that lands after its seek target must seek for a run to
+   *  decode from a keyframe at or before its first frame (`seeksPastKeyframe`). */
+  private async seekKeyframeDts(
+    absolutePath: string,
+    startSegment: number,
+    ctx?: SessionContext,
+  ): Promise<number | undefined> {
+    if (startSegment <= 0 || !seeksPastKeyframe(ctx?.sourceFormatName)) return undefined;
+    const start =
+      segmentIndexToSeconds(
+        startSegment,
+        ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION,
+        ctx?.sourceFps,
+      ) + (ctx?.sourceStartPts ?? 0);
+    const keyframe = await keyframeAtOrBefore(absolutePath, ctx?.videoStreamIndex, start).catch(
+      (err: Error) => {
+        this.log.warn(`Keyframe probe before ${start}s of ${absolutePath} failed: ${err.message}`);
+        return null;
+      },
+    );
+    if (!keyframe) {
+      this.log.warn(`No keyframe found before ${start}s of ${absolutePath}; the run may start late`);
+    }
+    return keyframe?.dts;
+  }
+
   private buildArgsOptionsFromCtx(
     ctx: SessionContext | undefined,
     call: {

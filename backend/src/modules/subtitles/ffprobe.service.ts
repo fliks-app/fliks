@@ -216,6 +216,8 @@ export interface MediaFileInfo {
   /** Container `start_time`: the earliest stream start, where an input `-ss`
    *  and a timestamp-rebasing extract count from. */
   formatStartSeconds?: number;
+  /** ffprobe `format_name` (`mpegts`, `matroska,webm`, …): how the demuxer seeks. */
+  formatName?: string;
   durationSeconds?: number;
   /** Embedded chapter markers from the container (MKV/MP4). Empty if none. */
   chapters?: Chapter[];
@@ -552,7 +554,12 @@ export class FfprobeService {
 
       const parsed = JSON.parse(stdout) as {
         streams?: FfprobeStream[];
-        format?: { duration?: string; bit_rate?: string; start_time?: string };
+        format?: {
+          duration?: string;
+          bit_rate?: string;
+          start_time?: string;
+          format_name?: string;
+        };
         chapters?: {
           start_time?: string;
           end_time?: string;
@@ -679,6 +686,7 @@ export class FfprobeService {
           subtitles: [],
           formatBitRate,
           formatStartSeconds,
+          formatName: parsed.format?.format_name,
           durationSeconds,
           chapters,
           error: 'No streams detected',
@@ -690,6 +698,7 @@ export class FfprobeService {
         subtitles,
         formatBitRate,
         formatStartSeconds,
+        formatName: parsed.format?.format_name,
         durationSeconds,
         chapters,
       };

@@ -97,6 +97,13 @@ describe('transcode resume seek', () => {
     expect(last(args, '-ss')).toBe(String(Number((seek + 4.2).toFixed(6))));
   });
 
+  it('seeks a demuxer that lands past its target to the keyframe before the run', () => {
+    // MPEG-TS from 2.779: the run at 11.8 decodes from the keyframe at dts 10.72.
+    const args = tx({ sourceStartPts: 2.8, sourceFormatStart: 2.779, startSegment: 3, seekKeyframeDts: 10.72 });
+    expect(after(args, '-ss')).toBe('7.941');
+    expect(last(args, '-ss')).toBe(String(3 * realSegmentSeconds(3, 25) + 2.8));
+  });
+
   it('keeps the seek when the container starts with the video', () => {
     const args = tx({ sourceStartPts: 2.8, startSegment: 20 });
     expect(after(args, '-ss')).toBe(String(seek));

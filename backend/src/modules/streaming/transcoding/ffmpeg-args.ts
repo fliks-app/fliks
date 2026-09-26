@@ -410,7 +410,11 @@ export interface BuildFfmpegArgsOptions {
   sourceStartPts?: number;
   /** Container start the input `-ss` counts from. Defaults to `sourceStartPts`. */
   sourceFormatStart?: number;
-  /** Source time the container ends at: encoded audio is padded up to it. */
+  /** Decode time of the last keyframe at or before a seeked run's first frame,
+   *  for a demuxer that lands after its seek target (`seeksPastKeyframe`): the
+   *  input seek goes there so decoding starts on it. */
+  seekKeyframeDts?: number;
+  /** Source time the video ends at: encoded audio is padded up to it. */
   sourceEndSeconds?: number;
   /** Absolute index of the programme video stream. */
   videoStreamIndex?: number;
@@ -859,6 +863,7 @@ export function buildFfmpegArgs(
     audioTrackPlans,
     sourceStartPts = 0,
     sourceFormatStart = sourceStartPts,
+    seekKeyframeDts,
     sourceEndSeconds,
     videoStreamIndex,
     encoderPreset = 'faster',
@@ -948,10 +953,12 @@ export function buildFfmpegArgs(
     args.push(
       '-ss',
       formatSeconds(
-        inputSeekSeconds(seekSeconds, {
-          origin: sourceStartPts,
-          formatStart: sourceFormatStart,
-        }),
+        seekKeyframeDts != null
+          ? seekKeyframeDts - sourceFormatStart
+          : inputSeekSeconds(seekSeconds, {
+              origin: sourceStartPts,
+              formatStart: sourceFormatStart,
+            }),
       ),
     );
   }
@@ -1353,7 +1360,7 @@ export interface BuildRemuxArgsOptions {
   sourceStartPts?: number;
   /** Absolute index of the programme video stream. */
   videoStreamIndex?: number;
-  /** Source time the container ends at: encoded audio is padded up to it. */
+  /** Source time the video ends at: encoded audio is padded up to it. */
   sourceEndSeconds?: number;
   /** Audio output of `audioStreamIndex`; AAC stereo when absent. */
   audioPlan?: AudioPlan;

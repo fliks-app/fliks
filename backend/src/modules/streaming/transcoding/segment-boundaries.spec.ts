@@ -2,6 +2,7 @@ import {
   computeSegmentGrid,
   parseVideoPackets,
   secondsToSegmentIndex,
+  seeksPastKeyframe,
   type Keyframe,
 } from './segment-boundaries';
 
@@ -91,5 +92,14 @@ describe('secondsToSegmentIndex', () => {
     const ts = [2.8, 5.8, 8.8, 11.8, 14.8, 17.8, 20.8, 23.8, 26.8];
     expect(secondsToSegmentIndex(ts, 20, 2.8)).toBe(6);
     expect(secondsToSegmentIndex(ts, 17.9, 2.8)).toBe(5);
+  });
+});
+
+describe('seeksPastKeyframe', () => {
+  it('is MPEG-TS, and anything unprobed', () => {
+    expect(seeksPastKeyframe('mpegts')).toBe(true);
+    expect(seeksPastKeyframe(undefined)).toBe(true);
+    expect(seeksPastKeyframe('matroska,webm')).toBe(false);
+    expect(seeksPastKeyframe('mov,mp4,m4a,3gp,3g2,mj2')).toBe(false);
   });
 });
