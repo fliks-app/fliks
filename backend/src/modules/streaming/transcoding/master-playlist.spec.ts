@@ -231,8 +231,31 @@ describe('generateMasterPlaylist — audio bitrate in BANDWIDTH', () => {
   it('folds the encode bitrate of the top rung into AVERAGE-BANDWIDTH', () => {
     const hi = generateMasterPlaylist({ ...base, audioPlans: [eac3] });
     const lo = generateMasterPlaylist({ ...base, audioPlans: [aac] });
-    // Same video rungs; only the audio differs: 640k against the 192k budget.
-    expect(maxAvgBandwidth(hi) - maxAvgBandwidth(lo)).toBe(448_000);
+    // Same video rungs; only the audio differs: 5.1 takes three 192k pairs.
+    expect(maxAvgBandwidth(hi) - maxAvgBandwidth(lo)).toBe(384_000);
+  });
+
+  it('declares each rung its own audio bitrate, a copy its source one', () => {
+    const avg = (m: string, rung: string) =>
+      Number(
+        new RegExp(`AVERAGE-BANDWIDTH=(\\d+),[^\\n]*NAME="${rung}"`).exec(
+          m,
+        )![1],
+      );
+    const enc = generateMasterPlaylist({ ...base, audioPlans: [eac3] });
+    const none = generateMasterPlaylist({
+      ...base,
+      audioStreams: [],
+    });
+    // 480p's 96k stereo budget: 288k of E-AC-3 5.1, not the top rung's 576k.
+    expect(avg(enc, '480p') - avg(none, '480p')).toBe(288_000);
+    const atmos = generateMasterPlaylist({
+      ...base,
+      audioPlans: [
+        { mode: 'copy', codec: 'eac3', channels: 6, bitrateBps: 768_000 },
+      ],
+    });
+    expect(avg(atmos, '480p') - avg(none, '480p')).toBe(768_000);
   });
 
   it('counts the heaviest rendition of a group', () => {

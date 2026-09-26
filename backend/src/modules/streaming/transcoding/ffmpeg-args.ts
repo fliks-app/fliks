@@ -1314,15 +1314,9 @@ export function remuxRunStart(
 /** The packet grid `buildRemuxArgs` encodes the picked track on, if encoded. */
 export function remuxAudioGrid(
   audioPlan: AudioPlan | undefined,
-  audioStreams: AudioStreamMeta[] | undefined,
-  audioStreamIndex: number | undefined,
 ): PacketGrid | null {
-  const plan = audioPlan ?? { mode: 'transcode' as const, codec: 'aac' as const };
-  if (plan.mode === 'copy') return null;
-  return encodedPacketGrid(
-    plan.codec,
-    audioStreams?.[audioStreamIndex ?? 0]?.sampleRate,
-  );
+  const plan = audioPlan ?? DEFAULT_AUDIO_PLAN;
+  return plan.mode === 'copy' ? null : encodedPacketGrid(plan.codec);
 }
 
 /** Stereo audio budget of a remux encode: the source-resolution rung's. */

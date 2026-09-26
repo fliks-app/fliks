@@ -27,8 +27,6 @@ export interface AudioStreamMeta {
   /** Source channel count (from ffprobe streamInfo): the EXT-X-MEDIA
    *  CHANNELS fallback when the session carries no per-track plan. */
   channels?: number;
-  /** Source sample rate: sets the packet grid an encode of the track lands on. */
-  sampleRate?: number;
 }
 
 /**

@@ -1,6 +1,11 @@
 import { audioStartAlignFilter, perStreamAudioArgs } from './ffmpeg-args';
 import type { AudioStreamMeta } from './types';
-import type { AudioEncodeCodec, AudioPlan } from './audio-encode';
+import {
+  audioEncodeBitrateBps,
+  audioOutputBitrateBps,
+  type AudioEncodeCodec,
+  type AudioPlan,
+} from './audio-encode';
 
 const enc = (alignStartSeconds: number, useTs = false) => ({
   stereoBitrate: '128k',
@@ -55,9 +60,9 @@ describe('perStreamAudioArgs', () => {
     expect(joined).toContain('-c:a:0 eac3');
     expect(joined).toContain('-ac:a:0 6');
     expect(joined).toContain('-ac:a:1 6');
-    // Surround bitrate is the named constant (640k), pinned here so it can't
-    // drift from the master-playlist BANDWIDTH that honours the same value.
-    expect(joined).toContain('-b:a:0 640k');
+    // Three times the 128k stereo budget.
+    expect(joined).toContain('-b:a:0 384k');
+    expect(joined).toContain('-ar:a:1 48000');
   });
 
   it('copies a fitting rendition without a channel arg', () => {
@@ -79,6 +84,8 @@ describe('perStreamAudioArgs', () => {
       '128k',
       '-ac:a:1',
       '2',
+      '-ar:a:1',
+      '48000',
       '-filter:a:1',
       'asetpts=PTS-0/TB,aresample=async=1:first_pts=0,asetpts=PTS+0/TB',
     ]);
@@ -158,8 +165,36 @@ describe('perStreamAudioArgs — codec policy', () => {
     expect(at('aac', 6)).toBe('384k');
     expect(at('aac', 8)).toBe('512k');
     expect(at('opus', 6)).toBe('384k');
-    expect(at('eac3', 2)).toBe('640k');
-    expect(at('ac3', 6)).toBe('640k');
+    expect(at('eac3', 2)).toBe('128k');
+    expect(at('ac3', 6)).toBe('384k');
+  });
+
+  it('keeps a Dolby encode within the recommended range of its layout', () => {
+    // Floors: AC-3 192k stereo and 384k 5.1, E-AC-3 two thirds of those.
+    expect(audioEncodeBitrateBps('eac3', 6, 64_000)).toBe(256_000);
+    expect(audioEncodeBitrateBps('ac3', 6, 64_000)).toBe(384_000);
+    expect(audioEncodeBitrateBps('ac3', 2, 64_000)).toBe(192_000);
+    expect(audioEncodeBitrateBps('eac3', 2, 64_000)).toBe(128_000);
+    // The stereo budget of a high rung, per channel pair, up to 640k.
+    expect(audioEncodeBitrateBps('eac3', 6, 192_000)).toBe(576_000);
+    expect(audioEncodeBitrateBps('eac3', 6, 256_000)).toBe(640_000);
+    // AC-3 only carries its own rates: 480k becomes 512k, never less.
+    expect(audioEncodeBitrateBps('ac3', 6, 160_000)).toBe(512_000);
+  });
+
+  it('declares a copy at its source bitrate, else at what an encode would take', () => {
+    expect(
+      audioOutputBitrateBps(
+        { mode: 'copy', codec: 'eac3', channels: 6, bitrateBps: 768_000 },
+        96_000,
+      ),
+    ).toBe(768_000);
+    expect(
+      audioOutputBitrateBps(
+        { mode: 'copy', codec: 'truehd', channels: 8 },
+        96_000,
+      ),
+    ).toBe(384_000);
   });
 
   it('pads an encoded rendition up to the video end', () => {

@@ -269,9 +269,10 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
   const codecsTail = noAudio || !audioCodec ? '' : `,${audioCodec}`;
   // BANDWIDTH is a peak, so a rung counts its heaviest rendition.
   const rungAudioBps = (p: TranscodeProfile): number => {
+    if (noAudio) return 0;
     const stereo = parseBitrateToBps(p.audioBitrate);
     return Math.max(
-      ...plans.map((plan) => audioOutputBitrateBps(plan, stereo) ?? stereo),
+      ...plans.map((plan) => audioOutputBitrateBps(plan, stereo)),
     );
   };
 

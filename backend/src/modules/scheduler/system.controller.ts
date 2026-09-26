@@ -188,10 +188,14 @@ function deriveAudioOutput(
       audioMode: audioPlan.mode,
       audioOutputCodec: audioPlan.codec,
       audioOutputBitrateBps:
-        audioOutputBitrateBps(
-          audioPlan,
-          parseBitrateToBps(rung?.audioBitrate ?? REMUX_STEREO_AUDIO_BITRATE),
-        ) ?? null,
+        audioPlan.mode === 'copy'
+          ? (audioPlan.bitrateBps ?? null)
+          : audioOutputBitrateBps(
+              audioPlan,
+              parseBitrateToBps(
+                rung?.audioBitrate ?? REMUX_STEREO_AUDIO_BITRATE,
+              ),
+            ),
     };
   }
   return {

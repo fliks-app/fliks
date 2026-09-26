@@ -1330,7 +1330,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       requestedSegment,
       segmentDuration,
       ctx?.sourceStartPts ?? 0,
-      remuxAudioGrid(ctx?.audioPlan, ctx?.audioStreams, ctx?.audioStreamIndex),
+      remuxAudioGrid(ctx?.audioPlan),
     );
     await fsp.mkdir(sessionDir, { recursive: true });
     // Per run: a run still being reaped must not delete this one's GOPs.

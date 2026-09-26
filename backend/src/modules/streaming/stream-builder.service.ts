@@ -575,6 +575,7 @@ export class StreamBuilderService {
           mode: 'copy',
           codec: (t.codec ?? '').toLowerCase(),
           channels: t.channels,
+          bitrateBps: t.bitRate,
         },
         reasonFlags: [],
       }));
@@ -657,14 +658,8 @@ export class StreamBuilderService {
     const audioPlans = groupDecisions.map((d) => d.plan);
     const pickedTrack = audioTracks[pickedAudio];
     const audioPlan = pickedDecision?.plan ?? DEFAULT_AUDIO_PLAN;
-    const rungAudioBps = (p: TranscodeProfile): number => {
-      const stereo = parseBitrateToBps(p.audioBitrate);
-      return (
-        audioOutputBitrateBps(audioPlan, stereo) ??
-        source.audioBitRate ??
-        stereo
-      );
-    };
+    const rungAudioBps = (p: TranscodeProfile): number =>
+      audioOutputBitrateBps(audioPlan, parseBitrateToBps(p.audioBitrate));
     const canCopyAudio = audioPlan.mode === 'copy';
     const outputAudioCodec = audioPlan.codec;
     reasons.push(
@@ -1040,7 +1035,12 @@ export class StreamBuilderService {
         codec === groupCodec && codecSupported && fmp4Safe && !channelsExceed;
       if (copyable && !blocker) {
         return {
-          plan: { mode: 'copy', codec: groupCodec, channels },
+          plan: {
+            mode: 'copy',
+            codec: groupCodec,
+            channels,
+            bitrateBps: t.bitRate,
+          },
           reasonFlags: [],
         };
       }
