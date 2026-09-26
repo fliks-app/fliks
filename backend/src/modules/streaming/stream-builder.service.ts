@@ -576,6 +576,7 @@ export class StreamBuilderService {
           codec: (t.codec ?? '').toLowerCase(),
           channels: t.channels,
           bitrateBps: t.bitRate,
+          profile: t.profile,
         },
         reasonFlags: [],
       }));
@@ -1040,6 +1041,7 @@ export class StreamBuilderService {
             codec: groupCodec,
             channels,
             bitrateBps: t.bitRate,
+            profile: t.profile,
           },
           reasonFlags: [],
         };

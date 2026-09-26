@@ -22,7 +22,10 @@ import {
   iframeBandwidthBps,
   iframeResolution,
 } from './iframe-trick-play';
-import { audioCodecString } from './codec/codec-strings';
+import {
+  audioChannelsAttr,
+  audioGroupCodecString,
+} from './codec/codec-strings';
 import {
   buildUniqueAudioNames,
   emitAudioRenditions,
@@ -265,7 +268,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
   const plans = audioPlans?.length ? audioPlans : [DEFAULT_AUDIO_PLAN];
   // A group shares one output codec (`decideAudio`).
   const outputAudioCodec = plans[0].codec;
-  const audioCodec = audioCodecString(outputAudioCodec);
+  const audioCodec = audioGroupCodecString(plans);
   const codecsTail = noAudio || !audioCodec ? '' : `,${audioCodec}`;
   // BANDWIDTH is a peak, so a rung counts its heaviest rendition.
   const rungAudioBps = (p: TranscodeProfile): number => {
@@ -323,7 +326,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
       outputAudioCodec,
       mediaFileId,
       tokenParam,
-      plans.map((p) => p.channels),
+      plans.map(audioChannelsAttr),
       dedupesAudioByLanguage,
     );
   }

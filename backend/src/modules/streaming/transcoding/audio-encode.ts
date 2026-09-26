@@ -2,9 +2,16 @@
 export type AudioEncodeCodec = 'aac' | 'ac3' | 'eac3' | 'opus';
 
 /** One audio output's decision, per rendition or for the one muxed track: a
- *  verbatim copy of the source, at its probed bitrate, or the encode target. */
+ *  verbatim copy of the source, with its probed bitrate and ffprobe profile, or
+ *  the encode target. */
 export type AudioPlan =
-  | { mode: 'copy'; codec: string; channels?: number; bitrateBps?: number }
+  | {
+      mode: 'copy';
+      codec: string;
+      channels?: number;
+      bitrateBps?: number;
+      profile?: string;
+    }
   | { mode: 'transcode'; codec: AudioEncodeCodec; channels: number };
 
 /** The output of a session that carries no decision: AAC stereo plays everywhere. */

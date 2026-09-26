@@ -83,7 +83,7 @@ export function emitAudioRenditions(
   outputAudioCodec: string,
   mediaFileId: number,
   tokenParam: string,
-  outputChannels?: (number | undefined)[],
+  outputChannels?: (number | string | undefined)[],
   dedupeByLanguage = false,
 ): void {
   const pickedIdx =
