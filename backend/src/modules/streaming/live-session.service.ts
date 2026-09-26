@@ -99,6 +99,8 @@ export interface LiveSession {
   /** Source timeline at playback-info: the session keeps it, and its cache
    *  dir, whatever a rescan meanwhile makes of the file. */
   timeline: SourceTimeline | null;
+  /** `sourceVersion` of the file at playback-info, null when unreadable. */
+  sourceVersion: string | null;
   /** Keyframe grid the remux variant is cut on, decided once at playback-info
    *  from the stored scan: null plays the uniform grid. */
   remuxGrid: KeyframeGrid | null;
@@ -176,6 +178,7 @@ export interface CreateLiveSessionInput {
   useTs?: boolean;
   audioPlan?: AudioPlan | null;
   timeline?: SourceTimeline | null;
+  sourceVersion?: string | null;
   remuxGrid?: KeyframeGrid | null;
   audioTrackPlans?: AudioTrackEncodePlan[] | null;
   audioStreamIndex?: number | null;
@@ -287,6 +290,7 @@ export function buildLiveSession(
       useTs: input.useTs ?? false,
       audioPlan: input.audioPlan ?? null,
       timeline: input.timeline ?? null,
+      sourceVersion: input.sourceVersion ?? null,
       remuxGrid: input.remuxGrid ?? null,
       audioTrackPlans: input.audioTrackPlans ?? null,
       audioStreamIndex: input.audioStreamIndex ?? null,

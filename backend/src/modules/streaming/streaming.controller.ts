@@ -929,6 +929,7 @@ export class StreamingController {
         })) ?? null,
       videoVariant,
       timeline: sourceTimeline(resolved.mediaFile.streamInfo, resolved.absolutePath),
+      sourceVersion: held.version,
     };
     const profileHash =
       response.playMethod === 'DirectPlay'
