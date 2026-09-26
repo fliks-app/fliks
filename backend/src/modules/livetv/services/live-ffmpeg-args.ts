@@ -3,9 +3,10 @@ import {
   audioCopyArgs,
   audioEncodeArgs,
 } from '../../streaming/transcoding/audio-encode';
-
-const LIVE_AAC_BITRATE_BPS = 128_000;
 import { liveTvFfmpegHeaderArgs } from '../livetv-http';
+
+/** Stereo, which every client decodes whatever the broadcast carries. */
+const LIVE_AAC_BITRATE_BPS = 128_000;
 
 export type LiveEncodeMode = 'remux' | 'transcode';
 
@@ -21,7 +22,7 @@ export interface LiveFfmpegArgsOptions {
   referer?: string | null;
   hwAccel: HwAccelType;
   videoBitrateBps?: number;
-  /** Probed source audio codec. `aac` is passed through untouched. */
+  /** Probed source audio codec. AAC is copied into MPEG-TS segments only. */
   audioCodec?: string | null;
   /** Continue an existing playlist after a failover respawn into the same directory. */
   append?: boolean;
@@ -61,9 +62,10 @@ const HWACCEL_INPUT_FLAGS: Partial<Record<HwAccelType, string[]>> = {
  * no known duration and no seekable segment grid, so it uses ffmpeg's own
  * sliding-window HLS muxer instead of the VOD cache/timeline machinery.
  *
- * Audio is always re-encoded to AAC, even on a remux: providers commonly ship
- * MP2/AC-3, which browsers refuse, and a video-only stream is the single most
- * reported failure of this kind of feature.
+ * Audio is re-encoded to stereo AAC, even on a remux, but for an AAC source
+ * cut into MPEG-TS: providers commonly ship MP2/AC-3, which browsers refuse,
+ * and a video-only stream is the single most reported failure of this kind of
+ * feature.
  */
 export function buildLiveFfmpegArgs(opts: LiveFfmpegArgsOptions): string[] {
   const args: string[] = [
@@ -124,14 +126,11 @@ export function buildLiveFfmpegArgs(opts: LiveFfmpegArgsOptions): string[] {
     );
   }
 
-  if (opts.audioCodec === 'aac') {
-    // Measured: re-encoding AAC puts the audio 22 ms ahead of the video, the
-    // encoder's priming delay, which fragmented MP4 carries no edit list to
-    // compensate. Copying reproduces the source exactly and costs nothing.
+  // A broadcast switches AAC between 2.0 and 5.1 at programme boundaries: each
+  // ADTS frame in MPEG-TS says so, while fMP4 keeps the first configuration.
+  if (opts.audioCodec === 'aac' && opts.useTs) {
     args.push(...audioCopyArgs('', 'aac', opts.useTs));
   } else {
-    // Providers ship MP2 and AC-3 that browsers refuse, and a silent stream is
-    // the single most reported failure of this kind of feature.
     args.push(...audioEncodeArgs('', 'aac', 2, LIVE_AAC_BITRATE_BPS));
   }
 
