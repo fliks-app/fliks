@@ -264,6 +264,17 @@ describe('StreamBuilderService — picked audio track', () => {
       evaluate(twoAac, profile(['aac']), { ext: '.mp4', pick: 1 }).playMethod,
     ).toBe('DirectPlay');
   });
+
+  it('leaves Direct Play for a second same-language track an engine folds away', () => {
+    const tracks: Track[] = [
+      { codec: 'aac', language: 'eng' },
+      { codec: 'aac', language: 'eng' },
+      { codec: 'aac', language: 'fre' },
+    ];
+    const folding = profile(['aac'], { dedupesAudioByLanguage: true });
+    expect(evaluate(tracks, folding, { ext: '.mp4', pick: 1 }).playMethod).toBe('DirectStream');
+    expect(evaluate(tracks, folding, { ext: '.mp4', pick: 2 }).playMethod).toBe('DirectPlay');
+  });
 });
 
 describe('StreamBuilderService — audio that ends early', () => {

@@ -753,7 +753,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const effectiveVideoCopy = isTranscodeQuality ? false : (pi?.videoCopyStream ?? true);
     const effectiveAudioCopy = pi?.audioCopyStream ?? true;
     // Per-track audio decision for the ACTIVE track. Multi-audio renditions
-    // switch client-side, so the default track's copy/reason (top-level
+    // switch client-side, so the picked track's copy/reason (top-level
     // audioCopyStream / transcodeReasons) is wrong for any other track.
     // availableAudioTracks() is in streamInfo.audio order (the i-th track maps
     // to streamInfo.audio[i]), so the selected track's position is its backend

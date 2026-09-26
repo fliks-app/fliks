@@ -492,12 +492,14 @@ export class StreamBuilderService {
         message: 'Client requires an HLS container (no raw direct play)',
       });
     }
-    // A raw file plays its first audio track; HLS lets the picked one lead.
-    if (
-      pickedAudio !== 0 &&
-      profile.switchesDirectPlayAudio === false &&
-      directPlayResult.canDirectPlay
-    ) {
+    // A raw file plays its first audio track; HLS lets the picked one lead. An
+    // engine folding tracks by language reaches only the first of each language.
+    const pickedLanguage = audioStreams[pickedAudio]?.language;
+    const unreachable =
+      profile.switchesDirectPlayAudio === false ||
+      (!!profile.dedupesAudioByLanguage &&
+        audioStreams.findIndex((t) => t.language === pickedLanguage) !== pickedAudio);
+    if (pickedAudio !== 0 && unreachable && directPlayResult.canDirectPlay) {
       directPlayResult.canDirectPlay = false;
       reasons.push({
         flag: 'ClientCannotSwitchAudio',
