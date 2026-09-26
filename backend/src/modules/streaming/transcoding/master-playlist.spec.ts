@@ -82,6 +82,26 @@ describe('generateMasterPlaylist — audio rendition CHANNELS', () => {
     expect(media[1]).toContain('CHANNELS="8"');
   });
 
+  it('declares the resolved output channels on the HDR ladder too', () => {
+    const m = generateMasterPlaylist({
+      mediaFileId: 1,
+      sourceWidth: 3840,
+      sourceHeight: 2160,
+      tokenParam: '',
+      hdrPassThrough: { hdrFormat: 'HDR10', hdrVariant: HEVC_HDR10 },
+      canEmitHdrLadder: true,
+      outputAudioCodec: 'aac',
+      audioStreams: [{ channels: 6 }, { channels: 2 }],
+      audioOutputChannels: [6, 2],
+    });
+    const media = mediaLines(m);
+    expect(media[0]).toContain('CHANNELS="6"');
+    expect(media[1]).toContain('CHANNELS="2"');
+    expect(streamInfLines(m).every((l) => l.includes('AUDIO="audio"'))).toBe(
+      true,
+    );
+  });
+
   it('falls back to the codec-derived count when output channels are absent', () => {
     const m = generateMasterPlaylist({
       mediaFileId: 1,
