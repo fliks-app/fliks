@@ -25,7 +25,7 @@ import {
   type RungBitrateContext,
 } from './transcoding/quality-ladder';
 import { resolveEncodePipeline } from './transcoding/encode-pipeline';
-import { parseSourceFps } from './transcoding/constants';
+import { parseSourceFps, realSegmentSeconds } from './transcoding/constants';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
 import {
   bucketResolutionHeight,
@@ -35,7 +35,7 @@ import { normaliseSourceCodec } from './transcoding/codec/normalise';
 import { deriveDvInfo, isDvProfile5 } from './transcoding/codec/dolby-vision';
 import { pickPrimaryVariant } from './transcoding/codec/selector';
 import type { CodecVariant, VideoCodec } from './transcoding/codec/types';
-import { resolveMuxFlavour } from './transcoding/audio-layout';
+import { pickAudioLayout, resolveMuxFlavour } from './transcoding/audio-layout';
 import {
   audioEncodeBitrateBps,
   encoderMaxChannels,
@@ -59,21 +59,27 @@ const AUDIO_START_OFFSET_THRESHOLD_SECONDS = 0.05;
  *  configuration and broadcasts switch it (2.0 ↔ 5.1) mid-stream. */
 const ADTS_AAC_CONTAINERS = new Set(['ts', 'm2ts']);
 
-type CopyBlocker = 'AudioStartOffset' | 'AudioFormatMayChange';
+type CopyBlocker =
+  | 'AudioStartOffset'
+  | 'AudioFormatMayChange'
+  | 'AudioEndsEarly';
 
 /**
  * Why a track the device could play as-is must still be re-encoded on this
- * output, or null. Only fMP4 is affected: MPEG-TS carries both as they are.
+ * output, or null. Only fMP4 is affected: MPEG-TS carries them as they are.
  * - A start offset lands in an empty edit, which MSE ignores; the encode
  *   aligns the track instead.
  * - fMP4 holds one AAC configuration for the whole track, taken from the first
  *   frame, so a copied ADTS stream that switches layout stops decoding there.
+ * - A separate rendition that ends before the last video segment starts lacks
+ *   segments its playlist lists; the encode pads it to the end.
  */
 function copyBlocker(
-  audio: { codec?: string; startTimeSeconds?: number },
+  audio: { codec?: string; startTimeSeconds?: number; endSeconds?: number },
   video: Parameters<typeof videoPresentationStart>[0],
   muxFlavour: 'ts' | 'fmp4',
   container: string,
+  lastVideoSegmentStart: number | undefined,
 ): CopyBlocker | null {
   if (muxFlavour !== 'fmp4') return null;
   if (
@@ -84,11 +90,34 @@ function copyBlocker(
   }
   const a = audio.startTimeSeconds;
   const v = videoPresentationStart(video);
-  return a != null &&
+  if (
+    a != null &&
     v != null &&
     Math.abs(a - v) > AUDIO_START_OFFSET_THRESHOLD_SECONDS
-    ? 'AudioStartOffset'
+  ) {
+    return 'AudioStartOffset';
+  }
+  return audio.endSeconds != null &&
+    lastVideoSegmentStart != null &&
+    audio.endSeconds <= lastVideoSegmentStart
+    ? 'AudioEndsEarly'
     : null;
+}
+
+/** Source time the last video segment of a separate-rendition layout starts
+ *  at, on the fps-aware grid the video is cut on from its first frame. */
+function lastVideoSegmentStart(
+  video: MediaFileInfo['video'][number] | undefined,
+  segmentDuration: number,
+): number | undefined {
+  const origin = videoPresentationStart(video);
+  if (origin == null || video?.endSeconds == null) return undefined;
+  const seg = realSegmentSeconds(
+    segmentDuration,
+    parseSourceFps(video.frameRate),
+  );
+  const count = Math.ceil((video.endSeconds - origin) / seg);
+  return count > 0 ? origin + (count - 1) * seg : undefined;
 }
 
 /** Transcode reason for each per-track flag. */
@@ -100,6 +129,7 @@ function audioReason(flag: string, t: AudioTrackPlan): TranscodeReason {
       'Audio starts off the video and is re-encoded to align it',
     AudioFormatMayChange:
       'AAC from MPEG-TS can change format mid-stream and is re-encoded',
+    AudioEndsEarly: 'Audio ends before the video and is padded to its end',
   };
   return { flag, message: messages[flag] ?? flag };
 }
@@ -895,8 +925,16 @@ export class StreamBuilderService {
   ): AudioTrackPlan[] {
     const audioStreams = si?.audio ?? [];
     const video = si?.video?.[0];
+    // Only separate renditions go missing at the tail; a muxed track just ends.
+    const lastSegmentStart =
+      pickAudioLayout(audioStreams.length, muxFlavour) === 'var-stream-map'
+        ? lastVideoSegmentStart(
+            video,
+            this.activeStreamTracker.getSegmentDuration(),
+          )
+        : undefined;
     const blockers = audioStreams.map((t) =>
-      copyBlocker(t, video, muxFlavour, container),
+      copyBlocker(t, video, muxFlavour, container, lastSegmentStart),
     );
     const profileAudioCodecs = profile.directPlayProfiles
       .flatMap((p) => p.audioCodecs)

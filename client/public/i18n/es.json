@@ -130,7 +130,8 @@
       "AudioCodecNotSupported": "Códec de audio no compatible",
       "AudioChannelsNotSupported": "Demasiados canales de audio",
       "AudioStartOffset": "Desfase de sincronización audio/vídeo",
-      "AudioFormatMayChange": "El formato de audio puede cambiar durante la emisión"
+      "AudioFormatMayChange": "El formato de audio puede cambiar durante la emisión",
+      "AudioEndsEarly": "El audio termina antes que el vídeo"
     },
     "preparing": "Preparando la transmisión…"
   },

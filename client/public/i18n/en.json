@@ -135,7 +135,8 @@
       "AudioCodecNotSupported": "Audio codec not supported",
       "AudioChannelsNotSupported": "Too many audio channels",
       "AudioStartOffset": "Audio/video timing offset",
-      "AudioFormatMayChange": "Audio format may change mid-stream"
+      "AudioFormatMayChange": "Audio format may change mid-stream",
+      "AudioEndsEarly": "Audio ends before the video"
     },
     "preparing": "Preparing the stream…"
   },

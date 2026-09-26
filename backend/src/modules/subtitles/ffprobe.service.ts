@@ -138,6 +138,8 @@ export interface VideoStreamInfo {
    *  from `startTimeSeconds` when a stream is cut mid-GOP or an edit list hides
    *  leading frames; the served timeline's origin (see `sourceTimeline`). */
   firstFrameSeconds?: number;
+  /** Source time the stream ends at, when the container declares it. */
+  endSeconds?: number;
   /** ffprobe `has_b_frames` > 0: frames are reordered, so decode starts before PTS 0. */
   hasBFrames?: boolean;
   bitRate?: number;
@@ -180,6 +182,14 @@ export interface AudioStreamInfo {
    *  reads 0 or the video's start). Compared against the video's to detect a
    *  leading gap. */
   startTimeSeconds?: number;
+  /** Source time the track ends at, when the container declares it. */
+  endSeconds?: number;
+  /** Director's or other commentary (`comment` disposition). */
+  commentary?: boolean;
+  /** Narrates the picture for blind viewers (`visual_impaired` / `descriptions`). */
+  audioDescription?: boolean;
+  /** Dialogue-enhanced track for hard-of-hearing viewers. */
+  hearingImpaired?: boolean;
 }
 
 export interface SubtitleStreamInfo {
@@ -227,6 +237,7 @@ interface FfprobeStream {
   r_frame_rate?: string;
   avg_frame_rate?: string;
   start_time?: string;
+  duration?: string;
   has_b_frames?: number;
   bit_rate?: string;
   bits_per_raw_sample?: string;
@@ -253,6 +264,39 @@ interface FfprobeStream {
     hearing_impaired?: number;
     default?: number;
     attached_pic?: number;
+    comment?: number;
+    visual_impaired?: number;
+    descriptions?: number;
+  };
+}
+
+/** Where a stream ends, in source time. Matroska keeps it in a `DURATION`
+ *  tag, whose value is the end timestamp even for a track that starts late;
+ *  other containers give a duration from the stream start. */
+export function streamEndSeconds(s: FfprobeStream): number | undefined {
+  const clock = /^(\d+):(\d{2}):(\d{2}(?:\.\d+)?)$/.exec(
+    tag(s.tags, 'DURATION') ?? '',
+  );
+  if (clock)
+    return Number(clock[1]) * 3600 + Number(clock[2]) * 60 + Number(clock[3]);
+  const duration = Number(s.duration);
+  if (!s.duration || !Number.isFinite(duration)) return undefined;
+  return (s.start_time ? Number(s.start_time) : 0) + duration;
+}
+
+/** Accessibility and commentary roles an audio stream declares. */
+export function audioStreamRoles(
+  s: FfprobeStream,
+): Pick<
+  AudioStreamInfo,
+  'commentary' | 'audioDescription' | 'hearingImpaired'
+> {
+  const d = s.disposition;
+  return {
+    commentary: d?.comment === 1 || undefined,
+    audioDescription:
+      d?.visual_impaired === 1 || d?.descriptions === 1 || undefined,
+    hearingImpaired: d?.hearing_impaired === 1 || undefined,
   };
 }
 
@@ -557,6 +601,7 @@ export class FfprobeService {
             path.basename(videoPath),
           ),
           startTimeSeconds: s.start_time ? Number(s.start_time) : undefined,
+          endSeconds: streamEndSeconds(s),
           hasBFrames:
             s.has_b_frames != null ? s.has_b_frames > 0 : undefined,
           bitRate: s.bit_rate ? Number(s.bit_rate) : undefined,
@@ -608,6 +653,8 @@ export class FfprobeService {
           bitRate: s.bit_rate ? Number(s.bit_rate) : undefined,
           isDefault: s.disposition?.default === 1,
           startTimeSeconds: s.start_time ? Number(s.start_time) : undefined,
+          endSeconds: streamEndSeconds(s),
+          ...audioStreamRoles(s),
         }));
       await this.probeAudioStarts(videoPath, audio, formatStartSeconds);
 

@@ -130,7 +130,8 @@
       "AudioCodecNotSupported": "Codec audio non supportato",
       "AudioChannelsNotSupported": "Troppi canali audio",
       "AudioStartOffset": "Sfasamento di sincronizzazione audio/video",
-      "AudioFormatMayChange": "Il formato audio può cambiare durante il flusso"
+      "AudioFormatMayChange": "Il formato audio può cambiare durante il flusso",
+      "AudioEndsEarly": "L'audio termina prima del video"
     },
     "preparing": "Preparazione del flusso…"
   },

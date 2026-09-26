@@ -5,13 +5,18 @@ import type { PlaybackInfoResponse } from './dto/playback-info.dto';
 const svc = () =>
   new StreamBuilderService(
     { getDetectedHwAccel: () => 'none' } as never,
-    { getAutoCropEnabled: () => false, getTonemapAlgo: () => 'auto' } as never,
+    {
+      getAutoCropEnabled: () => false,
+      getTonemapAlgo: () => 'auto',
+      getSegmentDuration: () => 3,
+    } as never,
   );
 
 type Track = {
   codec: string;
   channels?: number;
   startTimeSeconds?: number;
+  endSeconds?: number;
   language?: string;
 };
 
@@ -45,6 +50,7 @@ const file = (audio: Track[], ext = '.mkv') =>
             bitRate: 8_000_000,
             frameRate: '24',
             startTimeSeconds: 0,
+            endSeconds: 100,
           },
         ],
         audio: audio.map((a, i) => ({
@@ -256,5 +262,28 @@ describe('StreamBuilderService — picked audio track', () => {
     expect(
       evaluate(twoAac, profile(['aac']), { ext: '.mp4', pick: 1 }).playMethod,
     ).toBe('DirectPlay');
+  });
+});
+
+describe('StreamBuilderService — audio that ends early', () => {
+  // 100 s of video on a 3 s grid: the last segment starts at 99 s.
+  const pair = (endSeconds: number): Track[] => [
+    { codec: 'aac', language: 'eng' },
+    { codec: 'aac', language: 'fre', endSeconds },
+  ];
+
+  it('pads a separate rendition that stops before the last video segment', () => {
+    const t = evaluate(pair(15), tv).audioTracks![1];
+    expect(t.copy).toBe(false);
+    expect(t.reasonFlags).toEqual(['AudioEndsEarly']);
+  });
+
+  it('copies a rendition that reaches the last video segment', () => {
+    expect(evaluate(pair(99.5), tv).audioTracks![1].copy).toBe(true);
+  });
+
+  it('leaves a muxed single track alone, whose segments the video carries', () => {
+    const r = evaluate([{ codec: 'aac', endSeconds: 15 }], tv);
+    expect(r.audioPlan).toEqual({ mode: 'copy', codec: 'aac' });
   });
 });

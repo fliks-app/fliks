@@ -1,8 +1,10 @@
 import {
   displaySize,
   FfprobeService,
+  audioStreamRoles,
   parseFirstFrameSeconds,
   selectProgrammeVideoStreams,
+  streamEndSeconds,
   streamRotation,
 } from './ffprobe.service';
 
@@ -155,5 +157,49 @@ describe('parseFirstFrameSeconds', () => {
 
   it('is undefined when nothing decoded', () => {
     expect(parseFirstFrameSeconds('config in time_base: 1/90000')).toBeUndefined();
+  });
+});
+
+describe('streamEndSeconds', () => {
+  it('reads the Matroska DURATION tag as the end timestamp', () => {
+    expect(
+      streamEndSeconds({
+        index: 2,
+        start_time: '2.000000',
+        tags: { DURATION: '00:00:22.021000000' },
+      }),
+    ).toBeCloseTo(22.021, 6);
+    expect(
+      streamEndSeconds({ index: 1, tags: { DURATION: '01:02:03.5' } }),
+    ).toBe(3723.5);
+  });
+
+  it('adds a stream duration to its start elsewhere', () => {
+    expect(
+      streamEndSeconds({ index: 1, start_time: '1.4', duration: '31.446667' }),
+    ).toBeCloseTo(32.846667, 6);
+  });
+
+  it('is undefined when the container declares no end', () => {
+    expect(streamEndSeconds({ index: 1, duration: 'N/A' })).toBeUndefined();
+    expect(streamEndSeconds({ index: 1 })).toBeUndefined();
+  });
+});
+
+describe('audioStreamRoles', () => {
+  it('maps the commentary and accessibility dispositions', () => {
+    expect(audioStreamRoles({ index: 1, disposition: { comment: 1 } })).toEqual(
+      { commentary: true },
+    );
+    expect(
+      audioStreamRoles({ index: 1, disposition: { descriptions: 1 } }),
+    ).toEqual({ audioDescription: true });
+    expect(
+      audioStreamRoles({
+        index: 1,
+        disposition: { visual_impaired: 1, hearing_impaired: 1 },
+      }),
+    ).toEqual({ audioDescription: true, hearingImpaired: true });
+    expect(audioStreamRoles({ index: 1 })).toEqual({});
   });
 });
