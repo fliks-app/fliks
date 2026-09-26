@@ -6,7 +6,6 @@ import { readAndRewriteCmaf } from '../transcoding/cmaf-rewrite';
 import {
   parseInitTracks,
   rewriteSegmentTfdt,
-  shiftSegmentTfdt,
   timelineOrigin,
 } from '../transcoding/timeline';
 
@@ -32,8 +31,9 @@ export class SegmentPackagingService {
   /**
    * Serve a segment (or init) file onto `res`. `keyframeCut` is set for remux
    * (`-c:v copy`) output, whose segments follow the source keyframes rather
-   * than the grid (#349), so it only gets the origin shift. `segDuration` is
-   * the active HLS segment duration in seconds, threaded from the caller (the
+   * than the grid and are assembled on the served timeline already
+   * (`RemuxSegmentAssembler`). `segDuration` is the active HLS segment
+   * duration in seconds, threaded from the caller (the
    * StreamingSettingsCache-backed value) rather than a module global.
    */
   async serve(
@@ -98,8 +98,8 @@ export class SegmentPackagingService {
   /** Anchor a media segment onto the single absolute presentation timeline:
    *  rewrite its `tfdt` so `seg-N` decodes at its true presentation time
    *  `N · segDuration + origin` (per-track timescale), instead of FFmpeg's
-   *  per-run 0-based reset. A keyframe-cut segment keeps its own times, moved
-   *  by the origin. Init segments carry no `tfdt` and pass through unchanged. */
+   *  per-run 0-based reset. Init segments carry no `tfdt` and pass through
+   *  unchanged. */
   private async anchorSegmentTimeline(
     filePath: string,
     buf: Buffer,
@@ -108,12 +108,10 @@ export class SegmentPackagingService {
     keyframeCut: boolean,
   ): Promise<Buffer> {
     const m = /(?:^|\/)seg-(\d+)\.m4s$/.exec(filePath);
-    if (!m) return buf;
+    if (!m || keyframeCut) return buf;
     const tracks = await this.tracksForDir(path.dirname(filePath));
     if (tracks.size === 0) return buf;
-    return keyframeCut
-      ? shiftSegmentTfdt(buf, tracks, origin)
-      : rewriteSegmentTfdt(buf, tracks, Number(m[1]), segDuration, origin);
+    return rewriteSegmentTfdt(buf, tracks, Number(m[1]), segDuration, origin);
   }
 
   private async tracksForDir(

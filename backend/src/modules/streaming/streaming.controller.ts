@@ -49,6 +49,7 @@ import {
 import {
   getRemuxSegmentGrid,
   secondsToSegmentIndex as boundarySecondsToIndex,
+  type SegmentGrid,
 } from './transcoding/segment-boundaries';
 import {
   inputSeekSeconds,
@@ -436,22 +437,19 @@ export class StreamingController {
     );
   }
 
-  /** Keyframe-aligned cumulative segment boundaries for the remux/copy path,
-   *  or null when keyframes can't be probed (fall back to the uniform grid).
-   *  Cached per file by {@link getRemuxSegmentGrid}; the playlist is
-   *  fetched before segments, so segment-time lookups hit the warm cache. */
-  private async remuxBoundaries(
+  /** Keyframe grid of the remux/copy path, or null when keyframes can't be
+   *  probed (fall back to the uniform grid). Cached per file by
+   *  {@link getRemuxSegmentGrid}; the playlist is fetched before segments, so
+   *  segment-time lookups hit the warm cache. */
+  private remuxGrid(
     resolved: ResolvedFile,
     segDur: number,
-    durationHint = 0,
-  ): Promise<number[] | null> {
-    const grid = await getRemuxSegmentGrid(
+  ): Promise<SegmentGrid | null> {
+    return getRemuxSegmentGrid(
       resolved.absolutePath,
-      durationHint,
       segDur,
       resolved.mediaFile.streamInfo,
     );
-    return grid ? grid.boundaries : null;
   }
 
   /**
@@ -1954,20 +1952,16 @@ export class StreamingController {
         if (quality === 'remux') {
           // Copied video is keyframe-cut, so map the resume time to a segment
           // (and seek) via the real keyframe boundaries, not the uniform grid.
-          const boundaries = await this.remuxBoundaries(
-            resolved,
-            this.segDur(ctx),
-            duration,
-          );
-          const startSegment = boundaries
-            ? boundarySecondsToIndex(boundaries, startAtSec, ctx.sourceStartPts ?? 0)
+          const grid = await this.remuxGrid(resolved, this.segDur(ctx));
+          const startSegment = grid
+            ? boundarySecondsToIndex(grid.boundaries, startAtSec, ctx.sourceStartPts ?? 0)
             : secondsToSegmentIndex(startAtSec, this.segDur(ctx));
           void this.transcodingService.getOrCreateRemuxSession(
             mediaFileId,
             resolved.absolutePath,
             startSegment,
             ctx,
-            boundaries ?? undefined,
+            grid,
           );
         } else {
           void this.transcodingService.getOrCreateSession(
@@ -2016,12 +2010,7 @@ export class StreamingController {
     let remuxDurations: number[] | null = null;
     if (quality === 'remux') {
       remuxDurations =
-        (await getRemuxSegmentGrid(
-          resolved.absolutePath,
-          duration,
-          this.segDur(),
-          resolved.mediaFile.streamInfo,
-        ))?.durations ?? null;
+        (await this.remuxGrid(resolved, this.segDur()))?.durations ?? null;
     }
     // Transcoded fMP4 segments span one GOP each — declare their real length
     // so fractional-fps streams stay in A/V sync. Remux (variable) and TS keep
@@ -2300,20 +2289,19 @@ export class StreamingController {
     // Remux: anchor + seek on the real keyframe boundaries (cached) so a resume
     // / forward seek lands on the right content and the post-seek playlist stays
     // aligned. Non-remux keeps the uniform grid (force_key_frames makes it true).
-    const remuxBounds =
+    const remuxGrid =
       quality === 'remux'
-        ? ((await this.remuxBoundaries(resolved, this.segDur(ctx))) ??
-          undefined)
-        : undefined;
+        ? await this.remuxGrid(resolved, this.segDur(ctx))
+        : null;
     const anchorSeg = this.anchorSegment(
       live,
       existing,
       isInit,
       segIndex,
-      remuxBounds && {
-        boundaries: remuxBounds,
+      remuxGrid ? {
+        boundaries: remuxGrid.boundaries,
         origin: ctx.sourceStartPts ?? 0,
-      },
+      } : undefined,
     );
     const session =
       quality === 'remux'
@@ -2322,7 +2310,7 @@ export class StreamingController {
             resolved.absolutePath,
             anchorSeg,
             ctx,
-            remuxBounds,
+            remuxGrid,
           )
         : await this.transcodingService.getOrCreateSession(
             mediaFileId,

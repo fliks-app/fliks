@@ -7,8 +7,7 @@ import {
   resolvePreRoll,
 } from './streaming.controller';
 import {
-  boundariesFromDurations,
-  computeSegmentDurations,
+  computeSegmentGrid,
   secondsToSegmentIndex,
 } from './transcoding/segment-boundaries';
 import { buildLiveSession, type LiveSession } from './live-session.service';
@@ -310,14 +309,18 @@ describe('remux playlist cannot drift out of A/V sync', () => {
   // MPEG-TS and fMP4. Durations here are what the segments really contain.
   const KEYFRAMES = [0, 7.966, 15.974, 19.937, 25.317, 31.865, 38.997, 43.001];
   const SEG_DUR = 6;
+  const grid = computeSegmentGrid(
+    KEYFRAMES.map((pts) => ({ pts, dts: pts })),
+    0,
+    43.001,
+    SEG_DUR,
+  )!;
 
   it('announces the real cut durations, and the seek grid agrees with them', () => {
-    const durations = computeSegmentDurations(KEYFRAMES, 43.001, SEG_DUR);
+    const { durations, boundaries } = grid;
     expect(durations.map((d) => Number(d.toFixed(3)))).toEqual([
       7.966, 8.008, 3.963, 5.38, 6.548, 7.132, 4.004,
     ]);
-
-    const boundaries = boundariesFromDurations(durations, KEYFRAMES[0]);
     const playlist = buildVariableVodPlaylist(
       durations,
       (i) => `seg-${i}.m4s`,
@@ -339,7 +342,7 @@ describe('remux playlist cannot drift out of A/V sync', () => {
   });
 
   it('is what a uniform grid gets wrong — the regression being replaced', () => {
-    const durations = computeSegmentDurations(KEYFRAMES, 43.001, SEG_DUR);
+    const { durations } = grid;
     const uniform = buildVodPlaylist(43.001, (i) => `seg-${i}.ts`, undefined, SEG_DUR);
     const uniformExtinf = [...uniform.matchAll(/#EXTINF:([\d.]+),/g)].map((m) =>
       Number(m[1]),

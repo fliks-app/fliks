@@ -36,7 +36,7 @@ interface Box {
   payloadStart: number;
 }
 
-interface TrackInfo {
+export interface TrackInfo {
   timescale: number;
   isVideo: boolean;
 }
@@ -115,7 +115,8 @@ interface FragTfdt {
   trackId: number;
   valueOffset: number;
   version: number;
-  original: number;
+  /** Read signed: ffmpeg writes a decode time before 0 as a negative int64. */
+  original: bigint;
 }
 
 /** Collect every fragment's tfdt (trackId via tfhd, value + offset). */
@@ -134,8 +135,8 @@ function collectTfdts(buf: Buffer): FragTfdt[] {
       const valueOffset = tfdt.payloadStart + 4;
       const original =
         version === 1
-          ? Number(buf.readBigUInt64BE(valueOffset))
-          : buf.readUInt32BE(valueOffset);
+          ? buf.readBigInt64BE(valueOffset)
+          : BigInt(buf.readUInt32BE(valueOffset));
       out.push({ trackId, valueOffset, version, original });
     }
   }
@@ -180,7 +181,7 @@ export function rewriteSegmentTfdt(
   const ref = video ?? frags[0];
   const refTs = tracks.get(ref.trackId)?.timescale;
   if (!refTs) return segBuf;
-  const refTime = ref.original / refTs;
+  const refTime = Number(ref.original) / refTs;
 
   let runStart = segStart - refTime;
   if (!video) {
@@ -196,17 +197,6 @@ export function rewriteSegmentTfdt(
   return shiftTfdts(segBuf, frags, tracks, runStart);
 }
 
-/** Shift every fragment's `tfdt` by `seconds`. Moves a keyframe-cut (remux)
- *  run, whose output starts at 0, back onto the source timeline. */
-export function shiftSegmentTfdt(
-  segBuf: Buffer,
-  tracks: Map<number, TrackInfo>,
-  seconds: number,
-): Buffer {
-  if (tracks.size === 0 || seconds === 0) return segBuf;
-  return shiftTfdts(segBuf, collectTfdts(segBuf), tracks, seconds);
-}
-
 function shiftTfdts(
   segBuf: Buffer,
   frags: FragTfdt[],
@@ -217,18 +207,155 @@ function shiftTfdts(
   for (const f of frags) {
     const ts = tracks.get(f.trackId)?.timescale;
     if (!ts) continue;
-    const value = f.original + Math.round(seconds * ts);
-    if (f.version === 1) {
-      buf.writeBigUInt64BE(BigInt(value), f.valueOffset);
-    } else if (value <= 0xffffffff) {
-      buf.writeUInt32BE(value, f.valueOffset);
-    } else {
-      // Widening a version-0 tfdt would change the box size (forbidden here);
-      // fail loudly rather than silently leave a colliding run-relative tfdt.
-      throw new RangeError(
-        `tfdt ${value} exceeds the 32-bit version-0 box at offset ${f.valueOffset}`,
-      );
-    }
+    writeTfdt(buf, f, f.original + BigInt(Math.round(seconds * ts)));
   }
   return buf;
+}
+
+function writeTfdt(buf: Buffer, f: FragTfdt, value: bigint): void {
+  // A decode time can't go below 0; writing one would wrap to ~5.8e14 s.
+  if (value < 0n) {
+    throw new RangeError(
+      `tfdt ${value} of track ${f.trackId} would be negative at offset ${f.valueOffset}`,
+    );
+  }
+  if (f.version === 1) {
+    buf.writeBigUInt64BE(value, f.valueOffset);
+  } else if (value <= 0xffffffffn) {
+    buf.writeUInt32BE(Number(value), f.valueOffset);
+  } else {
+    // Widening a version-0 tfdt would change the box size.
+    throw new RangeError(
+      `tfdt ${value} exceeds the 32-bit version-0 box at offset ${f.valueOffset}`,
+    );
+  }
+}
+
+/** Media time each track's presentation starts at, in its timescale ticks:
+ *  its edit's `media_time` less the empty edits ahead of it, 0 without an edit. */
+export function readInitEdits(initBuf: Buffer): Map<number, bigint> {
+  const out = new Map<number, bigint>();
+  const moov = findBox(initBuf, 0, initBuf.length, 'moov');
+  if (!moov) return out;
+  const moovEnd = moov.start + moov.size;
+  const mvhd = findBox(initBuf, moov.payloadStart, moovEnd, 'mvhd');
+  const movieTs = mvhd
+    ? initBuf.readUInt32BE(mvhd.payloadStart + (initBuf[mvhd.payloadStart] === 1 ? 20 : 12))
+    : 0;
+  for (const [trackId, info] of parseInitTracks(initBuf)) {
+    const trak = trakOf(initBuf, moov, trackId);
+    const edts = trak && findBox(initBuf, trak.payloadStart, trak.start + trak.size, 'edts');
+    const elst =
+      edts && findBox(initBuf, edts.payloadStart, edts.start + edts.size, 'elst');
+    let ticks = 0n;
+    if (elst) {
+      const v1 = initBuf[elst.payloadStart] === 1;
+      const count = initBuf.readUInt32BE(elst.payloadStart + 4);
+      let off = elst.payloadStart + 8;
+      for (let i = 0; i < count; i++, off += v1 ? 20 : 12) {
+        const duration = v1 ? initBuf.readBigUInt64BE(off) : BigInt(initBuf.readUInt32BE(off));
+        const mediaTime = v1 ? initBuf.readBigInt64BE(off + 8) : BigInt(initBuf.readInt32BE(off + 4));
+        if (mediaTime !== -1n) {
+          ticks += mediaTime;
+          break;
+        }
+        if (!movieTs) throw new Error(`track ${trackId} has an empty edit and no movie timescale`);
+        ticks -= (duration * BigInt(info.timescale)) / BigInt(movieTs);
+      }
+    }
+    out.set(trackId, ticks);
+  }
+  return out;
+}
+
+function trakOf(buf: Buffer, moov: Box, trackId: number): Box | null {
+  for (const trak of boxes(buf, moov.payloadStart, moov.start + moov.size)) {
+    if (trak.type !== 'trak') continue;
+    const tkhd = findBox(buf, trak.payloadStart, trak.start + trak.size, 'tkhd');
+    if (tkhd && buf.readUInt32BE(tkhd.payloadStart + (buf[tkhd.payloadStart] === 1 ? 20 : 12)) === trackId) {
+      return trak;
+    }
+  }
+  return null;
+}
+
+/** 32-bit box: `type` around the concatenated `children`. */
+function makeBox(type: string, children: Buffer[]): Buffer {
+  const body = Buffer.concat(children);
+  const head = Buffer.alloc(8);
+  head.writeUInt32BE(8 + body.length, 0);
+  head.write(type, 4, 'latin1');
+  return Buffer.concat([head, body]);
+}
+
+/** One edit starting the presentation `ticks` into the media, for the whole of
+ *  a fragmented track (duration 0). */
+function singleEdit(ticks: bigint): Buffer {
+  const v1 = ticks > 0x7fffffffn;
+  const entry = Buffer.alloc(v1 ? 20 : 12);
+  if (v1) entry.writeBigInt64BE(ticks, 8);
+  else entry.writeInt32BE(Number(ticks), 4);
+  entry.writeUInt32BE(0x00010000, v1 ? 16 : 8);
+  const head = Buffer.from([v1 ? 1 : 0, 0, 0, 0, 0, 0, 0, 1]);
+  return makeBox('edts', [makeBox('elst', [head, entry])]);
+}
+
+/** `initBuf` with each track's edits replaced by one starting its presentation
+ *  `secondsOf(track)` into its media. */
+export function withInitEdits(
+  initBuf: Buffer,
+  secondsOf: (track: TrackInfo) => number,
+): Buffer {
+  const tracks = parseInitTracks(initBuf);
+  const rebuildTrak = (trak: Box): Buffer => {
+    const trakEnd = trak.start + trak.size;
+    const tkhd = findBox(initBuf, trak.payloadStart, trakEnd, 'tkhd');
+    const id = tkhd
+      ? initBuf.readUInt32BE(tkhd.payloadStart + (initBuf[tkhd.payloadStart] === 1 ? 20 : 12))
+      : -1;
+    const info = tracks.get(id);
+    if (!info) return initBuf.subarray(trak.start, trakEnd);
+    const edit = singleEdit(BigInt(Math.round(secondsOf(info) * info.timescale)));
+    const children: Buffer[] = [];
+    for (const b of boxes(initBuf, trak.payloadStart, trakEnd)) {
+      if (b.type === 'edts') continue;
+      children.push(initBuf.subarray(b.start, b.start + b.size));
+      if (b.type === 'tkhd') children.push(edit);
+    }
+    return makeBox('trak', children);
+  };
+  const out: Buffer[] = [];
+  for (const top of boxes(initBuf, 0, initBuf.length)) {
+    if (top.type !== 'moov') {
+      out.push(initBuf.subarray(top.start, top.start + top.size));
+      continue;
+    }
+    const children: Buffer[] = [];
+    for (const b of boxes(initBuf, top.payloadStart, top.start + top.size)) {
+      children.push(b.type === 'trak' ? rebuildTrak(b) : initBuf.subarray(b.start, b.start + b.size));
+    }
+    out.push(makeBox('moov', children));
+  }
+  return Buffer.concat(out);
+}
+
+/** Move every fragment's `tfdt` by its track's tick count. */
+export function retimeFragments(
+  segBuf: Buffer,
+  deltaTicks: Map<number, bigint>,
+): Buffer {
+  const buf = Buffer.from(segBuf);
+  for (const f of collectTfdts(segBuf)) {
+    const delta = deltaTicks.get(f.trackId);
+    if (delta === undefined) {
+      throw new Error(`fragment of track ${f.trackId}, absent from the init`);
+    }
+    writeTfdt(buf, f, f.original + delta);
+  }
+  return buf;
+}
+
+/** Decode time of the first fragment of `trackId`, in its timescale ticks. */
+export function firstTfdt(segBuf: Buffer, trackId: number): bigint | null {
+  return collectTfdts(segBuf).find((f) => f.trackId === trackId)?.original ?? null;
 }

@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { audioStartAlignFilter, buildFfmpegArgs, buildRemuxArgs } from './ffmpeg-args';
 import type { BuildFfmpegArgsOptions, BuildRemuxArgsOptions } from './ffmpeg-args';
 import { realSegmentSeconds } from './constants';
+import { computeSegmentGrid } from './segment-boundaries';
 
 /**
  * Every fMP4 run starts its output at 0 with the audio padded to the run's
@@ -44,7 +45,6 @@ const remux = (over: Partial<BuildRemuxArgsOptions>): string[] =>
     outputDir: '/cache/out',
     trustedStreamInfo: true,
     sourceVideoCodec: 'h264',
-    sourceHasBFrames: false,
     ...over,
   });
 
@@ -80,8 +80,11 @@ describe('fMP4 output origin', () => {
     expect(after(seeked, '-output_ts_offset')).toBe(last(seeked, '-ss'));
   });
 
-  it('starts every remux run at 0 as well', () => {
-    expect(after(remux({ sourceStartPts: 2.8 }), '-output_ts_offset')).toBe('-2.8');
+  it('writes remux runs in source time, less their output -ss', () => {
+    expect(remux({ sourceStartPts: 2.8 })).not.toContain('-output_ts_offset');
+    expect(after(remux({ sourceStartPts: 2.8 }), '-hls_segment_options')).toBe(
+      'movflags=+frag_discont',
+    );
   });
 });
 
@@ -134,25 +137,46 @@ describe('transcoded audio alignment', () => {
 });
 
 describe('remux resume', () => {
-  const bounds = [2.8, 5.8, 8.8, 11.8];
+  const grid = computeSegmentGrid(
+    [2.8, 5.8, 8.8, 11.8, 14.8].map((pts) => ({ pts, dts: pts - 0.08 })),
+    2.8,
+    17.8,
+    3,
+  )!;
 
-  it('seeks to the absolute keyframe boundary', () => {
-    const args = remux({ startSegment: 3, segmentBoundaries: bounds, sourceStartPts: 2.8 });
+  it('seeks both sides to the absolute keyframe decode time', () => {
+    const args = remux({ startSegment: 3, grid, sourceStartPts: 2.8 });
     expect(after(args, '-seek_timestamp')).toBe('1');
-    expect(after(args, '-ss')).toBe('11.800');
+    expect(after(args, '-ss')).toBe('11.72');
+    expect(last(args, '-ss')).toBe('11.72');
     expect(args).toContain('-noaccurate_seek');
-    expect(after(args, '-filter:a')).toBe(audioStartAlignFilter(11.8));
+    // No sample rate, no packet grid: the audio starts at that decode time.
+    expect(after(args, '-filter:a')).toBe(audioStartAlignFilter(11.72));
+  });
+
+  it('starts encoded audio on the packet a run from the start puts there', () => {
+    const args = remux({
+      startSegment: 3,
+      grid,
+      sourceStartPts: 2.8,
+      audioStreams: [{ streamIndex: 1, sampleRate: 48000 }],
+    });
+    // Packets from 2.8 - 1024/48000, every 1024/48000: the first at or past
+    // 11.72 is number 420; an encode starts on it when aligned 1024 samples on.
+    expect(after(args, '-filter:a')).toBe(audioStartAlignFilter(2.8 + (420 * 1024) / 48000));
   });
 
   it('adds the origin to the uniform-grid fallback', () => {
     const args = remux({ startSegment: 3, segmentDuration: 3, sourceStartPts: 2.8 });
-    expect(after(args, '-ss')).toBe('11.800');
+    expect(after(args, '-ss')).toBe('11.8');
   });
 
-  it('pads the run from 0 to the video start', () => {
-    expect(after(remux({ sourceStartPts: 2.8 }), '-filter:a')).toBe(
+  it('pads the run from the start to the video start', () => {
+    expect(after(remux({ sourceStartPts: 2.8, grid }), '-filter:a')).toBe(
       audioStartAlignFilter(2.8),
     );
+    // Under the first keyframe's decode time, to drop what nothing times.
+    expect(after(remux({ sourceStartPts: 2.8, grid }), '-ss')).toBe('2.71');
     expect(remux({})).not.toContain('-seek_timestamp');
   });
 

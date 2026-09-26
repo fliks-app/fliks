@@ -1,8 +1,10 @@
 import {
   parseInitTracks,
+  readInitEdits,
+  retimeFragments,
   rewriteSegmentTfdt,
-  shiftSegmentTfdt,
   timelineOrigin,
+  withInitEdits,
 } from './timeline';
 
 // Minimal ISO-BMFF box builders — just enough structure for parseInitTracks /
@@ -195,21 +197,83 @@ describe('rewriteSegmentTfdt', () => {
   });
 });
 
-describe('shiftSegmentTfdt', () => {
-  const both = parseInitTracks(buildInitAv());
+describe('track edits', () => {
+  /** A trak whose edts holds v0 elst entries, [duration, media_time] each. */
+  function trakWithEdits(trackId: number, timescale: number, handler: string, entries: [number, number][]): Buffer {
+    const tkhd = box('tkhd', Buffer.concat([Buffer.alloc(12), u32(trackId)]));
+    const mdhd = box('mdhd', Buffer.concat([Buffer.alloc(12), u32(timescale)]));
+    const hdlr = box('hdlr', Buffer.concat([Buffer.alloc(8), Buffer.from(handler, 'latin1')]));
+    const rows = entries.map(([duration, mediaTime]) => {
+      const e = Buffer.alloc(12);
+      e.writeUInt32BE(duration, 0);
+      e.writeInt32BE(mediaTime, 4);
+      e.writeUInt32BE(0x00010000, 8);
+      return e;
+    });
+    const elst = box('elst', Buffer.concat([Buffer.alloc(4), u32(entries.length), ...rows]));
+    return box('trak', Buffer.concat([tkhd, box('edts', elst), box('mdia', Buffer.concat([mdhd, hdlr]))]));
+  }
+  // mvhd v0: version+flags(4) creation(4) modification(4) timescale(4) → ts @12
+  const mvhd = box('mvhd', Buffer.concat([Buffer.alloc(12), u32(1000)]));
+  const init = box(
+    'moov',
+    Buffer.concat([mvhd, trakWithEdits(1, 16000, 'vide', [[0, 1280]]), trakWithEdits(2, 48000, 'soun', [[0, 0]])]),
+  );
+  const edit = (buf: Buffer, id: number) => readInitEdits(buf).get(id);
 
-  it('moves every track of a keyframe-cut segment by the origin, off-grid times kept', () => {
-    const seg = Buffer.concat([buildSeg(98 * TS, 1), buildSeg(97.979 * TS, 2)]);
-    const out = shiftSegmentTfdt(seg, both, 2.8);
-    const i = out.indexOf(Buffer.from('tfdt', 'latin1'));
-    const j = out.indexOf(Buffer.from('tfdt', 'latin1'), i + 1);
-    expect(out.readUInt32BE(i + 8)).toBe(100.8 * TS);
-    expect(out.readUInt32BE(j + 8)).toBe(Math.round(100.779 * TS));
+  it('reads each track edit in its own timescale', () => {
+    expect(edit(init, 1)).toBe(1280n);
+    expect(edit(init, 2)).toBe(0n);
   });
 
-  it('returns the same buffer for a zero origin', () => {
-    const seg = buildSeg(98 * TS, 1);
-    expect(shiftSegmentTfdt(seg, both, 0)).toBe(seg);
+  it('folds empty edits ahead of the media into the offset', () => {
+    // 0.5 s of empty edit (movie timescale 1000), then media from 0.
+    const delayed = box('moov', Buffer.concat([mvhd, trakWithEdits(1, 16000, 'vide', [[500, -1], [0, 160]])]));
+    expect(edit(delayed, 1)).toBe(160n - 8000n);
+  });
+
+  it('sets one edit per track, from its kind', () => {
+    const out = withInitEdits(init, (t) => (t.isVideo ? 0.08 : 0.128));
+    expect(edit(out, 1)).toBe(1280n);
+    expect(edit(out, 2)).toBe(6144n);
+    expect(parseInitTracks(out).get(2)?.timescale).toBe(48000);
+  });
+
+  it('adds an edit to a track without one, and replaces several with one', () => {
+    const bare = withInitEdits(buildInitAv(), () => 0.5);
+    expect(edit(bare, 1)).toBe(500n);
+    expect(edit(bare, 2)).toBe(500n);
+    const several = box('moov', Buffer.concat([mvhd, trakWithEdits(1, 16000, 'vide', [[500, -1], [0, 160]])]));
+    expect(edit(withInitEdits(several, () => 0.01), 1)).toBe(160n);
+  });
+
+  /** A fragment of `trackId` with a v1 (64-bit) tfdt. */
+  function seg64(value: bigint, trackId: number): Buffer {
+    const tfhd = box('tfhd', Buffer.concat([Buffer.alloc(4), u32(trackId)]));
+    const v = Buffer.alloc(8);
+    v.writeBigInt64BE(value);
+    const tfdt = box('tfdt', Buffer.concat([Buffer.from([1, 0, 0, 0]), v]));
+    return box('moof', box('traf', Buffer.concat([tfhd, tfdt])));
+  }
+  const tfdtOf = (buf: Buffer, n = 0) => {
+    let i = -1;
+    for (let k = 0; k <= n; k++) i = buf.indexOf(Buffer.from('tfdt', 'latin1'), i + 1);
+    return buf.readBigUInt64BE(i + 8);
+  };
+
+  it('moves every track by its own tick count, a negative run start included', () => {
+    const seg = Buffer.concat([seg64(1280n, 1), seg64(-1008n, 2)]);
+    const out = retimeFragments(seg, new Map([[1, 768n], [2, 6144n]]));
+    expect(tfdtOf(out, 0)).toBe(2048n);
+    expect(tfdtOf(out, 1)).toBe(5136n);
+  });
+
+  it('throws rather than write a negative tfdt', () => {
+    expect(() => retimeFragments(seg64(10n, 1), new Map([[1, -11n]]))).toThrow(RangeError);
+  });
+
+  it('throws on a fragment of a track the init does not declare', () => {
+    expect(() => retimeFragments(seg64(10n, 3), new Map([[1, 0n]]))).toThrow(/track 3/);
   });
 });
 

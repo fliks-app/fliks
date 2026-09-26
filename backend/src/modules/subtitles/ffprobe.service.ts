@@ -140,8 +140,6 @@ export interface VideoStreamInfo {
   firstFrameSeconds?: number;
   /** Source time the stream ends at, when the container declares it. */
   endSeconds?: number;
-  /** ffprobe `has_b_frames` > 0: frames are reordered, so decode starts before PTS 0. */
-  hasBFrames?: boolean;
   bitRate?: number;
   bitDepth?: number;
   colorSpace?: string;
@@ -238,7 +236,6 @@ interface FfprobeStream {
   avg_frame_rate?: string;
   start_time?: string;
   duration?: string;
-  has_b_frames?: number;
   bit_rate?: string;
   bits_per_raw_sample?: string;
   color_space?: string;
@@ -602,8 +599,6 @@ export class FfprobeService {
           ),
           startTimeSeconds: s.start_time ? Number(s.start_time) : undefined,
           endSeconds: streamEndSeconds(s),
-          hasBFrames:
-            s.has_b_frames != null ? s.has_b_frames > 0 : undefined,
           bitRate: s.bit_rate ? Number(s.bit_rate) : undefined,
           bitDepth: s.bits_per_raw_sample
             ? Number(s.bits_per_raw_sample)

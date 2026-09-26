@@ -36,6 +36,38 @@ const ENCODER_MAX_CHANNELS: Record<AudioEncodeCodec, number> = {
   eac3: 6,
 };
 
+/** Samples per packet and priming samples ahead of the first one, measured on
+ *  jellyfin-ffmpeg 8.1: the first packet of a stream aligned at t sits at
+ *  t - padding / rate, each next one a frame later. */
+const ENCODER_FRAMES: Record<AudioEncodeCodec, { frame: number; padding: number }> = {
+  aac: { frame: 1024, padding: 1024 },
+  opus: { frame: 960, padding: 312 },
+  ac3: { frame: 1536, padding: 256 },
+  eac3: { frame: 1536, padding: 256 },
+};
+
+/** Sample rates each encoder takes; ffmpeg converts any other input to the
+ *  first (checked from 22.05, 88.2 and 192 kHz). */
+const ENCODER_RATES: Record<AudioEncodeCodec, number[]> = {
+  aac: [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350],
+  opus: [48000, 24000, 16000, 12000, 8000],
+  ac3: [48000, 44100, 32000],
+  eac3: [48000, 44100, 32000],
+};
+
+/** Packet grid (seconds) of an encoded track: its packets start at
+ *  `alignedAt - padding + k · frame`. Null when the input rate is unknown. */
+export function encodedPacketGrid(
+  codec: AudioEncodeCodec,
+  inputRate: number | undefined,
+): { frame: number; padding: number } | null {
+  if (!inputRate) return null;
+  const rates = ENCODER_RATES[codec];
+  const rate = rates.includes(inputRate) ? inputRate : rates[0];
+  const { frame, padding } = ENCODER_FRAMES[codec];
+  return { frame: frame / rate, padding: padding / rate };
+}
+
 export function isEncodableAudio(codec: string): codec is AudioEncodeCodec {
   return Object.prototype.hasOwnProperty.call(ENCODERS, codec);
 }

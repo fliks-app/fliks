@@ -26,8 +26,11 @@ import {
   buildAudioOnlyFfmpegArgs,
   buildFfmpegArgs,
   buildRemuxArgs,
+  remuxRunStart,
   type BuildFfmpegArgsOptions,
 } from './ffmpeg-args';
+import { RemuxSegmentAssembler, remuxAssemblyPlan } from './remux-assembler';
+import type { SegmentGrid } from './segment-boundaries';
 import { varStreamMapLayout } from './audio-layout';
 import {
   matchTimingWarnings,
@@ -1284,7 +1287,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     absolutePath: string,
     requestedSegment = 0,
     ctx?: SessionContext,
-    segmentBoundaries?: number[],
+    grid: SegmentGrid | null = null,
   ): Promise<TranscodeSession> {
     // Remux variant lives in its own session-map bucket so its cache
     // path doesn't collide with a main session for the same base
@@ -1302,7 +1305,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         absolutePath,
         requestedSegment,
         ctx,
-        segmentBoundaries,
+        grid,
       ),
     );
   }
@@ -1312,8 +1315,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     mediaFileId: number,
     absolutePath: string,
     requestedSegment: number,
-    ctx?: SessionContext,
-    segmentBoundaries?: number[],
+    ctx: SessionContext | undefined,
+    grid: SegmentGrid | null,
   ): Promise<TranscodeSession> {
     const existing = this.sessions.get(key);
     if (existing) {
@@ -1343,19 +1346,27 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       'remux',
     );
     await fsp.mkdir(sessionDir, { recursive: true });
+    // Per run: a run still being reaped must not delete this one's GOPs.
+    const gopDir = await fsp.mkdtemp(path.join(sessionDir, 'gop-'));
 
+    const segmentDuration = ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION;
+    const run = remuxRunStart(
+      grid,
+      requestedSegment,
+      segmentDuration,
+      ctx?.sourceStartPts ?? 0,
+    );
     const args = buildRemuxArgs(
       {
         inputPath: absolutePath,
-        outputDir: sessionDir,
+        outputDir: gopDir,
         startSegment: requestedSegment,
         trustedStreamInfo: ctx?.trustedStreamInfo,
         audioStreamIndex: ctx?.audioStreamIndex,
         sourceVideoCodec: ctx?.sourceVideoCodec,
-        sourceHasBFrames: ctx?.sourceHasBFrames,
         audioStreams: ctx?.audioStreams,
-        segmentBoundaries,
-        segmentDuration: ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION,
+        grid,
+        segmentDuration,
         sourceStartPts: ctx?.sourceStartPts,
         videoStreamIndex: ctx?.videoStreamIndex,
         sourceEndSeconds: ctx?.sourceEndSeconds,
@@ -1363,6 +1374,19 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       },
       this.log,
     );
+    const assembler = new RemuxSegmentAssembler(
+      remuxAssemblyPlan({
+        dir: sessionDir,
+        gopDir,
+        grid,
+        startSegment: requestedSegment,
+        run,
+        origin: ctx?.sourceStartPts ?? 0,
+      }),
+      this.log,
+      key,
+    );
+    assembler.start();
 
     const session = this.spawnFfmpegSession({
       id: key,
@@ -1376,6 +1400,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     });
     session.baseProfileHash = remuxBaseHash;
     session.variant = VARIANT_REMUX;
+    session.process.on('close', (code) => {
+      void assembler.finish(code === 0 && !session.intentionallyKilled);
+    });
 
     this.applyContext(session, ctx);
     return session;

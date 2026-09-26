@@ -15,6 +15,7 @@ import {
   audioCopyArgs,
   audioEncodeBitrateBps,
   audioEncoderName,
+  encodedPacketGrid,
   isEncodableAudio,
   trackEncodePlan,
   type AudioPlan,
@@ -45,6 +46,10 @@ import { varStreamMapLayout } from './audio-layout';
 import { timelineOrigin } from './timeline';
 import { inputSeekSeconds } from './source-timeline';
 import { resolveEncodePipeline } from './encode-pipeline';
+import {
+  DECODE_TIME_TOLERANCE_SECONDS,
+  type SegmentGrid as KeyframeGrid,
+} from './segment-boundaries';
 import { openclTonemapInitArgs } from './hw-device';
 import { buildVideoFilters, resolveTonemapCurve } from './ffmpeg-filter-graph';
 import { isOpenclTonemapEnabled } from './codec/opencl-tonemap-probe';
@@ -65,10 +70,6 @@ import { buildImageBurnInFilterComplex } from './subtitle-overlay-filter';
  * startup cost on the common (small-header) case.
  */
 const TRUSTED_PROBE_SIZE = '5000000';
-
-/** ffmpeg's 3/23 s B-frame seek pull-back plus a 20 ms (one 50 fps frame) margin,
- *  far short of any real next keyframe. */
-const REMUX_SEEK_LEAD = 3 / 23 + 0.02;
 
 /** Join an HLS output path with forward slashes. ffmpeg's HLS muxer derives
  *  the fmp4 init directory with POSIX separators, so a backslash path (what
@@ -168,10 +169,11 @@ function hlsMuxerArgs(o: {
   varStreamMap?: string;
   segmentFilename: string;
   indexPath: string;
-  /** Start the fMP4 decode timeline at the run's first source PTS instead of 0. */
-  absoluteTimeline?: boolean;
   /** Source time the fMP4 output timeline starts from (the video `start_time`). */
   originSeconds?: number;
+  /** Remux: each run's first tfdt is its first sample's own time, less the
+   *  output `-ss`, for the assembler to move onto the served timeline. */
+  sourceTimestamps?: boolean;
 }): string[] {
   const origin = o.useTs ? 0 : timelineOrigin(o.originSeconds);
   return [
@@ -180,14 +182,13 @@ function hlsMuxerArgs(o: {
     ...(o.useTs
       ? []
       : ['-movflags', '+cmaf', '-avoid_negative_ts', 'disabled']),
-    // Without it the run's start lands in an empty edit, which MSE and ExoPlayer ignore.
-    ...(o.absoluteTimeline
+    ...(o.sourceTimestamps
       ? ['-hls_segment_options', 'movflags=+frag_discont']
       : []),
     // A video starting after 0 lands in an empty edit, which MSE ignores; a
     // 0-based output leaves none, and serving adds the origin back (timeline.ts).
     // A seeked run is already 0-based by its output `-ss`.
-    ...(origin !== 0 && o.outputSeekSeconds === 0
+    ...(!o.sourceTimestamps && origin !== 0 && o.outputSeekSeconds === 0
       ? ['-output_ts_offset', formatSeconds(-origin)]
       : []),
     // MPEG-TS carries no `tfdt` to re-anchor on serve, so a seeked run gets its
@@ -1335,12 +1336,94 @@ export function buildAudioOnlyFfmpegArgs(
   return args;
 }
 
+/** Where a remux run starts. */
+export interface RemuxRunStart {
+  /** Source time encoded audio is aligned to. */
+  audioStartSeconds: number;
+  /** Input and output `-ss`; null for none. */
+  seekSeconds: number | null;
+  /** ffmpeg's number for its first GOP file. */
+  startNumber: number;
+}
+
+/** Packet grid of the encoded audio track, when the audio is encoded. */
+export type EncodedAudioGrid = { frame: number; padding: number } | null;
+
+/**
+ * The start of a remux run at `startSegment`. A seeked run seeks both sides to
+ * its first keyframe's decode time: every demuxer lands at or before it
+ * (Matroska and MP4 on the keyframe before, MPEG-TS on the first keyframe
+ * after a byte position that ffmpeg pulls back by 3/23 s), and the output
+ * `-ss`, which drops copied packets by decode time until a keyframe, keeps
+ * exactly it. The muxer interleaves by decode time, so a run from the start
+ * puts in that segment the audio packets from that decode time on: a seeked
+ * run starts its audio on the first of them, encoded audio on the same packet
+ * grid, and the two runs meet without a gap or overlap. The run from the start
+ * seeks just under the first keyframe too, dropping packets nothing times
+ * before it. Without a keyframe list the run starts on the uniform grid.
+ */
+export function remuxRunStart(
+  grid: KeyframeGrid | null | undefined,
+  startSegment: number,
+  segmentDuration: number,
+  origin: number,
+  audioGrid: EncodedAudioGrid = null,
+): RemuxRunStart {
+  if (!grid) {
+    const start = origin + segmentIndexToSeconds(startSegment, segmentDuration);
+    return {
+      audioStartSeconds: start,
+      seekSeconds: startSegment > 0 ? start : null,
+      startNumber: startSegment,
+    };
+  }
+  if (startSegment >= grid.durations.length) {
+    throw new RangeError(
+      `remux segment ${startSegment} is past the last one (${grid.durations.length - 1})`,
+    );
+  }
+  const kf = grid.firstKeyframe[startSegment];
+  const { dts } = grid.keyframes[kf];
+  if (startSegment === 0) {
+    return {
+      audioStartSeconds: grid.boundaries[0],
+      seekSeconds: dts - DECODE_TIME_TOLERANCE_SECONDS,
+      startNumber: 0,
+    };
+  }
+  // A float-noise sliver past a packet start must not skip that packet.
+  const first = grid.boundaries[0];
+  const packets = audioGrid
+    ? Math.ceil((dts - first + audioGrid.padding) / audioGrid.frame - 1e-9)
+    : 0;
+  return {
+    audioStartSeconds: audioGrid ? first + packets * audioGrid.frame : dts,
+    seekSeconds: dts,
+    startNumber: kf,
+  };
+}
+
+/** The packet grid `buildRemuxArgs` encodes the picked track on, if encoded. */
+function remuxAudioGrid(
+  audioPlan: AudioPlan | undefined,
+  audioStreams: AudioStreamMeta[] | undefined,
+  audioStreamIndex: number | undefined,
+): EncodedAudioGrid {
+  const plan = audioPlan ?? { mode: 'transcode' as const, codec: 'aac' as const };
+  if (plan.mode === 'copy') return null;
+  return encodedPacketGrid(
+    plan.codec,
+    audioStreams?.[audioStreamIndex ?? 0]?.sampleRate,
+  );
+}
+
 /**
  * Build FFmpeg args for remux mode: copy video stream, optionally transcode audio.
  * This is much cheaper than full transcoding — no video re-encoding.
  */
 export interface BuildRemuxArgsOptions {
   inputPath: string;
+  /** Where this run writes one file per GOP (per segment without a grid). */
   outputDir: string;
   audioBitrate?: string;
   startSegment?: number;
@@ -1354,19 +1437,15 @@ export interface BuildRemuxArgsOptions {
    *  in the bitstream (`hev1`). Without this, iOS AVPlayer fails the
    *  variant with error -12927 on the first segment fetch. */
   sourceVideoCodec?: string;
-  /** Unknown (not probed) is treated as true: the seek lead only matters then. */
-  sourceHasBFrames?: boolean;
   /** Cached streamInfo audio array. See {@link AudioStreamMeta}. */
   audioStreams?: AudioStreamMeta[];
-  /** Keyframe-aligned segment start times (`boundaries[i]` = start of seg-`i`).
-   *  Copied video is cut at the source keyframes, so a resume/seek must seek to
-   *  the real start of `startSegment` — not the uniform-grid `index * segDur`,
-   *  which lands on the wrong content and desyncs the post-seek playlist. */
-  segmentBoundaries?: number[];
-  /** Nominal segment duration (seconds) for `-hls_time` and the uniform-grid
-   *  seek fallback. Defaults to {@link DEFAULT_SEGMENT_DURATION}. */
+  /** Keyframe grid the segments are assembled on; absent when keyframes
+   *  could not be read, and ffmpeg then cuts every `segmentDuration`. */
+  grid?: KeyframeGrid | null;
+  /** Nominal segment duration (seconds) of the uniform fallback.
+   *  Defaults to {@link DEFAULT_SEGMENT_DURATION}. */
   segmentDuration?: number;
-  /** Source time of the first presented video frame: the output timeline origin. */
+  /** Source time of the first presented video frame. */
   sourceStartPts?: number;
   /** Absolute index of the programme video stream. */
   videoStreamIndex?: number;
@@ -1388,9 +1467,8 @@ export function buildRemuxArgs(
     trustedStreamInfo = false,
     audioStreamIndex,
     sourceVideoCodec,
-    sourceHasBFrames = true,
     audioStreams,
-    segmentBoundaries,
+    grid,
     segmentDuration = DEFAULT_SEGMENT_DURATION,
     sourceStartPts = 0,
     videoStreamIndex,
@@ -1409,44 +1487,30 @@ export function buildRemuxArgs(
     args.push('-analyzeduration', '1000000', '-probesize', '1000000');
   }
 
-  // Source time of the run's first video frame: the keyframe boundaries are
-  // absolute, hence `-seek_timestamp`.
-  const runStartSeconds =
-    startSegment > 0
-      ? (segmentBoundaries?.[startSegment] ??
-        segmentIndexToSeconds(startSegment, segmentDuration) + sourceStartPts)
-      : sourceStartPts;
-  if (startSegment > 0) {
-    // ffmpeg pulls a B-frame seek target back by 3/23 s on formats that don't
-    // seek by PTS (MKV), which lands an exact keyframe time on the GOP before.
-    const lead = sourceHasBFrames ? REMUX_SEEK_LEAD : 0;
-    // The accurate-seek trim ignores `-seek_timestamp` and adds the file start
-    // again; the alignment filter trims decoded audio instead.
-    args.push('-noaccurate_seek', '-seek_timestamp', '1');
-    args.push('-ss', (runStartSeconds + lead).toFixed(3));
-  }
+  const run = remuxRunStart(
+    grid,
+    startSegment,
+    segmentDuration,
+    sourceStartPts,
+    remuxAudioGrid(audioPlan, audioStreams, audioStreamIndex),
+  );
+  const seek = run.seekSeconds != null ? formatSeconds(run.seekSeconds) : null;
+  // Keyframe decode times are absolute, hence `-seek_timestamp`. The
+  // accurate-seek trim ignores it and adds the file start again; the output
+  // `-ss` and the alignment filter trim instead.
+  if (seek) args.push('-noaccurate_seek', '-seek_timestamp', '1', '-ss', seek);
   const audioArgs = buildAudioOutputArgs(audioPlan, {
     stereoBitrate: audioBitrate,
-    alignStartSeconds: runStartSeconds,
+    alignStartSeconds: run.audioStartSeconds,
     endSeconds: sourceEndSeconds,
     useTs: false,
   });
 
   args.push('-i', inputPath);
-
-  // Preserve source PTS end-to-end on every spawn (see
-  // `buildFfmpegArgs` for the full rationale).
   args.push('-copyts', '-muxdelay', '0', '-muxpreload', '0');
-
-  // No output-side `-ss` here. The transcode path needs it because
-  // `-ss <T> -i input` with HW decode (VAAPI) doesn't reliably drop the
-  // [last_keyframe ≤ T, T) frame range before the encoder's mandatory
-  // first IDR (see `encoder-stability.md` issue 2b). Remux is `-c:v copy`
-  // — no decode → no frame range to drop, and `-ss` at the output side
-  // turns into a packet-level PTS filter that breaks the GOP (drops
-  // non-keyframe packets that depend on the last source keyframe). The
-  // pre-`-i` seek above lands on the source IDR cleanly via demuxer
-  // index lookup; that's all remux needs.
+  // Copied packets before the first keyframe's decode time go: the video up to
+  // that keyframe, audio (copied or not) ahead of the run.
+  if (seek) args.push('-ss', seek);
 
   // Remux always muxes one audio track: its master publishes no audio group,
   // so switching track is a new playback-info with that track picked.
@@ -1490,17 +1554,15 @@ export function buildRemuxArgs(
   args.push(
     ...hlsMuxerArgs({
       useTs: false,
-      hlsTime: String(segmentDuration),
-      startSegment,
-      outputSeekSeconds: 0,
+      // 0 cuts at every keyframe: the segments are assembled from those GOPs.
+      hlsTime: grid ? '0' : String(segmentDuration),
+      startSegment: run.startNumber,
+      outputSeekSeconds: run.seekSeconds ?? 0,
       segType: 'fmp4',
       initFilename: 'init.mp4',
-      segmentFilename: ffOutPath(outputDir, 'seg-%04d.m4s'),
+      segmentFilename: ffOutPath(outputDir, 'gop-%d.m4s'),
       indexPath: ffOutPath(outputDir, 'index.m3u8'),
-      // Seeked runs only: from the file start a primed AAC track has a negative
-      // first PTS, which frag_discont would write as a wrapped tfdt.
-      absoluteTimeline: startSegment > 0,
-      originSeconds: sourceStartPts,
+      sourceTimestamps: true,
     }),
   );
 

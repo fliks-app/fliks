@@ -5,6 +5,7 @@ import {
   buildAudioOnlyFfmpegArgs,
 } from './ffmpeg-args';
 import type { BuildFfmpegArgsOptions } from './ffmpeg-args';
+import { computeSegmentGrid } from './segment-boundaries';
 import type { CodecVariant } from './codec/types';
 import type { TranscodeProfile } from './types';
 
@@ -1352,6 +1353,14 @@ describe('buildFfmpegArgs — QSV/VAAPI matrix golden argv (characterization)', 
 });
 
 describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization)', () => {
+  // Keyframes every 3.003 s with a 2-frame reorder delay, cut every other one.
+  const GRID = computeSegmentGrid(
+    [0, 3.003, 6.006, 9.009, 12.012].map((pts) => ({ pts, dts: pts - 0.0834 })),
+    0,
+    15.015,
+    6,
+  )!;
+
   it('remux: copy audio, HEVC source → -c:v copy + -tag:v hvc1', () => {
     expect(
       buildRemuxArgs(
@@ -1400,6 +1409,8 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
        "+cmaf",
        "-avoid_negative_ts",
        "disabled",
+       "-hls_segment_options",
+       "movflags=+frag_discont",
        "-f",
        "hls",
        "-hls_time",
@@ -1415,7 +1426,7 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
        "-hls_flags",
        "independent_segments+temp_file",
        "-hls_segment_filename",
-       "/cache/out/seg-%04d.m4s",
+       "/cache/out/gop-%d.m4s",
        "/cache/out/index.m3u8",
      ]
     `);
@@ -1430,7 +1441,7 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
           startSegment: 2,
           trustedStreamInfo: true,
           sourceVideoCodec: 'h264',
-          segmentBoundaries: [0, 3.003, 6.006, 9.009],
+          grid: GRID,
         },
         silentLog,
       ),
@@ -1447,7 +1458,7 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
        "-seek_timestamp",
        "1",
        "-ss",
-       "6.156",
+       "11.9286",
        "-i",
        "/media/in.mkv",
        "-copyts",
@@ -1455,6 +1466,8 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
        "0",
        "-muxpreload",
        "0",
+       "-ss",
+       "11.9286",
        "-map",
        "0:v:0",
        "-map",
@@ -1468,7 +1481,7 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
        "-ac",
        "2",
        "-filter:a",
-       "asetpts=PTS-6.006/TB,aresample=async=1:first_pts=0,asetpts=PTS+6.006/TB",
+       "asetpts=PTS-11.9286/TB,aresample=async=1:first_pts=0,asetpts=PTS+11.9286/TB",
        "-movflags",
        "+cmaf",
        "-avoid_negative_ts",
@@ -1478,11 +1491,11 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
        "-f",
        "hls",
        "-hls_time",
-       "3",
+       "0",
        "-hls_list_size",
        "0",
        "-start_number",
-       "2",
+       "4",
        "-hls_segment_type",
        "fmp4",
        "-hls_fmp4_init_filename",
@@ -1490,7 +1503,7 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
        "-hls_flags",
        "independent_segments+temp_file",
        "-hls_segment_filename",
-       "/cache/out/seg-%04d.m4s",
+       "/cache/out/gop-%d.m4s",
        "/cache/out/index.m3u8",
      ]
     `);
@@ -1513,26 +1526,51 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
     ]);
   });
 
-  it('remux: seeks exactly on the keyframe when the source has no B-frames', () => {
-    const seekOf = (sourceHasBFrames?: boolean) => {
+  it('remux: every run but the first seeks both sides to its keyframe decode time', () => {
+    const seeksOf = (startSegment: number, grid: typeof GRID | null) => {
       const args = buildRemuxArgs(
         {
           inputPath: '/media/in.mkv',
           outputDir: '/cache/out',
-          startSegment: 2,
-          trustedStreamInfo: true,
-          sourceHasBFrames,
-          segmentBoundaries: [0, 3.003, 6.006],
+          startSegment,
+          grid,
         },
         silentLog,
       );
-      return args[args.indexOf('-ss') + 1];
+      return {
+        seeks: args.flatMap((a, i) => (a === '-ss' ? [args[i + 1]] : [])),
+        hlsTime: args[args.indexOf('-hls_time') + 1],
+        startNumber: args[args.indexOf('-start_number') + 1],
+      };
     };
-    expect(seekOf(false)).toBe('6.006');
-    expect(seekOf(true)).toBe('6.156');
-    expect(seekOf(undefined)).toBe('6.156');
+    // From the start: 10 ms under the first keyframe's decode time.
+    expect(seeksOf(0, GRID)).toEqual({
+      seeks: ['-0.0934', '-0.0934'],
+      hlsTime: '0',
+      startNumber: '0',
+    });
+    // Segment 1 opens on keyframe 2 (pts 6.006, dts 5.923).
+    expect(seeksOf(1, GRID)).toEqual({
+      seeks: ['5.9226', '5.9226'],
+      hlsTime: '0',
+      startNumber: '2',
+    });
+    // No keyframe list: ffmpeg cuts every 3 s and the run starts on that grid.
+    expect(seeksOf(2, null)).toEqual({
+      seeks: ['6', '6'],
+      hlsTime: '3',
+      startNumber: '2',
+    });
   });
 
+  it('remux: refuses a segment past the grid', () => {
+    expect(() =>
+      buildRemuxArgs(
+        { inputPath: '/m', outputDir: '/o', startSegment: 3, grid: GRID },
+        silentLog,
+      ),
+    ).toThrow(RangeError);
+  });
   it('audio-only: resume applies a single input -ss', () => {
     expect(
       buildAudioOnlyFfmpegArgs(
