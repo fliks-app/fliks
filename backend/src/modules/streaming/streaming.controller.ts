@@ -796,6 +796,7 @@ export class StreamingController {
       ss.autoQualityMode,
       audioStreamIndex,
       ss.segmentDuration,
+      held.scan,
     );
     const { response, useHdrLadder, videoVariant, muxFlavour } = evaluateResult;
     const sourceAudioCount = resolved.mediaFile.streamInfo?.audio?.length ?? 0;

@@ -138,9 +138,6 @@ export interface SessionContext {
   sourceClockBreakSeconds?: number;
   /** Source time the video ends at: transcoded audio is padded up to it. */
   sourceEndSeconds?: number;
-  /** Size and mtime of the source at playback-info (`sourceVersion`): segments
-   *  cut from another version of the file must not be served. */
-  sourceVersion?: string;
   /** Absolute index of the programme video stream. */
   videoStreamIndex?: number;
   /** Source colorimetry from ffprobe (`colorSpace`/`colorPrimaries`/
