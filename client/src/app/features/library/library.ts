@@ -12,6 +12,8 @@ import {
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { FormsModule } from '@angular/forms';
+import { Capacitor } from '@capacitor/core';
+import { Keyboard } from '@capacitor/keyboard';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { MediaService, Media, GenreSummary, CollectionSummary } from '../../core/services/api/media.service';
 import {
@@ -569,6 +571,14 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.searchQuery.set(query);
     this.syncQueryParams();
     this.load(this.library()?.id);
+  }
+
+  dismissKeyboard(input: HTMLInputElement) {
+    input.blur();
+    // Capacitor's WebView can keep the soft keyboard up after a JS blur.
+    if (Capacitor.isNativePlatform()) {
+      Keyboard.hide().catch(() => {});
+    }
   }
 
   onFilterChange() {
