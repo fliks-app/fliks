@@ -50,8 +50,8 @@ import {
 } from './transcoding/constants';
 import {
   getRemuxSegmentGrid,
-  secondsToSegmentIndex as boundarySecondsToIndex,
-  type SegmentGrid,
+  gridSegmentIndex,
+  type KeyframeGrid,
 } from './transcoding/segment-boundaries';
 import {
   cueOffsetSeconds,
@@ -63,6 +63,7 @@ import { LiveSessionRegistry } from './live-session.service';
 import * as path from 'path';
 import { SegmentPackagingService } from './services/segment-packaging.service';
 import { SessionRouter } from './services/session-router.service';
+import { ClockBreakScanService } from './services/clock-break-scan.service';
 import {
   SessionContextBuilder,
   sessionProfileHash,
@@ -369,6 +370,7 @@ export class StreamingController {
     private readonly segmentPackaging: SegmentPackagingService,
     private readonly sessionRouter: SessionRouter,
     private readonly sessionContextBuilder: SessionContextBuilder,
+    private readonly clockBreakScan: ClockBreakScanService,
     private readonly pluginPreRoll: PluginPreRollService,
     private readonly events: EventsService,
     private readonly caslAbilityFactory: CaslAbilityFactory,
@@ -429,7 +431,7 @@ export class StreamingController {
   ): number {
     const posIndex = live
       ? remux
-        ? boundarySecondsToIndex(remux.boundaries, live.position, remux.origin)
+        ? gridSegmentIndex(remux.boundaries, live.position, remux.origin)
         : secondsToSegmentIndex(
             live.position,
             this.segDur(existing ?? undefined),
@@ -455,7 +457,7 @@ export class StreamingController {
   private remuxGrid(
     resolved: ResolvedFile,
     segDur: number,
-  ): Promise<SegmentGrid | null> {
+  ): Promise<KeyframeGrid | null> {
     return getRemuxSegmentGrid(
       resolved.absolutePath,
       segDur,
@@ -767,6 +769,13 @@ export class StreamingController {
       .catch(() => {
         /* prewarm is best-effort — the on-demand path still serves the track */
       });
+
+    // A file imported before the scan existed gets it now, for its next plays.
+    void this.clockBreakScan.scheduleIfNeeded(
+      mediaFileId,
+      resolved.absolutePath,
+      resolved.mediaFile.streamInfo,
+    );
 
     // Before the decision below, which reads them.
     this.activeStreamTracker.setSegmentDuration(ss.segmentDuration);
@@ -1939,7 +1948,7 @@ export class StreamingController {
           // (and seek) via the real keyframe boundaries, not the uniform grid.
           const grid = await this.remuxGrid(resolved, this.segDur(ctx));
           const startSegment = grid
-            ? boundarySecondsToIndex(grid.boundaries, startAtSec, ctx.sourceStartPts ?? 0)
+            ? gridSegmentIndex(grid.boundaries, startAtSec, ctx.sourceStartPts ?? 0)
             : secondsToSegmentIndex(startAtSec, this.segDur(ctx));
           void this.transcodingService.getOrCreateRemuxSession(
             mediaFileId,

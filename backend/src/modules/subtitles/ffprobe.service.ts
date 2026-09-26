@@ -6,8 +6,9 @@ import { inferLanguageCodeFromTitle } from '../../common/release-parsing/languag
 import { isImageBasedSubtitleCodec } from '../../common/constants/subtitle-codecs';
 import { subtitleFlagsFromTitle } from '../../common/constants/subtitle-flags';
 import { existsSync } from 'fs';
+import { stat } from 'fs/promises';
 import { vaapiRenderNode } from '../streaming/transcoding/hw-device';
-import { extractVideoPackets } from '../streaming/transcoding/segment-boundaries';
+import { ffprobeLines } from './video-packets';
 import { mapWithConcurrency } from '../../common/utils/concurrency';
 import { ffmpegSlots, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
 
@@ -72,6 +73,9 @@ const MIN_PLAUSIBLE_FPS = 1;
 const MAX_PLAUSIBLE_FPS = 480;
 /** Audio decoded past a late stream's first packet before its parameters are read. */
 const LATE_AUDIO_PARAMS_MARGIN_SECONDS = 1;
+/** How far into the file a track's first packet is looked for; one starting
+ *  later keeps its header start. */
+const LATE_AUDIO_SEARCH_SECONDS = 120;
 /** Codecs that carry a still picture (cover art, thumbnail tracks) rather than the programme. */
 const STILL_IMAGE_CODECS = new Set(['mjpeg', 'png', 'bmp', 'gif', 'webp']);
 /** Relative gap at which the packets win over the header. */
@@ -128,11 +132,13 @@ export interface VideoStreamInfo {
    *  quarter turn, since every decode path autorotates. */
   width?: number;
   height?: number;
-  /** Display-matrix rotation in degrees (ffprobe sign), when not 0. */
-  rotation?: number;
   displayAspectRatio?: string;
   pixelFormat?: string;
   frameRate?: string;
+  /** Frames the decoder reorders (`has_b_frames`) and the `avg_frame_rate`:
+   *  where a copy starts the decode times Matroska leaves unknown. */
+  reorderFrames?: number;
+  avgFrameRate?: string;
   /** Container start PTS of the video stream (seconds): its first packet. */
   startTimeSeconds?: number;
   /** Source time of the first frame the decoder presents (seconds). Differs
@@ -187,8 +193,6 @@ export interface AudioStreamInfo {
   commentary?: boolean;
   /** Narrates the picture for blind viewers (`visual_impaired` / `descriptions`). */
   audioDescription?: boolean;
-  /** Dialogue-enhanced track for hard-of-hearing viewers. */
-  hearingImpaired?: boolean;
 }
 
 export interface SubtitleStreamInfo {
@@ -220,8 +224,9 @@ export interface MediaFileInfo {
   /** ffprobe `format_name` (`mpegts`, `matroska,webm`, …): how the demuxer seeks. */
   formatName?: string;
   /** Source time an MPEG-TS clock breaks at (a concatenated or restarted
-   *  recording). Playback ends there: what follows is on another clock. */
-  timestampBreakSeconds?: number;
+   *  recording): playback ends there. Null once a scan found none; absent
+   *  until the background scan ran. */
+  timestampBreakSeconds?: number | null;
   durationSeconds?: number;
   /** Embedded chapter markers from the container (MKV/MP4). Empty if none. */
   chapters?: Chapter[];
@@ -240,6 +245,8 @@ interface FfprobeStream {
   pix_fmt?: string;
   r_frame_rate?: string;
   avg_frame_rate?: string;
+  has_b_frames?: number;
+  time_base?: string;
   start_time?: string;
   duration?: string;
   bit_rate?: string;
@@ -290,16 +297,12 @@ export function streamEndSeconds(s: FfprobeStream): number | undefined {
 /** Accessibility and commentary roles an audio stream declares. */
 export function audioStreamRoles(
   s: FfprobeStream,
-): Pick<
-  AudioStreamInfo,
-  'commentary' | 'audioDescription' | 'hearingImpaired'
-> {
+): Pick<AudioStreamInfo, 'commentary' | 'audioDescription'> {
   const d = s.disposition;
   return {
     commentary: d?.comment === 1 || undefined,
     audioDescription:
       d?.visual_impaired === 1 || d?.descriptions === 1 || undefined,
-    hearingImpaired: d?.hearing_impaired === 1 || undefined,
   };
 }
 
@@ -319,7 +322,7 @@ export function selectProgrammeVideoStreams(
   return moving.length ? moving : video;
 }
 
-/** Display-matrix rotation in degrees, from the side data or the legacy tag. */
+/** Display-matrix rotation in degrees, from the side data or the rotate tag. */
 export function streamRotation(s: FfprobeStream): number {
   const matrix = s.side_data_list?.find((d) => typeof d.rotation === 'number');
   const raw = matrix?.rotation ?? Number(tag(s.tags, 'rotate') ?? 0);
@@ -337,13 +340,37 @@ export function displaySize(
     : { width, height };
 }
 
-/** Source time of the first frame in an ffmpeg `showinfo` log, from its
- *  integer pts and the filter time base (`pts_time` is rounded). */
-export function parseFirstFrameSeconds(log: string): number | undefined {
-  const tb = /config in time_base: (\d+)\/(\d+)/.exec(log);
-  const pts = /\bn: *0 pts: *(-?\d+)/.exec(log);
-  if (!tb || !pts || Number(tb[2]) === 0) return undefined;
-  return (Number(pts[1]) * Number(tb[1])) / Number(tb[2]);
+interface FfprobeFrame {
+  pts?: number;
+  best_effort_timestamp?: number;
+  side_data_list?: unknown[];
+}
+
+/** The first complete element of the `frames` array in ffprobe JSON output
+ *  read so far, or undefined while it is still being written. */
+export function firstFrameOf(json: string): FfprobeFrame | undefined {
+  const start = json.indexOf('{', json.indexOf('"frames"') + 1);
+  if (json.indexOf('"frames"') < 0 || start < 0) return undefined;
+  let depth = 0;
+  let quoted = false;
+  for (let i = start; i < json.length; i++) {
+    const c = json[i];
+    if (quoted) {
+      if (c === '\\') i++;
+      else if (c === '"') quoted = false;
+    } else if (c === '"') quoted = true;
+    else if (c === '{' || c === '[') depth++;
+    else if ((c === '}' || c === ']') && --depth === 0) {
+      return JSON.parse(json.slice(start, i + 1)) as FfprobeFrame;
+    }
+  }
+  return undefined;
+}
+
+/** A frame timestamp in seconds, exact from its integer ticks and time base. */
+export function ticksToSeconds(ticks: number | undefined, timeBase: string | undefined): number | undefined {
+  const [num, den] = (timeBase ?? '').split('/').map(Number);
+  return ticks == null || !(num > 0 && den > 0) ? undefined : (ticks * num) / den;
 }
 
 /** Case-insensitive ffprobe tag lookup. Matroska stores per-stream
@@ -593,14 +620,12 @@ export class FfprobeService {
         const dovi = (s.side_data_list ?? []).find(
           (d) => typeof d.dv_profile === 'number',
         );
-        const rotation = streamRotation(s);
         return {
           streamIndex: s.index,
           codec: s.codec_name ?? 'unknown',
           profile: s.profile,
           level: s.level,
-          ...displaySize(s.width, s.height, rotation),
-          rotation: rotation || undefined,
+          ...displaySize(s.width, s.height, streamRotation(s)),
           displayAspectRatio: s.display_aspect_ratio,
           pixelFormat: s.pix_fmt,
           frameRate: this.reconcileFrameRate(
@@ -608,6 +633,8 @@ export class FfprobeService {
             s.index === programme[0].index ? measuredFps : undefined,
             path.basename(videoPath),
           ),
+          reorderFrames: s.has_b_frames,
+          avgFrameRate: s.avg_frame_rate,
           startTimeSeconds: s.start_time ? Number(s.start_time) : undefined,
           endSeconds: streamEndSeconds(s),
           bitRate: s.bit_rate ? Number(s.bit_rate) : undefined,
@@ -628,27 +655,16 @@ export class FfprobeService {
         };
       });
 
-      // HDR10 sources: probe the first frame's side-data for mastering-display
-      // + content-light so the encoder signals the source's real peak luminance
-      // instead of a generic 1000-nit reference. Gated to HDR10 (one extra
-      // frame-decoding ffprobe pass); SDR / HLG imports skip it.
-      if (video[0]?.hdrFormat === 'HDR10') {
-        const meta = await this.probeHdrStaticMetadata(
-          videoPath,
-          video[0].streamIndex,
-        );
-        if (meta) video[0].hdrMetadata = meta;
-      }
       if (video[0]) {
-        video[0].firstFrameSeconds = await this.probeFirstFrameSeconds(
-          videoPath,
-          video[0].streamIndex,
-        );
+        const first = await this.probeFirstFrame(videoPath, programme[0]);
+        video[0].firstFrameSeconds = first.seconds;
+        // HDR10: the encoder signals the source's real peak luminance instead of a
+        // generic 1000-nit reference.
+        if (video[0].hdrFormat === 'HDR10') {
+          const meta = parseHdrStaticMetadata(first.sideData);
+          if (meta) video[0].hdrMetadata = meta;
+        }
       }
-      const timestampBreakSeconds =
-        video[0] && parsed.format?.format_name?.split(',').includes('mpegts')
-          ? await this.probeClockBreak(videoPath, video[0].streamIndex)
-          : undefined;
 
       const audio: AudioStreamInfo[] = streams
         .filter((s) => s.codec_type === 'audio')
@@ -695,7 +711,6 @@ export class FfprobeService {
           formatBitRate,
           formatStartSeconds,
           formatName: parsed.format?.format_name,
-          timestampBreakSeconds,
           durationSeconds,
           chapters,
           error: 'No streams detected',
@@ -708,7 +723,6 @@ export class FfprobeService {
         formatBitRate,
         formatStartSeconds,
         formatName: parsed.format?.format_name,
-        timestampBreakSeconds,
         durationSeconds,
         chapters,
       };
@@ -740,128 +754,74 @@ export class FfprobeService {
     return undefined;
   }
 
-  /** Probe the first video frame's side-data for HDR10 static metadata
-   *  (mastering display + content light). Gated to HDR10 sources by the caller
-   *  so non-HDR imports skip the extra (frame-decoding) ffprobe pass. Returns
-   *  null when the source carries no such metadata. */
-  private async probeHdrStaticMetadata(
+  /** First frame the decoder presents, as a transcode reads it (edit lists
+   *  applied): a stream cut mid-GOP starts on packets nothing decodes, so
+   *  neither its `start_time` nor its first keyframe is where the picture
+   *  starts. The read stops at that frame. */
+  private async probeFirstFrame(
     videoPath: string,
-    streamIndex: number,
-  ): Promise<HdrStaticMetadataDto | null> {
+    stream: FfprobeStream,
+  ): Promise<{ seconds?: number; sideData?: unknown[] }> {
+    let json = '';
+    let frame: FfprobeFrame | undefined;
     try {
-      const { stdout } = await execFileAsync(
-        'ffprobe',
+      await ffprobeLines(
         [
-          '-v',
-          'error',
-          '-print_format',
-          'json',
-          '-select_streams',
-          String(streamIndex),
-          '-read_intervals',
-          '%+#1',
-          '-show_frames',
-          '-show_entries',
-          'frame=side_data_list',
+          '-v', 'error',
+          '-select_streams', String(stream.index),
+          '-show_entries', 'frame=pts,best_effort_timestamp,side_data_list',
+          '-of', 'json',
           videoPath,
         ],
-        { timeout: 15_000 },
+        (line) => {
+          json += line + '\n';
+          frame = firstFrameOf(json);
+          return !frame;
+        },
+        { timeoutMs: 30_000 },
       );
-      const frames = (JSON.parse(stdout) as { frames?: { side_data_list?: unknown[] }[] }).frames;
-      return parseHdrStaticMetadata(frames?.[0]?.side_data_list);
     } catch (err) {
+      this.logger.warn(`First-frame probe failed for "${videoPath}": ${(err as Error).message}`);
+    }
+    // ffmpeg numbers a stream whose packets carry no timestamps from 0.
+    const seconds = frame
+      ? (ticksToSeconds(frame.pts ?? frame.best_effort_timestamp, stream.time_base) ?? 0)
+      : undefined;
+    if (seconds === undefined) {
       this.logger.warn(
-        `HDR static-metadata probe failed for "${videoPath}": ${(err as Error).message}`,
+        `"${path.basename(videoPath)}": no decodable video frame found; the timeline falls back to the stream start_time`,
       );
-      return null;
     }
-  }
-
-  /** First presented frame of the stream, decoded the way the transcode reads
-   *  it (`-copyts`, edit lists applied). A stream cut mid-GOP starts on packets
-   *  nothing can decode, so neither its `start_time` nor its first keyframe is
-   *  where the picture starts. Undefined when ffmpeg decodes nothing. */
-  private async probeFirstFrameSeconds(
-    videoPath: string,
-    streamIndex: number,
-  ): Promise<number | undefined> {
-    try {
-      const { stderr } = await execFileAsync(
-        'ffmpeg',
-        [
-          '-hide_banner', '-nostdin', '-nostats', '-loglevel', 'info',
-          '-an', '-sn', '-dn',
-          '-copyts',
-          '-i', videoPath,
-          '-map', `0:${streamIndex}`,
-          '-frames:v', '1',
-          '-vf', 'showinfo',
-          '-f', 'null', '-',
-        ],
-        { timeout: 30_000, maxBuffer: 16 * 1024 * 1024 },
-      );
-      const seconds = parseFirstFrameSeconds(stderr);
-      if (seconds === undefined) {
-        this.logger.warn(
-          `"${path.basename(videoPath)}": no decodable video frame found; the timeline falls back to the stream start_time`,
-        );
-      }
-      return seconds;
-    } catch (err) {
-      this.logger.warn(
-        `First-frame probe failed for "${videoPath}": ${(err as Error).message}`,
-      );
-      return undefined;
-    }
-  }
-
-  /** Where the video clock of an MPEG-TS breaks, if it does: its packets are
-   *  read end to end (no decode), since a break can sit anywhere. */
-  private async probeClockBreak(
-    videoPath: string,
-    streamIndex: number,
-  ): Promise<number | undefined> {
-    try {
-      const { breakSeconds } = await extractVideoPackets(videoPath, streamIndex);
-      if (breakSeconds != null) {
-        this.logger.warn(
-          `"${path.basename(videoPath)}": the timestamps break at ${breakSeconds}s; playback ends there`,
-        );
-      }
-      return breakSeconds;
-    } catch (err) {
-      this.logger.warn(`Clock break probe failed for "${videoPath}": ${(err as Error).message}`);
-      return undefined;
-    }
+    return { seconds, sideData: frame?.side_data_list };
   }
 
   /** Correct the header start of a track whose first packet lies past
    *  ffprobe's probe window, and read the parameters it then reports as
-   *  missing. One packet each, so the cost is a process spawn unless the track
-   *  really does start late. */
+   *  missing. One pass over the packets, stopped once every track showed. */
   private async probeAudioStarts(
     videoPath: string,
     audio: AudioStreamInfo[],
     formatStartSeconds: number | undefined,
   ): Promise<void> {
     const label = path.basename(videoPath);
-    await mapWithConcurrency(audio, ffmpegSlots(), async (a) => {
-      const first = await this.firstPacketSeconds(videoPath, a.streamIndex);
+    const firsts = await this.firstAudioPackets(videoPath, audio);
+    for (const a of audio) {
+      const first = firsts.get(a.streamIndex);
       // The header errs early only (a default when no packet was seen); a
       // packet before it is pre-roll an edit list or skip-samples discards.
-      if (first === undefined || first <= (a.startTimeSeconds ?? -Infinity)) return;
+      if (first === undefined || first <= (a.startTimeSeconds ?? -Infinity)) continue;
       this.logger.log(
         `"${label}": audio stream ${a.streamIndex} starts at ${first}s, past its header start ${a.startTimeSeconds}s`,
       );
       a.startTimeSeconds = first;
-    });
+    }
 
     const blind = audio.filter((a) => !a.channels || !a.sampleRate);
     if (!blind.length) return;
-    const reach =
-      Math.max(...blind.map((a) => a.startTimeSeconds ?? 0)) -
-      (formatStartSeconds ?? 0) +
-      LATE_AUDIO_PARAMS_MARGIN_SECONDS;
+    const reach = Math.max(
+      0,
+      Math.max(...blind.map((a) => a.startTimeSeconds ?? 0)) - (formatStartSeconds ?? 0),
+    ) + LATE_AUDIO_PARAMS_MARGIN_SECONDS;
     this.logger.log(
       `"${label}": audio stream(s) ${blind.map((a) => a.streamIndex).join(',')} have no parameters in the default probe window; reading ${reach.toFixed(1)}s of the file`,
     );
@@ -871,7 +831,8 @@ export class FfprobeService {
         [
           '-v', 'error',
           '-analyzeduration', String(Math.ceil(reach * 1_000_000)),
-          '-probesize', String(Number.MAX_SAFE_INTEGER),
+          // The duration bounds the read; the whole file is the byte ceiling.
+          '-probesize', String((await stat(videoPath)).size),
           '-select_streams', 'a',
           '-show_entries', 'stream=index,channels,channel_layout,sample_rate',
           '-of', 'json',
@@ -896,31 +857,35 @@ export class FfprobeService {
     }
   }
 
-  private async firstPacketSeconds(
+  /** First packet time of each audio stream, read in file order until every
+   *  one showed or the file moved `LATE_AUDIO_SEARCH_SECONDS` past its first
+   *  packet: a stream with no data at all must not read the whole file. */
+  private async firstAudioPackets(
     videoPath: string,
-    streamIndex: number,
-  ): Promise<number | undefined> {
+    audio: AudioStreamInfo[],
+  ): Promise<Map<number, number>> {
+    const firsts = new Map<number, number>();
+    const wanted = new Set(audio.map((a) => a.streamIndex));
+    if (!wanted.size) return firsts;
+    let origin: number | undefined;
     try {
-      const { stdout } = await execFileAsync(
-        'ffprobe',
-        [
-          '-v', 'error',
-          '-select_streams', String(streamIndex),
-          '-read_intervals', '%+#1',
-          '-show_entries', 'packet=pts_time',
-          '-of', 'csv=p=0',
-          videoPath,
-        ],
-        { timeout: 30_000 },
+      await ffprobeLines(
+        ['-v', 'error', '-show_entries', 'packet=stream_index,pts_time', '-of', 'csv=p=0', videoPath],
+        (line) => {
+          const [index, time] = line.split(',');
+          const pts = Number.parseFloat(time);
+          if (!Number.isFinite(pts)) return true;
+          origin ??= pts;
+          const stream = Number(index);
+          if (wanted.has(stream) && !firsts.has(stream)) firsts.set(stream, pts);
+          return firsts.size < wanted.size && pts - origin <= LATE_AUDIO_SEARCH_SECONDS;
+        },
+        { timeoutMs: 60_000 },
       );
-      const t = Number.parseFloat(stdout);
-      return Number.isFinite(t) ? t : undefined;
     } catch (err) {
-      this.logger.warn(
-        `First audio packet probe failed for "${videoPath}" stream ${streamIndex}: ${(err as Error).message}`,
-      );
-      return undefined;
+      this.logger.warn(`First audio packet probe failed for "${videoPath}": ${(err as Error).message}`);
     }
+    return firsts;
   }
 
   /**

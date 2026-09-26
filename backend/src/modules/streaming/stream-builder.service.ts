@@ -45,6 +45,7 @@ import {
 } from './transcoding/audio-encode';
 import type { MediaFileInfo } from '../subtitles/ffprobe.service';
 import { videoPresentationStart } from './transcoding/source-timeline';
+import { sourceIsMpegTs } from '../subtitles/video-packets';
 
 /** Audio codecs that can be copied verbatim into fMP4 segments via MSE.
  *  Anything outside this set is re-encoded to AAC on the remux path even when
@@ -54,10 +55,6 @@ const FMP4_COMPATIBLE_AUDIO = new Set(['aac', 'ac3', 'eac3', 'opus', 'flac']);
 
 /** Above the start offset encoder priming alone reports (AAC ~23 ms, E-AC-3 ~5 ms, Opus ~7 ms). */
 const AUDIO_START_OFFSET_THRESHOLD_SECONDS = 0.05;
-
-/** Containers that carry AAC as ADTS, where every frame restates its
- *  configuration and broadcasts switch it (2.0 ↔ 5.1) mid-stream. */
-const ADTS_AAC_CONTAINERS = new Set(['ts', 'm2ts']);
 
 type CopyBlocker =
   | 'AudioStartOffset'
@@ -78,14 +75,12 @@ function copyBlocker(
   audio: { codec?: string; startTimeSeconds?: number; endSeconds?: number },
   video: Parameters<typeof videoPresentationStart>[0],
   muxFlavour: 'ts' | 'fmp4',
-  container: string,
+  mpegTs: boolean,
   lastVideoSegmentStart: number | undefined,
 ): CopyBlocker | null {
   if (muxFlavour !== 'fmp4') return null;
-  if (
-    (audio.codec ?? '').toLowerCase() === 'aac' &&
-    ADTS_AAC_CONTAINERS.has(container)
-  ) {
+  // MPEG-TS carries AAC as ADTS, where broadcasts switch 2.0 and 5.1 mid-stream.
+  if ((audio.codec ?? '').toLowerCase() === 'aac' && mpegTs) {
     return 'AudioFormatMayChange';
   }
   const a = audio.startTimeSeconds;
@@ -235,6 +230,7 @@ export class StreamBuilderService {
     }
 
     const sourceContainer = resolved.ext.replace('.', '').toLowerCase();
+    const sourceMpegTs = sourceIsMpegTs(si, resolved.absolutePath);
     const sourceVideoCodec = (v?.codec ?? '').toLowerCase();
     const sourceAudioCodec = (a?.codec ?? '').toLowerCase();
 
@@ -557,7 +553,7 @@ export class StreamBuilderService {
           profile,
           'DirectPlay',
           'fmp4',
-          sourceContainer,
+          sourceMpegTs,
         ),
         source,
       });
@@ -572,7 +568,7 @@ export class StreamBuilderService {
       profile,
       'Transcode',
       hlsMux,
-      sourceContainer,
+      sourceMpegTs,
     );
     const pickedTrack = audioTracks[pickedAudio];
     const stereoAudioBps = parseBitrateToBps(ladder[0]?.audioBitrate ?? '192k');
@@ -921,7 +917,7 @@ export class StreamBuilderService {
     profile: DeviceProfileDto,
     playMethod: PlayMethod,
     muxFlavour: 'ts' | 'fmp4',
-    container: string,
+    mpegTs: boolean,
   ): AudioTrackPlan[] {
     const audioStreams = si?.audio ?? [];
     const video = si?.video?.[0];
@@ -934,7 +930,7 @@ export class StreamBuilderService {
           )
         : undefined;
     const blockers = audioStreams.map((t) =>
-      copyBlocker(t, video, muxFlavour, container, lastSegmentStart),
+      copyBlocker(t, video, muxFlavour, mpegTs, lastSegmentStart),
     );
     const profileAudioCodecs = profile.directPlayProfiles
       .flatMap((p) => p.audioCodecs)

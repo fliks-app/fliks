@@ -32,11 +32,8 @@ import {
   type BuildFfmpegArgsOptions,
 } from './ffmpeg-args';
 import { RemuxSegmentAssembler, remuxAssemblyPlan } from './remux-assembler';
-import {
-  keyframeAtOrBefore,
-  seeksPastKeyframe,
-  type SegmentGrid,
-} from './segment-boundaries';
+import type { KeyframeGrid } from './segment-boundaries';
+import { keyframeAtOrBefore } from '../../subtitles/video-packets';
 import { varStreamMapLayout } from './audio-layout';
 import {
   matchTimingWarnings,
@@ -1293,7 +1290,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     absolutePath: string,
     requestedSegment = 0,
     ctx?: SessionContext,
-    grid: SegmentGrid | null = null,
+    grid: KeyframeGrid | null = null,
   ): Promise<TranscodeSession> {
     const variant = remuxVariant(ctx?.audioStreamIndex, grid != null);
     const baseHash = this.computeProfileHashForCtx(ctx);
@@ -1322,7 +1319,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     absolutePath: string,
     requestedSegment: number,
     ctx: SessionContext | undefined,
-    grid: SegmentGrid | null,
+    grid: KeyframeGrid | null,
   ): Promise<TranscodeSession> {
     const existing = this.sessions.get(key);
     if (existing) {
@@ -1554,13 +1551,13 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
    *  spawns from drifting when a field is added (the "fix one, miss the other"
    *  trap). */
   /** Where a demuxer that lands after its seek target must seek for a run to
-   *  decode from a keyframe at or before its first frame (`seeksPastKeyframe`). */
+   *  decode from a keyframe at or before its first frame. */
   private async seekKeyframeDts(
     absolutePath: string,
     startSegment: number,
     ctx?: SessionContext,
   ): Promise<number | undefined> {
-    if (startSegment <= 0 || !seeksPastKeyframe(ctx?.sourceFormatName)) return undefined;
+    if (startSegment <= 0 || !ctx?.sourceSeeksPastKeyframe) return undefined;
     const start =
       segmentIndexToSeconds(
         startSegment,

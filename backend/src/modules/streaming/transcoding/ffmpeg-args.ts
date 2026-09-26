@@ -48,7 +48,7 @@ import { inputSeekSeconds } from './source-timeline';
 import { resolveEncodePipeline } from './encode-pipeline';
 import {
   DECODE_TIME_TOLERANCE_SECONDS,
-  type SegmentGrid as KeyframeGrid,
+  type KeyframeGrid,
 } from './segment-boundaries';
 import { openclTonemapInitArgs } from './hw-device';
 import { buildVideoFilters, resolveTonemapCurve } from './ffmpeg-filter-graph';

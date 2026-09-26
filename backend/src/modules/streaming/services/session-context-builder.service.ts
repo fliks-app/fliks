@@ -9,6 +9,7 @@ import type { SessionContext } from '../transcoding';
 import { pickAudioLayout } from '../transcoding/audio-layout';
 import { parseSourceFps } from '../transcoding/constants';
 import { sourceTimeline } from '../transcoding/source-timeline';
+import { seeksPastKeyframe } from '../transcoding/segment-boundaries';
 import { ActiveStreamTracker } from '../active-stream-tracker.service';
 import { SessionRouter } from './session-router.service';
 import type { ResolvedFile } from '../streaming.service';
@@ -130,8 +131,8 @@ export class SessionContextBuilder {
       // source fps. Falls back to 24 when unknown.
       sourceFps: parseSourceFps(si?.video?.[0]?.frameRate),
       videoStreamIndex: si?.video?.[0]?.streamIndex,
-      sourceFormatName: si?.formatName,
-      sourceClockBreakSeconds: si?.timestampBreakSeconds,
+      sourceSeeksPastKeyframe: seeksPastKeyframe(si, resolved.absolutePath),
+      sourceClockBreakSeconds: si?.timestampBreakSeconds ?? undefined,
       // Source colorimetry — preserved through an SDR transcode so the output
       // signals the source's real matrix/primaries/transfer, not a forced BT.709.
       sourceColorSpace: si?.video?.[0]?.colorSpace,

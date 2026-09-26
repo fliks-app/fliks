@@ -2,7 +2,8 @@ import {
   displaySize,
   FfprobeService,
   audioStreamRoles,
-  parseFirstFrameSeconds,
+  firstFrameOf,
+  ticksToSeconds,
   selectProgrammeVideoStreams,
   streamEndSeconds,
   streamRotation,
@@ -140,23 +141,26 @@ describe('rotation', () => {
   });
 });
 
-describe('parseFirstFrameSeconds', () => {
-  it('reads the integer pts against the filter time base', () => {
-    const log = [
-      '[Parsed_showinfo_0 @ 0x1] config in time_base: 1/90000, frame_rate: 25/1',
-      '[Parsed_showinfo_0 @ 0x1] n:   0 pts:8550003600 pts_time:95000 duration:3600',
-      '[Parsed_showinfo_0 @ 0x1] n:   1 pts:8550007200 pts_time:95000.1 duration:3600',
-    ].join('\n');
-    expect(parseFirstFrameSeconds(log)).toBe(95000.04);
+describe('firstFrameOf', () => {
+  const head = '{\n    "frames": [\n        { "pts": 8550003600,\n            "side_data_list": [\n                { "side_data_type": "x{y}" }\n';
+
+  it('waits for the first frame to be written whole', () => {
+    expect(firstFrameOf(head)).toBeUndefined();
+    expect(firstFrameOf('{\n')).toBeUndefined();
   });
 
-  it('keeps a negative first frame', () => {
-    const log = 'config in time_base: 1/1000, frame_rate: 25/1\nn:   0 pts:    -40 pts_time:-0.04';
-    expect(parseFirstFrameSeconds(log)).toBe(-0.04);
+  it('reads the first frame with its side data', () => {
+    const frame = firstFrameOf(head + '            ] },\n        { "pts": 8550007200');
+    expect(frame).toEqual({ pts: 8550003600, side_data_list: [{ side_data_type: 'x{y}' }] });
   });
+});
 
-  it('is undefined when nothing decoded', () => {
-    expect(parseFirstFrameSeconds('config in time_base: 1/90000')).toBeUndefined();
+describe('ticksToSeconds', () => {
+  it('reads integer ticks against the stream time base, negatives included', () => {
+    expect(ticksToSeconds(8550003600, '1/90000')).toBe(95000.04);
+    expect(ticksToSeconds(-40, '1/1000')).toBe(-0.04);
+    expect(ticksToSeconds(undefined, '1/1000')).toBeUndefined();
+    expect(ticksToSeconds(40, undefined)).toBeUndefined();
   });
 });
 
@@ -199,7 +203,7 @@ describe('audioStreamRoles', () => {
         index: 1,
         disposition: { visual_impaired: 1, hearing_impaired: 1 },
       }),
-    ).toEqual({ audioDescription: true, hearingImpaired: true });
+    ).toEqual({ audioDescription: true });
     expect(audioStreamRoles({ index: 1 })).toEqual({});
   });
 });

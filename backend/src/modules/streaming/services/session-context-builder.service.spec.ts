@@ -12,6 +12,7 @@ import type { ResolvedFile } from '../streaming.service';
 
 function resolved(audioCount: number): ResolvedFile {
   return {
+    absolutePath: '/media/film.mkv',
     media: { title: 'T', type: 'movie', posterUrl: null },
     mediaFile: {
       streamInfo: {
@@ -82,6 +83,7 @@ describe('SessionContextBuilder.build', () => {
   it('gates the crop on the auto-crop toggle', () => {
     const cropRect = { width: 3840, height: 1606, x: 0, y: 277 };
     const withCrop = {
+      absolutePath: '/media/film.mkv',
       media: { title: 'T', type: 'movie', posterUrl: null },
       mediaFile: {
         streamInfo: {

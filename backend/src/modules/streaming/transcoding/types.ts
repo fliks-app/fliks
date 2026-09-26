@@ -131,8 +131,8 @@ export interface SessionContext {
   sourceStartPts?: number;
   /** Container start the input `-ss` counts from (`sourceTimeline`). */
   sourceFormatStart?: number;
-  /** ffprobe `format_name`: how the demuxer seeks (`seeksPastKeyframe`). */
-  sourceFormatName?: string;
+  /** The demuxer lands after a seek target (`seeksPastKeyframe`). */
+  sourceSeeksPastKeyframe?: boolean;
   /** Source time an MPEG-TS clock breaks at: runs stop reading there. */
   sourceClockBreakSeconds?: number;
   /** Source time the video ends at: transcoded audio is padded up to it. */

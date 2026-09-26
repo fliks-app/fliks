@@ -1,7 +1,6 @@
 import {
   computeSegmentGrid,
-  parseVideoPackets,
-  secondsToSegmentIndex,
+  gridSegmentIndex,
   seeksPastKeyframe,
   type Keyframe,
 } from './segment-boundaries';
@@ -52,68 +51,31 @@ describe('computeSegmentGrid', () => {
   });
 });
 
-describe('parseVideoPackets', () => {
-  it('keeps key packets and derives the decode times Matroska leaves unknown as ffmpeg does', () => {
-    const csv = [
-      '0.000000,N/A,0.040000,K__',
-      '0.120000,N/A,0.040000,___',
-      '0.040000,0.000000,0.040000,___',
-      '2.000000,1.920000,0.040000,K__',
-      '1.960000,1.960000,0.040000,___',
-    ].join('\n');
-    // Two frames reordered at 25 fps: ffmpeg starts the unknown ones 80 ms under.
-    const { keyframes, end } = parseVideoPackets(csv, 2, '25/1');
-    expect(keyframes).toEqual([
-      { pts: 0, dts: -0.08 },
-      { pts: 2, dts: 1.92 },
-    ]);
-    expect(end).toBeCloseTo(2.04, 6);
-  });
-
-  it('stops at a clock break, what follows being on another clock', () => {
-    const csv = [
-      '32.720000,32.680000,0.040000,___',
-      '32.760000,32.720000,0.040000,___',
-      '1000.000000,999.920000,0.040000,K__',
-      '1000.040000,999.960000,0.040000,___',
-    ].join('\n');
-    const { keyframes, end, breakSeconds } = parseVideoPackets('32.680000,32.600000,0.040000,K__\n' + csv);
-    expect(keyframes.map((k) => k.pts)).toEqual([32.68]);
-    expect(end).toBeCloseTo(32.8, 6);
-    expect(breakSeconds).toBeCloseTo(32.8, 6);
-    expect(parseVideoPackets('2.8,2.72,0.04,K__').breakSeconds).toBeUndefined();
-  });
-
-  it('keeps pre-roll keyframes flagged discard', () => {
-    const { keyframes } = parseVideoPackets('-1.520000,-1.600000,0.040000,KD_\n0.480000,0.400000,0.040000,K__');
-    expect(keyframes.map((k) => k.pts)).toEqual([-1.52, 0.48]);
-  });
-});
-
-describe('secondsToSegmentIndex', () => {
+describe('gridSegmentIndex', () => {
   const boundaries = [0, 7, 13, 18];
 
   it('maps a time to the segment whose window contains it', () => {
-    expect(secondsToSegmentIndex(boundaries, 0, 0)).toBe(0);
-    expect(secondsToSegmentIndex(boundaries, 6.9, 0)).toBe(0);
-    expect(secondsToSegmentIndex(boundaries, 7, 0)).toBe(1);
-    expect(secondsToSegmentIndex(boundaries, 13, 0)).toBe(2);
-    expect(secondsToSegmentIndex(boundaries, 999, 0)).toBe(2);
+    expect(gridSegmentIndex(boundaries, 0, 0)).toBe(0);
+    expect(gridSegmentIndex(boundaries, 6.9, 0)).toBe(0);
+    expect(gridSegmentIndex(boundaries, 7, 0)).toBe(1);
+    expect(gridSegmentIndex(boundaries, 13, 0)).toBe(2);
+    expect(gridSegmentIndex(boundaries, 999, 0)).toBe(2);
   });
 
   it('places a content position on source-time boundaries through the origin', () => {
     // A TS starting at 2.8: content 20 s is source 22.8, in [20.8, 23.8).
     const ts = [2.8, 5.8, 8.8, 11.8, 14.8, 17.8, 20.8, 23.8, 26.8];
-    expect(secondsToSegmentIndex(ts, 20, 2.8)).toBe(6);
-    expect(secondsToSegmentIndex(ts, 17.9, 2.8)).toBe(5);
+    expect(gridSegmentIndex(ts, 20, 2.8)).toBe(6);
+    expect(gridSegmentIndex(ts, 17.9, 2.8)).toBe(5);
   });
 });
 
 describe('seeksPastKeyframe', () => {
-  it('is MPEG-TS, and anything unprobed', () => {
-    expect(seeksPastKeyframe('mpegts')).toBe(true);
-    expect(seeksPastKeyframe(undefined)).toBe(true);
-    expect(seeksPastKeyframe('matroska,webm')).toBe(false);
-    expect(seeksPastKeyframe('mov,mp4,m4a,3gp,3g2,mj2')).toBe(false);
+  it('is MPEG-TS, by format name or, unprobed, by extension', () => {
+    expect(seeksPastKeyframe({ formatName: 'mpegts' }, '/m/a.mkv')).toBe(true);
+    expect(seeksPastKeyframe({ formatName: 'matroska,webm' }, '/m/a.ts')).toBe(false);
+    expect(seeksPastKeyframe({ formatName: 'mov,mp4,m4a,3gp,3g2,mj2' }, '/m/a.mp4')).toBe(false);
+    expect(seeksPastKeyframe({}, '/m/a.MTS')).toBe(true);
+    expect(seeksPastKeyframe(undefined, '/m/a.mkv')).toBe(false);
   });
 });

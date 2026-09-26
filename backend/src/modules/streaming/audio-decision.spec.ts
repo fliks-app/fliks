@@ -38,6 +38,7 @@ const browser = profile(['aac', 'opus', 'flac'], { maxAudioChannels: 2 });
 const file = (audio: Track[], ext = '.mkv') =>
   ({
     ext,
+    absolutePath: `/media/file${ext}`,
     contentType: 'video/x-matroska',
     mediaFile: {
       id: 1,

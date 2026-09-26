@@ -1,40 +1,27 @@
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import { Logger } from '@nestjs/common';
-import { statSync } from 'fs';
+import { stat } from 'fs/promises';
 import type { MediaFileInfo } from '../../subtitles/ffprobe.service';
+import {
+  sourceIsMpegTs,
+  videoPackets,
+  type Keyframe,
+} from '../../subtitles/video-packets';
 import { sourceTimeline } from './source-timeline';
 
-const execFileAsync = promisify(execFile);
 const log = new Logger('SegmentBoundaries');
 
-/**
- * Segment grid of the REMUX / copy-video path.
- *
- * Transcoded video forces an IDR every segment, so it sits on a uniform grid.
- * Copied video can only be cut at its own keyframes, which are irregular (1-15 s
- * on Blu-ray rips), so its playlist declares each segment's real length: strict
- * players (AVPlayer) trust EXTINF for the timeline and drift on a uniform one.
- *
- * ffmpeg cuts a remux run at every keyframe and the segments are assembled from
- * those GOPs on this grid (see `RemuxSegmentAssembler`), so the playlist and the
- * bytes of every segment are the same whichever run produced them. ffmpeg's own
- * cut targets count from the run's first packet, so a seeked run would cut
- * elsewhere than the playlist.
- */
+// Copied video cuts only at its own irregular keyframes, so the remux playlist
+// declares each segment's real length: AVPlayer drifts on a uniform EXTINF grid.
 
 /** How far under its first keyframe's decode time the run from the file start
  *  seeks: well under a frame, far above the microsecond a derived decode time
  *  can be off by. */
 export const DECODE_TIME_TOLERANCE_SECONDS = 0.01;
 
-/** A video keyframe packet, in source time. */
-export interface Keyframe {
-  pts: number;
-  dts: number;
-}
+export type { Keyframe };
 
-export interface SegmentGrid {
+/** The keyframe segment grid of the remux / copy-video path. */
+export interface KeyframeGrid {
   /** Presented length of each segment (the playlist EXTINF). */
   durations: number[];
   /** Source time each segment's presentation starts at (the first one at the
@@ -46,147 +33,29 @@ export interface SegmentGrid {
   firstKeyframe: number[];
 }
 
-interface CacheEntry {
-  mtimeMs: number;
-  segDur: number;
-  grid: SegmentGrid;
-}
-
-const cache = new Map<string, CacheEntry>();
-
-export interface VideoPackets {
-  keyframes: Keyframe[];
-  /** Source time the last frame ends at, or where the clock breaks. */
-  end: number;
-  /** Source time an MPEG-TS clock jumps at (a concatenated or restarted
-   *  recording): what follows is not on this timeline and is left out. */
-  breakSeconds?: number;
-}
-
-/** A jump between consecutive video packets this long is a clock break, not
- *  a gap in the picture: ffmpeg's own discontinuity threshold (dts_delta_threshold). */
-const CLOCK_BREAK_SECONDS = 10;
-
-/** Keyframe packets of the video stream, as the demuxer hands them to a copy
- *  (what the muxer cuts on), and where the video ends. Reads packets only,
- *  nothing is decoded. */
-export async function extractVideoPackets(
-  filePath: string,
-  videoStreamIndex?: number,
-): Promise<VideoPackets> {
-  const select = videoStreamIndex != null ? String(videoStreamIndex) : 'v:0';
-  const probe = (entries: string) =>
-    execFileAsync(
-      'ffprobe',
-      ['-v', 'error', '-select_streams', select, '-show_entries', entries, '-of', 'csv=p=0', filePath],
-      { maxBuffer: 512 * 1024 * 1024, timeout: 300_000 },
-    );
-  const [stream, packets] = await Promise.all([
-    probe('stream=has_b_frames,avg_frame_rate'),
-    probe('packet=pts_time,dts_time,duration_time,flags'),
-  ]);
-  const [delay, rate] = stream.stdout.trim().split(',');
-  return parseVideoPackets(packets.stdout, Number(delay) || 0, rate);
-}
-
-/**
- * `pts,dts,duration,flags` csv lines (decode order). Matroska stores no decode
- * times and the demuxer derives them only once reordering is known; ffmpeg's
- * copy starts the unknown ones `reorder / avg_frame_rate` under the first pts,
- * then adds the packet durations, and so does this.
- */
-export function parseVideoPackets(
-  csv: string,
-  reorderFrames = 0,
-  avgFrameRate = '0/0',
-): VideoPackets {
-  const packets = csv
-    .split('\n')
-    .map((line) => line.split(','))
-    .filter((f) => f.length >= 4)
-    .map(([p, d, dur, flags]) => ({
-      pts: parseFloat(p),
-      dts: parseFloat(d),
-      dur: parseFloat(dur) || 0,
-      key: flags.includes('K'),
-    }))
-    .filter((p) => Number.isFinite(p.pts));
-  // Decode order: reordering moves pts by a few frames, a break by far more.
-  const cut = packets.findIndex(
-    (p, i) => i > 0 && Math.abs(p.pts - packets[i - 1].pts) > CLOCK_BREAK_SECONDS,
-  );
-  const kept = cut < 0 ? packets : packets.slice(0, cut);
-  const [num, den] = avgFrameRate.split('/').map(Number);
-  // ffmpeg truncates the reorder delay to whole microseconds.
-  const lead = num > 0 && den > 0 ? Math.trunc((reorderFrames * 1e6 * den) / num) / 1e6 : 0;
-  let next = kept.length ? kept[0].pts - lead : 0;
-  for (const p of kept) {
-    if (!Number.isFinite(p.dts)) p.dts = next;
-    next = p.dts + p.dur;
-  }
-  const end = kept.reduce((m, p) => Math.max(m, p.pts + p.dur), -Infinity);
-  return {
-    keyframes: kept.filter((p) => p.key).map(({ pts, dts }) => ({ pts, dts })),
-    end,
-    ...(cut < 0 ? {} : { breakSeconds: end }),
-  };
-}
-
 /** The MPEG-TS demuxer seeks to a byte position and decoding picks up at the
  *  next keyframe, so a seek lands up to a GOP after its target; the others
- *  land on the keyframe at or before it. Unknown formats are assumed to. */
-export function seeksPastKeyframe(formatName: string | undefined): boolean {
-  return formatName == null || formatName.split(',').includes('mpegts');
-}
-
-/** Longest GOP a keyframe is looked for behind a seek target. */
-const MAX_GOP_SECONDS = 64;
-
-/** The last video keyframe presented at or before `seconds` (source time),
- *  read from a widening window of packets ahead of it. */
-export async function keyframeAtOrBefore(
+ *  land on the keyframe at or before it. */
+export function seeksPastKeyframe(
+  si: Pick<MediaFileInfo, 'formatName'> | null | undefined,
   filePath: string,
-  videoStreamIndex: number | undefined,
-  seconds: number,
-): Promise<Keyframe | null> {
-  const select = videoStreamIndex != null ? String(videoStreamIndex) : 'v:0';
-  for (let window = 4; window <= MAX_GOP_SECONDS; window *= 2) {
-    const { stdout } = await execFileAsync(
-      'ffprobe',
-      [
-        '-v', 'error', '-select_streams', select,
-        '-read_intervals', `${seconds - window}%${seconds}`,
-        '-show_entries', 'packet=pts_time,dts_time,duration_time,flags',
-        '-of', 'csv=p=0', filePath,
-      ],
-      { maxBuffer: 64 * 1024 * 1024, timeout: 30_000 },
-    );
-    const before = parseVideoPackets(stdout).keyframes.filter((k) => k.pts <= seconds);
-    if (before.length) return before[before.length - 1];
-  }
-  return null;
+): boolean {
+  return sourceIsMpegTs(si, filePath);
 }
 
 /**
  * Group the keyframes into segments of about `segDur`: a segment ends at the
- * first keyframe at or past a target that starts one `segDur` after the first
- * and advances by `segDur` per cut, so lengths average `segDur`. The tail runs
- * to `end`, the source time the file ends at; a keyframe too close to it to
- * hold a frame stays in the last segment.
- *
- * The grid starts on the first keyframe presented at or after `origin`. An
- * edit list that starts mid-GOP hides the pre-roll ahead of it: copied, those
- * frames would be decoded before the timeline start, which MSE drops along
- * with everything that references them, or shown by a player that places the
- * first sample at the playlist start. The frames between `origin` and that
- * keyframe can't be decoded without the pre-roll, so a copy starts later.
+ * first keyframe at or past a target advancing `segDur` per cut from the
+ * first; the tail runs to `end`. The grid starts on the first keyframe shown
+ * at or after `origin`: an edit list starting mid-GOP hides pre-roll a copy
+ * could only decode before the timeline start.
  */
 export function computeSegmentGrid(
   allKeyframes: Keyframe[],
   origin: number,
   end: number,
   segDur: number,
-): SegmentGrid | null {
+): KeyframeGrid | null {
   const keyframes = allKeyframes.filter((k) => k.pts >= origin - TAIL_EPSILON);
   if (keyframes.length === 0 || segDur <= 0) return null;
   const last = keyframes[keyframes.length - 1].pts;
@@ -210,10 +79,9 @@ export function computeSegmentGrid(
 /** Shorter than any frame: a keyframe this close to the end starts no segment. */
 const TAIL_EPSILON = 0.001;
 
-/** Segment index whose `[start, end)` window contains content position
- *  `seconds` (from the first frame); the boundaries are source times, so the
- *  position is moved by the timeline `origin` first. */
-export function secondsToSegmentIndex(
+/** Segment of the keyframe grid whose `[start, end)` window holds content
+ *  position `seconds` (from the first frame, hence the `origin`). */
+export function gridSegmentIndex(
   boundaries: number[],
   seconds: number,
   origin: number,
@@ -226,43 +94,54 @@ export function secondsToSegmentIndex(
   return boundaries.length - 2;
 }
 
+interface GridEntry {
+  mtimeMs: number;
+  segDur: number;
+  grid: Promise<KeyframeGrid | null>;
+}
+
+const grids = new Map<string, GridEntry>();
+const MAX_GRIDS = 64;
+
 /**
- * Resolve (and cache) the keyframe grid of a source, ending where its video
- * ends. Null when keyframes can't be read; the caller then falls back to the
- * uniform grid. Cached by path + mtime + segment length.
+ * The keyframe grid of a source, ending where its video ends, or null when
+ * its keyframes can't be read: the remux then runs on the uniform grid. One
+ * answer per file version, the failure included, so every request of a
+ * playback agrees on it; concurrent requests share one read.
  */
 export async function getRemuxSegmentGrid(
   filePath: string,
   segDur: number,
-  streamInfo?: Pick<MediaFileInfo, 'video' | 'formatStartSeconds'> | null,
-): Promise<SegmentGrid | null> {
-  let mtimeMs = 0;
+  streamInfo: Pick<MediaFileInfo, 'video' | 'formatStartSeconds' | 'formatName'> | null | undefined,
+): Promise<KeyframeGrid | null> {
+  let mtimeMs: number;
   try {
-    mtimeMs = statSync(filePath).mtimeMs;
-  } catch {
-    return null;
-  }
-  const hit = cache.get(filePath);
-  if (hit && hit.mtimeMs === mtimeMs && hit.segDur === segDur) {
-    return hit.grid;
-  }
-  try {
-    const { keyframes, end } = await extractVideoPackets(
-      filePath,
-      streamInfo?.video?.[0]?.streamIndex,
-    );
-    const { origin } = sourceTimeline(streamInfo, filePath);
-    const grid = computeSegmentGrid(keyframes, origin, end, segDur);
-    if (!grid) {
-      log.warn(`No video keyframe in ${filePath}; falling back to uniform grid`);
-      return null;
-    }
-    cache.set(filePath, { mtimeMs, segDur, grid });
-    return grid;
+    mtimeMs = (await stat(filePath)).mtimeMs;
   } catch (err) {
-    log.warn(
-      `Keyframe probe failed for ${filePath}; falling back to uniform grid: ${(err as Error).message}`,
-    );
+    log.warn(`Cannot stat ${filePath}; uniform grid: ${(err as Error).message}`);
     return null;
   }
+  const hit = grids.get(filePath);
+  if (hit && hit.mtimeMs === mtimeMs && hit.segDur === segDur) return hit.grid;
+  const v = streamInfo?.video?.[0];
+  const grid = videoPackets(
+    filePath,
+    { streamIndex: v?.streamIndex, reorderFrames: v?.reorderFrames, avgFrameRate: v?.avgFrameRate },
+    { mpegTs: sourceIsMpegTs(streamInfo, filePath) },
+  ).then(
+    ({ keyframes, end }) => {
+      const { origin } = sourceTimeline(streamInfo, filePath);
+      const g = computeSegmentGrid(keyframes, origin, end, segDur);
+      if (!g) log.warn(`No video keyframe in ${filePath}; uniform grid`);
+      return g;
+    },
+    (err: Error) => {
+      log.warn(`Keyframe probe failed for ${filePath}; uniform grid: ${err.message}`);
+      return null;
+    },
+  );
+  grids.delete(filePath);
+  grids.set(filePath, { mtimeMs, segDur, grid });
+  if (grids.size > MAX_GRIDS) grids.delete(grids.keys().next().value!);
+  return grid;
 }

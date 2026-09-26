@@ -57,6 +57,7 @@ function harness() {
     settings as never,
     postImportQueue as never,
     activityRegistry as never,
+    { scheduleIfNeeded: jest.fn().mockResolvedValue(undefined) } as never,
   );
   service.onModuleInit();
   return {
@@ -117,9 +118,9 @@ describe('PostImportService', () => {
     jest.advanceTimersByTime(PostImportService.SETTLE_MS);
     await settle();
 
-    // One pass = 2 `find` calls: the ids-only load, then one batch join that
-    // resolves progress titles for the whole missing list (never per file).
-    expect(h.mediaFileRepo.find).toHaveBeenCalledTimes(2);
+    // One pass = 3 `find` calls: the clock scan's, the ids-only load, then one
+    // batch join resolving progress titles for the whole missing list.
+    expect(h.mediaFileRepo.find).toHaveBeenCalledTimes(3);
     expect(h.markers.autoDetectMissing).toHaveBeenCalledTimes(1);
     h.service.onModuleDestroy();
   });

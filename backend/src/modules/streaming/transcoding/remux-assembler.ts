@@ -7,7 +7,7 @@ import type { RemuxRunStart } from './ffmpeg-args';
 import { servedShift } from './source-timeline';
 import {
   DECODE_TIME_TOLERANCE_SECONDS,
-  type SegmentGrid,
+  type KeyframeGrid,
 } from './segment-boundaries';
 import {
   firstTfdt,
@@ -86,7 +86,7 @@ export function remuxEdits(start: number, firstDecode: number): RemuxEdits {
 export function remuxAssemblyPlan(o: {
   dir: string;
   gopDir: string;
-  grid: SegmentGrid | null;
+  grid: KeyframeGrid | null;
   startSegment: number;
   run: RemuxRunStart;
   origin: number;
