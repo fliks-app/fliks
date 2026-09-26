@@ -46,8 +46,8 @@ export interface PlaybackProfile {
    *  that moves it must not reuse segments timed against the old one. */
   origin: number;
   formatStart: number;
-  /** {@link SessionContext.sourceVersion}; absent hashes as before it existed. */
-  sourceVersion?: string;
+  /** {@link SessionContext.sourceVersion}. */
+  sourceVersion: string | null;
 }
 
 /** Segment timeline layout (edit lists, tfdt origin, audio alignment). Raised
@@ -78,7 +78,7 @@ function canonicalise(profile: PlaybackProfile): string {
     `tl=${SEGMENT_TIMELINE_VERSION}`,
     `o=${profile.origin}`,
     `fs=${profile.formatStart}`,
-    ...(profile.sourceVersion != null ? [`sv=${profile.sourceVersion}`] : []),
+    `sv=${profile.sourceVersion ?? ''}`,
   ].join('|');
 }
 
@@ -128,6 +128,6 @@ export function buildPlaybackProfileFromContext(
     tvPlatform: 'browser',
     origin: ctx?.sourceStartPts ?? 0,
     formatStart: ctx?.sourceFormatStart ?? ctx?.sourceStartPts ?? 0,
-    sourceVersion: ctx?.sourceVersion,
+    sourceVersion: ctx?.sourceVersion ?? null,
   };
 }

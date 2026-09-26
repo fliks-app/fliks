@@ -231,6 +231,7 @@ export class StreamBuilderService {
     autoQualityMode: 'directplay' | 'abr' = 'directplay',
     audioStreamIndex?: number,
     segmentDuration = DEFAULT_SEGMENT_DURATION,
+    sourceScan?: SourceScan | null,
   ): EvaluateResult {
     const si = resolved.mediaFile.streamInfo;
     const v = si?.video?.[0];
@@ -631,7 +632,7 @@ export class StreamBuilderService {
       profile,
       hlsMux,
       sourceMpegTs,
-      resolved.sourceScan,
+      sourceScan,
       audioLayout(audioStreams.length) === 'var-stream-map'
         ? lastVideoSegmentStart(si, resolved.absolutePath, segmentDuration)
         : undefined,
@@ -647,7 +648,7 @@ export class StreamBuilderService {
             profile,
             hlsMux,
             sourceMpegTs,
-            resolved.sourceScan,
+            sourceScan,
             undefined,
           )[0]
         : groupDecisions[pickedAudio];
