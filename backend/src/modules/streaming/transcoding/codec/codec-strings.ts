@@ -175,12 +175,8 @@ const AAC_OBJECT_TYPES: Record<string, number> = {
   'he-aacv2': 29,
 };
 
-/**
- * RFC 6381 CODECS audio entry of a group whose renditions share `codec` and
- * carry the ffprobe `profile` of their source when copied. An HE-AAC stream
- * plays on an AAC-LC decoder at half its rate, so a group declares the least
- * object type any of its renditions needs.
- */
+/** RFC 6381 CODECS audio entry of a group sharing `codec`. HE-AAC plays on an
+ *  AAC-LC decoder at half its rate, so the least object type any rendition needs wins. */
 export function audioGroupCodecString(
   tracks: { codec: string; profile?: string }[],
 ): string | null {

@@ -71,9 +71,8 @@ export class TrackManagerService {
     const settings = this.playerSettings.get();
     const key = mediaId;
 
-    // Priority 1: remembered selection for this media (see saveAudioSelection),
-    // matched on `streams` — the tracks' stream info, in the same order — when
-    // given, else on the tracks' languages alone.
+    // Priority 1: the remembered selection, matched on `streams` (the tracks'
+    // stream info) when given, else on the tracks' languages alone.
     if (settings.rememberAudioSelections) {
       const saved = this.playerSettings.getRememberedAudioTrack(key);
       const idx = saved ? matchRememberedAudio(saved, streams ?? tracks) : undefined;
@@ -92,12 +91,8 @@ export class TrackManagerService {
     if (match && match.id !== activeAudioTrackId) onSelect(match.id);
   }
 
-  /**
-   * Save the user's audio track selection so it carries across episodes: its
-   * language, role and channel count, from `streams` (the tracks' stream info,
-   * in the same order) when the tracks lack them, so a commentary or a stereo
-   * mix is found again when the next episode orders its tracks differently.
-   */
+  /** Remember a track by language, role and channel count (from `streams`, in track
+   *  order, when the tracks lack them): episodes order their tracks differently. */
   saveAudioSelection(
     trackId: string,
     tracks: (AudioStreamChoice & { id: string })[],

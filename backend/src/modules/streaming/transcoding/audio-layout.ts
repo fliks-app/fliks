@@ -9,18 +9,14 @@ export function resolveMuxFlavour(
     : 'fmp4';
 }
 
-/** How a source's audio is laid out in HLS: one EXT-X-MEDIA rendition per track
- *  (`var-stream-map`, a video-only main the player switches tracks against) for
- *  several tracks, else muxed next to the video. A single track stays muxed on
- *  every mux flavour: `cmaf-rewrite` makes muxed fMP4 parse on AVPlay, and a
- *  one-variant master never triggers its rendition probe. */
+/** One EXT-X-MEDIA rendition per track for several tracks, else muxed: a muxed
+ *  fMP4 parses on AVPlay (`cmaf-rewrite`), and a one-variant master skips its rendition probe. */
 export function audioLayout(audioCount: number): 'inline' | 'var-stream-map' {
   return audioCount > 1 ? 'var-stream-map' : 'inline';
 }
 
-/** Whether a session's ffmpeg run, readiness probe and serve paths use the
- *  var_stream_map subdirectories: the session was set up video-only
- *  (`sessionLayoutContext`) for a source {@link audioLayout} splits. */
+/** Whether the ffmpeg run, readiness probe and serve paths use var_stream_map
+ *  subdirectories: a video-only session of a source {@link audioLayout} splits. */
 export function varStreamMapLayout(
   videoOnly: boolean,
   audioCount: number,

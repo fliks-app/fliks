@@ -9,6 +9,7 @@ import {
 } from './constants';
 import {
   cappedTranscodeVideoBitrateBps,
+  DESKTOP_PROFILES,
   isHdrProfile,
   parseBitrateToBps,
   profileResolution,
@@ -1319,8 +1320,8 @@ export function remuxAudioGrid(
   return plan.mode === 'copy' ? null : encodedPacketGrid(plan.codec);
 }
 
-/** Stereo audio budget of a remux encode: the source-resolution rung's. */
-export const REMUX_STEREO_AUDIO_BITRATE = '192k';
+/** Stereo audio budget of a remux encode: the top rung's. */
+export const REMUX_STEREO_AUDIO_BITRATE = DESKTOP_PROFILES[0].audioBitrate;
 
 /**
  * Build FFmpeg args for remux mode: copy video stream, optionally transcode audio.

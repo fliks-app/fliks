@@ -174,10 +174,8 @@ export interface MasterPlaylistOptions {
   includeRemux?: boolean;
   sourceBitrate?: number;
   audioStreams?: AudioStreamMeta[];
-  /** What the variants' audio carries: one plan per rendition, aligned with
-   *  `audioStreams`, or the muxed track's alone. The CODECS audio entry, each
-   *  rendition's CHANNELS and each rung's audio BANDWIDTH follow it, since a
-   *  wrong CODECS rejects the segment on MSE append. AAC stereo when absent. */
+  /** One plan per rendition, aligned with `audioStreams`, or the muxed track's; AAC
+   *  stereo when absent. CODECS follows it: a wrong one fails the MSE append. */
   audioPlans?: AudioPlan[];
   onlyQuality?: string;
   defaultAudioIndex?: number;

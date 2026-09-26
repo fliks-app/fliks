@@ -62,10 +62,8 @@ const HWACCEL_INPUT_FLAGS: Partial<Record<HwAccelType, string[]>> = {
  * no known duration and no seekable segment grid, so it uses ffmpeg's own
  * sliding-window HLS muxer instead of the VOD cache/timeline machinery.
  *
- * Audio is re-encoded to stereo AAC, even on a remux, but for an AAC source
- * cut into MPEG-TS: providers commonly ship MP2/AC-3, which browsers refuse,
- * and a video-only stream is the single most reported failure of this kind of
- * feature.
+ * Audio is stereo AAC, re-encoded but for AAC cut into MPEG-TS: providers ship
+ * MP2/AC-3 that browsers refuse, and a video-only stream is the most reported failure.
  */
 export function buildLiveFfmpegArgs(opts: LiveFfmpegArgsOptions): string[] {
   const args: string[] = [

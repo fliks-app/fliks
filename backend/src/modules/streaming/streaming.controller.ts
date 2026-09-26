@@ -300,7 +300,7 @@ function iframeGrid(
  *  path, where ffmpeg cuts at source keyframes so segments are variable-length
  *  and a uniform `EXTINF` grid would mislead strict players (AVPlayer) into a
  *  progressive A/V drift. `durations` mirror ffmpeg's actual segment lengths
- *  (see {@link getRemuxSegmentGrid}). */
+ *  (see {@link remuxSegmentGrid}). */
 export function buildVariableVodPlaylist(
   durations: number[],
   segmentUrl: (index: string) => string,

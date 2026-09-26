@@ -104,9 +104,8 @@ export function rememberedAudioKey(s: AudioStreamChoice): string {
   return `${normalizeLangCode(s.language)}:${audioRole(s)}:${s.channels ?? ''}`;
 }
 
-/** Index of the stream a remembered key names: same language, then the same
- *  role, then the same channel count. Also reads the `language` and
- *  `language:ordinal` forms saved before roles were remembered. */
+/** Stream a remembered key names: same language, then role, then channel count.
+ *  Bare `language` and `language:ordinal` keys match too. */
 export function matchRememberedAudio(
   saved: string,
   streams: AudioStreamChoice[],
