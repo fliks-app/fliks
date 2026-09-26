@@ -80,6 +80,21 @@ describe('PlayerSettingsService audio selection', () => {
     expect(svc.resolveAudioLanguage(1, 'ja')).toBe('eng');
   });
 
+  it('honours the remembered ordinal among same-language tracks', () => {
+    const svc = make({ rememberAudioSelections: true });
+    const twoEng = [{ language: 'eng' }, { language: 'fra' }, { language: 'eng' }];
+    svc.saveRememberedAudioTrack(1, 'eng:1');
+    expect(svc.resolveAudioStreamIndex(1, twoEng, 1, null)).toBe(2);
+    svc.saveRememberedAudioTrack(1, 'eng:5');
+    expect(svc.resolveAudioStreamIndex(1, twoEng, 1, null)).toBe(0);
+  });
+
+  it('prefers the default-flagged track among same-language tracks', () => {
+    const svc = make({ audioSelectionMode: 'preferred', preferredAudioLanguage: 'eng' });
+    const streams = [{ language: 'eng' }, { language: 'eng', isDefault: true }];
+    expect(svc.resolveAudioStreamIndex(1, streams, 1, null)).toBe(1);
+  });
+
   it('leaves the file default alone on a fresh install', () => {
     expect(make().get().audioSelectionMode).toBe('default');
   });

@@ -159,6 +159,10 @@ export interface DeviceProfile {
    *  and fall back to DirectStream (remux to HLS). Unset = true. */
   supportsDirectPlay?: boolean;
 
+  /** Client engine switches audio tracks inside a raw DirectPlay file.
+   *  `false` sends a picked non-first track through HLS. Unset = true. */
+  switchesDirectPlayAudio?: boolean;
+
   /** Client can switch HLS variants at runtime (real ABR). `false` (e.g.
    *  embedded mpv, which picks one variant when it opens the master and
    *  never switches again) tells the backend to collapse the master to a
@@ -589,6 +593,10 @@ export class BrowserDeviceProfileService {
       // AVPlayer, webOS <video>, and Tizen AVPlay, whose `open()` takes any
       // remote URI and demuxes MKV itself.
       supportsDirectPlay: traits.supportsDirectPlay,
+      // Shaka plays a raw file through the media element, which exposes its
+      // audio tracks only where the browser implements `audioTracks` (Safari).
+      switchesDirectPlayAudio:
+        traits.switchesDirectPlayAudio ?? 'audioTracks' in HTMLMediaElement.prototype,
       // `false` only for the desktop mpv engine (see engine-traits.ts): the
       // backend then collapses the master to a single variant instead of
       // handing a no-ABR client the full ladder.

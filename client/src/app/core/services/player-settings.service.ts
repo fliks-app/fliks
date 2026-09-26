@@ -217,26 +217,30 @@ export class PlayerSettingsService {
   ): number | undefined {
     if (!audioStreams.length) return undefined;
     const s = this.get();
-    const indexOfLang = (lang: string) =>
-      audioStreams.findIndex(
-        (a) => normalizeLangCode(a.language) === normalizeLangCode(lang),
-      );
+    const indicesOfLang = (lang: string) =>
+      audioStreams
+        .map((a, i) => (normalizeLangCode(a.language) === normalizeLangCode(lang) ? i : -1))
+        .filter((i) => i >= 0);
 
     // Priority 1: remembered selection always wins, whatever the mode.
-    // Uses mediaId (series/movie) so the choice carries across episodes.
+    // Uses mediaId (series/movie) so the choice carries across episodes; the
+    // ":n" ordinal picks the Nth same-language track, as the engines do.
     if (s.rememberAudioSelections && mediaId) {
-      const savedLang = this.getRememberedAudioTrack(mediaId)?.split(':')[0];
-      if (savedLang) {
-        const idx = indexOfLang(savedLang);
-        if (idx >= 0) return idx;
+      const saved = this.getRememberedAudioTrack(mediaId);
+      if (saved) {
+        const [savedLang, ordinal] = saved.split(':');
+        const same = indicesOfLang(savedLang);
+        const idx = same[Number(ordinal ?? 0)] ?? same[0];
+        if (idx != null) return idx;
       }
     }
 
-    // Priority 2: the mode's target language.
+    // Priority 2: the mode's target language, its default-flagged track first.
     const lang = this.audioLanguage(originalLanguage);
     if (lang) {
-      const idx = indexOfLang(lang);
-      if (idx >= 0) return idx;
+      const same = indicesOfLang(lang);
+      const idx = same.find((i) => audioStreams[i].isDefault) ?? same[0];
+      if (idx != null) return idx;
     }
 
     // Priority 3: the track the file flags as default. Resolved here rather
