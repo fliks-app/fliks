@@ -1,15 +1,14 @@
-import { watch, type FSWatcher } from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
 import type { Logger } from '@nestjs/common';
 import { writeAtomically, writeFileAtomic } from '../../../common/utils/atomic-file';
-import { OUTPUT_POLL_MS } from './constants';
 import type { RemuxRunStart } from './ffmpeg-args';
 import { servedShift } from './source-timeline';
 import {
   DECODE_TIME_TOLERANCE_SECONDS,
   type KeyframeGrid,
 } from './segment-boundaries';
+import { watchDir } from './segment-utils';
 import {
   firstTfdt,
   parseInitTracks,
@@ -114,8 +113,7 @@ export class RemuxSegmentAssembler {
   /** ffmpeg GOP number → grid GOP index. */
   private gopOffset = 0;
   private delta: Map<number, bigint> | null = null;
-  private watcher: FSWatcher | null = null;
-  private timer: NodeJS.Timeout | null = null;
+  private unwatch: (() => void) | null = null;
   private chain: Promise<void> = Promise.resolve();
   private queued = false;
   private failures = 0;
@@ -132,22 +130,18 @@ export class RemuxSegmentAssembler {
   }
 
   start(): void {
-    try {
+    this.unwatch = watchDir(
+      this.plan.gopDir,
       // Writes into a GOP file raise `change`; a file appearing is a `rename`.
-      this.watcher = watch(this.plan.gopDir, { persistent: false }, (event) => {
-        if (event === 'rename') this.kick();
-      });
-    } catch (err) {
-      this.log.warn(`[${this.label}] cannot watch ${this.plan.gopDir}: ${(err as Error).message}`);
-    }
-    this.timer = setInterval(() => this.kick(), OUTPUT_POLL_MS);
+      (event) => event !== 'change' && this.kick(),
+      (err) => this.log.warn(`[${this.label}] cannot watch ${this.plan.gopDir}: ${err.message}`),
+    );
   }
 
   /** ffmpeg exited. A run that ended cleanly also completes the last segment:
    *  only then is its last GOP known whole. The GOP files go either way. */
   async finish(exitedCleanly: boolean): Promise<void> {
-    this.watcher?.close();
-    if (this.timer) clearInterval(this.timer);
+    this.unwatch?.();
     this.kick();
     await this.chain;
     if (exitedCleanly && !this.stopped) {
