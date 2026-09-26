@@ -20,6 +20,8 @@ export interface SourceTimeline {
    *  ends: ffmpeg cuts on the video, so audio past it gets no segment.
    *  Undefined when unprobed. */
   end?: number;
+  /** Source time an MPEG-TS clock breaks at, where every run stops. */
+  clockBreak?: number;
 }
 
 type TimelineProbe = Pick<
@@ -58,6 +60,7 @@ export function sourceTimeline(
   return {
     origin: videoPresentationStart(v) ?? 0,
     formatStart,
+    clockBreak: si?.timestampBreakSeconds ?? undefined,
     end:
       si?.timestampBreakSeconds ??
       v?.endSeconds ??

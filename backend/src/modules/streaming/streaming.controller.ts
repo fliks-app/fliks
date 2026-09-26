@@ -64,10 +64,8 @@ import * as path from 'path';
 import { SegmentPackagingService } from './services/segment-packaging.service';
 import { SessionRouter } from './services/session-router.service';
 import { ClockBreakScanService } from './services/clock-break-scan.service';
-import {
-  SessionContextBuilder,
-  sessionProfileHash,
-} from './services/session-context-builder.service';
+import { SessionContextBuilder } from './services/session-context-builder.service';
+import { sessionProfileHash } from './transcoding/session-profile';
 import { pickAudioLayout, resolveMuxFlavour } from './transcoding/audio-layout';
 import {
   buildIFrameSegmentArgs,
@@ -591,10 +589,13 @@ export class StreamingController {
    *  need be, for a row without stream info. */
   private async resolveDuration(
     mediaFileId: number,
-    absolutePath: string,
-    streamInfo: MediaFileInfo | null | undefined,
+    req: Request,
+    resolved: ResolvedFile,
   ): Promise<number> {
-    const timeline = sourceTimeline(streamInfo, absolutePath);
+    const { absolutePath } = resolved;
+    const timeline =
+      this.sessionRouter.findRequestSession(req, mediaFileId)?.timeline ??
+      sourceTimeline(resolved.mediaFile.streamInfo, absolutePath);
     if (timeline.end != null) return timeline.end - timeline.origin;
     try {
       const { stdout } = await execFileAsync(
@@ -930,6 +931,7 @@ export class StreamingController {
           outputChannels: t.outputChannels,
         })) ?? null,
       videoVariant,
+      timeline: sourceTimeline(resolved.mediaFile.streamInfo, resolved.absolutePath),
     };
     const profileHash =
       response.playMethod === 'DirectPlay'
@@ -1400,11 +1402,7 @@ export class StreamingController {
     const durationHint = firstQueryString(req.query, 'duration');
     const duration =
       (durationHint ? parseFloat(durationHint) : 0) ||
-      (await this.resolveDuration(
-        mediaFileId,
-        resolved.absolutePath,
-        resolved.mediaFile.streamInfo,
-      ));
+      (await this.resolveDuration(mediaFileId, req, resolved));
     if (!duration) {
       res.status(404).send('Duration unknown — rescan the file first');
       return;
@@ -1661,11 +1659,7 @@ export class StreamingController {
       mediaFileId,
       req.user as User,
     );
-    const duration = await this.resolveDuration(
-      mediaFileId,
-      resolved.absolutePath,
-      resolved.mediaFile.streamInfo,
-    );
+    const duration = await this.resolveDuration(mediaFileId, req, resolved);
     if (!duration) {
       res.status(404).send('Duration unknown');
       return;
@@ -1921,11 +1915,7 @@ export class StreamingController {
     const durationHint = firstQueryString(req.query, 'duration');
     const duration =
       (durationHint ? parseFloat(durationHint) : 0) ||
-      (await this.resolveDuration(
-        mediaFileId,
-        resolved.absolutePath,
-        resolved.mediaFile.streamInfo,
-      ));
+      (await this.resolveDuration(mediaFileId, req, resolved));
     if (!duration) {
       res.status(404).send('Duration unknown — rescan the file first');
       return;

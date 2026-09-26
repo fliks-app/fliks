@@ -1,8 +1,6 @@
 import type { Request } from 'express';
-import {
-  SessionContextBuilder,
-  sessionProfileHash,
-} from './session-context-builder.service';
+import { SessionContextBuilder } from './session-context-builder.service';
+import { sessionProfileHash } from '../transcoding/session-profile';
 import { LiveSessionRegistry } from '../live-session.service';
 import {
   buildPlaybackProfileFromContext,
@@ -125,6 +123,25 @@ describe('SessionContextBuilder.build', () => {
     expect(ctx.deviceType).toBe('desktop');
     expect(ctx.useTs).toBe(false);
     expect(ctx.videoVariant).toBeUndefined();
+  });
+
+  it('keeps the timeline frozen at playback-info through a rescan', () => {
+    const registry = new LiveSessionRegistry();
+    const live = registry.create({
+      userId: 7,
+      username: 'u',
+      kind: 'transcode',
+      mediaFileId: 1,
+      timeline: { origin: 2.8, formatStart: 2.779, end: 60, clockBreak: 40 },
+    });
+    sessionRouter.findRequestSession.mockReturnValue(live);
+    const rescanned = resolved(1);
+    const ctx = builder.build(req, rescanned, 1);
+    expect(ctx.sourceStartPts).toBe(2.8);
+    expect(ctx.sourceFormatStart).toBe(2.779);
+    expect(ctx.sourceEndSeconds).toBe(60);
+    expect(ctx.sourceClockBreakSeconds).toBe(40);
+    registry.onModuleDestroy();
   });
 
   it('hashes a var_stream_map session at playback-info as every transcode request does', () => {

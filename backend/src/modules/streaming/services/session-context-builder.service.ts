@@ -1,87 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import type { Request } from 'express';
-import {
-  buildPlaybackProfileFromContext,
-  computeProfileHash,
-  resolveSourceVideoBitrateBps,
-} from '../transcoding';
+import { resolveSourceVideoBitrateBps } from '../transcoding';
 import type { SessionContext } from '../transcoding';
-import { pickAudioLayout } from '../transcoding/audio-layout';
 import { parseSourceFps } from '../transcoding/constants';
-import { sourceTimeline } from '../transcoding/source-timeline';
+import { sessionLayoutContext } from '../transcoding/session-profile';
 import { seeksPastKeyframe } from '../transcoding/segment-boundaries';
 import { ActiveStreamTracker } from '../active-stream-tracker.service';
 import { SessionRouter } from './session-router.service';
 import type { ResolvedFile } from '../streaming.service';
-import type { LiveSession } from '../live-session.service';
-import type { MediaFileInfo } from '../../subtitles/ffprobe.service';
 import { User } from '../../users/entities/user.entity';
-
-/** The session fields the cache profile hash is derived from. playback-info
- *  hashes the session it creates through this too, so the hash it stores is
- *  the one every later transcode request derives. */
-export function sessionLayoutContext(
-  live:
-    | Pick<
-        LiveSession,
-        'useTs' | 'audioPlan' | 'audioTrackPlans' | 'videoVariant'
-      >
-    | null
-    | undefined,
-  si: MediaFileInfo | null | undefined,
-  label: string,
-): Pick<
-  SessionContext,
-  | 'useTs'
-  | 'videoOnly'
-  | 'audioStreams'
-  | 'audioPlan'
-  | 'audioTrackPlans'
-  | 'videoVariant'
-  | 'sourceStartPts'
-  | 'sourceFormatStart'
-  | 'sourceEndSeconds'
-> {
-  const useTs = live?.useTs ?? false;
-  const timeline = sourceTimeline(si, label);
-  return {
-    useTs,
-    // Multi-audio: produce video-only segments and let ffmpeg's var_stream_map
-    // emit one audio rendition per track (subdirs 1..N) so Shaka can switch
-    // client-side via EXT-X-MEDIA.
-    videoOnly:
-      pickAudioLayout(si?.audio?.length ?? 0, useTs ? 'ts' : 'fmp4') ===
-      'var-stream-map',
-    // Always plumb the audio streams (incl. `streamIndex`) so the single-track
-    // path can also resolve `-map 0:<abs>` and skip FFmpeg's audio enumeration.
-    audioStreams: si?.audio ?? undefined,
-    // Canonical audio decision, computed once in stream-builder.
-    audioPlan: live?.audioPlan ?? undefined,
-    audioTrackPlans: live?.audioTrackPlans ?? undefined,
-    // Variant chosen by stream-builder's codec selector; undefined only before
-    // a sid exists (routes through the userId-based findCurrent fallback).
-    videoVariant: live?.videoVariant ?? undefined,
-    sourceStartPts: timeline.origin,
-    sourceFormatStart: timeline.formatStart,
-    sourceEndSeconds: timeline.end,
-  };
-}
-
-/** Cache profile hash of a session, as `computeProfileHashForCtx` derives it
- *  from the context {@link SessionContextBuilder.build} returns for it. */
-export function sessionProfileHash(
-  live: Parameters<typeof sessionLayoutContext>[0],
-  si: MediaFileInfo | null | undefined,
-  label: string,
-  segmentDurationSeconds: number,
-): string {
-  return computeProfileHash(
-    buildPlaybackProfileFromContext(
-      sessionLayoutContext(live, si, label),
-      segmentDurationSeconds * 1000,
-    ),
-  );
-}
 
 /**
  * Assembles the SessionContext a transcode/segment route hands to the
@@ -132,7 +59,6 @@ export class SessionContextBuilder {
       sourceFps: parseSourceFps(si?.video?.[0]?.frameRate),
       videoStreamIndex: si?.video?.[0]?.streamIndex,
       sourceSeeksPastKeyframe: seeksPastKeyframe(si, resolved.absolutePath),
-      sourceClockBreakSeconds: si?.timestampBreakSeconds ?? undefined,
       // Source colorimetry — preserved through an SDR transcode so the output
       // signals the source's real matrix/primaries/transfer, not a forced BT.709.
       sourceColorSpace: si?.video?.[0]?.colorSpace,

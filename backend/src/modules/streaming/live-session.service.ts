@@ -14,11 +14,11 @@ import type {
   AudioPlan,
   AudioTrackEncodePlan,
 } from './transcoding/audio-encode';
+import type { SourceTimeline } from './transcoding/source-timeline';
 
 export type PlaybackState = 'playing' | 'paused' | 'buffering';
 export type SessionKind = 'transcode' | 'remux' | 'directplay';
 
-export type { AudioPlan };
 
 /**
  * Single live-session entry. The {@link sessionId} is the server-issued
@@ -95,6 +95,9 @@ export interface LiveSession {
   // ── Per-session settings owned by this entry ──
   useTs: boolean;
   audioPlan: AudioPlan | null;
+  /** Source timeline at playback-info: the session keeps it, and its cache
+   *  dir, whatever a rescan meanwhile makes of the file. */
+  timeline: SourceTimeline | null;
   /** Per-rendition audio decision (one entry per source audio stream) for the
    *  multi-audio var_stream_map encode; null when uniform / not multi-audio. */
   audioTrackPlans: AudioTrackEncodePlan[] | null;
@@ -168,6 +171,7 @@ export interface CreateLiveSessionInput {
   position?: number;
   useTs?: boolean;
   audioPlan?: AudioPlan | null;
+  timeline?: SourceTimeline | null;
   audioTrackPlans?: AudioTrackEncodePlan[] | null;
   audioStreamIndex?: number | null;
   audioStreamCount?: number;
@@ -277,6 +281,7 @@ export function buildLiveSession(
       muted: null,
       useTs: input.useTs ?? false,
       audioPlan: input.audioPlan ?? null,
+      timeline: input.timeline ?? null,
       audioTrackPlans: input.audioTrackPlans ?? null,
       audioStreamIndex: input.audioStreamIndex ?? null,
       audioStreamCount: input.audioStreamCount ?? 0,
