@@ -36,9 +36,8 @@ const ENCODER_MAX_CHANNELS: Record<AudioEncodeCodec, number> = {
   eac3: 6,
 };
 
-/** Samples per packet and priming samples ahead of the first one, measured on
- *  jellyfin-ffmpeg 8.1: the first packet of a stream aligned at t sits at
- *  t - padding / rate, each next one a frame later. */
+/** Samples per packet and priming ahead of the first, measured on jellyfin-ffmpeg
+ *  8.1: a stream aligned at t starts at t - padding / rate. */
 const ENCODER_FRAMES: Record<AudioEncodeCodec, { frame: number; padding: number }> = {
   aac: { frame: 1024, padding: 1024 },
   opus: { frame: 960, padding: 312 },
@@ -56,11 +55,17 @@ const ENCODER_RATES: Record<AudioEncodeCodec, number[]> = {
 };
 
 /** Packet grid (seconds) of an encoded track: its packets start at
- *  `alignedAt - padding + k · frame`. Null when the input rate is unknown. */
+ *  `alignedAt - padding + k · frame`. */
+export interface PacketGrid {
+  frame: number;
+  padding: number;
+}
+
+/** The grid an encode of a track at `inputRate` lands on; null when unknown. */
 export function encodedPacketGrid(
   codec: AudioEncodeCodec,
   inputRate: number | undefined,
-): { frame: number; padding: number } | null {
+): PacketGrid | null {
   if (!inputRate) return null;
   const rates = ENCODER_RATES[codec];
   const rate = rates.includes(inputRate) ? inputRate : rates[0];
@@ -90,6 +95,24 @@ export function audioEncodeBitrateBps(
   if (codec === 'ac3' || codec === 'eac3')
     return SURROUND_TRANSCODE_BITRATE_BPS;
   return Math.round((stereoBitrateBps * Math.max(channels, 2)) / 2);
+}
+
+/** Encode args for one audio output stream (`spec` `''` or `:<i>`). */
+export function audioEncodeArgs(
+  spec: string,
+  codec: AudioEncodeCodec,
+  channels: number,
+  bitrateBps: number,
+): string[] {
+  return [
+    `-c:a${spec}`,
+    audioEncoderName(codec),
+    `-b:a${spec}`,
+    `${Math.round(bitrateBps / 1000)}k`,
+    // `-ac` carries no stream type, so an indexed one must name the audio.
+    spec ? `-ac:a${spec}` : '-ac',
+    String(channels),
+  ];
 }
 
 /** Copy args for one audio output stream (`spec` `''` or `:<i>`). MP4 carries

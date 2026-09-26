@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { formatSeconds } from './transcoding/ffmpeg-args';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
@@ -31,7 +32,7 @@ export interface BurnInInfo {
 /** Seconds as a signed `setpts` term, microsecond precision. */
 function ptsTerm(sign: 1 | -1, seconds: number): string {
   const v = sign * seconds;
-  return `${v < 0 ? '-' : '+'}${Number(Math.abs(v).toFixed(6))}/TB`;
+  return `${v < 0 ? '-' : '+'}${formatSeconds(Math.abs(v))}/TB`;
 }
 
 /** Render `subtitleFilter` against cue time: under `-copyts` frames carry

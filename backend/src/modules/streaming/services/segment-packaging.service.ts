@@ -3,11 +3,8 @@ import type { Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import { readAndRewriteCmaf } from '../transcoding/cmaf-rewrite';
-import {
-  parseInitTracks,
-  rewriteSegmentTfdt,
-  timelineOrigin,
-} from '../transcoding/timeline';
+import { parseInitTracks, rewriteSegmentTfdt } from '../transcoding/timeline';
+import { servedOrigin } from '../transcoding/source-timeline';
 
 /**
  * Turns an on-disk cache-dir segment into a wire-ready HLS response: TS verbatim,
@@ -28,14 +25,8 @@ export class SegmentPackagingService {
     ReturnType<typeof parseInitTracks>
   >();
 
-  /**
-   * Serve a segment (or init) file onto `res`. `keyframeCut` is set for remux
-   * (`-c:v copy`) output, whose segments follow the source keyframes rather
-   * than the grid and are assembled on the served timeline already
-   * (`RemuxSegmentAssembler`). `segDuration` is the active HLS segment
-   * duration in seconds, threaded from the caller (the
-   * StreamingSettingsCache-backed value) rather than a module global.
-   */
+  /** Serve a segment (or init) file onto `res`. `keyframeCut` marks remux output,
+   *  already on the served timeline; `segDuration` is the session's grid. */
   async serve(
     res: Response,
     filePath: string,
@@ -76,13 +67,15 @@ export class SegmentPackagingService {
       if (!res.headersSent) res.status(404).end();
       return;
     }
-    const out = await this.anchorSegmentTimeline(
-      filePath,
-      buf,
-      opts.segDuration,
-      timelineOrigin(opts.startPts),
-      opts.keyframeCut ?? false,
-    );
+    // A remux segment is assembled on the served timeline already.
+    const out = opts.keyframeCut
+      ? buf
+      : await this.anchorSegmentTimeline(
+          filePath,
+          buf,
+          opts.segDuration,
+          servedOrigin({ origin: opts.startPts ?? 0 }),
+        );
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Length', String(out.length));
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -95,20 +88,16 @@ export class SegmentPackagingService {
     res.end(out);
   }
 
-  /** Anchor a media segment onto the single absolute presentation timeline:
-   *  rewrite its `tfdt` so `seg-N` decodes at its true presentation time
-   *  `N · segDuration + origin` (per-track timescale), instead of FFmpeg's
-   *  per-run 0-based reset. Init segments carry no `tfdt` and pass through
-   *  unchanged. */
+  /** Rewrite a segment's `tfdt` so `seg-N` decodes at `N · segDuration +
+   *  origin` instead of its run's 0-based time; an init passes unchanged. */
   private async anchorSegmentTimeline(
     filePath: string,
     buf: Buffer,
     segDuration: number,
     origin: number,
-    keyframeCut: boolean,
   ): Promise<Buffer> {
     const m = /(?:^|\/)seg-(\d+)\.m4s$/.exec(filePath);
-    if (!m || keyframeCut) return buf;
+    if (!m) return buf;
     const tracks = await this.tracksForDir(path.dirname(filePath));
     if (tracks.size === 0) return buf;
     return rewriteSegmentTfdt(buf, tracks, Number(m[1]), segDuration, origin);

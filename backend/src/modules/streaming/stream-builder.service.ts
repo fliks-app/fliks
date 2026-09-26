@@ -71,16 +71,8 @@ type CopyBlocker =
   | 'AudioFormatMayChange'
   | 'AudioEndsEarly';
 
-/**
- * Why a track the device could play as-is must still be re-encoded on this
- * output, or null. Only fMP4 is affected: MPEG-TS carries them as they are.
- * - A start offset lands in an empty edit, which MSE ignores; the encode
- *   aligns the track instead.
- * - fMP4 holds one AAC configuration for the whole track, taken from the first
- *   frame, so a copied ADTS stream that switches layout stops decoding there.
- * - A separate rendition that ends before the last video segment starts lacks
- *   segments its playlist lists; the encode pads it to the end.
- */
+/** Why a track the device plays as-is must still be re-encoded into fMP4, or
+ *  null: MSE ignores an offset's empty edit, and see each check below. */
 function copyBlocker(
   audio: { codec?: string; startTimeSeconds?: number; endSeconds?: number },
   video: Parameters<typeof videoPresentationStart>[0],
@@ -90,6 +82,7 @@ function copyBlocker(
 ): CopyBlocker | null {
   if (muxFlavour !== 'fmp4') return null;
   // MPEG-TS carries AAC as ADTS, where broadcasts switch 2.0 and 5.1 mid-stream.
+  // fMP4 keeps one AAC configuration, the first frame's, for the whole track.
   if ((audio.codec ?? '').toLowerCase() === 'aac' && mpegTs) {
     return 'AudioFormatMayChange';
   }
@@ -102,6 +95,7 @@ function copyBlocker(
   ) {
     return 'AudioStartOffset';
   }
+  // A separate rendition would lack the segments its playlist lists past its end.
   return audio.endSeconds != null &&
     lastVideoSegmentStart != null &&
     audio.endSeconds <= lastVideoSegmentStart
@@ -121,6 +115,12 @@ function lastVideoSegmentStart(
   const fps = parseSourceFps(si?.video?.[0]?.frameRate);
   const seg = realSegmentSeconds(segmentDuration, fps);
   return origin + (uniformSegmentCount(end - origin, seg, frameSecondsOf(fps)) - 1) * seg;
+}
+
+/** Channels an encode to `codec` can deliver: what both the device and the
+ *  encoder take. */
+function encodeChannelCap(profile: DeviceProfileDto, codec: AudioEncodeCodec): number {
+  return Math.min(audioChannelCap(profile, codec), encoderMaxChannels(codec));
 }
 
 /** Transcode reason for each per-track flag. */
@@ -574,9 +574,8 @@ export class StreamBuilderService {
       });
     }
 
-    // --- HLS audio (DirectStream and Transcode alike) ---
-    // One decision per track; the top-level plan and reasons are the picked
-    // track's, so they can never disagree with `audioTracks`.
+    // One decision per track, for DirectStream and Transcode alike: the top-level
+    // plan and reasons are the picked track's, so they match `audioTracks`.
     const audioTracks = this.buildAudioTracks(
       si,
       resolved.absolutePath,
@@ -957,10 +956,7 @@ export class StreamBuilderService {
       blockers.some(Boolean),
     );
     const outCap = isEncodableAudio(groupCodec)
-      ? Math.min(
-          audioChannelCap(profile, groupCodec),
-          encoderMaxChannels(groupCodec),
-        )
+      ? encodeChannelCap(profile, groupCodec)
       : audioChannelCap(profile, groupCodec);
 
     return audioStreams.map((t, index) => {
@@ -1004,9 +1000,8 @@ export class StreamBuilderService {
       // (MP3 is device-decodable but not fMP4-safe, so it must transcode — a
       // genuine reason, unlike a codec re-encoded only to match the group).
       const playableAsIs = codecSupported && fmp4Safe;
-      // A supported codec that's only downmixed shows the channel reason
-      // alone; a codec re-encoded purely to match the group's output codec
-      // (playable as-is, or saved as surround) shows no codec reason.
+      // No codec reason for a supported codec only downmixed, or one re-encoded
+      // just to match the group (playable as-is, or saved as surround).
       const reasonFlags: string[] = [];
       if (downmixed) {
         reasonFlags.push('AudioChannelsNotSupported');
@@ -1042,10 +1037,8 @@ export class StreamBuilderService {
     anyCopyBlocked: boolean,
   ): string {
     const codecs = audioStreams.map((t) => (t.codec ?? '').toLowerCase());
-    // All renditions share one source codec the device plays in fMP4: keep it
-    // so the fitting tracks copy and only an over-capacity or blocked one
-    // re-encodes, to the same codec — which needs an encoder for it (an
-    // all-Opus group stays Opus instead of re-encoding every track to E-AC-3).
+    // One source codec the device plays in fMP4 stays the group's, so only an
+    // over-capacity or blocked track re-encodes, to it, if an encoder exists.
     if (codecs.length > 0 && new Set(codecs).size === 1) {
       const c = codecs[0];
       const supported =
@@ -1060,7 +1053,7 @@ export class StreamBuilderService {
     const surround = (['eac3', 'ac3'] as const).find(
       (c) =>
         profileAudioCodecs.includes(c) &&
-        Math.min(audioChannelCap(profile, c), encoderMaxChannels(c)) >= 6,
+        encodeChannelCap(profile, c) >= 6,
     );
     return anySurround && surround ? surround : 'aac';
   }

@@ -169,11 +169,8 @@ export function audioCodecString(codec: string): string | null {
   return AUDIO_CODEC_STRINGS[codec.toLowerCase() as AudioOutputCodec] ?? null;
 }
 
-/**
- * CHANNELS value for an EXT-X-MEDIA audio rendition when the session carries
- * no per-track plan: AAC as stereo, any other codec at the source count (2
- * when unknown).
- */
+/** EXT-X-MEDIA CHANNELS of a rendition without a per-track plan: AAC as
+ *  stereo, any other codec at the source count (2 when unknown). */
 export function audioRenditionChannels(
   outputAudioCodec: string,
   sourceChannels: number | undefined,

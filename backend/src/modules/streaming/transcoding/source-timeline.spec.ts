@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import {
   cueOffsetSeconds,
   inputSeekSeconds,
+  servedOrigin,
   servedShift,
   sourceTimeline,
   videoPresentationStart,
@@ -69,6 +70,11 @@ describe('servedShift', () => {
   it('lifts a video that starts before 0 onto 0, and nothing else', () => {
     expect(servedShift({ origin: -23.717689 })).toBeCloseTo(23.717689, 9);
     expect(servedShift({ origin: 2.8 })).toBe(0);
+  });
+
+  it('serves the first frame at its source time, or at 0 from before 0', () => {
+    expect(servedOrigin({ origin: 2.8 })).toBe(2.8);
+    expect(servedOrigin({ origin: -0.042 })).toBe(0);
   });
 
   it('moves the subtitle map with it', () => {

@@ -6,12 +6,8 @@ import { MediaFile } from '../../media/entities/media-file.entity';
 import type { MediaFileInfo } from '../../subtitles/ffprobe.service';
 import { sourceIsMpegTs, videoPackets } from '../../subtitles/video-packets';
 
-/**
- * Finds where an MPEG-TS clock breaks, which takes reading every packet of the
- * file: off the import path, as a background ffmpeg job, stored on the row
- * (`timestampBreakSeconds`, null for none). The keyframe grid of a remux
- * played meanwhile shares the same read.
- */
+/** Where an MPEG-TS clock breaks, read off every packet in a background job and
+ *  stored on the row (`timestampBreakSeconds`, null for none). */
 @Injectable()
 export class ClockBreakScanService {
   private readonly log = new Logger(ClockBreakScanService.name);

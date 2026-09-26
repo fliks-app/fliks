@@ -402,7 +402,6 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
   // enough for the rung's resolution at 60 fps. A single `avc1.640028`
   // (L4.0) for every rung makes iOS AVPlayer reject 4K segments whose
   // bitstream signals L5.x — visible as decoder reinit / frame freeze.
-  //
   // Copy path (`?remux=1`, set only by a DirectStream decision): publish the
   // remux variant ALONE. Pairing it with the ladder is what made ExoPlayer
   // ABR-downgrade to the identical-resolution 1080p transcode and kill+respawn

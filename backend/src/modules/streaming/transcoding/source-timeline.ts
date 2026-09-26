@@ -6,19 +6,19 @@ import type {
 
 const log = new Logger('SourceTimeline');
 const reported = new Set<string>();
+/** Files reported before the set starts over. */
+const MAX_REPORTED = 1000;
 
-/** The two source times every served timeline and seek is derived from. */
+/** The source times every served timeline and seek is derived from. */
 export interface SourceTimeline {
   /** Source time of the first presented video frame: where every run's output
    *  timeline, the audio alignment and the segment grid start. */
   origin: number;
-  /** Container start: what an input `-ss` counts from, and what timestamps
-   *  ffmpeg rebases to 0 without `-copyts` (subtitle extracts, and the sidecars
-   *  authored against them or against a player's clock) count from. */
+  /** Container start: what an input `-ss` counts from, and what a `-copyts`-less
+   *  extract, and the sidecars authored against one, count cues from. */
   formatStart: number;
-  /** Source time the video ends at, or its clock breaks, where every playlist
-   *  ends: ffmpeg cuts on the video, so audio past it gets no segment.
-   *  Undefined when unprobed. */
+  /** Where the video ends or its clock breaks: every playlist ends there, since
+   *  ffmpeg cuts on the video. Undefined when unprobed. */
   end?: number;
   /** Source time an MPEG-TS clock breaks at, where every run stops. */
   clockBreak?: number;
@@ -36,27 +36,25 @@ export function videoPresentationStart(
   return v?.firstFrameSeconds ?? v?.startTimeSeconds;
 }
 
-/**
- * The timeline of a probed file. A row probed before `firstFrameSeconds` /
- * `formatStartSeconds` existed keeps the video `start_time` for both, which is
- * the behaviour it was served with, and is reported once so it gets rescanned.
- */
+/** The timeline of a probed file. Without a probed first frame or container
+ *  start, the video `start_time` stands in for both, reported once per file. */
 export function sourceTimeline(
   si: TimelineProbe | null | undefined,
   label = 'unknown file',
 ): SourceTimeline {
   const v = si?.video?.[0];
-  const legacy = v?.startTimeSeconds ?? 0;
+  const streamStart = v?.startTimeSeconds ?? 0;
   if (v && (v.firstFrameSeconds === undefined || si?.formatStartSeconds === undefined)) {
     if (!reported.has(label)) {
+      if (reported.size >= MAX_REPORTED) reported.clear();
       reported.add(label);
       log.warn(
         `${label}: stream info has no first-frame or container start; using the video ` +
-          `start_time (${legacy}s) for both until the file is rescanned`,
+          `start_time (${streamStart}s) for both until the file is rescanned`,
       );
     }
   }
-  const formatStart = si?.formatStartSeconds ?? legacy;
+  const formatStart = si?.formatStartSeconds ?? streamStart;
   return {
     origin: videoPresentationStart(v) ?? 0,
     formatStart,
@@ -78,9 +76,14 @@ export function inputSeekSeconds(
 }
 
 /** What the served fMP4 timeline adds to source time: 0, or what lifts a video
- *  starting before 0 to 0 (`timelineOrigin`). */
+ *  starting before 0 onto 0, since a tfdt can't go below 0. */
 export function servedShift(timeline: Pick<SourceTimeline, 'origin'>): number {
   return Math.max(0, -timeline.origin);
+}
+
+/** Where the first frame sits on the served timeline. */
+export function servedOrigin(timeline: Pick<SourceTimeline, 'origin'>): number {
+  return timeline.origin + servedShift(timeline);
 }
 
 /** Where a cue at 0 of a subtitle counted from the container start sits on the

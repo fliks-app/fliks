@@ -65,13 +65,8 @@ export interface RemuxAssemblyPlan {
   firstDecode: number | null;
 }
 
-/**
- * The edits of the served tracks: each takes back what the retime adds, so
- * presentation stays in source time. The video's is its first keyframe's
- * reorder delay, so a segment's tfdt is its first frame's time (what Shaka in
- * segments mode places it by); the audio's keeps its earliest sample, priming
- * ahead of the first keyframe's decode time, at or above 0.
- */
+/** Edits of the served tracks: the video's reorder delay makes a segment's tfdt
+ *  its first frame (Shaka places segments by it); the audio's keeps priming ≥ 0. */
 export function remuxEdits(start: number, firstDecode: number): RemuxEdits {
   const shift = servedShift({ origin: start });
   // The run from the start seeks this far under the first keyframe.
@@ -115,11 +110,8 @@ function gopsOf(plan: RemuxAssemblyPlan, segment: number): number[] | null {
 
 const segName = (n: number) => `seg-${String(n).padStart(4, '0')}.m4s`;
 
-/**
- * Builds a remux run's served segments from the GOP files its ffmpeg writes,
- * each segment the concatenation of its grid GOPs moved onto the served
- * timeline, so its bytes and the shared init do not depend on the run.
- */
+/** Builds a run's served segments from its GOP files on the grid and the served
+ *  timeline, so segments and the shared init do not depend on the run. */
 export class RemuxSegmentAssembler {
   private next: number;
   /** ffmpeg GOP number → grid GOP index. */
@@ -136,7 +128,7 @@ export class RemuxSegmentAssembler {
     private readonly plan: RemuxAssemblyPlan,
     private readonly log: Logger,
     private readonly label: string,
-    /** Called once assembly gave up: the run's output can no longer be served. */
+    /** Called once assembly gave up: the run's output can't be served. */
     private readonly onFailure: (err: Error) => void = () => {},
   ) {
     this.next = plan.startSegment;
@@ -259,9 +251,8 @@ export class RemuxSegmentAssembler {
     return true;
   }
 
-  /** What to add to the run's timestamps to get source time: the output `-ss`
-   *  as ffmpeg rounded it, found by matching the run's first GOP, whose tfdt
-   *  under `frag_discont` is its keyframe's pts less that `-ss`. */
+  /** The output `-ss` as ffmpeg rounded it, found by matching the first GOP's tfdt
+   *  (its keyframe's pts less the `-ss`, under `frag_discont`) to a keyframe. */
   private locateRun(
     gop: Buffer,
     tracks: ReturnType<typeof parseInitTracks>,

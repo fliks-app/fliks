@@ -70,6 +70,12 @@ function findBox(
   return null;
 }
 
+/** tkhd: fullbox, then creation and modification (4 bytes each in v0, 8 in
+ *  v1), then track_ID. */
+function tkhdTrackId(buf: Buffer, tkhd: Box): number {
+  return buf.readUInt32BE(tkhd.payloadStart + (buf[tkhd.payloadStart] === 1 ? 20 : 12));
+}
+
 /**
  * Parse `trackId → { timescale, isVideo }` from an init segment's `moov`.
  * Empty when the buffer isn't a parseable init (the caller then leaves the
@@ -86,12 +92,7 @@ export function parseInitTracks(initBuf: Buffer): Map<number, TrackInfo> {
     const mdia = findBox(initBuf, trak.payloadStart, trakEnd, 'mdia');
     if (!tkhd || !mdia) continue;
     const mdiaEnd = mdia.start + mdia.size;
-    // tkhd: fullbox, then (v0) creation(4) modification(4) track_ID(4) …
-    //                       (v1) creation(8) modification(8) track_ID(4) …
-    const tkVer = initBuf[tkhd.payloadStart];
-    const trackId = initBuf.readUInt32BE(
-      tkhd.payloadStart + (tkVer === 1 ? 20 : 12),
-    );
+    const trackId = tkhdTrackId(initBuf, tkhd);
     const mdhd = findBox(initBuf, mdia.payloadStart, mdiaEnd, 'mdhd');
     if (!mdhd) continue;
     // mdhd: fullbox, then (v0) creation(4) modification(4) timescale(4) …
@@ -143,13 +144,6 @@ function collectTfdts(buf: Buffer): FragTfdt[] {
   return out;
 }
 
-/** Source time the served fMP4 timeline puts at content 0. A video starting
- *  before 0 (a wrapped MPEG-TS clock, negative Matroska times) is served from 0,
- *  since a tfdt can't go below 0: see `servedShift`. */
-export function timelineOrigin(startPts = 0): number {
-  return Math.max(0, startPts);
-}
-
 /**
  * Shift every fragment's `tfdt` so the segment sits at its true content time
  * on the shared absolute timeline. Returns a new Buffer; box sizes unchanged.
@@ -173,9 +167,8 @@ export function rewriteSegmentTfdt(
   const frags = collectTfdts(segBuf);
   if (frags.length === 0) return segBuf;
 
-  // Every run's output starts at 0 (see `originSeconds` in ffmpeg-args), so the
-  // source start_time is part of the shift; the WebVTT X-TIMESTAMP-MAP adds it
-  // too.
+  // Every run's output starts at 0 (`originSeconds` in ffmpeg-args), so the origin
+  // is part of the shift, as in the WebVTT X-TIMESTAMP-MAP.
   const segStart = segIndex * segDuration + startPts;
   const video = frags.find((f) => tracks.get(f.trackId)?.isVideo);
   const ref = video ?? frags[0];
@@ -274,7 +267,7 @@ function trakOf(buf: Buffer, moov: Box, trackId: number): Box | null {
   for (const trak of boxes(buf, moov.payloadStart, moov.start + moov.size)) {
     if (trak.type !== 'trak') continue;
     const tkhd = findBox(buf, trak.payloadStart, trak.start + trak.size, 'tkhd');
-    if (tkhd && buf.readUInt32BE(tkhd.payloadStart + (buf[tkhd.payloadStart] === 1 ? 20 : 12)) === trackId) {
+    if (tkhd && tkhdTrackId(buf, tkhd) === trackId) {
       return trak;
     }
   }
@@ -312,9 +305,7 @@ export function withInitEdits(
   const rebuildTrak = (trak: Box): Buffer => {
     const trakEnd = trak.start + trak.size;
     const tkhd = findBox(initBuf, trak.payloadStart, trakEnd, 'tkhd');
-    const id = tkhd
-      ? initBuf.readUInt32BE(tkhd.payloadStart + (initBuf[tkhd.payloadStart] === 1 ? 20 : 12))
-      : -1;
+    const id = tkhd ? tkhdTrackId(initBuf, tkhd) : -1;
     const info = tracks.get(id);
     if (!info) return initBuf.subarray(trak.start, trakEnd);
     const edit = singleEdit(BigInt(Math.round(secondsOf(info) * info.timescale)));

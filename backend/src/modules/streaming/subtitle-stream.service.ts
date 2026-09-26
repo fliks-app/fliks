@@ -191,7 +191,12 @@ export class SubtitleStreamService implements OnModuleInit {
     // Sidecars count from the container start, like the extracts and the
     // players' clocks they are authored against (X-TIMESTAMP-MAP offset).
     const cueOffsetSeconds = cueOffsetOnServedTimeline(
-      sourceTimeline(sub.mediaFile?.streamInfo, realSubPath),
+      sourceTimeline(
+        sub.mediaFile?.streamInfo,
+        sub.media?.path && sub.mediaFile?.relativePath
+          ? path.join(sub.media.path, sub.mediaFile.relativePath)
+          : realSubPath,
+      ),
     );
     const vtt =
       ext === '.vtt'

@@ -123,7 +123,7 @@ describe('selectProgrammeVideoStreams', () => {
 });
 
 describe('rotation', () => {
-  it('reads the display matrix, else the legacy tag', () => {
+  it('reads the display matrix, else the rotate tag', () => {
     expect(
       streamRotation({
         index: 0,

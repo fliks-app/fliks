@@ -3,7 +3,6 @@ import {
   readInitEdits,
   retimeFragments,
   rewriteSegmentTfdt,
-  timelineOrigin,
   withInitEdits,
 } from './timeline';
 
@@ -104,12 +103,8 @@ describe('rewriteSegmentTfdt', () => {
     expect(readTfdt(out)).toBe(100 * TS); // 98s corrupted to 100s — the bug
   });
 
-  /**
-   * A source whose video starts at a non-zero PTS (TS captures, PVR rips).
-   * Every run's output starts at 0, so both the run from the file start and a
-   * mid-file run are moved onto the `start_time` origin, the one the WebVTT
-   * `X-TIMESTAMP-MAP` adds.
-   */
+  // Every run's output starts at 0: runs from the start and mid-file both move
+  // onto the origin the WebVTT `X-TIMESTAMP-MAP` adds.
   describe('a source with a non-zero start_time', () => {
     const START = 2.8;
 
@@ -277,10 +272,3 @@ describe('track edits', () => {
   });
 });
 
-describe('timelineOrigin', () => {
-  it('keeps a positive start and clamps a negative one to 0', () => {
-    expect(timelineOrigin(2.8)).toBe(2.8);
-    expect(timelineOrigin(-0.042)).toBe(0);
-    expect(timelineOrigin(undefined)).toBe(0);
-  });
-});

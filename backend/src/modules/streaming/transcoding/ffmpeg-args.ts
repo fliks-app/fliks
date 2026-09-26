@@ -15,13 +15,14 @@ import {
 } from './profiles';
 import {
   audioCopyArgs,
+  audioEncodeArgs,
   audioEncodeBitrateBps,
-  audioEncoderName,
   encodedPacketGrid,
   isEncodableAudio,
   trackEncodePlan,
   type AudioPlan,
   type AudioTrackEncodePlan,
+  type PacketGrid,
 } from './audio-encode';
 import type {
   AudioStreamMeta,
@@ -81,10 +82,8 @@ function ffOutPath(...parts: string[]): string {
   return parts.join('/').replace(/\\/g, '/');
 }
 
-/** Headroom every MPEG-TS run shares: TS can't carry a decode time below 0, and
- *  the muxer shifts a run that has one (B-frame reorder, audio priming at a
- *  start near 0) on its own, a frame or two off the others. A second covers
- *  16 reordered frames, the codec maximum, at 16 fps, and any priming. */
+/** Headroom every MPEG-TS run shares, so none drops below 0, which the muxer
+ *  would shift alone: a second covers 16 reordered frames at 16 fps, and priming. */
 export function tsHeadroom(originSeconds = 0): number {
   return Math.max(0, TS_MIN_START_SECONDS - originSeconds);
 }
@@ -92,7 +91,7 @@ export function tsHeadroom(originSeconds = 0): number {
 const TS_MIN_START_SECONDS = 1;
 
 /** Seconds as an ffmpeg duration / expression literal, microsecond precision. */
-function formatSeconds(seconds: number): string {
+export function formatSeconds(seconds: number): string {
   return String(Number(seconds.toFixed(6)));
 }
 
@@ -102,13 +101,8 @@ export function videoMapSpec(videoStreamIndex: number | undefined): string {
   return videoStreamIndex != null ? `0:${videoStreamIndex}` : '0:v:0';
 }
 
-/**
- * Pad or trim the audio so its first sample sits at `startSeconds` (source
- * time), the video's first frame, whatever the sample rate. A late track
- * otherwise starts in an empty edit, which MSE ignores, and plays early.
- * With `endSeconds`, a track that ends early is padded with silence up to it,
- * so its rendition has every segment the playlist lists.
- */
+/** Pad or trim the audio to start at `startSeconds`, the video's first frame (MSE
+ *  ignores a late track's empty edit), and pad it with silence to `endSeconds`. */
 export function audioStartAlignFilter(
   startSeconds: number,
   endSeconds?: number,
@@ -151,21 +145,14 @@ function audioStreamArgs(
     parseBitrateToBps(ctx.stereoBitrate),
   );
   return [
-    `-c:a${spec}`,
-    audioEncoderName(plan.outputCodec),
-    `-b:a${spec}`,
-    `${Math.round(bps / 1000)}k`,
-    // `-ac` carries no stream type, so an indexed one must name the audio.
-    spec ? `-ac:a${spec}` : '-ac',
-    String(channels),
+    ...audioEncodeArgs(spec, plan.outputCodec, channels, bps),
     `-filter:a${spec}`,
     audioStartAlignFilter(ctx.alignStartSeconds, ctx.endSeconds),
   ];
 }
 
 /** Input `-to` of a transcode run, from the container start like its `-ss`: the
- *  early companion's window, or an MPEG-TS clock break, past which the
- *  constant-rate sync would fill the jump with repeated frames. */
+ *  early window, or a clock break, whose jump the cfr sync would fill with frames. */
 function transcodeReadEnd(
   breakSeconds: number | undefined,
   formatStart: number,
@@ -178,15 +165,14 @@ function transcodeReadEnd(
   return Number.isFinite(end) ? ['-to', formatSeconds(end)] : [];
 }
 
-/** Output `-ss` of a transcode run: its first frame, which ffmpeg subtracts from
- *  every timestamp. A run from the start needs it only when that frame is
- *  before 0, where the constant-rate video sync would drop every frame up to 0. */
+/** Output `-ss` of a transcode run: its first frame. A run from the start needs it
+ *  only before 0, where the constant-rate sync would drop every frame up to 0. */
 function runOutputSeek(startSegment: number, runStartSeconds: number): number {
   return startSegment > 0 || runStartSeconds < 0 ? runStartSeconds : 0;
 }
 
 /** The shared fMP4/TS HLS muxer tail. Every output path (transcode single /
- *  var_stream_map, audio-only, remux) emits the same flags; they differ only in
+ *  var_stream_map, remux) emits the same flags; they differ only in
  *  the segment length, the init filename, the optional `-var_stream_map`, and
  *  the segment/index paths. The index path is the last positional (the muxer
  *  output). */
@@ -220,10 +206,8 @@ function hlsMuxerArgs(o: {
     ...(o.sourceTimestamps
       ? ['-hls_segment_options', 'movflags=+frag_discont']
       : []),
-    // A video starting after 0 lands in an empty edit, which MSE ignores, and
-    // one starting before 0 can't be written: a 0-based output does neither,
-    // and serving adds back what is at or above 0 (`timelineOrigin`). A seeked
-    // run is already 0-based by its output `-ss`.
+    // 0-based output (MSE ignores an empty edit, a tfdt can't go below 0); serving
+    // adds back `servedOrigin`. A seeked run is 0-based by its output `-ss`.
     ...(!o.sourceTimestamps && origin !== 0 && o.outputSeekSeconds === 0
       ? ['-output_ts_offset', formatSeconds(-origin)]
       : []),
@@ -446,9 +430,8 @@ export interface BuildFfmpegArgsOptions {
   sourceStartPts?: number;
   /** Container start the input `-ss` counts from. Defaults to `sourceStartPts`. */
   sourceFormatStart?: number;
-  /** Decode time of the last keyframe at or before a seeked run's first frame,
-   *  for a demuxer that lands after its seek target (`seeksPastKeyframe`): the
-   *  input seek goes there so decoding starts on it. */
+  /** Decode time of the keyframe at or before a seeked run's first frame, the input
+   *  seek of a demuxer landing after its target (`seeksPastKeyframe`). */
   seekKeyframeDts?: number;
   /** Source time an MPEG-TS clock breaks at: the run stops reading there, as
    *  the playlist ends there (`sourceTimeline`). */
@@ -1305,28 +1288,14 @@ export interface RemuxRunStart {
   startNumber: number;
 }
 
-/** Packet grid of the encoded audio track, when the audio is encoded. */
-export type EncodedAudioGrid = { frame: number; padding: number } | null;
-
-/**
- * The start of a remux run at `startSegment`. A seeked run seeks both sides to
- * its first keyframe's decode time: every demuxer lands at or before it
- * (Matroska and MP4 on the keyframe before, MPEG-TS on the first keyframe
- * after a byte position that ffmpeg pulls back by 3/23 s), and the output
- * `-ss`, which drops copied packets by decode time until a keyframe, keeps
- * exactly it. The muxer interleaves by decode time, so a run from the start
- * puts in that segment the audio packets from that decode time on: a seeked
- * run starts its audio on the first of them, encoded audio on the same packet
- * grid, and the two runs meet without a gap or overlap. The run from the start
- * seeks just under the first keyframe too, dropping packets nothing times
- * before it. Without a keyframe list the run starts on the uniform grid.
- */
+/** A remux run at `startSegment` seeks both sides to its first keyframe's decode
+ *  time, its audio starting on the packet a run from the start puts there. */
 export function remuxRunStart(
   grid: KeyframeGrid | null | undefined,
   startSegment: number,
   segmentDuration: number,
   origin: number,
-  audioGrid: EncodedAudioGrid = null,
+  audioGrid: PacketGrid | null = null,
 ): RemuxRunStart {
   if (!grid) {
     const start = origin + segmentIndexToSeconds(startSegment, segmentDuration);
@@ -1367,7 +1336,7 @@ export function remuxAudioGrid(
   audioPlan: AudioPlan | undefined,
   audioStreams: AudioStreamMeta[] | undefined,
   audioStreamIndex: number | undefined,
-): EncodedAudioGrid {
+): PacketGrid | null {
   const plan = audioPlan ?? { mode: 'transcode' as const, codec: 'aac' as const };
   if (plan.mode === 'copy') return null;
   return encodedPacketGrid(
@@ -1448,9 +1417,8 @@ export function buildRemuxArgs(
   }
 
   const seek = run.seekSeconds != null ? formatSeconds(run.seekSeconds) : null;
-  // Keyframe decode times are absolute, hence `-seek_timestamp`. The
-  // accurate-seek trim ignores it and adds the file start again; the output
-  // `-ss` and the alignment filter trim instead.
+  // Absolute decode times, hence `-seek_timestamp`; the accurate-seek trim would
+  // add the file start again, so the output `-ss` and the audio filter trim.
   if (seek) args.push('-noaccurate_seek', '-seek_timestamp', '1', '-ss', seek);
   const audioArgs = buildAudioOutputArgs(audioPlan, {
     stereoBitrate: audioBitrate,

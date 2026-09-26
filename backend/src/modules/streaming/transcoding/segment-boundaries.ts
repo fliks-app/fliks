@@ -14,9 +14,8 @@ const log = new Logger('SegmentBoundaries');
 // Copied video cuts only at its own irregular keyframes, so the remux playlist
 // declares each segment's real length: AVPlayer drifts on a uniform EXTINF grid.
 
-/** How far under its first keyframe's decode time the run from the file start
- *  seeks: well under a frame, far above the microsecond a derived decode time
- *  can be off by. */
+/** How far under its first keyframe's decode time the run from the start seeks:
+ *  under a frame, over the microsecond a derived decode time can be off. */
 export const DECODE_TIME_TOLERANCE_SECONDS = 0.01;
 
 export type { Keyframe };
@@ -34,9 +33,8 @@ export interface KeyframeGrid {
   firstKeyframe: number[];
 }
 
-/** The MPEG-TS demuxer seeks to a byte position and decoding picks up at the
- *  next keyframe, so a seek lands up to a GOP after its target; the others
- *  land on the keyframe at or before it. */
+/** MPEG-TS seeks to a byte position and lands up to a GOP past its target; the
+ *  other demuxers land on the keyframe at or before it. */
 export function seeksPastKeyframe(
   si: Pick<MediaFileInfo, 'formatName'> | null | undefined,
   filePath: string,
@@ -44,14 +42,8 @@ export function seeksPastKeyframe(
   return sourceIsMpegTs(si, filePath);
 }
 
-/**
- * Group the keyframes into segments of about `segDur`: a segment ends at the
- * first keyframe at or past a target advancing `segDur` per cut from the
- * first; the tail runs to `end`, and a keyframe starting no whole frame
- * before it stays in the last segment. The grid starts on the first keyframe shown
- * at or after `origin`: an edit list starting mid-GOP hides pre-roll a copy
- * could only decode before the timeline start.
- */
+/** Cut at the first keyframe past a target advancing `segDur` per cut, from the
+ *  first keyframe shown at `origin` (a copy can't show pre-roll) to `end`. */
 export function computeSegmentGrid(
   allKeyframes: Keyframe[],
   origin: number,
@@ -105,12 +97,8 @@ interface GridEntry {
 const grids = new Map<string, GridEntry>();
 const MAX_GRIDS = 64;
 
-/**
- * The keyframe grid of a source, ending where its video ends, or null when
- * its keyframes can't be read: the remux then runs on the uniform grid. One
- * answer per file version, the failure included, so every request of a
- * playback agrees on it; concurrent requests share one read.
- */
+/** The keyframe grid of a source, or null for the uniform one: one answer per
+ *  file version, a failure included, so every request of a playback agrees. */
 export async function getRemuxSegmentGrid(
   filePath: string,
   segDur: number,

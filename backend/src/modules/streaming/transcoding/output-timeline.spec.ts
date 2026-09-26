@@ -10,11 +10,8 @@ import type { BuildFfmpegArgsOptions, BuildRemuxArgsOptions } from './ffmpeg-arg
 import { realSegmentSeconds } from './constants';
 import { computeSegmentGrid } from './segment-boundaries';
 
-/**
- * Every fMP4 run starts its output at 0 with the audio padded to the run's
- * first video frame: a track starting later lands in an empty edit, which MSE
- * ignores. Serving adds the source origin back (timeline.ts).
- */
+// Every fMP4 run starts at 0, its audio padded to the run's first video frame
+// (MSE ignores an empty edit); serving adds the source origin back.
 const silentLog = {
   debug: () => {},
   log: () => {},
@@ -165,6 +162,23 @@ describe('transcoded audio alignment', () => {
   it('never filters a copied track', () => {
     const args = tx({ sourceStartPts: 2.8, audioPlan: { mode: 'copy', codec: 'aac' } });
     expect(args).not.toContain('-filter:a');
+  });
+
+  it('aligns every rendition to the video, whatever its own start', () => {
+    // Tracks starting 0, 11 ms and 300 ms off the video: each filter moves the
+    // track's own timestamps, so one video start serves them all.
+    const seek = 4 * realSegmentSeconds(3, 25);
+    const args = tx({
+      sourceStartPts: 2.8,
+      startSegment: 4,
+      sourceEndSeconds: 32.8,
+      videoOnly: true,
+      audioStreams: [{ streamIndex: 1 }, { streamIndex: 3 }, { streamIndex: 4 }],
+      audioTrackPlans: [0, 1, 2].map(() => ({ copy: false, outputCodec: 'aac', outputChannels: 2 })),
+    });
+    for (const i of [0, 1, 2]) {
+      expect(after(args, `-filter:a:${i}`)).toBe(audioStartAlignFilter(seek + 2.8, 32.8));
+    }
   });
 
   it('keeps the planned channels on the inline output', () => {

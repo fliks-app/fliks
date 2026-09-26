@@ -141,9 +141,8 @@ export interface VideoStreamInfo {
   avgFrameRate?: string;
   /** Container start PTS of the video stream (seconds): its first packet. */
   startTimeSeconds?: number;
-  /** Source time of the first frame the decoder presents (seconds). Differs
-   *  from `startTimeSeconds` when a stream is cut mid-GOP or an edit list hides
-   *  leading frames; the served timeline's origin (see `sourceTimeline`). */
+  /** First frame the decoder presents (seconds), the served origin: past
+   *  `startTimeSeconds` when cut mid-GOP or behind an edit list. */
   firstFrameSeconds?: number;
   /** Source time the stream ends at, when the container declares it. */
   endSeconds?: number;
@@ -182,10 +181,8 @@ export interface AudioStreamInfo {
   sampleRate?: number;
   bitRate?: number;
   isDefault?: boolean;
-  /** Start of the audio stream (seconds): the header `start_time`, or the
-   *  first packet when that is later (a track starting past the probe window
-   *  reads 0 or the video's start). Compared against the video's to detect a
-   *  leading gap. */
+  /** Header `start_time`, or the first packet when later (a track starting past
+   *  the probe window reads 0 or the video's start). */
   startTimeSeconds?: number;
   /** Source time the track ends at, when the container declares it. */
   endSeconds?: number;
@@ -223,9 +220,8 @@ export interface MediaFileInfo {
   formatStartSeconds?: number;
   /** ffprobe `format_name` (`mpegts`, `matroska,webm`, …): how the demuxer seeks. */
   formatName?: string;
-  /** Source time an MPEG-TS clock breaks at (a concatenated or restarted
-   *  recording): playback ends there. Null once a scan found none; absent
-   *  until the background scan ran. */
+  /** Where an MPEG-TS clock breaks (a restarted recording) and playback ends; null
+   *  for none, absent until the background scan ran. */
   timestampBreakSeconds?: number | null;
   durationSeconds?: number;
   /** Embedded chapter markers from the container (MKV/MP4). Empty if none. */
@@ -280,9 +276,8 @@ interface FfprobeStream {
   };
 }
 
-/** Where a stream ends, in source time. Matroska keeps it in a `DURATION`
- *  tag, whose value is the end timestamp even for a track that starts late;
- *  other containers give a duration from the stream start. */
+/** Where a stream ends: Matroska's `DURATION` tag is the end even for a late
+ *  track; other containers give a duration from the stream start. */
 export function streamEndSeconds(s: FfprobeStream): number | undefined {
   const clock = /^(\d+):(\d{2}):(\d{2}(?:\.\d+)?)$/.exec(
     tag(s.tags, 'DURATION') ?? '',
@@ -306,10 +301,8 @@ export function audioStreamRoles(
   };
 }
 
-/** The video streams that carry the programme, in container order. Cover art
- *  (`attached_pic`) never plays; a still-image track beside a moving one is a
- *  thumbnail. An MP4 muxing its cover before the programme lists it first,
- *  which would otherwise make it `video[0]`. */
+/** Programme video streams in container order: cover art never plays and a still
+ *  beside a moving track is a thumbnail, even when muxed first. */
 export function selectProgrammeVideoStreams(
   streams: FfprobeStream[],
 ): FfprobeStream[] {
@@ -754,10 +747,8 @@ export class FfprobeService {
     return undefined;
   }
 
-  /** First frame the decoder presents, as a transcode reads it (edit lists
-   *  applied): a stream cut mid-GOP starts on packets nothing decodes, so
-   *  neither its `start_time` nor its first keyframe is where the picture
-   *  starts. The read stops at that frame. */
+  /** First frame the decoder presents, edit lists applied: a stream cut mid-GOP
+   *  starts on packets nothing decodes. The read stops at that frame. */
   private async probeFirstFrame(
     videoPath: string,
     stream: FfprobeStream,
@@ -795,9 +786,8 @@ export class FfprobeService {
     return { seconds, sideData: frame?.side_data_list };
   }
 
-  /** Correct the header start of a track whose first packet lies past
-   *  ffprobe's probe window, and read the parameters it then reports as
-   *  missing. One pass over the packets, stopped once every track showed. */
+  /** Correct the header start of a track first seen past the probe window, and
+   *  read the parameters ffprobe then reports as missing. */
   private async probeAudioStarts(
     videoPath: string,
     audio: AudioStreamInfo[],
@@ -857,9 +847,8 @@ export class FfprobeService {
     }
   }
 
-  /** First packet time of each audio stream, read in file order until every
-   *  one showed or the file moved `LATE_AUDIO_SEARCH_SECONDS` past its first
-   *  packet: a stream with no data at all must not read the whole file. */
+  /** First packet of each audio stream, until all showed or the read is
+   *  `LATE_AUDIO_SEARCH_SECONDS` in: an empty stream must not read the whole file. */
   private async firstAudioPackets(
     videoPath: string,
     audio: AudioStreamInfo[],

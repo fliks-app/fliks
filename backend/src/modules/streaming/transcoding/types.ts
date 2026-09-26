@@ -168,11 +168,8 @@ export interface SessionContext {
    * planning decision is made in playback-info but consumed lazily by
    * later FFmpeg spawns (segments / quality switches).
    */
-  /**
-   * Audio output of the picked track, computed once by `stream-builder` (see
-   * `AudioPlan`). Everyone downstream (ffmpeg-args, master-playlist, admin
-   * dashboard) consumes it without re-deriving anything.
-   */
+  /** Audio output of the picked track, decided once by `stream-builder` and
+   *  consumed downstream as is. */
   audioPlan?: AudioPlan;
   /**
    * Per-rendition audio decision for the multi-audio `var_stream_map` path,

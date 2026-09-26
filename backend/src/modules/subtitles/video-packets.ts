@@ -56,12 +56,8 @@ const CLOCK_BACKWARD_SECONDS = 0.1;
  *  forward jump past it is a restarted clock. */
 const MAX_DROPOUT_SECONDS = 300;
 
-/**
- * Packets in decode order, as the demuxer hands them to a copy. Matroska
- * stores no decode times and the demuxer derives them only once reordering
- * is known; ffmpeg's copy starts the unknown ones `reorder / avg_frame_rate`
- * under the first pts, then adds the packet durations, and so does this.
- */
+/** Packets in decode order, as a copy gets them: decode times Matroska leaves
+ *  unknown start `reorder / avg_frame_rate` under the first pts, as ffmpeg's do. */
 export class VideoPacketReader {
   private readonly keyframes: Keyframe[] = [];
   private end = -Infinity;
@@ -227,12 +223,8 @@ const scans = new Map<string, ScanEntry>();
 /** Files whose scan stays in memory; a scan is a few hundred KB. */
 const MAX_SCANS = 64;
 
-/**
- * Keyframe packets of the video stream and where it ends, reading every packet
- * (none decoded) once per file version: concurrent callers share one read, and
- * a failure stands until the file changes. A background scan waits for an
- * ffmpeg slot and runs at idle I/O priority. Breaks are looked for on MPEG-TS.
- */
+/** Keyframes and end of the video, every packet read (none decoded) once per file
+ *  version, a failure included; a background read takes an ffmpeg slot, idle I/O. */
 export async function videoPackets(
   filePath: string,
   video: VideoStreamRef,

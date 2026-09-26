@@ -16,7 +16,7 @@ export function varStreamMapLayout(
 }
 
 /** Segment container of a transcode session: MPEG-TS when the profile forces it,
- *  or asks for it on single-audio sources (AVPlay, issue #148); fMP4 otherwise. */
+ *  or asks for it on single-audio sources (AVPlay); fMP4 otherwise. */
 export function resolveMuxFlavour(
   profile: { useTs?: boolean; useTsOnSingleAudio?: boolean },
   audioCount: number,

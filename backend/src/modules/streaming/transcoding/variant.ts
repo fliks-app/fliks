@@ -8,9 +8,8 @@
  * - `early`: short-lived companion that produces seg-0/seg-1 in
  *   parallel with a main session that's seeking mid-file. Same codec
  *   as main; suffix keeps the two in distinct cache dirs.
- * - `remux`: video-copy / audio-remux path (DirectStream). It muxes the
- *   picked audio track alone, cut on the keyframe grid or, without one, on
- *   the uniform grid, so both key its bucket.
+ * - `remux`: DirectStream, keyed on its one audio track and on its grid
+ *   (keyframe or uniform).
  *
  * Centralising the suffix logic here removes the foot-gun of editing
  * inline `${baseHash}-early` / `${baseHash}-remux` template

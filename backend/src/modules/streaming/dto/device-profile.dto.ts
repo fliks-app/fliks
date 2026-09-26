@@ -130,11 +130,8 @@ export class DeviceProfileDto {
   @IsOptional()
   supportsDirectPlay?: boolean;
 
-  /**
-   * Client can switch audio tracks inside a raw Direct Play file (native
-   * players, Safari). `false` makes a picked non-first track go through HLS,
-   * where it leads its own rendition. Unset is treated as `true`.
-   */
+  /** Client switches audio inside a raw Direct Play file; `false` sends a picked
+   *  non-first track through HLS, where it leads. Unset reads as `true`. */
   @IsBoolean()
   @IsOptional()
   switchesDirectPlayAudio?: boolean;

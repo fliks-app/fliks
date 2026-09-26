@@ -1545,11 +1545,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     await fsp.rm(dirPath, { recursive: true, force: true });
   }
 
-  /** Assemble the buildFfmpegArgs options from the session context. The
-   *  ~20 ctx-derived fields are identical across the main and early-start spawn
-   *  paths; only the call-specific fields below differ. One source keeps the two
-   *  spawns from drifting when a field is added (the "fix one, miss the other"
-   *  trap). */
   /** Where a demuxer that lands after its seek target must seek for a run to
    *  decode from a keyframe at or before its first frame. */
   private async seekKeyframeDts(
@@ -1576,6 +1571,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return keyframe?.dts;
   }
 
+  /** Assemble the buildFfmpegArgs options from the session context. The
+   *  ~20 ctx-derived fields are identical across the main and early-start spawn
+   *  paths; only the call-specific fields below differ. One source keeps the two
+   *  spawns from drifting when a field is added (the "fix one, miss the other"
+   *  trap). */
   private buildArgsOptionsFromCtx(
     ctx: SessionContext | undefined,
     call: {

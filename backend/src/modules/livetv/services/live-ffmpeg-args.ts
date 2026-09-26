@@ -1,5 +1,10 @@
 import type { HwAccelType } from '../../streaming/transcoding/types';
-import { audioCopyArgs } from '../../streaming/transcoding/audio-encode';
+import {
+  audioCopyArgs,
+  audioEncodeArgs,
+} from '../../streaming/transcoding/audio-encode';
+
+const LIVE_AAC_BITRATE_BPS = 128_000;
 import { liveTvFfmpegHeaderArgs } from '../livetv-http';
 
 export type LiveEncodeMode = 'remux' | 'transcode';
@@ -127,7 +132,7 @@ export function buildLiveFfmpegArgs(opts: LiveFfmpegArgsOptions): string[] {
   } else {
     // Providers ship MP2 and AC-3 that browsers refuse, and a silent stream is
     // the single most reported failure of this kind of feature.
-    args.push('-c:a', 'aac', '-ac', '2', '-b:a', '128k');
+    args.push(...audioEncodeArgs('', 'aac', 2, LIVE_AAC_BITRATE_BPS));
   }
 
   // Floored at 1: a 0 here (bad segment/window settings) would tell ffmpeg to

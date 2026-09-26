@@ -98,13 +98,8 @@ const VALID_QUALITIES = new Set([
   'remux',
 ]);
 
-/**
- * Inject the HLS X-TIMESTAMP-MAP that places the cues on the served media
- * timeline, which runs on source PTS (`-copyts`, re-anchored on serve). Cue
- * time 0 sits at `cueOffsetSeconds` there: the container start for every cue
- * source (see {@link sourceTimeline}). A negative offset moves LOCAL instead,
- * since MPEGTS is unsigned.
- */
+/** Inject the X-TIMESTAMP-MAP putting cue 0 at `cueOffsetSeconds` on the served
+ *  timeline; a negative offset moves LOCAL instead, MPEGTS being unsigned. */
 export function withTimestampMap(
   vtt: string | Buffer,
   cueOffsetSeconds = 0,
@@ -234,13 +229,8 @@ function statSizeOrNull(filePath: string): number | null {
   }
 }
 
-/** Generate a VOD HLS playlist for a given duration and segment URL pattern.
- *  `segDuration` is the real per-segment length (see `realSegmentSeconds`);
- *  seg-N covers `[N*segDuration, (N+1)*segDuration)`, so the EXTINF values
- *  mirror what FFmpeg actually emits and the presentation timeline stays
- *  aligned with the moof PTS the segments carry. FFmpeg cuts on the video, so
- *  a segment exists when a frame starts in it: the last frame starts
- *  `frameSeconds` before the end. */
+/** VOD playlist on the uniform grid: seg-N covers `[N, N+1) · segDuration` (the
+ *  real length, `realSegmentSeconds`), as many as `uniformSegmentCount` finds. */
 export function buildVodPlaylist(
   duration: number,
   segmentUrl: (index: string) => string,
@@ -445,10 +435,8 @@ export class StreamingController {
     );
   }
 
-  /** Keyframe grid of the remux/copy path, or null when keyframes can't be
-   *  probed (fall back to the uniform grid). Cached per file by
-   *  {@link getRemuxSegmentGrid}; the playlist is fetched before segments, so
-   *  segment-time lookups hit the warm cache. */
+  /** Keyframe grid of the remux path, or null for the uniform one; one answer
+   *  per file version ({@link getRemuxSegmentGrid}). */
   private remuxGrid(
     resolved: ResolvedFile,
     segDur: number,
@@ -581,9 +569,8 @@ export class StreamingController {
     }
   }
 
-  /** Seconds from the first frame to the video's end, what every playlist of
-   *  the file lasts (`sourceTimeline`); the container duration, probed if
-   *  need be, for a row without stream info. */
+  /** Seconds from the first frame to the video's end, what every playlist of the
+   *  session lasts; the probed container duration for a row without stream info. */
   private async resolveDuration(
     mediaFileId: number,
     req: Request,
@@ -768,7 +755,7 @@ export class StreamingController {
         /* prewarm is best-effort — the on-demand path still serves the track */
       });
 
-    // A file imported before the scan existed gets it now, for its next plays.
+    // A file whose clock was never scanned gets it for its next plays.
     void this.clockBreakScan.scheduleIfNeeded(
       mediaFileId,
       resolved.absolutePath,
@@ -1993,9 +1980,8 @@ export class StreamingController {
       remuxDurations =
         (await this.remuxGrid(resolved, this.segDur()))?.durations ?? null;
     }
-    // Transcoded segments span one forced GOP each, fMP4 and MPEG-TS alike:
-    // declare their real length so fractional-fps streams stay in A/V sync. A
-    // remux without keyframes runs on the plain grid (`remuxRunStart`).
+    // A transcoded segment is one forced GOP: its real length keeps fractional-fps
+    // streams in sync. A remux without keyframes runs on the plain grid.
     const sourceFps = parseSourceFps(
       resolved.mediaFile.streamInfo?.video?.[0]?.frameRate,
     );
@@ -2157,7 +2143,7 @@ export class StreamingController {
               this.segDur(existing),
               existing.sourceFps,
             ),
-            // Remux is cut on source keyframes, off the grid (#349).
+            // Remux is cut on source keyframes, off the grid.
             keyframeCut: quality === 'remux',
           },
         );
@@ -2334,7 +2320,7 @@ export class StreamingController {
       sendTransientUnavailable(res);
       return;
     }
-    // Remux is cut on source keyframes, off the grid (#349); the early-probe
+    // Remux is cut on source keyframes, off the grid; the early-probe
     // paths never run for remux (gated on quality !== 'remux').
     await this.segmentPackaging.serve(
       res,
