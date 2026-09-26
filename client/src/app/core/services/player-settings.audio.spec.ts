@@ -89,6 +89,17 @@ describe('PlayerSettingsService audio selection', () => {
     expect(svc.resolveAudioStreamIndex(1, twoEng, 1, null)).toBe(0);
   });
 
+  it('passes over a commentary or described track of the wanted language', () => {
+    const svc = make({ audioSelectionMode: 'preferred', preferredAudioLanguage: 'eng' });
+    const streams = [
+      { language: 'eng', commentary: true, isDefault: true },
+      { language: 'eng', audioDescription: true },
+      { language: 'eng' },
+    ];
+    expect(svc.resolveAudioStreamIndex(1, streams, 1, null)).toBe(2);
+    expect(svc.resolveAudioStreamIndex(1, streams.slice(0, 1), 1, null)).toBe(0);
+  });
+
   it('prefers the default-flagged track among same-language tracks', () => {
     const svc = make({ audioSelectionMode: 'preferred', preferredAudioLanguage: 'eng' });
     const streams = [{ language: 'eng' }, { language: 'eng', isDefault: true }];

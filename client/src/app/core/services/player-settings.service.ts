@@ -89,6 +89,8 @@ const DEFAULTS: PlayerSettings = {
 export interface AudioStreamChoice {
   language?: string;
   isDefault?: boolean;
+  commentary?: boolean;
+  audioDescription?: boolean;
 }
 
 /** Normalize any language code to 3-letter ISO 639-2/B. */
@@ -235,11 +237,16 @@ export class PlayerSettingsService {
       }
     }
 
-    // Priority 2: the mode's target language, its default-flagged track first.
+    // Priority 2: the mode's target language. A commentary or described track
+    // only when the language has nothing else; the default-flagged one first.
     const lang = this.audioLanguage(originalLanguage);
     if (lang) {
       const same = indicesOfLang(lang);
-      const idx = same.find((i) => audioStreams[i].isDefault) ?? same[0];
+      const main = same.filter(
+        (i) => !audioStreams[i].commentary && !audioStreams[i].audioDescription,
+      );
+      const pool = main.length ? main : same;
+      const idx = pool.find((i) => audioStreams[i].isDefault) ?? pool[0];
       if (idx != null) return idx;
     }
 
