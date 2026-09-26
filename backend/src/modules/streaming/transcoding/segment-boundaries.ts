@@ -2,6 +2,8 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { Logger } from '@nestjs/common';
 import { statSync } from 'fs';
+import type { MediaFileInfo } from '../../subtitles/ffprobe.service';
+import { sourceTimeline } from './source-timeline';
 
 const execFileAsync = promisify(execFile);
 const log = new Logger('SegmentBoundaries');
@@ -42,14 +44,17 @@ interface CacheEntry {
 const cache = new Map<string, CacheEntry>();
 
 /** Video keyframe presentation times (seconds, ascending) of the source. */
-export async function extractKeyframeTimes(filePath: string): Promise<number[]> {
+export async function extractKeyframeTimes(
+  filePath: string,
+  videoStreamIndex?: number,
+): Promise<number[]> {
   const { stdout } = await execFileAsync(
     'ffprobe',
     [
       '-v',
       'error',
       '-select_streams',
-      'v:0',
+      videoStreamIndex != null ? String(videoStreamIndex) : 'v:0',
       '-skip_frame',
       'nokey',
       '-show_entries',
@@ -70,19 +75,20 @@ export async function extractKeyframeTimes(filePath: string): Promise<number[]> 
 /**
  * Per-segment durations (seconds) ffmpeg's HLS muxer produces when copying a
  * keyframe-cut video. Cut at the first keyframe ≥ a target that advances by
- * `segDur` after each cut; the tail runs to `totalDuration`. Matches Jellyfin's
- * `ComputeSegments` and our ffmpeg's real output (verified to within ~7ms).
+ * `segDur` after each cut; the tail runs to `endSeconds`, the source time the
+ * file ends at (its container start plus duration, as absolute as the
+ * keyframes). Matches our ffmpeg's real output (verified to within ~7ms).
  */
 export function computeSegmentDurations(
   keyframeTimes: number[],
-  totalDuration: number,
+  endSeconds: number,
   segDur: number,
 ): number[] {
   if (keyframeTimes.length === 0 || segDur <= 0) return [];
-  // A keyframe past the container-reported duration extends the timeline so the
-  // tail segment isn't negative (Jellyfin #16703).
+  // A keyframe past the container-reported end extends the timeline so the
+  // tail segment isn't negative.
   const last = keyframeTimes[keyframeTimes.length - 1];
-  const total = Math.max(totalDuration, last);
+  const total = Math.max(endSeconds, last);
   if (total <= 0) return [];
 
   // Anchor at the first keyframe: ffmpeg measures each segment's elapsed time
@@ -119,14 +125,18 @@ export function boundariesFromDurations(
   return boundaries;
 }
 
-/** Segment index whose `[start, end)` window contains `seconds`. */
+/** Segment index whose `[start, end)` window contains content position
+ *  `seconds` (from the first frame); the boundaries are source times, so the
+ *  position is moved by the timeline `origin` first. */
 export function secondsToSegmentIndex(
   boundaries: number[],
   seconds: number,
+  origin: number,
 ): number {
   if (seconds <= 0 || boundaries.length < 2) return 0;
+  const at = seconds + origin;
   for (let i = 0; i < boundaries.length - 1; i++) {
-    if (seconds < boundaries[i + 1]) return i;
+    if (at < boundaries[i + 1]) return i;
   }
   return boundaries.length - 2;
 }
@@ -136,11 +146,16 @@ export function secondsToSegmentIndex(
  * per-segment durations (playlist EXTINF) and absolute cut times (seeking).
  * Returns null when keyframes can't be read — the caller then falls back to the
  * uniform grid (no regression). Cache is keyed by path + mtime + segment length.
+ * `totalDuration` 0 takes the probed duration.
  */
 export async function getRemuxSegmentGrid(
   filePath: string,
   totalDuration: number,
   segDur: number,
+  streamInfo?: Pick<
+    MediaFileInfo,
+    'video' | 'formatStartSeconds' | 'durationSeconds'
+  > | null,
 ): Promise<SegmentGrid | null> {
   let mtimeMs = 0;
   try {
@@ -153,8 +168,14 @@ export async function getRemuxSegmentGrid(
     return hit.grid;
   }
   try {
-    const keyframes = await extractKeyframeTimes(filePath);
-    const durations = computeSegmentDurations(keyframes, totalDuration, segDur);
+    const keyframes = await extractKeyframeTimes(
+      filePath,
+      streamInfo?.video?.[0]?.streamIndex,
+    );
+    const end =
+      sourceTimeline(streamInfo, filePath).formatStart +
+      (totalDuration || streamInfo?.durationSeconds || 0);
+    const durations = computeSegmentDurations(keyframes, end, segDur);
     if (durations.length === 0) return null;
     const grid: SegmentGrid = {
       durations,

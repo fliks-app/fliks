@@ -335,7 +335,7 @@ describe('remux playlist cannot drift out of A/V sync', () => {
       announced += d;
     });
     expect(announced).toBeCloseTo(boundaries[boundaries.length - 1], 3);
-    expect(secondsToSegmentIndex(boundaries, 20)).toBe(3);
+    expect(secondsToSegmentIndex(boundaries, 20, 0)).toBe(3);
   });
 
   it('is what a uniform grid gets wrong — the regression being replaced', () => {

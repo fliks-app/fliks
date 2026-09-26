@@ -22,12 +22,21 @@ describe('computeSegmentDurations', () => {
   });
 
   it('anchors at the first keyframe for sources with a non-zero start PTS', () => {
-    // TS rip: first PTS 1.4s. SEG=3, duration 10.4. Cuts advance from 1.4, so
+    // TS rip: first PTS 1.4s. SEG=3, ends at 10.4. Cuts advance from 1.4, so
     // the first segment is firstCut - start (= 3.0), not firstCut (= 4.4).
     const durs = computeSegmentDurations([1.4, 4.4, 7.4], 10.4, 3);
     expect(durs).toHaveLength(3);
     durs.forEach((d) => expect(d).toBeCloseTo(3, 6));
     expect(durs.reduce((a, b) => a + b, 0)).toBeCloseTo(9, 6); // total - start
+  });
+
+  it('runs the tail to the source end time, not to the duration', () => {
+    // Keyframes every 2 s from 2.8; the container starts at 2.78 and lasts 60.03 s,
+    // so it ends at 62.81: the last segment runs 60.8 -> 62.81.
+    const kf = Array.from({ length: 30 }, (_, i) => 2.8 + 2 * i);
+    const durs = computeSegmentDurations(kf, 2.78 + 60.03, 3);
+    expect(durs.at(-1)).toBeCloseTo(2.01, 6);
+    expect(durs.reduce((a, b) => a + b, 0)).toBeCloseTo(60.01, 6);
   });
 
   it('returns empty when there are no keyframes', () => {
@@ -43,12 +52,19 @@ describe('boundary helpers', () => {
   });
 
   it('maps a time to the segment whose window contains it', () => {
-    expect(secondsToSegmentIndex(boundaries, 0)).toBe(0);
-    expect(secondsToSegmentIndex(boundaries, 6.9)).toBe(0);
-    expect(secondsToSegmentIndex(boundaries, 7)).toBe(1);
-    expect(secondsToSegmentIndex(boundaries, 12.9)).toBe(1);
-    expect(secondsToSegmentIndex(boundaries, 13)).toBe(2);
-    expect(secondsToSegmentIndex(boundaries, 999)).toBe(2);
+    expect(secondsToSegmentIndex(boundaries, 0, 0)).toBe(0);
+    expect(secondsToSegmentIndex(boundaries, 6.9, 0)).toBe(0);
+    expect(secondsToSegmentIndex(boundaries, 7, 0)).toBe(1);
+    expect(secondsToSegmentIndex(boundaries, 12.9, 0)).toBe(1);
+    expect(secondsToSegmentIndex(boundaries, 13, 0)).toBe(2);
+    expect(secondsToSegmentIndex(boundaries, 999, 0)).toBe(2);
+  });
+
+  it('places a content position on source-time boundaries through the origin', () => {
+    // Boundaries of a TS starting at 2.8: content 20 s is source 22.8, in [20.8, 23.8).
+    const ts = boundariesFromDurations([3, 3, 3, 3, 3, 3, 3, 3], 2.8);
+    expect(secondsToSegmentIndex(ts, 20, 2.8)).toBe(6);
+    expect(secondsToSegmentIndex(ts, 17.9, 2.8)).toBe(5);
   });
 
   it('offsets cumulative boundaries by the source start PTS', () => {

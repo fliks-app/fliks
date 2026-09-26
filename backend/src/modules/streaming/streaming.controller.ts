@@ -412,11 +412,11 @@ export class StreamingController {
         }
       | null
       | undefined,
-    boundaries?: number[],
+    remux?: { boundaries: number[]; origin: number },
   ): number {
     const posIndex = live
-      ? boundaries
-        ? boundarySecondsToIndex(boundaries, live.position)
+      ? remux
+        ? boundarySecondsToIndex(remux.boundaries, live.position, remux.origin)
         : secondsToSegmentIndex(
             live.position,
             this.segDur(existing ?? undefined),
@@ -440,11 +440,16 @@ export class StreamingController {
    *  Cached per file by {@link getRemuxSegmentGrid}; the playlist is
    *  fetched before segments, so segment-time lookups hit the warm cache. */
   private async remuxBoundaries(
-    absolutePath: string,
+    resolved: ResolvedFile,
     segDur: number,
     durationHint = 0,
   ): Promise<number[] | null> {
-    const grid = await getRemuxSegmentGrid(absolutePath, durationHint, segDur);
+    const grid = await getRemuxSegmentGrid(
+      resolved.absolutePath,
+      durationHint,
+      segDur,
+      resolved.mediaFile.streamInfo,
+    );
     return grid ? grid.boundaries : null;
   }
 
@@ -461,9 +466,9 @@ export class StreamingController {
     existing: { startSegment?: number | null } | null | undefined,
     isInit: boolean,
     segIndex: number,
-    boundaries?: number[],
+    remux?: { boundaries: number[]; origin: number },
   ): number {
-    return isInit ? this.resumeFloor(live, existing, boundaries) : segIndex;
+    return isInit ? this.resumeFloor(live, existing, remux) : segIndex;
   }
 
   /**
@@ -1955,12 +1960,12 @@ export class StreamingController {
           // Copied video is keyframe-cut, so map the resume time to a segment
           // (and seek) via the real keyframe boundaries, not the uniform grid.
           const boundaries = await this.remuxBoundaries(
-            resolved.absolutePath,
+            resolved,
             this.segDur(ctx),
             duration,
           );
           const startSegment = boundaries
-            ? boundarySecondsToIndex(boundaries, startAtSec)
+            ? boundarySecondsToIndex(boundaries, startAtSec, ctx.sourceStartPts ?? 0)
             : secondsToSegmentIndex(startAtSec, this.segDur(ctx));
           void this.transcodingService.getOrCreateRemuxSession(
             mediaFileId,
@@ -2017,8 +2022,12 @@ export class StreamingController {
     let remuxDurations: number[] | null = null;
     if (quality === 'remux') {
       remuxDurations =
-        (await getRemuxSegmentGrid(resolved.absolutePath, duration, this.segDur()))
-          ?.durations ?? null;
+        (await getRemuxSegmentGrid(
+          resolved.absolutePath,
+          duration,
+          this.segDur(),
+          resolved.mediaFile.streamInfo,
+        ))?.durations ?? null;
     }
     // Transcoded fMP4 segments span one GOP each — declare their real length
     // so fractional-fps streams stay in A/V sync. Remux (variable) and TS keep
@@ -2302,17 +2311,18 @@ export class StreamingController {
     // aligned. Non-remux keeps the uniform grid (force_key_frames makes it true).
     const remuxBounds =
       quality === 'remux'
-        ? ((await this.remuxBoundaries(
-            resolved.absolutePath,
-            this.segDur(ctx),
-          )) ?? undefined)
+        ? ((await this.remuxBoundaries(resolved, this.segDur(ctx))) ??
+          undefined)
         : undefined;
     const anchorSeg = this.anchorSegment(
       live,
       existing,
       isInit,
       segIndex,
-      remuxBounds,
+      remuxBounds && {
+        boundaries: remuxBounds,
+        origin: ctx.sourceStartPts ?? 0,
+      },
     );
     const session =
       quality === 'remux'
