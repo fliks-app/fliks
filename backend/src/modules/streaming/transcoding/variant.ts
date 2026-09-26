@@ -14,15 +14,14 @@
  *   audioIndex so multi-audio playbacks don't share a writer.
  *
  * Centralising the suffix logic here removes the foot-gun of editing
- * five inline `${baseHash}-early` / `${baseHash}-a${n}` template
+ * inline `${baseHash}-early` / `${baseHash}-remux` template
  * literals — the strip regex, the prefix check, and the variant
  * encoder all live in one place.
  */
 export type SessionVariant =
   | { kind: 'main' }
   | { kind: 'early' }
-  | { kind: 'remux' }
-  | { kind: 'audio'; audioIndex: number };
+  | { kind: 'remux' };
 
 /** Singleton instances for the variants that take no parameters —
  *  saves an allocation per spawn. */
@@ -40,8 +39,6 @@ export function variantSuffix(variant: SessionVariant): string {
       return '-early';
     case 'remux':
       return '-remux';
-    case 'audio':
-      return `-a${variant.audioIndex}`;
   }
 }
 
@@ -55,7 +52,7 @@ export function variantHash(
   return `${baseHash}${variantSuffix(variant)}`;
 }
 
-const VARIANT_SUFFIX_RE = /-(?:early|remux|a\d+)$/;
+const VARIANT_SUFFIX_RE = /-(?:early|remux)$/;
 
 /** Strip any known variant suffix off a cache key to recover the base
  *  profile hash that the live-session registry tracks. The registry

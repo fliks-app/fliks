@@ -12,8 +12,6 @@ describe('variantSuffix', () => {
     expect(variantSuffix(VARIANT_MAIN)).toBe('');
     expect(variantSuffix(VARIANT_EARLY)).toBe('-early');
     expect(variantSuffix(VARIANT_REMUX)).toBe('-remux');
-    expect(variantSuffix({ kind: 'audio', audioIndex: 0 })).toBe('-a0');
-    expect(variantSuffix({ kind: 'audio', audioIndex: 3 })).toBe('-a3');
   });
 });
 
@@ -25,9 +23,6 @@ describe('variantHash', () => {
   it('appends the variant suffix', () => {
     expect(variantHash(base, VARIANT_EARLY)).toBe(`${base}-early`);
     expect(variantHash(base, VARIANT_REMUX)).toBe(`${base}-remux`);
-    expect(variantHash(base, { kind: 'audio', audioIndex: 2 })).toBe(
-      `${base}-a2`,
-    );
   });
 });
 
@@ -39,12 +34,10 @@ describe('baseProfileHash', () => {
   it('strips every known variant suffix', () => {
     expect(baseProfileHash(`${base}-early`)).toBe(base);
     expect(baseProfileHash(`${base}-remux`)).toBe(base);
-    expect(baseProfileHash(`${base}-a0`)).toBe(base);
-    expect(baseProfileHash(`${base}-a12`)).toBe(base);
   });
   it('leaves non-variant trailing dashes alone', () => {
     expect(baseProfileHash(`${base}-foo`)).toBe(`${base}-foo`);
-    expect(baseProfileHash(`${base}-aX`)).toBe(`${base}-aX`);
+    expect(baseProfileHash(`${base}-a0`)).toBe(`${base}-a0`);
   });
 });
 
@@ -55,8 +48,6 @@ describe('round-trip variantHash + baseProfileHash', () => {
       VARIANT_MAIN,
       VARIANT_EARLY,
       VARIANT_REMUX,
-      { kind: 'audio', audioIndex: 0 } as const,
-      { kind: 'audio', audioIndex: 7 } as const,
     ];
     for (const v of variants) {
       expect(baseProfileHash(variantHash(base, v))).toBe(base);

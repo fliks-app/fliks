@@ -2,7 +2,6 @@ import { Logger } from '@nestjs/common';
 import {
   buildFfmpegArgs,
   buildRemuxArgs,
-  buildAudioOnlyFfmpegArgs,
 } from './ffmpeg-args';
 import type { BuildFfmpegArgsOptions } from './ffmpeg-args';
 import { computeSegmentGrid } from './segment-boundaries';
@@ -1352,7 +1351,7 @@ describe('buildFfmpegArgs — QSV/VAAPI matrix golden argv (characterization)', 
   });
 });
 
-describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization)', () => {
+describe('buildRemuxArgs — golden (characterization)', () => {
   // Keyframes every 3.003 s with a 2-frame reorder delay, cut every other one.
   const GRID = computeSegmentGrid(
     [0, 3.003, 6.006, 9.009, 12.012].map((pts) => ({ pts, dts: pts - 0.0834 })),
@@ -1570,125 +1569,6 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
         silentLog,
       ),
     ).toThrow(RangeError);
-  });
-  it('audio-only: resume applies a single input -ss', () => {
-    expect(
-      buildAudioOnlyFfmpegArgs(
-        {
-          inputPath: '/media/in.mkv',
-          outputDir: '/cache/out',
-          audioStreamIndex: 0,
-          startSegment: 4,
-          trustedStreamInfo: true,
-        },
-        silentLog,
-      ),
-    ).toMatchInlineSnapshot(`
-     [
-       "-hide_banner",
-       "-loglevel",
-       "warning",
-       "-analyzeduration",
-       "0",
-       "-probesize",
-       "5000000",
-       "-ss",
-       "12",
-       "-i",
-       "/media/in.mkv",
-       "-copyts",
-       "-muxdelay",
-       "0",
-       "-muxpreload",
-       "0",
-       "-map",
-       "0:a:0?",
-       "-vn",
-       "-c:a",
-       "aac",
-       "-b:a",
-       "192k",
-       "-ac",
-       "2",
-       "-movflags",
-       "+cmaf",
-       "-avoid_negative_ts",
-       "disabled",
-       "-f",
-       "hls",
-       "-hls_time",
-       "3",
-       "-hls_list_size",
-       "0",
-       "-start_number",
-       "4",
-       "-hls_segment_type",
-       "fmp4",
-       "-hls_fmp4_init_filename",
-       "init.mp4",
-       "-hls_flags",
-       "independent_segments+temp_file",
-       "-hls_segment_filename",
-       "/cache/out/seg-%04d.m4s",
-       "/cache/out/index.m3u8",
-     ]
-    `);
-  });
-
-  it('audio-only: Tizen TS variant', () => {
-    expect(
-      buildAudioOnlyFfmpegArgs(
-        {
-          inputPath: '/media/in.mkv',
-          outputDir: '/cache/out',
-          audioStreamIndex: 0,
-          trustedStreamInfo: true,
-          useTs: true,
-        },
-        silentLog,
-      ),
-    ).toMatchInlineSnapshot(`
-     [
-       "-hide_banner",
-       "-loglevel",
-       "warning",
-       "-analyzeduration",
-       "0",
-       "-probesize",
-       "5000000",
-       "-i",
-       "/media/in.mkv",
-       "-copyts",
-       "-muxdelay",
-       "0",
-       "-muxpreload",
-       "0",
-       "-map",
-       "0:a:0?",
-       "-vn",
-       "-c:a",
-       "aac",
-       "-b:a",
-       "192k",
-       "-ac",
-       "2",
-       "-f",
-       "hls",
-       "-hls_time",
-       "3",
-       "-hls_list_size",
-       "0",
-       "-start_number",
-       "0",
-       "-hls_segment_type",
-       "mpegts",
-       "-hls_flags",
-       "independent_segments+temp_file",
-       "-hls_segment_filename",
-       "/cache/out/seg-%04d.ts",
-       "/cache/out/index.m3u8",
-     ]
-    `);
   });
 });
 

@@ -23,7 +23,6 @@ import {
   isHdrProfile,
 } from './profiles';
 import {
-  buildAudioOnlyFfmpegArgs,
   buildFfmpegArgs,
   buildRemuxArgs,
   remuxRunStart,
@@ -1403,127 +1402,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     session.process.on('close', (code) => {
       void assembler.finish(code === 0 && !session.intentionallyKilled);
     });
-
-    this.applyContext(session, ctx);
-    return session;
-  }
-
-  /**
-   * Start or retrieve an audio-only HLS session for a specific audio track.
-   * Audio sessions are keyed separately from video sessions.
-   */
-  async getOrCreateAudioSession(
-    mediaFileId: number,
-    audioIndex: number,
-    absolutePath: string,
-    requestedSegment = 0,
-    ctx?: SessionContext,
-  ): Promise<TranscodeSession> {
-    const baseHash = this.computeProfileHashForCtx(ctx);
-    const variant: SessionVariant = { kind: 'audio', audioIndex };
-    const key = sessionKey(
-      mediaFileId,
-      ctx?.userId,
-      variantHash(baseHash, variant),
-    );
-    return this.withLock(key, () =>
-      this.doGetOrCreateAudioSession(
-        key,
-        mediaFileId,
-        audioIndex,
-        absolutePath,
-        requestedSegment,
-        ctx,
-      ),
-    );
-  }
-
-  private async doGetOrCreateAudioSession(
-    key: string,
-    mediaFileId: number,
-    audioIndex: number,
-    absolutePath: string,
-    requestedSegment: number,
-    ctx?: SessionContext,
-  ): Promise<TranscodeSession> {
-    const existing = this.sessions.get(key);
-    if (existing) {
-      if (existing.process.exitCode !== null) {
-        this.sessions.delete(key);
-        await fsp.rm(existing.cachePath, { recursive: true, force: true });
-      } else {
-        existing.lastAccess = Date.now();
-
-        if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
-          // Same wait/restart call as video, so the two sessions stay in step.
-          if (
-            await segmentWithinReach(
-              existing.cachePath,
-              requestedSegment,
-              SEEK_WAIT_THRESHOLD,
-            )
-          ) {
-            return existing;
-          }
-          this.log.log(
-            `Seek: restarting audio session [${key}] from segment ${requestedSegment} (not cached)`,
-          );
-          this.sessions.delete(key);
-          existing.intentionallyKilled = true;
-          await this.killProcess(existing.process);
-        } else {
-          const gap = firstMissingSegment(existing.cachePath, requestedSegment);
-          if (gap != null && gap < (existing.startSegment ?? 0)) {
-            this.log.log(
-              `Seek: segment ${requestedSegment} cached, restarting audio [${key}] at unreachable gap ${gap}`,
-            );
-            this.sessions.delete(key);
-            existing.intentionallyKilled = true;
-            await this.killProcess(existing.process);
-            requestedSegment = gap;
-          } else {
-            return existing;
-          }
-        }
-      }
-    }
-
-    const { dir: sessionDir, baseHash: audioBaseHash } = this.cacheDirFor(
-      ctx,
-      mediaFileId,
-      { kind: 'audio', audioIndex },
-      'audio',
-    );
-    await fsp.mkdir(sessionDir, { recursive: true });
-
-    const args = buildAudioOnlyFfmpegArgs(
-      {
-        inputPath: absolutePath,
-        outputDir: sessionDir,
-        audioStreamIndex: audioIndex,
-        startSegment: requestedSegment,
-        trustedStreamInfo: ctx?.trustedStreamInfo ?? false,
-        useTs: ctx?.useTs ?? false,
-        audioStreams: ctx?.audioStreams,
-        sourceFps: ctx?.sourceFps,
-        segmentDuration: ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION,
-      },
-      this.log,
-    );
-
-    const session = this.spawnFfmpegSession({
-      id: key,
-      mediaFileId,
-      quality: `audio-${audioIndex}`,
-      args,
-      sessionDir,
-      startSegment: requestedSegment,
-      segExt: ctx?.useTs ? '.ts' : undefined,
-      reason: ctx?.spawnReason,
-      extra: { isAudioOnly: true },
-    });
-    session.baseProfileHash = audioBaseHash;
-    session.variant = { kind: 'audio', audioIndex };
 
     this.applyContext(session, ctx);
     return session;

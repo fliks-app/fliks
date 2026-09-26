@@ -1660,36 +1660,17 @@ export class StreamingController {
       return;
     }
 
-    // Audio is produced by the video session whenever the master picked the
-    // var_stream_map layout (`setUseExtXMedia`): any fMP4 source with audio
-    // (issue #148, Tizen) and any multi-audio source, whatever the mux. Only a
-    // muxed TS / muxed-fMP4 source needs a separate audio-only session instead.
+    // The master lists audio renditions only in the var_stream_map layout, so
+    // the video session cuts them, on its GOP grid (`hlsAudioSegment`).
     const live = this.sessionRouter.findRequestSession(req, mediaFileId);
-    const useExtXMedia = live?.useExtXMedia ?? false;
-    if (!useExtXMedia) {
-      const user = req.user;
-      void this.transcodingService.getOrCreateAudioSession(
-        mediaFileId,
-        audioIndex,
-        resolved.absolutePath,
-        0,
-        { userId: user?.id, segmentDuration: this.segDur() },
-      );
-    }
-
     const tokenParam = buildTokenParam(req);
     const basePath = `/api/stream/${mediaFileId}/audio/${audioIndex}`;
     const useTs = live?.useTs ?? false;
     const segExt = useTs ? 'ts' : 'm4s';
-    // var_stream_map audio renditions are cut on the video GOP grid, so they
-    // share the video's real per-segment duration.
-    const sourceFps = parseSourceFps(
-      resolved.mediaFile.streamInfo?.video?.[0]?.frameRate,
+    const audioSegDuration = realSegmentSeconds(
+      this.segDur(),
+      parseSourceFps(resolved.mediaFile.streamInfo?.video?.[0]?.frameRate),
     );
-    const audioSegDuration =
-      useExtXMedia && !useTs
-        ? realSegmentSeconds(this.segDur(), sourceFps)
-        : this.segDur();
     const playlist = buildVodPlaylist(
       duration,
       (seg) => `${basePath}/seg-${seg}.${segExt}${tokenParam}`,

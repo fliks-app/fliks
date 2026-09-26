@@ -257,8 +257,6 @@ export interface TranscodeSession {
   actualHwAccel?: HwAccelType;
   /** FFmpeg stderr output (for debugging HW accel failures) */
   stderr?: string;
-  /** True for audio-only sessions (multi-audio HLS renditions) */
-  isAudioOnly?: boolean;
   /** The `-start_number` this session was spawned with. Used to determine
    *  whether a cache gap is ahead of (reachable) or behind (unreachable)
    *  the current encoding position. */
