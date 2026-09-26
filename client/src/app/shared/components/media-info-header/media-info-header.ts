@@ -538,12 +538,11 @@ export class MediaInfoHeaderComponent {
 
   onAudioChange(index: number) {
     this.selectedAudioIndex.set(index);
-    const tracks = this.audioTracks();
+    const streams = (this.selectedFile()?.streamInfo?.audio ?? []) as AudioStreamChoice[];
     this.trackManager.saveAudioSelection(
       `audio-${index}`,
-      tracks.map(t => ({ id: `audio-${t.index}`, language: t.language })),
+      streams.map((s, i) => ({ ...s, id: `audio-${i}` })),
       this.mediaId(),
-      0,
     );
   }
 

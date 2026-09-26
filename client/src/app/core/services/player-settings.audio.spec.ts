@@ -1,5 +1,10 @@
 import { TestBed } from '@angular/core/testing';
-import { PlayerSettingsService, type PlayerSettings } from './player-settings.service';
+import {
+  PlayerSettingsService,
+  matchRememberedAudio,
+  rememberedAudioKey,
+  type PlayerSettings,
+} from './player-settings.service';
 import { DeviceService } from './device.service';
 
 /** ffprobe reports 3-letter codes; TMDB's original language is 2-letter. */
@@ -87,6 +92,28 @@ describe('PlayerSettingsService audio selection', () => {
     expect(svc.resolveAudioStreamIndex(1, twoEng, 1, null)).toBe(2);
     svc.saveRememberedAudioTrack(1, 'eng:5');
     expect(svc.resolveAudioStreamIndex(1, twoEng, 1, null)).toBe(0);
+  });
+
+  it('finds a remembered commentary or stereo mix again when the order changes', () => {
+    const svc = make({ rememberAudioSelections: true });
+    const ep1 = [
+      { language: 'eng', channels: 6 },
+      { language: 'eng', channels: 2, commentary: true },
+      { language: 'eng', channels: 2 },
+    ];
+    const ep2 = [ep1[2], ep1[1], ep1[0]];
+    svc.saveRememberedAudioTrack(1, rememberedAudioKey(ep1[1]));
+    expect(svc.resolveAudioStreamIndex(1, ep2, 1, null)).toBe(1);
+    svc.saveRememberedAudioTrack(1, rememberedAudioKey(ep1[2]));
+    expect(svc.resolveAudioStreamIndex(1, ep2, 1, null)).toBe(0);
+    // A role the file lacks still matches the channel count within the language.
+    expect(matchRememberedAudio('eng:ad:6', ep2)).toBe(2);
+    expect(matchRememberedAudio('fra:main:2', ep2)).toBeUndefined();
+  });
+
+  it('keys a track without a language as undetermined, never by its id', () => {
+    expect(rememberedAudioKey({})).toBe('und:main:');
+    expect(matchRememberedAudio('und:main:', [{ language: 'eng' }, {}])).toBe(1);
   });
 
   it('passes over a commentary or described track of the wanted language', () => {

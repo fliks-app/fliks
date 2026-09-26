@@ -2,6 +2,9 @@ import { Injectable, inject } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import {
   PlayerSettingsService,
+  matchRememberedAudio,
+  rememberedAudioKey,
+  type AudioStreamChoice,
   type HearingImpairedPreference,
 } from './player-settings.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
@@ -63,25 +66,21 @@ export class TrackManagerService {
     activeAudioTrackId: string | null,
     onSelect: (trackId: string) => void,
     originalLanguage?: string | null,
+    streams?: AudioStreamChoice[],
   ): void {
     const settings = this.playerSettings.get();
     const key = mediaId;
 
-    // Priority 1: remembered selection for this media (saved as "language" or
-    // "language:ordinal" — see saveAudioSelection). The ordinal picks the Nth
-    // same-language rendition; it falls back to the first if the layout drifted.
+    // Priority 1: remembered selection for this media (see saveAudioSelection),
+    // matched on `streams` — the tracks' stream info, in the same order — when
+    // given, else on the tracks' languages alone.
     if (settings.rememberAudioSelections) {
       const saved = this.playerSettings.getRememberedAudioTrack(key);
-      if (saved) {
-        const [savedLang, ordStr] = saved.split(':');
-        const ordinal = ordStr ? parseInt(ordStr, 10) : 0;
-        const want = normalizeLangCode(savedLang);
-        const sameLang = tracks.filter((t) => normalizeLangCode(t.language) === want);
-        const match = sameLang[ordinal] ?? sameLang[0];
-        if (match && match.id !== activeAudioTrackId) {
-          onSelect(match.id);
-          return;
-        }
+      const idx = saved ? matchRememberedAudio(saved, streams ?? tracks) : undefined;
+      const match = idx != null ? tracks[idx] : undefined;
+      if (match && match.id !== activeAudioTrackId) {
+        onSelect(match.id);
+        return;
       }
     }
 
@@ -94,30 +93,23 @@ export class TrackManagerService {
   }
 
   /**
-   * Save the user's audio track selection (by language) so it carries across episodes.
+   * Save the user's audio track selection so it carries across episodes: its
+   * language, role and channel count, from `streams` (the tracks' stream info,
+   * in the same order) when the tracks lack them, so a commentary or a stereo
+   * mix is found again when the next episode orders its tracks differently.
    */
   saveAudioSelection(
     trackId: string,
-    tracks: { id: string; language?: string }[],
+    tracks: (AudioStreamChoice & { id: string })[],
     mediaId: number,
-    mediaFileId?: number,
+    streams?: AudioStreamChoice[],
   ): void {
     if (!this.playerSettings.get().rememberAudioSelections) return;
-    const track = tracks.find((t) => t.id === trackId);
-    const lang = track?.language ?? trackId;
-    // Disambiguate multiple same-language renditions (e.g. 5.1 vs stereo) by
-    // their ordinal among same-language tracks — language alone can never reach
-    // the 2nd one. Reproducible across episodes when the audio layout is
-    // consistent. The ":n" suffix is only added past the first, so single-track
-    // languages stay a plain code; the pre-load paths honour it.
-    const sameLang = tracks.filter(
-      (t) => normalizeLangCode(t.language ?? '') === normalizeLangCode(lang),
-    );
-    const ordinal = sameLang.findIndex((t) => t.id === trackId);
-    const key = mediaId;
+    const pos = tracks.findIndex((t) => t.id === trackId);
+    if (pos < 0) return;
     this.playerSettings.saveRememberedAudioTrack(
-      key,
-      ordinal > 0 ? `${lang}:${ordinal}` : lang,
+      mediaId,
+      rememberedAudioKey(streams?.[pos] ?? tracks[pos]),
     );
   }
 
