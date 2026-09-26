@@ -8,6 +8,7 @@ import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { TRANSCODE_DIR } from '../../../common/constants/paths';
 import { StreamLifetime } from '../lifetime-constants';
+import { RUN_DIR_PREFIX } from './constants';
 
 /**
  * Index entry for one cache directory. A cache directory holds every
@@ -69,7 +70,8 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit(): Promise<void> {
     await fsp.mkdir(this.cacheRoot(), { recursive: true });
-    await this.rebuildIndex();
+    // No ffmpeg runs yet: a remux run directory is a crashed run's leftover.
+    await this.rebuildIndex(false, true);
     this.gcTimer = setInterval(() => {
       this.runGc().catch((err) =>
         this.log.warn(`gc tick failed: ${(err as Error).message}`),
@@ -359,8 +361,8 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
     return entry;
   }
 
-  private async rebuildIndex(quiet = false): Promise<void> {
-    const scanned = await this.scanIndexFromDisk();
+  private async rebuildIndex(quiet = false, sweepRuns = false): Promise<void> {
+    const scanned = await this.scanIndexFromDisk(sweepRuns);
     // Atomic swap: the clear + set loop is synchronous, so a concurrent
     // lookup() sees either the old index or the fully-rebuilt one, never a
     // half-populated map mid-scan.
@@ -376,7 +378,9 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
 
   /** Walk the cache root and build a fresh index map from disk. Pure — does
    *  not mutate {@link entries}; the caller swaps it in. */
-  private async scanIndexFromDisk(): Promise<Map<string, CacheEntry>> {
+  private async scanIndexFromDisk(
+    sweepRuns: boolean,
+  ): Promise<Map<string, CacheEntry>> {
     const result = new Map<string, CacheEntry>();
     const root = this.cacheRoot();
     let userDirs: string[];
@@ -413,6 +417,7 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
             mediaFileId,
             profileHash,
             cacheDir,
+            sweepRuns,
           );
           if (entry) {
             result.set(entryKey(userId, mediaFileId, profileHash), entry);
@@ -428,6 +433,7 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
     mediaFileId: number,
     profileHash: string,
     cacheDir: string,
+    sweepRuns: boolean,
   ): Promise<CacheEntry | null> {
     const perQuality = new Map<string, QualityCache>();
     let totalBytes = 0;
@@ -459,14 +465,23 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
         const filePath = path.join(qualityPath, f);
         let size = 0;
         let mtime = 0;
+        let isDir = false;
         try {
           const stat = await fsp.stat(filePath);
           size = stat.size;
           mtime = stat.mtimeMs;
+          isDir = stat.isDirectory();
         } catch {
           continue;
         }
-        if (f === 'init.mp4' || /^init_\d+\.mp4$/.test(f)) {
+        if (isDir && f.startsWith(RUN_DIR_PREFIX)) {
+          if (sweepRuns) {
+            await fsp.rm(filePath, { recursive: true, force: true });
+            continue;
+          }
+          // A live run's GOPs count against the budget like its segments.
+          size = await dirBytes(filePath);
+        } else if (f === 'init.mp4' || /^init_\d+\.mp4$/.test(f)) {
           q.hasInit = true;
         } else if (segIndex !== null) {
           q.segments.add(segIndex);
@@ -477,7 +492,7 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
         totalBytes += size;
         if (mtime > lastAccess) lastAccess = mtime;
       }
-      if (q.hasInit || q.segments.size > 0) {
+      if (q.hasInit || q.segments.size > 0 || q.bytes > 0) {
         perQuality.set(quality, q);
       }
     }

@@ -78,25 +78,29 @@ const grid = computeSegmentGrid(
 describe('RemuxSegmentAssembler', () => {
   let dir: string;
   let gopDir: string;
-  beforeEach(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'remux-asm-'));
-    gopDir = path.join(dir, 'gop-run');
+  const newRun = () => {
     fs.mkdirSync(gopDir);
     // ffmpeg's run init: video starts 2 frames into its media, audio at once.
     fs.writeFileSync(
       path.join(gopDir, 'init.mp4'),
       box('moov', Buffer.concat([trak(1, 1000, 'vide', 80), trak(2, 48000, 'soun', 0)])),
     );
+  };
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'remux-asm-'));
+    gopDir = path.join(dir, 'gop-run');
+    newRun();
   });
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-  const assemble = async (
+  const assembler = (
     startSegment: number,
     seekSeconds: number | null,
     startNumber: number,
     g: typeof grid | null = grid,
-  ) => {
-    const asm = new RemuxSegmentAssembler(
+    onFailure?: (err: Error) => void,
+  ) =>
+    new RemuxSegmentAssembler(
       remuxAssemblyPlan({
         dir,
         gopDir,
@@ -107,11 +111,25 @@ describe('RemuxSegmentAssembler', () => {
       }),
       log,
       'test',
+      onFailure,
     );
+  const assemble = async (
+    startSegment: number,
+    seekSeconds: number | null,
+    startNumber: number,
+    g: typeof grid | null = grid,
+    exitedCleanly = true,
+  ) => {
+    const asm = assembler(startSegment, seekSeconds, startNumber, g);
     asm.start();
-    await asm.finish(true);
+    await asm.finish(exitedCleanly);
   };
-  const edits = remuxEdits(grid, 0);
+  const writeGops = (count: number) =>
+    [0, 2, 4, 6, 8, 10].slice(0, count).forEach((t, i) =>
+      fs.writeFileSync(path.join(gopDir, `gop-${i}.m4s`), gop(BigInt(t * 1000), BigInt(t * 48000))),
+    );
+  const segs = () => fs.readdirSync(dir).filter((f) => f.startsWith('seg-')).sort();
+  const edits = remuxEdits(grid.boundaries[0], grid.keyframes[0].dts);
   const audioEdit = Math.round(edits.audio * 48000);
 
   it('lifts a grid that starts before 0 onto 0', () => {
@@ -121,7 +139,7 @@ describe('RemuxSegmentAssembler', () => {
       -19.72,
       2,
     )!;
-    const e = remuxEdits(wrapped, -23.72);
+    const e = remuxEdits(wrapped.boundaries[0], wrapped.keyframes[0].dts);
     expect(e.shift).toBeCloseTo(23.72, 9);
     expect(e.video).toBeCloseTo(0.08, 9);
     // The audio headroom counts on the lifted timeline, where it starts at 0.
@@ -213,5 +231,66 @@ describe('RemuxSegmentAssembler', () => {
       'seg-0000.m4s',
       'seg-0001.m4s',
     ]);
+  });
+
+  it('leaves a segment out until the GOP after it starts, unless the run ended cleanly', async () => {
+    // ffmpeg's trailer renames the GOP it cut short at a kill: gop-3 may be partial.
+    writeGops(4);
+    await assemble(0, null, 0, grid, false);
+    expect(segs()).toEqual(['seg-0000.m4s']);
+    newRun();
+    writeGops(4);
+    await assemble(1, null, 2, grid, true);
+    expect(segs()).toEqual(['seg-0000.m4s', 'seg-0001.m4s']);
+  });
+
+  it('takes the next GOP in progress as proof the previous one is whole', async () => {
+    writeGops(4);
+    fs.writeFileSync(path.join(gopDir, 'gop-4.m4s.tmp'), Buffer.alloc(0));
+    await assemble(0, null, 0, grid, false);
+    expect(segs()).toEqual(['seg-0000.m4s', 'seg-0001.m4s']);
+  });
+
+  it('keeps a segment another run already built and drops its GOPs', async () => {
+    fs.writeFileSync(path.join(dir, 'seg-0000.m4s'), 'served');
+    writeGops(3);
+    await assemble(0, null, 0, grid, false);
+    expect(fs.readFileSync(path.join(dir, 'seg-0000.m4s'), 'utf8')).toBe('served');
+    expect(fs.existsSync(gopDir)).toBe(false);
+  });
+
+  it('retries a rename a scanner holds, then carries on', async () => {
+    writeGops(3);
+    const rename = jest.spyOn(fs.promises, 'rename');
+    rename.mockRejectedValueOnce(Object.assign(new Error('locked'), { code: 'EBUSY' }));
+    try {
+      await assemble(0, null, 0, grid, false);
+    } finally {
+      rename.mockRestore();
+    }
+    expect(segs()).toEqual(['seg-0000.m4s']);
+  });
+
+  it('retries a failing segment on later passes, then stops the run', async () => {
+    writeGops(3);
+    const onFailure = jest.fn();
+    const asm = assembler(0, null, 0, grid, onFailure);
+    const write = jest.spyOn(fs.promises, 'open');
+    write.mockRejectedValue(Object.assign(new Error('quota'), { code: 'EDQUOT' }));
+    try {
+      const pass = async () => {
+        (asm as unknown as { kick(): void }).kick();
+        await (asm as unknown as { chain: Promise<void> }).chain;
+      };
+      await pass();
+      await pass();
+      expect(onFailure).not.toHaveBeenCalled();
+      await pass();
+      expect(onFailure).toHaveBeenCalledTimes(1);
+      expect(log.error).toHaveBeenCalledWith(expect.stringContaining('stopped at segment 0: quota'));
+    } finally {
+      write.mockRestore();
+    }
+    expect(segs()).toEqual([]);
   });
 });

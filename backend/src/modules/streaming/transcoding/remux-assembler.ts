@@ -2,6 +2,7 @@ import { watch, type FSWatcher } from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
 import type { Logger } from '@nestjs/common';
+import { OUTPUT_POLL_MS } from './constants';
 import type { RemuxRunStart } from './ffmpeg-args';
 import { servedShift } from './source-timeline';
 import {
@@ -21,13 +22,16 @@ import {
  *  priming our encoders put ahead of a run's first audio sample. */
 const AUDIO_PRIMING_MAX_SECONDS = 1024 / 8000;
 
-/** Without a keyframe list, how far ahead of the timeline origin the first
- *  keyframe's decode time is allowed to sit (B-frame reorder). */
-const UNPROBED_REORDER_SECONDS = 1;
-
 /** Tolerance when matching a GOP to the keyframe list: under a frame, above
  *  the output `-ss` rounding to a millisecond time base. */
 const KEYFRAME_MATCH_SECONDS = 0.002;
+
+/** Rename errors a scanner or indexer holding the file raises on Windows. */
+const TRANSIENT_RENAME_CODES = new Set(['EPERM', 'EBUSY', 'EACCES']);
+const RENAME_ATTEMPTS = 5;
+
+/** Passes, a poll apart, a segment may fail before the error is not a passing lock. */
+const SEGMENT_ATTEMPTS = 3;
 
 /** Edit each served track starts with, in seconds. */
 export interface RemuxEdits {
@@ -54,25 +58,21 @@ export interface RemuxAssemblyPlan {
   firstGop: number[] | null;
   /** Presentation time of each GOP's keyframe, to find where the run landed. */
   gopPts: number[] | null;
-  edits: RemuxEdits;
+  /** Source time the served timeline starts at. */
+  start: number;
+  /** Decode time of the first keyframe; null without a keyframe list, when the
+   *  run's own init tells the reorder delay. */
+  firstDecode: number | null;
 }
 
 /**
- * The edits of the served tracks. A served tfdt is its sample's source decode
- * time plus its track's edit, which the edit takes back off, so presentation
- * stays in source time. The video's is its first keyframe's reorder delay, so a
- * segment's tfdt is its first frame's time (for a constant delay), which is
- * what a player placing each segment by its tfdt against the playlist (Shaka in
- * segments mode) expects. The audio's keeps its earliest sample, priming ahead
- * of the first keyframe's decode time, at or above 0.
+ * The edits of the served tracks: each takes back what the retime adds, so
+ * presentation stays in source time. The video's is its first keyframe's
+ * reorder delay, so a segment's tfdt is its first frame's time (what Shaka in
+ * segments mode places it by); the audio's keeps its earliest sample, priming
+ * ahead of the first keyframe's decode time, at or above 0.
  */
-export function remuxEdits(
-  grid: SegmentGrid | null,
-  origin: number,
-): RemuxEdits {
-  const start = grid ? grid.boundaries[0] : origin;
-  const firstDecode =
-    grid?.keyframes[0]?.dts ?? start - UNPROBED_REORDER_SECONDS;
+export function remuxEdits(start: number, firstDecode: number): RemuxEdits {
   const shift = servedShift({ origin: start });
   // The run from the start seeks this far under the first keyframe.
   const lowest = firstDecode - DECODE_TIME_TOLERANCE_SECONDS + shift;
@@ -99,7 +99,8 @@ export function remuxAssemblyPlan(o: {
     seekSeconds: o.run.seekSeconds ?? 0,
     firstGop: o.grid?.firstKeyframe ?? null,
     gopPts: o.grid?.keyframes.map((k) => k.pts) ?? null,
-    edits: remuxEdits(o.grid, o.origin),
+    start: o.grid ? o.grid.boundaries[0] : o.origin,
+    firstDecode: o.grid?.keyframes[0]?.dts ?? null,
   };
 }
 
@@ -115,11 +116,9 @@ function gopsOf(plan: RemuxAssemblyPlan, segment: number): number[] | null {
 const segName = (n: number) => `seg-${String(n).padStart(4, '0')}.m4s`;
 
 /**
- * Builds a remux run's served segments from the GOP files its ffmpeg writes:
- * each segment is the concatenation of its grid GOPs, so its bytes do not
- * depend on where the run started. Every fragment is moved onto the served
- * timeline (source decode time plus the shared edit) and the init gets that
- * edit on every track, so all runs share one init.
+ * Builds a remux run's served segments from the GOP files its ffmpeg writes,
+ * each segment the concatenation of its grid GOPs moved onto the served
+ * timeline, so its bytes and the shared init do not depend on the run.
  */
 export class RemuxSegmentAssembler {
   private next: number;
@@ -129,43 +128,68 @@ export class RemuxSegmentAssembler {
   private watcher: FSWatcher | null = null;
   private timer: NodeJS.Timeout | null = null;
   private chain: Promise<void> = Promise.resolve();
-  private failed = false;
+  private queued = false;
+  private failures = 0;
+  private stopped = false;
 
   constructor(
     private readonly plan: RemuxAssemblyPlan,
     private readonly log: Logger,
     private readonly label: string,
+    /** Called once assembly gave up: the run's output can no longer be served. */
+    private readonly onFailure: (err: Error) => void = () => {},
   ) {
     this.next = plan.startSegment;
   }
 
   start(): void {
     try {
-      this.watcher = watch(this.plan.gopDir, { persistent: false }, () =>
-        this.kick(),
-      );
+      // Writes into a GOP file raise `change`; a file appearing is a `rename`.
+      this.watcher = watch(this.plan.gopDir, { persistent: false }, (event) => {
+        if (event === 'rename') this.kick();
+      });
     } catch (err) {
       this.log.warn(`[${this.label}] cannot watch ${this.plan.gopDir}: ${(err as Error).message}`);
     }
-    this.timer = setInterval(() => this.kick(), 500);
+    this.timer = setInterval(() => this.kick(), OUTPUT_POLL_MS);
   }
 
-  /** ffmpeg exited. A run that reached the end also completes the last
-   *  segment with the GOPs it wrote. The GOP files go either way. */
-  async finish(reachedEnd: boolean): Promise<void> {
+  /** ffmpeg exited. A run that ended cleanly also completes the last segment:
+   *  only then is its last GOP known whole. The GOP files go either way. */
+  async finish(exitedCleanly: boolean): Promise<void> {
     this.watcher?.close();
     if (this.timer) clearInterval(this.timer);
     this.kick();
     await this.chain;
-    if (reachedEnd) await this.assembleTail();
+    if (exitedCleanly && !this.stopped) {
+      await this.assembleTail().catch((err: Error) =>
+        this.log.error(`[${this.label}] last segment ${this.next} not assembled: ${err.message}`),
+      );
+    }
     await fsp.rm(this.plan.gopDir, { recursive: true, force: true });
   }
 
   private kick(): void {
-    this.chain = this.chain.then(() => this.pump()).catch((err: Error) => {
-      this.failed = true;
-      this.log.error(`[${this.label}] remux assembly stopped: ${err.message}`);
-    });
+    if (this.queued || this.stopped) return;
+    this.queued = true;
+    this.chain = this.chain
+      .then(() => {
+        this.queued = false;
+        return this.pump();
+      })
+      .catch((err: Error) => this.failed(err));
+  }
+
+  private failed(err: Error): void {
+    if (++this.failures < SEGMENT_ATTEMPTS) {
+      this.log.warn(
+        `[${this.label}] segment ${this.next} not assembled (attempt ${this.failures}): ${err.message}`,
+      );
+      return;
+    }
+    this.stopped = true;
+    this.log.error(`[${this.label}] remux assembly stopped at segment ${this.next}: ${err.message}`);
+    this.onFailure(err);
   }
 
   private gopPath(gop: number): string {
@@ -179,15 +203,21 @@ export class RemuxSegmentAssembler {
     );
   }
 
+  /** The GOP after `gop` has started: the muxer renames a GOP it cuts short at
+   *  exit too, so only that proves `gop` whole. */
+  private async followed(gop: number): Promise<boolean> {
+    const after = this.gopPath(gop + 1);
+    return (await this.exists(`${after}.tmp`)) || this.exists(after);
+  }
+
   private async pump(): Promise<void> {
-    if (this.failed) return;
     if (!this.delta && !(await this.openRun())) return;
     for (;;) {
       const gops = gopsOf(this.plan, this.next);
-      if (!gops) return;
-      for (const g of gops) if (!(await this.exists(this.gopPath(g)))) return;
+      if (!gops || !(await this.followed(gops[gops.length - 1]))) return;
       await this.assemble(this.next, gops);
       this.next++;
+      this.failures = 0;
     }
   }
 
@@ -198,16 +228,20 @@ export class RemuxSegmentAssembler {
     if (!(await this.exists(first))) return false;
     const init = await fsp.readFile(path.join(this.plan.gopDir, 'init.mp4'));
     const tracks = parseInitTracks(init);
-    const edits = readInitEdits(init);
+    const runEdits = readInitEdits(init);
     const gop = await fsp.readFile(first);
     const correction = this.locateRun(gop, tracks);
-    const editOf = (t: TrackInfo) => (t.isVideo ? this.plan.edits.video : this.plan.edits.audio);
+    const video = [...tracks].find(([, t]) => t.isVideo);
+    const runVideoEdit = video ? Number(runEdits.get(video[0]) ?? 0n) / video[1].timescale : 0;
+    const edits = remuxEdits(
+      this.plan.start,
+      this.plan.firstDecode ?? this.plan.start - runVideoEdit,
+    );
+    const editOf = (t: TrackInfo) => (t.isVideo ? edits.video : edits.audio);
     const delta = new Map<number, bigint>();
     for (const [id, t] of tracks) {
-      const shift = Math.round(
-        (editOf(t) + this.plan.edits.shift + correction) * t.timescale,
-      );
-      let d = BigInt(shift) - (edits.get(id) ?? 0n);
+      const shift = Math.round((editOf(t) + edits.shift + correction) * t.timescale);
+      let d = BigInt(shift) - (runEdits.get(id) ?? 0n);
       // A first frame at 0 whose derived decode time is a tick off.
       const start = firstTfdt(gop, id);
       if (start != null && start + d < 0n) {
@@ -221,15 +255,13 @@ export class RemuxSegmentAssembler {
       await writeAtomic(out, withInitEdits(init, editOf));
     }
     this.delta = delta;
+    this.failures = 0;
     return true;
   }
 
-  /**
-   * Match the run's first GOP to the keyframe list; under `frag_discont` its
-   * first tfdt is that keyframe's presentation time less the output `-ss`.
-   * Returns what to add to the run's timestamps to get source time: the `-ss`
-   * as ffmpeg rounded it to the source time base.
-   */
+  /** What to add to the run's timestamps to get source time: the output `-ss`
+   *  as ffmpeg rounded it, found by matching the run's first GOP, whose tfdt
+   *  under `frag_discont` is its keyframe's pts less that `-ss`. */
   private locateRun(
     gop: Buffer,
     tracks: ReturnType<typeof parseInitTracks>,
@@ -253,29 +285,55 @@ export class RemuxSegmentAssembler {
     return gopPts[at] - out;
   }
 
+  /** One GOP in memory at a time. A segment another run already built stays:
+   *  it holds the same samples on the same timeline, and may have been served. */
   private async assemble(segment: number, gops: number[]): Promise<void> {
-    const parts: Buffer[] = [];
-    for (const g of gops) parts.push(retimeFragments(await fsp.readFile(this.gopPath(g)), this.delta!));
-    await writeAtomic(path.join(this.plan.dir, segName(segment)), Buffer.concat(parts));
+    const out = path.join(this.plan.dir, segName(segment));
+    if (!(await this.exists(out))) {
+      const tmp = `${out}.tmp`;
+      const fh = await fsp.open(tmp, 'w');
+      try {
+        for (const g of gops) {
+          await fh.write(retimeFragments(await fsp.readFile(this.gopPath(g)), this.delta!));
+        }
+      } finally {
+        await fh.close();
+      }
+      await renameRetrying(tmp, out);
+    }
     await Promise.all(gops.map((g) => fsp.rm(this.gopPath(g), { force: true })));
   }
 
-  /** The last segment of a run that reached the end, from the GOPs written. */
+  /** The last segment of a run that ended cleanly, from the GOPs written. */
   private async assembleTail(): Promise<void> {
     const gops = gopsOf(this.plan, this.next);
-    if (this.failed || !this.delta || !gops) return;
+    if (!this.delta || !gops) return;
     const written: number[] = [];
     for (const g of gops) if (await this.exists(this.gopPath(g))) written.push(g);
     if (written.length === 0) return;
-    this.log.warn(
-      `[${this.label}] last segment ${this.next}: ${written.length} of ${gops.length} planned GOPs were written`,
-    );
+    if (written.length < gops.length) {
+      this.log.warn(
+        `[${this.label}] last segment ${this.next}: ${written.length} of ${gops.length} planned GOPs were written`,
+      );
+    }
     await this.assemble(this.next, written);
+  }
+}
+
+async function renameRetrying(from: string, to: string): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fsp.rename(from, to);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code ?? '';
+      if (attempt >= RENAME_ATTEMPTS || !TRANSIENT_RENAME_CODES.has(code)) throw err;
+      await new Promise((r) => setTimeout(r, OUTPUT_POLL_MS / RENAME_ATTEMPTS));
+    }
   }
 }
 
 async function writeAtomic(file: string, data: Buffer): Promise<void> {
   const tmp = `${file}.tmp`;
   await fsp.writeFile(tmp, data);
-  await fsp.rename(tmp, file);
+  await renameRetrying(tmp, file);
 }

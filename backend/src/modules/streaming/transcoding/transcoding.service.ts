@@ -12,6 +12,8 @@ import {
   DEFAULT_SEGMENT_DURATION,
   EARLY_PROBE_SEGMENTS,
   JOB_GRACE_MS,
+  OUTPUT_POLL_MS,
+  RUN_DIR_PREFIX,
   SEEK_WAIT_THRESHOLD,
   SESSION_TIMEOUT_MS,
   segmentIndexToSeconds,
@@ -275,10 +277,17 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleDestroy() {
     if (this.cleanupTimer) clearInterval(this.cleanupTimer);
+    // SIGTERM makes ffmpeg's trailer close the segment in progress as whole.
     for (const session of this.sessions.values()) {
-      session.process.kill('SIGTERM');
+      session.process.kill('SIGKILL');
     }
     this.sessions.clear();
+  }
+
+  /** ffmpeg still runs, or its last segments are still being assembled. */
+  isProducing(session: TranscodeSession): boolean {
+    const { exitCode, signalCode } = session.process;
+    return (exitCode === null && signalCode === null) || !!session.outputPending;
   }
 
   getDetectedHwAccel(): HwAccelType {
@@ -395,6 +404,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     qualityMatch: boolean,
   ): Promise<TranscodeSession | null> {
     if (existing.process.exitCode === 0 && qualityMatch) {
+      await existing.outputDone;
       if (await segmentNearby(existing.cachePath, requestedSegment)) {
         existing.lastAccess = Date.now();
         return existing;
@@ -965,12 +975,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       tryServe();
 
       exitTimer = setInterval(() => {
-        if (session.process.exitCode !== null && !existsSync(segPath)) {
+        if (!this.isProducing(session) && !existsSync(segPath)) {
           finish(null);
         } else {
           tryServe();
         }
-      }, 500);
+      }, OUTPUT_POLL_MS);
 
       timeout = setTimeout(() => {
         // ffmpeg launched but the segment never landed in time. Don't fail the
@@ -1110,7 +1120,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     const pollTimer = setInterval(() => {
       checkReady();
-    }, 500);
+    }, OUTPUT_POLL_MS);
 
     proc.on('close', (code) => {
       clearInterval(pollTimer);
@@ -1341,10 +1351,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       variant,
       'remux',
     );
-    await fsp.mkdir(sessionDir, { recursive: true });
-    // Per run: a run still being reaped must not delete this one's GOPs.
-    const gopDir = await fsp.mkdtemp(path.join(sessionDir, 'gop-'));
-
     const segmentDuration = ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION;
     const run = remuxRunStart(
       grid,
@@ -1353,6 +1359,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       ctx?.sourceStartPts ?? 0,
       remuxAudioGrid(ctx?.audioPlan, ctx?.audioStreams, ctx?.audioStreamIndex),
     );
+    await fsp.mkdir(sessionDir, { recursive: true });
+    // Per run: a run still being reaped must not delete this one's GOPs.
+    const gopDir = await fsp.mkdtemp(path.join(sessionDir, RUN_DIR_PREFIX));
     const args = buildRemuxArgs(
       {
         inputPath: absolutePath,
@@ -1371,6 +1380,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       },
       this.log,
     );
+    let session: TranscodeSession | undefined;
     const assembler = new RemuxSegmentAssembler(
       remuxAssemblyPlan({
         dir: sessionDir,
@@ -1382,10 +1392,17 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       }),
       this.log,
       key,
+      // Its output can't be served: stop it so the next request starts over.
+      () => {
+        if (!session) return;
+        if (this.sessions.get(key) === session) this.sessions.delete(key);
+        session.intentionallyKilled = true;
+        void this.killProcess(session.process);
+      },
     );
     assembler.start();
 
-    const session = this.spawnFfmpegSession({
+    const spawned = this.spawnFfmpegSession({
       id: key,
       mediaFileId,
       quality: 'remux',
@@ -1393,16 +1410,27 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       sessionDir,
       startSegment: requestedSegment,
       reason: ctx?.spawnReason,
-      extra: { remux: true },
+      extra: { remux: true, outputPending: true },
     });
-    session.baseProfileHash = remuxBaseHash;
-    session.variant = variant;
-    session.process.on('close', (code) => {
-      void assembler.finish(code === 0 && !session.intentionallyKilled);
+    session = spawned;
+    spawned.baseProfileHash = remuxBaseHash;
+    spawned.variant = variant;
+    spawned.outputDone = new Promise<void>((resolve) => {
+      spawned.process.once('close', (code) => {
+        assembler
+          .finish(code === 0 && !spawned.intentionallyKilled)
+          .catch((err: Error) =>
+            this.log.error(`[${key}] remux run cleanup failed: ${err.message}`),
+          )
+          .finally(() => {
+            spawned.outputPending = false;
+            resolve();
+          });
+      });
     });
 
-    this.applyContext(session, ctx);
-    return session;
+    this.applyContext(spawned, ctx);
+    return spawned;
   }
 
   /**
@@ -1487,25 +1515,13 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /**
-   * Kill an ffmpeg process and wait for it to exit. Does NOT delete cache.
-   * Uses SIGKILL by default (instant) for seek restarts — ffmpeg's graceful
-   * SIGTERM shutdown (write trailer, close files) is wasted work when we're
-   * about to overwrite the output. SIGTERM is only used when the caller
-   * explicitly needs a clean shutdown (e.g. stopSession on player close).
-   */
-  private killProcess(proc: ChildProcess, graceful = false): Promise<void> {
-    if (proc.exitCode !== null) return Promise.resolve();
+  /** SIGKILL an ffmpeg process and wait for it to exit. Does NOT delete cache.
+   *  A SIGTERM would have its trailer close the segment in progress as whole. */
+  private killProcess(proc: ChildProcess): Promise<void> {
+    if (proc.exitCode !== null || proc.signalCode !== null) return Promise.resolve();
     return new Promise<void>((resolve) => {
       proc.once('close', () => resolve());
-      if (graceful) {
-        proc.kill('SIGTERM');
-        setTimeout(() => {
-          if (proc.exitCode === null) proc.kill('SIGKILL');
-        }, 5000);
-      } else {
-        proc.kill('SIGKILL');
-      }
+      proc.kill('SIGKILL');
     });
   }
 
@@ -1524,7 +1540,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     dirPath: string,
     sessionId?: string,
   ): Promise<void> {
-    await this.killProcess(proc, false);
+    await this.killProcess(proc);
     if (sessionId && this.sessions.has(sessionId)) {
       this.log.log(`[disk] skip rm ${dirPath} — session ${sessionId} replaced`);
       return;

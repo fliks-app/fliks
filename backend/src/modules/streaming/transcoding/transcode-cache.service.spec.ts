@@ -44,6 +44,18 @@ describe('TranscodeCacheService', () => {
     expect(svc.totalBytes()).toBe(0);
   });
 
+  it('sweeps crashed remux runs at boot and counts live ones against the budget', async () => {
+    const dir = path.join(CACHE_ROOT, 'u1', '7', 'hash-remux-a0', 'remux');
+    await writeFile(path.join(dir, 'gop-crashed', 'gop-3.m4s'), 500);
+    await svc.onModuleInit();
+    expect(fs.existsSync(path.join(dir, 'gop-crashed'))).toBe(false);
+    expect(svc.size()).toBe(0);
+
+    await writeFile(path.join(dir, 'gop-live', 'gop-4.m4s'), 700);
+    await svc.runGc();
+    expect(svc.lookup(1, 7, 'hash-remux-a0')?.totalBytes).toBe(700);
+  });
+
   it('indexes existing cache directories on init', async () => {
     const dir = path.join(CACHE_ROOT, 'u42', '1234', 'a1b2c3d4e5', '720p');
     await writeFile(path.join(dir, 'init.mp4'), 100);

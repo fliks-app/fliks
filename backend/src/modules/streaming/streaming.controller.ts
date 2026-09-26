@@ -2317,10 +2317,9 @@ export class StreamingController {
       segName,
     );
     if (!segPath) {
-      // ffmpeg session is healthy (exitCode === null) → segment will
-      // arrive on the next tick; surface as transient so players retry.
-      // Hard 404 only when the session actually died.
-      if (session.process.exitCode === null) {
+      // Still producing → the segment arrives on a later tick; surface as
+      // transient so players retry. Hard 404 only once the run is over.
+      if (this.transcodingService.isProducing(session)) {
         this.log.warn(
           `Segment 503 (transient): ${segment} (quality=${quality}, mfid=${mediaFileId})`,
         );

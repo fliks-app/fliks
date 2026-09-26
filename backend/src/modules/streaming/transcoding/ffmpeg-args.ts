@@ -206,6 +206,8 @@ function hlsMuxerArgs(o: {
   /** Remux: each run's first tfdt is its first sample's own time, less the
    *  output `-ss`, for the assembler to move onto the served timeline. */
   sourceTimestamps?: boolean;
+  /** Entries kept in the muxer's own playlist, 0 for all of them. */
+  listSize?: number;
 }): string[] {
   const origin = o.useTs ? 0 : (o.originSeconds ?? 0);
   return [
@@ -234,7 +236,7 @@ function hlsMuxerArgs(o: {
     '-hls_time',
     o.hlsTime,
     '-hls_list_size',
-    '0',
+    String(o.listSize ?? 0),
     '-start_number',
     String(o.startSegment),
     '-hls_segment_type',
@@ -1518,6 +1520,8 @@ export function buildRemuxArgs(
       segmentFilename: ffOutPath(outputDir, 'gop-%d.m4s'),
       indexPath: ffOutPath(outputDir, 'index.m3u8'),
       sourceTimestamps: true,
+      // Nothing reads it; a full one is rewritten whole on every GOP.
+      listSize: 1,
     }),
   );
 

@@ -17,6 +17,13 @@ export const SESSION_TIMEOUT_MS = StreamLifetime.jobFallbackTimeoutMs();
  *  lifetime-constants.ts. */
 export const JOB_GRACE_MS = StreamLifetime.jobGraceMs();
 
+/** How often a wait on ffmpeg's output looks at the disk again: the delay it
+ *  adds where fs.watch misses events, as on network mounts. */
+export const OUTPUT_POLL_MS = 500;
+
+/** Name prefix of the per-run directory a remux ffmpeg writes its GOP files into. */
+export const RUN_DIR_PREFIX = 'gop-';
+
 /** Max gap (in segments) between FFmpeg frontier and requested segment before restarting. */
 export const SEEK_WAIT_THRESHOLD = 15;
 

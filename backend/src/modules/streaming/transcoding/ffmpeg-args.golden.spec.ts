@@ -1382,15 +1382,13 @@ describe('buildRemuxArgs — golden (characterization)', () => {
 
   it('remux: copy audio, HEVC source → -c:v copy + -tag:v hvc1', () => {
     expect(
-      remuxArgs(
-        {
-          inputPath: '/media/in.mkv',
-          outputDir: '/cache/out',
-          audioPlan: { mode: 'copy', codec: 'aac' },
-          trustedStreamInfo: true,
-          sourceVideoCodec: 'hevc',
-        },
-      ),
+      remuxArgs({
+        inputPath: '/media/in.mkv',
+        outputDir: '/cache/out',
+        audioPlan: { mode: 'copy', codec: 'aac' },
+        trustedStreamInfo: true,
+        sourceVideoCodec: 'hevc',
+      }),
     ).toMatchInlineSnapshot(`
      [
        "-hide_banner",
@@ -1434,7 +1432,7 @@ describe('buildRemuxArgs — golden (characterization)', () => {
        "-hls_time",
        "3",
        "-hls_list_size",
-       "0",
+       "1",
        "-start_number",
        "0",
        "-hls_segment_type",
@@ -1452,16 +1450,14 @@ describe('buildRemuxArgs — golden (characterization)', () => {
 
   it('remux: resume seeks to the keyframe boundary, transcodes incompatible audio', () => {
     expect(
-      remuxArgs(
-        {
-          inputPath: '/media/in.mkv',
-          outputDir: '/cache/out',
-          startSegment: 2,
-          trustedStreamInfo: true,
-          sourceVideoCodec: 'h264',
-          grid: GRID,
-        },
-      ),
+      remuxArgs({
+        inputPath: '/media/in.mkv',
+        outputDir: '/cache/out',
+        startSegment: 2,
+        trustedStreamInfo: true,
+        sourceVideoCodec: 'h264',
+        grid: GRID,
+      }),
     ).toMatchInlineSnapshot(`
      [
        "-hide_banner",
@@ -1510,7 +1506,7 @@ describe('buildRemuxArgs — golden (characterization)', () => {
        "-hls_time",
        "0",
        "-hls_list_size",
-       "0",
+       "1",
        "-start_number",
        "4",
        "-hls_segment_type",
@@ -1527,15 +1523,13 @@ describe('buildRemuxArgs — golden (characterization)', () => {
   });
 
   it('remux: maps only the video and one audio track, never a subtitle', () => {
-    const args = remuxArgs(
-      {
-        inputPath: '/media/in.mkv',
-        outputDir: '/cache/out',
-        audioPlan: { mode: 'copy', codec: 'aac' },
-        trustedStreamInfo: true,
-        sourceVideoCodec: 'h264',
-      },
-    );
+    const args = remuxArgs({
+      inputPath: '/media/in.mkv',
+      outputDir: '/cache/out',
+      audioPlan: { mode: 'copy', codec: 'aac' },
+      trustedStreamInfo: true,
+      sourceVideoCodec: 'h264',
+    });
     expect(args.filter((_, i) => args[i - 1] === '-map')).toEqual([
       '0:v:0',
       '0:a:0?',
@@ -1544,14 +1538,12 @@ describe('buildRemuxArgs — golden (characterization)', () => {
 
   it('remux: every run but the first seeks both sides to its keyframe decode time', () => {
     const seeksOf = (startSegment: number, grid: typeof GRID | null) => {
-      const args = remuxArgs(
-        {
-          inputPath: '/media/in.mkv',
-          outputDir: '/cache/out',
-          startSegment,
-          grid,
-        },
-      );
+      const args = remuxArgs({
+        inputPath: '/media/in.mkv',
+        outputDir: '/cache/out',
+        startSegment,
+        grid,
+      });
       return {
         seeks: args.flatMap((a, i) => (a === '-ss' ? [args[i + 1]] : [])),
         hlsTime: args[args.indexOf('-hls_time') + 1],
@@ -1632,6 +1624,8 @@ describe('buildFfmpegArgs — NVENC early/steady-state SPS consistency', () => {
     // Byte-identical but for the early read window.
     const window = early.indexOf('-to');
     expect(early.slice(window, window + 2)).toEqual(['-to', '7']);
-    expect([...early.slice(0, window), ...early.slice(window + 2)]).toEqual(main);
+    expect([...early.slice(0, window), ...early.slice(window + 2)]).toEqual(
+      main,
+    );
   });
 });

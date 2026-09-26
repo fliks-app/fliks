@@ -194,20 +194,22 @@ export function rewriteSegmentTfdt(
     runStart =
       Math.round((runStart - startPts) / segDuration) * segDuration + startPts;
   }
-  return shiftTfdts(segBuf, frags, tracks, runStart);
+  return moveTfdts(Buffer.from(segBuf), frags, (id) => {
+    const ts = tracks.get(id)?.timescale;
+    return ts ? BigInt(Math.round(runStart * ts)) : undefined;
+  });
 }
 
-function shiftTfdts(
-  segBuf: Buffer,
+/** Move each fragment's tfdt in place by its track's ticks; a fragment whose
+ *  track `ticksOf` leaves undefined stays. */
+function moveTfdts(
+  buf: Buffer,
   frags: FragTfdt[],
-  tracks: Map<number, TrackInfo>,
-  seconds: number,
+  ticksOf: (trackId: number) => bigint | undefined,
 ): Buffer {
-  const buf = Buffer.from(segBuf);
   for (const f of frags) {
-    const ts = tracks.get(f.trackId)?.timescale;
-    if (!ts) continue;
-    writeTfdt(buf, f, f.original + BigInt(Math.round(seconds * ts)));
+    const ticks = ticksOf(f.trackId);
+    if (ticks !== undefined) writeTfdt(buf, f, f.original + ticks);
   }
   return buf;
 }
@@ -339,20 +341,18 @@ export function withInitEdits(
   return Buffer.concat(out);
 }
 
-/** Move every fragment's `tfdt` by its track's tick count. */
+/** Move every fragment's `tfdt` by its track's tick count, in place. */
 export function retimeFragments(
   segBuf: Buffer,
   deltaTicks: Map<number, bigint>,
 ): Buffer {
-  const buf = Buffer.from(segBuf);
-  for (const f of collectTfdts(segBuf)) {
-    const delta = deltaTicks.get(f.trackId);
+  return moveTfdts(segBuf, collectTfdts(segBuf), (id) => {
+    const delta = deltaTicks.get(id);
     if (delta === undefined) {
-      throw new Error(`fragment of track ${f.trackId}, absent from the init`);
+      throw new Error(`fragment of track ${id}, absent from the init`);
     }
-    writeTfdt(buf, f, f.original + delta);
-  }
-  return buf;
+    return delta;
+  });
 }
 
 /** Decode time of the first fragment of `trackId`, in its timescale ticks. */

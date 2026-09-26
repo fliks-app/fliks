@@ -249,6 +249,10 @@ export interface TranscodeSession {
   ready: Promise<void>;
   /** If true, video is copied (remux), not re-encoded */
   remux?: boolean;
+  /** Settles once every segment of the run is on disk: a remux assembles its
+   *  last one after ffmpeg exits. Absent when ffmpeg writes them itself. */
+  outputDone?: Promise<void>;
+  outputPending?: boolean;
   /** User & media context for admin dashboard */
   userId?: number;
   username?: string;
