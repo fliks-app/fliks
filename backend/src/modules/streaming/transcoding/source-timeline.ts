@@ -71,3 +71,15 @@ export function inputSeekSeconds(
 ): number {
   return contentSeconds + (timeline.origin - timeline.formatStart);
 }
+
+/** What the served fMP4 timeline adds to source time: 0, or what lifts a video
+ *  starting before 0 to 0 (`timelineOrigin`). */
+export function servedShift(timeline: Pick<SourceTimeline, 'origin'>): number {
+  return Math.max(0, -timeline.origin);
+}
+
+/** Where a cue at 0 of a subtitle counted from the container start sits on the
+ *  served timeline (its X-TIMESTAMP-MAP). */
+export function cueOffsetSeconds(timeline: SourceTimeline): number {
+  return timeline.formatStart + servedShift(timeline);
+}

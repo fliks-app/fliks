@@ -67,8 +67,13 @@ describe('fMP4 output origin', () => {
     expect(last(seeked, '-ss')).toBe(String(20 * realSegmentSeconds(3, 25) + 2.8));
   });
 
-  it('keeps a negative video start in the output, where it becomes an edit', () => {
-    expect(after(tx({ sourceStartPts: -0.042 }), '-output_ts_offset')).toBeUndefined();
+  it('serves a video that starts before 0 from 0, rebased by the output -ss', () => {
+    // A wrapped MPEG-TS clock: the constant-rate sync would drop every frame
+    // up to 0 without it.
+    const args = tx({ sourceStartPts: -23.717689 });
+    expect(after(args, '-output_ts_offset')).toBeUndefined();
+    expect(last(args, '-ss')).toBe('-23.717689');
+    expect(after(tx({ sourceStartPts: -23.717689, useTs: true }), '-output_ts_offset')).toBe('1');
   });
 
   it('leaves the absolute MPEG-TS timeline alone', () => {

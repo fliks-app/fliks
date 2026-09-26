@@ -3,6 +3,7 @@ import * as fsp from 'fs/promises';
 import * as path from 'path';
 import type { Logger } from '@nestjs/common';
 import type { RemuxRunStart } from './ffmpeg-args';
+import { servedShift } from './source-timeline';
 import {
   DECODE_TIME_TOLERANCE_SECONDS,
   type SegmentGrid,
@@ -32,6 +33,9 @@ const KEYFRAME_MATCH_SECONDS = 0.002;
 export interface RemuxEdits {
   video: number;
   audio: number;
+  /** Added to every source time: lifts a video that starts before 0 onto 0,
+   *  as the transcoded variants are served (`servedShift`). */
+  shift: number;
 }
 
 export interface RemuxAssemblyPlan {
@@ -69,11 +73,13 @@ export function remuxEdits(
   const start = grid ? grid.boundaries[0] : origin;
   const firstDecode =
     grid?.keyframes[0]?.dts ?? start - UNPROBED_REORDER_SECONDS;
+  const shift = servedShift({ origin: start });
   // The run from the start seeks this far under the first keyframe.
-  const lowest = firstDecode - DECODE_TIME_TOLERANCE_SECONDS;
+  const lowest = firstDecode - DECODE_TIME_TOLERANCE_SECONDS + shift;
   return {
     video: start - firstDecode,
     audio: Math.max(0, AUDIO_PRIMING_MAX_SECONDS - lowest),
+    shift,
   };
 }
 
@@ -198,7 +204,9 @@ export class RemuxSegmentAssembler {
     const editOf = (t: TrackInfo) => (t.isVideo ? this.plan.edits.video : this.plan.edits.audio);
     const delta = new Map<number, bigint>();
     for (const [id, t] of tracks) {
-      const shift = Math.round((editOf(t) + correction) * t.timescale);
+      const shift = Math.round(
+        (editOf(t) + this.plan.edits.shift + correction) * t.timescale,
+      );
       let d = BigInt(shift) - (edits.get(id) ?? 0n);
       // A first frame at 0 whose derived decode time is a tick off.
       const start = firstTfdt(gop, id);

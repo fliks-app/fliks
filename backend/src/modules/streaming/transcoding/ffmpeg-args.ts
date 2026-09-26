@@ -43,7 +43,6 @@ import {
 import { normaliseSourceCodec } from './codec/normalise';
 import { hevcMainTierCapBps } from './codec/codec-strings';
 import { varStreamMapLayout } from './audio-layout';
-import { timelineOrigin } from './timeline';
 import { inputSeekSeconds } from './source-timeline';
 import { resolveEncodePipeline } from './encode-pipeline';
 import {
@@ -162,6 +161,13 @@ function audioStreamArgs(
   ];
 }
 
+/** Output `-ss` of a transcode run: its first frame, which ffmpeg subtracts from
+ *  every timestamp. A run from the start needs it only when that frame is
+ *  before 0, where the constant-rate video sync would drop every frame up to 0. */
+function runOutputSeek(startSegment: number, runStartSeconds: number): number {
+  return startSegment > 0 || runStartSeconds < 0 ? runStartSeconds : 0;
+}
+
 /** The shared fMP4/TS HLS muxer tail. Every output path (transcode single /
  *  var_stream_map, audio-only, remux) emits the same flags; they differ only in
  *  the segment length, the init filename, the optional `-var_stream_map`, and
@@ -185,7 +191,7 @@ function hlsMuxerArgs(o: {
    *  output `-ss`, for the assembler to move onto the served timeline. */
   sourceTimestamps?: boolean;
 }): string[] {
-  const origin = o.useTs ? 0 : timelineOrigin(o.originSeconds);
+  const origin = o.useTs ? 0 : (o.originSeconds ?? 0);
   return [
     // A B-frame or primed-audio track starts at a negative DTS; the default
     // shift delays every track by it, where `disabled` keeps it in the edit list.
@@ -195,9 +201,10 @@ function hlsMuxerArgs(o: {
     ...(o.sourceTimestamps
       ? ['-hls_segment_options', 'movflags=+frag_discont']
       : []),
-    // A video starting after 0 lands in an empty edit, which MSE ignores; a
-    // 0-based output leaves none, and serving adds the origin back (timeline.ts).
-    // A seeked run is already 0-based by its output `-ss`.
+    // A video starting after 0 lands in an empty edit, which MSE ignores, and
+    // one starting before 0 can't be written: a 0-based output does neither,
+    // and serving adds back what is at or above 0 (`timelineOrigin`). A seeked
+    // run is already 0-based by its output `-ss`.
     ...(!o.sourceTimestamps && origin !== 0 && o.outputSeekSeconds === 0
       ? ['-output_ts_offset', formatSeconds(-origin)]
       : []),
@@ -536,7 +543,7 @@ function buildAudioAndMuxerArgs(opts: {
     originSeconds,
   } = opts;
   const args: string[] = [];
-  const outputSeekSeconds = startSegment > 0 ? audioEnc.alignStartSeconds : 0;
+  const outputSeekSeconds = runOutputSeek(startSegment, audioEnc.alignStartSeconds);
 
   // Use var_stream_map whenever the caller asked for the EXT-X-MEDIA
   // layout (`videoOnly + audioStreams[]`), even for a SINGLE audio
@@ -1135,7 +1142,7 @@ export function buildFfmpegArgs(
   // hard-to-track A/V skew on some receivers.
   args.push('-copyts', '-muxdelay', '0', '-muxpreload', '0');
 
-  if (startSegment > 0) {
+  if (runOutputSeek(startSegment, alignStartSeconds) !== 0) {
     // Output-seek after `-i`: with `-copyts` it operates in source-time
     // and drops decoded video frames before `seekSeconds`, so the
     // encoder's mandatory first IDR lands at T instead of on the

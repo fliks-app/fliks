@@ -1,6 +1,8 @@
 import { Logger } from '@nestjs/common';
 import {
+  cueOffsetSeconds,
   inputSeekSeconds,
+  servedShift,
   sourceTimeline,
   videoPresentationStart,
 } from './source-timeline';
@@ -58,5 +60,18 @@ describe('inputSeekSeconds', () => {
 
   it('is the content position when the video starts the container', () => {
     expect(inputSeekSeconds(6, { origin: 2.8, formatStart: 2.8 })).toBe(6);
+  });
+});
+
+describe('servedShift', () => {
+  it('lifts a video that starts before 0 onto 0, and nothing else', () => {
+    expect(servedShift({ origin: -23.717689 })).toBeCloseTo(23.717689, 9);
+    expect(servedShift({ origin: 2.8 })).toBe(0);
+  });
+
+  it('moves the subtitle map with it', () => {
+    // A wrapped TS: the audio starts the container 21 ms before the video.
+    expect(cueOffsetSeconds({ origin: -23.717689, formatStart: -23.738689 })).toBeCloseTo(-0.021, 9);
+    expect(cueOffsetSeconds({ origin: 4.2, formatStart: 3.18 })).toBe(3.18);
   });
 });

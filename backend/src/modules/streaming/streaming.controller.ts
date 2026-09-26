@@ -54,6 +54,7 @@ import {
   type SegmentGrid,
 } from './transcoding/segment-boundaries';
 import {
+  cueOffsetSeconds,
   inputSeekSeconds,
   sourceTimeline,
 } from './transcoding/source-timeline';
@@ -1479,10 +1480,9 @@ export class StreamingController {
   ) {
     // resolveFile also re-checks library access.
     const resolved = await this.streamingService.resolveFile(mediaFileId, user);
-    const cueOffset = sourceTimeline(
-      resolved.mediaFile.streamInfo,
-      resolved.absolutePath,
-    ).formatStart;
+    const cueOffset = cueOffsetSeconds(
+      sourceTimeline(resolved.mediaFile.streamInfo, resolved.absolutePath),
+    );
     const stream = await this.subtitleStreamService.extractEmbeddedSubtitle(
       mediaFileId,
       streamIndex,
@@ -1509,10 +1509,9 @@ export class StreamingController {
     @Res() res: Response,
   ) {
     const resolved = await this.streamingService.resolveFile(mediaFileId, user);
-    const cueOffset = sourceTimeline(
-      resolved.mediaFile.streamInfo,
-      resolved.absolutePath,
-    ).formatStart;
+    const cueOffset = cueOffsetSeconds(
+      sourceTimeline(resolved.mediaFile.streamInfo, resolved.absolutePath),
+    );
     const stream = await this.subtitleStreamService.extractEmbeddedSubtitle(
       mediaFileId,
       streamIndex,

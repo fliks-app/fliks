@@ -114,6 +114,20 @@ describe('RemuxSegmentAssembler', () => {
   const edits = remuxEdits(grid, 0);
   const audioEdit = Math.round(edits.audio * 48000);
 
+  it('lifts a grid that starts before 0 onto 0', () => {
+    const wrapped = computeSegmentGrid(
+      [-23.72, -21.72].map((pts) => ({ pts, dts: pts - 0.08 })),
+      -23.72,
+      -19.72,
+      2,
+    )!;
+    const e = remuxEdits(wrapped, -23.72);
+    expect(e.shift).toBeCloseTo(23.72, 9);
+    expect(e.video).toBeCloseTo(0.08, 9);
+    // The audio headroom counts on the lifted timeline, where it starts at 0.
+    expect(e.audio).toBeCloseTo(0.128 + 0.08 + 0.01, 9);
+  });
+
   it('derives the edits from the first keyframe', () => {
     expect(edits.video).toBeCloseTo(0.08, 9);
     // Priming headroom from under the run-from-start seek.

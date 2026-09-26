@@ -143,9 +143,9 @@ function collectTfdts(buf: Buffer): FragTfdt[] {
   return out;
 }
 
-/** Source time an fMP4 run's output starts from. A negative video start (MP4
- *  edit lists) stays in the output, where ffmpeg writes it as an edit, since a
- *  tfdt can't go below 0. */
+/** Source time the served fMP4 timeline puts at content 0. A video starting
+ *  before 0 (a wrapped MPEG-TS clock, negative Matroska times) is served from 0,
+ *  since a tfdt can't go below 0: see `servedShift`. */
 export function timelineOrigin(startPts = 0): number {
   return Math.max(0, startPts);
 }

@@ -35,7 +35,10 @@ import {
   formatMediaProgressSubject,
   type MediaProgressSubject,
 } from '../../common/utils/media-progress-subject.util';
-import { sourceTimeline } from './transcoding/source-timeline';
+import {
+  cueOffsetSeconds as cueOffsetOnServedTimeline,
+  sourceTimeline,
+} from './transcoding/source-timeline';
 
 const execFileAsync = promisify(execFile);
 
@@ -187,10 +190,9 @@ export class SubtitleStreamService implements OnModuleInit {
     const ext = path.extname(realSubPath).toLowerCase();
     // Sidecars count from the container start, like the extracts and the
     // players' clocks they are authored against (X-TIMESTAMP-MAP offset).
-    const cueOffsetSeconds = sourceTimeline(
-      sub.mediaFile?.streamInfo,
-      realSubPath,
-    ).formatStart;
+    const cueOffsetSeconds = cueOffsetOnServedTimeline(
+      sourceTimeline(sub.mediaFile?.streamInfo, realSubPath),
+    );
     const vtt =
       ext === '.vtt'
         ? content
