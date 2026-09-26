@@ -88,10 +88,16 @@ describe('withTimestampMap', () => {
     );
   });
 
-  it('offsets cues by the source start PTS on the 90kHz clock', () => {
-    // 1.4s × 90000 → the cue at LOCAL 0 maps to the first frame, not 1.4s early.
+  it('offsets cues by the container start on the 90kHz clock', () => {
+    // 1.4s × 90000 → the cue at LOCAL 0 maps to source time 1.4, not 1.4s early.
     expect(mapLine(withTimestampMap('WEBVTT\n\n', 1.4))).toBe(
       'X-TIMESTAMP-MAP=MPEGTS:126000,LOCAL:00:00:00.000',
+    );
+  });
+
+  it('moves LOCAL for a container that starts before 0', () => {
+    expect(mapLine(withTimestampMap('WEBVTT\n\n', -1.022))).toBe(
+      'X-TIMESTAMP-MAP=MPEGTS:0,LOCAL:00:00:01.022',
     );
   });
 });

@@ -93,23 +93,22 @@ const VALID_QUALITIES = new Set([
 ]);
 
 /**
- * Inject HLS X-TIMESTAMP-MAP header so the player aligns VTT cues to the
- * absolute MPEGTS timeline of the video stream (which uses -copyts → PTS
- * matches original file time). Without this, players that normalise media
- * time treat VTT time as relative to playback start, which drifts after
- * any seek that doesn't land on an exact keyframe (-noaccurate_seek).
+ * Inject the HLS X-TIMESTAMP-MAP that places the cues on the served media
+ * timeline, which runs on source PTS (`-copyts`, re-anchored on serve). Cue
+ * time 0 sits at `cueOffsetSeconds` there: the container start for every cue
+ * source (see {@link sourceTimeline}). A negative offset moves LOCAL instead,
+ * since MPEGTS is unsigned.
  */
 export function withTimestampMap(
   vtt: string | Buffer,
-  startSeconds = 0,
+  cueOffsetSeconds = 0,
 ): string {
   const text = typeof vtt === 'string' ? vtt : vtt.toString('utf-8');
-  // `-copyts` keeps the first video frame at the source start PTS, so 0-based
-  // cue times (sidecar SRT/ASS and embedded extracts alike) must be offset by
-  // it on the 90kHz MPEGTS clock — else cues lead the video by `startSeconds`
-  // on TS/PVR rips. `startSeconds` 0 → MPEGTS:0, the no-op for MP4/MKV.
-  const mpegts = Math.round(Math.max(0, startSeconds) * 90000);
-  const map = `X-TIMESTAMP-MAP=MPEGTS:${mpegts},LOCAL:00:00:00.000`;
+  const mpegts = Math.round(Math.max(0, cueOffsetSeconds) * 90000);
+  const local = new Date(Math.round(Math.max(0, -cueOffsetSeconds) * 1000))
+    .toISOString()
+    .slice(11, 23);
+  const map = `X-TIMESTAMP-MAP=MPEGTS:${mpegts},LOCAL:${local}`;
   return text.replace(/^(WEBVTT[^\n]*)\n/, `$1\n${map}\n`);
 }
 
@@ -1473,12 +1472,12 @@ export class StreamingController {
     @CurrentUser() user: User | undefined,
     @Res() res: Response,
   ) {
-    // ffmpeg extracts these cues without `-copyts`, so they come out 0-based —
-    // same as sidecar subs — and need the source start-PTS offset to line up
-    // with the video on TS/PVR rips. resolveFile also re-checks library access.
+    // resolveFile also re-checks library access.
     const resolved = await this.streamingService.resolveFile(mediaFileId, user);
-    const startTimeSeconds =
-      resolved.mediaFile.streamInfo?.video?.[0]?.startTimeSeconds ?? 0;
+    const cueOffset = sourceTimeline(
+      resolved.mediaFile.streamInfo,
+      resolved.absolutePath,
+    ).formatStart;
     const stream = await this.subtitleStreamService.extractEmbeddedSubtitle(
       mediaFileId,
       streamIndex,
@@ -1493,7 +1492,7 @@ export class StreamingController {
     const vtt = Buffer.concat(chunks);
     res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.send(withTimestampMap(vtt, startTimeSeconds));
+    res.send(withTimestampMap(vtt, cueOffset));
   }
 
   /** Embedded stream: only the extracted WebVTT exists, no sidecar file. */
@@ -1505,8 +1504,10 @@ export class StreamingController {
     @Res() res: Response,
   ) {
     const resolved = await this.streamingService.resolveFile(mediaFileId, user);
-    const startTimeSeconds =
-      resolved.mediaFile.streamInfo?.video?.[0]?.startTimeSeconds ?? 0;
+    const cueOffset = sourceTimeline(
+      resolved.mediaFile.streamInfo,
+      resolved.absolutePath,
+    ).formatStart;
     const stream = await this.subtitleStreamService.extractEmbeddedSubtitle(
       mediaFileId,
       streamIndex,
@@ -1524,7 +1525,7 @@ export class StreamingController {
     // only the plain one still gets a name.
     res.attachment(`${base}.track-${streamIndex}.vtt`);
     res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
-    res.send(withTimestampMap(Buffer.concat(chunks), startTimeSeconds));
+    res.send(withTimestampMap(Buffer.concat(chunks), cueOffset));
   }
 
   /** Download an external subtitle as stored on disk, original format kept. */
@@ -1550,11 +1551,11 @@ export class StreamingController {
     @CurrentUser() user: User | undefined,
     @Res() res: Response,
   ) {
-    const { vtt, startTimeSeconds } =
+    const { vtt, cueOffsetSeconds } =
       await this.subtitleStreamService.getSubtitleAsVtt(subtitleId, user);
     res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.send(withTimestampMap(vtt, startTimeSeconds));
+    res.send(withTimestampMap(vtt, cueOffsetSeconds));
   }
 
   // HLS subtitle media playlists (single WebVTT segment) — referenced by the
