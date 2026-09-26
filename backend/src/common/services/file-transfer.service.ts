@@ -3,14 +3,13 @@ import { DataSource } from 'typeorm';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
-import { randomUUID } from 'crypto';
+import { ATOMIC_TEMP_PREFIX, writeAtomically } from '../utils/atomic-file';
 
 export type TransferMethod = 'copy' | 'move';
 
 const DEFAULT_COMPANION_EXTS =
   '.srt,.ass,.ssa,.vtt,.idx,.sub,.nfo,.jpg,.jpeg,.png,.webp';
 
-const TEMP_PREFIX = '.fliks-tmp-';
 const STALE_TEMP_AGE_MS = 24 * 60 * 60 * 1000;
 
 /**
@@ -63,12 +62,8 @@ export class FileTransferService {
     }
   }
 
-  /** The temp name must sit in `dest`'s own directory, or the promoting rename is not atomic.
-   *  Fixed length, so a long destination basename cannot push it past NAME_MAX. */
   private async atomicCopy(src: string, dest: string): Promise<void> {
-    const destDir = path.dirname(dest);
-    const tmp = path.join(destDir, `${TEMP_PREFIX}${randomUUID()}`);
-    try {
+    await writeAtomically(dest, async (tmp) => {
       await fsp.copyFile(src, tmp);
       // An overwrite would otherwise silently reset the destination's mode to the temp file's.
       const existingMode = await fsp
@@ -82,12 +77,8 @@ export class FileTransferService {
       } finally {
         await fh.close();
       }
-      await fsp.rename(tmp, dest);
-    } catch (err) {
-      await fsp.unlink(tmp).catch(() => {});
-      throw err;
-    }
-    void this.reapStaleTemps(destDir);
+    });
+    void this.reapStaleTemps(path.dirname(dest));
   }
 
   /** A copy killed mid-flight leaves its temp behind; only ones too old to be in flight are removed. */
@@ -95,7 +86,7 @@ export class FileTransferService {
     try {
       const cutoff = Date.now() - STALE_TEMP_AGE_MS;
       for (const name of await fsp.readdir(destDir)) {
-        if (!name.startsWith(TEMP_PREFIX)) continue;
+        if (!name.startsWith(ATOMIC_TEMP_PREFIX)) continue;
         const full = path.join(destDir, name);
         const stat = await fsp.stat(full).catch(() => null);
         if (stat && stat.mtimeMs < cutoff) await fsp.unlink(full).catch(() => {});

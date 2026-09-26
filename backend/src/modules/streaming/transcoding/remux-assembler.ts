@@ -2,6 +2,7 @@ import { watch, type FSWatcher } from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
 import type { Logger } from '@nestjs/common';
+import { writeAtomically, writeFileAtomic } from '../../../common/utils/atomic-file';
 import { OUTPUT_POLL_MS } from './constants';
 import type { RemuxRunStart } from './ffmpeg-args';
 import { servedShift } from './source-timeline';
@@ -25,10 +26,6 @@ const AUDIO_PRIMING_MAX_SECONDS = 1024 / 8000;
 /** Tolerance when matching a GOP to the keyframe list: under a frame, above
  *  the output `-ss` rounding to a millisecond time base. */
 const KEYFRAME_MATCH_SECONDS = 0.002;
-
-/** Rename errors a scanner or indexer holding the file raises on Windows. */
-const TRANSIENT_RENAME_CODES = new Set(['EPERM', 'EBUSY', 'EACCES']);
-const RENAME_ATTEMPTS = 5;
 
 /** Passes, a poll apart, a segment may fail before the error is not a passing lock. */
 const SEGMENT_ATTEMPTS = 3;
@@ -245,7 +242,7 @@ export class RemuxSegmentAssembler {
     }
     const out = path.join(this.plan.dir, 'init.mp4');
     if (!(await this.exists(out))) {
-      await writeAtomic(out, withInitEdits(init, editOf));
+      await writeFileAtomic(out, withInitEdits(init, editOf));
     }
     this.delta = delta;
     this.failures = 0;
@@ -282,16 +279,16 @@ export class RemuxSegmentAssembler {
   private async assemble(segment: number, gops: number[]): Promise<void> {
     const out = path.join(this.plan.dir, segName(segment));
     if (!(await this.exists(out))) {
-      const tmp = `${out}.tmp`;
-      const fh = await fsp.open(tmp, 'w');
-      try {
-        for (const g of gops) {
-          await fh.write(retimeFragments(await fsp.readFile(this.gopPath(g)), this.delta!));
+      await writeAtomically(out, async (tmp) => {
+        const fh = await fsp.open(tmp, 'w');
+        try {
+          for (const g of gops) {
+            await fh.write(retimeFragments(await fsp.readFile(this.gopPath(g)), this.delta!));
+          }
+        } finally {
+          await fh.close();
         }
-      } finally {
-        await fh.close();
-      }
-      await renameRetrying(tmp, out);
+      });
     }
     await Promise.all(gops.map((g) => fsp.rm(this.gopPath(g), { force: true })));
   }
@@ -310,22 +307,4 @@ export class RemuxSegmentAssembler {
     }
     await this.assemble(this.next, written);
   }
-}
-
-async function renameRetrying(from: string, to: string): Promise<void> {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await fsp.rename(from, to);
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code ?? '';
-      if (attempt >= RENAME_ATTEMPTS || !TRANSIENT_RENAME_CODES.has(code)) throw err;
-      await new Promise((r) => setTimeout(r, OUTPUT_POLL_MS / RENAME_ATTEMPTS));
-    }
-  }
-}
-
-async function writeAtomic(file: string, data: Buffer): Promise<void> {
-  const tmp = `${file}.tmp`;
-  await fsp.writeFile(tmp, data);
-  await renameRetrying(tmp, file);
 }
