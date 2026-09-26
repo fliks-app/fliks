@@ -5,6 +5,7 @@ import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { User } from '../users/entities/user.entity';
 import { LibrariesService } from '../libraries/libraries.service';
+import type { SourceScan } from './transcoding/source-scan';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 
@@ -16,6 +17,8 @@ export interface ResolvedFile {
   contentType: string;
   mediaFile: MediaFile;
   media: Media;
+  /** The file's background scan; absent until it ran. */
+  sourceScan?: SourceScan | null;
 }
 
 const CONTENT_TYPES: Record<string, string> = {

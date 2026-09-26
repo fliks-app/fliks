@@ -59,6 +59,7 @@ import {
   videoPresentationStart,
 } from './transcoding/source-timeline';
 import { sourceIsMpegTs } from '../subtitles/video-packets';
+import { aacConfigMayChange, type SourceScan } from './transcoding/source-scan';
 
 /** Audio codecs that can be copied verbatim into fMP4 segments via MSE.
  *  Anything outside this set is re-encoded to AAC on the remux path even when
@@ -77,16 +78,22 @@ type CopyBlocker =
 /** Why a track the device plays as-is must still be re-encoded into fMP4, or
  *  null: MSE ignores an offset's empty edit, and see each check below. */
 function copyBlocker(
-  audio: { codec?: string; startTimeSeconds?: number; endSeconds?: number },
+  audio: AudioStreamInfo,
   video: Parameters<typeof videoPresentationStart>[0],
   muxFlavour: 'ts' | 'fmp4',
   mpegTs: boolean,
+  scan: SourceScan | null | undefined,
   lastVideoSegmentStart: number | undefined,
 ): CopyBlocker | null {
   if (muxFlavour !== 'fmp4') return null;
   // MPEG-TS carries AAC as ADTS, where broadcasts switch 2.0 and 5.1 mid-stream.
-  // fMP4 keeps one AAC configuration, the first frame's, for the whole track.
-  if ((audio.codec ?? '').toLowerCase() === 'aac' && mpegTs) {
+  // fMP4 keeps one AAC configuration, the first frame's, for the whole track,
+  // so only a scan that saw none lets it copy.
+  if (
+    (audio.codec ?? '').toLowerCase() === 'aac' &&
+    mpegTs &&
+    aacConfigMayChange(scan, audio.streamIndex) !== false
+  ) {
     return 'AudioFormatMayChange';
   }
   const a = audio.startTimeSeconds;
@@ -159,7 +166,7 @@ function audioReason(flag: string, t: AudioTrackPlan): TranscodeReason {
     AudioStartOffset:
       'Audio starts off the video and is re-encoded to align it',
     AudioFormatMayChange:
-      'AAC from MPEG-TS can change format mid-stream and is re-encoded',
+      'AAC from MPEG-TS may change format mid-stream and is re-encoded',
     AudioEndsEarly: 'Audio ends before the video and is padded to its end',
   };
   return { flag, message: messages[flag] ?? flag };
@@ -622,6 +629,7 @@ export class StreamBuilderService {
       profile,
       hlsMux,
       sourceMpegTs,
+      resolved.sourceScan,
       audioLayout(audioStreams.length) === 'var-stream-map'
         ? lastVideoSegmentStart(si, resolved.absolutePath, segmentDuration)
         : undefined,
@@ -637,6 +645,7 @@ export class StreamBuilderService {
             profile,
             hlsMux,
             sourceMpegTs,
+            resolved.sourceScan,
             undefined,
           )[0]
         : groupDecisions[pickedAudio];
@@ -1000,10 +1009,11 @@ export class StreamBuilderService {
     profile: DeviceProfileDto,
     muxFlavour: 'ts' | 'fmp4',
     mpegTs: boolean,
+    scan: SourceScan | null | undefined,
     lastSegmentStart: number | undefined,
   ): TrackDecision[] {
     const blockers = tracks.map((t) =>
-      copyBlocker(t, video, muxFlavour, mpegTs, lastSegmentStart),
+      copyBlocker(t, video, muxFlavour, mpegTs, scan, lastSegmentStart),
     );
     const profileAudioCodecs = profile.directPlayProfiles
       .flatMap((p) => p.audioCodecs)

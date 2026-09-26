@@ -198,6 +198,26 @@ describe('StreamBuilderService — one audio decision per track', () => {
     });
   });
 
+  it('copies AAC from MPEG-TS once a scan saw its format hold', () => {
+    const scanned = (aacConfigChanges: number[] | null) =>
+      svc().evaluate(
+        {
+          ...(file([{ codec: 'aac', channels: 2 }], '.ts') as object),
+          sourceScan: aacConfigChanges && { aacConfigChanges },
+        } as never,
+        tv,
+        '',
+      ).response;
+    expect(scanned([]).audioPlan).toEqual({
+      mode: 'copy',
+      codec: 'aac',
+      channels: 2,
+    });
+    // streamIndex 1: the one track changes, or no scan ran yet.
+    expect(flags(scanned([1]))).toContain('AudioFormatMayChange');
+    expect(flags(scanned(null))).toContain('AudioFormatMayChange');
+  });
+
   it('re-encodes AAC from MPEG-TS on fMP4 and copies it into MPEG-TS', () => {
     const fmp4 = evaluate([{ codec: 'aac', channels: 2 }], tv, { ext: '.ts' });
     expect(fmp4.audioPlan.mode).toBe('transcode');
