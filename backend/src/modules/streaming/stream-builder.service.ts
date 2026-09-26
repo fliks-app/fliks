@@ -605,9 +605,18 @@ export class StreamBuilderService {
       );
     }
 
-    // One decision per track, for DirectStream and Transcode alike: the top-level
-    // plan and reasons are the picked track's, so they match `audioTracks`.
-    const decisions = this.decideAudio(
+    // Video codec must be supported; only container or audio may differ
+    // Cannot remux if tone mapping or burn-in is needed (video must be re-encoded).
+    // A lower explicit rung / ABR-on-auto wants a re-encoded ladder, not a
+    // source-resolution remux copy, so `forceLadder` skips this path too.
+    // Dolby Vision Profile 5 is never remuxed: the fMP4 muxer drops the DV
+    // configuration box on `-c:v copy`, so a copied P5 (whose base layer isn't
+    // valid HDR10) would render green/purple. P5 rides raw DirectPlay (whole
+    // original file, DV intact) or a tonemap transcode instead — never remux.
+    const canCopyVideo = sourceCopyable && !forceLadder && !dvP5;
+
+    // The renditions a var_stream_map encode of the session emits.
+    const groupDecisions = this.decideAudio(
       audioStreams,
       v,
       profile,
@@ -617,12 +626,28 @@ export class StreamBuilderService {
         ? lastVideoSegmentStart(si, resolved.absolutePath, segmentDuration)
         : undefined,
     );
+    // A remux muxes the picked track alone, so it is a group of its own, and
+    // a muxed track ends with the video's segments.
+    const pickedStream = audioStreams[pickedAudio];
+    const pickedDecision =
+      canCopyVideo && pickedStream
+        ? this.decideAudio(
+            [pickedStream],
+            v,
+            profile,
+            hlsMux,
+            sourceMpegTs,
+            undefined,
+          )[0]
+        : groupDecisions[pickedAudio];
+    // The top-level plan and reasons are the picked track's, which
+    // `audioTracks` describes as `playUrl` delivers it.
     const audioTracks = audioStreams.map((t, i) =>
-      trackDto(t, i, decisions[i]),
+      trackDto(t, i, i === pickedAudio ? pickedDecision : groupDecisions[i]),
     );
-    const audioPlans = decisions.map((d) => d.plan);
+    const audioPlans = groupDecisions.map((d) => d.plan);
     const pickedTrack = audioTracks[pickedAudio];
-    const audioPlan = audioPlans[pickedAudio] ?? DEFAULT_AUDIO_PLAN;
+    const audioPlan = pickedDecision?.plan ?? DEFAULT_AUDIO_PLAN;
     const rungAudioBps = (p: TranscodeProfile): number => {
       const stereo = parseBitrateToBps(p.audioBitrate);
       return (
@@ -640,15 +665,6 @@ export class StreamBuilderService {
     );
 
     // --- Step 2: Try DirectStream (remux) ---
-    // Video codec must be supported; only container or audio may differ
-    // Cannot remux if tone mapping or burn-in is needed (video must be re-encoded).
-    // A lower explicit rung / ABR-on-auto wants a re-encoded ladder, not a
-    // source-resolution remux copy, so `forceLadder` skips this path too.
-    // Dolby Vision Profile 5 is never remuxed: the fMP4 muxer drops the DV
-    // configuration box on `-c:v copy`, so a copied P5 (whose base layer isn't
-    // valid HDR10) would render green/purple. P5 rides raw DirectPlay (whole
-    // original file, DV intact) or a tonemap transcode instead — never remux.
-    const canCopyVideo = sourceCopyable && !forceLadder && !dvP5;
     if (canCopyVideo) {
       if (
         !directPlayResult.containerSupported &&

@@ -244,6 +244,45 @@ describe('StreamBuilderService — picked audio track', () => {
     expect(r.source.audioCodec).toBe('dts');
   });
 
+  it('decides a remuxed track alone, and keeps the group for the renditions', () => {
+    const flacAc3: Track[] = [
+      { codec: 'flac', channels: 6 },
+      { codec: 'ac3', channels: 6 },
+    ];
+    const svcr = svc().evaluate(
+      file(flacAc3),
+      tv,
+      '',
+      undefined,
+      undefined,
+      'directplay',
+      1,
+    );
+    const ds = svcr.response;
+    expect(ds.playMethod).toBe('DirectStream');
+    expect(ds.audioPlan).toEqual({ mode: 'copy', codec: 'ac3', channels: 6 });
+    expectPlanMatchesTrack(ds, 1);
+    expect(svcr.audioPlans.map((p) => `${p.mode}:${p.codec}`)).toEqual([
+      'transcode:eac3',
+      'transcode:eac3',
+    ]);
+    const tx = evaluate(flacAc3, tv, { pick: 1, quality: '720p' });
+    expect(tx.audioPlan).toMatchObject({ mode: 'transcode', codec: 'eac3' });
+  });
+
+  it('never pads a remuxed track that ends early, the video carrying its segments', () => {
+    const r = evaluate(
+      [
+        { codec: 'aac', language: 'eng' },
+        { codec: 'aac', language: 'fre', endSeconds: 15 },
+      ],
+      tv,
+      { pick: 1 },
+    );
+    expect(r.audioPlan).toEqual({ mode: 'copy', codec: 'aac', channels: 2 });
+    expect(flags(r)).not.toContain('AudioEndsEarly');
+  });
+
   it('falls back to the first track for an index outside the file', () => {
     expect(evaluate(multi, tv, { pick: 5 }).source.audioCodec).toBe('aac');
   });
