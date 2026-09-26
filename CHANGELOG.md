@@ -1,5 +1,25 @@
 # Changelog
 
+## [4.2.1](https://github.com/fliks-app/fliks/compare/v4.2.0...v4.2.1) (2026-09-26)
+
+
+### Features
+
+* **subtitles:** list the translation engine's models instead of a fixed set ([#1463](https://github.com/fliks-app/fliks/issues/1463)) ([6fb6e38](https://github.com/fliks-app/fliks/commit/6fb6e3851e1b60f47deca3b54117167c25e45484))
+
+
+### Bug Fixes
+
+* **android:** repair the library slide, the dock and the keyboard state ([#1462](https://github.com/fliks-app/fliks/issues/1462)) ([1be6c23](https://github.com/fliks-app/fliks/commit/1be6c2302c7607367187f18fb795d180e54c84f0))
+* **library:** dismiss the keyboard on enter in the search bar ([#1465](https://github.com/fliks-app/fliks/issues/1465)) ([9d50262](https://github.com/fliks-app/fliks/commit/9d502623c8a11f4d0e09e2cbcfb0fd6719f94ffc))
+* **streaming:** keep audio and video on one source timeline ([#1464](https://github.com/fliks-app/fliks/issues/1464)) ([94a22e8](https://github.com/fliks-app/fliks/commit/94a22e8ee04b84afc7a975ed0ab8746d03862740))
+* **subtitles:** scope the modal to the active file and clean up on delete ([#1460](https://github.com/fliks-app/fliks/issues/1460)) ([0607bc3](https://github.com/fliks-app/fliks/commit/0607bc33d285252b4d36971547d772ce84271111))
+
+
+### Miscellaneous Chores
+
+* release 4.2.1 ([#1466](https://github.com/fliks-app/fliks/issues/1466)) ([700f727](https://github.com/fliks-app/fliks/commit/700f7279b597ac92b99e05e3d37a112ce7aac167))
+
 ## [4.2.0](https://github.com/fliks-app/fliks/compare/v4.1.1...v4.2.0) (2026-09-25)
 
 
