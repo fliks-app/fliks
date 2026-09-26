@@ -25,7 +25,14 @@ import {
   type RungBitrateContext,
 } from './transcoding/quality-ladder';
 import { resolveEncodePipeline } from './transcoding/encode-pipeline';
-import { parseSourceFps, realSegmentSeconds } from './transcoding/constants';
+import {
+  DEFAULT_FPS,
+  DEFAULT_SEGMENT_DURATION,
+  frameSecondsOf,
+  parseSourceFps,
+  realSegmentSeconds,
+  uniformSegmentCount,
+} from './transcoding/constants';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
 import {
   bucketResolutionHeight,
@@ -44,7 +51,10 @@ import {
   type AudioPlan,
 } from './transcoding/audio-encode';
 import type { MediaFileInfo } from '../subtitles/ffprobe.service';
-import { videoPresentationStart } from './transcoding/source-timeline';
+import {
+  sourceTimeline,
+  videoPresentationStart,
+} from './transcoding/source-timeline';
 import { sourceIsMpegTs } from '../subtitles/video-packets';
 
 /** Audio codecs that can be copied verbatim into fMP4 segments via MSE.
@@ -102,17 +112,15 @@ function copyBlocker(
 /** Source time the last video segment of a separate-rendition layout starts
  *  at, on the fps-aware grid the video is cut on from its first frame. */
 function lastVideoSegmentStart(
-  video: MediaFileInfo['video'][number] | undefined,
+  si: MediaFileInfo | null | undefined,
+  label: string,
   segmentDuration: number,
 ): number | undefined {
-  const origin = videoPresentationStart(video);
-  if (origin == null || video?.endSeconds == null) return undefined;
-  const seg = realSegmentSeconds(
-    segmentDuration,
-    parseSourceFps(video.frameRate),
-  );
-  const count = Math.ceil((video.endSeconds - origin) / seg);
-  return count > 0 ? origin + (count - 1) * seg : undefined;
+  const { origin, end } = sourceTimeline(si, label);
+  if (end == null) return undefined;
+  const fps = parseSourceFps(si?.video?.[0]?.frameRate);
+  const seg = realSegmentSeconds(segmentDuration, fps);
+  return origin + (uniformSegmentCount(end - origin, seg, frameSecondsOf(fps)) - 1) * seg;
 }
 
 /** Transcode reason for each per-track flag. */
@@ -163,6 +171,8 @@ export interface EvaluateResult {
   response: PlaybackInfoResponse;
   useHdrLadder: boolean;
   videoVariant: CodecVariant | null;
+  /** Segment container of the HLS output. */
+  muxFlavour: 'ts' | 'fmp4';
 }
 
 /**
@@ -195,6 +205,7 @@ export class StreamBuilderService {
     requestedQuality?: string,
     autoQualityMode: 'directplay' | 'abr' = 'directplay',
     audioStreamIndex?: number,
+    segmentDuration = DEFAULT_SEGMENT_DURATION,
   ): EvaluateResult {
     const si = resolved.mediaFile.streamInfo;
     const v = si?.video?.[0];
@@ -315,10 +326,12 @@ export class StreamBuilderService {
     // useHdrLadder and selectedVariant are returned to the controller
     // via EvaluateResult; the controller threads them onto the live
     // session rather than the service writing side-effects.
+    const hlsMux = resolveMuxFlavour(profile, audioStreams.length);
     const wrap = (response: PlaybackInfoResponse): EvaluateResult => ({
       response,
       useHdrLadder,
       videoVariant: selectedVariant,
+      muxFlavour: hlsMux,
     });
     const needsBurnIn = !!burnInSubtitleId;
     // Cropping black bars forces a re-encode. When the admin disables auto-crop
@@ -550,10 +563,12 @@ export class StreamBuilderService {
         ),
         audioTracks: this.buildAudioTracks(
           si,
+          resolved.absolutePath,
           profile,
           'DirectPlay',
           'fmp4',
           sourceMpegTs,
+          segmentDuration,
         ),
         source,
       });
@@ -562,13 +577,14 @@ export class StreamBuilderService {
     // --- HLS audio (DirectStream and Transcode alike) ---
     // One decision per track; the top-level plan and reasons are the picked
     // track's, so they can never disagree with `audioTracks`.
-    const hlsMux = resolveMuxFlavour(profile, audioStreams.length);
     const audioTracks = this.buildAudioTracks(
       si,
+      resolved.absolutePath,
       profile,
       'Transcode',
       hlsMux,
       sourceMpegTs,
+      segmentDuration,
     );
     const pickedTrack = audioTracks[pickedAudio];
     const stereoAudioBps = parseBitrateToBps(ladder[0]?.audioBitrate ?? '192k');
@@ -747,7 +763,7 @@ export class StreamBuilderService {
       outputCodec,
       sourceWidth: source.width ?? 0,
       sourceHeight: source.height ?? 0,
-      sourceFrameRate: parseSourceFps(source.frameRate) ?? 24,
+      sourceFrameRate: parseSourceFps(source.frameRate) ?? DEFAULT_FPS,
       sourceVideoBitrateBps: source.videoBitRate,
       sourceVideoCodec: source.videoCodec,
     };
@@ -914,20 +930,19 @@ export class StreamBuilderService {
    */
   private buildAudioTracks(
     si: MediaFileInfo | null | undefined,
+    label: string,
     profile: DeviceProfileDto,
     playMethod: PlayMethod,
     muxFlavour: 'ts' | 'fmp4',
     mpegTs: boolean,
+    segmentDuration: number,
   ): AudioTrackPlan[] {
     const audioStreams = si?.audio ?? [];
     const video = si?.video?.[0];
     // Only separate renditions go missing at the tail; a muxed track just ends.
     const lastSegmentStart =
       pickAudioLayout(audioStreams.length, muxFlavour) === 'var-stream-map'
-        ? lastVideoSegmentStart(
-            video,
-            this.activeStreamTracker.getSegmentDuration(),
-          )
+        ? lastVideoSegmentStart(si, label, segmentDuration)
         : undefined;
     const blockers = audioStreams.map((t) =>
       copyBlocker(t, video, muxFlavour, mpegTs, lastSegmentStart),

@@ -47,6 +47,8 @@ import {
   parseSourceFps,
   realSegmentSeconds,
   secondsToSegmentIndex,
+  frameSecondsOf,
+  uniformSegmentCount,
 } from './transcoding/constants';
 import {
   getRemuxSegmentGrid,
@@ -66,7 +68,7 @@ import { SessionRouter } from './services/session-router.service';
 import { ClockBreakScanService } from './services/clock-break-scan.service';
 import { SessionContextBuilder } from './services/session-context-builder.service';
 import { sessionProfileHash } from './transcoding/session-profile';
-import { pickAudioLayout, resolveMuxFlavour } from './transcoding/audio-layout';
+import { pickAudioLayout } from './transcoding/audio-layout';
 import {
   buildIFrameSegmentArgs,
   iframeResolution,
@@ -246,11 +248,7 @@ export function buildVodPlaylist(
   segDuration: number,
   frameSeconds: number,
 ): string {
-  // The nanosecond keeps a last frame that starts on a boundary in float noise.
-  const segCount = Math.max(
-    1,
-    Math.floor((duration - frameSeconds) / segDuration + 1e-9) + 1,
-  );
+  const segCount = uniformSegmentCount(duration, segDuration, frameSeconds);
   const lines = [
     '#EXTM3U',
     '#EXT-X-VERSION:7',
@@ -289,11 +287,10 @@ export function buildIFramePlaylist(
   );
 }
 
-/** One frame of the source video, 24 fps when unknown (as `buildSegmentGrid`). */
 function frameSeconds(
   streamInfo: { video?: { frameRate?: string }[] } | null | undefined,
 ): number {
-  return 1 / (parseSourceFps(streamInfo?.video?.[0]?.frameRate) ?? 24);
+  return frameSecondsOf(parseSourceFps(streamInfo?.video?.[0]?.frameRate));
 }
 
 /** Trick-play grid: the variant's real segment length, so entry N is the IDR
@@ -798,10 +795,10 @@ export class StreamingController {
       startQuality,
       ss.autoQualityMode,
       audioStreamIndex,
+      ss.segmentDuration,
     );
-    const { response, useHdrLadder, videoVariant } = evaluateResult;
+    const { response, useHdrLadder, videoVariant, muxFlavour } = evaluateResult;
     const sourceAudioCount = resolved.mediaFile.streamInfo?.audio?.length ?? 0;
-    const muxFlavour = resolveMuxFlavour(deviceProfile, sourceAudioCount);
     const effectiveUseTs = muxFlavour === 'ts';
     const deviceType = deviceProfile.deviceType ?? 'desktop';
     const useExtXMedia =

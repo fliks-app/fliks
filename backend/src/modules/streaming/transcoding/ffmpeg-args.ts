@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import * as path from 'path';
 import {
+  DEFAULT_FPS,
   DEFAULT_SEGMENT_DURATION,
   EARLY_PROBE_SEGMENTS,
   realSegmentSeconds,
@@ -316,7 +317,7 @@ export function buildSegmentGrid(
   sourceFps: number | undefined,
   startSegment: number,
 ): SegmentGrid {
-  const fps = sourceFps && sourceFps > 0 ? sourceFps : 24;
+  const fps = sourceFps && sourceFps > 0 ? sourceFps : DEFAULT_FPS;
   const gopSize = Math.max(1, Math.round(segmentDuration * fps));
   const realSeg = realSegmentSeconds(segmentDuration, sourceFps);
   const seekSeconds =

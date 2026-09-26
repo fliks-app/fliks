@@ -7,6 +7,7 @@ import {
   type Keyframe,
 } from '../../subtitles/video-packets';
 import { sourceTimeline } from './source-timeline';
+import { frameSecondsOf, parseSourceFps } from './constants';
 
 const log = new Logger('SegmentBoundaries');
 
@@ -46,7 +47,8 @@ export function seeksPastKeyframe(
 /**
  * Group the keyframes into segments of about `segDur`: a segment ends at the
  * first keyframe at or past a target advancing `segDur` per cut from the
- * first; the tail runs to `end`. The grid starts on the first keyframe shown
+ * first; the tail runs to `end`, and a keyframe starting no whole frame
+ * before it stays in the last segment. The grid starts on the first keyframe shown
  * at or after `origin`: an edit list starting mid-GOP hides pre-roll a copy
  * could only decode before the timeline start.
  */
@@ -55,8 +57,11 @@ export function computeSegmentGrid(
   origin: number,
   end: number,
   segDur: number,
+  frameSeconds = frameSecondsOf(undefined),
 ): KeyframeGrid | null {
-  const keyframes = allKeyframes.filter((k) => k.pts >= origin - TAIL_EPSILON);
+  // Under half a frame apart, two times are the same frame's.
+  const sameFrame = frameSeconds / 2;
+  const keyframes = allKeyframes.filter((k) => k.pts >= origin - sameFrame);
   if (keyframes.length === 0 || segDur <= 0) return null;
   const last = keyframes[keyframes.length - 1].pts;
   const total = Math.max(end, last);
@@ -65,7 +70,7 @@ export function computeSegmentGrid(
   const firstKeyframe = [0];
   let target = start + segDur;
   keyframes.forEach((kf, i) => {
-    if (i === 0 || kf.pts < target || total - kf.pts <= TAIL_EPSILON) return;
+    if (i === 0 || kf.pts < target || total - kf.pts < sameFrame) return;
     boundaries.push(kf.pts);
     firstKeyframe.push(i);
     target += segDur;
@@ -75,9 +80,6 @@ export function computeSegmentGrid(
   const durations = boundaries.slice(1).map((b, i) => b - boundaries[i]);
   return { durations, boundaries, keyframes, firstKeyframe };
 }
-
-/** Shorter than any frame: a keyframe this close to the end starts no segment. */
-const TAIL_EPSILON = 0.001;
 
 /** Segment of the keyframe grid whose `[start, end)` window holds content
  *  position `seconds` (from the first frame, hence the `origin`). */
@@ -131,7 +133,8 @@ export async function getRemuxSegmentGrid(
   ).then(
     ({ keyframes, end }) => {
       const { origin } = sourceTimeline(streamInfo, filePath);
-      const g = computeSegmentGrid(keyframes, origin, end, segDur);
+      const frame = frameSecondsOf(parseSourceFps(v?.frameRate));
+      const g = computeSegmentGrid(keyframes, origin, end, segDur, frame);
       if (!g) log.warn(`No video keyframe in ${filePath}; uniform grid`);
       return g;
     },
