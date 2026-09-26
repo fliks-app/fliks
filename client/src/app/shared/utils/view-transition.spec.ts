@@ -6,6 +6,7 @@ import {
   leavingPosterPage,
   markViewTransition,
   stampPoster,
+  viewTransitionDone,
   viewTransitionRunning,
 } from './view-transition';
 
@@ -184,5 +185,27 @@ describe('markViewTransition', () => {
     await finished;
     await Promise.resolve();
     expect(viewTransitionRunning()).toBe(false);
+  });
+});
+
+describe('viewTransitionDone', () => {
+  it('resolves right away when no transition is running', async () => {
+    await expect(viewTransitionDone()).resolves.toBeUndefined();
+  });
+
+  it('waits for the running transition before resolving', async () => {
+    let settle!: () => void;
+    const finished = new Promise<void>((r) => (settle = r));
+    markViewTransition({ finished });
+
+    let settled = false;
+    void viewTransitionDone().then(() => (settled = true));
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    settle();
+    await finished;
+    await Promise.resolve();
+    expect(settled).toBe(true);
   });
 });
