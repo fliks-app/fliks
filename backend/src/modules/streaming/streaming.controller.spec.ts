@@ -19,13 +19,13 @@ describe('buildIFramePlaylist', () => {
   const url = (i: string): string => `iframe/seg-${i}.ts`;
 
   it('declares I-frames-only and no init segment', () => {
-    const m = buildIFramePlaylist(12, url, 4);
+    const m = buildIFramePlaylist(12, url, 4, 0.04);
     expect(m).toContain('#EXT-X-I-FRAMES-ONLY');
     expect(m).not.toContain('#EXT-X-MAP');
   });
 
   it('keeps one entry per grid keyframe', () => {
-    const m = buildIFramePlaylist(12, url, 4);
+    const m = buildIFramePlaylist(12, url, 4, 0.04);
     expect(m.split('\n').filter((l) => l.startsWith('#EXTINF'))).toHaveLength(
       3,
     );
@@ -38,13 +38,17 @@ describe('buildVodPlaylist', () => {
   const lines = (m: string, prefix: string): string[] =>
     m.split('\n').filter((l) => l.startsWith(prefix));
 
-  it('drops the phantom last segment from float-imprecise durations', () => {
-    // 120.001 / 3 naively ceils to 41, but ffmpeg writes 40 — the epsilon trims it.
-    expect(lines(buildVodPlaylist(120.001, url, undefined, 3), '#EXTINF')).toHaveLength(40);
+  it('lists a segment only when a frame starts in it', () => {
+    // 120.001 s at 25 fps: the last frame starts at 119.961, in segment 39.
+    expect(lines(buildVodPlaylist(120.001, url, undefined, 3, 0.04), '#EXTINF')).toHaveLength(40);
+    // One frame past 120: it starts at 120, so segment 40 exists.
+    expect(lines(buildVodPlaylist(120.04, url, undefined, 3, 0.04), '#EXTINF')).toHaveLength(41);
+    // A last frame that starts on a boundary through float noise.
+    expect(lines(buildVodPlaylist(90.09 + 1 / 23.976, url, undefined, 3.003, 1 / 23.976), '#EXTINF')).toHaveLength(31);
   });
 
   it('clamps the final EXTINF to the remainder and sets TARGETDURATION', () => {
-    const m = buildVodPlaylist(10, url, undefined, 3);
+    const m = buildVodPlaylist(10, url, undefined, 3, 0.04);
     const extinf = lines(m, '#EXTINF');
     expect(extinf).toEqual([
       '#EXTINF:3.000,',
@@ -57,7 +61,7 @@ describe('buildVodPlaylist', () => {
   });
 
   it('rounds TARGETDURATION up for fractional segment durations + emits the map', () => {
-    const m = buildVodPlaylist(9.009, url, 'init.mp4', 3.003);
+    const m = buildVodPlaylist(9.009, url, 'init.mp4', 3.003, 1 / 23.976);
     expect(m).toContain('#EXT-X-TARGETDURATION:4');
     expect(m).toContain('#EXT-X-MAP:URI="init.mp4"');
     expect(lines(m, '#EXTINF')[0]).toBe('#EXTINF:3.003,');
@@ -343,7 +347,7 @@ describe('remux playlist cannot drift out of A/V sync', () => {
 
   it('is what a uniform grid gets wrong — the regression being replaced', () => {
     const { durations } = grid;
-    const uniform = buildVodPlaylist(43.001, (i) => `seg-${i}.ts`, undefined, SEG_DUR);
+    const uniform = buildVodPlaylist(43.001, (i) => `seg-${i}.ts`, undefined, SEG_DUR, 0.04);
     const uniformExtinf = [...uniform.matchAll(/#EXTINF:([\d.]+),/g)].map((m) =>
       Number(m[1]),
     );

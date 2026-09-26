@@ -62,10 +62,7 @@ export function sessionLayoutContext(
     videoVariant: live?.videoVariant ?? undefined,
     sourceStartPts: timeline.origin,
     sourceFormatStart: timeline.formatStart,
-    sourceEndSeconds:
-      si?.durationSeconds != null
-        ? timeline.formatStart + si.durationSeconds
-        : undefined,
+    sourceEndSeconds: timeline.end,
   };
 }
 

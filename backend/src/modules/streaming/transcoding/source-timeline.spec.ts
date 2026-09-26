@@ -29,6 +29,15 @@ describe('sourceTimeline', () => {
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
+  it('ends where the video ends, the container end when that is unknown', () => {
+    const video = { streamIndex: 0, codec: 'h264', startTimeSeconds: 2.8, firstFrameSeconds: 2.8 };
+    // Audio runs 20 s past a 40 s video: the container lasts 60 s.
+    const si = { formatStartSeconds: 2.8, durationSeconds: 60, video: [{ ...video, endSeconds: 42.8 }] };
+    expect(sourceTimeline(si).end).toBe(42.8);
+    expect(sourceTimeline({ ...si, video: [video] }).end).toBe(62.8);
+    expect(sourceTimeline({ formatStartSeconds: 0, video: [video] }).end).toBeUndefined();
+  });
+
   it('is 0/0 without stream info', () => {
     expect(sourceTimeline(null)).toEqual({ origin: 0, formatStart: 0 });
     expect(sourceTimeline({ video: [], formatStartSeconds: 0 })).toEqual({ origin: 0, formatStart: 0 });

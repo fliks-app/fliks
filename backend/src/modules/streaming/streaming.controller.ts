@@ -26,6 +26,7 @@ import { Action } from '../auth/casl/actions.enum';
 import { EventsService } from '../scheduler/events.service';
 import { parseByteRange } from './byte-range.util';
 import { User } from '../users/entities/user.entity';
+import type { MediaFileInfo } from '../subtitles/ffprobe.service';
 import { StreamingService, ResolvedFile } from './streaming.service';
 import { SubtitleStreamService } from './subtitle-stream.service';
 import {
@@ -234,20 +235,20 @@ function statSizeOrNull(filePath: string): number | null {
  *  `segDuration` is the real per-segment length (see `realSegmentSeconds`);
  *  seg-N covers `[N*segDuration, (N+1)*segDuration)`, so the EXTINF values
  *  mirror what FFmpeg actually emits and the presentation timeline stays
- *  aligned with the moof PTS the segments carry. */
+ *  aligned with the moof PTS the segments carry. FFmpeg cuts on the video, so
+ *  a segment exists when a frame starts in it: the last frame starts
+ *  `frameSeconds` before the end. */
 export function buildVodPlaylist(
   duration: number,
   segmentUrl: (index: string) => string,
   initUrl: string | undefined,
   segDuration: number,
+  frameSeconds: number,
 ): string {
-  // Subtract small epsilon before ceil to avoid phantom last segment when
-  // ffprobe duration has floating-point imprecision (e.g. 120.001 → ceil
-  // produces 41 segments but FFmpeg only writes 40).
-  const epsilon = 0.05;
+  // The nanosecond keeps a last frame that starts on a boundary in float noise.
   const segCount = Math.max(
     1,
-    Math.ceil(Math.max(0, duration - epsilon) / segDuration),
+    Math.floor((duration - frameSeconds) / segDuration + 1e-9) + 1,
   );
   const lines = [
     '#EXTM3U',
@@ -279,11 +280,19 @@ export function buildIFramePlaylist(
   duration: number,
   segmentUrl: (index: string) => string,
   segDuration: number,
+  frameSeconds: number,
 ): string {
-  return buildVodPlaylist(duration, segmentUrl, undefined, segDuration).replace(
+  return buildVodPlaylist(duration, segmentUrl, undefined, segDuration, frameSeconds).replace(
     '#EXT-X-INDEPENDENT-SEGMENTS',
     '#EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-I-FRAMES-ONLY',
   );
+}
+
+/** One frame of the source video, 24 fps when unknown (as `buildSegmentGrid`). */
+function frameSeconds(
+  streamInfo: { video?: { frameRate?: string }[] } | null | undefined,
+): number {
+  return 1 / (parseSourceFps(streamInfo?.video?.[0]?.frameRate) ?? 24);
 }
 
 /** Trick-play grid: the variant's real segment length, so entry N is the IDR
@@ -573,36 +582,27 @@ export class StreamingController {
     }
   }
 
-  /** Resolve file duration from streamInfo or by probing with ffprobe. */
+  /** Seconds from the first frame to the video's end, what every playlist of
+   *  the file lasts (`sourceTimeline`); the container duration, probed if
+   *  need be, for a row without stream info. */
   private async resolveDuration(
     mediaFileId: number,
     absolutePath: string,
-    streamInfo: { durationSeconds?: number } | null | undefined,
+    streamInfo: MediaFileInfo | null | undefined,
   ): Promise<number> {
-    let duration = streamInfo?.durationSeconds ?? 0;
-    if (!duration) {
-      try {
-        const { stdout } = await execFileAsync(
-          'ffprobe',
-          [
-            '-v',
-            'error',
-            '-show_entries',
-            'format=duration',
-            '-of',
-            'csv=p=0',
-            absolutePath,
-          ],
-          { timeout: 10_000 },
-        );
-        duration = parseFloat(String(stdout).trim()) || 0;
-      } catch (err) {
-        this.log.warn(
-          `Failed to probe duration for MediaFile #${mediaFileId}: ${err}`,
-        );
-      }
+    const timeline = sourceTimeline(streamInfo, absolutePath);
+    if (timeline.end != null) return timeline.end - timeline.origin;
+    try {
+      const { stdout } = await execFileAsync(
+        'ffprobe',
+        ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', absolutePath],
+        { timeout: 10_000 },
+      );
+      return parseFloat(String(stdout).trim()) || 0;
+    } catch (err) {
+      this.log.warn(`Failed to probe duration for MediaFile #${mediaFileId}: ${err}`);
+      return 0;
     }
-    return duration;
   }
 
   /** Available download qualities for a media file (used by download-quality modal). */
@@ -1403,6 +1403,7 @@ export class StreamingController {
       duration,
       (seg) => `/api/stream/${mediaFileId}/iframe/seg-${seg}.ts${tokenParam}`,
       iframeGrid(resolved.mediaFile.streamInfo, this.segDur()),
+      frameSeconds(resolved.mediaFile.streamInfo),
     );
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -1694,6 +1695,7 @@ export class StreamingController {
       (seg) => `${basePath}/seg-${seg}.${segExt}${tokenParam}`,
       useTs ? undefined : `${basePath}/init_${audioIndex + 1}.mp4${tokenParam}`,
       audioSegDuration,
+      frameSeconds(resolved.mediaFile.streamInfo),
     );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -2012,20 +2014,20 @@ export class StreamingController {
       remuxDurations =
         (await this.remuxGrid(resolved, this.segDur()))?.durations ?? null;
     }
-    // Transcoded fMP4 segments span one GOP each — declare their real length
-    // so fractional-fps streams stay in A/V sync. Remux (variable) and TS keep
-    // their own paths.
+    // Transcoded segments span one forced GOP each, fMP4 and MPEG-TS alike:
+    // declare their real length so fractional-fps streams stay in A/V sync. A
+    // remux without keyframes runs on the plain grid (`remuxRunStart`).
     const sourceFps = parseSourceFps(
       resolved.mediaFile.streamInfo?.video?.[0]?.frameRate,
     );
-    const transcodeFmp4 = quality !== 'remux' && !useTs;
     const playlist = remuxDurations
       ? buildVariableVodPlaylist(remuxDurations, segmentUrl, initRef)
       : buildVodPlaylist(
           duration,
           segmentUrl,
           initRef,
-          transcodeFmp4 ? realSegmentSeconds(this.segDur(), sourceFps) : this.segDur(),
+          quality === 'remux' ? this.segDur() : realSegmentSeconds(this.segDur(), sourceFps),
+          frameSeconds(resolved.mediaFile.streamInfo),
         );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
