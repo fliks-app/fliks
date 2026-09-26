@@ -35,6 +35,10 @@ import {
   formatMediaProgressSubject,
   type MediaProgressSubject,
 } from '../../common/utils/media-progress-subject.util';
+import {
+  cueOffsetSeconds as cueOffsetOnServedTimeline,
+  sourceTimeline,
+} from './transcoding/source-timeline';
 
 const execFileAsync = promisify(execFile);
 
@@ -176,7 +180,7 @@ export class SubtitleStreamService implements OnModuleInit {
   async getSubtitleAsVtt(
     subtitleId: number,
     user?: User,
-  ): Promise<{ vtt: string; startTimeSeconds: number }> {
+  ): Promise<{ vtt: string; cueOffsetSeconds: number }> {
     const { sub, realSubPath } = await this.resolveSubtitleOnDisk(
       subtitleId,
       user,
@@ -184,17 +188,23 @@ export class SubtitleStreamService implements OnModuleInit {
 
     const content = await fs.readFile(realSubPath, 'utf-8');
     const ext = path.extname(realSubPath).toLowerCase();
-    // Sidecar cues are authored 0-based; the player aligns them via the
-    // X-TIMESTAMP-MAP offset, which the caller derives from this start PTS.
-    const startTimeSeconds =
-      sub.mediaFile?.streamInfo?.video?.[0]?.startTimeSeconds ?? 0;
+    // Sidecars count from the container start, like the extracts and the
+    // players' clocks they are authored against (X-TIMESTAMP-MAP offset).
+    const cueOffsetSeconds = cueOffsetOnServedTimeline(
+      sourceTimeline(
+        sub.mediaFile?.streamInfo,
+        sub.media?.path && sub.mediaFile?.relativePath
+          ? path.join(sub.media.path, sub.mediaFile.relativePath)
+          : realSubPath,
+      ),
+    );
     const vtt =
       ext === '.vtt'
         ? content
         : ext === '.ass' || ext === '.ssa'
           ? assToVtt(content)
           : srtToVtt(content); // .srt + unknown fallback
-    return { vtt, startTimeSeconds };
+    return { vtt, cueOffsetSeconds };
   }
 
   /**

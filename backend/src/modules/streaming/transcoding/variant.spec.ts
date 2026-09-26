@@ -1,8 +1,8 @@
 import {
   VARIANT_EARLY,
   VARIANT_MAIN,
-  VARIANT_REMUX,
   baseProfileHash,
+  remuxVariant,
   variantHash,
   variantSuffix,
 } from './variant';
@@ -11,9 +11,12 @@ describe('variantSuffix', () => {
   it('emits the canonical suffix for each kind', () => {
     expect(variantSuffix(VARIANT_MAIN)).toBe('');
     expect(variantSuffix(VARIANT_EARLY)).toBe('-early');
-    expect(variantSuffix(VARIANT_REMUX)).toBe('-remux');
-    expect(variantSuffix({ kind: 'audio', audioIndex: 0 })).toBe('-a0');
-    expect(variantSuffix({ kind: 'audio', audioIndex: 3 })).toBe('-a3');
+    expect(variantSuffix(remuxVariant(undefined, true))).toBe('-remux-a0');
+  });
+
+  it('keys the copy variant on the muxed track and the grid it is cut on', () => {
+    expect(variantSuffix(remuxVariant(2, true))).toBe('-remux-a2');
+    expect(variantSuffix(remuxVariant(2, false))).toBe('-remux-a2-u');
   });
 });
 
@@ -24,10 +27,7 @@ describe('variantHash', () => {
   });
   it('appends the variant suffix', () => {
     expect(variantHash(base, VARIANT_EARLY)).toBe(`${base}-early`);
-    expect(variantHash(base, VARIANT_REMUX)).toBe(`${base}-remux`);
-    expect(variantHash(base, { kind: 'audio', audioIndex: 2 })).toBe(
-      `${base}-a2`,
-    );
+    expect(variantHash(base, remuxVariant(1, true))).toBe(`${base}-remux-a1`);
   });
 });
 
@@ -38,13 +38,12 @@ describe('baseProfileHash', () => {
   });
   it('strips every known variant suffix', () => {
     expect(baseProfileHash(`${base}-early`)).toBe(base);
-    expect(baseProfileHash(`${base}-remux`)).toBe(base);
-    expect(baseProfileHash(`${base}-a0`)).toBe(base);
-    expect(baseProfileHash(`${base}-a12`)).toBe(base);
+    expect(baseProfileHash(`${base}-remux-a3`)).toBe(base);
+    expect(baseProfileHash(`${base}-remux-a3-u`)).toBe(base);
   });
   it('leaves non-variant trailing dashes alone', () => {
     expect(baseProfileHash(`${base}-foo`)).toBe(`${base}-foo`);
-    expect(baseProfileHash(`${base}-aX`)).toBe(`${base}-aX`);
+    expect(baseProfileHash(`${base}-a0`)).toBe(`${base}-a0`);
   });
 });
 
@@ -54,9 +53,8 @@ describe('round-trip variantHash + baseProfileHash', () => {
     const variants = [
       VARIANT_MAIN,
       VARIANT_EARLY,
-      VARIANT_REMUX,
-      { kind: 'audio', audioIndex: 0 } as const,
-      { kind: 'audio', audioIndex: 7 } as const,
+      remuxVariant(0, true),
+      remuxVariant(4, false),
     ];
     for (const v of variants) {
       expect(baseProfileHash(variantHash(base, v))).toBe(base);

@@ -6,7 +6,9 @@ import { inferLanguageCodeFromTitle } from '../../common/release-parsing/languag
 import { isImageBasedSubtitleCodec } from '../../common/constants/subtitle-codecs';
 import { subtitleFlagsFromTitle } from '../../common/constants/subtitle-flags';
 import { existsSync } from 'fs';
+import { stat } from 'fs/promises';
 import { vaapiRenderNode } from '../streaming/transcoding/hw-device';
+import { ffprobeLines } from './video-packets';
 import { mapWithConcurrency } from '../../common/utils/concurrency';
 import { ffmpegSlots, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
 
@@ -69,6 +71,13 @@ const MIN_MEASURABLE_SECONDS = 90;
 const MIN_SAMPLE_FRAMES = 100;
 const MIN_PLAUSIBLE_FPS = 1;
 const MAX_PLAUSIBLE_FPS = 480;
+/** Audio decoded past a late stream's first packet before its parameters are read. */
+const LATE_AUDIO_PARAMS_MARGIN_SECONDS = 1;
+/** How far into the file a track's first packet is looked for; one starting
+ *  later keeps its header start. */
+const LATE_AUDIO_SEARCH_SECONDS = 120;
+/** Codecs that carry a still picture (cover art, thumbnail tracks) rather than the programme. */
+const STILL_IMAGE_CODECS = new Set(['mjpeg', 'png', 'bmp', 'gif', 'webp']);
 /** Relative gap at which the packets win over the header. */
 const FPS_DISAGREEMENT = 0.001;
 
@@ -119,15 +128,24 @@ export interface VideoStreamInfo {
   codec: string;
   profile?: string;
   level?: number;
+  /** Displayed size: swapped from the coded size when the stream is rotated a
+   *  quarter turn, since every decode path autorotates. */
   width?: number;
   height?: number;
   displayAspectRatio?: string;
   pixelFormat?: string;
   frameRate?: string;
-  /** Container start PTS of the video stream (seconds). Non-zero on TS / PVR
-   *  rips; the `-copyts` transcode keeps the first frame at this time, so
-   *  0-based sidecar/embedded subtitle cues must be shifted by it. */
+  /** Frames the decoder reorders (`has_b_frames`) and the `avg_frame_rate`:
+   *  where a copy starts the decode times Matroska leaves unknown. */
+  reorderFrames?: number;
+  avgFrameRate?: string;
+  /** Container start PTS of the video stream (seconds): its first packet. */
   startTimeSeconds?: number;
+  /** First frame the decoder presents (seconds), the served origin: past
+   *  `startTimeSeconds` when cut mid-GOP or behind an edit list. */
+  firstFrameSeconds?: number;
+  /** Source time the stream ends at, when the container declares it. */
+  endSeconds?: number;
   bitRate?: number;
   bitDepth?: number;
   colorSpace?: string;
@@ -163,6 +181,15 @@ export interface AudioStreamInfo {
   sampleRate?: number;
   bitRate?: number;
   isDefault?: boolean;
+  /** Header `start_time`, or the first packet when later (a track starting past
+   *  the probe window reads 0 or the video's start). */
+  startTimeSeconds?: number;
+  /** Source time the track ends at, when the container declares it. */
+  endSeconds?: number;
+  /** Director's or other commentary (`comment` disposition). */
+  commentary?: boolean;
+  /** Narrates the picture for blind viewers (`visual_impaired` / `descriptions`). */
+  audioDescription?: boolean;
 }
 
 export interface SubtitleStreamInfo {
@@ -188,6 +215,14 @@ export interface MediaFileInfo {
   subtitles: SubtitleStreamInfo[];
   /** Overall container bitrate from ffprobe `format.bit_rate` (bits/s). */
   formatBitRate?: number;
+  /** Container `start_time`: the earliest stream start, where an input `-ss`
+   *  and a timestamp-rebasing extract count from. */
+  formatStartSeconds?: number;
+  /** ffprobe `format_name` (`mpegts`, `matroska,webm`, …): how the demuxer seeks. */
+  formatName?: string;
+  /** Where an MPEG-TS clock breaks (a restarted recording) and playback ends; null
+   *  for none, absent until the background scan ran. */
+  timestampBreakSeconds?: number | null;
   durationSeconds?: number;
   /** Embedded chapter markers from the container (MKV/MP4). Empty if none. */
   chapters?: Chapter[];
@@ -206,7 +241,10 @@ interface FfprobeStream {
   pix_fmt?: string;
   r_frame_rate?: string;
   avg_frame_rate?: string;
+  has_b_frames?: number;
+  time_base?: string;
   start_time?: string;
+  duration?: string;
   bit_rate?: string;
   bits_per_raw_sample?: string;
   color_space?: string;
@@ -221,6 +259,7 @@ interface FfprobeStream {
     rpu_present_flag?: number;
     bl_present_flag?: number;
     el_present_flag?: number;
+    rotation?: number;
   }[];
   channels?: number;
   channel_layout?: string;
@@ -230,7 +269,101 @@ interface FfprobeStream {
     forced?: number;
     hearing_impaired?: number;
     default?: number;
+    attached_pic?: number;
+    comment?: number;
+    visual_impaired?: number;
+    descriptions?: number;
   };
+}
+
+/** Where a stream ends: Matroska's `DURATION` tag is the end even for a late
+ *  track; other containers give a duration from the stream start. */
+export function streamEndSeconds(s: FfprobeStream): number | undefined {
+  const clock = /^(\d+):(\d{2}):(\d{2}(?:\.\d+)?)$/.exec(
+    tag(s.tags, 'DURATION') ?? '',
+  );
+  if (clock)
+    return Number(clock[1]) * 3600 + Number(clock[2]) * 60 + Number(clock[3]);
+  const duration = Number(s.duration);
+  if (!s.duration || !Number.isFinite(duration)) return undefined;
+  return (s.start_time ? Number(s.start_time) : 0) + duration;
+}
+
+/** Accessibility and commentary roles an audio stream declares. */
+export function audioStreamRoles(
+  s: FfprobeStream,
+): Pick<AudioStreamInfo, 'commentary' | 'audioDescription'> {
+  const d = s.disposition;
+  return {
+    commentary: d?.comment === 1 || undefined,
+    audioDescription:
+      d?.visual_impaired === 1 || d?.descriptions === 1 || undefined,
+  };
+}
+
+/** Programme video streams in container order: cover art never plays and a still
+ *  beside a moving track is a thumbnail, even when muxed first. */
+export function selectProgrammeVideoStreams(
+  streams: FfprobeStream[],
+): FfprobeStream[] {
+  const video = streams.filter(
+    (s) => s.codec_type === 'video' && s.disposition?.attached_pic !== 1,
+  );
+  const moving = video.filter(
+    (s) => !STILL_IMAGE_CODECS.has((s.codec_name ?? '').toLowerCase()),
+  );
+  return moving.length ? moving : video;
+}
+
+/** Display-matrix rotation in degrees, from the side data or the rotate tag. */
+export function streamRotation(s: FfprobeStream): number {
+  const matrix = s.side_data_list?.find((d) => typeof d.rotation === 'number');
+  const raw = matrix?.rotation ?? Number(tag(s.tags, 'rotate') ?? 0);
+  return Number.isFinite(raw) ? raw : 0;
+}
+
+/** Size as displayed: a quarter-turn rotation swaps the axes. */
+export function displaySize(
+  width: number | undefined,
+  height: number | undefined,
+  rotation: number,
+): { width?: number; height?: number } {
+  return Math.abs(rotation) % 180 === 90
+    ? { width: height, height: width }
+    : { width, height };
+}
+
+interface FfprobeFrame {
+  pts?: number;
+  best_effort_timestamp?: number;
+  side_data_list?: unknown[];
+}
+
+/** The first complete element of the `frames` array in ffprobe JSON output
+ *  read so far, or undefined while it is still being written. */
+export function firstFrameOf(json: string): FfprobeFrame | undefined {
+  const start = json.indexOf('{', json.indexOf('"frames"') + 1);
+  if (json.indexOf('"frames"') < 0 || start < 0) return undefined;
+  let depth = 0;
+  let quoted = false;
+  for (let i = start; i < json.length; i++) {
+    const c = json[i];
+    if (quoted) {
+      if (c === '\\') i++;
+      else if (c === '"') quoted = false;
+    } else if (c === '"') quoted = true;
+    else if (c === '{' || c === '[') depth++;
+    else if ((c === '}' || c === ']') && --depth === 0) {
+      return JSON.parse(json.slice(start, i + 1)) as FfprobeFrame;
+    }
+  }
+  return undefined;
+}
+
+/** A frame timestamp in seconds, exact from its integer ticks and time base. */
+export function ticksToSeconds(ticks: number | undefined, timeBase: string | undefined): number | undefined {
+  const [num, den] = (timeBase ?? '').split('/').map(Number);
+  return ticks == null || !(num > 0 && den > 0) ? undefined : (ticks * num) / den;
 }
 
 /** Case-insensitive ffprobe tag lookup. Matroska stores per-stream
@@ -445,7 +578,12 @@ export class FfprobeService {
 
       const parsed = JSON.parse(stdout) as {
         streams?: FfprobeStream[];
-        format?: { duration?: string; bit_rate?: string };
+        format?: {
+          duration?: string;
+          bit_rate?: string;
+          start_time?: string;
+          format_name?: string;
+        };
         chapters?: {
           start_time?: string;
           end_time?: string;
@@ -456,65 +594,69 @@ export class FfprobeService {
       const durationSeconds = parsed.format?.duration
         ? Number(parsed.format.duration)
         : undefined;
+      const formatStartSeconds = parsed.format?.start_time
+        ? Number(parsed.format.start_time)
+        : undefined;
+      const programme = selectProgrammeVideoStreams(streams);
       // One extra ffprobe (~25ms, the same cost as the probe above) — the
       // declared rate is only a header field, see `measureFrameRate`.
-      const measuredFps = await this.measureFrameRate(videoPath, durationSeconds);
+      const measuredFps = programme[0]
+        ? await this.measureFrameRate(videoPath, programme[0].index, durationSeconds)
+        : undefined;
       const formatBitRateRaw = parsed.format?.bit_rate
         ? Number(parsed.format.bit_rate)
         : undefined;
       const formatBitRate =
         formatBitRateRaw && formatBitRateRaw > 0 ? formatBitRateRaw : undefined;
 
-      const video: VideoStreamInfo[] = streams
-        .filter((s) => s.codec_type === 'video')
-        .map((s) => {
-          const dovi = (s.side_data_list ?? []).find(
-            (d) => typeof d.dv_profile === 'number',
-          );
-          return {
-            streamIndex: s.index,
-            codec: s.codec_name ?? 'unknown',
-            profile: s.profile,
-            level: s.level,
-            width: s.width,
-            height: s.height,
-            displayAspectRatio: s.display_aspect_ratio,
-            pixelFormat: s.pix_fmt,
-            frameRate: this.reconcileFrameRate(
-              this.parseFrameRate(s.r_frame_rate, s.avg_frame_rate),
-              // Only the first video stream is sampled; a second one (cover
-              // art, thumbnail track) is never what the grid encodes.
-              s.index === streams.find((x) => x.codec_type === 'video')?.index
-                ? measuredFps
-                : undefined,
-              path.basename(videoPath),
-            ),
-            startTimeSeconds: s.start_time ? Number(s.start_time) : undefined,
-            bitRate: s.bit_rate ? Number(s.bit_rate) : undefined,
-            bitDepth: s.bits_per_raw_sample
-              ? Number(s.bits_per_raw_sample)
-              : undefined,
-            colorSpace: s.color_space,
-            colorTransfer: s.color_transfer,
-            colorPrimaries: s.color_primaries,
-            colorRange: s.color_range,
-            hdrFormat: this.deriveHdrFormat(s.color_transfer, s.color_primaries),
-            dvProfile: dovi?.dv_profile,
-            dvBlSignalCompatId: dovi?.dv_bl_signal_compatibility_id,
-            dvLevel: dovi?.dv_level,
-            dvRpuPresent: dovi?.rpu_present_flag === 1,
-            dvBlPresent: dovi?.bl_present_flag === 1,
-            dvElPresent: dovi?.el_present_flag === 1,
-          };
-        });
+      const video: VideoStreamInfo[] = programme.map((s) => {
+        const dovi = (s.side_data_list ?? []).find(
+          (d) => typeof d.dv_profile === 'number',
+        );
+        return {
+          streamIndex: s.index,
+          codec: s.codec_name ?? 'unknown',
+          profile: s.profile,
+          level: s.level,
+          ...displaySize(s.width, s.height, streamRotation(s)),
+          displayAspectRatio: s.display_aspect_ratio,
+          pixelFormat: s.pix_fmt,
+          frameRate: this.reconcileFrameRate(
+            this.parseFrameRate(s.r_frame_rate, s.avg_frame_rate),
+            s.index === programme[0].index ? measuredFps : undefined,
+            path.basename(videoPath),
+          ),
+          reorderFrames: s.has_b_frames,
+          avgFrameRate: s.avg_frame_rate,
+          startTimeSeconds: s.start_time ? Number(s.start_time) : undefined,
+          endSeconds: streamEndSeconds(s),
+          bitRate: s.bit_rate ? Number(s.bit_rate) : undefined,
+          bitDepth: s.bits_per_raw_sample
+            ? Number(s.bits_per_raw_sample)
+            : undefined,
+          colorSpace: s.color_space,
+          colorTransfer: s.color_transfer,
+          colorPrimaries: s.color_primaries,
+          colorRange: s.color_range,
+          hdrFormat: this.deriveHdrFormat(s.color_transfer, s.color_primaries),
+          dvProfile: dovi?.dv_profile,
+          dvBlSignalCompatId: dovi?.dv_bl_signal_compatibility_id,
+          dvLevel: dovi?.dv_level,
+          dvRpuPresent: dovi?.rpu_present_flag === 1,
+          dvBlPresent: dovi?.bl_present_flag === 1,
+          dvElPresent: dovi?.el_present_flag === 1,
+        };
+      });
 
-      // HDR10 sources: probe the first frame's side-data for mastering-display
-      // + content-light so the encoder signals the source's real peak luminance
-      // instead of a generic 1000-nit reference. Gated to HDR10 (one extra
-      // frame-decoding ffprobe pass); SDR / HLG imports skip it.
-      if (video[0]?.hdrFormat === 'HDR10') {
-        const meta = await this.probeHdrStaticMetadata(videoPath);
-        if (meta) video[0].hdrMetadata = meta;
+      if (video[0]) {
+        const first = await this.probeFirstFrame(videoPath, programme[0]);
+        video[0].firstFrameSeconds = first.seconds;
+        // HDR10: the encoder signals the source's real peak luminance instead of a
+        // generic 1000-nit reference.
+        if (video[0].hdrFormat === 'HDR10') {
+          const meta = parseHdrStaticMetadata(first.sideData);
+          if (meta) video[0].hdrMetadata = meta;
+        }
       }
 
       const audio: AudioStreamInfo[] = streams
@@ -529,7 +671,11 @@ export class FfprobeService {
           sampleRate: s.sample_rate ? Number(s.sample_rate) : undefined,
           bitRate: s.bit_rate ? Number(s.bit_rate) : undefined,
           isDefault: s.disposition?.default === 1,
+          startTimeSeconds: s.start_time ? Number(s.start_time) : undefined,
+          endSeconds: streamEndSeconds(s),
+          ...audioStreamRoles(s),
         }));
+      await this.probeAudioStarts(videoPath, audio, formatStartSeconds);
 
       const subtitles: SubtitleStreamInfo[] = streams
         .filter((s) => s.codec_type === 'subtitle')
@@ -556,6 +702,8 @@ export class FfprobeService {
           audio: [],
           subtitles: [],
           formatBitRate,
+          formatStartSeconds,
+          formatName: parsed.format?.format_name,
           durationSeconds,
           chapters,
           error: 'No streams detected',
@@ -566,6 +714,8 @@ export class FfprobeService {
         audio,
         subtitles,
         formatBitRate,
+        formatStartSeconds,
+        formatName: parsed.format?.format_name,
         durationSeconds,
         chapters,
       };
@@ -597,40 +747,134 @@ export class FfprobeService {
     return undefined;
   }
 
-  /** Probe the first video frame's side-data for HDR10 static metadata
-   *  (mastering display + content light). Gated to HDR10 sources by the caller
-   *  so non-HDR imports skip the extra (frame-decoding) ffprobe pass. Returns
-   *  null when the source carries no such metadata. */
-  private async probeHdrStaticMetadata(
+  /** First frame the decoder presents, edit lists applied: a stream cut mid-GOP
+   *  starts on packets nothing decodes. The read stops at that frame. */
+  private async probeFirstFrame(
     videoPath: string,
-  ): Promise<HdrStaticMetadataDto | null> {
+    stream: FfprobeStream,
+  ): Promise<{ seconds?: number; sideData?: unknown[] }> {
+    let json = '';
+    let frame: FfprobeFrame | undefined;
+    try {
+      await ffprobeLines(
+        [
+          '-v', 'error',
+          '-select_streams', String(stream.index),
+          '-show_entries', 'frame=pts,best_effort_timestamp,side_data_list',
+          '-of', 'json',
+          videoPath,
+        ],
+        (line) => {
+          json += line + '\n';
+          frame = firstFrameOf(json);
+          return !frame;
+        },
+        { timeoutMs: 30_000 },
+      );
+    } catch (err) {
+      this.logger.warn(`First-frame probe failed for "${videoPath}": ${(err as Error).message}`);
+    }
+    // ffmpeg numbers a stream whose packets carry no timestamps from 0.
+    const seconds = frame
+      ? (ticksToSeconds(frame.pts ?? frame.best_effort_timestamp, stream.time_base) ?? 0)
+      : undefined;
+    if (seconds === undefined) {
+      this.logger.warn(
+        `"${path.basename(videoPath)}": no decodable video frame found; the timeline falls back to the stream start_time`,
+      );
+    }
+    return { seconds, sideData: frame?.side_data_list };
+  }
+
+  /** Correct the header start of a track first seen past the probe window, and
+   *  read the parameters ffprobe then reports as missing. */
+  private async probeAudioStarts(
+    videoPath: string,
+    audio: AudioStreamInfo[],
+    formatStartSeconds: number | undefined,
+  ): Promise<void> {
+    const label = path.basename(videoPath);
+    const firsts = await this.firstAudioPackets(videoPath, audio);
+    for (const a of audio) {
+      const first = firsts.get(a.streamIndex);
+      // The header errs early only (a default when no packet was seen); a
+      // packet before it is pre-roll an edit list or skip-samples discards.
+      if (first === undefined || first <= (a.startTimeSeconds ?? -Infinity)) continue;
+      this.logger.log(
+        `"${label}": audio stream ${a.streamIndex} starts at ${first}s, past its header start ${a.startTimeSeconds}s`,
+      );
+      a.startTimeSeconds = first;
+    }
+
+    const blind = audio.filter((a) => !a.channels || !a.sampleRate);
+    if (!blind.length) return;
+    const reach = Math.max(
+      0,
+      Math.max(...blind.map((a) => a.startTimeSeconds ?? 0)) - (formatStartSeconds ?? 0),
+    ) + LATE_AUDIO_PARAMS_MARGIN_SECONDS;
+    this.logger.log(
+      `"${label}": audio stream(s) ${blind.map((a) => a.streamIndex).join(',')} have no parameters in the default probe window; reading ${reach.toFixed(1)}s of the file`,
+    );
     try {
       const { stdout } = await execFileAsync(
         'ffprobe',
         [
-          '-v',
-          'error',
-          '-print_format',
-          'json',
-          '-select_streams',
-          'v:0',
-          '-read_intervals',
-          '%+#1',
-          '-show_frames',
-          '-show_entries',
-          'frame=side_data_list',
+          '-v', 'error',
+          '-analyzeduration', String(Math.ceil(reach * 1_000_000)),
+          // The duration bounds the read; the whole file is the byte ceiling.
+          '-probesize', String((await stat(videoPath)).size),
+          '-select_streams', 'a',
+          '-show_entries', 'stream=index,channels,channel_layout,sample_rate',
+          '-of', 'json',
           videoPath,
         ],
-        { timeout: 15_000 },
+        { timeout: 120_000 },
       );
-      const frames = (JSON.parse(stdout) as { frames?: { side_data_list?: unknown[] }[] }).frames;
-      return parseHdrStaticMetadata(frames?.[0]?.side_data_list);
+      const found = (JSON.parse(stdout) as { streams?: FfprobeStream[] }).streams ?? [];
+      for (const a of blind) {
+        const s = found.find((x) => x.index === a.streamIndex);
+        if (s?.channels) a.channels = s.channels;
+        if (s?.channel_layout) a.channelLayout = s.channel_layout;
+        if (s?.sample_rate && Number(s.sample_rate) > 0) a.sampleRate = Number(s.sample_rate);
+        if (!a.channels || !a.sampleRate) {
+          this.logger.warn(`"${label}": audio stream ${a.streamIndex} parameters still unknown`);
+        }
+      }
     } catch (err) {
       this.logger.warn(
-        `HDR static-metadata probe failed for "${videoPath}": ${(err as Error).message}`,
+        `Late audio parameter probe failed for "${videoPath}": ${(err as Error).message}`,
       );
-      return null;
     }
+  }
+
+  /** First packet of each audio stream, until all showed or the read is
+   *  `LATE_AUDIO_SEARCH_SECONDS` in: an empty stream must not read the whole file. */
+  private async firstAudioPackets(
+    videoPath: string,
+    audio: AudioStreamInfo[],
+  ): Promise<Map<number, number>> {
+    const firsts = new Map<number, number>();
+    const wanted = new Set(audio.map((a) => a.streamIndex));
+    if (!wanted.size) return firsts;
+    let origin: number | undefined;
+    try {
+      await ffprobeLines(
+        ['-v', 'error', '-show_entries', 'packet=stream_index,pts_time', '-of', 'csv=p=0', videoPath],
+        (line) => {
+          const [index, time] = line.split(',');
+          const pts = Number.parseFloat(time);
+          if (!Number.isFinite(pts)) return true;
+          origin ??= pts;
+          const stream = Number(index);
+          if (wanted.has(stream) && !firsts.has(stream)) firsts.set(stream, pts);
+          return firsts.size < wanted.size && pts - origin <= LATE_AUDIO_SEARCH_SECONDS;
+        },
+        { timeoutMs: 60_000 },
+      );
+    } catch (err) {
+      this.logger.warn(`First audio packet probe failed for "${videoPath}": ${(err as Error).message}`);
+    }
+    return firsts;
   }
 
   /**
@@ -661,6 +905,7 @@ export class FfprobeService {
    */
   private async measureFrameRate(
     videoPath: string,
+    streamIndex: number,
     durationSeconds?: number,
   ): Promise<number | undefined> {
     if (!durationSeconds || durationSeconds < MIN_MEASURABLE_SECONDS) {
@@ -672,7 +917,7 @@ export class FfprobeService {
         'ffprobe',
         [
           '-v', 'error',
-          '-select_streams', 'v:0',
+          '-select_streams', String(streamIndex),
           '-show_entries', 'packet=pts_time',
           '-read_intervals', `${from}%+${FPS_WINDOW_SECONDS}`,
           '-of', 'csv=p=0',

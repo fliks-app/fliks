@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { formatSeconds } from './transcoding/ffmpeg-args';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
@@ -9,6 +10,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { sourceTimeline } from './transcoding/source-timeline';
 
 const execFileAsync = promisify(execFile);
 
@@ -23,6 +25,24 @@ export interface BurnInInfo {
   streamIndex?: number;
   /** Original codec name */
   codec: string;
+  /** Source time cue 0 of a text file sits at (the container start). */
+  cueOffsetSeconds?: number;
+}
+
+/** Seconds as a signed `setpts` term, microsecond precision. */
+function ptsTerm(sign: 1 | -1, seconds: number): string {
+  const v = sign * seconds;
+  return `${v < 0 ? '-' : '+'}${formatSeconds(Math.abs(v))}/TB`;
+}
+
+/** Render `subtitleFilter` against cue time: under `-copyts` frames carry
+ *  source PTS, which libass would read as cue time. */
+export function atCueTime(subtitleFilter: string, cueOffsetSeconds = 0): string {
+  if (cueOffsetSeconds === 0) return subtitleFilter;
+  return (
+    `setpts=PTS${ptsTerm(-1, cueOffsetSeconds)},${subtitleFilter},` +
+    `setpts=PTS${ptsTerm(1, cueOffsetSeconds)}`
+  );
 }
 
 @Injectable()
@@ -50,6 +70,10 @@ export class SubtitleBurnInService {
     const resolved = await this.streamingService.resolveFile(mediaFileId);
     const videoPath = resolved.absolutePath;
     const isImage = isImageBasedSubtitleCodec(sub.codec);
+    const cueOffsetSeconds = sourceTimeline(
+      resolved.mediaFile.streamInfo,
+      videoPath,
+    ).formatStart;
 
     if (sub.relativePath) {
       // External subtitle file
@@ -76,6 +100,7 @@ export class SubtitleBurnInService {
         videoPath,
         subtitlePath: realPath,
         codec: sub.codec ?? 'unknown',
+        cueOffsetSeconds,
       };
     }
 
@@ -91,7 +116,8 @@ export class SubtitleBurnInService {
         };
       }
 
-      // Text embedded: extract to temp ASS file for the subtitles= filter
+      // Text embedded: extracted without -copyts, so its cues count from the
+      // container start like a sidecar's.
       const tmpPath = path.join(
         this.tmpDir,
         `${mediaFileId}-${sub.streamIndex}.ass`,
@@ -123,6 +149,7 @@ export class SubtitleBurnInService {
         videoPath,
         subtitlePath: tmpPath,
         codec: sub.codec ?? 'unknown',
+        cueOffsetSeconds,
       };
     }
 
@@ -143,10 +170,11 @@ export class SubtitleBurnInService {
           .replace(/:/g, '\\:')
           .replace(/'/g, "'\\''");
         const ext = path.extname(info.subtitlePath).toLowerCase();
-        if (ext === '.ass' || ext === '.ssa') {
-          return `ass='${escaped}'`;
-        }
-        return `subtitles='${escaped}'`;
+        const filter =
+          ext === '.ass' || ext === '.ssa'
+            ? `ass='${escaped}'`
+            : `subtitles='${escaped}'`;
+        return atCueTime(filter, info.cueOffsetSeconds);
       }
       // Embedded text with stream index (using video file as subtitle source)
       if (info.streamIndex != null) {

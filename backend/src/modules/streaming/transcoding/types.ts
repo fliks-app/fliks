@@ -1,4 +1,5 @@
 import { ChildProcess } from 'child_process';
+import type { AudioPlan, AudioTrackEncodePlan } from './audio-encode';
 
 export interface TranscodeProfile {
   name: string;
@@ -23,10 +24,11 @@ export interface AudioStreamMeta {
   language?: string;
   title?: string;
   streamIndex?: number;
-  /** Source channel count (from ffprobe streamInfo). Drives the EXT-X-MEDIA
-   *  CHANNELS attribute for copy / AC-3 / E-AC-3 renditions, which keep the
-   *  source layout; AAC renditions are downmixed to 2 regardless. */
+  /** Source channel count (from ffprobe streamInfo): the EXT-X-MEDIA
+   *  CHANNELS fallback when the session carries no per-track plan. */
   channels?: number;
+  /** Source sample rate: sets the packet grid an encode of the track lands on. */
+  sampleRate?: number;
 }
 
 /**
@@ -124,9 +126,19 @@ export interface SessionContext {
   tonemapAlgo?: TonemapAlgo;
   /** Source framerate (fps). Used to compute GOP = segmentDuration * fps. */
   sourceFps?: number;
-  /** Source video `start_time` (seconds). The presentation timeline is anchored
-   *  to it so every run has the same origin as the WebVTT `X-TIMESTAMP-MAP`. */
+  /** Source time of the first presented video frame (`sourceTimeline`): the
+   *  origin every run's presentation timeline is anchored to. */
   sourceStartPts?: number;
+  /** Container start the input `-ss` counts from (`sourceTimeline`). */
+  sourceFormatStart?: number;
+  /** The demuxer lands after a seek target (`seeksPastKeyframe`). */
+  sourceSeeksPastKeyframe?: boolean;
+  /** Source time an MPEG-TS clock breaks at: runs stop reading there. */
+  sourceClockBreakSeconds?: number;
+  /** Source time the video ends at: transcoded audio is padded up to it. */
+  sourceEndSeconds?: number;
+  /** Absolute index of the programme video stream. */
+  videoStreamIndex?: number;
   /** Source colorimetry from ffprobe (`colorSpace`/`colorPrimaries`/
    *  `colorTransfer`), threaded so an SDR transcode preserves the source's real
    *  color signalling instead of forcing BT.709. Undefined/`unknown` on an
@@ -156,42 +168,16 @@ export interface SessionContext {
    * planning decision is made in playback-info but consumed lazily by
    * later FFmpeg spawns (segments / quality switches).
    */
-  /**
-   * Canonical audio output decision — single source of truth, computed by
-   * `stream-builder` from the source codec / channels and the device's
-   * audio allow-list. Everyone downstream (ffmpeg-args, master-playlist,
-   * admin dashboard) consumes it without re-deriving anything.
-   *
-   * - `{ mode: 'copy', codec: <source codec> }` → ffmpeg `-c:a copy`. No
-   *   re-encode, no priming, source bitrate preserved.
-   * - `{ mode: 'transcode', codec: 'eac3' | 'ac3' | 'aac', bitrateBps }` →
-   *   ffmpeg re-encodes. EAC-3 / AC-3 keep the source channel layout
-   *   (5.1 stays 5.1) at the indicated bitrate; AAC always downmixes to
-   *   stereo.
-   *
-   * Priority for the surround codec selection is EAC-3 > AC-3 — when the
-   * source isn't decodable as-is but the device accepts a surround codec.
-   * Pure stereo or no-surround-codec falls back to `'aac'`.
-   */
-  audioPlan?:
-    | { mode: 'copy'; codec: string }
-    | {
-        mode: 'transcode';
-        codec: 'aac' | 'ac3' | 'eac3';
-        bitrateBps: number;
-      };
+  /** Audio output of the picked track, decided once by `stream-builder` and
+   *  consumed downstream as is. */
+  audioPlan?: AudioPlan;
   /**
    * Per-rendition audio decision for the multi-audio `var_stream_map` path,
    * one entry per `audioStreams[]` track in source order. The group shares one
    * output codec (HLS requires it); each rendition copies it or transcodes to
-   * it, downmixing to `outputChannels`. Threaded so the encode matches the
-   * playback-info decision the overlay shows.
+   * it, downmixing to `outputChannels`.
    */
-  audioTrackPlans?: {
-    copy: boolean;
-    outputCodec: string;
-    outputChannels?: number;
-  }[];
+  audioTrackPlans?: AudioTrackEncodePlan[];
   /**
    * True when the playback target is a Tizen TV that can't consume the
    * HLS muxer's fMP4 output — AVPlay rejects the `iso5` + per-stream
@@ -260,6 +246,10 @@ export interface TranscodeSession {
   ready: Promise<void>;
   /** If true, video is copied (remux), not re-encoded */
   remux?: boolean;
+  /** Settles once every segment of the run is on disk: a remux assembles its
+   *  last one after ffmpeg exits. Absent when ffmpeg writes them itself. */
+  outputDone?: Promise<void>;
+  outputPending?: boolean;
   /** User & media context for admin dashboard */
   userId?: number;
   username?: string;
@@ -272,8 +262,6 @@ export interface TranscodeSession {
   actualHwAccel?: HwAccelType;
   /** FFmpeg stderr output (for debugging HW accel failures) */
   stderr?: string;
-  /** True for audio-only sessions (multi-audio HLS renditions) */
-  isAudioOnly?: boolean;
   /** The `-start_number` this session was spawned with. Used to determine
    *  whether a cache gap is ahead of (reachable) or behind (unreachable)
    *  the current encoding position. */
@@ -281,8 +269,8 @@ export interface TranscodeSession {
   /** Source frame rate this session encodes at. Lets the segment-serve path
    *  resolve the real segment-duration grid without re-probing streamInfo. */
   sourceFps?: number;
-  /** Source video `start_time` this session encodes from, frozen at spawn for
-   *  the same reason: the serve path anchors onto it without re-probing. */
+  /** Timeline origin this session encodes from, frozen at spawn for the same
+   *  reason: the serve path anchors onto it without re-probing. */
   sourceStartPts?: number;
   /** Segment duration (seconds) this session was spawned with, frozen from the
    *  admin setting at spawn. The serve/seek grid reads this — never the live
@@ -298,13 +286,7 @@ export interface TranscodeSession {
    *  a codec drift (e.g. Chromecast picking AAC where browser was on
    *  EAC-3 copy) forces a kill+respawn so the segments stay coherent
    *  with the master.m3u8 CODECS string the player will see. */
-  audioPlan?:
-    | { mode: 'copy'; codec: string }
-    | {
-        mode: 'transcode';
-        codec: 'aac' | 'ac3' | 'eac3';
-        bitrateBps: number;
-      };
+  audioPlan?: AudioPlan;
   /** Video variant the session was spawned for. Same role as
    *  `audioPlan` above: any divergence between a fresh playback-info
    *  decision and the running session means the segments contradict

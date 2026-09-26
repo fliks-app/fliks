@@ -109,7 +109,7 @@ export class TrackManagerService {
     // their ordinal among same-language tracks — language alone can never reach
     // the 2nd one. Reproducible across episodes when the audio layout is
     // consistent. The ":n" suffix is only added past the first, so single-track
-    // languages stay a plain code; the language-keyed pre-load paths strip it.
+    // languages stay a plain code; the pre-load paths honour it.
     const sameLang = tracks.filter(
       (t) => normalizeLangCode(t.language ?? '') === normalizeLangCode(lang),
     );

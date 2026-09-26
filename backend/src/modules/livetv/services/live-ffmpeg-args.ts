@@ -1,4 +1,10 @@
 import type { HwAccelType } from '../../streaming/transcoding/types';
+import {
+  audioCopyArgs,
+  audioEncodeArgs,
+} from '../../streaming/transcoding/audio-encode';
+
+const LIVE_AAC_BITRATE_BPS = 128_000;
 import { liveTvFfmpegHeaderArgs } from '../livetv-http';
 
 export type LiveEncodeMode = 'remux' | 'transcode';
@@ -122,13 +128,11 @@ export function buildLiveFfmpegArgs(opts: LiveFfmpegArgsOptions): string[] {
     // Measured: re-encoding AAC puts the audio 22 ms ahead of the video, the
     // encoder's priming delay, which fragmented MP4 carries no edit list to
     // compensate. Copying reproduces the source exactly and costs nothing.
-    args.push('-c:a', 'copy');
-    // TS carries AAC in ADTS, MP4 wants it bare.
-    if (!opts.useTs) args.push('-bsf:a', 'aac_adtstoasc');
+    args.push(...audioCopyArgs('', 'aac', opts.useTs));
   } else {
     // Providers ship MP2 and AC-3 that browsers refuse, and a silent stream is
     // the single most reported failure of this kind of feature.
-    args.push('-c:a', 'aac', '-ac', '2', '-b:a', '128k');
+    args.push(...audioEncodeArgs('', 'aac', 2, LIVE_AAC_BITRATE_BPS));
   }
 
   // Floored at 1: a 0 here (bad segment/window settings) would tell ffmpeg to

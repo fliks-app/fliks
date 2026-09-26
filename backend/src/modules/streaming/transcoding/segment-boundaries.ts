@@ -1,171 +1,138 @@
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import { Logger } from '@nestjs/common';
-import { statSync } from 'fs';
+import { stat } from 'fs/promises';
+import type { MediaFileInfo } from '../../subtitles/ffprobe.service';
+import {
+  sourceIsMpegTs,
+  videoPackets,
+  type Keyframe,
+} from '../../subtitles/video-packets';
+import { sourceTimeline } from './source-timeline';
+import { frameSecondsOf, parseSourceFps } from './constants';
 
-const execFileAsync = promisify(execFile);
 const log = new Logger('SegmentBoundaries');
 
-/**
- * Keyframe-accurate HLS segment grid for the REMUX / copy-video path.
- *
- * Transcoded video forces an IDR every `segmentDuration`s (`-force_key_frames`),
- * so its segments — and the served playlist — sit on a uniform grid. Copied
- * video can't force keyframes: ffmpeg's HLS muxer cuts at the source keyframes,
- * producing wildly variable segment lengths (seen 1–15s on a Blu-ray HEVC rip).
- * Serving a uniform `EXTINF` for those segments makes strict players (AVPlayer)
- * drift progressively out of A/V sync — they trust `EXTINF` for the timeline,
- * unlike Shaka/ExoPlayer which re-anchor on each fragment's `tfdt`.
- *
- * We mirror ffmpeg's copy segmentation by reading the source keyframes and
- * cutting at the first keyframe at/after a target that advances by
- * `segmentDuration` per cut. This reproduces ffmpeg's actual `index.m3u8`
- * boundaries to within a few milliseconds.
- */
+// Copied video cuts only at its own irregular keyframes, so the remux playlist
+// declares each segment's real length: AVPlayer drifts on a uniform EXTINF grid.
 
-/** Real per-segment content durations (for the playlist EXTINF) plus the
- *  absolute cut times in source PTS (for resume seeking). Kept together because
- *  both come from one keyframe walk and a source whose first PTS is non-zero
- *  (TS / PVR rips) must declare content-relative durations while still seeking
- *  to the absolute keyframe. */
-export interface SegmentGrid {
+/** How far under its first keyframe's decode time the run from the start seeks:
+ *  under a frame, over the microsecond a derived decode time can be off. */
+export const DECODE_TIME_TOLERANCE_SECONDS = 0.01;
+
+export type { Keyframe };
+
+/** The keyframe segment grid of the remux / copy-video path. */
+export interface KeyframeGrid {
+  /** Presented length of each segment (the playlist EXTINF). */
   durations: number[];
+  /** Source time each segment's presentation starts at (the first one at the
+   *  timeline origin), then the source end. */
   boundaries: number[];
+  /** Video keyframes in decode order. */
+  keyframes: Keyframe[];
+  /** Index in `keyframes` of each segment's first keyframe, then their count. */
+  firstKeyframe: number[];
 }
 
-interface CacheEntry {
-  mtimeMs: number;
-  segDur: number;
-  grid: SegmentGrid;
+/** MPEG-TS seeks to a byte position and lands up to a GOP past its target; the
+ *  other demuxers land on the keyframe at or before it. */
+export function seeksPastKeyframe(
+  si: Pick<MediaFileInfo, 'formatName'> | null | undefined,
+  filePath: string,
+): boolean {
+  return sourceIsMpegTs(si, filePath);
 }
 
-const cache = new Map<string, CacheEntry>();
-
-/** Video keyframe presentation times (seconds, ascending) of the source. */
-export async function extractKeyframeTimes(filePath: string): Promise<number[]> {
-  const { stdout } = await execFileAsync(
-    'ffprobe',
-    [
-      '-v',
-      'error',
-      '-select_streams',
-      'v:0',
-      '-skip_frame',
-      'nokey',
-      '-show_entries',
-      'frame=pts_time',
-      '-of',
-      'csv=p=0',
-      filePath,
-    ],
-    { maxBuffer: 128 * 1024 * 1024, timeout: 120_000 },
-  );
-  return stdout
-    .split('\n')
-    .map((line) => parseFloat(line))
-    .filter((t) => Number.isFinite(t) && t >= 0)
-    .sort((a, b) => a - b);
-}
-
-/**
- * Per-segment durations (seconds) ffmpeg's HLS muxer produces when copying a
- * keyframe-cut video. Cut at the first keyframe ≥ a target that advances by
- * `segDur` after each cut; the tail runs to `totalDuration`. Matches Jellyfin's
- * `ComputeSegments` and our ffmpeg's real output (verified to within ~7ms).
- */
-export function computeSegmentDurations(
-  keyframeTimes: number[],
-  totalDuration: number,
+/** Cut at the first keyframe past a target advancing `segDur` per cut, from the
+ *  first keyframe shown at `origin` (a copy can't show pre-roll) to `end`. */
+export function computeSegmentGrid(
+  allKeyframes: Keyframe[],
+  origin: number,
+  end: number,
   segDur: number,
-): number[] {
-  if (keyframeTimes.length === 0 || segDur <= 0) return [];
-  // A keyframe past the container-reported duration extends the timeline so the
-  // tail segment isn't negative (Jellyfin #16703).
-  const last = keyframeTimes[keyframeTimes.length - 1];
-  const total = Math.max(totalDuration, last);
-  if (total <= 0) return [];
-
-  // Anchor at the first keyframe: ffmpeg measures each segment's elapsed time
-  // from its own first packet, so on a source with start PTS > 0 (TS / PVR
-  // rips) cuts advance from `start`, not 0, and the first segment's real
-  // duration is `firstCut - start`. For start === 0 this is unchanged.
-  const start = keyframeTimes[0];
-  const durations: number[] = [];
-  let lastCut = start;
-  let target = start + segDur;
-  for (const kf of keyframeTimes) {
-    if (kf >= target) {
-      durations.push(kf - lastCut);
-      lastCut = kf;
-      target += segDur;
-    }
-  }
-  const remaining = total - lastCut;
-  if (remaining > 0.001) durations.push(remaining);
-  return durations;
-}
-
-/** Cumulative segment start times from `start`; `boundaries[i]` is the start of
- *  seg-`i`, the last entry is the total end. `start` is the source's first PTS
- *  (0 for MP4/MKV) so the boundaries stay in absolute source time for seeking. */
-export function boundariesFromDurations(
-  durations: number[],
-  start = 0,
-): number[] {
+  frameSeconds = frameSecondsOf(undefined),
+): KeyframeGrid | null {
+  // Under half a frame apart, two times are the same frame's.
+  const sameFrame = frameSeconds / 2;
+  const keyframes = allKeyframes.filter((k) => k.pts >= origin - sameFrame);
+  if (keyframes.length === 0 || segDur <= 0) return null;
+  const last = keyframes[keyframes.length - 1].pts;
+  const total = Math.max(end, last);
+  const start = Math.max(origin, keyframes[0].pts);
   const boundaries = [start];
-  for (const d of durations) {
-    boundaries.push(boundaries[boundaries.length - 1] + d);
-  }
-  return boundaries;
+  const firstKeyframe = [0];
+  let target = start + segDur;
+  keyframes.forEach((kf, i) => {
+    if (i === 0 || kf.pts < target || total - kf.pts < sameFrame) return;
+    boundaries.push(kf.pts);
+    firstKeyframe.push(i);
+    target += segDur;
+  });
+  boundaries.push(total);
+  firstKeyframe.push(keyframes.length);
+  const durations = boundaries.slice(1).map((b, i) => b - boundaries[i]);
+  return { durations, boundaries, keyframes, firstKeyframe };
 }
 
-/** Segment index whose `[start, end)` window contains `seconds`. */
-export function secondsToSegmentIndex(
+/** Segment of the keyframe grid whose `[start, end)` window holds content
+ *  position `seconds` (from the first frame, hence the `origin`). */
+export function gridSegmentIndex(
   boundaries: number[],
   seconds: number,
+  origin: number,
 ): number {
   if (seconds <= 0 || boundaries.length < 2) return 0;
+  const at = seconds + origin;
   for (let i = 0; i < boundaries.length - 1; i++) {
-    if (seconds < boundaries[i + 1]) return i;
+    if (at < boundaries[i + 1]) return i;
   }
   return boundaries.length - 2;
 }
 
-/**
- * Resolve (and cache) the keyframe-aligned segment grid for a source: real
- * per-segment durations (playlist EXTINF) and absolute cut times (seeking).
- * Returns null when keyframes can't be read — the caller then falls back to the
- * uniform grid (no regression). Cache is keyed by path + mtime + segment length.
- */
+interface GridEntry {
+  mtimeMs: number;
+  segDur: number;
+  grid: Promise<KeyframeGrid | null>;
+}
+
+const grids = new Map<string, GridEntry>();
+const MAX_GRIDS = 64;
+
+/** The keyframe grid of a source, or null for the uniform one: one answer per
+ *  file version, a failure included, so every request of a playback agrees. */
 export async function getRemuxSegmentGrid(
   filePath: string,
-  totalDuration: number,
   segDur: number,
-): Promise<SegmentGrid | null> {
-  let mtimeMs = 0;
+  streamInfo: Pick<MediaFileInfo, 'video' | 'formatStartSeconds' | 'formatName'> | null | undefined,
+): Promise<KeyframeGrid | null> {
+  let mtimeMs: number;
   try {
-    mtimeMs = statSync(filePath).mtimeMs;
-  } catch {
-    return null;
-  }
-  const hit = cache.get(filePath);
-  if (hit && hit.mtimeMs === mtimeMs && hit.segDur === segDur) {
-    return hit.grid;
-  }
-  try {
-    const keyframes = await extractKeyframeTimes(filePath);
-    const durations = computeSegmentDurations(keyframes, totalDuration, segDur);
-    if (durations.length === 0) return null;
-    const grid: SegmentGrid = {
-      durations,
-      boundaries: boundariesFromDurations(durations, keyframes[0]),
-    };
-    cache.set(filePath, { mtimeMs, segDur, grid });
-    return grid;
+    mtimeMs = (await stat(filePath)).mtimeMs;
   } catch (err) {
-    log.warn(
-      `Keyframe probe failed for ${filePath}; falling back to uniform grid: ${(err as Error).message}`,
-    );
+    log.warn(`Cannot stat ${filePath}; uniform grid: ${(err as Error).message}`);
     return null;
   }
+  const hit = grids.get(filePath);
+  if (hit && hit.mtimeMs === mtimeMs && hit.segDur === segDur) return hit.grid;
+  const v = streamInfo?.video?.[0];
+  const grid = videoPackets(
+    filePath,
+    { streamIndex: v?.streamIndex, reorderFrames: v?.reorderFrames, avgFrameRate: v?.avgFrameRate },
+    { mpegTs: sourceIsMpegTs(streamInfo, filePath) },
+  ).then(
+    ({ keyframes, end }) => {
+      const { origin } = sourceTimeline(streamInfo, filePath);
+      const frame = frameSecondsOf(parseSourceFps(v?.frameRate));
+      const g = computeSegmentGrid(keyframes, origin, end, segDur, frame);
+      if (!g) log.warn(`No video keyframe in ${filePath}; uniform grid`);
+      return g;
+    },
+    (err: Error) => {
+      log.warn(`Keyframe probe failed for ${filePath}; uniform grid: ${err.message}`);
+      return null;
+    },
+  );
+  grids.delete(filePath);
+  grids.set(filePath, { mtimeMs, segDur, grid });
+  if (grids.size > MAX_GRIDS) grids.delete(grids.keys().next().value!);
+  return grid;
 }

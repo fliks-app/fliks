@@ -2,9 +2,12 @@ import { Logger } from '@nestjs/common';
 import {
   buildFfmpegArgs,
   buildRemuxArgs,
-  buildAudioOnlyFfmpegArgs,
+  remuxAudioGrid,
+  remuxRunStart,
+  type BuildRemuxArgsOptions,
 } from './ffmpeg-args';
 import type { BuildFfmpegArgsOptions } from './ffmpeg-args';
+import { computeSegmentGrid } from './segment-boundaries';
 import type { CodecVariant } from './codec/types';
 import type { TranscodeProfile } from './types';
 
@@ -134,8 +137,12 @@ describe('buildFfmpegArgs — CPU golden argv (characterization)', () => {
        "192k",
        "-ac",
        "2",
+       "-filter:a",
+       "asetpts=PTS-0/TB,aresample=async=1:first_pts=0,asetpts=PTS+0/TB",
        "-movflags",
        "+cmaf",
+       "-avoid_negative_ts",
+       "disabled",
        "-f",
        "hls",
        "-hls_time",
@@ -258,8 +265,12 @@ describe('buildFfmpegArgs — CPU golden argv (characterization)', () => {
        "192k",
        "-ac",
        "2",
+       "-filter:a",
+       "asetpts=PTS-0/TB,aresample=async=1:first_pts=0,asetpts=PTS+0/TB",
        "-movflags",
        "+cmaf",
+       "-avoid_negative_ts",
+       "disabled",
        "-f",
        "hls",
        "-hls_time",
@@ -349,8 +360,12 @@ describe('buildFfmpegArgs — CPU golden argv (characterization)', () => {
        "192k",
        "-ac",
        "2",
+       "-filter:a",
+       "asetpts=PTS-0/TB,aresample=async=1:first_pts=0,asetpts=PTS+0/TB",
        "-movflags",
        "+cmaf",
+       "-avoid_negative_ts",
+       "disabled",
        "-f",
        "hls",
        "-hls_time",
@@ -505,8 +520,12 @@ describe('buildFfmpegArgs — QSV/VAAPI matrix golden argv (characterization)', 
        "192k",
        "-ac",
        "2",
+       "-filter:a",
+       "asetpts=PTS-0/TB,aresample=async=1:first_pts=0,asetpts=PTS+0/TB",
        "-movflags",
        "+cmaf",
+       "-avoid_negative_ts",
+       "disabled",
        "-f",
        "hls",
        "-hls_time",
@@ -605,8 +624,12 @@ describe('buildFfmpegArgs — QSV/VAAPI matrix golden argv (characterization)', 
        "192k",
        "-ac",
        "2",
+       "-filter:a",
+       "asetpts=PTS-0/TB,aresample=async=1:first_pts=0,asetpts=PTS+0/TB",
        "-movflags",
        "+cmaf",
+       "-avoid_negative_ts",
+       "disabled",
        "-f",
        "hls",
        "-hls_time",
@@ -704,8 +727,12 @@ describe('buildFfmpegArgs — QSV/VAAPI matrix golden argv (characterization)', 
        "192k",
        "-ac",
        "2",
+       "-filter:a",
+       "asetpts=PTS-0/TB,aresample=async=1:first_pts=0,asetpts=PTS+0/TB",
        "-movflags",
        "+cmaf",
+       "-avoid_negative_ts",
+       "disabled",
        "-f",
        "hls",
        "-hls_time",
@@ -813,8 +840,12 @@ describe('buildFfmpegArgs — QSV/VAAPI matrix golden argv (characterization)', 
        "192k",
        "-ac",
        "2",
+       "-filter:a",
+       "asetpts=PTS-0/TB,aresample=async=1:first_pts=0,asetpts=PTS+0/TB",
        "-movflags",
        "+cmaf",
+       "-avoid_negative_ts",
+       "disabled",
        "-f",
        "hls",
        "-hls_time",
@@ -913,8 +944,12 @@ describe('buildFfmpegArgs — QSV/VAAPI matrix golden argv (characterization)', 
        "192k",
        "-ac",
        "2",
+       "-filter:a",
+       "asetpts=PTS-0/TB,aresample=async=1:first_pts=0,asetpts=PTS+0/TB",
        "-movflags",
        "+cmaf",
+       "-avoid_negative_ts",
+       "disabled",
        "-f",
        "hls",
        "-hls_time",
@@ -1001,8 +1036,12 @@ describe('buildFfmpegArgs — QSV/VAAPI matrix golden argv (characterization)', 
        "192k",
        "-ac",
        "2",
+       "-filter:a",
+       "asetpts=PTS-0/TB,aresample=async=1:first_pts=0,asetpts=PTS+0/TB",
        "-movflags",
        "+cmaf",
+       "-avoid_negative_ts",
+       "disabled",
        "-f",
        "hls",
        "-hls_time",
@@ -1103,8 +1142,12 @@ describe('buildFfmpegArgs — QSV/VAAPI matrix golden argv (characterization)', 
        "192k",
        "-ac",
        "2",
+       "-filter:a",
+       "asetpts=PTS-0/TB,aresample=async=1:first_pts=0,asetpts=PTS+0/TB",
        "-movflags",
        "+cmaf",
+       "-avoid_negative_ts",
+       "disabled",
        "-f",
        "hls",
        "-hls_time",
@@ -1195,8 +1238,12 @@ describe('buildFfmpegArgs — QSV/VAAPI matrix golden argv (characterization)', 
        "192k",
        "-ac",
        "2",
+       "-filter:a",
+       "asetpts=PTS-0/TB,aresample=async=1:first_pts=0,asetpts=PTS+0/TB",
        "-movflags",
        "+cmaf",
+       "-avoid_negative_ts",
+       "disabled",
        "-f",
        "hls",
        "-hls_time",
@@ -1279,8 +1326,12 @@ describe('buildFfmpegArgs — QSV/VAAPI matrix golden argv (characterization)', 
        "192k",
        "-ac",
        "2",
+       "-filter:a",
+       "asetpts=PTS-0/TB,aresample=async=1:first_pts=0,asetpts=PTS+0/TB",
        "-movflags",
        "+cmaf",
+       "-avoid_negative_ts",
+       "disabled",
        "-f",
        "hls",
        "-hls_time",
@@ -1303,159 +1354,41 @@ describe('buildFfmpegArgs — QSV/VAAPI matrix golden argv (characterization)', 
   });
 });
 
-describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization)', () => {
-  it('remux: copy audio, HEVC source → -c:v copy + -tag:v hvc1', () => {
-    expect(
-      buildRemuxArgs(
-        {
-          inputPath: '/media/in.mkv',
-          outputDir: '/cache/out',
-          copyAudio: true,
-          trustedStreamInfo: true,
-          sourceVideoCodec: 'hevc',
-        },
-        silentLog,
-      ),
-    ).toMatchInlineSnapshot(`
-     [
-       "-hide_banner",
-       "-loglevel",
-       "warning",
-       "-analyzeduration",
-       "0",
-       "-probesize",
-       "5000000",
-       "-i",
-       "/media/in.mkv",
-       "-copyts",
-       "-muxdelay",
-       "0",
-       "-muxpreload",
-       "0",
-       "-c:v",
-       "copy",
-       "-sn",
-       "-c:a",
-       "copy",
-       "-tag:v",
-       "hvc1",
-       "-bsf:v",
-       "hevc_mp4toannexb",
-       "-max_muxing_queue_size",
-       "2048",
-       "-movflags",
-       "+cmaf",
-       "-f",
-       "hls",
-       "-hls_time",
-       "3",
-       "-hls_list_size",
-       "0",
-       "-start_number",
-       "0",
-       "-hls_segment_type",
-       "fmp4",
-       "-hls_fmp4_init_filename",
-       "init.mp4",
-       "-hls_flags",
-       "independent_segments+temp_file",
-       "-hls_segment_filename",
-       "/cache/out/seg-%04d.m4s",
-       "/cache/out/index.m3u8",
-     ]
-    `);
-  });
+describe('buildRemuxArgs — golden (characterization)', () => {
+  // Keyframes every 3.003 s with a 2-frame reorder delay, cut every other one.
+  const GRID = computeSegmentGrid(
+    [0, 3.003, 6.006, 9.009, 12.012].map((pts) => ({ pts, dts: pts - 0.0834 })),
+    0,
+    15.015,
+    6,
+  )!;
 
-  it('remux: resume seeks to the keyframe boundary, transcodes incompatible audio', () => {
-    expect(
-      buildRemuxArgs(
-        {
-          inputPath: '/media/in.mkv',
-          outputDir: '/cache/out',
-          copyAudio: false,
-          startSegment: 2,
-          trustedStreamInfo: true,
-          sourceVideoCodec: 'h264',
-          segmentBoundaries: [0, 3.003, 6.006, 9.009],
-        },
-        silentLog,
-      ),
-    ).toMatchInlineSnapshot(`
-     [
-       "-hide_banner",
-       "-loglevel",
-       "warning",
-       "-analyzeduration",
-       "0",
-       "-probesize",
-       "5000000",
-       "-ss",
-       "6.006",
-       "-i",
-       "/media/in.mkv",
-       "-copyts",
-       "-muxdelay",
-       "0",
-       "-muxpreload",
-       "0",
-       "-c:v",
-       "copy",
-       "-sn",
-       "-c:a",
-       "aac",
-       "-b:a",
-       "192k",
-       "-ac",
-       "2",
-       "-movflags",
-       "+cmaf",
-       "-f",
-       "hls",
-       "-hls_time",
-       "3",
-       "-hls_list_size",
-       "0",
-       "-start_number",
-       "2",
-       "-hls_segment_type",
-       "fmp4",
-       "-hls_fmp4_init_filename",
-       "init.mp4",
-       "-hls_flags",
-       "independent_segments+temp_file",
-       "-hls_segment_filename",
-       "/cache/out/seg-%04d.m4s",
-       "/cache/out/index.m3u8",
-     ]
-    `);
-  });
-
-  it('remux: never lets ffmpeg default-select a subtitle stream into the output', () => {
-    const args = buildRemuxArgs(
+  const remuxArgs = (
+    o: Omit<BuildRemuxArgsOptions, 'run'> & { startSegment?: number },
+  ): string[] =>
+    buildRemuxArgs(
       {
-        inputPath: '/media/in.mkv',
-        outputDir: '/cache/out',
-        copyAudio: true,
-        trustedStreamInfo: true,
-        sourceVideoCodec: 'h264',
+        ...o,
+        run: remuxRunStart(
+          o.grid,
+          o.startSegment ?? 0,
+          o.segmentDuration ?? 3,
+          0,
+          remuxAudioGrid(o.audioPlan, o.audioStreams, o.audioStreamIndex),
+        ),
       },
       silentLog,
     );
-    expect(args).toContain('-sn');
-  });
 
-  it('audio-only: resume applies a single input -ss', () => {
+  it('remux: copy audio, HEVC source → -c:v copy + -tag:v hvc1', () => {
     expect(
-      buildAudioOnlyFfmpegArgs(
-        {
-          inputPath: '/media/in.mkv',
-          outputDir: '/cache/out',
-          audioStreamIndex: 0,
-          startSegment: 4,
-          trustedStreamInfo: true,
-        },
-        silentLog,
-      ),
+      remuxArgs({
+        inputPath: '/media/in.mkv',
+        outputDir: '/cache/out',
+        audioPlan: { mode: 'copy', codec: 'aac' },
+        trustedStreamInfo: true,
+        sourceVideoCodec: 'hevc',
+      }),
     ).toMatchInlineSnapshot(`
      [
        "-hide_banner",
@@ -1465,8 +1398,6 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
        "0",
        "-probesize",
        "5000000",
-       "-ss",
-       "12",
        "-i",
        "/media/in.mkv",
        "-copyts",
@@ -1475,22 +1406,107 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
        "-muxpreload",
        "0",
        "-map",
+       "0:v:0",
+       "-map",
        "0:a:0?",
-       "-vn",
+       "-c:v",
+       "copy",
+       "-c:a",
+       "copy",
+       "-bsf:a",
+       "aac_adtstoasc",
+       "-tag:v",
+       "hvc1",
+       "-bsf:v",
+       "hevc_mp4toannexb",
+       "-max_muxing_queue_size",
+       "2048",
+       "-movflags",
+       "+cmaf",
+       "-avoid_negative_ts",
+       "disabled",
+       "-hls_segment_options",
+       "movflags=+frag_discont",
+       "-f",
+       "hls",
+       "-hls_time",
+       "3",
+       "-hls_list_size",
+       "1",
+       "-start_number",
+       "0",
+       "-hls_segment_type",
+       "fmp4",
+       "-hls_fmp4_init_filename",
+       "init.mp4",
+       "-hls_flags",
+       "independent_segments+temp_file",
+       "-hls_segment_filename",
+       "/cache/out/gop-%d.m4s",
+       "/cache/out/index.m3u8",
+     ]
+    `);
+  });
+
+  it('remux: resume seeks to the keyframe boundary, transcodes incompatible audio', () => {
+    expect(
+      remuxArgs({
+        inputPath: '/media/in.mkv',
+        outputDir: '/cache/out',
+        startSegment: 2,
+        trustedStreamInfo: true,
+        sourceVideoCodec: 'h264',
+        grid: GRID,
+      }),
+    ).toMatchInlineSnapshot(`
+     [
+       "-hide_banner",
+       "-loglevel",
+       "warning",
+       "-analyzeduration",
+       "0",
+       "-probesize",
+       "5000000",
+       "-noaccurate_seek",
+       "-seek_timestamp",
+       "1",
+       "-ss",
+       "11.9286",
+       "-i",
+       "/media/in.mkv",
+       "-copyts",
+       "-muxdelay",
+       "0",
+       "-muxpreload",
+       "0",
+       "-ss",
+       "11.9286",
+       "-map",
+       "0:v:0",
+       "-map",
+       "0:a:0?",
+       "-c:v",
+       "copy",
        "-c:a",
        "aac",
        "-b:a",
        "192k",
        "-ac",
        "2",
+       "-filter:a",
+       "asetpts=PTS-11.9286/TB,aresample=async=1:first_pts=0,asetpts=PTS+11.9286/TB",
        "-movflags",
        "+cmaf",
+       "-avoid_negative_ts",
+       "disabled",
+       "-hls_segment_options",
+       "movflags=+frag_discont",
        "-f",
        "hls",
        "-hls_time",
-       "3",
-       "-hls_list_size",
        "0",
+       "-hls_list_size",
+       "1",
        "-start_number",
        "4",
        "-hls_segment_type",
@@ -1500,66 +1516,62 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
        "-hls_flags",
        "independent_segments+temp_file",
        "-hls_segment_filename",
-       "/cache/out/seg-%04d.m4s",
+       "/cache/out/gop-%d.m4s",
        "/cache/out/index.m3u8",
      ]
     `);
   });
 
-  it('audio-only: Tizen TS variant', () => {
-    expect(
-      buildAudioOnlyFfmpegArgs(
-        {
-          inputPath: '/media/in.mkv',
-          outputDir: '/cache/out',
-          audioStreamIndex: 0,
-          trustedStreamInfo: true,
-          useTs: true,
-        },
-        silentLog,
-      ),
-    ).toMatchInlineSnapshot(`
-     [
-       "-hide_banner",
-       "-loglevel",
-       "warning",
-       "-analyzeduration",
-       "0",
-       "-probesize",
-       "5000000",
-       "-i",
-       "/media/in.mkv",
-       "-copyts",
-       "-muxdelay",
-       "0",
-       "-muxpreload",
-       "0",
-       "-map",
-       "0:a:0?",
-       "-vn",
-       "-c:a",
-       "aac",
-       "-b:a",
-       "192k",
-       "-ac",
-       "2",
-       "-f",
-       "hls",
-       "-hls_time",
-       "3",
-       "-hls_list_size",
-       "0",
-       "-start_number",
-       "0",
-       "-hls_segment_type",
-       "mpegts",
-       "-hls_flags",
-       "independent_segments+temp_file",
-       "-hls_segment_filename",
-       "/cache/out/seg-%04d.ts",
-       "/cache/out/index.m3u8",
-     ]
-    `);
+  it('remux: maps only the video and one audio track, never a subtitle', () => {
+    const args = remuxArgs({
+      inputPath: '/media/in.mkv',
+      outputDir: '/cache/out',
+      audioPlan: { mode: 'copy', codec: 'aac' },
+      trustedStreamInfo: true,
+      sourceVideoCodec: 'h264',
+    });
+    expect(args.filter((_, i) => args[i - 1] === '-map')).toEqual([
+      '0:v:0',
+      '0:a:0?',
+    ]);
+  });
+
+  it('remux: every run but the first seeks both sides to its keyframe decode time', () => {
+    const seeksOf = (startSegment: number, grid: typeof GRID | null) => {
+      const args = remuxArgs({
+        inputPath: '/media/in.mkv',
+        outputDir: '/cache/out',
+        startSegment,
+        grid,
+      });
+      return {
+        seeks: args.flatMap((a, i) => (a === '-ss' ? [args[i + 1]] : [])),
+        hlsTime: args[args.indexOf('-hls_time') + 1],
+        startNumber: args[args.indexOf('-start_number') + 1],
+      };
+    };
+    // From the start: 10 ms under the first keyframe's decode time.
+    expect(seeksOf(0, GRID)).toEqual({
+      seeks: ['-0.0934', '-0.0934'],
+      hlsTime: '0',
+      startNumber: '0',
+    });
+    // Segment 1 opens on keyframe 2 (pts 6.006, dts 5.923).
+    expect(seeksOf(1, GRID)).toEqual({
+      seeks: ['5.9226', '5.9226'],
+      hlsTime: '0',
+      startNumber: '2',
+    });
+    // No keyframe list: ffmpeg cuts every 3 s and the run starts on that grid.
+    expect(seeksOf(2, null)).toEqual({
+      seeks: ['6', '6'],
+      hlsTime: '3',
+      startNumber: '2',
+    });
+  });
+
+  it('remux: refuses a segment past the grid', () => {
+    expect(() => remuxRunStart(GRID, 3, 3, 0)).toThrow(RangeError);
   });
 });
 
@@ -1609,8 +1621,11 @@ describe('buildFfmpegArgs — NVENC early/steady-state SPS consistency', () => {
     );
     expect(presetOf(main)).toBe('p4');
     expect(presetOf(early)).toBe('p4');
-    // -t (early duration cap) is injected by the session layer, not here, so
-    // the argv this builder emits must be byte-identical across the two.
-    expect(early).toEqual(main);
+    // Byte-identical but for the early read window.
+    const window = early.indexOf('-to');
+    expect(early.slice(window, window + 2)).toEqual(['-to', '7']);
+    expect([...early.slice(0, window), ...early.slice(window + 2)]).toEqual(
+      main,
+    );
   });
 });

@@ -119,7 +119,6 @@ describe('LiveSessionRegistry', () => {
     // Defaults apply for fields not supplied.
     expect(session.useExtXMedia).toBe(false);
     expect(session.canCopyVideo).toBe(false);
-    expect(session.canCopyAudio).toBe(false);
     expect(session.transcodeReasons).toEqual([]);
   });
 

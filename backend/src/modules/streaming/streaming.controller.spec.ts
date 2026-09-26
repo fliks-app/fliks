@@ -7,9 +7,8 @@ import {
   resolvePreRoll,
 } from './streaming.controller';
 import {
-  boundariesFromDurations,
-  computeSegmentDurations,
-  secondsToSegmentIndex,
+  computeSegmentGrid,
+  gridSegmentIndex,
 } from './transcoding/segment-boundaries';
 import { buildLiveSession, type LiveSession } from './live-session.service';
 import type { PreRollItem } from '../../common/plugin-contract';
@@ -20,13 +19,13 @@ describe('buildIFramePlaylist', () => {
   const url = (i: string): string => `iframe/seg-${i}.ts`;
 
   it('declares I-frames-only and no init segment', () => {
-    const m = buildIFramePlaylist(12, url, 4);
+    const m = buildIFramePlaylist(12, url, 4, 0.04);
     expect(m).toContain('#EXT-X-I-FRAMES-ONLY');
     expect(m).not.toContain('#EXT-X-MAP');
   });
 
   it('keeps one entry per grid keyframe', () => {
-    const m = buildIFramePlaylist(12, url, 4);
+    const m = buildIFramePlaylist(12, url, 4, 0.04);
     expect(m.split('\n').filter((l) => l.startsWith('#EXTINF'))).toHaveLength(
       3,
     );
@@ -39,13 +38,17 @@ describe('buildVodPlaylist', () => {
   const lines = (m: string, prefix: string): string[] =>
     m.split('\n').filter((l) => l.startsWith(prefix));
 
-  it('drops the phantom last segment from float-imprecise durations', () => {
-    // 120.001 / 3 naively ceils to 41, but ffmpeg writes 40 — the epsilon trims it.
-    expect(lines(buildVodPlaylist(120.001, url, undefined, 3), '#EXTINF')).toHaveLength(40);
+  it('lists a segment only when a frame starts in it', () => {
+    // 120.001 s at 25 fps: the last frame starts at 119.961, in segment 39.
+    expect(lines(buildVodPlaylist(120.001, url, undefined, 3, 0.04), '#EXTINF')).toHaveLength(40);
+    // One frame past 120: it starts at 120, so segment 40 exists.
+    expect(lines(buildVodPlaylist(120.04, url, undefined, 3, 0.04), '#EXTINF')).toHaveLength(41);
+    // A last frame that starts on a boundary through float noise.
+    expect(lines(buildVodPlaylist(90.09 + 1 / 23.976, url, undefined, 3.003, 1 / 23.976), '#EXTINF')).toHaveLength(31);
   });
 
   it('clamps the final EXTINF to the remainder and sets TARGETDURATION', () => {
-    const m = buildVodPlaylist(10, url, undefined, 3);
+    const m = buildVodPlaylist(10, url, undefined, 3, 0.04);
     const extinf = lines(m, '#EXTINF');
     expect(extinf).toEqual([
       '#EXTINF:3.000,',
@@ -58,7 +61,7 @@ describe('buildVodPlaylist', () => {
   });
 
   it('rounds TARGETDURATION up for fractional segment durations + emits the map', () => {
-    const m = buildVodPlaylist(9.009, url, 'init.mp4', 3.003);
+    const m = buildVodPlaylist(9.009, url, 'init.mp4', 3.003, 1 / 23.976);
     expect(m).toContain('#EXT-X-TARGETDURATION:4');
     expect(m).toContain('#EXT-X-MAP:URI="init.mp4"');
     expect(lines(m, '#EXTINF')[0]).toBe('#EXTINF:3.003,');
@@ -88,10 +91,16 @@ describe('withTimestampMap', () => {
     );
   });
 
-  it('offsets cues by the source start PTS on the 90kHz clock', () => {
-    // 1.4s × 90000 → the cue at LOCAL 0 maps to the first frame, not 1.4s early.
+  it('offsets cues by the container start on the 90kHz clock', () => {
+    // 1.4s × 90000 → the cue at LOCAL 0 maps to source time 1.4, not 1.4s early.
     expect(mapLine(withTimestampMap('WEBVTT\n\n', 1.4))).toBe(
       'X-TIMESTAMP-MAP=MPEGTS:126000,LOCAL:00:00:00.000',
+    );
+  });
+
+  it('moves LOCAL for a container that starts before 0', () => {
+    expect(mapLine(withTimestampMap('WEBVTT\n\n', -1.022))).toBe(
+      'X-TIMESTAMP-MAP=MPEGTS:0,LOCAL:00:00:01.022',
     );
   });
 });
@@ -139,6 +148,7 @@ describe('StreamingController.stopLiveSession', () => {
       {} as never, // segmentPackaging
       {} as never, // sessionRouter
       {} as never, // sessionContextBuilder
+      {} as never, // clockBreakScan
       {} as never, // pluginPreRoll
       events as never,
       caslAbilityFactory as never,
@@ -304,14 +314,18 @@ describe('remux playlist cannot drift out of A/V sync', () => {
   // MPEG-TS and fMP4. Durations here are what the segments really contain.
   const KEYFRAMES = [0, 7.966, 15.974, 19.937, 25.317, 31.865, 38.997, 43.001];
   const SEG_DUR = 6;
+  const grid = computeSegmentGrid(
+    KEYFRAMES.map((pts) => ({ pts, dts: pts })),
+    0,
+    43.001,
+    SEG_DUR,
+  )!;
 
   it('announces the real cut durations, and the seek grid agrees with them', () => {
-    const durations = computeSegmentDurations(KEYFRAMES, 43.001, SEG_DUR);
+    const { durations, boundaries } = grid;
     expect(durations.map((d) => Number(d.toFixed(3)))).toEqual([
       7.966, 8.008, 3.963, 5.38, 6.548, 7.132, 4.004,
     ]);
-
-    const boundaries = boundariesFromDurations(durations, KEYFRAMES[0]);
     const playlist = buildVariableVodPlaylist(
       durations,
       (i) => `seg-${i}.m4s`,
@@ -329,12 +343,12 @@ describe('remux playlist cannot drift out of A/V sync', () => {
       announced += d;
     });
     expect(announced).toBeCloseTo(boundaries[boundaries.length - 1], 3);
-    expect(secondsToSegmentIndex(boundaries, 20)).toBe(3);
+    expect(gridSegmentIndex(boundaries, 20, 0)).toBe(3);
   });
 
   it('is what a uniform grid gets wrong — the regression being replaced', () => {
-    const durations = computeSegmentDurations(KEYFRAMES, 43.001, SEG_DUR);
-    const uniform = buildVodPlaylist(43.001, (i) => `seg-${i}.ts`, undefined, SEG_DUR);
+    const { durations } = grid;
+    const uniform = buildVodPlaylist(43.001, (i) => `seg-${i}.ts`, undefined, SEG_DUR, 0.04);
     const uniformExtinf = [...uniform.matchAll(/#EXTINF:([\d.]+),/g)].map((m) =>
       Number(m[1]),
     );

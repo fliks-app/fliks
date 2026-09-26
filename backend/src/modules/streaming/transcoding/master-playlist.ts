@@ -307,28 +307,28 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
     );
   };
 
+  // Alternate audio renditions via EXT-X-MEDIA, shared by every variant of
+  // either ladder and served from /audio/<i>/.
+  if (multiAudio) {
+    emitAudioRenditions(
+      lines,
+      audioStreams,
+      defaultAudioIndex,
+      outputAudioCodec,
+      mediaFileId,
+      tokenParam,
+      audioOutputChannels,
+      dedupesAudioByLanguage,
+    );
+  }
+  const audioAttr = multiAudio ? ',AUDIO="audio"' : '';
+  pushSubtitleMedia(lines);
+
   // HDR pass-through path: the source is HDR and the client claims support.
   // Either the copy variant alone or an HDR ladder, never both, and never
   // mixed with the SDR ladder below (that mix flips AVPlayer's display mode).
   if (hdrPassThrough) {
     const range = hdrPassThrough.hdrFormat === 'HLG' ? 'HLG' : 'PQ';
-
-    // Each HDR variant references the shared `audio` group; renditions are
-    // served from /audio/<i>/, same wiring as the SDR ladder.
-    if (multiAudio) {
-      emitAudioRenditions(
-        lines,
-        audioStreams,
-        defaultAudioIndex,
-        outputAudioCodec,
-        mediaFileId,
-        tokenParam,
-        undefined,
-        dedupesAudioByLanguage,
-      );
-    }
-    const hdrAudioAttr = multiAudio ? ',AUDIO="audio"' : '';
-    pushSubtitleMedia(lines);
 
     // Copy path (`?remux=1`): publish the variant alone with VIDEO-RANGE.
     // A copy needs no HDR encoder, so this skips `canEmitHdrLadder`.
@@ -339,7 +339,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
         sourceWidth,
         sourceHeight,
         frameRateAttr,
-        audioAttr: hdrAudioAttr,
+        audioAttr,
         subsAttr,
         codecsTail,
         range,
@@ -376,7 +376,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
         profiles: hdrLadder,
         variant: hdrVariant,
         range,
-        audioAttr: hdrAudioAttr,
+        audioAttr,
         audioBitrateBps: hdrPassThrough.audioBitRateBps ?? audioOutputBitrateBps,
         subsAttr,
         frameRateAttr,
@@ -394,20 +394,6 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
     return lines.join('\n');
   }
 
-  // Multi-audio: declare alternate audio renditions via EXT-X-MEDIA
-  if (multiAudio) {
-    emitAudioRenditions(
-      lines,
-      audioStreams,
-      defaultAudioIndex,
-      outputAudioCodec,
-      mediaFileId,
-      tokenParam,
-      audioOutputChannels,
-      dedupesAudioByLanguage,
-    );
-  }
-
   // Always declare CODECS on EXT-X-STREAM-INF. For HLS-TS, this lets Shaka
   // skip fetching seg 0 purely to probe codecs (TS has no init segment) —
   // otherwise a user resuming mid-file wastes a transcode pass at seg 0
@@ -416,9 +402,6 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
   // enough for the rung's resolution at 60 fps. A single `avc1.640028`
   // (L4.0) for every rung makes iOS AVPlayer reject 4K segments whose
   // bitstream signals L5.x — visible as decoder reinit / frame freeze.
-  const audioAttr = multiAudio ? ',AUDIO="audio"' : '';
-  pushSubtitleMedia(lines);
-
   // Copy path (`?remux=1`, set only by a DirectStream decision): publish the
   // remux variant ALONE. Pairing it with the ladder is what made ExoPlayer
   // ABR-downgrade to the identical-resolution 1080p transcode and kill+respawn

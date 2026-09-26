@@ -10,6 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Subscription } from 'rxjs';
 import { existsSync } from 'fs';
+import * as path from 'path';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { EventsService } from './events.service';
@@ -18,6 +19,7 @@ import {
   type SpriteMetadata,
 } from '../streaming/thumbnail.service';
 import { MarkersService } from '../markers/markers.service';
+import { ClockBreakScanService } from '../streaming/services/clock-break-scan.service';
 import { SettingsService } from '../settings/settings.service';
 import { PostImportQueueService } from '../../common/post-import/post-import-queue.service';
 import { ActivityRegistryService } from './activity-registry.service';
@@ -57,6 +59,7 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
     @Inject(forwardRef(() => PostImportQueueService))
     private readonly postImportQueue: PostImportQueueService,
     private readonly activityRegistry: ActivityRegistryService,
+    private readonly clockBreakScan: ClockBreakScanService,
   ) {}
 
   onModuleInit(): void {
@@ -101,6 +104,7 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
     });
     await Promise.race([this.postImportQueue.whenIdle(), ceiling]);
     clearTimeout(ceilingTimer);
+    await this.scanClockBreaks(mediaId);
     if (await this.enabled('sprites_auto_generate_on_import')) {
       try {
         const generated = await this.generateMissingSprites(mediaId);
@@ -120,6 +124,21 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
     } catch (err) {
       this.log.warn(
         `Post-import[media #${mediaId}]: marker detection failed — ${(err as Error).message}`,
+      );
+    }
+  }
+
+  private async scanClockBreaks(mediaId: number): Promise<void> {
+    const files = await this.mediaFileRepo.find({
+      where: { media: { id: mediaId } },
+      relations: ['media'],
+    });
+    for (const f of files) {
+      if (!f.media?.path || !f.relativePath) continue;
+      await this.clockBreakScan.scheduleIfNeeded(
+        f.id,
+        path.join(f.media.path, f.relativePath),
+        f.streamInfo,
       );
     }
   }

@@ -19,14 +19,20 @@ import {
   parseBitrateToBps,
   profileFitsSource,
   resolveSourceVideoBitrateBps,
-  SURROUND_TRANSCODE_BITRATE_BPS,
 } from './transcoding';
 import {
   cappedRungVideoBitrateBps,
   type RungBitrateContext,
 } from './transcoding/quality-ladder';
 import { resolveEncodePipeline } from './transcoding/encode-pipeline';
-import { parseSourceFps } from './transcoding/constants';
+import {
+  DEFAULT_FPS,
+  DEFAULT_SEGMENT_DURATION,
+  frameSecondsOf,
+  parseSourceFps,
+  realSegmentSeconds,
+  uniformSegmentCount,
+} from './transcoding/constants';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
 import {
   bucketResolutionHeight,
@@ -36,6 +42,20 @@ import { normaliseSourceCodec } from './transcoding/codec/normalise';
 import { deriveDvInfo, isDvProfile5 } from './transcoding/codec/dolby-vision';
 import { pickPrimaryVariant } from './transcoding/codec/selector';
 import type { CodecVariant, VideoCodec } from './transcoding/codec/types';
+import { pickAudioLayout, resolveMuxFlavour } from './transcoding/audio-layout';
+import {
+  audioEncodeBitrateBps,
+  encoderMaxChannels,
+  isEncodableAudio,
+  type AudioEncodeCodec,
+  type AudioPlan,
+} from './transcoding/audio-encode';
+import type { MediaFileInfo } from '../subtitles/ffprobe.service';
+import {
+  sourceTimeline,
+  videoPresentationStart,
+} from './transcoding/source-timeline';
+import { sourceIsMpegTs } from '../subtitles/video-packets';
 
 /** Audio codecs that can be copied verbatim into fMP4 segments via MSE.
  *  Anything outside this set is re-encoded to AAC on the remux path even when
@@ -43,13 +63,92 @@ import type { CodecVariant, VideoCodec } from './transcoding/codec/types';
  *  codecs="mp4a.6B"` (MP3) on append. */
 const FMP4_COMPATIBLE_AUDIO = new Set(['aac', 'ac3', 'eac3', 'opus', 'flac']);
 
-/** Audio codecs the backend can transcode TO (FFmpeg encoders we drive:
- *  `aac`, `eac3`, `ac3`, `libopus`). A group can keep one of these as its
- *  uniform output codec even when some renditions need re-encoding (downmix),
- *  so a track already in that codec copies and only the over-capacity ones
- *  re-encode. Codecs outside this set can only be a group codec when every
- *  rendition copies (no re-encode needed). */
-const ENCODABLE_AUDIO = new Set(['aac', 'eac3', 'ac3', 'opus']);
+/** Above the start offset encoder priming alone reports (AAC ~23 ms, E-AC-3 ~5 ms, Opus ~7 ms). */
+const AUDIO_START_OFFSET_THRESHOLD_SECONDS = 0.05;
+
+type CopyBlocker =
+  | 'AudioStartOffset'
+  | 'AudioFormatMayChange'
+  | 'AudioEndsEarly';
+
+/** Why a track the device plays as-is must still be re-encoded into fMP4, or
+ *  null: MSE ignores an offset's empty edit, and see each check below. */
+function copyBlocker(
+  audio: { codec?: string; startTimeSeconds?: number; endSeconds?: number },
+  video: Parameters<typeof videoPresentationStart>[0],
+  muxFlavour: 'ts' | 'fmp4',
+  mpegTs: boolean,
+  lastVideoSegmentStart: number | undefined,
+): CopyBlocker | null {
+  if (muxFlavour !== 'fmp4') return null;
+  // MPEG-TS carries AAC as ADTS, where broadcasts switch 2.0 and 5.1 mid-stream.
+  // fMP4 keeps one AAC configuration, the first frame's, for the whole track.
+  if ((audio.codec ?? '').toLowerCase() === 'aac' && mpegTs) {
+    return 'AudioFormatMayChange';
+  }
+  const a = audio.startTimeSeconds;
+  const v = videoPresentationStart(video);
+  if (
+    a != null &&
+    v != null &&
+    Math.abs(a - v) > AUDIO_START_OFFSET_THRESHOLD_SECONDS
+  ) {
+    return 'AudioStartOffset';
+  }
+  // A separate rendition would lack the segments its playlist lists past its end.
+  return audio.endSeconds != null &&
+    lastVideoSegmentStart != null &&
+    audio.endSeconds <= lastVideoSegmentStart
+    ? 'AudioEndsEarly'
+    : null;
+}
+
+/** Source time the last video segment of a separate-rendition layout starts
+ *  at, on the fps-aware grid the video is cut on from its first frame. */
+function lastVideoSegmentStart(
+  si: MediaFileInfo | null | undefined,
+  label: string,
+  segmentDuration: number,
+): number | undefined {
+  const { origin, end } = sourceTimeline(si, label);
+  if (end == null) return undefined;
+  const fps = parseSourceFps(si?.video?.[0]?.frameRate);
+  const seg = realSegmentSeconds(segmentDuration, fps);
+  return origin + (uniformSegmentCount(end - origin, seg, frameSecondsOf(fps)) - 1) * seg;
+}
+
+/** Channels an encode to `codec` can deliver: what both the device and the
+ *  encoder take. */
+function encodeChannelCap(profile: DeviceProfileDto, codec: AudioEncodeCodec): number {
+  return Math.min(audioChannelCap(profile, codec), encoderMaxChannels(codec));
+}
+
+/** Transcode reason for each per-track flag. */
+function audioReason(flag: string, t: AudioTrackPlan): TranscodeReason {
+  const messages: Record<string, string> = {
+    AudioChannelsNotSupported: `${t.channels} channels > max ${t.outputChannels}`,
+    AudioCodecNotSupported: `Audio codec "${t.codec}" is not playable here`,
+    AudioStartOffset:
+      'Audio starts off the video and is re-encoded to align it',
+    AudioFormatMayChange:
+      'AAC from MPEG-TS can change format mid-stream and is re-encoded',
+    AudioEndsEarly: 'Audio ends before the video and is padded to its end',
+  };
+  return { flag, message: messages[flag] ?? flag };
+}
+
+/** The single-track plan of one rendition's decision. */
+function toAudioPlan(t: AudioTrackPlan, stereoBitrateBps: number): AudioPlan {
+  if (t.copy) return { mode: 'copy', codec: t.outputCodec };
+  const codec = t.outputCodec as AudioEncodeCodec;
+  const channels = t.outputChannels ?? 2;
+  return {
+    mode: 'transcode',
+    codec,
+    channels,
+    bitrateBps: audioEncodeBitrateBps(codec, channels, stereoBitrateBps),
+  };
+}
 
 /** Max channels the device can decode for `codec` — the per-codec cap when the
  *  profile carries one (`audioChannelsByCodec`), else the global
@@ -72,6 +171,8 @@ export interface EvaluateResult {
   response: PlaybackInfoResponse;
   useHdrLadder: boolean;
   videoVariant: CodecVariant | null;
+  /** Segment container of the HLS output. */
+  muxFlavour: 'ts' | 'fmp4';
 }
 
 /**
@@ -103,15 +204,25 @@ export class StreamBuilderService {
     burnInSubtitleId?: number,
     requestedQuality?: string,
     autoQualityMode: 'directplay' | 'abr' = 'directplay',
+    audioStreamIndex?: number,
+    segmentDuration = DEFAULT_SEGMENT_DURATION,
   ): EvaluateResult {
     const si = resolved.mediaFile.streamInfo;
     const v = si?.video?.[0];
-    const a = si?.audio?.[0];
+    const audioStreams = si?.audio ?? [];
+    // The track the client asked for decides everything below; an index
+    // outside the file falls back to the first track.
+    const pickedAudio =
+      audioStreamIndex != null &&
+      audioStreamIndex >= 0 &&
+      audioStreamIndex < audioStreams.length
+        ? audioStreamIndex
+        : 0;
+    const a = audioStreams[pickedAudio];
     const formatBitRate =
       si?.formatBitRate != null && si.formatBitRate > 0
         ? si.formatBitRate
         : undefined;
-    const audioStreams = si?.audio ?? [];
     const audioSumBitrate = audioStreams.reduce(
       (sum, s) => sum + (s.bitRate ?? 0),
       0,
@@ -130,6 +241,7 @@ export class StreamBuilderService {
     }
 
     const sourceContainer = resolved.ext.replace('.', '').toLowerCase();
+    const sourceMpegTs = sourceIsMpegTs(si, resolved.absolutePath);
     const sourceVideoCodec = (v?.codec ?? '').toLowerCase();
     const sourceAudioCodec = (a?.codec ?? '').toLowerCase();
 
@@ -214,10 +326,12 @@ export class StreamBuilderService {
     // useHdrLadder and selectedVariant are returned to the controller
     // via EvaluateResult; the controller threads them onto the live
     // session rather than the service writing side-effects.
+    const hlsMux = resolveMuxFlavour(profile, audioStreams.length);
     const wrap = (response: PlaybackInfoResponse): EvaluateResult => ({
       response,
       useHdrLadder,
       videoVariant: selectedVariant,
+      muxFlavour: hlsMux,
     });
     const needsBurnIn = !!burnInSubtitleId;
     // Cropping black bars forces a re-encode. When the admin disables auto-crop
@@ -378,6 +492,20 @@ export class StreamBuilderService {
         message: 'Client requires an HLS container (no raw direct play)',
       });
     }
+    // A raw file plays its first audio track; HLS lets the picked one lead. An
+    // engine folding tracks by language reaches only the first of each language.
+    const pickedLanguage = audioStreams[pickedAudio]?.language;
+    const unreachable =
+      profile.switchesDirectPlayAudio === false ||
+      (!!profile.dedupesAudioByLanguage &&
+        audioStreams.findIndex((t) => t.language === pickedLanguage) !== pickedAudio);
+    if (pickedAudio !== 0 && unreachable && directPlayResult.canDirectPlay) {
+      directPlayResult.canDirectPlay = false;
+      reasons.push({
+        flag: 'ClientCannotSwitchAudio',
+        message: 'Client cannot switch audio tracks inside a raw file',
+      });
+    }
     if (forceLadder) {
       if (directPlayResult.canDirectPlay)
         directPlayResult.canDirectPlay = false;
@@ -428,11 +556,54 @@ export class StreamBuilderService {
         hwAccel: 'none',
         tonemapping: false,
         clientTonemap,
-        qualities: this.buildQualityList(source, 'DirectPlay', sourceCopyable, qualityLadder, selectedVariant.codec),
-        audioTracks: this.buildAudioTracks(audioStreams, profile, 'DirectPlay'),
+        qualities: this.buildQualityList(
+          source,
+          'DirectPlay',
+          sourceCopyable,
+          qualityLadder,
+          selectedVariant.codec,
+        ),
+        audioTracks: this.buildAudioTracks(
+          si,
+          resolved.absolutePath,
+          profile,
+          'DirectPlay',
+          'fmp4',
+          sourceMpegTs,
+          segmentDuration,
+        ),
         source,
       });
     }
+
+    // One decision per track, for DirectStream and Transcode alike: the top-level
+    // plan and reasons are the picked track's, so they match `audioTracks`.
+    const audioTracks = this.buildAudioTracks(
+      si,
+      resolved.absolutePath,
+      profile,
+      'Transcode',
+      hlsMux,
+      sourceMpegTs,
+      segmentDuration,
+    );
+    const pickedTrack = audioTracks[pickedAudio];
+    const stereoAudioBps = parseBitrateToBps(ladder[0]?.audioBitrate ?? '192k');
+    const audioPlan: AudioPlan = pickedTrack
+      ? toAudioPlan(pickedTrack, stereoAudioBps)
+      : {
+          mode: 'transcode',
+          codec: 'aac',
+          bitrateBps: stereoAudioBps,
+          channels: 2,
+        };
+    const canCopyAudio = audioPlan.mode === 'copy';
+    const outputAudioCodec = audioPlan.codec;
+    reasons.push(
+      ...(pickedTrack?.reasonFlags ?? []).map((f) =>
+        audioReason(f, pickedTrack),
+      ),
+    );
 
     // --- Step 2: Try DirectStream (remux) ---
     // Video codec must be supported; only container or audio may differ
@@ -445,23 +616,6 @@ export class StreamBuilderService {
     // original file, DV intact) or a tonemap transcode instead — never remux.
     const canCopyVideo = sourceCopyable && !forceLadder && !dvP5;
     if (canCopyVideo) {
-      // Some audio codecs the device profile claims to support are
-      // only playable in their NATIVE container (e.g. MP3 via
-      // `audio/mpeg`), not when wrapped inside fMP4 segments via MSE
-      // — Chrome refuses `audio/mp4; codecs="mp4a.6B"` on append.
-      // For DirectStream we always emit fMP4 / HLS, so audio codecs
-      // outside the fMP4-MSE-safe set get force-transcoded to AAC
-      // regardless of the profile match.
-      const canCopyAudio =
-        directPlayResult.audioSupported &&
-        FMP4_COMPATIBLE_AUDIO.has(sourceAudioCodec.toLowerCase());
-      const outputAudioCodec = canCopyAudio ? sourceAudioCodec : 'aac';
-      if (!canCopyAudio && !reasons.some((r) => r.flag.startsWith('Audio'))) {
-        reasons.push({
-          flag: 'AudioCodecNotSupported',
-          message: `Audio codec "${sourceAudioCodec}" is not playable inside fMP4 segments`,
-        });
-      }
       if (
         !directPlayResult.containerSupported &&
         !reasons.some((r) => r.flag === 'ContainerNotSupported')
@@ -492,12 +646,12 @@ export class StreamBuilderService {
       // the overlay fell back to the full remux bandwidth.
       const rungCtx = this.rungBitrateCtx(source, selectedVariant.codec);
       for (const p of qualityLadder) {
-        const v = cappedRungVideoBitrateBps(p, rungCtx);
-        const a = parseBitrateToBps(p.audioBitrate);
+        const videoBps = cappedRungVideoBitrateBps(p, rungCtx);
+        const audioBps = parseBitrateToBps(p.audioBitrate);
         transcodeBitrateByQuality[p.name] = {
-          videoBitrateBps: v,
-          audioBitrateBps: a,
-          totalBitrateBps: v + a,
+          videoBitrateBps: videoBps,
+          audioBitrateBps: audioBps,
+          totalBitrateBps: videoBps + audioBps,
         };
       }
       return wrap({
@@ -510,13 +664,7 @@ export class StreamBuilderService {
         audioCopyStream: canCopyAudio,
         outputVideoCodec: sourceVideoCodec,
         outputAudioCodec,
-        audioPlan: canCopyAudio
-          ? { mode: 'copy', codec: sourceAudioCodec }
-          : {
-              mode: 'transcode',
-              codec: 'aac',
-              bitrateBps: parseBitrateToBps(ladder[0]?.audioBitrate ?? '192k'),
-            },
+        audioPlan,
         outputContainer: 'hls',
         quality: 'original',
         // Report the backend's detected hwAccel even on the remux path:
@@ -531,7 +679,7 @@ export class StreamBuilderService {
         remuxMasterBandwidthBps: remuxBw > 0 ? remuxBw : undefined,
         transcodeBitrateByQuality,
         qualities: this.buildQualityList(source, 'DirectStream', sourceCopyable, qualityLadder, selectedVariant.codec),
-        audioTracks: this.buildAudioTracks(audioStreams, profile, 'DirectStream'),
+        audioTracks,
         source,
       });
     }
@@ -559,68 +707,11 @@ export class StreamBuilderService {
       sourceVideoCodec,
     }).effectiveHwAccel;
 
-    // Audio output decision — single source of truth for ffmpeg-args and
-    // the master playlist. Three paths:
-    //
-    //   1. Source codec decodable by the receiver + channels ≤ max →
-    //      `audioOutputCodec = source.audioCodec`, `canCopyAudio = true`.
-    //      ffmpeg-args runs `-c:a copy` (verbatim bitstream, no priming).
-    //   2. Source has ≥ 6 channels + receiver accepts a surround codec →
-    //      pick the best (EAC-3 > AC-3) and transcode to it at 640 kbps.
-    //      `canCopyAudio = false` — ffmpeg re-encodes preserving channels.
-    //   3. Otherwise → AAC stereo downmix at the ladder bitrate.
-    const profileAudioCodecs = profile.directPlayProfiles
-      .flatMap((p) => p.audioCodecs)
-      .map((c) => c.toLowerCase());
-    const srcChannels = source.audioChannels ?? 2;
-    const srcCodec = (source.audioCodec ?? '').toLowerCase();
-    const srcCap = audioChannelCap(profile, srcCodec);
-    // Copy the source audio only when it can live in an fMP4 segment. Without
-    // this gate a profile that claims mp3/alac would copy an MP3/ALAC track
-    // into muxed fMP4 whose CODECS string can't be declared, so MSE rejects the
-    // init segment (Shaka 3014/3015) — a black player instead of playback.
-    // Mirrors the DirectStream path's guard.
-    const srcCompatible =
-      directPlayResult.audioSupported &&
-      srcChannels <= srcCap &&
-      FMP4_COMPATIBLE_AUDIO.has(srcCodec);
-    const surroundCodec = profileAudioCodecs.includes('eac3')
-      ? 'eac3'
-      : profileAudioCodecs.includes('ac3')
-        ? 'ac3'
-        : null;
-    const surroundPossible =
-      srcChannels >= 6 &&
-      surroundCodec != null &&
-      audioChannelCap(profile, surroundCodec) >= 6;
-
-    let outputAudioCodec: 'aac' | 'ac3' | 'eac3' | string;
-    let outputAudioBitrateBps: number;
-    let canCopyAudio = false;
-
-    if (srcCompatible) {
-      outputAudioCodec = srcCodec;
-      outputAudioBitrateBps = source.audioBitRate ?? 0;
-      canCopyAudio = true;
-    } else if (surroundPossible && surroundCodec) {
-      outputAudioCodec = surroundCodec;
-      outputAudioBitrateBps = SURROUND_TRANSCODE_BITRATE_BPS;
-    } else {
-      outputAudioCodec = 'aac';
-      outputAudioBitrateBps = parseBitrateToBps(
-        ladder[0]?.audioBitrate ?? '192k',
-      );
-    }
-
-    // When the surround path is what saved us, don't keep claiming the
-    // source codec is incompatible — the user actually gets surround.
-    if (surroundPossible && !srcCompatible) {
-      const idx = reasons.findIndex((r) => r.flag === 'AudioCodecNotSupported');
-      if (idx >= 0) reasons.splice(idx, 1);
-    }
+    const outputAudioBitrateBps =
+      audioPlan.mode === 'copy' ? (source.audioBitRate ?? 0) : audioPlan.bitrateBps;
 
     this.log.log(
-      `Transcode for file ${resolved.mediaFile.id}: ${reasons.map((r) => r.flag).join(', ')} (audioOut=${outputAudioCodec}, copy=${canCopyAudio}, srcCh=${srcChannels}, maxCh=${srcCap})`,
+      `Transcode for file ${resolved.mediaFile.id}: ${reasons.map((r) => r.flag).join(', ')} (audioOut=${outputAudioCodec}, copy=${canCopyAudio}, track=${pickedAudio})`,
     );
     const url = `/api/stream/${resolved.mediaFile.id}/master.m3u8${tokenParam}`;
     const transcodeBitrateByQuality: NonNullable<
@@ -631,12 +722,12 @@ export class StreamBuilderService {
     // remux bandwidth.
     const rungCtx = this.rungBitrateCtx(source, selectedVariant.codec);
     for (const p of qualityLadder) {
-      const v = cappedRungVideoBitrateBps(p, rungCtx);
-      const a = outputAudioBitrateBps ?? parseBitrateToBps(p.audioBitrate);
+      const videoBps = cappedRungVideoBitrateBps(p, rungCtx);
+      const audioBps = outputAudioBitrateBps ?? parseBitrateToBps(p.audioBitrate);
       transcodeBitrateByQuality[p.name] = {
-        videoBitrateBps: v,
-        audioBitrateBps: a,
-        totalBitrateBps: v + a,
+        videoBitrateBps: videoBps,
+        audioBitrateBps: audioBps,
+        totalBitrateBps: videoBps + audioBps,
       };
     }
     return wrap({
@@ -649,13 +740,7 @@ export class StreamBuilderService {
       audioCopyStream: canCopyAudio,
       outputVideoCodec: selectedVariant.codec,
       outputAudioCodec,
-      audioPlan: canCopyAudio
-        ? { mode: 'copy', codec: srcCodec }
-        : {
-            mode: 'transcode',
-            codec: outputAudioCodec as 'aac' | 'ac3' | 'eac3',
-            bitrateBps: outputAudioBitrateBps,
-          },
+      audioPlan,
       outputContainer: 'hls',
       quality: negotiatedQuality,
       hwAccel: effectiveHwAccel,
@@ -663,7 +748,7 @@ export class StreamBuilderService {
       clientTonemap,
       transcodeBitrateByQuality,
       qualities: this.buildQualityList(source, 'Transcode', sourceCopyable, qualityLadder, selectedVariant.codec),
-      audioTracks: this.buildAudioTracks(audioStreams, profile, 'Transcode'),
+      audioTracks,
       source,
     });
   }
@@ -679,7 +764,7 @@ export class StreamBuilderService {
       outputCodec,
       sourceWidth: source.width ?? 0,
       sourceHeight: source.height ?? 0,
-      sourceFrameRate: parseSourceFps(source.frameRate) ?? 24,
+      sourceFrameRate: parseSourceFps(source.frameRate) ?? DEFAULT_FPS,
       sourceVideoBitrateBps: source.videoBitRate,
       sourceVideoCodec: source.videoCodec,
     };
@@ -833,7 +918,7 @@ export class StreamBuilderService {
 
   /**
    * Per-track audio copy/transcode decision for every source audio stream,
-   * in `streamInfo.audio` order.
+   * in `streamInfo.audio` order — the only place audio is decided.
    *
    * For HLS output (DirectStream / Transcode) every rendition of the audio
    * group MUST share one OUTPUT codec — a master playlist carries a single
@@ -841,18 +926,28 @@ export class StreamBuilderService {
    * renditions disagree. So the group picks one output codec
    * ({@link pickGroupAudioCodec}) and each rendition either copies (its source
    * already IS that codec and fits the channel cap) or transcodes to it,
-   * downmixing surround to the cap. Copy + transcode can mix freely since the
-   * output codec stays uniform. DirectPlay copies everything (raw file).
-   *
-   * The top-level `audioPlan` / `transcodeReasons` only describe the default
-   * track; the overlay reads the *active* track's entry here so the reason
-   * follows a client-side audio switch.
+   * downmixing to what both the device and the encoder take. DirectPlay copies
+   * everything (raw file).
    */
   private buildAudioTracks(
-    audioStreams: { codec?: string; channels?: number; language?: string }[],
+    si: MediaFileInfo | null | undefined,
+    label: string,
     profile: DeviceProfileDto,
     playMethod: PlayMethod,
+    muxFlavour: 'ts' | 'fmp4',
+    mpegTs: boolean,
+    segmentDuration: number,
   ): AudioTrackPlan[] {
+    const audioStreams = si?.audio ?? [];
+    const video = si?.video?.[0];
+    // Only separate renditions go missing at the tail; a muxed track just ends.
+    const lastSegmentStart =
+      pickAudioLayout(audioStreams.length, muxFlavour) === 'var-stream-map'
+        ? lastVideoSegmentStart(si, label, segmentDuration)
+        : undefined;
+    const blockers = audioStreams.map((t) =>
+      copyBlocker(t, video, muxFlavour, mpegTs, lastSegmentStart),
+    );
     const profileAudioCodecs = profile.directPlayProfiles
       .flatMap((p) => p.audioCodecs)
       .map((c) => c.toLowerCase());
@@ -860,10 +955,11 @@ export class StreamBuilderService {
       audioStreams,
       profile,
       profileAudioCodecs,
+      blockers.some(Boolean),
     );
-    // Channel cap of the chosen OUTPUT codec — what a transcoded rendition
-    // downmixes to (EAC-3/AC-3 additionally cap at 5.1, AAC at stereo).
-    const outCap = audioChannelCap(profile, groupCodec);
+    const outCap = isEncodableAudio(groupCodec)
+      ? encodeChannelCap(profile, groupCodec)
+      : audioChannelCap(profile, groupCodec);
 
     return audioStreams.map((t, index) => {
       const codec = (t.codec ?? '').toLowerCase();
@@ -875,6 +971,7 @@ export class StreamBuilderService {
       // device may decode AAC 7.1 but EAC-3 only 5.1).
       const channelsExceed =
         channels != null && channels > audioChannelCap(profile, codec);
+      const blocker = blockers[index];
 
       // DirectPlay serves the raw file — every track plays natively.
       if (playMethod === 'DirectPlay') {
@@ -887,11 +984,9 @@ export class StreamBuilderService {
         };
       }
 
-      // HLS group: copy only when the source already IS the group's output
-      // codec and fits the channel cap; otherwise transcode to it.
-      const copy =
+      const copyable =
         codec === groupCodec && codecSupported && fmp4Safe && !channelsExceed;
-      if (copy) {
+      if (copyable && !blocker) {
         return {
           ...base,
           copy: true,
@@ -900,32 +995,24 @@ export class StreamBuilderService {
           reasonFlags: [],
         };
       }
-      // Output channels: AAC → stereo; EAC-3/AC-3 → output-codec device cap,
-      // hard-capped at 5.1; OPUS (and other multichannel codecs) → device cap.
-      const outputChannels =
-        groupCodec === 'aac'
-          ? 2
-          : groupCodec === 'eac3' || groupCodec === 'ac3'
-            ? Math.min(channels ?? outCap, outCap, 6)
-            : Math.min(channels ?? outCap, outCap);
+      const outputChannels = Math.min(channels ?? 2, outCap);
       const downmixed = channels != null && outputChannels < channels;
       const surroundPreserved = groupCodec !== 'aac' && outputChannels >= 6;
       // A track plays as-is only if the device decodes it AND it's fMP4-safe
       // (MP3 is device-decodable but not fMP4-safe, so it must transcode — a
       // genuine reason, unlike a codec re-encoded only to match the group).
       const playableAsIs = codecSupported && fmp4Safe;
-      // Both reasons can apply at once: a browser fed EAC-3 5.1 transcodes to
-      // AAC 2.0 because the codec ISN'T decodable AND the channels overflow —
-      // surface both, not just one. A supported codec that's only downmixed
-      // shows the channel reason alone (no codec flag); a codec re-encoded
-      // purely to match the group's output codec (playable as-is, or saved as
-      // surround) shows neither.
+      // No codec reason for a supported codec only downmixed, or one re-encoded
+      // just to match the group (playable as-is, or saved as surround).
       const reasonFlags: string[] = [];
       if (downmixed) {
         reasonFlags.push('AudioChannelsNotSupported');
       }
       if (!playableAsIs && !surroundPreserved) {
         reasonFlags.push('AudioCodecNotSupported');
+      }
+      if (blocker) {
+        reasonFlags.push(blocker);
       }
       return {
         ...base,
@@ -943,22 +1030,17 @@ export class StreamBuilderService {
    * supported, fMP4-safe codec that fits the channel cap — that codec is the
    * output and nothing re-encodes. Otherwise the best the device accepts: a
    * surround codec (EAC-3 > AC-3) when any track carries surround so 5.1/7.1
-   * survive, else AAC. Only AAC/EAC-3/AC-3 are valid transcode targets (the
-   * codecs we encode), so e.g. an all-OPUS group with one over-capacity track
-   * can't stay OPUS and lands on EAC-3.
+   * survive, else AAC.
    */
   private pickGroupAudioCodec(
     audioStreams: { codec?: string; channels?: number }[],
     profile: DeviceProfileDto,
     profileAudioCodecs: string[],
+    anyCopyBlocked: boolean,
   ): string {
     const codecs = audioStreams.map((t) => (t.codec ?? '').toLowerCase());
-    // All renditions share one source codec the device plays in fMP4: keep it
-    // as the group's output codec so the fitting tracks copy verbatim. If every
-    // track fits, nothing re-encodes; if one is over-capacity, we re-encode
-    // ONLY that one to the SAME codec (downmix) — which needs an encoder for it
-    // (e.g. an all-OPUS group stays OPUS via libopus instead of collapsing to
-    // EAC-3 and re-encoding the 5.1 tracks too).
+    // One source codec the device plays in fMP4 stays the group's, so only an
+    // over-capacity or blocked track re-encodes, to it, if an encoder exists.
     if (codecs.length > 0 && new Set(codecs).size === 1) {
       const c = codecs[0];
       const supported =
@@ -966,15 +1048,16 @@ export class StreamBuilderService {
       const allFit = audioStreams.every(
         (t) => t.channels == null || t.channels <= audioChannelCap(profile, c),
       );
-      if (supported && (allFit || ENCODABLE_AUDIO.has(c))) return c;
+      const allCopy = allFit && !anyCopyBlocked;
+      if (supported && (allCopy || isEncodableAudio(c))) return c;
     }
-    // Mixed source codecs (or an unencodable codec with an over-capacity
-    // track): pick the best the device accepts — surround when any track
-    // carries it so 5.1/7.1 survive, else AAC.
     const anySurround = audioStreams.some((t) => (t.channels ?? 0) >= 6);
-    if (anySurround && profileAudioCodecs.includes('eac3')) return 'eac3';
-    if (anySurround && profileAudioCodecs.includes('ac3')) return 'ac3';
-    return 'aac';
+    const surround = (['eac3', 'ac3'] as const).find(
+      (c) =>
+        profileAudioCodecs.includes(c) &&
+        encodeChannelCap(profile, c) >= 6,
+    );
+    return anySurround && surround ? surround : 'aac';
   }
 
   private tryDirectPlay(
@@ -1082,26 +1165,17 @@ export class StreamBuilderService {
       }
     }
 
-    // Audio channels check — against the source codec's own decode cap.
+    // Against the source codec's own decode cap. The audio reasons come from
+    // the per-track plan once Direct Play is off the table.
     const audioCap = audioChannelCap(profile, source.audioCodec);
-    if (audioCap && source.audioChannels && source.audioChannels > audioCap) {
+    if (source.audioChannels && source.audioChannels > audioCap) {
       audioSupported = false;
-      reasons.push({
-        flag: 'AudioChannelsNotSupported',
-        message: `${source.audioChannels} channels > max ${audioCap}`,
-      });
     }
 
     if (!videoSupported) {
       reasons.push({
         flag: 'VideoCodecNotSupported',
         message: `Codec "${source.videoCodec}" not supported`,
-      });
-    }
-    if (!audioSupported) {
-      reasons.push({
-        flag: 'AudioCodecNotSupported',
-        message: `Codec "${source.audioCodec}" not supported`,
       });
     }
     if (!containerSupported) {

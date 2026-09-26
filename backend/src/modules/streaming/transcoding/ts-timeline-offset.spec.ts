@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { buildFfmpegArgs } from './ffmpeg-args';
+import { buildFfmpegArgs, tsHeadroom } from './ffmpeg-args';
 import type { BuildFfmpegArgsOptions } from './ffmpeg-args';
 import { realSegmentSeconds } from './constants';
 import type { CodecVariant } from './codec/types';
@@ -54,21 +54,22 @@ describe('MPEG-TS resume timeline offset', () => {
       silentLog,
     );
     // The content time the playlist gives seg-0020, on the fps-aware grid
-    // (20 × 3.003 at the default 3s setting), not the integer 20 × 3.
-    expect(offsetOf(args)).toBe(String(20 * realSegmentSeconds(3, fps)));
-    expect(offsetOf(args)).not.toBe(String(20 * 3));
+    // (20 × 3.003 at the default 3s setting), not the integer 20 × 3, plus
+    // the headroom every TS run of a source starting at 0 shares.
+    expect(offsetOf(args)).toBe(String(20 * realSegmentSeconds(3, fps) + tsHeadroom(0)));
+    expect(offsetOf(args)).not.toBe(String(20 * 3 + tsHeadroom(0)));
     // Applied to the muxer, so it must precede the output format.
     expect(args.indexOf('-output_ts_offset')).toBeLessThan(
       args.indexOf('-f'),
     );
   });
 
-  it('leaves a TS run that starts at zero alone', () => {
+  it('gives a TS run from zero the headroom alone', () => {
     const args = buildFfmpegArgs(
       opts({ useTs: true, startSegment: 0, sourceFps: 24 }),
       silentLog,
     );
-    expect(offsetOf(args)).toBeUndefined();
+    expect(offsetOf(args)).toBe(String(tsHeadroom(0)));
   });
 
   it('never offsets fMP4 — the tfdt rewrite owns that timeline', () => {

@@ -51,6 +51,9 @@ export interface EngineTraits {
   probesSegZero?: boolean;
   /** Engine can play a raw progressive file as DirectPlay. */
   supportsDirectPlay?: boolean;
+  /** Engine switches audio tracks inside a raw DirectPlay file. The web row
+   *  leaves it out: the browser build probes the media element at runtime. */
+  switchesDirectPlayAudio?: boolean;
   /** Engine has its own client-side ABR (bitrate-adaptive variant switching
    *  mid-playback). Client-only — never sent to the backend, so it's a plain
    *  required boolean rather than the wire-optional pattern above. */
@@ -83,6 +86,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: true,
     probesSegZero: false,
     supportsDirectPlay: true,
+    switchesDirectPlayAudio: true,
     supportsAbr: true,
   },
   // Embedded mpv: renders behind the UI like NATIVE, but its ffmpeg HLS
@@ -106,6 +110,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: true,
     probesSegZero: true,
     supportsDirectPlay: true,
+    switchesDirectPlayAudio: true,
     supportsAbr: false,
   },
   [EngineKind.ANDROID_TV]: {
@@ -114,6 +119,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: true,
     probesSegZero: false,
     supportsDirectPlay: true,
+    switchesDirectPlayAudio: true,
     supportsAbr: true,
   },
   // AVPlay `open()` takes any remote URI, not just a manifest, and demuxes
@@ -125,6 +131,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: false,
     probesSegZero: false,
     supportsDirectPlay: true,
+    switchesDirectPlayAudio: true,
     supportsAbr: true,
   },
   // webOS folds the audio group by language: a group of eng/eng/hin reaches
@@ -137,6 +144,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: false,
     probesSegZero: false,
     supportsDirectPlay: true,
+    switchesDirectPlayAudio: true,
     supportsAbr: true,
   },
   [EngineKind.CAST]: {

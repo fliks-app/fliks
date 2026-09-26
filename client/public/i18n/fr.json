@@ -133,7 +133,10 @@
       "VideoAbr": "Bitrate adaptatif (ABR)",
       "SubtitleBurnIn": "Sous-titres incrustés",
       "AudioCodecNotSupported": "Codec audio non supporté",
-      "AudioChannelsNotSupported": "Trop de canaux audio"
+      "AudioChannelsNotSupported": "Trop de canaux audio",
+      "AudioStartOffset": "Décalage de synchronisation audio/vidéo",
+      "AudioFormatMayChange": "Format audio variable en cours de flux",
+      "AudioEndsEarly": "L'audio se termine avant la vidéo"
     },
     "preparing": "Préparation du flux…"
   },

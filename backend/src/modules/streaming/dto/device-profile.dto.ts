@@ -130,6 +130,12 @@ export class DeviceProfileDto {
   @IsOptional()
   supportsDirectPlay?: boolean;
 
+  /** Client switches audio inside a raw Direct Play file; `false` sends a picked
+   *  non-first track through HLS, where it leads. Unset reads as `true`. */
+  @IsBoolean()
+  @IsOptional()
+  switchesDirectPlayAudio?: boolean;
+
   /**
    * Client renders HLS `SUBTITLES` renditions natively (AVPlayer, ExoPlayer,
    * Tizen AVPlay, webOS), so the master advertises a subtitle group and cues

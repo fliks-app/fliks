@@ -1,4 +1,6 @@
 import {
+  frameSecondsOf,
+  uniformSegmentCount,
   parseSourceFps,
   realSegmentSeconds,
   secondsToSegmentIndex,
@@ -57,5 +59,22 @@ describe('realSegmentSeconds', () => {
     // seg-N starts at N × seg; t just under the 2nd boundary is still seg 1.
     expect(secondsToSegmentIndex(seg, 3, 23.976)).toBe(1);
     expect(secondsToSegmentIndex(seg * 2 - 0.001, 3, 23.976)).toBe(1);
+  });
+});
+
+describe('uniformSegmentCount', () => {
+  it('counts the segments a frame starts in, as ffmpeg cuts them', () => {
+    const frame = frameSecondsOf(24);
+    // 30.021 s at 24 fps: the last frame starts at 29.979, in segment 9.
+    expect(uniformSegmentCount(30.021, 3, frame)).toBe(10);
+    expect(uniformSegmentCount(30, 3, frame)).toBe(10);
+    // A frame starting on the boundary opens a segment of its own.
+    expect(uniformSegmentCount(30 + frame, 3, frame)).toBe(11);
+    expect(uniformSegmentCount(0.01, 3, frame)).toBe(1);
+  });
+
+  it('takes a frame at 24 fps when the rate is unknown', () => {
+    expect(frameSecondsOf(undefined)).toBe(1 / 24);
+    expect(frameSecondsOf(0)).toBe(1 / 24);
   });
 });

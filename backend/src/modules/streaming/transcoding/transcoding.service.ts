@@ -12,6 +12,8 @@ import {
   DEFAULT_SEGMENT_DURATION,
   EARLY_PROBE_SEGMENTS,
   JOB_GRACE_MS,
+  OUTPUT_POLL_MS,
+  RUN_DIR_PREFIX,
   SEEK_WAIT_THRESHOLD,
   SESSION_TIMEOUT_MS,
   segmentIndexToSeconds,
@@ -23,11 +25,15 @@ import {
   isHdrProfile,
 } from './profiles';
 import {
-  buildAudioOnlyFfmpegArgs,
   buildFfmpegArgs,
   buildRemuxArgs,
+  remuxAudioGrid,
+  remuxRunStart,
   type BuildFfmpegArgsOptions,
 } from './ffmpeg-args';
+import { RemuxSegmentAssembler, remuxAssemblyPlan } from './remux-assembler';
+import type { KeyframeGrid } from './segment-boundaries';
+import { keyframeAtOrBefore } from '../../subtitles/video-packets';
 import { varStreamMapLayout } from './audio-layout';
 import {
   matchTimingWarnings,
@@ -79,7 +85,7 @@ import {
 import {
   VARIANT_EARLY,
   VARIANT_MAIN,
-  VARIANT_REMUX,
+  remuxVariant,
   type SessionVariant,
   variantHash,
 } from './variant';
@@ -268,10 +274,17 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleDestroy() {
     if (this.cleanupTimer) clearInterval(this.cleanupTimer);
+    // SIGTERM makes ffmpeg's trailer close the segment in progress as whole.
     for (const session of this.sessions.values()) {
-      session.process.kill('SIGTERM');
+      session.process.kill('SIGKILL');
     }
     this.sessions.clear();
+  }
+
+  /** ffmpeg still runs, or its last segments are still being assembled. */
+  isProducing(session: TranscodeSession): boolean {
+    const { exitCode, signalCode } = session.process;
+    return (exitCode === null && signalCode === null) || !!session.outputPending;
   }
 
   getDetectedHwAccel(): HwAccelType {
@@ -388,6 +401,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     qualityMatch: boolean,
   ): Promise<TranscodeSession | null> {
     if (existing.process.exitCode === 0 && qualityMatch) {
+      await existing.outputDone;
       if (await segmentNearby(existing.cachePath, requestedSegment)) {
         existing.lastAccess = Date.now();
         return existing;
@@ -630,7 +644,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         // this run's at the boundary and stalls the player. Keeps the cache to
         // a single timeline forward of the restart point.
         await purgeSegmentsFrom(dir, restartAt);
-        const restarted = this.startSeekSession(
+        const restarted = await this.startSeekSession(
           key,
           mediaFileId,
           quality,
@@ -670,7 +684,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     // start so the forward path never crosses a backward tfdt jump (see
     // purgeSegmentsFrom). A cold first play finds nothing to drop.
     await purgeSegmentsFrom(sessionDir, requestedSegment);
-    const session = this.startFfmpeg(
+    const session = await this.startFfmpeg(
       key,
       mediaFileId,
       quality,
@@ -750,7 +764,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           });
         }
       }
-      const cpuSession = this.startFfmpeg(
+      const cpuSession = await this.startFfmpeg(
         key,
         mediaFileId,
         quality,
@@ -781,7 +795,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
    * the main session would force a kill+restart from K back to 0 — wiping
    * out the prewarm work and adding a second 4K cold-start.
    *
-   * Bounded by an input-side `-t` of EARLY_PROBE_SEGMENTS segments (+1s) so
+   * Bounded by an input-side `-to` of EARLY_PROBE_SEGMENTS segments (+1s) so
    * ffmpeg exits shortly after flushing seg-0 .. seg-(EARLY_PROBE_SEGMENTS-1),
    * each a full segment long (there is no `hls_init_time`, so
    * seg-0 is not shortened). Same encoder profile + audio layout as the main
@@ -862,17 +876,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         }),
         this.log,
       );
-      // Bound the input read so the early session writes EARLY_PROBE_SEGMENTS
-      // full segments (+1s so the last one closes past its boundary), then
-      // ffmpeg exits cleanly. Derived from the configured segment duration —
-      // a hardcoded 4s only covered two segments at the 3s default and left
-      // seg-1 unwritten at 4s/6s grids. Insert as an INPUT option (before -i).
-      const earlyReadSec =
-        EARLY_PROBE_SEGMENTS *
-          (ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION) +
-        1;
-      const inputIdx = args.indexOf('-i');
-      if (inputIdx >= 0) args.splice(inputIdx, 0, '-t', String(earlyReadSec));
 
       const usesVarStreamMap =
         !!ctxAudioStreams && varStreamMapLayout(isVideoOnly, ctxAudioStreams.length);
@@ -969,12 +972,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       tryServe();
 
       exitTimer = setInterval(() => {
-        if (session.process.exitCode !== null && !existsSync(segPath)) {
+        if (!this.isProducing(session) && !existsSync(segPath)) {
           finish(null);
         } else {
           tryServe();
         }
-      }, 500);
+      }, OUTPUT_POLL_MS);
 
       timeout = setTimeout(() => {
         // ffmpeg launched but the segment never landed in time. Don't fail the
@@ -1114,7 +1117,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     const pollTimer = setInterval(() => {
       checkReady();
-    }, 500);
+    }, OUTPUT_POLL_MS);
 
     proc.on('close', (code) => {
       clearInterval(pollTimer);
@@ -1161,7 +1164,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return session;
   }
 
-  private startFfmpeg(
+  private async startFfmpeg(
     sessionId: string,
     mediaFileId: number,
     quality: string,
@@ -1171,20 +1174,23 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     hwAccel: HwAccelType,
     startSegment = 0,
     ctx?: SessionContext,
-  ): TranscodeSession {
+  ): Promise<TranscodeSession> {
     const isVideoOnly = ctx?.videoOnly ?? false;
     const audioStreams = ctx?.audioStreams;
 
     const args = buildFfmpegArgs(
-      this.buildArgsOptionsFromCtx(ctx, {
-        inputPath: absolutePath,
-        outputDir: sessionDir,
-        profile,
-        hwAccel,
-        startSegment,
-        videoOnly: isVideoOnly,
-        audioStreams,
-      }),
+      {
+        ...this.buildArgsOptionsFromCtx(ctx, {
+          inputPath: absolutePath,
+          outputDir: sessionDir,
+          profile,
+          hwAccel,
+          startSegment,
+          videoOnly: isVideoOnly,
+          audioStreams,
+        }),
+        seekKeyframeDts: await this.seekKeyframeDts(absolutePath, startSegment, ctx),
+      },
       this.log,
     );
 
@@ -1207,7 +1213,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return session;
   }
 
-  private startSeekSession(
+  private async startSeekSession(
     sessionId: string,
     mediaFileId: number,
     quality: string,
@@ -1215,12 +1221,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     sessionDir: string,
     startSegment: number,
     ctx?: SessionContext,
-  ): TranscodeSession {
+  ): Promise<TranscodeSession> {
     const ladder = isHdrProfile(quality)
       ? getHdrLadderForDevice(ctx?.deviceType)
       : getLadderForDevice(ctx?.deviceType);
     const profile = ladder.find((p) => p.name === quality) ?? ladder[0];
-    const session = this.startFfmpeg(
+    const session = await this.startFfmpeg(
       sessionId,
       mediaFileId,
       quality,
@@ -1282,41 +1288,38 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   async getOrCreateRemuxSession(
     mediaFileId: number,
     absolutePath: string,
-    copyAudio: boolean,
     requestedSegment = 0,
     ctx?: SessionContext,
-    segmentBoundaries?: number[],
+    grid: KeyframeGrid | null = null,
   ): Promise<TranscodeSession> {
-    // Remux variant lives in its own session-map bucket so its cache
-    // path doesn't collide with a main session for the same base
-    // profile hash.
+    const variant = remuxVariant(ctx?.audioStreamIndex, grid != null);
     const baseHash = this.computeProfileHashForCtx(ctx);
     const key = sessionKey(
       mediaFileId,
       ctx?.userId,
-      variantHash(baseHash, VARIANT_REMUX),
+      variantHash(baseHash, variant),
     );
     return this.withLock(key, () =>
       this.doGetOrCreateRemuxSession(
         key,
+        variant,
         mediaFileId,
         absolutePath,
-        copyAudio,
         requestedSegment,
         ctx,
-        segmentBoundaries,
+        grid,
       ),
     );
   }
 
   private async doGetOrCreateRemuxSession(
     key: string,
+    variant: SessionVariant,
     mediaFileId: number,
     absolutePath: string,
-    copyAudio: boolean,
     requestedSegment: number,
-    ctx?: SessionContext,
-    segmentBoundaries?: number[],
+    ctx: SessionContext | undefined,
+    grid: KeyframeGrid | null,
   ): Promise<TranscodeSession> {
     const existing = this.sessions.get(key);
     if (existing) {
@@ -1342,30 +1345,61 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const { dir: sessionDir, baseHash: remuxBaseHash } = this.cacheDirFor(
       ctx,
       mediaFileId,
-      VARIANT_REMUX,
+      variant,
       'remux',
     );
+    const segmentDuration = ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION;
+    const run = remuxRunStart(
+      grid,
+      requestedSegment,
+      segmentDuration,
+      ctx?.sourceStartPts ?? 0,
+      remuxAudioGrid(ctx?.audioPlan, ctx?.audioStreams, ctx?.audioStreamIndex),
+    );
     await fsp.mkdir(sessionDir, { recursive: true });
-
-    const isVideoOnly = ctx?.videoOnly ?? false;
+    // Per run: a run still being reaped must not delete this one's GOPs.
+    const gopDir = await fsp.mkdtemp(path.join(sessionDir, RUN_DIR_PREFIX));
     const args = buildRemuxArgs(
       {
         inputPath: absolutePath,
-        outputDir: sessionDir,
-        copyAudio,
-        startSegment: requestedSegment,
-        videoOnly: isVideoOnly,
+        outputDir: gopDir,
+        run,
         trustedStreamInfo: ctx?.trustedStreamInfo,
         audioStreamIndex: ctx?.audioStreamIndex,
         sourceVideoCodec: ctx?.sourceVideoCodec,
         audioStreams: ctx?.audioStreams,
-        segmentBoundaries,
-        segmentDuration: ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION,
+        grid,
+        segmentDuration,
+        videoStreamIndex: ctx?.videoStreamIndex,
+        sourceEndSeconds: ctx?.sourceEndSeconds,
+        sourceClockBreakSeconds: ctx?.sourceClockBreakSeconds,
+        audioPlan: ctx?.audioPlan,
       },
       this.log,
     );
+    let session: TranscodeSession | undefined;
+    const assembler = new RemuxSegmentAssembler(
+      remuxAssemblyPlan({
+        dir: sessionDir,
+        gopDir,
+        grid,
+        startSegment: requestedSegment,
+        run,
+        origin: ctx?.sourceStartPts ?? 0,
+      }),
+      this.log,
+      key,
+      // Its output can't be served: stop it so the next request starts over.
+      () => {
+        if (!session) return;
+        if (this.sessions.get(key) === session) this.sessions.delete(key);
+        session.intentionallyKilled = true;
+        void this.killProcess(session.process);
+      },
+    );
+    assembler.start();
 
-    const session = this.spawnFfmpegSession({
+    const spawned = this.spawnFfmpegSession({
       id: key,
       mediaFileId,
       quality: 'remux',
@@ -1373,134 +1407,27 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       sessionDir,
       startSegment: requestedSegment,
       reason: ctx?.spawnReason,
-      extra: { remux: true },
+      extra: { remux: true, outputPending: true },
     });
-    session.baseProfileHash = remuxBaseHash;
-    session.variant = VARIANT_REMUX;
-
-    this.applyContext(session, ctx);
-    return session;
-  }
-
-  /**
-   * Start or retrieve an audio-only HLS session for a specific audio track.
-   * Audio sessions are keyed separately from video sessions.
-   */
-  async getOrCreateAudioSession(
-    mediaFileId: number,
-    audioIndex: number,
-    absolutePath: string,
-    requestedSegment = 0,
-    ctx?: SessionContext,
-  ): Promise<TranscodeSession> {
-    const baseHash = this.computeProfileHashForCtx(ctx);
-    const variant: SessionVariant = { kind: 'audio', audioIndex };
-    const key = sessionKey(
-      mediaFileId,
-      ctx?.userId,
-      variantHash(baseHash, variant),
-    );
-    return this.withLock(key, () =>
-      this.doGetOrCreateAudioSession(
-        key,
-        mediaFileId,
-        audioIndex,
-        absolutePath,
-        requestedSegment,
-        ctx,
-      ),
-    );
-  }
-
-  private async doGetOrCreateAudioSession(
-    key: string,
-    mediaFileId: number,
-    audioIndex: number,
-    absolutePath: string,
-    requestedSegment: number,
-    ctx?: SessionContext,
-  ): Promise<TranscodeSession> {
-    const existing = this.sessions.get(key);
-    if (existing) {
-      if (existing.process.exitCode !== null) {
-        this.sessions.delete(key);
-        await fsp.rm(existing.cachePath, { recursive: true, force: true });
-      } else {
-        existing.lastAccess = Date.now();
-
-        if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
-          // Same wait/restart call as video, so the two sessions stay in step.
-          if (
-            await segmentWithinReach(
-              existing.cachePath,
-              requestedSegment,
-              SEEK_WAIT_THRESHOLD,
-            )
-          ) {
-            return existing;
-          }
-          this.log.log(
-            `Seek: restarting audio session [${key}] from segment ${requestedSegment} (not cached)`,
-          );
-          this.sessions.delete(key);
-          existing.intentionallyKilled = true;
-          await this.killProcess(existing.process);
-        } else {
-          const gap = firstMissingSegment(existing.cachePath, requestedSegment);
-          if (gap != null && gap < (existing.startSegment ?? 0)) {
-            this.log.log(
-              `Seek: segment ${requestedSegment} cached, restarting audio [${key}] at unreachable gap ${gap}`,
-            );
-            this.sessions.delete(key);
-            existing.intentionallyKilled = true;
-            await this.killProcess(existing.process);
-            requestedSegment = gap;
-          } else {
-            return existing;
-          }
-        }
-      }
-    }
-
-    const { dir: sessionDir, baseHash: audioBaseHash } = this.cacheDirFor(
-      ctx,
-      mediaFileId,
-      { kind: 'audio', audioIndex },
-      'audio',
-    );
-    await fsp.mkdir(sessionDir, { recursive: true });
-
-    const args = buildAudioOnlyFfmpegArgs(
-      {
-        inputPath: absolutePath,
-        outputDir: sessionDir,
-        audioStreamIndex: audioIndex,
-        startSegment: requestedSegment,
-        trustedStreamInfo: ctx?.trustedStreamInfo ?? false,
-        useTs: ctx?.useTs ?? false,
-        audioStreams: ctx?.audioStreams,
-        sourceFps: ctx?.sourceFps,
-        segmentDuration: ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION,
-      },
-      this.log,
-    );
-
-    const session = this.spawnFfmpegSession({
-      id: key,
-      mediaFileId,
-      quality: `audio-${audioIndex}`,
-      args,
-      sessionDir,
-      startSegment: requestedSegment,
-      segExt: ctx?.useTs ? '.ts' : undefined,
-      reason: ctx?.spawnReason,
-      extra: { isAudioOnly: true },
+    session = spawned;
+    spawned.baseProfileHash = remuxBaseHash;
+    spawned.variant = variant;
+    spawned.outputDone = new Promise<void>((resolve) => {
+      spawned.process.once('close', (code) => {
+        assembler
+          .finish(code === 0 && !spawned.intentionallyKilled)
+          .catch((err: Error) =>
+            this.log.error(`[${key}] remux run cleanup failed: ${err.message}`),
+          )
+          .finally(() => {
+            spawned.outputPending = false;
+            resolve();
+          });
+      });
     });
-    session.baseProfileHash = audioBaseHash;
-    session.variant = { kind: 'audio', audioIndex };
 
-    this.applyContext(session, ctx);
-    return session;
+    this.applyContext(spawned, ctx);
+    return spawned;
   }
 
   /**
@@ -1585,25 +1512,13 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /**
-   * Kill an ffmpeg process and wait for it to exit. Does NOT delete cache.
-   * Uses SIGKILL by default (instant) for seek restarts — ffmpeg's graceful
-   * SIGTERM shutdown (write trailer, close files) is wasted work when we're
-   * about to overwrite the output. SIGTERM is only used when the caller
-   * explicitly needs a clean shutdown (e.g. stopSession on player close).
-   */
-  private killProcess(proc: ChildProcess, graceful = false): Promise<void> {
-    if (proc.exitCode !== null) return Promise.resolve();
+  /** SIGKILL an ffmpeg process and wait for it to exit. Does NOT delete cache.
+   *  A SIGTERM would have its trailer close the segment in progress as whole. */
+  private killProcess(proc: ChildProcess): Promise<void> {
+    if (proc.exitCode !== null || proc.signalCode !== null) return Promise.resolve();
     return new Promise<void>((resolve) => {
       proc.once('close', () => resolve());
-      if (graceful) {
-        proc.kill('SIGTERM');
-        setTimeout(() => {
-          if (proc.exitCode === null) proc.kill('SIGKILL');
-        }, 5000);
-      } else {
-        proc.kill('SIGKILL');
-      }
+      proc.kill('SIGKILL');
     });
   }
 
@@ -1622,12 +1537,38 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     dirPath: string,
     sessionId?: string,
   ): Promise<void> {
-    await this.killProcess(proc, false);
+    await this.killProcess(proc);
     if (sessionId && this.sessions.has(sessionId)) {
       this.log.log(`[disk] skip rm ${dirPath} — session ${sessionId} replaced`);
       return;
     }
     await fsp.rm(dirPath, { recursive: true, force: true });
+  }
+
+  /** Where a demuxer that lands after its seek target must seek for a run to
+   *  decode from a keyframe at or before its first frame. */
+  private async seekKeyframeDts(
+    absolutePath: string,
+    startSegment: number,
+    ctx?: SessionContext,
+  ): Promise<number | undefined> {
+    if (startSegment <= 0 || !ctx?.sourceSeeksPastKeyframe) return undefined;
+    const start =
+      segmentIndexToSeconds(
+        startSegment,
+        ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION,
+        ctx?.sourceFps,
+      ) + (ctx?.sourceStartPts ?? 0);
+    const keyframe = await keyframeAtOrBefore(absolutePath, ctx?.videoStreamIndex, start).catch(
+      (err: Error) => {
+        this.log.warn(`Keyframe probe before ${start}s of ${absolutePath} failed: ${err.message}`);
+        return null;
+      },
+    );
+    if (!keyframe) {
+      this.log.warn(`No keyframe found before ${start}s of ${absolutePath}; the run may start late`);
+    }
+    return keyframe?.dts;
   }
 
   /** Assemble the buildFfmpegArgs options from the session context. The
@@ -1663,6 +1604,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       crop: ctx?.crop,
       audioPlan: ctx?.audioPlan,
       audioTrackPlans: ctx?.audioTrackPlans,
+      sourceStartPts: ctx?.sourceStartPts,
+      sourceFormatStart: ctx?.sourceFormatStart,
+      sourceEndSeconds: ctx?.sourceEndSeconds,
+      sourceClockBreakSeconds: ctx?.sourceClockBreakSeconds,
+      videoStreamIndex: ctx?.videoStreamIndex,
       encoderPreset: ctx?.encoderPreset,
       tonemapAlgo: ctx?.tonemapAlgo,
       sourceFps: ctx?.sourceFps,

@@ -18,6 +18,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: true,
     probesSegZero: false,
     supportsDirectPlay: true,
+    switchesDirectPlayAudio: true,
     supportsAbr: true,
   },
   [EngineKind.DESKTOP]: {
@@ -26,6 +27,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: true,
     probesSegZero: true,
     supportsDirectPlay: true,
+    switchesDirectPlayAudio: true,
     supportsAbr: false,
   },
   [EngineKind.ANDROID_TV]: {
@@ -34,6 +36,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: true,
     probesSegZero: false,
     supportsDirectPlay: true,
+    switchesDirectPlayAudio: true,
     supportsAbr: true,
   },
   [EngineKind.TIZEN]: {
@@ -43,6 +46,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: false,
     probesSegZero: false,
     supportsDirectPlay: true,
+    switchesDirectPlayAudio: true,
     supportsAbr: true,
   },
   [EngineKind.WEBOS]: {
@@ -52,6 +56,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: false,
     probesSegZero: false,
     supportsDirectPlay: true,
+    switchesDirectPlayAudio: true,
     supportsAbr: true,
   },
   [EngineKind.CAST]: {

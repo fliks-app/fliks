@@ -1,9 +1,16 @@
 import type { Request } from 'express';
 import { SessionContextBuilder } from './session-context-builder.service';
+import { sessionProfileHash } from '../transcoding/session-profile';
+import { LiveSessionRegistry } from '../live-session.service';
+import {
+  buildPlaybackProfileFromContext,
+  computeProfileHash,
+} from '../transcoding';
 import type { ResolvedFile } from '../streaming.service';
 
 function resolved(audioCount: number): ResolvedFile {
   return {
+    absolutePath: '/media/film.mkv',
     media: { title: 'T', type: 'movie', posterUrl: null },
     mediaFile: {
       streamInfo: {
@@ -54,6 +61,18 @@ describe('SessionContextBuilder.build', () => {
     expect(ctx.userId).toBe(7);
   });
 
+  it('anchors on the first presented frame and seeks from the container start', () => {
+    const r = resolved(1);
+    Object.assign(r.mediaFile.streamInfo!, {
+      formatStartSeconds: 14.94,
+      video: [{ streamIndex: 1, codec: 'h264', startTimeSeconds: 15, firstFrameSeconds: 15.8 }],
+    });
+    const ctx = builder.build(req, r, 1);
+    expect(ctx.sourceStartPts).toBe(15.8);
+    expect(ctx.sourceFormatStart).toBe(14.94);
+    expect(ctx.videoStreamIndex).toBe(1);
+  });
+
   it('snapshots the admin segment duration onto the context', () => {
     tracker.getSegmentDuration.mockReturnValue(6);
     expect(builder.build(req, resolved(1), 1).segmentDuration).toBe(6);
@@ -62,6 +81,7 @@ describe('SessionContextBuilder.build', () => {
   it('gates the crop on the auto-crop toggle', () => {
     const cropRect = { width: 3840, height: 1606, x: 0, y: 277 };
     const withCrop = {
+      absolutePath: '/media/film.mkv',
       media: { title: 'T', type: 'movie', posterUrl: null },
       mediaFile: {
         streamInfo: {
@@ -103,5 +123,63 @@ describe('SessionContextBuilder.build', () => {
     expect(ctx.deviceType).toBe('desktop');
     expect(ctx.useTs).toBe(false);
     expect(ctx.videoVariant).toBeUndefined();
+  });
+
+  it('keeps the timeline frozen at playback-info through a rescan', () => {
+    const registry = new LiveSessionRegistry();
+    const live = registry.create({
+      userId: 7,
+      username: 'u',
+      kind: 'transcode',
+      mediaFileId: 1,
+      timeline: { origin: 2.8, formatStart: 2.779, end: 60, clockBreak: 40 },
+    });
+    sessionRouter.findRequestSession.mockReturnValue(live);
+    const rescanned = resolved(1);
+    const ctx = builder.build(req, rescanned, 1);
+    expect(ctx.sourceStartPts).toBe(2.8);
+    expect(ctx.sourceFormatStart).toBe(2.779);
+    expect(ctx.sourceEndSeconds).toBe(60);
+    expect(ctx.sourceClockBreakSeconds).toBe(40);
+    registry.onModuleDestroy();
+  });
+
+  it('hashes a var_stream_map session at playback-info as every transcode request does', () => {
+    const file = resolved(2);
+    const layout = (outputChannels: number) => ({
+      useTs: false,
+      audioPlan: { mode: 'copy' as const, codec: 'aac' },
+      audioTrackPlans: [
+        { copy: true, outputCodec: 'aac', outputChannels: 2 },
+        { copy: false, outputCodec: 'aac', outputChannels },
+      ],
+      videoVariant: { codec: 'h264' as const, bitDepth: 8 as const, hdr: null },
+    });
+    const registry = new LiveSessionRegistry();
+    const live = registry.create({
+      userId: 7,
+      username: 'u',
+      kind: 'transcode',
+      mediaFileId: 1,
+      profileHash: sessionProfileHash(
+        layout(2),
+        file.mediaFile.streamInfo,
+        'f',
+        3,
+      ),
+      ...layout(2),
+    });
+    sessionRouter.findRequestSession.mockReturnValue(live);
+    const ctx = builder.build(req, file, 1);
+    expect(ctx.videoOnly).toBe(true);
+    // What TranscodingService.computeProfileHashForCtx derives for this context.
+    const requestHash = computeProfileHash(
+      buildPlaybackProfileFromContext(ctx, ctx.segmentDuration! * 1000),
+    );
+    expect(live.profileHash).toBe(requestHash);
+    expect(
+      sessionProfileHash(layout(6), file.mediaFile.streamInfo, 'f', 3),
+    ).not.toBe(requestHash);
+    registry.onModuleDestroy();
   });
 });

@@ -26,6 +26,7 @@ import { Action } from '../auth/casl/actions.enum';
 import { EventsService } from '../scheduler/events.service';
 import { parseByteRange } from './byte-range.util';
 import { User } from '../users/entities/user.entity';
+import type { MediaFileInfo } from '../subtitles/ffprobe.service';
 import { StreamingService, ResolvedFile } from './streaming.service';
 import { SubtitleStreamService } from './subtitle-stream.service';
 import {
@@ -34,30 +35,39 @@ import {
   getLadderForDevice,
   getHdrLadderForDevice,
   profileFitsSource,
-  computeProfileHash,
-  buildPlaybackProfileFromContext,
   resolveSourceVideoBitrateBps,
   cappedRungVideoBitrateBps,
   parseBitrateToBps,
   type BurnInSubtitle,
 } from './transcoding';
+import { tsHeadroom } from './transcoding/ffmpeg-args';
 import {
   DEFAULT_SEGMENT_DURATION,
   EARLY_PROBE_SEGMENTS,
   parseSourceFps,
   realSegmentSeconds,
   secondsToSegmentIndex,
+  frameSecondsOf,
+  uniformSegmentCount,
 } from './transcoding/constants';
 import {
   getRemuxSegmentGrid,
-  secondsToSegmentIndex as boundarySecondsToIndex,
+  gridSegmentIndex,
+  type KeyframeGrid,
 } from './transcoding/segment-boundaries';
+import {
+  cueOffsetSeconds,
+  inputSeekSeconds,
+  sourceTimeline,
+} from './transcoding/source-timeline';
 import { copySourceCodecString } from './transcoding/codec/codec-strings';
 import { LiveSessionRegistry } from './live-session.service';
 import * as path from 'path';
 import { SegmentPackagingService } from './services/segment-packaging.service';
 import { SessionRouter } from './services/session-router.service';
+import { ClockBreakScanService } from './services/clock-break-scan.service';
 import { SessionContextBuilder } from './services/session-context-builder.service';
+import { sessionProfileHash } from './transcoding/session-profile';
 import { pickAudioLayout } from './transcoding/audio-layout';
 import {
   buildIFrameSegmentArgs,
@@ -88,24 +98,18 @@ const VALID_QUALITIES = new Set([
   'remux',
 ]);
 
-/**
- * Inject HLS X-TIMESTAMP-MAP header so the player aligns VTT cues to the
- * absolute MPEGTS timeline of the video stream (which uses -copyts → PTS
- * matches original file time). Without this, players that normalise media
- * time treat VTT time as relative to playback start, which drifts after
- * any seek that doesn't land on an exact keyframe (-noaccurate_seek).
- */
+/** Inject the X-TIMESTAMP-MAP putting cue 0 at `cueOffsetSeconds` on the served
+ *  timeline; a negative offset moves LOCAL instead, MPEGTS being unsigned. */
 export function withTimestampMap(
   vtt: string | Buffer,
-  startSeconds = 0,
+  cueOffsetSeconds = 0,
 ): string {
   const text = typeof vtt === 'string' ? vtt : vtt.toString('utf-8');
-  // `-copyts` keeps the first video frame at the source start PTS, so 0-based
-  // cue times (sidecar SRT/ASS and embedded extracts alike) must be offset by
-  // it on the 90kHz MPEGTS clock — else cues lead the video by `startSeconds`
-  // on TS/PVR rips. `startSeconds` 0 → MPEGTS:0, the no-op for MP4/MKV.
-  const mpegts = Math.round(Math.max(0, startSeconds) * 90000);
-  const map = `X-TIMESTAMP-MAP=MPEGTS:${mpegts},LOCAL:00:00:00.000`;
+  const mpegts = Math.round(Math.max(0, cueOffsetSeconds) * 90000);
+  const local = new Date(Math.round(Math.max(0, -cueOffsetSeconds) * 1000))
+    .toISOString()
+    .slice(11, 23);
+  const map = `X-TIMESTAMP-MAP=MPEGTS:${mpegts},LOCAL:${local}`;
   return text.replace(/^(WEBVTT[^\n]*)\n/, `$1\n${map}\n`);
 }
 
@@ -225,25 +229,16 @@ function statSizeOrNull(filePath: string): number | null {
   }
 }
 
-/** Generate a VOD HLS playlist for a given duration and segment URL pattern.
- *  `segDuration` is the real per-segment length (see `realSegmentSeconds`);
- *  seg-N covers `[N*segDuration, (N+1)*segDuration)`, so the EXTINF values
- *  mirror what FFmpeg actually emits and the presentation timeline stays
- *  aligned with the moof PTS the segments carry. */
+/** VOD playlist on the uniform grid: seg-N covers `[N, N+1) · segDuration` (the
+ *  real length, `realSegmentSeconds`), as many as `uniformSegmentCount` finds. */
 export function buildVodPlaylist(
   duration: number,
   segmentUrl: (index: string) => string,
   initUrl: string | undefined,
   segDuration: number,
+  frameSeconds: number,
 ): string {
-  // Subtract small epsilon before ceil to avoid phantom last segment when
-  // ffprobe duration has floating-point imprecision (e.g. 120.001 → ceil
-  // produces 41 segments but FFmpeg only writes 40).
-  const epsilon = 0.05;
-  const segCount = Math.max(
-    1,
-    Math.ceil(Math.max(0, duration - epsilon) / segDuration),
-  );
+  const segCount = uniformSegmentCount(duration, segDuration, frameSeconds);
   const lines = [
     '#EXTM3U',
     '#EXT-X-VERSION:7',
@@ -274,11 +269,18 @@ export function buildIFramePlaylist(
   duration: number,
   segmentUrl: (index: string) => string,
   segDuration: number,
+  frameSeconds: number,
 ): string {
-  return buildVodPlaylist(duration, segmentUrl, undefined, segDuration).replace(
+  return buildVodPlaylist(duration, segmentUrl, undefined, segDuration, frameSeconds).replace(
     '#EXT-X-INDEPENDENT-SEGMENTS',
     '#EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-I-FRAMES-ONLY',
   );
+}
+
+function frameSeconds(
+  streamInfo: { video?: { frameRate?: string }[] } | null | undefined,
+): number {
+  return frameSecondsOf(parseSourceFps(streamInfo?.video?.[0]?.frameRate));
 }
 
 /** Trick-play grid: the variant's real segment length, so entry N is the IDR
@@ -353,6 +355,7 @@ export class StreamingController {
     private readonly segmentPackaging: SegmentPackagingService,
     private readonly sessionRouter: SessionRouter,
     private readonly sessionContextBuilder: SessionContextBuilder,
+    private readonly clockBreakScan: ClockBreakScanService,
     private readonly pluginPreRoll: PluginPreRollService,
     private readonly events: EventsService,
     private readonly caslAbilityFactory: CaslAbilityFactory,
@@ -409,11 +412,11 @@ export class StreamingController {
         }
       | null
       | undefined,
-    boundaries?: number[],
+    remux?: { boundaries: number[]; origin: number },
   ): number {
     const posIndex = live
-      ? boundaries
-        ? boundarySecondsToIndex(boundaries, live.position)
+      ? remux
+        ? gridSegmentIndex(remux.boundaries, live.position, remux.origin)
         : secondsToSegmentIndex(
             live.position,
             this.segDur(existing ?? undefined),
@@ -432,17 +435,17 @@ export class StreamingController {
     );
   }
 
-  /** Keyframe-aligned cumulative segment boundaries for the remux/copy path,
-   *  or null when keyframes can't be probed (fall back to the uniform grid).
-   *  Cached per file by {@link getRemuxSegmentGrid}; the playlist is
-   *  fetched before segments, so segment-time lookups hit the warm cache. */
-  private async remuxBoundaries(
-    absolutePath: string,
+  /** Keyframe grid of the remux path, or null for the uniform one; one answer
+   *  per file version ({@link getRemuxSegmentGrid}). */
+  private remuxGrid(
+    resolved: ResolvedFile,
     segDur: number,
-    durationHint = 0,
-  ): Promise<number[] | null> {
-    const grid = await getRemuxSegmentGrid(absolutePath, durationHint, segDur);
-    return grid ? grid.boundaries : null;
+  ): Promise<KeyframeGrid | null> {
+    return getRemuxSegmentGrid(
+      resolved.absolutePath,
+      segDur,
+      resolved.mediaFile.streamInfo,
+    );
   }
 
   /**
@@ -458,9 +461,9 @@ export class StreamingController {
     existing: { startSegment?: number | null } | null | undefined,
     isInit: boolean,
     segIndex: number,
-    boundaries?: number[],
+    remux?: { boundaries: number[]; origin: number },
   ): number {
-    return isInit ? this.resumeFloor(live, existing, boundaries) : segIndex;
+    return isInit ? this.resumeFloor(live, existing, remux) : segIndex;
   }
 
   /**
@@ -566,36 +569,29 @@ export class StreamingController {
     }
   }
 
-  /** Resolve file duration from streamInfo or by probing with ffprobe. */
+  /** Seconds from the first frame to the video's end, what every playlist of the
+   *  session lasts; the probed container duration for a row without stream info. */
   private async resolveDuration(
     mediaFileId: number,
-    absolutePath: string,
-    streamInfo: { durationSeconds?: number } | null | undefined,
+    req: Request,
+    resolved: ResolvedFile,
   ): Promise<number> {
-    let duration = streamInfo?.durationSeconds ?? 0;
-    if (!duration) {
-      try {
-        const { stdout } = await execFileAsync(
-          'ffprobe',
-          [
-            '-v',
-            'error',
-            '-show_entries',
-            'format=duration',
-            '-of',
-            'csv=p=0',
-            absolutePath,
-          ],
-          { timeout: 10_000 },
-        );
-        duration = parseFloat(String(stdout).trim()) || 0;
-      } catch (err) {
-        this.log.warn(
-          `Failed to probe duration for MediaFile #${mediaFileId}: ${err}`,
-        );
-      }
+    const { absolutePath } = resolved;
+    const timeline =
+      this.sessionRouter.findRequestSession(req, mediaFileId)?.timeline ??
+      sourceTimeline(resolved.mediaFile.streamInfo, absolutePath);
+    if (timeline.end != null) return timeline.end - timeline.origin;
+    try {
+      const { stdout } = await execFileAsync(
+        'ffprobe',
+        ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', absolutePath],
+        { timeout: 10_000 },
+      );
+      return parseFloat(String(stdout).trim()) || 0;
+    } catch (err) {
+      this.log.warn(`Failed to probe duration for MediaFile #${mediaFileId}: ${err}`);
+      return 0;
     }
-    return duration;
   }
 
   /** Available download qualities for a media file (used by download-quality modal). */
@@ -759,6 +755,21 @@ export class StreamingController {
         /* prewarm is best-effort — the on-demand path still serves the track */
       });
 
+    // A file whose clock was never scanned gets it for its next plays.
+    void this.clockBreakScan.scheduleIfNeeded(
+      mediaFileId,
+      resolved.absolutePath,
+      resolved.mediaFile.streamInfo,
+    );
+
+    // Before the decision below, which reads them.
+    this.activeStreamTracker.setSegmentDuration(ss.segmentDuration);
+    this.activeStreamTracker.setTonemapAlgo(ss.tonemapAlgo);
+    this.activeStreamTracker.setAutoCropEnabled(ss.autoCropEnabled);
+    // Re-push the admin settings (GPU pin, tone-map curve, cache budget, job
+    // slots) so a change applies without a restart.
+    this.transcodingService.applyStreamingSettings(ss);
+
     // Quality the client is requesting (absent / 'auto' = let the server
     // decide per autoQualityMode; 'original' = source rung; anything else =
     // a lower rung that must transcode). Drives DirectPlay-vs-ladder routing.
@@ -770,28 +781,15 @@ export class StreamingController {
       burnInSubtitleId,
       startQuality,
       ss.autoQualityMode,
+      audioStreamIndex,
+      ss.segmentDuration,
     );
-    const { response, useHdrLadder, videoVariant } = evaluateResult;
-    // Resolve the effective `useTs`. The explicit profile flag wins as
-    // an admin / debug hard override. Otherwise Tizen-style profiles
-    // opt into TS only when the source has zero or one audio track
-    // (single-audio fmp4 hits AVPlay's missing-rendition-probe stall;
-    // see DTO docstring and issue #148).
+    const { response, useHdrLadder, videoVariant, muxFlavour } = evaluateResult;
     const sourceAudioCount = resolved.mediaFile.streamInfo?.audio?.length ?? 0;
-    const effectiveUseTs =
-      !!deviceProfile.useTs ||
-      (!!deviceProfile.useTsOnSingleAudio && sourceAudioCount <= 1);
+    const effectiveUseTs = muxFlavour === 'ts';
     const deviceType = deviceProfile.deviceType ?? 'desktop';
     const useExtXMedia =
-      pickAudioLayout(sourceAudioCount, effectiveUseTs ? 'ts' : 'fmp4') ===
-      'var-stream-map';
-
-    this.activeStreamTracker.setSegmentDuration(ss.segmentDuration);
-    this.activeStreamTracker.setTonemapAlgo(ss.tonemapAlgo);
-    this.activeStreamTracker.setAutoCropEnabled(ss.autoCropEnabled);
-    // Re-push the admin settings (GPU pin, tone-map curve, cache budget, job
-    // slots) so a change applies without a restart.
-    this.transcodingService.applyStreamingSettings(ss);
+      pickAudioLayout(sourceAudioCount, muxFlavour) === 'var-stream-map';
 
     // Different device profiles (codec / mux / audio layout) hash to
     // different session-map keys, so multi-device playback of the same
@@ -905,26 +903,28 @@ export class StreamingController {
         ? resolveTonemapCurve()
         : undefined;
 
-    // Compute the profile hash from the inputs we just derived — no
-    // tracker round-trip needed. The hash drives the cache directory
-    // shape and is matched against the same hash recomputed at every
-    // HLS request via the LiveSession we're about to create.
+    // The session's layout fields, stored on the LiveSession below and hashed
+    // through the same function every HLS request rebuilds its context with.
+    const sessionLayout = {
+      useTs: effectiveUseTs,
+      audioPlan: response.audioPlan,
+      audioTrackPlans:
+        response.audioTracks?.map((t) => ({
+          copy: t.copy,
+          outputCodec: t.outputCodec,
+          outputChannels: t.outputChannels,
+        })) ?? null,
+      videoVariant,
+      timeline: sourceTimeline(resolved.mediaFile.streamInfo, resolved.absolutePath),
+    };
     const profileHash =
       response.playMethod === 'DirectPlay'
         ? null
-        : computeProfileHash(
-            buildPlaybackProfileFromContext(
-              {
-                userId,
-                username: user.username,
-                audioPlan: response.audioPlan,
-                videoVariant: videoVariant ?? undefined,
-                useTs: effectiveUseTs,
-                videoOnly: useExtXMedia,
-                audioStreams: resolved.mediaFile.streamInfo?.audio,
-              },
-              ss.segmentDuration * 1000,
-            ),
+        : sessionProfileHash(
+            sessionLayout,
+            resolved.mediaFile.streamInfo,
+            resolved.absolutePath,
+            ss.segmentDuration,
           );
     const kind =
       response.playMethod === 'DirectPlay'
@@ -1000,14 +1000,7 @@ export class StreamingController {
       appVersion: deviceProfile.appVersion ?? null,
       sseConnectionId,
       position: resumePosition,
-      useTs: effectiveUseTs,
-      audioPlan: response.audioPlan,
-      audioTrackPlans:
-        response.audioTracks?.map((t) => ({
-          copy: t.copy,
-          outputCodec: t.outputCodec,
-          outputChannels: t.outputChannels,
-        })) ?? null,
+      ...sessionLayout,
       audioStreamIndex: audioStreamIndex ?? null,
       audioStreamCount: sourceAudioCount,
       useExtXMedia,
@@ -1018,14 +1011,12 @@ export class StreamingController {
       supportsIFrameTrickPlay: !!deviceProfile.supportsIFrameTrickPlay,
       probesSegZero: deviceProfile.probesSegZero,
       supportsAbr: deviceProfile.supportsAbr,
-      videoVariant,
       tonemapping: response.tonemapping,
       clientTonemap: response.clientTonemap ?? false,
       transcodeReasons: response.transcodeReasons,
       burnIn,
       encoderPreset: ss.qsvPreset,
       canCopyVideo: response.videoCopyStream,
-      canCopyAudio: response.audioCopyStream,
       pinned: isDownload,
     });
 
@@ -1290,12 +1281,15 @@ export class StreamingController {
 
     const sdrVariant = liveVariant;
     const sourceFrameRate = parseSourceFps(v?.frameRate);
+    // The copy variant muxes the picked track alone (buildRemuxArgs), so it
+    // publishes no audio group.
+    const audioGroup = useExtXMedia && !(includeRemux && !onlyQuality);
     // CODECS audio entry. With EXT-X-MEDIA renditions every track shares one
     // output codec (the audio group is uniform — see buildAudioTracks), so the
-    // master must advertise THAT codec, not the default track's audioPlan
+    // master must advertise THAT codec, not the picked track's audioPlan
     // (which is only the muxed single-audio decision).
     const masterAudioCodec =
-      useExtXMedia && live?.audioTrackPlans?.length
+      audioGroup && live?.audioTrackPlans?.length
         ? live.audioTrackPlans[0].outputCodec
         : (live?.audioPlan?.codec ?? 'aac');
     const playlist = this.transcodingService.generateMasterPlaylist({
@@ -1311,7 +1305,7 @@ export class StreamingController {
       // audio entry (otherwise Shaka / ExoPlayer reject the variant).
       // `undefined` keeps the muxed single-audio layout for everyone else.
       audioStreams:
-        useExtXMedia || audioStreams.length === 0 ? audioStreams : undefined,
+        audioGroup || audioStreams.length === 0 ? audioStreams : undefined,
       // Real per-track output channels (copy keeps source, transcode downmixes)
       // so the rendition CHANNELS hint matches the bytes; aligned with the
       // source audio order the session produces renditions in.
@@ -1392,11 +1386,7 @@ export class StreamingController {
     const durationHint = firstQueryString(req.query, 'duration');
     const duration =
       (durationHint ? parseFloat(durationHint) : 0) ||
-      (await this.resolveDuration(
-        mediaFileId,
-        resolved.absolutePath,
-        resolved.mediaFile.streamInfo,
-      ));
+      (await this.resolveDuration(mediaFileId, req, resolved));
     if (!duration) {
       res.status(404).send('Duration unknown — rescan the file first');
       return;
@@ -1406,6 +1396,7 @@ export class StreamingController {
       duration,
       (seg) => `/api/stream/${mediaFileId}/iframe/seg-${seg}.ts${tokenParam}`,
       iframeGrid(resolved.mediaFile.streamInfo, this.segDur()),
+      frameSeconds(resolved.mediaFile.streamInfo),
     );
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -1438,12 +1429,17 @@ export class StreamingController {
       crop?.width ?? v?.width ?? 1920,
       crop?.height ?? v?.height ?? 1080,
     );
+    const timeline = sourceTimeline(si, resolved.absolutePath);
     const args = buildIFrameSegmentArgs({
       inputPath: resolved.absolutePath,
-      seekSeconds: parseInt(match[1], 10) * iframeGrid(si, this.segDur()),
+      seekSeconds: inputSeekSeconds(
+        parseInt(match[1], 10) * iframeGrid(si, this.segDur()),
+        timeline,
+      ),
       width,
       height,
       crop,
+      timelineOffsetSeconds: tsHeadroom(timeline.origin),
     });
     try {
       // One ffmpeg pass per frame, uncached (~380 ms on 1080p): this is why
@@ -1473,12 +1469,11 @@ export class StreamingController {
     @CurrentUser() user: User | undefined,
     @Res() res: Response,
   ) {
-    // ffmpeg extracts these cues without `-copyts`, so they come out 0-based —
-    // same as sidecar subs — and need the source start-PTS offset to line up
-    // with the video on TS/PVR rips. resolveFile also re-checks library access.
+    // resolveFile also re-checks library access.
     const resolved = await this.streamingService.resolveFile(mediaFileId, user);
-    const startTimeSeconds =
-      resolved.mediaFile.streamInfo?.video?.[0]?.startTimeSeconds ?? 0;
+    const cueOffset = cueOffsetSeconds(
+      sourceTimeline(resolved.mediaFile.streamInfo, resolved.absolutePath),
+    );
     const stream = await this.subtitleStreamService.extractEmbeddedSubtitle(
       mediaFileId,
       streamIndex,
@@ -1493,7 +1488,7 @@ export class StreamingController {
     const vtt = Buffer.concat(chunks);
     res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.send(withTimestampMap(vtt, startTimeSeconds));
+    res.send(withTimestampMap(vtt, cueOffset));
   }
 
   /** Embedded stream: only the extracted WebVTT exists, no sidecar file. */
@@ -1505,8 +1500,9 @@ export class StreamingController {
     @Res() res: Response,
   ) {
     const resolved = await this.streamingService.resolveFile(mediaFileId, user);
-    const startTimeSeconds =
-      resolved.mediaFile.streamInfo?.video?.[0]?.startTimeSeconds ?? 0;
+    const cueOffset = cueOffsetSeconds(
+      sourceTimeline(resolved.mediaFile.streamInfo, resolved.absolutePath),
+    );
     const stream = await this.subtitleStreamService.extractEmbeddedSubtitle(
       mediaFileId,
       streamIndex,
@@ -1524,7 +1520,7 @@ export class StreamingController {
     // only the plain one still gets a name.
     res.attachment(`${base}.track-${streamIndex}.vtt`);
     res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
-    res.send(withTimestampMap(Buffer.concat(chunks), startTimeSeconds));
+    res.send(withTimestampMap(Buffer.concat(chunks), cueOffset));
   }
 
   /** Download an external subtitle as stored on disk, original format kept. */
@@ -1550,11 +1546,11 @@ export class StreamingController {
     @CurrentUser() user: User | undefined,
     @Res() res: Response,
   ) {
-    const { vtt, startTimeSeconds } =
+    const { vtt, cueOffsetSeconds } =
       await this.subtitleStreamService.getSubtitleAsVtt(subtitleId, user);
     res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.send(withTimestampMap(vtt, startTimeSeconds));
+    res.send(withTimestampMap(vtt, cueOffsetSeconds));
   }
 
   // HLS subtitle media playlists (single WebVTT segment) — referenced by the
@@ -1647,51 +1643,29 @@ export class StreamingController {
       mediaFileId,
       req.user as User,
     );
-    const duration = await this.resolveDuration(
-      mediaFileId,
-      resolved.absolutePath,
-      resolved.mediaFile.streamInfo,
-    );
+    const duration = await this.resolveDuration(mediaFileId, req, resolved);
     if (!duration) {
       res.status(404).send('Duration unknown');
       return;
     }
 
-    // Audio is produced by the video session whenever the master picked the
-    // var_stream_map layout (`setUseExtXMedia`): any fMP4 source with audio
-    // (issue #148, Tizen) and any multi-audio source, whatever the mux. Only a
-    // muxed TS / muxed-fMP4 source needs a separate audio-only session instead.
+    // The master lists audio renditions only in the var_stream_map layout, so
+    // the video session cuts them, on its GOP grid (`hlsAudioSegment`).
     const live = this.sessionRouter.findRequestSession(req, mediaFileId);
-    const useExtXMedia = live?.useExtXMedia ?? false;
-    if (!useExtXMedia) {
-      const user = req.user;
-      void this.transcodingService.getOrCreateAudioSession(
-        mediaFileId,
-        audioIndex,
-        resolved.absolutePath,
-        0,
-        { userId: user?.id, segmentDuration: this.segDur() },
-      );
-    }
-
     const tokenParam = buildTokenParam(req);
     const basePath = `/api/stream/${mediaFileId}/audio/${audioIndex}`;
     const useTs = live?.useTs ?? false;
     const segExt = useTs ? 'ts' : 'm4s';
-    // var_stream_map audio renditions are cut on the video GOP grid, so they
-    // share the video's real per-segment duration.
-    const sourceFps = parseSourceFps(
-      resolved.mediaFile.streamInfo?.video?.[0]?.frameRate,
+    const audioSegDuration = realSegmentSeconds(
+      this.segDur(),
+      parseSourceFps(resolved.mediaFile.streamInfo?.video?.[0]?.frameRate),
     );
-    const audioSegDuration =
-      useExtXMedia && !useTs
-        ? realSegmentSeconds(this.segDur(), sourceFps)
-        : this.segDur();
     const playlist = buildVodPlaylist(
       duration,
       (seg) => `${basePath}/seg-${seg}.${segExt}${tokenParam}`,
       useTs ? undefined : `${basePath}/init_${audioIndex + 1}.mp4${tokenParam}`,
       audioSegDuration,
+      frameSeconds(resolved.mediaFile.streamInfo),
     );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -1925,11 +1899,7 @@ export class StreamingController {
     const durationHint = firstQueryString(req.query, 'duration');
     const duration =
       (durationHint ? parseFloat(durationHint) : 0) ||
-      (await this.resolveDuration(
-        mediaFileId,
-        resolved.absolutePath,
-        resolved.mediaFile.streamInfo,
-      ));
+      (await this.resolveDuration(mediaFileId, req, resolved));
     if (!duration) {
       res.status(404).send('Duration unknown — rescan the file first');
       return;
@@ -1948,25 +1918,18 @@ export class StreamingController {
         const ctx = this.sessionContextBuilder.build(req, resolved, mediaFileId);
         ctx.spawnReason = 'variant-prespawn';
         if (quality === 'remux') {
-          const copyAudio =
-            firstQueryString(req.query, 'copyAudio') !== 'false';
           // Copied video is keyframe-cut, so map the resume time to a segment
           // (and seek) via the real keyframe boundaries, not the uniform grid.
-          const boundaries = await this.remuxBoundaries(
-            resolved.absolutePath,
-            this.segDur(ctx),
-            duration,
-          );
-          const startSegment = boundaries
-            ? boundarySecondsToIndex(boundaries, startAtSec)
+          const grid = await this.remuxGrid(resolved, this.segDur(ctx));
+          const startSegment = grid
+            ? gridSegmentIndex(grid.boundaries, startAtSec, ctx.sourceStartPts ?? 0)
             : secondsToSegmentIndex(startAtSec, this.segDur(ctx));
           void this.transcodingService.getOrCreateRemuxSession(
             mediaFileId,
             resolved.absolutePath,
-            copyAudio,
             startSegment,
             ctx,
-            boundaries ?? undefined,
+            grid,
           );
         } else {
           void this.transcodingService.getOrCreateSession(
@@ -2015,23 +1978,21 @@ export class StreamingController {
     let remuxDurations: number[] | null = null;
     if (quality === 'remux') {
       remuxDurations =
-        (await getRemuxSegmentGrid(resolved.absolutePath, duration, this.segDur()))
-          ?.durations ?? null;
+        (await this.remuxGrid(resolved, this.segDur()))?.durations ?? null;
     }
-    // Transcoded fMP4 segments span one GOP each — declare their real length
-    // so fractional-fps streams stay in A/V sync. Remux (variable) and TS keep
-    // their own paths.
+    // A transcoded segment is one forced GOP: its real length keeps fractional-fps
+    // streams in sync. A remux without keyframes runs on the plain grid.
     const sourceFps = parseSourceFps(
       resolved.mediaFile.streamInfo?.video?.[0]?.frameRate,
     );
-    const transcodeFmp4 = quality !== 'remux' && !useTs;
     const playlist = remuxDurations
       ? buildVariableVodPlaylist(remuxDurations, segmentUrl, initRef)
       : buildVodPlaylist(
           duration,
           segmentUrl,
           initRef,
-          transcodeFmp4 ? realSegmentSeconds(this.segDur(), sourceFps) : this.segDur(),
+          quality === 'remux' ? this.segDur() : realSegmentSeconds(this.segDur(), sourceFps),
+          frameSeconds(resolved.mediaFile.streamInfo),
         );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -2182,10 +2143,8 @@ export class StreamingController {
               this.segDur(existing),
               existing.sourceFps,
             ),
-            // Remux carries its own keyframe-cut timeline; the grid tfdt anchor
-            // shifts each remux segment by its IDR-vs-grid offset and must be
-            // skipped, exactly as the slow-path serve below does (#349).
-            skipTimelineRewrite: quality === 'remux',
+            // Remux is cut on source keyframes, off the grid.
+            keyframeCut: quality === 'remux',
           },
         );
         return;
@@ -2294,35 +2253,36 @@ export class StreamingController {
       }
     }
 
-    // For remux sessions, copy audio only when the source codec is compatible
-    // (captured at playback-info); otherwise transcode audio to AAC.
-    const copyAudio = live?.canCopyAudio ?? false;
     // Remux: anchor + seek on the real keyframe boundaries (cached) so a resume
     // / forward seek lands on the right content and the post-seek playlist stays
     // aligned. Non-remux keeps the uniform grid (force_key_frames makes it true).
-    const remuxBounds =
+    const remuxGrid =
       quality === 'remux'
-        ? ((await this.remuxBoundaries(
-            resolved.absolutePath,
-            this.segDur(ctx),
-          )) ?? undefined)
-        : undefined;
+        ? await this.remuxGrid(resolved, this.segDur(ctx))
+        : null;
+    if (remuxGrid && !isInit && segIndex >= remuxGrid.durations.length) {
+      this.log.warn(`Segment 404: ${segment} is past the ${remuxGrid.durations.length} of the remux grid`);
+      res.status(404).send('Segment not found');
+      return;
+    }
     const anchorSeg = this.anchorSegment(
       live,
       existing,
       isInit,
       segIndex,
-      remuxBounds,
+      remuxGrid ? {
+        boundaries: remuxGrid.boundaries,
+        origin: ctx.sourceStartPts ?? 0,
+      } : undefined,
     );
     const session =
       quality === 'remux'
         ? await this.transcodingService.getOrCreateRemuxSession(
             mediaFileId,
             resolved.absolutePath,
-            copyAudio,
             anchorSeg,
             ctx,
-            remuxBounds,
+            remuxGrid,
           )
         : await this.transcodingService.getOrCreateSession(
             mediaFileId,
@@ -2344,10 +2304,9 @@ export class StreamingController {
       segName,
     );
     if (!segPath) {
-      // ffmpeg session is healthy (exitCode === null) → segment will
-      // arrive on the next tick; surface as transient so players retry.
-      // Hard 404 only when the session actually died.
-      if (session.process.exitCode === null) {
+      // Still producing → the segment arrives on a later tick; surface as
+      // transient so players retry. Hard 404 only once the run is over.
+      if (this.transcodingService.isProducing(session)) {
         this.log.warn(
           `Segment 503 (transient): ${segment} (quality=${quality}, mfid=${mediaFileId})`,
         );
@@ -2366,10 +2325,8 @@ export class StreamingController {
       sendTransientUnavailable(res);
       return;
     }
-    // Remux segments skip the tfdt anchor — they already carry a keyframe-cut
-    // -copyts timeline (see SegmentPackagingService / #349). The on-disk fast
-    // path above serves remux too, so it passes the same flag; only the
-    // early-probe paths never run for remux (gated on quality !== 'remux').
+    // Remux is cut on source keyframes, off the grid; the early-probe
+    // paths never run for remux (gated on quality !== 'remux').
     await this.segmentPackaging.serve(
       res,
       segPath,
@@ -2377,7 +2334,7 @@ export class StreamingController {
       {
         segDuration: realSegmentSeconds(this.segDur(session), session.sourceFps),
         startPts: session.sourceStartPts,
-        skipTimelineRewrite: quality === 'remux',
+        keyframeCut: quality === 'remux',
       },
     );
   }

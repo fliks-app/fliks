@@ -1,4 +1,10 @@
-import { parseInitTracks, rewriteSegmentTfdt } from './timeline';
+import {
+  parseInitTracks,
+  readInitEdits,
+  retimeFragments,
+  rewriteSegmentTfdt,
+  withInitEdits,
+} from './timeline';
 
 // Minimal ISO-BMFF box builders — just enough structure for parseInitTracks /
 // collectTfdts to walk (moov>trak>[tkhd, mdia>[mdhd, hdlr]] and moof>traf>[tfhd,
@@ -97,26 +103,13 @@ describe('rewriteSegmentTfdt', () => {
     expect(readTfdt(out)).toBe(100 * TS); // 98s corrupted to 100s — the bug
   });
 
-  /**
-   * A source whose video starts at a non-zero PTS (TS captures, PVR rips). The
-   * run spawned at 0 keeps that origin — ffmpeg's `-copyts` passes absolute PTS
-   * through — so a run spawned mid-file has to be anchored onto it as well, or
-   * the two disagree by exactly `start_time`. The WebVTT `X-TIMESTAMP-MAP` adds
-   * `start_time` unconditionally, so it can only ever be right for one of them:
-   * subtitles ran `start_time` late on every seeked or resumed session.
-   */
+  // Every run's output starts at 0: runs from the start and mid-file both move
+  // onto the origin the WebVTT `X-TIMESTAMP-MAP` adds.
   describe('a source with a non-zero start_time', () => {
     const START = 2.8;
 
-    it('leaves a run started at 0 exactly where ffmpeg put it', () => {
-      // seg-25 of an absolute run decodes at 100 + 2.8 = its own tfdt already.
-      const out = rewriteSegmentTfdt(
-        buildSeg((100 + START) * TS),
-        tracks,
-        25,
-        SEG,
-        START,
-      );
+    it('moves a run started at 0 onto the origin', () => {
+      const out = rewriteSegmentTfdt(buildSeg(100 * TS), tracks, 25, SEG, START);
       expect(readTfdt(out)).toBe((100 + START) * TS);
     });
 
@@ -125,25 +118,17 @@ describe('rewriteSegmentTfdt', () => {
       expect(readTfdt(out)).toBe((100 + START) * TS);
     });
 
-    it('puts both runs on one timeline — the whole point', () => {
-      const fromZero = rewriteSegmentTfdt(
-        buildSeg((100 + START) * TS),
-        tracks,
-        25,
-        SEG,
-        START,
-      );
+    it('puts both runs on one timeline', () => {
+      const fromZero = rewriteSegmentTfdt(buildSeg(100 * TS), tracks, 25, SEG, START);
       const seeked = rewriteSegmentTfdt(buildSeg(0), tracks, 25, SEG, START);
       expect(readTfdt(seeked)).toBe(readTfdt(fromZero));
     });
 
-    // The absolute run lands within a frame of the grid, never exactly on it.
-    // `runStart <= 0` used to catch that; an epsilon has to, or a segment
-    // nothing asked to move gets nudged by the rounding.
-    it('does not nudge an absolute run that is a frame off the grid', () => {
-      const off = Math.round((100 + START) * TS) + 0.04 * TS;
-      const out = rewriteSegmentTfdt(buildSeg(off), tracks, 25, SEG, START);
-      expect(readTfdt(out)).toBe(off);
+    // Under half a segment the origin is indistinguishable from grid jitter, so
+    // any "already absolute" shortcut would leave seg-0 of the first run at 0.
+    it('moves a start_time shorter than half a segment too', () => {
+      const out = rewriteSegmentTfdt(buildSeg(0), tracks, 0, SEG, 1.4);
+      expect(readTfdt(out)).toBe(1.4 * TS);
     });
   });
 
@@ -187,23 +172,103 @@ describe('rewriteSegmentTfdt', () => {
       expect(a).toBe((100 + START) * TS);
     });
 
-    it('leaves an absolute audio rendition alone rather than inventing a shift', () => {
-      const at = Math.round((100 + START) * TS);
-      const out = rewriteSegmentTfdt(buildSeg(at, 2), audioOnly, 25, SEG, START);
-      expect(readTfdt(out)).toBe(at);
+    it('moves an audio rendition of the run from 0 onto the origin', () => {
+      // Its first fragment trails the grid by the encoder priming.
+      const out = rewriteSegmentTfdt(buildSeg(21, 2), audioOnly, 0, SEG, START);
+      expect(readTfdt(out)).toBe(21 + START * TS);
     });
 
-    // The pre-existing behaviour, unchanged: with no start_time the snap is a
-    // plain grid round and a run at 0 is left alone.
-    it('behaves exactly as before when start_time is 0', () => {
+    // With no start_time the snap is a plain grid round and a run at 0 stays.
+    it('leaves a start_time 0 run from the file start in place', () => {
       // Run-relative: snapped to a 100s run origin, fragment keeps its 20ms.
       expect(readTfdt(rewriteSegmentTfdt(buildSeg(0.02 * TS, 2), audioOnly, 25, SEG))).toBe(
         100.02 * TS,
       );
-      // Absolute: left alone.
+      // From the file start: left alone.
       expect(readTfdt(rewriteSegmentTfdt(buildSeg(100 * TS, 2), audioOnly, 25, SEG))).toBe(
         100 * TS,
       );
     });
   });
 });
+
+describe('track edits', () => {
+  /** A trak whose edts holds v0 elst entries, [duration, media_time] each. */
+  function trakWithEdits(trackId: number, timescale: number, handler: string, entries: [number, number][]): Buffer {
+    const tkhd = box('tkhd', Buffer.concat([Buffer.alloc(12), u32(trackId)]));
+    const mdhd = box('mdhd', Buffer.concat([Buffer.alloc(12), u32(timescale)]));
+    const hdlr = box('hdlr', Buffer.concat([Buffer.alloc(8), Buffer.from(handler, 'latin1')]));
+    const rows = entries.map(([duration, mediaTime]) => {
+      const e = Buffer.alloc(12);
+      e.writeUInt32BE(duration, 0);
+      e.writeInt32BE(mediaTime, 4);
+      e.writeUInt32BE(0x00010000, 8);
+      return e;
+    });
+    const elst = box('elst', Buffer.concat([Buffer.alloc(4), u32(entries.length), ...rows]));
+    return box('trak', Buffer.concat([tkhd, box('edts', elst), box('mdia', Buffer.concat([mdhd, hdlr]))]));
+  }
+  // mvhd v0: version+flags(4) creation(4) modification(4) timescale(4) → ts @12
+  const mvhd = box('mvhd', Buffer.concat([Buffer.alloc(12), u32(1000)]));
+  const init = box(
+    'moov',
+    Buffer.concat([mvhd, trakWithEdits(1, 16000, 'vide', [[0, 1280]]), trakWithEdits(2, 48000, 'soun', [[0, 0]])]),
+  );
+  const edit = (buf: Buffer, id: number) => readInitEdits(buf).get(id);
+
+  it('reads each track edit in its own timescale', () => {
+    expect(edit(init, 1)).toBe(1280n);
+    expect(edit(init, 2)).toBe(0n);
+  });
+
+  it('folds empty edits ahead of the media into the offset', () => {
+    // 0.5 s of empty edit (movie timescale 1000), then media from 0.
+    const delayed = box('moov', Buffer.concat([mvhd, trakWithEdits(1, 16000, 'vide', [[500, -1], [0, 160]])]));
+    expect(edit(delayed, 1)).toBe(160n - 8000n);
+  });
+
+  it('sets one edit per track, from its kind', () => {
+    const out = withInitEdits(init, (t) => (t.isVideo ? 0.08 : 0.128));
+    expect(edit(out, 1)).toBe(1280n);
+    expect(edit(out, 2)).toBe(6144n);
+    expect(parseInitTracks(out).get(2)?.timescale).toBe(48000);
+  });
+
+  it('adds an edit to a track without one, and replaces several with one', () => {
+    const bare = withInitEdits(buildInitAv(), () => 0.5);
+    expect(edit(bare, 1)).toBe(500n);
+    expect(edit(bare, 2)).toBe(500n);
+    const several = box('moov', Buffer.concat([mvhd, trakWithEdits(1, 16000, 'vide', [[500, -1], [0, 160]])]));
+    expect(edit(withInitEdits(several, () => 0.01), 1)).toBe(160n);
+  });
+
+  /** A fragment of `trackId` with a v1 (64-bit) tfdt. */
+  function seg64(value: bigint, trackId: number): Buffer {
+    const tfhd = box('tfhd', Buffer.concat([Buffer.alloc(4), u32(trackId)]));
+    const v = Buffer.alloc(8);
+    v.writeBigInt64BE(value);
+    const tfdt = box('tfdt', Buffer.concat([Buffer.from([1, 0, 0, 0]), v]));
+    return box('moof', box('traf', Buffer.concat([tfhd, tfdt])));
+  }
+  const tfdtOf = (buf: Buffer, n = 0) => {
+    let i = -1;
+    for (let k = 0; k <= n; k++) i = buf.indexOf(Buffer.from('tfdt', 'latin1'), i + 1);
+    return buf.readBigUInt64BE(i + 8);
+  };
+
+  it('moves every track by its own tick count, a negative run start included', () => {
+    const seg = Buffer.concat([seg64(1280n, 1), seg64(-1008n, 2)]);
+    const out = retimeFragments(seg, new Map([[1, 768n], [2, 6144n]]));
+    expect(tfdtOf(out, 0)).toBe(2048n);
+    expect(tfdtOf(out, 1)).toBe(5136n);
+  });
+
+  it('throws rather than write a negative tfdt', () => {
+    expect(() => retimeFragments(seg64(10n, 1), new Map([[1, -11n]]))).toThrow(RangeError);
+  });
+
+  it('throws on a fragment of a track the init does not declare', () => {
+    expect(() => retimeFragments(seg64(10n, 3), new Map([[1, 0n]]))).toThrow(/track 3/);
+  });
+});
+

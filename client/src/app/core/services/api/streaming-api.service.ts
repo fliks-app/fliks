@@ -64,10 +64,8 @@ export interface PlaybackInfoResponse {
     isRemux: boolean;
     lowBandwidth?: boolean;
   }[];
-  /** Per-audio-track copy/transcode decision, one entry per source audio
-   *  stream in `streamInfo.audio` order. The stats overlay reads the *active*
-   *  track's entry so the reason follows a client-side audio switch (the
-   *  top-level `transcodeReasons` only describe the default track). */
+  /** Per-audio-track copy/transcode decision, in `streamInfo.audio` order. The
+   *  overlay reads the active track's (the top level describes the picked one). */
   audioTracks?: {
     index: number;
     language?: string;
