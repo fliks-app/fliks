@@ -222,6 +222,40 @@ describe('RemuxSegmentAssembler', () => {
     expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('1 ticks before 0'));
   });
 
+  it('refuses a GOP file that opens another keyframe than planned', async () => {
+    // ffmpeg skipped the cut at 2 s: file 1 opens the keyframe at 4 s.
+    [0, 4, 6, 8, 10].forEach((t, i) =>
+      fs.writeFileSync(path.join(gopDir, `gop-${i}.m4s`), gop(BigInt(t * 1000), BigInt(t * 48000))),
+    );
+    const onFailure = jest.fn();
+    const asm = assembler(0, null, 0, grid, onFailure);
+    const pass = async () => {
+      (asm as unknown as { kick(): void }).kick();
+      await (asm as unknown as { chain: Promise<void> }).chain;
+    };
+    for (let i = 0; i < 3; i++) await pass();
+    expect(onFailure).toHaveBeenCalledTimes(1);
+    expect(log.error).toHaveBeenCalledWith(
+      expect.stringContaining('GOP file 1 starts at 4.000s, on keyframe 2 (4s), not the planned 1 (2s)'),
+    );
+    expect(segs()).toEqual([]);
+  });
+
+  it('copies media data larger than its copy buffer through untouched', async () => {
+    const data = [0, 1].map((i) => Buffer.alloc(3 * 1024 * 1024 + 7, i + 1));
+    [0, 2, 4].forEach((t, i) => {
+      const frags = gop(BigInt(t * 1000), BigInt(t * 48000));
+      fs.writeFileSync(
+        path.join(gopDir, `gop-${i}.m4s`),
+        Buffer.concat([frags, box('mdat', data[i] ?? Buffer.alloc(1))]),
+      );
+    });
+    await assemble(0, null, 0, grid, false);
+    const seg = fs.readFileSync(path.join(dir, 'seg-0000.m4s'));
+    for (const d of data) expect(seg.includes(d)).toBe(true);
+    expect(tfdts(seg)).toEqual([0, audioEdit, 2000, 2 * 48000 + audioEdit]);
+  });
+
   it('takes one ffmpeg segment per served one without a keyframe list', async () => {
     [0, 1].forEach((i) =>
       fs.writeFileSync(path.join(gopDir, `gop-${i}.m4s`), gop(BigInt(i * 3000 + 80), BigInt(i * 144000))),
