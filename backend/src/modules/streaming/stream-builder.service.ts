@@ -38,6 +38,7 @@ import { pickPrimaryVariant } from './transcoding/codec/selector';
 import type { CodecVariant, VideoCodec } from './transcoding/codec/types';
 import { resolveMuxFlavour } from './transcoding/audio-layout';
 import type { MediaFileInfo } from '../subtitles/ffprobe.service';
+import { videoPresentationStart } from './transcoding/source-timeline';
 
 /** Audio codecs that can be copied verbatim into fMP4 segments via MSE.
  *  Anything outside this set is re-encoded to AAC on the remux path even when
@@ -63,11 +64,11 @@ const AUDIO_START_OFFSET_THRESHOLD_SECONDS = 0.05;
  *  ignores, so it must transcode to be aligned (`audioStartAlignFilter`). */
 function audioNeedsAlignment(
   audio: { startTimeSeconds?: number } | undefined,
-  video: { startTimeSeconds?: number } | undefined,
+  video: Parameters<typeof videoPresentationStart>[0],
   muxFlavour: 'ts' | 'fmp4',
 ): boolean {
   const a = audio?.startTimeSeconds;
-  const v = video?.startTimeSeconds;
+  const v = videoPresentationStart(video);
   return (
     muxFlavour === 'fmp4' &&
     a != null &&

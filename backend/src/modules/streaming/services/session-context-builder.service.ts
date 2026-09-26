@@ -4,6 +4,7 @@ import { resolveSourceVideoBitrateBps } from '../transcoding';
 import type { SessionContext } from '../transcoding';
 import { pickAudioLayout } from '../transcoding/audio-layout';
 import { parseSourceFps } from '../transcoding/constants';
+import { sourceTimeline } from '../transcoding/source-timeline';
 import { ActiveStreamTracker } from '../active-stream-tracker.service';
 import { SessionRouter } from './session-router.service';
 import type { ResolvedFile } from '../streaming.service';
@@ -34,6 +35,7 @@ export class SessionContextBuilder {
     // var_stream_map decision: same logic as playback-info — relies on the
     // file's intrinsic audio-stream count, which doesn't drift across sessions.
     const audioCount = si?.audio?.length ?? 0;
+    const timeline = sourceTimeline(si, resolved.absolutePath);
     const useTs = live?.useTs ?? false;
     const useMultiAudioLayout =
       pickAudioLayout(audioCount, useTs ? 'ts' : 'fmp4') === 'var-stream-map';
@@ -71,8 +73,9 @@ export class SessionContextBuilder {
       // accurate GOP so IDR frames fall on the same boundary regardless of
       // source fps. Falls back to 24 when unknown.
       sourceFps: parseSourceFps(si?.video?.[0]?.frameRate),
-      // Source video start_time — the origin the served timeline is anchored to.
-      sourceStartPts: si?.video?.[0]?.startTimeSeconds ?? 0,
+      sourceStartPts: timeline.origin,
+      sourceFormatStart: timeline.formatStart,
+      videoStreamIndex: si?.video?.[0]?.streamIndex,
       // Source colorimetry — preserved through an SDR transcode so the output
       // signals the source's real matrix/primaries/transfer, not a forced BT.709.
       sourceColorSpace: si?.video?.[0]?.colorSpace,

@@ -124,9 +124,13 @@ export interface SessionContext {
   tonemapAlgo?: TonemapAlgo;
   /** Source framerate (fps). Used to compute GOP = segmentDuration * fps. */
   sourceFps?: number;
-  /** Source video `start_time` (seconds). The presentation timeline is anchored
-   *  to it so every run has the same origin as the WebVTT `X-TIMESTAMP-MAP`. */
+  /** Source time of the first presented video frame (`sourceTimeline`): the
+   *  origin every run's presentation timeline is anchored to. */
   sourceStartPts?: number;
+  /** Container start the input `-ss` counts from (`sourceTimeline`). */
+  sourceFormatStart?: number;
+  /** Absolute index of the programme video stream. */
+  videoStreamIndex?: number;
   /** Source colorimetry from ffprobe (`colorSpace`/`colorPrimaries`/
    *  `colorTransfer`), threaded so an SDR transcode preserves the source's real
    *  color signalling instead of forcing BT.709. Undefined/`unknown` on an
@@ -284,8 +288,8 @@ export interface TranscodeSession {
   /** Source frame rate this session encodes at. Lets the segment-serve path
    *  resolve the real segment-duration grid without re-probing streamInfo. */
   sourceFps?: number;
-  /** Source video `start_time` this session encodes from, frozen at spawn for
-   *  the same reason: the serve path anchors onto it without re-probing. */
+  /** Timeline origin this session encodes from, frozen at spawn for the same
+   *  reason: the serve path anchors onto it without re-probing. */
   sourceStartPts?: number;
   /** Segment duration (seconds) this session was spawned with, frozen from the
    *  admin setting at spawn. The serve/seek grid reads this — never the live

@@ -18,6 +18,11 @@ import {
 } from './thumbnail-extractors';
 import { TranscodingService } from './transcoding';
 import { ffmpegSlots, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
+import type { MediaFileInfo } from '../subtitles/ffprobe.service';
+import {
+  inputSeekSeconds,
+  sourceTimeline,
+} from './transcoding/source-timeline';
 import {
   buildMediaProgressSubject,
   formatMediaProgressSubject,
@@ -65,6 +70,7 @@ interface QueueItem {
   skipTracking?: boolean;
   crop?: CropArea;
   hdr?: boolean;
+  seekOffsetSeconds?: number;
   resolve: (meta: SpriteMetadata | null) => void;
 }
 
@@ -122,10 +128,10 @@ export class ThumbnailService implements OnModuleInit {
     file: {
       id: number;
       relativePath: string;
-      streamInfo?: {
-        durationSeconds?: number;
-        video?: { crop?: CropArea; colorTransfer?: string }[];
-      } | null;
+      streamInfo?: Pick<
+        MediaFileInfo,
+        'durationSeconds' | 'video' | 'formatStartSeconds'
+      > | null;
     },
     media: { path: string | null; title: string },
     subject: MediaProgressSubject,
@@ -146,6 +152,8 @@ export class ThumbnailService implements OnModuleInit {
       options.skipTracking ?? false,
       file.streamInfo?.video?.[0]?.crop,
       isHdrTransfer(file.streamInfo?.video?.[0]?.colorTransfer),
+      // Tile times count from the first frame; an input seek from the container start.
+      inputSeekSeconds(0, sourceTimeline(file.streamInfo, absPath)),
     );
   }
 
@@ -158,6 +166,7 @@ export class ThumbnailService implements OnModuleInit {
     skipTracking = false,
     crop?: CropArea,
     hdr = false,
+    seekOffsetSeconds = 0,
   ): Promise<SpriteMetadata | null> {
     const dir = path.join(baseDir(), String(mediaFileId));
     const metaPath = path.join(dir, 'sprite.json');
@@ -188,6 +197,7 @@ export class ThumbnailService implements OnModuleInit {
         skipTracking,
         crop,
         hdr,
+        seekOffsetSeconds,
         resolve,
       });
       this.processQueue();
@@ -247,6 +257,7 @@ export class ThumbnailService implements OnModuleInit {
         item.skipTracking,
         item.crop,
         item.hdr,
+        item.seekOffsetSeconds,
       )
         .then((meta) => item.resolve(meta))
         .catch((err) => {
@@ -273,6 +284,7 @@ export class ThumbnailService implements OnModuleInit {
     skipTracking = false,
     crop?: CropArea,
     hdr = false,
+    seekOffsetSeconds = 0,
   ): Promise<SpriteMetadata | null> {
     const dir = path.join(baseDir(), String(mediaFileId));
     const spritePath = path.join(dir, 'sprite.jpg');
@@ -371,6 +383,7 @@ export class ThumbnailService implements OnModuleInit {
             progressKey,
             crop,
             hdr,
+            seekOffsetSeconds,
           );
           extractMs = Date.now() - tExtract;
 
@@ -494,6 +507,7 @@ export class ThumbnailService implements OnModuleInit {
     progressKey: string,
     crop?: CropArea,
     hdr = false,
+    seekOffsetSeconds = 0,
   ): Promise<void> {
     let completed = 0;
     let failed = 0;
@@ -517,7 +531,13 @@ export class ThumbnailService implements OnModuleInit {
         );
         const tFrame = Date.now();
         try {
-          await this.extractFrameAt(inputPath, timestamp, outPath, crop, hdr);
+          await this.extractFrameAt(
+            inputPath,
+            timestamp + seekOffsetSeconds,
+            outPath,
+            crop,
+            hdr,
+          );
           frameTimings.push({ idx, ms: Date.now() - tFrame, ts: timestamp });
           completed++;
         } catch (err) {

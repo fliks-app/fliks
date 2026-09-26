@@ -224,7 +224,7 @@ describe('computeProfileHash — golden values (characterization)', () => {
   // on every refresh. If one of these changes, it is an intentional cache-key
   // migration — bump it deliberately, don't let it drift.
   it('locks the hash for the SDR H.264 baseline', () => {
-    expect(computeProfileHash(BASE)).toMatchInlineSnapshot(`"58e27b30fa"`);
+    expect(computeProfileHash(BASE)).toMatchInlineSnapshot(`"c77a958170"`);
   });
 
   it('locks the hash for HEVC HDR10 10-bit', () => {
@@ -235,7 +235,7 @@ describe('computeProfileHash — golden values (characterization)', () => {
         videoBitDepth: 10,
         hdr: 'HDR10',
       }),
-    ).toMatchInlineSnapshot(`"d49b3bdda2"`);
+    ).toMatchInlineSnapshot(`"657951b5e4"`);
   });
 
   it('locks the hash for a multi-audio E-AC-3 copy var-stream-map session', () => {
@@ -248,7 +248,7 @@ describe('computeProfileHash — golden values (characterization)', () => {
         audioMode: 'copy',
         audioLayout: 'var-stream-map',
       }),
-    ).toMatchInlineSnapshot(`"cba0e45c58"`);
+    ).toMatchInlineSnapshot(`"9f5cf3453e"`);
   });
 
   it('locks the hash for a Tizen TS 6s-segment session', () => {
@@ -259,6 +259,6 @@ describe('computeProfileHash — golden values (characterization)', () => {
         segmentDurationMs: 6000,
         tvPlatform: 'tizen',
       }),
-    ).toMatchInlineSnapshot(`"72437c09ac"`);
+    ).toMatchInlineSnapshot(`"108c313c3a"`);
   });
 });

@@ -35,6 +35,7 @@ import { normaliseSourceCodec } from './codec/normalise';
 import { hevcMainTierCapBps } from './codec/codec-strings';
 import { varStreamMapLayout } from './audio-layout';
 import { timelineOrigin } from './timeline';
+import { inputSeekSeconds } from './source-timeline';
 import { resolveEncodePipeline } from './encode-pipeline';
 import { openclTonemapInitArgs } from './hw-device';
 import { buildVideoFilters, resolveTonemapCurve } from './ffmpeg-filter-graph';
@@ -75,6 +76,12 @@ function formatSeconds(seconds: number): string {
   return String(Number(seconds.toFixed(6)));
 }
 
+/** `-map` spec of the programme video: its absolute index when known, since a
+ *  cover or thumbnail stream can sit at `0:v:0`. */
+export function videoMapSpec(videoStreamIndex: number | undefined): string {
+  return videoStreamIndex != null ? `0:${videoStreamIndex}` : '0:v:0';
+}
+
 /**
  * Pad or trim the audio so its first sample sits at `startSeconds` (source
  * time), the video's first frame, whatever the sample rate. A late track
@@ -95,7 +102,9 @@ function hlsMuxerArgs(o: {
   useTs: boolean;
   hlsTime: string;
   startSegment: number;
-  seekSeconds: number;
+  /** Output `-ss` of the run (source time, 0 for none). ffmpeg subtracts it
+   *  from every output timestamp, even under `-copyts`. */
+  outputSeekSeconds: number;
   segType: string;
   initFilename: string;
   varStreamMap?: string;
@@ -119,13 +128,14 @@ function hlsMuxerArgs(o: {
       : []),
     // A video starting after 0 lands in an empty edit, which MSE ignores; a
     // 0-based output leaves none, and serving adds the origin back (timeline.ts).
-    ...(origin !== 0 ? ['-output_ts_offset', formatSeconds(-origin)] : []),
-    // The muxer restarts its output timeline near zero on every run, so a
-    // seeked run's segments contradict the playlist that places them at
-    // `index · realSeg`. fMP4 is re-anchored on serve by `rewriteSegmentTfdt`;
-    // MPEG-TS carries no `tfdt` to rewrite, so the offset is applied here.
-    ...(o.useTs && o.seekSeconds > 0
-      ? ['-output_ts_offset', String(o.seekSeconds)]
+    // A seeked run is already 0-based by its output `-ss`.
+    ...(origin !== 0 && o.outputSeekSeconds === 0
+      ? ['-output_ts_offset', formatSeconds(-origin)]
+      : []),
+    // MPEG-TS carries no `tfdt` to re-anchor on serve, so a seeked run gets its
+    // source timestamps back here.
+    ...(o.useTs && o.outputSeekSeconds > 0
+      ? ['-output_ts_offset', formatSeconds(o.outputSeekSeconds)]
       : []),
     '-f',
     'hls',
@@ -357,9 +367,13 @@ export interface BuildFfmpegArgsOptions {
     outputCodec: string;
     outputChannels?: number;
   }[];
-  /** Source video `start_time` (seconds): the output timeline origin and the
-   *  point transcoded audio is aligned to. */
+  /** Source time of the first presented video frame: the output timeline
+   *  origin and the point transcoded audio is aligned to (`sourceTimeline`). */
   sourceStartPts?: number;
+  /** Container start the input `-ss` counts from. Defaults to `sourceStartPts`. */
+  sourceFormatStart?: number;
+  /** Absolute index of the programme video stream. */
+  videoStreamIndex?: number;
   encoderPreset?: string;
   /** HDR → SDR tone-mapping algorithm (admin override). Defaults to `'auto'`
    *  which preserves the historical vaapi-when-available preference. */
@@ -504,10 +518,7 @@ function buildAudioAndMuxerArgs(opts: {
     originSeconds,
   } = opts;
   const args: string[] = [];
-  // Content time this run starts at, matching the playlist's placement of
-  // `seg-startSegment`. Equals `segmentIndexToSeconds`, which is exactly
-  // `startSegment · realSeg`.
-  const runStartSeconds = startSegment > 0 ? startSegment * realSeg : 0;
+  const outputSeekSeconds = startSegment > 0 ? alignStartSeconds : 0;
 
   // Use var_stream_map whenever the caller asked for the EXT-X-MEDIA
   // layout (`videoOnly + audioStreams[]`), even for a SINGLE audio
@@ -554,7 +565,7 @@ function buildAudioAndMuxerArgs(opts: {
         useTs,
         hlsTime: String(realSeg),
         startSegment,
-        seekSeconds: runStartSeconds,
+        outputSeekSeconds,
         segType,
         initFilename: 'init_%v.mp4',
         varStreamMap: varParts.join(' '),
@@ -594,7 +605,7 @@ function buildAudioAndMuxerArgs(opts: {
       useTs,
       hlsTime: String(segmentDuration),
       startSegment,
-      seekSeconds: runStartSeconds,
+      outputSeekSeconds,
       segType,
       initFilename: 'init.mp4',
       segmentFilename: ffOutPath(outputDir, `seg-%04d.${segExt}`),
@@ -845,6 +856,8 @@ export function buildFfmpegArgs(
     audioPlan,
     audioTrackPlans,
     sourceStartPts = 0,
+    sourceFormatStart = sourceStartPts,
+    videoStreamIndex,
     encoderPreset = 'faster',
     sourceFps,
     sourceColorSpace,
@@ -876,8 +889,8 @@ export function buildFfmpegArgs(
 
   const { fps, gopSize, realSeg, seekSeconds, forceKeyframesExpr } =
     buildSegmentGrid(segmentDuration, sourceFps, startSegment);
-  // The input seek adds the file's start time and -copyts keeps source time in
-  // the filters, so this is the run's first video frame.
+  // Source time of the run's first video frame; -copyts keeps source time in
+  // the filters, so the audio alignment and the output seek use it as is.
   const alignStartSeconds = seekSeconds + sourceStartPts;
   const audioArgs = buildAudioOutputArgs(
     profile.audioBitrate,
@@ -926,10 +939,16 @@ export function buildFfmpegArgs(
     // Single input-seek to T. The demuxer snaps each stream to its own
     // frame boundary ≤ T (≤ 21 ms for AAC, 32 ms for AC-3, 40 ms for
     // DTS); `-copyts` (set after `-i` below) threads the source PTS
-    // straight through to the muxer so the first emitted segment's
-    // tfdt = seekSeconds × timescale and the player picks up the
-    // playlist boundary cleanly.
-    args.push('-ss', String(seekSeconds));
+    // straight through to the filters.
+    args.push(
+      '-ss',
+      formatSeconds(
+        inputSeekSeconds(seekSeconds, {
+          origin: sourceStartPts,
+          formatStart: sourceFormatStart,
+        }),
+      ),
+    );
   }
 
   // Resolved ahead of the bitrate so the HEVC Main-tier clamp below sizes to it.
@@ -1102,7 +1121,7 @@ export function buildFfmpegArgs(
     // discard pass doesn't always trim frames on VAAPI surfaces).
     // Audio keeps its ±21–40 ms packet-snap drift (intrinsic to
     // demuxer seek on a packetised stream).
-    args.push('-ss', String(seekSeconds));
+    args.push('-ss', formatSeconds(alignStartSeconds));
   }
 
   const tonemapCurve = resolveTonemapCurve();
@@ -1168,6 +1187,7 @@ export function buildFfmpegArgs(
         hwAccel: effectiveHwAccel,
         videoFilter,
         streamIndex: burnIn!.streamIndex!,
+        videoStreamIndex,
         width: w,
         height: h,
         bitDepth: variant.bitDepth,
@@ -1175,7 +1195,7 @@ export function buildFfmpegArgs(
       }),
     );
   }
-  const videoMapSpec = imageBurnIn ? '[vout]' : '0:v:0';
+  const videoMap = imageBurnIn ? '[vout]' : videoMapSpec(videoStreamIndex);
 
   // Sign the SDR output's colorimetry (`sdrColor`: the source's real tags, or
   // BT.709 for a tone-mapped / untagged source). Two failure modes this prevents:
@@ -1194,7 +1214,7 @@ export function buildFfmpegArgs(
 
   args.push(
     ...buildAudioAndMuxerArgs({
-      videoMapSpec,
+      videoMapSpec: videoMap,
       audioStreams,
       videoOnly,
       audioStreamIndex,
@@ -1300,7 +1320,8 @@ export function buildAudioOnlyFfmpegArgs(
       useTs,
       hlsTime: String(realSeg),
       startSegment,
-      seekSeconds,
+      // No output -ss: -copyts already leaves the source timestamps in place.
+      outputSeekSeconds: 0,
       segType,
       initFilename: 'init.mp4',
       segmentFilename: ffOutPath(outputDir, `seg-%04d.${segExt}`),
@@ -1343,8 +1364,10 @@ export interface BuildRemuxArgsOptions {
   /** Nominal segment duration (seconds) for `-hls_time` and the uniform-grid
    *  seek fallback. Defaults to {@link DEFAULT_SEGMENT_DURATION}. */
   segmentDuration?: number;
-  /** Source video `start_time` (seconds): the output timeline origin. */
+  /** Source time of the first presented video frame: the output timeline origin. */
   sourceStartPts?: number;
+  /** Absolute index of the programme video stream. */
+  videoStreamIndex?: number;
   /** Transcode target when `copyAudio` is false; AAC stereo when absent. */
   audioPlan?: BuildFfmpegArgsOptions['audioPlan'];
 }
@@ -1368,6 +1391,7 @@ export function buildRemuxArgs(
     segmentBoundaries,
     segmentDuration = DEFAULT_SEGMENT_DURATION,
     sourceStartPts = 0,
+    videoStreamIndex,
     audioPlan,
   } = opts;
 
@@ -1427,11 +1451,11 @@ export function buildRemuxArgs(
   if ((videoOnly && !userPickedAudio) || hasNoAudio(audioStreams)) {
     // Video-only remux: var_stream_map (audio served separately) OR a
     // source with zero audio streams in the cached streamInfo.
-    args.push('-map', '0:v:0', '-c:v', 'copy', '-an');
+    args.push('-map', videoMapSpec(videoStreamIndex), '-c:v', 'copy', '-an');
   } else if (userPickedAudio) {
     args.push(
       '-map',
-      '0:v:0',
+      videoMapSpec(videoStreamIndex),
       '-map',
       audioMapSpec(audioStreams, audioStreamIndex!),
       '-c:v',
@@ -1472,7 +1496,7 @@ export function buildRemuxArgs(
       useTs: false,
       hlsTime: String(segmentDuration),
       startSegment,
-      seekSeconds: 0,
+      outputSeekSeconds: 0,
       segType: 'fmp4',
       initFilename: 'init.mp4',
       segmentFilename: ffOutPath(outputDir, 'seg-%04d.m4s'),

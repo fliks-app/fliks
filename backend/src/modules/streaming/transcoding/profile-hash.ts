@@ -45,7 +45,7 @@ export interface PlaybackProfile {
 
 /** Segment timeline layout (edit lists, tfdt origin, audio alignment). Raised
  *  whenever it changes so cached segments of the old layout never mix in. */
-export const SEGMENT_TIMELINE_VERSION = 3;
+export const SEGMENT_TIMELINE_VERSION = 4;
 
 /**
  * Stable, order-independent serialisation of a {@link PlaybackProfile}.

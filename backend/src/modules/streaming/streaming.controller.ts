@@ -52,6 +52,10 @@ import {
   getRemuxSegmentGrid,
   secondsToSegmentIndex as boundarySecondsToIndex,
 } from './transcoding/segment-boundaries';
+import {
+  inputSeekSeconds,
+  sourceTimeline,
+} from './transcoding/source-timeline';
 import { copySourceCodecString } from './transcoding/codec/codec-strings';
 import { LiveSessionRegistry } from './live-session.service';
 import * as path from 'path';
@@ -1433,7 +1437,10 @@ export class StreamingController {
     );
     const args = buildIFrameSegmentArgs({
       inputPath: resolved.absolutePath,
-      seekSeconds: parseInt(match[1], 10) * iframeGrid(si, this.segDur()),
+      seekSeconds: inputSeekSeconds(
+        parseInt(match[1], 10) * iframeGrid(si, this.segDur()),
+        sourceTimeline(si, resolved.absolutePath),
+      ),
       width,
       height,
       crop,

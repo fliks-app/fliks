@@ -22,6 +22,9 @@ export function buildImageBurnInFilterComplex(ctx: {
   videoFilter: string;
   /** Absolute container index of the bitmap subtitle stream. */
   streamIndex: number;
+  /** Absolute container index of the programme video; `[0:v]` would take a
+   *  cover stream listed first. */
+  videoStreamIndex?: number;
   /** Target output dimensions (matches the video chain's output). */
   width: number;
   height: number;
@@ -34,7 +37,8 @@ export function buildImageBurnInFilterComplex(ctx: {
 }): string {
   const { hwAccel, videoFilter, streamIndex: s, width: w, height: h, crop } = ctx;
   const tenBit = ctx.bitDepth >= 10;
-  const video = videoFilter ? `[0:v]${videoFilter}` : '[0:v]null';
+  const input = `[0:${ctx.videoStreamIndex ?? 'v'}]`;
+  const video = videoFilter ? `${input}${videoFilter}` : `${input}null`;
 
   // Scale the subtitle (positioned against the source frame) to the output
   // size so the overlay lines up; keep its alpha. SDR: pull the grey fill up to

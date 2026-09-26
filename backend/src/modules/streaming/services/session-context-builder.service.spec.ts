@@ -54,6 +54,18 @@ describe('SessionContextBuilder.build', () => {
     expect(ctx.userId).toBe(7);
   });
 
+  it('anchors on the first presented frame and seeks from the container start', () => {
+    const r = resolved(1);
+    Object.assign(r.mediaFile.streamInfo!, {
+      formatStartSeconds: 14.94,
+      video: [{ streamIndex: 1, codec: 'h264', startTimeSeconds: 15, firstFrameSeconds: 15.8 }],
+    });
+    const ctx = builder.build(req, r, 1);
+    expect(ctx.sourceStartPts).toBe(15.8);
+    expect(ctx.sourceFormatStart).toBe(14.94);
+    expect(ctx.videoStreamIndex).toBe(1);
+  });
+
   it('snapshots the admin segment duration onto the context', () => {
     tracker.getSegmentDuration.mockReturnValue(6);
     expect(builder.build(req, resolved(1), 1).segmentDuration).toBe(6);

@@ -54,12 +54,18 @@ const after = (args: string[], flag: string): string | undefined => {
   return i === -1 ? undefined : args[i + 1];
 };
 
+const last = (args: string[], flag: string): string | undefined => {
+  const i = args.lastIndexOf(flag);
+  return i === -1 ? undefined : args[i + 1];
+};
+
 describe('fMP4 output origin', () => {
   it('starts every transcode run at 0, whatever the resume segment', () => {
     expect(after(tx({ sourceStartPts: 2.8 }), '-output_ts_offset')).toBe('-2.8');
-    expect(
-      after(tx({ sourceStartPts: 2.8, startSegment: 20 }), '-output_ts_offset'),
-    ).toBe('-2.8');
+    // A seeked run is rebased by its own output -ss, which ffmpeg subtracts.
+    const seeked = tx({ sourceStartPts: 2.8, startSegment: 20 });
+    expect(seeked).not.toContain('-output_ts_offset');
+    expect(last(seeked, '-ss')).toBe(String(20 * realSegmentSeconds(3, 25) + 2.8));
   });
 
   it('keeps a negative video start in the output, where it becomes an edit', () => {
@@ -70,10 +76,28 @@ describe('fMP4 output origin', () => {
     expect(
       after(tx({ sourceStartPts: 2.8, useTs: true }), '-output_ts_offset'),
     ).toBeUndefined();
+    // A seeked TS run gets back what its output -ss took away.
+    const seeked = tx({ sourceStartPts: 2.8, useTs: true, startSegment: 20 });
+    expect(after(seeked, '-output_ts_offset')).toBe(last(seeked, '-ss'));
   });
 
   it('starts every remux run at 0 as well', () => {
     expect(after(remux({ sourceStartPts: 2.8 }), '-output_ts_offset')).toBe('-2.8');
+  });
+});
+
+describe('transcode resume seek', () => {
+  const seek = 20 * realSegmentSeconds(3, 25);
+
+  it('seeks the input from the container start, the output in source time', () => {
+    const args = tx({ sourceStartPts: 4.2, sourceFormatStart: 3.18, startSegment: 20 });
+    expect(after(args, '-ss')).toBe(String(Number((seek + 4.2 - 3.18).toFixed(6))));
+    expect(last(args, '-ss')).toBe(String(Number((seek + 4.2).toFixed(6))));
+  });
+
+  it('keeps the seek when the container starts with the video', () => {
+    const args = tx({ sourceStartPts: 2.8, startSegment: 20 });
+    expect(after(args, '-ss')).toBe(String(seek));
   });
 });
 
