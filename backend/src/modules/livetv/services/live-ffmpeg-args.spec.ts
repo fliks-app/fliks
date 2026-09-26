@@ -43,14 +43,13 @@ describe('buildLiveFfmpegArgs', () => {
     expect(flagValue(args, '-c:a')).toBe('aac');
   });
 
-  it('copies AAC rather than re-encoding it, and converts ADTS for fMP4', () => {
-    // Measured: re-encoding puts the audio 22 ms ahead, the encoder's priming delay.
+  it('re-encodes AAC into fMP4, whose one configuration a 2.0/5.1 switch breaks', () => {
     const args = buildLiveFfmpegArgs(base({ mode: 'remux', audioCodec: 'aac' }));
-    expect(flagValue(args, '-c:a')).toBe('copy');
-    expect(flagValue(args, '-bsf:a')).toBe('aac_adtstoasc');
+    expect(flagValue(args, '-c:a')).toBe('aac');
+    expect(flagValue(args, '-ac')).toBe('2');
   });
 
-  it('leaves ADTS alone when the segments are TS', () => {
+  it('copies AAC into TS segments, leaving ADTS alone', () => {
     const args = buildLiveFfmpegArgs(base({ mode: 'remux', audioCodec: 'aac', useTs: true }));
     expect(flagValue(args, '-c:a')).toBe('copy');
     expect(args).not.toContain('-bsf:a');

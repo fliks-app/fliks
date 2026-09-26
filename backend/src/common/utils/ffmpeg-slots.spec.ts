@@ -64,6 +64,24 @@ describe('withFfmpegSlot', () => {
     expect(result).toBe('ok');
   });
 
+  it('drops an aborted waiter from the queue without taking a slot', async () => {
+    const { withFfmpegSlot, setFfmpegSlots } = loadWith();
+    setFfmpegSlots(1);
+    let free!: () => void;
+    const holder = withFfmpegSlot(() => new Promise<void>((r) => (free = r)));
+    const abort = new AbortController();
+    const ran = jest.fn(async () => {});
+    const aborted = withFfmpegSlot(ran, abort.signal);
+    const next = withFfmpegSlot(async () => 'next');
+
+    abort.abort(new Error('taken over'));
+    await expect(aborted).rejects.toThrow('taken over');
+    free();
+    await holder;
+    await expect(next).resolves.toBe('next');
+    expect(ran).not.toHaveBeenCalled();
+  });
+
   it('takes the admin budget, and restores the derived one when cleared', () => {
     const mod = loadWith({ hostCores: 8 });
     expect(mod.ffmpegSlots()).toBe(7);

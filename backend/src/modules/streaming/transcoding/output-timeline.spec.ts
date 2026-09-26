@@ -59,7 +59,7 @@ const remux = (
       over.startSegment ?? 0,
       over.segmentDuration ?? 3,
       over.sourceStartPts ?? 0,
-      remuxAudioGrid(over.audioPlan, over.audioStreams, over.audioStreamIndex),
+      remuxAudioGrid(over.audioPlan),
     ),
   });
 
@@ -173,8 +173,16 @@ describe('transcoded audio alignment', () => {
       startSegment: 4,
       sourceEndSeconds: 32.8,
       videoOnly: true,
-      audioStreams: [{ streamIndex: 1 }, { streamIndex: 3 }, { streamIndex: 4 }],
-      audioTrackPlans: [0, 1, 2].map(() => ({ copy: false, outputCodec: 'aac', outputChannels: 2 })),
+      audioStreams: [
+        { streamIndex: 1 },
+        { streamIndex: 3 },
+        { streamIndex: 4 },
+      ],
+      audioTrackPlans: [0, 1, 2].map(() => ({
+        mode: 'transcode' as const,
+        codec: 'aac' as const,
+        channels: 2,
+      })),
     });
     for (const i of [0, 1, 2]) {
       expect(after(args, `-filter:a:${i}`)).toBe(audioStartAlignFilter(seek + 2.8, 32.8));
@@ -202,17 +210,11 @@ describe('remux resume', () => {
     expect(after(args, '-ss')).toBe('11.72');
     expect(last(args, '-ss')).toBe('11.72');
     expect(args).toContain('-noaccurate_seek');
-    // No sample rate, no packet grid: the audio starts at that decode time.
-    expect(after(args, '-filter:a')).toBe(audioStartAlignFilter(11.72));
   });
 
   it('starts encoded audio on the packet a run from the start puts there', () => {
-    const args = remux({
-      startSegment: 3,
-      grid,
-      sourceStartPts: 2.8,
-      audioStreams: [{ streamIndex: 1, sampleRate: 48000 }],
-    });
+    // Whatever the source rate: every encode runs at 48 kHz.
+    const args = remux({ startSegment: 3, grid, sourceStartPts: 2.8 });
     // Packets from 2.8 - 1024/48000, every 1024/48000: the first at or past
     // 11.72 is number 420; an encode starts on it when aligned 1024 samples on.
     expect(after(args, '-filter:a')).toBe(audioStartAlignFilter(2.8 + (420 * 1024) / 48000));
@@ -234,7 +236,7 @@ describe('remux resume', () => {
 
   it('re-encodes to the planned codec and channels, or copies untouched', () => {
     const planned = remux({
-      audioPlan: { mode: 'transcode', codec: 'eac3', bitrateBps: 640_000, channels: 6 },
+      audioPlan: { mode: 'transcode', codec: 'eac3', channels: 6 },
     });
     expect(after(planned, '-c:a')).toBe('eac3');
     expect(after(planned, '-ac')).toBe('6');
@@ -247,7 +249,7 @@ describe('remux resume', () => {
     const args = remux({
       audioStreamIndex: 1,
       audioStreams: [{ streamIndex: 1 }, { streamIndex: 2 }],
-      audioPlan: { mode: 'transcode', codec: 'eac3', bitrateBps: 640_000, channels: 6 },
+      audioPlan: { mode: 'transcode', codec: 'eac3', channels: 6 },
     });
     expect(args.filter((_, i) => args[i - 1] === '-map')).toEqual([
       '0:v:0',

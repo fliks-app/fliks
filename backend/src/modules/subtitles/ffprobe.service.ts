@@ -180,6 +180,8 @@ export interface AudioStreamInfo {
   channelLayout?: string;
   sampleRate?: number;
   bitRate?: number;
+  /** ffprobe profile: `HE-AAC`, `Dolby Digital Plus + Dolby Atmos`, … */
+  profile?: string;
   isDefault?: boolean;
   /** Header `start_time`, or the first packet when later (a track starting past
    *  the probe window reads 0 or the video's start). */
@@ -670,6 +672,7 @@ export class FfprobeService {
           channelLayout: s.channel_layout,
           sampleRate: s.sample_rate ? Number(s.sample_rate) : undefined,
           bitRate: s.bit_rate ? Number(s.bit_rate) : undefined,
+          profile: s.profile,
           isDefault: s.disposition?.default === 1,
           startTimeSeconds: s.start_time ? Number(s.start_time) : undefined,
           endSeconds: streamEndSeconds(s),

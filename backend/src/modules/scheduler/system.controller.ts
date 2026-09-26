@@ -37,6 +37,7 @@ import { UpdateCheckService, type UpdateStatus } from './update-check.service';
 import { Observable } from 'rxjs';
 import {
   type HwAccelType,
+  type TranscodeProfile,
   type TranscodeSession,
   TranscodingService,
   TranscodeCacheService,
@@ -44,6 +45,8 @@ import {
   getHdrLadderForDevice,
   parseBitrateToBps,
 } from '../streaming/transcoding';
+import { audioOutputBitrateBps } from '../streaming/transcoding/audio-encode';
+import { REMUX_STEREO_AUDIO_BITRATE } from '../streaming/transcoding/ffmpeg-args';
 import {
   type LiveSessionSnapshot,
   LiveSessionRegistry,
@@ -169,6 +172,7 @@ export interface StatsReport {
 function deriveAudioOutput(
   audioPlan: LiveSessionSnapshot['audioPlan'],
   mode: 'transcode' | 'remux' | 'directplay',
+  rung: TranscodeProfile | undefined,
 ): {
   audioMode: 'direct' | 'copy' | 'transcode';
   audioOutputCodec: string | null;
@@ -184,7 +188,14 @@ function deriveAudioOutput(
       audioMode: audioPlan.mode,
       audioOutputCodec: audioPlan.codec,
       audioOutputBitrateBps:
-        audioPlan.mode === 'transcode' ? audioPlan.bitrateBps : null,
+        audioPlan.mode === 'copy'
+          ? (audioPlan.bitrateBps ?? null)
+          : audioOutputBitrateBps(
+              audioPlan,
+              parseBitrateToBps(
+                rung?.audioBitrate ?? REMUX_STEREO_AUDIO_BITRATE,
+              ),
+            ),
     };
   }
   return {
@@ -533,17 +544,20 @@ export class SystemController {
       // `audioPlan`; mode/codec/bitrate read directly.
       let outputContainer: string | null = null;
       let outputBitrate: number | null = null;
-      const audio = deriveAudioOutput(s.audioPlan, s.mode);
+      const rung =
+        s.mode === 'transcode'
+          ? [
+              ...getLadderForDevice(undefined),
+              ...getHdrLadderForDevice(undefined),
+            ].find((p) => p.name === s.quality)
+          : undefined;
+      const audio = deriveAudioOutput(s.audioPlan, s.mode, rung);
       const audioMode = audio.audioMode;
       const audioOutputCodec = audio.audioOutputCodec;
       const audioOutputBitrateBps = audio.audioOutputBitrateBps;
 
       if (s.mode === 'transcode') {
         outputContainer = 'HLS';
-        const rung = [
-          ...getLadderForDevice(undefined),
-          ...getHdrLadderForDevice(undefined),
-        ].find((p) => p.name === s.quality);
         outputBitrate = rung ? parseBitrateToBps(rung.videoBitrate) : null;
       } else if (s.mode === 'remux') {
         outputContainer = 'HLS';

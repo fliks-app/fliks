@@ -91,6 +91,36 @@ export interface AudioStreamChoice {
   isDefault?: boolean;
   commentary?: boolean;
   audioDescription?: boolean;
+  channels?: number;
+}
+
+function audioRole(s: AudioStreamChoice): 'main' | 'commentary' | 'ad' {
+  return s.commentary ? 'commentary' : s.audioDescription ? 'ad' : 'main';
+}
+
+/** The remembered form of a track, `language:role:channels`: what carries
+ *  across episodes whose track order differs. */
+export function rememberedAudioKey(s: AudioStreamChoice): string {
+  return `${normalizeLangCode(s.language)}:${audioRole(s)}:${s.channels ?? ''}`;
+}
+
+/** Stream a remembered key names: same language, then role, then channel count.
+ *  Bare `language` and `language:ordinal` keys match too. */
+export function matchRememberedAudio(
+  saved: string,
+  streams: AudioStreamChoice[],
+): number | undefined {
+  const [lang, second, channels] = saved.split(':');
+  const same = streams
+    .map((s, i) => (normalizeLangCode(s.language) === normalizeLangCode(lang) ? i : -1))
+    .filter((i) => i >= 0);
+  if (!same.length) return undefined;
+  if (second === undefined || /^\d+$/.test(second)) {
+    return same[Number(second ?? 0)] ?? same[0];
+  }
+  const sameRole = same.filter((i) => audioRole(streams[i]) === second);
+  const pool = sameRole.length ? sameRole : same;
+  return pool.find((i) => String(streams[i].channels ?? '') === channels) ?? pool[0];
 }
 
 /** Normalize any language code to 3-letter ISO 639-2/B. */
@@ -199,8 +229,7 @@ export class PlayerSettingsService {
   ): string | undefined {
     const s = this.get();
     if (s.rememberAudioSelections && mediaId) {
-      // The stored value may carry a ":n" ordinal (same-language
-      // disambiguator); engines pre-pick by language, so strip it here.
+      // Engines pre-pick by language alone; the rest of the key disambiguates.
       const saved = this.getRememberedAudioTrack(mediaId)?.split(':')[0];
       if (saved) return saved;
     }
@@ -225,16 +254,11 @@ export class PlayerSettingsService {
         .filter((i) => i >= 0);
 
     // Priority 1: remembered selection always wins, whatever the mode.
-    // Uses mediaId (series/movie) so the choice carries across episodes; the
-    // ":n" ordinal picks the Nth same-language track, as the engines do.
+    // Uses mediaId (series/movie) so the choice carries across episodes.
     if (s.rememberAudioSelections && mediaId) {
       const saved = this.getRememberedAudioTrack(mediaId);
-      if (saved) {
-        const [savedLang, ordinal] = saved.split(':');
-        const same = indicesOfLang(savedLang);
-        const idx = same[Number(ordinal ?? 0)] ?? same[0];
-        if (idx != null) return idx;
-      }
+      const idx = saved ? matchRememberedAudio(saved, audioStreams) : undefined;
+      if (idx != null) return idx;
     }
 
     // Priority 2: the mode's target language. A commentary or described track

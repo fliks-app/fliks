@@ -1,14 +1,15 @@
-import { watch, type FSWatcher } from 'fs';
 import * as fsp from 'fs/promises';
+import type { FileHandle } from 'fs/promises';
 import * as path from 'path';
 import type { Logger } from '@nestjs/common';
-import { OUTPUT_POLL_MS } from './constants';
+import { writeAtomically, writeFileAtomic } from '../../../common/utils/atomic-file';
 import type { RemuxRunStart } from './ffmpeg-args';
 import { servedShift } from './source-timeline';
 import {
   DECODE_TIME_TOLERANCE_SECONDS,
   type KeyframeGrid,
 } from './segment-boundaries';
+import { watchDir } from './segment-utils';
 import {
   firstTfdt,
   parseInitTracks,
@@ -26,9 +27,8 @@ const AUDIO_PRIMING_MAX_SECONDS = 1024 / 8000;
  *  the output `-ss` rounding to a millisecond time base. */
 const KEYFRAME_MATCH_SECONDS = 0.002;
 
-/** Rename errors a scanner or indexer holding the file raises on Windows. */
-const TRANSIENT_RENAME_CODES = new Set(['EPERM', 'EBUSY', 'EACCES']);
-const RENAME_ATTEMPTS = 5;
+/** Media data is copied through this much at a time, never a whole GOP. */
+const COPY_CHUNK_BYTES = 1 << 20;
 
 /** Passes, a poll apart, a segment may fail before the error is not a passing lock. */
 const SEGMENT_ATTEMPTS = 3;
@@ -117,8 +117,10 @@ export class RemuxSegmentAssembler {
   /** ffmpeg GOP number → grid GOP index. */
   private gopOffset = 0;
   private delta: Map<number, bigint> | null = null;
-  private watcher: FSWatcher | null = null;
-  private timer: NodeJS.Timeout | null = null;
+  /** The run's video track and what adds to its tfdt to give source time. */
+  private video: { id: number; timescale: number; correction: number } | null = null;
+  private readonly chunk = Buffer.alloc(COPY_CHUNK_BYTES);
+  private unwatch: (() => void) | null = null;
   private chain: Promise<void> = Promise.resolve();
   private queued = false;
   private failures = 0;
@@ -135,22 +137,18 @@ export class RemuxSegmentAssembler {
   }
 
   start(): void {
-    try {
+    this.unwatch = watchDir(
+      this.plan.gopDir,
       // Writes into a GOP file raise `change`; a file appearing is a `rename`.
-      this.watcher = watch(this.plan.gopDir, { persistent: false }, (event) => {
-        if (event === 'rename') this.kick();
-      });
-    } catch (err) {
-      this.log.warn(`[${this.label}] cannot watch ${this.plan.gopDir}: ${(err as Error).message}`);
-    }
-    this.timer = setInterval(() => this.kick(), OUTPUT_POLL_MS);
+      (event) => event !== 'change' && this.kick(),
+      (err) => this.log.warn(`[${this.label}] cannot watch ${this.plan.gopDir}: ${err.message}`),
+    );
   }
 
   /** ffmpeg exited. A run that ended cleanly also completes the last segment:
    *  only then is its last GOP known whole. The GOP files go either way. */
   async finish(exitedCleanly: boolean): Promise<void> {
-    this.watcher?.close();
-    if (this.timer) clearInterval(this.timer);
+    this.unwatch?.();
     this.kick();
     await this.chain;
     if (exitedCleanly && !this.stopped) {
@@ -222,9 +220,10 @@ export class RemuxSegmentAssembler {
     const init = await fsp.readFile(path.join(this.plan.gopDir, 'init.mp4'));
     const tracks = parseInitTracks(init);
     const runEdits = readInitEdits(init);
-    const gop = await fsp.readFile(first);
+    const gop = await readMoofs(first);
     const correction = this.locateRun(gop, tracks);
     const video = [...tracks].find(([, t]) => t.isVideo);
+    this.video = video ? { id: video[0], timescale: video[1].timescale, correction } : null;
     const runVideoEdit = video ? Number(runEdits.get(video[0]) ?? 0n) / video[1].timescale : 0;
     const edits = remuxEdits(
       this.plan.start,
@@ -245,7 +244,7 @@ export class RemuxSegmentAssembler {
     }
     const out = path.join(this.plan.dir, 'init.mp4');
     if (!(await this.exists(out))) {
-      await writeAtomic(out, withInitEdits(init, editOf));
+      await writeFileAtomic(out, withInitEdits(init, editOf));
     }
     this.delta = delta;
     this.failures = 0;
@@ -277,23 +276,61 @@ export class RemuxSegmentAssembler {
     return gopPts[at] - out;
   }
 
-  /** One GOP in memory at a time. A segment another run already built stays:
-   *  it holds the same samples on the same timeline, and may have been served. */
+  /** A segment another run already built stays: it holds the same samples on
+   *  the same timeline, and may have been served. */
   private async assemble(segment: number, gops: number[]): Promise<void> {
     const out = path.join(this.plan.dir, segName(segment));
     if (!(await this.exists(out))) {
-      const tmp = `${out}.tmp`;
-      const fh = await fsp.open(tmp, 'w');
-      try {
-        for (const g of gops) {
-          await fh.write(retimeFragments(await fsp.readFile(this.gopPath(g)), this.delta!));
+      await writeAtomically(out, async (tmp) => {
+        const fh = await fsp.open(tmp, 'w');
+        try {
+          for (const g of gops) await this.appendGop(fh, g);
+        } finally {
+          await fh.close();
         }
-      } finally {
-        await fh.close();
-      }
-      await renameRetrying(tmp, out);
+      });
     }
     await Promise.all(gops.map((g) => fsp.rm(this.gopPath(g), { force: true })));
+  }
+
+  /** GOP `g` onto `out`: its fragment headers retimed, its media data copied
+   *  through. */
+  private async appendGop(out: FileHandle, g: number): Promise<void> {
+    const src = await fsp.open(this.gopPath(g), 'r');
+    try {
+      let checked = false;
+      for await (const box of topBoxes(src)) {
+        if (!box.moof) {
+          await copyRange(src, out, box.start, box.size, this.chunk);
+          continue;
+        }
+        if (!checked) checked = this.checkGop(g, box.moof);
+        await out.write(retimeFragments(box.moof, this.delta!));
+      }
+      if (!checked) throw new Error(`GOP ${g} has no video fragment`);
+    } finally {
+      await src.close();
+    }
+  }
+
+  /** Whether `moof` opens GOP `g`'s video; throws when it opens another GOP,
+   *  whose samples a file matched by number alone would serve. The muxer's
+   *  decode clock drifts off the source's, so `g` must be the nearest keyframe. */
+  private checkGop(g: number, moof: Buffer): boolean {
+    const { gopPts } = this.plan;
+    if (!this.video) return true;
+    const tfdt = firstTfdt(moof, this.video.id);
+    if (tfdt == null) return false;
+    if (!gopPts) return true;
+    const at = Number(tfdt) / this.video.timescale + this.video.correction;
+    const off = (k: number) => Math.abs(at - gopPts[k]);
+    const nearer = [g - 1, g + 1].find((k) => k >= 0 && k < gopPts.length && off(k) < off(g));
+    if (nearer !== undefined) {
+      throw new Error(
+        `GOP file ${g - this.gopOffset} starts at ${at.toFixed(3)}s, on keyframe ${nearer} (${gopPts[nearer]}s), not the planned ${g} (${gopPts[g]}s)`,
+      );
+    }
+    return true;
   }
 
   /** The last segment of a run that ended cleanly, from the GOPs written. */
@@ -312,20 +349,54 @@ export class RemuxSegmentAssembler {
   }
 }
 
-async function renameRetrying(from: string, to: string): Promise<void> {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await fsp.rename(from, to);
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code ?? '';
-      if (attempt >= RENAME_ATTEMPTS || !TRANSIENT_RENAME_CODES.has(code)) throw err;
-      await new Promise((r) => setTimeout(r, OUTPUT_POLL_MS / RENAME_ATTEMPTS));
+/** A fragment file's top-level boxes: each `moof` read whole, the others (the
+ *  media data) by their extent only. */
+async function* topBoxes(
+  fh: FileHandle,
+): AsyncGenerator<{ start: number; size: number; moof: Buffer | null }> {
+  const { size: end } = await fh.stat();
+  const head = Buffer.alloc(16);
+  for (let start = 0; start < end; ) {
+    const { bytesRead } = await fh.read(head, 0, head.length, start);
+    let size = bytesRead >= 8 ? head.readUInt32BE(0) : 0;
+    if (size === 1 && bytesRead === 16) size = Number(head.readBigUInt64BE(8));
+    else if (size === 0 && bytesRead >= 8) size = end - start;
+    if (size < 8 || start + size > end) {
+      throw new Error(`malformed box at byte ${start} of ${end}`);
     }
+    let moof: Buffer | null = null;
+    if (head.toString('latin1', 4, 8) === 'moof') {
+      moof = Buffer.alloc(size);
+      await fh.read(moof, 0, size, start);
+    }
+    yield { start, size, moof };
+    start += size;
   }
 }
 
-async function writeAtomic(file: string, data: Buffer): Promise<void> {
-  const tmp = `${file}.tmp`;
-  await fsp.writeFile(tmp, data);
-  await renameRetrying(tmp, file);
+/** The `moof` boxes of a fragment file, back to back. */
+async function readMoofs(file: string): Promise<Buffer> {
+  const fh = await fsp.open(file, 'r');
+  try {
+    const moofs: Buffer[] = [];
+    for await (const box of topBoxes(fh)) if (box.moof) moofs.push(box.moof);
+    return Buffer.concat(moofs);
+  } finally {
+    await fh.close();
+  }
+}
+
+async function copyRange(
+  src: FileHandle,
+  out: FileHandle,
+  start: number,
+  size: number,
+  chunk: Buffer,
+): Promise<void> {
+  for (let done = 0; done < size; ) {
+    const { bytesRead } = await src.read(chunk, 0, Math.min(chunk.length, size - done), start + done);
+    if (bytesRead === 0) throw new Error(`fragment file ends ${size - done} bytes early`);
+    await out.write(chunk, 0, bytesRead);
+    done += bytesRead;
+  }
 }

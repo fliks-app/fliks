@@ -1,15 +1,7 @@
-import { Logger } from '@nestjs/common';
-import { stat } from 'fs/promises';
 import type { MediaFileInfo } from '../../subtitles/ffprobe.service';
-import {
-  sourceIsMpegTs,
-  videoPackets,
-  type Keyframe,
-} from '../../subtitles/video-packets';
-import { sourceTimeline } from './source-timeline';
+import { sourceIsMpegTs, type Keyframe } from '../../subtitles/video-packets';
 import { frameSecondsOf, parseSourceFps } from './constants';
-
-const log = new Logger('SegmentBoundaries');
+import type { SourceScan } from './source-scan';
 
 // Copied video cuts only at its own irregular keyframes, so the remux playlist
 // declares each segment's real length: AVPlayer drifts on a uniform EXTINF grid.
@@ -88,51 +80,19 @@ export function gridSegmentIndex(
   return boundaries.length - 2;
 }
 
-interface GridEntry {
-  mtimeMs: number;
-  segDur: number;
-  grid: Promise<KeyframeGrid | null>;
-}
-
-const grids = new Map<string, GridEntry>();
-const MAX_GRIDS = 64;
-
-/** The keyframe grid of a source, or null for the uniform one: one answer per
- *  file version, a failure included, so every request of a playback agrees. */
-export async function getRemuxSegmentGrid(
-  filePath: string,
+/** The keyframe grid of a scanned source on the timeline starting at `origin`,
+ *  or null when the scan holds no keyframe past it. */
+export function remuxSegmentGrid(
+  scan: Pick<SourceScan, 'keyframes' | 'end'>,
+  origin: number,
   segDur: number,
-  streamInfo: Pick<MediaFileInfo, 'video' | 'formatStartSeconds' | 'formatName'> | null | undefined,
-): Promise<KeyframeGrid | null> {
-  let mtimeMs: number;
-  try {
-    mtimeMs = (await stat(filePath)).mtimeMs;
-  } catch (err) {
-    log.warn(`Cannot stat ${filePath}; uniform grid: ${(err as Error).message}`);
-    return null;
-  }
-  const hit = grids.get(filePath);
-  if (hit && hit.mtimeMs === mtimeMs && hit.segDur === segDur) return hit.grid;
-  const v = streamInfo?.video?.[0];
-  const grid = videoPackets(
-    filePath,
-    { streamIndex: v?.streamIndex, reorderFrames: v?.reorderFrames, avgFrameRate: v?.avgFrameRate },
-    { mpegTs: sourceIsMpegTs(streamInfo, filePath) },
-  ).then(
-    ({ keyframes, end }) => {
-      const { origin } = sourceTimeline(streamInfo, filePath);
-      const frame = frameSecondsOf(parseSourceFps(v?.frameRate));
-      const g = computeSegmentGrid(keyframes, origin, end, segDur, frame);
-      if (!g) log.warn(`No video keyframe in ${filePath}; uniform grid`);
-      return g;
-    },
-    (err: Error) => {
-      log.warn(`Keyframe probe failed for ${filePath}; uniform grid: ${err.message}`);
-      return null;
-    },
+  frameRate: string | undefined,
+): KeyframeGrid | null {
+  return computeSegmentGrid(
+    scan.keyframes,
+    origin,
+    scan.end,
+    segDur,
+    frameSecondsOf(parseSourceFps(frameRate)),
   );
-  grids.delete(filePath);
-  grids.set(filePath, { mtimeMs, segDur, grid });
-  if (grids.size > MAX_GRIDS) grids.delete(grids.keys().next().value!);
-  return grid;
 }

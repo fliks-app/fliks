@@ -10,11 +10,9 @@ import { StreamLifetime } from './lifetime-constants';
 import type { TranscodeReason } from './dto/playback-info.dto';
 import type { BurnInSubtitle } from './transcoding';
 import type { CodecVariant } from './transcoding/codec/types';
-import type {
-  AudioPlan,
-  AudioTrackEncodePlan,
-} from './transcoding/audio-encode';
+import type { AudioPlan } from './transcoding/audio-encode';
 import type { SourceTimeline } from './transcoding/source-timeline';
+import type { KeyframeGrid } from './transcoding/segment-boundaries';
 
 export type PlaybackState = 'playing' | 'paused' | 'buffering';
 export type SessionKind = 'transcode' | 'remux' | 'directplay';
@@ -98,9 +96,14 @@ export interface LiveSession {
   /** Source timeline at playback-info: the session keeps it, and its cache
    *  dir, whatever a rescan meanwhile makes of the file. */
   timeline: SourceTimeline | null;
+  /** `sourceVersion` of the file at playback-info, null when unreadable. */
+  sourceVersion: string | null;
+  /** Keyframe grid the remux variant is cut on, decided once at playback-info
+   *  from the stored scan: null plays the uniform grid. */
+  remuxGrid: KeyframeGrid | null;
   /** Per-rendition audio decision (one entry per source audio stream) for the
    *  multi-audio var_stream_map encode; null when uniform / not multi-audio. */
-  audioTrackPlans: AudioTrackEncodePlan[] | null;
+  audioTrackPlans: AudioPlan[] | null;
   audioStreamIndex: number | null;
   audioStreamCount: number;
   useExtXMedia: boolean;
@@ -172,7 +175,9 @@ export interface CreateLiveSessionInput {
   useTs?: boolean;
   audioPlan?: AudioPlan | null;
   timeline?: SourceTimeline | null;
-  audioTrackPlans?: AudioTrackEncodePlan[] | null;
+  sourceVersion?: string | null;
+  remuxGrid?: KeyframeGrid | null;
+  audioTrackPlans?: AudioPlan[] | null;
   audioStreamIndex?: number | null;
   audioStreamCount?: number;
   useExtXMedia?: boolean;
@@ -282,6 +287,8 @@ export function buildLiveSession(
       useTs: input.useTs ?? false,
       audioPlan: input.audioPlan ?? null,
       timeline: input.timeline ?? null,
+      sourceVersion: input.sourceVersion ?? null,
+      remuxGrid: input.remuxGrid ?? null,
       audioTrackPlans: input.audioTrackPlans ?? null,
       audioStreamIndex: input.audioStreamIndex ?? null,
       audioStreamCount: input.audioStreamCount ?? 0,

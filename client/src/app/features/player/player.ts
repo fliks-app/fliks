@@ -1863,22 +1863,26 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  the dropdown labels match the media-detail header. Every engine that can
    *  enumerate tracks needs this: the streamInfo fallback in loadAudioTracks
    *  only covers an engine reporting none. */
+  /** The playing file's audio stream info, in the order engines list tracks.
+   *  Offline there's no media loaded, so it's the metadata captured on the
+   *  download task at download time. */
+  private audioStreamInfo(): AudioStreamChoice[] {
+    if (this.isOfflinePlayback) {
+      const task = this.dlCache
+        .load()
+        .find((t) => t.mediaFileId === this.mediaFileId && t.status === 'ready');
+      return task?.audioStreams ?? [];
+    }
+    const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
+    return (file?.streamInfo as any)?.audio ?? [];
+  }
+
   private wireAudioTracks(engine: PlaybackEngine): void {
     engine.on('audioTracksChanged', (e) => {
       // Cross-reference engine tracks with streamInfo.audio so the dropdown
       // label matches what the media-detail header shows. Engine emits tracks
-      // in streamInfo order. Offline there's no media loaded, so fall back to
-      // the audio metadata captured on the download task at download time.
-      let audioList: { language?: string }[];
-      if (this.isOfflinePlayback) {
-        const task = this.dlCache
-          .load()
-          .find((t) => t.mediaFileId === this.mediaFileId && t.status === 'ready');
-        audioList = task?.audioStreams ?? [];
-      } else {
-        const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
-        audioList = (file?.streamInfo as any)?.audio ?? [];
-      }
+      // in streamInfo order.
+      const audioList = this.audioStreamInfo();
       const tracks = e.tracks.map((t: any, i: number) => ({
         id: t.id,
         label: audioList[i] ? formatAudioLabel(audioList[i], this.translate, i + 1) : t.label,
@@ -1927,6 +1931,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.activeAudioTrackId(),
         (trackId) => this.onSelectAudioTrack(trackId),
         this.originalLanguage,
+        this.audioStreamInfo(),
       );
     });
   }
@@ -3891,6 +3896,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             this.activeAudioTrackId(),
             (trackId) => this.onSelectAudioTrack(trackId),
             this.originalLanguage,
+            this.audioStreamInfo(),
           );
         }
         return;
@@ -3927,6 +3933,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.activeAudioTrackId(),
         (trackId) => this.onSelectAudioTrack(trackId),
         this.originalLanguage,
+        this.audioStreamInfo(),
       );
     }, 2000);
   }
@@ -3965,7 +3972,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     // Save selection
     this.trackManager.saveAudioSelection(
-      trackId, this.availableAudioTracks(), this.mediaId, this.mediaFileId,
+      trackId, this.availableAudioTracks(), this.mediaId, this.audioStreamInfo(),
     );
 
     const isEngineTrack =

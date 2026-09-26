@@ -146,12 +146,12 @@ describe('SessionContextBuilder.build', () => {
 
   it('hashes a var_stream_map session at playback-info as every transcode request does', () => {
     const file = resolved(2);
-    const layout = (outputChannels: number) => ({
+    const layout = (channels: number) => ({
       useTs: false,
       audioPlan: { mode: 'copy' as const, codec: 'aac' },
       audioTrackPlans: [
-        { copy: true, outputCodec: 'aac', outputChannels: 2 },
-        { copy: false, outputCodec: 'aac', outputChannels },
+        { mode: 'copy' as const, codec: 'aac', channels: 2 },
+        { mode: 'transcode' as const, codec: 'aac' as const, channels },
       ],
       videoVariant: { codec: 'h264' as const, bitDepth: 8 as const, hdr: null },
     });

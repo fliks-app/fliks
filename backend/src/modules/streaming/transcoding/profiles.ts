@@ -1,11 +1,6 @@
 import { bucketResolutionHeight } from '../../../common/utils/resolution.util';
 import type { DeviceType, TranscodeProfile } from './types';
 
-/** Output bitrate for surround AC-3 / E-AC-3 transcodes (the encoders' 5.1
- *  ceiling). Single source for the encoder `-b:a` arg and the master-playlist
- *  BANDWIDTH so the declared and produced bitrates can't drift apart. */
-export const SURROUND_TRANSCODE_BITRATE_BPS = 640_000;
-
 /** Relative bits to reach a given visual quality, normalised to H.264 = 1.
  *  A less-efficient target codec needs proportionally more bits than the
  *  source to hold the same quality (HEVC/AV1 are more efficient → fewer bits). */

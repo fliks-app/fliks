@@ -1,5 +1,11 @@
 import { audioStartAlignFilter, perStreamAudioArgs } from './ffmpeg-args';
 import type { AudioStreamMeta } from './types';
+import {
+  audioEncodeBitrateBps,
+  audioOutputBitrateBps,
+  type AudioEncodeCodec,
+  type AudioPlan,
+} from './audio-encode';
 
 const enc = (alignStartSeconds: number, useTs = false) => ({
   stereoBitrate: '128k',
@@ -25,13 +31,13 @@ describe('perStreamAudioArgs', () => {
     const args = perStreamAudioArgs(
       twoSurround,
       [
-        { copy: false, outputCodec: 'aac', outputChannels: 2 },
-        { copy: false, outputCodec: 'aac', outputChannels: 2 },
+        { mode: 'transcode', codec: 'aac', channels: 2 },
+        { mode: 'transcode', codec: 'aac', channels: 2 },
       ],
       enc(0),
     );
 
-    const joined = args!.join(' ');
+    const joined = args.join(' ');
     expect(joined).toContain('-ac:a:0 2');
     expect(joined).toContain('-ac:a:1 2');
     // Never the bare specifier: it would hit the video at stream 0 / the wrong
@@ -44,27 +50,27 @@ describe('perStreamAudioArgs', () => {
     const args = perStreamAudioArgs(
       twoSurround,
       [
-        { copy: false, outputCodec: 'eac3', outputChannels: 6 },
-        { copy: false, outputCodec: 'eac3', outputChannels: 6 },
+        { mode: 'transcode', codec: 'eac3', channels: 6 },
+        { mode: 'transcode', codec: 'eac3', channels: 6 },
       ],
       enc(0),
     );
 
-    const joined = args!.join(' ');
+    const joined = args.join(' ');
     expect(joined).toContain('-c:a:0 eac3');
     expect(joined).toContain('-ac:a:0 6');
     expect(joined).toContain('-ac:a:1 6');
-    // Surround bitrate is the named constant (640k), pinned here so it can't
-    // drift from the master-playlist BANDWIDTH that honours the same value.
-    expect(joined).toContain('-b:a:0 640k');
+    // Three times the 128k stereo budget.
+    expect(joined).toContain('-b:a:0 384k');
+    expect(joined).toContain('-ar:a:1 48000');
   });
 
   it('copies a fitting rendition without a channel arg', () => {
     const args = perStreamAudioArgs(
       twoSurround,
       [
-        { copy: true, outputCodec: 'eac3' },
-        { copy: false, outputCodec: 'aac', outputChannels: 2 },
+        { mode: 'copy', codec: 'eac3' },
+        { mode: 'transcode', codec: 'aac', channels: 2 },
       ],
       enc(0),
     );
@@ -78,6 +84,8 @@ describe('perStreamAudioArgs', () => {
       '128k',
       '-ac:a:1',
       '2',
+      '-ar:a:1',
+      '48000',
       '-filter:a:1',
       'asetpts=PTS-0/TB,aresample=async=1:first_pts=0,asetpts=PTS+0/TB',
     ]);
@@ -87,12 +95,12 @@ describe('perStreamAudioArgs', () => {
     const args = perStreamAudioArgs(
       twoSurround,
       [
-        { copy: false, outputCodec: 'aac', outputChannels: 6 },
-        { copy: false, outputCodec: 'aac' },
+        { mode: 'transcode', codec: 'aac', channels: 6 },
+        { mode: 'transcode', codec: 'aac', channels: 2 },
       ],
       enc(0),
     );
-    const joined = args!.join(' ');
+    const joined = args.join(' ');
     expect(joined).toContain('-ac:a:0 6');
     expect(joined).toContain('-ac:a:1 2');
   });
@@ -101,26 +109,25 @@ describe('perStreamAudioArgs', () => {
     const args = perStreamAudioArgs(
       twoSurround,
       [
-        { copy: true, outputCodec: 'opus' },
-        { copy: false, outputCodec: 'opus', outputChannels: 6 },
+        { mode: 'copy', codec: 'opus' },
+        { mode: 'transcode', codec: 'opus', channels: 6 },
       ],
       enc(11.8),
     );
     expect(args).not.toContain('-filter:a:0');
-    expect(args!.join(' ')).toContain(
+    expect(args.join(' ')).toContain(
       '-filter:a:1 asetpts=PTS-11.8/TB,aresample=async=1:first_pts=0,asetpts=PTS+11.8/TB',
     );
   });
 
-  it('returns null when the plan count does not match the stream count', () => {
-    expect(
+  it('throws when the plan count does not match the stream count', () => {
+    expect(() =>
       perStreamAudioArgs(
         twoSurround,
-        [{ copy: false, outputCodec: 'aac', outputChannels: 2 }],
+        [{ mode: 'transcode', codec: 'aac', channels: 2 }],
         enc(0),
       ),
-    ).toBeNull();
-    expect(perStreamAudioArgs(twoSurround, undefined, enc(0))).toBeNull();
+    ).toThrow(/1 audio plans for 2/);
   });
 });
 
@@ -128,7 +135,7 @@ describe('perStreamAudioArgs — codec policy', () => {
   const one: AudioStreamMeta[] = [{ language: 'eng', channels: 6 }];
 
   it('turns a copied AAC into raw AAC for fMP4, never for MPEG-TS', () => {
-    const plan = [{ copy: true, outputCodec: 'aac' }];
+    const plan: AudioPlan[] = [{ mode: 'copy', codec: 'aac' }];
     expect(perStreamAudioArgs(one, plan, enc(0))).toEqual([
       '-c:a:0',
       'copy',
@@ -140,17 +147,17 @@ describe('perStreamAudioArgs — codec policy', () => {
       'copy',
     ]);
     expect(
-      perStreamAudioArgs(one, [{ copy: true, outputCodec: 'eac3' }], enc(0)),
+      perStreamAudioArgs(one, [{ mode: 'copy', codec: 'eac3' }], enc(0)),
     ).toEqual(['-c:a:0', 'copy']);
   });
 
   it('scales the stereo rung bitrate with the channel count', () => {
-    const at = (outputCodec: string, outputChannels: number) => {
+    const at = (codec: AudioEncodeCodec, channels: number) => {
       const args = perStreamAudioArgs(
         one,
-        [{ copy: false, outputCodec, outputChannels }],
+        [{ mode: 'transcode', codec, channels }],
         enc(0),
-      )!;
+      );
       return args[args.indexOf('-b:a:0') + 1];
     };
     expect(at('aac', 1)).toBe('128k');
@@ -158,29 +165,47 @@ describe('perStreamAudioArgs — codec policy', () => {
     expect(at('aac', 6)).toBe('384k');
     expect(at('aac', 8)).toBe('512k');
     expect(at('opus', 6)).toBe('384k');
-    expect(at('eac3', 2)).toBe('640k');
-    expect(at('ac3', 6)).toBe('640k');
+    expect(at('eac3', 2)).toBe('128k');
+    expect(at('ac3', 6)).toBe('384k');
+  });
+
+  it('keeps a Dolby encode within the recommended range of its layout', () => {
+    // Floors: AC-3 192k stereo and 384k 5.1, E-AC-3 two thirds of those.
+    expect(audioEncodeBitrateBps('eac3', 6, 64_000)).toBe(256_000);
+    expect(audioEncodeBitrateBps('ac3', 6, 64_000)).toBe(384_000);
+    expect(audioEncodeBitrateBps('ac3', 2, 64_000)).toBe(192_000);
+    expect(audioEncodeBitrateBps('eac3', 2, 64_000)).toBe(128_000);
+    // The stereo budget of a high rung, per channel pair, up to 640k.
+    expect(audioEncodeBitrateBps('eac3', 6, 192_000)).toBe(576_000);
+    expect(audioEncodeBitrateBps('eac3', 6, 256_000)).toBe(640_000);
+    // AC-3 only carries its own rates: 480k becomes 512k, never less.
+    expect(audioEncodeBitrateBps('ac3', 6, 160_000)).toBe(512_000);
+  });
+
+  it('declares a copy at its source bitrate, else at what an encode would take', () => {
+    expect(
+      audioOutputBitrateBps(
+        { mode: 'copy', codec: 'eac3', channels: 6, bitrateBps: 768_000 },
+        96_000,
+      ),
+    ).toBe(768_000);
+    expect(
+      audioOutputBitrateBps(
+        { mode: 'copy', codec: 'truehd', channels: 8 },
+        96_000,
+      ),
+    ).toBe(384_000);
   });
 
   it('pads an encoded rendition up to the video end', () => {
     const args = perStreamAudioArgs(
       one,
-      [{ copy: false, outputCodec: 'aac', outputChannels: 2 }],
+      [{ mode: 'transcode', codec: 'aac', channels: 2 }],
       { ...enc(12), endSeconds: 40 },
-    )!;
+    );
     expect(args[args.indexOf('-filter:a:0') + 1]).toBe(
       audioStartAlignFilter(12, 40),
     );
-  });
-
-  it('refuses an output codec it has no encoder for', () => {
-    expect(() =>
-      perStreamAudioArgs(
-        one,
-        [{ copy: false, outputCodec: 'dts', outputChannels: 6 }],
-        enc(0),
-      ),
-    ).toThrow(/dts/);
   });
 });
 

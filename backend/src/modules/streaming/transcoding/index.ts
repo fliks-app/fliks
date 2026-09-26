@@ -5,7 +5,6 @@ export {
   ECO_HDR_PROFILES,
   ECO_PROFILES,
   PROFILES,
-  SURROUND_TRANSCODE_BITRATE_BPS,
   cappedTranscodeVideoBitrateBps,
   getHdrLadderForDevice,
   getLadderForDevice,

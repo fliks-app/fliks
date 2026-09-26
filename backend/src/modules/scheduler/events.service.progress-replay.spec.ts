@@ -1,11 +1,18 @@
 import { EventsService } from './events.service';
+import type { Subscription } from 'rxjs';
 import { DownloadProgressCacheService } from './download-progress-cache.service';
+
+// Each open stream runs a ping interval until it is unsubscribed.
+const open: Subscription[] = [];
+afterEach(() => open.splice(0).forEach((s) => s.unsubscribe()));
 
 function connect(events: EventsService, userId: number): unknown[] {
   const received: unknown[] = [];
-  events
-    .getStream(userId)
-    .subscribe((m) => received.push(JSON.parse((m as MessageEvent).data as string)));
+  open.push(
+    events
+      .getStream(userId)
+      .subscribe((m) => received.push(JSON.parse((m as MessageEvent).data as string))),
+  );
   return received;
 }
 

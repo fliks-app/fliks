@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import sharp from 'sharp';
 import { getDataDir } from '../../common/constants/paths';
+import { writeFileAtomic } from '../../common/utils/atomic-file';
 
 // libvips defaults to one worker thread per core plus a decoded-image cache,
 // pure overhead for one-shot resizes on a low-core, low-RAM box.
@@ -237,7 +238,7 @@ export class ImageService {
 
     try {
       await fs.promises.mkdir(path.dirname(fullDest), { recursive: true });
-      await this.writeFileAtomic(fullDest, buffer);
+      await writeFileAtomic(fullDest, buffer);
     } catch (err) {
       this.logger.warn(`Failed to write image ${type}/${id}: ${err.message}`);
       return null;
@@ -257,7 +258,7 @@ export class ImageService {
           const out = await (
             asPng ? resized.png() : resized.jpeg({ quality: 90 })
           ).toBuffer();
-          await this.writeFileAtomic(
+          await writeFileAtomic(
             this.getDiskPath(type, id, variant, size),
             out,
           );
@@ -274,7 +275,7 @@ export class ImageService {
     // Stamping the content makes the URL move exactly when the image does.
     const hash = createHash('sha1').update(buffer).digest('hex').slice(0, 8);
     // Holds the hash so a later cache hit returns the same `?v=` without the bytes.
-    await this.writeFileAtomic(
+    await writeFileAtomic(
       srcPath,
       JSON.stringify({ url: sourceKey, hash }),
     );
@@ -349,17 +350,6 @@ export class ImageService {
     } finally {
       release();
     }
-  }
-
-  /** Write to a temp path then rename, so a crash mid-write can never leave a
-   *  torn file at `dest`. */
-  private async writeFileAtomic(
-    dest: string,
-    data: Buffer | string,
-  ): Promise<void> {
-    const tmp = `${dest}.tmp`;
-    await fs.promises.writeFile(tmp, data);
-    await fs.promises.rename(tmp, dest);
   }
 
   /** Cached result if `remoteUrl` matches the sidecar and every expected file

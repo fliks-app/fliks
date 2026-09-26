@@ -169,6 +169,39 @@ export function audioCodecString(codec: string): string | null {
   return AUDIO_CODEC_STRINGS[codec.toLowerCase() as AudioOutputCodec] ?? null;
 }
 
+/** ffprobe AAC profiles whose object type the CODECS string names. */
+const AAC_OBJECT_TYPES: Record<string, number> = {
+  'he-aac': 5,
+  'he-aacv2': 29,
+};
+
+/** RFC 6381 CODECS audio entry of a group sharing `codec`. HE-AAC plays on an
+ *  AAC-LC decoder at half its rate, so the least object type any rendition needs wins. */
+export function audioGroupCodecString(
+  tracks: { codec: string; profile?: string }[],
+): string | null {
+  const codec = tracks[0]?.codec.toLowerCase() ?? 'aac';
+  if (codec !== 'aac') return audioCodecString(codec);
+  const types = tracks.map(
+    (t) => AAC_OBJECT_TYPES[t.profile?.toLowerCase() ?? ''] ?? 2,
+  );
+  // HE-AACv2 is HE-AAC plus parametric stereo: 29 plays where 5 does.
+  const least = types.includes(2) ? 2 : types.includes(5) ? 5 : 29;
+  return `mp4a.40.${least}`;
+}
+
+/** EXT-X-MEDIA CHANNELS of a rendition: Apple's `16/JOC` for a copied Dolby
+ *  Atmos E-AC-3, whose objects ride on its channel bed, else the count. */
+export function audioChannelsAttr(t: {
+  codec: string;
+  profile?: string;
+  channels?: number;
+}): string | number | undefined {
+  const atmos =
+    t.codec.toLowerCase() === 'eac3' && /atmos/i.test(t.profile ?? '');
+  return atmos ? '16/JOC' : t.channels;
+}
+
 /** EXT-X-MEDIA CHANNELS of a rendition without a per-track plan: AAC as
  *  stereo, any other codec at the source count (2 when unknown). */
 export function audioRenditionChannels(

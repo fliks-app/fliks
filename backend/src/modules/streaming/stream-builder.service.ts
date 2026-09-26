@@ -3,7 +3,6 @@ import { DeviceProfileDto } from './dto/device-profile.dto';
 import {
   AudioTrackPlan,
   PlaybackInfoResponse,
-  PlayMethod,
   QualityOption,
   TranscodeReason,
 } from './dto/playback-info.dto';
@@ -42,20 +41,25 @@ import { normaliseSourceCodec } from './transcoding/codec/normalise';
 import { deriveDvInfo, isDvProfile5 } from './transcoding/codec/dolby-vision';
 import { pickPrimaryVariant } from './transcoding/codec/selector';
 import type { CodecVariant, VideoCodec } from './transcoding/codec/types';
-import { pickAudioLayout, resolveMuxFlavour } from './transcoding/audio-layout';
+import { audioLayout, resolveMuxFlavour } from './transcoding/audio-layout';
 import {
-  audioEncodeBitrateBps,
+  audioOutputBitrateBps,
+  DEFAULT_AUDIO_PLAN,
   encoderMaxChannels,
   isEncodableAudio,
   type AudioEncodeCodec,
   type AudioPlan,
 } from './transcoding/audio-encode';
-import type { MediaFileInfo } from '../subtitles/ffprobe.service';
+import type {
+  AudioStreamInfo,
+  MediaFileInfo,
+} from '../subtitles/ffprobe.service';
 import {
   sourceTimeline,
   videoPresentationStart,
 } from './transcoding/source-timeline';
 import { sourceIsMpegTs } from '../subtitles/video-packets';
+import { aacConfigMayChange, type SourceScan } from './transcoding/source-scan';
 
 /** Audio codecs that can be copied verbatim into fMP4 segments via MSE.
  *  Anything outside this set is re-encoded to AAC on the remux path even when
@@ -74,16 +78,22 @@ type CopyBlocker =
 /** Why a track the device plays as-is must still be re-encoded into fMP4, or
  *  null: MSE ignores an offset's empty edit, and see each check below. */
 function copyBlocker(
-  audio: { codec?: string; startTimeSeconds?: number; endSeconds?: number },
+  audio: AudioStreamInfo,
   video: Parameters<typeof videoPresentationStart>[0],
   muxFlavour: 'ts' | 'fmp4',
   mpegTs: boolean,
+  scan: SourceScan | null | undefined,
   lastVideoSegmentStart: number | undefined,
 ): CopyBlocker | null {
   if (muxFlavour !== 'fmp4') return null;
   // MPEG-TS carries AAC as ADTS, where broadcasts switch 2.0 and 5.1 mid-stream.
-  // fMP4 keeps one AAC configuration, the first frame's, for the whole track.
-  if ((audio.codec ?? '').toLowerCase() === 'aac' && mpegTs) {
+  // fMP4 keeps one AAC configuration, the first frame's, for the whole track,
+  // so only a scan that saw none lets it copy.
+  if (
+    (audio.codec ?? '').toLowerCase() === 'aac' &&
+    mpegTs &&
+    aacConfigMayChange(scan, audio.streamIndex) !== false
+  ) {
     return 'AudioFormatMayChange';
   }
   const a = audio.startTimeSeconds;
@@ -123,6 +133,31 @@ function encodeChannelCap(profile: DeviceProfileDto, codec: AudioEncodeCodec): n
   return Math.min(audioChannelCap(profile, codec), encoderMaxChannels(codec));
 }
 
+/** One track's audio decision: its output, and why it re-encodes (`Audio*`
+ *  flags, empty when copied). */
+interface TrackDecision {
+  plan: AudioPlan;
+  reasonFlags: string[];
+}
+
+/** The playback-info form of a track's decision. */
+function trackDto(
+  t: AudioStreamInfo,
+  index: number,
+  d: TrackDecision,
+): AudioTrackPlan {
+  return {
+    index,
+    language: t.language,
+    codec: (t.codec ?? '').toLowerCase(),
+    channels: t.channels,
+    copy: d.plan.mode === 'copy',
+    outputCodec: d.plan.codec,
+    outputChannels: d.plan.channels,
+    reasonFlags: d.reasonFlags,
+  };
+}
+
 /** Transcode reason for each per-track flag. */
 function audioReason(flag: string, t: AudioTrackPlan): TranscodeReason {
   const messages: Record<string, string> = {
@@ -131,23 +166,10 @@ function audioReason(flag: string, t: AudioTrackPlan): TranscodeReason {
     AudioStartOffset:
       'Audio starts off the video and is re-encoded to align it',
     AudioFormatMayChange:
-      'AAC from MPEG-TS can change format mid-stream and is re-encoded',
+      'AAC from MPEG-TS may change format mid-stream and is re-encoded',
     AudioEndsEarly: 'Audio ends before the video and is padded to its end',
   };
   return { flag, message: messages[flag] ?? flag };
-}
-
-/** The single-track plan of one rendition's decision. */
-function toAudioPlan(t: AudioTrackPlan, stereoBitrateBps: number): AudioPlan {
-  if (t.copy) return { mode: 'copy', codec: t.outputCodec };
-  const codec = t.outputCodec as AudioEncodeCodec;
-  const channels = t.outputChannels ?? 2;
-  return {
-    mode: 'transcode',
-    codec,
-    channels,
-    bitrateBps: audioEncodeBitrateBps(codec, channels, stereoBitrateBps),
-  };
 }
 
 /** Max channels the device can decode for `codec` — the per-codec cap when the
@@ -173,6 +195,9 @@ export interface EvaluateResult {
   videoVariant: CodecVariant | null;
   /** Segment container of the HLS output. */
   muxFlavour: 'ts' | 'fmp4';
+  /** Per-rendition audio output, in `streamInfo.audio` order: what a
+   *  var_stream_map encode of the session emits. */
+  audioPlans: AudioPlan[];
 }
 
 /**
@@ -206,6 +231,7 @@ export class StreamBuilderService {
     autoQualityMode: 'directplay' | 'abr' = 'directplay',
     audioStreamIndex?: number,
     segmentDuration = DEFAULT_SEGMENT_DURATION,
+    sourceScan?: SourceScan | null,
   ): EvaluateResult {
     const si = resolved.mediaFile.streamInfo;
     const v = si?.video?.[0];
@@ -327,11 +353,15 @@ export class StreamBuilderService {
     // via EvaluateResult; the controller threads them onto the live
     // session rather than the service writing side-effects.
     const hlsMux = resolveMuxFlavour(profile, audioStreams.length);
-    const wrap = (response: PlaybackInfoResponse): EvaluateResult => ({
+    const wrap = (
+      response: PlaybackInfoResponse,
+      audioPlans: AudioPlan[],
+    ): EvaluateResult => ({
       response,
       useHdrLadder,
       videoVariant: selectedVariant,
       muxFlavour: hlsMux,
+      audioPlans,
     });
     const needsBurnIn = !!burnInSubtitleId;
     // Cropping black bars forces a re-encode. When the admin disables auto-crop
@@ -540,72 +570,51 @@ export class StreamBuilderService {
         `DirectPlay for file ${resolved.mediaFile.id}: ${sourceContainer}/${sourceVideoCodec}/${sourceAudioCodec}`,
       );
       const url = `/api/stream/${resolved.mediaFile.id}${tokenParam}`;
-      return wrap({
-        mediaFileId: resolved.mediaFile.id,
-        playMethod: 'DirectPlay',
-        playUrl: url,
-        contentType: resolved.contentType,
-        transcodeReasons: [],
-        videoCopyStream: true,
-        audioCopyStream: true,
-        outputVideoCodec: sourceVideoCodec,
-        outputAudioCodec: sourceAudioCodec,
-        audioPlan: { mode: 'copy', codec: sourceAudioCodec },
-        outputContainer: sourceContainer,
-        quality: 'original',
-        hwAccel: 'none',
-        tonemapping: false,
-        clientTonemap,
-        qualities: this.buildQualityList(
+      // The raw file carries every track as is.
+      const copies: TrackDecision[] = audioStreams.map((t) => ({
+        plan: {
+          mode: 'copy',
+          codec: (t.codec ?? '').toLowerCase(),
+          channels: t.channels,
+          bitrateBps: t.bitRate,
+          profile: t.profile,
+        },
+        reasonFlags: [],
+      }));
+      return wrap(
+        {
+          mediaFileId: resolved.mediaFile.id,
+          playMethod: 'DirectPlay',
+          playUrl: url,
+          contentType: resolved.contentType,
+          transcodeReasons: [],
+          videoCopyStream: true,
+          audioCopyStream: true,
+          outputVideoCodec: sourceVideoCodec,
+          outputAudioCodec: sourceAudioCodec,
+          audioPlan: copies[pickedAudio]?.plan ?? {
+            mode: 'copy',
+            codec: sourceAudioCodec,
+          },
+          outputContainer: sourceContainer,
+          quality: 'original',
+          hwAccel: 'none',
+          tonemapping: false,
+          clientTonemap,
+          qualities: this.buildQualityList(
+            source,
+            'DirectPlay',
+            sourceCopyable,
+            qualityLadder,
+            selectedVariant.codec,
+          ),
+          audioTracks: audioStreams.map((t, i) => trackDto(t, i, copies[i])),
           source,
-          'DirectPlay',
-          sourceCopyable,
-          qualityLadder,
-          selectedVariant.codec,
-        ),
-        audioTracks: this.buildAudioTracks(
-          si,
-          resolved.absolutePath,
-          profile,
-          'DirectPlay',
-          'fmp4',
-          sourceMpegTs,
-          segmentDuration,
-        ),
-        source,
-      });
+        },
+        copies.map((d) => d.plan),
+      );
     }
 
-    // One decision per track, for DirectStream and Transcode alike: the top-level
-    // plan and reasons are the picked track's, so they match `audioTracks`.
-    const audioTracks = this.buildAudioTracks(
-      si,
-      resolved.absolutePath,
-      profile,
-      'Transcode',
-      hlsMux,
-      sourceMpegTs,
-      segmentDuration,
-    );
-    const pickedTrack = audioTracks[pickedAudio];
-    const stereoAudioBps = parseBitrateToBps(ladder[0]?.audioBitrate ?? '192k');
-    const audioPlan: AudioPlan = pickedTrack
-      ? toAudioPlan(pickedTrack, stereoAudioBps)
-      : {
-          mode: 'transcode',
-          codec: 'aac',
-          bitrateBps: stereoAudioBps,
-          channels: 2,
-        };
-    const canCopyAudio = audioPlan.mode === 'copy';
-    const outputAudioCodec = audioPlan.codec;
-    reasons.push(
-      ...(pickedTrack?.reasonFlags ?? []).map((f) =>
-        audioReason(f, pickedTrack),
-      ),
-    );
-
-    // --- Step 2: Try DirectStream (remux) ---
     // Video codec must be supported; only container or audio may differ
     // Cannot remux if tone mapping or burn-in is needed (video must be re-encoded).
     // A lower explicit rung / ABR-on-auto wants a re-encoded ladder, not a
@@ -615,6 +624,53 @@ export class StreamBuilderService {
     // valid HDR10) would render green/purple. P5 rides raw DirectPlay (whole
     // original file, DV intact) or a tonemap transcode instead — never remux.
     const canCopyVideo = sourceCopyable && !forceLadder && !dvP5;
+
+    // The renditions a var_stream_map encode of the session emits.
+    const groupDecisions = this.decideAudio(
+      audioStreams,
+      v,
+      profile,
+      hlsMux,
+      sourceMpegTs,
+      sourceScan,
+      audioLayout(audioStreams.length) === 'var-stream-map'
+        ? lastVideoSegmentStart(si, resolved.absolutePath, segmentDuration)
+        : undefined,
+    );
+    // A remux muxes the picked track alone, so it is a group of its own, and
+    // a muxed track ends with the video's segments.
+    const pickedStream = audioStreams[pickedAudio];
+    const pickedDecision =
+      canCopyVideo && pickedStream
+        ? this.decideAudio(
+            [pickedStream],
+            v,
+            profile,
+            hlsMux,
+            sourceMpegTs,
+            sourceScan,
+            undefined,
+          )[0]
+        : groupDecisions[pickedAudio];
+    // The top-level plan and reasons are the picked track's, which
+    // `audioTracks` describes as `playUrl` delivers it.
+    const audioTracks = audioStreams.map((t, i) =>
+      trackDto(t, i, i === pickedAudio ? pickedDecision : groupDecisions[i]),
+    );
+    const audioPlans = groupDecisions.map((d) => d.plan);
+    const pickedTrack = audioTracks[pickedAudio];
+    const audioPlan = pickedDecision?.plan ?? DEFAULT_AUDIO_PLAN;
+    const rungAudioBps = (p: TranscodeProfile): number =>
+      audioOutputBitrateBps(audioPlan, parseBitrateToBps(p.audioBitrate));
+    const canCopyAudio = audioPlan.mode === 'copy';
+    const outputAudioCodec = audioPlan.codec;
+    reasons.push(
+      ...(pickedTrack?.reasonFlags ?? []).map((f) =>
+        audioReason(f, pickedTrack),
+      ),
+    );
+
+    // --- Step 2: Try DirectStream (remux) ---
     if (canCopyVideo) {
       if (
         !directPlayResult.containerSupported &&
@@ -647,41 +703,50 @@ export class StreamBuilderService {
       const rungCtx = this.rungBitrateCtx(source, selectedVariant.codec);
       for (const p of qualityLadder) {
         const videoBps = cappedRungVideoBitrateBps(p, rungCtx);
-        const audioBps = parseBitrateToBps(p.audioBitrate);
+        const audioBps = rungAudioBps(p);
         transcodeBitrateByQuality[p.name] = {
           videoBitrateBps: videoBps,
           audioBitrateBps: audioBps,
           totalBitrateBps: videoBps + audioBps,
         };
       }
-      return wrap({
-        mediaFileId: resolved.mediaFile.id,
-        playMethod: 'DirectStream',
-        playUrl: url,
-        contentType: 'application/vnd.apple.mpegurl',
-        transcodeReasons: reasons,
-        videoCopyStream: true,
-        audioCopyStream: canCopyAudio,
-        outputVideoCodec: sourceVideoCodec,
-        outputAudioCodec,
-        audioPlan,
-        outputContainer: 'hls',
-        quality: 'original',
-        // Report the backend's detected hwAccel even on the remux path:
-        // the stats overlay binds this to the active *quality* (remux →
-        // "Direct playback" / transcode rung → "Transcoding (<HW>)"). A
-        // hard-coded 'none' here surfaced as "Transcoding (CPU)" as soon
-        // as the user switched to a transcoded rung (e.g. 1080p-hdr via
-        // hevc_qsv main10), since the field is stale for the new session.
-        hwAccel: this.transcodingService.getDetectedHwAccel(),
-        tonemapping: false,
-        clientTonemap,
-        remuxMasterBandwidthBps: remuxBw > 0 ? remuxBw : undefined,
-        transcodeBitrateByQuality,
-        qualities: this.buildQualityList(source, 'DirectStream', sourceCopyable, qualityLadder, selectedVariant.codec),
-        audioTracks,
-        source,
-      });
+      return wrap(
+        {
+          mediaFileId: resolved.mediaFile.id,
+          playMethod: 'DirectStream',
+          playUrl: url,
+          contentType: 'application/vnd.apple.mpegurl',
+          transcodeReasons: reasons,
+          videoCopyStream: true,
+          audioCopyStream: canCopyAudio,
+          outputVideoCodec: sourceVideoCodec,
+          outputAudioCodec,
+          audioPlan,
+          outputContainer: 'hls',
+          quality: 'original',
+          // Report the backend's detected hwAccel even on the remux path:
+          // the stats overlay binds this to the active *quality* (remux →
+          // "Direct playback" / transcode rung → "Transcoding (<HW>)"). A
+          // hard-coded 'none' here surfaced as "Transcoding (CPU)" as soon
+          // as the user switched to a transcoded rung (e.g. 1080p-hdr via
+          // hevc_qsv main10), since the field is stale for the new session.
+          hwAccel: this.transcodingService.getDetectedHwAccel(),
+          tonemapping: false,
+          clientTonemap,
+          remuxMasterBandwidthBps: remuxBw > 0 ? remuxBw : undefined,
+          transcodeBitrateByQuality,
+          qualities: this.buildQualityList(
+            source,
+            'DirectStream',
+            sourceCopyable,
+            qualityLadder,
+            selectedVariant.codec,
+          ),
+          audioTracks,
+          source,
+        },
+        audioPlans,
+      );
     }
 
     // --- Step 3: Full Transcode ---
@@ -707,9 +772,6 @@ export class StreamBuilderService {
       sourceVideoCodec,
     }).effectiveHwAccel;
 
-    const outputAudioBitrateBps =
-      audioPlan.mode === 'copy' ? (source.audioBitRate ?? 0) : audioPlan.bitrateBps;
-
     this.log.log(
       `Transcode for file ${resolved.mediaFile.id}: ${reasons.map((r) => r.flag).join(', ')} (audioOut=${outputAudioCodec}, copy=${canCopyAudio}, track=${pickedAudio})`,
     );
@@ -723,34 +785,43 @@ export class StreamBuilderService {
     const rungCtx = this.rungBitrateCtx(source, selectedVariant.codec);
     for (const p of qualityLadder) {
       const videoBps = cappedRungVideoBitrateBps(p, rungCtx);
-      const audioBps = outputAudioBitrateBps ?? parseBitrateToBps(p.audioBitrate);
+      const audioBps = rungAudioBps(p);
       transcodeBitrateByQuality[p.name] = {
         videoBitrateBps: videoBps,
         audioBitrateBps: audioBps,
         totalBitrateBps: videoBps + audioBps,
       };
     }
-    return wrap({
-      mediaFileId: resolved.mediaFile.id,
-      playMethod: 'Transcode',
-      playUrl: url,
-      contentType: 'application/vnd.apple.mpegurl',
-      transcodeReasons: reasons,
-      videoCopyStream: false,
-      audioCopyStream: canCopyAudio,
-      outputVideoCodec: selectedVariant.codec,
-      outputAudioCodec,
-      audioPlan,
-      outputContainer: 'hls',
-      quality: negotiatedQuality,
-      hwAccel: effectiveHwAccel,
-      tonemapping: transcodeTonemaps,
-      clientTonemap,
-      transcodeBitrateByQuality,
-      qualities: this.buildQualityList(source, 'Transcode', sourceCopyable, qualityLadder, selectedVariant.codec),
-      audioTracks,
-      source,
-    });
+    return wrap(
+      {
+        mediaFileId: resolved.mediaFile.id,
+        playMethod: 'Transcode',
+        playUrl: url,
+        contentType: 'application/vnd.apple.mpegurl',
+        transcodeReasons: reasons,
+        videoCopyStream: false,
+        audioCopyStream: canCopyAudio,
+        outputVideoCodec: selectedVariant.codec,
+        outputAudioCodec,
+        audioPlan,
+        outputContainer: 'hls',
+        quality: negotiatedQuality,
+        hwAccel: effectiveHwAccel,
+        tonemapping: transcodeTonemaps,
+        clientTonemap,
+        transcodeBitrateByQuality,
+        qualities: this.buildQualityList(
+          source,
+          'Transcode',
+          sourceCopyable,
+          qualityLadder,
+          selectedVariant.codec,
+        ),
+        audioTracks,
+        source,
+      },
+      audioPlans,
+    );
   }
 
   /** Per-rung bitrate context from the source + chosen output codec, so the
@@ -917,54 +988,43 @@ export class StreamBuilderService {
   // ---------------------------------------------------------------------------
 
   /**
-   * Per-track audio copy/transcode decision for every source audio stream,
-   * in `streamInfo.audio` order — the only place audio is decided.
+   * Copy/transcode decision for each of `tracks`, which share one audio group —
+   * the only place HLS audio is decided.
    *
-   * For HLS output (DirectStream / Transcode) every rendition of the audio
-   * group MUST share one OUTPUT codec — a master playlist carries a single
-   * CODECS string and players (AVPlayer, Shaka) reject a group whose
-   * renditions disagree. So the group picks one output codec
-   * ({@link pickGroupAudioCodec}) and each rendition either copies (its source
+   * Every rendition of a group MUST share one OUTPUT codec: a master playlist
+   * carries a single CODECS string and players (AVPlayer, Shaka) reject a group
+   * whose renditions disagree. So the group picks one output codec
+   * ({@link pickGroupAudioCodec}) and each track either copies (its source
    * already IS that codec and fits the channel cap) or transcodes to it,
-   * downmixing to what both the device and the encoder take. DirectPlay copies
-   * everything (raw file).
+   * downmixing to what both the device and the encoder take.
+   * `lastSegmentStart` is set for separate renditions, which lack the segments
+   * their playlist lists past their end.
    */
-  private buildAudioTracks(
-    si: MediaFileInfo | null | undefined,
-    label: string,
+  private decideAudio(
+    tracks: AudioStreamInfo[],
+    video: Parameters<typeof videoPresentationStart>[0],
     profile: DeviceProfileDto,
-    playMethod: PlayMethod,
     muxFlavour: 'ts' | 'fmp4',
     mpegTs: boolean,
-    segmentDuration: number,
-  ): AudioTrackPlan[] {
-    const audioStreams = si?.audio ?? [];
-    const video = si?.video?.[0];
-    // Only separate renditions go missing at the tail; a muxed track just ends.
-    const lastSegmentStart =
-      pickAudioLayout(audioStreams.length, muxFlavour) === 'var-stream-map'
-        ? lastVideoSegmentStart(si, label, segmentDuration)
-        : undefined;
-    const blockers = audioStreams.map((t) =>
-      copyBlocker(t, video, muxFlavour, mpegTs, lastSegmentStart),
+    scan: SourceScan | null | undefined,
+    lastSegmentStart: number | undefined,
+  ): TrackDecision[] {
+    const blockers = tracks.map((t) =>
+      copyBlocker(t, video, muxFlavour, mpegTs, scan, lastSegmentStart),
     );
     const profileAudioCodecs = profile.directPlayProfiles
       .flatMap((p) => p.audioCodecs)
       .map((c) => c.toLowerCase());
     const groupCodec = this.pickGroupAudioCodec(
-      audioStreams,
+      tracks,
       profile,
       profileAudioCodecs,
-      blockers.some(Boolean),
+      blockers,
     );
-    const outCap = isEncodableAudio(groupCodec)
-      ? encodeChannelCap(profile, groupCodec)
-      : audioChannelCap(profile, groupCodec);
 
-    return audioStreams.map((t, index) => {
+    return tracks.map((t, index): TrackDecision => {
       const codec = (t.codec ?? '').toLowerCase();
       const channels = t.channels;
-      const base = { index, language: t.language, codec, channels };
       const codecSupported = profileAudioCodecs.includes(codec);
       const fmp4Safe = FMP4_COMPATIBLE_AUDIO.has(codec);
       // Fits for a verbatim copy only within ITS OWN codec's decode cap (a
@@ -973,29 +1033,29 @@ export class StreamBuilderService {
         channels != null && channels > audioChannelCap(profile, codec);
       const blocker = blockers[index];
 
-      // DirectPlay serves the raw file — every track plays natively.
-      if (playMethod === 'DirectPlay') {
-        return {
-          ...base,
-          copy: true,
-          outputCodec: codec,
-          outputChannels: channels,
-          reasonFlags: [],
-        };
-      }
-
       const copyable =
         codec === groupCodec && codecSupported && fmp4Safe && !channelsExceed;
       if (copyable && !blocker) {
         return {
-          ...base,
-          copy: true,
-          outputCodec: groupCodec,
-          outputChannels: channels,
+          plan: {
+            mode: 'copy',
+            codec: groupCodec,
+            channels,
+            bitrateBps: t.bitRate,
+            profile: t.profile,
+          },
           reasonFlags: [],
         };
       }
-      const outputChannels = Math.min(channels ?? 2, outCap);
+      // pickGroupAudioCodec settles on a codec it can't encode only when every
+      // track copies it.
+      if (!isEncodableAudio(groupCodec)) {
+        throw new Error(`No audio encoder for group codec "${groupCodec}"`);
+      }
+      const outputChannels = Math.min(
+        channels ?? 2,
+        encodeChannelCap(profile, groupCodec),
+      );
       const downmixed = channels != null && outputChannels < channels;
       const surroundPreserved = groupCodec !== 'aac' && outputChannels >= 6;
       // A track plays as-is only if the device decodes it AND it's fMP4-safe
@@ -1015,10 +1075,11 @@ export class StreamBuilderService {
         reasonFlags.push(blocker);
       }
       return {
-        ...base,
-        copy: false,
-        outputCodec: groupCodec,
-        outputChannels,
+        plan: {
+          mode: 'transcode',
+          codec: groupCodec,
+          channels: outputChannels,
+        },
         reasonFlags,
       };
     });
@@ -1029,16 +1090,17 @@ export class StreamBuilderService {
    * (HLS requires one codec per group). Copy-all when every track is the same
    * supported, fMP4-safe codec that fits the channel cap — that codec is the
    * output and nothing re-encodes. Otherwise the best the device accepts: a
-   * surround codec (EAC-3 > AC-3) when any track carries surround so 5.1/7.1
-   * survive, else AAC.
+   * surround codec when any track carries surround so 5.1/7.1 survive (one a
+   * track already is first, then EAC-3 > AC-3), else AAC.
    */
   private pickGroupAudioCodec(
     audioStreams: { codec?: string; channels?: number }[],
     profile: DeviceProfileDto,
     profileAudioCodecs: string[],
-    anyCopyBlocked: boolean,
+    blockers: (CopyBlocker | null)[],
   ): string {
     const codecs = audioStreams.map((t) => (t.codec ?? '').toLowerCase());
+    const anyCopyBlocked = blockers.some(Boolean);
     // One source codec the device plays in fMP4 stays the group's, so only an
     // over-capacity or blocked track re-encodes, to it, if an encoder exists.
     if (codecs.length > 0 && new Set(codecs).size === 1) {
@@ -1052,12 +1114,21 @@ export class StreamBuilderService {
       if (supported && (allCopy || isEncodableAudio(c))) return c;
     }
     const anySurround = audioStreams.some((t) => (t.channels ?? 0) >= 6);
-    const surround = (['eac3', 'ac3'] as const).find(
+    const surround = (['eac3', 'ac3'] as const).filter(
       (c) =>
         profileAudioCodecs.includes(c) &&
         encodeChannelCap(profile, c) >= 6,
     );
-    return anySurround && surround ? surround : 'aac';
+    // One a track already is lets that track copy instead of re-encoding.
+    const copies = (c: string) =>
+      audioStreams.some(
+        (t, i) =>
+          codecs[i] === c &&
+          !blockers[i] &&
+          (t.channels == null || t.channels <= audioChannelCap(profile, c)),
+      );
+    const group = surround.find(copies) ?? surround[0];
+    return anySurround && group ? group : 'aac';
   }
 
   private tryDirectPlay(

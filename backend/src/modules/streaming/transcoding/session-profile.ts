@@ -1,6 +1,6 @@
 import type { LiveSession } from '../live-session.service';
 import type { MediaFileInfo } from '../../subtitles/ffprobe.service';
-import { pickAudioLayout } from './audio-layout';
+import { audioLayout } from './audio-layout';
 import {
   buildPlaybackProfileFromContext,
   computeProfileHash,
@@ -12,7 +12,7 @@ import type { SessionContext } from './types';
  *  session rebuilds its context, and so its cache hash, from. */
 export type SessionLayout = Pick<
   LiveSession,
-  'useTs' | 'audioPlan' | 'audioTrackPlans' | 'videoVariant' | 'timeline'
+  'useTs' | 'audioPlan' | 'audioTrackPlans' | 'videoVariant' | 'timeline' | 'sourceVersion'
 >;
 
 /** The session fields the cache profile hash is derived from. The timeline
@@ -33,6 +33,7 @@ export function sessionLayoutContext(
   | 'sourceFormatStart'
   | 'sourceEndSeconds'
   | 'sourceClockBreakSeconds'
+  | 'sourceVersion'
 > {
   const useTs = live?.useTs ?? false;
   const timeline = live?.timeline ?? sourceTimeline(si, label);
@@ -40,9 +41,7 @@ export function sessionLayoutContext(
     useTs,
     // Multi-audio: video-only segments plus one var_stream_map rendition per
     // track, so the player switches client-side via EXT-X-MEDIA.
-    videoOnly:
-      pickAudioLayout(si?.audio?.length ?? 0, useTs ? 'ts' : 'fmp4') ===
-      'var-stream-map',
+    videoOnly: audioLayout(si?.audio?.length ?? 0) === 'var-stream-map',
     // With `streamIndex`, so the single-track path maps `0:<abs>` too.
     audioStreams: si?.audio ?? undefined,
     audioPlan: live?.audioPlan ?? undefined,
@@ -53,6 +52,7 @@ export function sessionLayoutContext(
     sourceFormatStart: timeline.formatStart,
     sourceEndSeconds: timeline.end,
     sourceClockBreakSeconds: timeline.clockBreak,
+    sourceVersion: live?.sourceVersion ?? undefined,
   };
 }
 

@@ -1,5 +1,6 @@
 import { createHash } from 'crypto';
 import type { BitDepth, HdrFormat, VideoCodec } from './codec/types';
+import { varStreamMapLayout } from './audio-layout';
 import type { SessionContext } from './types';
 
 /**
@@ -45,6 +46,8 @@ export interface PlaybackProfile {
    *  that moves it must not reuse segments timed against the old one. */
   origin: number;
   formatStart: number;
+  /** {@link SessionContext.sourceVersion}. */
+  sourceVersion: string | null;
 }
 
 /** Segment timeline layout (edit lists, tfdt origin, audio alignment). Raised
@@ -75,6 +78,7 @@ function canonicalise(profile: PlaybackProfile): string {
     `tl=${SEGMENT_TIMELINE_VERSION}`,
     `o=${profile.origin}`,
     `fs=${profile.formatStart}`,
+    `sv=${profile.sourceVersion ?? ''}`,
   ].join('|');
 }
 
@@ -102,53 +106,28 @@ export function buildPlaybackProfileFromContext(
   ctx: SessionContext | undefined,
   segmentDurationMs: number,
 ): PlaybackProfile {
-  const audioCodec = ctx?.audioPlan?.codec ?? 'aac';
-  const audioChannels = pickAudioChannels(ctx);
-  const audioMode = ctx?.audioPlan?.mode ?? 'transcode';
   const videoVariant = ctx?.videoVariant;
   return {
     videoCodec: videoVariant?.codec ?? 'h264',
     videoBitDepth: videoVariant?.bitDepth ?? 8,
     hdr: videoVariant?.hdr ?? null,
-    audioCodec,
-    audioChannels,
-    audioMode,
+    audioCodec: ctx?.audioPlan?.codec ?? 'aac',
+    audioChannels: ctx?.audioPlan?.channels ?? 2,
+    audioMode: ctx?.audioPlan?.mode ?? 'transcode',
     audioTrackModes: ctx?.audioTrackPlans
-      ?.map((p) => (p.copy ? 'c' : `t${p.outputChannels ?? ''}`))
+      ?.map((p) => (p.mode === 'copy' ? 'c' : `t${p.channels}`))
       .join(''),
     muxFlavour: ctx?.useTs ? 'ts' : 'fmp4',
-    audioLayout: pickAudioLayout(ctx),
+    audioLayout: varStreamMapLayout(
+      ctx?.videoOnly ?? false,
+      ctx?.audioStreams?.length ?? 0,
+    )
+      ? 'var-stream-map'
+      : 'inline',
     segmentDurationMs,
     tvPlatform: 'browser',
     origin: ctx?.sourceStartPts ?? 0,
     formatStart: ctx?.sourceFormatStart ?? ctx?.sourceStartPts ?? 0,
+    sourceVersion: ctx?.sourceVersion ?? null,
   };
-}
-
-function pickAudioChannels(ctx: SessionContext | undefined): number {
-  // The planned transcode channels; for a copy, 6 on the surround codecs
-  // (5.1 in the overwhelming majority of releases) and 2 otherwise.
-  if (ctx?.audioPlan?.mode === 'transcode') return ctx.audioPlan.channels;
-  if (ctx?.audioPlan?.mode === 'copy') {
-    const codec = ctx.audioPlan.codec.toLowerCase();
-    if (
-      codec === 'eac3' ||
-      codec === 'ac3' ||
-      codec === 'dts' ||
-      codec === 'truehd'
-    ) {
-      return 6;
-    }
-  }
-  return 2;
-}
-
-function pickAudioLayout(
-  ctx: SessionContext | undefined,
-): 'inline' | 'var-stream-map' {
-  const isVideoOnly = ctx?.videoOnly ?? false;
-  const streams = ctx?.audioStreams;
-  return isVideoOnly && streams && streams.length > 1
-    ? 'var-stream-map'
-    : 'inline';
 }

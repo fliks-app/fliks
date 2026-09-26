@@ -45,13 +45,17 @@ export interface CastAudioOption {
    *  in master.m3u8 (transcoding/master-playlist.ts). The receiver-side
    *  audio switch matches on this, so any divergence breaks switching. */
   name: string;
+  /** What the remembered selection matches on (`rememberedAudioKey`). */
+  commentary?: boolean;
+  audioDescription?: boolean;
+  channels?: number;
 }
 
 /** Build CastAudioOption[] from streamInfo audio streams. Single source of
  *  truth for both quickStart (cast from a detail page) and the player's
  *  castAudioOptions (cast in-progress). */
 export function buildCastAudioOptions(
-  audioStreams: { language?: string; title?: string; codec?: string; channels?: number }[] | undefined,
+  audioStreams: (AudioStreamChoice & { title?: string; codec?: string })[] | undefined,
   translate: TranslateService,
 ): CastAudioOption[] {
   if (!audioStreams?.length) return [];
@@ -67,6 +71,9 @@ export function buildCastAudioOptions(
       // The name pairs with the manifest's own NAME, which is a display label
       // rather than a code, so it keeps the raw fallback.
       name: a.title || lang,
+      commentary: a.commentary,
+      audioDescription: a.audioDescription,
+      channels: a.channels,
     };
   });
 }
@@ -601,7 +608,7 @@ export class CastPlayerService {
 
     const trackId = `audio-${audioIndex}`;
     this.trackManager.saveAudioSelection(
-      trackId, this.availableAudioTracks(), this.mediaId(), 0,
+      trackId, this.availableAudioTracks(), this.mediaId(),
     );
     this.activeAudioTrackId.set(trackId);
 

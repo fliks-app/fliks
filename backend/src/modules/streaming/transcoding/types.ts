@@ -1,5 +1,5 @@
 import { ChildProcess } from 'child_process';
-import type { AudioPlan, AudioTrackEncodePlan } from './audio-encode';
+import type { AudioPlan } from './audio-encode';
 
 export interface TranscodeProfile {
   name: string;
@@ -27,8 +27,6 @@ export interface AudioStreamMeta {
   /** Source channel count (from ffprobe streamInfo): the EXT-X-MEDIA
    *  CHANNELS fallback when the session carries no per-track plan. */
   channels?: number;
-  /** Source sample rate: sets the packet grid an encode of the track lands on. */
-  sampleRate?: number;
 }
 
 /**
@@ -131,6 +129,9 @@ export interface SessionContext {
   sourceStartPts?: number;
   /** Container start the input `-ss` counts from (`sourceTimeline`). */
   sourceFormatStart?: number;
+  /** Identity of the source file's bytes (size + mtime): segments cut from a
+   *  replaced file never serve for the new one. */
+  sourceVersion?: string;
   /** The demuxer lands after a seek target (`seeksPastKeyframe`). */
   sourceSeeksPastKeyframe?: boolean;
   /** Source time an MPEG-TS clock breaks at: runs stop reading there. */
@@ -175,9 +176,9 @@ export interface SessionContext {
    * Per-rendition audio decision for the multi-audio `var_stream_map` path,
    * one entry per `audioStreams[]` track in source order. The group shares one
    * output codec (HLS requires it); each rendition copies it or transcodes to
-   * it, downmixing to `outputChannels`.
+   * it, downmixing to its `channels`.
    */
-  audioTrackPlans?: AudioTrackEncodePlan[];
+  audioTrackPlans?: AudioPlan[];
   /**
    * True when the playback target is a Tizen TV that can't consume the
    * HLS muxer's fMP4 output — AVPlay rejects the `iso5` + per-stream

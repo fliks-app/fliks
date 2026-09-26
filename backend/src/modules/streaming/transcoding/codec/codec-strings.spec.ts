@@ -1,5 +1,7 @@
 import {
+  audioChannelsAttr,
   audioCodecString,
+  audioGroupCodecString,
   audioRenditionChannels,
   copySourceCodecString,
   h264CodecString,
@@ -18,6 +20,40 @@ const target = (
   frameRate,
   videoBitrateBps: 0,
   gopSize: 0,
+});
+
+describe('audioGroupCodecString', () => {
+  // ffprobe's names on jellyfin-ffmpeg 8.1.
+  const he = { codec: 'aac', profile: 'HE-AAC' };
+  const hev2 = { codec: 'aac', profile: 'HE-AACv2' };
+  const lc = { codec: 'aac', profile: 'LC' };
+
+  it('names the HE-AAC object type of copied HE-AAC renditions', () => {
+    expect(audioGroupCodecString([he])).toBe('mp4a.40.5');
+    expect(audioGroupCodecString([hev2])).toBe('mp4a.40.29');
+    expect(audioGroupCodecString([hev2, he])).toBe('mp4a.40.5');
+  });
+
+  it('falls to AAC-LC as soon as one rendition is plain AAC, encoded or copied', () => {
+    expect(audioGroupCodecString([he, lc])).toBe('mp4a.40.2');
+    expect(audioGroupCodecString([he, { codec: 'aac' }])).toBe('mp4a.40.2');
+  });
+
+  it('keeps the other codecs as they are', () => {
+    expect(audioGroupCodecString([{ codec: 'eac3' }])).toBe('ec-3');
+    expect(audioGroupCodecString([{ codec: 'truehd' }])).toBeNull();
+  });
+});
+
+describe('audioChannelsAttr', () => {
+  it('declares a copied Atmos E-AC-3 as 16/JOC, anything else by count', () => {
+    const atmos = 'Dolby Digital Plus + Dolby Atmos';
+    expect(
+      audioChannelsAttr({ codec: 'eac3', profile: atmos, channels: 6 }),
+    ).toBe('16/JOC');
+    expect(audioChannelsAttr({ codec: 'eac3', channels: 6 })).toBe(6);
+    expect(audioChannelsAttr({ codec: 'aac', channels: 2 })).toBe(2);
+  });
 });
 
 describe('audioCodecString', () => {

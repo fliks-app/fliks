@@ -5,14 +5,13 @@ import {
   OnModuleDestroy,
 } from '@nestjs/common';
 import { ChildProcess, spawn } from 'child_process';
-import { existsSync, watch, FSWatcher } from 'fs';
+import { existsSync } from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
 import {
   DEFAULT_SEGMENT_DURATION,
   EARLY_PROBE_SEGMENTS,
   JOB_GRACE_MS,
-  OUTPUT_POLL_MS,
   RUN_DIR_PREFIX,
   SEEK_WAIT_THRESHOLD,
   SESSION_TIMEOUT_MS,
@@ -71,6 +70,7 @@ import {
   purgeSegmentsFrom,
   segmentNearby,
   segmentWithinReach,
+  watchDir,
 } from './segment-utils';
 import { sessionKey } from './session-key';
 import {
@@ -78,6 +78,7 @@ import {
   computeProfileHash,
 } from './profile-hash';
 import { TranscodeCacheService } from './transcode-cache.service';
+import { SourceScanService } from '../services/source-scan.service';
 import {
   StreamingSettingsCache,
   type StreamingSettings,
@@ -112,6 +113,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     private readonly cacheService: TranscodeCacheService,
     private readonly liveSessions: LiveSessionRegistry,
     private readonly streamingSettings: StreamingSettingsCache,
+    private readonly sourceScans: SourceScanService,
   ) {}
 
   async onModuleInit() {
@@ -419,7 +421,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         `Session [${key}]: FFmpeg crashed (code ${existing.process.exitCode}), restarting`,
       );
       this.sessions.delete(key);
-      await fsp.rm(existing.cachePath, { recursive: true, force: true });
+      // A remux run's own files are its GOP dir, which its assembler removes;
+      // the session dir holds every run's segments and the shared init.
+      if (!existing.remux) await fsp.rm(existing.cachePath, { recursive: true, force: true });
       return null;
     }
 
@@ -942,16 +946,13 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const name = path.basename(segPath);
 
     return new Promise((resolve) => {
-      let watcher: FSWatcher | null = null;
-      let exitTimer: NodeJS.Timeout | null = null;
       let timeout: NodeJS.Timeout | null = null;
       let settled = false;
 
       const finish = (val: string | null) => {
         if (settled) return;
         settled = true;
-        watcher?.close();
-        if (exitTimer) clearInterval(exitTimer);
+        unwatch();
         if (timeout) clearTimeout(timeout);
         resolve(val);
       };
@@ -961,23 +962,13 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         if (existsSync(segPath)) finish(segPath);
       };
 
-      try {
-        watcher = watch(dir, { persistent: false }, (_event, filename) => {
-          if (filename === name) tryServe();
-        });
-      } catch {
-        // Directory doesn't exist yet — exitTimer covers it.
-      }
+      // A directory ffmpeg has yet to create is polled.
+      const unwatch = watchDir(dir, (event, filename) => {
+        if (event === 'poll' && !this.isProducing(session) && !existsSync(segPath)) finish(null);
+        else if (event === 'poll' || filename === name) tryServe();
+      });
 
       tryServe();
-
-      exitTimer = setInterval(() => {
-        if (!this.isProducing(session) && !existsSync(segPath)) {
-          finish(null);
-        } else {
-          tryServe();
-        }
-      }, OUTPUT_POLL_MS);
 
       timeout = setTimeout(() => {
         // ffmpeg launched but the segment never landed in time. Don't fail the
@@ -1074,28 +1065,18 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     );
     const firstSegName = path.basename(firstSeg);
 
-    let readyWatcher: FSWatcher | null = null;
     const checkReady = () => {
       if (!resolved && existsSync(firstSeg)) {
         resolved = true;
-        readyWatcher?.close();
-        clearInterval(pollTimer);
+        unwatchReady();
         this.log.log(`[disk] first-seg-written ${firstSeg}`);
         readyResolve();
       }
     };
-
-    try {
-      readyWatcher = watch(
-        segDir,
-        { persistent: false },
-        (_event, filename) => {
-          if (filename === firstSegName) checkReady();
-        },
-      );
-    } catch {
-      // Directory will be created by ffmpeg shortly — pollTimer covers this.
-    }
+    // A directory ffmpeg has yet to create is polled.
+    const unwatchReady = watchDir(segDir, (event, filename) => {
+      if (event === 'poll' || filename === firstSegName) checkReady();
+    });
 
     proc.stderr.on('data', (chunk: Buffer) => {
       stderr += chunk.toString();
@@ -1115,13 +1096,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       checkReady();
     });
 
-    const pollTimer = setInterval(() => {
-      checkReady();
-    }, OUTPUT_POLL_MS);
-
     proc.on('close', (code) => {
-      clearInterval(pollTimer);
-      readyWatcher?.close();
+      unwatchReady();
       const firstSegProduced = resolved;
       if (!resolved) {
         resolved = true;
@@ -1189,7 +1165,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           videoOnly: isVideoOnly,
           audioStreams,
         }),
-        seekKeyframeDts: await this.seekKeyframeDts(absolutePath, startSegment, ctx),
+        seekKeyframeDts: await this.seekKeyframeDts(mediaFileId, absolutePath, startSegment, ctx),
       },
       this.log,
     );
@@ -1354,7 +1330,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       requestedSegment,
       segmentDuration,
       ctx?.sourceStartPts ?? 0,
-      remuxAudioGrid(ctx?.audioPlan, ctx?.audioStreams, ctx?.audioStreamIndex),
+      remuxAudioGrid(ctx?.audioPlan),
     );
     await fsp.mkdir(sessionDir, { recursive: true });
     // Per run: a run still being reaped must not delete this one's GOPs.
@@ -1548,6 +1524,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   /** Where a demuxer that lands after its seek target must seek for a run to
    *  decode from a keyframe at or before its first frame. */
   private async seekKeyframeDts(
+    mediaFileId: number,
     absolutePath: string,
     startSegment: number,
     ctx?: SessionContext,
@@ -1559,7 +1536,13 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION,
         ctx?.sourceFps,
       ) + (ctx?.sourceStartPts ?? 0);
-    const keyframe = await keyframeAtOrBefore(absolutePath, ctx?.videoStreamIndex, start).catch(
+    const { scan } = await this.sourceScans.lookup(mediaFileId, absolutePath);
+    const keyframe = await keyframeAtOrBefore(
+      absolutePath,
+      ctx?.videoStreamIndex,
+      start,
+      scan?.keyframes,
+    ).catch(
       (err: Error) => {
         this.log.warn(`Keyframe probe before ${start}s of ${absolutePath} failed: ${err.message}`);
         return null;

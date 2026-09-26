@@ -83,12 +83,24 @@ export function setFfmpegSlots(n: number | null): void {
   }
 }
 
-function acquire(): Promise<void> {
+function acquire(signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
   if (active < slots) {
     active++;
     return Promise.resolve();
   }
-  return new Promise((resolve) => waiters.push(resolve));
+  return new Promise((resolve, reject) => {
+    const grant = () => {
+      signal?.removeEventListener('abort', cancel);
+      resolve();
+    };
+    const cancel = () => {
+      waiters.splice(waiters.indexOf(grant), 1);
+      reject(signal!.reason as Error);
+    };
+    waiters.push(grant);
+    signal?.addEventListener('abort', cancel, { once: true });
+  });
 }
 
 /** Hands the freed slot straight to the oldest waiter (FIFO) instead of
@@ -106,8 +118,12 @@ function release(): void {
   }
 }
 
-export async function withFfmpegSlot<T>(fn: () => Promise<T>): Promise<T> {
-  await acquire();
+/** An abort while queued leaves the queue and rejects with the signal's reason. */
+export async function withFfmpegSlot<T>(
+  fn: () => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  await acquire(signal);
   try {
     return await fn();
   } finally {

@@ -115,11 +115,6 @@ function parseRetryDelayMs(body: string): number | null {
   return null;
 }
 
-/**
- * POST with a bounded timeout and transient-failure retries. Returns the
- * successful Response (unconsumed); throws {@link TranslationRateLimitError} on
- * a 429 after retries and a plain Error otherwise, so a run fails cleanly.
- */
 /** GETs an engine's model listing; one attempt, since the admin is waiting on it. */
 export async function getModelListing(
   url: string,
@@ -134,6 +129,11 @@ export async function getModelListing(
   return res.json();
 }
 
+/**
+ * POST with a bounded timeout and transient-failure retries. Returns the
+ * successful Response (unconsumed); throws {@link TranslationRateLimitError} on
+ * a 429 after retries and a plain Error otherwise, so a run fails cleanly.
+ */
 export async function postWithRetry(
   url: string,
   init: RequestInit,

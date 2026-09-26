@@ -1,6 +1,34 @@
-import { existsSync } from 'fs';
+import { existsSync, watch, type FSWatcher } from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
+import { OUTPUT_POLL_MS } from './constants';
+
+/** Calls `onChange` for each entry fs.watch reports in `dir`, and every
+ *  `OUTPUT_POLL_MS` with `poll`, as fs.watch misses events on network mounts.
+ *  A directory that can't be watched is polled only. Returns the stop. */
+export function watchDir(
+  dir: string,
+  onChange: (event: 'rename' | 'change' | 'poll', name: string | null) => void,
+  onUnwatched?: (err: Error) => void,
+): () => void {
+  let watcher: FSWatcher | null = null;
+  try {
+    watcher = watch(dir, { persistent: false }, (event, name) =>
+      onChange(event, name == null ? null : String(name)),
+    );
+    watcher.on('error', (err) => {
+      watcher?.close();
+      onUnwatched?.(err);
+    });
+  } catch (err) {
+    onUnwatched?.(err as Error);
+  }
+  const timer = setInterval(() => onChange('poll', null), OUTPUT_POLL_MS);
+  return () => {
+    watcher?.close();
+    clearInterval(timer);
+  };
+}
 
 export async function fileExists(p: string): Promise<boolean> {
   try {
