@@ -1,5 +1,13 @@
 import type { Request } from 'express';
-import { SessionContextBuilder } from './session-context-builder.service';
+import {
+  SessionContextBuilder,
+  sessionProfileHash,
+} from './session-context-builder.service';
+import { LiveSessionRegistry } from '../live-session.service';
+import {
+  buildPlaybackProfileFromContext,
+  computeProfileHash,
+} from '../transcoding';
 import type { ResolvedFile } from '../streaming.service';
 
 function resolved(audioCount: number): ResolvedFile {
@@ -115,5 +123,39 @@ describe('SessionContextBuilder.build', () => {
     expect(ctx.deviceType).toBe('desktop');
     expect(ctx.useTs).toBe(false);
     expect(ctx.videoVariant).toBeUndefined();
+  });
+
+  it('hashes a var_stream_map session at playback-info as every transcode request does', () => {
+    const file = resolved(2);
+    const layout = (outputChannels: number) => ({
+      useTs: false,
+      audioPlan: { mode: 'copy' as const, codec: 'aac' },
+      audioTrackPlans: [
+        { copy: true, outputCodec: 'aac', outputChannels: 2 },
+        { copy: false, outputCodec: 'aac', outputChannels },
+      ],
+      videoVariant: { codec: 'h264' as const, bitDepth: 8 as const, hdr: null },
+    });
+    const registry = new LiveSessionRegistry();
+    const live = registry.create({
+      userId: 7,
+      username: 'u',
+      kind: 'transcode',
+      mediaFileId: 1,
+      profileHash: sessionProfileHash(layout(2), file.mediaFile.streamInfo, 3),
+      ...layout(2),
+    });
+    sessionRouter.findRequestSession.mockReturnValue(live);
+    const ctx = builder.build(req, file, 1);
+    expect(ctx.videoOnly).toBe(true);
+    // What TranscodingService.computeProfileHashForCtx derives for this context.
+    const requestHash = computeProfileHash(
+      buildPlaybackProfileFromContext(ctx, ctx.segmentDuration! * 1000),
+    );
+    expect(live.profileHash).toBe(requestHash);
+    expect(
+      sessionProfileHash(layout(6), file.mediaFile.streamInfo, 3),
+    ).not.toBe(requestHash);
+    registry.onModuleDestroy();
   });
 });

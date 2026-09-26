@@ -34,8 +34,6 @@ import {
   getLadderForDevice,
   getHdrLadderForDevice,
   profileFitsSource,
-  computeProfileHash,
-  buildPlaybackProfileFromContext,
   resolveSourceVideoBitrateBps,
   cappedRungVideoBitrateBps,
   parseBitrateToBps,
@@ -61,7 +59,10 @@ import { LiveSessionRegistry } from './live-session.service';
 import * as path from 'path';
 import { SegmentPackagingService } from './services/segment-packaging.service';
 import { SessionRouter } from './services/session-router.service';
-import { SessionContextBuilder } from './services/session-context-builder.service';
+import {
+  SessionContextBuilder,
+  sessionProfileHash,
+} from './services/session-context-builder.service';
 import { pickAudioLayout, resolveMuxFlavour } from './transcoding/audio-layout';
 import {
   buildIFrameSegmentArgs,
@@ -907,26 +908,26 @@ export class StreamingController {
         ? resolveTonemapCurve()
         : undefined;
 
-    // Compute the profile hash from the inputs we just derived — no
-    // tracker round-trip needed. The hash drives the cache directory
-    // shape and is matched against the same hash recomputed at every
-    // HLS request via the LiveSession we're about to create.
+    // The session's layout fields, stored on the LiveSession below and hashed
+    // through the same function every HLS request rebuilds its context with.
+    const sessionLayout = {
+      useTs: effectiveUseTs,
+      audioPlan: response.audioPlan,
+      audioTrackPlans:
+        response.audioTracks?.map((t) => ({
+          copy: t.copy,
+          outputCodec: t.outputCodec,
+          outputChannels: t.outputChannels,
+        })) ?? null,
+      videoVariant,
+    };
     const profileHash =
       response.playMethod === 'DirectPlay'
         ? null
-        : computeProfileHash(
-            buildPlaybackProfileFromContext(
-              {
-                userId,
-                username: user.username,
-                audioPlan: response.audioPlan,
-                videoVariant: videoVariant ?? undefined,
-                useTs: effectiveUseTs,
-                videoOnly: useExtXMedia,
-                audioStreams: resolved.mediaFile.streamInfo?.audio,
-              },
-              ss.segmentDuration * 1000,
-            ),
+        : sessionProfileHash(
+            sessionLayout,
+            resolved.mediaFile.streamInfo,
+            ss.segmentDuration,
           );
     const kind =
       response.playMethod === 'DirectPlay'
@@ -1002,14 +1003,7 @@ export class StreamingController {
       appVersion: deviceProfile.appVersion ?? null,
       sseConnectionId,
       position: resumePosition,
-      useTs: effectiveUseTs,
-      audioPlan: response.audioPlan,
-      audioTrackPlans:
-        response.audioTracks?.map((t) => ({
-          copy: t.copy,
-          outputCodec: t.outputCodec,
-          outputChannels: t.outputChannels,
-        })) ?? null,
+      ...sessionLayout,
       audioStreamIndex: audioStreamIndex ?? null,
       audioStreamCount: sourceAudioCount,
       useExtXMedia,
@@ -1020,7 +1014,6 @@ export class StreamingController {
       supportsIFrameTrickPlay: !!deviceProfile.supportsIFrameTrickPlay,
       probesSegZero: deviceProfile.probesSegZero,
       supportsAbr: deviceProfile.supportsAbr,
-      videoVariant,
       tonemapping: response.tonemapping,
       clientTonemap: response.clientTonemap ?? false,
       transcodeReasons: response.transcodeReasons,
