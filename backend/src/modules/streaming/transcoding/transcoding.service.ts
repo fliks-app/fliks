@@ -419,7 +419,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         `Session [${key}]: FFmpeg crashed (code ${existing.process.exitCode}), restarting`,
       );
       this.sessions.delete(key);
-      await fsp.rm(existing.cachePath, { recursive: true, force: true });
+      // A remux run's own files are its GOP dir, which its assembler removes;
+      // the session dir holds every run's segments and the shared init.
+      if (!existing.remux) await fsp.rm(existing.cachePath, { recursive: true, force: true });
       return null;
     }
 
