@@ -86,7 +86,7 @@ import {
 import {
   VARIANT_EARLY,
   VARIANT_MAIN,
-  VARIANT_REMUX,
+  remuxVariant,
   type SessionVariant,
   variantHash,
 } from './variant';
@@ -1285,18 +1285,17 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     ctx?: SessionContext,
     grid: SegmentGrid | null = null,
   ): Promise<TranscodeSession> {
-    // Remux variant lives in its own session-map bucket so its cache
-    // path doesn't collide with a main session for the same base
-    // profile hash.
+    const variant = remuxVariant(ctx?.audioStreamIndex, grid != null);
     const baseHash = this.computeProfileHashForCtx(ctx);
     const key = sessionKey(
       mediaFileId,
       ctx?.userId,
-      variantHash(baseHash, VARIANT_REMUX),
+      variantHash(baseHash, variant),
     );
     return this.withLock(key, () =>
       this.doGetOrCreateRemuxSession(
         key,
+        variant,
         mediaFileId,
         absolutePath,
         requestedSegment,
@@ -1308,6 +1307,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
   private async doGetOrCreateRemuxSession(
     key: string,
+    variant: SessionVariant,
     mediaFileId: number,
     absolutePath: string,
     requestedSegment: number,
@@ -1338,7 +1338,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     const { dir: sessionDir, baseHash: remuxBaseHash } = this.cacheDirFor(
       ctx,
       mediaFileId,
-      VARIANT_REMUX,
+      variant,
       'remux',
     );
     await fsp.mkdir(sessionDir, { recursive: true });
@@ -1396,7 +1396,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       extra: { remux: true },
     });
     session.baseProfileHash = remuxBaseHash;
-    session.variant = VARIANT_REMUX;
+    session.variant = variant;
     session.process.on('close', (code) => {
       void assembler.finish(code === 0 && !session.intentionallyKilled);
     });

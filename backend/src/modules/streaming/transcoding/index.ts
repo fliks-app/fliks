@@ -25,8 +25,8 @@ export { sessionKey } from './session-key';
 export {
   VARIANT_EARLY,
   VARIANT_MAIN,
-  VARIANT_REMUX,
   baseProfileHash,
+  remuxVariant,
   variantHash,
   variantSuffix,
 } from './variant';
