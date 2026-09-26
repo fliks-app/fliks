@@ -1,5 +1,11 @@
 import { Logger } from '@nestjs/common';
-import { audioStartAlignFilter, buildFfmpegArgs, buildRemuxArgs } from './ffmpeg-args';
+import {
+  audioStartAlignFilter,
+  buildFfmpegArgs,
+  buildRemuxArgs,
+  remuxAudioGrid,
+  remuxRunStart,
+} from './ffmpeg-args';
 import type { BuildFfmpegArgsOptions, BuildRemuxArgsOptions } from './ffmpeg-args';
 import { realSegmentSeconds } from './constants';
 import { computeSegmentGrid } from './segment-boundaries';
@@ -39,13 +45,25 @@ const tx = (over: Partial<BuildFfmpegArgsOptions>): string[] =>
     silentLog,
   );
 
-const remux = (over: Partial<BuildRemuxArgsOptions>): string[] =>
+const remux = (
+  over: Partial<BuildRemuxArgsOptions> & {
+    startSegment?: number;
+    sourceStartPts?: number;
+  },
+): string[] =>
   buildRemuxArgs({
     inputPath: '/media/in.ts',
     outputDir: '/cache/out',
     trustedStreamInfo: true,
     sourceVideoCodec: 'h264',
     ...over,
+    run: remuxRunStart(
+      over.grid,
+      over.startSegment ?? 0,
+      over.segmentDuration ?? 3,
+      over.sourceStartPts ?? 0,
+      remuxAudioGrid(over.audioPlan, over.audioStreams, over.audioStreamIndex),
+    ),
   });
 
 const after = (args: string[], flag: string): string | undefined => {
@@ -233,14 +251,31 @@ describe('remux resume', () => {
 });
 
 describe('MPEG-TS clock break', () => {
-  it('stops every run reading at the break, counted from the container start', () => {
-    const at = { sourceStartPts: 2.8, sourceFormatStart: 2.779, sourceClockBreakSeconds: 32.8 };
-    for (const args of [tx(at), tx({ ...at, startSegment: 5 }), remux(at)]) {
+  const at = { sourceStartPts: 2.8, sourceFormatStart: 2.779, sourceClockBreakSeconds: 32.8 };
+
+  it('stops a transcode reading at the break, counted from the container start', () => {
+    for (const args of [tx(at), tx({ ...at, startSegment: 5 })]) {
       expect(after(args, '-to')).toBe('30.021');
       expect(args.indexOf('-to')).toBeLessThan(args.indexOf('-i'));
     }
-    // The early companion bounds its read with -t, which -to would override.
-    expect(tx({ ...at, early: true })).not.toContain('-to');
     expect(tx({ sourceStartPts: 2.8 })).not.toContain('-to');
+  });
+
+  it('bounds the early companion by its window or the break, whichever comes first', () => {
+    expect(after(tx({ early: true, segmentDuration: 3 }), '-to')).toBe('7');
+    expect(after(tx({ ...at, sourceClockBreakSeconds: 6, early: true }), '-to')).toBe('3.221');
+  });
+
+  it('stops a remux writing at the break in source time, past its absolute seek', () => {
+    const grid = computeSegmentGrid(
+      [2.8, 5.8, 8.8].map((pts) => ({ pts, dts: pts - 0.08 })),
+      2.8,
+      11.8,
+      3,
+    )!;
+    for (const args of [remux(at), remux({ ...at, grid, startSegment: 2 })]) {
+      expect(last(args, '-to')).toBe('32.8');
+      expect(args.lastIndexOf('-to')).toBeGreaterThan(args.indexOf('-i'));
+    }
   });
 });

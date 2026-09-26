@@ -1,5 +1,10 @@
 import { Logger } from '@nestjs/common';
-import { buildFfmpegArgs, buildRemuxArgs, videoMapSpec } from './ffmpeg-args';
+import {
+  buildFfmpegArgs,
+  buildRemuxArgs,
+  remuxRunStart,
+  videoMapSpec,
+} from './ffmpeg-args';
 import type { BuildFfmpegArgsOptions } from './ffmpeg-args';
 import { buildImageBurnInFilterComplex } from './subtitle-overlay-filter';
 
@@ -40,6 +45,7 @@ describe('programme video mapping', () => {
     const args = buildRemuxArgs({
       inputPath: '/media/in.mp4',
       outputDir: '/cache/out',
+      run: remuxRunStart(null, 0, 3, 0),
       audioPlan: { mode: 'copy', codec: 'aac' },
       audioStreams: [{ streamIndex: 2 }, { streamIndex: 3 }],
       audioStreamIndex: 1,

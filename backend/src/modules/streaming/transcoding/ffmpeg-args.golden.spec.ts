@@ -2,6 +2,9 @@ import { Logger } from '@nestjs/common';
 import {
   buildFfmpegArgs,
   buildRemuxArgs,
+  remuxAudioGrid,
+  remuxRunStart,
+  type BuildRemuxArgsOptions,
 } from './ffmpeg-args';
 import type { BuildFfmpegArgsOptions } from './ffmpeg-args';
 import { computeSegmentGrid } from './segment-boundaries';
@@ -1360,9 +1363,26 @@ describe('buildRemuxArgs — golden (characterization)', () => {
     6,
   )!;
 
+  const remuxArgs = (
+    o: Omit<BuildRemuxArgsOptions, 'run'> & { startSegment?: number },
+  ): string[] =>
+    buildRemuxArgs(
+      {
+        ...o,
+        run: remuxRunStart(
+          o.grid,
+          o.startSegment ?? 0,
+          o.segmentDuration ?? 3,
+          0,
+          remuxAudioGrid(o.audioPlan, o.audioStreams, o.audioStreamIndex),
+        ),
+      },
+      silentLog,
+    );
+
   it('remux: copy audio, HEVC source → -c:v copy + -tag:v hvc1', () => {
     expect(
-      buildRemuxArgs(
+      remuxArgs(
         {
           inputPath: '/media/in.mkv',
           outputDir: '/cache/out',
@@ -1370,7 +1390,6 @@ describe('buildRemuxArgs — golden (characterization)', () => {
           trustedStreamInfo: true,
           sourceVideoCodec: 'hevc',
         },
-        silentLog,
       ),
     ).toMatchInlineSnapshot(`
      [
@@ -1433,7 +1452,7 @@ describe('buildRemuxArgs — golden (characterization)', () => {
 
   it('remux: resume seeks to the keyframe boundary, transcodes incompatible audio', () => {
     expect(
-      buildRemuxArgs(
+      remuxArgs(
         {
           inputPath: '/media/in.mkv',
           outputDir: '/cache/out',
@@ -1442,7 +1461,6 @@ describe('buildRemuxArgs — golden (characterization)', () => {
           sourceVideoCodec: 'h264',
           grid: GRID,
         },
-        silentLog,
       ),
     ).toMatchInlineSnapshot(`
      [
@@ -1509,7 +1527,7 @@ describe('buildRemuxArgs — golden (characterization)', () => {
   });
 
   it('remux: maps only the video and one audio track, never a subtitle', () => {
-    const args = buildRemuxArgs(
+    const args = remuxArgs(
       {
         inputPath: '/media/in.mkv',
         outputDir: '/cache/out',
@@ -1517,7 +1535,6 @@ describe('buildRemuxArgs — golden (characterization)', () => {
         trustedStreamInfo: true,
         sourceVideoCodec: 'h264',
       },
-      silentLog,
     );
     expect(args.filter((_, i) => args[i - 1] === '-map')).toEqual([
       '0:v:0',
@@ -1527,14 +1544,13 @@ describe('buildRemuxArgs — golden (characterization)', () => {
 
   it('remux: every run but the first seeks both sides to its keyframe decode time', () => {
     const seeksOf = (startSegment: number, grid: typeof GRID | null) => {
-      const args = buildRemuxArgs(
+      const args = remuxArgs(
         {
           inputPath: '/media/in.mkv',
           outputDir: '/cache/out',
           startSegment,
           grid,
         },
-        silentLog,
       );
       return {
         seeks: args.flatMap((a, i) => (a === '-ss' ? [args[i + 1]] : [])),
@@ -1563,12 +1579,7 @@ describe('buildRemuxArgs — golden (characterization)', () => {
   });
 
   it('remux: refuses a segment past the grid', () => {
-    expect(() =>
-      buildRemuxArgs(
-        { inputPath: '/m', outputDir: '/o', startSegment: 3, grid: GRID },
-        silentLog,
-      ),
-    ).toThrow(RangeError);
+    expect(() => remuxRunStart(GRID, 3, 3, 0)).toThrow(RangeError);
   });
 });
 
@@ -1618,8 +1629,9 @@ describe('buildFfmpegArgs — NVENC early/steady-state SPS consistency', () => {
     );
     expect(presetOf(main)).toBe('p4');
     expect(presetOf(early)).toBe('p4');
-    // -t (early duration cap) is injected by the session layer, not here, so
-    // the argv this builder emits must be byte-identical across the two.
-    expect(early).toEqual(main);
+    // Byte-identical but for the early read window.
+    const window = early.indexOf('-to');
+    expect(early.slice(window, window + 2)).toEqual(['-to', '7']);
+    expect([...early.slice(0, window), ...early.slice(window + 2)]).toEqual(main);
   });
 });

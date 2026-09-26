@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import * as path from 'path';
 import {
   DEFAULT_SEGMENT_DURATION,
+  EARLY_PROBE_SEGMENTS,
   realSegmentSeconds,
   segmentIndexToSeconds,
 } from './constants';
@@ -161,17 +162,19 @@ function audioStreamArgs(
   ];
 }
 
-/** Input `-to` stopping a run at an MPEG-TS clock break; like `-ss` it counts
- *  from the container start. Past the break the constant-rate sync would fill
- *  the jump with repeated frames. The early companion bounds itself with `-t`. */
-function stopAtClockBreak(
+/** Input `-to` of a transcode run, from the container start like its `-ss`: the
+ *  early companion's window, or an MPEG-TS clock break, past which the
+ *  constant-rate sync would fill the jump with repeated frames. */
+function transcodeReadEnd(
   breakSeconds: number | undefined,
   formatStart: number,
-  early = false,
+  earlySeconds: number | undefined,
 ): string[] {
-  return breakSeconds != null && !early
-    ? ['-to', formatSeconds(breakSeconds - formatStart)]
-    : [];
+  const end = Math.min(
+    breakSeconds != null ? breakSeconds - formatStart : Infinity,
+    earlySeconds ?? Infinity,
+  );
+  return Number.isFinite(end) ? ['-to', formatSeconds(end)] : [];
 }
 
 /** Output `-ss` of a transcode run: its first frame, which ffmpeg subtracts from
@@ -1147,7 +1150,14 @@ export function buildFfmpegArgs(
     args.push(...colorTagArgs(sdrColor));
   }
 
-  args.push(...stopAtClockBreak(sourceClockBreakSeconds, sourceFormatStart, early));
+  args.push(
+    ...transcodeReadEnd(
+      sourceClockBreakSeconds,
+      sourceFormatStart,
+      // A second past the last segment, so it closes on its boundary.
+      early ? EARLY_PROBE_SEGMENTS * segmentDuration + 1 : undefined,
+    ),
+  );
   args.push('-i', inputPath);
 
   // Preserve source PTS end-to-end on every spawn (see
@@ -1350,7 +1360,7 @@ export function remuxRunStart(
 }
 
 /** The packet grid `buildRemuxArgs` encodes the picked track on, if encoded. */
-function remuxAudioGrid(
+export function remuxAudioGrid(
   audioPlan: AudioPlan | undefined,
   audioStreams: AudioStreamMeta[] | undefined,
   audioStreamIndex: number | undefined,
@@ -1372,7 +1382,8 @@ export interface BuildRemuxArgsOptions {
   /** Where this run writes one file per GOP (per segment without a grid). */
   outputDir: string;
   audioBitrate?: string;
-  startSegment?: number;
+  /** Where the run starts (`remuxRunStart`). */
+  run: RemuxRunStart;
   trustedStreamInfo?: boolean;
   /** The one audio track muxed next to the copied video (default the first). */
   audioStreamIndex?: number;
@@ -1391,15 +1402,11 @@ export interface BuildRemuxArgsOptions {
   /** Nominal segment duration (seconds) of the uniform fallback.
    *  Defaults to {@link DEFAULT_SEGMENT_DURATION}. */
   segmentDuration?: number;
-  /** Source time of the first presented video frame. */
-  sourceStartPts?: number;
   /** Absolute index of the programme video stream. */
   videoStreamIndex?: number;
   /** Source time the video ends at: encoded audio is padded up to it. */
   sourceEndSeconds?: number;
-  /** Container start, what an input `-to` counts from. */
-  sourceFormatStart?: number;
-  /** Source time an MPEG-TS clock breaks at: the run stops reading there. */
+  /** Source time an MPEG-TS clock breaks at: the run stops writing there. */
   sourceClockBreakSeconds?: number;
   /** Audio output of `audioStreamIndex`; AAC stereo when absent. */
   audioPlan?: AudioPlan;
@@ -1413,17 +1420,15 @@ export function buildRemuxArgs(
     inputPath,
     outputDir,
     audioBitrate = '192k',
-    startSegment = 0,
+    run,
     trustedStreamInfo = false,
     audioStreamIndex,
     sourceVideoCodec,
     audioStreams,
     grid,
     segmentDuration = DEFAULT_SEGMENT_DURATION,
-    sourceStartPts = 0,
     videoStreamIndex,
     sourceEndSeconds,
-    sourceFormatStart = sourceStartPts,
     sourceClockBreakSeconds,
     audioPlan,
   } = opts;
@@ -1439,13 +1444,6 @@ export function buildRemuxArgs(
     args.push('-analyzeduration', '1000000', '-probesize', '1000000');
   }
 
-  const run = remuxRunStart(
-    grid,
-    startSegment,
-    segmentDuration,
-    sourceStartPts,
-    remuxAudioGrid(audioPlan, audioStreams, audioStreamIndex),
-  );
   const seek = run.seekSeconds != null ? formatSeconds(run.seekSeconds) : null;
   // Keyframe decode times are absolute, hence `-seek_timestamp`. The
   // accurate-seek trim ignores it and adds the file start again; the output
@@ -1458,12 +1456,16 @@ export function buildRemuxArgs(
     useTs: false,
   });
 
-  args.push(...stopAtClockBreak(sourceClockBreakSeconds, sourceFormatStart));
   args.push('-i', inputPath);
   args.push('-copyts', '-muxdelay', '0', '-muxpreload', '0');
   // Copied packets before the first keyframe's decode time go: the video up to
   // that keyframe, audio (copied or not) ahead of the run.
   if (seek) args.push('-ss', seek);
+  // An output `-to` compares source time under `-copyts`; an input one would
+  // count from the container start and fall below the absolute `-ss`.
+  if (sourceClockBreakSeconds != null) {
+    args.push('-to', formatSeconds(sourceClockBreakSeconds));
+  }
 
   // Remux always muxes one audio track: its master publishes no audio group,
   // so switching track is a new playback-info with that track picked.

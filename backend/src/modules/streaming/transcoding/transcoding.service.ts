@@ -25,6 +25,7 @@ import {
 import {
   buildFfmpegArgs,
   buildRemuxArgs,
+  remuxAudioGrid,
   remuxRunStart,
   type BuildFfmpegArgsOptions,
 } from './ffmpeg-args';
@@ -787,7 +788,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
    * the main session would force a kill+restart from K back to 0 — wiping
    * out the prewarm work and adding a second 4K cold-start.
    *
-   * Bounded by an input-side `-t` of EARLY_PROBE_SEGMENTS segments (+1s) so
+   * Bounded by an input-side `-to` of EARLY_PROBE_SEGMENTS segments (+1s) so
    * ffmpeg exits shortly after flushing seg-0 .. seg-(EARLY_PROBE_SEGMENTS-1),
    * each a full segment long (there is no `hls_init_time`, so
    * seg-0 is not shortened). Same encoder profile + audio layout as the main
@@ -868,17 +869,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         }),
         this.log,
       );
-      // Bound the input read so the early session writes EARLY_PROBE_SEGMENTS
-      // full segments (+1s so the last one closes past its boundary), then
-      // ffmpeg exits cleanly. Derived from the configured segment duration —
-      // a hardcoded 4s only covered two segments at the 3s default and left
-      // seg-1 unwritten at 4s/6s grids. Insert as an INPUT option (before -i).
-      const earlyReadSec =
-        EARLY_PROBE_SEGMENTS *
-          (ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION) +
-        1;
-      const inputIdx = args.indexOf('-i');
-      if (inputIdx >= 0) args.splice(inputIdx, 0, '-t', String(earlyReadSec));
 
       const usesVarStreamMap =
         !!ctxAudioStreams && varStreamMapLayout(isVideoOnly, ctxAudioStreams.length);
@@ -1361,22 +1351,21 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       requestedSegment,
       segmentDuration,
       ctx?.sourceStartPts ?? 0,
+      remuxAudioGrid(ctx?.audioPlan, ctx?.audioStreams, ctx?.audioStreamIndex),
     );
     const args = buildRemuxArgs(
       {
         inputPath: absolutePath,
         outputDir: gopDir,
-        startSegment: requestedSegment,
+        run,
         trustedStreamInfo: ctx?.trustedStreamInfo,
         audioStreamIndex: ctx?.audioStreamIndex,
         sourceVideoCodec: ctx?.sourceVideoCodec,
         audioStreams: ctx?.audioStreams,
         grid,
         segmentDuration,
-        sourceStartPts: ctx?.sourceStartPts,
         videoStreamIndex: ctx?.videoStreamIndex,
         sourceEndSeconds: ctx?.sourceEndSeconds,
-        sourceFormatStart: ctx?.sourceFormatStart,
         sourceClockBreakSeconds: ctx?.sourceClockBreakSeconds,
         audioPlan: ctx?.audioPlan,
       },
