@@ -116,7 +116,7 @@ describe('buildPlaybackProfileFromContext', () => {
 
   it('propagates audio plan and video variant', () => {
     const ctx: SessionContext = {
-      audioPlan: { mode: 'copy', codec: 'eac3' },
+      audioPlan: { mode: 'copy', codec: 'eac3', channels: 6 },
       videoVariant: { codec: 'hevc', bitDepth: 10, hdr: 'HDR10' },
       useTs: false,
     };
@@ -154,40 +154,15 @@ describe('buildPlaybackProfileFromContext', () => {
     );
   });
 
-  it('keeps the same hash for two ctx values that map to the same profile', () => {
-    const a = buildPlaybackProfileFromContext(
-      {
-        audioPlan: {
-          mode: 'transcode',
-          codec: 'aac',
-          bitrateBps: 128000,
-          channels: 2,
-        },
-      },
-      3000,
-    );
-    const b = buildPlaybackProfileFromContext(
-      {
-        audioPlan: {
-          mode: 'transcode',
-          codec: 'aac',
-          bitrateBps: 192000,
-          channels: 2,
-        },
-      },
-      3000,
-    );
-    // Bitrate is not part of the profile — both should hash to the same dir.
-    expect(computeProfileHash(a)).toBe(computeProfileHash(b));
-  });
-
   it('separates a var_stream_map group whose per-track copy/transcode split differs', () => {
     const ctx = (copy: boolean): SessionContext => ({
       videoOnly: true,
       audioStreams: [{ language: 'eng' }, { language: 'eng' }],
       audioTrackPlans: [
-        { copy, outputCodec: 'aac' },
-        { copy: true, outputCodec: 'aac' },
+        copy
+          ? { mode: 'copy', codec: 'aac', channels: 2 }
+          : { mode: 'transcode', codec: 'aac', channels: 2 },
+        { mode: 'copy', codec: 'aac' },
       ],
     });
     expect(
@@ -198,12 +173,12 @@ describe('buildPlaybackProfileFromContext', () => {
   });
 
   it('separates a var_stream_map rendition re-encoded to a different channel count', () => {
-    const ctx = (outputChannels: number): SessionContext => ({
+    const ctx = (channels: number): SessionContext => ({
       videoOnly: true,
       audioStreams: [{ language: 'eng' }, { language: 'eng' }],
       audioTrackPlans: [
-        { copy: false, outputCodec: 'aac', outputChannels },
-        { copy: true, outputCodec: 'aac' },
+        { mode: 'transcode', codec: 'aac', channels },
+        { mode: 'copy', codec: 'aac' },
       ],
     });
     expect(
@@ -217,7 +192,7 @@ describe('buildPlaybackProfileFromContext', () => {
     const profile = buildPlaybackProfileFromContext(
       {
         audioStreams: [{ language: 'eng' }],
-        audioTrackPlans: [{ copy: true, outputCodec: 'aac' }],
+        audioTrackPlans: [{ mode: 'copy', codec: 'aac' }],
       },
       3000,
     );
@@ -229,18 +204,30 @@ describe('buildPlaybackProfileFromContext', () => {
 
   it('separates an inline transcode that keeps surround from a stereo one', () => {
     const ctx = (channels: number): SessionContext => ({
-      audioPlan: {
-        mode: 'transcode',
-        codec: 'aac',
-        bitrateBps: 192_000,
-        channels,
-      },
+      audioPlan: { mode: 'transcode', codec: 'aac', channels },
     });
     expect(
       computeProfileHash(buildPlaybackProfileFromContext(ctx(6), 3000)),
     ).not.toBe(
       computeProfileHash(buildPlaybackProfileFromContext(ctx(2), 3000)),
     );
+  });
+
+  it('separates a copy of a stereo track from one of a 5.1 track', () => {
+    const ctx = (channels: number): SessionContext => ({
+      audioPlan: { mode: 'copy', codec: 'eac3', channels },
+    });
+    expect(buildPlaybackProfileFromContext(ctx(2), 3000).audioChannels).toBe(2);
+    expect(buildPlaybackProfileFromContext(ctx(6), 3000).audioChannels).toBe(6);
+  });
+
+  it('separates two versions of the source file, and hashes as before without one', () => {
+    const hash = (sourceVersion?: string) =>
+      computeProfileHash(
+        buildPlaybackProfileFromContext({ sourceVersion }, 3000),
+      );
+    expect(hash('100:1')).not.toBe(hash('100:2'));
+    expect(hash(undefined)).toBe(computeProfileHash(BASE));
   });
 });
 

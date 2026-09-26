@@ -55,7 +55,7 @@ function master(opts: MasterOpts = {}): string {
     tokenParam: '',
     audioStreams,
     deviceType,
-    outputAudioCodec,
+    audioPlans: [{ mode: 'copy', codec: outputAudioCodec }],
     hdrPassThrough: hdrVariant ? { hdrFormat, hdrVariant } : undefined,
     canEmitHdrLadder: !!hdrVariant,
     sdrVariant,

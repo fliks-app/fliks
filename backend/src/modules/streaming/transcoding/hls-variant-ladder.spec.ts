@@ -22,6 +22,7 @@ function emit(variant: CodecVariant, range?: 'PQ' | 'HLG'): string[] {
     variant,
     range,
     audioAttr: '',
+    audioBitrateBps: () => 192_000,
     subsAttr: '',
     frameRateAttr: ',FRAME-RATE=24',
     codecsTail: ',mp4a.40.2',

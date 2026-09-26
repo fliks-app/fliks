@@ -69,7 +69,7 @@ import { SourceScanService } from './services/source-scan.service';
 import { SessionContextBuilder } from './services/session-context-builder.service';
 import { sessionProfileHash } from './transcoding/session-profile';
 import type { SourceScan } from './transcoding/source-scan';
-import { pickAudioLayout } from './transcoding/audio-layout';
+import { audioLayout } from './transcoding/audio-layout';
 import {
   buildIFrameSegmentArgs,
   iframeResolution,
@@ -801,8 +801,7 @@ export class StreamingController {
     const sourceAudioCount = resolved.mediaFile.streamInfo?.audio?.length ?? 0;
     const effectiveUseTs = muxFlavour === 'ts';
     const deviceType = deviceProfile.deviceType ?? 'desktop';
-    const useExtXMedia =
-      pickAudioLayout(sourceAudioCount, muxFlavour) === 'var-stream-map';
+    const useExtXMedia = audioLayout(sourceAudioCount) === 'var-stream-map';
 
     // Different device profiles (codec / mux / audio layout) hash to
     // different session-map keys, so multi-device playback of the same
@@ -921,12 +920,7 @@ export class StreamingController {
     const sessionLayout = {
       useTs: effectiveUseTs,
       audioPlan: response.audioPlan,
-      audioTrackPlans:
-        response.audioTracks?.map((t) => ({
-          copy: t.copy,
-          outputCodec: t.outputCodec,
-          outputChannels: t.outputChannels,
-        })) ?? null,
+      audioTrackPlans: evaluateResult.audioPlans,
       videoVariant,
       timeline: sourceTimeline(resolved.mediaFile.streamInfo, resolved.absolutePath),
       sourceVersion: held.version,
@@ -1249,7 +1243,6 @@ export class StreamingController {
             hdrFormat: sourceHdrFormat,
             hdrVariant: liveVariant,
             videoBitRateBps: v?.bitRate ?? undefined,
-            audioBitRateBps: si?.audio?.[0]?.bitRate ?? undefined,
           }
         : undefined;
     const audioStreams = si?.audio ?? [];
@@ -1258,9 +1251,7 @@ export class StreamingController {
     // is listed even when the user has picked a specific track — the picked
     // track is marked DEFAULT=YES so the player preselects it.
     const pickedIdx = live?.audioStreamIndex ?? null;
-    const muxFlavour: 'ts' | 'fmp4' = (live?.useTs ?? false) ? 'ts' : 'fmp4';
-    const useExtXMedia =
-      pickAudioLayout(audioStreams.length, muxFlavour) === 'var-stream-map';
+    const useExtXMedia = audioLayout(audioStreams.length) === 'var-stream-map';
     const onlyQuality = firstQueryString(req.query, 'startQuality');
     // Device type: URL param wins (stream URL is built by the frontend with
     // the cached client profile); fall back to whatever playback-info stored.
@@ -1307,14 +1298,12 @@ export class StreamingController {
     // The copy variant muxes the picked track alone (buildRemuxArgs), so it
     // publishes no audio group.
     const audioGroup = useExtXMedia && !(includeRemux && !onlyQuality);
-    // CODECS audio entry. With EXT-X-MEDIA renditions every track shares one
-    // output codec (the audio group is uniform — see buildAudioTracks), so the
-    // master must advertise THAT codec, not the picked track's audioPlan
-    // (which is only the muxed single-audio decision).
-    const masterAudioCodec =
-      audioGroup && live?.audioTrackPlans?.length
-        ? live.audioTrackPlans[0].outputCodec
-        : (live?.audioPlan?.codec ?? 'aac');
+    // The group's renditions, or the muxed track alone.
+    const audioPlans = audioGroup
+      ? (live?.audioTrackPlans ?? undefined)
+      : live?.audioPlan
+        ? [live.audioPlan]
+        : undefined;
     const playlist = this.transcodingService.generateMasterPlaylist({
       mediaFileId,
       sourceWidth: w,
@@ -1329,22 +1318,12 @@ export class StreamingController {
       // `undefined` keeps the muxed single-audio layout for everyone else.
       audioStreams:
         audioGroup || audioStreams.length === 0 ? audioStreams : undefined,
-      // Real per-track output channels (copy keeps source, transcode downmixes)
-      // so the rendition CHANNELS hint matches the bytes; aligned with the
-      // source audio order the session produces renditions in.
-      audioOutputChannels: live?.audioTrackPlans?.map((p) => p.outputChannels),
+      audioPlans,
       onlyQuality,
       defaultAudioIndex: pickedIdx ?? 0,
       deviceType,
       supportsAbr,
       dedupesAudioByLanguage: live?.dedupesAudioByLanguage ?? false,
-      outputAudioCodec: masterAudioCodec,
-      // Real output audio bitrate so the BANDWIDTH sum reflects the 640k
-      // AC-3/E-AC-3 path, not the profile nominal; copy renditions fall back.
-      audioOutputBitrateBps:
-        live?.audioPlan?.mode === 'transcode'
-          ? live.audioPlan.bitrateBps
-          : undefined,
       hdrPassThrough,
       // Only the SDR ladder branch consumes this — the HDR branch
       // already drives its codec strings from `hdrPassThrough`.

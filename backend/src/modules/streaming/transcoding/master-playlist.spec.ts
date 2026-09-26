@@ -1,5 +1,6 @@
 import { generateMasterPlaylist } from './master-playlist';
 import type { CodecVariant } from './codec/types';
+import type { AudioPlan } from './audio-encode';
 
 const HEVC_HDR10: CodecVariant = { codec: 'hevc', bitDepth: 10, hdr: 'HDR10' };
 const HEVC_HLG: CodecVariant = { codec: 'hevc', bitDepth: 10, hdr: 'HLG' };
@@ -73,9 +74,11 @@ describe('generateMasterPlaylist — audio rendition CHANNELS', () => {
       sourceWidth: 1920,
       sourceHeight: 1080,
       tokenParam: '',
-      outputAudioCodec: 'eac3',
       audioStreams: [{ channels: 8 }, { channels: 8 }],
-      audioOutputChannels: [6, 8],
+      audioPlans: [
+        { mode: 'transcode', codec: 'eac3', channels: 6 },
+        { mode: 'copy', codec: 'eac3', channels: 8 },
+      ],
     });
     const media = mediaLines(m);
     expect(media[0]).toContain('CHANNELS="6"');
@@ -90,9 +93,11 @@ describe('generateMasterPlaylist — audio rendition CHANNELS', () => {
       tokenParam: '',
       hdrPassThrough: { hdrFormat: 'HDR10', hdrVariant: HEVC_HDR10 },
       canEmitHdrLadder: true,
-      outputAudioCodec: 'aac',
       audioStreams: [{ channels: 6 }, { channels: 2 }],
-      audioOutputChannels: [6, 2],
+      audioPlans: [
+        { mode: 'transcode', codec: 'aac', channels: 6 },
+        { mode: 'transcode', codec: 'aac', channels: 2 },
+      ],
     });
     const media = mediaLines(m);
     expect(media[0]).toContain('CHANNELS="6"');
@@ -108,7 +113,7 @@ describe('generateMasterPlaylist — audio rendition CHANNELS', () => {
       sourceWidth: 1920,
       sourceHeight: 1080,
       tokenParam: '',
-      outputAudioCodec: 'eac3',
+      audioPlans: [{ mode: 'copy', codec: 'eac3' }],
       audioStreams: [{ channels: 6 }],
     });
     expect(mediaLines(m)[0]).toContain('CHANNELS="6"');
@@ -214,17 +219,31 @@ describe('generateMasterPlaylist — audio bitrate in BANDWIDTH', () => {
       ...[...m.matchAll(/AVERAGE-BANDWIDTH=(\d+)/g)].map((x) => Number(x[1])),
     );
 
-  it('folds the real output audio bitrate into AVERAGE-BANDWIDTH', () => {
-    const base = {
-      mediaFileId: 1,
-      sourceWidth: 1920,
-      sourceHeight: 1080,
-      tokenParam: '',
-    };
-    const hi = generateMasterPlaylist({ ...base, audioOutputBitrateBps: 640_000 });
-    const lo = generateMasterPlaylist({ ...base, audioOutputBitrateBps: 100_000 });
-    // Same video rungs; only the audio component differs by the exact delta.
-    expect(maxAvgBandwidth(hi) - maxAvgBandwidth(lo)).toBe(540_000);
+  const base = {
+    mediaFileId: 1,
+    sourceWidth: 1920,
+    sourceHeight: 1080,
+    tokenParam: '',
+  };
+  const eac3: AudioPlan = { mode: 'transcode', codec: 'eac3', channels: 6 };
+  const aac: AudioPlan = { mode: 'transcode', codec: 'aac', channels: 2 };
+
+  it('folds the encode bitrate of the top rung into AVERAGE-BANDWIDTH', () => {
+    const hi = generateMasterPlaylist({ ...base, audioPlans: [eac3] });
+    const lo = generateMasterPlaylist({ ...base, audioPlans: [aac] });
+    // Same video rungs; only the audio differs: 640k against the 192k budget.
+    expect(maxAvgBandwidth(hi) - maxAvgBandwidth(lo)).toBe(448_000);
+  });
+
+  it('counts the heaviest rendition of a group', () => {
+    const group = generateMasterPlaylist({
+      ...base,
+      audioStreams: [{ channels: 2 }, { channels: 6 }],
+      audioPlans: [aac, eac3],
+    });
+    expect(maxAvgBandwidth(group)).toBe(
+      maxAvgBandwidth(generateMasterPlaylist({ ...base, audioPlans: [eac3] })),
+    );
   });
 });
 
@@ -280,7 +299,7 @@ describe('generateMasterPlaylist — remux variant (copy path)', () => {
       sourceBitrate: 10_000_000,
       sourceFrameRate: 23.976,
       remuxCodecs: 'avc1.640029',
-      outputAudioCodec: 'eac3',
+      audioPlans: [{ mode: 'copy', codec: 'eac3' }],
       ...opts,
     });
 
@@ -352,7 +371,7 @@ describe('generateMasterPlaylist: HDR remux variant (copy path)', () => {
       sourceBitrate: 40_000_000,
       sourceFrameRate: 23.976,
       remuxCodecs: 'hvc1.2.4.L153.B0',
-      outputAudioCodec: 'eac3',
+      audioPlans: [{ mode: 'copy', codec: 'eac3' }],
       hdrPassThrough: { hdrFormat: 'HDR10', hdrVariant: HEVC_HDR10 },
       canEmitHdrLadder: true,
       ...opts,

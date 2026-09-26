@@ -1,5 +1,6 @@
 import { audioStartAlignFilter, perStreamAudioArgs } from './ffmpeg-args';
 import type { AudioStreamMeta } from './types';
+import type { AudioEncodeCodec, AudioPlan } from './audio-encode';
 
 const enc = (alignStartSeconds: number, useTs = false) => ({
   stereoBitrate: '128k',
@@ -25,13 +26,13 @@ describe('perStreamAudioArgs', () => {
     const args = perStreamAudioArgs(
       twoSurround,
       [
-        { copy: false, outputCodec: 'aac', outputChannels: 2 },
-        { copy: false, outputCodec: 'aac', outputChannels: 2 },
+        { mode: 'transcode', codec: 'aac', channels: 2 },
+        { mode: 'transcode', codec: 'aac', channels: 2 },
       ],
       enc(0),
     );
 
-    const joined = args!.join(' ');
+    const joined = args.join(' ');
     expect(joined).toContain('-ac:a:0 2');
     expect(joined).toContain('-ac:a:1 2');
     // Never the bare specifier: it would hit the video at stream 0 / the wrong
@@ -44,13 +45,13 @@ describe('perStreamAudioArgs', () => {
     const args = perStreamAudioArgs(
       twoSurround,
       [
-        { copy: false, outputCodec: 'eac3', outputChannels: 6 },
-        { copy: false, outputCodec: 'eac3', outputChannels: 6 },
+        { mode: 'transcode', codec: 'eac3', channels: 6 },
+        { mode: 'transcode', codec: 'eac3', channels: 6 },
       ],
       enc(0),
     );
 
-    const joined = args!.join(' ');
+    const joined = args.join(' ');
     expect(joined).toContain('-c:a:0 eac3');
     expect(joined).toContain('-ac:a:0 6');
     expect(joined).toContain('-ac:a:1 6');
@@ -63,8 +64,8 @@ describe('perStreamAudioArgs', () => {
     const args = perStreamAudioArgs(
       twoSurround,
       [
-        { copy: true, outputCodec: 'eac3' },
-        { copy: false, outputCodec: 'aac', outputChannels: 2 },
+        { mode: 'copy', codec: 'eac3' },
+        { mode: 'transcode', codec: 'aac', channels: 2 },
       ],
       enc(0),
     );
@@ -87,12 +88,12 @@ describe('perStreamAudioArgs', () => {
     const args = perStreamAudioArgs(
       twoSurround,
       [
-        { copy: false, outputCodec: 'aac', outputChannels: 6 },
-        { copy: false, outputCodec: 'aac' },
+        { mode: 'transcode', codec: 'aac', channels: 6 },
+        { mode: 'transcode', codec: 'aac', channels: 2 },
       ],
       enc(0),
     );
-    const joined = args!.join(' ');
+    const joined = args.join(' ');
     expect(joined).toContain('-ac:a:0 6');
     expect(joined).toContain('-ac:a:1 2');
   });
@@ -101,26 +102,25 @@ describe('perStreamAudioArgs', () => {
     const args = perStreamAudioArgs(
       twoSurround,
       [
-        { copy: true, outputCodec: 'opus' },
-        { copy: false, outputCodec: 'opus', outputChannels: 6 },
+        { mode: 'copy', codec: 'opus' },
+        { mode: 'transcode', codec: 'opus', channels: 6 },
       ],
       enc(11.8),
     );
     expect(args).not.toContain('-filter:a:0');
-    expect(args!.join(' ')).toContain(
+    expect(args.join(' ')).toContain(
       '-filter:a:1 asetpts=PTS-11.8/TB,aresample=async=1:first_pts=0,asetpts=PTS+11.8/TB',
     );
   });
 
-  it('returns null when the plan count does not match the stream count', () => {
-    expect(
+  it('throws when the plan count does not match the stream count', () => {
+    expect(() =>
       perStreamAudioArgs(
         twoSurround,
-        [{ copy: false, outputCodec: 'aac', outputChannels: 2 }],
+        [{ mode: 'transcode', codec: 'aac', channels: 2 }],
         enc(0),
       ),
-    ).toBeNull();
-    expect(perStreamAudioArgs(twoSurround, undefined, enc(0))).toBeNull();
+    ).toThrow(/1 audio plans for 2/);
   });
 });
 
@@ -128,7 +128,7 @@ describe('perStreamAudioArgs — codec policy', () => {
   const one: AudioStreamMeta[] = [{ language: 'eng', channels: 6 }];
 
   it('turns a copied AAC into raw AAC for fMP4, never for MPEG-TS', () => {
-    const plan = [{ copy: true, outputCodec: 'aac' }];
+    const plan: AudioPlan[] = [{ mode: 'copy', codec: 'aac' }];
     expect(perStreamAudioArgs(one, plan, enc(0))).toEqual([
       '-c:a:0',
       'copy',
@@ -140,17 +140,17 @@ describe('perStreamAudioArgs — codec policy', () => {
       'copy',
     ]);
     expect(
-      perStreamAudioArgs(one, [{ copy: true, outputCodec: 'eac3' }], enc(0)),
+      perStreamAudioArgs(one, [{ mode: 'copy', codec: 'eac3' }], enc(0)),
     ).toEqual(['-c:a:0', 'copy']);
   });
 
   it('scales the stereo rung bitrate with the channel count', () => {
-    const at = (outputCodec: string, outputChannels: number) => {
+    const at = (codec: AudioEncodeCodec, channels: number) => {
       const args = perStreamAudioArgs(
         one,
-        [{ copy: false, outputCodec, outputChannels }],
+        [{ mode: 'transcode', codec, channels }],
         enc(0),
-      )!;
+      );
       return args[args.indexOf('-b:a:0') + 1];
     };
     expect(at('aac', 1)).toBe('128k');
@@ -165,22 +165,12 @@ describe('perStreamAudioArgs — codec policy', () => {
   it('pads an encoded rendition up to the video end', () => {
     const args = perStreamAudioArgs(
       one,
-      [{ copy: false, outputCodec: 'aac', outputChannels: 2 }],
+      [{ mode: 'transcode', codec: 'aac', channels: 2 }],
       { ...enc(12), endSeconds: 40 },
-    )!;
+    );
     expect(args[args.indexOf('-filter:a:0') + 1]).toBe(
       audioStartAlignFilter(12, 40),
     );
-  });
-
-  it('refuses an output codec it has no encoder for', () => {
-    expect(() =>
-      perStreamAudioArgs(
-        one,
-        [{ copy: false, outputCodec: 'dts', outputChannels: 6 }],
-        enc(0),
-      ),
-    ).toThrow(/dts/);
   });
 });
 

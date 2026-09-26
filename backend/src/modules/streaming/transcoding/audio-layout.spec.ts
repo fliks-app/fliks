@@ -1,12 +1,24 @@
-import { resolveMuxFlavour, varStreamMapLayout } from './audio-layout';
+import {
+  audioLayout,
+  resolveMuxFlavour,
+  varStreamMapLayout,
+} from './audio-layout';
+
+describe('audioLayout', () => {
+  it('splits several tracks into renditions and muxes one or none', () => {
+    expect(audioLayout(3)).toBe('var-stream-map');
+    expect(audioLayout(2)).toBe('var-stream-map');
+    expect(audioLayout(1)).toBe('inline');
+    expect(audioLayout(0)).toBe('inline');
+  });
+});
 
 describe('varStreamMapLayout', () => {
-  it('is in effect only for a video-only session with audio to map', () => {
+  it('is in effect only for a video-only session of a split source', () => {
     expect(varStreamMapLayout(true, 2)).toBe(true);
-    expect(varStreamMapLayout(true, 1)).toBe(true);
-    expect(varStreamMapLayout(true, 0)).toBe(false); // nothing to map
-    expect(varStreamMapLayout(false, 3)).toBe(false); // muxed output
-    expect(varStreamMapLayout(false, 0)).toBe(false);
+    expect(varStreamMapLayout(true, 1)).toBe(false);
+    expect(varStreamMapLayout(true, 0)).toBe(false);
+    expect(varStreamMapLayout(false, 3)).toBe(false);
   });
 });
 

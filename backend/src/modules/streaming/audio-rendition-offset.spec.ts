@@ -126,7 +126,6 @@ describe('StreamBuilderService — audio start offset', () => {
     expect(r.audioPlan).toEqual({
       mode: 'transcode',
       codec: 'aac',
-      bitrateBps: expect.any(Number),
       channels: 6,
     });
     expect(r.transcodeReasons.map((x) => x.flag)).toContain('AudioStartOffset');
@@ -144,7 +143,6 @@ describe('StreamBuilderService — audio start offset', () => {
     expect(r.audioPlan).toEqual({
       mode: 'transcode',
       codec: 'eac3',
-      bitrateBps: expect.any(Number),
       channels: 6,
     });
     expect(r.transcodeReasons.map((x) => x.flag)).toContain('AudioStartOffset');

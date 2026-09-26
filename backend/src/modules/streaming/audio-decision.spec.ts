@@ -1,6 +1,7 @@
 import { StreamBuilderService } from './stream-builder.service';
 import type { DeviceProfileDto } from './dto/device-profile.dto';
 import type { PlaybackInfoResponse } from './dto/playback-info.dto';
+import { audioOutputBitrateBps } from './transcoding/audio-encode';
 
 const svc = () =>
   new StreamBuilderService(
@@ -139,7 +140,6 @@ describe('StreamBuilderService — one audio decision per track', () => {
       mode: 'transcode',
       codec: 'eac3',
       channels: 6,
-      bitrateBps: 640_000,
     });
   });
 
@@ -168,8 +168,8 @@ describe('StreamBuilderService — one audio decision per track', () => {
       mode: 'transcode',
       codec: 'aac',
       channels: 6,
-      bitrateBps: 576_000,
     });
+    expect(audioOutputBitrateBps(r.audioPlan, 192_000)).toBe(576_000);
   });
 
   it('encodes AAC at the device cap rather than always stereo', () => {
@@ -209,7 +209,7 @@ describe('StreamBuilderService — one audio decision per track', () => {
         ext: '.ts',
       },
     );
-    expect(ts.audioPlan).toEqual({ mode: 'copy', codec: 'aac' });
+    expect(ts.audioPlan).toEqual({ mode: 'copy', codec: 'aac', channels: 2 });
   });
 
   it('decides the inline output on the real mux: MPEG-TS keeps an offset copy', () => {
@@ -218,7 +218,7 @@ describe('StreamBuilderService — one audio decision per track', () => {
       profile(['ac3'], { useTsOnSingleAudio: true }),
     );
     expect(r.playMethod).toBe('DirectStream');
-    expect(r.audioPlan).toEqual({ mode: 'copy', codec: 'ac3' });
+    expect(r.audioPlan).toEqual({ mode: 'copy', codec: 'ac3', channels: 6 });
   });
 
   it('reports a channel overflow as a channel reason, not a codec one', () => {
@@ -296,6 +296,6 @@ describe('StreamBuilderService — audio that ends early', () => {
 
   it('leaves a muxed single track alone, whose segments the video carries', () => {
     const r = evaluate([{ codec: 'aac', endSeconds: 15 }], tv);
-    expect(r.audioPlan).toEqual({ mode: 'copy', codec: 'aac' });
+    expect(r.audioPlan).toEqual({ mode: 'copy', codec: 'aac', channels: 2 });
   });
 });

@@ -17,11 +17,9 @@ import {
   audioCopyArgs,
   audioEncodeArgs,
   audioEncodeBitrateBps,
+  DEFAULT_AUDIO_PLAN,
   encodedPacketGrid,
-  isEncodableAudio,
-  trackEncodePlan,
   type AudioPlan,
-  type AudioTrackEncodePlan,
   type PacketGrid,
 } from './audio-encode';
 import type {
@@ -131,21 +129,17 @@ export interface AudioEncodeContext {
  *  or `:<i>` for the i-th one (audio-relative: the video sits at stream 0). */
 function audioStreamArgs(
   spec: string,
-  plan: AudioTrackEncodePlan,
+  plan: AudioPlan,
   ctx: AudioEncodeContext,
 ): string[] {
-  if (plan.copy) return audioCopyArgs(spec, plan.outputCodec, ctx.useTs);
-  if (!isEncodableAudio(plan.outputCodec)) {
-    throw new Error(`No audio encoder for output codec "${plan.outputCodec}"`);
-  }
-  const channels = plan.outputChannels ?? 2;
+  if (plan.mode === 'copy') return audioCopyArgs(spec, plan.codec, ctx.useTs);
   const bps = audioEncodeBitrateBps(
-    plan.outputCodec,
-    channels,
+    plan.codec,
+    plan.channels,
     parseBitrateToBps(ctx.stereoBitrate),
   );
   return [
-    ...audioEncodeArgs(spec, plan.outputCodec, channels, bps),
+    ...audioEncodeArgs(spec, plan.codec, plan.channels, bps),
     `-filter:a${spec}`,
     audioStartAlignFilter(ctx.alignStartSeconds, ctx.endSeconds),
   ];
@@ -323,13 +317,7 @@ function buildAudioOutputArgs(
   audioPlan: AudioPlan | undefined,
   ctx: AudioEncodeContext,
 ): string[] {
-  return audioStreamArgs(
-    '',
-    audioPlan
-      ? trackEncodePlan(audioPlan)
-      : { copy: false, outputCodec: 'aac', outputChannels: 2 },
-    ctx,
-  );
+  return audioStreamArgs('', audioPlan ?? DEFAULT_AUDIO_PLAN, ctx);
 }
 
 /**
@@ -422,9 +410,9 @@ export interface BuildFfmpegArgsOptions {
   /** Per-rendition audio decision for the multi-audio `var_stream_map` path,
    *  one entry per `audioStreams[]` track in the same order. The group shares
    *  one output codec; each rendition gets its own `-c:a:N` (copy when its
-   *  source already is that codec, else transcode, downmixed to
-   *  `outputChannels`). Omitted → the single `audioPlan` applies to all. */
-  audioTrackPlans?: AudioTrackEncodePlan[];
+   *  source already is that codec, else transcode, downmixed to its
+   *  `channels`). Omitted → the single `audioPlan` applies to all. */
+  audioTrackPlans?: AudioPlan[];
   /** Source time of the first presented video frame: the output timeline
    *  origin and the point transcoded audio is aligned to (`sourceTimeline`). */
   sourceStartPts?: number;
@@ -491,18 +479,20 @@ function hasNoAudio(streams: AudioStreamMeta[] | undefined): boolean {
 
 /**
  * Per-output-stream audio codec args for the multi-audio `var_stream_map`
- * path, indexed to match the `-map 0:a:i` order. Returns `null` only when
- * there are no per-track plans (or a length mismatch) — then the caller keeps
- * the single `-c:a` form. The group's output codec is uniform (HLS CODECS
- * requirement), but copy and transcode mix per rendition: a track already in
- * the output codec copies; the rest re-encode, downmixed to `outputChannels`.
+ * path, indexed to match the `-map 0:a:i` order. The group's output codec is
+ * uniform (HLS CODECS requirement), but copy and transcode mix per rendition: a
+ * track already in the output codec copies; the rest re-encode, downmixed.
  */
 export function perStreamAudioArgs(
   audioStreams: AudioStreamMeta[],
-  plans: AudioTrackEncodePlan[] | undefined,
+  plans: AudioPlan[],
   ctx: AudioEncodeContext,
-): string[] | null {
-  if (!plans || plans.length !== audioStreams.length) return null;
+): string[] {
+  if (plans.length !== audioStreams.length) {
+    throw new Error(
+      `${plans.length} audio plans for ${audioStreams.length} audio streams`,
+    );
+  }
   return plans.flatMap((p, i) => audioStreamArgs(`:${i}`, p, ctx));
 }
 
@@ -550,14 +540,6 @@ function buildAudioAndMuxerArgs(opts: {
   const args: string[] = [];
   const outputSeekSeconds = runOutputSeek(startSegment, audioEnc.alignStartSeconds);
 
-  // Use var_stream_map whenever the caller asked for the EXT-X-MEDIA
-  // layout (`videoOnly + audioStreams[]`), even for a SINGLE audio
-  // track. Multi-audio was the original driver (Shaka switches
-  // client-side via EXT-X-MEDIA without a backend reload), but Samsung
-  // Tizen AVPlay's HLS-fMP4 parser ALSO requires the same shape on
-  // single-audio sources — Tizen muxed-fMP4 stalls silently
-  // (issue #148). The controller forces `videoOnly=true` even with
-  // 1 audio on fMP4 to trigger this branch.
   const useVarStreamMap =
     !!audioStreams && varStreamMapLayout(videoOnly, audioStreams.length);
 
@@ -567,14 +549,12 @@ function buildAudioAndMuxerArgs(opts: {
     for (let i = 0; i < audioStreams!.length; i++) {
       args.push('-map', audioMapSpec(audioStreams, i));
     }
-    // Per-rendition audio (uniform output codec; copy or transcode per track).
-    // Falls back to the single `audioArgs` only when no plans were threaded.
-    const perStream = perStreamAudioArgs(
-      audioStreams!,
-      audioTrackPlans,
-      audioEnc,
+    // Without per-rendition plans the single `audioArgs` apply to every track.
+    args.push(
+      ...(audioTrackPlans
+        ? perStreamAudioArgs(audioStreams!, audioTrackPlans, audioEnc)
+        : audioArgs),
     );
-    args.push(...(perStream ?? audioArgs));
 
     // Build var_stream_map: "v:0,agroup:audio a:0,agroup:audio,language:fre ..."
     const varParts = ['v:0,agroup:audio'];
@@ -1345,6 +1325,9 @@ export function remuxAudioGrid(
   );
 }
 
+/** Stereo audio budget of a remux encode: the source-resolution rung's. */
+export const REMUX_STEREO_AUDIO_BITRATE = '192k';
+
 /**
  * Build FFmpeg args for remux mode: copy video stream, optionally transcode audio.
  * This is much cheaper than full transcoding — no video re-encoding.
@@ -1353,7 +1336,6 @@ export interface BuildRemuxArgsOptions {
   inputPath: string;
   /** Where this run writes one file per GOP (per segment without a grid). */
   outputDir: string;
-  audioBitrate?: string;
   /** Where the run starts (`remuxRunStart`). */
   run: RemuxRunStart;
   trustedStreamInfo?: boolean;
@@ -1391,7 +1373,6 @@ export function buildRemuxArgs(
   const {
     inputPath,
     outputDir,
-    audioBitrate = '192k',
     run,
     trustedStreamInfo = false,
     audioStreamIndex,
@@ -1421,7 +1402,7 @@ export function buildRemuxArgs(
   // add the file start again, so the output `-ss` and the audio filter trim.
   if (seek) args.push('-noaccurate_seek', '-seek_timestamp', '1', '-ss', seek);
   const audioArgs = buildAudioOutputArgs(audioPlan, {
-    stereoBitrate: audioBitrate,
+    stereoBitrate: REMUX_STEREO_AUDIO_BITRATE,
     alignStartSeconds: run.audioStartSeconds,
     endSeconds: sourceEndSeconds,
     useTs: false,

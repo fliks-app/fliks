@@ -10,10 +10,7 @@ import { StreamLifetime } from './lifetime-constants';
 import type { TranscodeReason } from './dto/playback-info.dto';
 import type { BurnInSubtitle } from './transcoding';
 import type { CodecVariant } from './transcoding/codec/types';
-import type {
-  AudioPlan,
-  AudioTrackEncodePlan,
-} from './transcoding/audio-encode';
+import type { AudioPlan } from './transcoding/audio-encode';
 import type { SourceTimeline } from './transcoding/source-timeline';
 import type { KeyframeGrid } from './transcoding/segment-boundaries';
 
@@ -106,7 +103,7 @@ export interface LiveSession {
   remuxGrid: KeyframeGrid | null;
   /** Per-rendition audio decision (one entry per source audio stream) for the
    *  multi-audio var_stream_map encode; null when uniform / not multi-audio. */
-  audioTrackPlans: AudioTrackEncodePlan[] | null;
+  audioTrackPlans: AudioPlan[] | null;
   audioStreamIndex: number | null;
   audioStreamCount: number;
   useExtXMedia: boolean;
@@ -180,7 +177,7 @@ export interface CreateLiveSessionInput {
   timeline?: SourceTimeline | null;
   sourceVersion?: string | null;
   remuxGrid?: KeyframeGrid | null;
-  audioTrackPlans?: AudioTrackEncodePlan[] | null;
+  audioTrackPlans?: AudioPlan[] | null;
   audioStreamIndex?: number | null;
   audioStreamCount?: number;
   useExtXMedia?: boolean;

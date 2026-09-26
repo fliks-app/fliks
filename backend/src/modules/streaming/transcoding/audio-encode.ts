@@ -3,22 +3,18 @@ import { SURROUND_TRANSCODE_BITRATE_BPS } from './profiles';
 /** Audio codecs the backend encodes to. */
 export type AudioEncodeCodec = 'aac' | 'ac3' | 'eac3' | 'opus';
 
-/** Single-track audio output decision: a verbatim copy, or the encode target. */
+/** One audio output's decision, per rendition or for the one muxed track: a
+ *  verbatim copy of the source, or the encode target. */
 export type AudioPlan =
-  | { mode: 'copy'; codec: string }
-  | {
-      mode: 'transcode';
-      codec: AudioEncodeCodec;
-      bitrateBps: number;
-      channels: number;
-    };
+  | { mode: 'copy'; codec: string; channels?: number }
+  | { mode: 'transcode'; codec: AudioEncodeCodec; channels: number };
 
-/** One audio rendition's output decision, as ffmpeg consumes it. */
-export interface AudioTrackEncodePlan {
-  copy: boolean;
-  outputCodec: string;
-  outputChannels?: number;
-}
+/** The output of a session that carries no decision: AAC stereo plays everywhere. */
+export const DEFAULT_AUDIO_PLAN: AudioPlan = {
+  mode: 'transcode',
+  codec: 'aac',
+  channels: 2,
+};
 
 const ENCODERS: Record<AudioEncodeCodec, string> = {
   aac: 'aac',
@@ -97,6 +93,17 @@ export function audioEncodeBitrateBps(
   return Math.round((stereoBitrateBps * Math.max(channels, 2)) / 2);
 }
 
+/** Bitrate an audio output streams at on a rung of `stereoBitrateBps`: an
+ *  encode's target; undefined for a copy. */
+export function audioOutputBitrateBps(
+  plan: AudioPlan,
+  stereoBitrateBps: number,
+): number | undefined {
+  return plan.mode === 'transcode'
+    ? audioEncodeBitrateBps(plan.codec, plan.channels, stereoBitrateBps)
+    : undefined;
+}
+
 /** Encode args for one audio output stream (`spec` `''` or `:<i>`). */
 export function audioEncodeArgs(
   spec: string,
@@ -125,11 +132,4 @@ export function audioCopyArgs(
   const bsf =
     codec === 'aac' && !useTs ? [`-bsf:a${spec}`, 'aac_adtstoasc'] : [];
   return [`-c:a${spec}`, 'copy', ...bsf];
-}
-
-/** The per-rendition form of a single-track plan. */
-export function trackEncodePlan(plan: AudioPlan): AudioTrackEncodePlan {
-  return plan.mode === 'copy'
-    ? { copy: true, outputCodec: plan.codec }
-    : { copy: false, outputCodec: plan.codec, outputChannels: plan.channels };
 }

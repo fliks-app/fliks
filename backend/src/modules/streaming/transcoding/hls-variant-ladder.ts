@@ -1,4 +1,4 @@
-import { parseBitrateToBps, profileResolution } from './profiles';
+import { profileResolution } from './profiles';
 import {
   audioRenditionChannels,
   av1CodecString,
@@ -114,10 +114,8 @@ export interface VariantLadderOptions {
   /** VIDEO-RANGE attribute value; omitted (SDR) leaves the attribute off. */
   range?: 'PQ' | 'HLG';
   audioAttr: string;
-  /** Real output audio bitrate (bps) for the BANDWIDTH/AVERAGE-BANDWIDTH sum.
-   *  Falls back to the per-rung profile nominal when absent — which undercounts
-   *  AC-3/E-AC-3 (encoded at a fixed 640k, far above the nominal). */
-  audioBitrateBps?: number;
+  /** Audio bitrate (bps) a rung streams at, for its BANDWIDTH sum. */
+  audioBitrateBps: (p: TranscodeProfile) => number;
   subsAttr: string;
   frameRateAttr: string;
   codecsTail: string;
@@ -172,8 +170,7 @@ export function emitVariantLadder(
       sourceVideoBitrateBps,
       sourceVideoCodec,
     });
-    const avg =
-      cappedVideo + (audioBitrateBps ?? parseBitrateToBps(p.audioBitrate));
+    const avg = cappedVideo + audioBitrateBps(p);
     // BANDWIDTH ~1.5x nominal: with -maxrate == -b:v the encoder is near-CBR but
     // VBV bursts push segments ~30% above nominal; the margin gives AVPlayer ABR
     // stable hysteresis.

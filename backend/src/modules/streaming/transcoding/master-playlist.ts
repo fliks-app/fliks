@@ -1,9 +1,15 @@
 import {
   getHdrLadderForDevice,
   getLadderForDevice,
+  parseBitrateToBps,
   profileFitsSource,
   profileResolution,
 } from './profiles';
+import {
+  audioOutputBitrateBps,
+  DEFAULT_AUDIO_PLAN,
+  type AudioPlan,
+} from './audio-encode';
 import type {
   AudioStreamMeta,
   DeviceType,
@@ -165,26 +171,20 @@ export interface MasterPlaylistOptions {
   includeRemux?: boolean;
   sourceBitrate?: number;
   audioStreams?: AudioStreamMeta[];
-  /** Resolved per-track output channel count (aligned with `audioStreams`):
-   *  source count when copied, downmix target when transcoded. Drives the
-   *  rendition CHANNELS attribute; codec-derived fallback when absent. */
-  audioOutputChannels?: (number | undefined)[];
+  /** What the variants' audio carries: one plan per rendition, aligned with
+   *  `audioStreams`, or the muxed track's alone. The CODECS audio entry, each
+   *  rendition's CHANNELS and each rung's audio BANDWIDTH follow it, since a
+   *  wrong CODECS rejects the segment on MSE append. AAC stereo when absent. */
+  audioPlans?: AudioPlan[];
   onlyQuality?: string;
   defaultAudioIndex?: number;
   deviceType?: DeviceType;
-  /** Output audio codec ffmpeg emits; the CODECS attribute must match it or the
-   *  receiver rejects the segment on MSE append. `aac` | `ac3` | `eac3`. */
-  outputAudioCodec?: string;
-  /** Real output audio bitrate (bps) for each rung's BANDWIDTH; profile nominal
-   *  fallback when absent (undercounts the fixed-640k AC-3/E-AC-3 path). */
-  audioOutputBitrateBps?: number;
   /** When set, emit an HDR ladder (gated by `canEmitHdrLadder`); `hdrVariant`
    *  drives every rung's CODECS + VIDEO-RANGE. */
   hdrPassThrough?: {
     hdrFormat: 'HDR10' | 'HLG';
     hdrVariant: CodecVariant;
     videoBitRateBps?: number;
-    audioBitRateBps?: number;
   };
   /** Host has a probed-OK encoder for `hdrPassThrough.hdrVariant`; false skips
    *  the HDR ladder so the master never advertises rungs it can't produce. */
@@ -234,12 +234,10 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
     includeRemux = false,
     sourceBitrate,
     audioStreams,
-    audioOutputChannels,
+    audioPlans,
     onlyQuality,
     defaultAudioIndex = 0,
     deviceType = 'desktop',
-    outputAudioCodec = 'aac',
-    audioOutputBitrateBps,
     hdrPassThrough,
     canEmitHdrLadder = false,
     sdrVariant,
@@ -253,11 +251,8 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
     remuxCodecs,
     remuxBandwidthBps,
   } = opts;
-  // The "multi-audio" flag is really an "EXT-X-MEDIA layout" toggle —
-  // the caller decided whether to split audio into renditions. Single-
-  // audio sources can opt-in (Tizen fMP4 needs it; see issue #148), so
-  // we honour any non-empty `audioStreams` list rather than gating on
-  // `length > 1`. Callers that want the muxed layout pass `undefined`.
+  // The caller decided the layout (`audioLayout`): a non-empty `audioStreams`
+  // asks for EXT-X-MEDIA renditions, `undefined` for the muxed one.
   const multiAudio = audioStreams && audioStreams.length > 0;
   // Audio-less source: ffmpeg emits `-an` so the segments truly carry no
   // audio. The master MUST NOT advertise an audio codec in CODECS — Shaka
@@ -267,8 +262,18 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
   const noAudio = audioStreams != null && audioStreams.length === 0;
   const lines = ['#EXTM3U', '#EXT-X-VERSION:7', '#EXT-X-INDEPENDENT-SEGMENTS'];
 
+  const plans = audioPlans?.length ? audioPlans : [DEFAULT_AUDIO_PLAN];
+  // A group shares one output codec (`decideAudio`).
+  const outputAudioCodec = plans[0].codec;
   const audioCodec = audioCodecString(outputAudioCodec);
   const codecsTail = noAudio || !audioCodec ? '' : `,${audioCodec}`;
+  // BANDWIDTH is a peak, so a rung counts its heaviest rendition.
+  const rungAudioBps = (p: TranscodeProfile): number => {
+    const stereo = parseBitrateToBps(p.audioBitrate);
+    return Math.max(
+      ...plans.map((plan) => audioOutputBitrateBps(plan, stereo) ?? stereo),
+    );
+  };
 
   const frameRateAttr = `,FRAME-RATE=${formatFrameRate(sourceFrameRate)}`;
 
@@ -317,7 +322,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
       outputAudioCodec,
       mediaFileId,
       tokenParam,
-      audioOutputChannels,
+      plans.map((p) => p.channels),
       dedupesAudioByLanguage,
     );
   }
@@ -377,7 +382,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
         variant: hdrVariant,
         range,
         audioAttr,
-        audioBitrateBps: hdrPassThrough.audioBitRateBps ?? audioOutputBitrateBps,
+        audioBitrateBps: rungAudioBps,
         subsAttr,
         frameRateAttr,
         codecsTail,
@@ -447,7 +452,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
     profiles,
     variant: sdrVariant ?? SDR_H264_VARIANT,
     audioAttr,
-    audioBitrateBps: audioOutputBitrateBps,
+    audioBitrateBps: rungAudioBps,
     subsAttr,
     frameRateAttr,
     codecsTail,

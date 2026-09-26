@@ -1,6 +1,6 @@
 import type { LiveSession } from '../live-session.service';
 import type { MediaFileInfo } from '../../subtitles/ffprobe.service';
-import { pickAudioLayout } from './audio-layout';
+import { audioLayout } from './audio-layout';
 import {
   buildPlaybackProfileFromContext,
   computeProfileHash,
@@ -41,9 +41,7 @@ export function sessionLayoutContext(
     useTs,
     // Multi-audio: video-only segments plus one var_stream_map rendition per
     // track, so the player switches client-side via EXT-X-MEDIA.
-    videoOnly:
-      pickAudioLayout(si?.audio?.length ?? 0, useTs ? 'ts' : 'fmp4') ===
-      'var-stream-map',
+    videoOnly: audioLayout(si?.audio?.length ?? 0) === 'var-stream-map',
     // With `streamIndex`, so the single-track path maps `0:<abs>` too.
     audioStreams: si?.audio ?? undefined,
     audioPlan: live?.audioPlan ?? undefined,
