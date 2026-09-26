@@ -40,6 +40,7 @@ import {
   parseBitrateToBps,
   type BurnInSubtitle,
 } from './transcoding';
+import { tsHeadroom } from './transcoding/ffmpeg-args';
 import {
   DEFAULT_SEGMENT_DURATION,
   EARLY_PROBE_SEGMENTS,
@@ -1436,15 +1437,17 @@ export class StreamingController {
       crop?.width ?? v?.width ?? 1920,
       crop?.height ?? v?.height ?? 1080,
     );
+    const timeline = sourceTimeline(si, resolved.absolutePath);
     const args = buildIFrameSegmentArgs({
       inputPath: resolved.absolutePath,
       seekSeconds: inputSeekSeconds(
         parseInt(match[1], 10) * iframeGrid(si, this.segDur()),
-        sourceTimeline(si, resolved.absolutePath),
+        timeline,
       ),
       width,
       height,
       crop,
+      timelineOffsetSeconds: tsHeadroom(timeline.origin),
     });
     try {
       // One ffmpeg pass per frame, uncached (~380 ms on 1080p): this is why

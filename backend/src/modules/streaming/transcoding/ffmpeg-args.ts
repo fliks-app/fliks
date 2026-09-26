@@ -80,6 +80,16 @@ function ffOutPath(...parts: string[]): string {
   return parts.join('/').replace(/\\/g, '/');
 }
 
+/** Headroom every MPEG-TS run shares: TS can't carry a decode time below 0, and
+ *  the muxer shifts a run that has one (B-frame reorder, audio priming at a
+ *  start near 0) on its own, a frame or two off the others. A second covers
+ *  16 reordered frames, the codec maximum, at 16 fps, and any priming. */
+export function tsHeadroom(originSeconds = 0): number {
+  return Math.max(0, TS_MIN_START_SECONDS - originSeconds);
+}
+
+const TS_MIN_START_SECONDS = 1;
+
 /** Seconds as an ffmpeg duration / expression literal, microsecond precision. */
 function formatSeconds(seconds: number): string {
   return String(Number(seconds.toFixed(6)));
@@ -192,9 +202,9 @@ function hlsMuxerArgs(o: {
       ? ['-output_ts_offset', formatSeconds(-origin)]
       : []),
     // MPEG-TS carries no `tfdt` to re-anchor on serve, so a seeked run gets its
-    // source timestamps back here.
-    ...(o.useTs && o.outputSeekSeconds > 0
-      ? ['-output_ts_offset', formatSeconds(o.outputSeekSeconds)]
+    // source timestamps back here, plus the headroom every TS run shares.
+    ...(o.useTs && o.outputSeekSeconds + tsHeadroom(o.originSeconds) > 0
+      ? ['-output_ts_offset', formatSeconds(o.outputSeekSeconds + tsHeadroom(o.originSeconds))]
       : []),
     '-f',
     'hls',

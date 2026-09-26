@@ -80,6 +80,14 @@ describe('fMP4 output origin', () => {
     expect(after(seeked, '-output_ts_offset')).toBe(last(seeked, '-ss'));
   });
 
+  it('lifts every MPEG-TS run of a source starting near 0 by one headroom', () => {
+    // A B-frame encode and AAC priming put decode times below 0, which the TS
+    // muxer would otherwise shift out of the run from the start alone.
+    expect(after(tx({ sourceStartPts: 0, useTs: true }), '-output_ts_offset')).toBe('1');
+    const seeked = tx({ sourceStartPts: 0, useTs: true, startSegment: 4 });
+    expect(after(seeked, '-output_ts_offset')).toBe(String(Number(last(seeked, '-ss')) + 1));
+  });
+
   it('writes remux runs in source time, less their output -ss', () => {
     expect(remux({ sourceStartPts: 2.8 })).not.toContain('-output_ts_offset');
     expect(after(remux({ sourceStartPts: 2.8 }), '-hls_segment_options')).toBe(

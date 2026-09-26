@@ -47,6 +47,8 @@ export function buildIFrameSegmentArgs(opts: {
   width: number;
   height: number;
   crop?: { width: number; height: number; x: number; y: number };
+  /** Added to the source PTS, as on the variant's MPEG-TS runs (`tsHeadroom`). */
+  timelineOffsetSeconds?: number;
 }): string[] {
   const crop = opts.crop
     ? `crop=${opts.crop.width}:${opts.crop.height}:${opts.crop.x}:${opts.crop.y},`
@@ -73,6 +75,9 @@ export function buildIFrameSegmentArgs(opts: {
     'veryfast',
     '-pix_fmt',
     'yuv420p',
+    ...(opts.timelineOffsetSeconds
+      ? ['-output_ts_offset', String(opts.timelineOffsetSeconds)]
+      : []),
     '-f',
     'mpegts',
     '-muxdelay',
