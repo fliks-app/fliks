@@ -10,8 +10,16 @@ import {
   isHdrProfile,
   parseBitrateToBps,
   profileResolution,
-  SURROUND_TRANSCODE_BITRATE_BPS,
 } from './profiles';
+import {
+  audioCopyArgs,
+  audioEncodeBitrateBps,
+  audioEncoderName,
+  isEncodableAudio,
+  trackEncodePlan,
+  type AudioPlan,
+  type AudioTrackEncodePlan,
+} from './audio-encode';
 import type {
   AudioStreamMeta,
   BurnInSubtitle,
@@ -86,11 +94,61 @@ export function videoMapSpec(videoStreamIndex: number | undefined): string {
  * Pad or trim the audio so its first sample sits at `startSeconds` (source
  * time), the video's first frame, whatever the sample rate. A late track
  * otherwise starts in an empty edit, which MSE ignores, and plays early.
+ * With `endSeconds`, a track that ends early is padded with silence up to it,
+ * so its rendition has every segment the playlist lists.
  */
-export function audioStartAlignFilter(startSeconds: number): string {
+export function audioStartAlignFilter(
+  startSeconds: number,
+  endSeconds?: number,
+): string {
   const s = formatSeconds(Math.abs(startSeconds));
   const [to, back] = startSeconds < 0 ? ['+', '-'] : ['-', '+'];
-  return `asetpts=PTS${to}${s}/TB,aresample=async=1:first_pts=0,asetpts=PTS${back}${s}/TB`;
+  const pad =
+    endSeconds != null && endSeconds > startSeconds
+      ? `,apad=whole_dur=${formatSeconds(endSeconds - startSeconds)}`
+      : '';
+  return `asetpts=PTS${to}${s}/TB,aresample=async=1:first_pts=0${pad},asetpts=PTS${back}${s}/TB`;
+}
+
+/** What every audio output of one ffmpeg run shares. */
+export interface AudioEncodeContext {
+  /** The rung's stereo audio bitrate (e.g. `128k`). */
+  stereoBitrate: string;
+  /** Source time of the run's first video frame; encoded audio is aligned to it. */
+  alignStartSeconds: number;
+  /** Source time the video ends at; encoded audio is padded up to it. */
+  endSeconds?: number;
+  useTs: boolean;
+}
+
+/** Output args for one audio stream. `spec` is `''` for the only audio output
+ *  or `:<i>` for the i-th one (audio-relative: the video sits at stream 0). */
+function audioStreamArgs(
+  spec: string,
+  plan: AudioTrackEncodePlan,
+  ctx: AudioEncodeContext,
+): string[] {
+  if (plan.copy) return audioCopyArgs(spec, plan.outputCodec, ctx.useTs);
+  if (!isEncodableAudio(plan.outputCodec)) {
+    throw new Error(`No audio encoder for output codec "${plan.outputCodec}"`);
+  }
+  const channels = plan.outputChannels ?? 2;
+  const bps = audioEncodeBitrateBps(
+    plan.outputCodec,
+    channels,
+    parseBitrateToBps(ctx.stereoBitrate),
+  );
+  return [
+    `-c:a${spec}`,
+    audioEncoderName(plan.outputCodec),
+    `-b:a${spec}`,
+    `${Math.round(bps / 1000)}k`,
+    // `-ac` carries no stream type, so an indexed one must name the audio.
+    spec ? `-ac:a${spec}` : '-ac',
+    String(channels),
+    `-filter:a${spec}`,
+    audioStartAlignFilter(ctx.alignStartSeconds, ctx.endSeconds),
+  ];
 }
 
 /** The shared fMP4/TS HLS muxer tail. Every output path (transcode single /
@@ -238,29 +296,19 @@ export function buildSegmentGrid(
   };
 }
 
-/** Audio output args from the stream-builder decision — emitted verbatim, no
- *  re-derivation. Copy passes through; a transcode plan re-encodes to its codec
- *  and channel count (default AAC stereo, EAC-3/AC-3 at the 6-channel encoder
- *  ceiling), aligned to `alignStartSeconds`. A missing plan is AAC stereo. */
+/** Audio output args of the single muxed audio stream, from the stream-builder
+ *  decision. A missing plan is AAC stereo. */
 function buildAudioOutputArgs(
-  aacBitrate: string,
-  audioPlan: BuildFfmpegArgsOptions['audioPlan'],
-  alignStartSeconds: number,
+  audioPlan: AudioPlan | undefined,
+  ctx: AudioEncodeContext,
 ): string[] {
-  if (audioPlan?.mode === 'copy') return ['-c:a', 'copy'];
-  const plan = audioPlan?.mode === 'transcode' ? audioPlan : undefined;
-  const codec = plan?.codec ?? 'aac';
-  const aac = codec === 'aac';
-  return [
-    '-c:a',
-    codec,
-    '-b:a',
-    aac ? aacBitrate : `${SURROUND_TRANSCODE_BITRATE_BPS / 1000}k`,
-    '-ac',
-    String(plan?.channels ?? (aac ? 2 : 6)),
-    '-filter:a',
-    audioStartAlignFilter(alignStartSeconds),
-  ];
+  return audioStreamArgs(
+    '',
+    audioPlan
+      ? trackEncodePlan(audioPlan)
+      : { copy: false, outputCodec: 'aac', outputChannels: 2 },
+    ctx,
+  );
 }
 
 /**
@@ -349,29 +397,20 @@ export interface BuildFfmpegArgsOptions {
   /** Audio output decision — see {@link SessionContext.audioPlan}. When
    *  omitted, ffmpeg-args falls back to AAC stereo at the profile bitrate
    *  (safe default that plays everywhere). */
-  audioPlan?:
-    | { mode: 'copy'; codec: string }
-    | {
-        mode: 'transcode';
-        codec: 'aac' | 'ac3' | 'eac3';
-        bitrateBps: number;
-        channels?: number;
-      };
+  audioPlan?: AudioPlan;
   /** Per-rendition audio decision for the multi-audio `var_stream_map` path,
    *  one entry per `audioStreams[]` track in the same order. The group shares
    *  one output codec; each rendition gets its own `-c:a:N` (copy when its
    *  source already is that codec, else transcode, downmixed to
    *  `outputChannels`). Omitted → the single `audioPlan` applies to all. */
-  audioTrackPlans?: {
-    copy: boolean;
-    outputCodec: string;
-    outputChannels?: number;
-  }[];
+  audioTrackPlans?: AudioTrackEncodePlan[];
   /** Source time of the first presented video frame: the output timeline
    *  origin and the point transcoded audio is aligned to (`sourceTimeline`). */
   sourceStartPts?: number;
   /** Container start the input `-ss` counts from. Defaults to `sourceStartPts`. */
   sourceFormatStart?: number;
+  /** Source time the container ends at: encoded audio is padded up to it. */
+  sourceEndSeconds?: number;
   /** Absolute index of the programme video stream. */
   videoStreamIndex?: number;
   encoderPreset?: string;
@@ -430,48 +469,14 @@ function hasNoAudio(streams: AudioStreamMeta[] | undefined): boolean {
  * the single `-c:a` form. The group's output codec is uniform (HLS CODECS
  * requirement), but copy and transcode mix per rendition: a track already in
  * the output codec copies; the rest re-encode, downmixed to `outputChannels`.
- *
- * Every per-stream option uses the audio-relative specifier (`-c:a:i`,
- * `-b:a:i`, `-ac:a:i`): the muxed output carries the video at stream 0, so a
- * bare `-ac:i` would target the wrong output stream and leave the last
- * rendition at its source channel count. Every re-encoded rendition is aligned
- * to `alignStartSeconds`.
  */
 export function perStreamAudioArgs(
   audioStreams: AudioStreamMeta[],
-  plans:
-    | { copy: boolean; outputCodec: string; outputChannels?: number }[]
-    | undefined,
-  aacBitrate: string,
-  alignStartSeconds: number,
+  plans: AudioTrackEncodePlan[] | undefined,
+  ctx: AudioEncodeContext,
 ): string[] | null {
   if (!plans || plans.length !== audioStreams.length) return null;
-  const out: string[] = [];
-  plans.forEach((p, i) => {
-    if (p.copy) {
-      out.push(`-c:a:${i}`, 'copy');
-      return;
-    }
-    if (p.outputCodec === 'aac') {
-      out.push(`-c:a:${i}`, 'aac', `-b:a:${i}`, aacBitrate);
-    } else if (p.outputCodec === 'opus') {
-      // 256k is transparent for 5.1 (Opus is far more efficient than EAC-3).
-      out.push(`-c:a:${i}`, 'libopus', `-b:a:${i}`, '256k');
-    } else {
-      // EAC-3 / AC-3 at the surround ceiling, downmixed to the planned count (≤ 5.1).
-      out.push(
-        `-c:a:${i}`,
-        p.outputCodec,
-        `-b:a:${i}`,
-        `${SURROUND_TRANSCODE_BITRATE_BPS / 1000}k`,
-      );
-    }
-    const channels =
-      p.outputChannels ?? (p.outputCodec === 'aac' ? 2 : undefined);
-    if (channels != null) out.push(`-ac:a:${i}`, String(channels));
-    out.push(`-filter:a:${i}`, audioStartAlignFilter(alignStartSeconds));
-  });
-  return out;
+  return plans.flatMap((p, i) => audioStreamArgs(`:${i}`, p, ctx));
 }
 
 /**
@@ -488,7 +493,7 @@ function buildAudioAndMuxerArgs(opts: {
   audioStreamIndex: number | undefined;
   audioTrackPlans: BuildFfmpegArgsOptions['audioTrackPlans'];
   audioArgs: string[];
-  audioBitrate: string;
+  audioEnc: AudioEncodeContext;
   useTs: boolean;
   segType: string;
   segExt: string;
@@ -496,7 +501,6 @@ function buildAudioAndMuxerArgs(opts: {
   segmentDuration: number;
   startSegment: number;
   outputDir: string;
-  alignStartSeconds: number;
   originSeconds: number;
 }): string[] {
   const {
@@ -506,7 +510,7 @@ function buildAudioAndMuxerArgs(opts: {
     audioStreamIndex,
     audioTrackPlans,
     audioArgs,
-    audioBitrate,
+    audioEnc,
     useTs,
     segType,
     segExt,
@@ -514,11 +518,10 @@ function buildAudioAndMuxerArgs(opts: {
     segmentDuration,
     startSegment,
     outputDir,
-    alignStartSeconds,
     originSeconds,
   } = opts;
   const args: string[] = [];
-  const outputSeekSeconds = startSegment > 0 ? alignStartSeconds : 0;
+  const outputSeekSeconds = startSegment > 0 ? audioEnc.alignStartSeconds : 0;
 
   // Use var_stream_map whenever the caller asked for the EXT-X-MEDIA
   // layout (`videoOnly + audioStreams[]`), even for a SINGLE audio
@@ -528,7 +531,6 @@ function buildAudioAndMuxerArgs(opts: {
   // single-audio sources — Tizen muxed-fMP4 stalls silently
   // (issue #148). The controller forces `videoOnly=true` even with
   // 1 audio on fMP4 to trigger this branch.
-  const userPickedAudio = audioStreamIndex != null && audioStreamIndex > 0;
   const useVarStreamMap =
     !!audioStreams && varStreamMapLayout(videoOnly, audioStreams.length);
 
@@ -543,8 +545,7 @@ function buildAudioAndMuxerArgs(opts: {
     const perStream = perStreamAudioArgs(
       audioStreams!,
       audioTrackPlans,
-      audioBitrate,
-      alignStartSeconds,
+      audioEnc,
     );
     args.push(...(perStream ?? audioArgs));
 
@@ -590,7 +591,7 @@ function buildAudioAndMuxerArgs(opts: {
   if (hasNoAudio(audioStreams)) {
     args.push('-map', videoMapSpec, '-an');
   } else {
-    const pickedRel = userPickedAudio ? audioStreamIndex! : 0;
+    const pickedRel = audioStreamIndex ?? 0;
     args.push(
       '-map',
       videoMapSpec,
@@ -857,6 +858,7 @@ export function buildFfmpegArgs(
     audioTrackPlans,
     sourceStartPts = 0,
     sourceFormatStart = sourceStartPts,
+    sourceEndSeconds,
     videoStreamIndex,
     encoderPreset = 'faster',
     sourceFps,
@@ -892,11 +894,13 @@ export function buildFfmpegArgs(
   // Source time of the run's first video frame; -copyts keeps source time in
   // the filters, so the audio alignment and the output seek use it as is.
   const alignStartSeconds = seekSeconds + sourceStartPts;
-  const audioArgs = buildAudioOutputArgs(
-    profile.audioBitrate,
-    audioPlan,
+  const audioEnc: AudioEncodeContext = {
+    stereoBitrate: profile.audioBitrate,
     alignStartSeconds,
-  );
+    endSeconds: sourceEndSeconds,
+    useTs,
+  };
+  const audioArgs = buildAudioOutputArgs(audioPlan, audioEnc);
   // Closed-GOP, deterministic IDR placement on h264_qsv:
   //  - `-forced_idr 1` : every `force_key_frames` tick lands as a real
   //    IDR (without it, qsvenc emits some as plain I, breaking HLS
@@ -1220,7 +1224,7 @@ export function buildFfmpegArgs(
       audioStreamIndex,
       audioTrackPlans,
       audioArgs,
-      audioBitrate: profile.audioBitrate,
+      audioEnc,
       useTs,
       segType,
       segExt,
@@ -1228,7 +1232,6 @@ export function buildFfmpegArgs(
       segmentDuration,
       startSegment,
       outputDir,
-      alignStartSeconds,
       originSeconds: sourceStartPts,
     }),
   );
@@ -1339,11 +1342,10 @@ export function buildAudioOnlyFfmpegArgs(
 export interface BuildRemuxArgsOptions {
   inputPath: string;
   outputDir: string;
-  copyAudio: boolean;
   audioBitrate?: string;
   startSegment?: number;
-  videoOnly?: boolean;
   trustedStreamInfo?: boolean;
+  /** The one audio track muxed next to the copied video (default the first). */
   audioStreamIndex?: number;
   /** Source video codec (ffprobe `codec_name`, lowercased). Drives the
    *  `-tag:v hvc1` flag for HEVC inputs — FFmpeg's mov muxer otherwise
@@ -1368,8 +1370,10 @@ export interface BuildRemuxArgsOptions {
   sourceStartPts?: number;
   /** Absolute index of the programme video stream. */
   videoStreamIndex?: number;
-  /** Transcode target when `copyAudio` is false; AAC stereo when absent. */
-  audioPlan?: BuildFfmpegArgsOptions['audioPlan'];
+  /** Source time the container ends at: encoded audio is padded up to it. */
+  sourceEndSeconds?: number;
+  /** Audio output of `audioStreamIndex`; AAC stereo when absent. */
+  audioPlan?: AudioPlan;
 }
 
 export function buildRemuxArgs(
@@ -1379,10 +1383,8 @@ export function buildRemuxArgs(
   const {
     inputPath,
     outputDir,
-    copyAudio,
     audioBitrate = '192k',
     startSegment = 0,
-    videoOnly = false,
     trustedStreamInfo = false,
     audioStreamIndex,
     sourceVideoCodec,
@@ -1392,6 +1394,7 @@ export function buildRemuxArgs(
     segmentDuration = DEFAULT_SEGMENT_DURATION,
     sourceStartPts = 0,
     videoStreamIndex,
+    sourceEndSeconds,
     audioPlan,
   } = opts;
 
@@ -1422,15 +1425,12 @@ export function buildRemuxArgs(
     args.push('-noaccurate_seek', '-seek_timestamp', '1');
     args.push('-ss', (runStartSeconds + lead).toFixed(3));
   }
-  const userPickedAudio = audioStreamIndex != null && audioStreamIndex > 0;
-  // The plan describes the default track; a picked one keeps the AAC fallback.
-  const audioArgs = copyAudio
-    ? ['-c:a', 'copy']
-    : buildAudioOutputArgs(
-        audioBitrate,
-        audioPlan?.mode === 'transcode' && !userPickedAudio ? audioPlan : undefined,
-        runStartSeconds,
-      );
+  const audioArgs = buildAudioOutputArgs(audioPlan, {
+    stereoBitrate: audioBitrate,
+    alignStartSeconds: runStartSeconds,
+    endSeconds: sourceEndSeconds,
+    useTs: false,
+  });
 
   args.push('-i', inputPath);
 
@@ -1448,24 +1448,20 @@ export function buildRemuxArgs(
   // pre-`-i` seek above lands on the source IDR cleanly via demuxer
   // index lookup; that's all remux needs.
 
-  if ((videoOnly && !userPickedAudio) || hasNoAudio(audioStreams)) {
-    // Video-only remux: var_stream_map (audio served separately) OR a
-    // source with zero audio streams in the cached streamInfo.
+  // Remux always muxes one audio track: its master publishes no audio group,
+  // so switching track is a new playback-info with that track picked.
+  if (hasNoAudio(audioStreams)) {
     args.push('-map', videoMapSpec(videoStreamIndex), '-c:v', 'copy', '-an');
-  } else if (userPickedAudio) {
+  } else {
     args.push(
       '-map',
       videoMapSpec(videoStreamIndex),
       '-map',
-      audioMapSpec(audioStreams, audioStreamIndex!),
+      audioMapSpec(audioStreams, audioStreamIndex ?? 0),
       '-c:v',
       'copy',
       ...audioArgs,
     );
-  } else {
-    // No explicit `-map` here, so ffmpeg's default stream selection
-    // picks video+audio itself; `-sn` stops it also grabbing a subtitle.
-    args.push('-c:v', 'copy', '-sn', ...audioArgs);
   }
 
   // HEVC needs Apple HLS conformance:

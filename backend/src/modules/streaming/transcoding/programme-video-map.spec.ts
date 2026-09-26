@@ -36,15 +36,16 @@ describe('programme video mapping', () => {
     expect(maps(tx({ videoStreamIndex: 1 }))).toEqual(['0:1', '0:2']);
   });
 
-  it('maps the programme in a video-only remux', () => {
+  it('maps the programme and the picked track in a remux', () => {
     const args = buildRemuxArgs({
       inputPath: '/media/in.mp4',
       outputDir: '/cache/out',
-      copyAudio: true,
-      videoOnly: true,
+      audioPlan: { mode: 'copy', codec: 'aac' },
+      audioStreams: [{ streamIndex: 2 }, { streamIndex: 3 }],
+      audioStreamIndex: 1,
       videoStreamIndex: 1,
     });
-    expect(maps(args)).toEqual(['0:1']);
+    expect(maps(args)).toEqual(['0:1', '0:3']);
   });
 
   it('overlays a bitmap subtitle on the programme, not the cover', () => {

@@ -1,6 +1,12 @@
 import { audioStartAlignFilter, perStreamAudioArgs } from './ffmpeg-args';
 import type { AudioStreamMeta } from './types';
 
+const enc = (alignStartSeconds: number, useTs = false) => ({
+  stereoBitrate: '128k',
+  alignStartSeconds,
+  useTs,
+});
+
 /**
  * The multi-audio `var_stream_map` output muxes the video at stream 0, so the
  * per-rendition channel option must use the audio-relative specifier
@@ -22,8 +28,7 @@ describe('perStreamAudioArgs', () => {
         { copy: false, outputCodec: 'aac', outputChannels: 2 },
         { copy: false, outputCodec: 'aac', outputChannels: 2 },
       ],
-      '128k',
-      0,
+      enc(0),
     );
 
     const joined = args!.join(' ');
@@ -42,8 +47,7 @@ describe('perStreamAudioArgs', () => {
         { copy: false, outputCodec: 'eac3', outputChannels: 6 },
         { copy: false, outputCodec: 'eac3', outputChannels: 6 },
       ],
-      '128k',
-      0,
+      enc(0),
     );
 
     const joined = args!.join(' ');
@@ -62,8 +66,7 @@ describe('perStreamAudioArgs', () => {
         { copy: true, outputCodec: 'eac3' },
         { copy: false, outputCodec: 'aac', outputChannels: 2 },
       ],
-      '128k',
-      0,
+      enc(0),
     );
 
     expect(args).toEqual([
@@ -87,8 +90,7 @@ describe('perStreamAudioArgs', () => {
         { copy: false, outputCodec: 'aac', outputChannels: 6 },
         { copy: false, outputCodec: 'aac' },
       ],
-      '128k',
-      0,
+      enc(0),
     );
     const joined = args!.join(' ');
     expect(joined).toContain('-ac:a:0 6');
@@ -102,8 +104,7 @@ describe('perStreamAudioArgs', () => {
         { copy: true, outputCodec: 'opus' },
         { copy: false, outputCodec: 'opus', outputChannels: 6 },
       ],
-      '128k',
-      11.8,
+      enc(11.8),
     );
     expect(args).not.toContain('-filter:a:0');
     expect(args!.join(' ')).toContain(
@@ -116,15 +117,81 @@ describe('perStreamAudioArgs', () => {
       perStreamAudioArgs(
         twoSurround,
         [{ copy: false, outputCodec: 'aac', outputChannels: 2 }],
-        '128k',
-        0,
+        enc(0),
       ),
     ).toBeNull();
-    expect(perStreamAudioArgs(twoSurround, undefined, '128k', 0)).toBeNull();
+    expect(perStreamAudioArgs(twoSurround, undefined, enc(0))).toBeNull();
+  });
+});
+
+describe('perStreamAudioArgs — codec policy', () => {
+  const one: AudioStreamMeta[] = [{ language: 'eng', channels: 6 }];
+
+  it('turns a copied AAC into raw AAC for fMP4, never for MPEG-TS', () => {
+    const plan = [{ copy: true, outputCodec: 'aac' }];
+    expect(perStreamAudioArgs(one, plan, enc(0))).toEqual([
+      '-c:a:0',
+      'copy',
+      '-bsf:a:0',
+      'aac_adtstoasc',
+    ]);
+    expect(perStreamAudioArgs(one, plan, enc(0, true))).toEqual([
+      '-c:a:0',
+      'copy',
+    ]);
+    expect(
+      perStreamAudioArgs(one, [{ copy: true, outputCodec: 'eac3' }], enc(0)),
+    ).toEqual(['-c:a:0', 'copy']);
+  });
+
+  it('scales the stereo rung bitrate with the channel count', () => {
+    const at = (outputCodec: string, outputChannels: number) => {
+      const args = perStreamAudioArgs(
+        one,
+        [{ copy: false, outputCodec, outputChannels }],
+        enc(0),
+      )!;
+      return args[args.indexOf('-b:a:0') + 1];
+    };
+    expect(at('aac', 1)).toBe('128k');
+    expect(at('aac', 2)).toBe('128k');
+    expect(at('aac', 6)).toBe('384k');
+    expect(at('aac', 8)).toBe('512k');
+    expect(at('opus', 6)).toBe('384k');
+    expect(at('eac3', 2)).toBe('640k');
+    expect(at('ac3', 6)).toBe('640k');
+  });
+
+  it('pads an encoded rendition up to the video end', () => {
+    const args = perStreamAudioArgs(
+      one,
+      [{ copy: false, outputCodec: 'aac', outputChannels: 2 }],
+      { ...enc(12), endSeconds: 40 },
+    )!;
+    expect(args[args.indexOf('-filter:a:0') + 1]).toBe(
+      audioStartAlignFilter(12, 40),
+    );
+  });
+
+  it('refuses an output codec it has no encoder for', () => {
+    expect(() =>
+      perStreamAudioArgs(
+        one,
+        [{ copy: false, outputCodec: 'dts', outputChannels: 6 }],
+        enc(0),
+      ),
+    ).toThrow(/dts/);
   });
 });
 
 describe('audioStartAlignFilter', () => {
+  it('pads to the end relative to the run start', () => {
+    expect(audioStartAlignFilter(12, 40)).toBe(
+      'asetpts=PTS-12/TB,aresample=async=1:first_pts=0,apad=whole_dur=28,asetpts=PTS+12/TB',
+    );
+    expect(audioStartAlignFilter(40, 40)).not.toContain('apad');
+  });
+
   it('shifts by seconds, so the sample rate never enters the filter', () => {
     expect(audioStartAlignFilter(2.8)).toBe(
       'asetpts=PTS-2.8/TB,aresample=async=1:first_pts=0,asetpts=PTS+2.8/TB',

@@ -129,7 +129,8 @@
       "SubtitleBurnIn": "Legendas incrustadas",
       "AudioCodecNotSupported": "Codec de áudio não suportado",
       "AudioChannelsNotSupported": "Demasiados canais de áudio",
-      "AudioStartOffset": "Desvio de sincronização áudio/vídeo"
+      "AudioStartOffset": "Desvio de sincronização áudio/vídeo",
+      "AudioFormatMayChange": "O formato de áudio pode mudar durante a transmissão"
     },
     "preparing": "A preparar a transmissão…"
   },

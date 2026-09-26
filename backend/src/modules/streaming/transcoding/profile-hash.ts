@@ -118,13 +118,9 @@ export function buildPlaybackProfileFromContext(
 }
 
 function pickAudioChannels(ctx: SessionContext | undefined): number {
-  // The planned transcode channels when the plan carries them; otherwise 2 for
-  // transcode (AAC stereo downmix) and 6 for surround copy paths (EAC-3/AC-3/
-  // DTS/TrueHD copy preserves the source layout, which is 5.1 in the
-  // overwhelming majority of releases that pick the surround copy branch).
-  if (ctx?.audioPlan?.mode === 'transcode' && ctx.audioPlan.channels != null) {
-    return ctx.audioPlan.channels;
-  }
+  // The planned transcode channels; for a copy, 6 on the surround codecs
+  // (5.1 in the overwhelming majority of releases) and 2 otherwise.
+  if (ctx?.audioPlan?.mode === 'transcode') return ctx.audioPlan.channels;
   if (ctx?.audioPlan?.mode === 'copy') {
     const codec = ctx.audioPlan.codec.toLowerCase();
     if (

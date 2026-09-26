@@ -75,6 +75,10 @@ export class SessionContextBuilder {
       sourceFps: parseSourceFps(si?.video?.[0]?.frameRate),
       sourceStartPts: timeline.origin,
       sourceFormatStart: timeline.formatStart,
+      sourceEndSeconds:
+        si?.durationSeconds != null
+          ? timeline.formatStart + si.durationSeconds
+          : undefined,
       videoStreamIndex: si?.video?.[0]?.streamIndex,
       // Source colorimetry — preserved through an SDR transcode so the output
       // signals the source's real matrix/primaries/transfer, not a forced BT.709.

@@ -131,6 +131,15 @@ export class DeviceProfileDto {
   supportsDirectPlay?: boolean;
 
   /**
+   * Client can switch audio tracks inside a raw Direct Play file (native
+   * players, Safari). `false` makes a picked non-first track go through HLS,
+   * where it leads its own rendition. Unset is treated as `true`.
+   */
+  @IsBoolean()
+  @IsOptional()
+  switchesDirectPlayAudio?: boolean;
+
+  /**
    * Client renders HLS `SUBTITLES` renditions natively (AVPlayer, ExoPlayer,
    * Tizen AVPlay, webOS), so the master advertises a subtitle group and cues
    * show in PiP / AirPlay / lock-screen. Web (Shaka) leaves this unset and

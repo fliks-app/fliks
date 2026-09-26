@@ -10,18 +10,15 @@ import { StreamLifetime } from './lifetime-constants';
 import type { TranscodeReason } from './dto/playback-info.dto';
 import type { BurnInSubtitle } from './transcoding';
 import type { CodecVariant } from './transcoding/codec/types';
+import type {
+  AudioPlan,
+  AudioTrackEncodePlan,
+} from './transcoding/audio-encode';
 
 export type PlaybackState = 'playing' | 'paused' | 'buffering';
 export type SessionKind = 'transcode' | 'remux' | 'directplay';
 
-export type AudioPlan =
-  | { mode: 'copy'; codec: string }
-  | {
-      mode: 'transcode';
-      codec: 'aac' | 'ac3' | 'eac3';
-      bitrateBps: number;
-      channels?: number;
-    };
+export type { AudioPlan };
 
 /**
  * Single live-session entry. The {@link sessionId} is the server-issued
@@ -100,11 +97,7 @@ export interface LiveSession {
   audioPlan: AudioPlan | null;
   /** Per-rendition audio decision (one entry per source audio stream) for the
    *  multi-audio var_stream_map encode; null when uniform / not multi-audio. */
-  audioTrackPlans: {
-    copy: boolean;
-    outputCodec: string;
-    outputChannels?: number;
-  }[] | null;
+  audioTrackPlans: AudioTrackEncodePlan[] | null;
   audioStreamIndex: number | null;
   audioStreamCount: number;
   useExtXMedia: boolean;
@@ -139,7 +132,6 @@ export interface LiveSession {
   burnIn: BurnInSubtitle | null;
   encoderPreset: string;
   canCopyVideo: boolean;
-  canCopyAudio: boolean;
   /** Download sessions: kept past the short playback TTL so a paused
    *  download can resume without its segments 410ing. Active segment fetches
    *  keep it warm; GC reclaims it after a long idle window. */
@@ -176,11 +168,7 @@ export interface CreateLiveSessionInput {
   position?: number;
   useTs?: boolean;
   audioPlan?: AudioPlan | null;
-  audioTrackPlans?: {
-    copy: boolean;
-    outputCodec: string;
-    outputChannels?: number;
-  }[] | null;
+  audioTrackPlans?: AudioTrackEncodePlan[] | null;
   audioStreamIndex?: number | null;
   audioStreamCount?: number;
   useExtXMedia?: boolean;
@@ -198,7 +186,6 @@ export interface CreateLiveSessionInput {
   burnIn?: BurnInSubtitle | null;
   encoderPreset?: string;
   canCopyVideo?: boolean;
-  canCopyAudio?: boolean;
   pinned?: boolean;
 }
 
@@ -220,7 +207,6 @@ export type LiveSessionPatch = Partial<
     | 'burnIn'
     | 'encoderPreset'
     | 'canCopyVideo'
-    | 'canCopyAudio'
     | 'profileHash'
     | 'quality'
   >
@@ -315,7 +301,6 @@ export function buildLiveSession(
       burnIn: input.burnIn ?? null,
       encoderPreset: input.encoderPreset ?? 'faster',
       canCopyVideo: input.canCopyVideo ?? false,
-      canCopyAudio: input.canCopyAudio ?? false,
       pinned: input.pinned ?? false,
   };
 }

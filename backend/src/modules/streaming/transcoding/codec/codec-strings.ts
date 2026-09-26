@@ -170,10 +170,9 @@ export function audioCodecString(codec: string): string | null {
 }
 
 /**
- * CHANNELS value for an EXT-X-MEDIA audio rendition. AAC output is always
- * downmixed to stereo (`-ac 2`); copy / AC-3 / E-AC-3 keep the source layout
- * (no `-ac`), so they report the source channel count. Falls back to 2 when
- * the source count is unknown.
+ * CHANNELS value for an EXT-X-MEDIA audio rendition when the session carries
+ * no per-track plan: AAC as stereo, any other codec at the source count (2
+ * when unknown).
  */
 export function audioRenditionChannels(
   outputAudioCodec: string,

@@ -1,4 +1,5 @@
 import type { PreRollItem } from '../../../common/plugin-contract';
+import type { AudioPlan } from '../transcoding/audio-encode';
 
 /**
  * Playback info response — the backend's decision on how to play a media file.
@@ -92,15 +93,7 @@ export interface PlaybackInfoResponse {
 
   /** Canonical audio output decision. Authoritative; every downstream
    *  consumer (ffmpeg, admin dashboard, master playlist) reads from here. */
-  audioPlan:
-    | { mode: 'copy'; codec: string }
-    | {
-        mode: 'transcode';
-        codec: 'aac' | 'ac3' | 'eac3';
-        bitrateBps: number;
-        /** Absent: AAC stereo, AC-3/E-AC-3 5.1. */
-        channels?: number;
-      };
+  audioPlan: AudioPlan;
 
   /** Output container format */
   outputContainer: string;

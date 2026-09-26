@@ -129,7 +129,8 @@
       "SubtitleBurnIn": "Subtítulos incrustados",
       "AudioCodecNotSupported": "Códec de audio no compatible",
       "AudioChannelsNotSupported": "Demasiados canales de audio",
-      "AudioStartOffset": "Desfase de sincronización audio/vídeo"
+      "AudioStartOffset": "Desfase de sincronización audio/vídeo",
+      "AudioFormatMayChange": "El formato de audio puede cambiar durante la emisión"
     },
     "preparing": "Preparando la transmisión…"
   },

@@ -129,7 +129,8 @@
       "SubtitleBurnIn": "Sottotitoli incorporati",
       "AudioCodecNotSupported": "Codec audio non supportato",
       "AudioChannelsNotSupported": "Troppi canali audio",
-      "AudioStartOffset": "Sfasamento di sincronizzazione audio/video"
+      "AudioStartOffset": "Sfasamento di sincronizzazione audio/video",
+      "AudioFormatMayChange": "Il formato audio può cambiare durante il flusso"
     },
     "preparing": "Preparazione del flusso…"
   },

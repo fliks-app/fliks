@@ -778,6 +778,7 @@ export class StreamingController {
       burnInSubtitleId,
       startQuality,
       ss.autoQualityMode,
+      audioStreamIndex,
     );
     const { response, useHdrLadder, videoVariant } = evaluateResult;
     const sourceAudioCount = resolved.mediaFile.streamInfo?.audio?.length ?? 0;
@@ -1026,7 +1027,6 @@ export class StreamingController {
       burnIn,
       encoderPreset: ss.qsvPreset,
       canCopyVideo: response.videoCopyStream,
-      canCopyAudio: response.audioCopyStream,
       pinned: isDownload,
     });
 
@@ -1291,12 +1291,15 @@ export class StreamingController {
 
     const sdrVariant = liveVariant;
     const sourceFrameRate = parseSourceFps(v?.frameRate);
+    // The copy variant muxes the picked track alone (buildRemuxArgs), so it
+    // publishes no audio group.
+    const audioGroup = useExtXMedia && !(includeRemux && !onlyQuality);
     // CODECS audio entry. With EXT-X-MEDIA renditions every track shares one
     // output codec (the audio group is uniform — see buildAudioTracks), so the
-    // master must advertise THAT codec, not the default track's audioPlan
+    // master must advertise THAT codec, not the picked track's audioPlan
     // (which is only the muxed single-audio decision).
     const masterAudioCodec =
-      useExtXMedia && live?.audioTrackPlans?.length
+      audioGroup && live?.audioTrackPlans?.length
         ? live.audioTrackPlans[0].outputCodec
         : (live?.audioPlan?.codec ?? 'aac');
     const playlist = this.transcodingService.generateMasterPlaylist({
@@ -1312,7 +1315,7 @@ export class StreamingController {
       // audio entry (otherwise Shaka / ExoPlayer reject the variant).
       // `undefined` keeps the muxed single-audio layout for everyone else.
       audioStreams:
-        useExtXMedia || audioStreams.length === 0 ? audioStreams : undefined,
+        audioGroup || audioStreams.length === 0 ? audioStreams : undefined,
       // Real per-track output channels (copy keeps source, transcode downmixes)
       // so the rendition CHANNELS hint matches the bytes; aligned with the
       // source audio order the session produces renditions in.
@@ -1954,9 +1957,6 @@ export class StreamingController {
         const ctx = this.sessionContextBuilder.build(req, resolved, mediaFileId);
         ctx.spawnReason = 'variant-prespawn';
         if (quality === 'remux') {
-          const copyAudio =
-            this.sessionRouter.findRequestSession(req, mediaFileId)
-              ?.canCopyAudio ?? false;
           // Copied video is keyframe-cut, so map the resume time to a segment
           // (and seek) via the real keyframe boundaries, not the uniform grid.
           const boundaries = await this.remuxBoundaries(
@@ -1970,7 +1970,6 @@ export class StreamingController {
           void this.transcodingService.getOrCreateRemuxSession(
             mediaFileId,
             resolved.absolutePath,
-            copyAudio,
             startSegment,
             ctx,
             boundaries ?? undefined,
@@ -2303,9 +2302,6 @@ export class StreamingController {
       }
     }
 
-    // For remux sessions, copy audio only when the source codec is compatible
-    // (captured at playback-info); otherwise transcode audio to AAC.
-    const copyAudio = live?.canCopyAudio ?? false;
     // Remux: anchor + seek on the real keyframe boundaries (cached) so a resume
     // / forward seek lands on the right content and the post-seek playlist stays
     // aligned. Non-remux keeps the uniform grid (force_key_frames makes it true).
@@ -2329,7 +2325,6 @@ export class StreamingController {
         ? await this.transcodingService.getOrCreateRemuxSession(
             mediaFileId,
             resolved.absolutePath,
-            copyAudio,
             anchorSeg,
             ctx,
             remuxBounds,

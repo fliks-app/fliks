@@ -129,7 +129,8 @@
       "SubtitleBurnIn": "Eingebrannte Untertitel",
       "AudioCodecNotSupported": "Audio-Codec nicht unterstützt",
       "AudioChannelsNotSupported": "Zu viele Audiokanäle",
-      "AudioStartOffset": "Audio-/Video-Zeitversatz"
+      "AudioStartOffset": "Audio-/Video-Zeitversatz",
+      "AudioFormatMayChange": "Audioformat kann sich im Stream ändern"
     },
     "preparing": "Stream wird vorbereitet…"
   },

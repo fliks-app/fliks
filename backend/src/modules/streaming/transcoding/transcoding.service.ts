@@ -1282,7 +1282,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   async getOrCreateRemuxSession(
     mediaFileId: number,
     absolutePath: string,
-    copyAudio: boolean,
     requestedSegment = 0,
     ctx?: SessionContext,
     segmentBoundaries?: number[],
@@ -1301,7 +1300,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         key,
         mediaFileId,
         absolutePath,
-        copyAudio,
         requestedSegment,
         ctx,
         segmentBoundaries,
@@ -1313,7 +1311,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     key: string,
     mediaFileId: number,
     absolutePath: string,
-    copyAudio: boolean,
     requestedSegment: number,
     ctx?: SessionContext,
     segmentBoundaries?: number[],
@@ -1347,14 +1344,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     );
     await fsp.mkdir(sessionDir, { recursive: true });
 
-    const isVideoOnly = ctx?.videoOnly ?? false;
     const args = buildRemuxArgs(
       {
         inputPath: absolutePath,
         outputDir: sessionDir,
-        copyAudio,
         startSegment: requestedSegment,
-        videoOnly: isVideoOnly,
         trustedStreamInfo: ctx?.trustedStreamInfo,
         audioStreamIndex: ctx?.audioStreamIndex,
         sourceVideoCodec: ctx?.sourceVideoCodec,
@@ -1364,6 +1358,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         segmentDuration: ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION,
         sourceStartPts: ctx?.sourceStartPts,
         videoStreamIndex: ctx?.videoStreamIndex,
+        sourceEndSeconds: ctx?.sourceEndSeconds,
         audioPlan: ctx?.audioPlan,
       },
       this.log,
@@ -1669,6 +1664,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       audioTrackPlans: ctx?.audioTrackPlans,
       sourceStartPts: ctx?.sourceStartPts,
       sourceFormatStart: ctx?.sourceFormatStart,
+      sourceEndSeconds: ctx?.sourceEndSeconds,
       videoStreamIndex: ctx?.videoStreamIndex,
       encoderPreset: ctx?.encoderPreset,
       tonemapAlgo: ctx?.tonemapAlgo,

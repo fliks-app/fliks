@@ -1358,7 +1358,7 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
         {
           inputPath: '/media/in.mkv',
           outputDir: '/cache/out',
-          copyAudio: true,
+          audioPlan: { mode: 'copy', codec: 'aac' },
           trustedStreamInfo: true,
           sourceVideoCodec: 'hevc',
         },
@@ -1380,11 +1380,16 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
        "0",
        "-muxpreload",
        "0",
+       "-map",
+       "0:v:0",
+       "-map",
+       "0:a:0?",
        "-c:v",
        "copy",
-       "-sn",
        "-c:a",
        "copy",
+       "-bsf:a",
+       "aac_adtstoasc",
        "-tag:v",
        "hvc1",
        "-bsf:v",
@@ -1422,7 +1427,6 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
         {
           inputPath: '/media/in.mkv',
           outputDir: '/cache/out',
-          copyAudio: false,
           startSegment: 2,
           trustedStreamInfo: true,
           sourceVideoCodec: 'h264',
@@ -1451,9 +1455,12 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
        "0",
        "-muxpreload",
        "0",
+       "-map",
+       "0:v:0",
+       "-map",
+       "0:a:0?",
        "-c:v",
        "copy",
-       "-sn",
        "-c:a",
        "aac",
        "-b:a",
@@ -1489,18 +1496,21 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
     `);
   });
 
-  it('remux: never lets ffmpeg default-select a subtitle stream into the output', () => {
+  it('remux: maps only the video and one audio track, never a subtitle', () => {
     const args = buildRemuxArgs(
       {
         inputPath: '/media/in.mkv',
         outputDir: '/cache/out',
-        copyAudio: true,
+        audioPlan: { mode: 'copy', codec: 'aac' },
         trustedStreamInfo: true,
         sourceVideoCodec: 'h264',
       },
       silentLog,
     );
-    expect(args).toContain('-sn');
+    expect(args.filter((_, i) => args[i - 1] === '-map')).toEqual([
+      '0:v:0',
+      '0:a:0?',
+    ]);
   });
 
   it('remux: seeks exactly on the keyframe when the source has no B-frames', () => {
@@ -1509,7 +1519,6 @@ describe('buildRemuxArgs / buildAudioOnlyFfmpegArgs — golden (characterization
         {
           inputPath: '/media/in.mkv',
           outputDir: '/cache/out',
-          copyAudio: true,
           startSegment: 2,
           trustedStreamInfo: true,
           sourceHasBFrames,

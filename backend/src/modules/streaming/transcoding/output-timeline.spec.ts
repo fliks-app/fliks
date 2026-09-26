@@ -42,7 +42,6 @@ const remux = (over: Partial<BuildRemuxArgsOptions>): string[] =>
   buildRemuxArgs({
     inputPath: '/media/in.ts',
     outputDir: '/cache/out',
-    copyAudio: false,
     trustedStreamInfo: true,
     sourceVideoCodec: 'h264',
     sourceHasBFrames: false,
@@ -102,7 +101,12 @@ describe('transcode resume seek', () => {
 });
 
 describe('transcoded audio alignment', () => {
-  const plan = { mode: 'transcode' as const, codec: 'aac' as const, bitrateBps: 192_000 };
+  const plan = {
+    mode: 'transcode' as const,
+    codec: 'aac' as const,
+    bitrateBps: 192_000,
+    channels: 2,
+  };
 
   it('pads the run from 0 to the video start', () => {
     expect(after(tx({ sourceStartPts: 2.8, audioPlan: plan }), '-filter:a')).toBe(
@@ -158,23 +162,27 @@ describe('remux resume', () => {
     });
     expect(after(planned, '-c:a')).toBe('eac3');
     expect(after(planned, '-ac')).toBe('6');
-    const copied = remux({ copyAudio: true });
+    const copied = remux({ audioPlan: { mode: 'copy', codec: 'eac3' } });
     expect(after(copied, '-c:a')).toBe('copy');
     expect(copied).not.toContain('-filter:a');
   });
 
-  it('applies the default-track plan only to the default track', () => {
+  it('muxes the picked track with its own plan', () => {
     const args = remux({
       audioStreamIndex: 1,
       audioStreams: [{ streamIndex: 1 }, { streamIndex: 2 }],
       audioPlan: { mode: 'transcode', codec: 'eac3', bitrateBps: 640_000, channels: 6 },
     });
-    expect(after(args, '-c:a')).toBe('aac');
-    expect(after(args, '-ac')).toBe('2');
+    expect(args.filter((_, i) => args[i - 1] === '-map')).toEqual([
+      '0:v:0',
+      '0:2',
+    ]);
+    expect(after(args, '-c:a')).toBe('eac3');
+    expect(after(args, '-ac')).toBe('6');
   });
 
-  it('falls back to AAC stereo when the copy decision and the plan disagree', () => {
-    const args = remux({ audioPlan: { mode: 'copy', codec: 'eac3' } });
+  it('encodes AAC stereo without a plan', () => {
+    const args = remux({});
     expect(after(args, '-c:a')).toBe('aac');
     expect(after(args, '-ac')).toBe('2');
   });

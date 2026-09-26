@@ -142,11 +142,25 @@ describe('buildPlaybackProfileFromContext', () => {
 
   it('keeps the same hash for two ctx values that map to the same profile', () => {
     const a = buildPlaybackProfileFromContext(
-      { audioPlan: { mode: 'transcode', codec: 'aac', bitrateBps: 128000 } },
+      {
+        audioPlan: {
+          mode: 'transcode',
+          codec: 'aac',
+          bitrateBps: 128000,
+          channels: 2,
+        },
+      },
       3000,
     );
     const b = buildPlaybackProfileFromContext(
-      { audioPlan: { mode: 'transcode', codec: 'aac', bitrateBps: 192000 } },
+      {
+        audioPlan: {
+          mode: 'transcode',
+          codec: 'aac',
+          bitrateBps: 192000,
+          channels: 2,
+        },
+      },
       3000,
     );
     // Bitrate is not part of the profile — both should hash to the same dir.
@@ -200,7 +214,7 @@ describe('buildPlaybackProfileFromContext', () => {
   });
 
   it('separates an inline transcode that keeps surround from a stereo one', () => {
-    const ctx = (channels?: number): SessionContext => ({
+    const ctx = (channels: number): SessionContext => ({
       audioPlan: {
         mode: 'transcode',
         codec: 'aac',
@@ -211,7 +225,7 @@ describe('buildPlaybackProfileFromContext', () => {
     expect(
       computeProfileHash(buildPlaybackProfileFromContext(ctx(6), 3000)),
     ).not.toBe(
-      computeProfileHash(buildPlaybackProfileFromContext(ctx(undefined), 3000)),
+      computeProfileHash(buildPlaybackProfileFromContext(ctx(2), 3000)),
     );
   });
 });

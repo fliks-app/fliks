@@ -134,7 +134,8 @@
       "SubtitleBurnIn": "Sous-titres incrustés",
       "AudioCodecNotSupported": "Codec audio non supporté",
       "AudioChannelsNotSupported": "Trop de canaux audio",
-      "AudioStartOffset": "Décalage de synchronisation audio/vidéo"
+      "AudioStartOffset": "Décalage de synchronisation audio/vidéo",
+      "AudioFormatMayChange": "Format audio variable en cours de flux"
     },
     "preparing": "Préparation du flux…"
   },
