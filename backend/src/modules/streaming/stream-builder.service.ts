@@ -1018,7 +1018,7 @@ export class StreamBuilderService {
       tracks,
       profile,
       profileAudioCodecs,
-      blockers.some(Boolean),
+      blockers,
     );
 
     return tracks.map((t, index): TrackDecision => {
@@ -1089,16 +1089,17 @@ export class StreamBuilderService {
    * (HLS requires one codec per group). Copy-all when every track is the same
    * supported, fMP4-safe codec that fits the channel cap — that codec is the
    * output and nothing re-encodes. Otherwise the best the device accepts: a
-   * surround codec (EAC-3 > AC-3) when any track carries surround so 5.1/7.1
-   * survive, else AAC.
+   * surround codec when any track carries surround so 5.1/7.1 survive (one a
+   * track already is first, then EAC-3 > AC-3), else AAC.
    */
   private pickGroupAudioCodec(
     audioStreams: { codec?: string; channels?: number }[],
     profile: DeviceProfileDto,
     profileAudioCodecs: string[],
-    anyCopyBlocked: boolean,
+    blockers: (CopyBlocker | null)[],
   ): string {
     const codecs = audioStreams.map((t) => (t.codec ?? '').toLowerCase());
+    const anyCopyBlocked = blockers.some(Boolean);
     // One source codec the device plays in fMP4 stays the group's, so only an
     // over-capacity or blocked track re-encodes, to it, if an encoder exists.
     if (codecs.length > 0 && new Set(codecs).size === 1) {
@@ -1112,12 +1113,21 @@ export class StreamBuilderService {
       if (supported && (allCopy || isEncodableAudio(c))) return c;
     }
     const anySurround = audioStreams.some((t) => (t.channels ?? 0) >= 6);
-    const surround = (['eac3', 'ac3'] as const).find(
+    const surround = (['eac3', 'ac3'] as const).filter(
       (c) =>
         profileAudioCodecs.includes(c) &&
         encodeChannelCap(profile, c) >= 6,
     );
-    return anySurround && surround ? surround : 'aac';
+    // One a track already is lets that track copy instead of re-encoding.
+    const copies = (c: string) =>
+      audioStreams.some(
+        (t, i) =>
+          codecs[i] === c &&
+          !blockers[i] &&
+          (t.channels == null || t.channels <= audioChannelCap(profile, c)),
+      );
+    const group = surround.find(copies) ?? surround[0];
+    return anySurround && group ? group : 'aac';
   }
 
   private tryDirectPlay(

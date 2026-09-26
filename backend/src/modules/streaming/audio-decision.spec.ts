@@ -198,6 +198,41 @@ describe('StreamBuilderService — one audio decision per track', () => {
     });
   });
 
+  it('groups on a surround codec a track already carries, to copy it', () => {
+    const tracks: Track[] = [
+      { codec: 'truehd', channels: 8 },
+      { codec: 'ac3', channels: 6 },
+    ];
+    const r = evaluate(tracks, tv, { quality: '720p' });
+    expect(
+      r.audioTracks!.map((t) => `${t.copy ? 'copy' : 'tx'}:${t.outputCodec}`),
+    ).toEqual(['tx:ac3', 'copy:ac3']);
+    // Not when that track is re-encoded anyway, here to align its offset.
+    expect(
+      evaluate(
+        [
+          { codec: 'truehd', channels: 8 },
+          { codec: 'ac3', channels: 6, startTimeSeconds: 0.3 },
+        ],
+        tv,
+        { quality: '720p' },
+      ).audioTracks!.map((t) => t.outputCodec),
+    ).toEqual(['eac3', 'eac3']);
+    // With no such track, E-AC-3 still wins over AC-3.
+    expect(
+      evaluate(
+        [
+          { codec: 'truehd', channels: 8 },
+          { codec: 'dts', channels: 6 },
+        ],
+        tv,
+        {
+          quality: '720p',
+        },
+      ).audioTracks!.map((t) => t.outputCodec),
+    ).toEqual(['eac3', 'eac3']);
+  });
+
   it('copies AAC from MPEG-TS once a scan saw its format hold', () => {
     const scanned = (aacConfigChanges: number[] | null) =>
       svc().evaluate(
@@ -265,29 +300,29 @@ describe('StreamBuilderService — picked audio track', () => {
   });
 
   it('decides a remuxed track alone, and keeps the group for the renditions', () => {
-    const flacAc3: Track[] = [
-      { codec: 'flac', channels: 6 },
+    const stereoAc3: Track[] = [
+      { codec: 'aac', channels: 2 },
       { codec: 'ac3', channels: 6 },
     ];
     const svcr = svc().evaluate(
-      file(flacAc3),
+      file(stereoAc3),
       tv,
       '',
       undefined,
       undefined,
       'directplay',
-      1,
+      0,
     );
     const ds = svcr.response;
     expect(ds.playMethod).toBe('DirectStream');
-    expect(ds.audioPlan).toEqual({ mode: 'copy', codec: 'ac3', channels: 6 });
-    expectPlanMatchesTrack(ds, 1);
+    expect(ds.audioPlan).toEqual({ mode: 'copy', codec: 'aac', channels: 2 });
+    expectPlanMatchesTrack(ds, 0);
     expect(svcr.audioPlans.map((p) => `${p.mode}:${p.codec}`)).toEqual([
-      'transcode:eac3',
-      'transcode:eac3',
+      'transcode:ac3',
+      'copy:ac3',
     ]);
-    const tx = evaluate(flacAc3, tv, { pick: 1, quality: '720p' });
-    expect(tx.audioPlan).toMatchObject({ mode: 'transcode', codec: 'eac3' });
+    const tx = evaluate(stereoAc3, tv, { pick: 0, quality: '720p' });
+    expect(tx.audioPlan).toMatchObject({ mode: 'transcode', codec: 'ac3' });
   });
 
   it('never pads a remuxed track that ends early, the video carrying its segments', () => {
