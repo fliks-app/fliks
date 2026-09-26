@@ -70,6 +70,20 @@ describe('parseVideoPackets', () => {
     expect(end).toBeCloseTo(2.04, 6);
   });
 
+  it('stops at a clock break, what follows being on another clock', () => {
+    const csv = [
+      '32.720000,32.680000,0.040000,___',
+      '32.760000,32.720000,0.040000,___',
+      '1000.000000,999.920000,0.040000,K__',
+      '1000.040000,999.960000,0.040000,___',
+    ].join('\n');
+    const { keyframes, end, breakSeconds } = parseVideoPackets('32.680000,32.600000,0.040000,K__\n' + csv);
+    expect(keyframes.map((k) => k.pts)).toEqual([32.68]);
+    expect(end).toBeCloseTo(32.8, 6);
+    expect(breakSeconds).toBeCloseTo(32.8, 6);
+    expect(parseVideoPackets('2.8,2.72,0.04,K__').breakSeconds).toBeUndefined();
+  });
+
   it('keeps pre-roll keyframes flagged discard', () => {
     const { keyframes } = parseVideoPackets('-1.520000,-1.600000,0.040000,KD_\n0.480000,0.400000,0.040000,K__');
     expect(keyframes.map((k) => k.pts)).toEqual([-1.52, 0.48]);

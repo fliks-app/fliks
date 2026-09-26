@@ -7,6 +7,7 @@ import { isImageBasedSubtitleCodec } from '../../common/constants/subtitle-codec
 import { subtitleFlagsFromTitle } from '../../common/constants/subtitle-flags';
 import { existsSync } from 'fs';
 import { vaapiRenderNode } from '../streaming/transcoding/hw-device';
+import { extractVideoPackets } from '../streaming/transcoding/segment-boundaries';
 import { mapWithConcurrency } from '../../common/utils/concurrency';
 import { ffmpegSlots, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
 
@@ -218,6 +219,9 @@ export interface MediaFileInfo {
   formatStartSeconds?: number;
   /** ffprobe `format_name` (`mpegts`, `matroska,webm`, …): how the demuxer seeks. */
   formatName?: string;
+  /** Source time an MPEG-TS clock breaks at (a concatenated or restarted
+   *  recording). Playback ends there: what follows is on another clock. */
+  timestampBreakSeconds?: number;
   durationSeconds?: number;
   /** Embedded chapter markers from the container (MKV/MP4). Empty if none. */
   chapters?: Chapter[];
@@ -641,6 +645,10 @@ export class FfprobeService {
           video[0].streamIndex,
         );
       }
+      const timestampBreakSeconds =
+        video[0] && parsed.format?.format_name?.split(',').includes('mpegts')
+          ? await this.probeClockBreak(videoPath, video[0].streamIndex)
+          : undefined;
 
       const audio: AudioStreamInfo[] = streams
         .filter((s) => s.codec_type === 'audio')
@@ -687,6 +695,7 @@ export class FfprobeService {
           formatBitRate,
           formatStartSeconds,
           formatName: parsed.format?.format_name,
+          timestampBreakSeconds,
           durationSeconds,
           chapters,
           error: 'No streams detected',
@@ -699,6 +708,7 @@ export class FfprobeService {
         formatBitRate,
         formatStartSeconds,
         formatName: parsed.format?.format_name,
+        timestampBreakSeconds,
         durationSeconds,
         chapters,
       };
@@ -801,6 +811,26 @@ export class FfprobeService {
       this.logger.warn(
         `First-frame probe failed for "${videoPath}": ${(err as Error).message}`,
       );
+      return undefined;
+    }
+  }
+
+  /** Where the video clock of an MPEG-TS breaks, if it does: its packets are
+   *  read end to end (no decode), since a break can sit anywhere. */
+  private async probeClockBreak(
+    videoPath: string,
+    streamIndex: number,
+  ): Promise<number | undefined> {
+    try {
+      const { breakSeconds } = await extractVideoPackets(videoPath, streamIndex);
+      if (breakSeconds != null) {
+        this.logger.warn(
+          `"${path.basename(videoPath)}": the timestamps break at ${breakSeconds}s; playback ends there`,
+        );
+      }
+      return breakSeconds;
+    } catch (err) {
+      this.logger.warn(`Clock break probe failed for "${videoPath}": ${(err as Error).message}`);
       return undefined;
     }
   }

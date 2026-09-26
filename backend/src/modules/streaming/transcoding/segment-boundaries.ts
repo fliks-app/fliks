@@ -56,9 +56,16 @@ const cache = new Map<string, CacheEntry>();
 
 export interface VideoPackets {
   keyframes: Keyframe[];
-  /** Source time the last frame ends at. */
+  /** Source time the last frame ends at, or where the clock breaks. */
   end: number;
+  /** Source time an MPEG-TS clock jumps at (a concatenated or restarted
+   *  recording): what follows is not on this timeline and is left out. */
+  breakSeconds?: number;
 }
+
+/** A jump between consecutive video packets this long is a clock break, not
+ *  a gap in the picture: ffmpeg's own discontinuity threshold (dts_delta_threshold). */
+const CLOCK_BREAK_SECONDS = 10;
 
 /** Keyframe packets of the video stream, as the demuxer hands them to a copy
  *  (what the muxer cuts on), and where the video ends. Reads packets only,
@@ -104,17 +111,24 @@ export function parseVideoPackets(
       key: flags.includes('K'),
     }))
     .filter((p) => Number.isFinite(p.pts));
+  // Decode order: reordering moves pts by a few frames, a break by far more.
+  const cut = packets.findIndex(
+    (p, i) => i > 0 && Math.abs(p.pts - packets[i - 1].pts) > CLOCK_BREAK_SECONDS,
+  );
+  const kept = cut < 0 ? packets : packets.slice(0, cut);
   const [num, den] = avgFrameRate.split('/').map(Number);
   // ffmpeg truncates the reorder delay to whole microseconds.
   const lead = num > 0 && den > 0 ? Math.trunc((reorderFrames * 1e6 * den) / num) / 1e6 : 0;
-  let next = packets.length ? packets[0].pts - lead : 0;
-  for (const p of packets) {
+  let next = kept.length ? kept[0].pts - lead : 0;
+  for (const p of kept) {
     if (!Number.isFinite(p.dts)) p.dts = next;
     next = p.dts + p.dur;
   }
+  const end = kept.reduce((m, p) => Math.max(m, p.pts + p.dur), -Infinity);
   return {
-    keyframes: packets.filter((p) => p.key).map(({ pts, dts }) => ({ pts, dts })),
-    end: packets.reduce((m, p) => Math.max(m, p.pts + p.dur), -Infinity),
+    keyframes: kept.filter((p) => p.key).map(({ pts, dts }) => ({ pts, dts })),
+    end,
+    ...(cut < 0 ? {} : { breakSeconds: end }),
   };
 }
 

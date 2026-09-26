@@ -38,6 +38,8 @@ describe('sourceTimeline', () => {
     expect(sourceTimeline(si).end).toBe(42.8);
     expect(sourceTimeline({ ...si, video: [video] }).end).toBe(62.8);
     expect(sourceTimeline({ formatStartSeconds: 0, video: [video] }).end).toBeUndefined();
+    // A concatenated recording whose clock jumps at 32.8 s ends there.
+    expect(sourceTimeline({ ...si, timestampBreakSeconds: 32.8 }).end).toBe(32.8);
   });
 
   it('is 0/0 without stream info', () => {

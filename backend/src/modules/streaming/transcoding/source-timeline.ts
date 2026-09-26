@@ -16,14 +16,15 @@ export interface SourceTimeline {
    *  ffmpeg rebases to 0 without `-copyts` (subtitle extracts, and the sidecars
    *  authored against them or against a player's clock) count from. */
   formatStart: number;
-  /** Source time the video ends at, where every playlist ends: ffmpeg cuts on
-   *  the video, so audio past it gets no segment. Undefined when unprobed. */
+  /** Source time the video ends at, or its clock breaks, where every playlist
+   *  ends: ffmpeg cuts on the video, so audio past it gets no segment.
+   *  Undefined when unprobed. */
   end?: number;
 }
 
 type TimelineProbe = Pick<
   MediaFileInfo,
-  'video' | 'formatStartSeconds' | 'durationSeconds'
+  'video' | 'formatStartSeconds' | 'durationSeconds' | 'timestampBreakSeconds'
 >;
 
 /** Where a video stream's picture starts, falling back to its first packet. */
@@ -58,6 +59,7 @@ export function sourceTimeline(
     origin: videoPresentationStart(v) ?? 0,
     formatStart,
     end:
+      si?.timestampBreakSeconds ??
       v?.endSeconds ??
       (si?.durationSeconds != null ? formatStart + si.durationSeconds : undefined),
   };

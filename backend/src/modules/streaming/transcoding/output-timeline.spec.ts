@@ -231,3 +231,16 @@ describe('remux resume', () => {
     expect(after(args, '-ac')).toBe('2');
   });
 });
+
+describe('MPEG-TS clock break', () => {
+  it('stops every run reading at the break, counted from the container start', () => {
+    const at = { sourceStartPts: 2.8, sourceFormatStart: 2.779, sourceClockBreakSeconds: 32.8 };
+    for (const args of [tx(at), tx({ ...at, startSegment: 5 }), remux(at)]) {
+      expect(after(args, '-to')).toBe('30.021');
+      expect(args.indexOf('-to')).toBeLessThan(args.indexOf('-i'));
+    }
+    // The early companion bounds its read with -t, which -to would override.
+    expect(tx({ ...at, early: true })).not.toContain('-to');
+    expect(tx({ sourceStartPts: 2.8 })).not.toContain('-to');
+  });
+});

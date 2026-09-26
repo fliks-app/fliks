@@ -161,6 +161,19 @@ function audioStreamArgs(
   ];
 }
 
+/** Input `-to` stopping a run at an MPEG-TS clock break; like `-ss` it counts
+ *  from the container start. Past the break the constant-rate sync would fill
+ *  the jump with repeated frames. The early companion bounds itself with `-t`. */
+function stopAtClockBreak(
+  breakSeconds: number | undefined,
+  formatStart: number,
+  early = false,
+): string[] {
+  return breakSeconds != null && !early
+    ? ['-to', formatSeconds(breakSeconds - formatStart)]
+    : [];
+}
+
 /** Output `-ss` of a transcode run: its first frame, which ffmpeg subtracts from
  *  every timestamp. A run from the start needs it only when that frame is
  *  before 0, where the constant-rate video sync would drop every frame up to 0. */
@@ -431,6 +444,9 @@ export interface BuildFfmpegArgsOptions {
    *  for a demuxer that lands after its seek target (`seeksPastKeyframe`): the
    *  input seek goes there so decoding starts on it. */
   seekKeyframeDts?: number;
+  /** Source time an MPEG-TS clock breaks at: the run stops reading there, as
+   *  the playlist ends there (`sourceTimeline`). */
+  sourceClockBreakSeconds?: number;
   /** Source time the video ends at: encoded audio is padded up to it. */
   sourceEndSeconds?: number;
   /** Absolute index of the programme video stream. */
@@ -881,6 +897,7 @@ export function buildFfmpegArgs(
     sourceStartPts = 0,
     sourceFormatStart = sourceStartPts,
     seekKeyframeDts,
+    sourceClockBreakSeconds,
     sourceEndSeconds,
     videoStreamIndex,
     encoderPreset = 'faster',
@@ -1130,6 +1147,7 @@ export function buildFfmpegArgs(
     args.push(...colorTagArgs(sdrColor));
   }
 
+  args.push(...stopAtClockBreak(sourceClockBreakSeconds, sourceFormatStart, early));
   args.push('-i', inputPath);
 
   // Preserve source PTS end-to-end on every spawn (see
@@ -1379,6 +1397,10 @@ export interface BuildRemuxArgsOptions {
   videoStreamIndex?: number;
   /** Source time the video ends at: encoded audio is padded up to it. */
   sourceEndSeconds?: number;
+  /** Container start, what an input `-to` counts from. */
+  sourceFormatStart?: number;
+  /** Source time an MPEG-TS clock breaks at: the run stops reading there. */
+  sourceClockBreakSeconds?: number;
   /** Audio output of `audioStreamIndex`; AAC stereo when absent. */
   audioPlan?: AudioPlan;
 }
@@ -1401,6 +1423,8 @@ export function buildRemuxArgs(
     sourceStartPts = 0,
     videoStreamIndex,
     sourceEndSeconds,
+    sourceFormatStart = sourceStartPts,
+    sourceClockBreakSeconds,
     audioPlan,
   } = opts;
 
@@ -1434,6 +1458,7 @@ export function buildRemuxArgs(
     useTs: false,
   });
 
+  args.push(...stopAtClockBreak(sourceClockBreakSeconds, sourceFormatStart));
   args.push('-i', inputPath);
   args.push('-copyts', '-muxdelay', '0', '-muxpreload', '0');
   // Copied packets before the first keyframe's decode time go: the video up to
