@@ -2260,6 +2260,11 @@ export class StreamingController {
       quality === 'remux'
         ? await this.remuxGrid(resolved, this.segDur(ctx))
         : null;
+    if (remuxGrid && !isInit && segIndex >= remuxGrid.durations.length) {
+      this.log.warn(`Segment 404: ${segment} is past the ${remuxGrid.durations.length} of the remux grid`);
+      res.status(404).send('Segment not found');
+      return;
+    }
     const anchorSeg = this.anchorSegment(
       live,
       existing,
