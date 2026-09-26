@@ -51,8 +51,8 @@ import {
   uniformSegmentCount,
 } from './transcoding/constants';
 import {
-  getRemuxSegmentGrid,
   gridSegmentIndex,
+  remuxSegmentGrid,
   type KeyframeGrid,
 } from './transcoding/segment-boundaries';
 import {
@@ -65,9 +65,10 @@ import { LiveSessionRegistry } from './live-session.service';
 import * as path from 'path';
 import { SegmentPackagingService } from './services/segment-packaging.service';
 import { SessionRouter } from './services/session-router.service';
-import { ClockBreakScanService } from './services/clock-break-scan.service';
+import { SourceScanService } from './services/source-scan.service';
 import { SessionContextBuilder } from './services/session-context-builder.service';
 import { sessionProfileHash } from './transcoding/session-profile';
+import type { SourceScan } from './transcoding/source-scan';
 import { pickAudioLayout } from './transcoding/audio-layout';
 import {
   buildIFrameSegmentArgs,
@@ -355,7 +356,7 @@ export class StreamingController {
     private readonly segmentPackaging: SegmentPackagingService,
     private readonly sessionRouter: SessionRouter,
     private readonly sessionContextBuilder: SessionContextBuilder,
-    private readonly clockBreakScan: ClockBreakScanService,
+    private readonly sourceScans: SourceScanService,
     private readonly pluginPreRoll: PluginPreRollService,
     private readonly events: EventsService,
     private readonly caslAbilityFactory: CaslAbilityFactory,
@@ -435,17 +436,25 @@ export class StreamingController {
     );
   }
 
-  /** Keyframe grid of the remux path, or null for the uniform one; one answer
-   *  per file version ({@link getRemuxSegmentGrid}). */
-  private remuxGrid(
+  /** The keyframe grid a remux playback keeps, or null for the uniform one. */
+  private freezeRemuxGrid(
+    scan: SourceScan | null,
     resolved: ResolvedFile,
+    origin: number,
     segDur: number,
-  ): Promise<KeyframeGrid | null> {
-    return getRemuxSegmentGrid(
-      resolved.absolutePath,
+  ): KeyframeGrid | null {
+    if (!scan) {
+      this.log.log(`${resolved.absolutePath} not scanned yet; remux on the uniform grid`);
+      return null;
+    }
+    const grid = remuxSegmentGrid(
+      scan,
+      origin,
       segDur,
-      resolved.mediaFile.streamInfo,
+      resolved.mediaFile.streamInfo?.video?.[0]?.frameRate,
     );
+    if (!grid) this.log.warn(`No video keyframe in ${resolved.absolutePath}; uniform grid`);
+    return grid;
   }
 
   /**
@@ -755,12 +764,16 @@ export class StreamingController {
         /* prewarm is best-effort — the on-demand path still serves the track */
       });
 
-    // A file whose clock was never scanned gets it for its next plays.
-    void this.clockBreakScan.scheduleIfNeeded(
-      mediaFileId,
-      resolved.absolutePath,
-      resolved.mediaFile.streamInfo,
-    );
+    // Never waits on a scan: an unscanned file plays without one and is
+    // scanned for its next plays.
+    const held = await this.sourceScans.lookup(mediaFileId, resolved.absolutePath);
+    if (!held.scan) {
+      void this.sourceScans.scheduleIfNeeded(
+        mediaFileId,
+        resolved.absolutePath,
+        resolved.mediaFile.streamInfo,
+      );
+    }
 
     // Before the decision below, which reads them.
     this.activeStreamTracker.setSegmentDuration(ss.segmentDuration);
@@ -1001,6 +1014,15 @@ export class StreamingController {
       sseConnectionId,
       position: resumePosition,
       ...sessionLayout,
+      remuxGrid:
+        kind === 'remux'
+          ? this.freezeRemuxGrid(
+              held.scan,
+              resolved,
+              sessionLayout.timeline.origin,
+              ss.segmentDuration,
+            )
+          : null,
       audioStreamIndex: audioStreamIndex ?? null,
       audioStreamCount: sourceAudioCount,
       useExtXMedia,
@@ -1910,6 +1932,7 @@ export class StreamingController {
     // The session is created on first actual segment request (with the correct quality
     // selected by the frontend's ABR lock).
     // Exception: Cast passes startAt for resume position — pre-start for Cast/remux only.
+    const live = this.sessionRouter.findRequestSession(req, mediaFileId);
     const startAtRaw = firstQueryString(req.query, 'startAt');
     if (startAtRaw) {
       const existing = this.sessionRouter.resolveSession(mediaFileId, req.user?.id, req);
@@ -1920,7 +1943,7 @@ export class StreamingController {
         if (quality === 'remux') {
           // Copied video is keyframe-cut, so map the resume time to a segment
           // (and seek) via the real keyframe boundaries, not the uniform grid.
-          const grid = await this.remuxGrid(resolved, this.segDur(ctx));
+          const grid = live?.remuxGrid ?? null;
           const startSegment = grid
             ? gridSegmentIndex(grid.boundaries, startAtSec, ctx.sourceStartPts ?? 0)
             : secondsToSegmentIndex(startAtSec, this.segDur(ctx));
@@ -1946,7 +1969,6 @@ export class StreamingController {
     const tokenParam = buildTokenParam(req);
     const basePath = `/api/stream/${mediaFileId}/${quality}`;
     // Use the master.m3u8 decision — must match to avoid init filename mismatch.
-    const live = this.sessionRouter.findRequestSession(req, mediaFileId);
     const multiAudio = live?.useExtXMedia ?? false;
     const useTs = live?.useTs ?? false;
     // Tizen TV sessions can opt into MPEG-TS segments (no init segment)
@@ -1971,15 +1993,12 @@ export class StreamingController {
 
     // Remux copies the source video, so ffmpeg cuts at its (irregular)
     // keyframes — the uniform grid would emit wrong EXTINF durations and drift
-    // AVPlayer out of A/V sync. Emit the real keyframe-aligned durations; fall
-    // back to the uniform grid when keyframes can't be probed (no regression).
+    // AVPlayer out of A/V sync. Emit the real keyframe-aligned durations of the
+    // grid the playback froze; without one, the uniform grid.
     // Mux-flavour independent: `-c:v copy` cuts on the same source keyframes in
     // MPEG-TS and fMP4 (verified identical to the millisecond).
-    let remuxDurations: number[] | null = null;
-    if (quality === 'remux') {
-      remuxDurations =
-        (await this.remuxGrid(resolved, this.segDur()))?.durations ?? null;
-    }
+    const remuxDurations =
+      quality === 'remux' ? (live?.remuxGrid?.durations ?? null) : null;
     // A transcoded segment is one forced GOP: its real length keeps fractional-fps
     // streams in sync. A remux without keyframes runs on the plain grid.
     const sourceFps = parseSourceFps(
@@ -2253,13 +2272,10 @@ export class StreamingController {
       }
     }
 
-    // Remux: anchor + seek on the real keyframe boundaries (cached) so a resume
+    // Remux: anchor + seek on the keyframe boundaries the playback froze so a resume
     // / forward seek lands on the right content and the post-seek playlist stays
     // aligned. Non-remux keeps the uniform grid (force_key_frames makes it true).
-    const remuxGrid =
-      quality === 'remux'
-        ? await this.remuxGrid(resolved, this.segDur(ctx))
-        : null;
+    const remuxGrid = quality === 'remux' ? (live?.remuxGrid ?? null) : null;
     if (remuxGrid && !isInit && segIndex >= remuxGrid.durations.length) {
       this.log.warn(`Segment 404: ${segment} is past the ${remuxGrid.durations.length} of the remux grid`);
       res.status(404).send('Segment not found');

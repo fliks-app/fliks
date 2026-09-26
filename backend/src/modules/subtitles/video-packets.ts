@@ -2,8 +2,8 @@ import { spawn } from 'child_process';
 import { createInterface } from 'readline';
 import { stat } from 'fs/promises';
 import * as path from 'path';
+import type { Readable } from 'stream';
 import { Logger } from '@nestjs/common';
-import { withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
 
 const log = new Logger('VideoPackets');
 
@@ -122,11 +122,12 @@ function feedPacket(reader: VideoPacketReader, line: string): boolean {
   );
 }
 
-/** Run ffprobe line by line; `onLine` returning false ends it early. */
+/** Run ffprobe line by line; `onLine` returning false ends it early. With
+ *  `input`, ffprobe reads it on stdin in place of the path in `args`. */
 export function ffprobeLines(
   args: string[],
   onLine: (line: string) => boolean,
-  opts: { timeoutMs: number; background?: boolean },
+  opts: { timeoutMs: number; background?: boolean; input?: Readable },
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const proc =
@@ -135,19 +136,28 @@ export function ffprobeLines(
         : spawn('ffprobe', args);
     let stderr = '';
     let stopped = false;
-    const timer = setTimeout(() => {
+    const stop = () => {
       stopped = true;
       proc.kill('SIGKILL');
+    };
+    const timer = setTimeout(() => {
+      stop();
       reject(new Error(`ffprobe timed out after ${opts.timeoutMs} ms`));
     }, opts.timeoutMs);
+    if (opts.input) {
+      // A read ended early closes the pipe under the writer: EPIPE, not a failure.
+      proc.stdin.on('error', () => {});
+      opts.input.on('error', (err) => {
+        stop();
+        reject(err);
+      });
+      opts.input.pipe(proc.stdin);
+    }
     proc.stderr.on('data', (d: Buffer) => {
       stderr = (stderr + d.toString()).slice(-2000);
     });
     createInterface({ input: proc.stdout }).on('line', (line) => {
-      if (!stopped && line && !onLine(line)) {
-        stopped = true;
-        proc.kill('SIGKILL');
-      }
+      if (!stopped && line && !onLine(line)) stop();
     });
     proc.on('error', (err) => {
       clearTimeout(timer);
@@ -193,62 +203,27 @@ async function streamReorder(filePath: string, video: VideoStreamRef): Promise<n
 const SCAN_MIN_BYTES_PER_SECOND = 10 * 1024 * 1024;
 const SCAN_MIN_TIMEOUT_MS = 300_000;
 
-async function scan(
+/** Keyframes and end of the video, every packet read, none decoded. From
+ *  `input` when given (the file's bytes), else from the file itself. */
+export async function scanVideoPackets(
   filePath: string,
-  size: number,
   video: VideoStreamRef,
-  detectBreak: boolean,
-  background: boolean,
+  opts: { mpegTs: boolean; background?: boolean; input?: Readable },
 ): Promise<VideoPackets> {
-  const reader = new VideoPacketReader(await streamReorder(filePath, video), detectBreak);
+  const { size } = await stat(filePath);
+  const reader = new VideoPacketReader(await streamReorder(filePath, video), opts.mpegTs);
   await ffprobeLines(
     ['-v', 'error', '-select_streams', selectOf(video.streamIndex), '-show_entries',
-      'packet=pts_time,dts_time,duration_time,flags', '-of', 'compact=p=0', filePath],
+      'packet=pts_time,dts_time,duration_time,flags', '-of', 'compact=p=0',
+      opts.input ? 'pipe:0' : filePath],
     (line) => feedPacket(reader, line),
     {
       timeoutMs: Math.max(SCAN_MIN_TIMEOUT_MS, (size / SCAN_MIN_BYTES_PER_SECOND) * 1000),
-      background,
+      background: opts.background,
+      input: opts.input,
     },
   );
   return reader.result();
-}
-
-interface ScanEntry {
-  mtimeMs: number;
-  streamIndex?: number;
-  packets: Promise<VideoPackets>;
-}
-
-const scans = new Map<string, ScanEntry>();
-/** Files whose scan stays in memory; a scan is a few hundred KB. */
-const MAX_SCANS = 64;
-
-/** Keyframes and end of the video, every packet read (none decoded) once per file
- *  version, a failure included; a background read takes an ffmpeg slot, idle I/O. */
-export async function videoPackets(
-  filePath: string,
-  video: VideoStreamRef,
-  opts: { mpegTs: boolean; background?: boolean },
-): Promise<VideoPackets> {
-  const { mtimeMs, size } = await stat(filePath);
-  const hit = scans.get(filePath);
-  if (hit && hit.mtimeMs === mtimeMs && hit.streamIndex === video.streamIndex) {
-    return hit.packets;
-  }
-  const run = () => scan(filePath, size, video, opts.mpegTs, !!opts.background);
-  const packets = opts.background ? withFfmpegSlot(run) : run();
-  scans.delete(filePath);
-  scans.set(filePath, { mtimeMs, streamIndex: video.streamIndex, packets });
-  if (scans.size > MAX_SCANS) scans.delete(scans.keys().next().value!);
-  return packets;
-}
-
-/** A read of the packet table, if one is held for this file version. */
-export async function heldVideoPackets(filePath: string): Promise<VideoPackets | null> {
-  const hit = scans.get(filePath);
-  if (!hit) return null;
-  const { mtimeMs } = await stat(filePath).catch(() => ({ mtimeMs: NaN }));
-  return hit.mtimeMs === mtimeMs ? hit.packets.catch(() => null) : null;
 }
 
 /** Longest GOP a keyframe is looked for behind a seek target. */
@@ -258,18 +233,18 @@ const MAX_GOP_SECONDS = 64;
 const FIRST_WINDOW_SECONDS = 4;
 
 /** The last video keyframe presented at or before `seconds` (source time):
- *  from a held packet table, else from a widening window of packets ahead of it. */
+ *  from the file's scanned keyframes, else from a widening window of packets ahead of it. */
 export async function keyframeAtOrBefore(
   filePath: string,
   videoStreamIndex: number | undefined,
   seconds: number,
+  scanned?: Keyframe[] | null,
 ): Promise<Keyframe | null> {
   const before = (keyframes: Keyframe[]) => {
     const found = keyframes.filter((k) => k.pts <= seconds);
     return found.length ? found[found.length - 1] : null;
   };
-  const held = await heldVideoPackets(filePath);
-  if (held) return before(held.keyframes);
+  if (scanned) return before(scanned);
   for (let window = FIRST_WINDOW_SECONDS; window <= MAX_GOP_SECONDS; window *= 2) {
     // Only MPEG-TS seeks come here, and its packets carry their decode times.
     const reader = new VideoPacketReader(0, false);

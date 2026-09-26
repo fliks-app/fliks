@@ -78,6 +78,7 @@ import {
   computeProfileHash,
 } from './profile-hash';
 import { TranscodeCacheService } from './transcode-cache.service';
+import { SourceScanService } from '../services/source-scan.service';
 import {
   StreamingSettingsCache,
   type StreamingSettings,
@@ -112,6 +113,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     private readonly cacheService: TranscodeCacheService,
     private readonly liveSessions: LiveSessionRegistry,
     private readonly streamingSettings: StreamingSettingsCache,
+    private readonly sourceScans: SourceScanService,
   ) {}
 
   async onModuleInit() {
@@ -1163,7 +1165,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
           videoOnly: isVideoOnly,
           audioStreams,
         }),
-        seekKeyframeDts: await this.seekKeyframeDts(absolutePath, startSegment, ctx),
+        seekKeyframeDts: await this.seekKeyframeDts(mediaFileId, absolutePath, startSegment, ctx),
       },
       this.log,
     );
@@ -1522,6 +1524,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   /** Where a demuxer that lands after its seek target must seek for a run to
    *  decode from a keyframe at or before its first frame. */
   private async seekKeyframeDts(
+    mediaFileId: number,
     absolutePath: string,
     startSegment: number,
     ctx?: SessionContext,
@@ -1533,7 +1536,13 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION,
         ctx?.sourceFps,
       ) + (ctx?.sourceStartPts ?? 0);
-    const keyframe = await keyframeAtOrBefore(absolutePath, ctx?.videoStreamIndex, start).catch(
+    const { scan } = await this.sourceScans.lookup(mediaFileId, absolutePath);
+    const keyframe = await keyframeAtOrBefore(
+      absolutePath,
+      ctx?.videoStreamIndex,
+      start,
+      scan?.keyframes,
+    ).catch(
       (err: Error) => {
         this.log.warn(`Keyframe probe before ${start}s of ${absolutePath} failed: ${err.message}`);
         return null;

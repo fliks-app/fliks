@@ -148,7 +148,7 @@ describe('StreamingController.stopLiveSession', () => {
       {} as never, // segmentPackaging
       {} as never, // sessionRouter
       {} as never, // sessionContextBuilder
-      {} as never, // clockBreakScan
+      {} as never, // sourceScans
       {} as never, // pluginPreRoll
       events as never,
       caslAbilityFactory as never,
@@ -357,5 +357,55 @@ describe('remux playlist cannot drift out of A/V sync', () => {
     const realStart = durations[0] + durations[1];
     const uniformStart = uniformExtinf[0] + uniformExtinf[1];
     expect(Math.abs(realStart - uniformStart)).toBeGreaterThan(1.9);
+  });
+});
+
+describe('StreamingController.hlsPlaylist (remux)', () => {
+  const grid = computeSegmentGrid(
+    [0, 7.966, 15.974, 19.937].map((pts) => ({ pts, dts: pts })),
+    0,
+    25,
+    6,
+  )!;
+
+  function playlistFor(live: Partial<LiveSession> | null): Promise<string> {
+    const resolved = { mediaFile: { streamInfo: { video: [{ frameRate: '25' }] } } };
+    const controller = new StreamingController(
+      { resolveFile: jest.fn().mockResolvedValue(resolved) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { getSegmentDuration: () => 6 } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { assertFresh: jest.fn(), findRequestSession: jest.fn().mockReturnValue(live) } as never,
+      {} as never,
+      {} as never, // sourceScans: a request never reads the scan itself
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    return new Promise((resolve) => {
+      const res = { setHeader: jest.fn(), send: resolve, status: jest.fn() };
+      void controller.hlsPlaylist(
+        42,
+        'remux',
+        { query: { duration: '25' }, user: { id: 7 } } as never,
+        res as never,
+      );
+    });
+  }
+  const extinf = (m: string) => [...m.matchAll(/#EXTINF:([\d.]+),/g)].map((x) => Number(x[1]));
+
+  it('lists the grid the playback froze, or the uniform one it froze without a scan', async () => {
+    expect(extinf(await playlistFor({ remuxGrid: grid }))).toEqual(
+      grid.durations.map((d) => Number(d.toFixed(3))),
+    );
+    expect(extinf(await playlistFor({ remuxGrid: null }))).toEqual([6, 6, 6, 6, 1]);
   });
 });
