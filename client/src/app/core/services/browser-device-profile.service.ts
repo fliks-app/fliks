@@ -440,10 +440,9 @@ export class BrowserDeviceProfileService {
       }
       if (this.testCodec(video, hasMSE, 'audio/mp4', 'ac-3')) audioCodecs.push('ac3');
       if (this.testCodec(video, hasMSE, 'audio/mp4', 'ec-3')) audioCodecs.push('eac3');
-      if (this.testCodec(video, hasMSE, 'audio/mp4', 'opus') ||
-          this.testCodec(video, hasMSE, 'audio/webm', 'opus')) audioCodecs.push('opus');
-      if (this.testCodec(video, hasMSE, 'audio/mp4', 'flac') ||
-          this.testCodec(video, hasMSE, 'audio/flac', '')) audioCodecs.push('flac');
+      // Probed in fMP4 only, the form the HLS paths deliver them in.
+      if (this.testCodec(video, hasMSE, 'audio/mp4', 'opus')) audioCodecs.push('opus');
+      if (this.testCodec(video, hasMSE, 'audio/mp4', 'flac')) audioCodecs.push('flac');
       if (this.testCodec(video, hasMSE, 'audio/mp4', 'alac')) audioCodecs.push('alac');
       // AVPlay decodes the stream on Tizen, so its own capability API overrides
       // the MSE probe for every codec that API enumerates.
@@ -457,18 +456,18 @@ export class BrowserDeviceProfileService {
       maxAudioChannels = ctx.destination.maxChannelCount || 2;
       ctx.close();
     } catch { /* fallback to stereo */ }
-    // Same reasoning as the codec override above: AudioContext exposes the
-    // Same source as the codec list above — the native plugin reports
-    // what the active output sink (HDMI / speakers / Bluetooth) accepts.
     // The native plugin reports the real DECODE capability (Android: per-codec
     // getMaxInputChannelCount; iOS: device-class estimate) — the device decodes
     // this many channels and the OS downmixes to the actual output, so a 5.1/
-    // 7.1 source DirectPlays instead of a server-side downmix. (Web keeps the
-    // AudioContext output-sink value above; browsers don't downmix multichannel
-    // for us.)
+    // 7.1 source DirectPlays instead of a server-side downmix.
     if (this.nativeAudio) {
       maxAudioChannels = Math.max(maxAudioChannels, this.nativeAudio.maxChannels);
     }
+    // A browser decodes 7.1 AAC, Opus and FLAC and downmixes them to its output
+    // itself, so their cap is the decoder's, not AudioContext's output count.
+    const audioChannelsByCodec =
+      this.nativeAudio?.channelsByCodec ??
+      (tvPlatform ? undefined : { aac: 8, opus: 8, flac: 8 });
     // TVs: the WebView's AudioContext caps at 2ch, but the playback pipeline
     // (webOS <video>, Tizen AVPlay) decodes Dolby and renders/passes it (TV
     // speakers downmix, eARC passes through). Declaring 5.1 when AC3/EAC3 is
@@ -564,7 +563,7 @@ export class BrowserDeviceProfileService {
       codecConditions,
       maxStreamingBitrate: 0, // 0 = no limit
       maxAudioChannels,
-      audioChannelsByCodec: this.nativeAudio?.channelsByCodec,
+      audioChannelsByCodec,
       supportsHdr,
       tonemapsHdrLocally,
       cropsBlackBarsLocally,
