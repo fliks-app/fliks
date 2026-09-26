@@ -1,4 +1,10 @@
-import { FfprobeService } from './ffprobe.service';
+import {
+  displaySize,
+  FfprobeService,
+  parseFirstFrameSeconds,
+  selectProgrammeVideoStreams,
+  streamRotation,
+} from './ffprobe.service';
 
 describe('FfprobeService.parseFrameRate', () => {
   const svc = new FfprobeService();
@@ -79,5 +85,75 @@ describe('FfprobeService.reconcileFrameRate', () => {
   it('ignores a declared rate that is not a number', () => {
     expect(reconcile('0', 24)).toBe('0');
     expect(reconcile('abc', 24)).toBe('abc');
+  });
+});
+
+describe('selectProgrammeVideoStreams', () => {
+  const v = (index: number, codec: string, attached = 0) => ({
+    index,
+    codec_type: 'video',
+    codec_name: codec,
+    disposition: { attached_pic: attached },
+  });
+
+  it('drops cover art listed before the programme', () => {
+    const picked = selectProgrammeVideoStreams([
+      v(0, 'mjpeg', 1),
+      v(1, 'h264'),
+      { index: 2, codec_type: 'audio', codec_name: 'aac' },
+    ]);
+    expect(picked.map((s) => s.index)).toEqual([1]);
+  });
+
+  it('drops a still-image thumbnail track beside a moving one', () => {
+    const picked = selectProgrammeVideoStreams([v(0, 'mjpeg'), v(1, 'hevc'), v(2, 'png')]);
+    expect(picked.map((s) => s.index)).toEqual([1]);
+  });
+
+  it('keeps motion JPEG when it is the only video', () => {
+    expect(selectProgrammeVideoStreams([v(0, 'mjpeg')]).map((s) => s.index)).toEqual([0]);
+  });
+
+  it('has no programme when the only picture is a cover', () => {
+    expect(selectProgrammeVideoStreams([v(0, 'png', 1)])).toEqual([]);
+  });
+});
+
+describe('rotation', () => {
+  it('reads the display matrix, else the legacy tag', () => {
+    expect(
+      streamRotation({
+        index: 0,
+        side_data_list: [{ side_data_type: 'Display Matrix', rotation: -90 }],
+      }),
+    ).toBe(-90);
+    expect(streamRotation({ index: 0, tags: { rotate: '270' } })).toBe(270);
+    expect(streamRotation({ index: 0 })).toBe(0);
+  });
+
+  it('swaps the axes on a quarter turn only', () => {
+    expect(displaySize(1920, 1080, 90)).toEqual({ width: 1080, height: 1920 });
+    expect(displaySize(1920, 1080, -270)).toEqual({ width: 1080, height: 1920 });
+    expect(displaySize(1920, 1080, 180)).toEqual({ width: 1920, height: 1080 });
+  });
+});
+
+describe('parseFirstFrameSeconds', () => {
+  it('reads the integer pts against the filter time base', () => {
+    const log = [
+      '[Parsed_showinfo_0 @ 0x1] config in time_base: 1/90000, frame_rate: 25/1',
+      '[Parsed_showinfo_0 @ 0x1] n:   0 pts:8550003600 pts_time:95000 duration:3600',
+      '[Parsed_showinfo_0 @ 0x1] n:   1 pts:8550007200 pts_time:95000.1 duration:3600',
+    ].join('\n');
+    expect(parseFirstFrameSeconds(log)).toBe(95000.04);
+  });
+
+  it('keeps a negative first frame', () => {
+    const log = 'config in time_base: 1/1000, frame_rate: 25/1\nn:   0 pts:    -40 pts_time:-0.04';
+    expect(parseFirstFrameSeconds(log)).toBe(-0.04);
+  });
+
+  it('is undefined when nothing decoded', () => {
+    expect(parseFirstFrameSeconds('config in time_base: 1/90000')).toBeUndefined();
   });
 });
