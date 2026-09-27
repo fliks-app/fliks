@@ -63,7 +63,7 @@ import {
 } from './transcoding/source-timeline';
 import { sourceIsMpegTs } from '../subtitles/video-packets';
 import { aacConfigMayChange, type SourceScan } from './transcoding/source-scan';
-import { remuxSegmentGrid } from './transcoding/segment-boundaries';
+import type { KeyframeGrid } from './transcoding/segment-boundaries';
 
 /** Audio codecs that can be copied verbatim into fMP4 segments via MSE.
  *  Anything outside this set is re-encoded to AAC on the remux path even when
@@ -117,24 +117,19 @@ function copyBlocker(
     : null;
 }
 
-/** Source time the last video segment of a separate-rendition layout starts
- *  at, on the fps-aware grid the video is cut on from its first frame. */
+/** Source time the last video segment of a separate-rendition layout starts at,
+ *  on the caller's frozen remux grid: null is an unscanned copy, undefined is no video copy. */
 function lastVideoSegmentStart(
   si: MediaFileInfo | null | undefined,
   label: string,
   segmentDuration: number,
-  remux: { scan: SourceScan | null | undefined } | null,
+  grid: KeyframeGrid | null | undefined,
 ): number | undefined {
   const { origin, end } = sourceTimeline(si, label);
   if (end == null) return undefined;
-  const frameRate = si?.video?.[0]?.frameRate;
-  // A remux is cut on the keyframe grid, or on the plain segment length without a scan.
-  if (remux) {
-    const grid = remux.scan ? remuxSegmentGrid(remux.scan, origin, segmentDuration, frameRate) : null;
-    if (grid) return grid.boundaries[grid.boundaries.length - 2];
-  }
-  const fps = parseSourceFps(frameRate);
-  const seg = remux ? segmentDuration : realSegmentSeconds(segmentDuration, fps);
+  if (grid) return grid.boundaries[grid.boundaries.length - 2];
+  const fps = parseSourceFps(si?.video?.[0]?.frameRate);
+  const seg = grid === null ? segmentDuration : realSegmentSeconds(segmentDuration, fps);
   return origin + (uniformSegmentCount(end - origin, seg, frameSecondsOf(fps)) - 1) * seg;
 }
 
@@ -255,6 +250,9 @@ export class StreamBuilderService {
     segmentDuration = DEFAULT_SEGMENT_DURATION,
     sourceScan?: SourceScan | null,
     allowDirectStream = true,
+    /** The controller's already-frozen remux grid (see `freezeRemuxGrid`),
+     *  fed back so the AudioEndsEarly check reads the exact grid served. */
+    remuxGrid?: KeyframeGrid | null,
   ): EvaluateResult {
     const si = resolved.mediaFile.streamInfo;
     const v = si?.video?.[0];
@@ -695,7 +693,7 @@ export class StreamBuilderService {
             si,
             resolved.absolutePath,
             segmentDuration,
-            canCopyVideo ? { scan: sourceScan } : null,
+            canCopyVideo ? (remuxGrid ?? null) : undefined,
           )
         : undefined,
     );

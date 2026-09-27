@@ -53,10 +53,9 @@ export class SessionContextBuilder {
       deviceType: live?.deviceType ?? 'desktop',
       encoderPreset: live?.encoderPreset ?? 'faster',
       tonemapAlgo: this.activeStreamTracker.getTonemapAlgo(),
-      // Source framerate (e.g. "24", "23.976", "29.97") — used to compute an
-      // accurate GOP so IDR frames fall on the same boundary regardless of
-      // source fps. Falls back to 24 when unknown.
-      sourceFps: parseSourceFps(si?.video?.[0]?.frameRate),
+      // Source framerate: accurate GOP sizing keeps IDR frames on the same boundary.
+      // The frozen value beats a mid-session re-probe; falls back to 24 when unknown.
+      sourceFps: live?.sourceFps ?? parseSourceFps(si?.video?.[0]?.frameRate),
       videoStreamIndex: si?.video?.[0]?.streamIndex,
       sourceSeeksPastKeyframe: seeksPastKeyframe(si, resolved.absolutePath),
       // Source colorimetry — preserved through an SDR transcode so the output

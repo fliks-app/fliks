@@ -1327,8 +1327,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
      *  reachability for an audio rendition rather than the video track. */
     audioIndex?: number,
   ): Promise<TranscodeSession> {
-    const isMultiAudio =
-      varStreamMapLayout(ctx?.videoOnly ?? false, ctx?.audioStreams?.length ?? 0);
+    // videoOnly already equals audioLayout(audioStreams.length) === 'var-stream-map'
+    // (session-profile.ts); re-deriving it from ctx.audioStreams would just duplicate it.
+    const isMultiAudio = ctx?.videoOnly ?? false;
     const variant = remuxVariant({
       audioIndex: ctx?.audioStreamIndex,
       keyframeGrid: grid != null,
@@ -1385,7 +1386,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       variant,
       'remux',
     );
-    const isMultiAudio = varStreamMapLayout(ctx?.videoOnly ?? false, ctx?.audioStreams?.length ?? 0);
+    // Same as above: ctx.videoOnly already is this predicate over ctx.audioStreams.
+    const isMultiAudio = ctx?.videoOnly ?? false;
     const segmentDuration = ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION;
     const audioRenditions = isMultiAudio ? (ctx?.audioStreams?.length ?? 0) : 0;
     // The group's shared codec (any transcoded rendition names it) decides the

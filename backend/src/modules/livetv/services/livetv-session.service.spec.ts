@@ -274,8 +274,27 @@ describe('LiveTvSessionService', () => {
     mockSpawnAlwaysSucceeds();
     const result = await service.open(channel, makeUser(3), {});
     expect(result.channelId).toBe(103);
-    // Lets this test's own fire-and-forget teardown fs.rm settle before the next test reuses the dir.
-    await new Promise((r) => setTimeout(r, 50));
+  });
+
+  it('gives a reopened channel a fresh dir, so a still-pending teardown fs.rm never lands on it', async () => {
+    settings.get.mockImplementation((key: string) =>
+      Promise.resolve(key === 'livetv_channel_idle_seconds' ? '0' : null),
+    );
+    mockSpawnAlwaysSucceeds();
+    const channel = makeChannel([makeStream({ id: 106, channelId: 106 })], { id: 106 });
+
+    const first = await service.open(channel, makeUser(1), {});
+    const firstDir = service.getForServe(first.sessionId)!.dir;
+    await service.leave(first.sessionId);
+    await new Promise((r) => setTimeout(r, 30)); // idle timeout (0s) tears it down, queuing fs.rm(firstDir)
+
+    const second = await service.open(channel, makeUser(2), {});
+    const secondDir = service.getForServe(second.sessionId)!.dir;
+    expect(secondDir).not.toBe(firstDir);
+
+    // Give the stale teardown's fs.rm every chance to run before asserting.
+    await new Promise((r) => setTimeout(r, 60));
+    expect(fs.existsSync(path.join(secondDir, 'seg-00000.m4s'))).toBe(true);
   });
 
   it('purges viewerIndex entries when a running session exhausts every stream', async () => {
