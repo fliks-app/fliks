@@ -41,7 +41,7 @@ function createHarness() {
   const decline = vi.fn(async () => FAKE_APPROVED);
   const list = vi.fn(async () => ({ data: [], total: 0 }));
   const toast = { success: vi.fn() };
-  const navbar = { enterHeroPage: vi.fn(), leaveHeroPage: vi.fn() };
+  const navbar = { enterHeroPage: vi.fn(), leaveHeroPage: vi.fn(), markAsBackNavigation: vi.fn() };
 
   TestBed.configureTestingModule({
     providers: [
@@ -95,7 +95,7 @@ describe('TmdbPreviewComponent.approveRequest', () => {
 
     await fixture.componentInstance.approveRequest(7);
 
-    expect(navigate).toHaveBeenCalledWith(['/movies', 99]);
+    expect(navigate).toHaveBeenCalledWith(['/movies', 99], { replaceUrl: true });
   });
 });
 

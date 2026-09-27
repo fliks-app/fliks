@@ -227,6 +227,9 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
   private readonly opening = new Map<string, Promise<LiveTvSessionEntry>>();
   /** Per-viewer token (returned as `sessionId`) → the shared session's key. */
   private readonly viewerIndex = new Map<string, string>();
+  /** Suffixes each session's dir so a reopen on the same key never shares one
+   *  with the previous session's pending `fs.rm` (see `teardown`). */
+  private dirSeq = 0;
   private sweepTimer: NodeJS.Timeout | null = null;
 
   constructor(
@@ -241,6 +244,10 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
+    // A dir left by a crashed process (no onModuleDestroy) must not let a
+    // reopened `key-0` land on stale segments.
+    fs.rmSync(this.liveRoot, { recursive: true, force: true });
+    fs.mkdirSync(this.liveRoot, { recursive: true });
     this.sweepTimer = setInterval(
       () => this.sweepAbandoned(),
       StreamLifetime.liveSessionGcIntervalMs(),
@@ -453,7 +460,10 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
         streamId: streams[0].id,
         streamUrl: streams[0].url,
         sourceId: streams[0].sourceId,
-        dir: effectiveMode === 'direct' ? '' : path.join(this.liveRoot, key.replace(/[^a-z0-9-]/gi, '_')),
+        dir:
+          effectiveMode === 'direct'
+            ? ''
+            : path.join(this.liveRoot, `${key.replace(/[^a-z0-9-]/gi, '_')}-${this.dirSeq++}`),
         proc: null,
         viewers: new Map(),
         createdAt: Date.now(),

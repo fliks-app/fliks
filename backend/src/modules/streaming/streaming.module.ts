@@ -26,6 +26,7 @@ import { SegmentPackagingService } from './services/segment-packaging.service';
 import { SessionRouter } from './services/session-router.service';
 import { SessionContextBuilder } from './services/session-context-builder.service';
 import { SourceScanService } from './services/source-scan.service';
+import { StaleProbeRescanService } from './services/stale-probe-rescan.service';
 import { MediaFileScan } from './entities/media-file-scan.entity';
 import { Command } from '../scheduler/entities/command.entity';
 import { AuthModule } from '../auth/auth.module';
@@ -34,6 +35,7 @@ import { LibrariesModule } from '../libraries/libraries.module';
 import { MarkersModule } from '../markers/markers.module';
 import { PlaylistsModule } from '../playlists/playlists.module';
 import { PluginsModule } from '../plugins/plugins.module';
+import { SubtitlesModule } from '../subtitles/subtitles.module';
 
 @Module({
   imports: [
@@ -54,6 +56,7 @@ import { PluginsModule } from '../plugins/plugins.module';
     MarkersModule,
     PlaylistsModule,
     PluginsModule,
+    SubtitlesModule,
   ],
   controllers: [StreamingController, PlaybackController],
   providers: [
@@ -74,6 +77,7 @@ import { PluginsModule } from '../plugins/plugins.module';
     SessionRouter,
     SessionContextBuilder,
     SourceScanService,
+    StaleProbeRescanService,
   ],
   exports: [
     SourceScanService,

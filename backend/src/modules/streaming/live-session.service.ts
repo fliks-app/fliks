@@ -99,6 +99,9 @@ export interface LiveSession {
   /** Source timeline at playback-info: the session keeps it, and its cache
    *  dir, whatever a rescan meanwhile makes of the file. */
   timeline: SourceTimeline | null;
+  /** Source fps at playback-info, frozen next to `timeline`: a mid-session
+   *  re-probe must not move the grid a seek respawn or playlist read computes from. */
+  sourceFps: number | null;
   /** `sourceVersion` of the file at playback-info, null when unreadable. */
   sourceVersion: string | null;
   /** Keyframe grid the remux variant is cut on, decided once at playback-info
@@ -178,6 +181,7 @@ export interface CreateLiveSessionInput {
   useTs?: boolean;
   audioPlan?: AudioPlan | null;
   timeline?: SourceTimeline | null;
+  sourceFps?: number | null;
   sourceVersion?: string | null;
   remuxGrid?: KeyframeGrid | null;
   audioTrackPlans?: AudioPlan[] | null;
@@ -292,6 +296,7 @@ export function buildLiveSession(
       useTs: input.useTs ?? false,
       audioPlan: input.audioPlan ?? null,
       timeline: input.timeline ?? null,
+      sourceFps: input.sourceFps ?? null,
       sourceVersion: input.sourceVersion ?? null,
       remuxGrid: input.remuxGrid ?? null,
       audioTrackPlans: input.audioTrackPlans ?? null,

@@ -71,6 +71,9 @@ interface Fixture {
   isHeroPage?: boolean;
   /** Overrides `CountsApiService.get` — a spy, so tests can assert call counts. */
   countsGet?: () => Promise<{ mediaByLibrary: Record<number, number>; badgeCounts: Record<string, number>; pendingRequests: number }>;
+  /** Defaults to granting only `livetv.read`, so a fixture that denies it still
+   *  exercises the real gate instead of a mock that grants everything. */
+  hasPermission?: (perm: string) => boolean;
 }
 
 const lib = (id: number, name: string, opts: Partial<LibrarySummary> = {}): LibrarySummary => ({
@@ -99,7 +102,10 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
       { provide: Title, useValue: { setTitle: () => {} } },
       {
         provide: AuthService,
-        useValue: { user: () => ({ id: f.userId, isAdmin: f.isAdmin }), hasPermission: () => false },
+        useValue: {
+          user: () => ({ id: f.userId, isAdmin: f.isAdmin }),
+          hasPermission: f.hasPermission ?? ((p: string) => p === 'livetv.read'),
+        },
       },
       { provide: LibraryPrefsService, useValue: { present: (libs: LibrarySummary[]) => libs } },
       { provide: LibrariesApiService, useValue: { listMine: () => Promise.resolve(f.libraries) } },
@@ -117,7 +123,14 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
         },
       },
       { provide: ServerConfigService, useValue: {} },
-      { provide: SseService, useValue: { lastEvent: f.sseLastEvent ?? (() => null), connect: () => {} } },
+      {
+        provide: SseService,
+        useValue: {
+          lastEvent: f.sseLastEvent ?? (() => null),
+          connectionId: () => null,
+          connect: () => {},
+        },
+      },
       { provide: DownloadManagerService, useValue: {} },
       { provide: NavigationHistoryService, useValue: { resetNavHistory: () => {} } },
       { provide: AddToPlaylistService, useValue: { request: () => null, clear: () => {} } },
@@ -397,6 +410,18 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
       { label: 'nav.history', icon: 'lucideHistory', badge: null, href: '/history' },
       { label: 'nav.calendar', icon: 'lucideCalendar', badge: null, href: '/calendar' },
     ]);
+  });
+
+  it('hides Live TV from the sidebar, the dock and the sheet when the user lacks livetv.read', async () => {
+    const fixture = await createFixture({ ...NATIVE_PHONE, hasPermission: () => false });
+    fixture.componentInstance.bottomMenuOpen.set(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(sidebarItems(fixture.nativeElement).some((i) => i.label === 'liveTv.title')).toBe(false);
+    expect(dockItems(fixture.nativeElement).some((i) => i.label === 'liveTv.title')).toBe(false);
+    expect(sheetItems(fixture.nativeElement).some((i) => i.label === 'liveTv.title')).toBe(false);
   });
 
   it('a plugin contribution with an unknown icon renders a generic glyph, never a blank space', async () => {

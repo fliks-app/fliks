@@ -1,7 +1,10 @@
 import type { DeviceProfileDto } from './dto/device-profile.dto';
 import type { PlaybackInfoResponse } from './dto/playback-info.dto';
 import { audioOutputBitrateBps } from './transcoding/audio-encode';
+import { remuxSegmentGrid } from './transcoding/segment-boundaries';
+import { sourceTimeline } from './transcoding/source-timeline';
 import { makeStreamBuilder as svc } from './stream-builder.test-helpers';
+import type { MediaFileInfo } from '../subtitles/ffprobe.service';
 
 type Track = {
   codec: string;
@@ -443,10 +446,30 @@ describe('StreamBuilderService — audio that ends early', () => {
       end: 100,
       audioConfigChanges: {},
     };
-    const r = svc().evaluate(file(pair(95)), tv, '', undefined, undefined, 'directplay', undefined, 3, scan)
+    const f = file(pair(95));
+    const streamInfo = (f as { mediaFile: { streamInfo: MediaFileInfo } }).mediaFile.streamInfo;
+    // Same grid the controller would freeze and serve, fed back in like it does.
+    const { origin } = sourceTimeline(streamInfo, (f as { absolutePath: string }).absolutePath);
+    const grid = remuxSegmentGrid(scan, origin, 3, streamInfo.video![0].frameRate);
+    const r = svc().evaluate(f, tv, '', undefined, undefined, 'directplay', undefined, 3, scan, true, grid)
       .response;
     expect(r.playMethod).toBe('DirectStream');
     expect(r.audioTracks![1].copy).toBe(true);
+  });
+
+  it('never derives its own grid from scan, only the frozen grid it is handed decides', () => {
+    // Same scan as above, but nothing frozen and passed in: falls back to the
+    // plain (ungridded) segment length instead of quietly recomputing one from
+    // scan, so this decision can never drift from what freezeRemuxGrid served.
+    const scan = {
+      keyframes: Array.from({ length: 10 }, (_, i) => ({ pts: i * 10, dts: i * 10 })),
+      end: 100,
+      audioConfigChanges: {},
+    };
+    const r = svc().evaluate(file(pair(95)), tv, '', undefined, undefined, 'directplay', undefined, 3, scan)
+      .response;
+    expect(r.audioTracks![1].copy).toBe(false);
+    expect(r.audioTracks![1].reasonFlags).toEqual(['AudioEndsEarly']);
   });
 
   it('leaves a muxed single track alone, whose segments the video carries', () => {

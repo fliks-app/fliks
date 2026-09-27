@@ -144,6 +144,24 @@ describe('SessionContextBuilder.build', () => {
     registry.onModuleDestroy();
   });
 
+  it('keeps sourceFps frozen at playback-info through a mid-session re-probe', () => {
+    const registry = new LiveSessionRegistry();
+    const live = registry.create({
+      userId: 7,
+      username: 'u',
+      kind: 'transcode',
+      mediaFileId: 1,
+      sourceFps: 23.81,
+    });
+    sessionRouter.findRequestSession.mockReturnValue(live);
+    const rescanned = resolved(1);
+    Object.assign(rescanned.mediaFile.streamInfo!, {
+      video: [{ codec: 'hevc', width: 3840, height: 2160, frameRate: '23.976' }],
+    });
+    expect(builder.build(req, rescanned, 1).sourceFps).toBe(23.81);
+    registry.onModuleDestroy();
+  });
+
   it('hashes a var_stream_map session at playback-info as every transcode request does', () => {
     const file = resolved(2);
     const layout = (channels: number) => ({
