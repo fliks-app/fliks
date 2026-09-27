@@ -1553,30 +1553,32 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, this.playbackMode());
 
-      // Load tracks (skip subtitle loading if already preloaded for native engine)
-      if (this.isOfflinePlayback) {
-        // Offline: load pre-downloaded subtitles from local storage (no API)
-        await this.loadOfflineSubtitles();
-        this.loadAudioTracks();
-      } else if (!this.availableSubtitles().length) {
-        // subsPromise was started in parallel with engine.load (Shaka + native);
-        // resolve it here, falling back to a direct fetch if none was started.
-        const subs = subsPromise
-          ? await subsPromise
-          : await this.trackManager.loadSubtitles(this.mediaId, this.mediaFileId, this.streamingApi, this.media);
-        this.availableSubtitles.set(subs);
-        this.loadAudioTracks();
-      } else {
-        this.loadAudioTracks();
-      }
-      await this.trackManager.autoSelectSubtitle(
-        this.availableSubtitles(),
-        this.availableAudioTracks(),
-        this.activeAudioTrackId(),
-        this.mediaFileId,
-        (sub) => this.selectSubtitle(sub),
-        this.mediaId,
-      );
+      // Tracks and subtitles load beside playback: a slow subtitle list must not delay the first frame.
+      void (async () => {
+        if (this.isOfflinePlayback) {
+          // Offline: load pre-downloaded subtitles from local storage (no API)
+          await this.loadOfflineSubtitles();
+          this.loadAudioTracks();
+        } else if (!this.availableSubtitles().length) {
+          // subsPromise was started in parallel with engine.load (Shaka + native);
+          // resolve it here, falling back to a direct fetch if none was started.
+          const subs = subsPromise
+            ? await subsPromise
+            : await this.trackManager.loadSubtitles(this.mediaId, this.mediaFileId, this.streamingApi, this.media);
+          this.availableSubtitles.set(subs);
+          this.loadAudioTracks();
+        } else {
+          this.loadAudioTracks();
+        }
+        await this.trackManager.autoSelectSubtitle(
+          this.availableSubtitles(),
+          this.availableAudioTracks(),
+          this.activeAudioTrackId(),
+          this.mediaFileId,
+          (sub) => this.selectSubtitle(sub),
+          this.mediaId,
+        );
+      })().catch((e) => console.warn('[player] track setup failed', e));
 
       // If Cast is already connected, send to Cast
       if (this.castService.isConnected() && !this.isNativeEngine()) {
@@ -3234,7 +3236,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** `startAt` for a reload: the live position, including 0; never omitted,
    *  since an omitted value falls back to the stale saved DB position. */
   private reloadStartAt(pos: number | undefined): number | undefined {
-    return pos != null ? Math.floor(pos) : undefined;
+    // The clock reads 0 until the load's seek lands: carry the resume point it is headed to.
+    const at = !pos && this.pendingStartTime > 0 ? this.pendingStartTime : pos;
+    return at != null ? Math.floor(at) : undefined;
   }
 
   /** `{url, mimeType}` for the engine's `load()`, from the negotiated `pi`.
