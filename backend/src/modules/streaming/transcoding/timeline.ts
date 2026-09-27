@@ -350,3 +350,112 @@ export function retimeFragments(
 export function firstTfdt(segBuf: Buffer, trackId: number): bigint | null {
   return collectTfdts(segBuf).find((f) => f.trackId === trackId)?.original ?? null;
 }
+
+// ── trun/tfhd sample fields (shared by the audio-fragment reader/writer and
+//    {@link videoDecodeExtent}) ────────────────────────────────────────────
+
+export const TFHD_DEFAULT_DURATION = 0x000008;
+export const TFHD_DEFAULT_SIZE = 0x000010;
+export const TFHD_DEFAULT_FLAGS = 0x000020;
+export const TRUN_DATA_OFFSET = 0x000001;
+export const TRUN_FIRST_SAMPLE_FLAGS = 0x000004;
+export const TRUN_SAMPLE_DURATION = 0x000100;
+export const TRUN_SAMPLE_SIZE = 0x000200;
+export const TRUN_SAMPLE_FLAGS = 0x000400;
+export const TRUN_SAMPLE_CTS = 0x000800;
+
+export interface VideoDecodeExtent {
+  /** The first traf's tfdt, in `trackId`'s timescale ticks. */
+  start: bigint;
+  /** `start` plus every sample duration seen, across every traf. */
+  end: bigint;
+  /** Duration of the last sample read: half of it is a frame's tolerance. */
+  lastDuration: bigint;
+}
+
+/** `trackId`'s decode extent across every `moof` in `moofBuf` (concatenated
+ *  moof boxes, e.g. {@link readMoofs}): the first traf's tfdt, plus every
+ *  trun sample's duration summed onto it — a proof of how far decode reached
+ *  that doesn't depend on the file's last tfdt being trustworthy.
+ *  A sample's duration is its trun's own (flag 0x100), else the tfhd default,
+ *  else `trexDefault` (the init's `mvex/trex`, for a track declaring neither). */
+export function videoDecodeExtent(
+  moofBuf: Buffer,
+  trackId: number,
+  trexDefault = 0,
+): VideoDecodeExtent | null {
+  let start: bigint | null = null;
+  let end = 0n;
+  let lastDuration = 0n;
+  for (const moof of boxes(moofBuf, 0, moofBuf.length)) {
+    if (moof.type !== 'moof') continue;
+    for (const traf of boxes(moofBuf, moof.payloadStart, moof.start + moof.size)) {
+      if (traf.type !== 'traf') continue;
+      const trafEnd = traf.start + traf.size;
+      const tfhd = findBox(moofBuf, traf.payloadStart, trafEnd, 'tfhd');
+      if (!tfhd || tfhdTrackId(moofBuf, tfhd) !== trackId) continue;
+      const trun = findBox(moofBuf, traf.payloadStart, trafEnd, 'trun');
+      if (!trun) continue;
+      if (start === null) {
+        const tfdtBox = findBox(moofBuf, traf.payloadStart, trafEnd, 'tfdt');
+        if (!tfdtBox) return null;
+        const v1 = moofBuf[tfdtBox.payloadStart] === 1;
+        start = v1
+          ? moofBuf.readBigInt64BE(tfdtBox.payloadStart + 4)
+          : BigInt(moofBuf.readUInt32BE(tfdtBox.payloadStart + 4));
+        end = start;
+      }
+      const defaultDuration = tfhdDefaultDuration(moofBuf, tfhd) ?? trexDefault;
+      const trunFlags = moofBuf.readUIntBE(trun.payloadStart + 1, 3);
+      const sampleCount = moofBuf.readUInt32BE(trun.payloadStart + 4);
+      let o = trun.payloadStart + 8;
+      if (trunFlags & TRUN_DATA_OFFSET) o += 4;
+      if (trunFlags & TRUN_FIRST_SAMPLE_FLAGS) o += 4;
+      const perSample = !!(trunFlags & TRUN_SAMPLE_DURATION);
+      const fieldsAfterDuration =
+        (trunFlags & TRUN_SAMPLE_SIZE ? 1 : 0) +
+        (trunFlags & TRUN_SAMPLE_FLAGS ? 1 : 0) +
+        (trunFlags & TRUN_SAMPLE_CTS ? 1 : 0);
+      for (let i = 0; i < sampleCount; i++) {
+        const duration = perSample ? moofBuf.readUInt32BE(o) : defaultDuration;
+        if (perSample) o += 4;
+        o += fieldsAfterDuration * 4;
+        end += BigInt(duration);
+        lastDuration = BigInt(duration);
+      }
+    }
+  }
+  return start === null ? null : { start, end, lastDuration };
+}
+
+/** tfhd's own `track_ID` (fullbox(4) immediately followed by it). */
+function tfhdTrackId(buf: Buffer, tfhd: { payloadStart: number }): number {
+  return buf.readUInt32BE(tfhd.payloadStart + 4);
+}
+
+/** tfhd's `default_sample_duration`, or null when its flag is unset. */
+function tfhdDefaultDuration(buf: Buffer, tfhd: { payloadStart: number }): number | null {
+  const flags = buf.readUIntBE(tfhd.payloadStart + 1, 3);
+  let o = tfhd.payloadStart + 8;
+  if (flags & 0x000001) o += 8; // base_data_offset
+  if (flags & 0x000002) o += 4; // sample_description_index
+  return flags & TFHD_DEFAULT_DURATION ? buf.readUInt32BE(o) : null;
+}
+
+/** trackId → `default_sample_duration` from an init's `moov/mvex/trex`: the
+ *  last-resort fallback a trun/tfhd can leave unset. */
+export function parseTrexDefaults(initBuf: Buffer): Map<number, number> {
+  const out = new Map<number, number>();
+  const moov = findBox(initBuf, 0, initBuf.length, 'moov');
+  const mvex = moov && findBox(initBuf, moov.payloadStart, moov.start + moov.size, 'mvex');
+  if (!mvex) return out;
+  for (const trex of boxes(initBuf, mvex.payloadStart, mvex.start + mvex.size)) {
+    if (trex.type !== 'trex') continue;
+    // fullbox(4) track_ID(4) default_sample_description_index(4) default_sample_duration(4)
+    out.set(
+      initBuf.readUInt32BE(trex.payloadStart + 4),
+      initBuf.readUInt32BE(trex.payloadStart + 12),
+    );
+  }
+  return out;
+}

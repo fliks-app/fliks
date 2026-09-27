@@ -38,23 +38,34 @@ function trak(id: number, timescale: number, handler: string, mediaTime: number)
   );
 }
 
-/** A GOP file: one video and one audio fragment, v1 tfdt. */
-function gop(videoTfdt: bigint, audioTfdt: bigint): Buffer {
-  const frag = (id: number, v: bigint) => {
+/** version-0 trun, one sample, explicit duration (flag 0x100). */
+const videoTrun = (durationTicks: number) =>
+  box('trun', Buffer.concat([Buffer.from([0, 0, 1, 0]), u32(1), u32(durationTicks)]));
+
+// This file's keyframes are always 2s apart at the 1000 timescale fixtures
+// use: a video fragment spanning exactly that reaches its next keyframe.
+const GOP_DECODE_SPAN_TICKS = 2000;
+
+/** A GOP file: one video (with a trun reaching the next keyframe) and one
+ *  audio fragment, v1 tfdt. */
+function gop(videoTfdt: bigint, audioTfdt: bigint, videoDurationTicks = GOP_DECODE_SPAN_TICKS): Buffer {
+  const traf = (id: number, v: bigint, trun: Buffer | null) => {
     const t = Buffer.alloc(8);
     t.writeBigInt64BE(v);
     return box(
-      'moof',
-      box(
-        'traf',
-        Buffer.concat([
-          box('tfhd', Buffer.concat([Buffer.alloc(4), u32(id)])),
-          box('tfdt', Buffer.concat([Buffer.from([1, 0, 0, 0]), t])),
-        ]),
-      ),
+      'traf',
+      Buffer.concat([
+        box('tfhd', Buffer.concat([Buffer.alloc(4), u32(id)])),
+        box('tfdt', Buffer.concat([Buffer.from([1, 0, 0, 0]), t])),
+        ...(trun ? [trun] : []),
+      ]),
     );
   };
-  return Buffer.concat([frag(1, videoTfdt), box('mdat', Buffer.alloc(2)), frag(2, audioTfdt)]);
+  return Buffer.concat([
+    box('moof', traf(1, videoTfdt, videoTrun(videoDurationTicks))),
+    box('mdat', Buffer.alloc(2)),
+    box('moof', traf(2, audioTfdt, null)),
+  ]);
 }
 
 const tfdts = (buf: Buffer): number[] => {
@@ -267,12 +278,28 @@ describe('RemuxSegmentAssembler', () => {
     ]);
   });
 
-  it('assembles a segment once its own last GOP is renamed, with no need for the next one to start', async () => {
-    // Every kill is SIGKILL, which can't rename a partial GOP: a renamed
-    // gop-3 is proof enough on its own, whether or not gop-4 ever starts.
+  it('assembles a segment once its own decode reaches the next keyframe, with no need for the next GOP to start', async () => {
+    // The target time comes from the grid, not from gop-4: no wait for it.
     writeGops(4);
     await assemble(0, null, 0, grid, false);
     expect(segs()).toEqual(['seg-0000.m4s', 'seg-0001.m4s']);
+  });
+
+  it('never assembles a GOP whose decode falls short of its next keyframe, however it was renamed', async () => {
+    // ffmpeg's own SIGTERM trailer can rename a mid-GOP cut as if it were done.
+    fs.writeFileSync(path.join(gopDir, 'gop-0.m4s'), gop(0n, 0n));
+    fs.writeFileSync(path.join(gopDir, 'gop-1.m4s'), gop(2000n, 96000n, 200));
+    await assemble(0, null, 0, grid, false);
+    expect(segs()).toEqual([]);
+  });
+
+  it("doesn't let a clean exit code publish a GOP a truncated trailer only renamed", async () => {
+    // ffmpeg reports code 0 after a graceful SIGTERM too: assembleTail must
+    // still refuse a last GOP whose own decode never reached its target.
+    writeGops(2);
+    fs.writeFileSync(path.join(gopDir, 'gop-2.m4s'), gop(4000n, 192000n, 200));
+    await assemble(0, null, 0, grid, true);
+    expect(segs()).toEqual(['seg-0000.m4s']);
   });
 
   it('leaves a segment out while its last GOP is still .tmp', async () => {
@@ -383,6 +410,7 @@ describe('RemuxSegmentAssembler: multi-audio (one growing file per track, H6)', 
           Buffer.concat([
             box('tfhd', Buffer.concat([Buffer.alloc(4), u32(1)])),
             box('tfdt', Buffer.concat([Buffer.from([1, 0, 0, 0]), t])),
+            videoTrun(GOP_DECODE_SPAN_TICKS),
           ]),
         ),
       ),
