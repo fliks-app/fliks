@@ -1107,8 +1107,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     );
     this.log.debug(`FFmpeg argv [${id}]: ffmpeg ${args.join(' ')}`);
 
+    // stdin stays a pipe (not 'ignore') so FfmpegThrottleService can send the
+    // bundled jellyfin-ffmpeg's `p`/`u` pause/resume keys.
     const proc = spawn('ffmpeg', args, {
-      stdio: ['ignore', 'ignore', 'pipe'],
+      stdio: ['pipe', 'ignore', 'pipe'],
     });
 
     let stderr = '';

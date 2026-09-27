@@ -74,6 +74,11 @@ export interface LiveSession {
   startedAt: number;
   lastBeat: number;
   position: number;
+  /** Highest HLS segment index this session has requested. Combined with
+   *  `position` (the heartbeat) as the throttle service's playhead: a
+   *  player buffering ahead of its last-reported position must not starve
+   *  the encoder. Null until a real segment (not init) is fetched. */
+  lastRequestedSegment: number | null;
   state: PlaybackState;
   /** Client-composed "S1:E2 - Title" for a series, null for a film. Carried so
    *  a controller can label what a target plays without a second lookup. */
@@ -277,6 +282,7 @@ export function buildLiveSession(
       startedAt: now,
       lastBeat: now,
       position: input.position ?? 0,
+      lastRequestedSegment: null,
       state: 'playing',
       episodeLabel: null,
       supportsVolume: true,
@@ -474,6 +480,16 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
     if (!session) return false;
     session.lastBeat = Date.now();
     return true;
+  }
+
+  /** Record the highest segment index this session has requested, see
+   *  {@link LiveSession.lastRequestedSegment}. No-op on an unknown sid. */
+  trackSegment(sessionId: string, segmentIndex: number): void {
+    const session = this.resolve(sessionId);
+    if (!session) return;
+    if (session.lastRequestedSegment == null || segmentIndex > session.lastRequestedSegment) {
+      session.lastRequestedSegment = segmentIndex;
+    }
   }
 
   /**

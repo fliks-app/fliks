@@ -53,7 +53,9 @@ function makeController(deps: ControllerDeps = {}): StreamingController {
     (deps.playbackService ?? {}) as never,
     (deps.markersService ?? {}) as never,
     (deps.streamingSettingsCache ?? {}) as never,
-    (deps.liveSessions ?? {}) as never,
+    // trackSegment fires on every segment fetch a test resolves a live
+    // session for; default it so only tests that actually assert on it opt in.
+    (deps.liveSessions ?? { trackSegment: jest.fn() }) as never,
     (deps.segmentPackaging ?? {}) as never,
     (deps.sessionRouter ?? {}) as never,
     (deps.sessionContextBuilder ?? {}) as never,
@@ -800,7 +802,7 @@ describe('StreamingController.hlsSegment - kind refresh', () => {
   ): Promise<{ liveSessions: { update: jest.Mock } }> {
     const segPath = path.join(cacheRoot, 'seg-0001.m4s');
     fs.writeFileSync(segPath, 'x');
-    const liveSessions = { update: jest.fn() };
+    const liveSessions = { update: jest.fn(), trackSegment: jest.fn() };
     const controller = makeController({
       streamingService: { resolveFile: jest.fn().mockResolvedValue({}) },
       activeStreamTracker: { getSegmentDuration: () => 3 },

@@ -65,6 +65,22 @@ describe('LiveSessionRegistry', () => {
     expect(svc.touch('missing')).toBe(false);
   });
 
+  it('trackSegment keeps the highest requested segment, ignoring a later smaller one', () => {
+    const session = svc.create(BASE);
+    expect(session.lastRequestedSegment).toBeNull();
+    svc.trackSegment(session.sessionId, 5);
+    expect(session.lastRequestedSegment).toBe(5);
+    svc.trackSegment(session.sessionId, 12);
+    expect(session.lastRequestedSegment).toBe(12);
+    // A player re-buffering an earlier segment is not a rewind of the playhead.
+    svc.trackSegment(session.sessionId, 3);
+    expect(session.lastRequestedSegment).toBe(12);
+  });
+
+  it('trackSegment is a no-op for an unknown sessionId', () => {
+    expect(() => svc.trackSegment('missing', 5)).not.toThrow();
+  });
+
   it('stop removes the session and returns true', () => {
     const session = svc.create(BASE);
     expect(svc.stop(session.sessionId)).toBe(true);

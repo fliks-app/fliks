@@ -198,6 +198,11 @@ export class RemuxSegmentAssembler {
   /** `this.next` once the run opened: the baseline `segmentsPerSecond`
    *  measures progress from. */
   private openStartSegment = 0;
+  /** Wall-clock ms this run has spent throttle-paused so far, plus the open
+   *  span below; excluded from {@link segmentsPerSecond} so a paused run
+   *  doesn't read back as a slow one once it resumes. */
+  private pausedMs = 0;
+  private pausedSince: number | null = null;
 
   /** Maps run-local time to source-pts time (the same space `boundaries`
    *  is in); resolved once video's own run lands, shared by every audio
@@ -276,12 +281,41 @@ export class RemuxSegmentAssembler {
     return this.audio.find((a) => a.index === index)?.served ?? null;
   }
 
-  /** Segments produced per wall-clock second since the run opened. */
+  /** Segments produced per wall-clock second since the run opened, excluding
+   *  any time the throttle service has paused this run, otherwise a long
+   *  pause reads back as a slow run and shrinks {@link canServe}'s wait
+   *  window right when the run resumes. */
   segmentsPerSecond(): number | null {
     if (!this.opened || this.openedAt == null) return null;
-    const elapsedSeconds = (Date.now() - this.openedAt) / 1000;
+    const pausedMs =
+      this.pausedMs + (this.pausedSince != null ? Date.now() - this.pausedSince : 0);
+    const elapsedSeconds = (Date.now() - this.openedAt - pausedMs) / 1000;
     if (elapsedSeconds <= 0) return null;
     return (this.next - this.openStartSegment) / elapsedSeconds;
+  }
+
+  /** Source-time boundary of the current frontier segment: how far into the
+   *  source this run has produced. Null before the run's landing point is
+   *  known (see {@link videoFrontier}). */
+  frontierSeconds(): number | null {
+    if (!this.opened) return null;
+    const { boundaries, start, segmentDuration } = this.plan;
+    if (boundaries) return boundaries[Math.min(this.next, boundaries.length - 1)];
+    return start + this.next * segmentDuration;
+  }
+
+  /** Freeze the throughput clock: called when the throttle service stops
+   *  this run's ffmpeg. Idempotent. */
+  pause(): void {
+    if (this.pausedSince == null) this.pausedSince = Date.now();
+  }
+
+  /** Resume the throughput clock. Idempotent. */
+  resume(): void {
+    if (this.pausedSince != null) {
+      this.pausedMs += Date.now() - this.pausedSince;
+      this.pausedSince = null;
+    }
   }
 
   /** Whether `segment` (the video, or one rendition with `audioIndex`) is

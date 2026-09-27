@@ -66,6 +66,13 @@ export interface StreamingSettings {
    * Every mode still extracts on demand; they only differ on what runs ahead.
    */
   subtitlePrewarm: SubtitlePrewarm;
+  /** Whether a streaming ffmpeg run is paused once it gets too far ahead of
+   *  the viewer's playhead. Default `true`. */
+  throttleEnabled: boolean;
+  /** How many seconds ahead of the furthest-ahead viewer's playhead a run's
+   *  produced frontier may get before it is paused; resumed at half of this.
+   *  Ignored while {@link throttleEnabled} is off. */
+  throttleThresholdSeconds: number;
 }
 
 export type AutoQualityMode = 'directplay' | 'abr';
@@ -84,7 +91,13 @@ const KEYS = [
   'streaming_allow_direct_stream',
   'streaming_gpu_render_node',
   'streaming_subtitle_prewarm',
+  'streaming_throttle_enabled',
+  'streaming_throttle_threshold_seconds',
 ] as const;
+
+/** Resume-at-half default: a run may run this many seconds ahead of the
+ *  viewer before pausing. */
+const DEFAULT_THROTTLE_THRESHOLD_SECONDS = 90;
 
 const TONEMAP_ALGOS: TonemapAlgo[] = ['auto', 'opencl', 'vaapi', 'qsv'];
 const TONEMAP_CURVES: TonemapCurve[] = ['hable', 'mobius', 'reinhard'];
@@ -154,6 +167,8 @@ export class StreamingSettingsCache implements OnModuleInit {
       allowDirectStream,
       gpuRenderNode,
       subtitlePrewarm,
+      throttleEnabled,
+      throttleThresholdSeconds,
     ] = values;
 
     const algo = TONEMAP_ALGOS.includes(tonemapAlgo as TonemapAlgo)
@@ -196,6 +211,10 @@ export class StreamingSettingsCache implements OnModuleInit {
       )
         ? (subtitlePrewarm as SubtitlePrewarm)
         : 'playback',
+      // Default on; only the explicit string 'false' disables throttling.
+      throttleEnabled: throttleEnabled !== 'false',
+      throttleThresholdSeconds:
+        positive(throttleThresholdSeconds) ?? DEFAULT_THROTTLE_THRESHOLD_SECONDS,
     };
   }
 }

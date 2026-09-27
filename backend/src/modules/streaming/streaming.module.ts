@@ -13,6 +13,7 @@ import { StreamingService } from './streaming.service';
 import { SubtitleStreamService } from './subtitle-stream.service';
 import { TranscodingService } from './transcoding';
 import { TranscodeCacheService } from './transcoding/transcode-cache.service';
+import { FfmpegThrottleService } from './transcoding/ffmpeg-throttle.service';
 import { LiveSessionRegistry } from './live-session.service';
 import { StreamBuilderService } from './stream-builder.service';
 import { PlaybackService } from './playback.service';
@@ -60,6 +61,7 @@ import { PluginsModule } from '../plugins/plugins.module';
     SubtitleStreamService,
     TranscodingService,
     TranscodeCacheService,
+    FfmpegThrottleService,
     LiveSessionRegistry,
     StreamBuilderService,
     PlaybackService,

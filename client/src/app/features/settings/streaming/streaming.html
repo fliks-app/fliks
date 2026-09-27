@@ -65,6 +65,23 @@
       [hint]="'settings.streaming.auto_crop_help' | translate"
     />
 
+    <!-- Throttle streaming runs against the viewer's playhead: pauses far
+         ahead, resumes as the viewer catches up. -->
+    <app-toggle-field
+      [(value)]="throttleEnabled"
+      [label]="'settings.streaming.throttle_enabled' | translate"
+      [hint]="'settings.streaming.throttle_enabled_help' | translate"
+    />
+    @if (throttleEnabled()) {
+      <div class="form-control">
+        <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.throttle_threshold' | translate }}</span></label>
+        <input
+          type="number" min="10" step="5" class="input input-bordered w-full"
+          [ngModel]="throttleThresholdSeconds()" (ngModelChange)="throttleThresholdSeconds.set($event)" />
+        <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.throttle_threshold_help' | translate }}</span></label>
+      </div>
+    }
+
     <!-- QSV / libx264 encoder preset -->
     <div class="form-control">
       <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.qsv_preset' | translate }}</span></label>

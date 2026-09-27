@@ -52,6 +52,11 @@ export class StreamingSettingsComponent implements OnInit {
   /** When off, a session that could copy the video is transcoded instead -
    *  no DirectStream (remux) offered at all. Default on. */
   readonly allowRemux = signal(true);
+  /** Pauses a streaming run once it gets too far ahead of the viewer, and
+   *  resumes it as the viewer catches up. Default on. */
+  readonly throttleEnabled = signal(true);
+  /** Seconds a run may get ahead of the viewer before it pauses. */
+  readonly throttleThresholdSeconds = signal('90');
   /** How the "Auto" quality resolves: 'directplay' tries Direct Play first
    *  (zero transcoding when compatible), 'abr' always uses the adaptive HLS
    *  ladder. Explicit quality picks are unaffected. */
@@ -87,6 +92,8 @@ export class StreamingSettingsComponent implements OnInit {
       this.qsvPreset.set(all['streaming_qsv_preset'] ?? 'faster');
       this.autoCropEnabled.set(all['streaming_auto_crop_enabled'] !== 'false');
       this.allowRemux.set(all['streaming_allow_direct_stream'] !== 'false');
+      this.throttleEnabled.set(all['streaming_throttle_enabled'] !== 'false');
+      this.throttleThresholdSeconds.set(all['streaming_throttle_threshold_seconds'] ?? '90');
       this.autoQualityMode.set(
         all['streaming_auto_quality_mode'] === 'abr' ? 'abr' : 'directplay',
       );
@@ -137,6 +144,8 @@ export class StreamingSettingsComponent implements OnInit {
         streaming_subtitle_prewarm: this.subtitlePrewarm(),
         streaming_auto_crop_enabled: String(this.autoCropEnabled()),
         streaming_allow_direct_stream: String(this.allowRemux()),
+        streaming_throttle_enabled: String(this.throttleEnabled()),
+        streaming_throttle_threshold_seconds: this.throttleThresholdSeconds(),
       });
       this.toast.success(this.translate.instant('settings.streaming.saved'));
     } catch { /* interceptor */ }

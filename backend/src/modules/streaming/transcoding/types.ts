@@ -336,4 +336,7 @@ export interface TranscodeSession {
    *  this transcode session. Reset to `null` whenever a live session
    *  reappears. Used to enforce the JOB_GRACE_MS window. */
   zeroLiveSince?: number | null;
+  /** Set by `FfmpegThrottleService` while this run is paused because its
+   *  frontier is far enough ahead of every viewer's playhead. */
+  throttlePaused?: boolean;
 }

@@ -1,4 +1,4 @@
-import { existsSync, watch, type FSWatcher } from 'fs';
+import { existsSync, readdirSync, watch, type FSWatcher } from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { OUTPUT_POLL_MS } from './constants';
@@ -81,6 +81,29 @@ export async function segmentWithinReach(
     }
   }
   return false;
+}
+
+/** Highest ffmpeg-numbered segment written to `cachePath` (flat layout, or
+ *  the var_stream_map '0/' video subdir), or -1 before any segment lands.
+ *  Sync: the throttle service's tick reads this with no await between
+ *  observing a session's state and acting on it. */
+export function latestSegmentNumber(cachePath: string): number {
+  const dirs = [path.join(cachePath, '0'), cachePath];
+  for (const dir of dirs) {
+    let files: string[];
+    try {
+      files = readdirSync(dir);
+    } catch {
+      continue;
+    }
+    let max = -1;
+    for (const f of files) {
+      const m = f.match(/^seg-(\d+)\.(?:m4s|ts)$/);
+      if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+    if (max >= 0) return max;
+  }
+  return -1;
 }
 
 /**

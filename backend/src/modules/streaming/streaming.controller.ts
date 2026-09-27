@@ -1808,6 +1808,8 @@ export class StreamingController {
     // any segment Shaka asks for here is in `<videoSession.cachePath>/<varStreamPath>`.
     let videoSession = this.sessionRouter.resolveSession(mediaFileId, user?.id, req);
     const live = this.sessionRouter.findRequestSession(req, mediaFileId);
+    // Throttle playhead signal: an init request carries no position.
+    if (!isInit && live) this.liveSessions.trackSegment(live.sessionId, segIndex);
     // A seek can respawn video without this rendition catching up; gated on
     // the file missing so the common case never pays for the resolve+lock.
     const behindOnAudio =
@@ -2214,6 +2216,8 @@ export class StreamingController {
 
     const segMatch = segment.match(/seg-(\d+)\.(ts|m4s)/);
     const segIndex = segMatch ? parseInt(segMatch[1], 10) : 0;
+    // Throttle playhead signal: an init request carries no position.
+    if (segMatch && live) this.liveSessions.trackSegment(live.sessionId, segIndex);
 
     // If a session (running OR completed) already has this segment ON DISK,
     // serve it without any DB query or session management. Completed sessions
