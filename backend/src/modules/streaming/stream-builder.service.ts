@@ -666,11 +666,14 @@ export class StreamBuilderService {
         ? lastVideoSegmentStart(si, resolved.absolutePath, segmentDuration)
         : undefined,
     );
-    // A remux muxes the picked track alone, so it is a group of its own, and
-    // a muxed track ends with the video's segments.
+    // A single-audio remux muxes the picked track alone, so it is a group of
+    // its own; a multi-audio remux now muxes every rendition through the same
+    // var_stream_map group as the transcode ladder, picked track included, so
+    // its decision is the group's like every other rendition's.
+    const multiAudioLayout = audioLayout(audioStreams.length) === 'var-stream-map';
     const pickedStream = audioStreams[pickedAudio];
     const pickedDecision =
-      canCopyVideo && pickedStream
+      canCopyVideo && pickedStream && !multiAudioLayout
         ? this.decideAudio(
             [pickedStream],
             v,

@@ -413,6 +413,148 @@ describe('StreamingController.hlsPlaylist (remux)', () => {
   });
 });
 
+describe('StreamingController.hlsAudioPlaylist (remux rendition)', () => {
+  const grid = computeSegmentGrid(
+    [0, 7.966, 15.974, 19.937].map((pts) => ({ pts, dts: pts })),
+    0,
+    25,
+    6,
+  )!;
+
+  function playlistFor(live: Partial<LiveSession> | null): Promise<string> {
+    const resolved = { mediaFile: { streamInfo: { video: [{ frameRate: '25' }], durationSeconds: 25 } } };
+    const controller = new StreamingController(
+      { resolveFile: jest.fn().mockResolvedValue(resolved) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { getSegmentDuration: () => 6 } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { assertFresh: jest.fn(), findRequestSession: jest.fn().mockReturnValue(live) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    return new Promise((resolve) => {
+      const res = { setHeader: jest.fn(), send: resolve, status: jest.fn() };
+      void controller.hlsAudioPlaylist(
+        42,
+        0,
+        { query: {}, user: { id: 7 } } as never,
+        res as never,
+      );
+    });
+  }
+  const extinf = (m: string) => [...m.matchAll(/#EXTINF:([\d.]+),/g)].map((x) => Number(x[1]));
+
+  it('carries the same real durations as the video remux playlist, not a uniform grid', async () => {
+    expect(extinf(await playlistFor({ kind: 'remux', remuxGrid: grid }))).toEqual(
+      grid.durations.map((d) => Number(d.toFixed(3))),
+    );
+  });
+
+  it('falls back to the uniform grid for a transcode session (or no live session at all)', async () => {
+    expect(extinf(await playlistFor({ kind: 'transcode', remuxGrid: grid }))).toEqual([6, 6, 6, 6, 1]);
+    expect(extinf(await playlistFor(null))).toEqual([6, 6, 6, 6, 1]);
+  });
+});
+
+describe('StreamingController.hlsMaster — multi-audio remux publishes the group', () => {
+  function masterFor(
+    live: Partial<LiveSession> | null,
+    query: Record<string, string> = { remux: '1' },
+  ) {
+    const resolved = {
+      mediaFile: {
+        streamInfo: {
+          video: [{ width: 1920, height: 1080, frameRate: '24' }],
+          audio: [{ codec: 'aac' }, { codec: 'ac3' }],
+        },
+      },
+    };
+    const generateMasterPlaylist = jest.fn().mockReturnValue('#EXTM3U');
+    const controller = new StreamingController(
+      { resolveFile: jest.fn().mockResolvedValue(resolved) } as never,
+      {} as never,
+      { generateMasterPlaylist } as never,
+      {} as never,
+      { getSegmentDuration: () => 6 } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { update: jest.fn() } as never,
+      {} as never,
+      { assertFresh: jest.fn(), findRequestSession: jest.fn().mockReturnValue(live) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    return { controller, generateMasterPlaylist };
+  }
+
+  it('publishes the audio group for a multi-audio remux (today it muxed the picked track alone)', async () => {
+    const audioTrackPlans = [
+      { mode: 'copy' as const, codec: 'aac', channels: 2 },
+      { mode: 'copy' as const, codec: 'ac3', channels: 6 },
+    ];
+    const { controller, generateMasterPlaylist } = masterFor({
+      audioStreamIndex: 0,
+      audioTrackPlans,
+    });
+    const res = { setHeader: jest.fn(), send: jest.fn(), status: jest.fn() };
+    await controller.hlsMaster(42, { query: { remux: '1' }, user: { id: 7 } } as never, res as never);
+    const opts = generateMasterPlaylist.mock.calls[0][0];
+    expect(opts.audioStreams).toHaveLength(2);
+    expect(opts.audioPlans).toEqual(audioTrackPlans);
+  });
+
+  it('keeps the muxed single track for a single-audio source', async () => {
+    const resolved = {
+      mediaFile: { streamInfo: { video: [{ width: 1920, height: 1080, frameRate: '24' }], audio: [{ codec: 'aac' }] } },
+    };
+    const generateMasterPlaylist = jest.fn().mockReturnValue('#EXTM3U');
+    const controller = new StreamingController(
+      { resolveFile: jest.fn().mockResolvedValue(resolved) } as never,
+      {} as never,
+      { generateMasterPlaylist } as never,
+      {} as never,
+      { getSegmentDuration: () => 6 } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { update: jest.fn() } as never,
+      {} as never,
+      { assertFresh: jest.fn(), findRequestSession: jest.fn().mockReturnValue({
+        audioPlan: { mode: 'copy', codec: 'aac', channels: 2 },
+      }) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    const res = { setHeader: jest.fn(), send: jest.fn(), status: jest.fn() };
+    await controller.hlsMaster(42, { query: { remux: '1' }, user: { id: 7 } } as never, res as never);
+    const opts = generateMasterPlaylist.mock.calls[0][0];
+    expect(opts.audioStreams).toBeUndefined();
+    expect(opts.audioPlans).toEqual([{ mode: 'copy', codec: 'aac', channels: 2 }]);
+  });
+});
+
 describe('StreamingController.hlsSegment — kind refresh', () => {
   const cacheRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fliks-kind-refresh-'));
   afterAll(() => fs.rmSync(cacheRoot, { recursive: true, force: true }));

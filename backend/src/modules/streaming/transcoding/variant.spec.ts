@@ -18,6 +18,11 @@ describe('variantSuffix', () => {
     expect(variantSuffix(remuxVariant(2, true))).toBe('-remux-a2');
     expect(variantSuffix(remuxVariant(2, false))).toBe('-remux-a2-u');
   });
+
+  it('drops the track index for a multi-audio remux, keeping the grid', () => {
+    expect(variantSuffix(remuxVariant(2, true, true))).toBe('-remux');
+    expect(variantSuffix(remuxVariant(2, false, true))).toBe('-remux-u');
+  });
 });
 
 describe('variantHash', () => {
@@ -40,6 +45,8 @@ describe('baseProfileHash', () => {
     expect(baseProfileHash(`${base}-early`)).toBe(base);
     expect(baseProfileHash(`${base}-remux-a3`)).toBe(base);
     expect(baseProfileHash(`${base}-remux-a3-u`)).toBe(base);
+    expect(baseProfileHash(`${base}-remux`)).toBe(base);
+    expect(baseProfileHash(`${base}-remux-u`)).toBe(base);
   });
   it('leaves non-variant trailing dashes alone', () => {
     expect(baseProfileHash(`${base}-foo`)).toBe(`${base}-foo`);
@@ -55,6 +62,8 @@ describe('round-trip variantHash + baseProfileHash', () => {
       VARIANT_EARLY,
       remuxVariant(0, true),
       remuxVariant(4, false),
+      remuxVariant(0, true, true),
+      remuxVariant(4, false, true),
     ];
     for (const v of variants) {
       expect(baseProfileHash(variantHash(base, v))).toBe(base);

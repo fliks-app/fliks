@@ -63,6 +63,13 @@ export interface RemuxAssemblyPlan {
   /** Decode time of the first keyframe; null without a keyframe list, when the
    *  run's own init tells the reorder delay. */
   firstDecode: number | null;
+  /** Grid segment boundaries (source seconds, `KeyframeGrid.boundaries`);
+   *  null on the uniform fallback, where ffmpeg already cuts every rendition
+   *  at `segmentDuration` and no time-based grouping is needed. */
+  boundaries: number[] | null;
+  /** Extra audio-only EXT-X-MEDIA renditions sharing this run (var_stream_map,
+   *  ffmpeg's `%v` index `i+1`); 0 for the single-rendition inline layout. */
+  audioRenditions: number;
 }
 
 /** Edits of the served tracks: the video's reorder delay makes a segment's tfdt
@@ -85,6 +92,8 @@ export function remuxAssemblyPlan(o: {
   startSegment: number;
   run: RemuxRunStart;
   origin: number;
+  /** See {@link RemuxAssemblyPlan.audioRenditions}. */
+  audioRenditions?: number;
 }): RemuxAssemblyPlan {
   return {
     dir: o.dir,
@@ -96,6 +105,8 @@ export function remuxAssemblyPlan(o: {
     gopPts: o.grid?.keyframes.map((k) => k.pts) ?? null,
     start: o.grid ? o.grid.boundaries[0] : o.origin,
     firstDecode: o.grid?.keyframes[0]?.dts ?? null,
+    boundaries: o.grid?.boundaries ?? null,
+    audioRenditions: o.audioRenditions ?? 0,
   };
 }
 
@@ -110,8 +121,36 @@ function gopsOf(plan: RemuxAssemblyPlan, segment: number): number[] | null {
 
 const segName = (n: number) => `seg-${String(n).padStart(4, '0')}.m4s`;
 
+/** One audio-only rendition's assembly state — a fine-grained per-fragment
+ *  raw stream (ffmpeg's own segmenting is meaningless at `hls_time=0` on a
+ *  stream with no video reference: it cuts on literally every packet) grouped
+ *  onto the video's grid by each fragment's own decode time. */
+interface AudioRendition {
+  /** 1-based EXT-X-MEDIA index; ffmpeg's `%v` folder is the same number. */
+  index: number;
+  /** Served dir: `plan.dir/<index>`. */
+  dir: string;
+  /** Raw ffmpeg output dir: `plan.gopDir/<index>`. */
+  gopDir: string;
+  /** Next raw fragment number to read. */
+  nextRaw: number;
+  /** Next served segment index to close. */
+  served: number;
+  /** Retimed fragments accumulated for `served`, not yet flushed. */
+  pending: Buffer[];
+  trackId: number | null;
+  timescale: number;
+  /** Ticks added to this track's tfdt onto the served timeline; resolved once
+   *  from the run's init, like the single-track `delta` map entry. */
+  delta: bigint | null;
+  /** `delta` was clamped against a first-frame-before-0 tick once already. */
+  deltaClamped: boolean;
+  unwatch: (() => void) | null;
+}
+
 /** Builds a run's served segments from its GOP files on the grid and the served
- *  timeline, so segments and the shared init do not depend on the run. */
+ *  timeline, so segments and the shared init do not depend on the run. A
+ *  multi-audio run also assembles every {@link AudioRendition} sharing it. */
 export class RemuxSegmentAssembler {
   private next: number;
   /** ffmpeg GOP number → grid GOP index. */
@@ -126,6 +165,17 @@ export class RemuxSegmentAssembler {
   private failures = 0;
   private stopped = false;
 
+  /** Var_stream_map layout: raw video lives under `gopDir/0/seg-%04d.m4s` +
+   *  `init_0.mp4`, not the single-rendition `gopDir/gop-<n>.m4s` + `init.mp4`. */
+  private readonly multiAudio: boolean;
+  private readonly videoRawDir: string;
+  /** Maps run-local time to source-pts time (the same space `boundaries`
+   *  is in); resolved once video's own run lands, shared by every audio
+   *  rendition's boundary comparison. */
+  private correction: number | null = null;
+  private edits: RemuxEdits | null = null;
+  private readonly audio: AudioRendition[];
+
   constructor(
     private readonly plan: RemuxAssemblyPlan,
     private readonly log: Logger,
@@ -134,27 +184,58 @@ export class RemuxSegmentAssembler {
     private readonly onFailure: (err: Error) => void = () => {},
   ) {
     this.next = plan.startSegment;
+    this.multiAudio = plan.audioRenditions > 0;
+    this.videoRawDir = this.multiAudio ? path.join(plan.gopDir, '0') : plan.gopDir;
+    this.audio = [];
+    for (let i = 1; i <= plan.audioRenditions; i++) {
+      this.audio.push({
+        index: i,
+        dir: path.join(plan.dir, String(i)),
+        gopDir: path.join(plan.gopDir, String(i)),
+        nextRaw: plan.startNumber,
+        served: plan.startSegment,
+        pending: [],
+        trackId: null,
+        timescale: 0,
+        delta: null,
+        deltaClamped: false,
+        unwatch: null,
+      });
+    }
   }
 
   start(): void {
     this.unwatch = watchDir(
-      this.plan.gopDir,
+      this.videoRawDir,
       // Writes into a GOP file raise `change`; a file appearing is a `rename`.
       (event) => event !== 'change' && this.kick(),
-      (err) => this.log.warn(`[${this.label}] cannot watch ${this.plan.gopDir}: ${err.message}`),
+      (err) => this.log.warn(`[${this.label}] cannot watch ${this.videoRawDir}: ${err.message}`),
     );
+    for (const a of this.audio) {
+      a.unwatch = watchDir(
+        a.gopDir,
+        (event) => event !== 'change' && this.kick(),
+        (err) => this.log.warn(`[${this.label}] cannot watch ${a.gopDir}: ${err.message}`),
+      );
+    }
   }
 
   /** ffmpeg exited. A run that ended cleanly also completes the last segment:
    *  only then is its last GOP known whole. The GOP files go either way. */
   async finish(exitedCleanly: boolean): Promise<void> {
     this.unwatch?.();
+    for (const a of this.audio) a.unwatch?.();
     this.kick();
     await this.chain;
     if (exitedCleanly && !this.stopped) {
       await this.assembleTail().catch((err: Error) =>
         this.log.error(`[${this.label}] last segment ${this.next} not assembled: ${err.message}`),
       );
+      for (const a of this.audio) {
+        await this.assembleAudioTail(a).catch((err: Error) =>
+          this.log.error(`[${this.label}] audio rendition ${a.index} tail not assembled: ${err.message}`),
+        );
+      }
     }
     await fsp.rm(this.plan.gopDir, { recursive: true, force: true });
   }
@@ -182,8 +263,12 @@ export class RemuxSegmentAssembler {
     this.onFailure(err);
   }
 
+  private rawName(n: number): string {
+    return this.multiAudio ? segName(n) : `gop-${n}.m4s`;
+  }
+
   private gopPath(gop: number): string {
-    return path.join(this.plan.gopDir, `gop-${gop - this.gopOffset}.m4s`);
+    return path.join(this.videoRawDir, this.rawName(gop - this.gopOffset));
   }
 
   private async exists(p: string): Promise<boolean> {
@@ -205,19 +290,22 @@ export class RemuxSegmentAssembler {
     if (!this.delta && !(await this.openRun())) return;
     for (;;) {
       const gops = gopsOf(this.plan, this.next);
-      if (!gops || !(await this.followed(gops[gops.length - 1]))) return;
+      if (!gops || !(await this.followed(gops[gops.length - 1]))) break;
       await this.assemble(this.next, gops);
       this.next++;
       this.failures = 0;
     }
+    for (const a of this.audio) await this.pumpAudio(a);
   }
 
   /** Once the run's first GOP is out: its init is complete, and where the
    *  demuxer really landed is known. */
   private async openRun(): Promise<boolean> {
-    const first = path.join(this.plan.gopDir, `gop-${this.plan.startNumber}.m4s`);
+    const first = this.gopPath(this.plan.startNumber);
     if (!(await this.exists(first))) return false;
-    const init = await fsp.readFile(path.join(this.plan.gopDir, 'init.mp4'));
+    const init = await fsp.readFile(
+      path.join(this.videoRawDir, this.multiAudio ? 'init_0.mp4' : 'init.mp4'),
+    );
     const tracks = parseInitTracks(init);
     const runEdits = readInitEdits(init);
     const gop = await readMoofs(first);
@@ -229,6 +317,8 @@ export class RemuxSegmentAssembler {
       this.plan.start,
       this.plan.firstDecode ?? this.plan.start - runVideoEdit,
     );
+    this.edits = edits;
+    this.correction = correction;
     const editOf = (t: TrackInfo) => (t.isVideo ? edits.video : edits.audio);
     const delta = new Map<number, bigint>();
     for (const [id, t] of tracks) {
@@ -346,6 +436,147 @@ export class RemuxSegmentAssembler {
       );
     }
     await this.assemble(this.next, written);
+  }
+
+  // ── Audio renditions (var_stream_map) ──────────────────────────────────
+
+  /** The raw fragment after `n` has started: same completion proof as the
+   *  video GOPs, generalised to an arbitrary rendition dir. */
+  private async rawFollowed(dir: string, n: number): Promise<boolean> {
+    const after = path.join(dir, segName(n));
+    return (await this.exists(`${after}.tmp`)) || this.exists(after);
+  }
+
+  /** Resolve `a`'s own track + per-run delta from its init, once its first
+   *  fragment (and so its init) exists. Mirrors {@link openRun}'s per-track
+   *  math for the audio edit, applied to this rendition's lone track. */
+  private async openAudioRun(a: AudioRendition): Promise<boolean> {
+    const initPath = path.join(a.gopDir, `init_${a.index}.mp4`);
+    if (!(await this.exists(initPath))) return false;
+    const init = await fsp.readFile(initPath);
+    const entry = [...parseInitTracks(init)][0];
+    if (!entry || this.edits == null || this.correction == null) return false;
+    const [trackId, info] = entry;
+    const runEdits = readInitEdits(init);
+    a.trackId = trackId;
+    a.timescale = info.timescale;
+    const shift = Math.round(
+      (this.edits.audio + this.edits.shift + this.correction) * info.timescale,
+    );
+    a.delta = BigInt(shift) - (runEdits.get(trackId) ?? 0n);
+    await fsp.mkdir(a.dir, { recursive: true });
+    const out = path.join(a.dir, `init_${a.index}.mp4`);
+    if (!(await this.exists(out))) {
+      await writeFileAtomic(out, withInitEdits(init, () => this.edits!.audio));
+    }
+    return true;
+  }
+
+  /** Retime one raw fragment onto the served timeline, clamping the run's
+   *  delta once if its very first frame would land before 0 (same guard
+   *  {@link openRun} applies to the video/muxed-audio delta map). */
+  private retimeAudioBuf(a: AudioRendition, buf: Buffer): Buffer {
+    let d = a.delta!;
+    if (!a.deltaClamped) {
+      const start = firstTfdt(buf, a.trackId!);
+      if (start != null && start + d < 0n) d = -start;
+      a.delta = d;
+      a.deltaClamped = true;
+    }
+    return retimeFragments(buf, new Map([[a.trackId!, d]]));
+  }
+
+  /** Read, retime and group the next raw fragment of `a` — grouping onto the
+   *  video's grid by each fragment's own decode time. ffmpeg's own
+   *  `hls_time=0` segmenting is meaningless on a stream with no video
+   *  reference (it cuts on every packet), so the raw files are many and
+   *  tiny; {@link RemuxAssemblyPlan.boundaries} is what actually decides a
+   *  served segment's contents. Without a grid (the uniform fallback),
+   *  ffmpeg already cuts every rendition at `segmentDuration`, so each raw
+   *  fragment file *is* a served segment, 1:1 — the same shape `gopsOf`
+   *  returns for the video when there is no keyframe list. Returns whether a
+   *  fragment was there to consume.
+   *  ponytail: the boundary check reuses the video's `correction`, whose
+   *  sub-frame rounding can differ a few ms between two runs of the same
+   *  nominal segment (fine for the video's own index-based GOP grouping,
+   *  immaterial here too — no frame is ever lost or duplicated, only which
+   *  side of a boundary an edge frame lands on can wobble by ~1 frame) — so
+   *  a copy-mode rendition is not always byte-identical across runs right at
+   *  a segment edge. Upgrade path: a per-track audio keyframe-style prescan
+   *  (like `SourceScanService` gives video) to fix each edge frame's segment
+   *  independently of any run's correction. */
+  private async consumeAudioFragment(a: AudioRendition): Promise<boolean> {
+    const rawPath = path.join(a.gopDir, segName(a.nextRaw));
+    if (!(await this.exists(rawPath))) return false;
+    const raw = await fsp.readFile(rawPath);
+    await fsp.rm(rawPath, { force: true });
+    // Read the fragment's own (source-time) tfdt before retiming — it mutates
+    // the buffer in place, and the grouping decision below needs the
+    // original time to compare against `boundaries` (also source-time).
+    const tfdt = firstTfdt(raw, a.trackId!);
+    const absTime = tfdt != null ? Number(tfdt) / a.timescale + this.correction! : null;
+    const retimed = this.retimeAudioBuf(a, raw);
+    a.nextRaw++;
+
+    const boundaries = this.plan.boundaries;
+    if (!boundaries) {
+      await writeFileAtomic(path.join(a.dir, segName(a.served)), retimed);
+      a.served++;
+      return true;
+    }
+
+    if (absTime != null) {
+      while (a.served + 1 < boundaries.length && absTime >= boundaries[a.served + 1]) {
+        await this.flushAudioPending(a);
+      }
+    }
+    // A fragment past the last grid boundary belongs to no served segment
+    // (trailing audio beyond the video's own end) — drop it, or the tail's
+    // unconditional flush would manufacture a phantom extra segment.
+    if (a.served + 1 < boundaries.length) a.pending.push(retimed);
+    return true;
+  }
+
+  /** Consume every raw fragment of rendition `a` proven complete so far (the
+   *  next one has started, {@link rawFollowed} — same completeness proof the
+   *  video GOPs use). */
+  private async pumpAudio(a: AudioRendition): Promise<void> {
+    if (this.stopped) return;
+    if (!a.delta && !(await this.openAudioRun(a))) return;
+    const boundaries = this.plan.boundaries;
+    for (;;) {
+      if (boundaries && a.served + 1 >= boundaries.length) return;
+      if (!(await this.rawFollowed(a.gopDir, a.nextRaw))) return;
+      await this.consumeAudioFragment(a);
+    }
+  }
+
+  /** The last segment(s) of a run that ended cleanly: unlike {@link pumpAudio},
+   *  reads whatever fragments exist without requiring the next one to have
+   *  started — the run is over, so what's on disk is final (mirrors
+   *  {@link assembleTail} for the video). */
+  private async assembleAudioTail(a: AudioRendition): Promise<void> {
+    if (!a.delta) return;
+    const boundaries = this.plan.boundaries;
+    for (;;) {
+      if (boundaries && a.served + 1 >= boundaries.length) break;
+      if (!(await this.consumeAudioFragment(a))) break;
+    }
+    await this.flushAudioPending(a);
+  }
+
+  /** Write `a`'s accumulated fragments as its current served segment (skipped
+   *  when empty — a track that ends early simply stops publishing renditions,
+   *  same as the muxed single-track path), then advance to the next one. */
+  private async flushAudioPending(a: AudioRendition): Promise<void> {
+    if (a.pending.length > 0) {
+      const out = path.join(a.dir, segName(a.served));
+      if (!(await this.exists(out))) {
+        await writeFileAtomic(out, Buffer.concat(a.pending));
+      }
+    }
+    a.pending = [];
+    a.served++;
   }
 }
 

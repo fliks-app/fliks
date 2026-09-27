@@ -1268,7 +1268,13 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     ctx?: SessionContext,
     grid: KeyframeGrid | null = null,
   ): Promise<TranscodeSession> {
-    const variant = remuxVariant(ctx?.audioStreamIndex, grid != null);
+    const isMultiAudio =
+      varStreamMapLayout(ctx?.videoOnly ?? false, ctx?.audioStreams?.length ?? 0);
+    const variant = remuxVariant(
+      ctx?.audioStreamIndex,
+      grid != null,
+      isMultiAudio,
+    );
     const baseHash = this.computeProfileHashForCtx(ctx);
     const key = sessionKey(
       mediaFileId,
@@ -1325,12 +1331,19 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       'remux',
     );
     const segmentDuration = ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION;
+    const isMultiAudio = variant.kind === 'remux' && variant.audioIndex == null;
+    const audioRenditions = isMultiAudio ? (ctx?.audioStreams?.length ?? 0) : 0;
+    // The group's shared codec (any transcoded rendition names it) decides the
+    // packet grid a seeked run's audio start snaps onto; a solo-copied picked
+    // track carries no such grid at all.
+    const gridBasisPlan =
+      ctx?.audioTrackPlans?.find((p) => p.mode === 'transcode') ?? ctx?.audioPlan;
     const run = remuxRunStart(
       grid,
       requestedSegment,
       segmentDuration,
       ctx?.sourceStartPts ?? 0,
-      remuxAudioGrid(ctx?.audioPlan),
+      remuxAudioGrid(gridBasisPlan),
     );
     await fsp.mkdir(sessionDir, { recursive: true });
     // Per run: a run still being reaped must not delete this one's GOPs.
@@ -1350,6 +1363,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         sourceEndSeconds: ctx?.sourceEndSeconds,
         sourceClockBreakSeconds: ctx?.sourceClockBreakSeconds,
         audioPlan: ctx?.audioPlan,
+        audioTrackPlans: isMultiAudio ? ctx?.audioTrackPlans : undefined,
+        videoOnly: isMultiAudio,
       },
       this.log,
     );
@@ -1362,6 +1377,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         startSegment: requestedSegment,
         run,
         origin: ctx?.sourceStartPts ?? 0,
+        audioRenditions,
       }),
       this.log,
       key,

@@ -498,11 +498,94 @@ export function perStreamAudioArgs(
 }
 
 /**
+ * EXT-X-MEDIA layout: one FFmpeg process for the programme video plus every
+ * audio rendition, each its own `%v` output. Shared by the transcode ladder
+ * (`hlsTime` = the fps-aware grid, cutting with the forced-IDR cadence) and
+ * the multi-audio remux (`hlsTime` = `'0'`, cutting on the source's real
+ * keyframes) — the two differ only in that cadence and whether the run
+ * carries its own source timestamps.
+ */
+function varStreamMapArgs(opts: {
+  videoMapSpec: string;
+  audioStreams: AudioStreamMeta[];
+  audioTrackPlans: AudioPlan[] | undefined;
+  audioArgs: string[];
+  audioEnc: AudioEncodeContext;
+  useTs: boolean;
+  segType: string;
+  segExt: string;
+  hlsTime: string;
+  startSegment: number;
+  outputSeekSeconds: number;
+  outputDir: string;
+  originSeconds: number;
+  sourceTimestamps?: boolean;
+  listSize?: number;
+  /** Output options with no per-track shape (e.g. the remux HEVC HLS
+   *  conformance flags), pushed after the audio codec args. */
+  extraArgs?: string[];
+}): string[] {
+  const {
+    videoMapSpec,
+    audioStreams,
+    audioTrackPlans,
+    audioArgs,
+    audioEnc,
+    useTs,
+    segType,
+    segExt,
+    hlsTime,
+    startSegment,
+    outputSeekSeconds,
+    outputDir,
+    originSeconds,
+    sourceTimestamps,
+    listSize,
+    extraArgs,
+  } = opts;
+  const args: string[] = ['-map', videoMapSpec];
+  for (let i = 0; i < audioStreams.length; i++) {
+    args.push('-map', audioMapSpec(audioStreams, i));
+  }
+  // Without per-rendition plans the single `audioArgs` apply to every track.
+  args.push(
+    ...(audioTrackPlans
+      ? perStreamAudioArgs(audioStreams, audioTrackPlans, audioEnc)
+      : audioArgs),
+  );
+  if (extraArgs) args.push(...extraArgs);
+
+  // Build var_stream_map: "v:0,agroup:audio a:0,agroup:audio,language:fre ..."
+  const varParts = ['v:0,agroup:audio'];
+  for (let i = 0; i < audioStreams.length; i++) {
+    const lang = audioStreams[i].language || 'und';
+    varParts.push(`a:${i},agroup:audio,language:${lang}`);
+  }
+
+  args.push(
+    ...hlsMuxerArgs({
+      useTs,
+      hlsTime,
+      startSegment,
+      outputSeekSeconds,
+      segType,
+      initFilename: 'init_%v.mp4',
+      varStreamMap: varParts.join(' '),
+      segmentFilename: ffOutPath(outputDir, '%v', `seg-%04d.${segExt}`),
+      indexPath: ffOutPath(outputDir, '%v', 'index.m3u8'),
+      originSeconds,
+      sourceTimestamps,
+      listSize,
+    }),
+  );
+  return args;
+}
+
+/**
  * Audio track mapping + HLS muxer args — the terminal block of a video
- * transcode. Two shapes: the EXT-X-MEDIA layout (`var_stream_map`, one FFmpeg
- * process for video + every audio rendition, cut on the fps-aware grid) and the
- * single muxed video+audio stream. Pure: consumes the resolved video map spec,
- * audio plans and segment grid, returns the args to append.
+ * transcode. Two shapes: the EXT-X-MEDIA layout ({@link varStreamMapArgs}) and
+ * the single muxed video+audio stream. Pure: consumes the resolved video map
+ * spec, audio plans and segment grid, returns the args to append.
  */
 function buildAudioAndMuxerArgs(opts: {
   videoMapSpec: string;
@@ -538,52 +621,32 @@ function buildAudioAndMuxerArgs(opts: {
     outputDir,
     originSeconds,
   } = opts;
-  const args: string[] = [];
   const outputSeekSeconds = runOutputSeek(startSegment, audioEnc.alignStartSeconds);
 
   const useVarStreamMap =
     !!audioStreams && varStreamMapLayout(videoOnly, audioStreams.length);
 
   if (useVarStreamMap) {
-    // Single FFmpeg process for video + all audio renditions (perfect sync).
-    args.push('-map', videoMapSpec);
-    for (let i = 0; i < audioStreams!.length; i++) {
-      args.push('-map', audioMapSpec(audioStreams, i));
-    }
-    // Without per-rendition plans the single `audioArgs` apply to every track.
-    args.push(
-      ...(audioTrackPlans
-        ? perStreamAudioArgs(audioStreams!, audioTrackPlans, audioEnc)
-        : audioArgs),
-    );
-
-    // Build var_stream_map: "v:0,agroup:audio a:0,agroup:audio,language:fre ..."
-    const varParts = ['v:0,agroup:audio'];
-    for (let i = 0; i < audioStreams!.length; i++) {
-      const lang = audioStreams![i].language || 'und';
-      varParts.push(`a:${i},agroup:audio,language:${lang}`);
-    }
-
     // Cut on the fps-aware grid (== the forced-IDR cadence and the playlist
     // EXTINF), not the integer setting. On fractional-fps sources the audio
     // renditions would otherwise be cut on the 3.0s grid while video IDRs land
     // on 3.003s; the per-segment drift accumulates until the tfdt anchor snaps
     // audio a whole segment late mid-film (sudden A/V desync).
-    args.push(
-      ...hlsMuxerArgs({
-        useTs,
-        hlsTime: String(realSeg),
-        startSegment,
-        outputSeekSeconds,
-        segType,
-        initFilename: 'init_%v.mp4',
-        varStreamMap: varParts.join(' '),
-        segmentFilename: ffOutPath(outputDir, '%v', `seg-%04d.${segExt}`),
-        indexPath: ffOutPath(outputDir, '%v', 'index.m3u8'),
-        originSeconds,
-      }),
-    );
-    return args;
+    return varStreamMapArgs({
+      videoMapSpec,
+      audioStreams: audioStreams!,
+      audioTrackPlans,
+      audioArgs,
+      audioEnc,
+      useTs,
+      segType,
+      segExt,
+      hlsTime: String(realSeg),
+      startSegment,
+      outputSeekSeconds,
+      outputDir,
+      originSeconds,
+    });
   }
 
   // Standard single-stream output: video + one audio track muxed.
@@ -596,6 +659,7 @@ function buildAudioAndMuxerArgs(opts: {
   // Audio-less sources (silent video, corrupted track, etc.) must NOT
   // emit a `-map` for audio — FFmpeg fails with "Stream map matches no
   // streams" otherwise.
+  const args: string[] = [];
   if (hasNoAudio(audioStreams)) {
     args.push('-map', videoMapSpec, '-an');
   } else {
@@ -1359,6 +1423,14 @@ export interface BuildRemuxArgsOptions {
   sourceClockBreakSeconds?: number;
   /** Audio output of `audioStreamIndex`; AAC stereo when absent. */
   audioPlan?: AudioPlan;
+  /** Per-rendition audio decision for a multi-audio source: every track is
+   *  muxed as its own EXT-X-MEDIA rendition (`varStreamMapLayout`) instead of
+   *  the single picked one. One entry per `audioStreams[]` track, aligned. */
+  audioTrackPlans?: AudioPlan[];
+  /** Caller opts into the var_stream_map layout (mirrors
+   *  `BuildFfmpegArgsOptions.videoOnly`) — `audioStreams.length > 1` alone
+   *  doesn't imply it: a caller may still pick one track out of several. */
+  videoOnly?: boolean;
 }
 
 export function buildRemuxArgs(
@@ -1379,6 +1451,8 @@ export function buildRemuxArgs(
     sourceEndSeconds,
     sourceClockBreakSeconds,
     audioPlan,
+    audioTrackPlans,
+    videoOnly = false,
   } = opts;
 
   const args = ['-hide_banner', '-loglevel', 'warning'];
@@ -1414,8 +1488,68 @@ export function buildRemuxArgs(
     args.push('-to', formatSeconds(sourceClockBreakSeconds));
   }
 
-  // Remux always muxes one audio track: its master publishes no audio group,
-  // so switching track is a new playback-info with that track picked.
+  // HEVC needs Apple HLS conformance:
+  //   - `-tag:v hvc1` writes parameter sets to the moov sample
+  //     description; FFmpeg defaults to `hev1` (parameter sets inline
+  //     in mdat) which AVPlayer rejects on HLS.
+  //   - `-bsf:v hevc_mp4toannexb` converts NAL units from mp4-style
+  //     length-prefixed to annex-B start-code form, which is what the
+  //     fmp4 muxer expects when emitting parameter sets to moov.
+  //   - `-max_muxing_queue_size 2048` doubles the default per-stream
+  //     packet buffer. HEVC GOPs (12-16 frames between IDRs) plus
+  //     non-AAC audio inter-frame intervals (TrueHD, DTS) can
+  //     overflow the default 1024-packet queue and crash the mux
+  //     with "Too many packets buffered for output stream".
+  const hevcArgs =
+    sourceVideoCodec === 'hevc'
+      ? [
+          '-tag:v',
+          'hvc1',
+          '-bsf:v',
+          'hevc_mp4toannexb',
+          '-max_muxing_queue_size',
+          '2048',
+        ]
+      : [];
+
+  // A multi-audio source publishes every track as its own EXT-X-MEDIA
+  // rendition — one process, video copy + all tracks, cut on the source's
+  // real keyframes (`hlsTime: '0'`) exactly like the single-rendition path
+  // below, so the group's renditions share the video's irregular grid.
+  const useVarStreamMap =
+    !!audioStreams && varStreamMapLayout(videoOnly, audioStreams.length);
+  if (useVarStreamMap) {
+    return [
+      ...args,
+      ...varStreamMapArgs({
+        videoMapSpec: videoMapSpec(videoStreamIndex),
+        audioStreams: audioStreams!,
+        audioTrackPlans,
+        audioArgs,
+        audioEnc: {
+          stereoBitrate: REMUX_STEREO_AUDIO_BITRATE,
+          alignStartSeconds: run.audioStartSeconds,
+          endSeconds: sourceEndSeconds,
+          useTs: false,
+        },
+        useTs: false,
+        segType: 'fmp4',
+        segExt: 'm4s',
+        // 0 cuts at every keyframe: the segments are assembled from those GOPs.
+        hlsTime: grid ? '0' : String(segmentDuration),
+        startSegment: run.startNumber,
+        outputSeekSeconds: run.seekSeconds ?? 0,
+        outputDir,
+        originSeconds: 0,
+        sourceTimestamps: true,
+        listSize: 1,
+        extraArgs: ['-c:v', 'copy', ...hevcArgs],
+      }),
+    ];
+  }
+
+  // Remux muxes one audio track: its master publishes no audio group, so
+  // switching track is a new playback-info with that track picked.
   if (hasNoAudio(audioStreams)) {
     args.push('-map', videoMapSpec(videoStreamIndex), '-c:v', 'copy', '-an');
   } else {
@@ -1429,29 +1563,7 @@ export function buildRemuxArgs(
       ...audioArgs,
     );
   }
-
-  // HEVC needs Apple HLS conformance:
-  //   - `-tag:v hvc1` writes parameter sets to the moov sample
-  //     description; FFmpeg defaults to `hev1` (parameter sets inline
-  //     in mdat) which AVPlayer rejects on HLS.
-  //   - `-bsf:v hevc_mp4toannexb` converts NAL units from mp4-style
-  //     length-prefixed to annex-B start-code form, which is what the
-  //     fmp4 muxer expects when emitting parameter sets to moov.
-  //   - `-max_muxing_queue_size 2048` doubles the default per-stream
-  //     packet buffer. HEVC GOPs (12-16 frames between IDRs) plus
-  //     non-AAC audio inter-frame intervals (TrueHD, DTS) can
-  //     overflow the default 1024-packet queue and crash the mux
-  //     with "Too many packets buffered for output stream".
-  if (sourceVideoCodec === 'hevc') {
-    args.push(
-      '-tag:v',
-      'hvc1',
-      '-bsf:v',
-      'hevc_mp4toannexb',
-      '-max_muxing_queue_size',
-      '2048',
-    );
-  }
+  args.push(...hevcArgs);
 
   args.push(
     ...hlsMuxerArgs({

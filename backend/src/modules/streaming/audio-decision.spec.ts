@@ -306,7 +306,7 @@ describe('StreamBuilderService — picked audio track', () => {
     expect(r.source.audioCodec).toBe('dts');
   });
 
-  it('decides a remuxed track alone, and keeps the group for the renditions', () => {
+  it('a multi-audio remux decides the picked track through the group, like every rendition', () => {
     const stereoAc3: Track[] = [
       { codec: 'aac', channels: 2 },
       { codec: 'ac3', channels: 6 },
@@ -322,7 +322,10 @@ describe('StreamBuilderService — picked audio track', () => {
     );
     const ds = svcr.response;
     expect(ds.playMethod).toBe('DirectStream');
-    expect(ds.audioPlan).toEqual({ mode: 'copy', codec: 'aac', channels: 2 });
+    // The group's shared codec is ac3 (track 1 forces it); the picked track
+    // (0, source AAC stereo) folds into it instead of copying its own AAC —
+    // the remux now muxes every rendition through this same group decision.
+    expect(ds.audioPlan).toEqual({ mode: 'transcode', codec: 'ac3', channels: 2 });
     expectPlanMatchesTrack(ds, 0);
     expect(svcr.audioPlans.map((p) => `${p.mode}:${p.codec}`)).toEqual([
       'transcode:ac3',
@@ -332,7 +335,10 @@ describe('StreamBuilderService — picked audio track', () => {
     expect(tx.audioPlan).toMatchObject({ mode: 'transcode', codec: 'ac3' });
   });
 
-  it('never pads a remuxed track that ends early, the video carrying its segments', () => {
+  it('pads a multi-audio remux track that ends early, its own rendition carrying segments past it', () => {
+    // Two tracks: the picked one now rides the same var_stream_map group
+    // decision as its sibling, which needs the pad — its own playlist
+    // reports segments the whole way to the video's end.
     const r = evaluate(
       [
         { codec: 'aac', language: 'eng' },
@@ -341,8 +347,8 @@ describe('StreamBuilderService — picked audio track', () => {
       tv,
       { pick: 1 },
     );
-    expect(r.audioPlan).toEqual({ mode: 'copy', codec: 'aac', channels: 2 });
-    expect(flags(r)).not.toContain('AudioEndsEarly');
+    expect(r.audioPlan).toEqual({ mode: 'transcode', codec: 'aac', channels: 2 });
+    expect(flags(r)).toContain('AudioEndsEarly');
   });
 
   it('falls back to the first track for an index outside the file', () => {

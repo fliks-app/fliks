@@ -390,8 +390,8 @@ export function resolveDownloadUrl(
   quality: string,
   pi: Pick<PlaybackInfoResponse, 'playMethod' | 'playUrl' | 'sessionId' | 'audioTracks'>,
 ): string {
-  // The remux muxes one audio track; a multi-language download keeps every track on the ladder.
-  return pi.playMethod === 'DirectStream' && (pi.audioTracks?.length ?? 0) <= 1
+  // The remux now carries every audio track (EXT-X-MEDIA), same as the ladder.
+  return pi.playMethod === 'DirectStream'
     ? api.buildPlayUrl(pi, { sid: pi.sessionId })
     : api.getHlsUrl(mediaFileId, quality, undefined, pi.sessionId);
 }

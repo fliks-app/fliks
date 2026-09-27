@@ -53,13 +53,13 @@ describe('resolveDownloadUrl', () => {
     return { playMethod, playUrl: '/api/stream/123/master.m3u8?token=x', sessionId: 'sid-1', audioTracks };
   }
 
-  it('original + DirectStream with several audio tracks: keeps the ladder so every language is stored', () => {
-    const buildPlayUrl = vi.fn();
-    const getHlsUrl = vi.fn().mockReturnValue('/api/stream/123/master.m3u8?token=x&startQuality=original');
+  it('original + DirectStream with several audio tracks: the remux carries every track too', () => {
+    const buildPlayUrl = vi.fn().mockReturnValue('/api/stream/123/master.m3u8?token=x&remux=1&sid=sid-1');
+    const getHlsUrl = vi.fn();
     const tracks = [{}, {}] as unknown as PlaybackInfoResponse['audioTracks'];
     resolveDownloadUrl({ buildPlayUrl, getHlsUrl } as any, 123, 'original', pi('DirectStream', tracks));
-    expect(buildPlayUrl).not.toHaveBeenCalled();
-    expect(getHlsUrl).toHaveBeenCalledWith(123, 'original', undefined, 'sid-1');
+    expect(getHlsUrl).not.toHaveBeenCalled();
+    expect(buildPlayUrl).toHaveBeenCalledWith(pi('DirectStream', tracks), { sid: 'sid-1' });
   });
 
   it('original + DirectStream: builds via buildPlayUrl, no startQuality pin', () => {

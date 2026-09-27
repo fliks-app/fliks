@@ -1297,9 +1297,10 @@ export class StreamingController {
 
     const sdrVariant = liveVariant;
     const sourceFrameRate = parseSourceFps(v?.frameRate);
-    // The copy variant muxes the picked track alone (buildRemuxArgs), so it
-    // publishes no audio group.
-    const audioGroup = useExtXMedia && !(includeRemux && !onlyQuality);
+    // A multi-audio source publishes every rendition whichever play method
+    // serves it — the remux copy now muxes every track too, one per
+    // EXT-X-MEDIA rendition, same as the transcode ladder.
+    const audioGroup = useExtXMedia;
     // The group's renditions, or the muxed track alone.
     const audioPlans = audioGroup
       ? (live?.audioTrackPlans ?? undefined)
@@ -1660,17 +1661,29 @@ export class StreamingController {
     const basePath = `/api/stream/${mediaFileId}/audio/${audioIndex}`;
     const useTs = live?.useTs ?? false;
     const segExt = useTs ? 'ts' : 'm4s';
-    const audioSegDuration = realSegmentSeconds(
-      this.segDur(),
-      parseSourceFps(resolved.mediaFile.streamInfo?.video?.[0]?.frameRate),
-    );
-    const playlist = buildVodPlaylist(
-      duration,
-      (seg) => `${basePath}/seg-${seg}.${segExt}${tokenParam}`,
-      useTs ? undefined : `${basePath}/init_${audioIndex + 1}.mp4${tokenParam}`,
-      audioSegDuration,
-      frameSeconds(resolved.mediaFile.streamInfo),
-    );
+    const initUrl = useTs
+      ? undefined
+      : `${basePath}/init_${audioIndex + 1}.mp4${tokenParam}`;
+    const segmentUrl = (seg: string) =>
+      `${basePath}/seg-${seg}.${segExt}${tokenParam}`;
+    // A remux rendition is cut on the video's own irregular keyframe grid
+    // (`RemuxSegmentAssembler`), same as the video's own remux playlist —
+    // a uniform EXTINF grid here would desync the rendition's reported
+    // durations from what its segments actually carry.
+    const remuxDurations =
+      live?.kind === 'remux' ? (live.remuxGrid?.durations ?? null) : null;
+    const playlist = remuxDurations
+      ? buildVariableVodPlaylist(remuxDurations, segmentUrl, initUrl)
+      : buildVodPlaylist(
+          duration,
+          segmentUrl,
+          initUrl,
+          realSegmentSeconds(
+            this.segDur(),
+            parseSourceFps(resolved.mediaFile.streamInfo?.video?.[0]?.frameRate),
+          ),
+          frameSeconds(resolved.mediaFile.streamInfo),
+        );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -1879,6 +1892,9 @@ export class StreamingController {
           videoSession.sourceFps,
         ),
         startPts: videoSession.sourceStartPts,
+        // A remux rendition is already assembled onto the served timeline
+        // (`RemuxSegmentAssembler`); re-anchoring it here would shift it twice.
+        keyframeCut: videoSession.quality === 'remux',
       },
     );
   }
