@@ -383,15 +383,28 @@ describe('StreamBuilderService — picked audio track', () => {
       { codec: 'aac', language: 'fre' },
     ];
     const noSwitch = profile(['aac'], { switchesDirectPlayAudio: false });
-    expect(evaluate(twoAac, noSwitch, { ext: '.mp4' }).playMethod).toBe(
-      'DirectPlay',
-    );
+    const first = evaluate(twoAac, noSwitch, { ext: '.mp4' });
+    expect(first.playMethod).toBe('DirectStream');
+    expect(flags(first)).toContain('ClientCannotSwitchAudio');
     const picked = evaluate(twoAac, noSwitch, { ext: '.mp4', pick: 1 });
     expect(picked.playMethod).toBe('DirectStream');
     expect(flags(picked)).toContain('ClientCannotSwitchAudio');
     expect(
       evaluate(twoAac, profile(['aac']), { ext: '.mp4', pick: 1 }).playMethod,
     ).toBe('DirectPlay');
+  });
+
+  it('keeps Direct Play when a no-switch client has nothing to switch or no remux', () => {
+    const noSwitch = profile(['aac'], { switchesDirectPlayAudio: false });
+    expect(evaluate([{ codec: 'aac' }], noSwitch, { ext: '.mp4' }).playMethod).toBe('DirectPlay');
+    const twoAac: Track[] = [
+      { codec: 'aac', language: 'eng' },
+      { codec: 'aac', language: 'fre' },
+    ];
+    const remuxOff = svc().evaluate(
+      file(twoAac, '.mp4'), noSwitch, '', undefined, undefined, 'directplay', undefined, 3, undefined, false,
+    ).response;
+    expect(remuxOff.playMethod).toBe('DirectPlay');
   });
 
   it('leaves Direct Play for a second same-language track an engine folds away', () => {

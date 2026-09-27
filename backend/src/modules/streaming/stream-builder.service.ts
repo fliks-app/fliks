@@ -540,6 +540,13 @@ export class StreamBuilderService {
       ((!isSourceHdr && !dvP5) || clientCanPresentDynamicRange) &&
       !needsBurnIn &&
       (!needsCrop || clientCropsBlackBars);
+    const muxRejectsCopy = hlsMux === 'ts';
+    const rejectsCopy = profile.rejectCopy === true;
+    // Whether the source would copy if not for these three gates: push their
+    // reasons only then, so an already-uncopyable source blames no gate.
+    const copyableIgnoringGates = sourceCopyable && !forceLadder && !dvP5;
+    const canCopyVideo =
+      copyableIgnoringGates && !muxRejectsCopy && !rejectsCopy && allowDirectStream;
 
     if (profile.supportsDirectPlay === false && directPlayResult.canDirectPlay) {
       directPlayResult.canDirectPlay = false;
@@ -555,7 +562,10 @@ export class StreamBuilderService {
       profile.switchesDirectPlayAudio === false ||
       (!!profile.dedupesAudioByLanguage &&
         audioStreams.findIndex((t) => t.language === pickedLanguage) !== pickedAudio);
-    if (pickedAudio !== 0 && unreachable && directPlayResult.canDirectPlay) {
+    // No in-file switch and several tracks: the remux carries them all, so a later pick switches in place.
+    const remuxForSwitching =
+      profile.switchesDirectPlayAudio === false && audioStreams.length > 1 && canCopyVideo;
+    if (((pickedAudio !== 0 && unreachable) || remuxForSwitching) && directPlayResult.canDirectPlay) {
       directPlayResult.canDirectPlay = false;
       reasons.push({
         flag: 'ClientCannotSwitchAudio',
@@ -655,11 +665,6 @@ export class StreamBuilderService {
     // original file, DV intact) or a tonemap transcode instead — never remux.
     // buildRemuxArgs only ever writes fMP4; a TS-mux session (Tizen
     // single-audio) would list seg-N.ts with no producer.
-    const muxRejectsCopy = hlsMux === 'ts';
-    const rejectsCopy = profile.rejectCopy === true;
-    // Whether the source would copy if not for these three gates: push their
-    // reasons only then, so an already-uncopyable source blames no gate.
-    const copyableIgnoringGates = sourceCopyable && !forceLadder && !dvP5;
     if (muxRejectsCopy && copyableIgnoringGates) {
       reasons.push({
         flag: 'MuxNotSupported',
@@ -678,8 +683,6 @@ export class StreamBuilderService {
         message: 'Direct Stream (remux) is disabled on this server',
       });
     }
-    const canCopyVideo =
-      copyableIgnoringGates && !muxRejectsCopy && !rejectsCopy && allowDirectStream;
 
     // The renditions a var_stream_map encode of the session emits.
     const groupDecisions = this.decideAudio(

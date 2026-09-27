@@ -1,3 +1,4 @@
+import { detectBrowser } from '../utils/ua-parser';
 import { Injectable, inject } from '@angular/core';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { PlayerSettingsService } from './player-settings.service';
@@ -602,7 +603,10 @@ export class BrowserDeviceProfileService {
       // audio tracks only where the browser implements `audioTracks` (Safari).
       // Only web probes it: every other engine switches natively, which is
       // what an absent key already means to the backend.
-      switchesDirectPlayAudio: isWeb ? 'audioTracks' in HTMLMediaElement.prototype : undefined,
+      // Firefox exposes audioTracks behind media.track.enabled, yet toggling a track doesn't switch what plays.
+      switchesDirectPlayAudio: isWeb
+        ? 'audioTracks' in HTMLMediaElement.prototype && detectBrowser(navigator.userAgent) !== 'Firefox'
+        : undefined,
       // `false` only for the desktop mpv engine (see engine-traits.ts): the
       // backend then collapses the master to a single variant instead of
       // handing a no-ABR client the full ladder.

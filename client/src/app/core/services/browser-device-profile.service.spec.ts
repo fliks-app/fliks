@@ -69,6 +69,18 @@ describe('BrowserDeviceProfileService: switchesDirectPlayAudio', () => {
     );
   });
 
+  it('is false for Firefox, whose audioTracks does not switch the audible track', () => {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(
+      'Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0',
+    );
+    const service = configure({
+      isTv: () => false,
+      tvPlatform: () => null,
+      isDesktopNative: () => false,
+    } as DeviceService);
+    expect(service.getProfile().switchesDirectPlayAudio).toBe(false);
+  });
+
   it('is undefined for native mobile: an absent key already reads as true on the backend', () => {
     const service = configure({
       isTv: () => false,
