@@ -19,44 +19,46 @@ import { CardActionsService } from '../../../core/services/card-actions.service'
 const row = (over: Partial<SubtitleFileRow>): SubtitleFileRow =>
   ({ id: 1, mediaFileId: 1, language: 'eng', ...over }) as SubtitleFileRow;
 
+const providers = (getForMedia: () => Promise<SubtitleFileRow[]>) => [
+    provideZonelessChangeDetection(),
+    provideRouter([]),
+    provideTranslateService({
+      lang: 'en',
+      loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
+    }),
+    { provide: SubtitlesApiService, useValue: { getForMedia } },
+    { provide: SubtitleActionsService, useValue: {} },
+    { provide: TranslationProvidersApiService, useValue: {} },
+    { provide: ConfirmationService, useValue: {} },
+    { provide: ToastService, useValue: { success: () => {}, error: () => {}, info: () => {} } },
+    { provide: ProfilesService, useValue: { getLanguageProfiles: () => new Promise(() => {}) } },
+    {
+      provide: SseService,
+      useValue: {
+        lastEvent: () => null,
+        translationProgress: () => ({}),
+        retainTranslationProgress: () => {},
+      },
+    },
+    {
+      provide: AppSettingsService,
+      useValue: { hideBurnInSubtitles: () => false, showSubtitleFormat: () => false },
+    },
+    { provide: StreamingApiService, useValue: {} },
+    {
+      provide: DeviceService,
+      useValue: { canSaveFiles: () => false, isTv: () => false, isAndroidNative: () => false },
+    },
+    { provide: CardActionsService, useValue: { register: () => {}, show: () => {} } },
+];
+
 describe('SubtitlesModalComponent.filteredSubtitles', () => {
   let fixture: ComponentFixture<SubtitlesModalComponent>;
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [
-        provideZonelessChangeDetection(),
-        provideRouter([]),
-        provideTranslateService({
-          lang: 'en',
-          loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
-        }),
-        // Never resolves: the modal's own auto-load must not race the direct signal writes below.
-        { provide: SubtitlesApiService, useValue: { getForMedia: () => new Promise(() => {}) } },
-        { provide: SubtitleActionsService, useValue: {} },
-        { provide: TranslationProvidersApiService, useValue: {} },
-        { provide: ConfirmationService, useValue: {} },
-        { provide: ToastService, useValue: { success: () => {}, error: () => {}, info: () => {} } },
-        { provide: ProfilesService, useValue: { getLanguageProfiles: () => new Promise(() => {}) } },
-        {
-          provide: SseService,
-          useValue: {
-            lastEvent: () => null,
-            translationProgress: () => ({}),
-            retainTranslationProgress: () => {},
-          },
-        },
-        {
-          provide: AppSettingsService,
-          useValue: { hideBurnInSubtitles: () => false, showSubtitleFormat: () => false },
-        },
-        { provide: StreamingApiService, useValue: {} },
-        {
-          provide: DeviceService,
-          useValue: { canSaveFiles: () => false, isTv: () => false, isAndroidNative: () => false },
-        },
-        { provide: CardActionsService, useValue: { register: () => {}, show: () => {} } },
-      ],
+      // Never resolves: the modal's own auto-load must not race the direct signal writes below.
+      providers: providers(() => new Promise(() => {})),
     });
 
     fixture = TestBed.createComponent(SubtitlesModalComponent);
@@ -90,5 +92,23 @@ describe('SubtitlesModalComponent.filteredSubtitles', () => {
     fixture.componentInstance.subtitles.set([row({ id: 1, mediaFileId: 1 })]);
 
     expect(fixture.componentInstance.filteredSubtitles()).toEqual([]);
+  });
+});
+
+describe('SubtitlesModalComponent auto-load', () => {
+  it('fetches the list once, not again when the answer lands', async () => {
+    const getForMedia = vi.fn().mockResolvedValue([row({ id: 1 })]);
+    TestBed.configureTestingModule({ providers: providers(getForMedia) });
+    const fixture = TestBed.createComponent(SubtitlesModalComponent);
+    fixture.componentRef.setInput('mediaId', 1);
+    fixture.componentRef.setInput('selectedFileId', 1);
+
+    for (let i = 0; i < 5; i++) {
+      TestBed.tick();
+      await Promise.resolve();
+    }
+
+    expect(fixture.componentInstance.subtitles().length).toBe(1);
+    expect(getForMedia).toHaveBeenCalledTimes(1);
   });
 });
