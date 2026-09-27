@@ -23,6 +23,7 @@
 #   - ANDROID_UPLOAD_KEY_ALIAS
 #   - ANDROID_UPLOAD_KEY_PASSWORD
 #   - PLAY_STORE_SERVICE_ACCOUNT_JSON
+#   - AMAZON_APPSTORE_CLIENT_ID, AMAZON_APPSTORE_CLIENT_SECRET, AMAZON_APPSTORE_APP_ID
 name: Publish Android to Play Store
 
 on:
@@ -185,3 +186,42 @@ jobs:
           # the track auto-reviews and the Edit API rejects the upload when
           # changesNotSentForReview is set on it.
           whatsNewDirectory: client/android/app/src/main/play/release-notes
+
+  # Replaces the APK of the Amazon Appstore listing (Fire TV + Fire tablets) with the one
+  # just attached to the release, then commits the edit, which sends it to Amazon review.
+  amazon-appstore:
+    needs: build-and-publish
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      APP: https://developer.amazon.com/api/appstore/v1/applications/${{ secrets.AMAZON_APPSTORE_APP_ID }}
+    steps:
+      - name: Download the signed APK from the release
+        run: gh release download "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" -p 'Fliks-*.apk' -O fliks.apk
+
+      - name: Replace the APK and commit the edit
+        env:
+          CLIENT_ID: ${{ secrets.AMAZON_APPSTORE_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.AMAZON_APPSTORE_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          token=$(curl -sf https://api.amazon.com/auth/o2/token \
+            -d grant_type=client_credentials -d scope=appstore::apps:readwrite \
+            --data-urlencode "client_id=$CLIENT_ID" --data-urlencode "client_secret=$CLIENT_SECRET" \
+            | jq -r .access_token)
+          auth="Authorization: Bearer $token"
+          etag() { curl -sf -D - -o /dev/null -H "$auth" "$1" | awk 'tolower($1)=="etag:" {print $2}' | tr -d '\r'; }
+
+          # Only one edit can be open per app: reuse the one a failed run left behind.
+          edit=$(curl -s -H "$auth" "$APP/edits" | jq -r '.id // empty' 2>/dev/null || true)
+          [ -n "$edit" ] || edit=$(curl -sf -X POST -H "$auth" "$APP/edits" | jq -r .id)
+
+          apk=$(curl -sf -H "$auth" "$APP/edits/$edit/apks" | jq -r '.[0].id')
+          curl -sS --fail-with-body -X PUT -H "$auth" -H "If-Match: $(etag "$APP/edits/$edit/apks/$apk")" \
+            -H 'Content-Type: application/octet-stream' -H 'fileName: fliks.apk' \
+            --data-binary @fliks.apk "$APP/edits/$edit/apks/$apk/replace" > /dev/null
+
+          curl -sS --fail-with-body -X POST -H "$auth" "$APP/edits/$edit/validate" > /dev/null
+          curl -sS --fail-with-body -X POST -H "$auth" -H "If-Match: $(etag "$APP/edits/$edit")" \
+            "$APP/edits/$edit/commit" > /dev/null
