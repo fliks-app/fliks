@@ -23,7 +23,8 @@ import {
   cappedRungVideoBitrateBps,
   type RungBitrateContext,
 } from './transcoding/quality-ladder';
-import { remuxPeakBandwidthBps } from './transcoding/master-playlist';
+import { remuxBandwidthBps } from './transcoding/master-playlist';
+import { REMUX_STEREO_AUDIO_BITRATE } from './transcoding/ffmpeg-args';
 import { resolveEncodePipeline } from './transcoding/encode-pipeline';
 import {
   DEFAULT_FPS,
@@ -46,6 +47,7 @@ import { audioLayout, resolveMuxFlavour } from './transcoding/audio-layout';
 import {
   audioOutputBitrateBps,
   DEFAULT_AUDIO_PLAN,
+  ENCODE_SAMPLE_RATE,
   encoderMaxChannels,
   isEncodableAudio,
   type AudioEncodeCodec,
@@ -71,9 +73,6 @@ const FMP4_COMPATIBLE_AUDIO = new Set(['aac', 'ac3', 'eac3', 'opus', 'flac']);
 
 /** Above the start offset encoder priming alone reports (AAC ~23 ms, E-AC-3 ~5 ms, Opus ~7 ms). */
 const AUDIO_START_OFFSET_THRESHOLD_SECONDS = 0.05;
-
-/** Every audio encode resamples to this rate (matches audio-encode's own target). */
-const ENCODE_SAMPLE_RATE_HZ = 48_000;
 
 type CopyBlocker =
   | 'AudioStartOffset'
@@ -145,6 +144,12 @@ function encodeChannelCap(profile: DeviceProfileDto, codec: AudioEncodeCodec): n
   return Math.min(audioChannelCap(profile, codec), encoderMaxChannels(codec));
 }
 
+/** A ladder's reference rung absent an explicit pin: the highest non-eco
+ *  entry, or its own first when every rung in the list is eco. */
+function topNonEcoProfile(ladder: TranscodeProfile[]): TranscodeProfile {
+  return ladder.find((p) => !isEcoProfile(p.name)) ?? ladder[0];
+}
+
 /** One track's audio decision: its output, and why it re-encodes (`Audio*`
  *  flags, empty when copied). */
 interface TrackDecision {
@@ -153,8 +158,8 @@ interface TrackDecision {
 }
 
 /** The playback-info form of a track's decision. `stereoBitrateBps` is the
- *  negotiated rung's audio budget, the same reference `audioOutputBitrateBps`
- *  scales an encode's target from elsewhere in this file. */
+ *  reference an encode's target scales from: the negotiated rung on a full
+ *  transcode, or the remux encoder's own fixed budget on a DirectStream. */
 function trackDto(
   t: AudioStreamInfo,
   index: number,
@@ -170,11 +175,8 @@ function trackDto(
     outputCodec: d.plan.codec,
     outputChannels: d.plan.channels,
     reasonFlags: d.reasonFlags,
-    bitrateBps:
-      d.plan.mode === 'copy'
-        ? t.bitRate
-        : audioOutputBitrateBps(d.plan, stereoBitrateBps),
-    sampleRate: d.plan.mode === 'copy' ? t.sampleRate : ENCODE_SAMPLE_RATE_HZ,
+    bitrateBps: audioOutputBitrateBps(d.plan, stereoBitrateBps),
+    sampleRate: d.plan.mode === 'copy' ? t.sampleRate : ENCODE_SAMPLE_RATE,
   };
 }
 
@@ -518,10 +520,7 @@ export class StreamBuilderService {
     const negotiatedQuality = explicitRung?.name ?? 'auto';
     // Stereo audio budget of the pinned rung (or the top fitting one, absent
     // a pin): what a transcoded track's own bitrate scales from below.
-    const negotiatedAudioRung =
-      explicitRung ??
-      qualityLadder.find((p) => !isEcoProfile(p.name)) ??
-      qualityLadder[0];
+    const negotiatedAudioRung = explicitRung ?? topNonEcoProfile(qualityLadder);
     const negotiatedStereoBps = parseBitrateToBps(negotiatedAudioRung.audioBitrate);
     const explicitDownscale =
       !!explicitRung &&
@@ -545,8 +544,25 @@ export class StreamBuilderService {
     // Whether the source would copy if not for these three gates: push their
     // reasons only then, so an already-uncopyable source blames no gate.
     const copyableIgnoringGates = sourceCopyable && !forceLadder && !dvP5;
-    const canCopyVideo =
-      copyableIgnoringGates && !muxRejectsCopy && !rejectsCopy && allowDirectStream;
+    // Each independent reason a copyable source is still forced to transcode.
+    const copyGates: { active: boolean; flag: string; message: string }[] = [
+      {
+        active: muxRejectsCopy,
+        flag: 'MuxNotSupported',
+        message: "MPEG-TS packaging can't carry a copied video stream",
+      },
+      {
+        active: rejectsCopy,
+        flag: 'ClientRejectedCopy',
+        message: 'Client asked for a transcode instead of a copied stream',
+      },
+      {
+        active: !allowDirectStream,
+        flag: 'DirectStreamDisabled',
+        message: 'Direct Stream (remux) is disabled on this server',
+      },
+    ];
+    const canCopyVideo = copyableIgnoringGates && copyGates.every((g) => !g.active);
 
     if (profile.supportsDirectPlay === false && directPlayResult.canDirectPlay) {
       directPlayResult.canDirectPlay = false;
@@ -655,35 +671,17 @@ export class StreamBuilderService {
       );
     }
 
-    // Video codec must be supported; only container or audio may differ
-    // Cannot remux if tone mapping or burn-in is needed (video must be re-encoded).
-    // A lower explicit rung / ABR-on-auto wants a re-encoded ladder, not a
-    // source-resolution remux copy, so `forceLadder` skips this path too.
-    // Dolby Vision Profile 5 is never remuxed: the fMP4 muxer drops the DV
-    // configuration box on `-c:v copy`, so a copied P5 (whose base layer isn't
-    // valid HDR10) would render green/purple. P5 rides raw DirectPlay (whole
-    // original file, DV intact) or a tonemap transcode instead — never remux.
-    // buildRemuxArgs only ever writes fMP4; a TS-mux session (Tizen
-    // single-audio) would list seg-N.ts with no producer.
-    if (muxRejectsCopy && copyableIgnoringGates) {
-      reasons.push({
-        flag: 'MuxNotSupported',
-        message: "MPEG-TS packaging can't carry a copied video stream",
-      });
-    }
-    if (rejectsCopy && copyableIgnoringGates) {
-      reasons.push({
-        flag: 'ClientRejectedCopy',
-        message: 'Client asked for a transcode instead of a copied stream',
-      });
-    }
-    if (!allowDirectStream && copyableIgnoringGates) {
-      reasons.push({
-        flag: 'DirectStreamDisabled',
-        message: 'Direct Stream (remux) is disabled on this server',
-      });
+    // Each gate fires only when the source would otherwise have copied; an
+    // already-uncopyable source (forceLadder, DV P5, …) blames no gate here.
+    if (copyableIgnoringGates) {
+      for (const g of copyGates) {
+        if (g.active) reasons.push({ flag: g.flag, message: g.message });
+      }
     }
 
+    // A single-audio remux is a group of one; a multi-audio remux's picked
+    // track decides through the same var_stream_map group as every rendition.
+    const multiAudioLayout = audioLayout(audioStreams.length) === 'var-stream-map';
     // The renditions a var_stream_map encode of the session emits.
     const groupDecisions = this.decideAudio(
       audioStreams,
@@ -692,7 +690,7 @@ export class StreamBuilderService {
       hlsMux,
       sourceMpegTs,
       sourceScan,
-      audioLayout(audioStreams.length) === 'var-stream-map'
+      multiAudioLayout
         ? lastVideoSegmentStart(
             si,
             resolved.absolutePath,
@@ -701,9 +699,6 @@ export class StreamBuilderService {
           )
         : undefined,
     );
-    // A single-audio remux is a group of one; a multi-audio remux's picked
-    // track decides through the same var_stream_map group as every rendition.
-    const multiAudioLayout = audioLayout(audioStreams.length) === 'var-stream-map';
     const pickedStream = audioStreams[pickedAudio];
     const pickedDecision =
       canCopyVideo && pickedStream && !multiAudioLayout
@@ -718,13 +713,18 @@ export class StreamBuilderService {
           )[0]
         : groupDecisions[pickedAudio];
     // The top-level plan and reasons are the picked track's, which
-    // `audioTracks` describes as `playUrl` delivers it.
+    // `audioTracks` describes as `playUrl` delivers it. A DirectStream encodes
+    // any transcoded track at buildRemuxArgs' own fixed budget, never the
+    // negotiated rung's: the stats must quote the bitrate ffmpeg actually runs.
+    const trackStereoBps = canCopyVideo
+      ? parseBitrateToBps(REMUX_STEREO_AUDIO_BITRATE)
+      : negotiatedStereoBps;
     const audioTracks = audioStreams.map((t, i) =>
       trackDto(
         t,
         i,
         i === pickedAudio ? pickedDecision : groupDecisions[i],
-        negotiatedStereoBps,
+        trackStereoBps,
       ),
     );
     const audioPlans = groupDecisions.map((d) => d.plan);
@@ -757,11 +757,9 @@ export class StreamBuilderService {
       );
       const sep = tokenParam ? '&' : '?';
       const url = `/api/stream/${resolved.mediaFile.id}/master.m3u8${tokenParam}${sep}remux=1`;
-      // Same peak (video + largest audio rendition) the master playlist's
-      // own BANDWIDTH uses, so the stats overlay never disagrees with it.
-      const remuxBw = source.videoBitRate
-        ? remuxPeakBandwidthBps(source.videoBitRate, audioPlans)
-        : (source.formatBitRate ?? 0);
+      // Same function the master playlist's own BANDWIDTH calls, so the
+      // stats overlay never disagrees with it.
+      const remuxBw = remuxBandwidthBps(source.videoBitRate, source.formatBitRate, audioPlans);
       // Same scale as the master playlist's transcoded rungs — exposes
       // a bitrate hint per quality so the stats overlay can plot the
       // selected rung without re-deriving the bitrate ladder client-side.
@@ -882,10 +880,12 @@ export class StreamBuilderService {
         tonemapping: transcodeTonemaps,
         clientTonemap,
         transcodeBitrateByQuality,
+        // canCopyVideo, not sourceCopyable: a source only gated off here
+        // (mux/reject/allowDirectStream) must not collapse to an uncapped 'original'.
         qualities: this.buildQualityList(
           source,
           'Transcode',
-          sourceCopyable,
+          canCopyVideo,
           qualityLadder,
           selectedVariant.codec,
         ),
@@ -961,8 +961,7 @@ export class StreamBuilderService {
       cappedRungVideoBitrateBps(p, rungCtx) + parseBitrateToBps(p.audioBitrate);
 
     // First non-eco entry = the source-resolution (top) rung.
-    const topProfile =
-      available.find((p) => !isEcoProfile(p.name)) ?? available[0];
+    const topProfile = topNonEcoProfile(available);
     const resolutionLabel = displayLabel(topProfile.name);
     const originalHeight = sourceH || topProfile.maxHeight;
     const originalWidth = sourceW || topProfile.maxWidth;

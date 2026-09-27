@@ -489,13 +489,12 @@ export class SystemController {
         session.mediaFileId,
         session.profileHash,
       );
-      const mode: SessionKind = session.kind;
       const quality =
-        mode === 'directplay'
+        session.kind === 'directplay'
           ? 'original'
           : (ts?.quality ?? session.quality ?? 'original');
       const hwAccelVal =
-        mode === 'directplay' || mode === 'remux'
+        session.kind === 'directplay' || session.kind === 'remux'
           ? 'none'
           : (ts?.actualHwAccel ?? hwAccel);
       work.push({
@@ -506,7 +505,7 @@ export class SystemController {
         mediaTitle: session.mediaTitle ?? '',
         mediaType: session.mediaType ?? '',
         posterUrl: session.posterUrl,
-        mode,
+        mode: session.kind,
         quality,
         hwAccelVal,
         startedAt: session.startedAt.toISOString(),

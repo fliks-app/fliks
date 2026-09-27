@@ -39,6 +39,8 @@ import {
   cappedRungVideoBitrateBps,
   parseBitrateToBps,
   type BurnInSubtitle,
+  type SessionContext,
+  type TranscodeSession,
 } from './transcoding';
 import { tsHeadroom } from './transcoding/ffmpeg-args';
 import {
@@ -61,7 +63,7 @@ import {
   sourceTimeline,
 } from './transcoding/source-timeline';
 import { copySourceCodecString } from './transcoding/codec/codec-strings';
-import { LiveSessionRegistry, type SessionKind } from './live-session.service';
+import { LiveSessionRegistry, type LiveSession, type SessionKind } from './live-session.service';
 import * as path from 'path';
 import { SegmentPackagingService } from './services/segment-packaging.service';
 import { SessionRouter } from './services/session-router.service';
@@ -484,6 +486,87 @@ export class StreamingController {
     return isInit ? this.resumeFloor(live, existing, remux) : segIndex;
   }
 
+  /** No resolvable LiveSession means no codec variant to thread into ffmpeg
+   *  (player torn down mid-flight, or a stale sid): 410 so the client
+   *  re-establishes via playback-info, instead of spawning for nobody. */
+  private assertVideoVariant(ctx: { videoVariant?: unknown }, req: Request): void {
+    if (!ctx.videoVariant) {
+      throw new SessionExpiredException(firstQueryString(req.query, 'sid') ?? null);
+    }
+  }
+
+  /** Packaging options every segment/init serve shares: the session's real
+   *  segment length and PTS origin. `keyframeCut` marks an already-assembled
+   *  remux rendition, which must not be re-anchored a second time. */
+  private async serveFrom(
+    res: Response,
+    segPath: string,
+    segment: string,
+    session: { segmentDuration?: number; sourceFps?: number; sourceStartPts?: number },
+    keyframeCut = false,
+  ): Promise<void> {
+    await this.segmentPackaging.serve(res, segPath, segmentContentType(segment), {
+      segDuration: realSegmentSeconds(this.segDur(session), session.sourceFps),
+      startPts: session.sourceStartPts,
+      keyframeCut,
+    });
+  }
+
+  /** var_stream_map writes video files under `0/`; a remux session (video-only,
+   *  flat layout) never uses it, so the prefix would 404 there. */
+  private videoSegName(segment: string, quality: string, useExtXMedia: boolean): string {
+    return useExtXMedia && quality !== 'remux' ? `0/${segment}` : segment;
+  }
+
+  /** 404 a real segment past the frozen remux grid before anchoring/spawning
+   *  on it: past the end, that throws a RangeError instead of a session. */
+  private rejectPastRemuxGrid(
+    res: Response,
+    segment: string,
+    grid: KeyframeGrid | null,
+    isInit: boolean,
+    segIndex: number,
+  ): boolean {
+    if (!grid || isInit || segIndex < grid.durations.length) return false;
+    this.log.warn(`Segment 404: ${segment} is past the ${grid.durations.length} of the remux grid`);
+    res.status(404).send('Segment not found');
+    return true;
+  }
+
+  /** Anchor + spawn a remux session for a request, 404ing (not killing the
+   *  live run) when the segment falls past the frozen grid: null means the
+   *  404 was already sent and the caller must return without serving. */
+  private async spawnRemuxSession(
+    res: Response,
+    segment: string,
+    mediaFileId: number,
+    absolutePath: string,
+    ctx: SessionContext,
+    live: LiveSession | null | undefined,
+    existing: { startSegment?: number | null } | null | undefined,
+    isInit: boolean,
+    segIndex: number,
+    variantIndex?: number,
+  ): Promise<TranscodeSession | null> {
+    const grid = live?.remuxGrid ?? null;
+    if (this.rejectPastRemuxGrid(res, segment, grid, isInit, segIndex)) return null;
+    const startSeg = this.anchorSegment(
+      live,
+      existing,
+      isInit,
+      segIndex,
+      grid ? { boundaries: grid.boundaries, origin: ctx.sourceStartPts ?? 0 } : undefined,
+    );
+    return this.transcodingService.getOrCreateRemuxSession(
+      mediaFileId,
+      absolutePath,
+      startSeg,
+      ctx,
+      grid,
+      variantIndex,
+    );
+  }
+
   /**
    * Pre-spawn ffmpeg for the first segment the player will request. Handles
    * both fresh play (startAt=0) and resume (startAt>0 from URL or from the
@@ -534,12 +617,16 @@ export class StreamingController {
       // avoids the spawn-then-kill dance; the player's first segment
       // fetch starts ffmpeg synchronously at the correct rung.
       if (startQuality === 'remux' || startQuality === 'original') return;
+      const session = this.sessionRouter.findRequestSession(req, mediaFileId);
+      // A pinned rung matching the source can still resolve to DirectStream
+      // (e.g. a 1080p pin on a 1080p source): the client plays the 'remux'
+      // session, so warming a transcode one here would run unwatched to EOF.
+      if (session?.kind === 'remux') return;
       // When the HDR ladder is in effect, the master only publishes
       // `*-hdr` rungs. The frontend's saved quality is height-based
       // (`1080p`), so translate to the HDR equivalent so prewarm
       // doesn't spawn a doomed SDR session that the player will
       // immediately kill and replace with the matching HDR rung.
-      const session = this.sessionRouter.findRequestSession(req, mediaFileId);
       const targetQuality =
         (session?.hdrLadder ?? false) && !startQuality.endsWith('-hdr')
           ? `${startQuality}-hdr`
@@ -1048,16 +1135,11 @@ export class StreamingController {
       pinned: isDownload,
     });
 
-    // Pre-spawn ffmpeg as early as possible — the client will GET master.m3u8
-    // next (~100–300ms later) and then seg-0. Starting ffmpeg here overlaps
-    // that gap with encoder init so segment 0 is usually already on disk
-    // (or streaming) when requested. No-op for DirectPlay or auto quality.
-    // Runs after LiveSession creation so the SessionContextBuilder can find it.
-    // Fire-and-forget: the playback-info response (playUrl + sessionId) does
-    // not depend on the spawn, so it must not block on ffmpeg init — same
-    // pattern as the master.m3u8 prewarm. prewarmTranscodeSession swallows its
-    // own errors.
-    if (response.playMethod !== 'DirectPlay') {
+    // Pre-spawn ffmpeg for the segment the player will soon request. Skipped
+    // for DirectPlay/auto (nothing to warm) and DirectStream (a pinned rung
+    // there still plays through the 'remux' session, never this transcode
+    // one, which would then run unread to EOF). Fire-and-forget.
+    if (response.playMethod === 'Transcode') {
       void this.prewarmTranscodeSession(
         mediaFileId,
         resolved,
@@ -1235,7 +1317,6 @@ export class StreamingController {
     const tokenParam = buildTokenParam(req);
 
     const includeRemux = firstQueryString(req.query, 'remux') === '1';
-    const sourceBitrate = (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0);
     const live = this.sessionRouter.findRequestSession(req, mediaFileId);
     // HDR ladder eligibility — decided by stream-builder at playback-info
     // time and stored on the LiveSession. Independent from `includeRemux`:
@@ -1306,11 +1387,9 @@ export class StreamingController {
 
     const sdrVariant = liveVariant;
     const sourceFrameRate = parseSourceFps(v?.frameRate);
-    // A multi-audio source publishes every rendition on every play method:
-    // the remux copy also muxes every track, one per EXT-X-MEDIA rendition.
-    const audioGroup = useExtXMedia;
-    // The group's renditions, or the muxed track alone.
-    const audioPlans = audioGroup
+    // The group's renditions (a remux copy also muxes every track, one per
+    // EXT-X-MEDIA rendition), or the muxed track alone.
+    const audioPlans = useExtXMedia
       ? (live?.audioTrackPlans ?? undefined)
       : live?.audioPlan
         ? [live.audioPlan]
@@ -1323,14 +1402,13 @@ export class StreamingController {
       remuxHeight: v?.height,
       tokenParam,
       includeRemux,
-      sourceBitrate: sourceBitrate || undefined,
       // Pass the array when we want EXT-X-MEDIA renditions, OR when the
       // source has zero audio streams — the empty array signals
       // `noAudio` to the master-playlist builder so CODECS drops the
       // audio entry (otherwise Shaka / ExoPlayer reject the variant).
       // `undefined` keeps the muxed single-audio layout for everyone else.
       audioStreams:
-        audioGroup || audioStreams.length === 0 ? audioStreams : undefined,
+        useExtXMedia || audioStreams.length === 0 ? audioStreams : undefined,
       audioPlans,
       onlyQuality,
       defaultAudioIndex: pickedIdx ?? 0,
@@ -1344,9 +1422,7 @@ export class StreamingController {
       // Copied stream: describe the bitstream as probed, not as a rung would
       // encode it (see copySourceCodecString).
       remuxCodecs: includeRemux && v ? copySourceCodecString(v) : undefined,
-      // Same formula as playback-info's remuxMasterBandwidthBps: a copy streams
-      // the whole container, and per-stream bitrates are often absent.
-      remuxBandwidthBps:
+      formatBitRate:
         si?.formatBitRate ?? (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0),
       sourceFrameRate,
       subtitleRenditions,
@@ -1744,40 +1820,25 @@ export class StreamingController {
         req.user as User,
       );
       const ctx = this.sessionContextBuilder.build(req, resolved, mediaFileId);
-      // No resolvable LiveSession means no codec variant to thread into
-      // ffmpeg (player closed / torn down while segment requests were still
-      // in flight — e.g. a rapid open/close — or a stale sid). 410 so the
-      // client re-establishes via playback-info instead of a 500, and we
-      // never spawn a transcode for a stream nobody is watching.
-      if (!ctx.videoVariant) {
-        throw new SessionExpiredException(
-          firstQueryString(req.query, 'sid') ?? null,
-        );
-      }
+      this.assertVideoVariant(ctx, req);
       ctx.spawnReason = videoSession ? 'seg-request' : 'seg-race';
       if (live?.kind === 'remux') {
         // Same race, remux playback: spawn the copy session, not a
         // guessed top-rung transcode mislabeled 'remux' into the audio group.
-        const grid = live.remuxGrid ?? null;
-        // The real request, not a (possibly stale) heartbeat position: a wrong
-        // anchor here can kill and mis-respawn a session another request just spawned.
-        const startSeg = this.anchorSegment(
+        const spawned = await this.spawnRemuxSession(
+          res,
+          segment,
+          mediaFileId,
+          resolved.absolutePath,
+          ctx,
           live,
           videoSession ?? null,
           isInit,
           segIndex,
-          grid
-            ? { boundaries: grid.boundaries, origin: ctx.sourceStartPts ?? 0 }
-            : undefined,
-        );
-        videoSession = await this.transcodingService.getOrCreateRemuxSession(
-          mediaFileId,
-          resolved.absolutePath,
-          startSeg,
-          ctx,
-          grid,
           audioIndex + 1,
         );
+        if (!spawned) return;
+        videoSession = spawned;
       } else {
         const deviceType = live?.deviceType ?? 'desktop';
         const sv = resolved.mediaFile.streamInfo?.video?.[0];
@@ -1923,21 +1984,9 @@ export class StreamingController {
       }
     }
 
-    await this.segmentPackaging.serve(
-      res,
-      segPath,
-      segmentContentType(segment),
-      {
-        segDuration: realSegmentSeconds(
-          this.segDur(videoSession),
-          videoSession.sourceFps,
-        ),
-        startPts: videoSession.sourceStartPts,
-        // A remux rendition is already assembled onto the served timeline
-        // (`RemuxSegmentAssembler`); re-anchoring it here would shift it twice.
-        keyframeCut: videoSession.quality === 'remux',
-      },
-    );
+    // A remux rendition is already assembled onto the served timeline
+    // (`RemuxSegmentAssembler`); re-anchoring it here would shift it twice.
+    await this.serveFrom(res, segPath, segment, videoSession, videoSession.quality === 'remux');
   }
 
   /** HLS variant playlist — pre-computed segment list based on known duration. */
@@ -2123,10 +2172,7 @@ export class StreamingController {
       existing != null &&
       (quality === 'remux' ? !!existing.remux : existing.quality === quality);
     if (segment.startsWith('init') && existing && sessionQualityMatches) {
-      const ma = live?.useExtXMedia ?? false;
-      // Same caveat as the segment path: remux video-only doesn't use
-      // var_stream_map, so the `0/` prefix would 404 on the init lookup.
-      const initFile = ma && quality !== 'remux' ? `0/${segment}` : segment;
+      const initFile = this.videoSegName(segment, quality, live?.useExtXMedia ?? false);
       const earlySession = this.sessionRouter.resolveEarlySession(
         mediaFileId,
         req.user?.id,
@@ -2161,15 +2207,7 @@ export class StreamingController {
           );
           continue;
         }
-        await this.segmentPackaging.serve(
-          res,
-          initPath,
-          segmentContentType(segment),
-          {
-            segDuration: realSegmentSeconds(this.segDur(src), src.sourceFps),
-            startPts: src.sourceStartPts,
-          },
-        );
+        await this.serveFrom(res, initPath, segment, src);
         return;
       }
     }
@@ -2181,9 +2219,7 @@ export class StreamingController {
     // serve it without any DB query or session management. Completed sessions
     // (exitCode !== null) still have valid segments in cache — don't skip them.
     if (existing && existing.quality === quality) {
-      const varStreamMap = live?.useExtXMedia ?? false;
-      const segName =
-        varStreamMap && quality !== 'remux' ? `0/${segment}` : segment;
+      const segName = this.videoSegName(segment, quality, live?.useExtXMedia ?? false);
       const segPath = `${existing.cachePath}/${segName}`;
       if (fs.existsSync(segPath)) {
         // Same 0-byte CDN-poisoning trap as the init handler above: a
@@ -2199,20 +2235,8 @@ export class StreamingController {
           return;
         }
         existing.lastAccess = Date.now();
-        await this.segmentPackaging.serve(
-          res,
-          segPath,
-          segmentContentType(segment),
-          {
-            startPts: existing.sourceStartPts,
-            segDuration: realSegmentSeconds(
-              this.segDur(existing),
-              existing.sourceFps,
-            ),
-            // Remux is cut on source keyframes, off the grid.
-            keyframeCut: quality === 'remux',
-          },
-        );
+        // Remux is cut on source keyframes, off the grid.
+        await this.serveFrom(res, segPath, segment, existing, quality === 'remux');
         return;
       }
       // Segment not on disk — fall through to full resolve + getOrCreateSession.
@@ -2225,15 +2249,7 @@ export class StreamingController {
     );
 
     const ctx = this.sessionContextBuilder.build(req, resolved, mediaFileId);
-    // No resolvable LiveSession → no codec variant to thread into ffmpeg
-    // (player closed / torn down with segment requests still in flight, or a
-    // stale sid). 410 so the client re-establishes instead of a 500 from
-    // buildFfmpegArgs; nothing is spawned for a stream nobody is watching.
-    if (!ctx.videoVariant) {
-      throw new SessionExpiredException(
-        firstQueryString(req.query, 'sid') ?? null,
-      );
-    }
+    this.assertVideoVariant(ctx, req);
     ctx.spawnReason = 'seg-request';
 
     // Early probe routing: the seg-0/seg-1 init probe a player fires on
@@ -2285,8 +2301,7 @@ export class StreamingController {
           .catch(() => undefined);
       }
       if (earlySession && earlySession.quality === quality) {
-        const varStreamMap = live?.useExtXMedia ?? false;
-        const segName = varStreamMap ? `0/${segment}` : segment;
+        const segName = this.videoSegName(segment, quality, live?.useExtXMedia ?? false);
         const segPath = await this.transcodingService.getSegmentPath(
           earlySession,
           segName,
@@ -2298,18 +2313,7 @@ export class StreamingController {
             sendTransientUnavailable(res);
             return;
           }
-          await this.segmentPackaging.serve(
-            res,
-            segPath,
-            segmentContentType(segment),
-            {
-              segDuration: realSegmentSeconds(
-                this.segDur(earlySession),
-                earlySession.sourceFps,
-              ),
-              startPts: earlySession.sourceStartPts,
-            },
-          );
+          await this.serveFrom(res, segPath, segment, earlySession);
           return;
         }
         // Early failed/timeout — log and fall through to slow path
@@ -2322,46 +2326,33 @@ export class StreamingController {
     // Remux: anchor + seek on the keyframe boundaries the playback froze so a resume
     // / forward seek lands on the right content and the post-seek playlist stays
     // aligned. Non-remux keeps the uniform grid (force_key_frames makes it true).
-    const remuxGrid = quality === 'remux' ? (live?.remuxGrid ?? null) : null;
-    if (remuxGrid && !isInit && segIndex >= remuxGrid.durations.length) {
-      this.log.warn(`Segment 404: ${segment} is past the ${remuxGrid.durations.length} of the remux grid`);
-      res.status(404).send('Segment not found');
-      return;
+    let session: TranscodeSession;
+    if (quality === 'remux') {
+      const spawned = await this.spawnRemuxSession(
+        res,
+        segment,
+        mediaFileId,
+        resolved.absolutePath,
+        ctx,
+        live,
+        existing,
+        isInit,
+        segIndex,
+      );
+      if (!spawned) return;
+      session = spawned;
+    } else {
+      const anchorSeg = this.anchorSegment(live, existing, isInit, segIndex);
+      session = await this.transcodingService.getOrCreateSession(
+        mediaFileId,
+        quality,
+        resolved.absolutePath,
+        anchorSeg,
+        ctx,
+      );
     }
-    const anchorSeg = this.anchorSegment(
-      live,
-      existing,
-      isInit,
-      segIndex,
-      remuxGrid ? {
-        boundaries: remuxGrid.boundaries,
-        origin: ctx.sourceStartPts ?? 0,
-      } : undefined,
-    );
-    const session =
-      quality === 'remux'
-        ? await this.transcodingService.getOrCreateRemuxSession(
-            mediaFileId,
-            resolved.absolutePath,
-            anchorSeg,
-            ctx,
-            remuxGrid,
-          )
-        : await this.transcodingService.getOrCreateSession(
-            mediaFileId,
-            quality,
-            resolved.absolutePath,
-            anchorSeg,
-            ctx,
-          );
 
-    // With var_stream_map (fMP4 + multi-audio), video segments are in
-    // subdirectory "0/". The remux session keeps a flat layout (no
-    // var_stream_map), so the `0/` prefix would 404 there.
-    const varStreamMap = live?.useExtXMedia ?? false;
-    const usesVarStreamMapLayout = varStreamMap && quality !== 'remux';
-    const segName = usesVarStreamMapLayout ? `0/${segment}` : segment;
-
+    const segName = this.videoSegName(segment, quality, live?.useExtXMedia ?? false);
     const segPath = await this.transcodingService.getSegmentPath(
       session,
       segName,
@@ -2390,16 +2381,7 @@ export class StreamingController {
     }
     // Remux is cut on source keyframes, off the grid; the early-probe
     // paths never run for remux (gated on quality !== 'remux').
-    await this.segmentPackaging.serve(
-      res,
-      segPath,
-      segmentContentType(segment),
-      {
-        segDuration: realSegmentSeconds(this.segDur(session), session.sourceFps),
-        startPts: session.sourceStartPts,
-        keyframeCut: quality === 'remux',
-      },
-    );
+    await this.serveFrom(res, segPath, segment, session, quality === 'remux');
   }
 
   // ---------------------------------------------------------------------------

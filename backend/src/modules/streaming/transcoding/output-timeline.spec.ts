@@ -266,7 +266,7 @@ describe('remux resume', () => {
   });
 });
 
-describe('multi-audio remux (one output per track, H6)', () => {
+describe('multi-audio remux (one output per track)', () => {
   const streams = [{ streamIndex: 1, language: 'eng' }, { streamIndex: 2, language: 'fre' }];
   const plans: BuildRemuxArgsOptions['audioTrackPlans'] = [
     { mode: 'copy', codec: 'aac', channels: 2 },

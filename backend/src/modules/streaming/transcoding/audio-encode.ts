@@ -68,7 +68,7 @@ function resolvedAacEncoder(channels: number): 'aac' | 'libfdk_aac' {
 /** Every encode runs at 48 kHz: what Opus and Dolby take, and one of the two
  *  rates Apple's HLS authoring spec allows for AAC, which would otherwise keep
  *  a 96 kHz source's rate. */
-const ENCODE_SAMPLE_RATE = 48_000;
+export const ENCODE_SAMPLE_RATE = 48_000;
 
 /** Packet grid (seconds) of an encoded track: its packets start at
  *  `alignedAt - padding + k · frame`. */

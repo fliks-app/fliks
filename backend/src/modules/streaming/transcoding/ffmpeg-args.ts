@@ -498,77 +498,6 @@ export function perStreamAudioArgs(
 }
 
 /**
- * EXT-X-MEDIA layout: one FFmpeg process for the programme video plus every
- * audio rendition, each its own `%v` output, cut on the fps-aware grid (the
- * forced-IDR cadence and the playlist EXTINF). The transcode ladder's own
- * multi-audio layout; the remux path publishes its tracks another way (H6).
- */
-function varStreamMapArgs(opts: {
-  videoMapSpec: string;
-  audioStreams: AudioStreamMeta[];
-  audioTrackPlans: AudioPlan[] | undefined;
-  audioArgs: string[];
-  audioEnc: AudioEncodeContext;
-  useTs: boolean;
-  segType: string;
-  segExt: string;
-  hlsTime: string;
-  startSegment: number;
-  outputSeekSeconds: number;
-  outputDir: string;
-  originSeconds: number;
-}): string[] {
-  const {
-    videoMapSpec,
-    audioStreams,
-    audioTrackPlans,
-    audioArgs,
-    audioEnc,
-    useTs,
-    segType,
-    segExt,
-    hlsTime,
-    startSegment,
-    outputSeekSeconds,
-    outputDir,
-    originSeconds,
-  } = opts;
-  const args: string[] = ['-map', videoMapSpec];
-  for (let i = 0; i < audioStreams.length; i++) {
-    args.push('-map', audioMapSpec(audioStreams, i));
-  }
-  // Without per-rendition plans the single `audioArgs` apply to every track.
-  args.push(
-    ...(audioTrackPlans
-      ? perStreamAudioArgs(audioStreams, audioTrackPlans, audioEnc)
-      : audioArgs),
-  );
-
-  // Build var_stream_map: "v:0,agroup:audio a:0,agroup:audio,language:fre ..."
-  const varParts = ['v:0,agroup:audio'];
-  for (let i = 0; i < audioStreams.length; i++) {
-    const lang = audioStreams[i].language || 'und';
-    varParts.push(`a:${i},agroup:audio,language:${lang}`);
-  }
-
-  args.push(
-    ...hlsMuxerArgs({
-      useTs,
-      hlsTime,
-      startSegment,
-      outputSeekSeconds,
-      segType,
-      initFilename: 'init_%v.mp4',
-      varStreamMap: varParts.join(' '),
-      segmentFilename: ffOutPath(outputDir, '%v', `seg-%04d.${segExt}`),
-      indexPath: ffOutPath(outputDir, '%v', 'index.m3u8'),
-      originSeconds,
-    }),
-  );
-  return args;
-}
-
-/**
  * Audio track mapping + HLS muxer args — the terminal block of a video
  * transcode. Two shapes: the EXT-X-MEDIA layout ({@link varStreamMapArgs}) and
  * the single muxed video+audio stream. Pure: consumes the resolved video map
@@ -614,26 +543,41 @@ function buildAudioAndMuxerArgs(opts: {
     !!audioStreams && varStreamMapLayout(videoOnly, audioStreams.length);
 
   if (useVarStreamMap) {
-    // Cut on the fps-aware grid (== the forced-IDR cadence and the playlist
-    // EXTINF), not the integer setting. On fractional-fps sources the audio
-    // renditions would otherwise be cut on the 3.0s grid while video IDRs land
-    // on 3.003s; the per-segment drift accumulates until the tfdt anchor snaps
-    // audio a whole segment late mid-film (sudden A/V desync).
-    return varStreamMapArgs({
-      videoMapSpec,
-      audioStreams: audioStreams!,
-      audioTrackPlans,
-      audioArgs,
-      audioEnc,
-      useTs,
-      segType,
-      segExt,
-      hlsTime: String(realSeg),
-      startSegment,
-      outputSeekSeconds,
-      outputDir,
-      originSeconds,
-    });
+    // Cut on the fps-aware grid (the forced-IDR cadence), not the integer
+    // setting: a fractional-fps source otherwise drifts audio a whole segment
+    // late mid-film once the tfdt anchor snaps to the accumulated gap.
+    const streams = audioStreams!;
+    const args: string[] = ['-map', videoMapSpec];
+    for (let i = 0; i < streams.length; i++) {
+      args.push('-map', audioMapSpec(streams, i));
+    }
+    // Without per-rendition plans the single `audioArgs` apply to every track.
+    args.push(
+      ...(audioTrackPlans
+        ? perStreamAudioArgs(streams, audioTrackPlans, audioEnc)
+        : audioArgs),
+    );
+    // "v:0,agroup:audio a:0,agroup:audio,language:fre …"; the remux path
+    // publishes its own multi-audio tracks a different way (per-track `-f mp4`).
+    const varParts = ['v:0,agroup:audio'];
+    for (let i = 0; i < streams.length; i++) {
+      varParts.push(`a:${i},agroup:audio,language:${streams[i].language || 'und'}`);
+    }
+    args.push(
+      ...hlsMuxerArgs({
+        useTs,
+        hlsTime: String(realSeg),
+        startSegment,
+        outputSeekSeconds,
+        segType,
+        initFilename: 'init_%v.mp4',
+        varStreamMap: varParts.join(' '),
+        segmentFilename: ffOutPath(outputDir, '%v', `seg-%04d.${segExt}`),
+        indexPath: ffOutPath(outputDir, '%v', 'index.m3u8'),
+        originSeconds,
+      }),
+    );
+    return args;
   }
 
   // Standard single-stream output: video + one audio track muxed.
@@ -1420,12 +1364,8 @@ export interface BuildRemuxArgsOptions {
   videoOnly?: boolean;
 }
 
-/**
- * One `-f mp4` output per audio track of a multi-audio remux, each its own
- * growing fragmented file (`a<i>.mp4`) instead of an HLS segment per packet
- * (H6: `-hls_time 0` on a video-less stream cuts on every packet). The
- * assembler tails each file and coalesces its frames onto the video's grid.
- */
+/** One `-f mp4` output per audio track: a growing fragmented file the assembler
+ *  tails, since `-hls_time 0` on a video-less stream cuts on every packet. */
 function buildMultiAudioOutputs(opts: {
   audioStreams: AudioStreamMeta[];
   audioTrackPlans: AudioPlan[] | undefined;
@@ -1541,10 +1481,8 @@ export function buildRemuxArgs(
         ]
       : [];
 
-  // A multi-audio source publishes every track as its own rendition. The video
-  // still writes the single-rendition GOP output below; each audio track is a
-  // separate `-f mp4` output in the same process (`buildMultiAudioOutputs`):
-  // one growing file per track, not one HLS segment per packet (H6).
+  // A multi-audio source publishes every track as its own rendition: the video
+  // writes the single GOP output below, each audio track its own `-f mp4` output.
   const multiAudio =
     !!audioStreams && varStreamMapLayout(videoOnly, audioStreams.length);
 

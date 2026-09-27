@@ -1,14 +1,8 @@
-import { StreamBuilderService } from './stream-builder.service';
+import type { StreamBuilderService } from './stream-builder.service';
+import { makeStreamBuilder } from './stream-builder.test-helpers';
 import type { DeviceProfileDto } from './dto/device-profile.dto';
 
-const svc = () =>
-  new StreamBuilderService(
-    { getDetectedHwAccel: () => 'none' } as never,
-    {
-      getAutoCropEnabled: () => false,
-      getTonemapAlgo: () => 'auto',
-    } as never,
-  );
+const svc = () => makeStreamBuilder();
 
 // mp4-only profile: the mkv source can't Direct Play (container mismatch) but its
 // codecs are copyable, so DirectStream (remux) is the baseline absent a guard.

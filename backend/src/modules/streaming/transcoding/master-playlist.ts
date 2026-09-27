@@ -1,5 +1,4 @@
 import {
-  DESKTOP_PROFILES,
   getHdrLadderForDevice,
   getLadderForDevice,
   parseBitrateToBps,
@@ -11,6 +10,7 @@ import {
   DEFAULT_AUDIO_PLAN,
   type AudioPlan,
 } from './audio-encode';
+import { REMUX_STEREO_AUDIO_BITRATE } from './ffmpeg-args';
 import type {
   AudioStreamMeta,
   DeviceType,
@@ -40,13 +40,11 @@ const REMUX_FALLBACK_BANDWIDTH_BPS = 8_000_000;
 
 /** Stereo reference for an encoded remux audio rendition's bitrate, matching
  *  the top rung ffmpeg itself encodes remux audio against. */
-const REMUX_AUDIO_STEREO_REF_BPS = parseBitrateToBps(
-  DESKTOP_PROFILES[0].audioBitrate,
-);
+const REMUX_AUDIO_STEREO_REF_BPS = parseBitrateToBps(REMUX_STEREO_AUDIO_BITRATE);
 
 /** Peak BANDWIDTH per the HLS spec: the copied video's own bitrate plus
  *  the single largest audio rendition, never every track or subtitles. */
-export function remuxPeakBandwidthBps(
+function remuxPeakBandwidthBps(
   videoBitrateBps: number,
   audioPlans: AudioPlan[],
 ): number {
@@ -55,6 +53,21 @@ export function remuxPeakBandwidthBps(
     0,
   );
   return videoBitrateBps + audioPeak;
+}
+
+/** Remux variant BANDWIDTH: the peak formula once a video-only bitrate is
+ *  known (even estimated from the container total), else the container total
+ *  itself, else a manifest-only placeholder. Shared by the master and
+ *  playback-info so the two can never quote different numbers. */
+export function remuxBandwidthBps(
+  sourceVideoBitrateBps: number | undefined,
+  formatBitRate: number | undefined,
+  audioPlans: AudioPlan[],
+): number {
+  if (sourceVideoBitrateBps) {
+    return remuxPeakBandwidthBps(Math.round(sourceVideoBitrateBps), audioPlans);
+  }
+  return Math.round(formatBitRate || 0) || REMUX_FALLBACK_BANDWIDTH_BPS;
 }
 
 interface RemuxVariantOptions {
@@ -69,8 +82,8 @@ interface RemuxVariantOptions {
   /** VIDEO-RANGE attribute value; omitted (SDR) leaves the attribute off. */
   range?: 'PQ' | 'HLG';
   remuxCodecs?: string | null;
-  remuxBandwidthBps?: number;
-  sourceBitrate?: number;
+  /** Container total, used only when `sourceVideoBitrateBps` can't be resolved. */
+  formatBitRate?: number;
   sourceVideoBitrateBps?: number;
   /** Every rendition's output plan, to find the peak for BANDWIDTH. */
   audioPlans: AudioPlan[];
@@ -91,17 +104,11 @@ function pushRemuxVariant(lines: string[], opts: RemuxVariantOptions): void {
     codecsTail,
     range,
     remuxCodecs,
-    remuxBandwidthBps,
-    sourceBitrate,
+    formatBitRate,
     sourceVideoBitrateBps,
     audioPlans,
   } = opts;
-  // sourceVideoBitrateBps is video-only, so the peak formula adds audio back
-  // on top; without it, the container-total fallbacks stand in as-is.
-  const bandwidth = sourceVideoBitrateBps
-    ? remuxPeakBandwidthBps(Math.round(sourceVideoBitrateBps), audioPlans)
-    : Math.round(remuxBandwidthBps || sourceBitrate || 0) ||
-      REMUX_FALLBACK_BANDWIDTH_BPS;
+  const bandwidth = remuxBandwidthBps(sourceVideoBitrateBps, formatBitRate, audioPlans);
   const codecsAttr = remuxCodecs ? `,CODECS="${remuxCodecs}${codecsTail}"` : '';
   const rangeAttr = range ? `,VIDEO-RANGE=${range}` : '';
   lines.push(
@@ -199,7 +206,6 @@ export interface MasterPlaylistOptions {
   remuxHeight?: number;
   tokenParam: string;
   includeRemux?: boolean;
-  sourceBitrate?: number;
   audioStreams?: AudioStreamMeta[];
   /** One plan per rendition, aligned with `audioStreams`, or the muxed track's; AAC
    *  stereo when absent. CODECS follows it: a wrong one fails the MSE append. */
@@ -241,11 +247,9 @@ export interface MasterPlaylistOptions {
    *  probes the real bytes — never substitute a rung-derived string here, a
    *  copy must not be described by the encoder's arithmetic. */
   remuxCodecs?: string | null;
-  /** Container total bitrate for the remux variant's BANDWIDTH. Needed
-   *  separately from {@link sourceBitrate}, which sums per-stream bitrates and
-   *  collapses to the audio track alone on a source (MKV, typically) that
-   *  declares no per-stream video bitrate. */
-  remuxBandwidthBps?: number;
+  /** Container total bitrate for the remux variant's BANDWIDTH, used only when
+   *  `sourceVideoBitrateBps` can't be resolved. */
+  formatBitRate?: number;
   /** Segment grid length, in seconds, of the trick-play rendition to advertise.
    *  Unset omits it: only AVPlay needs the `EXT-X-I-FRAME-STREAM-INF` tag, and
    *  every player that reads one will fetch the frames behind it. */
@@ -262,7 +266,6 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
     remuxHeight = sourceHeight,
     tokenParam,
     includeRemux = false,
-    sourceBitrate,
     audioStreams,
     audioPlans,
     onlyQuality,
@@ -279,7 +282,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
     dedupesAudioByLanguage = false,
     iFrameTrickPlaySegmentSeconds,
     remuxCodecs,
-    remuxBandwidthBps,
+    formatBitRate,
   } = opts;
   // The caller decided the layout (`audioLayout`): a non-empty `audioStreams`
   // asks for EXT-X-MEDIA renditions, `undefined` for the muxed one.
@@ -380,8 +383,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
         codecsTail,
         range,
         remuxCodecs,
-        remuxBandwidthBps,
-        sourceBitrate,
+        formatBitRate,
         sourceVideoBitrateBps,
         audioPlans: plans,
       });
@@ -456,8 +458,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
       subsAttr,
       codecsTail,
       remuxCodecs,
-      remuxBandwidthBps,
-      sourceBitrate,
+      formatBitRate,
       sourceVideoBitrateBps,
       audioPlans: plans,
     });
