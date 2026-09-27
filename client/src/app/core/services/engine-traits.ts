@@ -2,7 +2,7 @@ import { TvPlatform } from './device.service';
 
 /**
  * Distinct playback-engine kinds, one per unique behavioural trait-row. The
- * engine drives seven flags the backend keys streaming decisions on
+ * engine drives the flags the backend keys streaming decisions on
  * (see `EngineTraits`). Every supported client maps to exactly one kind:
  *
  *  - WEB        — browser web build (Shaka / MSE).
@@ -27,7 +27,7 @@ export enum EngineKind {
 }
 
 /**
- * The seven engine-behavioural flags on `DeviceProfile`. Each is optional
+ * The engine-behavioural flags on `DeviceProfile`. Each is optional
  * because `undefined` is load-bearing on the wire: the DTO marks them
  * `@IsOptional()` and an absent `supportsDirectPlay` is read as `true` by the
  * backend. A row that omits a key emits `undefined` (no key in the JSON),
@@ -58,7 +58,7 @@ export interface EngineTraits {
 }
 
 /**
- * Single source of truth for the seven wire engine traits plus `supportsAbr`,
+ * Single source of truth for the wire engine traits plus `supportsAbr`,
  * one row per `EngineKind`.
  *
  * The CAST row sets `supportsAbr` (a local-only decision, never on the wire)

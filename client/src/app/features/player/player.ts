@@ -44,7 +44,7 @@ import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { PlaybackQueueService, QueueItem } from '../../core/services/playback-queue.service';
 import { buildSeriesQueueItems, resolvePlayableFile } from '../../shared/utils/media-play.util';
-import { audioChannelsLabel, computeVideoCropStyle, deliveredKindFromVariant, formatAudioLabel, formatAudioParts, inIntroRange, inOutroRange, parseAudioIndex, playbackModeOf, SpriteMetadata, widthForProfile, type PlaybackMode, type VideoCropStyle } from '../../core/utils/player.utils';
+import { audioChannelsLabel, computeVideoCropStyle, deliveredKindFromVariant, formatAudioLabel, formatAudioParts, inIntroRange, inOutroRange, parseAudioIndex, playbackModeOf, SpriteMetadata, widthForProfile, type CropRect, type VideoCropStyle } from '../../core/utils/player.utils';
 import { classifyPlaybackError, formatErrorDiagnostics, isUndecodableError, userMessageKeyFor, type PlaybackError } from '../../core/services/playback-engine/playback-error';
 import { environment } from '../../../environments/environment';
 import { normalizeLangCode } from '../../core/utils/language.utils';
@@ -735,37 +735,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  error diagnostics so a failed open shows which endpoint/format was tried. */
   private lastStreamUrl = '';
 
-  /** What the engine is ACTUALLY playing, refreshed every stats tick
-   *  (updateDeliveredKind) independently of the stats panel being open, the
-   *  overlay must never label from `playbackInfo.playMethod` alone. Null when
-   *  unknown (nothing loaded, or an offline copy whose packaging isn't recorded). */
-  private readonly deliveredKind = signal<PlaybackMode | null>(null);
-
-  /** Session the delivery-mismatch console.warn already fired for, one
-   *  warning per negotiated session, re-armed by the next one. */
-  private deliveryMismatchWarnedSid: string | undefined;
-
-  /** Recompute {@link deliveredKind} from the loaded URL + the active
-   *  variant (Shaka only, every other engine has no variant introspection)
-   *  and warn once if it disagrees with the server's decision. */
-  private updateDeliveredKind(): void {
-    if (this.isOfflinePlayback) {
-      this.deliveredKind.set(null);
-      return;
-    }
-    if (!this.lastStreamUrl) return;
-    const originalVideoId = this.getActiveVariant()?.originalVideoId ?? null;
-    const kind = deliveredKindFromVariant(this.lastStreamUrl, originalVideoId);
-    this.deliveredKind.set(kind);
-    const pi = this.playbackInfo;
-    if (!pi) return;
-    const decisionKind = playbackModeOf(pi);
-    if (decisionKind !== kind && this.deliveryMismatchWarnedSid !== pi.sessionId) {
-      this.deliveryMismatchWarnedSid = pi.sessionId;
-      console.warn(`[player] delivery mismatch: server decided ${decisionKind}, actually playing ${kind}`);
-    }
-  }
-
   /** Live-session id to bind the next stream request to. While casting
    *  the receiver's session id wins (its segments come from a separate
    *  ffmpeg job under the cast device profile); otherwise the local
@@ -797,17 +766,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const playingWidth = activeVariant?.width ?? src?.width;
     const playingHeight = activeVariant?.height ?? src?.height;
 
-    // What the engine is ACTUALLY playing, refreshed every stats tick
-    // (updateDeliveredKind) independently of the panel being open, never the
-    // server's playMethod decision alone, which a desynced stream URL can
-    // disagree with.
-    const deliveredKind = this.deliveredKind();
+    // What the engine is ACTUALLY playing, never the server's playMethod
+    // decision alone, which a desynced stream URL can disagree with.
+    const deliveredKind = this.isOfflinePlayback || !this.lastStreamUrl
+      ? null
+      : deliveredKindFromVariant(this.lastStreamUrl, this.getActiveVariant()?.originalVideoId ?? null);
     const effectiveVideoCopy = deliveredKind !== 'transcode';
     // Without a negotiation (offline) nothing says what was copied: show no mode.
     const deliveryKnown = !!pi && deliveredKind != null;
-    // Audio is decided independently by the backend, a lower video rung
-    // still copies a supported audio track (e.g. AC3 5.1) verbatim, so
-    // reflect the backend's audioCopyStream, not the video delivery.
+    // Audio is decided independently: a lower video rung still copies a
+    // supported audio track (e.g. AC3 5.1) verbatim, so reflect audioCopyStream.
     const effectiveAudioCopy = pi?.audioCopyStream ?? true;
     // Per-track audio decision for the ACTIVE track. Multi-audio renditions
     // switch client-side, so the picked track's copy/reason (top-level
@@ -953,9 +921,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // so a remux whose rung was pinned reports the transcode it actually is.
     const streamTypeKey = deliveredKind ? `player.stats_stream_type_${deliveredKind}` : '';
 
-    // The server's decision can disagree with what's actually playing (a
-    // stream URL that failed to carry the decision through, or a mid-flight
-    // fallback reload), flag it instead of silently trusting either side.
+    // Flag when the server's decision disagrees with what's actually playing,
+    // instead of silently trusting either side.
     const decisionKind = pi ? playbackModeOf(pi) : undefined;
     const mismatch =
       decisionKind && deliveredKind && decisionKind !== deliveredKind
@@ -1010,15 +977,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         ? this.translate.instant('player.stats_tonemapping_client')
         : '';
 
-    // Split transcode-reason flags by what they actually re-encode so
-    // each section's "Reasons" line only shows what's relevant to it.
-    // Video re-encode triggers: any `Video*` flag plus `SubtitleBurnIn`
-    // (which composites text frames into the video stream). Audio
-    // re-encode triggers: any `Audio*` flag. Everything else (container /
-    // mux / server-policy flags \u2014 `ContainerNotSupported`, `MuxNotSupported`,
-    // `DirectStreamDisabled`, `ClientRejectedCopy`) is neither video- nor
-    // audio-specific and goes in the stream section instead, so it's never
-    // silently dropped.
+    // Video: `Video*` flags plus `SubtitleBurnIn`. Audio: `Audio*` flags.
+    // Everything else (container/mux/server-policy) goes in the stream section, never dropped.
     const allFlags = (pi?.transcodeReasons ?? []).map((r) => r.flag);
     // Translate each flag to a human label so the overlay explains
     // bitrate/quality-driven transcodes, not just raw codes. Unknown flags fall
@@ -1295,7 +1255,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.state.playbackMode.set('direct');
         this.qualityManager.availableQualities.set([]);
         this.lastStreamUrl = offlineCheck ?? '';
-        this.updateDeliveredKind();
 
         if (this.isDesktopNative) {
           // Desktop: the original container lives on disk; mpv plays it back
@@ -1554,7 +1513,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, this.playbackMode());
 
       // Tracks and subtitles load beside playback: a slow subtitle list must not delay the first frame.
-      void (async () => {
+      const trackSetupPromise = (async () => {
         if (this.isOfflinePlayback) {
           // Offline: load pre-downloaded subtitles from local storage (no API)
           await this.loadOfflineSubtitles();
@@ -1578,10 +1537,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           (sub) => this.selectSubtitle(sub),
           this.mediaId,
         );
-      })().catch((e) => console.warn('[player] track setup failed', e));
+      })();
+      trackSetupPromise.catch((e) => console.warn('[player] track setup failed', e));
 
       // If Cast is already connected, send to Cast
       if (this.castService.isConnected() && !this.isNativeEngine()) {
+        // Let the subtitle list settle before handing off, so Cast gets the
+        // full list instead of whatever raced ahead of it.
+        await trackSetupPromise.catch(() => {});
         await this.engine!.pause();
         this.engine!.muted = true;
         await this.engine!.unload();
@@ -1617,7 +1580,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.statsInterval = setInterval(() => {
         this.tickClockWatch();
         this.checkStall();
-        this.updateDeliveredKind();
         const stats = this.engine?.getStats();
         const variant = stats?.activeVariant;
         if (variant?.height) {
@@ -1661,11 +1623,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         // preRollAdvanceEffect handles a pre-roll failure; this teardown would
         // null the engine it needs, and the toast has no film-error to show.
         if (!this.preRollActive()) {
-          // TV / Tizen engine path: the AVPlay <object> + the hidden <video>
-          // both stay parked on top of the error overlay if the engine dies
-          // during load(). Force the player UI back into a visible-DOM state
-          // so the user can read what blew up instead of staring at the
-          // pre-paint bg-base-200 plane.
+          // TV/native engines leave their surface parked over the error overlay
+          // if they die during load(): tear it down so the card is visible.
           if ((this.isTizenEngine() || this.isDesktopNative || this.isNativeEngine()) && this.engine) {
             releaseEngineSurface();
             const video = this.videoEl()?.nativeElement;
@@ -1679,9 +1638,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             this.isTizenEngine.set(false);
             this.isNativeEngine.set(false);
           }
-          // Surface a toast on top of everything - fixed z-[9999], rendered
-          // by the always-mounted <app-toast-container>, so it survives even
-          // when the player-container itself isn't laying out correctly.
+          // Fixed z-[9999] on the always-mounted <app-toast-container>: survives
+          // even when the player-container itself isn't laying out correctly.
           try {
             this.toast.error(userMessage);
           } catch {
@@ -2202,11 +2160,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (gen === this.seekGeneration) this.state.seekLocked.set(false);
   }
 
-  /** Desktop mpv multi-audio HLS (remux or transcode) only: true when `target`
-   *  falls outside mpv's demuxer cache, where an in-place seek would force its
-   *  ffmpeg HLS demuxer to re-seek across the separate video/audio child
-   *  playlists. Those reload at the offset (see {@link seekByReload}); Shaka,
-   *  DirectPlay and single-audio keep the instant in-place seek. */
+  /** Desktop mpv multi-audio HLS only: true when `target` falls outside mpv's
+   *  demuxer cache, forcing a reload (see {@link seekByReload}) instead of an in-place seek. */
   private desktopFarSeekNeedsReload(target: number): boolean {
     if (
       !this.isDesktopNative ||
@@ -3258,9 +3213,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       mimeType: pi.playMethod === 'DirectPlay' ? 'video/mp4' : undefined,
     };
     this.lastStreamUrl = built.url;
-    // Recompute now instead of waiting up to 1s for the next stats tick - a
-    // reload must not keep showing the previous file's delivery in between.
-    this.updateDeliveredKind();
     return built;
   }
 
@@ -3274,15 +3226,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.applyVideoCrop();
   }
 
-  /**
-   * Mint a fresh LiveSession via `playback-info` and reload the
-   * engine at `pos` with the new sid. Shared body between
-   * {@link resumeLocalAfterCast} (Cast disconnect, also unmutes),
-   * {@link recoverFromLostSession} (heartbeat said sid is unknown, keeps a
-   * pre-existing pause) and {@link seekByReload}. HLS routes
-   * intentionally drop `startTime` on the URL because the engine handles
-   * the seek after `load`. False when the remux fallback took the reload over.
-   */
+  /** Mint a fresh LiveSession via `playback-info` and reload the engine at
+   *  `pos` with the new sid. False when the remux fallback took the reload over. */
   private async refreshSidAndReload(
     pos: number,
     opts: { preservePause: boolean; unmute: boolean },
@@ -3420,14 +3365,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  (an `error` event plus the rejected load()) is absorbed, not carded. */
   private remuxFallback: Promise<void> | null = null;
 
-  /**
-   * One wiring call per engine for the two ways a live session goes bad:
-   * - `sessionExpired`: a backend 410 on a segment / playlist request;
-   *   recover on the very next tick instead of waiting for the heartbeat.
-   * - `error`: an undecodable remux copy falls back to a transcode, see
-   *   {@link maybeFallbackFromRemux}. A reload in flight reports its own
-   *   load failure through {@link fallBackFromRemuxOnLoadError} instead.
-   */
+  /** Wires the two ways a live session goes bad: `sessionExpired` (a backend
+   *  410) recovers immediately; `error` routes to {@link maybeFallbackFromRemux}. */
   private wireErrorRecovery(engine: PlaybackEngine): void {
     engine.on('sessionExpired', () => {
       void this.recoverFromLostSession();
@@ -3448,13 +3387,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return this.maybeFallbackFromRemux({ source, code, message: e?.message ?? String(e) }, position);
   }
 
-  /**
-   * A DirectStream (remux) decision can still be undecodable on this device (a
-   * codec/level the browser or hardware path won't touch). Records the file in
-   * {@link rejectCopyFileIds} and reloads it once through {@link reloadStream};
-   * never twice for the same session, so a rejection that fails too surfaces as
-   * a normal fatal error. True when the failure is handled here.
-   */
+  /** A remux copy that's undecodable on this device: reject it and reload
+   *  once through `reloadStream`, never twice for the same session. True when handled here. */
   private maybeFallbackFromRemux(
     err: { source?: PlaybackError['source']; code?: number; message?: string },
     position: number,
@@ -3480,6 +3414,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     try {
       if (!(await this.waitForReloadIdle())) {
         console.warn('[player] remux fallback dropped: another reload is still running');
+        if (!this.state.error()) {
+          this.state.setError(
+            this.translate.instant(userMessageKeyFor({ source: 'session' })),
+            { source: 'session', message: 'remux fallback dropped: another reload is still running' },
+          );
+        }
         return;
       }
       // A recovery that settled meanwhile lowered the veil.
@@ -3674,9 +3614,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Same builder as the load path, so the prewarm URL can never drift from
     // what the engine actually plays.
     const res = await fetch(this.buildPlayUrl({ sid, startTime: pos }).url, { cache: 'no-store' });
-    // A network failure already throws (caught by the caller); a bad status
-    // (401 on a token race, 404 on a GC'd session) resolves silently - log it
-    // so it's not invisible when the heartbeat's own recovery masks it.
+    // A bad status (401 token race, 404 GC'd session) resolves silently:
+    // log it so it's not invisible when the heartbeat's own recovery masks it.
     if (!res.ok) {
       console.warn(`[player] prewarm fetch failed: ${res.status} ${res.statusText}`);
     }
@@ -4248,6 +4187,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   async selectSubtitle(sub: SubtitleOption | null) {
     if (!this.engine) return;
+    // Cast owns subtitle selection once connected (via applyCastSubtitle):
+    // an auto-select racing in from the local engine must not reload it instead.
+    if (this.castService.isConnected()) return;
     this.chrome.resetHideTimer();
 
     if (!sub) {
@@ -4544,7 +4486,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** The rectangle this client should remove: only when this copy is the one
    *  playing (`videoCopyStream`) - a re-encode already cut it server-side. */
-  private activeCropRect(): { width: number; height: number; x: number; y: number } | undefined {
+  private activeCropRect(): CropRect | undefined {
     return this.playbackInfo?.videoCopyStream ? this.playbackInfo.source?.crop : undefined;
   }
 
@@ -4569,7 +4511,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** CSS crop for the `<video>` element every non-desktop engine renders
    *  into; PiP and iOS native fullscreen bypass it (see `cropBypassed`). */
-  private applyWebVideoCrop(c?: { width: number; height: number; x: number; y: number }): void {
+  private applyWebVideoCrop(c?: CropRect): void {
     const container = this.containerEl()?.nativeElement;
     const video = this.videoEl()?.nativeElement;
     const style =

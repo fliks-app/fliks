@@ -508,24 +508,22 @@ export class CastPlayerService {
    */
   private async dispatchLoad(
     mfId: number,
-    pi: { playMethod: string; playUrl: string; sessionId?: string },
+    pi: { playMethod: PlayMethod; playUrl: string; sessionId?: string },
     currentPos: number,
     transcodeQuality: string | undefined,
     castInfo: { token: string; streamBaseUrl: string },
     autoplay: boolean,
   ) {
     // getCastDeviceProfile lists no direct-play video codec: never DirectPlay here.
-    this.playbackMode.set(playbackModeOf(pi as { playMethod: PlayMethod }));
+    this.playbackMode.set(playbackModeOf(pi));
 
     const { token: castToken, streamBaseUrl } = castInfo;
     this.cast.setCastStreamBase(streamBaseUrl);
 
-    // Route Cast through master.m3u8 (same as desktop/Android) so the
-    // backend's tracker sets useExtXMedia for multi-audio renditions —
-    // bypassing master breaks `init_N.mp4` resolution + drops audio entirely
-    // when var_stream_map is used.
+    // Route Cast through master.m3u8 (same as desktop/Android): bypassing it
+    // breaks `init_N.mp4` resolution and drops audio under var_stream_map.
     const built = this.streamingApi.buildAbsolutePlayUrl(
-      pi as { playMethod: PlayMethod; playUrl: string },
+      pi,
       castToken,
       {
         sid: pi.sessionId,

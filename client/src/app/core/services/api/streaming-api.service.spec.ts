@@ -127,3 +127,60 @@ describe('StreamingApiService.buildPlayUrl / buildAbsolutePlayUrl', () => {
     expect(url).not.toContain('remux=1');
   });
 });
+
+describe('StreamingApiService.resolveDownloadUrl', () => {
+  let service: StreamingApiService;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: AuthService, useValue: { playbackToken: null } },
+        {
+          provide: ServerConfigService,
+          useValue: { isNative: false, resolveUrl: (path: string) => path },
+        },
+        { provide: CastService, useValue: { castStreamBaseUrl: () => '' } },
+        {
+          provide: BrowserDeviceProfileService,
+          useValue: { getProfile: () => ({ deviceType: 'desktop' }) },
+        },
+        { provide: SseService, useValue: { connectionId: () => null } },
+      ],
+    });
+    service = TestBed.inject(StreamingApiService);
+  });
+
+  function downloadPi(
+    playMethod: PlaybackInfoResponse['playMethod'],
+  ): Pick<PlaybackInfoResponse, 'playMethod' | 'playUrl' | 'sessionId'> {
+    return { playMethod, playUrl: '/api/stream/123/master.m3u8?token=x', sessionId: 'sid-1' };
+  }
+
+  it('original + DirectStream: builds via buildPlayUrl, no startQuality pin', () => {
+    const buildPlayUrl = vi.spyOn(service, 'buildPlayUrl');
+    const getHlsUrl = vi.spyOn(service, 'getHlsUrl');
+    const url = service.resolveDownloadUrl(123, 'original', downloadPi('DirectStream'));
+    expect(buildPlayUrl).toHaveBeenCalledWith(downloadPi('DirectStream'), { sid: 'sid-1' });
+    expect(getHlsUrl).not.toHaveBeenCalled();
+    expect(url).not.toContain('startQuality');
+  });
+
+  it('lower rung: builds via getHlsUrl pinned to the requested quality', () => {
+    const buildPlayUrl = vi.spyOn(service, 'buildPlayUrl');
+    const getHlsUrl = vi.spyOn(service, 'getHlsUrl');
+    const url = service.resolveDownloadUrl(123, '720p', downloadPi('Transcode'));
+    expect(getHlsUrl).toHaveBeenCalledWith(123, '720p', undefined, 'sid-1');
+    expect(buildPlayUrl).not.toHaveBeenCalled();
+    expect(url).toContain('startQuality=720p');
+  });
+
+  it('original + DirectPlay: keeps the existing HLS-bundle pipeline (native downloaders need an HLS asset)', () => {
+    const buildPlayUrl = vi.spyOn(service, 'buildPlayUrl');
+    const getHlsUrl = vi.spyOn(service, 'getHlsUrl');
+    service.resolveDownloadUrl(123, 'original', downloadPi('DirectPlay'));
+    expect(getHlsUrl).toHaveBeenCalledWith(123, 'original', undefined, 'sid-1');
+    expect(buildPlayUrl).not.toHaveBeenCalled();
+  });
+});

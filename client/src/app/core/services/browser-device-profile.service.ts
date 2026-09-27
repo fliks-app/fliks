@@ -92,9 +92,8 @@ export interface DeviceProfile {
   /** mpv tone-maps HDR to this SDR display itself, so the backend copies the
    *  HDR bitstream instead of re-encoding it. Desktop shell only. */
   tonemapsHdrLocally?: boolean;
-  /** Client crops the detected black bars itself, mpv `video-crop` on
-   *  desktop, a CSS transform on `<video>` for web/Shaka. False for native
-   *  and TV engines, which run neither. */
+  /** Client crops the detected black bars itself (mpv `video-crop` on
+   *  desktop, a CSS transform for web/Shaka). False for native/TV. */
   cropsBlackBarsLocally?: boolean;
   /** Client can present single-layer Dolby Vision (P5 / 8.x) directly, so the
    *  backend DirectPlays the original container untouched instead of tonemapping
@@ -171,9 +170,8 @@ export interface DeviceProfile {
    *  single variant instead of the full ladder. Unset = true. */
   supportsAbr?: boolean;
 
-  /** One-shot per-request override, never part of the cached profile: the
-   *  engine couldn't decode the copy the backend chose (DirectStream), so ask
-   *  it to transcode instead. Set by the caller on a copy of the profile. */
+  /** One-shot per-request override (never part of the cached profile): asks
+   *  the backend to transcode instead of a DirectStream copy it can't decode. */
   rejectCopy?: boolean;
 }
 
@@ -277,9 +275,8 @@ export class BrowserDeviceProfileService {
     const hasMSE = typeof MediaSource !== 'undefined' && !!MediaSource.isTypeSupported;
 
     // --- Detect supported containers ---
-    // Probed WITH a representative codec: `isTypeSupported`/`canPlayType`
-    // with a bare container mime (no `codecs`) is ambiguous and Chromium
-    // now answers false for it, which would empty the container list.
+    // Probed WITH a representative codec: a bare container mime (no `codecs`)
+    // is ambiguous and Chromium answers false for it, emptying the list.
     const containers: string[] = [];
     if (this.testCodec(video, hasMSE, 'video/mp4', 'avc1.42E01E')) {
       containers.push('mp4', 'm4v', 'mov');
@@ -539,9 +536,8 @@ export class BrowserDeviceProfileService {
     // it whenever the screen has no EDR headroom), so the server can copy the
     // bitstream instead of re-encoding it.
     const tonemapsHdrLocally = this.device.isDesktopNative() && !supportsHdr;
-    // A plain browser always runs the server's current build, so its version is
-    // redundant on the admin dashboard, only the installed clients (native app,
-    // Smart TV, desktop shell) report a build version worth surfacing.
+    // A plain browser always runs the server's current build, so only the
+    // installed clients report a build version worth surfacing.
     const isWeb =
       !Capacitor.isNativePlatform() && !isTv && !this.device.isDesktopNative();
     // `video-crop` cuts the bars at the VO: free, and hwdec-safe unlike a lavfi
@@ -604,11 +600,8 @@ export class BrowserDeviceProfileService {
       // AVPlayer, webOS <video>, and Tizen AVPlay, whose `open()` takes any
       // remote URI and demuxes MKV itself.
       supportsDirectPlay: traits.supportsDirectPlay,
-      // Shaka plays a raw file through the media element, which exposes its
-      // audio tracks only where the browser implements `audioTracks` (Safari).
-      // Only web probes it: every other engine switches natively, which is
-      // what an absent key already means to the backend.
-      // Firefox exposes audioTracks behind media.track.enabled, yet toggling a track doesn't switch what plays.
+      // Only web probes it (every other engine switches natively); skip Firefox,
+      // whose `audioTracks` toggle doesn't switch what plays.
       switchesDirectPlayAudio: isWeb
         ? 'audioTracks' in HTMLMediaElement.prototype && detectBrowser(navigator.userAgent) !== 'Firefox'
         : undefined,

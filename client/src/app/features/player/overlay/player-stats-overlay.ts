@@ -12,14 +12,11 @@ export interface PlayerStats {
    *  (video re-encoded). Read from the real delivery, not just the decision.
    *  Empty when the delivery is unknown (offline). */
   streamTypeKey: string;
-  /** Set only when the server's `playMethod` decision disagrees with what's
-   *  actually delivered, a translated "Server decision: X / Delivered: Y"
-   *  line, already interpolated. Empty otherwise. */
+  /** Translated "Server decision: X / Delivered: Y" line, set only when they
+   *  disagree. Empty otherwise. */
   mismatch?: string;
-  /** `transcodeReasons` flags that are neither video- nor audio-specific
-   *  (container/mux/server-policy: `ContainerNotSupported`,
-   *  `DirectStreamDisabled`, …), why DirectStream/DirectPlay wasn't used
-   *  at all, independent of any later video/audio re-encode reason. */
+  /** `transcodeReasons` flags that are neither video- nor audio-specific:
+   *  why DirectStream/DirectPlay wasn't used at all. */
   streamTranscodeReasons: string[];
 
   videoLabel: string;

@@ -1,6 +1,6 @@
 import type { TranslateService } from '@ngx-translate/core';
 import { localizeLanguage, normalizeLangCode } from './language.utils';
-import type { PlaybackInfoResponse, PlayMethod, StreamingApiService } from '../services/api/streaming-api.service';
+import type { PlayMethod } from '../services/api/streaming-api.service';
 
 /** Pixel widths backing each ladder rung id (must match the backend
  *  `PROFILES` table). Used by NativeEngine + quality-manager to set
@@ -321,9 +321,8 @@ export interface VideoCropStyle {
   translateY: number;
 }
 
-/** CSS box for a `<video>` so only `crop` shows, fit into the container like
- *  a server-side crop would. Null when there's nothing to crop. `crop` is in
- *  coded pixels; `displayWidth/Height` rescale it for an anamorphic source. */
+/** CSS box for a `<video>` so only `crop` shows, in coded pixels;
+ *  `displayWidth/Height` rescale it for an anamorphic source. */
 export function computeVideoCropStyle(params: {
   sourceWidth: number;
   sourceHeight: number;
@@ -368,9 +367,8 @@ export function playbackModeOf(pi: { playMethod: PlayMethod }): PlaybackMode {
       : 'transcode';
 }
 
-/** What the engine is actually playing, which a desynced URL can make differ from
- *  `playMethod`: the loaded URL, refined by Shaka's `originalVideoId` (`/remux/` vs
- *  `/<rung>/`); other engines read `remux=1` + no `startQuality` instead. */
+/** What the engine is actually playing, which a desynced URL can make differ
+ *  from `playMethod`; refined by Shaka's `originalVideoId` when available. */
 export function deliveredKindFromVariant(
   url: string,
   originalVideoId?: string | null,
@@ -384,22 +382,4 @@ export function deliveredKindFromVariant(
   const hasRemux = /[?&]remux=1(?:&|$)/.test(url);
   const hasStartQuality = /[?&]startQuality=/.test(url);
   return hasRemux && !hasStartQuality ? 'remux' : 'transcode';
-}
-
-/**
- * URL for an "original"-quality download. DirectStream (remux) goes through
- * `buildPlayUrl`, which derives the URL from `playUrl` and drops the rung pin
- * that would otherwise collapse the copy into a transcode. DirectPlay falls
- * through to the ladder below, pinned to `quality`: no backend route serves a
- * DirectPlay-capable file as its remux copy.
- */
-export function resolveDownloadUrl(
-  api: Pick<StreamingApiService, 'buildPlayUrl' | 'getHlsUrl'>,
-  mediaFileId: number,
-  quality: string,
-  pi: Pick<PlaybackInfoResponse, 'playMethod' | 'playUrl' | 'sessionId'>,
-): string {
-  return pi.playMethod === 'DirectStream'
-    ? api.buildPlayUrl(pi, { sid: pi.sessionId })
-    : api.getHlsUrl(mediaFileId, quality, undefined, pi.sessionId);
 }
