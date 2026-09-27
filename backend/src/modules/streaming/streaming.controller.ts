@@ -68,7 +68,7 @@ import * as path from 'path';
 import { SegmentPackagingService } from './services/segment-packaging.service';
 import { SessionRouter } from './services/session-router.service';
 import { SourceScanService } from './services/source-scan.service';
-import { StaleProbeRescanService } from './services/stale-probe-rescan.service';
+import { StaleProbeRescanService, needsReprobe } from './services/stale-probe-rescan.service';
 import { SessionContextBuilder } from './services/session-context-builder.service';
 import { sessionProfileHash } from './transcoding/session-profile';
 import type { SourceScan } from './transcoding/source-scan';
@@ -449,10 +449,8 @@ export class StreamingController {
     return isRemux ? this.segDur() : realSegmentSeconds(this.segDur(), sourceFps);
   }
 
-  /** The keyframe grid a remux playback would keep, or null for the uniform
-   *  one. Computed once per request, before the play-method decision, and
-   *  threaded into `evaluate()` so its AudioEndsEarly check and the grid
-   *  actually served can never disagree. */
+  /** The keyframe grid a remux playback would keep, or null for the uniform one.
+   *  Computed once per request so evaluate()'s AudioEndsEarly check and the grid actually served can never disagree. */
   private freezeRemuxGrid(
     scan: SourceScan | null,
     resolved: ResolvedFile,
@@ -464,9 +462,8 @@ export class StreamingController {
       : null;
   }
 
-  /** Logs why a remux session actually fell back to the uniform grid, only
-   *  once the play method is known, so a DirectPlay/Transcode outcome (which
-   *  never serves this grid) doesn't log about it. */
+  /** Logs why a remux session fell back to the uniform grid. Called only once the
+   *  play method is known, so a DirectPlay/Transcode outcome never logs about it. */
   private logRemuxGridFallback(
     scan: SourceScan | null,
     resolved: ResolvedFile,
@@ -871,10 +868,11 @@ export class StreamingController {
         /* prewarm is best-effort — the on-demand path still serves the track */
       });
 
-    // Never waits on a scan: an unscanned file plays without one and is
-    // scanned for its next plays.
+    // Never waits on a scan: an unscanned file plays without one and is scanned
+    // for its next plays. Skipped on a stale row until the re-probe below chains it.
     const held = await this.sourceScans.lookup(mediaFileId, resolved.absolutePath);
-    if (!held.scan) {
+    const staleProbe = needsReprobe(resolved.mediaFile.streamInfo);
+    if (!held.scan && !staleProbe) {
       void this.sourceScans.scheduleIfNeeded(
         mediaFileId,
         resolved.absolutePath,
@@ -901,10 +899,12 @@ export class StreamingController {
     // decide per autoQualityMode; 'original' = source rung; anything else =
     // a lower rung that must transcode). Drives DirectPlay-vs-ladder routing.
     const startQuality = firstQueryString(req.query, 'startQuality');
-    // Frozen once, before the play-method decision, so the AudioEndsEarly
-    // check inside evaluate() and the grid this request eventually serves
-    // (see the LiveSession's `remuxGrid` below) read the same object.
+    // Frozen once, before the play-method decision, so evaluate()'s AudioEndsEarly
+    // check and the grid this request serves (the LiveSession's remuxGrid) agree.
     const timeline = sourceTimeline(resolved.mediaFile.streamInfo, resolved.absolutePath);
+    // Frozen alongside the timeline: a mid-session re-probe must not move the
+    // grid a later seek respawn or playlist read on this session computes from.
+    const sourceFps = parseSourceFps(resolved.mediaFile.streamInfo?.video?.[0]?.frameRate);
     const remuxGrid = this.freezeRemuxGrid(
       held.scan,
       resolved,
@@ -1137,6 +1137,7 @@ export class StreamingController {
       sseConnectionId,
       position: resumePosition,
       ...sessionLayout,
+      sourceFps,
       remuxGrid: kind === 'remux' ? remuxGrid : null,
       audioStreamIndex: audioStreamIndex ?? null,
       audioStreamCount: sourceAudioCount,
@@ -1580,12 +1581,14 @@ export class StreamingController {
     @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
     @Param('streamIndex', ParseIntPipe) streamIndex: number,
     @CurrentUser() user: User | undefined,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
     // resolveFile also re-checks library access.
     const resolved = await this.streamingService.resolveFile(mediaFileId, user);
     const cueOffset = cueOffsetSeconds(
-      sourceTimeline(resolved.mediaFile.streamInfo, resolved.absolutePath),
+      this.sessionRouter.findRequestSession(req, mediaFileId)?.timeline ??
+        sourceTimeline(resolved.mediaFile.streamInfo, resolved.absolutePath),
     );
     const stream = await this.subtitleStreamService.extractEmbeddedSubtitle(
       mediaFileId,
@@ -1610,11 +1613,13 @@ export class StreamingController {
     @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
     @Param('streamIndex', ParseIntPipe) streamIndex: number,
     @CurrentUser() user: User | undefined,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
     const resolved = await this.streamingService.resolveFile(mediaFileId, user);
     const cueOffset = cueOffsetSeconds(
-      sourceTimeline(resolved.mediaFile.streamInfo, resolved.absolutePath),
+      this.sessionRouter.findRequestSession(req, mediaFileId)?.timeline ??
+        sourceTimeline(resolved.mediaFile.streamInfo, resolved.absolutePath),
     );
     const stream = await this.subtitleStreamService.extractEmbeddedSubtitle(
       mediaFileId,
@@ -2110,10 +2115,10 @@ export class StreamingController {
     const remuxDurations =
       quality === 'remux' ? (live?.remuxGrid?.durations ?? null) : null;
     // A transcoded segment is one forced GOP: its real length keeps fractional-fps
-    // streams in sync. A remux without keyframes runs on the plain grid.
-    const sourceFps = parseSourceFps(
-      resolved.mediaFile.streamInfo?.video?.[0]?.frameRate,
-    );
+    // streams in sync, frozen so a mid-session re-probe can't move it off-grid.
+    const sourceFps =
+      live?.sourceFps ??
+      parseSourceFps(resolved.mediaFile.streamInfo?.video?.[0]?.frameRate);
     const playlist = remuxDurations
       ? buildVariableVodPlaylist(remuxDurations, segmentUrl, initRef)
       : buildVodPlaylist(

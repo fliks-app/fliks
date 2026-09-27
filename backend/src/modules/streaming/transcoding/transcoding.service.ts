@@ -1327,9 +1327,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
      *  reachability for an audio rendition rather than the video track. */
     audioIndex?: number,
   ): Promise<TranscodeSession> {
-    // videoOnly is already `audioLayout(audioStreams.length) === 'var-stream-map'`
-    // (session-profile.ts), so re-deriving it from ctx.audioStreams here would
-    // only ever agree with it.
+    // videoOnly already equals audioLayout(audioStreams.length) === 'var-stream-map'
+    // (session-profile.ts); re-deriving it from ctx.audioStreams would just duplicate it.
     const isMultiAudio = ctx?.videoOnly ?? false;
     const variant = remuxVariant({
       audioIndex: ctx?.audioStreamIndex,

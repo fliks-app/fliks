@@ -227,10 +227,8 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
   private readonly opening = new Map<string, Promise<LiveTvSessionEntry>>();
   /** Per-viewer token (returned as `sessionId`) → the shared session's key. */
   private readonly viewerIndex = new Map<string, string>();
-  /** Makes each session's dir unique even when it reopens on the same key
-   *  right after teardown: without it, the old session's fire-and-forget
-   *  `fs.rm` (see `teardown`) can land after the new one starts writing and
-   *  delete its just-created segments. */
+  /** Suffixes each session's dir so a reopen on the same key never shares one
+   *  with the previous session's pending `fs.rm` (see `teardown`). */
   private dirSeq = 0;
   private sweepTimer: NodeJS.Timeout | null = null;
 
@@ -246,6 +244,10 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
+    // A dir left by a crashed process (no onModuleDestroy) must not let a
+    // reopened `key-0` land on stale segments.
+    fs.rmSync(this.liveRoot, { recursive: true, force: true });
+    fs.mkdirSync(this.liveRoot, { recursive: true });
     this.sweepTimer = setInterval(
       () => this.sweepAbandoned(),
       StreamLifetime.liveSessionGcIntervalMs(),

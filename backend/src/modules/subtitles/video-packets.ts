@@ -36,9 +36,7 @@ export function isMpegTs(formatName: string | undefined): boolean {
 }
 
 /** Whether a probed file is MPEG-TS: its format name, or the extension for a
- *  row probed before the format name was kept, source-timeline.ts already
- *  warns once per such file, so this falls back silently instead of logging
- *  again on every call (once per segment request). */
+ *  row predating that field (source-timeline.ts already warns once per file). */
 export function sourceIsMpegTs(
   si: { formatName?: string } | null | undefined,
   filePath: string,

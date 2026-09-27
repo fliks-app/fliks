@@ -117,11 +117,8 @@ function copyBlocker(
     : null;
 }
 
-/** Source time the last video segment of a separate-rendition layout starts
- *  at, on the fps-aware grid the video is cut on from its first frame.
- *  `grid` is the caller's already-frozen remux grid, the same one served , 
- *  so this can never disagree with it; null means copying video without one
- *  (unscanned/no keyframe), undefined means not copying video at all. */
+/** Source time the last video segment of a separate-rendition layout starts at,
+ *  on the caller's frozen remux grid: null is an unscanned copy, undefined is no video copy. */
 function lastVideoSegmentStart(
   si: MediaFileInfo | null | undefined,
   label: string,
