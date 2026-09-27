@@ -76,6 +76,11 @@ export interface PlaybackInfoResponse {
     /** Output channel count when transcoded (downmixed to the device/codec
      *  cap); source channels when copied. */
     outputChannels?: number;
+    /** Source bitrate for a copy, output target for a transcode. Absent on
+     *  an older backend: the overlay shows nothing rather than guess. */
+    bitrateBps?: number;
+    /** Source sample rate for a copy, output target for a transcode. */
+    sampleRate?: number;
     reasonFlags: string[];
   }[];
   source: {
@@ -273,38 +278,39 @@ export class StreamingApiService {
   }
 
   /**
-   * The one URL builder for local (non-Cast) playback. Derives the URL from
-   * `pi.playUrl` — which already carries `remux=1` for a DirectStream
-   * decision — instead of reconstructing `/master.m3u8` by hand, so a caller
-   * can never drop the flag, and never pairs it with `startQuality`: doing so
-   * makes the backend collapse the master onto a single transcoded rung
-   * instead of the copy (master-playlist.ts `applyQualityPin` only skips the
-   * remux-alone branch when no quality is pinned).
+   * The one URL builder for local (non-Cast) playback. Rebuilds the query
+   * from `pi.playUrl`'s path + `remux` flag with the CURRENT token and one
+   * `sid`: the token baked into `pi.playUrl` goes stale by a later reload.
+   * `startQuality` never pairs with `remux=1`: doing so makes the backend
+   * collapse the master onto a single transcoded rung instead of the copy
+   * (master-playlist.ts `applyQualityPin` only skips the remux-alone branch
+   * when no quality is pinned).
    */
   buildPlayUrl(
     pi: { playMethod: PlayMethod; playUrl: string },
     opts: { sid?: string; startAt?: number; startQuality?: string } = {},
   ): string {
-    const base = this.serverConfig.isNative
-      ? this.serverConfig.resolveUrl(pi.playUrl)
-      : pi.playUrl;
+    const { path, remux } = this.parsePlayUrlFlags(pi.playUrl);
+    const base = this.serverConfig.isNative ? this.serverConfig.resolveUrl(path) : path;
     if (pi.playMethod === 'DirectPlay') {
-      return this.appendSid(base, opts.sid);
+      return this.withTokenAndSid(base, opts.sid);
     }
     const params: string[] = [];
+    const token = this.playbackToken;
+    if (token) params.push(`token=${encodeURIComponent(token)}`);
     if (opts.sid) params.push(`sid=${encodeURIComponent(opts.sid)}`);
-    if (opts.startQuality && pi.playMethod !== 'DirectStream') {
+    if (remux) params.push('remux=1');
+    if (opts.startQuality && !remux) {
       params.push(`startQuality=${encodeURIComponent(opts.startQuality)}`);
     }
     if (opts.startAt != null) params.push(`startAt=${opts.startAt}`);
     params.push(`device=${this.deviceProfileService.getProfile().deviceType}`);
-    const sep = base.includes('?') ? '&' : '?';
-    return params.length ? `${base}${sep}${params.join('&')}` : base;
+    return `${base}?${params.join('&')}`;
   }
 
   /** Path + whether the backend's `playUrl` carries `remux=1`, without its
-   *  (sender-only) token — used by {@link buildAbsolutePlayUrl} to rebuild
-   *  the query string against the Cast receiver's own short-lived token. */
+   *  baked-in token/sid, for {@link buildPlayUrl} and
+   *  {@link buildAbsolutePlayUrl} to rebuild the query string fresh. */
   private parsePlayUrlFlags(playUrl: string): { path: string; remux: boolean } {
     const qIdx = playUrl.indexOf('?');
     const path = qIdx >= 0 ? playUrl.slice(0, qIdx) : playUrl;
@@ -314,8 +320,8 @@ export class StreamingApiService {
 
   /** Same composition as {@link buildPlayUrl}, absolute through the Cast
    *  receiver's stream base and its own token (the sender's token baked into
-   *  `pi.playUrl` is useless to the receiver device). HLS decisions only —
-   *  DirectPlay's cast URL has no ladder/remux concern (see getAbsoluteStreamUrl). */
+   *  `pi.playUrl` is useless to the receiver device). The Cast profile lists no
+   *  direct-play video codec, so the decision is always an HLS one. */
   buildAbsolutePlayUrl(
     pi: { playMethod: PlayMethod; playUrl: string },
     castToken: string,
@@ -335,15 +341,6 @@ export class StreamingApiService {
     };
   }
 
-  /** Build authenticated stream URL for direct play */
-  getStreamUrl(mediaFileId: number, sessionId?: string): string {
-    const base = this.serverConfig.isNative
-      ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}`)
-      : `/api/stream/${mediaFileId}`;
-    const url = this.withTokenAndSid(base, sessionId);
-    return url;
-  }
-
   /** Authenticated URL that downloads the raw source file as an attachment.
    *  Browser-only — the offline pipeline transcodes/remuxes into HLS, this
    *  hands back the untouched container (embedded streams only, no sidecar
@@ -358,8 +355,8 @@ export class StreamingApiService {
     return `${base}?${params.join('&')}`;
   }
 
-  /** Internal helper for getStreamUrl — keeps the token+sid query
-   *  composition consistent with `getHlsUrl`. */
+  /** Token+sid query composition shared by `buildPlayUrl`'s DirectPlay branch
+   *  and the sidecar/thumbnail URL builders below. */
   private withTokenAndSid(base: string, sessionId?: string): string {
     const params: string[] = [];
     const token = this.playbackToken;
@@ -427,48 +424,6 @@ export class StreamingApiService {
 
   private appendToken(url: string, token: string): string {
     return `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
-  }
-
-  private appendSid(url: string, sid: string | undefined): string {
-    if (!sid) return url;
-    return `${url}${url.includes('?') ? '&' : '?'}sid=${encodeURIComponent(sid)}`;
-  }
-
-  private withToken(url: string): string {
-    const token = this.playbackToken;
-    return token ? this.appendToken(url, token) : url;
-  }
-
-  /** Build Cast URLs with a temporary token. `sessionId` is the live
-   *  session handle the Cast device received from its own `playback-info`
-   *  call; baking it here propagates the same sid into the variant +
-   *  segment URLs so segments route to the Cast-specific transcode job. */
-  getAbsoluteHlsUrl(
-    mediaFileId: number,
-    castToken: string,
-    sessionId?: string,
-  ): string {
-    return this.appendSid(
-      this.appendToken(
-        this.absoluteUrl(`/api/stream/${mediaFileId}/master.m3u8`),
-        castToken,
-      ),
-      sessionId,
-    );
-  }
-
-  getAbsoluteStreamUrl(
-    mediaFileId: number,
-    castToken: string,
-    sessionId?: string,
-  ): string {
-    return this.appendSid(
-      this.appendToken(
-        this.absoluteUrl(`/api/stream/${mediaFileId}`),
-        castToken,
-      ),
-      sessionId,
-    );
   }
 
   getAbsoluteSubtitleUrl(mediaFileId: number, subtitleId: number, castToken: string): string {

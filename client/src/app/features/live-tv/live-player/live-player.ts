@@ -746,6 +746,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
       videoPlaybackMode: this.translate.instant(this.livePlaybackModeKey()),
       crop: '',
       cropAppliedByPlayer: false,
+      cropBypassed: false,
       tonemapping: '',
       videoTranscodeReasons: [],
       droppedFrames: engineStats?.droppedFrames ?? 0,

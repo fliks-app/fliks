@@ -11,7 +11,7 @@ import { AuthService } from './auth.service';
 import { DeviceProfile } from './browser-device-profile.service';
 import { ENGINE_TRAITS, EngineKind } from './engine-traits';
 import { ServerConfigService } from './server-config.service';
-import { formatAudioParts, formatAudioLabel, formatSubtitleLabel, formatSubtitleParts, parseAudioIndex, SpriteMetadata } from '../utils/player.utils';
+import { formatAudioParts, formatAudioLabel, formatSubtitleLabel, formatSubtitleParts, parseAudioIndex, playbackModeOf, SpriteMetadata, type PlaybackMode } from '../utils/player.utils';
 import {
   PlayerSettingsService,
   type AudioStreamChoice,
@@ -296,7 +296,7 @@ export class CastPlayerService {
   readonly mediaTitle = signal('');
   readonly episodeTitle = signal('');
   readonly fanartUrl = signal<string | null>(null);
-  readonly playbackMode = signal<'direct' | 'remux' | 'transcode'>('transcode');
+  readonly playbackMode = signal<PlaybackMode>('transcode');
 
   // Options
   readonly availableSubtitles = signal<CastSubtitleOption[]>([]);
@@ -336,7 +336,7 @@ export class CastPlayerService {
     mediaTitle: string;
     episodeTitle: string;
     fanartUrl: string | null;
-    playbackMode: 'direct' | 'remux' | 'transcode';
+    playbackMode: PlaybackMode;
     subtitles: SubtitleInfo[];
     qualities: CastQualityOption[];
     audioTracks: CastAudioOption[];
@@ -514,10 +514,8 @@ export class CastPlayerService {
     castInfo: { token: string; streamBaseUrl: string },
     autoplay: boolean,
   ) {
-    const castMode: 'direct' | 'remux' | 'transcode' =
-      pi.playMethod === 'DirectPlay' ? 'direct' :
-      pi.playMethod === 'DirectStream' ? 'remux' : 'transcode';
-    this.playbackMode.set(castMode);
+    // getCastDeviceProfile lists no direct-play video codec: never DirectPlay here.
+    this.playbackMode.set(playbackModeOf(pi as { playMethod: PlayMethod }));
 
     const { token: castToken, streamBaseUrl } = castInfo;
     this.cast.setCastStreamBase(streamBaseUrl);
@@ -526,28 +524,17 @@ export class CastPlayerService {
     // backend's tracker sets useExtXMedia for multi-audio renditions —
     // bypassing master breaks `init_N.mp4` resolution + drops audio entirely
     // when var_stream_map is used.
-    let castUrl: string;
-    let contentType: string;
-    if (castMode === 'direct') {
-      castUrl = this.streamingApi.getAbsoluteStreamUrl(
-        mfId,
-        castToken,
-        pi.sessionId,
-      );
-      contentType = 'video/mp4';
-    } else {
-      const built = this.streamingApi.buildAbsolutePlayUrl(
-        pi as { playMethod: PlayMethod; playUrl: string },
-        castToken,
-        {
-          sid: pi.sessionId,
-          startAt: Math.floor(currentPos),
-          startQuality: transcodeQuality ?? '1080p',
-        },
-      );
-      castUrl = built.url;
-      contentType = built.contentType;
-    }
+    const built = this.streamingApi.buildAbsolutePlayUrl(
+      pi as { playMethod: PlayMethod; playUrl: string },
+      castToken,
+      {
+        sid: pi.sessionId,
+        startAt: Math.floor(currentPos),
+        startQuality: transcodeQuality ?? '1080p',
+      },
+    );
+    const castUrl = built.url;
+    const contentType = built.contentType;
 
     // Stash the Cast live-session id so the sender's heartbeat loop
     // (`savePosition` in the local player) keeps the receiver's

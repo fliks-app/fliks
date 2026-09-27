@@ -48,19 +48,9 @@ describe('deliveredKindFromVariant', () => {
 describe('resolveDownloadUrl', () => {
   function pi(
     playMethod: PlaybackInfoResponse['playMethod'],
-    audioTracks: PlaybackInfoResponse['audioTracks'] = [],
-  ): Pick<PlaybackInfoResponse, 'playMethod' | 'playUrl' | 'sessionId' | 'audioTracks'> {
-    return { playMethod, playUrl: '/api/stream/123/master.m3u8?token=x', sessionId: 'sid-1', audioTracks };
+  ): Pick<PlaybackInfoResponse, 'playMethod' | 'playUrl' | 'sessionId'> {
+    return { playMethod, playUrl: '/api/stream/123/master.m3u8?token=x', sessionId: 'sid-1' };
   }
-
-  it('original + DirectStream with several audio tracks: the remux carries every track too', () => {
-    const buildPlayUrl = vi.fn().mockReturnValue('/api/stream/123/master.m3u8?token=x&remux=1&sid=sid-1');
-    const getHlsUrl = vi.fn();
-    const tracks = [{}, {}] as unknown as PlaybackInfoResponse['audioTracks'];
-    resolveDownloadUrl({ buildPlayUrl, getHlsUrl } as any, 123, 'original', pi('DirectStream', tracks));
-    expect(getHlsUrl).not.toHaveBeenCalled();
-    expect(buildPlayUrl).toHaveBeenCalledWith(pi('DirectStream', tracks), { sid: 'sid-1' });
-  });
 
   it('original + DirectStream: builds via buildPlayUrl, no startQuality pin', () => {
     const buildPlayUrl = vi.fn().mockReturnValue('/api/stream/123/master.m3u8?token=x&remux=1&sid=sid-1');
@@ -94,7 +84,7 @@ describe('resolveDownloadUrl', () => {
 });
 
 describe('computeVideoCropStyle', () => {
-  it('contain: crop AR matches container AR — no pillarbox around the crop', () => {
+  it('contain: crop AR matches container AR, no pillarbox around the crop', () => {
     const style = computeVideoCropStyle({
       sourceWidth: 1920,
       sourceHeight: 1080,
@@ -106,8 +96,8 @@ describe('computeVideoCropStyle', () => {
     expect(style).toEqual({ width: 2400, height: 1350, translateX: 0, translateY: -175 });
   });
 
-  it('contain: crop narrower than the container AR — pillarboxed like a true server crop would be', () => {
-    // Margin shows the source's own bars, not the container bg — same
+  it('contain: crop narrower than the container AR, pillarboxed like a true server crop would be', () => {
+    // Margin shows the source's own bars, not the container bg, same
     // pixels either way, since a detected crop's surround is black.
     const style = computeVideoCropStyle({
       sourceWidth: 1000,
@@ -166,5 +156,33 @@ describe('computeVideoCropStyle', () => {
       fit: 'contain',
     });
     expect(style).toBeNull();
+  });
+
+  it('anamorphic: rescales a coded-grid crop onto the decoded display grid (1440x1080 -> 1920x1080)', () => {
+    const style = computeVideoCropStyle({
+      sourceWidth: 1440,
+      sourceHeight: 1080,
+      displayWidth: 1920,
+      displayHeight: 1080,
+      crop: { width: 1440, height: 900, x: 0, y: 90 },
+      containerWidth: 1920,
+      containerHeight: 1000,
+      fit: 'contain',
+    });
+    expect(style).toEqual({ width: 1920, height: 1080, translateX: 0, translateY: -40 });
+  });
+
+  it('anamorphic: a PAL DVD (720x576 coded, 4:3 display 768x576) crops the coded bars correctly', () => {
+    const style = computeVideoCropStyle({
+      sourceWidth: 720,
+      sourceHeight: 576,
+      displayWidth: 768,
+      displayHeight: 576,
+      crop: { width: 720, height: 480, x: 0, y: 48 },
+      containerWidth: 768,
+      containerHeight: 480,
+      fit: 'contain',
+    });
+    expect(style).toEqual({ width: 768, height: 576, translateX: 0, translateY: -48 });
   });
 });

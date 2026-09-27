@@ -2,7 +2,7 @@ import { TvPlatform } from './device.service';
 
 /**
  * Distinct playback-engine kinds, one per unique behavioural trait-row. The
- * engine drives four flags the backend keys streaming decisions on
+ * engine drives seven flags the backend keys streaming decisions on
  * (see `EngineTraits`). Every supported client maps to exactly one kind:
  *
  *  - WEB        — browser web build (Shaka / MSE).
@@ -27,7 +27,7 @@ export enum EngineKind {
 }
 
 /**
- * The four engine-behavioural flags on `DeviceProfile`. Each is optional
+ * The seven engine-behavioural flags on `DeviceProfile`. Each is optional
  * because `undefined` is load-bearing on the wire: the DTO marks them
  * `@IsOptional()` and an absent `supportsDirectPlay` is read as `true` by the
  * backend. A row that omits a key emits `undefined` (no key in the JSON),
@@ -51,9 +51,6 @@ export interface EngineTraits {
   probesSegZero?: boolean;
   /** Engine can play a raw progressive file as DirectPlay. */
   supportsDirectPlay?: boolean;
-  /** Engine switches audio tracks inside a raw DirectPlay file. The web row
-   *  leaves it out: the browser build probes the media element at runtime. */
-  switchesDirectPlayAudio?: boolean;
   /** Engine has its own client-side ABR (bitrate-adaptive variant switching
    *  mid-playback). Client-only — never sent to the backend, so it's a plain
    *  required boolean rather than the wire-optional pattern above. */
@@ -61,7 +58,7 @@ export interface EngineTraits {
 }
 
 /**
- * Single source of truth for the four wire engine traits plus `supportsAbr`,
+ * Single source of truth for the seven wire engine traits plus `supportsAbr`,
  * one row per `EngineKind`.
  *
  * The CAST row sets `supportsAbr` (a local-only decision, never on the wire)
@@ -86,7 +83,6 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: true,
     probesSegZero: false,
     supportsDirectPlay: true,
-    switchesDirectPlayAudio: true,
     supportsAbr: true,
   },
   // Embedded mpv: renders behind the UI like NATIVE, but its ffmpeg HLS
@@ -110,7 +106,6 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: true,
     probesSegZero: true,
     supportsDirectPlay: true,
-    switchesDirectPlayAudio: true,
     supportsAbr: false,
   },
   [EngineKind.ANDROID_TV]: {
@@ -119,7 +114,6 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: true,
     probesSegZero: false,
     supportsDirectPlay: true,
-    switchesDirectPlayAudio: true,
     supportsAbr: true,
   },
   // AVPlay `open()` takes any remote URI, not just a manifest, and demuxes
@@ -131,7 +125,6 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: false,
     probesSegZero: false,
     supportsDirectPlay: true,
-    switchesDirectPlayAudio: true,
     supportsAbr: true,
   },
   // webOS folds the audio group by language: a group of eng/eng/hin reaches
@@ -144,7 +137,6 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: false,
     probesSegZero: false,
     supportsDirectPlay: true,
-    switchesDirectPlayAudio: true,
     supportsAbr: true,
   },
   [EngineKind.CAST]: {

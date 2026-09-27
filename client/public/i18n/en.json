@@ -66,7 +66,6 @@
     "stats_video": "Video",
     "stats_audio": "Audio",
     "stats_playback": "Playback",
-    "stats_network": "Network",
     "direct_play": "Direct Play",
     "remux": "Remux",
     "off": "Off",
@@ -118,6 +117,7 @@
     "stats_segment_duration": "Segment",
     "stats_crop": "Crop (server, re-encode):",
     "stats_crop_local": "Crop (player):",
+    "stats_crop_bypassed": "Crop (not applied):",
     "stats_tonemapping": "Tone mapping:",
     "stats_tonemapping_client": "Local",
     "stats_reasons": "Reasons:",
@@ -141,7 +141,10 @@
       "MuxNotSupported": "MPEG-TS packaging not supported",
       "DirectStreamDisabled": "Remux disabled by the server",
       "ClientRejectedCopy": "The player could not decode the original stream",
-      "ContainerNotSupported": "Container format not supported"
+      "ContainerNotSupported": "Container format not supported",
+      "ClientRequiresHls": "Requires HLS packaging",
+      "ClientCannotSwitchAudio": "The player can't switch audio tracks in a raw file",
+      "VideoBitrateNotSupported": "Bitrate too high"
     },
     "preparing": "Preparing the stream…",
     "stats_delivery_mismatch": "Server decision: {{decision}} / Delivered: {{delivered}}"

@@ -13,8 +13,9 @@ import { HttpErrorResponse } from '@angular/common/http';
 export interface PlaybackError {
   /** Translated, human-facing one-liner shown under the title. */
   userMessage: string;
-  /** Which layer reported it — drives the diagnostics header. */
-  source: 'shaka' | 'media' | 'session' | 'engine';
+  /** Which layer reported it (drives the diagnostics header). `native` is
+   *  ExoPlayer / AVPlayer, whose own error code the Capacitor bridge forwards. */
+  source: 'shaka' | 'media' | 'session' | 'engine' | 'native';
   /** Numeric error code: Shaka `error.code`, or `MediaError.code` (1-4). */
   code?: number;
   /** Shaka error category (1 NETWORK, 3 MEDIA, 4 MANIFEST, …). */
@@ -145,14 +146,28 @@ export function isNetworkOrAbort(err: {
  *  recovery. Kept conservative: network / session / timeout / quota stay
  *  recoverable. */
 export function isUndecodableError(err: {
-  source: PlaybackError['source'];
+  source?: PlaybackError['source'];
   code?: number;
+  message?: string;
 }): boolean {
   if (err.source === 'media') return err.code === 3 || err.code === 4;
   if (err.source === 'shaka') {
     return err.code === 3016 || err.code === 4032 || err.code === 4012;
   }
-  return false;
+  if (err.source === 'native') {
+    // media3 PlaybackException.errorCode (Android) or AVFoundationErrorDomain
+    // NSError.code (iOS); media3's 2xxx IO codes stay recoverable.
+    if (err.code == null) return false;
+    if (err.code >= 3001 && err.code <= 3004) return true; // ERROR_CODE_PARSING_*
+    // DECODER_*/DECODING_*, minus 4006 RESOURCES_RECLAIMED (another app took the codec).
+    if (err.code >= 4001 && err.code <= 4005) return true;
+    // AVError FileFormatNotRecognized / FileFailedToParse / DecoderNotFound; -12927 = variant rejected.
+    return [-11828, -11829, -11833, -12927].includes(err.code);
+  }
+  // Tizen AVPlay and mpv (end-file `file_error`) carry no code, only these texts.
+  // The macOS mpv bridge reports a bare "end-file error", so it stays unclassified.
+  const msg = err.message ?? '';
+  return msg.includes('PLAYER_ERROR_NOT_SUPPORTED_FILE') || msg.startsWith('unrecognized file format');
 }
 
 /** A stable one-line signature so repeated identical failures can be

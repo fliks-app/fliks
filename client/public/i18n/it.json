@@ -66,7 +66,6 @@
     "stats_video": "Video",
     "stats_audio": "Audio",
     "stats_playback": "Riproduzione",
-    "stats_network": "Rete",
     "direct_play": "Direct Play",
     "remux": "Remux",
     "off": "Disattivato",
@@ -113,6 +112,7 @@
     "stats_segment_duration": "Segmento",
     "stats_crop": "Ritaglio (server, transcodifica):",
     "stats_crop_local": "Ritaglio (player):",
+    "stats_crop_bypassed": "Ritaglio (non applicato):",
     "stats_tonemapping": "Mappatura tonale:",
     "stats_tonemapping_client": "Locale",
     "stats_reasons": "Motivi:",
@@ -136,7 +136,10 @@
       "MuxNotSupported": "Pacchettizzazione MPEG-TS non supportata",
       "DirectStreamDisabled": "Remux disattivato dal server",
       "ClientRejectedCopy": "Il lettore non è riuscito a decodificare lo stream originale",
-      "ContainerNotSupported": "Formato contenitore non supportato"
+      "ContainerNotSupported": "Formato contenitore non supportato",
+      "ClientRequiresHls": "Richiede la pacchettizzazione HLS",
+      "ClientCannotSwitchAudio": "Il lettore non può cambiare traccia audio in un file non elaborato",
+      "VideoBitrateNotSupported": "Bitrate troppo alto"
     },
     "preparing": "Preparazione del flusso…",
     "stats_delivery_mismatch": "Decisione server: {{decision}} / Consegnato: {{delivered}}"

@@ -410,8 +410,8 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
         // mpv can't expose the failing segment's HTTP status either; mirror the
         // native heuristic — first error after a frame played → try one
         // session-expired recovery before surfacing a fatal error.
-        if (this.maybeEmitSessionExpired()) return;
         const { code, message, detail } = event.payload;
+        if (this.maybeEmitSessionExpired({ code, message })) return;
         // mpv's generic message ("loading failed") plus the concrete cause it
         // logged (TLS verify, HTTP status, unsupported codec) so the error card
         // shows why, not just that.

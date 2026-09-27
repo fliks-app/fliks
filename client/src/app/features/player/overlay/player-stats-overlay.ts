@@ -9,15 +9,16 @@ export interface PlayerStats {
   outputFps: string;
   /** Translation key naming what the server actually does with the file:
    *  direct play (served as-is), remux (streams copied into HLS) or transcode
-   *  (video re-encoded). Read from the real delivery, not just the decision. */
+   *  (video re-encoded). Read from the real delivery, not just the decision.
+   *  Empty when the delivery is unknown (offline). */
   streamTypeKey: string;
   /** Set only when the server's `playMethod` decision disagrees with what's
-   *  actually delivered — a translated "Server decision: X / Delivered: Y"
+   *  actually delivered, a translated "Server decision: X / Delivered: Y"
    *  line, already interpolated. Empty otherwise. */
   mismatch?: string;
   /** `transcodeReasons` flags that are neither video- nor audio-specific
    *  (container/mux/server-policy: `ContainerNotSupported`,
-   *  `DirectStreamDisabled`, …) — why DirectStream/DirectPlay wasn't used
+   *  `DirectStreamDisabled`, …), why DirectStream/DirectPlay wasn't used
    *  at all, independent of any later video/audio re-encode reason. */
   streamTranscodeReasons: string[];
 
@@ -31,6 +32,8 @@ export interface PlayerStats {
   /** True when this client removed the bars (copy delivery); false when the
    *  server did (re-encode). Meaningless when `crop` is empty. */
   cropAppliedByPlayer: boolean;
+  /** Player crop not painting: PiP and iOS native fullscreen show the full frame. */
+  cropBypassed: boolean;
   /** HDR → SDR tone-mapping filter the backend actually picked
    *  (after `auto` resolution + opencl-probe fallback). Empty when no
    *  tone-mapping pass runs on this session. */

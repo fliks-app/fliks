@@ -62,12 +62,36 @@ describe('StreamingApiService.buildPlayUrl / buildAbsolutePlayUrl', () => {
     expect(url).not.toContain('remux=1');
   });
 
-  it('DirectPlay ignores startQuality and only appends sid', () => {
+  it('DirectPlay ignores startQuality and device, and drops the stale baked-in token when there is no live one', () => {
     const url = service.buildPlayUrl(
       pi('DirectPlay', '/api/stream/1?token=abc'),
       { sid: 'sid1', startQuality: 'original' },
     );
-    expect(url).toBe('/api/stream/1?token=abc&sid=sid1');
+    expect(url).toBe('/api/stream/1?sid=sid1');
+  });
+
+  it('rebuilds against the CURRENT playback token, never the one baked into playUrl at playback-info time', () => {
+    const auth = TestBed.inject(AuthService) as unknown as { playbackToken: string | null };
+    auth.playbackToken = 'fresh-token';
+    const url = service.buildPlayUrl(
+      pi('DirectStream', '/api/stream/1/master.m3u8?token=stale-token&sid=sid-old&remux=1'),
+      { sid: 'sid1' },
+    );
+    expect(url).not.toContain('stale-token');
+    expect(url).not.toContain('sid-old');
+    expect(url).toContain('token=fresh-token');
+    expect(url.match(/sid=/g)?.length).toBe(1);
+    expect(url).toContain('sid=sid1');
+  });
+
+  it('DirectPlay also rebuilds against the current token', () => {
+    const auth = TestBed.inject(AuthService) as unknown as { playbackToken: string | null };
+    auth.playbackToken = 'fresh-token';
+    const url = service.buildPlayUrl(
+      pi('DirectPlay', '/api/stream/1?token=stale-token&sid=sid-old'),
+      { sid: 'sid1' },
+    );
+    expect(url).toBe('/api/stream/1?token=fresh-token&sid=sid1');
   });
 
   it('resolves an absolute URL for native even for a DirectStream decision', () => {

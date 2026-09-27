@@ -49,7 +49,7 @@ export class StreamingSettingsComponent implements OnInit {
   /** When off, detected black bars are kept instead of cropped — avoids a
    *  forced re-encode on low-power servers. Default on. */
   readonly autoCropEnabled = signal(true);
-  /** When off, a session that could copy the video is transcoded instead —
+  /** When off, a session that could copy the video is transcoded instead -
    *  no DirectStream (remux) offered at all. Default on. */
   readonly allowRemux = signal(true);
   /** How the "Auto" quality resolves: 'directplay' tries Direct Play first

@@ -91,7 +91,7 @@ export interface DeviceProfile {
   /** mpv tone-maps HDR to this SDR display itself, so the backend copies the
    *  HDR bitstream instead of re-encoding it. Desktop shell only. */
   tonemapsHdrLocally?: boolean;
-  /** Client crops the detected black bars itself — mpv `video-crop` on
+  /** Client crops the detected black bars itself, mpv `video-crop` on
    *  desktop, a CSS transform on `<video>` for web/Shaka. False for native
    *  and TV engines, which run neither. */
   cropsBlackBarsLocally?: boolean;
@@ -534,14 +534,14 @@ export class BrowserDeviceProfileService {
     // bitstream instead of re-encoding it.
     const tonemapsHdrLocally = this.device.isDesktopNative() && !supportsHdr;
     // A plain browser always runs the server's current build, so its version is
-    // redundant on the admin dashboard — only the installed clients (native app,
+    // redundant on the admin dashboard, only the installed clients (native app,
     // Smart TV, desktop shell) report a build version worth surfacing.
     const isWeb =
       !Capacitor.isNativePlatform() && !isTv && !this.device.isDesktopNative();
     // `video-crop` cuts the bars at the VO: free, and hwdec-safe unlike a lavfi
     // crop. Every mpv backend qualifies, the Linux render API included, since
     // they all run the gl_video renderer that applies the rectangle.
-    // The web (Shaka) path crops the same way in CSS — see `applyWebVideoCrop`.
+    // The web (Shaka) path crops the same way in CSS, see `applyWebVideoCrop`.
     const cropsBlackBarsLocally = this.device.isDesktopNative() || isWeb;
 
     // Dolby Vision passthrough capability, gated under supportsHdr (DV ⊆ HDR, so
@@ -600,8 +600,9 @@ export class BrowserDeviceProfileService {
       supportsDirectPlay: traits.supportsDirectPlay,
       // Shaka plays a raw file through the media element, which exposes its
       // audio tracks only where the browser implements `audioTracks` (Safari).
-      switchesDirectPlayAudio:
-        traits.switchesDirectPlayAudio ?? 'audioTracks' in HTMLMediaElement.prototype,
+      // Only web probes it: every other engine switches natively, which is
+      // what an absent key already means to the backend.
+      switchesDirectPlayAudio: isWeb ? 'audioTracks' in HTMLMediaElement.prototype : undefined,
       // `false` only for the desktop mpv engine (see engine-traits.ts): the
       // backend then collapses the master to a single variant instead of
       // handing a no-ABR client the full ladder.

@@ -434,9 +434,9 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
       // haven't tried recovery yet, treat the first error as a
       // possible session-expired and let the player attempt a single
       // /playback-info + reload before surfacing a fatal error.
-      if (this.maybeEmitSessionExpired()) return;
+      if (this.maybeEmitSessionExpired({ source: 'native', code: d.code })) return;
       this._state = 'error';
-      this.emit('error', d);
+      this.emit('error', { ...d, source: 'native' });
     });
 
     bind('nativePlayerTracksChanged', (e: Event) => {

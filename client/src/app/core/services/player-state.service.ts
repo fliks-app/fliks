@@ -7,6 +7,7 @@ import {
   userMessageKeyFor,
   type PlaybackError,
 } from './playback-engine/playback-error';
+import type { PlaybackMode } from '../utils/player.utils';
 
 /** localStorage key for the persisted output level (a bare 0..1 number). */
 const VOLUME_KEY = 'player.volume';
@@ -44,7 +45,7 @@ export class PlayerStateService {
    *  {@link reset} on the next load. The player watches it to auto-advance the
    *  queue. */
   readonly ended = signal(false);
-  readonly playbackMode = signal<'direct' | 'remux' | 'transcode'>('direct');
+  readonly playbackMode = signal<PlaybackMode>('direct');
   readonly hwAccel = signal('none');
 
   /** True while a seek gesture is in flight — set by the player while

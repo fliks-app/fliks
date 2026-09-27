@@ -59,6 +59,38 @@ describe('playback-error', () => {
       expect(isUndecodableError({ source: 'shaka', code: 3017 })).toBe(false);
       expect(isUndecodableError({ source: 'session' })).toBe(false);
     });
+
+    it('flags androidx.media3 PARSING_*/DECODER_*/DECODING_* codes (Android, forwarded verbatim)', () => {
+      expect(isUndecodableError({ source: 'native', code: 3001 })).toBe(true); // PARSING_CONTAINER_MALFORMED
+      expect(isUndecodableError({ source: 'native', code: 3004 })).toBe(true); // PARSING_MANIFEST_UNSUPPORTED
+      expect(isUndecodableError({ source: 'native', code: 4001 })).toBe(true); // DECODER_INIT_FAILED
+      expect(isUndecodableError({ source: 'native', code: 4005 })).toBe(true); // DECODING_FORMAT_UNSUPPORTED
+      expect(isUndecodableError({ source: 'native', code: 4006 })).toBe(false); // RESOURCES_RECLAIMED, retryable
+    });
+
+    it('flags AVFoundationErrorDomain codes (iOS, forwarded verbatim)', () => {
+      expect(isUndecodableError({ source: 'native', code: -11828 })).toBe(true); // AVErrorFileFormatNotRecognized
+      expect(isUndecodableError({ source: 'native', code: -11829 })).toBe(true); // AVErrorFileFailedToParse
+      expect(isUndecodableError({ source: 'native', code: -11833 })).toBe(true); // AVErrorDecoderNotFound
+      expect(isUndecodableError({ source: 'native', code: -12927 })).toBe(true); // CoreMedia variant rejected
+    });
+
+    it('keeps native IO/network codes (media3 2xxx range, unrelated AVFoundation codes) recoverable', () => {
+      expect(isUndecodableError({ source: 'native', code: 2004 })).toBe(false); // ERROR_CODE_IO_BAD_HTTP_STATUS
+      expect(isUndecodableError({ source: 'native', code: -1004 })).toBe(false); // unrelated NSURLErrorDomain range
+      expect(isUndecodableError({ source: 'native' })).toBe(false); // no code at all
+    });
+
+    it('flags the Tizen AVPlay unsupported-format error by name, since it carries no code', () => {
+      expect(isUndecodableError({ code: -1, message: 'PLAYER_ERROR_NOT_SUPPORTED_FILE' })).toBe(true);
+      expect(isUndecodableError({ code: -1, message: 'PLAYER_ERROR_CONNECTION_FAILED' })).toBe(false);
+    });
+
+    it('flags mpv unrecognized-format end-file errors, not its generic load failure', () => {
+      expect(isUndecodableError({ code: -1, message: 'unrecognized file format' })).toBe(true);
+      expect(isUndecodableError({ code: -1, message: 'loading failed' })).toBe(false);
+      expect(isUndecodableError({ source: 'engine', code: -1 })).toBe(false);
+    });
   });
 
   describe('errorSignature', () => {

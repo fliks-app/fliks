@@ -1,7 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import type { PlaybackEngine } from './playback-engine/playback-engine';
-import { bucketResolutionLabel, widthForProfile } from '../utils/player.utils';
+import { bucketResolutionLabel, widthForProfile, type PlaybackMode } from '../utils/player.utils';
 import { PlayerSettingsService } from './player-settings.service';
 
 export interface QualityOption {
@@ -152,7 +152,7 @@ export class QualityManagerService {
   selectQuality(
     option: QualityOption,
     engine: PlaybackEngine | null,
-    playbackMode: 'direct' | 'remux' | 'transcode',
+    playbackMode: PlaybackMode,
     force = false,
     persist = false,
   ): void {
@@ -258,7 +258,7 @@ export class QualityManagerService {
    */
   applyQualityPreferenceAfterLoad(
     engine: PlaybackEngine | null,
-    playbackMode: 'direct' | 'remux' | 'transcode',
+    playbackMode: PlaybackMode,
   ): void {
     const option = this.availableQualities().find(q => q.id === this.activeQualityId())
       ?? this.availableQualities().find(q => q.id === 'auto')

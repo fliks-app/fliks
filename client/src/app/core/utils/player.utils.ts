@@ -1,6 +1,6 @@
 import type { TranslateService } from '@ngx-translate/core';
 import { localizeLanguage, normalizeLangCode } from './language.utils';
-import type { PlaybackInfoResponse, StreamingApiService } from '../services/api/streaming-api.service';
+import type { PlaybackInfoResponse, PlayMethod, StreamingApiService } from '../services/api/streaming-api.service';
 
 /** Pixel widths backing each ladder rung id (must match the backend
  *  `PROFILES` table). Used by NativeEngine + quality-manager to set
@@ -312,7 +312,7 @@ export interface CropRect {
 }
 
 export interface VideoCropStyle {
-  /** Video element's own box, in the source's aspect ratio — pair with
+  /** Video element's own box, in the source's aspect ratio, pair with
    *  `object-fit: fill` (never distorts, the box already carries that AR). */
   width: number;
   height: number;
@@ -322,7 +322,8 @@ export interface VideoCropStyle {
 }
 
 /** CSS box for a `<video>` so only `crop` shows, fit into the container like
- *  a server-side crop would. Null when there's nothing to crop. */
+ *  a server-side crop would. Null when there's nothing to crop. `crop` is in
+ *  coded pixels; `displayWidth/Height` rescale it for an anamorphic source. */
 export function computeVideoCropStyle(params: {
   sourceWidth: number;
   sourceHeight: number;
@@ -330,44 +331,50 @@ export function computeVideoCropStyle(params: {
   containerWidth: number;
   containerHeight: number;
   fit: 'contain' | 'cover';
+  displayWidth?: number;
+  displayHeight?: number;
 }): VideoCropStyle | null {
   const { sourceWidth: w, sourceHeight: h, crop, containerWidth: cw, containerHeight: ch, fit } = params;
   if (!w || !h || !cw || !ch || !crop?.width || !crop?.height) return null;
   if (crop.width >= w && crop.height >= h) return null;
+  const dw = params.displayWidth || w;
+  const dh = params.displayHeight || h;
+  const sx = dw / w;
+  const sy = dh / h;
+  const cropW = crop.width * sx;
+  const cropH = crop.height * sy;
+  const cropX = crop.x * sx;
+  const cropY = crop.y * sy;
   const scale =
     fit === 'cover'
-      ? Math.max(cw / crop.width, ch / crop.height)
-      : Math.min(cw / crop.width, ch / crop.height);
+      ? Math.max(cw / cropW, ch / cropH)
+      : Math.min(cw / cropW, ch / cropH);
   return {
-    width: w * scale,
-    height: h * scale,
-    translateX: (cw - crop.width * scale) / 2 - crop.x * scale,
-    translateY: (ch - crop.height * scale) / 2 - crop.y * scale,
+    width: dw * scale,
+    height: dh * scale,
+    translateX: (cw - cropW * scale) / 2 - cropX * scale,
+    translateY: (ch - cropH * scale) / 2 - cropY * scale,
   };
 }
 
-/** What the engine is actually playing — independent of the server's
- *  `playMethod` decision, which a stale/desynced stream URL can disagree
- *  with. Drives the stats overlay so its labels describe delivery, not intent. */
-export type DeliveredKind = 'direct' | 'remux' | 'transcode';
+export type PlaybackMode = 'direct' | 'remux' | 'transcode';
 
-/**
- * Derive {@link DeliveredKind} from the loaded stream URL, refined by the
- * engine's active-variant id when one is available.
- *
- * `originalVideoId` only comes from Shaka (the sole engine that exposes real
- * variant tracks — see `getVariantTracks()` on the other engines, which all
- * return `[]`): its path segment is `/remux/` for the copy variant or
- * `/<rung>/` for a transcoded one. Every other engine (native, Tizen, webOS,
- * desktop mpv) has no variant introspection, so the query string is the only
- * signal: `remux=1` with no `startQuality` is the single-variant master
- * `includeRemux && !onlyQuality` emits (master-playlist.ts); pairing the two
- * collapses it to a transcoded rung instead.
- */
+/** The one `playMethod` to {@link PlaybackMode} mapping. */
+export function playbackModeOf(pi: { playMethod: PlayMethod }): PlaybackMode {
+  return pi.playMethod === 'DirectPlay'
+    ? 'direct'
+    : pi.playMethod === 'DirectStream'
+      ? 'remux'
+      : 'transcode';
+}
+
+/** What the engine is actually playing, which a desynced URL can make differ from
+ *  `playMethod`: the loaded URL, refined by Shaka's `originalVideoId` (`/remux/` vs
+ *  `/<rung>/`); other engines read `remux=1` + no `startQuality` instead. */
 export function deliveredKindFromVariant(
   url: string,
   originalVideoId?: string | null,
-): DeliveredKind {
+): PlaybackMode {
   if (!url.includes('master.m3u8')) return 'direct';
   if (originalVideoId != null) {
     return originalVideoId.includes('/remux/') ? 'remux' : 'transcode';
@@ -380,17 +387,16 @@ export function deliveredKindFromVariant(
 /**
  * URL for an "original"-quality download. DirectStream (remux) goes through
  * `buildPlayUrl`, which derives the URL from `playUrl` and drops the rung pin
- * that would otherwise collapse the copy into a transcode; every other
- * playMethod (Transcode, and DirectPlay — native downloaders need an HLS
- * bundle, not the raw-file route) keeps the ladder URL pinned to `quality`.
+ * that would otherwise collapse the copy into a transcode. DirectPlay falls
+ * through to the ladder below, pinned to `quality`: no backend route serves a
+ * DirectPlay-capable file as its remux copy.
  */
 export function resolveDownloadUrl(
   api: Pick<StreamingApiService, 'buildPlayUrl' | 'getHlsUrl'>,
   mediaFileId: number,
   quality: string,
-  pi: Pick<PlaybackInfoResponse, 'playMethod' | 'playUrl' | 'sessionId' | 'audioTracks'>,
+  pi: Pick<PlaybackInfoResponse, 'playMethod' | 'playUrl' | 'sessionId'>,
 ): string {
-  // The remux now carries every audio track (EXT-X-MEDIA), same as the ladder.
   return pi.playMethod === 'DirectStream'
     ? api.buildPlayUrl(pi, { sid: pi.sessionId })
     : api.getHlsUrl(mediaFileId, quality, undefined, pi.sessionId);

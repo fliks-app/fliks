@@ -6,6 +6,8 @@
  * the Shaka/ExoPlayer event shape.
  */
 
+import { isUndecodableError } from './playback-error';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -199,8 +201,10 @@ export abstract class AbstractPlaybackEngine {
    *  caller should stop and not surface a fatal error), false when the guard
    *  is spent / no frame has played and the caller must fall through to a real
    *  error. Engines with a platform-specific precondition (e.g. a
-   *  network-shaped error string) gate on it before calling this. */
-  protected maybeEmitSessionExpired(): boolean {
+   *  network-shaped error string) gate on it before calling this. An `err`
+   *  the classifier reads as undecodable is never a session expiry. */
+  protected maybeEmitSessionExpired(err?: Parameters<typeof isUndecodableError>[0]): boolean {
+    if (err && isUndecodableError(err)) return false;
     if (this.firstFrameEmitted && !this.recoveryAttempted) {
       this.recoveryAttempted = true;
       this.emit('sessionExpired', undefined);
