@@ -6,6 +6,7 @@ import {
   inject,
   input,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -670,8 +671,9 @@ export class SubtitlesModalComponent {
   // ── Actions ──
 
   async loadSubtitles(mediaId: number) {
-    // A refresh keeps the rows on screen; the spinner is for an empty list only.
-    this.subtitlesLoading.set(this.filteredSubtitles().length === 0);
+    // Spinner for an empty list only; read untracked so the effects calling this don't depend
+    // on the list they are about to replace.
+    this.subtitlesLoading.set(untracked(() => this.filteredSubtitles().length === 0));
     try {
       this.subtitles.set(await this.subtitlesApi.getForMedia(mediaId, { force: true }));
       // Drop progress entries for translations that finished/failed so the map
