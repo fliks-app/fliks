@@ -737,4 +737,160 @@ describe('RemuxSegmentAssembler.canServe (wait vs respawn)', () => {
     expect(asm.canServe(3, 1, true)).toBe(false); // rendition 1 hasn't reached it yet
     expect(asm.canServe(3, undefined, true)).toBe(true); // video has
   });
+
+  describe('throttle pause/resume: canServe must not be fooled by a paused run', () => {
+    /** Same shape as `open()` above, plus a directly-injected `pausedMs`: the
+     *  throttle service only measures real time, so tests set it directly. */
+    const openPaused = (
+      asm: RemuxSegmentAssembler,
+      next: number,
+      openStartSegment: number,
+      wallClockElapsedMs: number,
+      pausedMs: number,
+    ): RemuxSegmentAssembler => {
+      Object.assign(
+        asm as unknown as {
+          opened: boolean;
+          next: number;
+          openStartSegment: number;
+          openedAt: number | null;
+          pausedMs: number;
+        },
+        {
+          opened: true,
+          next,
+          openStartSegment,
+          openedAt: Date.now() - wallClockElapsedMs,
+          pausedMs,
+        },
+      );
+      return asm;
+    };
+
+    it('excludes paused wall-clock time from measured throughput', () => {
+      // 6s wall clock, 5s of it paused: producing time is 1s for 3 segments → 3/s,
+      // window round(3*3)=9 capped to REMUX_MAX_WAIT_SEGMENTS(3). Frontier 13.
+      const throttled = openPaused(bare(10), 13, 10, 6000, 5000);
+      expect(throttled.canServe(16, undefined, false)).toBe(true);
+
+      // Same wall clock, nothing excluded: 3 segments / 6s = 0.5/s, window
+      // round(0.5*3)=2. Frontier 13 + 2 = 15, so 16 is out of reach.
+      const unthrottled = openPaused(bare(10), 13, 10, 6000, 0);
+      expect(unthrottled.canServe(16, undefined, false)).toBe(false);
+    });
+
+    it('pause() then resume() accumulate exactly the paused span', () => {
+      jest.useFakeTimers();
+      try {
+        const asm = bare(0);
+        Object.assign(
+          asm as unknown as { opened: boolean; next: number; openStartSegment: number; openedAt: number | null },
+          { opened: true, next: 5, openStartSegment: 0, openedAt: Date.now() },
+        );
+        jest.advanceTimersByTime(2000); // 2s producing
+        asm.pause();
+        jest.advanceTimersByTime(3000); // 3s paused, excluded
+        asm.resume();
+        jest.advanceTimersByTime(1000); // 1s more producing
+        // Wall clock 6s, paused 3s → producing elapsed 3s → 5 segments / 3s.
+        expect(asm.segmentsPerSecond()).toBeCloseTo(5 / 3, 5);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('reads Infinity-free null while a pause is still open and openedAt is unset', () => {
+      const asm = bare(0);
+      expect(asm.segmentsPerSecond()).toBeNull();
+      asm.pause(); // no-op before the run has opened
+      expect(asm.segmentsPerSecond()).toBeNull();
+    });
+  });
+
+  describe('RemuxSegmentAssembler.frontierSeconds', () => {
+    it('is null before the run has opened', () => {
+      expect(bare(0).frontierSeconds()).toBeNull();
+    });
+
+    it('falls back to the uniform grid when there is no keyframe grid', () => {
+      const asm = open(bare(10), 13, 10, 1000); // DEFAULT_SEGMENT_DURATION=3, origin 0
+      expect(asm.frontierSeconds()).toBeCloseTo(13 * 3, 5);
+    });
+
+    it('reads the real grid boundary at the frontier segment when one exists', () => {
+      const withGrid = new RemuxSegmentAssembler(
+        remuxAssemblyPlan({
+          dir: '/x',
+          gopDir: '/x/gop',
+          grid,
+          startSegment: 0,
+          run: { audioStartSeconds: 0, seekSeconds: null, startNumber: 0 },
+          origin: 0,
+        }),
+        log,
+        'test-frontier-grid',
+      );
+      open(withGrid, 2, 0, 1000);
+      expect(withGrid.frontierSeconds()).toBe(grid.boundaries[2]);
+    });
+
+    it('is content time, not source pts, with a non-zero origin (uniform fallback)', () => {
+      // A DVB/IPTV .ts source starting well past 0: the old bug returned
+      // `origin + next*segDur` (source pts), inflating aheadSeconds by origin.
+      const asm = open(
+        new RemuxSegmentAssembler(
+          remuxAssemblyPlan({
+            dir: '/x',
+            gopDir: '/x/gop',
+            grid: null,
+            startSegment: 10,
+            run: { audioStartSeconds: 0, seekSeconds: null, startNumber: 10 },
+            origin: 45,
+          }),
+          log,
+          'test-frontier-uniform-origin',
+        ),
+        13,
+        10,
+        1000,
+      );
+      expect(asm.frontierSeconds()).toBeCloseTo(13 * 3, 5);
+    });
+
+    it('is content time, not source pts, with a non-zero origin (real grid)', () => {
+      const originGrid = computeSegmentGrid(
+        [45, 47, 49, 51, 53, 55].map((pts) => ({ pts, dts: pts - 0.08 })),
+        45,
+        57,
+        4,
+      )!;
+      const asm = open(
+        new RemuxSegmentAssembler(
+          remuxAssemblyPlan({
+            dir: '/x',
+            gopDir: '/x/gop',
+            grid: originGrid,
+            startSegment: 0,
+            run: { audioStartSeconds: 0, seekSeconds: null, startNumber: 0 },
+            origin: 45,
+          }),
+          log,
+          'test-frontier-grid-origin',
+        ),
+        2,
+        0,
+        1000,
+      );
+      expect(asm.frontierSeconds()).toBeCloseTo(originGrid.boundaries[2] - 45, 5);
+    });
+  });
+
+  describe('RemuxSegmentAssembler.segmentContentSeconds', () => {
+    it('matches frontierSeconds() at the current frontier, and works for any other segment', () => {
+      const asm = open(bare(10), 13, 10, 1000);
+      expect(asm.segmentContentSeconds(13)).toBe(asm.frontierSeconds());
+      // Same uniform grid, an arbitrary earlier index: 11 segments * 3s.
+      expect(asm.segmentContentSeconds(11)).toBeCloseTo(11 * 3, 5);
+    });
+  });
 });

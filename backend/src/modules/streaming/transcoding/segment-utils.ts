@@ -83,6 +83,27 @@ export async function segmentWithinReach(
   return false;
 }
 
+/** Highest ffmpeg-numbered segment written to `cachePath` (flat layout, or
+ *  the var_stream_map '0/' video subdir), or -1 before any segment lands. */
+export async function latestSegmentNumber(cachePath: string): Promise<number> {
+  const dirs = [path.join(cachePath, '0'), cachePath];
+  for (const dir of dirs) {
+    let files: string[];
+    try {
+      files = await fsp.readdir(dir);
+    } catch {
+      continue;
+    }
+    let max = -1;
+    for (const f of files) {
+      const m = f.match(/^seg-(\d+)\.(?:m4s|ts)$/);
+      if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+    if (max >= 0) return max;
+  }
+  return -1;
+}
+
 /**
  * Delete cached segments numbered `>= fromSegment` across the flat layout and
  * any var_stream_map numeric subdirs (`0/`, `1/`, …). Called when a run
