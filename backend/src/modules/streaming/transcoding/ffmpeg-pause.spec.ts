@@ -1,5 +1,6 @@
 import type { Logger } from '@nestjs/common';
 import type { ChildProcess } from 'child_process';
+import { EventEmitter } from 'events';
 import {
   getPauseCapability,
   pauseProcess,
@@ -19,7 +20,7 @@ function fakeProcess(): ChildProcess {
 describe('pauseProcess / resumeProcess', () => {
   afterEach(() => jest.clearAllMocks());
 
-  it('writes the jellyfin-ffmpeg pause/resume keys to stdin under stdin capability', () => {
+  it('writes the bundled ffmpeg pause/resume keys to stdin under stdin capability', () => {
     setPauseCapabilityForTest('stdin');
     const proc = fakeProcess();
     pauseProcess(proc, log);
@@ -48,16 +49,28 @@ describe('pauseProcess / resumeProcess', () => {
     expect(proc.stdin!.write).not.toHaveBeenCalled();
   });
 
-  it('swallows a write/kill failure (e.g. the process already exited) instead of throwing', () => {
+  it('swallows a synchronous write/kill failure (e.g. a destroyed stream) instead of throwing', () => {
     setPauseCapabilityForTest('stdin');
     const proc = {
       stdin: {
         write: jest.fn(() => {
-          throw new Error('EPIPE');
+          throw new Error('write after end');
         }),
       },
     } as unknown as ChildProcess;
     expect(() => pauseProcess(proc, log)).not.toThrow();
+  });
+
+  it('does not crash on a stdin that EPIPEs asynchronously, once the spawn site has an error listener attached', () => {
+    setPauseCapabilityForTest('stdin');
+    const stdin = new EventEmitter();
+    (stdin as unknown as { write: () => boolean }).write = () => true;
+    stdin.on('error', () => {}); // attached at spawn (transcoding.service.ts / the pause probe)
+    const proc = { stdin } as unknown as ChildProcess;
+    pauseProcess(proc, log);
+    // A real EPIPE surfaces off the stream asynchronously, not from write() itself;
+    // with no listener, this emit would throw and crash the whole process.
+    expect(() => stdin.emit('error', new Error('EPIPE'))).not.toThrow();
   });
 
   it('setPauseCapabilityForTest is reflected by getPauseCapability', () => {

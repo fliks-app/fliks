@@ -1626,6 +1626,7 @@
       "allow_remux_help": "Trasmette il video originale reimpacchettato come HLS, senza ricodifica. Disattivato, viene applicata una transcodifica.",
       "throttle_enabled": "Limitare la codifica",
       "throttle_enabled_help": "Mette in pausa la codifica quando è troppo avanti rispetto alla riproduzione e la riprende quando lo spettatore recupera. Risparmia CPU su stop e salti.",
+      "throttle_unavailable_help": "Non disponibile su questo server: non può mettere in pausa l'encoder durante la riproduzione.",
       "throttle_threshold": "Soglia di limitazione",
       "throttle_threshold_help": "Quanti secondi l'encoder può anticipare la riproduzione prima di mettersi in pausa. Riprende a metà di questo valore.",
       "auto_crop": "Ritaglio automatico delle bande nere",

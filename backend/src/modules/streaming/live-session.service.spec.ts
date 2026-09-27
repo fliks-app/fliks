@@ -65,16 +65,17 @@ describe('LiveSessionRegistry', () => {
     expect(svc.touch('missing')).toBe(false);
   });
 
-  it('trackSegment keeps the highest requested segment, ignoring a later smaller one', () => {
+  it('trackSegment stores the last requested segment, even going backward on a seek', () => {
     const session = svc.create(BASE);
     expect(session.lastRequestedSegment).toBeNull();
     svc.trackSegment(session.sessionId, 5);
     expect(session.lastRequestedSegment).toBe(5);
     svc.trackSegment(session.sessionId, 12);
     expect(session.lastRequestedSegment).toBe(12);
-    // A player re-buffering an earlier segment is not a rewind of the playhead.
+    // A restart from 0 after a resume at segment 12 must not stay stuck there,
+    // or the throttle service never sees the run needs to catch back down.
     svc.trackSegment(session.sessionId, 3);
-    expect(session.lastRequestedSegment).toBe(12);
+    expect(session.lastRequestedSegment).toBe(3);
   });
 
   it('trackSegment is a no-op for an unknown sessionId', () => {

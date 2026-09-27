@@ -57,6 +57,9 @@ export class StreamingSettingsComponent implements OnInit {
   readonly throttleEnabled = signal(true);
   /** Seconds a run may get ahead of the viewer before it pauses. */
   readonly throttleThresholdSeconds = signal('90');
+  /** False when this host's ffmpeg build can't pause a run mid-stream (no
+   *  stdin key, no POSIX fallback: a Windows build without the key). */
+  readonly throttleAvailable = signal(true);
   /** How the "Auto" quality resolves: 'directplay' tries Direct Play first
    *  (zero transcoding when compatible), 'abr' always uses the adaptive HLS
    *  ladder. Explicit quality picks are unaffected. */
@@ -123,6 +126,7 @@ export class StreamingSettingsComponent implements OnInit {
         this.cacheTtlHours.set(String(effective.cacheTtlHours));
         this.ffmpegSlots.set(effective.ffmpegSlots ? String(effective.ffmpegSlots) : '');
         this.ffmpegSlotsAuto.set(effective.ffmpegSlotsAuto);
+        this.throttleAvailable.set(effective.pauseCapability !== 'none');
       }
     } catch { /* interceptor */ }
     this.loading.set(false);

@@ -704,6 +704,8 @@ export class StreamingApiService {
         cacheTtlHours: number;
         ffmpegSlots: number | null;
         ffmpegSlotsAuto: number;
+        /** Whether this host's ffmpeg build can pause a run mid-stream. */
+        pauseCapability: 'stdin' | 'signal' | 'none';
       }>('/api/stream/info/effective-settings'),
     );
   }

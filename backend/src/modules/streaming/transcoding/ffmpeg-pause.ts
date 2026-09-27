@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import { spawn, type ChildProcess } from 'child_process';
 
 /** How this host's ffmpeg build can be paused mid-run:
- *  - `stdin`: jellyfin-ffmpeg's `p`/`u` stdin keys (Linux/Windows/macOS).
+ *  - `stdin`: the bundled ffmpeg's `p`/`u` stdin keys (Linux/Windows/macOS).
  *  - `signal`: POSIX SIGSTOP/SIGCONT fallback for a build without the key.
  *  - `none`: neither, a Windows build without the key has no fallback. */
 export type PauseCapability = 'stdin' | 'signal' | 'none';
@@ -41,16 +41,13 @@ export function resumeProcess(proc: ChildProcess, log: Logger): void {
   }
 }
 
-/** One-time boot probe (fire-and-forget, like the codec probes): confirms
- *  the bundled ffmpeg really freezes production on stdin `p` and picks back
- *  up on `u`, rather than trusting the build to have the feature. Falls back
- *  to POSIX SIGSTOP/SIGCONT; without either (a Windows build whose stdin key
- *  handling needs a real console, not a redirected pipe) throttling stays off. */
+/** One-time boot probe: confirms the bundled ffmpeg really pauses on stdin
+ *  `p`/`u` before relying on it, falling back to SIGSTOP/SIGCONT or off. */
 export async function detectPauseCapability(log: Logger): Promise<void> {
   if (probed) return;
   probed = true;
   const t0 = Date.now();
-  const stdinWorks = await probeStdinPause().catch(() => false);
+  const stdinWorks = await probeStdinPause(log).catch(() => false);
   capability = stdinWorks ? 'stdin' : process.platform === 'win32' ? 'none' : 'signal';
   if (capability === 'none') {
     log.warn(
@@ -60,13 +57,10 @@ export async function detectPauseCapability(log: Logger): Promise<void> {
   log.log(`[pause-probe] capability=${capability} (${Date.now() - t0}ms)`);
 }
 
-/** Real encode, real pause: a synthetic 720p run is heavy enough that a
- *  failed pause keeps producing frames for the whole check window, and light
- *  enough this costs ~3s at boot. Two windows after 'p', a drain window for
- *  in-flight frames already queued in the encoder, then a confirm window
- *  that must be flat, tell a real pause apart from one that merely stalled
- *  by luck. */
-function probeStdinPause(): Promise<boolean> {
+/** `-re` paces a cheap rawvideo run in real time so a failed pause keeps
+ *  visibly advancing; a drain window then a flat window tell a real pause
+ *  from one that merely stalled by luck. No encoder library required. */
+function probeStdinPause(log: Logger): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     let proc: ChildProcess;
     try {
@@ -74,8 +68,8 @@ function probeStdinPause(): Promise<boolean> {
         'ffmpeg',
         [
           '-hide_banner', '-loglevel', 'error', '-nostats',
-          '-f', 'lavfi', '-i', 'testsrc=size=1280x720:rate=30',
-          '-t', '600', '-c:v', 'libx264', '-preset', 'medium',
+          '-re', '-f', 'lavfi', '-i', 'testsrc=size=320x240:rate=30',
+          '-t', '600', '-c:v', 'rawvideo',
           '-progress', 'pipe:2', '-f', 'null', '-',
         ],
         { stdio: ['pipe', 'ignore', 'pipe'] },
@@ -84,6 +78,7 @@ function probeStdinPause(): Promise<boolean> {
       resolve(false);
       return;
     }
+    proc.stdin?.on('error', (err) => log.debug(`[pause-probe] stdin: ${err.message}`));
     let frames = 0;
     let settled = false;
     const timers: ReturnType<typeof setTimeout>[] = [];

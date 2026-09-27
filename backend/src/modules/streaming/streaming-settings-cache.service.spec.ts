@@ -58,6 +58,16 @@ describe('StreamingSettingsCache tuning resolution', () => {
     expect(s.tonemapAlgo).toBe('auto');
   });
 
+  it('clamps a saved throttle threshold below the server floor, but keeps a higher one', async () => {
+    expect((await build().get()).throttleThresholdSeconds).toBe(90);
+    expect(
+      (await build({ streaming_throttle_threshold_seconds: '10' }).get()).throttleThresholdSeconds,
+    ).toBe(60);
+    expect(
+      (await build({ streaming_throttle_threshold_seconds: '120' }).get()).throttleThresholdSeconds,
+    ).toBe(120);
+  });
+
   it('never lets a retired env var reach the resolved settings', async () => {
     process.env.TRANSCODE_TONEMAP_ALGO = 'qsv';
     process.env.TRANSCODE_TONEMAP_CURVE = 'mobius';

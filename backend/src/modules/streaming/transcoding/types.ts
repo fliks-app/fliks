@@ -339,4 +339,7 @@ export interface TranscodeSession {
   /** Set by `FfmpegThrottleService` while this run is paused because its
    *  frontier is far enough ahead of every viewer's playhead. */
   throttlePaused?: boolean;
+  /** Set on this run's first pause, so later pauses log at debug instead of
+   *  repeating the same `.log()` line every time it catches up and pulls away. */
+  throttlePausedOnce?: boolean;
 }

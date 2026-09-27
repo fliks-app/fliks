@@ -66,17 +66,19 @@
     />
 
     <!-- Throttle streaming runs against the viewer's playhead: pauses far
-         ahead, resumes as the viewer catches up. -->
+         ahead, resumes as the viewer catches up. Disabled when this host's
+         ffmpeg build can't actually pause a run (Windows without the key). -->
     <app-toggle-field
       [(value)]="throttleEnabled"
       [label]="'settings.streaming.throttle_enabled' | translate"
-      [hint]="'settings.streaming.throttle_enabled_help' | translate"
+      [hint]="(throttleAvailable() ? 'settings.streaming.throttle_enabled_help' : 'settings.streaming.throttle_unavailable_help') | translate"
+      [disabled]="!throttleAvailable()"
     />
     @if (throttleEnabled()) {
       <div class="form-control">
         <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.throttle_threshold' | translate }}</span></label>
         <input
-          type="number" min="10" step="5" class="input input-bordered w-full"
+          type="number" min="60" step="5" class="input input-bordered w-full"
           [ngModel]="throttleThresholdSeconds()" (ngModelChange)="throttleThresholdSeconds.set($event)" />
         <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.throttle_threshold_help' | translate }}</span></label>
       </div>

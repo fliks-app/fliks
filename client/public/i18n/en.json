@@ -1634,6 +1634,7 @@
       "allow_remux_help": "Serves the original video repackaged as HLS instead of the raw file, without re-encoding. Off transcodes instead.",
       "throttle_enabled": "Throttle encoding",
       "throttle_enabled_help": "Pauses encoding once it gets far ahead of playback and resumes as the viewer catches up. Saves CPU on stops and seeks.",
+      "throttle_unavailable_help": "Not available on this server: it can't pause an encoder mid-run.",
       "throttle_threshold": "Throttle threshold",
       "throttle_threshold_help": "How far ahead of playback the encoder may get before it pauses, in seconds. Resumes at half this value.",
       "auto_crop": "Automatic black bar cropping",

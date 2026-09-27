@@ -68,6 +68,7 @@ import {
 import {
   fileExists,
   firstMissingSegment,
+  latestSegmentNumber,
   purgeSegmentsFrom,
   segmentNearby,
   segmentWithinReach,
@@ -531,27 +532,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   ): Promise<number> {
     if (!durationSeconds || durationSeconds <= 0) return 0;
     try {
-      // var_stream_map sessions write video into a `0/` subdir; fall back to
-      // the session root for single-stream sessions and remux output.
-      const rootDir = session.cachePath;
-      const dirs = [path.join(rootDir, '0'), rootDir];
-      let maxSeg = -1;
-      for (const dir of dirs) {
-        let files: string[];
-        try {
-          files = await fsp.readdir(dir);
-        } catch {
-          continue;
-        }
-        for (const f of files) {
-          const m = f.match(/^seg-(\d+)\.(?:m4s|ts)$/);
-          if (m) {
-            const n = parseInt(m[1], 10);
-            if (n > maxSeg) maxSeg = n;
-          }
-        }
-        if (maxSeg >= 0) break;
-      }
+      const maxSeg = await latestSegmentNumber(session.cachePath);
       if (maxSeg < 0) return 0;
       const transcodedUpTo = segmentIndexToSeconds(
         maxSeg + 1,
@@ -1108,10 +1089,13 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     this.log.debug(`FFmpeg argv [${id}]: ffmpeg ${args.join(' ')}`);
 
     // stdin stays a pipe (not 'ignore') so FfmpegThrottleService can send the
-    // bundled jellyfin-ffmpeg's `p`/`u` pause/resume keys.
+    // bundled ffmpeg's `p`/`u` pause/resume keys.
     const proc = spawn('ffmpeg', args, {
       stdio: ['pipe', 'ignore', 'pipe'],
     });
+    // A pause/resume write to a dead-but-unreaped ffmpeg fails async (EPIPE);
+    // unhandled, it's an uncaught exception that takes the whole process down.
+    proc.stdin?.on('error', (err) => this.log.debug(`[${id}] stdin: ${err.message}`));
 
     let stderr = '';
     const warnedTimingLabels = new Set<string>();

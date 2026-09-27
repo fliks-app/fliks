@@ -46,6 +46,14 @@ describe('jobPlayheadSeconds (multi-viewer max)', () => {
     const live = [{ position: 0, lastRequestedSegment: 20 }];
     expect(jobPlayheadSeconds(live, 3, undefined)).toBe(60);
   });
+
+  it('converts a remux requested segment through the assembler grid, not the uniform formula', () => {
+    // A keyframe grid (10s GOP) reports segment 4 starting at 35s; the uniform
+    // formula (segmentDuration=6) would underestimate it as 24s.
+    const live = [{ position: 0, lastRequestedSegment: 4 }];
+    const remuxAssembler = { segmentContentSeconds: (i: number) => (i === 4 ? 35 : 0) };
+    expect(jobPlayheadSeconds(live, 6, undefined, remuxAssembler)).toBe(35);
+  });
 });
 
 describe('isThrottleEligible', () => {

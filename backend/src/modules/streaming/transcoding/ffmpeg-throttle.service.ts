@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { TranscodingService } from './transcoding.service';
+import type { RemuxSegmentAssembler } from './remux-assembler';
 import type { TranscodeSession } from './types';
 import { LiveSessionRegistry, type LiveSession } from '../live-session.service';
 import { StreamingSettingsCache } from '../streaming-settings-cache.service';
@@ -32,20 +33,25 @@ export function decideThrottle(o: {
 }
 
 /** Furthest-ahead viewer across every LiveSession sharing this job: a
- *  slower sibling must never stall the run a faster one still needs
- *. Null when nothing is watching, cleanup reaps the run on its
- *  own schedule, this service leaves it alone. */
+ *  slower sibling must never stall the run a faster one still needs. Null
+ *  when nothing is watching, cleanup reaps the run on its own schedule. */
 export function jobPlayheadSeconds(
   live: readonly Pick<LiveSession, 'position' | 'lastRequestedSegment'>[],
   segmentDuration: number,
   sourceFps: number | undefined,
+  // Remux indices sit on the keyframe grid, not a uniform one: convert
+  // through the assembler's own grid when there is one, the ladder's
+  // uniform segmentIndexToSeconds otherwise.
+  remuxAssembler?: Pick<RemuxSegmentAssembler, 'segmentContentSeconds'> | null,
 ): number | null {
   if (live.length === 0) return null;
   let max = 0;
   for (const s of live) {
     const requested =
       s.lastRequestedSegment != null
-        ? segmentIndexToSeconds(s.lastRequestedSegment, segmentDuration, sourceFps)
+        ? (remuxAssembler
+            ? remuxAssembler.segmentContentSeconds(s.lastRequestedSegment)
+            : segmentIndexToSeconds(s.lastRequestedSegment, segmentDuration, sourceFps))
         : 0;
     max = Math.max(max, s.position, requested);
   }
@@ -64,19 +70,15 @@ export function isThrottleEligible(
   return true;
 }
 
-/**
- * Paces every remux and transcode-ladder run against its viewers' playhead
- *: a run that has produced far more than anyone is watching is
- * paused (stdin `p`/`u` on the bundled jellyfin-ffmpeg, SIGSTOP/SIGCONT
- * fallback otherwise) instead of burning CPU/GPU encoding a stop or a seek
- * will throw away. Live TV is realtime-paced already and never reaches
- * this service (its own session registry, not `TranscodingService`);
- * trick-play segments are one-shot ffmpeg calls, never a tracked session.
- */
+/** Pauses a remux/ladder run once it's far enough ahead of every viewer's
+ *  playhead to save CPU/GPU; skips Live TV and trick-play (untracked here). */
 @Injectable()
 export class FfmpegThrottleService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger(FfmpegThrottleService.name);
   private timer: ReturnType<typeof setInterval> | null = null;
+  /** Set once a settings-load failure has been logged, so a hiccup doesn't
+   *  spam a warning on every 5s tick until it recovers. */
+  private settingsErrorLogged = false;
 
   constructor(
     private readonly transcoding: TranscodingService,
@@ -95,21 +97,31 @@ export class FfmpegThrottleService implements OnModuleInit, OnModuleDestroy {
 
   private async tick(): Promise<void> {
     if (getPauseCapability() === 'none') return;
-    const settings = await this.settings.get();
+    let settings: Awaited<ReturnType<StreamingSettingsCache['get']>>;
+    try {
+      settings = await this.settings.get();
+      this.settingsErrorLogged = false;
+    } catch (err) {
+      if (!this.settingsErrorLogged) {
+        this.settingsErrorLogged = true;
+        this.log.warn(`throttle tick: settings unavailable, skipping: ${(err as Error).message}`);
+      }
+      return;
+    }
     for (const session of this.transcoding.getActiveSessions()) {
       if (!settings.throttleEnabled) {
         if (session.throttlePaused) this.resume(session);
         continue;
       }
       try {
-        this.checkOne(session, settings.throttleThresholdSeconds);
+        await this.checkOne(session, settings.throttleThresholdSeconds);
       } catch (err) {
         this.log.warn(`[${session.id}] throttle check failed: ${(err as Error).message}`);
       }
     }
   }
 
-  private checkOne(session: TranscodeSession, thresholdSeconds: number): void {
+  private async checkOne(session: TranscodeSession, thresholdSeconds: number): Promise<void> {
     if (session.process.exitCode !== null) return;
     const live = session.baseProfileHash
       ? this.liveSessions.listForJob(
@@ -123,40 +135,51 @@ export class FfmpegThrottleService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     const segmentDuration = session.segmentDuration ?? DEFAULT_SEGMENT_DURATION;
-    const playhead = jobPlayheadSeconds(live, segmentDuration, session.sourceFps);
+    const playhead = jobPlayheadSeconds(live, segmentDuration, session.sourceFps, session.remuxAssembler);
     if (playhead == null) return;
-    const frontier = this.frontierSeconds(session, segmentDuration);
+    const frontier = await this.frontierSeconds(session, segmentDuration);
     if (frontier == null) return;
     const decision = decideThrottle({
       aheadSeconds: frontier - playhead,
       paused: !!session.throttlePaused,
       thresholdSeconds,
     });
-    if (decision === 'pause') this.pause(session);
-    else if (decision === 'resume') this.resume(session);
+    if (decision === 'pause') this.pause(session, frontier, playhead);
+    else if (decision === 'resume') this.resume(session, frontier, playhead);
   }
 
-  /** Remux: the assembler's own source-time frontier. Transcode ladder: the
+  /** Remux: the assembler's own content-time frontier. Transcode ladder: the
    *  highest segment number on disk, there is no assembler, ffmpeg writes
    *  its own segments straight to the session dir. */
-  private frontierSeconds(session: TranscodeSession, segmentDuration: number): number | null {
+  private async frontierSeconds(
+    session: TranscodeSession,
+    segmentDuration: number,
+  ): Promise<number | null> {
     if (session.remuxAssembler) return session.remuxAssembler.frontierSeconds();
-    const latest = latestSegmentNumber(session.cachePath);
+    const latest = await latestSegmentNumber(session.cachePath);
     if (latest < 0) return null;
     return segmentIndexToSeconds(latest + 1, segmentDuration, session.sourceFps);
   }
 
-  private pause(session: TranscodeSession): void {
+  private pause(session: TranscodeSession, frontier: number, playhead: number): void {
     pauseProcess(session.process, this.log);
     session.throttlePaused = true;
     session.remuxAssembler?.pause();
-    this.log.log(`Throttle: paused [${session.id}], ahead of every viewer's playhead`);
+    const msg = `Throttle: paused [${session.id}], frontier ${frontier.toFixed(1)}s vs playhead ${playhead.toFixed(1)}s`;
+    if (session.throttlePausedOnce) this.log.debug(msg);
+    else {
+      session.throttlePausedOnce = true;
+      this.log.log(msg);
+    }
   }
 
-  private resume(session: TranscodeSession): void {
+  private resume(session: TranscodeSession, frontier?: number, playhead?: number): void {
     resumeProcess(session.process, this.log);
     session.throttlePaused = false;
     session.remuxAssembler?.resume();
-    this.log.log(`Throttle: resumed [${session.id}]`);
+    const detail = frontier != null && playhead != null
+      ? `, frontier ${frontier.toFixed(1)}s vs playhead ${playhead.toFixed(1)}s`
+      : '';
+    this.log.debug(`Throttle: resumed [${session.id}]${detail}`);
   }
 }

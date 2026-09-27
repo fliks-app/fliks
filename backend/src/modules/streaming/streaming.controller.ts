@@ -79,6 +79,7 @@ import {
 import { resolveTonemapPath } from './transcoding/tonemap-path';
 import { resolveTonemapCurve } from './transcoding/ffmpeg-filter-graph';
 import { autoFfmpegSlots } from '../../common/utils/ffmpeg-slots';
+import { getPauseCapability } from './transcoding/ffmpeg-pause';
 import { isOpenclTonemapEnabled } from './transcoding/codec/opencl-tonemap-probe';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
@@ -803,6 +804,7 @@ export class StreamingController {
       cacheTtlHours: +(ss.cacheTtlMs / 3_600_000).toFixed(1),
       ffmpegSlots: ss.ffmpegSlots,
       ffmpegSlotsAuto: autoFfmpegSlots(),
+      pauseCapability: getPauseCapability(),
     };
   }
 

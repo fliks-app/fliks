@@ -1626,6 +1626,7 @@
       "allow_remux_help": "Überträgt das Originalvideo neu verpackt als HLS, ohne Neukodierung. Aus wird stattdessen transkodiert.",
       "throttle_enabled": "Kodierung drosseln",
       "throttle_enabled_help": "Pausiert die Kodierung, sobald sie der Wiedergabe zu weit voraus ist, und setzt sie fort, sobald der Zuschauer aufholt. Spart CPU bei Stopps und Sprüngen.",
+      "throttle_unavailable_help": "Auf diesem Server nicht verfügbar: er kann den Encoder während der Wiedergabe nicht pausieren.",
       "throttle_threshold": "Drosselschwelle",
       "throttle_threshold_help": "Wie viele Sekunden der Encoder der Wiedergabe voraus sein darf, bevor er pausiert. Setzt bei der Hälfte dieses Werts fort.",
       "auto_crop": "Automatisches Zuschneiden der schwarzen Balken",

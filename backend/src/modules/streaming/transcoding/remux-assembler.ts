@@ -123,6 +123,16 @@ export function remuxAssemblyPlan(o: {
   };
 }
 
+/** Segment `i`'s planned source-time boundary: the real grid boundary, or
+ *  (uniform fallback) `segmentDuration` multiples from the plan's origin. */
+function planBoundarySeconds(
+  plan: Pick<RemuxAssemblyPlan, 'boundaries' | 'start' | 'segmentDuration'>,
+  i: number,
+): number {
+  const { boundaries, start, segmentDuration } = plan;
+  return boundaries ? boundaries[Math.min(i, boundaries.length - 1)] : start + i * segmentDuration;
+}
+
 /** The GOP files of `segment`, by ffmpeg number, or null past the end. */
 function gopsOf(plan: RemuxAssemblyPlan, segment: number): number[] | null {
   if (!plan.firstGop) return [segment];
@@ -198,9 +208,8 @@ export class RemuxSegmentAssembler {
   /** `this.next` once the run opened: the baseline `segmentsPerSecond`
    *  measures progress from. */
   private openStartSegment = 0;
-  /** Wall-clock ms this run has spent throttle-paused so far, plus the open
-   *  span below; excluded from {@link segmentsPerSecond} so a paused run
-   *  doesn't read back as a slow one once it resumes. */
+  /** Wall-clock ms spent throttle-paused so far; excluded from
+   *  {@link segmentsPerSecond} so a pause doesn't read back as a slow run. */
   private pausedMs = 0;
   private pausedSince: number | null = null;
 
@@ -281,10 +290,8 @@ export class RemuxSegmentAssembler {
     return this.audio.find((a) => a.index === index)?.served ?? null;
   }
 
-  /** Segments produced per wall-clock second since the run opened, excluding
-   *  any time the throttle service has paused this run, otherwise a long
-   *  pause reads back as a slow run and shrinks {@link canServe}'s wait
-   *  window right when the run resumes. */
+  /** Segments/second since open, excluding paused time: a long pause must
+   *  not read back as a slow run and shrink {@link canServe}'s wait window. */
   segmentsPerSecond(): number | null {
     if (!this.opened || this.openedAt == null) return null;
     const pausedMs =
@@ -294,14 +301,16 @@ export class RemuxSegmentAssembler {
     return (this.next - this.openStartSegment) / elapsedSeconds;
   }
 
-  /** Source-time boundary of the current frontier segment: how far into the
-   *  source this run has produced. Null before the run's landing point is
-   *  known (see {@link videoFrontier}). */
+  /** Content-time boundary of the frontier segment (source time less the
+   *  plan's origin, matching `LiveSession.position`). Null before landing. */
   frontierSeconds(): number | null {
-    if (!this.opened) return null;
-    const { boundaries, start, segmentDuration } = this.plan;
-    if (boundaries) return boundaries[Math.min(this.next, boundaries.length - 1)];
-    return start + this.next * segmentDuration;
+    return this.opened ? this.segmentContentSeconds(this.next) : null;
+  }
+
+  /** Content-time start of served segment `i`, on the keyframe grid's real
+   *  spacing: shared by {@link frontierSeconds} and the throttle service. */
+  segmentContentSeconds(i: number): number {
+    return planBoundarySeconds(this.plan, i) - this.plan.start;
   }
 
   /** Freeze the throughput clock: called when the throttle service stops
@@ -621,9 +630,7 @@ export class RemuxSegmentAssembler {
    *  run's own landing point, which drifts from the video's fixed grid
    *  by whatever the run's own start is offset from segment 0. */
   private boundaryTicks(a: AudioRendition, i: number): bigint {
-    const boundaries = this.plan.boundaries;
-    const seconds = boundaries ? boundaries[i] : this.plan.start + i * this.plan.segmentDuration;
-    return BigInt(Math.round(seconds * a.timescale));
+    return BigInt(Math.round(planBoundarySeconds(this.plan, i) * a.timescale));
   }
 
   private hasMoreSegments(a: AudioRendition): boolean {
