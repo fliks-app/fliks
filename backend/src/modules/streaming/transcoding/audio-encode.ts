@@ -1,5 +1,11 @@
+import { isLibfdkAacEnabled } from './audio-encoder-probe';
+
 /** Audio codecs the backend encodes to. */
 export type AudioEncodeCodec = 'aac' | 'ac3' | 'eac3' | 'opus';
+
+/** Encoder binaries `aac` can resolve to, so the tables below stay the one
+ *  source of truth for both a codec's ceiling and a binary's own limit. */
+type AudioEncoderId = AudioEncodeCodec | 'libfdk_aac';
 
 /** One audio output's decision, per rendition or for the one muxed track: a
  *  verbatim copy of the source, with its probed bitrate and ffprobe profile, or
@@ -29,22 +35,35 @@ const ENCODERS: Record<AudioEncodeCodec, string> = {
 };
 
 /** Measured on jellyfin-ffmpeg 8.1: `ac3`/`eac3` reject 6.1 and 7.1, `aac` and
- *  `libopus` encode 7.1. */
-const ENCODER_MAX_CHANNELS: Record<AudioEncodeCodec, number> = {
+ *  `libopus` encode 7.1. `libfdk_aac` caps at 5.1 (Fraunhofer library limit),
+ *  so 7.1/8-channel AAC output stays on the native encoder. */
+const ENCODER_MAX_CHANNELS: Record<AudioEncoderId, number> = {
   aac: 8,
+  libfdk_aac: 6,
   opus: 8,
   ac3: 6,
   eac3: 6,
 };
 
 /** Samples per packet and priming ahead of the first, measured on jellyfin-ffmpeg
- *  8.1: a stream aligned at t starts at t - padding / rate. */
-const ENCODER_FRAMES: Record<AudioEncodeCodec, { frame: number; padding: number }> = {
+ *  8.1 (init segment edit-list `media_time`): a stream aligned at t starts at
+ *  t - padding / rate. `libfdk_aac` primes a full extra frame over native `aac`
+ *  (2048 vs 1024 samples), same 1024-sample AAC-LC frame either way. */
+const ENCODER_FRAMES: Record<AudioEncoderId, { frame: number; padding: number }> = {
   aac: { frame: 1024, padding: 1024 },
+  libfdk_aac: { frame: 1024, padding: 2048 },
   opus: { frame: 960, padding: 312 },
   ac3: { frame: 1536, padding: 256 },
   eac3: { frame: 1536, padding: 256 },
 };
+
+/** Which binary an `'aac'` encode runs on: libfdk when the boot probe found it
+ *  and the output fits its 6-channel ceiling, else the native fallback. */
+function resolvedAacEncoder(channels: number): 'aac' | 'libfdk_aac' {
+  return isLibfdkAacEnabled() && channels <= ENCODER_MAX_CHANNELS.libfdk_aac
+    ? 'libfdk_aac'
+    : 'aac';
+}
 
 /** Every encode runs at 48 kHz: what Opus and Dolby take, and one of the two
  *  rates Apple's HLS authoring spec allows for AAC, which would otherwise keep
@@ -58,9 +77,15 @@ export interface PacketGrid {
   padding: number;
 }
 
-/** The grid an encode to `codec` lands on. */
-export function encodedPacketGrid(codec: AudioEncodeCodec): PacketGrid {
-  const { frame, padding } = ENCODER_FRAMES[codec];
+/** The grid an encode of `channels` to `codec` lands on: resolves to the same
+ *  binary {@link audioEncoderName} would pick, since `aac` priming differs by
+ *  encoder. */
+export function encodedPacketGrid(
+  codec: AudioEncodeCodec,
+  channels: number,
+): PacketGrid {
+  const key = codec === 'aac' ? resolvedAacEncoder(channels) : codec;
+  const { frame, padding } = ENCODER_FRAMES[key];
   return {
     frame: frame / ENCODE_SAMPLE_RATE,
     padding: padding / ENCODE_SAMPLE_RATE,
@@ -88,8 +113,13 @@ export function isEncodableAudio(codec: string): codec is AudioEncodeCodec {
   return Object.prototype.hasOwnProperty.call(ENCODERS, codec);
 }
 
-export function audioEncoderName(codec: AudioEncodeCodec): string {
-  return ENCODERS[codec];
+/** Encoder binary for one output stream: `aac` resolves to `libfdk_aac` when
+ *  the boot probe found it and `channels` fits its limit, else native `aac`. */
+export function audioEncoderName(
+  codec: AudioEncodeCodec,
+  channels: number,
+): string {
+  return codec === 'aac' ? resolvedAacEncoder(channels) : ENCODERS[codec];
 }
 
 export function encoderMaxChannels(codec: AudioEncodeCodec): number {
@@ -137,7 +167,7 @@ export function audioEncodeArgs(
 ): string[] {
   return [
     `-c:a${spec}`,
-    audioEncoderName(codec),
+    audioEncoderName(codec, channels),
     `-b:a${spec}`,
     `${Math.round(bitrateBps / 1000)}k`,
     // `-ac` / `-ar` carry no stream type, so an indexed one must name the audio.

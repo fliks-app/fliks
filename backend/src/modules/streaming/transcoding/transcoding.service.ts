@@ -49,6 +49,7 @@ import { setFfmpegSlots } from '../../../common/utils/ffmpeg-slots';
 import { enumerateGpus, type GpuInfo } from './gpu-registry';
 import { ALL_DESCRIPTORS, encoderRegistry } from './codec/encoders';
 import { runEncoderProbes } from './codec/encoder-probe';
+import { runAudioEncoderProbe } from './audio-encoder-probe';
 import { ALL_DECODERS } from './codec/decoders';
 import { runDecoderProbes } from './codec/decoder-probe';
 import {
@@ -153,6 +154,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       /* settings unavailable at boot: keep the env/derived defaults */
     }
 
+    // Audio encoders carry no HW/driver risk, so a plain `-encoders` listing
+    // check is enough, independent of hwAccel; runs on every platform.
+    void runAudioEncoderProbe(this.log);
     // Probe every compiled-in encoder. Each runs a single black-frame
     // ffmpeg encode; the descriptors that fail to open are blacklisted
     // in the runtime registry gate. Runs async — module init doesn't

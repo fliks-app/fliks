@@ -1368,7 +1368,7 @@ export function remuxAudioGrid(
   audioPlan: AudioPlan | undefined,
 ): PacketGrid | null {
   const plan = audioPlan ?? DEFAULT_AUDIO_PLAN;
-  return plan.mode === 'copy' ? null : encodedPacketGrid(plan.codec);
+  return plan.mode === 'copy' ? null : encodedPacketGrid(plan.codec, plan.channels);
 }
 
 /** Stereo audio budget of a remux encode: the top rung's. */
