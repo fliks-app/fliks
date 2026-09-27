@@ -6,10 +6,7 @@ import { writeAtomically, writeFileAtomic } from '../../../common/utils/atomic-f
 import type { RemuxRunStart } from './ffmpeg-args';
 import { servedShift } from './source-timeline';
 import { DEFAULT_SEGMENT_DURATION } from './constants';
-import {
-  DECODE_TIME_TOLERANCE_SECONDS,
-  type KeyframeGrid,
-} from './segment-boundaries';
+import { type KeyframeGrid } from './segment-boundaries';
 import { watchDir } from './segment-utils';
 import {
   firstTfdt,
@@ -31,10 +28,6 @@ import {
   type TrackInfo,
 } from './timeline';
 
-/** One AAC frame at its lowest sample rate (1024 / 8000 Hz): the longest
- *  priming our encoders put ahead of a run's first audio sample. */
-const AUDIO_PRIMING_MAX_SECONDS = 1024 / 8000;
-
 /** Tolerance when matching a GOP to the keyframe list: under a frame, above
  *  the output `-ss` rounding to a millisecond time base. */
 const KEYFRAME_MATCH_SECONDS = 0.002;
@@ -45,10 +38,10 @@ const COPY_CHUNK_BYTES = 1 << 20;
 /** Passes, a poll apart, a segment may fail before the error is not a passing lock. */
 const SEGMENT_ATTEMPTS = 3;
 
-/** Edit each served track starts with, in seconds. */
+/** Edit the served video track starts with, in seconds; audio's own is
+ *  read per-track from the run's real encoder delay ({@link audioEditSeconds}). */
 export interface RemuxEdits {
   video: number;
-  audio: number;
   /** Added to every source time: lifts a video that starts before 0 onto 0,
    *  as the transcoded variants are served (`servedShift`). */
   shift: number;
@@ -87,17 +80,16 @@ export interface RemuxAssemblyPlan {
   audioRenditions: number;
 }
 
-/** Edits of the served tracks: the video's reorder delay makes a segment's tfdt
- *  its first frame (Shaka places segments by it); the audio's keeps priming ≥ 0. */
+/** The video's reorder delay makes a served segment's tfdt its first frame
+ *  (Shaka places segments by it, ignoring the edit list). */
 export function remuxEdits(start: number, firstDecode: number): RemuxEdits {
-  const shift = servedShift({ origin: start });
-  // The run from the start seeks this far under the first keyframe.
-  const lowest = firstDecode - DECODE_TIME_TOLERANCE_SECONDS + shift;
-  return {
-    video: start - firstDecode,
-    audio: Math.max(0, AUDIO_PRIMING_MAX_SECONDS - lowest),
-    shift,
-  };
+  return { video: start - firstDecode, shift: servedShift({ origin: start }) };
+}
+
+/** A non-video track's edit, in seconds: its run's own encoder delay, so its raw tfdt
+ *  stays within the video's (Shaka aligns tracks on raw tfdt, not the edit list). */
+function audioEditSeconds(runEdits: Map<number, bigint>, id: number, timescale: number): number {
+  return Math.max(0, Number(runEdits.get(id) ?? 0n)) / timescale;
 }
 
 export function remuxAssemblyPlan(o: {
@@ -357,10 +349,11 @@ export class RemuxSegmentAssembler {
     );
     this.edits = edits;
     this.correction = correction;
-    const editOf = (t: TrackInfo) => (t.isVideo ? edits.video : edits.audio);
+    const editOf = (id: number, t: TrackInfo) =>
+      t.isVideo ? edits.video : audioEditSeconds(runEdits, id, t.timescale);
     const delta = new Map<number, bigint>();
     for (const [id, t] of tracks) {
-      const shift = Math.round((editOf(t) + edits.shift + correction) * t.timescale);
+      const shift = Math.round((editOf(id, t) + edits.shift + correction) * t.timescale);
       let d = BigInt(shift) - (runEdits.get(id) ?? 0n);
       // A first frame at 0 whose derived decode time is a tick off.
       const start = firstTfdt(gop, id);
@@ -509,15 +502,14 @@ export class RemuxSegmentAssembler {
     a.trackId = trackId;
     a.timescale = info.timescale;
     a.correctionTicks = BigInt(Math.round(this.correction * info.timescale));
-    const shift = Math.round(
-      (this.edits.audio + this.edits.shift + this.correction) * info.timescale,
-    );
+    const edit = audioEditSeconds(runEdits, trackId, info.timescale);
+    const shift = Math.round((edit + this.edits.shift + this.correction) * info.timescale);
     a.delta = BigInt(shift) - (runEdits.get(trackId) ?? 0n);
     a.offset = moovEnd;
     await fsp.mkdir(a.dir, { recursive: true });
     const out = path.join(a.dir, `init_${a.index}.mp4`);
     if (!(await this.exists(out))) {
-      await writeFileAtomic(out, withInitEdits(init, () => this.edits!.audio));
+      await writeFileAtomic(out, withInitEdits(init, () => edit));
     }
     return true;
   }

@@ -228,7 +228,7 @@ describe('track edits', () => {
   });
 
   it('sets one edit per track, from its kind', () => {
-    const out = withInitEdits(init, (t) => (t.isVideo ? 0.08 : 0.128));
+    const out = withInitEdits(init, (_id, t) => (t.isVideo ? 0.08 : 0.128));
     expect(edit(out, 1)).toBe(1280n);
     expect(edit(out, 2)).toBe(6144n);
     expect(parseInitTracks(out).get(2)?.timescale).toBe(48000);

@@ -141,7 +141,8 @@ describe('RemuxSegmentAssembler', () => {
     );
   const segs = () => fs.readdirSync(dir).filter((f) => f.startsWith('seg-')).sort();
   const edits = remuxEdits(grid.boundaries[0], grid.keyframes[0].dts);
-  const audioEdit = Math.round(edits.audio * 48000);
+  // This fixture's own run records no audio priming (media_time 0), so its served edit is 0.
+  const audioEdit = 0;
 
   it('lifts a grid that starts before 0 onto 0', () => {
     const wrapped = computeSegmentGrid(
@@ -153,14 +154,32 @@ describe('RemuxSegmentAssembler', () => {
     const e = remuxEdits(wrapped.boundaries[0], wrapped.keyframes[0].dts);
     expect(e.shift).toBeCloseTo(23.72, 9);
     expect(e.video).toBeCloseTo(0.08, 9);
-    // The audio headroom counts on the lifted timeline, where it starts at 0.
-    expect(e.audio).toBeCloseTo(0.128 + 0.08 + 0.01, 9);
   });
 
-  it('derives the edits from the first keyframe', () => {
+  it('derives the video edit from the first keyframe', () => {
     expect(edits.video).toBeCloseTo(0.08, 9);
-    // Priming headroom from under the run-from-start seek.
-    expect(edits.audio).toBeCloseTo(0.128 + 0.08 + 0.01, 9);
+  });
+
+  it("carries a track's own priming, not the video's reorder delay, into its served edit", async () => {
+    // Reorder (0.2 s) is ~10x the real AAC priming (1024 ticks @48k, 0.021 s):
+    // a shared headroom sized off the video would leak into the audio's tfdt.
+    const bigReorder = computeSegmentGrid(
+      [0, 2, 4, 6, 8, 10].map((pts) => ({ pts, dts: pts - 0.2 })),
+      0,
+      12,
+      4,
+    )!;
+    fs.writeFileSync(
+      path.join(gopDir, 'init.mp4'),
+      box('moov', Buffer.concat([trak(1, 1000, 'vide', 200), trak(2, 48000, 'soun', 1024)])),
+    );
+    fs.writeFileSync(path.join(gopDir, 'gop-0.m4s'), gop(0n, 0n));
+    await assemble(0, null, 0, bigReorder);
+    // Both tracks' first sample decodes at 0: audio isn't pushed out by video's edit.
+    expect(tfdts(fs.readFileSync(path.join(dir, 'seg-0000.m4s')))).toEqual([0, 0]);
+    const init = readInitEdits(fs.readFileSync(path.join(dir, 'init.mp4')));
+    expect(init.get(1)).toBe(200n);
+    expect(init.get(2)).toBe(1024n);
   });
 
   it('joins each segment from its grid GOPs and retimes them onto the served timeline', async () => {
@@ -178,14 +197,11 @@ describe('RemuxSegmentAssembler', () => {
       'seg-0002.m4s',
     ]);
     // Video: the run's edit (80) comes off, the served one (80) back on: its
-    // tfdt stays its first frame. Audio moves up by its headroom.
+    // tfdt stays its first frame. Audio: GOP-0's sample (t=-0.021, real
+    // priming) is its own first frame, clamped to 0; later ones land on the
+    // same round grid as video, not shifted by any extra headroom.
     const seg1 = fs.readFileSync(path.join(dir, 'seg-0001.m4s'));
-    expect(tfdts(seg1)).toEqual([
-      4000,
-      Math.round((4 - 0.021) * 48000) + audioEdit,
-      6000,
-      Math.round((6 - 0.021) * 48000) + audioEdit,
-    ]);
+    expect(tfdts(seg1)).toEqual([4000, 4 * 48000, 6000, 6 * 48000]);
     const init = readInitEdits(fs.readFileSync(path.join(dir, 'init.mp4')));
     expect(init.get(1)).toBe(80n);
     expect(init.get(2)).toBe(BigInt(audioEdit));

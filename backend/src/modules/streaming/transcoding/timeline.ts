@@ -296,10 +296,10 @@ function singleEdit(ticks: bigint): Buffer {
 }
 
 /** `initBuf` with each track's edits replaced by one starting its presentation
- *  `secondsOf(track)` into its media. */
+ *  `secondsOf(id, track)` into its media. */
 export function withInitEdits(
   initBuf: Buffer,
-  secondsOf: (track: TrackInfo) => number,
+  secondsOf: (id: number, track: TrackInfo) => number,
 ): Buffer {
   const tracks = parseInitTracks(initBuf);
   const rebuildTrak = (trak: Box): Buffer => {
@@ -308,7 +308,7 @@ export function withInitEdits(
     const id = tkhd ? tkhdTrackId(initBuf, tkhd) : -1;
     const info = tracks.get(id);
     if (!info) return initBuf.subarray(trak.start, trakEnd);
-    const edit = singleEdit(BigInt(Math.round(secondsOf(info) * info.timescale)));
+    const edit = singleEdit(BigInt(Math.round(secondsOf(id, info) * info.timescale)));
     const children: Buffer[] = [];
     for (const b of boxes(initBuf, trak.payloadStart, trakEnd)) {
       if (b.type === 'edts') continue;
