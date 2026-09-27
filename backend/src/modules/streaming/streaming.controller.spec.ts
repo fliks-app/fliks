@@ -36,6 +36,7 @@ interface ControllerDeps {
   sessionRouter?: unknown;
   sessionContextBuilder?: unknown;
   sourceScans?: unknown;
+  staleProbeRescan?: unknown;
   pluginPreRoll?: unknown;
   events?: unknown;
   caslAbilityFactory?: unknown;
@@ -58,6 +59,7 @@ function makeController(deps: ControllerDeps = {}): StreamingController {
     (deps.sessionRouter ?? {}) as never,
     (deps.sessionContextBuilder ?? {}) as never,
     (deps.sourceScans ?? {}) as never,
+    (deps.staleProbeRescan ?? { scheduleIfNeeded: () => {} }) as never,
     (deps.pluginPreRoll ?? {}) as never,
     (deps.events ?? {}) as never,
     (deps.caslAbilityFactory ?? {}) as never,

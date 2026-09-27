@@ -3,9 +3,6 @@ import { createInterface } from 'readline';
 import { stat } from 'fs/promises';
 import * as path from 'path';
 import type { Readable } from 'stream';
-import { Logger } from '@nestjs/common';
-
-const log = new Logger('VideoPackets');
 
 /** A video keyframe packet, in source time. */
 export interface Keyframe {
@@ -39,15 +36,15 @@ export function isMpegTs(formatName: string | undefined): boolean {
 }
 
 /** Whether a probed file is MPEG-TS: its format name, or the extension for a
- *  row probed before the format name was kept. */
+ *  row probed before the format name was kept, source-timeline.ts already
+ *  warns once per such file, so this falls back silently instead of logging
+ *  again on every call (once per segment request). */
 export function sourceIsMpegTs(
   si: { formatName?: string } | null | undefined,
   filePath: string,
 ): boolean {
   if (si?.formatName) return isMpegTs(si.formatName);
-  const byExtension = MPEG_TS_EXTENSIONS.has(path.extname(filePath).toLowerCase());
-  log.debug(`${filePath}: no format name probed; MPEG-TS by extension: ${byExtension}`);
-  return byExtension;
+  return MPEG_TS_EXTENSIONS.has(path.extname(filePath).toLowerCase());
 }
 
 /** ffmpeg's backward discontinuity: a decode time 0.1 s behind the last one. */

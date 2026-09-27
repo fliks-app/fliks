@@ -99,7 +99,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
       { provide: Title, useValue: { setTitle: () => {} } },
       {
         provide: AuthService,
-        useValue: { user: () => ({ id: f.userId, isAdmin: f.isAdmin }), hasPermission: () => false },
+        useValue: { user: () => ({ id: f.userId, isAdmin: f.isAdmin }), hasPermission: () => true },
       },
       { provide: LibraryPrefsService, useValue: { present: (libs: LibrarySummary[]) => libs } },
       { provide: LibrariesApiService, useValue: { listMine: () => Promise.resolve(f.libraries) } },
@@ -117,7 +117,14 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
         },
       },
       { provide: ServerConfigService, useValue: {} },
-      { provide: SseService, useValue: { lastEvent: f.sseLastEvent ?? (() => null), connect: () => {} } },
+      {
+        provide: SseService,
+        useValue: {
+          lastEvent: f.sseLastEvent ?? (() => null),
+          connectionId: () => null,
+          connect: () => {},
+        },
+      },
       { provide: DownloadManagerService, useValue: {} },
       { provide: NavigationHistoryService, useValue: { resetNavHistory: () => {} } },
       { provide: AddToPlaylistService, useValue: { request: () => null, clear: () => {} } },

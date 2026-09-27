@@ -16,8 +16,9 @@ function build(opts: { isNative?: boolean; token?: string | null } = {}) {
     resolveUrl: (p: string) => `https://server.test${p}`,
   };
   wired.auth = {
-    streamToken: () => (opts.token === undefined ? 'tok' : opts.token),
-    accessToken: null,
+    get playbackToken() {
+      return opts.token === undefined ? 'tok' : opts.token;
+    },
   };
   return service;
 }
