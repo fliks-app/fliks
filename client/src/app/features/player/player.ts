@@ -913,19 +913,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Video stream bitrate
     let videoStreamBitrate = '';
     let serverStreamTotalBps: number | undefined;
-    // A pinned rung carries its own authoritative target bitrate from the
-    // backend — use it first so eco / -hdr rungs report their real bitrate
-    // instead of falling back to the variant/remux bandwidth (which left an
-    // eco selection showing the full ~9.7 Mbps).
-    if (
+    // The rung's own video target (eco / -hdr rungs included); its audio budget
+    // is not spent when the audio is copied. A pinned rung's total stands in without it.
+    if (validBps(selectedRateEntry?.videoBitrateBps)) {
+      serverStreamTotalBps = selectedRateEntry!.videoBitrateBps;
+    } else if (
       isTranscodeDelivery &&
       _quality !== 'auto' &&
       _quality !== 'original' &&
       validBps(selectedQualityOpt?.totalBitrateBps)
     ) {
       serverStreamTotalBps = selectedQualityOpt!.totalBitrateBps;
-    } else if (selectedRateEntry) {
-      serverStreamTotalBps = selectedRateEntry.totalBitrateBps;
     } else if (deliveredKind != null && !isTranscodeDelivery && validBps(src?.videoBitRate)) {
       // A copy's own video bitrate; remuxMasterBandwidthBps also counts audio.
       serverStreamTotalBps = src!.videoBitRate;

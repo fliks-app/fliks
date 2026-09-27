@@ -1129,7 +1129,7 @@ describe('PlayerComponent stats overlay: delivery-based labels', () => {
     h.component.statsVisible.set(true);
 
     const stats = h.component.playerStats();
-    expect(stats?.videoStreamBitrate).toBe('2.0 Mbps');
+    expect(stats?.videoStreamBitrate).toBe('1.9 Mbps');
   });
 
   it('direct: video bitrate falls back to the source file bitrate, not a rateMap/remux figure', () => {
@@ -1259,7 +1259,7 @@ describe('PlayerComponent stats overlay: H4 bitrate cascade', () => {
     h.component.statsVisible.set(true);
 
     const stats = h.component.playerStats();
-    expect(stats?.videoStreamBitrate).toBe('3.1 Mbps');
+    expect(stats?.videoStreamBitrate).toBe('3.0 Mbps');
   });
 
   it('audio: reads the active track\'s own bitrate/sample rate from playbackInfo.audioTracks', () => {

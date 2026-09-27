@@ -24,6 +24,15 @@ describe('deliveredKindFromVariant', () => {
     ).toBe('transcode');
   });
 
+  it('ignores a variant left over from the previous session while the next one loads', () => {
+    expect(
+      deliveredKindFromVariant(
+        '/api/stream/123/master.m3u8?token=x&sid=new&startQuality=480p',
+        '/api/stream/123/remux/index.m3u8?token=x&sid=old',
+      ),
+    ).toBe('transcode');
+  });
+
   it('falls back to the query string when no variant id is available (native/Tizen/webOS/desktop)', () => {
     expect(
       deliveredKindFromVariant('/api/stream/123/master.m3u8?token=x&remux=1'),

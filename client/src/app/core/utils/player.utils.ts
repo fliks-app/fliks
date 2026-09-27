@@ -376,7 +376,9 @@ export function deliveredKindFromVariant(
   originalVideoId?: string | null,
 ): PlaybackMode {
   if (!url.includes('master.m3u8')) return 'direct';
-  if (originalVideoId != null) {
+  // A variant still showing from the previous load carries that load's sid.
+  const sidOf = (u: string) => /[?&]sid=([^&]+)/.exec(u)?.[1];
+  if (originalVideoId != null && sidOf(originalVideoId) === sidOf(url)) {
     return originalVideoId.includes('/remux/') ? 'remux' : 'transcode';
   }
   const hasRemux = /[?&]remux=1(?:&|$)/.test(url);

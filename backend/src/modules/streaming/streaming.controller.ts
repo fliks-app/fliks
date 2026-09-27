@@ -1319,6 +1319,8 @@ export class StreamingController {
       mediaFileId,
       sourceWidth: w,
       sourceHeight: h,
+      remuxWidth: v?.width,
+      remuxHeight: v?.height,
       tokenParam,
       includeRemux,
       sourceBitrate: sourceBitrate || undefined,

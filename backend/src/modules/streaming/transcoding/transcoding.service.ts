@@ -432,8 +432,16 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     existing.lastAccess = Date.now();
 
     if (!(await segmentNearby(existing.cachePath, requestedSegment))) {
+      // A live run that has yet to write its first segment reaches the ones just after it.
+      const start = existing.startSegment ?? 0;
+      const runStarting =
+        existing.process.exitCode === null &&
+        requestedSegment >= start &&
+        requestedSegment - start <= SEEK_WAIT_THRESHOLD &&
+        !(await segmentWithinReach(existing.cachePath, start, 0));
       // Within reach of the encoder frontier: buffer-ahead, wait. Beyond it: seek.
       if (
+        runStarting ||
         await segmentWithinReach(
           existing.cachePath,
           requestedSegment,

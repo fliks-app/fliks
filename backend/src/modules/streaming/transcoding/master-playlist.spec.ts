@@ -337,6 +337,11 @@ describe('generateMasterPlaylist — remux variant (copy path)', () => {
     expect(m).not.toMatch(/\/api\/stream\/26\/(eco-)?\d+p\/index\.m3u8/);
   });
 
+  it('declares the coded size of the copy, not the crop the ladder applies', () => {
+    const lines = streamInfLines(remuxMaster({ remuxWidth: 1920, remuxHeight: 1080 }));
+    expect(lines[0]).toContain('RESOLUTION=1920x1080');
+  });
+
   it('declares the probed source CODECS, never a rung-derived level', () => {
     const lines = streamInfLines(remuxMaster());
     // L4.1 (29) as probed. The rung arithmetic would say L4.0 (28) for

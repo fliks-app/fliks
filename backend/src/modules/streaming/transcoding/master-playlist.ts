@@ -193,6 +193,10 @@ export interface MasterPlaylistOptions {
   mediaFileId: number;
   sourceWidth: number;
   sourceHeight: number;
+  /** Coded size of the copy variant: a copy keeps the bars the ladder crops.
+   *  Defaults to {@link sourceWidth} x {@link sourceHeight}. */
+  remuxWidth?: number;
+  remuxHeight?: number;
   tokenParam: string;
   includeRemux?: boolean;
   sourceBitrate?: number;
@@ -254,6 +258,8 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
     mediaFileId,
     sourceWidth,
     sourceHeight,
+    remuxWidth = sourceWidth,
+    remuxHeight = sourceHeight,
     tokenParam,
     includeRemux = false,
     sourceBitrate,
@@ -366,8 +372,8 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
       pushRemuxVariant(lines, {
         mediaFileId,
         tokenParam,
-        sourceWidth,
-        sourceHeight,
+        sourceWidth: remuxWidth,
+        sourceHeight: remuxHeight,
         frameRateAttr,
         audioAttr,
         subsAttr,
@@ -443,8 +449,8 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
     pushRemuxVariant(lines, {
       mediaFileId,
       tokenParam,
-      sourceWidth,
-      sourceHeight,
+      sourceWidth: remuxWidth,
+      sourceHeight: remuxHeight,
       frameRateAttr,
       audioAttr,
       subsAttr,
