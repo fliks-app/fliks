@@ -131,7 +131,9 @@
       "AudioChannelsNotSupported": "Demasiados canales de audio",
       "AudioStartOffset": "Desfase de sincronización audio/vídeo",
       "AudioFormatMayChange": "El formato de audio puede cambiar durante la emisión",
-      "AudioEndsEarly": "El audio termina antes que el vídeo"
+      "AudioEndsEarly": "El audio termina antes que el vídeo",
+      "MuxNotSupported": "Empaquetado MPEG-TS no compatible",
+      "DirectStreamDisabled": "Remux desactivado por el servidor"
     },
     "preparing": "Preparando la transmisión…"
   },
@@ -1613,6 +1615,8 @@
       "subtitle_prewarm_off_help": "Nada se ejecuta por adelantado. La primera vez que se muestra un subtítulo se espera la lectura del contenedor: segundos para un episodio, hasta un minuto para un remux grande.",
       "segment_duration": "Duración de los segmentos",
       "segment_duration_help": "Segmentos más cortos = inicio más rápido pero más peticiones HTTP. 3s es un buen compromiso.",
+      "allow_remux": "Permitir remux",
+      "allow_remux_help": "Transmite el vídeo original reempaquetado como HLS, sin recodificar. Desactivado, se aplica una transcodificación en su lugar.",
       "auto_crop": "Recorte automático de las barras negras",
       "auto_crop_help": "Quita las bandas negras, a costa de un recodificado. Desactivado, se conservan y la fuente se reproduce tal cual.",
       "init_time": "Duración del primer segmento",

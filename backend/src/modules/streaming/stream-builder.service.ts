@@ -623,7 +623,36 @@ export class StreamBuilderService {
     // configuration box on `-c:v copy`, so a copied P5 (whose base layer isn't
     // valid HDR10) would render green/purple. P5 rides raw DirectPlay (whole
     // original file, DV intact) or a tonemap transcode instead — never remux.
-    const canCopyVideo = sourceCopyable && !forceLadder && !dvP5;
+    // buildRemuxArgs only ever writes fMP4; a TS-mux session (Tizen
+    // single-audio) would list seg-N.ts with no producer.
+    const muxRejectsCopy = hlsMux === 'ts';
+    const rejectsCopy = profile.rejectCopy === true;
+    const allowDirectStream = this.activeStreamTracker.getAllowDirectStream();
+    if (muxRejectsCopy) {
+      reasons.push({
+        flag: 'MuxNotSupported',
+        message: "MPEG-TS packaging can't carry a copied video stream",
+      });
+    }
+    if (rejectsCopy) {
+      reasons.push({
+        flag: 'ClientRejectedCopy',
+        message: 'Client asked for a transcode instead of a copied stream',
+      });
+    }
+    if (!allowDirectStream) {
+      reasons.push({
+        flag: 'DirectStreamDisabled',
+        message: 'Direct Stream (remux) is disabled on this server',
+      });
+    }
+    const canCopyVideo =
+      sourceCopyable &&
+      !forceLadder &&
+      !dvP5 &&
+      !muxRejectsCopy &&
+      !rejectsCopy &&
+      allowDirectStream;
 
     // The renditions a var_stream_map encode of the session emits.
     const groupDecisions = this.decideAudio(

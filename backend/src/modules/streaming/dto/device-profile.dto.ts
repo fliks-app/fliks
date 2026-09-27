@@ -261,4 +261,10 @@ export class DeviceProfileDto {
   @IsBoolean()
   @IsOptional()
   supportsAbr?: boolean;
+
+  /** Client rejects a copied HLS variant (DirectStream); the session
+   *  transcodes instead, flagged `ClientRejectedCopy`. DirectPlay is unaffected. */
+  @IsBoolean()
+  @IsOptional()
+  rejectCopy?: boolean;
 }

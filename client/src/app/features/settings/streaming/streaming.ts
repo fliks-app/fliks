@@ -49,6 +49,9 @@ export class StreamingSettingsComponent implements OnInit {
   /** When off, detected black bars are kept instead of cropped — avoids a
    *  forced re-encode on low-power servers. Default on. */
   readonly autoCropEnabled = signal(true);
+  /** When off, a session that could copy the video is transcoded instead —
+   *  no DirectStream (remux) offered at all. Default on. */
+  readonly allowRemux = signal(true);
   /** How the "Auto" quality resolves: 'directplay' tries Direct Play first
    *  (zero transcoding when compatible), 'abr' always uses the adaptive HLS
    *  ladder. Explicit quality picks are unaffected. */
@@ -83,6 +86,7 @@ export class StreamingSettingsComponent implements OnInit {
       this.segmentDuration.set(all['streaming_segment_duration'] ?? '3');
       this.qsvPreset.set(all['streaming_qsv_preset'] ?? 'faster');
       this.autoCropEnabled.set(all['streaming_auto_crop_enabled'] !== 'false');
+      this.allowRemux.set(all['streaming_allow_direct_stream'] !== 'false');
       this.autoQualityMode.set(
         all['streaming_auto_quality_mode'] === 'abr' ? 'abr' : 'directplay',
       );
@@ -132,6 +136,7 @@ export class StreamingSettingsComponent implements OnInit {
         streaming_auto_quality_mode: this.autoQualityMode(),
         streaming_subtitle_prewarm: this.subtitlePrewarm(),
         streaming_auto_crop_enabled: String(this.autoCropEnabled()),
+        streaming_allow_direct_stream: String(this.allowRemux()),
       });
       this.toast.success(this.translate.instant('settings.streaming.saved'));
     } catch { /* interceptor */ }

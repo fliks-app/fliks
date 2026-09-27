@@ -10,6 +10,7 @@ const svc = () =>
       getAutoCropEnabled: () => false,
       getTonemapAlgo: () => 'auto',
       getSegmentDuration: () => 3,
+      getAllowDirectStream: () => true,
     } as never,
   );
 
@@ -275,7 +276,10 @@ describe('StreamBuilderService — one audio decision per track', () => {
       [{ codec: 'ac3', channels: 6, startTimeSeconds: 0.3 }],
       profile(['ac3'], { useTsOnSingleAudio: true }),
     );
-    expect(r.playMethod).toBe('DirectStream');
+    // TS mux forces the video onto the transcode ladder (buildRemuxArgs is
+    // fMP4-only); the picked track's own copy/transcode decision is unaffected.
+    expect(r.playMethod).toBe('Transcode');
+    expect(flags(r)).toContain('MuxNotSupported');
     expect(r.audioPlan).toEqual({ mode: 'copy', codec: 'ac3', channels: 6 });
   });
 

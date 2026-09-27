@@ -61,7 +61,7 @@ import {
   sourceTimeline,
 } from './transcoding/source-timeline';
 import { copySourceCodecString } from './transcoding/codec/codec-strings';
-import { LiveSessionRegistry } from './live-session.service';
+import { LiveSessionRegistry, type SessionKind } from './live-session.service';
 import * as path from 'path';
 import { SegmentPackagingService } from './services/segment-packaging.service';
 import { SessionRouter } from './services/session-router.service';
@@ -779,6 +779,7 @@ export class StreamingController {
     this.activeStreamTracker.setSegmentDuration(ss.segmentDuration);
     this.activeStreamTracker.setTonemapAlgo(ss.tonemapAlgo);
     this.activeStreamTracker.setAutoCropEnabled(ss.autoCropEnabled);
+    this.activeStreamTracker.setAllowDirectStream(ss.allowDirectStream);
     // Re-push the admin settings (GPU pin, tone-map curve, cache budget, job
     // slots) so a change applies without a restart.
     this.transcodingService.applyStreamingSettings(ss);
@@ -2032,6 +2033,14 @@ export class StreamingController {
       );
     }
     const live = this.sessionRouter.findRequestSession(req, mediaFileId);
+    // Truthful for the admin dashboard: a decision made at playback-info can
+    // be superseded (ABR switch between the remux rung and a transcoded one).
+    if (live) {
+      const servedKind: SessionKind = quality === 'remux' ? 'remux' : 'transcode';
+      if (live.kind !== servedKind) {
+        this.liveSessions.update(live.sessionId, { kind: servedKind });
+      }
+    }
 
     // Fast path: if a session already exists, skip the DB query — we only
     // need resolveFile for absolutePath + context when creating a NEW session.

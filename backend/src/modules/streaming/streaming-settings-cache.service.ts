@@ -47,6 +47,9 @@ export interface StreamingSettings {
    * Direct Play / remux with the black bars intact instead of transcoding.
    */
   autoCropEnabled: boolean;
+  /** Whether DirectStream (remux) may be offered at all. Off forces every
+   *  otherwise-copyable playback onto the transcode ladder instead. Default `true`. */
+  allowDirectStream: boolean;
   /** GPU render node for hardware transcoding, or `'auto'` to let the host
    *  pick. On a multi-GPU box, pinning a specific `/dev/dri/renderD*` keeps
    *  sessions off the wrong adapter. */
@@ -78,6 +81,7 @@ const KEYS = [
   'streaming_ffmpeg_slots',
   'streaming_auto_quality_mode',
   'streaming_auto_crop_enabled',
+  'streaming_allow_direct_stream',
   'streaming_gpu_render_node',
   'streaming_subtitle_prewarm',
 ] as const;
@@ -147,6 +151,7 @@ export class StreamingSettingsCache implements OnModuleInit {
       ffmpegSlots,
       autoQualityMode,
       autoCropEnabled,
+      allowDirectStream,
       gpuRenderNode,
       subtitlePrewarm,
     ] = values;
@@ -183,6 +188,8 @@ export class StreamingSettingsCache implements OnModuleInit {
       // Default on (preserve current behaviour); only the explicit string
       // 'false' disables cropping.
       autoCropEnabled: autoCropEnabled !== 'false',
+      // Default on; only the explicit string 'false' disables DirectStream.
+      allowDirectStream: allowDirectStream !== 'false',
       gpuRenderNode: renderNode,
       subtitlePrewarm: SUBTITLE_PREWARMS.includes(
         subtitlePrewarm as SubtitlePrewarm,

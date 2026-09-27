@@ -14,6 +14,9 @@ import { buildLiveSession, type LiveSession } from './live-session.service';
 import type { PreRollItem } from '../../common/plugin-contract';
 import type { User } from '../users/entities/user.entity';
 import { ForbiddenException } from '@nestjs/common';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 describe('buildIFramePlaylist', () => {
   const url = (i: string): string => `iframe/seg-${i}.ts`;
@@ -407,5 +410,89 @@ describe('StreamingController.hlsPlaylist (remux)', () => {
       grid.durations.map((d) => Number(d.toFixed(3))),
     );
     expect(extinf(await playlistFor({ remuxGrid: null }))).toEqual([6, 6, 6, 6, 1]);
+  });
+});
+
+describe('StreamingController.hlsSegment — kind refresh', () => {
+  const cacheRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fliks-kind-refresh-'));
+  afterAll(() => fs.rmSync(cacheRoot, { recursive: true, force: true }));
+
+  /** Serves `quality`'s segment off a real on-disk file via the fast path
+   *  (an `existing` session + a live session already resolved), so the
+   *  refresh runs without exercising the slow spawn path. */
+  async function serveSegment(
+    quality: string,
+    live: LiveSession,
+  ): Promise<{ liveSessions: { update: jest.Mock } }> {
+    const segPath = path.join(cacheRoot, 'seg-0001.m4s');
+    fs.writeFileSync(segPath, 'x');
+    const liveSessions = { update: jest.fn() };
+    const controller = new StreamingController(
+      { resolveFile: jest.fn().mockResolvedValue({}) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { getSegmentDuration: () => 3 } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      liveSessions as never,
+      { serve: jest.fn().mockResolvedValue(undefined) } as never,
+      {
+        assertFresh: jest.fn(),
+        findRequestSession: jest.fn().mockReturnValue(live),
+        resolveSession: jest.fn().mockReturnValue({
+          quality,
+          cachePath: cacheRoot,
+          segmentDuration: 3,
+        }),
+      } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    await controller.hlsSegment(
+      42,
+      quality,
+      'seg-0001.m4s',
+      { query: {}, user: { id: 7 } } as never,
+      { id: 7 } as User,
+      { setHeader: jest.fn() } as never,
+    );
+    return { liveSessions };
+  }
+
+  it('flips a remux-decided session to transcode once a rung is actually served', async () => {
+    const live = buildLiveSession(
+      { userId: 7, username: null, mediaFileId: 42, kind: 'remux' },
+      'sid-1',
+      0,
+    );
+    const { liveSessions } = await serveSegment('1080p', live);
+    expect(liveSessions.update).toHaveBeenCalledWith(live.sessionId, { kind: 'transcode' });
+  });
+
+  it('flips a transcode-decided session to remux once the remux rendition is served', async () => {
+    const live = buildLiveSession(
+      { userId: 7, username: null, mediaFileId: 42, kind: 'transcode' },
+      'sid-1',
+      0,
+    );
+    const { liveSessions } = await serveSegment('remux', live);
+    expect(liveSessions.update).toHaveBeenCalledWith(live.sessionId, { kind: 'remux' });
+  });
+
+  it('is a no-op once the served kind already matches', async () => {
+    const live = buildLiveSession(
+      { userId: 7, username: null, mediaFileId: 42, kind: 'transcode' },
+      'sid-1',
+      0,
+    );
+    const { liveSessions } = await serveSegment('1080p', live);
+    expect(liveSessions.update).not.toHaveBeenCalled();
   });
 });

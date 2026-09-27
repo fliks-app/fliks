@@ -203,6 +203,7 @@ export interface CreateLiveSessionInput {
 export type LiveSessionPatch = Partial<
   Pick<
     LiveSession,
+    | 'kind'
     | 'useTs'
     | 'audioPlan'
     | 'audioStreamIndex'

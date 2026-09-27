@@ -7,6 +7,7 @@ const svc = (autoCrop = false) =>
     {
       getAutoCropEnabled: () => autoCrop,
       getTonemapAlgo: () => 'auto',
+      getAllowDirectStream: () => true,
     } as never,
   );
 

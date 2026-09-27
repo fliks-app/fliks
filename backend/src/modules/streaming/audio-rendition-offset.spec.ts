@@ -8,6 +8,7 @@ const svc = () =>
       getAutoCropEnabled: () => false,
       getTonemapAlgo: () => 'auto',
       getSegmentDuration: () => 3,
+      getAllowDirectStream: () => true,
     } as never,
   );
 

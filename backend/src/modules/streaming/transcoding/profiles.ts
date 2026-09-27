@@ -127,13 +127,8 @@ export const DESKTOP_PROFILES: TranscodeProfile[] = [
  *  so the file size matches what users expect from the rung label.
  *  Audio bitrates unchanged from the SDR ladder. */
 export const DESKTOP_HDR_PROFILES: TranscodeProfile[] = [
-  // 2160p-hdr replaces the former HEVC HDR "remux" pass-through at the
-  // top of the HDR ladder. Pure `-c:v copy` is incompatible with the
-  // synthetic uniform-3s VOD playlist (segments cut at every source
-  // IDR → variable durations 1–10 s+), and re-encode forces predictable
-  // 3 s segments via `-force_key_frames`. 28 Mbps HEVC Main10 is
-  // visually transparent vs typical 50–80 Mbps source 4K HDR — the
-  // re-encode preserves HDR10/HLG signaling end-to-end.
+  // Re-encode alternative to remux (copy works today via the persisted
+  // keyframe grid) — 28 Mbps HEVC Main10 stays visually transparent vs source.
   {
     name: '2160p-hdr',
     maxWidth: 3840,

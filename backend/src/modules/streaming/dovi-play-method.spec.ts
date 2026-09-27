@@ -4,7 +4,11 @@ import type { DeviceProfileDto } from './dto/device-profile.dto';
 const svc = () =>
   new StreamBuilderService(
     { getDetectedHwAccel: () => 'none' } as never,
-    { getAutoCropEnabled: () => false, getTonemapAlgo: () => 'auto' } as never,
+    {
+      getAutoCropEnabled: () => false,
+      getTonemapAlgo: () => 'auto',
+      getAllowDirectStream: () => true,
+    } as never,
   );
 
 const hdrHevcClient: DeviceProfileDto = {

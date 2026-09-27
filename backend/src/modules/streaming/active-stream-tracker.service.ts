@@ -39,4 +39,14 @@ export class ActiveStreamTracker {
   getAutoCropEnabled(): boolean {
     return this.autoCropEnabledCache;
   }
+
+  /** Whether DirectStream (remux) may be offered (admin-configurable, global).
+   *  Off forces every otherwise-copyable playback onto the transcode ladder. */
+  private allowDirectStreamCache = true;
+  setAllowDirectStream(enabled: boolean) {
+    this.allowDirectStreamCache = enabled;
+  }
+  getAllowDirectStream(): boolean {
+    return this.allowDirectStreamCache;
+  }
 }
