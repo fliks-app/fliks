@@ -1426,6 +1426,30 @@ describe('PlayerComponent H5: refreshSidAndReload adopts the fresh decision', ()
   });
 });
 
+describe('PlayerComponent reloadStream: startAt', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  it('passes the live position as startAt, never the backend-saved DB position', async () => {
+    const h = createHarness();
+    h.engine.currentTime = 456;
+
+    await h.component.reloadStream();
+
+    expect((h.streamingApi.getPlaybackInfo.mock.calls[0] as any[])[5]).toBe(456);
+  });
+
+  it('passes 0 explicitly rather than omitting it, so a restart-to-0 overrides a stale saved position', async () => {
+    const h = createHarness();
+    h.engine.currentTime = 0;
+
+    await h.component.reloadStream();
+
+    expect((h.streamingApi.getPlaybackInfo.mock.calls[0] as any[])[5]).toBe(0);
+  });
+});
+
 describe('PlayerComponent remux fallback on a rejected load', () => {
   afterEach(() => {
     TestBed.resetTestingModule();

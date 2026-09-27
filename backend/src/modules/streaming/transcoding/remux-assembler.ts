@@ -14,9 +14,20 @@ import { watchDir } from './segment-utils';
 import {
   firstTfdt,
   parseInitTracks,
+  parseTrexDefaults,
   readInitEdits,
   retimeFragments,
+  videoDecodeExtent,
   withInitEdits,
+  TFHD_DEFAULT_DURATION,
+  TFHD_DEFAULT_SIZE,
+  TFHD_DEFAULT_FLAGS,
+  TRUN_DATA_OFFSET,
+  TRUN_FIRST_SAMPLE_FLAGS,
+  TRUN_SAMPLE_DURATION,
+  TRUN_SAMPLE_SIZE,
+  TRUN_SAMPLE_FLAGS,
+  TRUN_SAMPLE_CTS,
   type TrackInfo,
 } from './timeline';
 
@@ -173,7 +184,13 @@ export class RemuxSegmentAssembler {
   private gopOffset = 0;
   private delta: Map<number, bigint> | null = null;
   /** The run's video track and what adds to its tfdt to give source time. */
-  private video: { id: number; timescale: number; correction: number } | null = null;
+  private video: {
+    id: number;
+    timescale: number;
+    correction: number;
+    /** `trex` default duration, for a sample whose trun and tfhd give none. */
+    trexDefault: number;
+  } | null = null;
   private readonly chunk = Buffer.alloc(COPY_CHUNK_BYTES);
   private unwatch: (() => void) | null = null;
   private chain: Promise<void> = Promise.resolve();
@@ -279,11 +296,22 @@ export class RemuxSegmentAssembler {
     );
   }
 
-  /** The GOP after `gop` has started: the muxer renames a GOP it cuts short at
-   *  exit too, so only that proves `gop` whole. */
-  private async followed(gop: number): Promise<boolean> {
-    const after = this.gopPath(gop + 1);
-    return (await this.exists(`${after}.tmp`)) || this.exists(after);
+  /** Complete once its video decode reaches the next keyframe's time on the
+   *  grid (the last GOP: the video's end), whichever way ffmpeg exited. */
+  private async isComplete(gop: number): Promise<boolean> {
+    const file = this.gopPath(gop);
+    if (!(await this.exists(file))) return false;
+    const { gopPts, boundaries } = this.plan;
+    // Uniform fallback: no grid to prove decode position against, so a
+    // rename (the muxer's own segment-closed signal) is all there is.
+    if (!gopPts || !boundaries || !this.video) return true;
+    const extent = videoDecodeExtent(await readMoofs(file), this.video.id, this.video.trexDefault);
+    if (!extent) return false;
+    const targetSeconds = gop + 1 < gopPts.length ? gopPts[gop + 1] : boundaries[boundaries.length - 1];
+    const targetTicks = BigInt(
+      Math.round((targetSeconds - this.video.correction) * this.video.timescale),
+    );
+    return extent.end + extent.lastDuration / 2n >= targetTicks;
   }
 
   private async pump(): Promise<void> {
@@ -291,7 +319,7 @@ export class RemuxSegmentAssembler {
     if (!this.delta && !(await this.openRun())) return;
     for (;;) {
       const gops = gopsOf(this.plan, this.next);
-      if (!gops || !(await this.followed(gops[gops.length - 1]))) break;
+      if (!gops || !(await this.isComplete(gops[gops.length - 1]))) break;
       await this.assemble(this.next, gops);
       this.next++;
       this.failures = 0;
@@ -313,7 +341,15 @@ export class RemuxSegmentAssembler {
     const gop = await readMoofs(first);
     const correction = this.locateRun(gop, tracks);
     const video = [...tracks].find(([, t]) => t.isVideo);
-    this.video = video ? { id: video[0], timescale: video[1].timescale, correction } : null;
+    const trex = parseTrexDefaults(init);
+    this.video = video
+      ? {
+          id: video[0],
+          timescale: video[1].timescale,
+          correction,
+          trexDefault: trex.get(video[0]) ?? 0,
+        }
+      : null;
     const runVideoEdit = video ? Number(runEdits.get(video[0]) ?? 0n) / video[1].timescale : 0;
     const edits = remuxEdits(
       this.plan.start,
@@ -434,10 +470,15 @@ export class RemuxSegmentAssembler {
     if (!this.delta || !gops) return;
     const written: number[] = [];
     for (const g of gops) if (await this.exists(this.gopPath(g))) written.push(g);
+    // A clean exit code proves nothing about the last GOP: a killed service
+    // manager can SIGTERM ffmpeg itself, whose trailer renames it anyway.
+    if (written.length > 0 && !(await this.isComplete(written[written.length - 1]))) {
+      written.pop();
+    }
     if (written.length === 0) return;
     if (written.length < gops.length) {
       this.log.warn(
-        `[${this.label}] last segment ${this.next}: ${written.length} of ${gops.length} planned GOPs were written`,
+        `[${this.label}] last segment ${this.next}: ${written.length} of ${gops.length} planned GOPs were complete`,
       );
     }
     await this.assemble(this.next, written);
@@ -650,16 +691,7 @@ async function copyRange(
 
 // ── Audio fragment tailing (buildMultiAudioOutputs' `a<i>.mp4`) ───────────
 
-const TFHD_DEFAULT_DURATION = 0x000008;
-const TFHD_DEFAULT_SIZE = 0x000010;
-const TFHD_DEFAULT_FLAGS = 0x000020;
 const TFHD_BASE_IS_MOOF = 0x020000;
-const TRUN_DATA_OFFSET = 0x000001;
-const TRUN_FIRST_SAMPLE_FLAGS = 0x000004;
-const TRUN_SAMPLE_DURATION = 0x000100;
-const TRUN_SAMPLE_SIZE = 0x000200;
-const TRUN_SAMPLE_FLAGS = 0x000400;
-const TRUN_SAMPLE_CTS = 0x000800;
 
 interface RawSample {
   duration: number;

@@ -44,4 +44,15 @@ describe('TranscodingService.resolveExistingSession', () => {
     expect(await resolve(run(0), 40)).toBeNull();
     expect(killed).toBe(1);
   });
+
+  it('leaves the map entry in place on a restart, never absent for a concurrent lookup', async () => {
+    const session = run(0);
+    const sessions = (svc as unknown as { sessions: Map<string, TranscodeSession> }).sessions;
+    sessions.set('k', session);
+    expect(await resolve(session, 40)).toBeNull();
+    // The caller overwrites this same key once it spawns the replacement; a
+    // lookup racing in between (outside this call's lock) must see the
+    // outgoing session, never nothing, or it may spawn its own duplicate.
+    expect(sessions.get('k')).toBe(session);
+  });
 });

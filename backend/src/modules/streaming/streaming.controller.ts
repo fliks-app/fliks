@@ -1753,11 +1753,13 @@ export class StreamingController {
         // Same race, remux playback: spawn the copy session, not a
         // guessed top-rung transcode mislabeled 'remux' into the audio group.
         const grid = live.remuxGrid ?? null;
+        // The real request, not a (possibly stale) heartbeat position: a wrong
+        // anchor here can kill and mis-respawn a session another request just spawned.
         const startSeg = this.anchorSegment(
           live,
           null,
-          true,
-          0,
+          isInit,
+          segIndex,
           grid
             ? { boundaries: grid.boundaries, origin: ctx.sourceStartPts ?? 0 }
             : undefined,
@@ -1790,10 +1792,9 @@ export class StreamingController {
           (live?.hdrLadder ?? false) && !baseQuality.endsWith('-hdr')
             ? `${baseQuality}-hdr`
             : baseQuality;
-        // No existing main and we're spawning to serve a request: anchor at the
-        // resume floor (the session playhead), not segment 0, so a resume starts
-        // ffmpeg at the resume segment directly. See {@link anchorSegment}.
-        const startSeg = this.anchorSegment(live, null, true, 0);
+        // An init anchors at the resume floor (the session playhead); a real
+        // segment anchors at the one requested, never a stale heartbeat position.
+        const startSeg = this.anchorSegment(live, null, isInit, segIndex);
         videoSession = await this.transcodingService.getOrCreateSession(
           mediaFileId,
           quality,

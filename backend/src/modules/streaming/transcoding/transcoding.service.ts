@@ -393,8 +393,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
    * Resolve an existing session: serve from cache, wait for FFmpeg, or signal
    * that a new session is needed. Shared between transcode and remux paths.
    *
-   * Returns the existing session if it can serve the segment, or null if the
-   * caller should create a new session (session is deleted from the map).
+   * Returns the existing session, or null if the caller should create a new
+   * one; still registered under `key` so a concurrent lookup never sees it gone.
    */
   private async resolveExistingSession(
     key: string,
@@ -411,7 +411,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       this.log.log(
         `Session [${key}]: exited but segment ${requestedSegment} not cached, restarting`,
       );
-      this.sessions.delete(key);
       existing.startSegment = requestedSegment;
       return null;
     }
@@ -420,7 +419,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       this.log.warn(
         `Session [${key}]: FFmpeg crashed (code ${existing.process.exitCode}), restarting`,
       );
-      this.sessions.delete(key);
       // A remux run's own files are its GOP dir, which its assembler removes;
       // the session dir holds every run's segments and the shared init.
       if (!existing.remux) await fsp.rm(existing.cachePath, { recursive: true, force: true });
@@ -453,7 +451,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       this.log.log(
         `Seek: restarting [${key}] from segment ${requestedSegment} (not cached)`,
       );
-      this.sessions.delete(key);
       existing.intentionallyKilled = true;
       await this.killProcess(existing.process);
       existing.startSegment = requestedSegment;
@@ -465,7 +462,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       this.log.log(
         `Seek: segment ${requestedSegment} cached, restarting [${key}] at unreachable gap ${gap}`,
       );
-      this.sessions.delete(key);
       existing.intentionallyKilled = true;
       await this.killProcess(existing.process);
       existing.startSegment = gap;
@@ -627,7 +623,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         if (requestedSegment === 0 && existing.startSegment) {
           requestedSegment = existing.startSegment;
         }
-        this.sessions.delete(key);
+        // Left registered under `key` (see resolveExistingSession) until the
+        // spawn below overwrites it.
         existing.intentionallyKilled = true;
         await this.killProcess(existing.process);
       } else {
@@ -945,11 +942,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
 
     if (existsSync(segPath)) return segPath;
 
-    if (segmentName.includes('init')) {
-      await session.ready;
-      if (existsSync(segPath)) return segPath;
-    }
-
+    // Init segments land well before the first full one; the watch below
+    // serves it the instant it appears, and callers guard the 0-byte creat() race.
     const dir = path.dirname(segPath);
     const name = path.basename(segPath);
 
@@ -1320,7 +1314,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         this.log.log(
           `Switch to remux [${key}]: killing old ${existing.quality} session`,
         );
-        this.sessions.delete(key);
+        // Left registered under `key` (see resolveExistingSession) until the
+        // spawn below overwrites it.
         await this.killAndClean(existing.process, existing.cachePath);
       } else {
         const resolved = await this.resolveExistingSession(

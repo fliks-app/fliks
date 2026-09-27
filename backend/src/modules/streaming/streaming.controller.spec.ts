@@ -682,6 +682,74 @@ describe('StreamingController.hlsAudioSegment - remux guards', () => {
     expect(getOrCreateRemuxSession).toHaveBeenCalled();
     expect(getOrCreateSession).not.toHaveBeenCalled();
   });
+
+  it('anchors a seg-race spawn at the requested segment, never the stale heartbeat position', async () => {
+    const segPath = path.join(cacheRoot, '1', 'seg-0007.m4s');
+    fs.mkdirSync(path.dirname(segPath), { recursive: true });
+    fs.writeFileSync(segPath, 'x');
+    const resolved = {
+      mediaFile: { streamInfo: { video: [{}] } },
+      absolutePath: '/media/file.mkv',
+    };
+    const getOrCreateRemuxSession = jest.fn().mockResolvedValue({
+      quality: 'remux',
+      startSegment: 7,
+      cachePath: cacheRoot,
+    });
+    const transcodingService = {
+      getOrCreateRemuxSession,
+      getOrCreateSession: jest.fn(),
+      getSegmentPath: jest.fn().mockResolvedValue(segPath),
+    };
+    const controller = new StreamingController(
+      { resolveFile: jest.fn().mockResolvedValue(resolved) } as never,
+      {} as never,
+      transcodingService as never,
+      {} as never,
+      { getSegmentDuration: () => 3 } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { serve: jest.fn().mockResolvedValue(undefined) } as never,
+      {
+        assertFresh: jest.fn(),
+        resolveSession: jest.fn().mockReturnValue(null),
+        resolveEarlySession: jest.fn().mockReturnValue(null),
+        // Stale (0) vs the segment actually requested (7): anchoring on it would
+        // kill and mis-respawn the session legitimately spawned for the real position.
+        findRequestSession: jest.fn().mockReturnValue({
+          kind: 'remux',
+          remuxGrid: null,
+          position: 0,
+        }),
+      } as never,
+      { build: jest.fn().mockReturnValue({ videoVariant: { codec: 'h264' } }) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await controller.hlsAudioSegment(
+      42,
+      0,
+      'seg-0007.m4s',
+      { query: {}, user: { id: 7 } } as never,
+      { id: 7 } as User,
+      { setHeader: jest.fn() } as never,
+    );
+
+    expect(getOrCreateRemuxSession).toHaveBeenCalledWith(
+      42,
+      '/media/file.mkv',
+      7,
+      expect.anything(),
+      null,
+    );
+  });
 });
 
 describe('StreamingController.hlsSegment - kind refresh', () => {

@@ -3157,7 +3157,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.activeBurnInId ?? undefined,
       this.activeAudioStreamIndex ?? undefined,
       undefined,
-      position != null ? Math.floor(position) : undefined,
+      this.reloadStartAt(position),
     );
     const castQualities = buildCastQualityOptions(
       castPi.qualities,
@@ -3214,6 +3214,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.playbackInfo?.playMethod === 'DirectStream') return undefined;
     const supportsAbr = this.deviceProfileService.getProfile().supportsAbr ?? true;
     return supportsAbr ? undefined : this.qualityManager.topRungId();
+  }
+
+  /** `startAt` for a reload: the live position, including 0; never omitted,
+   *  since an omitted value falls back to the stale saved DB position. */
+  private reloadStartAt(pos: number | undefined): number | undefined {
+    return pos != null ? Math.floor(pos) : undefined;
   }
 
   /** `{url, mimeType}` for the engine's `load()`, from the negotiated `pi`.
@@ -3285,7 +3291,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.activeBurnInId ?? undefined,
         this.activeAudioStreamIndex ?? undefined,
         prewarmQuality,
-        pos > 0 ? Math.floor(pos) : undefined,
+        this.reloadStartAt(pos),
       );
       this.adoptPlaybackInfo(this.playbackInfo);
       // Refresh the near-expiry stream token before rebuilding the play URL:
@@ -4694,6 +4700,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.activeBurnInId ?? undefined,
         this.activeAudioStreamIndex,
         requestedQuality,
+        this.reloadStartAt(currentPos),
       );
       const pi = this.playbackInfo;
       this.introMarker.set(pi.markers?.intro ?? null);

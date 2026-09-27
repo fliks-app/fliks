@@ -105,7 +105,7 @@ function pushRemuxVariant(lines: string[], opts: RemuxVariantOptions): void {
   const codecsAttr = remuxCodecs ? `,CODECS="${remuxCodecs}${codecsTail}"` : '';
   const rangeAttr = range ? `,VIDEO-RANGE=${range}` : '';
   lines.push(
-    `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth},AVERAGE-BANDWIDTH=${bandwidth},RESOLUTION=${sourceWidth}x${sourceHeight}${rangeAttr}${frameRateAttr},NAME="remux"${codecsAttr}${audioAttr}${subsAttr}`,
+    `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth},AVERAGE-BANDWIDTH=${bandwidth},RESOLUTION=${sourceWidth}x${sourceHeight}${rangeAttr}${frameRateAttr},NAME="remux"${codecsAttr}${audioAttr}${subsAttr},CLOSED-CAPTIONS=NONE`,
     `/api/stream/${mediaFileId}/remux/index.m3u8${tokenParam}`,
   );
 }

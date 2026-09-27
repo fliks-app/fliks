@@ -267,22 +267,20 @@ describe('RemuxSegmentAssembler', () => {
     ]);
   });
 
-  it('leaves a segment out until the GOP after it starts, unless the run ended cleanly', async () => {
-    // ffmpeg's trailer renames the GOP it cut short at a kill: gop-3 may be partial.
+  it('assembles a segment once its own last GOP is renamed, with no need for the next one to start', async () => {
+    // Every kill is SIGKILL, which can't rename a partial GOP: a renamed
+    // gop-3 is proof enough on its own, whether or not gop-4 ever starts.
     writeGops(4);
     await assemble(0, null, 0, grid, false);
-    expect(segs()).toEqual(['seg-0000.m4s']);
-    newRun();
-    writeGops(4);
-    await assemble(1, null, 2, grid, true);
     expect(segs()).toEqual(['seg-0000.m4s', 'seg-0001.m4s']);
   });
 
-  it('takes the next GOP in progress as proof the previous one is whole', async () => {
-    writeGops(4);
-    fs.writeFileSync(path.join(gopDir, 'gop-4.m4s.tmp'), Buffer.alloc(0));
+  it('leaves a segment out while its last GOP is still .tmp', async () => {
+    writeGops(2);
+    fs.writeFileSync(path.join(gopDir, 'gop-2.m4s.tmp'), Buffer.alloc(0));
+    fs.writeFileSync(path.join(gopDir, 'gop-3.m4s.tmp'), Buffer.alloc(0));
     await assemble(0, null, 0, grid, false);
-    expect(segs()).toEqual(['seg-0000.m4s', 'seg-0001.m4s']);
+    expect(segs()).toEqual(['seg-0000.m4s']);
   });
 
   it('keeps a segment another run already built and drops its GOPs', async () => {
@@ -565,11 +563,9 @@ describe('RemuxSegmentAssembler: multi-audio (one growing file per track, H6)', 
       kick();
       await settle();
     }
-    // Video assembled segments 0-1 on the first pass, untouched by the audio
-    // track's own failures: a shared counter would have this attributed to
-    // a video "segment N", not the audio rendition. (Segment 2, the last
-    // GOP, needs the clean-exit tail assembly, skipped once the run stops.)
-    expect(segsIn(dir)).toEqual(['seg-0000.m4s', 'seg-0001.m4s']);
+    // Video assembles every segment (its own last GOP is already renamed, no
+    // tail needed), untouched by the audio track's own failures.
+    expect(segsIn(dir)).toEqual(['seg-0000.m4s', 'seg-0001.m4s', 'seg-0002.m4s']);
     expect(onFailure).toHaveBeenCalledTimes(1);
     const newErrors = (log.error as jest.Mock).mock.calls.slice(errorCallsBefore);
     expect(newErrors).toEqual([[expect.stringContaining('audio rendition 1 assembly stopped')]]);
