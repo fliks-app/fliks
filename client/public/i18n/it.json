@@ -1625,7 +1625,7 @@
       "allow_remux": "Consenti remux",
       "allow_remux_help": "Trasmette il video originale reimpacchettato come HLS, senza ricodifica. Disattivato, viene applicata una transcodifica.",
       "auto_crop": "Ritaglio automatico delle bande nere",
-      "auto_crop_help": "Rimuove le bande nere, al prezzo di una ricodifica. Disattivato, restano e la sorgente passa così com'è.",
+      "auto_crop_help": "Rimuove le bande nere. I lettori che ritagliano da soli mantengono il flusso originale; gli altri ricevono una ricodifica.",
       "init_time": "Durata del primo segmento",
       "init_time_help": "Il primo segmento può essere più corto per accelerare l'avvio. I successivi usano la durata normale.",
       "qsv_preset": "Preset di codifica (QSV / libx264)",

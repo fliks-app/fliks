@@ -1625,7 +1625,7 @@
       "allow_remux": "Remux erlauben",
       "allow_remux_help": "Überträgt das Originalvideo neu verpackt als HLS, ohne Neukodierung. Aus wird stattdessen transkodiert.",
       "auto_crop": "Automatisches Zuschneiden der schwarzen Balken",
-      "auto_crop_help": "Entfernt schwarze Balken, um den Preis einer Neukodierung. Aus bleiben sie erhalten und die Quelle läuft unverändert.",
+      "auto_crop_help": "Entfernt schwarze Balken. Player, die selbst zuschneiden, behalten den Original-Stream; andere erhalten eine Neukodierung.",
       "init_time": "Dauer des ersten Segments",
       "init_time_help": "Das erste Segment kann kürzer sein, um den Start zu beschleunigen. Die folgenden verwenden die normale Dauer.",
       "qsv_preset": "Encoding-Preset (QSV / libx264)",

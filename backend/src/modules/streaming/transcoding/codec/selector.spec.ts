@@ -72,3 +72,27 @@ describe('pickPrimaryVariant — client decode-resolution gate', () => {
     expect(v.codec).toBe('av1');
   });
 });
+
+describe('pickPrimaryVariant, rejectCopy drops the source codec', () => {
+  it('falls back to H.264 for an HEVC source when the client rejected the HEVC copy', () => {
+    const profile = {
+      deviceType: 'mobile',
+      supportsHdr: false,
+      rejectCopy: true,
+      directPlayProfiles: [
+        {
+          containers: ['mp4'],
+          videoCodecs: ['hevc', 'hvc1', 'h264', 'avc1'],
+          audioCodecs: ['aac'],
+        },
+      ],
+      codecConditions: [],
+    } as unknown as DeviceProfileDto;
+    const v = pickPrimaryVariant(
+      { width: 1920, height: 1080, hdr: null, codec: 'hevc' },
+      profile,
+      'none',
+    );
+    expect(v.codec).toBe('h264');
+  });
+});

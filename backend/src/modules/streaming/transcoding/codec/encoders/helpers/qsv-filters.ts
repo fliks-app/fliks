@@ -35,11 +35,11 @@ export function qsvScaleFilter8bit(input: EncoderInput): string {
     //    ~3× the throughput of the vaapi-decode chain on cropped 4K
     //    HDR sources, with identical visual output.
     //  - no tonemap (crop/scale only) — straight nv12 output.
+    // `target.height` is the same `profileResolution` value the master
+    // playlist's RESOLUTION advertises; render that exact height.
     const cropArgs =
       hasCrop && filters.cropStr ? parseCropStr(filters.cropStr) : null;
-    const targetH = cropArgs
-      ? snapEven(Math.round((w * cropArgs.h) / cropArgs.w))
-      : target.height;
+    const targetH = target.height;
     const cropOpts = cropArgs
       ? `cw=${cropArgs.w}:ch=${cropArgs.h}:cx=${cropArgs.x}:cy=${cropArgs.y}:`
       : '';
@@ -101,9 +101,7 @@ export function qsvScaleFilter10bit(input: EncoderInput): string {
       input.inputSurface === 'd3d11' ? 'hwmap=derive_device=qsv,' : '';
     const cropArgs =
       hasCrop && filters.cropStr ? parseCropStr(filters.cropStr) : null;
-    const targetH = cropArgs
-      ? snapEven(Math.round((w * cropArgs.h) / cropArgs.w))
-      : target.height;
+    const targetH = target.height;
     const cropOpts = cropArgs
       ? `cw=${cropArgs.w}:ch=${cropArgs.h}:cx=${cropArgs.x}:cy=${cropArgs.y}:`
       : '';
@@ -125,6 +123,3 @@ function parseCropStr(
   };
 }
 
-function snapEven(n: number): number {
-  return n - (n % 2);
-}

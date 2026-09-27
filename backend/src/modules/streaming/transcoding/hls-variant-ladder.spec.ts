@@ -4,6 +4,7 @@ import {
   emitVariantLadder,
   type VariantLadderOptions,
 } from './hls-variant-ladder';
+import { buildOutputDimensions } from './ffmpeg-args';
 import type { CodecVariant } from './codec/types';
 import type { TranscodeProfile } from './types';
 
@@ -93,6 +94,33 @@ describe('emitAudioRenditions', () => {
     expect(lines[0]).toContain('CHANNELS="6"');
     expect(lines[1]).toContain('DEFAULT=NO');
     expect(lines[1]).toContain('CHANNELS="2"');
+  });
+});
+
+describe('master RESOLUTION matches buildOutputDimensions for a cropped source', () => {
+  it('emits the same even-rounded height ffmpeg is told to render', () => {
+    const crop = { width: 1921, height: 800 };
+    const dims = buildOutputDimensions(PROFILE, crop, crop.width, crop.height);
+    const lines: string[] = [];
+    emitVariantLadder(lines, {
+      profiles: [PROFILE],
+      variant: { codec: 'h264', bitDepth: 8, hdr: null },
+      audioAttr: '',
+      audioBitrateBps: () => 192_000,
+      subsAttr: '',
+      frameRateAttr: ',FRAME-RATE=24',
+      codecsTail: ',mp4a.40.2',
+      // The controller passes already-cropped dimensions here (see
+      // stream-builder.service.ts), matching what buildOutputDimensions frames.
+      sourceWidth: crop.width,
+      sourceHeight: crop.height,
+      sourceFrameRate: 24,
+      sourceVideoBitrateBps: 100_000_000,
+      sourceVideoCodec: 'h264',
+      mediaFileId: 1,
+      tokenParam: '',
+    });
+    expect(lines[0]).toContain(`RESOLUTION=${dims.width}x${dims.height}`);
   });
 });
 

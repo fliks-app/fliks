@@ -103,6 +103,35 @@ describe('qsvScaleFilter8bit', () => {
       ),
     ).toContain(':tonemap=reinhard:desat=0');
   });
+
+  it('renders target.height on a crop, not its own aspect-ratio rounding', () => {
+    // target.height (534) is what profileResolution/buildOutputDimensions
+    // computed for this crop; re-deriving it from cw/ch here rounded to 532.
+    expect(
+      qsvScaleFilter8bit(
+        input({
+          inputSurface: 'qsv',
+          hasCrop: true,
+          target: {
+            width: 1280,
+            height: 534,
+            videoBitrateBps: 0,
+            gopSize: 0,
+            frameRate: 24,
+          },
+          filters: {
+            cropStr: 'crop=1921:800:0:0',
+            cpuCropPrefix: '',
+            hwCropPrefix: '',
+            burnInFilter: '',
+            tonemapVaapi: '',
+            tonemapOpencl: '',
+            tonemapCpu: '',
+          },
+        }),
+      ),
+    ).toBe('vpp_qsv=cw=1921:ch=800:cx=0:cy=0:w=1280:h=534:format=nv12');
+  });
 });
 
 describe('qsvScaleFilter10bit', () => {
@@ -116,5 +145,32 @@ describe('qsvScaleFilter10bit', () => {
     expect(qsvScaleFilter10bit(input({ inputSurface: 'd3d11' }))).toBe(
       'hwmap=derive_device=qsv,vpp_qsv=w=1920:h=804:format=p010le',
     );
+  });
+
+  it('renders target.height on a crop, not its own aspect-ratio rounding', () => {
+    expect(
+      qsvScaleFilter10bit(
+        input({
+          inputSurface: 'qsv',
+          hasCrop: true,
+          target: {
+            width: 1280,
+            height: 534,
+            videoBitrateBps: 0,
+            gopSize: 0,
+            frameRate: 24,
+          },
+          filters: {
+            cropStr: 'crop=1921:800:0:0',
+            cpuCropPrefix: '',
+            hwCropPrefix: '',
+            burnInFilter: '',
+            tonemapVaapi: '',
+            tonemapOpencl: '',
+            tonemapCpu: '',
+          },
+        }),
+      ),
+    ).toBe('vpp_qsv=cw=1921:ch=800:cx=0:cy=0:w=1280:h=534:format=p010le');
   });
 });

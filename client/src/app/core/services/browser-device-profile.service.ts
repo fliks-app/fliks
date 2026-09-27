@@ -277,9 +277,14 @@ export class BrowserDeviceProfileService {
     const hasMSE = typeof MediaSource !== 'undefined' && !!MediaSource.isTypeSupported;
 
     // --- Detect supported containers ---
+    // Probed WITH a representative codec: `isTypeSupported`/`canPlayType`
+    // with a bare container mime (no `codecs`) is ambiguous and Chromium
+    // now answers false for it, which would empty the container list.
     const containers: string[] = [];
-    if (this.testType(video, hasMSE, 'video/mp4')) containers.push('mp4', 'm4v', 'mov');
-    if (this.testType(video, hasMSE, 'video/webm')) containers.push('webm');
+    if (this.testCodec(video, hasMSE, 'video/mp4', 'avc1.42E01E')) {
+      containers.push('mp4', 'm4v', 'mov');
+    }
+    if (this.testCodec(video, hasMSE, 'video/webm', 'vp8')) containers.push('webm');
     // MKV: no browser demuxes Matroska, so it stays out of the probed list. A
     // supported codec inside MKV still remuxes to HLS via DirectStream.
 
@@ -617,11 +622,6 @@ export class BrowserDeviceProfileService {
   // ---------------------------------------------------------------------------
   // Probing helpers
   // ---------------------------------------------------------------------------
-
-  private testType(video: HTMLVideoElement, hasMSE: boolean, mime: string): boolean {
-    if (hasMSE) return MediaSource.isTypeSupported(mime);
-    return !!video.canPlayType(mime);
-  }
 
   /** Codec support gate for the device profile sent to the backend.
    *

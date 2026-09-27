@@ -110,3 +110,37 @@ describe('BrowserDeviceProfileService: switchesDirectPlayAudio', () => {
     expect(service.getProfile().switchesDirectPlayAudio).toBeUndefined();
   });
 });
+
+describe('BrowserDeviceProfileService: container detection', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    vi.restoreAllMocks();
+    delete (globalThis as unknown as { MediaSource?: unknown }).MediaSource;
+  });
+
+  it('lists mp4/webm when isTypeSupported rejects the bare mime but accepts a codec string', () => {
+    (globalThis as unknown as { MediaSource: unknown }).MediaSource = {
+      isTypeSupported: (mime: string) => mime.includes('codecs='),
+    };
+    const service = configure({
+      isTv: () => false,
+      tvPlatform: () => null,
+      isDesktopNative: () => false,
+    } as DeviceService);
+    const containers = service.getProfile().directPlayProfiles[0].containers;
+    expect(containers).toContain('mp4');
+    expect(containers).toContain('webm');
+  });
+
+  it('falls back to canPlayType with a codec string when MediaSource is absent', () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockImplementation(
+      (mime: string) => (mime.includes('codecs=') ? 'probably' : ''),
+    );
+    const service = configure({
+      isTv: () => false,
+      tvPlatform: () => null,
+      isDesktopNative: () => false,
+    } as DeviceService);
+    expect(service.getProfile().directPlayProfiles[0].containers).toContain('mp4');
+  });
+});

@@ -1625,7 +1625,7 @@
       "allow_remux": "Permitir remux",
       "allow_remux_help": "Transmite o vídeo original reempacotado como HLS, sem recodificar. Desligado, é aplicada uma transcodificação.",
       "auto_crop": "Recorte automático das barras pretas",
-      "auto_crop_help": "Remove as barras pretas, ao custo de uma recodificação. Desligado, ficam e a fonte passa tal como está.",
+      "auto_crop_help": "Remove as barras pretas. Os leitores que recortam sozinhos mantêm o fluxo original; os demais recebem uma recodificação.",
       "init_time": "Duração do primeiro segmento",
       "init_time_help": "O primeiro segmento pode ser mais curto para acelerar o arranque. Os seguintes usam a duração normal.",
       "qsv_preset": "Preset de codificação (QSV / libx264)",

@@ -52,11 +52,15 @@ export function pickVariants(
 
   // Codec ranking: source codec first when client supports it, then
   // efficiency fallback. H.264 last as the universal compatibility safety.
+  // `rejectCopy`: the client's decoder just failed this exact bitstream, so
+  // drop the source codec entirely instead of only deprioritising it.
   const efficiencyOrder: VideoCodec[] = ['av1', 'hevc', 'h264'];
   const codecOrder: VideoCodec[] =
-    source.codec && clientSupports(clientCodecs, source.codec)
-      ? [source.codec, ...efficiencyOrder.filter((c) => c !== source.codec)]
-      : efficiencyOrder;
+    profile.rejectCopy === true
+      ? efficiencyOrder.filter((c) => c !== source.codec)
+      : source.codec && clientSupports(clientCodecs, source.codec)
+        ? [source.codec, ...efficiencyOrder.filter((c) => c !== source.codec)]
+        : efficiencyOrder;
 
   // HDR path — only meaningful when source is HDR AND the client either has
   // an HDR display (browser caps + gamut probe) or tone-maps HDR itself, which

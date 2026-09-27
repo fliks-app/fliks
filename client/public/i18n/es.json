@@ -1625,7 +1625,7 @@
       "allow_remux": "Permitir remux",
       "allow_remux_help": "Transmite el vídeo original reempaquetado como HLS, sin recodificar. Desactivado, se aplica una transcodificación en su lugar.",
       "auto_crop": "Recorte automático de las barras negras",
-      "auto_crop_help": "Quita las bandas negras, a costa de un recodificado. Desactivado, se conservan y la fuente se reproduce tal cual.",
+      "auto_crop_help": "Quita las bandas negras. Los reproductores que recortan por sí mismos mantienen la transmisión original; los demás reciben una recodificación.",
       "init_time": "Duración del primer segmento",
       "init_time_help": "El primer segmento puede ser más corto para acelerar el inicio. Los siguientes usan la duración normal.",
       "qsv_preset": "Preset de codificación (QSV / libx264)",

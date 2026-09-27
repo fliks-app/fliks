@@ -329,7 +329,7 @@ function buildAudioOutputArgs(
  * already advertises. Falls back to the profile's declared max when the source
  * dimensions are unknown.
  */
-function buildOutputDimensions(
+export function buildOutputDimensions(
   profile: TranscodeProfile,
   crop: { width: number; height: number } | undefined,
   sourceWidth: number,
