@@ -65,6 +65,9 @@ export interface RemuxAssemblyPlan {
   firstGop: number[] | null;
   /** Presentation time of each GOP's keyframe, to find where the run landed. */
   gopPts: number[] | null;
+  /** Decode time of each GOP's keyframe: an open-GOP source's keyframes don't
+   *  share one pts-dts offset, unlike `gopPts` under a single `correction`. */
+  gopDts: number[] | null;
   /** Source time the served timeline starts at. */
   start: number;
   /** Decode time of the first keyframe; null without a keyframe list, when the
@@ -115,6 +118,7 @@ export function remuxAssemblyPlan(o: {
     seekSeconds: o.run.seekSeconds ?? 0,
     firstGop: o.grid?.firstKeyframe ?? null,
     gopPts: o.grid?.keyframes.map((k) => k.pts) ?? null,
+    gopDts: o.grid?.keyframes.map((k) => k.dts) ?? null,
     start: o.grid ? o.grid.boundaries[0] : o.origin,
     firstDecode: o.grid?.keyframes[0]?.dts ?? null,
     boundaries: o.grid?.boundaries ?? null,
@@ -192,6 +196,9 @@ export class RemuxSegmentAssembler {
     id: number;
     timescale: number;
     correction: number;
+    /** Same run-to-source shift in decode time: unlike `correction`, valid at
+     *  any keyframe regardless of its own pts-dts offset. */
+    dtsCorrection: number;
     /** `trex` default duration, for a sample whose trun and tfhd give none. */
     trexDefault: number;
   } | null = null;
@@ -381,16 +388,20 @@ export class RemuxSegmentAssembler {
   private async isComplete(gop: number): Promise<boolean> {
     const file = this.gopPath(gop);
     if (!(await this.exists(file))) return false;
-    const { gopPts, boundaries } = this.plan;
+    const { gopDts, boundaries } = this.plan;
     // Uniform fallback: no grid to prove decode position against, so a
     // rename (the muxer's own segment-closed signal) is all there is.
-    if (!gopPts || !boundaries || !this.video) return true;
+    if (!gopDts || !boundaries || !this.video) return true;
     const extent = videoDecodeExtent(await readMoofs(file), this.video.id, this.video.trexDefault);
     if (!extent) return false;
-    const targetSeconds = gop + 1 < gopPts.length ? gopPts[gop + 1] : boundaries[boundaries.length - 1];
-    const targetTicks = BigInt(
-      Math.round((targetSeconds - this.video.correction) * this.video.timescale),
-    );
+    // The next keyframe's own decode time: its pts-dts offset (open-GOP CRA vs
+    // IDR) doesn't cancel out through the single pts-domain `correction`.
+    const targetTicks =
+      gop + 1 < gopDts.length
+        ? BigInt(Math.round((gopDts[gop + 1] - this.video.dtsCorrection) * this.video.timescale))
+        : BigInt(
+            Math.round((boundaries[boundaries.length - 1] - this.video.correction) * this.video.timescale),
+          );
     return extent.end + extent.lastDuration / 2n >= targetTicks;
   }
 
@@ -419,7 +430,7 @@ export class RemuxSegmentAssembler {
     const tracks = parseInitTracks(init);
     const runEdits = readInitEdits(init);
     const gop = await readMoofs(first);
-    const correction = this.locateRun(gop, tracks);
+    const { correction, dtsCorrection } = this.locateRun(gop, tracks);
     const video = [...tracks].find(([, t]) => t.isVideo);
     const trex = parseTrexDefaults(init);
     this.video = video
@@ -427,6 +438,7 @@ export class RemuxSegmentAssembler {
           id: video[0],
           timescale: video[1].timescale,
           correction,
+          dtsCorrection,
           trexDefault: trex.get(video[0]) ?? 0,
         }
       : null;
@@ -471,9 +483,11 @@ export class RemuxSegmentAssembler {
   private locateRun(
     gop: Buffer,
     tracks: ReturnType<typeof parseInitTracks>,
-  ): number {
-    const { gopPts, firstGop, startNumber, startSegment, seekSeconds } = this.plan;
-    if (!gopPts || !firstGop) return seekSeconds;
+  ): { correction: number; dtsCorrection: number } {
+    const { gopPts, gopDts, firstGop, startNumber, startSegment, seekSeconds } = this.plan;
+    if (!gopPts || !gopDts || !firstGop) {
+      return { correction: seekSeconds, dtsCorrection: seekSeconds };
+    }
     const video = [...tracks].find(([, t]) => t.isVideo);
     const tfdt = video && firstTfdt(gop, video[0]);
     if (!video || tfdt == null) throw new Error('first GOP has no video fragment');
@@ -488,7 +502,7 @@ export class RemuxSegmentAssembler {
         `[${this.label}] run meant for segment ${startSegment} landed on GOP ${at} (planned ${startNumber}); assembling from segment ${this.next}`,
       );
     }
-    return gopPts[at] - out;
+    return { correction: gopPts[at] - out, dtsCorrection: gopDts[at] - out };
   }
 
   /** A segment another run already built stays: it holds the same samples on

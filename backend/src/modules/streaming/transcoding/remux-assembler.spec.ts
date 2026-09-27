@@ -32,9 +32,15 @@ function trak(id: number, timescale: number, handler: string, mediaTime: number)
   );
 }
 
-/** version-0 trun, one sample, explicit duration (flag 0x100). */
-const videoTrun = (durationTicks: number) =>
-  box('trun', Buffer.concat([Buffer.from([0, 0, 1, 0]), u32(1), u32(durationTicks)]));
+/** version-0 trun, explicit per-sample duration (flag 0x100): one sample, or
+ *  (an array) the GOP's real last frames, for a realistic `lastDuration`. */
+const videoTrun = (durationTicks: number | number[]) => {
+  const durations = Array.isArray(durationTicks) ? durationTicks : [durationTicks];
+  return box(
+    'trun',
+    Buffer.concat([Buffer.from([0, 0, 1, 0]), u32(durations.length), ...durations.map(u32)]),
+  );
+};
 
 // This file's keyframes are always 2s apart at the 1000 timescale fixtures
 // use: a video fragment spanning exactly that reaches its next keyframe.
@@ -42,7 +48,11 @@ const GOP_DECODE_SPAN_TICKS = 2000;
 
 /** A GOP file: one video (with a trun reaching the next keyframe) and one
  *  audio fragment, v1 tfdt. */
-function gop(videoTfdt: bigint, audioTfdt: bigint, videoDurationTicks = GOP_DECODE_SPAN_TICKS): Buffer {
+function gop(
+  videoTfdt: bigint,
+  audioTfdt: bigint,
+  videoDurationTicks: number | number[] = GOP_DECODE_SPAN_TICKS,
+): Buffer {
   const traf = (id: number, v: bigint, trun: Buffer | null) => {
     const t = Buffer.alloc(8);
     t.writeBigInt64BE(v);
@@ -293,6 +303,22 @@ describe('RemuxSegmentAssembler', () => {
     writeGops(4);
     await assemble(0, null, 0, grid, false);
     expect(segs()).toEqual(['seg-0000.m4s', 'seg-0001.m4s']);
+  });
+
+  it('completes an open-GOP file whose keyframes carry different pts-dts offsets', async () => {
+    // Open GOP: the first keyframe (IDR) reorders 0.08s, later ones (CRA) 0.2s.
+    // A single fixed pts-domain correction can't track both at once.
+    const openGopGrid = computeSegmentGrid(
+      [0, 2, 4, 6, 8].map((pts, i) => ({ pts, dts: pts - (i === 0 ? 0.08 : 0.2) })),
+      0,
+      8,
+      2,
+    )!;
+    // Real decode extent: 1880 ticks (next keyframe's dts, 1.8+0.08), not
+    // 2000 (its pts): the last real frame lands short of the pts-derived target.
+    fs.writeFileSync(path.join(gopDir, 'gop-0.m4s'), gop(0n, 0n, [1840, 40]));
+    await assemble(0, null, 0, openGopGrid, false);
+    expect(segs()).toEqual(['seg-0000.m4s']);
   });
 
   it('exposes the frontier one past the last produced segment, short of the tail until a clean exit', async () => {
