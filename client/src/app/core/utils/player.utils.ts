@@ -1,5 +1,6 @@
 import type { TranslateService } from '@ngx-translate/core';
 import { localizeLanguage, normalizeLangCode } from './language.utils';
+import type { PlaybackInfoResponse, StreamingApiService } from '../services/api/streaming-api.service';
 
 /** Pixel widths backing each ladder rung id (must match the backend
  *  `PROFILES` table). Used by NativeEngine + quality-manager to set
@@ -332,4 +333,23 @@ export function deliveredKindFromVariant(
   const hasRemux = /[?&]remux=1(?:&|$)/.test(url);
   const hasStartQuality = /[?&]startQuality=/.test(url);
   return hasRemux && !hasStartQuality ? 'remux' : 'transcode';
+}
+
+/**
+ * URL for an "original"-quality download. DirectStream (remux) goes through
+ * `buildPlayUrl`, which derives the URL from `playUrl` and drops the rung pin
+ * that would otherwise collapse the copy into a transcode; every other
+ * playMethod (Transcode, and DirectPlay — native downloaders need an HLS
+ * bundle, not the raw-file route) keeps the ladder URL pinned to `quality`.
+ */
+export function resolveDownloadUrl(
+  api: Pick<StreamingApiService, 'buildPlayUrl' | 'getHlsUrl'>,
+  mediaFileId: number,
+  quality: string,
+  pi: Pick<PlaybackInfoResponse, 'playMethod' | 'playUrl' | 'sessionId' | 'audioTracks'>,
+): string {
+  // The remux muxes one audio track; a multi-language download keeps every track on the ladder.
+  return pi.playMethod === 'DirectStream' && (pi.audioTracks?.length ?? 0) <= 1
+    ? api.buildPlayUrl(pi, { sid: pi.sessionId })
+    : api.getHlsUrl(mediaFileId, quality, undefined, pi.sessionId);
 }
