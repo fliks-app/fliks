@@ -1,5 +1,8 @@
-import { pickPrimaryVariant } from './selector';
+import { pickPrimaryVariant, pickVariants } from './selector';
 import type { DeviceProfileDto } from '../../dto/device-profile.dto';
+import { isEncoderEnabled } from './encoder-probe';
+
+jest.mock('./encoder-probe', () => ({ isEncoderEnabled: jest.fn(() => true) }));
 
 /** A native-style profile that lists AV1, HEVC and H.264 but caps the AV1
  *  decoder at 2048x2048 (no 4K AV1 HW path) while allowing 4K HEVC. */
@@ -73,7 +76,7 @@ describe('pickPrimaryVariant — client decode-resolution gate', () => {
   });
 });
 
-describe('pickPrimaryVariant, rejectCopy drops the source codec', () => {
+describe('pickPrimaryVariant, rejectCopy deprioritises the source codec', () => {
   it('falls back to H.264 for an HEVC source when the client rejected the HEVC copy', () => {
     const profile = {
       deviceType: 'mobile',
@@ -94,5 +97,32 @@ describe('pickPrimaryVariant, rejectCopy drops the source codec', () => {
       'none',
     );
     expect(v.codec).toBe('h264');
+  });
+
+  it('still offers an H.264 source as a last resort when neither AV1 nor HEVC has a working encoder', () => {
+    (isEncoderEnabled as jest.Mock).mockImplementation((id: string) => id === 'libx264');
+    try {
+      const profile = {
+        deviceType: 'mobile',
+        supportsHdr: false,
+        rejectCopy: true,
+        directPlayProfiles: [
+          {
+            containers: ['mp4'],
+            videoCodecs: ['av1', 'hevc', 'h264', 'avc1'],
+            audioCodecs: ['aac'],
+          },
+        ],
+        codecConditions: [],
+      } as unknown as DeviceProfileDto;
+      const variants = pickVariants(
+        { width: 1920, height: 1080, hdr: null, codec: 'h264' },
+        profile,
+        'none',
+      );
+      expect(variants.map((v) => v.codec)).toEqual(['h264']);
+    } finally {
+      (isEncoderEnabled as jest.Mock).mockReturnValue(true);
+    }
   });
 });

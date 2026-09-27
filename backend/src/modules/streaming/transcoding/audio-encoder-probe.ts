@@ -4,16 +4,15 @@ import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
 
-/** Same singleton-probe shape as the video encoder/decoder/tonemap probes:
- *  populated once at boot, read by `isLibfdkAacEnabled()` from then on. */
-let probedOnce = false;
+/** Populated once at boot (awaited from `onModuleInit`), read by
+ *  `isLibfdkAacEnabled()` from then on; false until then, same as absent. */
 let libfdkEnabled = false;
 
 /** True once the boot probe found `libfdk_aac` in this ffmpeg build. False
  *  (native `aac` fallback) before the probe finishes or when it's absent,
  *  e.g. macOS Homebrew ffmpeg, which doesn't bundle the Fraunhofer encoder. */
 export function isLibfdkAacEnabled(): boolean {
-  return probedOnce && libfdkEnabled;
+  return libfdkEnabled;
 }
 
 /** `ffmpeg -encoders` lists every compiled-in codec once; audio encoders carry
@@ -31,7 +30,6 @@ export async function runAudioEncoderProbe(log: Logger): Promise<void> {
   } catch {
     libfdkEnabled = false;
   } finally {
-    probedOnce = true;
     log.log(
       `[audio-encoder-probe] libfdk_aac=${libfdkEnabled} (${Date.now() - t0}ms)`,
     );

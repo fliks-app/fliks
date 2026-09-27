@@ -12,8 +12,6 @@ import {
   DEFAULT_SEGMENT_DURATION,
   EARLY_PROBE_SEGMENTS,
   JOB_GRACE_MS,
-  REMUX_MAX_WAIT_SEGMENTS,
-  REMUX_WAIT_BUFFER_SECONDS,
   RUN_DIR_PREFIX,
   SEEK_WAIT_THRESHOLD,
   SESSION_TIMEOUT_MS,
@@ -33,7 +31,6 @@ import {
   type BuildFfmpegArgsOptions,
 } from './ffmpeg-args';
 import { RemuxSegmentAssembler, remuxAssemblyPlan } from './remux-assembler';
-import { remuxProduced, remuxReachable, remuxWaitWindow } from './remux-reachability';
 import type { KeyframeGrid } from './segment-boundaries';
 import { keyframeAtOrBefore } from '../../subtitles/video-packets';
 import { varStreamMapLayout } from './audio-layout';
@@ -155,8 +152,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     }
 
     // Audio encoders carry no HW/driver risk, so a plain `-encoders` listing
-    // check is enough, independent of hwAccel; runs on every platform.
-    void runAudioEncoderProbe(this.log);
+    // check is enough, independent of hwAccel; runs on every platform. Awaited
+    // (unlike the probes below): a playback-info during it would hash/align
+    // the session as native aac, wrong for the rest of that session's life.
+    await runAudioEncoderProbe(this.log);
     // Probe every compiled-in encoder. Each runs a single black-frame
     // ffmpeg encode; the descriptors that fail to open are blacklisted
     // in the runtime registry gate. Runs async — module init doesn't
@@ -413,14 +412,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     audioIndex?: number,
   ): Promise<TranscodeSession | null> {
     const { exitCode, signalCode } = existing.process;
-    // exitCode alone reads a SIGKILLed process as still running; match
-    // isProducing's own two-field check instead.
-    const stillRunning = exitCode === null && signalCode == null;
+    const stillRunning = this.isProducing(existing);
 
     if (exitCode === 0 && qualityMatch) {
       await existing.outputDone;
       const reachable = existing.remux
-        ? this.remuxProduced(existing, requestedSegment, audioIndex)
+        ? (existing.remuxAssembler?.canServe(requestedSegment, audioIndex, true) ?? false)
         : await segmentNearby(existing.cachePath, requestedSegment);
       if (reachable) {
         existing.lastAccess = Date.now();
@@ -434,12 +431,19 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (!stillRunning) {
-      this.log.warn(
-        `Session [${key}]: FFmpeg ${signalCode ? `killed (${signalCode})` : `crashed (code ${exitCode})`}, restarting`,
-      );
-      // A remux run's own files are its GOP dir, which its assembler removes;
-      // the session dir holds every run's segments and the shared init.
-      if (!existing.remux) await fsp.rm(existing.cachePath, { recursive: true, force: true });
+      // A null exitCode with no signal can't happen once stillRunning is false;
+      // a clean exit (0) here is another quality/variant, not a crash.
+      const crashed = signalCode != null || (exitCode !== null && exitCode !== 0);
+      if (crashed) {
+        this.log.warn(
+          `Session [${key}]: FFmpeg ${signalCode ? `killed (${signalCode})` : `crashed (code ${exitCode})`}, restarting`,
+        );
+        // A remux run's own files are its GOP dir, which its assembler removes;
+        // the session dir holds every run's segments and the shared init.
+        if (!existing.remux) await fsp.rm(existing.cachePath, { recursive: true, force: true });
+      } else {
+        this.log.log(`Session [${key}]: exited cleanly for another quality, restarting`);
+      }
       return null;
     }
 
@@ -455,7 +459,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       // A live run that has yet to write its first segment reaches the ones just after it.
       const start = existing.startSegment ?? 0;
       const runStarting =
-        existing.process.exitCode === null &&
         requestedSegment >= start &&
         requestedSegment - start <= SEEK_WAIT_THRESHOLD &&
         !(await segmentWithinReach(existing.cachePath, start, 0));
@@ -473,10 +476,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       this.log.log(
         `Seek: restarting [${key}] from segment ${requestedSegment} (not cached)`,
       );
-      existing.intentionallyKilled = true;
-      await this.killProcess(existing.process);
-      existing.startSegment = requestedSegment;
-      return null;
+      return this.restartAt(existing, requestedSegment);
     }
 
     const gap = firstMissingSegment(existing.cachePath, requestedSegment);
@@ -484,67 +484,45 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       this.log.log(
         `Seek: segment ${requestedSegment} cached, restarting [${key}] at unreachable gap ${gap}`,
       );
-      existing.intentionallyKilled = true;
-      await this.killProcess(existing.process);
-      existing.startSegment = gap;
-      return null;
+      return this.restartAt(existing, gap);
     }
 
     return existing;
   }
 
+  /** Kill the run and mark the caller to respawn from `segment`: the shared
+   *  tail of every seek-restart branch above and in remux resolution. */
+  private async restartAt(existing: TranscodeSession, segment: number): Promise<null> {
+    existing.intentionallyKilled = true;
+    await this.killProcess(existing.process);
+    existing.startSegment = segment;
+    return null;
+  }
+
   /** The frontier (see `RemuxSegmentAssembler.videoFrontier`/`audioFrontier`)
-   *  this session's run has reached for the requested track; null before the
-   *  run has opened (or if it has no assembler at all). */
+   *  this session's run has reached for the requested track, for the seek-log
+   *  line only; reachability itself is the assembler's own `canServe`. */
   private remuxFrontier(session: TranscodeSession, audioIndex?: number): number | null {
     const assembler = session.remuxAssembler;
     if (!assembler) return null;
     return audioIndex != null ? assembler.audioFrontier(audioIndex) : assembler.videoFrontier();
   }
 
-  /** Whether an exited remux run actually produced `requestedSegment`,
-   *  decided from the assembler's own frontier, never the directory. */
-  private remuxProduced(
-    session: TranscodeSession,
-    requestedSegment: number,
-    audioIndex?: number,
-  ): boolean {
-    return remuxProduced({
-      requestedSegment,
-      start: session.startSegment ?? 0,
-      frontier: this.remuxFrontier(session, audioIndex),
-    });
-  }
-
   /** Wait-vs-respawn for a live remux run: reachable segments are decided
-   *  from the run's own progress, never the killed-run-island-prone directory. */
+   *  from the run's own progress (its assembler), never the killed-run-island-prone directory. */
   private async resolveRunningRemuxSegment(
     key: string,
     existing: TranscodeSession,
     requestedSegment: number,
     audioIndex?: number,
   ): Promise<TranscodeSession | null> {
-    const start = existing.startSegment ?? 0;
-    const frontier = this.remuxFrontier(existing, audioIndex);
-    const reachable = remuxReachable({
-      requestedSegment,
-      start,
-      frontier,
-      waitWindow: remuxWaitWindow({
-        segmentsPerSecond: existing.remuxAssembler?.segmentsPerSecond() ?? null,
-        bufferSeconds: REMUX_WAIT_BUFFER_SECONDS,
-        capSegments: REMUX_MAX_WAIT_SEGMENTS,
-      }),
-    });
-    if (reachable) return existing;
+    if (existing.remuxAssembler?.canServe(requestedSegment, audioIndex, false)) return existing;
 
+    const start = existing.startSegment ?? 0;
     this.log.log(
-      `Seek: restarting [${key}] from segment ${requestedSegment} (remux frontier ${frontier ?? 'unopened'}, start ${start})`,
+      `Seek: restarting [${key}] from segment ${requestedSegment} (remux frontier ${this.remuxFrontier(existing, audioIndex) ?? 'unopened'}, start ${start})`,
     );
-    existing.intentionallyKilled = true;
-    await this.killProcess(existing.process);
-    existing.startSegment = requestedSegment;
-    return null;
+    return this.restartAt(existing, requestedSegment);
   }
 
   async getTranscodePercent(
@@ -1366,7 +1344,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       this.doGetOrCreateRemuxSession(
         key,
         variant,
-        isMultiAudio,
         mediaFileId,
         absolutePath,
         requestedSegment,
@@ -1380,7 +1357,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   private async doGetOrCreateRemuxSession(
     key: string,
     variant: SessionVariant,
-    isMultiAudio: boolean,
     mediaFileId: number,
     absolutePath: string,
     requestedSegment: number,
@@ -1390,25 +1366,17 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   ): Promise<TranscodeSession> {
     const existing = this.sessions.get(key);
     if (existing) {
-      const qualityMatch = !!existing.remux;
-      if (!qualityMatch && existing.process.exitCode === null) {
-        this.log.log(
-          `Switch to remux [${key}]: killing old ${existing.quality} session`,
-        );
-        // Left registered under `key` (see resolveExistingSession) until the
-        // spawn below overwrites it.
-        await this.killAndClean(existing.process, existing.cachePath);
-      } else {
-        const resolved = await this.resolveExistingSession(
-          key,
-          existing,
-          requestedSegment,
-          qualityMatch,
-          audioIndex,
-        );
-        if (resolved) return resolved;
-        requestedSegment = existing.startSegment ?? requestedSegment;
-      }
+      // A `-remux` key (variant.ts) is only ever written by this method, always
+      // with `remux: true` — an entry found here can't be another quality.
+      const resolved = await this.resolveExistingSession(
+        key,
+        existing,
+        requestedSegment,
+        true,
+        audioIndex,
+      );
+      if (resolved) return resolved;
+      requestedSegment = existing.startSegment ?? requestedSegment;
     }
 
     const { dir: sessionDir, baseHash: remuxBaseHash } = this.cacheDirFor(
@@ -1417,6 +1385,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       variant,
       'remux',
     );
+    const isMultiAudio = varStreamMapLayout(ctx?.videoOnly ?? false, ctx?.audioStreams?.length ?? 0);
     const segmentDuration = ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION;
     const audioRenditions = isMultiAudio ? (ctx?.audioStreams?.length ?? 0) : 0;
     // The group's shared codec (any transcoded rendition names it) decides the

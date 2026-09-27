@@ -1,28 +1,19 @@
 import {
+  makeBox,
   parseInitTracks,
   readInitEdits,
   retimeFragments,
   rewriteSegmentTfdt,
+  u32,
   withInitEdits,
 } from './timeline';
 
-// Minimal ISO-BMFF box builders — just enough structure for parseInitTracks /
+// Minimal ISO-BMFF fixtures — just enough structure for parseInitTracks /
 // collectTfdts to walk (moov>trak>[tkhd, mdia>[mdhd, hdlr]] and moof>traf>[tfhd,
 // tfdt]). Offsets match what timeline.ts reads.
 const TS = 1000; // timescale (ticks/sec)
 
-function u32(n: number): Buffer {
-  const b = Buffer.alloc(4);
-  b.writeUInt32BE(n >>> 0, 0);
-  return b;
-}
-
-function box(type: string, payload: Buffer): Buffer {
-  const head = Buffer.alloc(8);
-  head.writeUInt32BE(8 + payload.length, 0);
-  head.write(type, 4, 'latin1');
-  return Buffer.concat([head, payload]);
-}
+const box = (type: string, payload: Buffer): Buffer => makeBox(type, [payload]);
 
 function buildInit(trackId = 1, timescale = TS, handler = 'vide'): Buffer {
   // tkhd v0: version+flags(4) creation(4) modification(4) track_ID(4) → id @12

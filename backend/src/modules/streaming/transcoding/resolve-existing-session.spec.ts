@@ -1,6 +1,7 @@
 import * as fsp from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
+import { REMUX_MAX_WAIT_SEGMENTS } from './constants';
 import { TranscodingService } from './transcoding.service';
 import type { TranscodeSession } from './types';
 
@@ -22,7 +23,12 @@ describe('TranscodingService.resolveExistingSession', () => {
   });
 
   const run = (startSegment: number) =>
-    ({ id: 'k', cachePath: dir, startSegment, process: { exitCode: null } }) as unknown as TranscodeSession;
+    ({
+      id: 'k',
+      cachePath: dir,
+      startSegment,
+      process: { exitCode: null, signalCode: null },
+    }) as unknown as TranscodeSession;
   const resolve = (session: TranscodeSession, seg: number) =>
     (svc as unknown as {
       resolveExistingSession: (k: string, s: TranscodeSession, n: number, q: boolean) => Promise<TranscodeSession | null>;
@@ -68,12 +74,48 @@ describe('TranscodingService.resolveExistingSession', () => {
     expect(killed).toBe(0);
   });
 
+  it('drops a cleanly-exited session for another quality without touching its cache dir', async () => {
+    await fsp.writeFile(path.join(dir, 'seg-0000.m4s'), 'x');
+    const session = {
+      id: 'k',
+      cachePath: dir,
+      startSegment: 0,
+      process: { exitCode: 0, signalCode: null },
+    } as unknown as TranscodeSession;
+    const resolved = await (svc as unknown as {
+      resolveExistingSession: (
+        k: string,
+        s: TranscodeSession,
+        n: number,
+        q: boolean,
+      ) => Promise<TranscodeSession | null>;
+    }).resolveExistingSession('k', session, 0, false);
+    expect(resolved).toBeNull();
+    expect(killed).toBe(0);
+    // A clean exit (code 0) isn't a crash: its cache is still a valid rung.
+    expect(await fsp.readdir(dir)).toContain('seg-0000.m4s');
+  });
+
   describe('remux: reachability decided from the assembler frontier, not the directory', () => {
-    const fakeAssembler = (videoFrontier: number | null, audioFrontier: number | null = null) =>
+    // Mirrors RemuxSegmentAssembler.canServe: no measured throughput here, so
+    // a live run's wait window is always the cap.
+    const fakeAssembler = (
+      startSegment: number,
+      videoFrontier: number | null,
+      audioFrontier: number | null = null,
+    ) =>
       ({
         videoFrontier: () => videoFrontier,
         audioFrontier: () => audioFrontier,
         segmentsPerSecond: () => null,
+        canServe: (segment: number, audioIndex: number | undefined, exited: boolean) => {
+          const frontier = audioIndex != null ? audioFrontier : videoFrontier;
+          if (exited) return frontier != null && segment >= startSegment && segment < frontier;
+          if (segment < startSegment) return false;
+          return frontier == null
+            ? segment - startSegment <= REMUX_MAX_WAIT_SEGMENTS
+            : segment <= frontier + REMUX_MAX_WAIT_SEGMENTS;
+        },
       }) as unknown as TranscodeSession['remuxAssembler'];
 
     const runRemux = (startSegment: number, videoFrontier: number | null) =>
@@ -82,8 +124,8 @@ describe('TranscodingService.resolveExistingSession', () => {
         cachePath: dir,
         startSegment,
         remux: true,
-        remuxAssembler: fakeAssembler(videoFrontier),
-        process: { exitCode: null },
+        remuxAssembler: fakeAssembler(startSegment, videoFrontier),
+        process: { exitCode: null, signalCode: null },
       }) as unknown as TranscodeSession;
 
     it('waits when the request is below the frontier (already produced)', async () => {
@@ -115,7 +157,7 @@ describe('TranscodingService.resolveExistingSession', () => {
         cachePath: dir,
         startSegment,
         remux: true,
-        remuxAssembler: fakeAssembler(videoFrontier),
+        remuxAssembler: fakeAssembler(startSegment, videoFrontier),
         process: { exitCode: 0 },
         outputDone: Promise.resolve(),
       }) as unknown as TranscodeSession;

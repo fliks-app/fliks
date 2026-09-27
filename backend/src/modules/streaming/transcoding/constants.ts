@@ -28,7 +28,7 @@ export const RUN_DIR_PREFIX = 'gop-';
 export const SEEK_WAIT_THRESHOLD = 15;
 
 /** Wall-clock seconds of buffer-ahead converted from a remux run's own
- *  measured throughput (see `remux-reachability.ts`). */
+ *  measured throughput (see `RemuxSegmentAssembler.canServe`). */
 export const REMUX_WAIT_BUFFER_SECONDS = 3;
 
 /** Hard ceiling on the above, in segments: a fast run never earns an

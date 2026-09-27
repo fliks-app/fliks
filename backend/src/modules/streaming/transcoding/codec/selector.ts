@@ -53,11 +53,13 @@ export function pickVariants(
   // Codec ranking: source codec first when client supports it, then
   // efficiency fallback. H.264 last as the universal compatibility safety.
   // `rejectCopy`: the client's decoder just failed this exact bitstream, so
-  // drop the source codec entirely instead of only deprioritising it.
+  // deprioritise the source codec instead of preferring it — but keep it as
+  // a last resort, or a host with no HW encoder for the others is stuck on
+  // a CPU encode of whichever's left.
   const efficiencyOrder: VideoCodec[] = ['av1', 'hevc', 'h264'];
   const codecOrder: VideoCodec[] =
     profile.rejectCopy === true
-      ? efficiencyOrder.filter((c) => c !== source.codec)
+      ? [...efficiencyOrder.filter((c) => c !== source.codec), ...(source.codec ? [source.codec] : [])]
       : source.codec && clientSupports(clientCodecs, source.codec)
         ? [source.codec, ...efficiencyOrder.filter((c) => c !== source.codec)]
         : efficiencyOrder;

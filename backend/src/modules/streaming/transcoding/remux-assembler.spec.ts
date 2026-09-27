@@ -8,15 +8,9 @@ import {
   remuxEdits,
 } from './remux-assembler';
 import { computeSegmentGrid } from './segment-boundaries';
-import { readInitEdits } from './timeline';
+import { makeBox, readInitEdits, u32 } from './timeline';
 
-const u32 = (n: number) => {
-  const b = Buffer.alloc(4);
-  b.writeUInt32BE(n >>> 0);
-  return b;
-};
-const box = (type: string, payload: Buffer) =>
-  Buffer.concat([u32(8 + payload.length), Buffer.from(type, 'latin1'), payload]);
+const box = (type: string, payload: Buffer) => makeBox(type, [payload]);
 
 /** A trak with one v0 edit at `mediaTime`. */
 function trak(id: number, timescale: number, handler: string, mediaTime: number): Buffer {
@@ -411,7 +405,7 @@ const audioFrame = (trackId: number, tfdt: bigint): Buffer => {
   ]);
 };
 
-/** ffmpeg's growing per-track output (H6): ftyp + moov, then one fragment
+/** ffmpeg's growing per-track output: ftyp + moov, then one fragment
  *  per source frame, all in the one file this tails as it grows. */
 const audioTrackFile = (trackId: number, timescale: number, tfdts: bigint[]): Buffer =>
   Buffer.concat([
@@ -428,7 +422,7 @@ const sampleCounts = (buf: Buffer): number[] => {
   return out;
 };
 
-describe('RemuxSegmentAssembler: multi-audio (one growing file per track, H6)', () => {
+describe('RemuxSegmentAssembler: multi-audio (one growing file per track)', () => {
   let dir: string;
   let gopDir: string;
 
@@ -469,7 +463,10 @@ describe('RemuxSegmentAssembler: multi-audio (one growing file per track, H6)', 
       audioTrackFile(trackId, 48000, times.map((t) => BigInt(Math.round(t * 48000)))),
     );
   const segsIn = (d: string) => fs.readdirSync(d).filter((f) => f.startsWith('seg-')).sort();
-  const plan = (grid_: typeof grid | null, extra: { segmentDuration?: number } = {}) =>
+  const plan = (
+    grid_: typeof grid | null,
+    extra: { segmentDuration?: number; origin?: number } = {},
+  ) =>
     remuxAssemblyPlan({
       dir,
       gopDir,
@@ -481,7 +478,7 @@ describe('RemuxSegmentAssembler: multi-audio (one growing file per track, H6)', 
       ...extra,
     });
 
-  it('coalesces per-frame fragments into one moof/trun per served segment (M2)', async () => {
+  it('coalesces per-frame fragments into one moof/trun per served segment', async () => {
     // 6 keyframes (0,2,4,6,8,10) → 3 served segments of 4s (boundaries 0,4,8,12).
     writeVideoGops([0, 2, 4, 6, 8, 10]);
     // ffmpeg writes one fragment per frame, one file per second here, none
@@ -532,7 +529,30 @@ describe('RemuxSegmentAssembler: multi-audio (one growing file per track, H6)', 
     expect(segsIn(path.join(dir, '1'))).toEqual(['seg-0000.m4s', 'seg-0001.m4s']);
   });
 
-  it("drops a seeked run's own priming fragments instead of prepending them (M2)", async () => {
+  it('anchors the uniform fallback grid on the plan origin, not the run\'s own landing point', async () => {
+    // Origin 10s, 3s segments: a run from segment 0 needs no -ss, so its raw
+    // tfdt is already the absolute source time, same as video's own cut.
+    writeVideoGops([10, 13]);
+    writeAudioTrack(0, 10, [10, 13]);
+    const asm = new RemuxSegmentAssembler(plan(null, { origin: 10 }), log, 'test-multi-origin');
+    asm.start();
+    await asm.finish(true);
+    expect(segsIn(path.join(dir, '1'))).toEqual(['seg-0000.m4s', 'seg-0001.m4s']);
+  });
+
+  it("keeps a run-from-0 track's own priming instead of dropping it, like the single-audio path", async () => {
+    writeVideoGops([0, 2, 4, 6, 8, 10]);
+    // Two frames ahead of the file's own start (real encoder priming), then
+    // the real content: segment 0 has no earlier run's segment to protect.
+    writeAudioTrack(0, 10, [-0.02, -0.01, 0, 1, 2, 3]);
+    const asm = new RemuxSegmentAssembler(plan(grid), log, 'test-multi-first-priming');
+    asm.start();
+    await asm.finish(true);
+    const seg0 = fs.readFileSync(path.join(dir, '1', 'seg-0000.m4s'));
+    expect(sampleCounts(seg0)).toEqual([6]);
+  });
+
+  it("drops a seeked run's own priming fragments instead of prepending them", async () => {
     // Segment 1 (boundary 4s), same run as the single-rendition "adds back
     // the output -ss" test above: -ss 3.9195 rounds to 3.920, so a run-local
     // time is its absolute source time less 3.92.
@@ -573,7 +593,7 @@ describe('RemuxSegmentAssembler: multi-audio (one growing file per track, H6)', 
     expect(sampleCounts(seg1)).toEqual([4]);
   });
 
-  it('treats a delta of exactly 0n as already resolved, not "not yet open" (M3)', async () => {
+  it('treats a delta of exactly 0n as already resolved, not "not yet open"', async () => {
     // A run whose audio priming headroom and correction net to exactly 0
     // ticks: `!a.delta` (falsy on 0n) would re-run openAudioRun forever.
     const zeroGrid = computeSegmentGrid([{ pts: 0, dts: 0.14 }], 0, 4, 4)!;
@@ -597,7 +617,7 @@ describe('RemuxSegmentAssembler: multi-audio (one growing file per track, H6)', 
     await asm.finish(true);
   });
 
-  it('logs and fails the run when a track\'s init never becomes parseable (M4)', async () => {
+  it("logs and fails the run when a track's init never becomes parseable", async () => {
     writeVideoGops([0, 2, 4, 6, 8, 10]);
     // Not a parseable moov: the track can never open, so this must fail fast
     // instead of silently never publishing the rendition.
@@ -618,7 +638,7 @@ describe('RemuxSegmentAssembler: multi-audio (one growing file per track, H6)', 
     await asm.finish(true);
   });
 
-  it("isolates one track's failures from the video's own counter and log wording (M13)", async () => {
+  it("isolates one track's failures from the video's own counter and log wording", async () => {
     writeVideoGops([0, 2, 4, 6, 8, 10]);
     fs.writeFileSync(path.join(gopDir, 'a0.mp4'), Buffer.concat([box('ftyp', Buffer.alloc(4)), box('moov', Buffer.alloc(0))]));
     const onFailure = jest.fn();
@@ -638,5 +658,83 @@ describe('RemuxSegmentAssembler: multi-audio (one growing file per track, H6)', 
     const newErrors = (log.error as jest.Mock).mock.calls.slice(errorCallsBefore);
     expect(newErrors).toEqual([[expect.stringContaining('audio rendition 1 assembly stopped')]]);
     await asm.finish(true);
+  });
+});
+
+describe('RemuxSegmentAssembler.canServe (wait vs respawn)', () => {
+  const bare = (startSegment: number) =>
+    new RemuxSegmentAssembler(
+      remuxAssemblyPlan({
+        dir: '/x',
+        gopDir: '/x/gop',
+        grid: null,
+        startSegment,
+        run: { audioStartSeconds: 0, seekSeconds: null, startNumber: startSegment },
+        origin: 0,
+      }),
+      log,
+      'test-canserve',
+    );
+  /** Poke the run open with a video frontier at `next`, and a throughput of
+   *  `(next - openStartSegment) / (elapsedMs / 1000)` (null: unmeasured). */
+  const open = (
+    asm: RemuxSegmentAssembler,
+    next: number,
+    openStartSegment: number,
+    elapsedMs: number | null,
+  ): RemuxSegmentAssembler => {
+    Object.assign(
+      asm as unknown as { opened: boolean; next: number; openStartSegment: number; openedAt: number | null },
+      { opened: true, next, openStartSegment, openedAt: elapsedMs == null ? null : Date.now() - elapsedMs },
+    );
+    return asm;
+  };
+
+  it("is false below the run's own start: it will never produce a segment behind it", () => {
+    const asm = open(bare(10), 12, 10, 1000);
+    expect(asm.canServe(5, undefined, false)).toBe(false);
+    expect(asm.canServe(5, undefined, true)).toBe(false);
+  });
+
+  it('is true for a segment already produced (below the frontier)', () => {
+    const asm = open(bare(10), 20, 10, 1000);
+    expect(asm.canServe(11, undefined, false)).toBe(true);
+    expect(asm.canServe(11, undefined, true)).toBe(true);
+  });
+
+  it('a live run is true just past the frontier, within its wait window', () => {
+    // Throughput 10/s, buffer 3s, cap 3: window caps at 3.
+    const asm = open(bare(10), 20, 10, 1000);
+    expect(asm.canServe(22, undefined, false)).toBe(true);
+    expect(asm.canServe(24, undefined, false)).toBe(false);
+  });
+
+  it("an exited run is a hard boundary at the frontier: no buffer-ahead, whatever a live run's window would allow", () => {
+    const asm = open(bare(10), 20, 10, 1000);
+    expect(asm.canServe(20, undefined, true)).toBe(false);
+    expect(asm.canServe(20, undefined, false)).toBe(true); // same segment, still running: within window
+  });
+
+  it("an unopened run is reachable only within the wait window of its own start", () => {
+    const asm = bare(0); // never opened: no frontier, no throughput
+    expect(asm.canServe(2, undefined, false)).toBe(true);
+    expect(asm.canServe(9, undefined, false)).toBe(false);
+    expect(asm.canServe(2, undefined, true)).toBe(false); // exited with no frontier: never produced anything
+  });
+
+  it('shrinks the wait window for a slow run, never below 1', () => {
+    // Throughput 0.05/s: round(0.05 * 3) = 0, floored to 1; frontier 1 + window 1 = 2.
+    const asm = open(bare(0), 1, 0, 20_000);
+    expect(asm.canServe(2, undefined, false)).toBe(true);
+    expect(asm.canServe(3, undefined, false)).toBe(false);
+  });
+
+  it("one rendition's own frontier is independent of the video's", () => {
+    const asm = bare(0);
+    open(asm, 5, 0, 1000); // video produced up to 5
+    (asm as unknown as { audio: { index: number; served: number }[] }).audio = [{ index: 1, served: 2 }];
+    expect(asm.canServe(1, 1, true)).toBe(true); // rendition 1 already produced this
+    expect(asm.canServe(3, 1, true)).toBe(false); // rendition 1 hasn't reached it yet
+    expect(asm.canServe(3, undefined, true)).toBe(true); // video has
   });
 });
