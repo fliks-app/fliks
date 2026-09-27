@@ -23,7 +23,7 @@ describe('needsReprobe', () => {
     ['formatStartSeconds', { ...withVideo, formatStartSeconds: undefined }],
     ['firstFrameSeconds', { ...withVideo, video: [{ firstFrameSeconds: undefined }] }],
     ['per-track audio start', { ...withVideo, audio: [{ startTimeSeconds: undefined }] }],
-  ])('is false when only %s is missing — formatName alone decides staleness', (_label, si) => {
+  ])('is false when only %s is missing: formatName alone decides staleness', (_label, si) => {
     expect(needsReprobe(si as never)).toBe(false);
   });
 });
@@ -109,7 +109,7 @@ describe('StaleProbeRescanService', () => {
     });
   });
 
-  it('never saves a probe that resolved with an error — the real ffprobe behaviour on a timeout or a corrupt header', async () => {
+  it('never saves a probe that resolved with an error, the real ffprobe behaviour on a timeout or a corrupt header', async () => {
     const broken = { video: [], audio: [], subtitles: [], error: 'ffprobe file info failed: timed out' };
     const { svc, files, sourceScans } = setup({ streamInfo: stale }, broken);
     await expect(svc.scheduleIfNeeded(3, file, stale as never)).resolves.toBeUndefined();

@@ -7,7 +7,7 @@ import { MediaFile } from '../../media/entities/media-file.entity';
 import { FfprobeService, type MediaFileInfo } from '../../subtitles/ffprobe.service';
 import { SourceScanService, sourceVersion } from './source-scan.service';
 
-/** True once a video row predates `formatName` — it landed together with every
+/** True once a video row predates `formatName`: it landed together with every
  *  other field this backfill fixes, so its absence alone flags the row stale. */
 export function needsReprobe(si: MediaFileInfo | null | undefined): boolean {
   if (!si?.video?.[0]) return false;
