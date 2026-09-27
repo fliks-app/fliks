@@ -46,6 +46,7 @@ const resolved = (
   dvProfile?: number,
   dvBlSignalCompatId?: number,
   dvElPresent?: boolean,
+  dvLevel?: number,
 ) =>
   ({
     ext: '.mkv',
@@ -73,6 +74,7 @@ const resolved = (
             dvProfile,
             dvBlSignalCompatId,
             dvElPresent,
+            dvLevel,
           },
         ],
         audio: [{ codec: 'aac', channels: 2, bitRate: 128_000 }],
@@ -140,5 +142,16 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
     expect(r.response.playMethod).toBe('Transcode');
     expect(r.response.videoCopyStream).toBeFalsy();
     expect(r.response.tonemapping).toBe(true);
+  });
+
+  it('remuxes DV 8.1 with dolbyVision:true for a DV client that cannot raw-play the container', () => {
+    const r = svc().evaluate(resolved(8, 1, undefined, 6), dvMp4OnlyClient, 'tok');
+    expect(r.response.playMethod).toBe('DirectStream');
+    expect(r.response.dolbyVision).toBe(true);
+  });
+
+  it('never flags dolbyVision for an HDR-only client (no DV declared)', () => {
+    const r = svc().evaluate(resolved(8, 1, undefined, 6), hdrHevcClient, 'tok');
+    expect(r.response.dolbyVision).toBeFalsy();
   });
 });

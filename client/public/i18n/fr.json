@@ -147,7 +147,8 @@
       "VideoBitrateNotSupported": "Bitrate trop élevé"
     },
     "preparing": "Préparation du flux…",
-    "stats_delivery_mismatch": "Décision serveur : {{decision}} / Diffusé : {{delivered}}"
+    "stats_delivery_mismatch": "Décision serveur : {{decision}} / Diffusé : {{delivered}}",
+    "stats_dolby_vision_base": "Dolby Vision {{profile}}, base {{base}}"
   },
   "sse": {
     "subtitle_synced": "Sous-titre synchronisé avec succès.",

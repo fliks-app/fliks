@@ -142,7 +142,8 @@
       "VideoBitrateNotSupported": "Débito demasiado elevado"
     },
     "preparing": "A preparar a transmissão…",
-    "stats_delivery_mismatch": "Decisão do servidor: {{decision}} / Entregue: {{delivered}}"
+    "stats_delivery_mismatch": "Decisão do servidor: {{decision}} / Entregue: {{delivered}}",
+    "stats_dolby_vision_base": "Dolby Vision {{profile}}, base {{base}}"
   },
   "sse": {
     "subtitle_synced": "Legenda sincronizada com sucesso.",

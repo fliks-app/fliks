@@ -63,6 +63,7 @@ import {
   sourceTimeline,
 } from './transcoding/source-timeline';
 import { copySourceCodecString } from './transcoding/codec/codec-strings';
+import { dvSupplementalCodecs } from './transcoding/codec/dolby-vision';
 import { LiveSessionRegistry, type LiveSession, type SessionKind } from './live-session.service';
 import * as path from 'path';
 import { SegmentPackagingService } from './services/segment-packaging.service';
@@ -1053,6 +1054,7 @@ export class StreamingController {
       videoVariant,
       timeline,
       sourceVersion: held.version,
+      dolbyVision: response.dolbyVision ?? false,
     };
     const profileHash =
       response.playMethod === 'DirectPlay'
@@ -1447,9 +1449,12 @@ export class StreamingController {
       // Copied stream: describe the bitstream as probed, not as a rung would
       // encode it (see copySourceCodecString).
       remuxCodecs: includeRemux && v ? copySourceCodecString(v) : undefined,
+      remuxSupplementalCodecs:
+        includeRemux && live?.dolbyVision ? dvSupplementalCodecs(v) : undefined,
       formatBitRate:
         si?.formatBitRate ?? (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0),
       sourceFrameRate,
+      sourceHdrFormat,
       subtitleRenditions,
       sourceVideoBitrateBps: resolveSourceVideoBitrateBps(
         v?.bitRate,

@@ -32,6 +32,9 @@ export interface PlaybackInfoResponse {
   /** HDR copied through and tone-mapped by this client (desktop mpv on an SDR
    *  display), so no server-side tone-map ran. */
   clientTonemap?: boolean;
+  /** Delivered stream is Dolby Vision-presentable (raw DirectPlay, or a
+   *  SUPPLEMENTAL-CODECS remux); false on a transcode, which drops DV. */
+  dolbyVision?: boolean;
   /** Tone-map mechanism the backend actually runs: a HW path
    *  (`'vaapi'` / `'opencl'` / `'qsv'`) on QSV/VAAPI encoders, or
    *  `'cpu'` for the CPU chain (NVENC / libx26x / VideoToolbox

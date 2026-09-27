@@ -52,6 +52,9 @@ export interface PlaybackProfile {
   formatStart: number;
   /** {@link SessionContext.sourceVersion}. */
   sourceVersion: string | null;
+  /** {@link SessionContext.dolbyVision}: a DV session writes a `dvvC` box the
+   *  init segment otherwise lacks, so it can never share a non-DV cache dir. */
+  dolbyVision: boolean;
 }
 
 /** Segment timeline layout (edit lists, tfdt origin, audio alignment). Raised
@@ -88,6 +91,7 @@ function canonicalise(profile: PlaybackProfile): string {
     `o=${profile.origin}`,
     `fs=${profile.formatStart}`,
     `sv=${profile.sourceVersion ?? ''}`,
+    ...(profile.dolbyVision ? [`dv=1`] : []),
   ].join('|');
 }
 
@@ -147,5 +151,6 @@ export function buildPlaybackProfileFromContext(
     origin: ctx?.sourceStartPts ?? 0,
     formatStart: ctx?.sourceFormatStart ?? ctx?.sourceStartPts ?? 0,
     sourceVersion: ctx?.sourceVersion ?? null,
+    dolbyVision: ctx?.dolbyVision ?? false,
   };
 }

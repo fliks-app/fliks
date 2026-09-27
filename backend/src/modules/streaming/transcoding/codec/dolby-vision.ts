@@ -12,6 +12,8 @@ export interface DvStream {
   dvProfile?: number;
   dvBlSignalCompatId?: number;
   dvElPresent?: boolean;
+  dvLevel?: number;
+  hdrFormat?: string;
 }
 
 export function deriveDvInfo(v?: DvStream): DvInfo {
@@ -27,4 +29,14 @@ export function deriveDvInfo(v?: DvStream): DvInfo {
  *  client can present DV. */
 export function isDvProfile5(info: DvInfo): boolean {
   return info.profile === 5 && info.singleLayer;
+}
+
+/** RFC 8216bis SUPPLEMENTAL-CODECS for a P8 base: `db1p` for PQ compat-1,
+ *  `db4h` for HLG compat-4; null on any other profile/compat/transfer/level. */
+export function dvSupplementalCodecs(v?: DvStream): string | null {
+  if (v?.dvProfile !== 8 || !v?.dvLevel) return null;
+  const level = String(v.dvLevel).padStart(2, '0');
+  if (v.dvBlSignalCompatId === 1 && v.hdrFormat === 'HDR10') return `dvh1.08.${level}/db1p`;
+  if (v.dvBlSignalCompatId === 4 && v.hdrFormat === 'HLG') return `dvh1.08.${level}/db4h`;
+  return null;
 }

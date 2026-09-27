@@ -142,7 +142,8 @@
       "VideoBitrateNotSupported": "Tasa de bits demasiado alta"
     },
     "preparing": "Preparando la transmisión…",
-    "stats_delivery_mismatch": "Decisión del servidor: {{decision}} / Entregado: {{delivered}}"
+    "stats_delivery_mismatch": "Decisión del servidor: {{decision}} / Entregado: {{delivered}}",
+    "stats_dolby_vision_base": "Dolby Vision {{profile}}, base {{base}}"
   },
   "sse": {
     "subtitle_synced": "Subtítulo sincronizado correctamente.",

@@ -190,6 +190,9 @@ function hlsMuxerArgs(o: {
   sourceTimestamps?: boolean;
   /** Entries kept in the muxer's own playlist, 0 for all of them. */
   listSize?: number;
+  /** Emit `dvvC`/`dvcC` in the init segment: the mp4 sub-muxer otherwise logs
+   *  "Not writing 'dvcC'/'dvvC' box. Requires -strict unofficial." and drops it. */
+  dolbyVision?: boolean;
 }): string[] {
   const origin = o.useTs ? 0 : (o.originSeconds ?? 0);
   return [
@@ -199,7 +202,10 @@ function hlsMuxerArgs(o: {
       ? []
       : ['-movflags', '+cmaf', '-avoid_negative_ts', 'disabled']),
     ...(o.sourceTimestamps
-      ? ['-hls_segment_options', 'movflags=+frag_discont']
+      ? [
+          '-hls_segment_options',
+          `movflags=+frag_discont${o.dolbyVision ? ':strict=unofficial' : ''}`,
+        ]
       : []),
     // 0-based output (MSE ignores an empty edit, a tfdt can't go below 0); serving
     // adds back `servedOrigin`. A seeked run is 0-based by its output `-ss`.
@@ -1362,6 +1368,9 @@ export interface BuildRemuxArgsOptions {
    *  `BuildFfmpegArgsOptions.videoOnly`): `audioStreams.length > 1` alone
    *  doesn't imply it, a caller may still pick one track out of several. */
   videoOnly?: boolean;
+  /** Session is Dolby Vision-eligible: writes a `dvvC` box into the init
+   *  segment via `-hls_segment_options ...:strict=unofficial`. */
+  dolbyVision?: boolean;
 }
 
 /** One `-f mp4` output per audio track: a growing fragmented file the assembler
@@ -1421,6 +1430,7 @@ export function buildRemuxArgs(
     audioPlan,
     audioTrackPlans,
     videoOnly = false,
+    dolbyVision = false,
   } = opts;
 
   const args = ['-hide_banner', '-loglevel', 'warning'];
@@ -1516,6 +1526,7 @@ export function buildRemuxArgs(
       sourceTimestamps: true,
       // Nothing reads it; a full one is rewritten whole on every GOP.
       listSize: 1,
+      dolbyVision,
     }),
   );
 

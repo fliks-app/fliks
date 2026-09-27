@@ -40,7 +40,12 @@ import {
   resolutionFitsCap,
 } from '../../common/utils/resolution.util';
 import { normaliseSourceCodec } from './transcoding/codec/normalise';
-import { deriveDvInfo, isDvProfile5 } from './transcoding/codec/dolby-vision';
+import {
+  deriveDvInfo,
+  isDvProfile5,
+  dvSupplementalCodecs,
+} from './transcoding/codec/dolby-vision';
+import { copySourceCodecString } from './transcoding/codec/codec-strings';
 import { pickPrimaryVariant } from './transcoding/codec/selector';
 import type { CodecVariant, VideoCodec } from './transcoding/codec/types';
 import { audioLayout, resolveMuxFlavour } from './transcoding/audio-layout';
@@ -433,6 +438,12 @@ export class StreamBuilderService {
       directPlayResult.videoConditionsMet;
     const clientCanPresentDynamicRange =
       clientCanPresentHdr || clientCanPresentDv;
+    // dv.singleLayer alone also matches P5 and P8.2; dvSupplementalCodecs
+    // narrows to a real P8.1/8.4 base layer, which is what "Dolby Vision" means.
+    const dvP8 = clientCanPresentDv && dvSupplementalCodecs(v) != null;
+    // A remux additionally needs a manifest-describable CODECS string;
+    // DirectPlay has no manifest to negotiate.
+    const dvRemuxEligible = dvP8 && copySourceCodecString(v ?? {}) != null;
     // HDR reaches an SDR client that tone-maps on its own — copied through, or
     // re-encoded on the HDR ladder. Surfaced in the stats overlay and the admin
     // dashboard, which would otherwise show no HDR step at all.
@@ -653,6 +664,7 @@ export class StreamBuilderService {
           hwAccel: 'none',
           tonemapping: false,
           clientTonemap,
+          dolbyVision: dvP8,
           qualities: this.buildQualityList(
             source,
             'DirectPlay',
@@ -801,6 +813,7 @@ export class StreamBuilderService {
           hwAccel: this.transcodingService.getDetectedHwAccel(),
           tonemapping: false,
           clientTonemap,
+          dolbyVision: dvRemuxEligible,
           remuxMasterBandwidthBps: remuxBw > 0 ? remuxBw : undefined,
           transcodeBitrateByQuality,
           qualities: this.buildQualityList(
@@ -877,6 +890,8 @@ export class StreamBuilderService {
         hwAccel: effectiveHwAccel,
         tonemapping: transcodeTonemaps,
         clientTonemap,
+        // A transcode re-encodes to H.264/HEVC SDR or HDR10, never DV.
+        dolbyVision: false,
         transcodeBitrateByQuality,
         // canCopyVideo, not sourceCopyable: a source only gated off here
         // (mux/reject/allowDirectStream) must not collapse to an uncapped 'original'.

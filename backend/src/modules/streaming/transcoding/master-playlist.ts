@@ -82,6 +82,9 @@ interface RemuxVariantOptions {
   /** VIDEO-RANGE attribute value; omitted (SDR) leaves the attribute off. */
   range?: 'PQ' | 'HLG';
   remuxCodecs?: string | null;
+  /** RFC 8216bis SUPPLEMENTAL-CODECS for the copied DV base layer; only
+   *  emitted alongside a non-null `remuxCodecs` (its base codec). */
+  remuxSupplementalCodecs?: string | null;
   /** Container total, used only when `sourceVideoBitrateBps` can't be resolved. */
   formatBitRate?: number;
   sourceVideoBitrateBps?: number;
@@ -104,15 +107,20 @@ function pushRemuxVariant(lines: string[], opts: RemuxVariantOptions): void {
     codecsTail,
     range,
     remuxCodecs,
+    remuxSupplementalCodecs,
     formatBitRate,
     sourceVideoBitrateBps,
     audioPlans,
   } = opts;
   const bandwidth = remuxBandwidthBps(sourceVideoBitrateBps, formatBitRate, audioPlans);
   const codecsAttr = remuxCodecs ? `,CODECS="${remuxCodecs}${codecsTail}"` : '';
+  const supplementalAttr =
+    remuxCodecs && remuxSupplementalCodecs
+      ? `,SUPPLEMENTAL-CODECS="${remuxSupplementalCodecs}"`
+      : '';
   const rangeAttr = range ? `,VIDEO-RANGE=${range}` : '';
   lines.push(
-    `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth},AVERAGE-BANDWIDTH=${bandwidth},RESOLUTION=${sourceWidth}x${sourceHeight}${rangeAttr}${frameRateAttr},NAME="remux"${codecsAttr}${audioAttr}${subsAttr},CLOSED-CAPTIONS=NONE`,
+    `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth},AVERAGE-BANDWIDTH=${bandwidth},RESOLUTION=${sourceWidth}x${sourceHeight}${rangeAttr}${frameRateAttr},NAME="remux"${codecsAttr}${supplementalAttr}${audioAttr}${subsAttr},CLOSED-CAPTIONS=NONE`,
     `/api/stream/${mediaFileId}/remux/index.m3u8${tokenParam}`,
   );
 }
@@ -247,9 +255,15 @@ export interface MasterPlaylistOptions {
    *  probes the real bytes — never substitute a rung-derived string here, a
    *  copy must not be described by the encoder's arithmetic. */
   remuxCodecs?: string | null;
+  /** RFC 8216bis SUPPLEMENTAL-CODECS for the copied Dolby Vision base layer
+   *  (see {@link dvSupplementalCodecs}); emitted on the remux variant only. */
+  remuxSupplementalCodecs?: string | null;
   /** Container total bitrate for the remux variant's BANDWIDTH, used only when
    *  `sourceVideoBitrateBps` can't be resolved. */
   formatBitRate?: number;
+  /** Source HDR format: sets the remux variant's VIDEO-RANGE directly, since
+   *  a copy carries the source's HDR regardless of `hdrPassThrough`. */
+  sourceHdrFormat?: 'HDR10' | 'HLG';
   /** Segment grid length, in seconds, of the trick-play rendition to advertise.
    *  Unset omits it: only AVPlay needs the `EXT-X-I-FRAME-STREAM-INF` tag, and
    *  every player that reads one will fetch the frames behind it. */
@@ -282,8 +296,12 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
     dedupesAudioByLanguage = false,
     iFrameTrickPlaySegmentSeconds,
     remuxCodecs,
+    remuxSupplementalCodecs,
     formatBitRate,
+    sourceHdrFormat,
   } = opts;
+  const remuxRange: 'PQ' | 'HLG' | undefined =
+    sourceHdrFormat === 'HLG' ? 'HLG' : sourceHdrFormat ? 'PQ' : undefined;
   // The caller decided the layout (`audioLayout`): a non-empty `audioStreams`
   // asks for EXT-X-MEDIA renditions, `undefined` for the muxed one.
   const multiAudio = audioStreams && audioStreams.length > 0;
@@ -381,8 +399,9 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
         audioAttr,
         subsAttr,
         codecsTail,
-        range,
+        range: remuxRange,
         remuxCodecs,
+        remuxSupplementalCodecs,
         formatBitRate,
         sourceVideoBitrateBps,
         audioPlans: plans,
@@ -457,7 +476,9 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
       audioAttr,
       subsAttr,
       codecsTail,
+      range: remuxRange,
       remuxCodecs,
+      remuxSupplementalCodecs,
       formatBitRate,
       sourceVideoBitrateBps,
       audioPlans: plans,

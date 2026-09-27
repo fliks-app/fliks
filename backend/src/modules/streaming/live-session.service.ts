@@ -140,6 +140,8 @@ export interface LiveSession {
   tonemapping: boolean;
   /** HDR copied through to a client that tone-maps it locally. */
   clientTonemap: boolean;
+  /** Delivered stream is Dolby Vision-presentable (see playback-info.dto). */
+  dolbyVision: boolean;
   transcodeReasons: TranscodeReason[];
   burnIn: BurnInSubtitle | null;
   encoderPreset: string;
@@ -198,6 +200,7 @@ export interface CreateLiveSessionInput {
   videoVariant?: CodecVariant | null;
   tonemapping?: boolean;
   clientTonemap?: boolean;
+  dolbyVision?: boolean;
   transcodeReasons?: TranscodeReason[];
   burnIn?: BurnInSubtitle | null;
   encoderPreset?: string;
@@ -319,6 +322,7 @@ export function buildLiveSession(
       videoVariant: input.videoVariant ?? null,
       tonemapping: input.tonemapping ?? false,
       clientTonemap: input.clientTonemap ?? false,
+      dolbyVision: input.dolbyVision ?? false,
       transcodeReasons: input.transcodeReasons ?? [],
       burnIn: input.burnIn ?? null,
       encoderPreset: input.encoderPreset ?? 'faster',

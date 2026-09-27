@@ -27,6 +27,7 @@ const BASE: PlaybackProfile = {
   origin: 0,
   formatStart: 0,
   sourceVersion: null,
+  dolbyVision: false,
 };
 
 describe('computeProfileHash', () => {

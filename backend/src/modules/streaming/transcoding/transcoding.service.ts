@@ -1408,6 +1408,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         audioPlan: ctx?.audioPlan,
         audioTrackPlans: isMultiAudio ? ctx?.audioTrackPlans : undefined,
         videoOnly: isMultiAudio,
+        dolbyVision: ctx?.dolbyVision,
       },
       this.log,
     );
