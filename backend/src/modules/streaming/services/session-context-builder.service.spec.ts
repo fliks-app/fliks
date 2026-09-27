@@ -172,6 +172,7 @@ describe('SessionContextBuilder.build', () => {
         { mode: 'transcode' as const, codec: 'aac' as const, channels },
       ],
       videoVariant: { codec: 'h264' as const, bitDepth: 8 as const, hdr: null },
+      dolbyVision: true,
     });
     const registry = new LiveSessionRegistry();
     const live = registry.create({

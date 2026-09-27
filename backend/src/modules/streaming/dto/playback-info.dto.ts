@@ -119,6 +119,10 @@ export interface PlaybackInfoResponse {
    *  mpv), so no server-side tone-map ran. */
   clientTonemap?: boolean;
 
+  /** Delivered stream is Dolby Vision-presentable (raw DirectPlay, or a
+   *  SUPPLEMENTAL-CODECS remux); false on a transcode, which drops DV. */
+  dolbyVision?: boolean;
+
   /** Tone-map mechanism the session actually runs. `'vaapi'` / `'opencl'`
    *  / `'qsv'` for QSV/VAAPI encoders (after `auto` resolution + boot
    *  probe); `'videotoolbox'` for the macOS `scale_vt` Metal path; `'cpu'`

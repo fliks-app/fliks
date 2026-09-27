@@ -236,6 +236,9 @@ export interface SessionContext {
    *  ffmpeg-args can gate the P5 `tonemap_opencl=apply_dovi` tone-map. */
   sourceDvProfile?: number;
   sourceDvBlSignalCompatId?: number;
+  /** Delivered stream is Dolby Vision-presentable, frozen on the LiveSession
+   *  at playback-info. Gates the remux muxer's `strict=unofficial`. */
+  dolbyVision?: boolean;
 }
 
 export interface TranscodeSession {

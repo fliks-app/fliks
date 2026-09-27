@@ -423,6 +423,7 @@ describe('generateMasterPlaylist: HDR remux variant (copy path)', () => {
       audioPlans: [{ mode: 'copy', codec: 'eac3' }],
       hdrPassThrough: { hdrFormat: 'HDR10', hdrVariant: HEVC_HDR10 },
       canEmitHdrLadder: true,
+      sourceHdrFormat: 'HDR10',
       ...opts,
     });
 
@@ -444,6 +445,22 @@ describe('generateMasterPlaylist: HDR remux variant (copy path)', () => {
     const line = streamInfLines(hdrRemuxMaster())[0];
     expect(line).toContain('VIDEO-RANGE=PQ');
     expect(line).toContain('RESOLUTION=3840x2160');
+  });
+
+  it('carries VIDEO-RANGE from sourceHdrFormat alone, with no hdrPassThrough', () => {
+    const line = streamInfLines(
+      hdrRemuxMaster({ hdrPassThrough: undefined, canEmitHdrLadder: false }),
+    )[0];
+    expect(line).toContain('VIDEO-RANGE=PQ');
+  });
+
+  it('adds SUPPLEMENTAL-CODECS for a Dolby Vision P8.1 remux, alongside VIDEO-RANGE=PQ', () => {
+    const line = streamInfLines(
+      hdrRemuxMaster({ remuxSupplementalCodecs: 'dvh1.08.06/db1p' }),
+    )[0];
+    expect(line).toContain('CODECS="hvc1.2.4.L153.B0,ec-3"');
+    expect(line).toContain('SUPPLEMENTAL-CODECS="dvh1.08.06/db1p"');
+    expect(line).toContain('VIDEO-RANGE=PQ');
   });
 
   it('is published even when the host has no HDR encoder (copy needs none)', () => {

@@ -1562,6 +1562,19 @@ describe('buildRemuxArgs — golden (characterization)', () => {
     ]);
   });
 
+  it('remux: a Dolby Vision session appends strict=unofficial so ffmpeg writes dvvC', () => {
+    const args = remuxArgs({
+      inputPath: '/media/in.mkv',
+      outputDir: '/cache/out',
+      audioPlan: { mode: 'copy', codec: 'aac' },
+      trustedStreamInfo: true,
+      sourceVideoCodec: 'hevc',
+      dolbyVision: true,
+    });
+    const i = args.indexOf('-hls_segment_options');
+    expect(args[i + 1]).toBe('movflags=+frag_discont:strict=unofficial');
+  });
+
   it('remux: every run but the first seeks both sides to its keyframe decode time', () => {
     const seeksOf = (startSegment: number, grid: typeof GRID | null) => {
       const args = remuxArgs({

@@ -849,8 +849,22 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       src?.width,
       src?.height,
     );
-    // A tonemapped delivery is SDR: the header must not claim the source's HDR.
-    const hdrTag = src?.hdrFormat && !pi?.tonemapping ? ` ${src.hdrFormat}` : '';
+    // A tonemapped delivery is SDR; corroborate DV with Shaka's own codec
+    // string (if reported) so a plain-HEVC fallback never claims DV.
+    const engineVideoCodec = activeVariant?.videoCodec?.toLowerCase();
+    const showsDolbyVision =
+      !!pi?.dolbyVision &&
+      deliveredKind !== 'transcode' &&
+      (engineVideoCodec == null || engineVideoCodec.startsWith('dv'));
+    const hdrTag =
+      !src?.hdrFormat || pi?.tonemapping
+        ? ''
+        : showsDolbyVision
+          ? ` ${this.translate.instant('player.stats_dolby_vision_base', {
+              profile: src.hdrFormat === 'HLG' ? '8.4' : '8.1',
+              base: src.hdrFormat,
+            })}`
+          : ` ${src.hdrFormat}`;
     const codecName = (src?.videoCodec ?? '?').toUpperCase();
     const videoLabel = `${resLabel}${hdrTag} ${codecName}`;
 

@@ -12,7 +12,13 @@ import type { SessionContext } from './types';
  *  session rebuilds its context, and so its cache hash, from. */
 export type SessionLayout = Pick<
   LiveSession,
-  'useTs' | 'audioPlan' | 'audioTrackPlans' | 'videoVariant' | 'timeline' | 'sourceVersion'
+  | 'useTs'
+  | 'audioPlan'
+  | 'audioTrackPlans'
+  | 'videoVariant'
+  | 'timeline'
+  | 'sourceVersion'
+  | 'dolbyVision'
 >;
 
 /** The session fields the cache profile hash is derived from. The timeline
@@ -34,6 +40,7 @@ export function sessionLayoutContext(
   | 'sourceEndSeconds'
   | 'sourceClockBreakSeconds'
   | 'sourceVersion'
+  | 'dolbyVision'
 > {
   const useTs = live?.useTs ?? false;
   const timeline = live?.timeline ?? sourceTimeline(si, label);
@@ -53,6 +60,7 @@ export function sessionLayoutContext(
     sourceEndSeconds: timeline.end,
     sourceClockBreakSeconds: timeline.clockBreak,
     sourceVersion: live?.sourceVersion ?? undefined,
+    dolbyVision: live?.dolbyVision ?? false,
   };
 }
 
