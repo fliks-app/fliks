@@ -44,7 +44,7 @@ import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { PlaybackQueueService, QueueItem } from '../../core/services/playback-queue.service';
 import { buildSeriesQueueItems, resolvePlayableFile } from '../../shared/utils/media-play.util';
-import { audioChannelsLabel, deliveredKindFromVariant, formatAudioLabel, formatAudioParts, inIntroRange, inOutroRange, parseAudioIndex, SpriteMetadata, widthForProfile, type DeliveredKind } from '../../core/utils/player.utils';
+import { audioChannelsLabel, computeVideoCropStyle, deliveredKindFromVariant, formatAudioLabel, formatAudioParts, inIntroRange, inOutroRange, parseAudioIndex, SpriteMetadata, widthForProfile, type DeliveredKind, type VideoCropStyle } from '../../core/utils/player.utils';
 import { classifyPlaybackError, formatErrorDiagnostics, isUndecodableError, userMessageKeyFor } from '../../core/services/playback-engine/playback-error';
 import { environment } from '../../../environments/environment';
 import { normalizeLangCode } from '../../core/utils/language.utils';
@@ -452,6 +452,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly isLandscape = signal(screen.orientation?.type?.startsWith('landscape') ?? false);
   readonly statsVisible = signal(false);
   readonly fillScreen = signal(false);
+  /** Web-crop box (see `applyWebVideoCrop`); null keeps the template's plain
+   *  `object-fit: contain/cover` binding. */
+  readonly videoCropStyle = signal<VideoCropStyle | null>(null);
+  readonly videoCropTransform = computed(() => {
+    const s = this.videoCropStyle();
+    return s ? `translate(${s.translateX}px, ${s.translateY}px)` : null;
+  });
+  private cropResizeObserver: ResizeObserver | null = null;
   private readonly statsRefreshTick = signal(0);
   // ── Skip-intro state ──
   /** Episode-level intro marker received in playback-info (null for movies / no marker). */
@@ -654,6 +662,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (engine && typeof engine.setFillScreen === 'function') {
       engine.setFillScreen(fill);
     }
+    // contain ↔ cover changes the crop's fit math too.
+    this.applyVideoCrop();
   });
 
   /** Push appearance to the active renderer whenever the settings change, so the
@@ -820,13 +830,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const outputFormat = isHls ? 'HLS' : '';
     const outputFps = src?.frameRate ?? '';
 
-    // Letterbox crop detected at import time (ffprobe `cropdetect`).
-    // The transcode pipeline cuts these bars on every cropped session;
-    // surfacing the rectangle in the overlay lets the user see why
-    // the output resolution doesn't match the source.
+    // Letterbox crop detected at import time (ffprobe `cropdetect`). Who
+    // removed it follows actual delivery: a copy means this client did.
     const cropLine = src?.crop
       ? `${src.crop.width}x${src.crop.height} (offset ${src.crop.x},${src.crop.y})`
       : '';
+    const cropAppliedByPlayer = !!cropLine && effectiveVideoCopy;
 
     // --- Video label ---
     // The header describes the SOURCE file (resolution + HDR + codec), matching
@@ -1068,6 +1077,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       videoProfileLine,
       videoPlaybackMode,
       crop: cropLine,
+      cropAppliedByPlayer,
       tonemapping,
       videoTranscodeReasons,
       // Engine stats can read NaN before a quality switch settles; show 0.
@@ -1090,6 +1100,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // On native: listen to orientation changes (immersive handled by effect)
     if (this.isNative) {
       screen.orientation?.addEventListener('change', this.onOrientationChange);
+    }
+
+    // The container's own box (not window resize) is what the web crop
+    // transform needs — it also catches fullscreen toggles and iOS reflow.
+    if (typeof ResizeObserver !== 'undefined') {
+      this.cropResizeObserver = new ResizeObserver(() => this.applyVideoCrop());
+      const container = this.containerEl()?.nativeElement;
+      if (container) this.cropResizeObserver.observe(container);
     }
 
     // Eager backdrop from router state — set BEFORE any await so the
@@ -1429,6 +1447,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           await this.engine!.load(nativeUrl, startTime, nativeMimeType, headers);
         } else {
           await this.createShakaEngine();
+          this.applyVideoCrop();
 
           // Start subtitle loading in parallel with engine.load (Shaka doesn't need them upfront)
           subsPromise = this.trackManager.loadSubtitles(
@@ -1652,6 +1671,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy() {
     this.destroyed = true;
+    this.cropResizeObserver?.disconnect();
     if (this.forcedSaveTrailing) clearTimeout(this.forcedSaveTrailing);
     this.remoteCommandSub.unsubscribe();
     this.savePosition();
@@ -4449,17 +4469,39 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.statsVisible.set(false);
   }
 
-  /** Push the black-bar rectangle onto the desktop engine. The server only
+  /** Push the black-bar rectangle onto the active engine. The server only
    *  crops when it re-encodes, so the client crops exactly on the copy paths —
    *  `videoCopyStream` tells the two apart and keeps them from stacking. */
   private applyVideoCrop(): void {
-    if (!this.isDesktopNative) return;
     const c = this.playbackInfo?.videoCopyStream
       ? this.playbackInfo.source?.crop
       : undefined;
-    this.engine?.configure({
-      videoCrop: c ? `${c.width}x${c.height}+${c.x}+${c.y}` : null,
-    });
+    if (this.isDesktopNative) {
+      this.engine?.configure({
+        videoCrop: c ? `${c.width}x${c.height}+${c.x}+${c.y}` : null,
+      });
+      return;
+    }
+    this.applyWebVideoCrop(c);
+  }
+
+  /** CSS crop for the Shaka `<video>` (web + Android WebView only — `c` is
+   *  undefined elsewhere, see `cropsBlackBarsLocally`). PiP is a known gap:
+   *  Chromium paints it from the decoded frame, bypassing this transform. */
+  private applyWebVideoCrop(c?: { width: number; height: number; x: number; y: number }): void {
+    const container = this.containerEl()?.nativeElement;
+    const style =
+      c && container
+        ? computeVideoCropStyle({
+            sourceWidth: this.playbackInfo?.source?.width ?? 0,
+            sourceHeight: this.playbackInfo?.source?.height ?? 0,
+            crop: c,
+            containerWidth: container.clientWidth,
+            containerHeight: container.clientHeight,
+            fit: this.fillScreen() ? 'cover' : 'contain',
+          })
+        : null;
+    this.videoCropStyle.set(style);
   }
 
   async onSelectQualityById(id: string) {

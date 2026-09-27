@@ -28,6 +28,9 @@ export interface PlayerStats {
   /** Detected letterbox crop rectangle (`"WxH (offset X,Y)"`) when
    *  the source was flagged by cropdetect. Empty when no crop. */
   crop: string;
+  /** True when this client removed the bars (copy delivery); false when the
+   *  server did (re-encode). Meaningless when `crop` is empty. */
+  cropAppliedByPlayer: boolean;
   /** HDR → SDR tone-mapping filter the backend actually picked
    *  (after `auto` resolution + opencl-probe fallback). Empty when no
    *  tone-mapping pass runs on this session. */

@@ -52,7 +52,10 @@
     [class.opacity-0]="!videoStarted()"
     [class.controls-visible]="chrome.visible()"
     [class.controls-seek]="chrome.visible() && chrome.seekOsd()"
-    [style.object-fit]="fillScreen() ? 'cover' : 'contain'"
+    [style.object-fit]="videoCropStyle() ? 'fill' : (fillScreen() ? 'cover' : 'contain')"
+    [style.width.px]="videoCropStyle()?.width"
+    [style.height.px]="videoCropStyle()?.height"
+    [style.transform]="videoCropTransform()"
   ></video>
 
   <app-player-error-overlay

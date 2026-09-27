@@ -1,4 +1,4 @@
-import { deliveredKindFromVariant, resolveDownloadUrl } from './player.utils';
+import { computeVideoCropStyle, deliveredKindFromVariant, resolveDownloadUrl } from './player.utils';
 import type { PlaybackInfoResponse } from '../services/api/streaming-api.service';
 
 describe('deliveredKindFromVariant', () => {
@@ -90,5 +90,81 @@ describe('resolveDownloadUrl', () => {
     resolveDownloadUrl({ buildPlayUrl, getHlsUrl } as any, 123, 'original', pi('DirectPlay'));
     expect(getHlsUrl).toHaveBeenCalledWith(123, 'original', undefined, 'sid-1');
     expect(buildPlayUrl).not.toHaveBeenCalled();
+  });
+});
+
+describe('computeVideoCropStyle', () => {
+  it('contain: crop AR matches container AR — no pillarbox around the crop', () => {
+    const style = computeVideoCropStyle({
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+      crop: { width: 1920, height: 800, x: 0, y: 140 },
+      containerWidth: 2400,
+      containerHeight: 1000,
+      fit: 'contain',
+    });
+    expect(style).toEqual({ width: 2400, height: 1350, translateX: 0, translateY: -175 });
+  });
+
+  it('contain: crop narrower than the container AR — pillarboxed like a true server crop would be', () => {
+    // Margin shows the source's own bars, not the container bg — same
+    // pixels either way, since a detected crop's surround is black.
+    const style = computeVideoCropStyle({
+      sourceWidth: 1000,
+      sourceHeight: 1000,
+      crop: { width: 600, height: 1000, x: 200, y: 0 },
+      containerWidth: 800,
+      containerHeight: 400,
+      fit: 'contain',
+    });
+    expect(style).toEqual({ width: 400, height: 400, translateX: 200, translateY: 0 });
+  });
+
+  it('cover: fills the container and clips the crop rectangle symmetrically', () => {
+    const style = computeVideoCropStyle({
+      sourceWidth: 3840,
+      sourceHeight: 2160,
+      crop: { width: 3840, height: 1620, x: 0, y: 270 },
+      containerWidth: 1920,
+      containerHeight: 1080,
+      fit: 'cover',
+    });
+    expect(style).toEqual({ width: 2560, height: 1440, translateX: -320, translateY: -180 });
+  });
+
+  it('is null when the crop covers the whole frame (nothing to remove)', () => {
+    const style = computeVideoCropStyle({
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+      crop: { width: 1920, height: 1080, x: 0, y: 0 },
+      containerWidth: 1920,
+      containerHeight: 1080,
+      fit: 'contain',
+    });
+    expect(style).toBeNull();
+  });
+
+  it('is null for a zero-sized container (not yet laid out)', () => {
+    const style = computeVideoCropStyle({
+      sourceWidth: 3840,
+      sourceHeight: 2160,
+      crop: { width: 3840, height: 1648, x: 0, y: 256 },
+      containerWidth: 0,
+      containerHeight: 0,
+      fit: 'contain',
+    });
+    expect(style).toBeNull();
+  });
+
+  it('is null for a degenerate (zero-sized) crop rectangle', () => {
+    const style = computeVideoCropStyle({
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+      crop: { width: 0, height: 0, x: 0, y: 0 },
+      containerWidth: 1920,
+      containerHeight: 1080,
+      fit: 'contain',
+    });
+    expect(style).toBeNull();
   });
 });

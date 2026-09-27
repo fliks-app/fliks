@@ -35,6 +35,14 @@ const croppingClient: DeviceProfileDto = {
   cropsBlackBarsLocally: true,
 };
 
+/** A browser/Shaka-shaped profile: no raw Direct Play, so a copy can only
+ *  ever land as DirectStream (remux). Crops via CSS transform, not mpv. */
+const croppingWebClient: DeviceProfileDto = {
+  ...client,
+  cropsBlackBarsLocally: true,
+  supportsDirectPlay: false,
+};
+
 /** 2160p HEVC with black bars — cropdetect found a 3840x1648 active area. */
 const resolved = () =>
   ({
@@ -82,6 +90,19 @@ describe('StreamBuilderService — client-side black-bar crop', () => {
     expect(r.response.videoCopyStream).toBe(true);
     expect(hasCropReason(r)).toBe(false);
     // The rectangle the client applies.
+    expect(r.response.source.crop).toEqual({
+      width: 3840,
+      height: 1648,
+      x: 0,
+      y: 256,
+    });
+  });
+
+  it('DirectStreams (remux) it for a client that crops locally but has no raw Direct Play', () => {
+    const r = svc().evaluate(resolved(), croppingWebClient, 'tok');
+    expect(r.response.playMethod).toBe('DirectStream');
+    expect(r.response.videoCopyStream).toBe(true);
+    expect(hasCropReason(r)).toBe(false);
     expect(r.response.source.crop).toEqual({
       width: 3840,
       height: 1648,

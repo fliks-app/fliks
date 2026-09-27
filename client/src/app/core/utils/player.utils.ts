@@ -304,6 +304,48 @@ export function inOutroRange(marker: TimeMarker | null, position: number): boole
   return position >= marker.startSeconds;
 }
 
+export interface CropRect {
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+}
+
+export interface VideoCropStyle {
+  /** Video element's own box, in the source's aspect ratio — pair with
+   *  `object-fit: fill` (never distorts, the box already carries that AR). */
+  width: number;
+  height: number;
+  /** CSS px translate that centers the crop rectangle in the container. */
+  translateX: number;
+  translateY: number;
+}
+
+/** CSS box for a `<video>` so only `crop` shows, fit into the container like
+ *  a server-side crop would. Null when there's nothing to crop. */
+export function computeVideoCropStyle(params: {
+  sourceWidth: number;
+  sourceHeight: number;
+  crop: CropRect;
+  containerWidth: number;
+  containerHeight: number;
+  fit: 'contain' | 'cover';
+}): VideoCropStyle | null {
+  const { sourceWidth: w, sourceHeight: h, crop, containerWidth: cw, containerHeight: ch, fit } = params;
+  if (!w || !h || !cw || !ch || !crop?.width || !crop?.height) return null;
+  if (crop.width >= w && crop.height >= h) return null;
+  const scale =
+    fit === 'cover'
+      ? Math.max(cw / crop.width, ch / crop.height)
+      : Math.min(cw / crop.width, ch / crop.height);
+  return {
+    width: w * scale,
+    height: h * scale,
+    translateX: (cw - crop.width * scale) / 2 - crop.x * scale,
+    translateY: (ch - crop.height * scale) / 2 - crop.y * scale,
+  };
+}
+
 /** What the engine is actually playing — independent of the server's
  *  `playMethod` decision, which a stale/desynced stream URL can disagree
  *  with. Drives the stats overlay so its labels describe delivery, not intent. */

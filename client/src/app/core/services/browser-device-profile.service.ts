@@ -91,8 +91,9 @@ export interface DeviceProfile {
   /** mpv tone-maps HDR to this SDR display itself, so the backend copies the
    *  HDR bitstream instead of re-encoding it. Desktop shell only. */
   tonemapsHdrLocally?: boolean;
-  /** mpv crops the detected black bars at its video output, so a crop alone
-   *  no longer costs a server-side re-encode. Desktop shell only. */
+  /** Client crops the detected black bars itself — mpv `video-crop` on
+   *  desktop, a CSS transform on `<video>` for web/Shaka. False for native
+   *  and TV engines, which run neither. */
   cropsBlackBarsLocally?: boolean;
   /** Client can present single-layer Dolby Vision (P5 / 8.x) directly, so the
    *  backend DirectPlays the original container untouched instead of tonemapping
@@ -532,10 +533,16 @@ export class BrowserDeviceProfileService {
     // it whenever the screen has no EDR headroom), so the server can copy the
     // bitstream instead of re-encoding it.
     const tonemapsHdrLocally = this.device.isDesktopNative() && !supportsHdr;
+    // A plain browser always runs the server's current build, so its version is
+    // redundant on the admin dashboard — only the installed clients (native app,
+    // Smart TV, desktop shell) report a build version worth surfacing.
+    const isWeb =
+      !Capacitor.isNativePlatform() && !isTv && !this.device.isDesktopNative();
     // `video-crop` cuts the bars at the VO: free, and hwdec-safe unlike a lavfi
     // crop. Every mpv backend qualifies, the Linux render API included, since
     // they all run the gl_video renderer that applies the rectangle.
-    const cropsBlackBarsLocally = this.device.isDesktopNative();
+    // The web (Shaka) path crops the same way in CSS — see `applyWebVideoCrop`.
+    const cropsBlackBarsLocally = this.device.isDesktopNative() || isWeb;
 
     // Dolby Vision passthrough capability, gated under supportsHdr (DV ⊆ HDR, so
     // it never outlives HDR and the forceDisableHdr override stays consistent).
@@ -552,12 +559,6 @@ export class BrowserDeviceProfileService {
 
     const useTs = readUseTsOverride();
     if (useTs) console.warn('[DeviceProfile] useTs override active');
-
-    // A plain browser always runs the server's current build, so its version is
-    // redundant on the admin dashboard — only the installed clients (native app,
-    // Smart TV, desktop shell) report a build version worth surfacing.
-    const isWeb =
-      !Capacitor.isNativePlatform() && !isTv && !this.device.isDesktopNative();
 
     return {
       directPlayProfiles: [{

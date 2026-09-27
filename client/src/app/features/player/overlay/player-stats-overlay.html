@@ -42,7 +42,7 @@
           <div class="text-white/70 text-[10px] sm:text-xs">{{ s.videoProfileLine }}</div>
           <div class="text-white/60">&rarr; {{ s.videoPlaybackMode }}</div>
           @if (s.crop) {
-            <div class="text-white/60">{{ 'player.stats_crop' | translate }}&nbsp;&nbsp;<span class="font-semibold">{{ s.crop }}</span></div>
+            <div class="text-white/60">{{ (s.cropAppliedByPlayer ? 'player.stats_crop_local' : 'player.stats_crop') | translate }}&nbsp;&nbsp;<span class="font-semibold">{{ s.crop }}</span></div>
           }
           @if (s.tonemapping) {
             <div class="text-white/60">{{ 'player.stats_tonemapping' | translate }}&nbsp;&nbsp;<span class="font-semibold">{{ s.tonemapping }}</span></div>
