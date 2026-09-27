@@ -8,29 +8,39 @@
  * - `early`: short-lived companion that produces seg-0/seg-1 in
  *   parallel with a main session that's seeking mid-file. Same codec
  *   as main; suffix keeps the two in distinct cache dirs.
- * - `remux`: DirectStream, keyed on its one audio track and on its grid
- *   (keyframe or uniform).
+ * - `remux`: DirectStream, keyed on its grid (keyframe or uniform) and,
+ *   for a single-audio source, on its one muxed audio track. A
+ *   multi-audio source publishes every track as its own rendition, so
+ *   picking a different default doesn't change what the session
+ *   produces: `audioIndex` is `null` and the suffix drops `-a<N>`.
  *
  * Centralising the suffix logic here removes the foot-gun of editing
  * inline `${baseHash}-early` / `${baseHash}-remux` template
- * literals — the strip regex, the prefix check, and the variant
+ * literals: the strip regex, the prefix check, and the variant
  * encoder all live in one place.
  */
 export type SessionVariant =
   | { kind: 'main' }
   | { kind: 'early' }
-  | { kind: 'remux'; audioIndex: number; keyframeGrid: boolean };
+  | { kind: 'remux'; audioIndex: number | null; keyframeGrid: boolean };
 
-/** Singleton instances for the variants that take no parameters —
+/** Singleton instances for the variants that take no parameters:
  *  saves an allocation per spawn. */
 export const VARIANT_MAIN: SessionVariant = { kind: 'main' };
 export const VARIANT_EARLY: SessionVariant = { kind: 'early' };
 
-export function remuxVariant(
-  audioIndex: number | undefined,
-  keyframeGrid: boolean,
-): SessionVariant {
-  return { kind: 'remux', audioIndex: audioIndex ?? 0, keyframeGrid };
+export function remuxVariant(o: {
+  audioIndex: number | undefined;
+  keyframeGrid: boolean;
+  /** Source has more than one audio track: the session muxes every
+   *  rendition, so the picked track never forks the cache/session key. */
+  multiAudio?: boolean;
+}): SessionVariant {
+  return {
+    kind: 'remux',
+    audioIndex: o.multiAudio ? null : (o.audioIndex ?? 0),
+    keyframeGrid: o.keyframeGrid,
+  };
 }
 
 /** Suffix appended to a base profile hash to disambiguate the variant
@@ -42,7 +52,7 @@ export function variantSuffix(variant: SessionVariant): string {
     case 'early':
       return '-early';
     case 'remux':
-      return `-remux-a${variant.audioIndex}${variant.keyframeGrid ? '' : '-u'}`;
+      return `-remux${variant.audioIndex != null ? `-a${variant.audioIndex}` : ''}${variant.keyframeGrid ? '' : '-u'}`;
   }
 }
 
@@ -56,7 +66,7 @@ export function variantHash(
   return `${baseHash}${variantSuffix(variant)}`;
 }
 
-const VARIANT_SUFFIX_RE = /-(?:early|remux-a\d+(?:-u)?)$/;
+const VARIANT_SUFFIX_RE = /-(?:early|remux(?:-a\d+)?(?:-u)?)$/;
 
 /** Strip any known variant suffix off a cache key to recover the base
  *  profile hash that the live-session registry tracks. The registry

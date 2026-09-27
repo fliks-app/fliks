@@ -1,9 +1,16 @@
+jest.mock('./audio-encoder-probe', () => ({
+  isLibfdkAacEnabled: jest.fn(() => false),
+}));
+
 import {
   buildPlaybackProfileFromContext,
   computeProfileHash,
   type PlaybackProfile,
 } from './profile-hash';
+import { isLibfdkAacEnabled } from './audio-encoder-probe';
 import type { SessionContext } from './types';
+
+const libfdkEnabled = isLibfdkAacEnabled as jest.Mock;
 
 const BASE: PlaybackProfile = {
   videoCodec: 'h264',
@@ -12,6 +19,7 @@ const BASE: PlaybackProfile = {
   audioCodec: 'aac',
   audioChannels: 2,
   audioMode: 'transcode',
+  audioEncoderId: 'aac',
   muxFlavour: 'fmp4',
   audioLayout: 'inline',
   segmentDurationMs: 3000,
@@ -189,6 +197,30 @@ describe('buildPlaybackProfileFromContext', () => {
     );
   });
 
+  it('hashes identically across different picks of the same multi-audio remux group', () => {
+    const ctx = (
+      pickedChannels: number,
+      pickedMode: 'copy' | 'transcode',
+    ): SessionContext => ({
+      videoOnly: true,
+      audioStreams: [{ language: 'eng' }, { language: 'fre' }],
+      audioTrackPlans: [
+        { mode: 'copy', codec: 'ac3', channels: 6 },
+        { mode: 'transcode', codec: 'ac3', channels: 2 },
+      ],
+      // The picked track's own decision varies per viewer; the group (atm)
+      // doesn't, so different picks must land on the same cache directory.
+      audioPlan: { mode: pickedMode, codec: 'ac3', channels: pickedChannels },
+    });
+    expect(
+      computeProfileHash(buildPlaybackProfileFromContext(ctx(6, 'copy'), 3000)),
+    ).toBe(
+      computeProfileHash(
+        buildPlaybackProfileFromContext(ctx(2, 'transcode'), 3000),
+      ),
+    );
+  });
+
   it('ignores the per-track mask on the inline layout, which never reads it', () => {
     const profile = buildPlaybackProfileFromContext(
       {
@@ -222,6 +254,16 @@ describe('buildPlaybackProfileFromContext', () => {
     expect(buildPlaybackProfileFromContext(ctx(6), 3000).audioChannels).toBe(6);
   });
 
+  it('separates AAC transcodes by encoder binary, same codec but different bytes', () => {
+    const ctx: SessionContext = { audioPlan: { mode: 'transcode', codec: 'aac', channels: 2 } };
+    libfdkEnabled.mockReturnValue(false);
+    const native = computeProfileHash(buildPlaybackProfileFromContext(ctx, 3000));
+    libfdkEnabled.mockReturnValue(true);
+    const fdk = computeProfileHash(buildPlaybackProfileFromContext(ctx, 3000));
+    libfdkEnabled.mockReturnValue(false);
+    expect(fdk).not.toBe(native);
+  });
+
   it('separates two versions of the source file', () => {
     const hash = (sourceVersion?: string) =>
       computeProfileHash(
@@ -240,7 +282,7 @@ describe('computeProfileHash — golden values (characterization)', () => {
   // on every refresh. If one of these changes, it is an intentional cache-key
   // migration — bump it deliberately, don't let it drift.
   it('locks the hash for the SDR H.264 baseline', () => {
-    expect(computeProfileHash(BASE)).toMatchInlineSnapshot(`"e6d2d986af"`);
+    expect(computeProfileHash(BASE)).toMatchInlineSnapshot(`"81e8a740ff"`);
   });
 
   it('locks the hash for HEVC HDR10 10-bit', () => {
@@ -251,7 +293,7 @@ describe('computeProfileHash — golden values (characterization)', () => {
         videoBitDepth: 10,
         hdr: 'HDR10',
       }),
-    ).toMatchInlineSnapshot(`"a2020310a4"`);
+    ).toMatchInlineSnapshot(`"ddc2d698db"`);
   });
 
   it('locks the hash for a multi-audio E-AC-3 copy var-stream-map session', () => {
@@ -264,7 +306,7 @@ describe('computeProfileHash — golden values (characterization)', () => {
         audioMode: 'copy',
         audioLayout: 'var-stream-map',
       }),
-    ).toMatchInlineSnapshot(`"5ffb1b0082"`);
+    ).toMatchInlineSnapshot(`"5c6e824043"`);
   });
 
   it('locks the hash for a Tizen TS 6s-segment session', () => {
@@ -275,6 +317,6 @@ describe('computeProfileHash — golden values (characterization)', () => {
         segmentDurationMs: 6000,
         tvPlatform: 'tizen',
       }),
-    ).toMatchInlineSnapshot(`"9504dd7eac"`);
+    ).toMatchInlineSnapshot(`"62916d7d8a"`);
   });
 });

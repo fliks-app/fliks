@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import type { BitDepth, HdrFormat, VideoCodec } from './codec/types';
 import { varStreamMapLayout } from './audio-layout';
+import { audioEncoderName, DEFAULT_AUDIO_PLAN } from './audio-encode';
 import type { SessionContext } from './types';
 
 /**
@@ -35,7 +36,10 @@ export interface PlaybackProfile {
   audioCodec: string;
   audioChannels: number;
   audioMode: 'copy' | 'transcode';
-  /** Per-rendition copy (`c`) / transcode (`t<channels>`) mask of a
+  /** Encoder binary a transcode runs on (e.g. `aac` vs `libfdk_aac`): same
+   *  codec, different segment bytes. `'copy'` when the plan doesn't encode. */
+  audioEncoderId: string;
+  /** Per-rendition copy (`c`) / transcode (`t<channels><encoderId>`) mask of a
    *  var_stream_map group. */
   audioTrackModes?: string;
   muxFlavour: 'ts' | 'fmp4';
@@ -61,16 +65,21 @@ export const SEGMENT_TIMELINE_VERSION = 1;
  * the format is free to evolve as long as new fields are appended.
  */
 function canonicalise(profile: PlaybackProfile): string {
+  // A group's `atm` already hashes every rendition; the picked track's own
+  // channels/mode would fork the cache by pick, not by actual output.
+  const grouped = profile.audioLayout === 'var-stream-map';
   return [
     `v=${profile.videoCodec}`,
     `vd=${profile.videoBitDepth}`,
     `h=${profile.hdr ?? 'null'}`,
     `a=${profile.audioCodec}`,
-    `ac=${profile.audioChannels}`,
-    `am=${profile.audioMode}`,
-    ...(profile.audioLayout === 'var-stream-map'
+    ...(grouped
       ? [`atm=${profile.audioTrackModes ?? ''}`]
-      : []),
+      : [
+          `ac=${profile.audioChannels}`,
+          `am=${profile.audioMode}`,
+          `ae=${profile.audioEncoderId}`,
+        ]),
     `mux=${profile.muxFlavour}`,
     `al=${profile.audioLayout}`,
     `sd=${profile.segmentDurationMs}`,
@@ -107,15 +116,24 @@ export function buildPlaybackProfileFromContext(
   segmentDurationMs: number,
 ): PlaybackProfile {
   const videoVariant = ctx?.videoVariant;
+  const audioPlan = ctx?.audioPlan ?? DEFAULT_AUDIO_PLAN;
   return {
     videoCodec: videoVariant?.codec ?? 'h264',
     videoBitDepth: videoVariant?.bitDepth ?? 8,
     hdr: videoVariant?.hdr ?? null,
-    audioCodec: ctx?.audioPlan?.codec ?? 'aac',
-    audioChannels: ctx?.audioPlan?.channels ?? 2,
-    audioMode: ctx?.audioPlan?.mode ?? 'transcode',
+    audioCodec: audioPlan.codec,
+    audioChannels: audioPlan.channels ?? 2,
+    audioMode: audioPlan.mode,
+    audioEncoderId:
+      audioPlan.mode === 'copy'
+        ? 'copy'
+        : audioEncoderName(audioPlan.codec, audioPlan.channels),
     audioTrackModes: ctx?.audioTrackPlans
-      ?.map((p) => (p.mode === 'copy' ? 'c' : `t${p.channels}`))
+      ?.map((p) =>
+        p.mode === 'copy'
+          ? 'c'
+          : `t${p.channels}${audioEncoderName(p.codec, p.channels)}`,
+      )
       .join(''),
     muxFlavour: ctx?.useTs ? 'ts' : 'fmp4',
     audioLayout: varStreamMapLayout(

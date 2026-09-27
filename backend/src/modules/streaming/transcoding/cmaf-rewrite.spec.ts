@@ -1,13 +1,7 @@
 import { cmafRewrite, isCmafRewritten } from './cmaf-rewrite';
+import { makeBox } from './timeline';
 
-/** Build a minimal ISO-BMFF box: [size(4)][type(4)][payload]. */
-function box(type: string, payload: Buffer = Buffer.alloc(0)): Buffer {
-  const b = Buffer.alloc(8 + payload.length);
-  b.writeUInt32BE(8 + payload.length, 0);
-  b.write(type, 4, 'latin1');
-  payload.copy(b, 8);
-  return b;
-}
+const box = (type: string, payload: Buffer = Buffer.alloc(0)): Buffer => makeBox(type, [payload]);
 
 /** ftyp payload: major brand + minor version + compat-brand list. */
 function ftyp(major: string, compat: string[]): Buffer {

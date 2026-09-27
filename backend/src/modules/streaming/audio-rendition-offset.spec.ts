@@ -1,15 +1,5 @@
-import { StreamBuilderService } from './stream-builder.service';
 import type { DeviceProfileDto } from './dto/device-profile.dto';
-
-const svc = () =>
-  new StreamBuilderService(
-    { getDetectedHwAccel: () => 'none' } as never,
-    {
-      getAutoCropEnabled: () => false,
-      getTonemapAlgo: () => 'auto',
-      getSegmentDuration: () => 3,
-    } as never,
-  );
+import { makeStreamBuilder as svc } from './stream-builder.test-helpers';
 
 const profileWith = (
   audioCodecs: string[],

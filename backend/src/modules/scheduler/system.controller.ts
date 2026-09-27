@@ -49,6 +49,7 @@ import { audioOutputBitrateBps } from '../streaming/transcoding/audio-encode';
 import { REMUX_STEREO_AUDIO_BITRATE } from '../streaming/transcoding/ffmpeg-args';
 import {
   type LiveSessionSnapshot,
+  type SessionKind,
   LiveSessionRegistry,
 } from '../streaming/live-session.service';
 import { StreamLifetime } from '../streaming/lifetime-constants';
@@ -81,7 +82,7 @@ export interface ActiveStreamDto {
   episodeId: number | null;
   episodeLabel: string | null;
   posterUrl: string | null;
-  mode: 'transcode' | 'remux' | 'directplay';
+  mode: SessionKind;
   quality: string;
   hwAccel: string;
   device: string | null;
@@ -171,7 +172,7 @@ export interface StatsReport {
  *  remux copies the bitstream and every other mode is a straight direct play. */
 function deriveAudioOutput(
   audioPlan: LiveSessionSnapshot['audioPlan'],
-  mode: 'transcode' | 'remux' | 'directplay',
+  mode: SessionKind,
   rung: TranscodeProfile | undefined,
 ): {
   audioMode: 'direct' | 'copy' | 'transcode';
@@ -465,7 +466,7 @@ export class SystemController {
       mediaTitle: string;
       mediaType: string;
       posterUrl: string | null;
-      mode: 'transcode' | 'remux' | 'directplay';
+      mode: SessionKind;
       quality: string;
       hwAccelVal: string;
       startedAt: string;
@@ -488,18 +489,12 @@ export class SystemController {
         session.mediaFileId,
         session.profileHash,
       );
-      const mode: 'transcode' | 'remux' | 'directplay' =
-        session.kind === 'directplay'
-          ? 'directplay'
-          : session.kind === 'remux'
-            ? 'remux'
-            : 'transcode';
       const quality =
-        mode === 'directplay'
+        session.kind === 'directplay'
           ? 'original'
           : (ts?.quality ?? session.quality ?? 'original');
       const hwAccelVal =
-        mode === 'directplay' || mode === 'remux'
+        session.kind === 'directplay' || session.kind === 'remux'
           ? 'none'
           : (ts?.actualHwAccel ?? hwAccel);
       work.push({
@@ -510,7 +505,7 @@ export class SystemController {
         mediaTitle: session.mediaTitle ?? '',
         mediaType: session.mediaType ?? '',
         posterUrl: session.posterUrl,
-        mode,
+        mode: session.kind,
         quality,
         hwAccelVal,
         startedAt: session.startedAt.toISOString(),

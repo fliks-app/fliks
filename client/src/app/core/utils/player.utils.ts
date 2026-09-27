@@ -1,5 +1,6 @@
 import type { TranslateService } from '@ngx-translate/core';
 import { localizeLanguage, normalizeLangCode } from './language.utils';
+import type { PlayMethod } from '../services/api/streaming-api.service';
 
 /** Pixel widths backing each ladder rung id (must match the backend
  *  `PROFILES` table). Used by NativeEngine + quality-manager to set
@@ -301,4 +302,84 @@ export function inIntroRange(marker: TimeMarker | null, position: number): boole
 export function inOutroRange(marker: TimeMarker | null, position: number): boolean {
   if (!marker) return false;
   return position >= marker.startSeconds;
+}
+
+export interface CropRect {
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+}
+
+export interface VideoCropStyle {
+  /** Video element's own box, in the source's aspect ratio, pair with
+   *  `object-fit: fill` (never distorts, the box already carries that AR). */
+  width: number;
+  height: number;
+  /** CSS px translate that centers the crop rectangle in the container. */
+  translateX: number;
+  translateY: number;
+}
+
+/** CSS box for a `<video>` so only `crop` shows, in coded pixels;
+ *  `displayWidth/Height` rescale it for an anamorphic source. */
+export function computeVideoCropStyle(params: {
+  sourceWidth: number;
+  sourceHeight: number;
+  crop: CropRect;
+  containerWidth: number;
+  containerHeight: number;
+  fit: 'contain' | 'cover';
+  displayWidth?: number;
+  displayHeight?: number;
+}): VideoCropStyle | null {
+  const { sourceWidth: w, sourceHeight: h, crop, containerWidth: cw, containerHeight: ch, fit } = params;
+  if (!w || !h || !cw || !ch || !crop?.width || !crop?.height) return null;
+  if (crop.width >= w && crop.height >= h) return null;
+  const dw = params.displayWidth || w;
+  const dh = params.displayHeight || h;
+  const sx = dw / w;
+  const sy = dh / h;
+  const cropW = crop.width * sx;
+  const cropH = crop.height * sy;
+  const cropX = crop.x * sx;
+  const cropY = crop.y * sy;
+  const scale =
+    fit === 'cover'
+      ? Math.max(cw / cropW, ch / cropH)
+      : Math.min(cw / cropW, ch / cropH);
+  return {
+    width: dw * scale,
+    height: dh * scale,
+    translateX: (cw - cropW * scale) / 2 - cropX * scale,
+    translateY: (ch - cropH * scale) / 2 - cropY * scale,
+  };
+}
+
+export type PlaybackMode = 'direct' | 'remux' | 'transcode';
+
+/** The one `playMethod` to {@link PlaybackMode} mapping. */
+export function playbackModeOf(pi: { playMethod: PlayMethod }): PlaybackMode {
+  return pi.playMethod === 'DirectPlay'
+    ? 'direct'
+    : pi.playMethod === 'DirectStream'
+      ? 'remux'
+      : 'transcode';
+}
+
+/** What the engine is actually playing, which a desynced URL can make differ
+ *  from `playMethod`; refined by Shaka's `originalVideoId` when available. */
+export function deliveredKindFromVariant(
+  url: string,
+  originalVideoId?: string | null,
+): PlaybackMode {
+  if (!url.includes('master.m3u8')) return 'direct';
+  // A variant still showing from the previous load carries that load's sid.
+  const sidOf = (u: string) => /[?&]sid=([^&]+)/.exec(u)?.[1];
+  if (originalVideoId != null && sidOf(originalVideoId) === sidOf(url)) {
+    return originalVideoId.includes('/remux/') ? 'remux' : 'transcode';
+  }
+  const hasRemux = /[?&]remux=1(?:&|$)/.test(url);
+  const hasStartQuality = /[?&]startQuality=/.test(url);
+  return hasRemux && !hasStartQuality ? 'remux' : 'transcode';
 }

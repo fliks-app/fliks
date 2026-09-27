@@ -9,8 +9,15 @@ export interface PlayerStats {
   outputFps: string;
   /** Translation key naming what the server actually does with the file:
    *  direct play (served as-is), remux (streams copied into HLS) or transcode
-   *  (video re-encoded). Read from the real delivery, not just the decision. */
+   *  (video re-encoded). Read from the real delivery, not just the decision.
+   *  Empty when the delivery is unknown (offline). */
   streamTypeKey: string;
+  /** Translated "Server decision: X / Delivered: Y" line, set only when they
+   *  disagree. Empty otherwise. */
+  mismatch?: string;
+  /** `transcodeReasons` flags that are neither video- nor audio-specific:
+   *  why DirectStream/DirectPlay wasn't used at all. */
+  streamTranscodeReasons: string[];
 
   videoLabel: string;
   videoStreamBitrate: string;
@@ -19,6 +26,11 @@ export interface PlayerStats {
   /** Detected letterbox crop rectangle (`"WxH (offset X,Y)"`) when
    *  the source was flagged by cropdetect. Empty when no crop. */
   crop: string;
+  /** True when this client removed the bars (copy delivery); false when the
+   *  server did (re-encode). Meaningless when `crop` is empty. */
+  cropAppliedByPlayer: boolean;
+  /** Player crop not painting: PiP and iOS native fullscreen show the full frame. */
+  cropBypassed: boolean;
   /** HDR → SDR tone-mapping filter the backend actually picked
    *  (after `auto` resolution + opencl-probe fallback). Empty when no
    *  tone-mapping pass runs on this session. */

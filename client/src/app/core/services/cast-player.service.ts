@@ -2,7 +2,7 @@ import { Injectable, effect, inject, signal } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { CastService } from './cast.service';
 import { CastSettingsService } from './cast-settings.service';
-import { StreamingApiService } from './api/streaming-api.service';
+import { StreamingApiService, type PlayMethod } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { AppSettingsService } from './app-settings.service';
 import { buildSubtitleTracks } from '../utils/subtitle-tracks';
@@ -11,7 +11,7 @@ import { AuthService } from './auth.service';
 import { DeviceProfile } from './browser-device-profile.service';
 import { ENGINE_TRAITS, EngineKind } from './engine-traits';
 import { ServerConfigService } from './server-config.service';
-import { formatAudioParts, formatAudioLabel, formatSubtitleLabel, formatSubtitleParts, parseAudioIndex, SpriteMetadata } from '../utils/player.utils';
+import { formatAudioParts, formatAudioLabel, formatSubtitleLabel, formatSubtitleParts, parseAudioIndex, playbackModeOf, SpriteMetadata, type PlaybackMode } from '../utils/player.utils';
 import {
   PlayerSettingsService,
   type AudioStreamChoice,
@@ -296,7 +296,7 @@ export class CastPlayerService {
   readonly mediaTitle = signal('');
   readonly episodeTitle = signal('');
   readonly fanartUrl = signal<string | null>(null);
-  readonly playbackMode = signal<'direct' | 'remux' | 'transcode'>('transcode');
+  readonly playbackMode = signal<PlaybackMode>('transcode');
 
   // Options
   readonly availableSubtitles = signal<CastSubtitleOption[]>([]);
@@ -336,7 +336,7 @@ export class CastPlayerService {
     mediaTitle: string;
     episodeTitle: string;
     fanartUrl: string | null;
-    playbackMode: 'direct' | 'remux' | 'transcode';
+    playbackMode: PlaybackMode;
     subtitles: SubtitleInfo[];
     qualities: CastQualityOption[];
     audioTracks: CastAudioOption[];
@@ -508,52 +508,31 @@ export class CastPlayerService {
    */
   private async dispatchLoad(
     mfId: number,
-    pi: { playMethod: string; sessionId?: string },
+    pi: { playMethod: PlayMethod; playUrl: string; sessionId?: string },
     currentPos: number,
     transcodeQuality: string | undefined,
     castInfo: { token: string; streamBaseUrl: string },
     autoplay: boolean,
   ) {
-    const castMode: 'direct' | 'remux' | 'transcode' =
-      pi.playMethod === 'DirectPlay' ? 'direct' :
-      pi.playMethod === 'DirectStream' ? 'remux' : 'transcode';
-    this.playbackMode.set(castMode);
+    // getCastDeviceProfile lists no direct-play video codec: never DirectPlay here.
+    this.playbackMode.set(playbackModeOf(pi));
 
     const { token: castToken, streamBaseUrl } = castInfo;
     this.cast.setCastStreamBase(streamBaseUrl);
-    const fromServer = streamBaseUrl.replace(/\/+$/, '');
-    const lanUrl =
-      fromServer ||
-      (this.serverConfig.isNative
-        ? this.serverConfig.serverUrl()
-        : window.location.origin);
 
-    // Route Cast through master.m3u8 (same as desktop/Android) so the
-    // backend's tracker sets useExtXMedia for multi-audio renditions —
-    // bypassing master breaks `init_N.mp4` resolution + drops audio entirely
-    // when var_stream_map is used.
-    let castUrl: string;
-    let contentType: string;
-    const tokenQ = encodeURIComponent(castToken);
-    const startAtParam = `&startAt=${Math.floor(currentPos)}`;
-    const sidParam = pi.sessionId
-      ? `&sid=${encodeURIComponent(pi.sessionId)}`
-      : '';
-    if (castMode === 'direct') {
-      castUrl = this.streamingApi.getAbsoluteStreamUrl(
-        mfId,
-        castToken,
-        pi.sessionId,
-      );
-      contentType = 'video/mp4';
-    } else if (castMode === 'remux') {
-      castUrl = `${lanUrl}/api/stream/${mfId}/master.m3u8?token=${tokenQ}${sidParam}&remux=1${startAtParam}`;
-      contentType = 'application/x-mpegurl';
-    } else {
-      const q = transcodeQuality ?? '1080p';
-      castUrl = `${lanUrl}/api/stream/${mfId}/master.m3u8?token=${tokenQ}${sidParam}&startQuality=${q}${startAtParam}`;
-      contentType = 'application/x-mpegurl';
-    }
+    // Route Cast through master.m3u8 (same as desktop/Android): bypassing it
+    // breaks `init_N.mp4` resolution and drops audio under var_stream_map.
+    const built = this.streamingApi.buildAbsolutePlayUrl(
+      pi,
+      castToken,
+      {
+        sid: pi.sessionId,
+        startAt: Math.floor(currentPos),
+        startQuality: transcodeQuality ?? '1080p',
+      },
+    );
+    const castUrl = built.url;
+    const contentType = built.contentType;
 
     // Stash the Cast live-session id so the sender's heartbeat loop
     // (`savePosition` in the local player) keeps the receiver's

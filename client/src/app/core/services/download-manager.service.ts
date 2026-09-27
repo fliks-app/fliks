@@ -294,12 +294,7 @@ export class DownloadManagerService {
       undefined,
       /* download */ true,
     );
-    const hlsUrl = this.streamingApi.getHlsUrl(
-      mediaFileId,
-      quality,
-      undefined,
-      playbackInfo.sessionId,
-    );
+    const hlsUrl = this.streamingApi.resolveDownloadUrl(mediaFileId, quality, playbackInfo);
     task.hlsUrl = hlsUrl;
 
     this.titles.set(taskId, { title, episode });

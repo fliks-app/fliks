@@ -36,6 +36,12 @@ export interface AudioTrackPlan {
   /** Output channel count (source channels when copied; downmixed to the
    *  device/codec cap when transcoded). */
   outputChannels?: number;
+  /** Bitrate actually delivered: the source track's own bitrate when copied,
+   *  the negotiated rung's encode target when transcoded. */
+  bitrateBps?: number;
+  /** Sample rate actually delivered: the source's when copied, 48000 (every
+   *  encode's target) when transcoded. */
+  sampleRate?: number;
   /** Why this track is re-encoded (`Audio*` flags); empty when copied. */
   reasonFlags: string[];
 }

@@ -1,6 +1,7 @@
 import type { Request } from 'express';
 import { SessionRouter } from './session-router.service';
 import { SessionExpiredException } from '../session-expired.exception';
+import { VARIANT_MAIN } from '../transcoding';
 
 function req(sid?: string, userId?: number): Request {
   return {
@@ -33,12 +34,29 @@ describe('SessionRouter', () => {
   });
 
   describe('resolveSession', () => {
-    it('routes to the exact session via the sid profileHash', () => {
-      live.get.mockReturnValue({ profileHash: 'abc' });
+    it('routes to the exact session via the sid profileHash, main variant', () => {
+      live.get.mockReturnValue({ profileHash: 'abc', kind: 'transcode' });
       transcoding.getExistingSession.mockReturnValue({ id: 's1' });
       expect(router.resolveSession(2, 7, req('SID'))).toEqual({ id: 's1' });
-      expect(transcoding.getExistingSession).toHaveBeenCalledWith(2, 7, 'abc');
+      expect(transcoding.getExistingSession).toHaveBeenCalledWith(2, 7, 'abc', VARIANT_MAIN);
       expect(transcoding.findCurrentSession).not.toHaveBeenCalled();
+    });
+
+    it('routes a remux live session through its own -remux[-aN][-u] variant, not the bare main hash', () => {
+      live.get.mockReturnValue({
+        profileHash: 'abc',
+        kind: 'remux',
+        audioStreamIndex: 2,
+        remuxGrid: { boundaries: [0, 4] },
+        useExtXMedia: false,
+      });
+      transcoding.getExistingSession.mockReturnValue({ id: 's-remux' });
+      expect(router.resolveSession(2, 7, req('SID'))).toEqual({ id: 's-remux' });
+      expect(transcoding.getExistingSession).toHaveBeenCalledWith(2, 7, 'abc', {
+        kind: 'remux',
+        audioIndex: 2,
+        keyframeGrid: true,
+      });
     });
 
     it('falls back to findCurrentSession with no sid', () => {
@@ -46,10 +64,11 @@ describe('SessionRouter', () => {
       expect(router.resolveSession(2, 7, req())).toEqual({ id: 'cur' });
     });
 
-    it('falls back when the sid is unknown / expired', () => {
+    it('does NOT fall back to another session\'s MRU when the sid is unknown / expired (a sibling instance may own it)', () => {
       live.get.mockReturnValue(undefined);
       transcoding.findCurrentSession.mockReturnValue({ id: 'cur' });
-      expect(router.resolveSession(2, 7, req('STALE'))).toEqual({ id: 'cur' });
+      expect(router.resolveSession(2, 7, req('STALE'))).toBeUndefined();
+      expect(transcoding.findCurrentSession).not.toHaveBeenCalled();
     });
   });
 

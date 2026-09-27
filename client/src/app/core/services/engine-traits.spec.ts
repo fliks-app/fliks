@@ -1,7 +1,7 @@
 import { TvPlatform } from './device.service';
 import { ENGINE_TRAITS, EngineKind, EngineTraits, engineKindFor } from './engine-traits';
 
-/** The four engine traits transcribed from the audited schema. `undefined`
+/** The seven engine traits transcribed from the audited schema. `undefined`
  *  (an omitted key) is asserted via `toEqual`, so a stray `false` would fail. */
 const EXPECTED: Record<EngineKind, EngineTraits> = {
   [EngineKind.WEB]: {
@@ -18,7 +18,6 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: true,
     probesSegZero: false,
     supportsDirectPlay: true,
-    switchesDirectPlayAudio: true,
     supportsAbr: true,
   },
   [EngineKind.DESKTOP]: {
@@ -27,7 +26,6 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: true,
     probesSegZero: true,
     supportsDirectPlay: true,
-    switchesDirectPlayAudio: true,
     supportsAbr: false,
   },
   [EngineKind.ANDROID_TV]: {
@@ -36,7 +34,6 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: true,
     probesSegZero: false,
     supportsDirectPlay: true,
-    switchesDirectPlayAudio: true,
     supportsAbr: true,
   },
   [EngineKind.TIZEN]: {
@@ -46,7 +43,6 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: false,
     probesSegZero: false,
     supportsDirectPlay: true,
-    switchesDirectPlayAudio: true,
     supportsAbr: true,
   },
   [EngineKind.WEBOS]: {
@@ -56,7 +52,6 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     supportsImageSubtitles: false,
     probesSegZero: false,
     supportsDirectPlay: true,
-    switchesDirectPlayAudio: true,
     supportsAbr: true,
   },
   [EngineKind.CAST]: {

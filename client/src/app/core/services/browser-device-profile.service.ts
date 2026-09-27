@@ -1,3 +1,4 @@
+import { detectBrowser } from '../utils/ua-parser';
 import { Injectable, inject } from '@angular/core';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { PlayerSettingsService } from './player-settings.service';
@@ -91,8 +92,8 @@ export interface DeviceProfile {
   /** mpv tone-maps HDR to this SDR display itself, so the backend copies the
    *  HDR bitstream instead of re-encoding it. Desktop shell only. */
   tonemapsHdrLocally?: boolean;
-  /** mpv crops the detected black bars at its video output, so a crop alone
-   *  no longer costs a server-side re-encode. Desktop shell only. */
+  /** Client crops the detected black bars itself (mpv `video-crop` on
+   *  desktop, a CSS transform for web/Shaka). False for native/TV. */
   cropsBlackBarsLocally?: boolean;
   /** Client can present single-layer Dolby Vision (P5 / 8.x) directly, so the
    *  backend DirectPlays the original container untouched instead of tonemapping
@@ -168,6 +169,10 @@ export interface DeviceProfile {
    *  never switches again) tells the backend to collapse the master to a
    *  single variant instead of the full ladder. Unset = true. */
   supportsAbr?: boolean;
+
+  /** One-shot per-request override (never part of the cached profile): asks
+   *  the backend to transcode instead of a DirectStream copy it can't decode. */
+  rejectCopy?: boolean;
 }
 
 /** Containers AVPlay demuxes, from Samsung's published media specification
@@ -270,9 +275,13 @@ export class BrowserDeviceProfileService {
     const hasMSE = typeof MediaSource !== 'undefined' && !!MediaSource.isTypeSupported;
 
     // --- Detect supported containers ---
+    // Probed WITH a representative codec: a bare container mime (no `codecs`)
+    // is ambiguous and Chromium answers false for it, emptying the list.
     const containers: string[] = [];
-    if (this.testType(video, hasMSE, 'video/mp4')) containers.push('mp4', 'm4v', 'mov');
-    if (this.testType(video, hasMSE, 'video/webm')) containers.push('webm');
+    if (this.testCodec(video, hasMSE, 'video/mp4', 'avc1.42E01E')) {
+      containers.push('mp4', 'm4v', 'mov');
+    }
+    if (this.testCodec(video, hasMSE, 'video/webm', 'vp8')) containers.push('webm');
     // MKV: no browser demuxes Matroska, so it stays out of the probed list. A
     // supported codec inside MKV still remuxes to HLS via DirectStream.
 
@@ -527,10 +536,15 @@ export class BrowserDeviceProfileService {
     // it whenever the screen has no EDR headroom), so the server can copy the
     // bitstream instead of re-encoding it.
     const tonemapsHdrLocally = this.device.isDesktopNative() && !supportsHdr;
+    // A plain browser always runs the server's current build, so only the
+    // installed clients report a build version worth surfacing.
+    const isWeb =
+      !Capacitor.isNativePlatform() && !isTv && !this.device.isDesktopNative();
     // `video-crop` cuts the bars at the VO: free, and hwdec-safe unlike a lavfi
     // crop. Every mpv backend qualifies, the Linux render API included, since
     // they all run the gl_video renderer that applies the rectangle.
-    const cropsBlackBarsLocally = this.device.isDesktopNative();
+    // The web (Shaka) path crops the same way in CSS, see `applyWebVideoCrop`.
+    const cropsBlackBarsLocally = this.device.isDesktopNative() || isWeb;
 
     // Dolby Vision passthrough capability, gated under supportsHdr (DV ⊆ HDR, so
     // it never outlives HDR and the forceDisableHdr override stays consistent).
@@ -547,12 +561,6 @@ export class BrowserDeviceProfileService {
 
     const useTs = readUseTsOverride();
     if (useTs) console.warn('[DeviceProfile] useTs override active');
-
-    // A plain browser always runs the server's current build, so its version is
-    // redundant on the admin dashboard — only the installed clients (native app,
-    // Smart TV, desktop shell) report a build version worth surfacing.
-    const isWeb =
-      !Capacitor.isNativePlatform() && !isTv && !this.device.isDesktopNative();
 
     return {
       directPlayProfiles: [{
@@ -592,10 +600,11 @@ export class BrowserDeviceProfileService {
       // AVPlayer, webOS <video>, and Tizen AVPlay, whose `open()` takes any
       // remote URI and demuxes MKV itself.
       supportsDirectPlay: traits.supportsDirectPlay,
-      // Shaka plays a raw file through the media element, which exposes its
-      // audio tracks only where the browser implements `audioTracks` (Safari).
-      switchesDirectPlayAudio:
-        traits.switchesDirectPlayAudio ?? 'audioTracks' in HTMLMediaElement.prototype,
+      // Only web probes it (every other engine switches natively); skip Firefox,
+      // whose `audioTracks` toggle doesn't switch what plays.
+      switchesDirectPlayAudio: isWeb
+        ? 'audioTracks' in HTMLMediaElement.prototype && detectBrowser(navigator.userAgent) !== 'Firefox'
+        : undefined,
       // `false` only for the desktop mpv engine (see engine-traits.ts): the
       // backend then collapses the master to a single variant instead of
       // handing a no-ABR client the full ladder.
@@ -606,11 +615,6 @@ export class BrowserDeviceProfileService {
   // ---------------------------------------------------------------------------
   // Probing helpers
   // ---------------------------------------------------------------------------
-
-  private testType(video: HTMLVideoElement, hasMSE: boolean, mime: string): boolean {
-    if (hasMSE) return MediaSource.isTypeSupported(mime);
-    return !!video.canPlayType(mime);
-  }
 
   /** Codec support gate for the device profile sent to the backend.
    *

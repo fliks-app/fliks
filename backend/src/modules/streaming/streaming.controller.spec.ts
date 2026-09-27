@@ -14,6 +14,55 @@ import { buildLiveSession, type LiveSession } from './live-session.service';
 import type { PreRollItem } from '../../common/plugin-contract';
 import type { User } from '../users/entities/user.entity';
 import { ForbiddenException } from '@nestjs/common';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
+/** Every constructor slot of {@link StreamingController} defaults to `{}`;
+ *  a test overrides only the collaborators it actually exercises. */
+interface ControllerDeps {
+  streamingService?: unknown;
+  subtitleStreamService?: unknown;
+  transcodingService?: unknown;
+  streamBuilder?: unknown;
+  activeStreamTracker?: unknown;
+  subtitleBurnIn?: unknown;
+  thumbnailService?: unknown;
+  playbackService?: unknown;
+  markersService?: unknown;
+  streamingSettingsCache?: unknown;
+  liveSessions?: unknown;
+  segmentPackaging?: unknown;
+  sessionRouter?: unknown;
+  sessionContextBuilder?: unknown;
+  sourceScans?: unknown;
+  pluginPreRoll?: unknown;
+  events?: unknown;
+  caslAbilityFactory?: unknown;
+}
+
+function makeController(deps: ControllerDeps = {}): StreamingController {
+  return new StreamingController(
+    (deps.streamingService ?? {}) as never,
+    (deps.subtitleStreamService ?? {}) as never,
+    (deps.transcodingService ?? {}) as never,
+    (deps.streamBuilder ?? {}) as never,
+    (deps.activeStreamTracker ?? {}) as never,
+    (deps.subtitleBurnIn ?? {}) as never,
+    (deps.thumbnailService ?? {}) as never,
+    (deps.playbackService ?? {}) as never,
+    (deps.markersService ?? {}) as never,
+    (deps.streamingSettingsCache ?? {}) as never,
+    (deps.liveSessions ?? {}) as never,
+    (deps.segmentPackaging ?? {}) as never,
+    (deps.sessionRouter ?? {}) as never,
+    (deps.sessionContextBuilder ?? {}) as never,
+    (deps.sourceScans ?? {}) as never,
+    (deps.pluginPreRoll ?? {}) as never,
+    (deps.events ?? {}) as never,
+    (deps.caslAbilityFactory ?? {}) as never,
+  );
+}
 
 describe('buildIFramePlaylist', () => {
   const url = (i: string): string => `iframe/seg-${i}.ts`;
@@ -113,7 +162,7 @@ describe('withTimestampMap', () => {
  * irrelevant here.
  */
 describe('StreamingController.stopLiveSession', () => {
-  function makeController(live: LiveSession | null, canManageSettings = false) {
+  function setup(live: LiveSession | null, canManageSettings = false) {
     const liveSessions = {
       get: jest.fn().mockReturnValue(live),
       stop: jest.fn(),
@@ -133,26 +182,12 @@ describe('StreamingController.stopLiveSession', () => {
       }),
     };
 
-    const controller = new StreamingController(
-      {} as never, // streamingService
-      {} as never, // subtitleStreamService
-      transcodingService as never,
-      {} as never, // streamBuilder
-      {} as never, // activeStreamTracker
-      {} as never, // subtitleBurnIn
-      {} as never, // thumbnailService
-      {} as never, // playbackService
-      {} as never, // markersService
-      {} as never, // streamingSettingsCache
-      liveSessions as never,
-      {} as never, // segmentPackaging
-      {} as never, // sessionRouter
-      {} as never, // sessionContextBuilder
-      {} as never, // sourceScans
-      {} as never, // pluginPreRoll
-      events as never,
-      caslAbilityFactory as never,
-    );
+    const controller = makeController({
+      transcodingService,
+      liveSessions,
+      events,
+      caslAbilityFactory,
+    });
 
     return {
       controller,
@@ -179,7 +214,7 @@ describe('StreamingController.stopLiveSession', () => {
 
   it('stops a DirectPlay sid (null profileHash) without touching ffmpeg', () => {
     const live = makeLive({ profileHash: null, userId: 7, mediaFileId: 42 });
-    const { controller, liveSessions, transcodingService } = makeController(live);
+    const { controller, liveSessions, transcodingService } = setup(live);
 
     controller.stopLiveSession('sid-1', owner);
 
@@ -189,7 +224,7 @@ describe('StreamingController.stopLiveSession', () => {
 
   it('walks the ffmpeg-kill path for a transcode sid', () => {
     const live = makeLive({ profileHash: 'abc123', userId: 7, mediaFileId: 42 });
-    const { controller, liveSessions, transcodingService } = makeController(live);
+    const { controller, liveSessions, transcodingService } = setup(live);
 
     controller.stopLiveSession('sid-1', owner);
 
@@ -203,7 +238,7 @@ describe('StreamingController.stopLiveSession', () => {
   });
 
   it('is a no-op on an unknown sid', () => {
-    const { controller, liveSessions, events } = makeController(null);
+    const { controller, liveSessions, events } = setup(null);
 
     controller.stopLiveSession('missing', owner);
 
@@ -214,7 +249,7 @@ describe('StreamingController.stopLiveSession', () => {
 
   it('lets the owner stop their own session and notifies their other devices', () => {
     const live = makeLive({ profileHash: null, userId: 7, mediaFileId: 42 });
-    const { controller, liveSessions, events } = makeController(live);
+    const { controller, liveSessions, events } = setup(live);
 
     controller.stopLiveSession('sid-1', owner);
 
@@ -226,7 +261,7 @@ describe('StreamingController.stopLiveSession', () => {
 
   it('refuses a non-owner without Manage:Settings: the ownership hole', () => {
     const live = makeLive({ profileHash: null, userId: 7, mediaFileId: 42 });
-    const { controller, liveSessions, events } = makeController(live, false);
+    const { controller, liveSessions, events } = setup(live, false);
 
     expect(() => controller.stopLiveSession('sid-1', stranger)).toThrow(
       ForbiddenException,
@@ -237,7 +272,7 @@ describe('StreamingController.stopLiveSession', () => {
 
   it('lets a user with Manage:Settings stop someone else\'s session', () => {
     const live = makeLive({ profileHash: null, userId: 7, mediaFileId: 42 });
-    const { controller, liveSessions, events } = makeController(live, true);
+    const { controller, liveSessions, events } = setup(live, true);
 
     controller.stopLiveSession('sid-1', stranger);
 
@@ -249,7 +284,7 @@ describe('StreamingController.stopLiveSession', () => {
 
   it('does not notify a shared-device session (no owning userId)', () => {
     const live = makeLive({ profileHash: null, userId: null, mediaFileId: 42 });
-    const { controller, events } = makeController(live);
+    const { controller, events } = setup(live);
 
     controller.stopLiveSession('sid-1', owner);
 
@@ -370,26 +405,11 @@ describe('StreamingController.hlsPlaylist (remux)', () => {
 
   function playlistFor(live: Partial<LiveSession> | null): Promise<string> {
     const resolved = { mediaFile: { streamInfo: { video: [{ frameRate: '25' }] } } };
-    const controller = new StreamingController(
-      { resolveFile: jest.fn().mockResolvedValue(resolved) } as never,
-      {} as never,
-      {} as never,
-      {} as never,
-      { getSegmentDuration: () => 6 } as never,
-      {} as never,
-      {} as never,
-      {} as never,
-      {} as never,
-      {} as never,
-      {} as never,
-      {} as never,
-      { assertFresh: jest.fn(), findRequestSession: jest.fn().mockReturnValue(live) } as never,
-      {} as never,
-      {} as never, // sourceScans: a request never reads the scan itself
-      {} as never,
-      {} as never,
-      {} as never,
-    );
+    const controller = makeController({
+      streamingService: { resolveFile: jest.fn().mockResolvedValue(resolved) },
+      activeStreamTracker: { getSegmentDuration: () => 6 },
+      sessionRouter: { assertFresh: jest.fn(), findRequestSession: jest.fn().mockReturnValue(live) },
+    });
     return new Promise((resolve) => {
       const res = { setHeader: jest.fn(), send: resolve, status: jest.fn() };
       void controller.hlsPlaylist(
@@ -407,5 +427,433 @@ describe('StreamingController.hlsPlaylist (remux)', () => {
       grid.durations.map((d) => Number(d.toFixed(3))),
     );
     expect(extinf(await playlistFor({ remuxGrid: null }))).toEqual([6, 6, 6, 6, 1]);
+  });
+});
+
+describe('StreamingController.hlsAudioPlaylist (remux rendition)', () => {
+  const grid = computeSegmentGrid(
+    [0, 7.966, 15.974, 19.937].map((pts) => ({ pts, dts: pts })),
+    0,
+    25,
+    6,
+  )!;
+
+  function playlistFor(
+    live: Partial<LiveSession> | null,
+    frameRate = '25',
+  ): Promise<string> {
+    const resolved = { mediaFile: { streamInfo: { video: [{ frameRate }], durationSeconds: 25 } } };
+    const controller = makeController({
+      streamingService: { resolveFile: jest.fn().mockResolvedValue(resolved) },
+      activeStreamTracker: { getSegmentDuration: () => 6 },
+      sessionRouter: { assertFresh: jest.fn(), findRequestSession: jest.fn().mockReturnValue(live) },
+    });
+    return new Promise((resolve) => {
+      const res = { setHeader: jest.fn(), send: resolve, status: jest.fn() };
+      void controller.hlsAudioPlaylist(
+        42,
+        0,
+        { query: {}, user: { id: 7 } } as never,
+        res as never,
+      );
+    });
+  }
+  const extinf = (m: string) => [...m.matchAll(/#EXTINF:([\d.]+),/g)].map((x) => Number(x[1]));
+
+  it('carries the same real durations as the video remux playlist, not a uniform grid', async () => {
+    expect(extinf(await playlistFor({ kind: 'remux', remuxGrid: grid }))).toEqual(
+      grid.durations.map((d) => Number(d.toFixed(3))),
+    );
+  });
+
+  it('falls back to the uniform grid for a transcode session (or no live session at all)', async () => {
+    expect(extinf(await playlistFor({ kind: 'transcode', remuxGrid: grid }))).toEqual([6, 6, 6, 6, 1]);
+    expect(extinf(await playlistFor(null))).toEqual([6, 6, 6, 6, 1]);
+  });
+
+  it('cuts the ungridded remux fallback at the plain segDur, like the video playlist, not the fps-adjusted GOP', async () => {
+    // 23.976fps: realSegmentSeconds(6, 23.976) = 6.006, so this fails if the
+    // audio fallback ever drifts back to the fps-aware duration.
+    expect(extinf(await playlistFor({ kind: 'remux', remuxGrid: null }, '23.976'))).toEqual(
+      [6, 6, 6, 6, 1],
+    );
+    expect(extinf(await playlistFor({ kind: 'transcode', remuxGrid: null }, '23.976'))).toEqual(
+      [6.006, 6.006, 6.006, 6.006, 0.976],
+    );
+  });
+});
+
+describe('StreamingController.hlsMaster - multi-audio remux publishes the group', () => {
+  function masterFor(
+    live: Partial<LiveSession> | null,
+    query: Record<string, string> = { remux: '1' },
+  ) {
+    const resolved = {
+      mediaFile: {
+        streamInfo: {
+          video: [{ width: 1920, height: 1080, frameRate: '24' }],
+          audio: [{ codec: 'aac' }, { codec: 'ac3' }],
+        },
+      },
+    };
+    const generateMasterPlaylist = jest.fn().mockReturnValue('#EXTM3U');
+    const controller = makeController({
+      streamingService: { resolveFile: jest.fn().mockResolvedValue(resolved) },
+      transcodingService: { generateMasterPlaylist },
+      activeStreamTracker: { getSegmentDuration: () => 6 },
+      liveSessions: { update: jest.fn() },
+      sessionRouter: { assertFresh: jest.fn(), findRequestSession: jest.fn().mockReturnValue(live) },
+    });
+    return { controller, generateMasterPlaylist };
+  }
+
+  it('publishes the audio group for a multi-audio remux, picked track included', async () => {
+    const audioTrackPlans = [
+      { mode: 'copy' as const, codec: 'aac', channels: 2 },
+      { mode: 'copy' as const, codec: 'ac3', channels: 6 },
+    ];
+    const { controller, generateMasterPlaylist } = masterFor({
+      audioStreamIndex: 0,
+      audioTrackPlans,
+    });
+    const res = { setHeader: jest.fn(), send: jest.fn(), status: jest.fn() };
+    await controller.hlsMaster(42, { query: { remux: '1' }, user: { id: 7 } } as never, res as never);
+    const opts = generateMasterPlaylist.mock.calls[0][0];
+    expect(opts.audioStreams).toHaveLength(2);
+    expect(opts.audioPlans).toEqual(audioTrackPlans);
+  });
+
+  it('keeps the muxed single track for a single-audio source', async () => {
+    const resolved = {
+      mediaFile: { streamInfo: { video: [{ width: 1920, height: 1080, frameRate: '24' }], audio: [{ codec: 'aac' }] } },
+    };
+    const generateMasterPlaylist = jest.fn().mockReturnValue('#EXTM3U');
+    const controller = makeController({
+      streamingService: { resolveFile: jest.fn().mockResolvedValue(resolved) },
+      transcodingService: { generateMasterPlaylist },
+      activeStreamTracker: { getSegmentDuration: () => 6 },
+      liveSessions: { update: jest.fn() },
+      sessionRouter: {
+        assertFresh: jest.fn(),
+        findRequestSession: jest.fn().mockReturnValue({
+          audioPlan: { mode: 'copy', codec: 'aac', channels: 2 },
+        }),
+      },
+    });
+    const res = { setHeader: jest.fn(), send: jest.fn(), status: jest.fn() };
+    await controller.hlsMaster(42, { query: { remux: '1' }, user: { id: 7 } } as never, res as never);
+    const opts = generateMasterPlaylist.mock.calls[0][0];
+    expect(opts.audioStreams).toBeUndefined();
+    expect(opts.audioPlans).toEqual([{ mode: 'copy', codec: 'aac', channels: 2 }]);
+  });
+});
+
+describe('StreamingController.hlsAudioSegment - remux guards', () => {
+  const cacheRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fliks-remux-audio-'));
+  afterAll(() => fs.rmSync(cacheRoot, { recursive: true, force: true }));
+
+  it('never routes a remux video session through the early companion', async () => {
+    const segPath = path.join(cacheRoot, '1', 'seg-0001.m4s');
+    fs.mkdirSync(path.dirname(segPath), { recursive: true });
+    fs.writeFileSync(segPath, 'x');
+    const getOrCreateEarlySession = jest.fn();
+    const videoSession = { quality: 'remux', startSegment: 5, cachePath: cacheRoot };
+    const transcodingService = {
+      getOrCreateEarlySession,
+      getSegmentPath: jest.fn().mockResolvedValue(segPath),
+    };
+    const controller = makeController({
+      streamingService: { resolveFile: jest.fn().mockResolvedValue({}) },
+      transcodingService,
+      activeStreamTracker: { getSegmentDuration: () => 3 },
+      segmentPackaging: { serve: jest.fn().mockResolvedValue(undefined) },
+      sessionRouter: {
+        assertFresh: jest.fn(),
+        resolveSession: jest.fn().mockReturnValue(videoSession),
+        resolveEarlySession: jest.fn().mockReturnValue(null),
+        findRequestSession: jest.fn().mockReturnValue(null),
+      },
+    });
+
+    await controller.hlsAudioSegment(
+      42,
+      0,
+      'seg-0001.m4s',
+      { query: {}, user: { id: 7 } } as never,
+      { id: 7 } as User,
+      { setHeader: jest.fn() } as never,
+    );
+
+    expect(getOrCreateEarlySession).not.toHaveBeenCalled();
+  });
+
+  it('spawns the remux session, not a guessed transcode, for a remux live session racing ahead', async () => {
+    const segPath = path.join(cacheRoot, '1', 'seg-0000.m4s');
+    fs.mkdirSync(path.dirname(segPath), { recursive: true });
+    fs.writeFileSync(segPath, 'x');
+    const resolved = {
+      mediaFile: { streamInfo: { video: [{}] } },
+      absolutePath: '/media/file.mkv',
+    };
+    const getOrCreateRemuxSession = jest.fn().mockResolvedValue({
+      quality: 'remux',
+      startSegment: 0,
+      cachePath: cacheRoot,
+    });
+    const getOrCreateSession = jest.fn();
+    const transcodingService = {
+      getOrCreateRemuxSession,
+      getOrCreateSession,
+      getSegmentPath: jest.fn().mockResolvedValue(segPath),
+    };
+    const controller = makeController({
+      streamingService: { resolveFile: jest.fn().mockResolvedValue(resolved) },
+      transcodingService,
+      activeStreamTracker: { getSegmentDuration: () => 3 },
+      segmentPackaging: { serve: jest.fn().mockResolvedValue(undefined) },
+      sessionRouter: {
+        assertFresh: jest.fn(),
+        resolveSession: jest.fn().mockReturnValue(null),
+        resolveEarlySession: jest.fn().mockReturnValue(null),
+        findRequestSession: jest.fn().mockReturnValue({
+          kind: 'remux',
+          remuxGrid: null,
+          position: 0,
+        }),
+      },
+      sessionContextBuilder: { build: jest.fn().mockReturnValue({ videoVariant: { codec: 'h264' } }) },
+    });
+
+    await controller.hlsAudioSegment(
+      42,
+      0,
+      'seg-0000.m4s',
+      { query: {}, user: { id: 7 } } as never,
+      { id: 7 } as User,
+      { setHeader: jest.fn() } as never,
+    );
+
+    expect(getOrCreateRemuxSession).toHaveBeenCalled();
+    expect(getOrCreateSession).not.toHaveBeenCalled();
+  });
+
+  it('anchors a seg-race spawn at the requested segment, never the stale heartbeat position', async () => {
+    const segPath = path.join(cacheRoot, '1', 'seg-0007.m4s');
+    fs.mkdirSync(path.dirname(segPath), { recursive: true });
+    fs.writeFileSync(segPath, 'x');
+    const resolved = {
+      mediaFile: { streamInfo: { video: [{}] } },
+      absolutePath: '/media/file.mkv',
+    };
+    const getOrCreateRemuxSession = jest.fn().mockResolvedValue({
+      quality: 'remux',
+      startSegment: 7,
+      cachePath: cacheRoot,
+    });
+    const transcodingService = {
+      getOrCreateRemuxSession,
+      getOrCreateSession: jest.fn(),
+      getSegmentPath: jest.fn().mockResolvedValue(segPath),
+    };
+    const controller = makeController({
+      streamingService: { resolveFile: jest.fn().mockResolvedValue(resolved) },
+      transcodingService,
+      activeStreamTracker: { getSegmentDuration: () => 3 },
+      segmentPackaging: { serve: jest.fn().mockResolvedValue(undefined) },
+      sessionRouter: {
+        assertFresh: jest.fn(),
+        resolveSession: jest.fn().mockReturnValue(null),
+        resolveEarlySession: jest.fn().mockReturnValue(null),
+        // Stale (0) vs the segment actually requested (7): anchoring on it would
+        // kill and mis-respawn the session legitimately spawned for the real position.
+        findRequestSession: jest.fn().mockReturnValue({
+          kind: 'remux',
+          remuxGrid: null,
+          position: 0,
+        }),
+      },
+      sessionContextBuilder: { build: jest.fn().mockReturnValue({ videoVariant: { codec: 'h264' } }) },
+    });
+
+    await controller.hlsAudioSegment(
+      42,
+      0,
+      'seg-0007.m4s',
+      { query: {}, user: { id: 7 } } as never,
+      { id: 7 } as User,
+      { setHeader: jest.fn() } as never,
+    );
+
+    expect(getOrCreateRemuxSession).toHaveBeenCalledWith(
+      42,
+      '/media/file.mkv',
+      7,
+      expect.anything(),
+      null,
+      1, // audioIndex (0) + 1: the served EXT-X-MEDIA index the frontier decision keys on
+    );
+  });
+
+  it('respawns through getOrCreateRemuxSession when this rendition is missing but the video session is producing', async () => {
+    // videoSession owns segment 65, but never wrote seg-0065 for this rendition.
+    const resolved = {
+      mediaFile: { streamInfo: { video: [{}] } },
+      absolutePath: '/media/file.mkv',
+    };
+    const oldDir = path.join(cacheRoot, 'old');
+    const newDir = path.join(cacheRoot, 'new');
+    fs.mkdirSync(path.join(newDir, '1'), { recursive: true });
+    fs.writeFileSync(path.join(newDir, '1', 'seg-0065.m4s'), 'x');
+    const videoSession = { quality: 'remux', startSegment: 0, cachePath: oldDir };
+    const respawned = { quality: 'remux', startSegment: 65, cachePath: newDir };
+    const getOrCreateRemuxSession = jest.fn().mockResolvedValue(respawned);
+    const getSegmentPath = jest.fn().mockImplementation((session) =>
+      Promise.resolve(session === respawned ? path.join(newDir, '1', 'seg-0065.m4s') : null),
+    );
+    const controller = makeController({
+      streamingService: { resolveFile: jest.fn().mockResolvedValue(resolved) },
+      transcodingService: { getOrCreateRemuxSession, getSegmentPath },
+      activeStreamTracker: { getSegmentDuration: () => 3 },
+      segmentPackaging: { serve: jest.fn().mockResolvedValue(undefined) },
+      sessionRouter: {
+        assertFresh: jest.fn(),
+        resolveSession: jest.fn().mockReturnValue(videoSession),
+        resolveEarlySession: jest.fn().mockReturnValue(null),
+        findRequestSession: jest.fn().mockReturnValue({
+          kind: 'remux',
+          remuxGrid: null,
+          position: 0,
+        }),
+      },
+      sessionContextBuilder: { build: jest.fn().mockReturnValue({ videoVariant: { codec: 'h264' } }) },
+    });
+
+    await controller.hlsAudioSegment(
+      42,
+      0,
+      'seg-0065.m4s',
+      { query: {}, user: { id: 7 } } as never,
+      { id: 7 } as User,
+      { setHeader: jest.fn() } as never,
+    );
+
+    expect(getOrCreateRemuxSession).toHaveBeenCalledWith(
+      42,
+      '/media/file.mkv',
+      65,
+      expect.anything(),
+      null,
+      1,
+    );
+  });
+
+  it("never re-resolves when this rendition's segment is already on disk (no lock/DB cost on the hot path)", async () => {
+    const videoSession = { quality: 'remux', startSegment: 0, cachePath: cacheRoot };
+    fs.mkdirSync(path.join(cacheRoot, '1'), { recursive: true });
+    fs.writeFileSync(path.join(cacheRoot, '1', 'seg-0003.m4s'), 'x');
+    const getOrCreateRemuxSession = jest.fn();
+    const resolveFile = jest.fn().mockResolvedValue({});
+    const controller = makeController({
+      streamingService: { resolveFile },
+      transcodingService: {
+        getOrCreateRemuxSession,
+        getSegmentPath: jest.fn().mockResolvedValue(path.join(cacheRoot, '1', 'seg-0003.m4s')),
+      },
+      activeStreamTracker: { getSegmentDuration: () => 3 },
+      segmentPackaging: { serve: jest.fn().mockResolvedValue(undefined) },
+      sessionRouter: {
+        assertFresh: jest.fn(),
+        resolveSession: jest.fn().mockReturnValue(videoSession),
+        resolveEarlySession: jest.fn().mockReturnValue(null),
+        findRequestSession: jest.fn().mockReturnValue({
+          kind: 'remux',
+          remuxGrid: null,
+          position: 0,
+        }),
+      },
+    });
+
+    await controller.hlsAudioSegment(
+      42,
+      0,
+      'seg-0003.m4s',
+      { query: {}, user: { id: 7 } } as never,
+      { id: 7 } as User,
+      { setHeader: jest.fn() } as never,
+    );
+
+    expect(getOrCreateRemuxSession).not.toHaveBeenCalled();
+    // resolveFile is still called once, unconditionally, for the ACL check.
+    expect(resolveFile).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('StreamingController.hlsSegment - kind refresh', () => {
+  const cacheRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fliks-kind-refresh-'));
+  afterAll(() => fs.rmSync(cacheRoot, { recursive: true, force: true }));
+
+  /** Serves `quality`'s segment off a real on-disk file via the fast path
+   *  (`existing` + a live session already resolved), skipping the spawn path. */
+  async function serveSegment(
+    quality: string,
+    live: LiveSession,
+  ): Promise<{ liveSessions: { update: jest.Mock } }> {
+    const segPath = path.join(cacheRoot, 'seg-0001.m4s');
+    fs.writeFileSync(segPath, 'x');
+    const liveSessions = { update: jest.fn() };
+    const controller = makeController({
+      streamingService: { resolveFile: jest.fn().mockResolvedValue({}) },
+      activeStreamTracker: { getSegmentDuration: () => 3 },
+      liveSessions,
+      segmentPackaging: { serve: jest.fn().mockResolvedValue(undefined) },
+      sessionRouter: {
+        assertFresh: jest.fn(),
+        findRequestSession: jest.fn().mockReturnValue(live),
+        resolveSession: jest.fn().mockReturnValue({
+          quality,
+          cachePath: cacheRoot,
+          segmentDuration: 3,
+        }),
+      },
+    });
+    await controller.hlsSegment(
+      42,
+      quality,
+      'seg-0001.m4s',
+      { query: {}, user: { id: 7 } } as never,
+      { id: 7 } as User,
+      { setHeader: jest.fn() } as never,
+    );
+    return { liveSessions };
+  }
+
+  it('flips a remux-decided session to transcode once a rung is actually served', async () => {
+    const live = buildLiveSession(
+      { userId: 7, username: null, mediaFileId: 42, kind: 'remux' },
+      'sid-1',
+      0,
+    );
+    const { liveSessions } = await serveSegment('1080p', live);
+    expect(liveSessions.update).toHaveBeenCalledWith(live.sessionId, { kind: 'transcode' });
+  });
+
+  it('flips a transcode-decided session to remux once the remux rendition is served', async () => {
+    const live = buildLiveSession(
+      { userId: 7, username: null, mediaFileId: 42, kind: 'transcode' },
+      'sid-1',
+      0,
+    );
+    const { liveSessions } = await serveSegment('remux', live);
+    expect(liveSessions.update).toHaveBeenCalledWith(live.sessionId, { kind: 'remux' });
+  });
+
+  it('is a no-op once the served kind already matches', async () => {
+    const live = buildLiveSession(
+      { userId: 7, username: null, mediaFileId: 42, kind: 'transcode' },
+      'sid-1',
+      0,
+    );
+    const { liveSessions } = await serveSegment('1080p', live);
+    expect(liveSessions.update).not.toHaveBeenCalled();
   });
 });

@@ -169,6 +169,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
         err?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED;
       if (networkShaped && this.maybeEmitSessionExpired()) return;
       this.emit('error', {
+        source: 'media',
         code: err?.code ?? -1,
         message: mediaErrorMessage(err),
         errorKey: mediaErrorKey(err),

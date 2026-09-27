@@ -184,7 +184,7 @@ export function emitVariantLadder(
     };
     const codec = videoCodecString(variant, target);
     lines.push(
-      `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h}${rangeAttr}${frameRateAttr},NAME="${p.name}",CODECS="${codec}${codecsTail}"${audioAttr}${subsAttr}`,
+      `#EXT-X-STREAM-INF:BANDWIDTH=${bw},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${w}x${h}${rangeAttr}${frameRateAttr},NAME="${p.name}",CODECS="${codec}${codecsTail}"${audioAttr}${subsAttr},CLOSED-CAPTIONS=NONE`,
       `/api/stream/${mediaFileId}/${p.name}/index.m3u8${tokenParam}`,
     );
   }

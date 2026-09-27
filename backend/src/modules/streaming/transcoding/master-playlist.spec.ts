@@ -319,7 +319,7 @@ describe('generateMasterPlaylist — remux variant (copy path)', () => {
       sourceHeight: 800,
       tokenParam: '?token=t',
       includeRemux: true,
-      sourceBitrate: 10_000_000,
+      formatBitRate: 10_000_000,
       sourceFrameRate: 23.976,
       remuxCodecs: 'avc1.640029',
       audioPlans: [{ mode: 'copy', codec: 'eac3' }],
@@ -337,6 +337,11 @@ describe('generateMasterPlaylist — remux variant (copy path)', () => {
     expect(m).not.toMatch(/\/api\/stream\/26\/(eco-)?\d+p\/index\.m3u8/);
   });
 
+  it('declares the coded size of the copy, not the crop the ladder applies', () => {
+    const lines = streamInfLines(remuxMaster({ remuxWidth: 1920, remuxHeight: 1080 }));
+    expect(lines[0]).toContain('RESOLUTION=1920x1080');
+  });
+
   it('declares the probed source CODECS, never a rung-derived level', () => {
     const lines = streamInfLines(remuxMaster());
     // L4.1 (29) as probed. The rung arithmetic would say L4.0 (28) for
@@ -350,20 +355,41 @@ describe('generateMasterPlaylist — remux variant (copy path)', () => {
     expect(lines[0]).not.toContain('CODECS=');
   });
 
-  it('prefers the container total over summed per-stream bitrates', () => {
-    // MKV with no per-stream video bitrate: sourceBitrate collapses to the
-    // audio track (768 kbps) and would advertise a 1080p copy as 1 Mbps.
-    const line = streamInfLines(
-      remuxMaster({ sourceBitrate: 768_000, remuxBandwidthBps: 9_700_000 }),
-    )[0];
+  it('falls back to the container total alone when no per-stream video bitrate is known', () => {
+    const line = streamInfLines(remuxMaster({ formatBitRate: 9_700_000 }))[0];
     expect(line).toContain('AVERAGE-BANDWIDTH=9700000');
   });
 
-  it('carries the source resolution and a peak BANDWIDTH above the average', () => {
+  it('carries the source resolution, with no video-only figure to split from', () => {
     const line = streamInfLines(remuxMaster())[0];
     expect(line).toContain('RESOLUTION=1920x800');
+    // No sourceVideoBitrateBps here: the container total stands in for both,
+    // same as before, never inflated by a flat multiplier.
     expect(line).toContain('AVERAGE-BANDWIDTH=10000000');
-    expect(line).toContain('BANDWIDTH=15000000');
+    expect(line).toContain('BANDWIDTH=10000000');
+  });
+
+  it('peaks BANDWIDTH at the video bitrate plus the largest audio rendition', () => {
+    // 9 Mbps video + the eac3 copy's 192 kbps stereo reference (no probed
+    // bitrate on the plan) = 9,192,000, identical for both attributes.
+    const line = streamInfLines(
+      remuxMaster({ sourceVideoBitrateBps: 9_000_000 }),
+    )[0];
+    expect(line).toContain('BANDWIDTH=9192000,AVERAGE-BANDWIDTH=9192000');
+  });
+
+  it('never counts every audio track, only the largest rendition', () => {
+    const line = streamInfLines(
+      remuxMaster({
+        sourceVideoBitrateBps: 9_000_000,
+        audioPlans: [
+          { mode: 'copy', codec: 'eac3', bitrateBps: 192_000 },
+          { mode: 'copy', codec: 'ac3', bitrateBps: 640_000 },
+        ] as AudioPlan[],
+      }),
+    )[0];
+    // Peak of the two renditions (640k), not their sum (832k).
+    expect(line).toContain('BANDWIDTH=9640000,AVERAGE-BANDWIDTH=9640000');
   });
 
   it('falls back to the ladder when the user pinned a rung', () => {
@@ -391,7 +417,7 @@ describe('generateMasterPlaylist: HDR remux variant (copy path)', () => {
       sourceHeight: 2160,
       tokenParam: '?token=t',
       includeRemux: true,
-      sourceBitrate: 40_000_000,
+      formatBitRate: 40_000_000,
       sourceFrameRate: 23.976,
       remuxCodecs: 'hvc1.2.4.L153.B0',
       audioPlans: [{ mode: 'copy', codec: 'eac3' }],

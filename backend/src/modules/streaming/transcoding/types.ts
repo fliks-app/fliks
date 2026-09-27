@@ -1,5 +1,6 @@
 import { ChildProcess } from 'child_process';
 import type { AudioPlan } from './audio-encode';
+import type { RemuxSegmentAssembler } from './remux-assembler';
 
 export interface TranscodeProfile {
   name: string;
@@ -247,6 +248,9 @@ export interface TranscodeSession {
   ready: Promise<void>;
   /** If true, video is copied (remux), not re-encoded */
   remux?: boolean;
+  /** The run's own assembler, for a reachability decision keyed to its
+   *  measured progress instead of the (unreliable, island-prone) directory. */
+  remuxAssembler?: RemuxSegmentAssembler;
   /** Settles once every segment of the run is on disk: a remux assembles its
    *  last one after ffmpeg exits. Absent when ffmpeg writes them itself. */
   outputDone?: Promise<void>;
