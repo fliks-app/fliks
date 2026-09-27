@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { Request } from 'express';
-import { TranscodingService, VARIANT_EARLY } from '../transcoding';
+import { TranscodingService, VARIANT_EARLY, VARIANT_MAIN, remuxVariant } from '../transcoding';
 import type { TranscodeSession } from '../transcoding/types';
 import { LiveSession, LiveSessionRegistry } from '../live-session.service';
 import { SessionExpiredException } from '../session-expired.exception';
@@ -27,28 +27,34 @@ export class SessionRouter {
     return undefined;
   }
 
-  /** Resolve the exact transcode session for a request: prefer the
-   *  `(file, user, profileHash)` triple from the request's `?sid=` (what
-   *  manifest URLs bake in), falling back to the most-recently-accessed session
-   *  when no sid is given or the live session has expired. */
+  /** Resolve the exact `(file, user, profileHash, variant)` session for a
+   *  sid; MRU fallback only with no sid at all, never on a miss (a sibling
+   *  instance, e.g. another tab, could own the MRU slot instead). */
   resolveSession(
     mediaFileId: number,
     userId: number | undefined,
     req: Request,
   ): TranscodeSession | undefined {
     const sid = this.sidOf(req);
-    if (sid) {
-      const live = this.liveSessions.get(sid);
-      if (live && live.profileHash) {
-        const exact = this.transcodingService.getExistingSession(
-          mediaFileId,
-          userId,
-          live.profileHash,
-        );
-        if (exact) return exact;
-      }
-    }
-    return this.transcodingService.findCurrentSession(mediaFileId, userId);
+    if (!sid) return this.transcodingService.findCurrentSession(mediaFileId, userId);
+    const live = this.liveSessions.get(sid);
+    if (!live || !live.profileHash) return undefined;
+    // The remux key carries a `-remux[-aN][-u]` suffix (variant.ts); the
+    // bare profileHash the default main variant looks up never matches it.
+    const variant =
+      live.kind === 'remux'
+        ? remuxVariant({
+            audioIndex: live.audioStreamIndex ?? undefined,
+            keyframeGrid: live.remuxGrid != null,
+            multiAudio: live.useExtXMedia,
+          })
+        : VARIANT_MAIN;
+    return this.transcodingService.getExistingSession(
+      mediaFileId,
+      userId,
+      live.profileHash,
+      variant,
+    );
   }
 
   /** Same routing as {@link resolveSession} for the early-segment companion —

@@ -1516,10 +1516,25 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
                 defaultBandwidthEstimate: 100_000_000,
               },
               streaming: {
-                retryParameters: { timeout: 60_000, maxAttempts: 5, baseDelay: 1000 },
+                // connectionTimeout defaults to 10s, well under a legitimate
+                // segment wait; match it to `timeout` so it isn't cut short.
+                retryParameters: {
+                  timeout: 60_000,
+                  connectionTimeout: 60_000,
+                  maxAttempts: 5,
+                  baseDelay: 1000,
+                },
+                // 0 opts out of Shaka's disableStream: never silently switch
+                // language/quality away from what the user picked.
+                maxDisabledTime: 0,
               },
               manifest: {
-                retryParameters: { timeout: 30_000, maxAttempts: 5, baseDelay: 1000 },
+                retryParameters: {
+                  timeout: 30_000,
+                  connectionTimeout: 30_000,
+                  maxAttempts: 5,
+                  baseDelay: 1000,
+                },
               },
               ...(preferredLang ? { preferredAudioLanguage: preferredLang } : {}),
             });

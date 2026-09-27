@@ -55,4 +55,79 @@ describe('TranscodingService.resolveExistingSession', () => {
     // outgoing session, never nothing, or it may spawn its own duplicate.
     expect(sessions.get('k')).toBe(session);
   });
+
+  it('respawns a SIGKILLed session instead of treating it as still running (exitCode null, signalCode set)', async () => {
+    const session = {
+      id: 'k',
+      cachePath: dir,
+      startSegment: 0,
+      process: { exitCode: null, signalCode: 'SIGKILL' },
+    } as unknown as TranscodeSession;
+    expect(await resolve(session, 5)).toBeNull();
+    // Already dead: the caller respawns directly, no kill needed.
+    expect(killed).toBe(0);
+  });
+
+  describe('remux: reachability decided from the assembler frontier, not the directory', () => {
+    const fakeAssembler = (videoFrontier: number | null, audioFrontier: number | null = null) =>
+      ({
+        videoFrontier: () => videoFrontier,
+        audioFrontier: () => audioFrontier,
+        segmentsPerSecond: () => null,
+      }) as unknown as TranscodeSession['remuxAssembler'];
+
+    const runRemux = (startSegment: number, videoFrontier: number | null) =>
+      ({
+        id: 'k',
+        cachePath: dir,
+        startSegment,
+        remux: true,
+        remuxAssembler: fakeAssembler(videoFrontier),
+        process: { exitCode: null },
+      }) as unknown as TranscodeSession;
+
+    it('waits when the request is below the frontier (already produced)', async () => {
+      expect(await resolve(runRemux(0, 5), 3)).not.toBeNull();
+      expect(killed).toBe(0);
+    });
+
+    it('waits just past the frontier, within the derived wait window', async () => {
+      expect(await resolve(runRemux(0, 5), 6)).not.toBeNull();
+      expect(killed).toBe(0);
+    });
+
+    it('restarts for a request below the run\'s own start, whatever an island on disk says', async () => {
+      // A leftover island from a killed run could sit at seg-3 on disk; this
+      // run's own start is 10, so 3 is never reachable by waiting on it.
+      await fsp.writeFile(path.join(dir, 'seg-0003.m4s'), 'x');
+      expect(await resolve(runRemux(10, 12), 3)).toBeNull();
+      expect(killed).toBe(1);
+    });
+
+    it('restarts far past the frontier (T below start → never; T far ahead → seek)', async () => {
+      expect(await resolve(runRemux(0, 5), 65)).toBeNull();
+      expect(killed).toBe(1);
+    });
+
+    const exitedRemux = (startSegment: number, videoFrontier: number | null) =>
+      ({
+        id: 'k',
+        cachePath: dir,
+        startSegment,
+        remux: true,
+        remuxAssembler: fakeAssembler(videoFrontier),
+        process: { exitCode: 0 },
+        outputDone: Promise.resolve(),
+      }) as unknown as TranscodeSession;
+
+    it('exited run: a segment past its own frontier respawns, even with a stale island on disk at that number', async () => {
+      // An unrelated run's leftover seg-6 sits past this run's frontier (5).
+      await fsp.writeFile(path.join(dir, 'seg-0006.m4s'), 'x');
+      expect(await resolve(exitedRemux(0, 5), 6)).toBeNull();
+    });
+
+    it('exited run: a segment inside its produced range serves straight from it', async () => {
+      expect(await resolve(exitedRemux(0, 5), 3)).not.toBeNull();
+    });
+  });
 });

@@ -1731,7 +1731,14 @@ export class StreamingController {
     // `audioStreams.length > 1`), so we don't need a separate audio-only path —
     // any segment Shaka asks for here is in `<videoSession.cachePath>/<varStreamPath>`.
     let videoSession = this.sessionRouter.resolveSession(mediaFileId, user?.id, req);
-    if (!videoSession) {
+    const live = this.sessionRouter.findRequestSession(req, mediaFileId);
+    // A seek can respawn video without this rendition catching up; gated on
+    // the file missing so the common case never pays for the resolve+lock.
+    const behindOnAudio =
+      live?.kind === 'remux' &&
+      !!videoSession &&
+      !fs.existsSync(path.join(videoSession.cachePath, varStreamPath));
+    if (!videoSession || behindOnAudio) {
       const resolved = await this.streamingService.resolveFile(
         mediaFileId,
         req.user as User,
@@ -1747,8 +1754,7 @@ export class StreamingController {
           firstQueryString(req.query, 'sid') ?? null,
         );
       }
-      ctx.spawnReason = 'seg-race';
-      const live = this.sessionRouter.findRequestSession(req, mediaFileId);
+      ctx.spawnReason = videoSession ? 'seg-request' : 'seg-race';
       if (live?.kind === 'remux') {
         // Same race, remux playback: spawn the copy session, not a
         // guessed top-rung transcode mislabeled 'remux' into the audio group.
@@ -1757,7 +1763,7 @@ export class StreamingController {
         // anchor here can kill and mis-respawn a session another request just spawned.
         const startSeg = this.anchorSegment(
           live,
-          null,
+          videoSession ?? null,
           isInit,
           segIndex,
           grid
@@ -1770,6 +1776,7 @@ export class StreamingController {
           startSeg,
           ctx,
           grid,
+          audioIndex + 1,
         );
       } else {
         const deviceType = live?.deviceType ?? 'desktop';

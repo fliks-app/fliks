@@ -189,6 +189,13 @@ export class RemuxSegmentAssembler {
   private queued = false;
   private failures = 0;
   private stopped = false;
+  /** Set once the run's landing point is known (end of {@link openRun}); gates
+   *  the frontier getters below, which are meaningless before then. */
+  private opened = false;
+  private openedAt: number | null = null;
+  /** `this.next` once the run opened: the baseline `segmentsPerSecond`
+   *  measures progress from. */
+  private openStartSegment = 0;
 
   /** Maps run-local time to source-pts time (the same space `boundaries`
    *  is in); resolved once video's own run lands, shared by every audio
@@ -252,6 +259,27 @@ export class RemuxSegmentAssembler {
       }
     }
     await fsp.rm(this.plan.gopDir, { recursive: true, force: true });
+  }
+
+  /** Segment this run has yet to produce (below it, all are on disk).
+   *  Null before the run's first GOP has landed ({@link openRun}). */
+  videoFrontier(): number | null {
+    return this.opened ? this.next : null;
+  }
+
+  /** Same as {@link videoFrontier}, for one rendition (1-based served
+   *  EXT-X-MEDIA index). Null before open, or with no such rendition. */
+  audioFrontier(index: number): number | null {
+    if (!this.opened) return null;
+    return this.audio.find((a) => a.index === index)?.served ?? null;
+  }
+
+  /** Segments produced per wall-clock second since the run opened. */
+  segmentsPerSecond(): number | null {
+    if (!this.opened || this.openedAt == null) return null;
+    const elapsedSeconds = (Date.now() - this.openedAt) / 1000;
+    if (elapsedSeconds <= 0) return null;
+    return (this.next - this.openStartSegment) / elapsedSeconds;
   }
 
   private kick(): void {
@@ -372,6 +400,9 @@ export class RemuxSegmentAssembler {
     // A run that landed past its planned segment (above) must not let an
     // audio rendition persist a segment before it (M2): start where video did.
     for (const a of this.audio) a.served = this.next;
+    this.opened = true;
+    this.openedAt = Date.now();
+    this.openStartSegment = this.next;
     return true;
   }
 
@@ -475,6 +506,9 @@ export class RemuxSegmentAssembler {
       );
     }
     await this.assemble(this.next, written);
+    // Mirrors the pump loop's own `this.next++`: frontier getters below are
+    // "one past the last produced segment" in both the running and exited case.
+    this.next++;
   }
 
   // ── Audio renditions ────────────────────────────────────────────────────

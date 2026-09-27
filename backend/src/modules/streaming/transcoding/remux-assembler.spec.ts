@@ -301,6 +301,23 @@ describe('RemuxSegmentAssembler', () => {
     expect(segs()).toEqual(['seg-0000.m4s', 'seg-0001.m4s']);
   });
 
+  it('exposes the frontier one past the last produced segment, short of the tail until a clean exit', async () => {
+    const asm = assembler(0, null, 0);
+    expect(asm.videoFrontier()).toBeNull(); // not opened: no GOP has landed yet
+    writeGops(4);
+    asm.start();
+    await asm.finish(false); // killed, not exited cleanly: no tail
+    expect(asm.videoFrontier()).toBe(2); // seg-0000, seg-0001 produced; seg-0002 (tail) is not
+  });
+
+  it('advances the frontier past the tail once a clean exit assembles the last segment', async () => {
+    writeGops(6);
+    const asm = assembler(0, null, 0);
+    asm.start();
+    await asm.finish(true);
+    expect(asm.videoFrontier()).toBe(3); // one past seg-0002, the tail assembleTail() just wrote
+  });
+
   it('never assembles a GOP whose decode falls short of its next keyframe, however it was renamed', async () => {
     // ffmpeg's own SIGTERM trailer can rename a mid-GOP cut as if it were done.
     fs.writeFileSync(path.join(gopDir, 'gop-0.m4s'), gop(0n, 0n));
@@ -471,8 +488,15 @@ describe('RemuxSegmentAssembler: multi-audio (one growing file per track, H6)', 
     // aligned with the video's 4s grid; the assembler groups them onto it.
     writeAudioTrack(0, 10, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
     const asm = new RemuxSegmentAssembler(plan(grid), log, 'test-multi');
+    expect(asm.videoFrontier()).toBeNull();
+    expect(asm.audioFrontier(1)).toBeNull();
     asm.start();
     await asm.finish(true);
+
+    // One past the last produced segment on both tracks, tail included.
+    expect(asm.videoFrontier()).toBe(3);
+    expect(asm.audioFrontier(1)).toBe(3);
+    expect(asm.audioFrontier(2)).toBeNull();
 
     expect(segsIn(dir)).toEqual(['seg-0000.m4s', 'seg-0001.m4s', 'seg-0002.m4s']);
     const rendition = path.join(dir, '1');

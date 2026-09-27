@@ -748,7 +748,126 @@ describe('StreamingController.hlsAudioSegment - remux guards', () => {
       7,
       expect.anything(),
       null,
+      1, // audioIndex (0) + 1: the served EXT-X-MEDIA index the frontier decision keys on
     );
+  });
+
+  it('respawns through getOrCreateRemuxSession when this rendition is missing but the video session is producing', async () => {
+    // videoSession owns segment 65, but never wrote seg-0065 for this rendition.
+    const resolved = {
+      mediaFile: { streamInfo: { video: [{}] } },
+      absolutePath: '/media/file.mkv',
+    };
+    const oldDir = path.join(cacheRoot, 'old');
+    const newDir = path.join(cacheRoot, 'new');
+    fs.mkdirSync(path.join(newDir, '1'), { recursive: true });
+    fs.writeFileSync(path.join(newDir, '1', 'seg-0065.m4s'), 'x');
+    const videoSession = { quality: 'remux', startSegment: 0, cachePath: oldDir };
+    const respawned = { quality: 'remux', startSegment: 65, cachePath: newDir };
+    const getOrCreateRemuxSession = jest.fn().mockResolvedValue(respawned);
+    const getSegmentPath = jest.fn().mockImplementation((session) =>
+      Promise.resolve(session === respawned ? path.join(newDir, '1', 'seg-0065.m4s') : null),
+    );
+    const controller = new StreamingController(
+      { resolveFile: jest.fn().mockResolvedValue(resolved) } as never,
+      {} as never,
+      { getOrCreateRemuxSession, getSegmentPath } as never,
+      {} as never,
+      { getSegmentDuration: () => 3 } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { serve: jest.fn().mockResolvedValue(undefined) } as never,
+      {
+        assertFresh: jest.fn(),
+        resolveSession: jest.fn().mockReturnValue(videoSession),
+        resolveEarlySession: jest.fn().mockReturnValue(null),
+        findRequestSession: jest.fn().mockReturnValue({
+          kind: 'remux',
+          remuxGrid: null,
+          position: 0,
+        }),
+      } as never,
+      { build: jest.fn().mockReturnValue({ videoVariant: { codec: 'h264' } }) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await controller.hlsAudioSegment(
+      42,
+      0,
+      'seg-0065.m4s',
+      { query: {}, user: { id: 7 } } as never,
+      { id: 7 } as User,
+      { setHeader: jest.fn() } as never,
+    );
+
+    expect(getOrCreateRemuxSession).toHaveBeenCalledWith(
+      42,
+      '/media/file.mkv',
+      65,
+      expect.anything(),
+      null,
+      1,
+    );
+  });
+
+  it("never re-resolves when this rendition's segment is already on disk (no lock/DB cost on the hot path)", async () => {
+    const videoSession = { quality: 'remux', startSegment: 0, cachePath: cacheRoot };
+    fs.mkdirSync(path.join(cacheRoot, '1'), { recursive: true });
+    fs.writeFileSync(path.join(cacheRoot, '1', 'seg-0003.m4s'), 'x');
+    const getOrCreateRemuxSession = jest.fn();
+    const resolveFile = jest.fn().mockResolvedValue({});
+    const controller = new StreamingController(
+      { resolveFile } as never,
+      {} as never,
+      {
+        getOrCreateRemuxSession,
+        getSegmentPath: jest.fn().mockResolvedValue(path.join(cacheRoot, '1', 'seg-0003.m4s')),
+      } as never,
+      {} as never,
+      { getSegmentDuration: () => 3 } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { serve: jest.fn().mockResolvedValue(undefined) } as never,
+      {
+        assertFresh: jest.fn(),
+        resolveSession: jest.fn().mockReturnValue(videoSession),
+        resolveEarlySession: jest.fn().mockReturnValue(null),
+        findRequestSession: jest.fn().mockReturnValue({
+          kind: 'remux',
+          remuxGrid: null,
+          position: 0,
+        }),
+      } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await controller.hlsAudioSegment(
+      42,
+      0,
+      'seg-0003.m4s',
+      { query: {}, user: { id: 7 } } as never,
+      { id: 7 } as User,
+      { setHeader: jest.fn() } as never,
+    );
+
+    expect(getOrCreateRemuxSession).not.toHaveBeenCalled();
+    // resolveFile is still called once, unconditionally, for the ACL check.
+    expect(resolveFile).toHaveBeenCalledTimes(1);
   });
 });
 

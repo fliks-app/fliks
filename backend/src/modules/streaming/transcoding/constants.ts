@@ -27,6 +27,14 @@ export const RUN_DIR_PREFIX = 'gop-';
 /** Max gap (in segments) between FFmpeg frontier and requested segment before restarting. */
 export const SEEK_WAIT_THRESHOLD = 15;
 
+/** Wall-clock seconds of buffer-ahead converted from a remux run's own
+ *  measured throughput (see `remux-reachability.ts`). */
+export const REMUX_WAIT_BUFFER_SECONDS = 3;
+
+/** Hard ceiling on the above, in segments: a fast run never earns an
+ *  unbounded wait, and a run with no measured throughput yet gets this. */
+export const REMUX_MAX_WAIT_SEGMENTS = 3;
+
 /** Number of leading segments (seg-0 .. seg-(N-1)) the early-start companion
  *  pre-encodes at position 0 while the main session spins up at the resume
  *  point. Drives BOTH how long the early ffmpeg reads (its `-t`) and how many
