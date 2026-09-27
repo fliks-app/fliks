@@ -302,3 +302,34 @@ export function inOutroRange(marker: TimeMarker | null, position: number): boole
   if (!marker) return false;
   return position >= marker.startSeconds;
 }
+
+/** What the engine is actually playing — independent of the server's
+ *  `playMethod` decision, which a stale/desynced stream URL can disagree
+ *  with. Drives the stats overlay so its labels describe delivery, not intent. */
+export type DeliveredKind = 'direct' | 'remux' | 'transcode';
+
+/**
+ * Derive {@link DeliveredKind} from the loaded stream URL, refined by the
+ * engine's active-variant id when one is available.
+ *
+ * `originalVideoId` only comes from Shaka (the sole engine that exposes real
+ * variant tracks — see `getVariantTracks()` on the other engines, which all
+ * return `[]`): its path segment is `/remux/` for the copy variant or
+ * `/<rung>/` for a transcoded one. Every other engine (native, Tizen, webOS,
+ * desktop mpv) has no variant introspection, so the query string is the only
+ * signal: `remux=1` with no `startQuality` is the single-variant master
+ * `includeRemux && !onlyQuality` emits (master-playlist.ts); pairing the two
+ * collapses it to a transcoded rung instead.
+ */
+export function deliveredKindFromVariant(
+  url: string,
+  originalVideoId?: string | null,
+): DeliveredKind {
+  if (!url.includes('master.m3u8')) return 'direct';
+  if (originalVideoId != null) {
+    return originalVideoId.includes('/remux/') ? 'remux' : 'transcode';
+  }
+  const hasRemux = /[?&]remux=1(?:&|$)/.test(url);
+  const hasStartQuality = /[?&]startQuality=/.test(url);
+  return hasRemux && !hasStartQuality ? 'remux' : 'transcode';
+}

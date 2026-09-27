@@ -19,6 +19,7 @@ describe('playback-error', () => {
       expect(userMessageKeyFor({ source: 'shaka', category: 1, code: 1002 })).toBe('player.error_network');
       expect(userMessageKeyFor({ source: 'shaka', category: 3, code: 3016 })).toBe('player.error_decode');
       expect(userMessageKeyFor({ source: 'shaka', category: 4, code: 4032 })).toBe('player.error_unsupported');
+      expect(userMessageKeyFor({ source: 'shaka', category: 4, code: 4012 })).toBe('player.error_unsupported');
     });
 
     it('falls back to the generic key', () => {
@@ -45,9 +46,10 @@ describe('playback-error', () => {
       expect(isUndecodableError({ source: 'media', code: 4 })).toBe(true);
     });
 
-    it('flags Shaka VIDEO_ERROR / CONTENT_UNSUPPORTED', () => {
+    it('flags Shaka VIDEO_ERROR / CONTENT_UNSUPPORTED / RESTRICTIONS_CANNOT_BE_MET', () => {
       expect(isUndecodableError({ source: 'shaka', code: 3016 })).toBe(true);
       expect(isUndecodableError({ source: 'shaka', code: 4032 })).toBe(true);
+      expect(isUndecodableError({ source: 'shaka', code: 4012 })).toBe(true);
     });
 
     it('keeps network / timeout / quota / session recoverable', () => {

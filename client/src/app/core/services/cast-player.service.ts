@@ -2,7 +2,7 @@ import { Injectable, effect, inject, signal } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { CastService } from './cast.service';
 import { CastSettingsService } from './cast-settings.service';
-import { StreamingApiService } from './api/streaming-api.service';
+import { StreamingApiService, type PlayMethod } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { AppSettingsService } from './app-settings.service';
 import { buildSubtitleTracks } from '../utils/subtitle-tracks';
@@ -508,7 +508,7 @@ export class CastPlayerService {
    */
   private async dispatchLoad(
     mfId: number,
-    pi: { playMethod: string; sessionId?: string },
+    pi: { playMethod: string; playUrl: string; sessionId?: string },
     currentPos: number,
     transcodeQuality: string | undefined,
     castInfo: { token: string; streamBaseUrl: string },
@@ -521,12 +521,6 @@ export class CastPlayerService {
 
     const { token: castToken, streamBaseUrl } = castInfo;
     this.cast.setCastStreamBase(streamBaseUrl);
-    const fromServer = streamBaseUrl.replace(/\/+$/, '');
-    const lanUrl =
-      fromServer ||
-      (this.serverConfig.isNative
-        ? this.serverConfig.serverUrl()
-        : window.location.origin);
 
     // Route Cast through master.m3u8 (same as desktop/Android) so the
     // backend's tracker sets useExtXMedia for multi-audio renditions —
@@ -534,11 +528,6 @@ export class CastPlayerService {
     // when var_stream_map is used.
     let castUrl: string;
     let contentType: string;
-    const tokenQ = encodeURIComponent(castToken);
-    const startAtParam = `&startAt=${Math.floor(currentPos)}`;
-    const sidParam = pi.sessionId
-      ? `&sid=${encodeURIComponent(pi.sessionId)}`
-      : '';
     if (castMode === 'direct') {
       castUrl = this.streamingApi.getAbsoluteStreamUrl(
         mfId,
@@ -546,13 +535,18 @@ export class CastPlayerService {
         pi.sessionId,
       );
       contentType = 'video/mp4';
-    } else if (castMode === 'remux') {
-      castUrl = `${lanUrl}/api/stream/${mfId}/master.m3u8?token=${tokenQ}${sidParam}&remux=1${startAtParam}`;
-      contentType = 'application/x-mpegurl';
     } else {
-      const q = transcodeQuality ?? '1080p';
-      castUrl = `${lanUrl}/api/stream/${mfId}/master.m3u8?token=${tokenQ}${sidParam}&startQuality=${q}${startAtParam}`;
-      contentType = 'application/x-mpegurl';
+      const built = this.streamingApi.buildAbsolutePlayUrl(
+        pi as { playMethod: PlayMethod; playUrl: string },
+        castToken,
+        {
+          sid: pi.sessionId,
+          startAt: Math.floor(currentPos),
+          startQuality: transcodeQuality ?? '1080p',
+        },
+      );
+      castUrl = built.url;
+      contentType = built.contentType;
     }
 
     // Stash the Cast live-session id so the sender's heartbeat loop

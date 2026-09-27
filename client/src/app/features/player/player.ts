@@ -44,8 +44,8 @@ import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { PlaybackQueueService, QueueItem } from '../../core/services/playback-queue.service';
 import { buildSeriesQueueItems, resolvePlayableFile } from '../../shared/utils/media-play.util';
-import { audioChannelsLabel, formatAudioLabel, formatAudioParts, inIntroRange, inOutroRange, parseAudioIndex, SpriteMetadata, widthForProfile } from '../../core/utils/player.utils';
-import { classifyPlaybackError, formatErrorDiagnostics, userMessageKeyFor } from '../../core/services/playback-engine/playback-error';
+import { audioChannelsLabel, deliveredKindFromVariant, formatAudioLabel, formatAudioParts, inIntroRange, inOutroRange, parseAudioIndex, SpriteMetadata, widthForProfile, type DeliveredKind } from '../../core/utils/player.utils';
+import { classifyPlaybackError, formatErrorDiagnostics, isUndecodableError, userMessageKeyFor } from '../../core/services/playback-engine/playback-error';
 import { environment } from '../../../environments/environment';
 import { normalizeLangCode } from '../../core/utils/language.utils';
 import {
@@ -712,6 +712,33 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  error diagnostics so a failed open shows which endpoint/format was tried. */
   private lastStreamUrl = '';
 
+  /** What the engine is ACTUALLY playing, refreshed every stats tick
+   *  (updateDeliveredKind) independently of the stats panel being open — the
+   *  overlay must never label from `playbackInfo.playMethod` alone. */
+  private readonly deliveredKind = signal<DeliveredKind>('direct');
+
+  /** Session the delivery-mismatch console.warn already fired for — one
+   *  warning per negotiated session, re-armed by the next one. */
+  private deliveryMismatchWarnedSid: string | undefined;
+
+  /** Recompute {@link deliveredKind} from the loaded URL + the active
+   *  variant (Shaka only — every other engine has no variant introspection)
+   *  and warn once if it disagrees with the server's decision. */
+  private updateDeliveredKind(): void {
+    if (!this.lastStreamUrl) return;
+    const originalVideoId = this.getActiveVariant()?.originalVideoId ?? null;
+    const kind = deliveredKindFromVariant(this.lastStreamUrl, originalVideoId);
+    this.deliveredKind.set(kind);
+    const pi = this.playbackInfo;
+    if (!pi) return;
+    const decisionKind: DeliveredKind =
+      pi.playMethod === 'DirectPlay' ? 'direct' : pi.playMethod === 'DirectStream' ? 'remux' : 'transcode';
+    if (decisionKind !== kind && this.deliveryMismatchWarnedSid !== pi.sessionId) {
+      this.deliveryMismatchWarnedSid = pi.sessionId;
+      console.warn(`[player] delivery mismatch: server decided ${decisionKind}, actually playing ${kind}`);
+    }
+  }
+
   /** Live-session id to bind the next stream request to. While casting
    *  the receiver's session id wins (its segments come from a separate
    *  ffmpeg job under the cast device profile); otherwise the local
@@ -737,20 +764,21 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const pi = this.playbackInfo;
     const src = pi?.source;
     const engineStats = this.engine?.getStats();
-    const mode = this.playbackMode();
     const hw = this.hwAccel();
     const activeVariant = engineStats?.activeVariant;
 
     const playingWidth = activeVariant?.width ?? src?.width;
     const playingHeight = activeVariant?.height ?? src?.height;
 
-    // Video re-encodes on any pinned rung below the source. Audio is decided
-    // independently by the backend — a lower video rung still copies a
-    // supported audio track (e.g. AC3 5.1) verbatim — so reflect the backend's
-    // audioCopyStream, not the video rung. Forcing it off the rung mislabelled a
-    // copied AC3 stream as an AAC transcode.
-    const isTranscodeQuality = !['auto', 'original'].includes(_quality);
-    const effectiveVideoCopy = isTranscodeQuality ? false : (pi?.videoCopyStream ?? true);
+    // What the engine is ACTUALLY playing, refreshed every stats tick
+    // (updateDeliveredKind) independently of the panel being open — never the
+    // server's playMethod decision alone, which a desynced stream URL can
+    // disagree with.
+    const deliveredKind = this.deliveredKind();
+    const effectiveVideoCopy = deliveredKind !== 'transcode';
+    // Audio is decided independently by the backend — a lower video rung
+    // still copies a supported audio track (e.g. AC3 5.1) verbatim — so
+    // reflect the backend's audioCopyStream, not the video delivery.
     const effectiveAudioCopy = pi?.audioCopyStream ?? true;
     // Per-track audio decision for the ACTIVE track. Multi-audio renditions
     // switch client-side, so the picked track's copy/reason (top-level
@@ -788,7 +816,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         ? formatBitrateBps(totalContainerBps)
         : '?';
 
-    const isHls = mode !== 'direct' || isTranscodeQuality;
+    const isHls = deliveredKind !== 'direct';
     const outputFormat = isHls ? 'HLS' : '';
     const outputFps = src?.frameRate ?? '';
 
@@ -852,14 +880,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       serverStreamTotalBps = selectedQualityOpt!.totalBitrateBps;
     } else if (selectedRateEntry) {
       serverStreamTotalBps = selectedRateEntry.totalBitrateBps;
-    } else if (
-      pi?.playMethod === 'DirectStream' &&
-      qId === 'original' &&
-      validBps(pi.remuxMasterBandwidthBps)
-    ) {
-      serverStreamTotalBps = pi.remuxMasterBandwidthBps;
-    } else if (pi?.playMethod === 'DirectStream' && validBps(pi.remuxMasterBandwidthBps)) {
-      serverStreamTotalBps = pi.remuxMasterBandwidthBps;
+    } else if (deliveredKind === 'remux' && validBps(pi?.remuxMasterBandwidthBps)) {
+      serverStreamTotalBps = pi!.remuxMasterBandwidthBps;
     }
 
     if (serverStreamTotalBps != null && serverStreamTotalBps > 0) {
@@ -880,15 +902,27 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (src?.frameRate) profileParts.push(`${src.frameRate} fps`);
     const videoProfileLine = profileParts.join('  ') || '?';
 
-    // What the server really does with this file. `effectiveVideoCopy` already
-    // accounts for a pinned rung, so a remux whose rung was pinned reports the
-    // transcode it actually is.
-    const streamTypeKey =
-      pi?.playMethod === 'DirectPlay'
-        ? 'player.stats_stream_type_direct'
-        : effectiveVideoCopy
-          ? 'player.stats_stream_type_remux'
-          : 'player.stats_stream_type_transcode';
+    // Delivery, not decision: `deliveredKind` already folds in a pinned rung,
+    // so a remux whose rung was pinned reports the transcode it actually is.
+    const streamTypeKey = `player.stats_stream_type_${deliveredKind}`;
+
+    // The server's decision can disagree with what's actually playing (a
+    // stream URL that failed to carry the decision through, or a mid-flight
+    // fallback reload) — flag it instead of silently trusting either side.
+    const decisionKind: DeliveredKind | undefined = !pi
+      ? undefined
+      : pi.playMethod === 'DirectPlay'
+        ? 'direct'
+        : pi.playMethod === 'DirectStream'
+          ? 'remux'
+          : 'transcode';
+    const mismatch =
+      decisionKind && decisionKind !== deliveredKind
+        ? this.translate.instant('player.stats_delivery_mismatch', {
+            decision: this.translate.instant(`player.stats_stream_type_${decisionKind}`),
+            delivered: this.translate.instant(`player.stats_stream_type_${deliveredKind}`),
+          })
+        : undefined;
 
     // Playback mode for video
     let videoPlaybackMode: string;
@@ -937,10 +971,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // each section's "Reasons" line only shows what's relevant to it.
     // Video re-encode triggers: any `Video*` flag plus `SubtitleBurnIn`
     // (which composites text frames into the video stream). Audio
-    // re-encode triggers: any `Audio*` flag. `Container*` is intentionally
-    // excluded \u2014 it's a packaging-level reason that already shows up in
-    // the "\u2192 HLS" line of the stream section, and it doesn't tell you
-    // anything about why this codec specifically had to change.
+    // re-encode triggers: any `Audio*` flag. Everything else (container /
+    // mux / server-policy flags \u2014 `ContainerNotSupported`, `MuxNotSupported`,
+    // `DirectStreamDisabled`, `ClientRejectedCopy`) is neither video- nor
+    // audio-specific and goes in the stream section instead, so it's never
+    // silently dropped.
     const allFlags = (pi?.transcodeReasons ?? []).map((r) => r.flag);
     // Translate each flag to a human label so the overlay explains
     // bitrate/quality-driven transcodes, not just raw codes. Unknown flags fall
@@ -963,6 +998,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       : effectiveAudioCopy
         ? []
         : allFlags.filter((f) => f.startsWith('Audio')).map(reasonLabel);
+    const streamTranscodeReasons = allFlags
+      .filter((f) => !f.startsWith('Video') && !f.startsWith('Audio') && f !== 'SubtitleBurnIn')
+      .map(reasonLabel);
 
     // --- Audio ---
     // Derive from the SELECTED track, not the source's primary stream, so the
@@ -1023,6 +1061,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       outputFormat,
       outputFps,
       streamTypeKey,
+      mismatch,
+      streamTranscodeReasons,
       videoLabel,
       videoStreamBitrate,
       videoProfileLine,
@@ -1509,6 +1549,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.statsInterval = setInterval(() => {
         this.tickClockWatch();
         this.checkStall();
+        this.updateDeliveredKind();
         const stats = this.engine?.getStats();
         const variant = stats?.activeVariant;
         if (variant?.height) {
@@ -1770,6 +1811,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     });
     this.wireAudioTracks(engine);
     this.wireSessionExpiredRecovery(engine);
+    this.wireRemuxFallback(engine);
   }
 
   private async createWebOsEngine(): Promise<void> {
@@ -1786,6 +1828,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     });
     this.wireAudioTracks(engine);
     this.wireSessionExpiredRecovery(engine);
+    this.wireRemuxFallback(engine);
   }
 
   private async createTizenEngine(): Promise<void> {
@@ -1803,6 +1846,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.state.videoStarted.set(true);
     });
     this.wireSessionExpiredRecovery(engine);
+    this.wireRemuxFallback(engine);
 
     // Tizen audio-tracks listener is deliberately NOT wired. With MPEG-TS
     // HLS the variant has a single muxed audio, so AVPlay's
@@ -1851,6 +1895,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.state.videoStarted.set(true);
     });
     this.wireSessionExpiredRecovery(engine);
+    this.wireRemuxFallback(engine);
 
     // Engine audio tracks may emit multiple times (e.g. rendition switch) —
     // never overwrite a good list with a smaller one. BUT always let
@@ -3118,6 +3163,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    * playback-info / stream-url call site.
    */
   private resolveStartQuality(): string | undefined {
+    // A DirectStream decision's playUrl already carries `remux=1` alone; any
+    // startQuality here — even the no-ABR top-rung pin below — would collapse
+    // the master onto a transcoded rung instead (master-playlist.ts
+    // applyQualityPin only skips that when no quality is pinned).
+    if (this.playbackInfo?.playMethod === 'DirectStream') return undefined;
     const active = this.activeQualityId();
     if (active !== 'auto') return active;
     const supportsAbr = this.deviceProfileService.getProfile().supportsAbr ?? true;
@@ -3125,7 +3175,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   /**
-   * Compose the engine's stream URL for the current `playbackMode`.
+   * Compose the engine's stream URL from the negotiated `playbackInfo`.
    * Returns `{ url, mimeType }` — direct play needs the explicit
    * `video/mp4` content type for native + Tizen engines, HLS lets the
    * engine sniff. `startTime` is only consumed by HLS (lets the
@@ -3136,25 +3186,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     sid?: string | null;
     startTime?: number;
   } = {}): { url: string; mimeType?: string } {
-    const mode = this.playbackMode();
-    const sid = opts.sid ?? this.playbackInfo?.sessionId;
-    let built: { url: string; mimeType?: string };
-    if (mode === 'direct') {
-      built = {
-        url: this.streamingApi.getStreamUrl(this.mediaFileId, sid),
-        mimeType: 'video/mp4',
-      };
-    } else {
-      const startQuality = this.resolveStartQuality();
-      built = {
-        url: this.streamingApi.getHlsUrl(
-          this.mediaFileId,
-          startQuality,
-          opts.startTime,
-          sid,
-        ),
-      };
-    }
+    const pi = this.playbackInfo!;
+    const sid = opts.sid ?? pi.sessionId;
+    const built: { url: string; mimeType?: string } = {
+      url: this.streamingApi.buildPlayUrl(pi, {
+        sid: sid ?? undefined,
+        startAt: opts.startTime,
+        startQuality: this.resolveStartQuality(),
+      }),
+      mimeType: pi.playMethod === 'DirectPlay' ? 'video/mp4' : undefined,
+    };
     this.lastStreamUrl = built.url;
     return built;
   }
@@ -3304,6 +3345,80 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     engine.on('sessionExpired', () => {
       void this.recoverFromLostSession();
     });
+  }
+
+  /** Session the copy-rejection fallback already retried once for. Keyed by
+   *  sid (not a plain boolean) so the next negotiation re-arms it. */
+  private remuxFallbackSid: string | undefined;
+
+  /**
+   * A DirectStream (remux) decision can still be undecodable on this device
+   * (a codec/level the browser or hardware path won't touch). One
+   * re-negotiation with `rejectCopy` asks the backend to transcode instead;
+   * never retried twice for the same session, so a rejection that fails too
+   * surfaces as a normal fatal error.
+   */
+  private wireRemuxFallback(engine: PlaybackEngine): void {
+    engine.on('error', (e) => {
+      if (this.destroyed || this.reloadingStream || this.recoveringFromLostSession) return;
+      if (this.playbackMode() !== 'remux') return;
+      if (!isUndecodableError({ source: e.source ?? 'engine', code: e.code })) return;
+      const sid = this.playbackInfo?.sessionId;
+      if (!sid || this.remuxFallbackSid === sid) return;
+      this.remuxFallbackSid = sid;
+      console.warn('[player] remux copy failed to decode, retrying with rejectCopy');
+      const pos = this.engine?.currentTime || this.state.currentTime() || 0;
+      void this.retryRejectingCopy(pos);
+    });
+  }
+
+  /** Re-negotiate the current file with `rejectCopy: true` and reload —
+   *  the one-shot body {@link wireRemuxFallback} triggers. Mirrors
+   *  {@link refreshSidAndReload}'s shape; kept separate because it forces a
+   *  fresh decision instead of reusing the active quality/session. */
+  private async retryRejectingCopy(position: number): Promise<void> {
+    if (!this.engine || !this.mediaFileId || this.reloadingStream) return;
+    this.reloadingStream = true;
+    this.state.setRecovering(true);
+    try {
+      const prevSid = this.playbackInfo?.sessionId;
+      if (prevSid) await this.streamingApi.stopSession(prevSid).catch(() => {});
+      // rejectCopy rides the device profile body, not a query param — it's
+      // a per-request override, never cached on the profile itself.
+      const deviceProfile = { ...this.deviceProfileService.getProfile(), rejectCopy: true };
+      this.playbackInfo = await this.streamingApi.getPlaybackInfo(
+        this.mediaFileId,
+        deviceProfile,
+        this.activeBurnInId ?? undefined,
+        this.activeAudioStreamIndex,
+        undefined,
+        position > 0 ? Math.floor(position) : undefined,
+      );
+      const pi = this.playbackInfo;
+      this.state.playbackMode.set(
+        pi.playMethod === 'DirectPlay' ? 'direct' : pi.playMethod === 'DirectStream' ? 'remux' : 'transcode',
+      );
+      this.state.hwAccel.set(pi.hwAccel);
+      this.qualityManager.buildQualityOptions(pi);
+      this.qualityManager.adoptNegotiatedQuality(pi.quality);
+      await this.authService.ensureStreamToken();
+      const wasPaused = this.pauseIntent();
+      const { url, mimeType } = this.buildPlayUrl({ startTime: position });
+      await this.engine.load(url, position > 0 ? position : undefined, mimeType);
+      this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, this.playbackMode());
+      this.restorePlaybackRate();
+      this.restorePlayState(wasPaused);
+      this.state.setRecovering(false);
+    } catch (e) {
+      this.state.setRecovering(false);
+      const { source, code } = classifyPlaybackError(e);
+      this.state.setError(
+        this.translate.instant(userMessageKeyFor({ source, code })),
+        { source, code, message: (e as any)?.message ?? String(e) },
+      );
+    } finally {
+      this.reloadingStream = false;
+    }
   }
 
   /** Re-baseline the stall watchdog so the next {@link stallTimeoutMs} window
@@ -3469,15 +3584,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const pos = Math.floor(
       this.engine?.currentTime || this.state.currentTime() || 0,
     );
-    await fetch(
-      this.streamingApi.getHlsUrl(
-        this.mediaFileId!,
-        this.resolveStartQuality(),
-        pos,
-        sid,
-      ),
-      { cache: 'no-store' },
-    );
+    // Same builder as the load path, so the prewarm URL can never drift from
+    // what the engine actually plays.
+    await fetch(this.buildPlayUrl({ sid, startTime: pos }).url, { cache: 'no-store' });
   }
 
   /** Ticked once a second from the stats interval. Detects a frozen playhead

@@ -138,9 +138,12 @@
       "AudioFormatMayChange": "Audio format may change mid-stream",
       "AudioEndsEarly": "Audio ends before the video",
       "MuxNotSupported": "MPEG-TS packaging not supported",
-      "DirectStreamDisabled": "Remux disabled by the server"
+      "DirectStreamDisabled": "Remux disabled by the server",
+      "ClientRejectedCopy": "The player could not decode the original stream",
+      "ContainerNotSupported": "Container format not supported"
     },
-    "preparing": "Preparing the stream…"
+    "preparing": "Preparing the stream…",
+    "stats_delivery_mismatch": "Server decision: {{decision}} / Delivered: {{delivered}}"
   },
   "sse": {
     "subtitle_synced": "Subtitle synced successfully.",

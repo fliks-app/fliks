@@ -738,6 +738,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
       outputFormat: '',
       outputFps: '',
       streamTypeKey: `player.stats_stream_type_${session?.mode ?? 'remux'}`,
+      streamTranscodeReasons: [],
 
       videoLabel: [resolution, videoCodec].filter(Boolean).join(' ') || videoCodec,
       videoStreamBitrate: bitrate(variant?.videoBandwidth),

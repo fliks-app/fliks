@@ -11,6 +11,15 @@ export interface PlayerStats {
    *  direct play (served as-is), remux (streams copied into HLS) or transcode
    *  (video re-encoded). Read from the real delivery, not just the decision. */
   streamTypeKey: string;
+  /** Set only when the server's `playMethod` decision disagrees with what's
+   *  actually delivered — a translated "Server decision: X / Delivered: Y"
+   *  line, already interpolated. Empty otherwise. */
+  mismatch?: string;
+  /** `transcodeReasons` flags that are neither video- nor audio-specific
+   *  (container/mux/server-policy: `ContainerNotSupported`,
+   *  `DirectStreamDisabled`, …) — why DirectStream/DirectPlay wasn't used
+   *  at all, independent of any later video/audio re-encode reason. */
+  streamTranscodeReasons: string[];
 
   videoLabel: string;
   videoStreamBitrate: string;

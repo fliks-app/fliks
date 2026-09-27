@@ -133,9 +133,12 @@
       "AudioFormatMayChange": "O formato de áudio pode mudar durante a transmissão",
       "AudioEndsEarly": "O áudio termina antes do vídeo",
       "MuxNotSupported": "Empacotamento MPEG-TS não suportado",
-      "DirectStreamDisabled": "Remux desativado pelo servidor"
+      "DirectStreamDisabled": "Remux desativado pelo servidor",
+      "ClientRejectedCopy": "O player não conseguiu decodificar o stream original",
+      "ContainerNotSupported": "Formato de contêiner não suportado"
     },
-    "preparing": "A preparar a transmissão…"
+    "preparing": "A preparar a transmissão…",
+    "stats_delivery_mismatch": "Decisão do servidor: {{decision}} / Entregue: {{delivered}}"
   },
   "sse": {
     "subtitle_synced": "Legenda sincronizada com sucesso.",

@@ -18,8 +18,14 @@
             {{ s.container | uppercase }}@if (s.containerBitrate) { ({{ s.containerBitrate }}) }
           </div>
           <div class="text-white/60">&rarr; {{ s.streamTypeKey | translate }}</div>
+          @if (s.mismatch) {
+            <div class="text-warning">{{ s.mismatch }}</div>
+          }
           @if (s.outputFormat) {
             <div class="text-white/60">&rarr; {{ s.outputFormat | uppercase }}@if (s.outputFps) { ({{ s.outputFps }}) }</div>
+          }
+          @if (s.streamTranscodeReasons.length) {
+            <div class="text-white/60">{{ 'player.stats_reasons' | translate }}&nbsp;&nbsp;<span class="font-semibold">{{ s.streamTranscodeReasons.join(', ') }}</span></div>
           }
         </div>
       </section>

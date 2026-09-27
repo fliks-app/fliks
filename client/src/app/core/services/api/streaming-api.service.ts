@@ -272,6 +272,69 @@ export class StreamingApiService {
     return params.length ? `${base}?${params.join('&')}` : base;
   }
 
+  /**
+   * The one URL builder for local (non-Cast) playback. Derives the URL from
+   * `pi.playUrl` — which already carries `remux=1` for a DirectStream
+   * decision — instead of reconstructing `/master.m3u8` by hand, so a caller
+   * can never drop the flag, and never pairs it with `startQuality`: doing so
+   * makes the backend collapse the master onto a single transcoded rung
+   * instead of the copy (master-playlist.ts `applyQualityPin` only skips the
+   * remux-alone branch when no quality is pinned).
+   */
+  buildPlayUrl(
+    pi: { playMethod: PlayMethod; playUrl: string },
+    opts: { sid?: string; startAt?: number; startQuality?: string } = {},
+  ): string {
+    const base = this.serverConfig.isNative
+      ? this.serverConfig.resolveUrl(pi.playUrl)
+      : pi.playUrl;
+    if (pi.playMethod === 'DirectPlay') {
+      return this.appendSid(base, opts.sid);
+    }
+    const params: string[] = [];
+    if (opts.sid) params.push(`sid=${encodeURIComponent(opts.sid)}`);
+    if (opts.startQuality && pi.playMethod !== 'DirectStream') {
+      params.push(`startQuality=${encodeURIComponent(opts.startQuality)}`);
+    }
+    if (opts.startAt != null) params.push(`startAt=${opts.startAt}`);
+    params.push(`device=${this.deviceProfileService.getProfile().deviceType}`);
+    const sep = base.includes('?') ? '&' : '?';
+    return params.length ? `${base}${sep}${params.join('&')}` : base;
+  }
+
+  /** Path + whether the backend's `playUrl` carries `remux=1`, without its
+   *  (sender-only) token — used by {@link buildAbsolutePlayUrl} to rebuild
+   *  the query string against the Cast receiver's own short-lived token. */
+  private parsePlayUrlFlags(playUrl: string): { path: string; remux: boolean } {
+    const qIdx = playUrl.indexOf('?');
+    const path = qIdx >= 0 ? playUrl.slice(0, qIdx) : playUrl;
+    const query = qIdx >= 0 ? playUrl.slice(qIdx + 1) : '';
+    return { path, remux: new URLSearchParams(query).get('remux') === '1' };
+  }
+
+  /** Same composition as {@link buildPlayUrl}, absolute through the Cast
+   *  receiver's stream base and its own token (the sender's token baked into
+   *  `pi.playUrl` is useless to the receiver device). HLS decisions only —
+   *  DirectPlay's cast URL has no ladder/remux concern (see getAbsoluteStreamUrl). */
+  buildAbsolutePlayUrl(
+    pi: { playMethod: PlayMethod; playUrl: string },
+    castToken: string,
+    opts: { sid?: string; startAt?: number; startQuality?: string } = {},
+  ): { url: string; contentType: string } {
+    const { path, remux } = this.parsePlayUrlFlags(pi.playUrl);
+    const params = [`token=${encodeURIComponent(castToken)}`];
+    if (opts.sid) params.push(`sid=${encodeURIComponent(opts.sid)}`);
+    if (remux) params.push('remux=1');
+    if (opts.startQuality && pi.playMethod !== 'DirectStream') {
+      params.push(`startQuality=${encodeURIComponent(opts.startQuality)}`);
+    }
+    if (opts.startAt != null) params.push(`startAt=${opts.startAt}`);
+    return {
+      url: `${this.absoluteUrl(path)}?${params.join('&')}`,
+      contentType: 'application/x-mpegurl',
+    };
+  }
+
   /** Build authenticated stream URL for direct play */
   getStreamUrl(mediaFileId: number, sessionId?: string): string {
     const base = this.serverConfig.isNative

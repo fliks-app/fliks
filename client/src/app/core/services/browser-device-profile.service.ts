@@ -168,6 +168,11 @@ export interface DeviceProfile {
    *  never switches again) tells the backend to collapse the master to a
    *  single variant instead of the full ladder. Unset = true. */
   supportsAbr?: boolean;
+
+  /** One-shot per-request override, never part of the cached profile: the
+   *  engine couldn't decode the copy the backend chose (DirectStream), so ask
+   *  it to transcode instead. Set by the caller on a copy of the profile. */
+  rejectCopy?: boolean;
 }
 
 /** Containers AVPlay demuxes, from Samsung's published media specification

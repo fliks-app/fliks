@@ -138,9 +138,12 @@
       "AudioFormatMayChange": "Format audio variable en cours de flux",
       "AudioEndsEarly": "L'audio se termine avant la vidéo",
       "MuxNotSupported": "Empaquetage MPEG-TS non pris en charge",
-      "DirectStreamDisabled": "Remux désactivé par le serveur"
+      "DirectStreamDisabled": "Remux désactivé par le serveur",
+      "ClientRejectedCopy": "Le lecteur n'a pas pu décoder le flux original",
+      "ContainerNotSupported": "Format de conteneur non pris en charge"
     },
-    "preparing": "Préparation du flux…"
+    "preparing": "Préparation du flux…",
+    "stats_delivery_mismatch": "Décision serveur : {{decision}} / Diffusé : {{delivered}}"
   },
   "sse": {
     "subtitle_synced": "Sous-titre synchronisé avec succès.",

@@ -58,6 +58,7 @@ const SHAKA_CODE_NAMES: Record<number, string> = {
   3018: 'TRANSMUXING_FAILED',
   3019: 'CONTENT_TRANSFORMATION_FAILED',
   4000: 'UNABLE_TO_GUESS_MANIFEST_TYPE',
+  4012: 'RESTRICTIONS_CANNOT_BE_MET',
   4032: 'CONTENT_UNSUPPORTED_BY_BROWSER',
   4038: 'HLS_INTERNAL_ERROR',
   7000: 'LOAD_INTERRUPTED',
@@ -116,7 +117,7 @@ export function userMessageKeyFor(err: {
   if (err.source === 'shaka') {
     if (err.category === 1) return 'player.error_network';
     if (err.code === 3016) return 'player.error_decode';
-    if (err.code === 4032) return 'player.error_unsupported';
+    if (err.code === 4032 || err.code === 4012) return 'player.error_unsupported';
   }
   // A playback-info/session request that failed transport-side (status 0 —
   // no response reached the browser) reads the same as a media network error.
@@ -148,7 +149,9 @@ export function isUndecodableError(err: {
   code?: number;
 }): boolean {
   if (err.source === 'media') return err.code === 3 || err.code === 4;
-  if (err.source === 'shaka') return err.code === 3016 || err.code === 4032;
+  if (err.source === 'shaka') {
+    return err.code === 3016 || err.code === 4032 || err.code === 4012;
+  }
   return false;
 }
 

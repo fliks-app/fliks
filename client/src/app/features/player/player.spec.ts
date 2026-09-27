@@ -26,6 +26,7 @@ import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { PlaybackQueueService } from '../../core/services/playback-queue.service';
 import { TrackManagerService } from '../../core/services/track-manager.service';
+import { QualityManagerService } from '../../core/services/quality-manager.service';
 import { DeviceService } from '../../core/services/device.service';
 
 /*
@@ -71,6 +72,7 @@ function buildPi(mediaFileId: number, overrides: Partial<PlaybackInfoResponse> =
 
 function fakeEngine() {
   const loadCalls: { url: string; startTime?: number; mimeType?: string }[] = [];
+  const handlers = new Map<string, Set<(data: any) => void>>();
   return {
     loadCalls,
     currentTime: 0,
@@ -84,6 +86,21 @@ function fakeEngine() {
     play: vi.fn(async () => {}),
     pause: vi.fn(async () => {}),
     destroy: vi.fn(async () => {}),
+    configure: vi.fn(),
+    getVariantTracks: vi.fn(() => [] as any[]),
+    getStats: vi.fn(() => ({ droppedFrames: 0 }) as any),
+    // Minimal pub/sub so tests can wire the real listener methods
+    // (wireRemuxFallback, wireSessionExpiredRecovery) and fire an event.
+    on: (event: string, handler: (data: any) => void) => {
+      if (!handlers.has(event)) handlers.set(event, new Set());
+      handlers.get(event)!.add(handler);
+    },
+    off: (event: string, handler: (data: any) => void) => {
+      handlers.get(event)?.delete(handler);
+    },
+    emit: (event: string, data: any) => {
+      for (const h of handlers.get(event) ?? []) h(data);
+    },
   };
 }
 
@@ -132,6 +149,19 @@ function createHarness(opts: {
     (id: number, quality?: string, startAt?: number, sid?: string) =>
       `hls://${id}?q=${quality}&startAt=${startAt}&sid=${sid}`,
   );
+  // Mirrors the real dispatch (DirectPlay -> raw stream, else -> HLS master)
+  // via the two mocks above, so existing loadCalls assertions stay valid.
+  const buildPlayUrl = vi.fn(
+    (
+      pi: { mediaFileId: number; playMethod: string; sessionId?: string },
+      opts: { sid?: string; startAt?: number; startQuality?: string } = {},
+    ) => {
+      const sid = opts.sid ?? pi.sessionId;
+      return pi.playMethod === 'DirectPlay'
+        ? getStreamUrl(pi.mediaFileId, sid)
+        : getHlsUrl(pi.mediaFileId, opts.startQuality, opts.startAt, sid);
+    },
+  );
 
   const streamingApi = {
     getPlaybackInfo,
@@ -140,6 +170,7 @@ function createHarness(opts: {
     updatePlaybackState,
     getStreamUrl,
     getHlsUrl,
+    buildPlayUrl,
     getStopSessionUrl: vi.fn(() => 'stop://x'),
     getThumbnailMetadataUrl: vi.fn(() => ''),
     getThumbnailSpriteUrl: vi.fn(() => ''),
@@ -486,6 +517,7 @@ describe('PlayerComponent wake / resume', () => {
     const fetchMock = vi.fn(async (_url: string) => ({}) as any);
     vi.stubGlobal('fetch', fetchMock);
     h.state.playbackMode.set('transcode');
+    h.component.playbackInfo = buildPi(MAIN_FILE_ID, { playMethod: 'Transcode' });
     h.engine.currentTime = 640;
 
     sleep(h.component, 10 * 60 * 1000);
@@ -819,5 +851,180 @@ describe('PlayerComponent loading spinner', () => {
     h.state.loading.set(false);
     h.state.buffering.set(true);
     expect(h.component.spinnerVisible()).toBe(true);
+  });
+});
+
+describe('PlayerComponent DirectStream URL building', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  const DIRECT_STREAM_PI = () =>
+    buildPi(MAIN_FILE_ID, {
+      playMethod: 'DirectStream',
+      playUrl: `/api/stream/${MAIN_FILE_ID}/master.m3u8?token=t&remux=1`,
+    });
+
+  it('never resolves a startQuality while playMethod is DirectStream, in auto', () => {
+    const h = createHarness();
+    h.component.playbackInfo = DIRECT_STREAM_PI();
+    TestBed.inject(QualityManagerService).activeQualityId.set('auto');
+
+    expect(h.component.resolveStartQuality()).toBeUndefined();
+  });
+
+  it('never resolves a startQuality while playMethod is DirectStream, even for a no-ABR client in auto', () => {
+    const h = createHarness();
+    const deviceProfileService = TestBed.inject(BrowserDeviceProfileService) as any;
+    deviceProfileService.getProfile = () => ({ ...DEVICE_PROFILE, supportsAbr: false });
+    const qm = TestBed.inject(QualityManagerService);
+    qm.activeQualityId.set('auto');
+    qm.availableQualities.set([
+      { id: 'auto', label: 'Auto', height: 0 },
+      { id: '1080p', label: '1080p', height: 1080 },
+    ]);
+    // Without the DirectStream gate, a no-ABR client in auto pins the top rung
+    // (proves the gate is doing real work, not vacuously passing on an empty list).
+    expect(qm.topRungId()).toBe('1080p');
+
+    h.component.playbackInfo = DIRECT_STREAM_PI();
+    expect(h.component.resolveStartQuality()).toBeUndefined();
+  });
+
+  it('resolves the picked rung once the backend has re-decided Transcode for it', () => {
+    const h = createHarness();
+    h.component.playbackInfo = buildPi(MAIN_FILE_ID, { playMethod: 'Transcode' });
+    TestBed.inject(QualityManagerService).activeQualityId.set('720p');
+
+    expect(h.component.resolveStartQuality()).toBe('720p');
+  });
+
+  it('buildPlayUrl carries remux=1 and no startQuality for DirectStream; DirectPlay ignores quality entirely', () => {
+    const h = createHarness();
+    h.component.playbackInfo = DIRECT_STREAM_PI();
+    TestBed.inject(QualityManagerService).activeQualityId.set('auto');
+
+    const { url, mimeType } = h.component.buildPlayUrl({ startTime: 30 });
+    expect(mimeType).toBeUndefined();
+    expect(h.streamingApi.buildPlayUrl).toHaveBeenCalledWith(
+      h.component.playbackInfo,
+      expect.objectContaining({ startAt: 30, startQuality: undefined }),
+    );
+    expect(url).toContain(`hls://${MAIN_FILE_ID}`);
+  });
+
+  it('prewarm hits the exact same URL the load path would build for the same position', async () => {
+    const h = createHarness();
+    h.component.playbackInfo = DIRECT_STREAM_PI();
+    h.state.playbackMode.set('remux');
+    h.engine.currentTime = 77;
+    const fetchMock = vi.fn(async (_url: string) => ({}) as any);
+    vi.stubGlobal('fetch', fetchMock);
+
+    await h.component.prewarmCurrentStream();
+
+    const prewarmUrl = fetchMock.mock.calls[0]![0];
+    const { url: loadUrl } = h.component.buildPlayUrl({ startTime: 77 });
+    expect(prewarmUrl).toBe(loadUrl);
+  });
+});
+
+describe('PlayerComponent remux fallback (rejectCopy)', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  it('re-negotiates once with rejectCopy on an undecodable error while delivering remux, then stops', async () => {
+    const h = createHarness();
+    h.state.playbackMode.set('remux');
+    h.component.playbackInfo = buildPi(MAIN_FILE_ID, {
+      playMethod: 'DirectStream',
+      playUrl: `/api/stream/${MAIN_FILE_ID}/master.m3u8?token=t&remux=1`,
+    });
+    h.streamingApi.getPlaybackInfo.mockResolvedValueOnce(
+      buildPi(MAIN_FILE_ID, { playMethod: 'Transcode', playUrl: `/api/stream/${MAIN_FILE_ID}/master.m3u8?token=t` }),
+    );
+    h.component.wireRemuxFallback(h.engine);
+
+    h.engine.emit('error', { source: 'shaka', code: 4032 });
+    await flush();
+
+    expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalledTimes(1);
+    expect((h.streamingApi.getPlaybackInfo.mock.calls[0] as any[])[1]).toMatchObject({ rejectCopy: true });
+    expect(h.engine.loadCalls.length).toBe(1);
+    expect(h.state.playbackMode()).toBe('transcode');
+
+    // A second failure on the same (still undecoded) session must not retry again.
+    h.engine.emit('error', { source: 'shaka', code: 4032 });
+    await flush();
+    expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores a recoverable error and an error outside remux delivery', async () => {
+    const h = createHarness();
+    h.component.wireRemuxFallback(h.engine);
+    h.state.playbackMode.set('remux');
+    h.component.playbackInfo = buildPi(MAIN_FILE_ID, { playMethod: 'DirectStream' });
+
+    // Network blip — recoverable, not a "can't decode this" signal.
+    h.engine.emit('error', { source: 'shaka', category: 1, code: 1002 });
+    await flush();
+    expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
+
+    // Same error class, but the delivery isn't remux — nothing to fall back from.
+    h.state.playbackMode.set('transcode');
+    h.engine.emit('error', { source: 'shaka', code: 4032 });
+    await flush();
+    expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
+  });
+});
+
+describe('PlayerComponent stats overlay: delivery-based labels', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  it('labels Direct Play for a raw (non-HLS) stream URL', () => {
+    const h = createHarness();
+    h.component.playbackInfo = buildPi(MAIN_FILE_ID, { playMethod: 'DirectPlay' });
+    h.component.lastStreamUrl = `stream://${MAIN_FILE_ID}?sid=sid-${MAIN_FILE_ID}`;
+    h.component.updateDeliveredKind();
+    h.component.statsVisible.set(true);
+
+    const stats = h.component.playerStats();
+    expect(stats?.streamTypeKey).toBe('player.stats_stream_type_direct');
+    expect(stats?.mismatch).toBeUndefined();
+  });
+
+  it('labels Remux for remux=1 with no startQuality, even with no variant introspection', () => {
+    const h = createHarness();
+    h.component.playbackInfo = buildPi(MAIN_FILE_ID, { playMethod: 'DirectStream' });
+    h.component.lastStreamUrl = `/api/stream/${MAIN_FILE_ID}/master.m3u8?token=t&remux=1`;
+    h.component.updateDeliveredKind();
+    h.component.statsVisible.set(true);
+
+    const stats = h.component.playerStats();
+    expect(stats?.streamTypeKey).toBe('player.stats_stream_type_remux');
+    expect(stats?.mismatch).toBeUndefined();
+  });
+
+  it('flags the mismatch and warns once when remux=1 + startQuality collapses delivery to a transcoded rung', () => {
+    const h = createHarness();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    h.component.playbackInfo = buildPi(MAIN_FILE_ID, { playMethod: 'DirectStream' });
+    h.component.lastStreamUrl = `/api/stream/${MAIN_FILE_ID}/master.m3u8?token=t&remux=1&startQuality=original`;
+
+    h.component.updateDeliveredKind();
+    h.component.statsVisible.set(true);
+    const stats = h.component.playerStats();
+
+    expect(stats?.streamTypeKey).toBe('player.stats_stream_type_transcode');
+    expect(stats?.mismatch).toBeTruthy();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect((warn.mock.calls[0] as any[])[0]).toContain('delivery mismatch');
+
+    // Same session, same mismatch on the next tick — warn only once.
+    h.component.updateDeliveredKind();
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 });
