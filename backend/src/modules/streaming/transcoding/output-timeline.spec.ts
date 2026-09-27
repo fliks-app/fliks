@@ -266,14 +266,14 @@ describe('remux resume', () => {
   });
 });
 
-describe('multi-audio remux (var_stream_map)', () => {
+describe('multi-audio remux (one output per track, H6)', () => {
   const streams = [{ streamIndex: 1, language: 'eng' }, { streamIndex: 2, language: 'fre' }];
   const plans: BuildRemuxArgsOptions['audioTrackPlans'] = [
     { mode: 'copy', codec: 'aac', channels: 2 },
     { mode: 'transcode', codec: 'aac', channels: 6 },
   ];
 
-  it('maps the programme video plus every track, one -c:a per rendition', () => {
+  it('maps the programme video plus every track, each its own -c:a', () => {
     const args = remux({
       videoOnly: true,
       audioStreams: streams,
@@ -284,19 +284,42 @@ describe('multi-audio remux (var_stream_map)', () => {
       '0:1',
       '0:2',
     ]);
-    expect(after(args, '-c:a:0')).toBe('copy');
-    expect(after(args, '-c:a:1')).toBe('aac');
-    expect(after(args, '-ac:a:1')).toBe('6');
+    expect(args.filter((_, i) => args[i - 1] === '-c:a')).toEqual(['copy', 'aac']);
+    expect(args.filter((_, i) => args[i - 1] === '-ac')).toEqual(['6']);
   });
 
-  it('emits one agroup rendition per track, keeping their language', () => {
+  it('repeats the run window on every audio output (ffmpeg does not carry an output -ss/-to across outputs)', () => {
+    const seekGrid = computeSegmentGrid(
+      [2.8, 5.8, 8.8].map((pts) => ({ pts, dts: pts - 0.08 })),
+      2.8,
+      17.8,
+      3,
+    )!;
+    const args = remux({
+      videoOnly: true,
+      audioStreams: streams,
+      audioTrackPlans: plans,
+      grid: seekGrid,
+      startSegment: 1,
+      sourceClockBreakSeconds: 17.8,
+    });
+    // 1 input seek + 1 for the video output + 1 per audio track (2 tracks).
+    const ss = args.filter((_, i) => args[i - 1] === '-ss');
+    expect(ss).toHaveLength(4);
+    expect(new Set(ss).size).toBe(1);
+    // 1 for the video output + 1 per audio track.
+    const to = args.filter((_, i) => args[i - 1] === '-to');
+    expect(to).toHaveLength(3);
+    expect(new Set(to).size).toBe(1);
+  });
+
+  it('never uses var_stream_map: each track is a separate -f mp4 output', () => {
     const args = remux({ videoOnly: true, audioStreams: streams, audioTrackPlans: plans });
-    expect(after(args, '-var_stream_map')).toBe(
-      'v:0,agroup:audio a:0,agroup:audio,language:eng a:1,agroup:audio,language:fre',
-    );
+    expect(args).not.toContain('-var_stream_map');
+    expect(args.filter((_, i) => args[i - 1] === '-f')).toEqual(['hls', 'mp4', 'mp4']);
   });
 
-  it('cuts on the source keyframes (hls_time 0) with a grid, the uniform duration without one', () => {
+  it('cuts the video on the source keyframes (hls_time 0) with a grid, the uniform duration without one', () => {
     const grid = computeSegmentGrid([{ pts: 0, dts: 0 }, { pts: 6, dts: 6 }], 0, 12, 6)!;
     const withGrid = remux({ videoOnly: true, audioStreams: streams, audioTrackPlans: plans, grid });
     expect(after(withGrid, '-hls_time')).toBe('0');
@@ -309,10 +332,22 @@ describe('multi-audio remux (var_stream_map)', () => {
     expect(after(uniform, '-hls_time')).toBe('4');
   });
 
-  it('writes each rendition under its own %v subdir, video first', () => {
+  it('writes the video GOPs and each track to its own growing file', () => {
     const args = remux({ videoOnly: true, audioStreams: streams, audioTrackPlans: plans });
-    expect(after(args, '-hls_segment_filename')).toBe('/cache/out/%v/seg-%04d.m4s');
-    expect(after(args, '-hls_fmp4_init_filename')).toBe('init_%v.mp4');
+    expect(after(args, '-hls_segment_filename')).toBe('/cache/out/gop-%d.m4s');
+    expect(after(args, '-hls_fmp4_init_filename')).toBe('init.mp4');
+    expect(args).toContain('/cache/out/a0.mp4');
+    expect(args).toContain('/cache/out/a1.mp4');
+    expect(args.indexOf('/cache/out/a0.mp4')).toBeLessThan(args.indexOf('/cache/out/a1.mp4'));
+    expect(args.filter((_, i) => args[i - 1] === '-map_chapters')).toEqual(['-1', '-1']);
+  });
+
+  it('fragments each track output on every frame, not the segment grid', () => {
+    const args = remux({ videoOnly: true, audioStreams: streams, audioTrackPlans: plans });
+    expect(args.filter((_, i) => args[i - 1] === '-movflags').slice(1)).toEqual([
+      '+frag_every_frame+delay_moov+default_base_moof+frag_discont',
+      '+frag_every_frame+delay_moov+default_base_moof+frag_discont',
+    ]);
   });
 
   it('still copies the video and keeps the HEVC HLS-conformance flags', () => {
@@ -328,15 +363,15 @@ describe('multi-audio remux (var_stream_map)', () => {
   });
 
   it('keeps the single-picked-track layout for a multi-track source when the caller opts out', () => {
-    // Same 2-track source as above, but `videoOnly` unset — regression guard:
-    // several audioStreams must not alone flip on var_stream_map.
+    // Same 2-track source as above, but `videoOnly` unset: regression guard,
+    // several audioStreams must not alone flip to the per-track layout.
     const args = remux({
       audioStreamIndex: 1,
       audioStreams: streams,
       audioPlan: { mode: 'copy', codec: 'aac', channels: 2 },
     });
     expect(args.filter((_, i) => args[i - 1] === '-map')).toEqual(['0:v:0', '0:2']);
-    expect(args).not.toContain('-var_stream_map');
+    expect(args).not.toContain('/cache/out/a0.mp4');
   });
 });
 

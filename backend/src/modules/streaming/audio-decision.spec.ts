@@ -1,18 +1,7 @@
-import { StreamBuilderService } from './stream-builder.service';
 import type { DeviceProfileDto } from './dto/device-profile.dto';
 import type { PlaybackInfoResponse } from './dto/playback-info.dto';
 import { audioOutputBitrateBps } from './transcoding/audio-encode';
-
-const svc = () =>
-  new StreamBuilderService(
-    { getDetectedHwAccel: () => 'none' } as never,
-    {
-      getAutoCropEnabled: () => false,
-      getTonemapAlgo: () => 'auto',
-      getSegmentDuration: () => 3,
-      getAllowDirectStream: () => true,
-    } as never,
-  );
+import { makeStreamBuilder as svc } from './stream-builder.test-helpers';
 
 type Track = {
   codec: string;
@@ -20,6 +9,8 @@ type Track = {
   startTimeSeconds?: number;
   endSeconds?: number;
   language?: string;
+  bitRate?: number;
+  sampleRate?: number;
 };
 
 const profile = (
@@ -283,6 +274,20 @@ describe('StreamBuilderService — one audio decision per track', () => {
     expect(r.audioPlan).toEqual({ mode: 'copy', codec: 'ac3', channels: 6 });
   });
 
+  // useTsOnSingleAudio only forces TS below 2 tracks; a multi-audio Tizen
+  // source stays fMP4/EXT-X-MEDIA, the same layout its transcode ladder uses.
+  it('allows a multi-audio remux for Tizen, unlike the single-audio TS gate above', () => {
+    const r = evaluate(
+      [
+        { codec: 'ac3', channels: 6, language: 'eng' },
+        { codec: 'ac3', channels: 6, language: 'fre' },
+      ],
+      profile(['ac3'], { useTsOnSingleAudio: true }),
+    );
+    expect(r.playMethod).toBe('DirectStream');
+    expect(flags(r)).not.toContain('MuxNotSupported');
+  });
+
   it('reports a channel overflow as a channel reason, not a codec one', () => {
     const r = evaluate([{ codec: 'aac', channels: 6 }], browser, {
       ext: '.mp4',
@@ -323,8 +328,7 @@ describe('StreamBuilderService — picked audio track', () => {
     const ds = svcr.response;
     expect(ds.playMethod).toBe('DirectStream');
     // The group's shared codec is ac3 (track 1 forces it); the picked track
-    // (0, source AAC stereo) folds into it instead of copying its own AAC —
-    // the remux now muxes every rendition through this same group decision.
+    // folds into it instead of copying its own AAC, like every rendition.
     expect(ds.audioPlan).toEqual({ mode: 'transcode', codec: 'ac3', channels: 2 });
     expectPlanMatchesTrack(ds, 0);
     expect(svcr.audioPlans.map((p) => `${p.mode}:${p.codec}`)).toEqual([
@@ -335,10 +339,28 @@ describe('StreamBuilderService — picked audio track', () => {
     expect(tx.audioPlan).toMatchObject({ mode: 'transcode', codec: 'ac3' });
   });
 
+  it('peaks the remux master bandwidth at video + the largest rendition, not every track', () => {
+    const stereoAc3: Track[] = [
+      { codec: 'aac', channels: 2 },
+      { codec: 'ac3', channels: 6 },
+    ];
+    const ds = svc().evaluate(
+      file(stereoAc3),
+      tv,
+      '',
+      undefined,
+      undefined,
+      'directplay',
+      0,
+    ).response;
+    // 8 Mbps video + the 6ch ac3 rendition's own 576 kbps (the group's other
+    // rendition, transcoded stereo ac3, is smaller and never added on top).
+    expect(ds.remuxMasterBandwidthBps).toBe(8_576_000);
+  });
+
   it('pads a multi-audio remux track that ends early, its own rendition carrying segments past it', () => {
-    // Two tracks: the picked one now rides the same var_stream_map group
-    // decision as its sibling, which needs the pad — its own playlist
-    // reports segments the whole way to the video's end.
+    // The picked track shares its sibling's group decision, padded the same
+    // way: its own playlist also lists segments past the audio's real end.
     const r = evaluate(
       [
         { codec: 'aac', language: 'eng' },
@@ -401,8 +423,48 @@ describe('StreamBuilderService — audio that ends early', () => {
     expect(evaluate(pair(99.5), tv).audioTracks![1].copy).toBe(true);
   });
 
+  it('judges a remux against the keyframe grid it is cut on', () => {
+    // Keyframes every 10 s: the remux's last segment starts at 90 s, not 99 s.
+    const scan = {
+      keyframes: Array.from({ length: 10 }, (_, i) => ({ pts: i * 10, dts: i * 10 })),
+      end: 100,
+      audioConfigChanges: {},
+    };
+    const r = svc().evaluate(file(pair(95)), tv, '', undefined, undefined, 'directplay', undefined, 3, scan)
+      .response;
+    expect(r.playMethod).toBe('DirectStream');
+    expect(r.audioTracks![1].copy).toBe(true);
+  });
+
   it('leaves a muxed single track alone, whose segments the video carries', () => {
     const r = evaluate([{ codec: 'aac', endSeconds: 15 }], tv);
     expect(r.audioPlan).toEqual({ mode: 'copy', codec: 'aac', channels: 2 });
+  });
+});
+
+describe('StreamBuilderService - audio track bitrate/sample rate', () => {
+  it('reports the source values for a copied track', () => {
+    const r = evaluate(
+      [{ codec: 'aac', channels: 2, bitRate: 128_000, sampleRate: 44_100 }],
+      tv,
+    );
+    expect(r.audioTracks![0]).toMatchObject({
+      copy: true,
+      bitrateBps: 128_000,
+      sampleRate: 44_100,
+    });
+  });
+
+  it('reports the negotiated rung encode target for a transcoded track', () => {
+    const r = evaluate([{ codec: 'dts', channels: 6 }], tv);
+    expect(r.audioTracks![0]).toMatchObject({
+      copy: false,
+      outputCodec: 'eac3',
+      bitrateBps: audioOutputBitrateBps(
+        { mode: 'transcode', codec: 'eac3', channels: 6 },
+        192_000,
+      ),
+      sampleRate: 48_000,
+    });
   });
 });

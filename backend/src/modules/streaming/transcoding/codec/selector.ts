@@ -2,7 +2,6 @@ import type { CodecVariant, EncoderDescriptor, VideoCodec } from './types';
 import type { DeviceProfileDto } from '../../dto/device-profile.dto';
 import type { HwAccelType } from '../types';
 import { encoderRegistry } from './encoders';
-import { applyQuirks, type QuirkContext } from './fallback';
 import { resolutionFitsCap } from '../../../../common/utils/resolution.util';
 
 /**
@@ -33,7 +32,7 @@ function resolveHwEncoder(
  *
  *  Each candidate is gated on encoder availability via
  *  `encoderRegistry.resolve()`; combos with no working encoder are
- *  dropped. The quirks DB filters known-bad client/codec pairings last.
+ *  dropped.
  *
  *  Returns the full ranked list; the caller usually emits only the top
  *  entry (one codec per master playlist — see the architecture plan
@@ -42,8 +41,7 @@ export function pickVariants(
   source: SourceInfoForSelector,
   profile: DeviceProfileDto,
   hwAccel: HwAccelType,
-  userAgent: string,
-): { variants: CodecVariant[]; quirksApplied: string[] } {
+): CodecVariant[] {
   const clientCodecs = new Set(
     profile.directPlayProfiles.flatMap((p) =>
       p.videoCodecs.map((c) => c.toLowerCase()),
@@ -127,26 +125,18 @@ export function pickVariants(
     }
   }
 
-  const ctx: QuirkContext = {
-    profile,
-    sourceWidth: source.width,
-    sourceHeight: source.height,
-    userAgent: userAgent.toLowerCase(),
-  };
-  const { variants, applied } = applyQuirks(candidates, ctx);
-  return { variants, quirksApplied: applied };
+  return candidates;
 }
 
-/** Convenience: pick a single variant — the top-ranked one after quirks.
+/** Convenience: pick a single variant, the top-ranked one.
  *  Falls back to H.264 SDR if nothing else survives (universal codec
  *  every client claims to support). */
 export function pickPrimaryVariant(
   source: SourceInfoForSelector,
   profile: DeviceProfileDto,
   hwAccel: HwAccelType,
-  userAgent: string,
 ): CodecVariant {
-  const { variants } = pickVariants(source, profile, hwAccel, userAgent);
+  const variants = pickVariants(source, profile, hwAccel);
   return variants[0] ?? { codec: 'h264', bitDepth: 8, hdr: null };
 }
 

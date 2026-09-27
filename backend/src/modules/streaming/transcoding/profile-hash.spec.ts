@@ -189,6 +189,30 @@ describe('buildPlaybackProfileFromContext', () => {
     );
   });
 
+  it('hashes identically across different picks of the same multi-audio remux group', () => {
+    const ctx = (
+      pickedChannels: number,
+      pickedMode: 'copy' | 'transcode',
+    ): SessionContext => ({
+      videoOnly: true,
+      audioStreams: [{ language: 'eng' }, { language: 'fre' }],
+      audioTrackPlans: [
+        { mode: 'copy', codec: 'ac3', channels: 6 },
+        { mode: 'transcode', codec: 'ac3', channels: 2 },
+      ],
+      // The picked track's own decision varies per viewer; the group (atm)
+      // doesn't, so different picks must land on the same cache directory.
+      audioPlan: { mode: pickedMode, codec: 'ac3', channels: pickedChannels },
+    });
+    expect(
+      computeProfileHash(buildPlaybackProfileFromContext(ctx(6, 'copy'), 3000)),
+    ).toBe(
+      computeProfileHash(
+        buildPlaybackProfileFromContext(ctx(2, 'transcode'), 3000),
+      ),
+    );
+  });
+
   it('ignores the per-track mask on the inline layout, which never reads it', () => {
     const profile = buildPlaybackProfileFromContext(
       {
@@ -264,7 +288,7 @@ describe('computeProfileHash — golden values (characterization)', () => {
         audioMode: 'copy',
         audioLayout: 'var-stream-map',
       }),
-    ).toMatchInlineSnapshot(`"5ffb1b0082"`);
+    ).toMatchInlineSnapshot(`"5c6e824043"`);
   });
 
   it('locks the hash for a Tizen TS 6s-segment session', () => {

@@ -1,4 +1,5 @@
 import {
+  DESKTOP_PROFILES,
   getHdrLadderForDevice,
   getLadderForDevice,
   parseBitrateToBps,
@@ -37,6 +38,25 @@ import {
  *  Only a manifest formality: the variant is alone, so nothing selects on it. */
 const REMUX_FALLBACK_BANDWIDTH_BPS = 8_000_000;
 
+/** Stereo reference for an encoded remux audio rendition's bitrate, matching
+ *  the top rung ffmpeg itself encodes remux audio against. */
+const REMUX_AUDIO_STEREO_REF_BPS = parseBitrateToBps(
+  DESKTOP_PROFILES[0].audioBitrate,
+);
+
+/** Peak BANDWIDTH per the HLS spec: the copied video's own bitrate plus
+ *  the single largest audio rendition, never every track or subtitles. */
+export function remuxPeakBandwidthBps(
+  videoBitrateBps: number,
+  audioPlans: AudioPlan[],
+): number {
+  const audioPeak = audioPlans.reduce(
+    (max, p) => Math.max(max, audioOutputBitrateBps(p, REMUX_AUDIO_STEREO_REF_BPS)),
+    0,
+  );
+  return videoBitrateBps + audioPeak;
+}
+
 interface RemuxVariantOptions {
   mediaFileId: number;
   tokenParam: string;
@@ -52,6 +72,8 @@ interface RemuxVariantOptions {
   remuxBandwidthBps?: number;
   sourceBitrate?: number;
   sourceVideoBitrateBps?: number;
+  /** Every rendition's output plan, to find the peak for BANDWIDTH. */
+  audioPlans: AudioPlan[];
 }
 
 /** Push the copy variant (`/remux/`), alone, at source resolution. Shared by
@@ -72,17 +94,18 @@ function pushRemuxVariant(lines: string[], opts: RemuxVariantOptions): void {
     remuxBandwidthBps,
     sourceBitrate,
     sourceVideoBitrateBps,
+    audioPlans,
   } = opts;
-  // BANDWIDTH is required and must be a peak, so keep the ladder's 1.5x
-  // convention over the source average; the fallback only fires when ffprobe
-  // reported no bitrate at all.
-  const avg =
-    Math.round(remuxBandwidthBps || sourceBitrate || sourceVideoBitrateBps || 0) ||
-    REMUX_FALLBACK_BANDWIDTH_BPS;
+  // sourceVideoBitrateBps is video-only, so the peak formula adds audio back
+  // on top; without it, the container-total fallbacks stand in as-is.
+  const bandwidth = sourceVideoBitrateBps
+    ? remuxPeakBandwidthBps(Math.round(sourceVideoBitrateBps), audioPlans)
+    : Math.round(remuxBandwidthBps || sourceBitrate || 0) ||
+      REMUX_FALLBACK_BANDWIDTH_BPS;
   const codecsAttr = remuxCodecs ? `,CODECS="${remuxCodecs}${codecsTail}"` : '';
   const rangeAttr = range ? `,VIDEO-RANGE=${range}` : '';
   lines.push(
-    `#EXT-X-STREAM-INF:BANDWIDTH=${Math.round(avg * 1.5)},AVERAGE-BANDWIDTH=${avg},RESOLUTION=${sourceWidth}x${sourceHeight}${rangeAttr}${frameRateAttr},NAME="remux"${codecsAttr}${audioAttr}${subsAttr}`,
+    `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth},AVERAGE-BANDWIDTH=${bandwidth},RESOLUTION=${sourceWidth}x${sourceHeight}${rangeAttr}${frameRateAttr},NAME="remux"${codecsAttr}${audioAttr}${subsAttr}`,
     `/api/stream/${mediaFileId}/remux/index.m3u8${tokenParam}`,
   );
 }
@@ -354,6 +377,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
         remuxBandwidthBps,
         sourceBitrate,
         sourceVideoBitrateBps,
+        audioPlans: plans,
       });
       pushIFrameStream(lines);
       return lines.join('\n');
@@ -429,6 +453,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
       remuxBandwidthBps,
       sourceBitrate,
       sourceVideoBitrateBps,
+      audioPlans: plans,
     });
     pushIFrameStream(lines);
     return lines.join('\n');

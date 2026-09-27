@@ -127,8 +127,8 @@ export const DESKTOP_PROFILES: TranscodeProfile[] = [
  *  so the file size matches what users expect from the rung label.
  *  Audio bitrates unchanged from the SDR ladder. */
 export const DESKTOP_HDR_PROFILES: TranscodeProfile[] = [
-  // Re-encode alternative to remux (copy works today via the persisted
-  // keyframe grid) — 28 Mbps HEVC Main10 stays visually transparent vs source.
+  // Re-encode alternative to remux (copy relies on the persisted keyframe
+  // grid): 28 Mbps HEVC Main10 stays visually transparent vs source.
   {
     name: '2160p-hdr',
     maxWidth: 3840,

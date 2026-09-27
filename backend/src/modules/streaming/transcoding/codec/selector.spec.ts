@@ -28,7 +28,6 @@ describe('pickPrimaryVariant — client decode-resolution gate', () => {
       { width: 3840, height: 2076, hdr: 'HDR10', codec: 'av1' },
       nativeProfile(),
       'none',
-      '',
     );
     expect(v.codec).toBe('hevc');
     expect(v.hdr).toBe('HDR10');
@@ -39,7 +38,6 @@ describe('pickPrimaryVariant — client decode-resolution gate', () => {
       { width: 2076, height: 3840, hdr: 'HDR10', codec: 'av1' },
       nativeProfile(),
       'none',
-      '',
     );
     expect(v.codec).toBe('hevc');
   });
@@ -49,7 +47,6 @@ describe('pickPrimaryVariant — client decode-resolution gate', () => {
       { width: 1920, height: 1080, hdr: null, codec: 'av1' },
       nativeProfile(),
       'none',
-      '',
     );
     expect(v.codec).toBe('av1');
   });
@@ -71,7 +68,6 @@ describe('pickPrimaryVariant — client decode-resolution gate', () => {
       { width: 3840, height: 2160, hdr: null, codec: 'av1' },
       profile,
       'none',
-      '',
     );
     expect(v.codec).toBe('av1');
   });

@@ -1270,11 +1270,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   ): Promise<TranscodeSession> {
     const isMultiAudio =
       varStreamMapLayout(ctx?.videoOnly ?? false, ctx?.audioStreams?.length ?? 0);
-    const variant = remuxVariant(
-      ctx?.audioStreamIndex,
-      grid != null,
-      isMultiAudio,
-    );
+    const variant = remuxVariant({
+      audioIndex: ctx?.audioStreamIndex,
+      keyframeGrid: grid != null,
+      multiAudio: isMultiAudio,
+    });
     const baseHash = this.computeProfileHashForCtx(ctx);
     const key = sessionKey(
       mediaFileId,
@@ -1285,6 +1285,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       this.doGetOrCreateRemuxSession(
         key,
         variant,
+        isMultiAudio,
         mediaFileId,
         absolutePath,
         requestedSegment,
@@ -1297,6 +1298,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   private async doGetOrCreateRemuxSession(
     key: string,
     variant: SessionVariant,
+    isMultiAudio: boolean,
     mediaFileId: number,
     absolutePath: string,
     requestedSegment: number,
@@ -1331,7 +1333,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       'remux',
     );
     const segmentDuration = ctx?.segmentDuration ?? DEFAULT_SEGMENT_DURATION;
-    const isMultiAudio = variant.kind === 'remux' && variant.audioIndex == null;
     const audioRenditions = isMultiAudio ? (ctx?.audioStreams?.length ?? 0) : 0;
     // The group's shared codec (any transcoded rendition names it) decides the
     // packet grid a seeked run's audio start snaps onto; a solo-copied picked
@@ -1377,6 +1378,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         startSegment: requestedSegment,
         run,
         origin: ctx?.sourceStartPts ?? 0,
+        segmentDuration,
         audioRenditions,
       }),
       this.log,

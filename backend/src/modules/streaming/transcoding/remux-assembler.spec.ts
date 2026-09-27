@@ -329,30 +329,51 @@ describe('RemuxSegmentAssembler', () => {
   });
 });
 
-describe('RemuxSegmentAssembler — multi-audio (var_stream_map)', () => {
+const TFHD_BASE_IS_MOOF = 0x020000;
+const TRUN_EXPLICIT_SAMPLE = 0x000001 | 0x000100 | 0x000200 | 0x000400;
+const u64 = (n: bigint) => {
+  const b = Buffer.alloc(8);
+  b.writeBigInt64BE(n); // signed: a priming frame's tfdt can be negative
+  return b;
+};
+const fullbox = (version: number, flags: number) => u32((version << 24) | flags);
+
+/** One raw audio frame as `buildMultiAudioOutputs` produces it: a single
+ *  sample per fragment (`frag_every_frame`), explicit trun fields. */
+const audioFrame = (trackId: number, tfdt: bigint): Buffer => {
+  const trun = box(
+    'trun',
+    Buffer.concat([fullbox(0, TRUN_EXPLICIT_SAMPLE), u32(1), u32(0), u32(1024), u32(2), u32(0x02000000)]),
+  );
+  const tfhd = box('tfhd', Buffer.concat([fullbox(0, TFHD_BASE_IS_MOOF), u32(trackId)]));
+  const tfdtBox = box('tfdt', Buffer.concat([fullbox(1, 0), u64(tfdt)]));
+  return Buffer.concat([
+    box('moof', box('traf', Buffer.concat([tfhd, tfdtBox, trun]))),
+    box('mdat', Buffer.alloc(2)),
+  ]);
+};
+
+/** ffmpeg's growing per-track output (H6): ftyp + moov, then one fragment
+ *  per source frame, all in the one file this tails as it grows. */
+const audioTrackFile = (trackId: number, timescale: number, tfdts: bigint[]): Buffer =>
+  Buffer.concat([
+    box('ftyp', Buffer.alloc(4)),
+    box('moov', trak(trackId, timescale, 'soun', 0)),
+    ...tfdts.map((t) => audioFrame(trackId, t)),
+  ]);
+
+const sampleCounts = (buf: Buffer): number[] => {
+  const out: number[] = [];
+  for (let i = buf.indexOf('trun'); i !== -1; i = buf.indexOf('trun', i + 4)) {
+    out.push(buf.readUInt32BE(i + 8));
+  }
+  return out;
+};
+
+describe('RemuxSegmentAssembler: multi-audio (one growing file per track, H6)', () => {
   let dir: string;
   let gopDir: string;
-  const videoDir = () => path.join(gopDir, '0');
-  const audioDir = (i: number) => path.join(gopDir, String(i));
 
-  /** A single-track fragment: no video, just `id`'s tfdt. */
-  const audioFrag = (id: number, tfdt: bigint): Buffer => {
-    const t = Buffer.alloc(8);
-    t.writeBigInt64BE(tfdt);
-    return Buffer.concat([
-      box(
-        'moof',
-        box(
-          'traf',
-          Buffer.concat([
-            box('tfhd', Buffer.concat([Buffer.alloc(4), u32(id)])),
-            box('tfdt', Buffer.concat([Buffer.from([1, 0, 0, 0]), t])),
-          ]),
-        ),
-      ),
-      box('mdat', Buffer.alloc(2)),
-    ]);
-  };
   const videoOnlyGop = (tfdt: bigint): Buffer => {
     const t = Buffer.alloc(8);
     t.writeBigInt64BE(tfdt);
@@ -370,112 +391,188 @@ describe('RemuxSegmentAssembler — multi-audio (var_stream_map)', () => {
       box('mdat', Buffer.alloc(2)),
     ]);
   };
-  const rawName = (n: number) => `seg-${String(n).padStart(4, '0')}.m4s`;
 
   beforeEach(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'remux-asm-multi-'));
     gopDir = path.join(dir, 'gop-run');
-    fs.mkdirSync(videoDir(), { recursive: true });
-    fs.mkdirSync(audioDir(1), { recursive: true });
-    fs.writeFileSync(
-      path.join(videoDir(), 'init_0.mp4'),
-      box('moov', trak(1, 1000, 'vide', 80)),
-    );
-    fs.writeFileSync(
-      path.join(audioDir(1), 'init_1.mp4'),
-      box('moov', trak(10, 48000, 'soun', 0)),
-    );
+    fs.mkdirSync(gopDir, { recursive: true });
+    fs.writeFileSync(path.join(gopDir, 'init.mp4'), box('moov', trak(1, 1000, 'vide', 80)));
   });
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
   const writeVideoGops = (times: number[]) =>
     times.forEach((t, i) =>
-      fs.writeFileSync(path.join(videoDir(), rawName(i)), videoOnlyGop(BigInt(t * 1000))),
+      fs.writeFileSync(path.join(gopDir, `gop-${i}.m4s`), videoOnlyGop(BigInt(t * 1000))),
     );
-  const writeAudioFrags = (dirIndex: number, trackId: number, times: number[]) =>
-    times.forEach((t, i) =>
-      fs.writeFileSync(
-        path.join(audioDir(dirIndex), rawName(i)),
-        audioFrag(trackId, BigInt(Math.round(t * 48000))),
-      ),
+  const writeAudioTrack = (index0: number, trackId: number, times: number[]) =>
+    fs.writeFileSync(
+      path.join(gopDir, `a${index0}.mp4`),
+      audioTrackFile(trackId, 48000, times.map((t) => BigInt(Math.round(t * 48000)))),
     );
   const segsIn = (d: string) => fs.readdirSync(d).filter((f) => f.startsWith('seg-')).sort();
+  const plan = (grid_: typeof grid | null, extra: { segmentDuration?: number } = {}) =>
+    remuxAssemblyPlan({
+      dir,
+      gopDir,
+      grid: grid_,
+      startSegment: 0,
+      run: { audioStartSeconds: 0, seekSeconds: null, startNumber: 0 },
+      origin: 0,
+      audioRenditions: 1,
+      ...extra,
+    });
 
-  it('groups fine-grained per-frame audio fragments onto the video grid, one seg per served segment', async () => {
+  it('coalesces per-frame fragments into one moof/trun per served segment (M2)', async () => {
     // 6 keyframes (0,2,4,6,8,10) → 3 served segments of 4s (boundaries 0,4,8,12).
     writeVideoGops([0, 2, 4, 6, 8, 10]);
-    // ffmpeg's own hls_time=0 segmenting on the audio-only rendition cuts every
-    // packet: one raw file per second here, 12 for the whole 12s duration —
-    // none aligned with the video's 4s grid.
-    writeAudioFrags(1, 10, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
-    const asm = new RemuxSegmentAssembler(
-      remuxAssemblyPlan({
-        dir,
-        gopDir,
-        grid,
-        startSegment: 0,
-        run: { audioStartSeconds: 0, seekSeconds: null, startNumber: 0 },
-        origin: 0,
-        audioRenditions: 1,
-      }),
-      log,
-      'test-multi',
-    );
+    // ffmpeg writes one fragment per frame, one file per second here, none
+    // aligned with the video's 4s grid; the assembler groups them onto it.
+    writeAudioTrack(0, 10, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    const asm = new RemuxSegmentAssembler(plan(grid), log, 'test-multi');
     asm.start();
     await asm.finish(true);
 
     expect(segsIn(dir)).toEqual(['seg-0000.m4s', 'seg-0001.m4s', 'seg-0002.m4s']);
     const rendition = path.join(dir, '1');
-    // The last fragment (t=11) is proven complete only once the run ends —
-    // the tail flush must still pick it up (no gop-12 ever exists).
+    // The last fragment (t=11) is proven complete only once the run ends:
+    // the tail flush must still pick it up (no a0.mp4 growth ever proven by a "next").
     expect(segsIn(rendition)).toEqual(['seg-0000.m4s', 'seg-0001.m4s', 'seg-0002.m4s']);
-    expect(tfdts(fs.readFileSync(path.join(rendition, 'seg-0000.m4s')))).toHaveLength(4);
-    expect(tfdts(fs.readFileSync(path.join(rendition, 'seg-0001.m4s')))).toHaveLength(4);
-    expect(tfdts(fs.readFileSync(path.join(rendition, 'seg-0002.m4s')))).toHaveLength(4);
+    for (const n of [0, 1, 2]) {
+      const buf = fs.readFileSync(path.join(rendition, `seg-000${n}.m4s`));
+      expect(tfdts(buf)).toHaveLength(1); // one moof, not one per source frame
+      expect(sampleCounts(buf)).toEqual([4]);
+    }
     expect(fs.existsSync(gopDir)).toBe(false);
   });
 
-  it('skips a served segment with no audio at all — a track that ends early', async () => {
+  it('skips a served segment with no audio at all: a track that ends early', async () => {
     writeVideoGops([0, 2, 4, 6, 8, 10]);
     // Only the first two segments' worth of audio; the third (8-12s) never
-    // gets a fragment — mirrors a copied track shorter than the video.
-    writeAudioFrags(1, 10, [0, 1, 2, 3, 4, 5, 6, 7]);
+    // gets a frame, mirroring a copied track shorter than the video.
+    writeAudioTrack(0, 10, [0, 1, 2, 3, 4, 5, 6, 7]);
+    const asm = new RemuxSegmentAssembler(plan(grid), log, 'test-multi-short');
+    asm.start();
+    await asm.finish(true);
+    expect(segsIn(path.join(dir, '1'))).toEqual(['seg-0000.m4s', 'seg-0001.m4s']);
+  });
+
+  it('groups by time onto the uniform fallback grid too, not 1 file = 1 segment', async () => {
+    writeVideoGops([0, 1]);
+    // Frames at 0s and exactly the 3s (default segmentDuration) boundary.
+    writeAudioTrack(0, 10, [0, 3]);
+    const asm = new RemuxSegmentAssembler(plan(null), log, 'test-multi-uniform');
+    asm.start();
+    await asm.finish(true);
+    expect(segsIn(path.join(dir, '1'))).toEqual(['seg-0000.m4s', 'seg-0001.m4s']);
+  });
+
+  it("drops a seeked run's own priming fragments instead of prepending them (M2)", async () => {
+    // Segment 1 (boundary 4s), same run as the single-rendition "adds back
+    // the output -ss" test above: -ss 3.9195 rounds to 3.920, so a run-local
+    // time is its absolute source time less 3.92.
+    [4, 6, 8, 10].forEach((t, k) =>
+      fs.writeFileSync(
+        path.join(gopDir, `gop-${2 + k}.m4s`),
+        videoOnlyGop(BigInt(Math.round((t - 3.92) * 1000))),
+      ),
+    );
+    // Absolute source times 3.9, 3.95 (priming, before the 4s boundary), then
+    // the real 4, 5, 6, 7: all run-local (less 3.92), timescale 48000.
+    fs.writeFileSync(
+      path.join(gopDir, 'a0.mp4'),
+      audioTrackFile(
+        10,
+        48000,
+        [3.9, 3.95, 4, 5, 6, 7].map((t) => BigInt(Math.round((t - 3.92) * 48000))),
+      ),
+    );
     const asm = new RemuxSegmentAssembler(
       remuxAssemblyPlan({
         dir,
         gopDir,
         grid,
-        startSegment: 0,
-        run: { audioStartSeconds: 0, seekSeconds: null, startNumber: 0 },
+        startSegment: 1,
+        run: { audioStartSeconds: 0, seekSeconds: 3.9195, startNumber: 2 },
         origin: 0,
         audioRenditions: 1,
       }),
       log,
-      'test-multi-short',
+      'test-multi-seek',
     );
     asm.start();
     await asm.finish(true);
-    expect(segsIn(path.join(dir, '1'))).toEqual(['seg-0000.m4s', 'seg-0001.m4s']);
+    const seg1 = fs.readFileSync(path.join(dir, '1', 'seg-0001.m4s'));
+    // The 4 real samples (4,5,6,7s): the 3.9/3.95 priming is dropped, not
+    // folded into segment 1 ahead of its real first sample (would give 6).
+    expect(sampleCounts(seg1)).toEqual([4]);
   });
 
-  it('takes one raw fragment per served segment without a keyframe grid (uniform fallback)', async () => {
-    writeVideoGops([0, 1]);
-    writeAudioFrags(1, 10, [0, 1]);
-    const asm = new RemuxSegmentAssembler(
-      remuxAssemblyPlan({
-        dir,
-        gopDir,
-        grid: null,
-        startSegment: 0,
-        run: { audioStartSeconds: 0, seekSeconds: null, startNumber: 0 },
-        origin: 0,
-        audioRenditions: 1,
-      }),
-      log,
-      'test-multi-uniform',
-    );
+  it('treats a delta of exactly 0n as already resolved, not "not yet open" (M3)', async () => {
+    // A run whose audio priming headroom and correction net to exactly 0
+    // ticks: `!a.delta` (falsy on 0n) would re-run openAudioRun forever.
+    const zeroGrid = computeSegmentGrid([{ pts: 0, dts: 0.14 }], 0, 4, 4)!;
+    fs.writeFileSync(path.join(gopDir, 'init.mp4'), box('moov', trak(1, 1000, 'vide', 0)));
+    writeVideoGops([0]);
+    writeAudioTrack(0, 10, [0]);
+    const asm = new RemuxSegmentAssembler(plan(zeroGrid), log, 'test-multi-zero-delta');
+    const mkdir = jest.spyOn(fs.promises, 'mkdir');
+    const kick = () => (asm as unknown as { kick(): void }).kick();
+    const settle = () => (asm as unknown as { chain: Promise<void> }).chain;
     asm.start();
+    kick();
+    await settle();
+    kick();
+    await settle();
+    kick();
+    await settle();
+    const audioDirCalls = mkdir.mock.calls.filter((c) => c[0] === path.join(dir, '1'));
+    mkdir.mockRestore();
+    expect(audioDirCalls).toHaveLength(1);
     await asm.finish(true);
-    expect(segsIn(path.join(dir, '1'))).toEqual(['seg-0000.m4s', 'seg-0001.m4s']);
+  });
+
+  it('logs and fails the run when a track\'s init never becomes parseable (M4)', async () => {
+    writeVideoGops([0, 2, 4, 6, 8, 10]);
+    // Not a parseable moov: the track can never open, so this must fail fast
+    // instead of silently never publishing the rendition.
+    fs.writeFileSync(path.join(gopDir, 'a0.mp4'), Buffer.concat([box('ftyp', Buffer.alloc(4)), box('moov', Buffer.alloc(0))]));
+    const onFailure = jest.fn();
+    const asm = new RemuxSegmentAssembler(plan(grid), log, 'test-multi-bad-init', onFailure);
+    const kick = () => (asm as unknown as { kick(): void }).kick();
+    const settle = () => (asm as unknown as { chain: Promise<void> }).chain;
+    asm.start();
+    for (let i = 0; i < 3; i++) {
+      kick();
+      await settle();
+    }
+    expect(onFailure).toHaveBeenCalledTimes(1);
+    expect(log.error).toHaveBeenCalledWith(
+      expect.stringContaining('audio rendition 1 assembly stopped'),
+    );
+    await asm.finish(true);
+  });
+
+  it("isolates one track's failures from the video's own counter and log wording (M13)", async () => {
+    writeVideoGops([0, 2, 4, 6, 8, 10]);
+    fs.writeFileSync(path.join(gopDir, 'a0.mp4'), Buffer.concat([box('ftyp', Buffer.alloc(4)), box('moov', Buffer.alloc(0))]));
+    const onFailure = jest.fn();
+    const errorCallsBefore = (log.error as jest.Mock).mock.calls.length;
+    const asm = new RemuxSegmentAssembler(plan(grid), log, 'test-multi-isolate', onFailure);
+    const kick = () => (asm as unknown as { kick(): void }).kick();
+    const settle = () => (asm as unknown as { chain: Promise<void> }).chain;
+    asm.start();
+    for (let i = 0; i < 3; i++) {
+      kick();
+      await settle();
+    }
+    // Video assembled segments 0-1 on the first pass, untouched by the audio
+    // track's own failures: a shared counter would have this attributed to
+    // a video "segment N", not the audio rendition. (Segment 2, the last
+    // GOP, needs the clean-exit tail assembly, skipped once the run stops.)
+    expect(segsIn(dir)).toEqual(['seg-0000.m4s', 'seg-0001.m4s']);
+    expect(onFailure).toHaveBeenCalledTimes(1);
+    const newErrors = (log.error as jest.Mock).mock.calls.slice(errorCallsBefore);
+    expect(newErrors).toEqual([[expect.stringContaining('audio rendition 1 assembly stopped')]]);
+    await asm.finish(true);
   });
 });

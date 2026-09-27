@@ -1,15 +1,7 @@
-import { StreamBuilderService } from './stream-builder.service';
 import type { DeviceProfileDto } from './dto/device-profile.dto';
+import { makeStreamBuilder } from './stream-builder.test-helpers';
 
-const svc = (autoCrop = false) =>
-  new StreamBuilderService(
-    { getDetectedHwAccel: () => 'none' } as never,
-    {
-      getAutoCropEnabled: () => autoCrop,
-      getTonemapAlgo: () => 'auto',
-      getAllowDirectStream: () => true,
-    } as never,
-  );
+const svc = (autoCrop = false) => makeStreamBuilder({ autoCrop });
 
 // Desktop shell on an SDR panel: decodes HEVC Main 10, no HDR display.
 const sdrClient: DeviceProfileDto = {

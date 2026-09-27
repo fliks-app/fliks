@@ -61,16 +61,17 @@ export const SEGMENT_TIMELINE_VERSION = 1;
  * the format is free to evolve as long as new fields are appended.
  */
 function canonicalise(profile: PlaybackProfile): string {
+  // A group's `atm` already hashes every rendition; the picked track's own
+  // channels/mode would fork the cache by pick, not by actual output.
+  const grouped = profile.audioLayout === 'var-stream-map';
   return [
     `v=${profile.videoCodec}`,
     `vd=${profile.videoBitDepth}`,
     `h=${profile.hdr ?? 'null'}`,
     `a=${profile.audioCodec}`,
-    `ac=${profile.audioChannels}`,
-    `am=${profile.audioMode}`,
-    ...(profile.audioLayout === 'var-stream-map'
+    ...(grouped
       ? [`atm=${profile.audioTrackModes ?? ''}`]
-      : []),
+      : [`ac=${profile.audioChannels}`, `am=${profile.audioMode}`]),
     `mux=${profile.muxFlavour}`,
     `al=${profile.audioLayout}`,
     `sd=${profile.segmentDurationMs}`,

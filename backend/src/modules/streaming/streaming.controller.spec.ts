@@ -421,8 +421,11 @@ describe('StreamingController.hlsAudioPlaylist (remux rendition)', () => {
     6,
   )!;
 
-  function playlistFor(live: Partial<LiveSession> | null): Promise<string> {
-    const resolved = { mediaFile: { streamInfo: { video: [{ frameRate: '25' }], durationSeconds: 25 } } };
+  function playlistFor(
+    live: Partial<LiveSession> | null,
+    frameRate = '25',
+  ): Promise<string> {
+    const resolved = { mediaFile: { streamInfo: { video: [{ frameRate }], durationSeconds: 25 } } };
     const controller = new StreamingController(
       { resolveFile: jest.fn().mockResolvedValue(resolved) } as never,
       {} as never,
@@ -465,9 +468,20 @@ describe('StreamingController.hlsAudioPlaylist (remux rendition)', () => {
     expect(extinf(await playlistFor({ kind: 'transcode', remuxGrid: grid }))).toEqual([6, 6, 6, 6, 1]);
     expect(extinf(await playlistFor(null))).toEqual([6, 6, 6, 6, 1]);
   });
+
+  it('cuts the ungridded remux fallback at the plain segDur, like the video playlist, not the fps-adjusted GOP', async () => {
+    // 23.976fps: realSegmentSeconds(6, 23.976) = 6.006, so this fails if the
+    // audio fallback ever drifts back to the fps-aware duration.
+    expect(extinf(await playlistFor({ kind: 'remux', remuxGrid: null }, '23.976'))).toEqual(
+      [6, 6, 6, 6, 1],
+    );
+    expect(extinf(await playlistFor({ kind: 'transcode', remuxGrid: null }, '23.976'))).toEqual(
+      [6.006, 6.006, 6.006, 6.006, 0.976],
+    );
+  });
 });
 
-describe('StreamingController.hlsMaster — multi-audio remux publishes the group', () => {
+describe('StreamingController.hlsMaster - multi-audio remux publishes the group', () => {
   function masterFor(
     live: Partial<LiveSession> | null,
     query: Record<string, string> = { remux: '1' },
@@ -504,7 +518,7 @@ describe('StreamingController.hlsMaster — multi-audio remux publishes the grou
     return { controller, generateMasterPlaylist };
   }
 
-  it('publishes the audio group for a multi-audio remux (today it muxed the picked track alone)', async () => {
+  it('publishes the audio group for a multi-audio remux, picked track included', async () => {
     const audioTrackPlans = [
       { mode: 'copy' as const, codec: 'aac', channels: 2 },
       { mode: 'copy' as const, codec: 'ac3', channels: 6 },
@@ -555,13 +569,127 @@ describe('StreamingController.hlsMaster — multi-audio remux publishes the grou
   });
 });
 
-describe('StreamingController.hlsSegment — kind refresh', () => {
+describe('StreamingController.hlsAudioSegment - remux guards', () => {
+  const cacheRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fliks-remux-audio-'));
+  afterAll(() => fs.rmSync(cacheRoot, { recursive: true, force: true }));
+
+  it('never routes a remux video session through the early companion', async () => {
+    const segPath = path.join(cacheRoot, '1', 'seg-0001.m4s');
+    fs.mkdirSync(path.dirname(segPath), { recursive: true });
+    fs.writeFileSync(segPath, 'x');
+    const getOrCreateEarlySession = jest.fn();
+    const videoSession = { quality: 'remux', startSegment: 5, cachePath: cacheRoot };
+    const transcodingService = {
+      getOrCreateEarlySession,
+      getSegmentPath: jest.fn().mockResolvedValue(segPath),
+    };
+    const controller = new StreamingController(
+      { resolveFile: jest.fn().mockResolvedValue({}) } as never,
+      {} as never,
+      transcodingService as never,
+      {} as never,
+      { getSegmentDuration: () => 3 } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { serve: jest.fn().mockResolvedValue(undefined) } as never,
+      {
+        assertFresh: jest.fn(),
+        resolveSession: jest.fn().mockReturnValue(videoSession),
+        resolveEarlySession: jest.fn().mockReturnValue(null),
+        findRequestSession: jest.fn().mockReturnValue(null),
+      } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await controller.hlsAudioSegment(
+      42,
+      0,
+      'seg-0001.m4s',
+      { query: {}, user: { id: 7 } } as never,
+      { id: 7 } as User,
+      { setHeader: jest.fn() } as never,
+    );
+
+    expect(getOrCreateEarlySession).not.toHaveBeenCalled();
+  });
+
+  it('spawns the remux session, not a guessed transcode, for a remux live session racing ahead', async () => {
+    const segPath = path.join(cacheRoot, '1', 'seg-0000.m4s');
+    fs.mkdirSync(path.dirname(segPath), { recursive: true });
+    fs.writeFileSync(segPath, 'x');
+    const resolved = {
+      mediaFile: { streamInfo: { video: [{}] } },
+      absolutePath: '/media/file.mkv',
+    };
+    const getOrCreateRemuxSession = jest.fn().mockResolvedValue({
+      quality: 'remux',
+      startSegment: 0,
+      cachePath: cacheRoot,
+    });
+    const getOrCreateSession = jest.fn();
+    const transcodingService = {
+      getOrCreateRemuxSession,
+      getOrCreateSession,
+      getSegmentPath: jest.fn().mockResolvedValue(segPath),
+    };
+    const controller = new StreamingController(
+      { resolveFile: jest.fn().mockResolvedValue(resolved) } as never,
+      {} as never,
+      transcodingService as never,
+      {} as never,
+      { getSegmentDuration: () => 3 } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { serve: jest.fn().mockResolvedValue(undefined) } as never,
+      {
+        assertFresh: jest.fn(),
+        resolveSession: jest.fn().mockReturnValue(null),
+        resolveEarlySession: jest.fn().mockReturnValue(null),
+        findRequestSession: jest.fn().mockReturnValue({
+          kind: 'remux',
+          remuxGrid: null,
+          position: 0,
+        }),
+      } as never,
+      { build: jest.fn().mockReturnValue({ videoVariant: { codec: 'h264' } }) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await controller.hlsAudioSegment(
+      42,
+      0,
+      'seg-0000.m4s',
+      { query: {}, user: { id: 7 } } as never,
+      { id: 7 } as User,
+      { setHeader: jest.fn() } as never,
+    );
+
+    expect(getOrCreateRemuxSession).toHaveBeenCalled();
+    expect(getOrCreateSession).not.toHaveBeenCalled();
+  });
+});
+
+describe('StreamingController.hlsSegment - kind refresh', () => {
   const cacheRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fliks-kind-refresh-'));
   afterAll(() => fs.rmSync(cacheRoot, { recursive: true, force: true }));
 
   /** Serves `quality`'s segment off a real on-disk file via the fast path
-   *  (an `existing` session + a live session already resolved), so the
-   *  refresh runs without exercising the slow spawn path. */
+   *  (`existing` + a live session already resolved), skipping the spawn path. */
   async function serveSegment(
     quality: string,
     live: LiveSession,

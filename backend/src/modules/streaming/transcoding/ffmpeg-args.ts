@@ -499,11 +499,9 @@ export function perStreamAudioArgs(
 
 /**
  * EXT-X-MEDIA layout: one FFmpeg process for the programme video plus every
- * audio rendition, each its own `%v` output. Shared by the transcode ladder
- * (`hlsTime` = the fps-aware grid, cutting with the forced-IDR cadence) and
- * the multi-audio remux (`hlsTime` = `'0'`, cutting on the source's real
- * keyframes) — the two differ only in that cadence and whether the run
- * carries its own source timestamps.
+ * audio rendition, each its own `%v` output, cut on the fps-aware grid (the
+ * forced-IDR cadence and the playlist EXTINF). The transcode ladder's own
+ * multi-audio layout; the remux path publishes its tracks another way (H6).
  */
 function varStreamMapArgs(opts: {
   videoMapSpec: string;
@@ -519,11 +517,6 @@ function varStreamMapArgs(opts: {
   outputSeekSeconds: number;
   outputDir: string;
   originSeconds: number;
-  sourceTimestamps?: boolean;
-  listSize?: number;
-  /** Output options with no per-track shape (e.g. the remux HEVC HLS
-   *  conformance flags), pushed after the audio codec args. */
-  extraArgs?: string[];
 }): string[] {
   const {
     videoMapSpec,
@@ -539,9 +532,6 @@ function varStreamMapArgs(opts: {
     outputSeekSeconds,
     outputDir,
     originSeconds,
-    sourceTimestamps,
-    listSize,
-    extraArgs,
   } = opts;
   const args: string[] = ['-map', videoMapSpec];
   for (let i = 0; i < audioStreams.length; i++) {
@@ -553,7 +543,6 @@ function varStreamMapArgs(opts: {
       ? perStreamAudioArgs(audioStreams, audioTrackPlans, audioEnc)
       : audioArgs),
   );
-  if (extraArgs) args.push(...extraArgs);
 
   // Build var_stream_map: "v:0,agroup:audio a:0,agroup:audio,language:fre ..."
   const varParts = ['v:0,agroup:audio'];
@@ -574,8 +563,6 @@ function varStreamMapArgs(opts: {
       segmentFilename: ffOutPath(outputDir, '%v', `seg-%04d.${segExt}`),
       indexPath: ffOutPath(outputDir, '%v', 'index.m3u8'),
       originSeconds,
-      sourceTimestamps,
-      listSize,
     }),
   );
   return args;
@@ -1389,7 +1376,7 @@ export const REMUX_STEREO_AUDIO_BITRATE = DESKTOP_PROFILES[0].audioBitrate;
 
 /**
  * Build FFmpeg args for remux mode: copy video stream, optionally transcode audio.
- * This is much cheaper than full transcoding — no video re-encoding.
+ * This is much cheaper than full transcoding: no video re-encoding.
  */
 export interface BuildRemuxArgsOptions {
   inputPath: string;
@@ -1401,7 +1388,7 @@ export interface BuildRemuxArgsOptions {
   /** The one audio track muxed next to the copied video (default the first). */
   audioStreamIndex?: number;
   /** Source video codec (ffprobe `codec_name`, lowercased). Drives the
-   *  `-tag:v hvc1` flag for HEVC inputs — FFmpeg's mov muxer otherwise
+   *  `-tag:v hvc1` flag for HEVC inputs: FFmpeg's mov muxer otherwise
    *  defaults to `hev1`, which Apple HLS rejects: the spec requires
    *  parameter sets in the moov sample description (`hvc1`), not inline
    *  in the bitstream (`hev1`). Without this, iOS AVPlayer fails the
@@ -1424,13 +1411,54 @@ export interface BuildRemuxArgsOptions {
   /** Audio output of `audioStreamIndex`; AAC stereo when absent. */
   audioPlan?: AudioPlan;
   /** Per-rendition audio decision for a multi-audio source: every track is
-   *  muxed as its own EXT-X-MEDIA rendition (`varStreamMapLayout`) instead of
-   *  the single picked one. One entry per `audioStreams[]` track, aligned. */
+   *  published as its own rendition (`varStreamMapLayout`) instead of the
+   *  single picked one. One entry per `audioStreams[]` track, aligned. */
   audioTrackPlans?: AudioPlan[];
-  /** Caller opts into the var_stream_map layout (mirrors
-   *  `BuildFfmpegArgsOptions.videoOnly`) — `audioStreams.length > 1` alone
-   *  doesn't imply it: a caller may still pick one track out of several. */
+  /** Caller opts into publishing every track as its own rendition (mirrors
+   *  `BuildFfmpegArgsOptions.videoOnly`): `audioStreams.length > 1` alone
+   *  doesn't imply it, a caller may still pick one track out of several. */
   videoOnly?: boolean;
+}
+
+/**
+ * One `-f mp4` output per audio track of a multi-audio remux, each its own
+ * growing fragmented file (`a<i>.mp4`) instead of an HLS segment per packet
+ * (H6: `-hls_time 0` on a video-less stream cuts on every packet). The
+ * assembler tails each file and coalesces its frames onto the video's grid.
+ */
+function buildMultiAudioOutputs(opts: {
+  audioStreams: AudioStreamMeta[];
+  audioTrackPlans: AudioPlan[] | undefined;
+  audioPlan: AudioPlan | undefined;
+  audioEnc: AudioEncodeContext;
+  outputDir: string;
+  /** The run's own output `-ss`/`-to` (formatted): ffmpeg does not carry a
+   *  per-output trim from one output to the next, so each track's output
+   *  repeats the same window the video output above it already applied. */
+  outputSeek: string | null;
+  outputEnd?: string;
+}): string[] {
+  const { audioStreams, audioTrackPlans, audioPlan, audioEnc, outputDir, outputSeek, outputEnd } = opts;
+  const plans = audioTrackPlans ?? audioStreams.map(() => audioPlan ?? DEFAULT_AUDIO_PLAN);
+  if (plans.length !== audioStreams.length) {
+    throw new Error(
+      `${plans.length} audio plans for ${audioStreams.length} audio streams`,
+    );
+  }
+  return audioStreams.flatMap((_, i) => [
+    ...(outputSeek ? ['-ss', outputSeek] : []),
+    ...(outputEnd ? ['-to', outputEnd] : []),
+    '-map',
+    audioMapSpec(audioStreams, i),
+    ...audioStreamArgs('', plans[i], audioEnc),
+    '-f',
+    'mp4',
+    '-movflags',
+    '+frag_every_frame+delay_moov+default_base_moof+frag_discont',
+    '-map_chapters',
+    '-1',
+    ffOutPath(outputDir, `a${i}.mp4`),
+  ]);
 }
 
 export function buildRemuxArgs(
@@ -1461,7 +1489,7 @@ export function buildRemuxArgs(
     args.push('-analyzeduration', '0', '-probesize', TRUSTED_PROBE_SIZE);
   } else {
     log?.log(
-      'Probe [remux]: no cached streamInfo — running full FFmpeg scan (1s / 1MB)',
+      'Probe [remux]: no cached streamInfo, running full FFmpeg scan (1s / 1MB)',
     );
     args.push('-analyzeduration', '1000000', '-probesize', '1000000');
   }
@@ -1470,12 +1498,13 @@ export function buildRemuxArgs(
   // Absolute decode times, hence `-seek_timestamp`; the accurate-seek trim would
   // add the file start again, so the output `-ss` and the audio filter trim.
   if (seek) args.push('-noaccurate_seek', '-seek_timestamp', '1', '-ss', seek);
-  const audioArgs = buildAudioOutputArgs(audioPlan, {
+  const audioEnc: AudioEncodeContext = {
     stereoBitrate: REMUX_STEREO_AUDIO_BITRATE,
     alignStartSeconds: run.audioStartSeconds,
     endSeconds: sourceEndSeconds,
     useTs: false,
-  });
+  };
+  const audioArgs = buildAudioOutputArgs(audioPlan, audioEnc);
 
   args.push('-i', inputPath);
   args.push('-copyts', '-muxdelay', '0', '-muxpreload', '0');
@@ -1512,46 +1541,16 @@ export function buildRemuxArgs(
         ]
       : [];
 
-  // A multi-audio source publishes every track as its own EXT-X-MEDIA
-  // rendition — one process, video copy + all tracks, cut on the source's
-  // real keyframes (`hlsTime: '0'`) exactly like the single-rendition path
-  // below, so the group's renditions share the video's irregular grid.
-  const useVarStreamMap =
+  // A multi-audio source publishes every track as its own rendition. The video
+  // still writes the single-rendition GOP output below; each audio track is a
+  // separate `-f mp4` output in the same process (`buildMultiAudioOutputs`):
+  // one growing file per track, not one HLS segment per packet (H6).
+  const multiAudio =
     !!audioStreams && varStreamMapLayout(videoOnly, audioStreams.length);
-  if (useVarStreamMap) {
-    return [
-      ...args,
-      ...varStreamMapArgs({
-        videoMapSpec: videoMapSpec(videoStreamIndex),
-        audioStreams: audioStreams!,
-        audioTrackPlans,
-        audioArgs,
-        audioEnc: {
-          stereoBitrate: REMUX_STEREO_AUDIO_BITRATE,
-          alignStartSeconds: run.audioStartSeconds,
-          endSeconds: sourceEndSeconds,
-          useTs: false,
-        },
-        useTs: false,
-        segType: 'fmp4',
-        segExt: 'm4s',
-        // 0 cuts at every keyframe: the segments are assembled from those GOPs.
-        hlsTime: grid ? '0' : String(segmentDuration),
-        startSegment: run.startNumber,
-        outputSeekSeconds: run.seekSeconds ?? 0,
-        outputDir,
-        originSeconds: 0,
-        sourceTimestamps: true,
-        listSize: 1,
-        extraArgs: ['-c:v', 'copy', ...hevcArgs],
-      }),
-    ];
-  }
 
-  // Remux muxes one audio track: its master publishes no audio group, so
-  // switching track is a new playback-info with that track picked.
-  if (hasNoAudio(audioStreams)) {
-    args.push('-map', videoMapSpec(videoStreamIndex), '-c:v', 'copy', '-an');
+  if (multiAudio || hasNoAudio(audioStreams)) {
+    args.push('-map', videoMapSpec(videoStreamIndex), '-c:v', 'copy');
+    if (!multiAudio) args.push('-an');
   } else {
     args.push(
       '-map',
@@ -1581,6 +1580,20 @@ export function buildRemuxArgs(
       listSize: 1,
     }),
   );
+
+  if (multiAudio) {
+    args.push(
+      ...buildMultiAudioOutputs({
+        audioStreams: audioStreams!,
+        audioTrackPlans,
+        audioPlan,
+        audioEnc,
+        outputDir,
+        outputSeek: seek,
+        outputEnd: sourceClockBreakSeconds != null ? formatSeconds(sourceClockBreakSeconds) : undefined,
+      }),
+    );
+  }
 
   return args;
 }

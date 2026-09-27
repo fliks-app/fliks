@@ -1,15 +1,7 @@
-import { StreamBuilderService } from './stream-builder.service';
 import type { DeviceProfileDto } from './dto/device-profile.dto';
+import { makeStreamBuilder } from './stream-builder.test-helpers';
 
-const svc = () =>
-  new StreamBuilderService(
-    { getDetectedHwAccel: () => 'none' } as never,
-    {
-      getAutoCropEnabled: () => true,
-      getTonemapAlgo: () => 'auto',
-      getAllowDirectStream: () => true,
-    } as never,
-  );
+const svc = () => makeStreamBuilder({ autoCrop: true });
 
 const client: DeviceProfileDto = {
   directPlayProfiles: [

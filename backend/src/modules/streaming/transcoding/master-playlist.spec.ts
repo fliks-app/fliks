@@ -359,11 +359,36 @@ describe('generateMasterPlaylist — remux variant (copy path)', () => {
     expect(line).toContain('AVERAGE-BANDWIDTH=9700000');
   });
 
-  it('carries the source resolution and a peak BANDWIDTH above the average', () => {
+  it('carries the source resolution, with no video-only figure to split from', () => {
     const line = streamInfLines(remuxMaster())[0];
     expect(line).toContain('RESOLUTION=1920x800');
+    // No sourceVideoBitrateBps here: the container total stands in for both,
+    // same as before, never inflated by a flat multiplier.
     expect(line).toContain('AVERAGE-BANDWIDTH=10000000');
-    expect(line).toContain('BANDWIDTH=15000000');
+    expect(line).toContain('BANDWIDTH=10000000');
+  });
+
+  it('peaks BANDWIDTH at the video bitrate plus the largest audio rendition', () => {
+    // 9 Mbps video + the eac3 copy's 192 kbps stereo reference (no probed
+    // bitrate on the plan) = 9,192,000, identical for both attributes.
+    const line = streamInfLines(
+      remuxMaster({ sourceVideoBitrateBps: 9_000_000 }),
+    )[0];
+    expect(line).toContain('BANDWIDTH=9192000,AVERAGE-BANDWIDTH=9192000');
+  });
+
+  it('never counts every audio track, only the largest rendition', () => {
+    const line = streamInfLines(
+      remuxMaster({
+        sourceVideoBitrateBps: 9_000_000,
+        audioPlans: [
+          { mode: 'copy', codec: 'eac3', bitrateBps: 192_000 },
+          { mode: 'copy', codec: 'ac3', bitrateBps: 640_000 },
+        ] as AudioPlan[],
+      }),
+    )[0];
+    // Peak of the two renditions (640k), not their sum (832k).
+    expect(line).toContain('BANDWIDTH=9640000,AVERAGE-BANDWIDTH=9640000');
   });
 
   it('falls back to the ladder when the user pinned a rung', () => {

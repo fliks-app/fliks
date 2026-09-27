@@ -436,6 +436,15 @@ export class StreamingController {
     );
   }
 
+  /** Fallback playlist duration for a request with no keyframe grid: plain
+   *  segDur for remux (its real, ungridded ffmpeg cut), the fps-aware GOP
+   *  length otherwise (the forced-keyframe transcode grid). Shared by the
+   *  video and audio-rendition playlists so a remux group never announces
+   *  audio durations the video route wouldn't. */
+  private fallbackSegDuration(isRemux: boolean, sourceFps: number | undefined): number {
+    return isRemux ? this.segDur() : realSegmentSeconds(this.segDur(), sourceFps);
+  }
+
   /** The keyframe grid a remux playback keeps, or null for the uniform one. */
   private freezeRemuxGrid(
     scan: SourceScan | null,
@@ -779,7 +788,6 @@ export class StreamingController {
     this.activeStreamTracker.setSegmentDuration(ss.segmentDuration);
     this.activeStreamTracker.setTonemapAlgo(ss.tonemapAlgo);
     this.activeStreamTracker.setAutoCropEnabled(ss.autoCropEnabled);
-    this.activeStreamTracker.setAllowDirectStream(ss.allowDirectStream);
     // Re-push the admin settings (GPU pin, tone-map curve, cache budget, job
     // slots) so a change applies without a restart.
     this.transcodingService.applyStreamingSettings(ss);
@@ -798,6 +806,7 @@ export class StreamingController {
       audioStreamIndex,
       ss.segmentDuration,
       held.scan,
+      ss.allowDirectStream,
     );
     const { response, useHdrLadder, videoVariant, muxFlavour } = evaluateResult;
     const sourceAudioCount = resolved.mediaFile.streamInfo?.audio?.length ?? 0;
@@ -1297,9 +1306,8 @@ export class StreamingController {
 
     const sdrVariant = liveVariant;
     const sourceFrameRate = parseSourceFps(v?.frameRate);
-    // A multi-audio source publishes every rendition whichever play method
-    // serves it — the remux copy now muxes every track too, one per
-    // EXT-X-MEDIA rendition, same as the transcode ladder.
+    // A multi-audio source publishes every rendition on every play method:
+    // the remux copy also muxes every track, one per EXT-X-MEDIA rendition.
     const audioGroup = useExtXMedia;
     // The group's renditions, or the muxed track alone.
     const audioPlans = audioGroup
@@ -1666,20 +1674,18 @@ export class StreamingController {
       : `${basePath}/init_${audioIndex + 1}.mp4${tokenParam}`;
     const segmentUrl = (seg: string) =>
       `${basePath}/seg-${seg}.${segExt}${tokenParam}`;
-    // A remux rendition is cut on the video's own irregular keyframe grid
-    // (`RemuxSegmentAssembler`), same as the video's own remux playlist —
-    // a uniform EXTINF grid here would desync the rendition's reported
-    // durations from what its segments actually carry.
-    const remuxDurations =
-      live?.kind === 'remux' ? (live.remuxGrid?.durations ?? null) : null;
+    // A remux rendition is cut on the video's own keyframe grid
+    // (`RemuxSegmentAssembler`); a uniform grid would desync its durations.
+    const isRemux = live?.kind === 'remux';
+    const remuxDurations = isRemux ? (live.remuxGrid?.durations ?? null) : null;
     const playlist = remuxDurations
       ? buildVariableVodPlaylist(remuxDurations, segmentUrl, initUrl)
       : buildVodPlaylist(
           duration,
           segmentUrl,
           initUrl,
-          realSegmentSeconds(
-            this.segDur(),
+          this.fallbackSegDuration(
+            isRemux,
             parseSourceFps(resolved.mediaFile.streamInfo?.video?.[0]?.frameRate),
           ),
           frameSeconds(resolved.mediaFile.streamInfo),
@@ -1741,38 +1747,60 @@ export class StreamingController {
       }
       ctx.spawnReason = 'seg-race';
       const live = this.sessionRouter.findRequestSession(req, mediaFileId);
-      const deviceType = live?.deviceType ?? 'desktop';
-      const sv = resolved.mediaFile.streamInfo?.video?.[0];
-      const sourceW = sv?.width || 1920;
-      const sourceH = sv?.height || 1080;
-      const profiles = this.transcodingService.getAvailableProfiles(
-        sourceW,
-        sourceH,
-        deviceType,
-      );
-      const baseQuality = (profiles[0] ?? PROFILES[PROFILES.length - 1]).name;
-      // Audio route can race ahead of the seek-restart's video session
-      // being registered: it sees no session, falls into this branch
-      // and spawns a brand-new one at the SDR top rung — which then
-      // kills the in-flight HDR session via `getOrCreateSession`'s
-      // quality-change path. Translate to the HDR rung when the master
-      // is publishing the HDR ladder so the spawned session matches.
-      const quality =
-        (live?.hdrLadder ?? false) && !baseQuality.endsWith('-hdr')
-          ? `${baseQuality}-hdr`
-          : baseQuality;
-      // No existing main and we're spawning to serve a request: anchor at the
-      // resume floor (the session playhead), not segment 0, so a resume starts
-      // ffmpeg at the resume segment directly. See {@link anchorSegment}.
-      const startSeg = this.anchorSegment(live, null, true, 0);
-      videoSession = await this.transcodingService.getOrCreateSession(
-        mediaFileId,
-        quality,
-        resolved.absolutePath,
-        startSeg,
-        ctx,
-        /* skipVerify */ true,
-      );
+      if (live?.kind === 'remux') {
+        // Same race, remux playback: spawn the copy session, not a
+        // guessed top-rung transcode mislabeled 'remux' into the audio group.
+        const grid = live.remuxGrid ?? null;
+        const startSeg = this.anchorSegment(
+          live,
+          null,
+          true,
+          0,
+          grid
+            ? { boundaries: grid.boundaries, origin: ctx.sourceStartPts ?? 0 }
+            : undefined,
+        );
+        videoSession = await this.transcodingService.getOrCreateRemuxSession(
+          mediaFileId,
+          resolved.absolutePath,
+          startSeg,
+          ctx,
+          grid,
+        );
+      } else {
+        const deviceType = live?.deviceType ?? 'desktop';
+        const sv = resolved.mediaFile.streamInfo?.video?.[0];
+        const sourceW = sv?.width || 1920;
+        const sourceH = sv?.height || 1080;
+        const profiles = this.transcodingService.getAvailableProfiles(
+          sourceW,
+          sourceH,
+          deviceType,
+        );
+        const baseQuality = (profiles[0] ?? PROFILES[PROFILES.length - 1]).name;
+        // Audio route can race ahead of the seek-restart's video session
+        // being registered: it sees no session, falls into this branch
+        // and spawns a brand-new one at the SDR top rung, which then
+        // kills the in-flight HDR session via `getOrCreateSession`'s
+        // quality-change path. Translate to the HDR rung when the master
+        // is publishing the HDR ladder so the spawned session matches.
+        const quality =
+          (live?.hdrLadder ?? false) && !baseQuality.endsWith('-hdr')
+            ? `${baseQuality}-hdr`
+            : baseQuality;
+        // No existing main and we're spawning to serve a request: anchor at the
+        // resume floor (the session playhead), not segment 0, so a resume starts
+        // ffmpeg at the resume segment directly. See {@link anchorSegment}.
+        const startSeg = this.anchorSegment(live, null, true, 0);
+        videoSession = await this.transcodingService.getOrCreateSession(
+          mediaFileId,
+          quality,
+          resolved.absolutePath,
+          startSeg,
+          ctx,
+          /* skipVerify */ true,
+        );
+      }
     }
 
     // Resume: the early companion produces variant inits + seg-0/seg-1 in
@@ -1781,6 +1809,9 @@ export class StreamingController {
     // already exited adds latency for nothing.
     let earlySession = this.sessionRouter.resolveEarlySession(mediaFileId, user?.id, req);
     const wantEarly =
+      // The early companion has no 'remux' rung of its own (it picks the
+      // top transcode rung); never route a remux audio group through it.
+      videoSession.quality !== 'remux' &&
       videoSession.startSegment != null &&
       videoSession.startSegment > 0 &&
       // Only seg-0 .. seg-(EARLY_PROBE_SEGMENTS-1) live in the early session —
@@ -2008,7 +2039,7 @@ export class StreamingController {
           duration,
           segmentUrl,
           initRef,
-          quality === 'remux' ? this.segDur() : realSegmentSeconds(this.segDur(), sourceFps),
+          this.fallbackSegDuration(quality === 'remux', sourceFps),
           frameSeconds(resolved.mediaFile.streamInfo),
         );
 

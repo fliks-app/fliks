@@ -23,6 +23,7 @@ import {
   cappedRungVideoBitrateBps,
   type RungBitrateContext,
 } from './transcoding/quality-ladder';
+import { remuxPeakBandwidthBps } from './transcoding/master-playlist';
 import { resolveEncodePipeline } from './transcoding/encode-pipeline';
 import {
   DEFAULT_FPS,
@@ -60,6 +61,7 @@ import {
 } from './transcoding/source-timeline';
 import { sourceIsMpegTs } from '../subtitles/video-packets';
 import { aacConfigMayChange, type SourceScan } from './transcoding/source-scan';
+import { remuxSegmentGrid } from './transcoding/segment-boundaries';
 
 /** Audio codecs that can be copied verbatim into fMP4 segments via MSE.
  *  Anything outside this set is re-encoded to AAC on the remux path even when
@@ -69,6 +71,9 @@ const FMP4_COMPATIBLE_AUDIO = new Set(['aac', 'ac3', 'eac3', 'opus', 'flac']);
 
 /** Above the start offset encoder priming alone reports (AAC ~23 ms, E-AC-3 ~5 ms, Opus ~7 ms). */
 const AUDIO_START_OFFSET_THRESHOLD_SECONDS = 0.05;
+
+/** Every audio encode resamples to this rate (matches audio-encode's own target). */
+const ENCODE_SAMPLE_RATE_HZ = 48_000;
 
 type CopyBlocker =
   | 'AudioStartOffset'
@@ -119,11 +124,18 @@ function lastVideoSegmentStart(
   si: MediaFileInfo | null | undefined,
   label: string,
   segmentDuration: number,
+  remux: { scan: SourceScan | null | undefined } | null,
 ): number | undefined {
   const { origin, end } = sourceTimeline(si, label);
   if (end == null) return undefined;
-  const fps = parseSourceFps(si?.video?.[0]?.frameRate);
-  const seg = realSegmentSeconds(segmentDuration, fps);
+  const frameRate = si?.video?.[0]?.frameRate;
+  // A remux is cut on the keyframe grid, or on the plain segment length without a scan.
+  if (remux) {
+    const grid = remux.scan ? remuxSegmentGrid(remux.scan, origin, segmentDuration, frameRate) : null;
+    if (grid) return grid.boundaries[grid.boundaries.length - 2];
+  }
+  const fps = parseSourceFps(frameRate);
+  const seg = remux ? segmentDuration : realSegmentSeconds(segmentDuration, fps);
   return origin + (uniformSegmentCount(end - origin, seg, frameSecondsOf(fps)) - 1) * seg;
 }
 
@@ -140,11 +152,14 @@ interface TrackDecision {
   reasonFlags: string[];
 }
 
-/** The playback-info form of a track's decision. */
+/** The playback-info form of a track's decision. `stereoBitrateBps` is the
+ *  negotiated rung's audio budget, the same reference `audioOutputBitrateBps`
+ *  scales an encode's target from elsewhere in this file. */
 function trackDto(
   t: AudioStreamInfo,
   index: number,
   d: TrackDecision,
+  stereoBitrateBps: number,
 ): AudioTrackPlan {
   return {
     index,
@@ -155,6 +170,11 @@ function trackDto(
     outputCodec: d.plan.codec,
     outputChannels: d.plan.channels,
     reasonFlags: d.reasonFlags,
+    bitrateBps:
+      d.plan.mode === 'copy'
+        ? t.bitRate
+        : audioOutputBitrateBps(d.plan, stereoBitrateBps),
+    sampleRate: d.plan.mode === 'copy' ? t.sampleRate : ENCODE_SAMPLE_RATE_HZ,
   };
 }
 
@@ -232,6 +252,7 @@ export class StreamBuilderService {
     audioStreamIndex?: number,
     segmentDuration = DEFAULT_SEGMENT_DURATION,
     sourceScan?: SourceScan | null,
+    allowDirectStream = true,
   ): EvaluateResult {
     const si = resolved.mediaFile.streamInfo;
     const v = si?.video?.[0];
@@ -322,7 +343,6 @@ export class StreamBuilderService {
     // AV1 via NVENC/libsvtav1, …). It returns an SDR variant when the client
     // lacks HDR display support or no HDR encoder is probed-OK.
     const detectedHwAccel = this.transcodingService.getDetectedHwAccel();
-    const userAgent = ''; // UA-driven quirks plumbed via a later patch
     let selectedVariant = pickPrimaryVariant(
       {
         width: source.width ?? 0,
@@ -332,7 +352,6 @@ export class StreamBuilderService {
       },
       profile,
       detectedHwAccel,
-      userAgent,
     );
     // The transcode ladder preserves HDR exactly when the selector chose an
     // HDR variant. Codec-agnostic on both the source and the output side: an
@@ -497,6 +516,13 @@ export class StreamBuilderService {
     // selector on it instead of re-deriving one from the stored preference,
     // which cannot see which ladder the backend ended up on.
     const negotiatedQuality = explicitRung?.name ?? 'auto';
+    // Stereo audio budget of the pinned rung (or the top fitting one, absent
+    // a pin): what a transcoded track's own bitrate scales from below.
+    const negotiatedAudioRung =
+      explicitRung ??
+      qualityLadder.find((p) => !isEcoProfile(p.name)) ??
+      qualityLadder[0];
+    const negotiatedStereoBps = parseBitrateToBps(negotiatedAudioRung.audioBitrate);
     const explicitDownscale =
       !!explicitRung &&
       (bucketResolutionHeight(explicitRung.maxWidth, explicitRung.maxHeight) <
@@ -536,6 +562,8 @@ export class StreamBuilderService {
         message: 'Client cannot switch audio tracks inside a raw file',
       });
     }
+    // The raw file carries the same video the client just failed to decode copied.
+    if (profile.rejectCopy === true) directPlayResult.canDirectPlay = false;
     if (forceLadder) {
       if (directPlayResult.canDirectPlay)
         directPlayResult.canDirectPlay = false;
@@ -608,7 +636,9 @@ export class StreamBuilderService {
             qualityLadder,
             selectedVariant.codec,
           ),
-          audioTracks: audioStreams.map((t, i) => trackDto(t, i, copies[i])),
+          audioTracks: audioStreams.map((t, i) =>
+            trackDto(t, i, copies[i], negotiatedStereoBps),
+          ),
           source,
         },
         copies.map((d) => d.plan),
@@ -627,32 +657,29 @@ export class StreamBuilderService {
     // single-audio) would list seg-N.ts with no producer.
     const muxRejectsCopy = hlsMux === 'ts';
     const rejectsCopy = profile.rejectCopy === true;
-    const allowDirectStream = this.activeStreamTracker.getAllowDirectStream();
-    if (muxRejectsCopy) {
+    // Whether the source would copy if not for these three gates: push their
+    // reasons only then, so an already-uncopyable source blames no gate.
+    const copyableIgnoringGates = sourceCopyable && !forceLadder && !dvP5;
+    if (muxRejectsCopy && copyableIgnoringGates) {
       reasons.push({
         flag: 'MuxNotSupported',
         message: "MPEG-TS packaging can't carry a copied video stream",
       });
     }
-    if (rejectsCopy) {
+    if (rejectsCopy && copyableIgnoringGates) {
       reasons.push({
         flag: 'ClientRejectedCopy',
         message: 'Client asked for a transcode instead of a copied stream',
       });
     }
-    if (!allowDirectStream) {
+    if (!allowDirectStream && copyableIgnoringGates) {
       reasons.push({
         flag: 'DirectStreamDisabled',
         message: 'Direct Stream (remux) is disabled on this server',
       });
     }
     const canCopyVideo =
-      sourceCopyable &&
-      !forceLadder &&
-      !dvP5 &&
-      !muxRejectsCopy &&
-      !rejectsCopy &&
-      allowDirectStream;
+      copyableIgnoringGates && !muxRejectsCopy && !rejectsCopy && allowDirectStream;
 
     // The renditions a var_stream_map encode of the session emits.
     const groupDecisions = this.decideAudio(
@@ -663,13 +690,16 @@ export class StreamBuilderService {
       sourceMpegTs,
       sourceScan,
       audioLayout(audioStreams.length) === 'var-stream-map'
-        ? lastVideoSegmentStart(si, resolved.absolutePath, segmentDuration)
+        ? lastVideoSegmentStart(
+            si,
+            resolved.absolutePath,
+            segmentDuration,
+            canCopyVideo ? { scan: sourceScan } : null,
+          )
         : undefined,
     );
-    // A single-audio remux muxes the picked track alone, so it is a group of
-    // its own; a multi-audio remux now muxes every rendition through the same
-    // var_stream_map group as the transcode ladder, picked track included, so
-    // its decision is the group's like every other rendition's.
+    // A single-audio remux is a group of one; a multi-audio remux's picked
+    // track decides through the same var_stream_map group as every rendition.
     const multiAudioLayout = audioLayout(audioStreams.length) === 'var-stream-map';
     const pickedStream = audioStreams[pickedAudio];
     const pickedDecision =
@@ -687,7 +717,12 @@ export class StreamBuilderService {
     // The top-level plan and reasons are the picked track's, which
     // `audioTracks` describes as `playUrl` delivers it.
     const audioTracks = audioStreams.map((t, i) =>
-      trackDto(t, i, i === pickedAudio ? pickedDecision : groupDecisions[i]),
+      trackDto(
+        t,
+        i,
+        i === pickedAudio ? pickedDecision : groupDecisions[i],
+        negotiatedStereoBps,
+      ),
     );
     const audioPlans = groupDecisions.map((d) => d.plan);
     const pickedTrack = audioTracks[pickedAudio];
@@ -719,9 +754,11 @@ export class StreamBuilderService {
       );
       const sep = tokenParam ? '&' : '?';
       const url = `/api/stream/${resolved.mediaFile.id}/master.m3u8${tokenParam}${sep}remux=1`;
-      const remuxBw =
-        source.formatBitRate ??
-        (source.videoBitRate ?? 0) + (source.audioBitRate ?? 0);
+      // Same peak (video + largest audio rendition) the master playlist's
+      // own BANDWIDTH uses, so the stats overlay never disagrees with it.
+      const remuxBw = source.videoBitRate
+        ? remuxPeakBandwidthBps(source.videoBitRate, audioPlans)
+        : (source.formatBitRate ?? 0);
       // Same scale as the master playlist's transcoded rungs — exposes
       // a bitrate hint per quality so the stats overlay can plot the
       // selected rung without re-deriving the bitrate ladder client-side.

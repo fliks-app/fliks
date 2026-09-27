@@ -12,11 +12,11 @@
  *   for a single-audio source, on its one muxed audio track. A
  *   multi-audio source publishes every track as its own rendition, so
  *   picking a different default doesn't change what the session
- *   produces — `audioIndex` is `null` and the suffix drops `-a<N>`.
+ *   produces: `audioIndex` is `null` and the suffix drops `-a<N>`.
  *
  * Centralising the suffix logic here removes the foot-gun of editing
  * inline `${baseHash}-early` / `${baseHash}-remux` template
- * literals — the strip regex, the prefix check, and the variant
+ * literals: the strip regex, the prefix check, and the variant
  * encoder all live in one place.
  */
 export type SessionVariant =
@@ -24,22 +24,22 @@ export type SessionVariant =
   | { kind: 'early' }
   | { kind: 'remux'; audioIndex: number | null; keyframeGrid: boolean };
 
-/** Singleton instances for the variants that take no parameters —
+/** Singleton instances for the variants that take no parameters:
  *  saves an allocation per spawn. */
 export const VARIANT_MAIN: SessionVariant = { kind: 'main' };
 export const VARIANT_EARLY: SessionVariant = { kind: 'early' };
 
-export function remuxVariant(
-  audioIndex: number | undefined,
-  keyframeGrid: boolean,
+export function remuxVariant(o: {
+  audioIndex: number | undefined;
+  keyframeGrid: boolean;
   /** Source has more than one audio track: the session muxes every
    *  rendition, so the picked track never forks the cache/session key. */
-  multiAudio = false,
-): SessionVariant {
+  multiAudio?: boolean;
+}): SessionVariant {
   return {
     kind: 'remux',
-    audioIndex: multiAudio ? null : (audioIndex ?? 0),
-    keyframeGrid,
+    audioIndex: o.multiAudio ? null : (o.audioIndex ?? 0),
+    keyframeGrid: o.keyframeGrid,
   };
 }
 

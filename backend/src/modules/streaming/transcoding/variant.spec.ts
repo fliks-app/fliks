@@ -11,17 +11,23 @@ describe('variantSuffix', () => {
   it('emits the canonical suffix for each kind', () => {
     expect(variantSuffix(VARIANT_MAIN)).toBe('');
     expect(variantSuffix(VARIANT_EARLY)).toBe('-early');
-    expect(variantSuffix(remuxVariant(undefined, true))).toBe('-remux-a0');
+    expect(variantSuffix(remuxVariant({ audioIndex: undefined, keyframeGrid: true }))).toBe(
+      '-remux-a0',
+    );
   });
 
   it('keys the copy variant on the muxed track and the grid it is cut on', () => {
-    expect(variantSuffix(remuxVariant(2, true))).toBe('-remux-a2');
-    expect(variantSuffix(remuxVariant(2, false))).toBe('-remux-a2-u');
+    expect(variantSuffix(remuxVariant({ audioIndex: 2, keyframeGrid: true }))).toBe('-remux-a2');
+    expect(variantSuffix(remuxVariant({ audioIndex: 2, keyframeGrid: false }))).toBe('-remux-a2-u');
   });
 
   it('drops the track index for a multi-audio remux, keeping the grid', () => {
-    expect(variantSuffix(remuxVariant(2, true, true))).toBe('-remux');
-    expect(variantSuffix(remuxVariant(2, false, true))).toBe('-remux-u');
+    expect(
+      variantSuffix(remuxVariant({ audioIndex: 2, keyframeGrid: true, multiAudio: true })),
+    ).toBe('-remux');
+    expect(
+      variantSuffix(remuxVariant({ audioIndex: 2, keyframeGrid: false, multiAudio: true })),
+    ).toBe('-remux-u');
   });
 });
 
@@ -32,7 +38,9 @@ describe('variantHash', () => {
   });
   it('appends the variant suffix', () => {
     expect(variantHash(base, VARIANT_EARLY)).toBe(`${base}-early`);
-    expect(variantHash(base, remuxVariant(1, true))).toBe(`${base}-remux-a1`);
+    expect(variantHash(base, remuxVariant({ audioIndex: 1, keyframeGrid: true }))).toBe(
+      `${base}-remux-a1`,
+    );
   });
 });
 
@@ -60,10 +68,10 @@ describe('round-trip variantHash + baseProfileHash', () => {
     const variants = [
       VARIANT_MAIN,
       VARIANT_EARLY,
-      remuxVariant(0, true),
-      remuxVariant(4, false),
-      remuxVariant(0, true, true),
-      remuxVariant(4, false, true),
+      remuxVariant({ audioIndex: 0, keyframeGrid: true }),
+      remuxVariant({ audioIndex: 4, keyframeGrid: false }),
+      remuxVariant({ audioIndex: 0, keyframeGrid: true, multiAudio: true }),
+      remuxVariant({ audioIndex: 4, keyframeGrid: false, multiAudio: true }),
     ];
     for (const v of variants) {
       expect(baseProfileHash(variantHash(base, v))).toBe(base);

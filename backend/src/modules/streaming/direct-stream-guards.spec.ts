@@ -1,13 +1,12 @@
 import { StreamBuilderService } from './stream-builder.service';
 import type { DeviceProfileDto } from './dto/device-profile.dto';
 
-const svc = (allowDirectStream = true) =>
+const svc = () =>
   new StreamBuilderService(
     { getDetectedHwAccel: () => 'none' } as never,
     {
       getAutoCropEnabled: () => false,
       getTonemapAlgo: () => 'auto',
-      getAllowDirectStream: () => allowDirectStream,
     } as never,
   );
 
@@ -42,7 +41,7 @@ const resolved = () =>
 const flags = (r: ReturnType<StreamBuilderService['evaluate']>) =>
   r.response.transcodeReasons.map((x) => x.flag);
 
-describe('StreamBuilderService — DirectStream guards', () => {
+describe('StreamBuilderService - DirectStream guards', () => {
   it('remuxes by default (baseline)', () => {
     const r = svc().evaluate(resolved(), profile(), 'tok');
     expect(r.response.playMethod).toBe('DirectStream');
@@ -61,12 +60,46 @@ describe('StreamBuilderService — DirectStream guards', () => {
   });
 
   it('DirectStream disabled server-side forces a transcode, flagged DirectStreamDisabled', () => {
-    const r = svc(false).evaluate(resolved(), profile(), 'tok');
+    const r = svc().evaluate(
+      resolved(),
+      profile(),
+      'tok',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      /* allowDirectStream */ false,
+    );
     expect(r.response.playMethod).toBe('Transcode');
     expect(flags(r)).toContain('DirectStreamDisabled');
   });
 
-  it('rejectCopy leaves DirectPlay untouched when the container itself is compatible', () => {
+  it('does not blame a gate that changed nothing, when burn-in already forces the transcode', () => {
+    // Burn-in alone already makes the source uncopyable; useTs/rejectCopy/
+    // allowDirectStream=false never get the chance to flip anything here.
+    const r = svc().evaluate(
+      resolved(),
+      profile({ useTs: true, rejectCopy: true }),
+      'tok',
+      /* burnInSubtitleId */ 7,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      /* allowDirectStream */ false,
+    );
+    expect(r.response.playMethod).toBe('Transcode');
+    const f = flags(r);
+    expect(f).toContain('SubtitleBurnIn');
+    expect(f).not.toContain('MuxNotSupported');
+    expect(f).not.toContain('ClientRejectedCopy');
+    expect(f).not.toContain('DirectStreamDisabled');
+  });
+
+  it('rejectCopy also rules out DirectPlay, which serves the same video bitstream', () => {
     const r = svc().evaluate(
       resolved(),
       profile({
@@ -77,6 +110,7 @@ describe('StreamBuilderService — DirectStream guards', () => {
       }),
       'tok',
     );
-    expect(r.response.playMethod).toBe('DirectPlay');
+    expect(r.response.playMethod).toBe('Transcode');
+    expect(r.response.transcodeReasons.map((x) => x.flag)).toContain('ClientRejectedCopy');
   });
 });
