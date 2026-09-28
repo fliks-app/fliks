@@ -1366,9 +1366,10 @@ export interface BuildRemuxArgsOptions {
   /** Session is Dolby Vision-eligible: writes a `dvvC` box into the init
    *  segment via `-hls_segment_options ...:strict=unofficial`. */
   dolbyVision?: boolean;
-  /** P5 has no HDR10/HLG base, which the bundled ffmpeg's mp4 muxer only tags
-   *  `dvcC` for under a `dvh1` sample entry; a plain `hvc1` silently drops it. */
+  /** P5/P10.0 (no base): the muxer only tags `dvcC`/`dvvC` under a
+   *  `dvh1`/`dav1` sample entry, dropping it under a plain `hvc1`/`av01`. */
   sourceDvProfile?: number;
+  sourceDvBlSignalCompatId?: number;
 }
 
 /** One `-f mp4` output per audio track: a growing fragmented file the assembler
@@ -1430,6 +1431,7 @@ export function buildRemuxArgs(
     videoOnly = false,
     dolbyVision = false,
     sourceDvProfile,
+    sourceDvBlSignalCompatId,
   } = opts;
 
   const args = ['-hide_banner', '-loglevel', 'warning'];
@@ -1469,9 +1471,9 @@ export function buildRemuxArgs(
   // HEVC needs Apple HLS conformance:
   //   - `-tag:v hvc1` writes parameter sets to the moov sample
   //     description; FFmpeg defaults to `hev1` (parameter sets inline
-  //     in mdat) which AVPlayer rejects on HLS. P5 (no HDR10/HLG base) needs
-  //     `dvh1` instead: the bundled ffmpeg's muxer silently drops `dvcC`
-  //     under a plain `hvc1` tag.
+  //     in mdat) which AVPlayer rejects on HLS. A no-base DV source (P5, or
+  //     P10.0 on AV1) needs the DV tag instead: the bundled ffmpeg's muxer
+  //     silently drops `dvcC`/`dvvC` under a plain `hvc1`/`av01` tag.
   //   - `-bsf:v hevc_mp4toannexb` converts NAL units from mp4-style
   //     length-prefixed to annex-B start-code form, which is what the
   //     fmp4 muxer expects when emitting parameter sets to moov.
@@ -1480,18 +1482,22 @@ export function buildRemuxArgs(
   //     non-AAC audio inter-frame intervals (TrueHD, DTS) can
   //     overflow the default 1024-packet queue and crash the mux
   //     with "Too many packets buffered for output stream".
-  const dvP5Tag = dolbyVision && sourceDvProfile === 5;
+  const dvNoBaseTag =
+    dolbyVision && dvHasNoBase(sourceDvProfile, sourceDvBlSignalCompatId);
   const hevcArgs =
     sourceVideoCodec === 'hevc'
       ? [
           '-tag:v',
-          dvP5Tag ? 'dvh1' : 'hvc1',
+          dvNoBaseTag ? 'dvh1' : 'hvc1',
           '-bsf:v',
           'hevc_mp4toannexb',
           '-max_muxing_queue_size',
           '2048',
         ]
       : [];
+  // P10.0 (AV1, no compatible base): same dvvC-under-DV-tag requirement as P5.
+  const av1Args =
+    sourceVideoCodec === 'av1' && dvNoBaseTag ? ['-tag:v', 'dav1'] : [];
 
   // A multi-audio source publishes every track as its own rendition: the video
   // writes the single GOP output below, each audio track its own `-f mp4` output.
@@ -1512,7 +1518,7 @@ export function buildRemuxArgs(
       ...audioArgs,
     );
   }
-  args.push(...hevcArgs);
+  args.push(...hevcArgs, ...av1Args);
 
   args.push(
     ...hlsMuxerArgs({

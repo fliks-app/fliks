@@ -1724,6 +1724,34 @@ describe('buildRemuxArgs — golden (characterization)', () => {
     expect(args[args.indexOf('-tag:v') + 1]).toBe('dvh1');
   });
 
+  it('remux: Dolby Vision P10.0 (no compatible base, AV1) tags dav1', () => {
+    const args = remuxArgs({
+      inputPath: '/media/in.mkv',
+      outputDir: '/cache/out',
+      audioPlan: { mode: 'copy', codec: 'aac' },
+      trustedStreamInfo: true,
+      sourceVideoCodec: 'av1',
+      dolbyVision: true,
+      sourceDvProfile: 10,
+      sourceDvBlSignalCompatId: 0,
+    });
+    expect(args[args.indexOf('-tag:v') + 1]).toBe('dav1');
+  });
+
+  it('remux: Dolby Vision P10.1 (AV1, HDR10 base) leaves the AV1 tag alone', () => {
+    const args = remuxArgs({
+      inputPath: '/media/in.mkv',
+      outputDir: '/cache/out',
+      audioPlan: { mode: 'copy', codec: 'aac' },
+      trustedStreamInfo: true,
+      sourceVideoCodec: 'av1',
+      dolbyVision: true,
+      sourceDvProfile: 10,
+      sourceDvBlSignalCompatId: 1,
+    });
+    expect(args).not.toContain('-tag:v');
+  });
+
   it('remux: Dolby Vision P8.1 (HDR10 base) keeps hvc1', () => {
     const args = remuxArgs({
       inputPath: '/media/in.mkv',

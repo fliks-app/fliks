@@ -1403,6 +1403,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         videoOnly: isMultiAudio,
         dolbyVision: ctx?.dolbyVision,
         sourceDvProfile: ctx?.sourceDvProfile,
+        sourceDvBlSignalCompatId: ctx?.sourceDvBlSignalCompatId,
       },
       this.log,
     );

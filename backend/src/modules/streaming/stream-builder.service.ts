@@ -45,6 +45,7 @@ import {
   dvHasNoBase,
   dvSupplementalCodecs,
   dvStandaloneCodecs,
+  clientDvProfiles,
 } from './transcoding/codec/dolby-vision';
 import { copySourceCodecString } from './transcoding/codec/codec-strings';
 import { pickPrimaryVariant } from './transcoding/codec/selector';
@@ -432,9 +433,12 @@ export class StreamBuilderService {
 
     // Single-layer DV (P5/P8/P10) carries its RPU inside the base NALs, so a
     // raw copy preserves it; dual-layer P7's EL can't ride HLS, so it's excluded.
+    const dvProfiles = clientDvProfiles(profile);
+    // clientDvProfiles is the sole gate: the client must list this exact profile.
     const clientCanPresentDv =
-      profile.supportsDolbyVision === true &&
       dv.singleLayer &&
+      dv.profile != null &&
+      dvProfiles.includes(dv.profile) &&
       directPlayResult.videoSupported &&
       directPlayResult.videoConditionsMet;
     const clientCanPresentDynamicRange =
@@ -442,18 +446,21 @@ export class StreamBuilderService {
     // dv.singleLayer alone also matches P5/P8.2/P10.2; dvSupplementalCodecs
     // narrows to a real P8.1/8.4/10.1/10.4 base (and applies the muxer gate).
     const dvWithBase = clientCanPresentDv && dvSupplementalCodecs(v) != null;
-    // P5's own manifest string needs a probed level; this also gates whether
-    // it's copyable at all below, so DirectPlay and the quality list agree.
-    const dvP5Copy = clientCanPresentDv && dvStandaloneCodecs(v) != null;
-    // P10.0 (noBase, not P5) is never copyable: it always tone-maps.
-    const dvCopyAllowed = !noBase || dvP5Copy;
+    // The standalone manifest string (P5, or P10.0) needs a probed level; only the
+    // remux builds one, DirectPlay ships the raw bytes and needs no CODECS string.
+    const dvStandaloneCopy = clientCanPresentDv && dvStandaloneCodecs(v) != null;
+    // No-base DV (P5/P10.0) DirectPlays to any client listing that profile, level or
+    // not; this also gates `sourceCopyable` so the two never disagree.
+    const dvCopyAllowed = !noBase || clientCanPresentDv;
+    // The remux is stricter: no-base DV only remuxes once a level lets it build CODECS.
+    const dvRemuxCopyAllowed = !noBase || dvStandaloneCopy;
     const dvRemuxEligible =
-      (dvWithBase && copySourceCodecString(v ?? {}) != null) || dvP5Copy;
+      (dvWithBase && copySourceCodecString(v ?? {}) != null) || dvStandaloneCopy;
     // DirectPlay ships the raw file unmodified: report DV from profile/compat
-    // alone, skipping the remux-only muxer validation dvWithBase/dvP5Copy apply.
+    // alone, skipping the remux-only muxer validation dvWithBase/dvStandaloneCopy apply.
     const dvDirectPlayLabel =
       clientCanPresentDv &&
-      (dv.profile === 5 || dv.compatId === 1 || dv.compatId === 4);
+      (noBase || dv.compatId === 1 || dv.compatId === 4);
     // HDR reaches an SDR client that tone-maps on its own — copied through, or
     // re-encoded on the HDR ladder. Surfaced in the stats overlay and the admin
     // dashboard, which would otherwise show no HDR step at all.
@@ -464,7 +471,7 @@ export class StreamBuilderService {
     // tone-map only when the re-encode is actually SDR — when the HDR ladder
     // preserves it the real blocker is whatever tryDirectPlay already
     // recorded (resolution, level, …).
-    if ((isSourceHdr && !clientCanPresentDynamicRange) || (noBase && !dvP5Copy)) {
+    if ((isSourceHdr && !clientCanPresentDynamicRange) || !dvCopyAllowed) {
       if (directPlayResult.canDirectPlay)
         directPlayResult.canDirectPlay = false;
       this.log.log(
@@ -582,7 +589,8 @@ export class StreamBuilderService {
         message: 'Direct Stream (remux) is disabled on this server',
       },
     ];
-    const canCopyVideo = copyableIgnoringGates && copyGates.every((g) => !g.active);
+    const canCopyVideo =
+      copyableIgnoringGates && dvRemuxCopyAllowed && copyGates.every((g) => !g.active);
 
     if (profile.supportsDirectPlay === false && directPlayResult.canDirectPlay) {
       directPlayResult.canDirectPlay = false;

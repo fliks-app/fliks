@@ -1,6 +1,5 @@
 import {
   deriveDvInfo,
-  isDvProfile5,
   dvSupplementalCodecs,
   dvStandaloneCodecs,
 } from './dolby-vision';
@@ -9,13 +8,11 @@ describe('deriveDvInfo', () => {
   it('classifies P5 as single-layer', () => {
     const info = deriveDvInfo({ dvProfile: 5, dvBlSignalCompatId: 0 });
     expect(info.singleLayer).toBe(true);
-    expect(isDvProfile5(info)).toBe(true);
   });
 
   it('classifies P8.1 (HDR10 base) as single-layer', () => {
     const info = deriveDvInfo({ dvProfile: 8, dvBlSignalCompatId: 1 });
     expect(info.singleLayer).toBe(true);
-    expect(isDvProfile5(info)).toBe(false);
   });
 
   it('classifies P8.4 (HLG base) as single-layer', () => {
@@ -30,7 +27,6 @@ describe('deriveDvInfo', () => {
       dvElPresent: true,
     });
     expect(info.singleLayer).toBe(false);
-    expect(isDvProfile5(info)).toBe(false);
   });
 
   it('treats a P8 that declares an enhancement layer as not single-layer', () => {
@@ -46,7 +42,6 @@ describe('deriveDvInfo', () => {
     const info = deriveDvInfo({});
     expect(info.profile).toBeUndefined();
     expect(info.singleLayer).toBe(false);
-    expect(isDvProfile5(info)).toBe(false);
   });
 });
 
@@ -77,8 +72,14 @@ describe('dvStandaloneCodecs', () => {
     expect(dvStandaloneCodecs({ dvProfile: 5, dvBlSignalCompatId: 0, dvLevel: 6 })).toBe('dvh1.05.06');
   });
 
-  it('returns null without a probed level, or for any other profile', () => {
+  it('builds dav1.10.LL for a P10.0 remux (no compatible base)', () => {
+    expect(dvStandaloneCodecs({ dvProfile: 10, dvBlSignalCompatId: 0, dvLevel: 8 })).toBe('dav1.10.08');
+    expect(dvStandaloneCodecs({ dvProfile: 10, dvLevel: 8 })).toBe('dav1.10.08');
+  });
+
+  it('returns null without a probed level, for P8, or for a P10 with a compatible base', () => {
     expect(dvStandaloneCodecs({ dvProfile: 5, dvBlSignalCompatId: 0 })).toBeNull();
     expect(dvStandaloneCodecs({ dvProfile: 8, dvBlSignalCompatId: 1, dvLevel: 6 })).toBeNull();
+    expect(dvStandaloneCodecs({ dvProfile: 10, dvBlSignalCompatId: 1, dvLevel: 8 })).toBeNull();
   });
 });
