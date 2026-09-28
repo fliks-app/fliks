@@ -123,14 +123,8 @@ export interface PlaybackInfoResponse {
    *  SUPPLEMENTAL-CODECS remux); false on a transcode, which drops DV. */
   dolbyVision?: boolean;
 
-  /** Tone-map mechanism the session actually runs. `'vaapi'` / `'opencl'`
-   *  / `'qsv'` for QSV/VAAPI encoders (after `auto` resolution + boot
-   *  probe); `'cuda'` for NVENC's zero-copy `tonemap_cuda` (after its own
-   *  boot probe); `'videotoolbox'` for the macOS `scale_vt` Metal path;
-   *  `'cpu'` for the CPU zscale chain (NVENC without tonemap_cuda / libx26x /
-   *  VideoToolbox with a burn-in or crop). `null` when no tone-mapping pass
-   *  runs. Stats overlays show this value, not the (encoder-agnostic) admin
-   *  pick. */
+  /** Tone-map mechanism the session actually runs, not the admin pick; see
+   *  `resolveTonemapPath`/`isCudaTonemapPath`/`isOpenclTonemapPath`. */
   tonemapAlgo?: 'vaapi' | 'opencl' | 'qsv' | 'cuda' | 'videotoolbox' | 'cpu' | null;
 
   /** Tone-map curve (`hable` / `mobius` / `reinhard`), set only when

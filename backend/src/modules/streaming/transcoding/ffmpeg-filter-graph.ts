@@ -40,9 +40,8 @@ export interface VideoFilterContext {
    *  CPU zscale chain: see {@link isOpenclTonemapPath} in `encode-pipeline.ts`
    *  (NVENC/AMF, or a no-base DV source that needs the RPU-aware bounce). */
   openclTonemap?: boolean;
-  /** Route NVENC's HDR→SDR tone-map through `tonemap_cuda`, the CUDA
-   *  surface stays on the GPU end to end, no CPU/OpenCL bounce. See
-   *  {@link isCudaTonemapPath} in `encode-pipeline.ts`. */
+  /** Route NVENC's HDR→SDR tone-map through `tonemap_cuda` (zero-copy).
+   *  See {@link isCudaTonemapPath} in `encode-pipeline.ts`. */
   cudaTonemap?: boolean;
   /** Target output width. The CPU tone-map downscales to it in linear light
    *  before tone-mapping, so the (CPU-bound) tone curve + gamut conversion run
@@ -95,8 +94,8 @@ export function buildVideoFilters(
     useVaapiTonemap && !burnIn?.filter
       ? ',tonemap_vaapi=format=nv12:t=bt709:p=bt709:m=bt709'
       : '';
-  // NVENC zero-copy path: stays on the CUDA surface, no hwupload/hwdownload
-  // round-trip (unlike tonemapOpencl, which bridges through a device hwmap).
+  // The filter itself is a no-op on the round-trip question; nvenc-filters.ts
+  // decides whether the surface needs bouncing to CUDA before this runs.
   const tonemapCuda =
     tonemap && cudaTonemap
       ? `,tonemap_cuda=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=${curve}:desat=0:${dvApplyDoviOpt(dvNoBase)}`

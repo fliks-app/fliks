@@ -112,9 +112,9 @@ describe('NVENC encoders — surface-aware filter graph', () => {
       expect(vf).toContain('tonemap=tonemap=hable');
     });
 
-    it('cuda decode, no tonemap: scale_cuda scales on the GPU, keeps native format', () => {
-      const vf = vfOf(enc.buildArgs(makeInput({ inputSurface: 'cuda' })));
-      expect(vf).toBe('scale_cuda=w=1920:h=-2');
+    it('cuda decode, no tonemap: scale_cuda forces nv12 (a 10-bit source must not leak p010le onto an 8-bit rung)', () => {
+      const vf = vfOf(enc.buildArgs(makeInput({ inputSurface: 'cuda', sourceBitDepth: 10 })));
+      expect(vf).toBe('scale_cuda=w=1920:h=-2:format=nv12');
     });
 
     it('cpu decode, no tonemap: software scale, no GPU filters', () => {
@@ -134,7 +134,7 @@ describe('NVENC encoders — surface-aware filter graph', () => {
     it('cuda decode + crop: crop round-trips through hwupload_cuda', () => {
       const vf = vfOf(enc.buildArgs(makeInput({ inputSurface: 'cuda', crop: true })));
       expect(vf).toBe(
-        'hwdownload,format=nv12,crop=3840:1632:0:264,hwupload_cuda,scale_cuda=w=1920:h=-2',
+        'hwdownload,format=nv12,crop=3840:1632:0:264,hwupload_cuda,scale_cuda=w=1920:h=-2:format=nv12',
       );
     });
 
@@ -147,8 +147,8 @@ describe('NVENC encoders — surface-aware filter graph', () => {
   });
 
   // tonemap_cuda: the zero-copy path (no CPU/OpenCL bounce) when the boot
-  // probe enabled it.
-  describe.each(SDR_ENCODERS)('%s (cuda tone-map)', (_id, enc) => {
+  // probe enabled it. nvencScaleFilter8bit is shared code, one encoder proves it.
+  describe('h264_nvenc (cuda tone-map)', () => {
     it.each([
       [
         'cuda, no crop: stays on the surface end to end',
@@ -158,7 +158,7 @@ describe('NVENC encoders — surface-aware filter graph', () => {
       [
         'cuda + crop: rounds off the surface for the CPU crop, then back',
         { inputSurface: 'cuda' as SurfaceFormat, crop: true },
-        'hwdownload,format=p010le,crop=3840:1632:0:264,format=p010le,hwupload_cuda,scale_cuda=w=1920:h=-2:format=p010le,tonemap_cuda=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=hable:desat=0:apply_dovi=0',
+        'hwdownload,format=p010le,crop=3840:1632:0:264,hwupload_cuda,scale_cuda=w=1920:h=-2:format=p010le,tonemap_cuda=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=hable:desat=0:apply_dovi=0',
       ],
       [
         'cpu decode: uploads once to reach the CUDA-only filter',
@@ -167,7 +167,7 @@ describe('NVENC encoders — surface-aware filter graph', () => {
       ],
     ])('%s', (_desc, cfg, expected) => {
       const vf = vfOf(
-        enc.buildArgs(
+        h264Nvenc.buildArgs(
           makeInput({ ...cfg, tonemap: true, cudaTonemap: true, sourceBitDepth: 10 }),
         ),
       );

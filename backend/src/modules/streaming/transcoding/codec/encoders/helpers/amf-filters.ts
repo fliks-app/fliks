@@ -1,6 +1,12 @@
 import type { EncoderInput } from '../../types';
 import { scaleEvenHeight } from './scale-filter';
 
+/** Whether the AMF `-vf` chain below lands on a D3D11 surface (the full-GPU
+ *  zero-copy path) rather than CPU frames. Shared with the PGS burn-in
+ *  composite, which needs to know whether to `hwdownload` before compositing. */
+export const amfVfEndsOnGpu = (i: EncoderInput): boolean =>
+  i.inputSurface === 'd3d11';
+
 /** `-vf` for an 8-bit AMF encode. The v1 AMF chain runs on CPU surfaces
  *  (d3d11va decode auto-downloads); `*_amf` uploads and encodes the scaled
  *  frames. Any non-CPU surface is pulled down first. */

@@ -34,11 +34,8 @@ export function buildImageBurnInFilterComplex(ctx: {
    *  authored against the full source frame, so it must be cropped identically
    *  before scaling or the subtitle ends up oversized and mispositioned. */
   crop?: { width: number; height: number; x: number; y: number };
-  /** Whether `videoFilter` lands on the encoder's HW surface (needs a
-   *  `hwdownload` before compositing) rather than already-CPU frames (a
-   *  CPU/OpenCL tone-map bounce, or a CPU/VAAPI-bridged decode on NVENC):
-   *  `hwdownload` on frames already in system memory aborts the graph.
-   *  Defaults to true, matching every HW path's own round-trip. */
+  /** Whether `videoFilter` already reaches a GPU surface (else `hwdownload`
+   *  on CPU frames aborts the graph). Defaults to true. */
   framesOnGpu?: boolean;
 }): string {
   const {

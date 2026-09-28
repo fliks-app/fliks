@@ -9,15 +9,8 @@ import type { HwAccelType } from '../types';
 
 const execFileAsync = promisify(execFile);
 
-/** Standalone `tonemap_opencl` capability, i.e. the OpenCL HDR→SDR path an
- *  NVENC/CPU encoder can use: `format=p010le,hwupload,tonemap_opencl,…,
- *  hwdownload`. This is DISTINCT from the QSV probe in `tonemap-opencl-probe`,
- *  which tests the QSV↔OpenCL surface bridge (`hwmap`) and is meaningless on a
- *  pure-NVENC host. On NVIDIA, OpenCL rides the same compute stack as
- *  CUDA/NVENC (`libnvidia-opencl.so`), no Vulkan/GLX, so it's the CPU-bounce
- *  fallback for NVENC when `tonemap_cuda` isn't available (see
- *  `cuda-tonemap-probe.ts`), and the only GPU path for AMF. Fail-closed until
- *  the boot probe confirms it. */
+/** Standalone `tonemap_opencl` capability: NVENC's fallback bounce when
+ *  `tonemap_cuda` isn't available, and AMF's only GPU tonemap. Fail-closed. */
 let probedOnce = false;
 let enabled = false;
 

@@ -4,11 +4,8 @@ import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
 
-/** Whether `tonemap_cuda` works on this host: it keeps the HDR→SDR tone-map on
- *  CUDA surfaces end to end (NVDEC → scale_cuda → tonemap_cuda → NVENC), no CPU
- *  bounce. Needs a bundled ffmpeg that carries the filter plus a working
- *  libcuda; on an older build or a driver mismatch the probe fails and the
- *  NVENC filter helper falls back to the OpenCL bounce. Fail-closed. */
+/** Whether `tonemap_cuda` works on this host, keeping the HDR→SDR tone-map on
+ *  the CUDA surface end to end. Fail-closed; falls back to the OpenCL bounce. */
 let probedOnce = false;
 let enabled = false;
 

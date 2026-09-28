@@ -191,3 +191,50 @@ describe('buildFfmpegArgs: NVENC tonemap_cuda once its probe passes', () => {
     expect(cli).not.toContain('tonemap_opencl');
   });
 });
+
+// Subtitle burn-in must not silently drop the GPU pipeline (NVENC text) or
+// break the PGS composite on a chain that already ends on CPU frames (AMF).
+describe('buildFfmpegArgs: subtitle burn-in keeps the GPU pipeline', () => {
+  const platformDescriptor = Object.getOwnPropertyDescriptor(
+    process,
+    'platform',
+  )!;
+  beforeEach(() => mockCudaTonemap.mockReturnValue(false));
+  afterEach(() =>
+    Object.defineProperty(process, 'platform', platformDescriptor),
+  );
+
+  it('NVENC: text burn-in keeps NVDEC + the tone-map, libass runs on the CPU tail', () => {
+    const args = buildFfmpegArgs(
+      opts({
+        hwAccel: 'nvenc',
+        burnIn: { type: 'text', filter: "subtitles='/tmp/s.srt'" },
+      }),
+      silentLog,
+    );
+    const cli = args.join(' ');
+    expect(cli).toContain('-hwaccel cuda -hwaccel_output_format cuda');
+    expect(cli).toMatch(/-c:v \w+_nvenc\b/);
+    const vf = vfOf(args);
+    expect(vf).toContain('tonemap_opencl=');
+    expect(vf.endsWith(",subtitles='/tmp/s.srt'")).toBe(true);
+  });
+
+  it('AMF: PGS burn-in composites on the CPU chain with no stray hwdownload', () => {
+    Object.defineProperty(process, 'platform', {
+      value: 'win32',
+      configurable: true,
+    });
+    const args = buildFfmpegArgs(
+      opts({
+        hwAccel: 'amf',
+        burnIn: { type: 'image', filter: null, streamIndex: 3 },
+      }),
+      silentLog,
+    );
+    const fc = args[args.indexOf('-filter_complex') + 1];
+    expect(fc.match(/hwdownload/g)).toHaveLength(1);
+    expect(fc).not.toContain('extra_hw_frames');
+    expect(fc).toContain('[ov]format=yuv420p[vout]');
+  });
+});

@@ -847,6 +847,29 @@ export class StreamingController {
     const burnInSubtitleId = burnInSubtitleRaw
       ? parseInt(burnInSubtitleRaw, 10)
       : undefined;
+
+    // Resolved up front (not just before session creation below): the
+    // encode-pipeline decision (stream-builder's stats hwAccel) needs its
+    // `type` too, and for embedded text subs this also extracts the sidecar ;
+    // one resolve, reused for both.
+    let burnIn: BurnInSubtitle | null = null;
+    if (burnInSubtitleId) {
+      try {
+        const info = await this.subtitleBurnIn.resolve(
+          burnInSubtitleId,
+          mediaFileId,
+        );
+        burnIn = {
+          filter: this.subtitleBurnIn.buildFilter(info),
+          streamIndex: info.streamIndex,
+          type: info.type,
+        };
+      } catch (err) {
+        this.log.warn(
+          `Burn-in resolve failed for subtitle #${burnInSubtitleId}: ${err}`,
+        );
+      }
+    }
     const audioStreamRaw = firstQueryString(req.query, 'audioStreamIndex');
     const audioStreamIndex =
       audioStreamRaw != null ? parseInt(audioStreamRaw, 10) : undefined;
@@ -929,6 +952,9 @@ export class StreamingController {
       held.scan,
       ss.allowDirectStream,
       remuxGrid,
+      // Text-only, matching ffmpeg-args' `!!burnIn?.filter`: an image/PGS
+      // burn-in doesn't force the encode pipeline off HW, only text does.
+      !!burnIn?.filter,
     );
     const { response, useHdrLadder, videoVariant, muxFlavour } = evaluateResult;
     const sourceAudioCount = resolved.mediaFile.streamInfo?.audio?.length ?? 0;
@@ -1017,11 +1043,8 @@ export class StreamingController {
     });
 
     // Surface the tonemap mechanism the session actually runs, not the admin
-    // pick. QSV/VAAPI encoders run the HW tonemap (vaapi/opencl/qsv after
-    // `auto` resolution + boot probe); NVENC runs `tonemap_opencl` on the GPU
-    // when the OpenCL probe passed, else the CPU zscale chain; libx26x /
-    // VideoToolbox fallback always CPU. Report the real path (+ curve for the
-    // opencl/CPU chains, which honour it) so the overlay shows what's running.
+    // pick: QSV/VAAPI run the HW tonemap, NVENC prefers `tonemap_cuda` then
+    // `tonemap_opencl`, everything else falls to the CPU zscale chain.
     const hasCrop = resolved.mediaFile.streamInfo?.video?.[0]?.crop != null;
     const dvNoBase = dvHasNoBase(
       resolved.mediaFile.streamInfo?.video?.[0]?.dvProfile,
@@ -1050,9 +1073,8 @@ export class StreamingController {
               ? 'videotoolbox'
               : 'cpu'
       : null;
-    // The curve is a `tonemap`/`tonemap_opencl`/`tonemap_cuda` operator, so it
-    // only applies to the cuda, opencl and CPU paths; the vpp_qsv /
-    // tonemap_vaapi LUTs ignore it.
+    // Applies only to the cuda/opencl/CPU paths; the vpp_qsv / tonemap_vaapi
+    // LUTs ignore the curve.
     const tonemapCurve =
       tonemapAlgo === 'opencl' || tonemapAlgo === 'cpu' || tonemapAlgo === 'cuda'
         ? resolveTonemapCurve()
@@ -1100,28 +1122,8 @@ export class StreamingController {
       episodeId ?? undefined,
     );
 
-    // Resolve the burn-in subtitle BEFORE creating the session: the transcode
-    // pre-spawns synchronously below, so resolving it async and patching the
-    // session afterwards raced the spawn and the first ffmpeg never carried the
-    // burn-in. For text subs this also extracts the sidecar up front.
-    let burnIn: BurnInSubtitle | null = null;
-    if (burnInSubtitleId) {
-      try {
-        const info = await this.subtitleBurnIn.resolve(
-          burnInSubtitleId,
-          mediaFileId,
-        );
-        burnIn = {
-          filter: this.subtitleBurnIn.buildFilter(info),
-          streamIndex: info.streamIndex,
-          type: info.type,
-        };
-      } catch (err) {
-        this.log.warn(
-          `Burn-in resolve failed for subtitle #${burnInSubtitleId}: ${err}`,
-        );
-      }
-    }
+    // burnIn was already resolved above (needed before evaluate() too), and
+    // must land on the session before the transcode pre-spawns below.
 
     // A launch from another device counts for whoever started it. Resolved here
     // because this is where the playback that claims it actually begins.
