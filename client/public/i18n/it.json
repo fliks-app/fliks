@@ -139,7 +139,8 @@
       "ContainerNotSupported": "Formato contenitore non supportato",
       "ClientRequiresHls": "Richiede la pacchettizzazione HLS",
       "ClientCannotSwitchAudio": "Il lettore non può cambiare traccia audio in un file non elaborato",
-      "VideoBitrateNotSupported": "Bitrate troppo alto"
+      "VideoBitrateNotSupported": "Bitrate troppo alto",
+      "VideoDolbyVisionP7NotSupported": "Dolby Vision profilo 7 non supportato"
     },
     "preparing": "Preparazione del flusso…",
     "stats_delivery_mismatch": "Decisione server: {{decision}} / Consegnato: {{delivered}}",

@@ -1765,6 +1765,51 @@ describe('buildRemuxArgs — golden (characterization)', () => {
     expect(args[args.indexOf('-tag:v') + 1]).toBe('hvc1');
   });
 
+  it.each([
+    [
+      'DV P8.1 HEVC + HDR10+ hybrid strips HDR10+ via hevc_metadata',
+      { sourceVideoCodec: 'hevc', dolbyVision: true, sourceDvProfile: 8, hdr10Plus: true },
+      'hevc_mp4toannexb,hevc_metadata=remove_hdr10plus=1',
+    ],
+    [
+      'DV P10.1 AV1 + HDR10+ hybrid strips HDR10+ via av1_metadata',
+      {
+        sourceVideoCodec: 'av1',
+        dolbyVision: true,
+        sourceDvProfile: 10,
+        sourceDvBlSignalCompatId: 1,
+        hdr10Plus: true,
+      },
+      'av1_metadata=remove_hdr10plus=1',
+    ],
+    [
+      'HDR10+ alone (no DV) never strips it',
+      { sourceVideoCodec: 'hevc', hdr10Plus: true },
+      'hevc_mp4toannexb',
+    ],
+    [
+      'raw P7 (dolbyVision false) strips the EL/RPU via hevc_metadata',
+      { sourceVideoCodec: 'hevc', dolbyVision: false, sourceDvProfile: 7 },
+      'hevc_mp4toannexb,hevc_metadata=remove_dovi=1',
+    ],
+    [
+      // No dvvC box on the P7 fallback, so nothing to confuse: the HDR10+
+      // strip is gated on dolbyVision, which a P7 remux never sets.
+      'P7 + HDR10+ hybrid strips only the EL/RPU, leaves HDR10+ on the HDR10 fallback',
+      { sourceVideoCodec: 'hevc', dolbyVision: false, sourceDvProfile: 7, hdr10Plus: true },
+      'hevc_mp4toannexb,hevc_metadata=remove_dovi=1',
+    ],
+  ])('remux: %s', (_name, opts, expectedBsf) => {
+    const args = remuxArgs({
+      inputPath: '/media/in.mkv',
+      outputDir: '/cache/out',
+      audioPlan: { mode: 'copy', codec: 'aac' },
+      trustedStreamInfo: true,
+      ...opts,
+    });
+    expect(args[args.indexOf('-bsf:v') + 1]).toBe(expectedBsf);
+  });
+
   it('remux: a Dolby Vision session appends strict=unofficial so ffmpeg writes dvvC', () => {
     const args = remuxArgs({
       inputPath: '/media/in.mkv',

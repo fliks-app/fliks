@@ -1061,6 +1061,7 @@ export class StreamingController {
       timeline,
       sourceVersion: held.version,
       dolbyVision: response.dolbyVision ?? false,
+      sourceHdr10Plus: resolved.mediaFile.streamInfo?.video?.[0]?.hdr10Plus ?? false,
       tonemapping: response.tonemapping,
     };
     const profileHash =

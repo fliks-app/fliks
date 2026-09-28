@@ -142,6 +142,9 @@ export interface LiveSession {
   clientTonemap: boolean;
   /** Delivered stream is Dolby Vision-presentable (see playback-info.dto). */
   dolbyVision: boolean;
+  /** Source carries HDR10+ dynamic metadata, frozen at playback-info: a
+   *  background reprobe must not fork the cache hash mid-session. */
+  sourceHdr10Plus: boolean;
   transcodeReasons: TranscodeReason[];
   burnIn: BurnInSubtitle | null;
   encoderPreset: string;
@@ -201,6 +204,7 @@ export interface CreateLiveSessionInput {
   tonemapping?: boolean;
   clientTonemap?: boolean;
   dolbyVision?: boolean;
+  sourceHdr10Plus?: boolean;
   transcodeReasons?: TranscodeReason[];
   burnIn?: BurnInSubtitle | null;
   encoderPreset?: string;
@@ -323,6 +327,7 @@ export function buildLiveSession(
       tonemapping: input.tonemapping ?? false,
       clientTonemap: input.clientTonemap ?? false,
       dolbyVision: input.dolbyVision ?? false,
+      sourceHdr10Plus: input.sourceHdr10Plus ?? false,
       transcodeReasons: input.transcodeReasons ?? [],
       burnIn: input.burnIn ?? null,
       encoderPreset: input.encoderPreset ?? 'faster',

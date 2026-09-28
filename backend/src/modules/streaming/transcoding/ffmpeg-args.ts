@@ -1371,6 +1371,9 @@ export interface BuildRemuxArgsOptions {
    *  `dvh1`/`dav1` sample entry, dropping it under a plain `hvc1`/`av01`. */
   sourceDvProfile?: number;
   sourceDvBlSignalCompatId?: number;
+  /** Source carries HDR10+ dynamic metadata alongside its DV RPU: strip it so a
+   *  DV client isn't handed both. */
+  hdr10Plus?: boolean;
 }
 
 /** One `-f mp4` output per audio track: a growing fragmented file the assembler
@@ -1433,6 +1436,7 @@ export function buildRemuxArgs(
     dolbyVision = false,
     sourceDvProfile,
     sourceDvBlSignalCompatId,
+    hdr10Plus = false,
   } = opts;
 
   const args = ['-hide_banner', '-loglevel', 'warning'];
@@ -1485,20 +1489,40 @@ export function buildRemuxArgs(
   //     with "Too many packets buffered for output stream".
   const dvNoBaseTag =
     dolbyVision && dvHasNoBase(sourceDvProfile, sourceDvBlSignalCompatId);
+  // A DV remux drops HDR10+ dynamic metadata: sent alongside the RPU it can
+  // confuse a DV client expecting one dynamic-metadata track, not two.
+  const stripHdr10Plus = dolbyVision && hdr10Plus;
+  // A P7 (dual-layer) remux never carries a DV box (dolbyVision is always
+  // false for P7), so its enhancement-layer/RPU NALs are dead weight: strip
+  // them, leaving a clean plain HDR10 base.
+  const stripDoviEl = sourceDvProfile === 7 && !dolbyVision;
+  const hevcMetadataOpts = [
+    ...(stripDoviEl ? ['remove_dovi=1'] : []),
+    ...(stripHdr10Plus ? ['remove_hdr10plus=1'] : []),
+  ];
   const hevcArgs =
     sourceVideoCodec === 'hevc'
       ? [
           '-tag:v',
           dvNoBaseTag ? 'dvh1' : 'hvc1',
           '-bsf:v',
-          'hevc_mp4toannexb',
+          [
+            'hevc_mp4toannexb',
+            ...(hevcMetadataOpts.length
+              ? [`hevc_metadata=${hevcMetadataOpts.join(':')}`]
+              : []),
+          ].join(','),
           '-max_muxing_queue_size',
           '2048',
         ]
       : [];
   // P10.0 (AV1, no compatible base): same dvvC-under-DV-tag requirement as P5.
-  const av1Args =
-    sourceVideoCodec === 'av1' && dvNoBaseTag ? ['-tag:v', 'dav1'] : [];
+  const av1Args = [
+    ...(sourceVideoCodec === 'av1' && dvNoBaseTag ? ['-tag:v', 'dav1'] : []),
+    ...(sourceVideoCodec === 'av1' && stripHdr10Plus
+      ? ['-bsf:v', 'av1_metadata=remove_hdr10plus=1']
+      : []),
+  ];
 
   // A multi-audio source publishes every track as its own rendition: the video
   // writes the single GOP output below, each audio track its own `-f mp4` output.
