@@ -143,7 +143,8 @@
     },
     "preparing": "A preparar a transmissão…",
     "stats_delivery_mismatch": "Decisão do servidor: {{decision}} / Entregue: {{delivered}}",
-    "stats_dolby_vision_base": "Dolby Vision {{profile}}, base {{base}}"
+    "stats_dolby_vision_base": "Dolby Vision {{profile}}, base {{base}}",
+    "stats_dolby_vision": "Dolby Vision {{profile}}"
   },
   "sse": {
     "subtitle_synced": "Legenda sincronizada com sucesso.",

@@ -1,7 +1,7 @@
 /** Dolby Vision classification derived from a stream's DOVI configuration
- *  record. Single-layer profiles (5, 8) carry their DV inside the HEVC NALs, so
- *  a raw stream copy preserves DV with no re-encode; dual-layer P7's enhancement
- *  layer is unreachable over HLS, so it is never single-layer here. */
+ *  record. Single-layer profiles (5, 8, 10) carry their DV inside the base
+ *  NALs, so a raw stream copy preserves DV with no re-encode; dual-layer P7's
+ *  enhancement layer is unreachable over HLS, so it is never single-layer here. */
 export interface DvInfo {
   profile?: number;
   compatId?: number;
@@ -14,13 +14,17 @@ export interface DvStream {
   dvElPresent?: boolean;
   dvLevel?: number;
   hdrFormat?: string;
+  colorRange?: string;
+  colorSpace?: string;
+  pixelFormat?: string;
+  bitDepth?: number;
 }
 
 export function deriveDvInfo(v?: DvStream): DvInfo {
   const profile = v?.dvProfile;
   const compatId = v?.dvBlSignalCompatId;
   const singleLayer =
-    (profile === 5 || profile === 8) && v?.dvElPresent !== true;
+    (profile === 5 || profile === 8 || profile === 10) && v?.dvElPresent !== true;
   return { profile, compatId, singleLayer };
 }
 
@@ -31,12 +35,32 @@ export function isDvProfile5(info: DvInfo): boolean {
   return info.profile === 5 && info.singleLayer;
 }
 
-/** RFC 8216bis SUPPLEMENTAL-CODECS for a P8 base: `db1p` for PQ compat-1,
- *  `db4h` for HLG compat-4; null on any other profile/compat/transfer/level. */
+/** P5, or P10 with compat 0/unknown: no base layer, so a non-DV client must
+ *  tone-map. Unknown compat is treated as no base (the safe side). */
+export function dvHasNoBase(
+  profile: number | undefined,
+  compat: number | undefined,
+): boolean {
+  return profile === 5 || (profile === 10 && (compat === 0 || compat == null));
+}
+
+/** RFC 8216bis SUPPLEMENTAL-CODECS for a DV base layer (P8→`dvh1.08.LL`,
+ *  P10→`dav1.10.LL`); null unless it passes the bundled ffmpeg's dvcC/dvvC gate. */
 export function dvSupplementalCodecs(v?: DvStream): string | null {
-  if (v?.dvProfile !== 8 || !v?.dvLevel) return null;
+  const prefix =
+    v?.dvProfile === 8 ? 'dvh1.08' : v?.dvProfile === 10 ? 'dav1.10' : null;
+  if (!prefix || !v?.dvLevel) return null;
+  if (v.colorRange !== 'tv' || v.colorSpace !== 'bt2020nc') return null;
+  if (v.pixelFormat !== 'yuv420p10' && v.pixelFormat !== 'yuv420p10le') return null;
   const level = String(v.dvLevel).padStart(2, '0');
-  if (v.dvBlSignalCompatId === 1 && v.hdrFormat === 'HDR10') return `dvh1.08.${level}/db1p`;
-  if (v.dvBlSignalCompatId === 4 && v.hdrFormat === 'HLG') return `dvh1.08.${level}/db4h`;
+  if (v.dvBlSignalCompatId === 1 && v.hdrFormat === 'HDR10') return `${prefix}.${level}/db1p`;
+  if (v.dvBlSignalCompatId === 4 && v.hdrFormat === 'HLG') return `${prefix}.${level}/db4h`;
   return null;
+}
+
+/** RFC 8216bis CODECS for a standalone Profile 5 remux, which has no base
+ *  layer to fall back to: `dvh1.05.LL`. Null without a probed level. */
+export function dvStandaloneCodecs(v?: DvStream): string | null {
+  if (v?.dvProfile !== 5 || !v?.dvLevel) return null;
+  return `dvh1.05.${String(v.dvLevel).padStart(2, '0')}`;
 }

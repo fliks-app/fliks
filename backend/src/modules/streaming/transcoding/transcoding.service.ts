@@ -42,6 +42,7 @@ import {
 import { detectHwAccel } from './hw-detect';
 import { setSelectedRenderNode, vaapiRenderNode } from './hw-device';
 import { setSelectedTonemapCurve } from './ffmpeg-filter-graph';
+import { dvHasNoBase } from './codec/dolby-vision';
 import { setFfmpegSlots } from '../../../common/utils/ffmpeg-slots';
 import { enumerateGpus, type GpuInfo } from './gpu-registry';
 import { ALL_DESCRIPTORS, encoderRegistry } from './codec/encoders';
@@ -1409,6 +1410,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         audioTrackPlans: isMultiAudio ? ctx?.audioTrackPlans : undefined,
         videoOnly: isMultiAudio,
         dolbyVision: ctx?.dolbyVision,
+        sourceDvProfile: ctx?.sourceDvProfile,
       },
       this.log,
     );
@@ -1667,7 +1669,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       videoVariant: ctx?.videoVariant,
       sourceVideoCodec: ctx?.sourceVideoCodec,
       sourceVideoBitrateBps: ctx?.sourceVideoBitrateBps,
-      sourceBitDepth: ctx?.isSourceHdr || ctx?.sourceDvProfile === 5 ? 10 : 8,
+      sourceBitDepth:
+        ctx?.isSourceHdr ||
+        dvHasNoBase(ctx?.sourceDvProfile, ctx?.sourceDvBlSignalCompatId)
+          ? 10
+          : 8,
       sourceWidth: ctx?.sourceWidth,
       sourceHeight: ctx?.sourceHeight,
       sourceHdrMetadata: ctx?.hdrMetadata,

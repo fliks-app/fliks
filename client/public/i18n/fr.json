@@ -148,7 +148,8 @@
     },
     "preparing": "Préparation du flux…",
     "stats_delivery_mismatch": "Décision serveur : {{decision}} / Diffusé : {{delivered}}",
-    "stats_dolby_vision_base": "Dolby Vision {{profile}}, base {{base}}"
+    "stats_dolby_vision_base": "Dolby Vision {{profile}}, base {{base}}",
+    "stats_dolby_vision": "Dolby Vision {{profile}}"
   },
   "sse": {
     "subtitle_synced": "Sous-titre synchronisé avec succès.",

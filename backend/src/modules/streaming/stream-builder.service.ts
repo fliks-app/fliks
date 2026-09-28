@@ -26,6 +26,7 @@ import {
 import { remuxBandwidthBps } from './transcoding/master-playlist';
 import { REMUX_STEREO_AUDIO_BITRATE } from './transcoding/ffmpeg-args';
 import { resolveEncodePipeline } from './transcoding/encode-pipeline';
+import { isOpenclTonemapEnabled } from './transcoding/codec/opencl-tonemap-probe';
 import {
   DEFAULT_FPS,
   DEFAULT_SEGMENT_DURATION,
@@ -42,8 +43,9 @@ import {
 import { normaliseSourceCodec } from './transcoding/codec/normalise';
 import {
   deriveDvInfo,
-  isDvProfile5,
+  dvHasNoBase,
   dvSupplementalCodecs,
+  dvStandaloneCodecs,
 } from './transcoding/codec/dolby-vision';
 import { copySourceCodecString } from './transcoding/codec/codec-strings';
 import { pickPrimaryVariant } from './transcoding/codec/selector';
@@ -330,11 +332,12 @@ export class StreamBuilderService {
     // HDR / Dolby Vision detection
     const isSourceHdr = !!source.hdrFormat;
     const dv = deriveDvInfo(v);
-    // Profile 5 (single-layer IPT-PQ-C2, no HDR10 base) decodes green/purple
-    // wherever a non-DV client copies it, and its metadata often lives only in
-    // the RPU (no HDR VUI), so it drives transcode+tonemap independently of
-    // isSourceHdr — unless the client can present DV (see clientCanPresentDv).
-    const dvP5 = isDvProfile5(dv);
+    // P5 (always) and P10.0 have no base layer to fall back to, so a non-DV
+    // client must tone-map regardless of isSourceHdr (see clientCanPresentDv).
+    const noBase = dvHasNoBase(dv.profile, dv.compatId);
+    // Human label for a forced tone-map reason/log: the real DV profile when
+    // there's no HDR VUI to fall back to (an untagged P5), else the HDR format.
+    const dvLabel = noBase ? `Dolby Vision P${dv.profile}` : source.hdrFormat;
     const clientSupportsHdr = profile.supportsHdr === true;
     // Codec selector: picks the variant the encoder pipeline will produce
     // when the playback path lands on transcode. The result is threaded by
@@ -352,7 +355,7 @@ export class StreamBuilderService {
       {
         width: source.width ?? 0,
         height: source.height ?? 0,
-        hdr: dvP5 ? null : ((source.hdrFormat as CodecVariant['hdr']) ?? null),
+        hdr: noBase ? null : ((source.hdrFormat as CodecVariant['hdr']) ?? null),
         codec: normaliseSourceCodec(source.videoCodec) ?? undefined,
       },
       profile,
@@ -372,7 +375,7 @@ export class StreamBuilderService {
     // re-encode then runs the tonemap filter; copy paths (DirectPlay / remux)
     // never tone-map. AVPlayer rejects with -12927 if an H.264 re-encode
     // keeps the HDR VUI, hence the filter.
-    const transcodeTonemaps = (isSourceHdr || dvP5) && !useHdrLadder;
+    const transcodeTonemaps = (isSourceHdr || noBase) && !useHdrLadder;
     // useHdrLadder and selectedVariant are returned to the controller
     // via EvaluateResult; the controller threads them onto the live
     // session rather than the service writing side-effects.
@@ -423,14 +426,13 @@ export class StreamBuilderService {
     // takes the bitstream verbatim — it just renders it in SDR.
     const clientCanPresentHdr =
       isSourceHdr &&
-      !dvP5 &&
+      !noBase &&
       (clientSupportsHdr || profile.tonemapsHdrLocally === true) &&
       directPlayResult.videoSupported &&
       directPlayResult.videoConditionsMet;
 
-    // Single-layer DV (P5, P8.x) carries its RPU inside the HEVC NALs, so a raw
-    // copy preserves DV for a client that declares it can present it. Dual-layer
-    // P7's enhancement layer can't ride HLS, so dv.singleLayer excludes it.
+    // Single-layer DV (P5/P8/P10) carries its RPU inside the base NALs, so a
+    // raw copy preserves it; dual-layer P7's EL can't ride HLS, so it's excluded.
     const clientCanPresentDv =
       profile.supportsDolbyVision === true &&
       dv.singleLayer &&
@@ -438,12 +440,21 @@ export class StreamBuilderService {
       directPlayResult.videoConditionsMet;
     const clientCanPresentDynamicRange =
       clientCanPresentHdr || clientCanPresentDv;
-    // dv.singleLayer alone also matches P5 and P8.2; dvSupplementalCodecs
-    // narrows to a real P8.1/8.4 base layer, which is what "Dolby Vision" means.
-    const dvP8 = clientCanPresentDv && dvSupplementalCodecs(v) != null;
-    // A remux additionally needs a manifest-describable CODECS string;
-    // DirectPlay has no manifest to negotiate.
-    const dvRemuxEligible = dvP8 && copySourceCodecString(v ?? {}) != null;
+    // dv.singleLayer alone also matches P5/P8.2/P10.2; dvSupplementalCodecs
+    // narrows to a real P8.1/8.4/10.1/10.4 base (and applies the muxer gate).
+    const dvWithBase = clientCanPresentDv && dvSupplementalCodecs(v) != null;
+    // P5's own manifest string needs a probed level; this also gates whether
+    // it's copyable at all below, so DirectPlay and the quality list agree.
+    const dvP5Copy = clientCanPresentDv && dvStandaloneCodecs(v) != null;
+    // P10.0 (noBase, not P5) is never copyable: it always tone-maps.
+    const dvCopyAllowed = !noBase || dvP5Copy;
+    const dvRemuxEligible =
+      (dvWithBase && copySourceCodecString(v ?? {}) != null) || dvP5Copy;
+    // DirectPlay ships the raw file unmodified: report DV from profile/compat
+    // alone, skipping the remux-only muxer validation dvWithBase/dvP5Copy apply.
+    const dvDirectPlayLabel =
+      clientCanPresentDv &&
+      (dv.profile === 5 || dv.compatId === 1 || dv.compatId === 4);
     // HDR reaches an SDR client that tone-maps on its own — copied through, or
     // re-encoded on the HDR ladder. Surfaced in the stats overlay and the admin
     // dashboard, which would otherwise show no HDR step at all.
@@ -454,16 +465,16 @@ export class StreamBuilderService {
     // tone-map only when the re-encode is actually SDR — when the HDR ladder
     // preserves it the real blocker is whatever tryDirectPlay already
     // recorded (resolution, level, …).
-    if ((isSourceHdr || dvP5) && !clientCanPresentDynamicRange) {
+    if ((isSourceHdr && !clientCanPresentDynamicRange) || (noBase && !dvP5Copy)) {
       if (directPlayResult.canDirectPlay)
         directPlayResult.canDirectPlay = false;
       this.log.log(
-        `hdrDecision[file=${resolved.mediaFile.id}] ${dvP5 ? 'Dolby Vision P5' : source.hdrFormat} → SDR: supportsHdr=${clientSupportsHdr}, tonemapsHdrLocally=${profile.tonemapsHdrLocally === true}, supportsDolbyVision=${profile.supportsDolbyVision === true}, videoSupported=${directPlayResult.videoSupported}, videoConditionsMet=${directPlayResult.videoConditionsMet}`,
+        `hdrDecision[file=${resolved.mediaFile.id}] ${dvLabel} → SDR: supportsHdr=${clientSupportsHdr}, tonemapsHdrLocally=${profile.tonemapsHdrLocally === true}, supportsDolbyVision=${profile.supportsDolbyVision === true}, videoSupported=${directPlayResult.videoSupported}, videoConditionsMet=${directPlayResult.videoConditionsMet}`,
       );
       if (transcodeTonemaps) {
         reasons.push({
           flag: 'VideoHdrNotSupported',
-          message: `HDR → SDR (tone mapping ${dvP5 ? 'Dolby Vision P5' : source.hdrFormat})`,
+          message: `HDR → SDR (tone mapping ${dvLabel})`,
         });
       }
     }
@@ -545,14 +556,15 @@ export class StreamBuilderService {
     const sourceCopyable =
       directPlayResult.videoSupported &&
       directPlayResult.videoConditionsMet &&
-      ((!isSourceHdr && !dvP5) || clientCanPresentDynamicRange) &&
+      dvCopyAllowed &&
+      (!isSourceHdr || clientCanPresentDynamicRange) &&
       !needsBurnIn &&
       (!needsCrop || clientCropsBlackBars);
     const muxRejectsCopy = hlsMux === 'ts';
     const rejectsCopy = profile.rejectCopy === true;
     // Whether the source would copy if not for these three gates: push their
     // reasons only then, so an already-uncopyable source blames no gate.
-    const copyableIgnoringGates = sourceCopyable && !forceLadder && !dvP5;
+    const copyableIgnoringGates = sourceCopyable && !forceLadder;
     // Each independent reason a copyable source is still forced to transcode.
     const copyGates: { active: boolean; flag: string; message: string }[] = [
       {
@@ -664,7 +676,7 @@ export class StreamBuilderService {
           hwAccel: 'none',
           tonemapping: false,
           clientTonemap,
-          dolbyVision: dvP8,
+          dolbyVision: dvDirectPlayLabel,
           qualities: this.buildQualityList(
             source,
             'DirectPlay',
@@ -682,7 +694,7 @@ export class StreamBuilderService {
     }
 
     // Each gate fires only when the source would otherwise have copied; an
-    // already-uncopyable source (forceLadder, DV P5, …) blames no gate here.
+    // already-uncopyable source (forceLadder, no-base DV, …) blames no gate here.
     if (copyableIgnoringGates) {
       for (const g of copyGates) {
         if (g.active) reasons.push({ flag: g.flag, message: g.message });
@@ -837,15 +849,22 @@ export class StreamBuilderService {
     ) {
       reasons.push({
         flag: 'VideoHdrNotSupported',
-        message: `HDR → SDR (tone mapping ${source.hdrFormat})`,
+        message: `HDR → SDR (tone mapping ${dvLabel})`,
       });
     }
     // Report the encoder that will actually run via the SAME resolver
     // ffmpeg-args uses, so the stats hwAccel can't drift from the real encode
     // (it picks up the registry's runtime CPU fallback and the QSV crop→VAAPI
     // splice). Same inputs the session will carry, so the result matches.
+    // A no-base DV source applies the dovi OpenCL tone-map, which ffmpeg-args
+    // forces onto the CPU for the whole pipeline (see useDoviOpenclTonemap):
+    // mirror that here so the reported accel doesn't still claim hardware.
+    const doviOpenclTonemap =
+      transcodeTonemaps && noBase && isOpenclTonemapEnabled();
     const effectiveHwAccel = resolveEncodePipeline(selectedVariant, {
-      hwAccel: this.transcodingService.getDetectedHwAccel(),
+      hwAccel: doviOpenclTonemap
+        ? 'none'
+        : this.transcodingService.getDetectedHwAccel(),
       crop: needsCrop,
       burnIn: needsBurnIn,
       tonemap: transcodeTonemaps,
@@ -890,7 +909,7 @@ export class StreamBuilderService {
         hwAccel: effectiveHwAccel,
         tonemapping: transcodeTonemaps,
         clientTonemap,
-        // A transcode re-encodes to H.264/HEVC SDR or HDR10, never DV.
+        // A transcode re-encodes to H.264/HEVC/AV1 SDR or HDR10, never DV.
         dolbyVision: false,
         transcodeBitrateByQuality,
         // canCopyVideo, not sourceCopyable: a source only gated off here

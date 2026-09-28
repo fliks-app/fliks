@@ -212,6 +212,27 @@ export function audioRenditionChannels(
   return sourceChannels && sourceChannels > 0 ? sourceChannels : 2;
 }
 
+/** AV1 `seq_profile` per ffprobe profile name. */
+const AV1_PROFILE_IDC: Record<string, number> = {
+  main: 0,
+  high: 1,
+  professional: 2,
+};
+
+/** Bit depth from the probed value, else the pixel format name (`p10`/`p12`);
+ *  null when neither signal is present, so the caller doesn't guess. */
+export function probedBitDepth(video: {
+  bitDepth?: number;
+  pixelFormat?: string;
+}): 8 | 10 | 12 | null {
+  if (video.bitDepth === 8 || video.bitDepth === 10 || video.bitDepth === 12) {
+    return video.bitDepth;
+  }
+  if (/p12/.test(video.pixelFormat ?? '')) return 12;
+  if (/p10/.test(video.pixelFormat ?? '')) return 10;
+  return video.pixelFormat ? 8 : null;
+}
+
 /** H.264 `profile_idc` per ffprobe profile name, as the `PP` byte of `avc1.PPCCLL`. */
 const H264_PROFILE_IDC: Record<string, string> = {
   baseline: '42',
@@ -242,6 +263,8 @@ export function copySourceCodecString(video: {
   codec?: string;
   profile?: string;
   level?: number;
+  bitDepth?: number;
+  pixelFormat?: string;
 }): string | null {
   const codec = video.codec?.toLowerCase();
   const profile = video.profile?.toLowerCase();
@@ -265,6 +288,17 @@ export function copySourceCodecString(video: {
     if (profile === 'main') return `hvc1.1.6.L${level}.B0`;
     if (profile === 'main 10') return `hvc1.2.4.L${level}.B0`;
     return null;
+  }
+
+  if (codec === 'av1') {
+    // seq_level_idx is already 0..31, no per-codec multiplier to undo. Tier
+    // Main is assumed, as the HEVC branch does: the probe reports no tier.
+    if (level > 31) return null;
+    const profileIdc = AV1_PROFILE_IDC[profile];
+    if (profileIdc == null) return null;
+    const bitDepth = probedBitDepth(video);
+    if (bitDepth == null) return null;
+    return `av01.${profileIdc}.${String(level).padStart(2, '0')}M.${String(bitDepth).padStart(2, '0')}`;
   }
 
   return null;
