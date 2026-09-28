@@ -1277,7 +1277,14 @@ export function buildFfmpegArgs(
   // metadata and the extra `-color_*` flags re-trigger a CPU `auto_scale` that
   // fails (-78) with no bridge back to a videotoolbox_vld surface.
   // Same for Vulkan (-38): libplacebo already tags the frame itself.
-  if (!isHdrOutput && !useVtMetalPath && !useVulkanTonemap) {
+  // Same for pure VAAPI after `tonemap_vaapi`; QSV is unaffected, it
+  // re-renders through `vpp_qsv`, which sets the link's colour props itself.
+  if (
+    !isHdrOutput &&
+    !useVtMetalPath &&
+    !useVulkanTonemap &&
+    !(useVaapiTonemap && effectiveHwAccel === 'vaapi')
+  ) {
     args.push(...colorTagArgs(sdrColor));
   }
 

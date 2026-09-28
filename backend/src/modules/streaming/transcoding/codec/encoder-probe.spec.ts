@@ -1,4 +1,5 @@
-import { probeableAccels } from './encoder-probe';
+import { probeableAccels, probeEncoderInput } from './encoder-probe';
+import { ALL_DESCRIPTORS } from './encoders';
 
 describe('probeableAccels', () => {
   it('always includes the CPU fallback so resolve() can degrade', () => {
@@ -25,5 +26,19 @@ describe('probeableAccels', () => {
       'videotoolbox',
     ]);
     expect([...probeableAccels('none')]).toEqual(['none']);
+  });
+});
+
+describe('probeEncoderInput', () => {
+  it('builds a real, valid argv for every registered descriptor', () => {
+    for (const d of ALL_DESCRIPTORS) {
+      const args = d.buildArgs(probeEncoderInput(d));
+      expect(args).toContain('-c:v');
+      // av1_qsv has no -mbbrc option on the bundled ffmpeg; a stale copy here
+      // would fail at boot with the stricter, real-buildArgs probe.
+      if (d.id === 'av1_qsv' || d.id === 'av1_qsv_hdr10') {
+        expect(args).not.toContain('-mbbrc');
+      }
+    }
   });
 });

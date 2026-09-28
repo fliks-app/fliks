@@ -1,7 +1,6 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { hevcMain10CodecString, hevcMainCodecString } from '../codec-strings';
 import { hdrColorArgs, hlgFromHdr10 } from './helpers/hdr-variants';
-import { masterDisplayString, maxCllString } from './helpers/hdr-metadata';
 import {
   nvencScaleFilter10bit,
   nvencScaleFilter8bit,
@@ -47,11 +46,8 @@ export const hevcNvenc: EncoderDescriptor = {
   },
 };
 
-/** NVENC HEVC Main10 HDR10 encoder — Pascal (GP10x) and later. NVENC has
- *  emitted the full mastering-display / content-light-level SEI since
- *  the 2019 FFmpeg patch landed, so `supportsHdrMetadata()` is true and
- *  the orchestrator can drive it as the preferred HDR HW path on NV
- *  hardware. */
+/** NVENC HEVC Main10 HDR10 encoder; Pascal (GP10x) and later. No
+ *  `-master_display`/`-max_cll` option; NVENC reads HDR10 metadata from the AVFrame side data. */
 export const hevcNvencHdr10: EncoderDescriptor = {
   id: 'hevc_nvenc_main10',
   hwAccel: 'nvenc',
@@ -85,18 +81,6 @@ export const hevcNvencHdr10: EncoderDescriptor = {
       '-force_key_frames',
       input.forceKeyframesExpr,
       ...hdrColorArgs('HDR10'),
-      // When the source's HDR10 static metadata was probed, emit it explicitly
-      // so the mastering-display / content-light SEI is guaranteed rather than
-      // depending on the AVFrame side-data surviving scale_cuda. Absent → fall
-      // back to NVENC's own input-derived SEI (#354).
-      ...(input.hdrMetadata
-        ? [
-            '-master_display',
-            masterDisplayString(input.hdrMetadata),
-            '-max_cll',
-            maxCllString(input.hdrMetadata),
-          ]
-        : []),
       '-tag:v',
       'hvc1',
     ];

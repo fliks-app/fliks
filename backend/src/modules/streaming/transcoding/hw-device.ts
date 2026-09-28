@@ -60,15 +60,12 @@ export function qsvViaD3d11DeviceInitArgs(): string[] {
   ];
 }
 
-/** Whether QSV is backed by a VAAPI device on this host: true on Linux
- *  (`qsv=qs@va`), false on Windows (native D3D11). The QSV→VAAPI crop
- *  fallback and the VAAPI/`tonemap_vaapi` tone-map paths need a VAAPI device,
- *  so when this is false they must stay QSV-native (`vpp_qsv`) or drop to CPU —
- *  there is no VAAPI to route through. (macOS has no QSV, so it never asks.) */
+/** Whether this host has a VAAPI device: true on Linux only (QSV derives
+ *  from it via `qsv=qs@va`), false on Windows and macOS. */
 export function hostHasVaapi(
   platform: NodeJS.Platform = process.platform,
 ): boolean {
-  return platform !== 'win32';
+  return platform === 'linux';
 }
 
 /** DRM + VAAPI + Vulkan device chain for the libplacebo tone-map, with Vulkan

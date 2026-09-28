@@ -1,6 +1,7 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { hevcMain10CodecString, hevcMainCodecString } from '../codec-strings';
 import { hdrColorArgs, hlgFromHdr10 } from './helpers/hdr-variants';
+import { vaapiWritesHdrMetadata } from '../encoder-probe';
 import {
   vaapiScaleFilter8bit,
   vaapiScaleFilter10bit,
@@ -43,17 +44,13 @@ export const hevcVaapi: EncoderDescriptor = {
 };
 
 /** VAAPI HEVC Main10 HDR10 encoder. Profile 2 (Main10), p010 surfaces,
- *  BT.2020 + PQ color tags. Mesa VAAPI does not reliably emit the
- *  mastering-display (`mdcv`) / content-light-level (`clli`) SEI on most
- *  drivers — `supportsHdrMetadata()` returns false so the registry falls
- *  back to libx265 for HDR rungs. The builder remains here so a future
- *  Mesa fix only requires flipping the capability bit. */
+ *  BT.2020 + PQ color tags. `supportsHdrMetadata` reads the boot probe's VAAPI driver check. */
 export const hevcVaapiHdr10: EncoderDescriptor = {
   id: 'hevc_vaapi_main10',
   hwAccel: 'vaapi',
   variant: { codec: 'hevc', bitDepth: 10, hdr: 'HDR10' },
   supports: () => true,
-  supportsHdrMetadata: () => false,
+  supportsHdrMetadata: () => vaapiWritesHdrMetadata(),
   codecString: (target: EncoderTarget) => hevcMain10CodecString(target),
   buildArgs(input: EncoderInput): string[] {
     const { target } = input;
@@ -82,9 +79,8 @@ export const hevcVaapiHdr10: EncoderDescriptor = {
   },
 };
 
-/** VAAPI HEVC Main10 HLG variant — same encoder path as HDR10, only the
- *  transfer characteristic differs. Same Mesa metadata limitation
- *  applies; registry falls back to libx265. */
+/** VAAPI HEVC Main10 HLG variant, same path as HDR10 with the transfer
+ *  characteristic flipped; shares the HDR10 sibling's probed `supportsHdrMetadata`. */
 export const hevcVaapiHlg: EncoderDescriptor = hlgFromHdr10(
   'hevc_vaapi_hlg',
   hevcVaapiHdr10,

@@ -73,6 +73,9 @@ describe('hw-device', () => {
     it('is false on Windows (QSV runs natively on D3D11)', () => {
       expect(hostHasVaapi('win32')).toBe(false);
     });
+    it('is false on macOS (no VAAPI device)', () => {
+      expect(hostHasVaapi('darwin')).toBe(false);
+    });
   });
 
   describe('openclTonemapInitArgs', () => {

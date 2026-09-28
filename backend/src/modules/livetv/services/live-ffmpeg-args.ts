@@ -3,6 +3,12 @@ import {
   audioCopyArgs,
   audioEncodeArgs,
 } from '../../streaming/transcoding/audio-encode';
+import {
+  QSV_DEVICE_ALIAS,
+  VAAPI_DEVICE_ALIAS,
+  qsvDeviceInitArgs,
+  vaapiDeviceInitArgs,
+} from '../../streaming/transcoding/hw-device';
 import { liveTvFfmpegHeaderArgs } from '../livetv-http';
 
 /** Stereo, which every client decodes whatever the broadcast carries. */
@@ -49,13 +55,38 @@ const H264_ENCODER: Record<HwAccelType, string> = {
   videotoolbox: 'h264_videotoolbox',
 };
 
-/** Input-side decode flags, applied before `-i`. `amf` and `none` decode in software. */
-const HWACCEL_INPUT_FLAGS: Partial<Record<HwAccelType, string[]>> = {
-  qsv: ['-hwaccel', 'qsv', '-hwaccel_output_format', 'qsv'],
-  vaapi: ['-hwaccel', 'vaapi', '-hwaccel_output_format', 'vaapi'],
-  nvenc: ['-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda'],
-  videotoolbox: ['-hwaccel', 'videotoolbox'],
-};
+/** Input-side decode flags, applied before `-i`. `qsv`/`vaapi` init their
+ *  device explicitly (same helper the VOD path uses) so the admin render-node pin applies here too. */
+function hwaccelInputFlags(hwAccel: HwAccelType): string[] {
+  switch (hwAccel) {
+    case 'qsv':
+      return [
+        ...qsvDeviceInitArgs(),
+        '-hwaccel',
+        'qsv',
+        '-hwaccel_output_format',
+        'qsv',
+        '-hwaccel_device',
+        QSV_DEVICE_ALIAS,
+      ];
+    case 'vaapi':
+      return [
+        ...vaapiDeviceInitArgs(),
+        '-hwaccel',
+        'vaapi',
+        '-hwaccel_output_format',
+        'vaapi',
+        '-hwaccel_device',
+        VAAPI_DEVICE_ALIAS,
+      ];
+    case 'nvenc':
+      return ['-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda'];
+    case 'videotoolbox':
+      return ['-hwaccel', 'videotoolbox'];
+    default:
+      return [];
+  }
+}
 
 /**
  * Live HLS output flags, kept separate from the VOD `buildFfmpegArgs`: live has
@@ -95,7 +126,7 @@ export function buildLiveFfmpegArgs(opts: LiveFfmpegArgsOptions): string[] {
   );
 
   if (opts.mode === 'transcode') {
-    args.push(...(HWACCEL_INPUT_FLAGS[opts.hwAccel] ?? []));
+    args.push(...hwaccelInputFlags(opts.hwAccel));
   }
 
   args.push('-i', opts.inputUrl);

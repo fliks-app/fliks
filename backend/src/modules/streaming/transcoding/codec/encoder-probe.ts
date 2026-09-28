@@ -1,9 +1,14 @@
 import { Logger } from '@nestjs/common';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import type { EncoderDescriptor } from './types';
+import type { EncoderDescriptor, EncoderInput, EncoderTarget } from './types';
 import type { HwAccelType } from '../types';
-import { qsvDeviceInitArgs, vaapiDeviceInitArgs } from '../hw-device';
+import type { SurfaceFormat } from './decoders/types';
+import {
+  qsvDeviceInitArgs,
+  vaapiDeviceInitArgs,
+  vaapiRenderNode,
+} from '../hw-device';
 
 const execFileAsync = promisify(execFile);
 
@@ -34,6 +39,44 @@ export function isEncoderEnabled(descriptorId: string): boolean {
   return probeResult.get(descriptorId) ?? false;
 }
 
+/** True when the last boot probe found Intel's iHD VAAPI driver. Keyed to
+ *  the render node it ran on, so a later admin re-pin invalidates it. */
+let vaapiIsIntelIhd = false;
+let vaapiIhdCheckedNode: string | null = null;
+
+export function vaapiWritesHdrMetadata(): boolean {
+  return vaapiIsIntelIhd && vaapiIhdCheckedNode === vaapiRenderNode();
+}
+
+/** ffmpeg logs the VAAPI driver's vendor string at verbose level during
+ *  device init, so this needs no `vainfo` dependency and no real encode. */
+async function detectVaapiIntelDriver(): Promise<boolean> {
+  try {
+    const { stderr } = await execFileAsync(
+      'ffmpeg',
+      [
+        '-hide_banner',
+        '-loglevel',
+        'verbose',
+        ...vaapiDeviceInitArgs(),
+        '-f',
+        'lavfi',
+        '-i',
+        'nullsrc=size=64x64:rate=1',
+        '-frames:v',
+        '1',
+        '-f',
+        'null',
+        '-',
+      ],
+      { timeout: 10_000 },
+    );
+    return /VAAPI driver:\s*Intel iHD/i.test(stderr);
+  } catch {
+    return false;
+  }
+}
+
 /** The encoder hwAccels worth probing on a host whose detected accel is
  *  `detected`. The orchestrator only ever asks the registry for the detected
  *  accel, the CPU fallback (`'none'`), and — on a QSV host — VAAPI, because a
@@ -62,9 +105,8 @@ export function probeableAccels(detected: HwAccelType): Set<HwAccelType> {
  *  dGPU is shared — 20+ concurrent VAAPI contexts trip 'internal
  *  encoding error 24' even when each context, taken alone, encodes
  *  cleanly. CPU descriptors run in parallel (no shared state).
- *  Probe args are derived from each descriptor's `buildArgs()` so we
- *  exercise the exact encoder + pixel format + filter the runtime
- *  path uses (modulo the lavfi source and the `-f null -` sink). */
+ *  Probe args are the descriptor's own `buildArgs()`, with its `-vf` swapped
+ *  for the probe's surface-upload filter, so a bad option fails at boot. */
 export async function runEncoderProbes(
   descriptors: readonly EncoderDescriptor[],
   log: Logger,
@@ -89,6 +131,12 @@ export async function runEncoderProbes(
     (d.hwAccel === 'none' ? cpuDescriptors : hwDescriptors).push(d);
   }
 
+  // Only the VAAPI HDR10 descriptors read this; skip the extra spawn otherwise.
+  if (hwDescriptors.some((d) => d.hwAccel === 'vaapi' && d.variant.hdr === 'HDR10')) {
+    vaapiIhdCheckedNode = vaapiRenderNode();
+    vaapiIsIntelIhd = await detectVaapiIntelDriver();
+  }
+
   const runOne = async (
     d: EncoderDescriptor,
   ): Promise<{ id: string; ok: boolean }> => {
@@ -96,7 +144,7 @@ export async function runEncoderProbes(
       probeResult.set(d.id, false);
       return { id: d.id, ok: false };
     }
-    const ok = await probeOne(d, log);
+    const ok = await probeOne(d);
     probeResult.set(d.id, ok);
     return { id: d.id, ok };
   };
@@ -129,22 +177,68 @@ export async function runEncoderProbes(
   );
 }
 
-async function probeOne(d: EncoderDescriptor, _log: Logger): Promise<boolean> {
-  // Synthetic minimal input: a 320×180 black frame at the descriptor's
-  // expected pixel layout. The encoder is invoked with the same arg
-  // slice it would emit in production, just shortened to 1 frame.
-  const isHdr = d.variant.hdr != null;
+/** Throwaway target/tuning numbers for `buildArgs()` at probe time; only the
+ *  shape matters, not the value, since the probe just needs valid args. */
+const PROBE_TARGET: EncoderTarget = {
+  width: 320,
+  height: 180,
+  videoBitrateBps: 1_000_000,
+  gopSize: 48,
+  frameRate: 24,
+};
+const PROBE_QSV_EXTRA = ['-forced_idr', '1', '-adaptive_i', '0', '-bf', '0', '-b_strategy', '0'];
+
+function probeInputSurface(hwAccel: HwAccelType): SurfaceFormat {
+  switch (hwAccel) {
+    case 'qsv':
+      return 'qsv';
+    case 'vaapi':
+      return 'vaapi';
+    case 'nvenc':
+      return 'cuda';
+    default:
+      return 'cpu';
+  }
+}
+
+/** Minimal `EncoderInput` so a descriptor's real `buildArgs()` runs at boot
+ *  instead of a hand-rolled stub. Exported for the structural build-args test. */
+export function probeEncoderInput(d: EncoderDescriptor): EncoderInput {
+  return {
+    variant: d.variant,
+    target: PROBE_TARGET,
+    preset: 'veryfast',
+    nvencPreset: 'p4',
+    seekSeconds: 0,
+    early: false,
+    forceKeyframesExpr: 'expr:eq(n,0)',
+    qsv: {
+      extra: PROBE_QSV_EXTRA,
+      rcInitOccupancy: PROBE_TARGET.videoBitrateBps,
+      bufsize: PROBE_TARGET.videoBitrateBps,
+    },
+    libx264BufsizeMb: '2M',
+    filters: {
+      cropStr: '',
+      cpuCropPrefix: '',
+      hwCropPrefix: '',
+      burnInFilter: '',
+      tonemapVaapi: '',
+      tonemapVulkan: '',
+      tonemapOpencl: '',
+      tonemapCuda: '',
+      tonemapCpu: '',
+    },
+    tonemap: false,
+    tonemapPath: 'vaapi',
+    hasBurnIn: false,
+    hasCrop: false,
+    inputSurface: probeInputSurface(d.hwAccel),
+  };
+}
+
+async function probeOne(d: EncoderDescriptor): Promise<boolean> {
   const pixFmt = d.variant.bitDepth === 10 ? 'yuv420p10le' : 'yuv420p';
-  const colorTags = isHdr
-    ? [
-        '-color_primaries',
-        'bt2020',
-        '-color_trc',
-        d.variant.hdr === 'HLG' ? 'arib-std-b67' : 'smpte2084',
-        '-colorspace',
-        'bt2020nc',
-      ]
-    : [];
   // HW encoders only accept HW surfaces. Feed them through the same
   // device-init chain the runtime path uses so the probe exercises a
   // representative pipeline:
@@ -197,6 +291,13 @@ async function probeOne(d: EncoderDescriptor, _log: Logger): Promise<boolean> {
       inputArgs = ['-f', 'lavfi', '-i', lavfi];
       filterArgs = [];
   }
+
+  // The descriptor's real args, minus its own `-vf` (the probe's surface-upload
+  // filter above stands in for it).
+  const encoderArgs = d.buildArgs(probeEncoderInput(d));
+  const vfIdx = encoderArgs.indexOf('-vf');
+  if (vfIdx !== -1) encoderArgs.splice(vfIdx, 2);
+
   const args = [
     '-hide_banner',
     '-loglevel',
@@ -205,9 +306,7 @@ async function probeOne(d: EncoderDescriptor, _log: Logger): Promise<boolean> {
     '-frames:v',
     '1',
     ...filterArgs,
-    '-c:v',
-    encoderName(d),
-    ...colorTags,
+    ...encoderArgs,
     '-f',
     'null',
     '-',
@@ -221,38 +320,5 @@ async function probeOne(d: EncoderDescriptor, _log: Logger): Promise<boolean> {
     // logs quiet on hosts where most HW paths aren't present (e.g.
     // a QSV-only deployment legitimately fails 18+ probes).
     return false;
-  }
-}
-
-/** Map descriptor id back to the ffmpeg encoder binary name. Reads
- *  the first `-c:v <name>` from a stub input that doesn't have HW
- *  surfaces — so descriptors that only accept HW-derived AVFrame
- *  inputs (HEVC HDR pipelines, etc.) get probed against the same
- *  encoder binary but with a CPU source. */
-function encoderName(d: EncoderDescriptor): string {
-  switch (d.hwAccel) {
-    case 'qsv':
-      if (d.variant.codec === 'av1') return 'av1_qsv';
-      if (d.variant.codec === 'hevc') return 'hevc_qsv';
-      return 'h264_qsv';
-    case 'vaapi':
-      if (d.variant.codec === 'av1') return 'av1_vaapi';
-      if (d.variant.codec === 'hevc') return 'hevc_vaapi';
-      return 'h264_vaapi';
-    case 'nvenc':
-      if (d.variant.codec === 'av1') return 'av1_nvenc';
-      if (d.variant.codec === 'hevc') return 'hevc_nvenc';
-      return 'h264_nvenc';
-    case 'amf':
-      if (d.variant.codec === 'av1') return 'av1_amf';
-      if (d.variant.codec === 'hevc') return 'hevc_amf';
-      return 'h264_amf';
-    case 'videotoolbox':
-      if (d.variant.codec === 'hevc') return 'hevc_videotoolbox';
-      return 'h264_videotoolbox';
-    case 'none':
-      if (d.variant.codec === 'av1') return 'libsvtav1';
-      if (d.variant.codec === 'hevc') return 'libx265';
-      return 'libx264';
   }
 }

@@ -33,6 +33,8 @@ export const hevcQsv: EncoderDescriptor = {
       '1',
       '-b:v',
       String(target.videoBitrateBps),
+      // == bitrate selects CBR: keeps a Main-tier-clamped rung's declared peak
+      // at the tier ceiling instead of flipping general_tier_flag to High.
       '-maxrate',
       String(target.videoBitrateBps),
       '-rc_init_occupancy',
@@ -93,9 +95,8 @@ export const hevcQsvHdr10: EncoderDescriptor = {
       String(target.gopSize),
       '-force_key_frames',
       input.forceKeyframesExpr,
-      // hevc_qsv has no -master_display / -max_cll option (it's NVENC-private)
-      // and rejects them ("Unrecognized option") — QSV carries the source HDR10
-      // static metadata through from the input AVFrame instead. See #354.
+      // No -master_display/-max_cll option (rejected as unrecognized); QSV
+      // carries HDR10 static metadata through from the input AVFrame instead.
       ...hdrColorArgs('HDR10'),
       '-tag:v',
       'hvc1',

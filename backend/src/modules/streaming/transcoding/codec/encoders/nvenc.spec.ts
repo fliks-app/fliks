@@ -226,6 +226,16 @@ describe('NVENC encoders — surface-aware filter graph', () => {
     });
   });
 
+  // No -master_display/-max_cll option exists on hevc_nvenc/av1_nvenc; NVENC
+  // reads mastering-display/content-light from the input AVFrame side data.
+  describe.each(HDR_ENCODERS)('%s (no NVENC-private HDR flags)', (_id, enc) => {
+    it('never emits -master_display or -max_cll', () => {
+      const args = enc.buildArgs(makeInput({ inputSurface: 'cuda', sourceBitDepth: 10 }));
+      expect(args).not.toContain('-master_display');
+      expect(args).not.toContain('-max_cll');
+    });
+  });
+
   // Load-bearing invariant: only CUDA surfaces may drive `scale_cuda` /
   // `hwupload_cuda`. On any other surface those GPU-only filters must be
   // absent, and CPU-decoded input must carry no `hwdownload` at all.

@@ -41,6 +41,9 @@ export const hevcCpu: EncoderDescriptor = {
       String(target.gopSize),
       '-force_key_frames',
       input.forceKeyframesExpr,
+      // open-gop=0 is what makes a forced keyframe a real IDR, not -forced-idr.
+      '-x265-params',
+      'open-gop=0',
       '-tag:v',
       'hvc1',
     ];
@@ -66,6 +69,8 @@ export const hevcCpuHdr10: EncoderDescriptor = {
     const x265Params = [
       'hdr-opt=1',
       'repeat-headers=1',
+      // open-gop=0 is what makes a forced keyframe a real IDR.
+      'open-gop=0',
       'colorprim=bt2020',
       'transfer=smpte2084',
       'colormatrix=bt2020nc',
@@ -119,6 +124,7 @@ export const hevcCpuHlg: EncoderDescriptor = {
     const bitrate = `${target.videoBitrateBps}`;
     const x265Params = [
       'repeat-headers=1',
+      'open-gop=0',
       'colorprim=bt2020',
       'transfer=arib-std-b67',
       'colormatrix=bt2020nc',

@@ -9,10 +9,10 @@ import type { CropArea, ExtractArgs, ExtractorBackend } from './types';
  * recent SoCs.
  *
  * Notes:
- *   • No `scale_vt` filter is reliably available across ffmpeg builds, so
- *     we keep the decoded frames on the CPU side after download and run
- *     crop+scale in SW. The decode is the heavy bit — even pure-SW scale
- *     on a 4K frame is sub-millisecond compared with the decode itself.
+ *   • `scale_vt` exists and is used by the streaming encode path, but a
+ *     single throwaway thumbnail frame isn't worth its HW-frame plumbing:
+ *     crop+scale run on the CPU after download, and decode dominates cost
+ *     regardless; even pure-SW scale on a 4K frame is sub-millisecond.
  *   • Single-threaded ffmpegs again — one frame per process.
  */
 export class VideoToolboxExtractor implements ExtractorBackend {
