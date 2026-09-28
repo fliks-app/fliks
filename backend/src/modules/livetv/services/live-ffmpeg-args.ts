@@ -55,10 +55,8 @@ const H264_ENCODER: Record<HwAccelType, string> = {
   videotoolbox: 'h264_videotoolbox',
 };
 
-/** Input-side decode flags, applied before `-i`. `amf` and `none` decode in
- *  software. `qsv`/`vaapi` init their device explicitly (same helper the VOD
- *  path uses) so the admin render-node pin applies here too, instead of
- *  ffmpeg silently opening its own default-adapter device. */
+/** Input-side decode flags, applied before `-i`. `qsv`/`vaapi` init their
+ *  device explicitly (same helper the VOD path uses) so the admin render-node pin applies here too. */
 function hwaccelInputFlags(hwAccel: HwAccelType): string[] {
   switch (hwAccel) {
     case 'qsv':

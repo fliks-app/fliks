@@ -226,9 +226,8 @@ describe('NVENC encoders — surface-aware filter graph', () => {
     });
   });
 
-  // No -master_display/-max_cll AVOption exists on hevc_nvenc/av1_nvenc on the
-  // bundled ffmpeg build ("Unrecognized option"); NVENC reads mastering-display
-  // and content-light straight off the input AVFrame side data instead.
+  // No -master_display/-max_cll option exists on hevc_nvenc/av1_nvenc; NVENC
+  // reads mastering-display/content-light from the input AVFrame side data.
   describe.each(HDR_ENCODERS)('%s (no NVENC-private HDR flags)', (_id, enc) => {
     it('never emits -master_display or -max_cll', () => {
       const args = enc.buildArgs(makeInput({ inputSurface: 'cuda', sourceBitDepth: 10 }));

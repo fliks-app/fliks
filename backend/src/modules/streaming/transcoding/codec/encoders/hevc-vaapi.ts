@@ -44,11 +44,7 @@ export const hevcVaapi: EncoderDescriptor = {
 };
 
 /** VAAPI HEVC Main10 HDR10 encoder. Profile 2 (Main10), p010 surfaces,
- *  BT.2020 + PQ color tags. Confirmed on Intel iHD: the mastering-display
- *  (`mdcv`) / content-light-level (`clli`) SEI reaches the bitstream. Mesa's
- *  AMD driver is unverified, so `supportsHdrMetadata` reads the boot probe's
- *  VAAPI driver check instead of a hard-coded allowlist; non-iHD drivers
- *  fall back to libx265. */
+ *  BT.2020 + PQ color tags. `supportsHdrMetadata` reads the boot probe's VAAPI driver check. */
 export const hevcVaapiHdr10: EncoderDescriptor = {
   id: 'hevc_vaapi_main10',
   hwAccel: 'vaapi',
@@ -83,9 +79,8 @@ export const hevcVaapiHdr10: EncoderDescriptor = {
   },
 };
 
-/** VAAPI HEVC Main10 HLG variant — same encoder path as HDR10, only the
- *  transfer characteristic differs; shares the HDR10 sibling's probed
- *  `supportsHdrMetadata` (HLG itself has no mastering-display SEI to check). */
+/** VAAPI HEVC Main10 HLG variant, same path as HDR10 with the transfer
+ *  characteristic flipped; shares the HDR10 sibling's probed `supportsHdrMetadata`. */
 export const hevcVaapiHlg: EncoderDescriptor = hlgFromHdr10(
   'hevc_vaapi_hlg',
   hevcVaapiHdr10,

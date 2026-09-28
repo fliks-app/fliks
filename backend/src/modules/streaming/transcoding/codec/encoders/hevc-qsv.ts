@@ -95,9 +95,8 @@ export const hevcQsvHdr10: EncoderDescriptor = {
       String(target.gopSize),
       '-force_key_frames',
       input.forceKeyframesExpr,
-      // hevc_qsv has no -master_display / -max_cll option and rejects them
-      // ("Unrecognized option"); same as hevc_nvenc. QSV carries the source
-      // HDR10 static metadata through from the input AVFrame instead. See #354.
+      // No -master_display/-max_cll option (rejected as unrecognized); QSV
+      // carries HDR10 static metadata through from the input AVFrame instead.
       ...hdrColorArgs('HDR10'),
       '-tag:v',
       'hvc1',

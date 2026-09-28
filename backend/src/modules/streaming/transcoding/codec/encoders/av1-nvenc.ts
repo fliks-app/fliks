@@ -44,9 +44,8 @@ export const av1Nvenc: EncoderDescriptor = {
   },
 };
 
-/** NVENC AV1 HDR10; no `-master_display`/`-max_cll` CLI option exists for
- *  av1_nvenc; the encoder reads mastering-display/CLL straight off the
- *  input AVFrame side data and writes the OBU metadata itself. */
+/** NVENC AV1 HDR10. No `-master_display`/`-max_cll` option exists; the
+ *  encoder reads mastering-display/CLL from the input AVFrame side data. */
 export const av1NvencHdr10: EncoderDescriptor = {
   id: 'av1_nvenc_hdr10',
   hwAccel: 'nvenc',

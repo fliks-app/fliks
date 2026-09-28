@@ -12,10 +12,8 @@ export type BitDepth = 8 | 10;
  *  - HDR10: BT.2020 primaries + SMPTE-ST-2084 (PQ) transfer + static metadata
  *  - HLG:   BT.2020 primaries + ARIB STD-B67 transfer
  *
- *  Dolby Vision is detected separately (`dolby-vision.ts`, from the DOVI
- *  config record) and drives tonemap/passthrough routing directly. This enum
- *  still classifies by ffprobe's plain colour tags, so a DV source resolves
- *  here to HDR10 (its PQ base layer) or SDR, same as any other source. */
+ *  Dolby Vision is detected separately (`dolby-vision.ts`) and drives
+ *  tonemap/passthrough routing directly; this enum still classifies by ffprobe's plain colour tags. */
 export type HdrFormat = 'HDR10' | 'HLG';
 
 /** HDR→SDR tone-map curve, shared by the CPU and GPU (tonemap_opencl) paths.

@@ -247,8 +247,6 @@ describe('buildFfmpegArgs — CPU golden argv (characterization)', () => {
        "72",
        "-force_key_frames",
        "expr:gte(n,n_forced*72)",
-       "-forced-idr",
-       "1",
        "-x265-params",
        "hdr-opt=1:repeat-headers=1:open-gop=0:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:master-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1):max-cll=1000,400",
        "-color_primaries",
@@ -1173,8 +1171,6 @@ describe('buildFfmpegArgs — QSV/VAAPI matrix golden argv (characterization)', 
        "0",
        "-c:v",
        "av1_qsv",
-       "-pix_fmt",
-       "p010le",
        "-preset",
        "faster",
        "-forced_idr",
@@ -1403,8 +1399,6 @@ describe('buildFfmpegArgs — QSV/VAAPI matrix golden argv (characterization)', 
        "72",
        "-force_key_frames",
        "expr:gte(n,n_forced*72)",
-       "-forced-idr",
-       "1",
        "-x265-params",
        "hdr-opt=1:repeat-headers=1:open-gop=0:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:master-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1):max-cll=1000,400",
        "-color_primaries",
@@ -1778,12 +1772,7 @@ describe('buildRemuxArgs — golden (characterization)', () => {
   it.each([
     [
       'DV P8.1 HEVC + HDR10+ hybrid strips HDR10+ via hevc_metadata',
-      {
-        sourceVideoCodec: 'hevc',
-        dolbyVision: true,
-        sourceDvProfile: 8,
-        hdr10Plus: true,
-      },
+      { sourceVideoCodec: 'hevc', dolbyVision: true, sourceDvProfile: 8, hdr10Plus: true },
       'hevc_mp4toannexb,hevc_metadata=remove_hdr10plus=1',
     ],
     [
@@ -1811,12 +1800,7 @@ describe('buildRemuxArgs — golden (characterization)', () => {
       // No dvvC box on the P7 fallback, so nothing to confuse: the HDR10+
       // strip is gated on dolbyVision, which a P7 remux never sets.
       'P7 + HDR10+ hybrid strips only the EL/RPU, leaves HDR10+ on the HDR10 fallback',
-      {
-        sourceVideoCodec: 'hevc',
-        dolbyVision: false,
-        sourceDvProfile: 7,
-        hdr10Plus: true,
-      },
+      { sourceVideoCodec: 'hevc', dolbyVision: false, sourceDvProfile: 7, hdr10Plus: true },
       'hevc_mp4toannexb,hevc_metadata=remove_dovi=1',
     ],
   ])('remux: %s', (_name, opts, expectedBsf) => {

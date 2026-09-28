@@ -4,7 +4,11 @@ import { promisify } from 'util';
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from './types';
 import type { HwAccelType } from '../types';
 import type { SurfaceFormat } from './decoders/types';
-import { qsvDeviceInitArgs, vaapiDeviceInitArgs } from '../hw-device';
+import {
+  qsvDeviceInitArgs,
+  vaapiDeviceInitArgs,
+  vaapiRenderNode,
+} from '../hw-device';
 
 const execFileAsync = promisify(execFile);
 
@@ -35,20 +39,17 @@ export function isEncoderEnabled(descriptorId: string): boolean {
   return probeResult.get(descriptorId) ?? false;
 }
 
-/** Whether the VAAPI device on this host is bound to Intel's iHD driver.
- *  Only iHD's HDR10 mastering-display / content-light SEI emission is
- *  confirmed on real hardware (Mesa/AMD radeonsi unverified), so the VAAPI
- *  HDR10 descriptors gate `supportsHdrMetadata` on this instead of a static
- *  guess. Populated once by `runEncoderProbes()`, false until then. */
+/** True when the last boot probe found Intel's iHD VAAPI driver. Keyed to
+ *  the render node it ran on, so a later admin re-pin invalidates it. */
 let vaapiIsIntelIhd = false;
+let vaapiIhdCheckedNode: string | null = null;
 
 export function vaapiWritesHdrMetadata(): boolean {
-  return vaapiIsIntelIhd;
+  return vaapiIsIntelIhd && vaapiIhdCheckedNode === vaapiRenderNode();
 }
 
-/** ffmpeg logs the VAAPI driver's vendor string ("Intel iHD driver for...",
- *  "Mesa Gallium driver...") at verbose level during device init; no
- *  `vainfo` dependency, and no encode needed. */
+/** ffmpeg logs the VAAPI driver's vendor string at verbose level during
+ *  device init, so this needs no `vainfo` dependency and no real encode. */
 async function detectVaapiIntelDriver(): Promise<boolean> {
   try {
     const { stderr } = await execFileAsync(
@@ -104,10 +105,8 @@ export function probeableAccels(detected: HwAccelType): Set<HwAccelType> {
  *  dGPU is shared — 20+ concurrent VAAPI contexts trip 'internal
  *  encoding error 24' even when each context, taken alone, encodes
  *  cleanly. CPU descriptors run in parallel (no shared state).
- *  Probe args are the descriptor's own `buildArgs()` output, only
- *  swapping its `-vf` for the probe's plain surface-upload filter and
- *  prepending the matching device-init chain, so a private option
- *  invalid on this build fails here instead of at session spawn. */
+ *  Probe args are the descriptor's own `buildArgs()`, with its `-vf` swapped
+ *  for the probe's surface-upload filter, so a bad option fails at boot. */
 export async function runEncoderProbes(
   descriptors: readonly EncoderDescriptor[],
   log: Logger,
@@ -134,6 +133,7 @@ export async function runEncoderProbes(
 
   // Only the VAAPI HDR10 descriptors read this; skip the extra spawn otherwise.
   if (hwDescriptors.some((d) => d.hwAccel === 'vaapi' && d.variant.hdr === 'HDR10')) {
+    vaapiIhdCheckedNode = vaapiRenderNode();
     vaapiIsIntelIhd = await detectVaapiIntelDriver();
   }
 
@@ -177,9 +177,8 @@ export async function runEncoderProbes(
   );
 }
 
-/** Throwaway target/tuning numbers for `buildArgs()` at probe time; only
- *  their shape matters, never their value, since the probe checks whether
- *  the arg list parses and runs, not the picture it produces. */
+/** Throwaway target/tuning numbers for `buildArgs()` at probe time; only the
+ *  shape matters, not the value, since the probe just needs valid args. */
 const PROBE_TARGET: EncoderTarget = {
   width: 320,
   height: 180,
@@ -202,10 +201,8 @@ function probeInputSurface(hwAccel: HwAccelType): SurfaceFormat {
   }
 }
 
-/** Minimal `EncoderInput` so a descriptor's real `buildArgs()` runs at
- *  boot instead of a hand-rolled stub; every private option (`-mbbrc`,
- *  HDR flags, GOP cadence…) gets the same validation the runtime path would
- *  hit. Exported for the structural build-args test. */
+/** Minimal `EncoderInput` so a descriptor's real `buildArgs()` runs at boot
+ *  instead of a hand-rolled stub. Exported for the structural build-args test. */
 export function probeEncoderInput(d: EncoderDescriptor): EncoderInput {
   return {
     variant: d.variant,
@@ -296,8 +293,7 @@ async function probeOne(d: EncoderDescriptor): Promise<boolean> {
   }
 
   // The descriptor's real args, minus its own `-vf` (the probe's surface-upload
-  // filter above stands in for it); this is what actually exercises private
-  // options like `-mbbrc`/HDR flags against the bundled ffmpeg build.
+  // filter above stands in for it).
   const encoderArgs = d.buildArgs(probeEncoderInput(d));
   const vfIdx = encoderArgs.indexOf('-vf');
   if (vfIdx !== -1) encoderArgs.splice(vfIdx, 2);

@@ -40,10 +40,8 @@ export const av1Vaapi: EncoderDescriptor = {
   },
 };
 
-/** AMD/Intel VAAPI AV1 HDR10; confirmed on Intel iHD: the mastering-display
- *  packet reaches the bitstream. Mesa/AMD's emission is unverified, so
- *  `supportsHdrMetadata` reads the boot probe's VAAPI driver check instead
- *  of a hard-coded allowlist; non-iHD drivers fall back to libsvtav1. */
+/** AMD/Intel VAAPI AV1 HDR10. `supportsHdrMetadata` reads the boot probe's
+ *  VAAPI driver check (Intel iHD only) instead of a static allowlist. */
 export const av1VaapiHdr10: EncoderDescriptor = {
   id: 'av1_vaapi_hdr10',
   hwAccel: 'vaapi',

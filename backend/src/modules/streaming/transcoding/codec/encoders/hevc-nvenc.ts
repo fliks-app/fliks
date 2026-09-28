@@ -47,10 +47,7 @@ export const hevcNvenc: EncoderDescriptor = {
 };
 
 /** NVENC HEVC Main10 HDR10 encoder; Pascal (GP10x) and later. No
- *  `-master_display`/`-max_cll` CLI option exists for hevc_nvenc (it
- *  rejects them as unrecognized); the encoder reads mastering-display and
- *  content-light-level straight off the input AVFrame side data and
- *  writes the SEI itself, so `supportsHdrMetadata()` is true. */
+ *  `-master_display`/`-max_cll` option; NVENC reads HDR10 metadata from the AVFrame side data. */
 export const hevcNvencHdr10: EncoderDescriptor = {
   id: 'hevc_nvenc_main10',
   hwAccel: 'nvenc',

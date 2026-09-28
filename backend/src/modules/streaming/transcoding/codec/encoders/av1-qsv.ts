@@ -42,8 +42,8 @@ export const av1Qsv: EncoderDescriptor = {
   },
 };
 
-/** Intel QSV AV1 HDR10; same pipeline in p010le. Confirmed on-device: the
- *  bundled ffmpeg writes the mdcv/clli SEI through to the OBU on Arc/iGPU. */
+/** Intel QSV AV1 HDR10, same pipeline in p010le. No -pix_fmt: the qsv-native
+ *  10-bit surface already carries p010le, and forcing it breaks the hwupload chain. */
 export const av1QsvHdr10: EncoderDescriptor = {
   id: 'av1_qsv_hdr10',
   hwAccel: 'qsv',
@@ -56,8 +56,6 @@ export const av1QsvHdr10: EncoderDescriptor = {
     return [
       '-c:v',
       'av1_qsv',
-      '-pix_fmt',
-      'p010le',
       '-preset',
       preset,
       ...qsv.extra,

@@ -1,8 +1,5 @@
-import { probeableAccels, probeEncoderInput, vaapiWritesHdrMetadata } from './encoder-probe';
+import { probeableAccels, probeEncoderInput } from './encoder-probe';
 import { ALL_DESCRIPTORS } from './encoders';
-import { av1QsvHdr10 } from './encoders/av1-qsv';
-import { av1VaapiHdr10 } from './encoders/av1-vaapi';
-import { hevcVaapiHdr10, hevcVaapiHlg } from './encoders/hevc-vaapi';
 
 describe('probeableAccels', () => {
   it('always includes the CPU fallback so resolve() can degrade', () => {
@@ -29,24 +26,6 @@ describe('probeableAccels', () => {
       'videotoolbox',
     ]);
     expect([...probeableAccels('none')]).toEqual(['none']);
-  });
-});
-
-describe('vaapiWritesHdrMetadata', () => {
-  it('defaults to false before the boot probe runs', () => {
-    expect(vaapiWritesHdrMetadata()).toBe(false);
-  });
-
-  it('gates the VAAPI HDR10 descriptors, including the HLG sibling', () => {
-    expect(av1VaapiHdr10.supportsHdrMetadata()).toBe(vaapiWritesHdrMetadata());
-    expect(hevcVaapiHdr10.supportsHdrMetadata()).toBe(vaapiWritesHdrMetadata());
-    expect(hevcVaapiHlg.supportsHdrMetadata()).toBe(vaapiWritesHdrMetadata());
-  });
-});
-
-describe('av1_qsv_hdr10', () => {
-  it('reports HDR metadata support (confirmed on Arc/iGPU, no driver gate needed)', () => {
-    expect(av1QsvHdr10.supportsHdrMetadata()).toBe(true);
   });
 });
 

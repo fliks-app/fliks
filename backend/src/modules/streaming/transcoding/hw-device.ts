@@ -60,11 +60,8 @@ export function qsvViaD3d11DeviceInitArgs(): string[] {
   ];
 }
 
-/** Whether this host has a VAAPI device at all: true on Linux only (QSV
- *  derives from it there via `qsv=qs@va`), false on Windows (native D3D11)
- *  and macOS (no VAAPI). The QSV→VAAPI crop fallback and the
- *  VAAPI/`tonemap_vaapi` tone-map paths need a VAAPI device, so when this is
- *  false they must stay QSV-native (`vpp_qsv`) or drop to CPU. */
+/** Whether this host has a VAAPI device: true on Linux only (QSV derives
+ *  from it via `qsv=qs@va`), false on Windows and macOS. */
 export function hostHasVaapi(
   platform: NodeJS.Platform = process.platform,
 ): boolean {
