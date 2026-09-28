@@ -56,12 +56,7 @@ import {
   DECODE_TIME_TOLERANCE_SECONDS,
   type KeyframeGrid,
 } from './segment-boundaries';
-import {
-  openclTonemapInitArgs,
-  qsvDeviceInitArgs,
-  amfD3d11OpenclInitArgs,
-  D3D11VA_DEVICE_ALIAS,
-} from './hw-device';
+import { openclTonemapInitArgs, qsvDeviceInitArgs } from './hw-device';
 import { buildVideoFilters, resolveTonemapCurve } from './ffmpeg-filter-graph';
 import { buildImageBurnInFilterComplex } from './subtitle-overlay-filter';
 import { nvencVfEndsOnGpu } from './codec/encoders/helpers/nvenc-filters';
@@ -649,7 +644,6 @@ function buildAudioAndMuxerArgs(opts: {
 function resolveDecodeStage(opts: {
   sourceVideoCodec: string | undefined;
   qsvNativeAvailable: boolean;
-  amfFullGpuAvailable: boolean;
   amfOpenclAvailable: boolean;
   effectiveHwAccel: HwAccelType;
   decodeHwAccel: HwAccelType;
@@ -667,11 +661,11 @@ function resolveDecodeStage(opts: {
   decoder: ReturnType<typeof decoderRegistry.resolve>;
   useVtMetalPath: boolean;
   useVtHwTonemap: boolean;
+  qsvOpenclTonemap: boolean;
 } {
   const {
     sourceVideoCodec,
     qsvNativeAvailable,
-    amfFullGpuAvailable,
     amfOpenclAvailable,
     effectiveHwAccel,
     decodeHwAccel,
@@ -688,6 +682,9 @@ function resolveDecodeStage(opts: {
   const args: string[] = [];
 
   const normalisedSourceCodec = normaliseSourceCodec(sourceVideoCodec);
+  // amfOpenclDecode computed once: reused below for the decoder pick and to
+  // skip the duplicate `ocl` init when the decoder already owns that device.
+  const amfOpenclDecode = amfOpenclAvailable && effectiveHwAccel === 'amf';
   // Opt into the qsv-native decoder when the qsv crop path is in use
   // (pre-flighted above so requestedHwAccelFor could keep us on QSV).
   // The default qsv decoder emits VAAPI surfaces — kept as the safe
@@ -702,11 +699,9 @@ function resolveDecodeStage(opts: {
           },
           effectiveHwAccel,
         ))
-      : (amfFullGpuAvailable || amfOpenclAvailable) &&
-          effectiveHwAccel === 'amf' &&
-          normalisedSourceCodec
-        ? // D3D11-native decode: the OpenCL zero-copy chain or the full-GPU
-          // scale_d3d11 case both stay on the device, no CPU round-trip.
+      : amfOpenclDecode && normalisedSourceCodec
+        ? // D3D11-native decode, pinned to the AMD adapter: scale_opencl/
+          // tonemap_opencl and the AMF encode share the device, no CPU round-trip.
           findAmfNativeDecoder(normalisedSourceCodec)
         : decoderRegistry.resolve(
             {
@@ -717,17 +712,9 @@ function resolveDecodeStage(opts: {
             // CPU; an unreported one keeps the h264 assumption.
             sourceVideoCodec && !normalisedSourceCodec ? 'none' : decodeHwAccel,
           );
-  // The zero-copy AMF OpenCL chain needs a named D3D11 device (`dx`) so
-  // OpenCL can derive from the same texture the decoder writes into.
-  const amfOpenclDecode =
-    amfOpenclAvailable && effectiveHwAccel === 'amf' && !!normalisedSourceCodec;
-  if (amfOpenclDecode) {
-    args.push(...amfD3d11OpenclInitArgs());
-  }
+  // The AMF descriptor's own buildInputArgs already pins the adapter and
+  // inits the OpenCL device (see d3d11va.ts); nothing more to add here.
   args.push(...decoder.buildInputArgs());
-  if (amfOpenclDecode) {
-    args.push('-hwaccel_device', D3D11VA_DEVICE_ALIAS);
-  }
   // A CPU decoder inits no device, yet the qsv encoder's filters need one.
   if (decoder.outputSurface === 'cpu' && effectiveHwAccel === 'qsv') {
     args.push(...qsvDeviceInitArgs(), '-filter_hw_device', 'qs');
@@ -793,8 +780,7 @@ function resolveDecodeStage(opts: {
   }
   // NVENC/AMF OpenCL tone-map: OpenCL as the default filter device so `hwupload`
   // lands on it, coexisting with the HW decode device (validated by the probe).
-  // `!amfOpenclDecode`: the zero-copy AMF chain already inited its own `ocl`
-  // device above (derived from the d3d11 decode), so skip this one.
+  // `!amfOpenclDecode`: the AMF decoder already owns an `ocl` device, skip this one.
   if (openclTonemap && !amfOpenclDecode) {
     args.push(...openclTonemapInitArgs());
   }
@@ -816,7 +802,13 @@ function resolveDecodeStage(opts: {
     }
   }
 
-  return { decodeArgs: args, decoder, useVtMetalPath, useVtHwTonemap };
+  return {
+    decodeArgs: args,
+    decoder,
+    useVtMetalPath,
+    useVtHwTonemap,
+    qsvOpenclTonemap,
+  };
 }
 
 /**
@@ -1069,7 +1061,6 @@ export function buildFfmpegArgs(
     tonemapPath,
     qsvNativeAvailable,
     useVaapiTonemap,
-    amfFullGpuAvailable,
     amfOpenclAvailable,
   } = resolveEncodePipeline(variant, {
     hwAccel,
@@ -1079,6 +1070,7 @@ export function buildFfmpegArgs(
     tonemapAlgo,
     sourceVideoCodec,
     dvNoBase,
+    sourceBitDepth,
   });
   // No encoder means the variant is unsupported on this host even after the
   // registry's CPU fallback.
@@ -1112,24 +1104,23 @@ export function buildFfmpegArgs(
   // needs to land for encode (qsv-native + vpp_qsv, vaapi + scale_vaapi, CPU +
   // hwdownload). `useVaapiTonemap` / `tonemapPath` / `qsvNativeAvailable` come
   // from resolveEncodePipeline above.
-  const { decodeArgs, decoder, useVtMetalPath, useVtHwTonemap } =
+  const { decodeArgs, decoder, useVtMetalPath, useVtHwTonemap, qsvOpenclTonemap } =
     resolveDecodeStage({
-    sourceVideoCodec,
-    qsvNativeAvailable,
-    amfFullGpuAvailable,
-    amfOpenclAvailable,
-    effectiveHwAccel,
-    decodeHwAccel,
-    sourceBitDepth,
-    encoderId: encoder.id,
-    tonemap: !!tonemap,
-    hasBurnInFilter: !!burnIn?.filter,
-    hasCrop: !!crop,
-    useVaapiTonemap,
-    openclTonemap,
-    tonemapPath,
-    dvNoBase,
-  });
+      sourceVideoCodec,
+      qsvNativeAvailable,
+      amfOpenclAvailable,
+      effectiveHwAccel,
+      decodeHwAccel,
+      sourceBitDepth,
+      encoderId: encoder.id,
+      tonemap: !!tonemap,
+      hasBurnInFilter: !!burnIn?.filter,
+      hasCrop: !!crop,
+      useVaapiTonemap,
+      openclTonemap,
+      tonemapPath,
+      dvNoBase,
+    });
   args.push(...decodeArgs);
 
   // Declaring the SDR colorimetry on the input (SDR sources only) keeps the
@@ -1216,9 +1207,6 @@ export function buildFfmpegArgs(
     dvNoBase,
     hasBurnIn: !!burnIn?.filter,
     hasCrop: !!crop,
-    // See isAmfOpenclPath: the amf-filters helper picks scale_opencl/
-    // tonemap_opencl on a d3d11 surface instead of the buggy scale_d3d11.
-    amfOpenclPath: amfOpenclAvailable && effectiveHwAccel === 'amf',
     hdrMetadata: sourceHdrMetadata,
     // Override to 'videotoolbox' when the Metal fast path is active —
     // the descriptor's static `outputSurface` is `'cpu'` because every
@@ -1259,6 +1247,8 @@ export function buildFfmpegArgs(
         bitDepth: variant.bitDepth,
         crop,
         framesOnGpu,
+        // AMF's decoder always owns `ocl`; QSV only when it tonemaps this way.
+        openclFilterDevice: effectiveHwAccel === 'amf' || qsvOpenclTonemap,
       }),
     );
   }

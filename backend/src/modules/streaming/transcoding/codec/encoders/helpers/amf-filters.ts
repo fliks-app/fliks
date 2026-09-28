@@ -1,4 +1,4 @@
-import type { EncoderInput } from '../../types';
+import type { EncoderInput, TonemapCurve } from '../../types';
 import { scaleEvenHeight } from './scale-filter';
 import { dvApplyDoviOpt } from '../../../ffmpeg-filter-graph';
 
@@ -8,16 +8,25 @@ export const amfVfEndsOnGpu = (i: EncoderInput): boolean =>
   i.inputSurface === 'd3d11';
 
 /** Zero-copy AMF chain: hwmap to OpenCL, scale (+ crop, + tonemap for HDR),
- *  hwmap back to D3D11. `reset_sar=1` fixes the SAR a hardware crop leaves wrong. */
-function amfOpenclFilter(
-  input: EncoderInput,
-  outputFormat: 'nv12' | 'p010le',
-): string {
-  const { target, filters, tonemap, tonemapCurve, dvNoBase } = input;
-  const w = target.width;
+ *  hwmap back to D3D11. Small params object (not `EncoderInput`) so the boot
+ *  probe can build the same `-vf` a real session would, with no fake session. */
+export function amfOpenclFilter(opts: {
+  width: number;
+  height: number;
+  cropStr: string;
+  tonemap: boolean;
+  tonemapCurve?: TonemapCurve;
+  dvNoBase?: boolean;
+  outputFormat: 'nv12' | 'p010le';
+}): string {
+  const { width, height, cropStr, tonemap, tonemapCurve, dvNoBase, outputFormat } =
+    opts;
   const curve = tonemapCurve ?? 'hable';
-  const crop = filters.cropStr ? `${filters.cropStr},` : '';
-  const scale = `scale_opencl=w=${w}:h=${target.height}:reset_sar=1`;
+  const crop = cropStr ? `${cropStr},` : '';
+  // reset_sar=1 only matters after a crop: it fixes the SAR the crop leaves
+  // wrong; on an uncropped anamorphic source it would squash the picture.
+  const resetSar = cropStr ? ':reset_sar=1' : '';
+  const scale = `scale_opencl=w=${width}:h=${height}${resetSar}`;
   // Tonemap: format left unset (p010 passthrough), tonemap_opencl sets it.
   const step = tonemap
     ? `${scale},tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=${curve}:desat=0:${dvApplyDoviOpt(dvNoBase)}`
@@ -25,13 +34,22 @@ function amfOpenclFilter(
   return `hwmap=derive_device=opencl:mode=read,${crop}${step},hwmap=derive_device=d3d11va:mode=write:reverse=1,format=d3d11`;
 }
 
-/** `-vf` for an 8-bit AMF encode. Zero-copy OpenCL on a D3D11 surface when
- *  `amfOpenclPath`; otherwise frames are pulled down and scaled on the CPU. */
+/** `-vf` for an 8-bit AMF encode. A D3D11 surface only ever comes from the
+ *  zero-copy decoder (see `isAmfOpenclPath`); otherwise frames are pulled
+ *  down and scaled on the CPU. */
 export function amfScaleFilter8bit(input: EncoderInput): string {
-  const { target, filters, tonemap, inputSurface, amfOpenclPath } = input;
+  const { target, filters, tonemap, tonemapCurve, dvNoBase, inputSurface } = input;
   const w = target.width;
-  if (inputSurface === 'd3d11' && amfOpenclPath) {
-    return amfOpenclFilter(input, 'nv12');
+  if (inputSurface === 'd3d11') {
+    return amfOpenclFilter({
+      width: w,
+      height: target.height,
+      cropStr: filters.cropStr,
+      tonemap,
+      tonemapCurve,
+      dvNoBase,
+      outputFormat: 'nv12',
+    });
   }
   const download =
     inputSurface === 'cpu'
@@ -46,10 +64,16 @@ export function amfScaleFilter8bit(input: EncoderInput): string {
 /** `-vf` for a 10-bit AMF HDR encode. No tonemap branch — a 10-bit encoder
  *  preserves HDR; tonemap-to-SDR sources are routed to the 8-bit rung. */
 export function amfScaleFilter10bit(input: EncoderInput): string {
-  const { target, filters, inputSurface, amfOpenclPath } = input;
+  const { target, filters, inputSurface } = input;
   const w = target.width;
-  if (inputSurface === 'd3d11' && amfOpenclPath) {
-    return amfOpenclFilter(input, 'p010le');
+  if (inputSurface === 'd3d11') {
+    return amfOpenclFilter({
+      width: w,
+      height: target.height,
+      cropStr: filters.cropStr,
+      tonemap: false,
+      outputFormat: 'p010le',
+    });
   }
   const download =
     inputSurface === 'cpu' ? '' : 'hwdownload,format=p010le,';

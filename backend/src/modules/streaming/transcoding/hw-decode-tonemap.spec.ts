@@ -13,6 +13,9 @@ jest.mock('./codec/cuda-tonemap-probe', () => ({
 jest.mock('./codec/amf-opencl-probe', () => ({
   isAmfOpenclEnabled: jest.fn(() => false),
 }));
+jest.mock('./codec/qsv-opencl-probe', () => ({
+  isQsvOpenclTonemapEnabled: jest.fn(() => false),
+}));
 
 import { buildFfmpegArgs } from './ffmpeg-args';
 import type { BuildFfmpegArgsOptions } from './ffmpeg-args';
@@ -20,9 +23,11 @@ import { resolveEncodePipeline } from './encode-pipeline';
 import type { CodecVariant } from './codec/types';
 import { isCudaTonemapEnabled } from './codec/cuda-tonemap-probe';
 import { isAmfOpenclEnabled } from './codec/amf-opencl-probe';
+import { isQsvOpenclTonemapEnabled } from './codec/qsv-opencl-probe';
 
 const mockCudaTonemap = isCudaTonemapEnabled as jest.Mock;
 const mockAmfOpencl = isAmfOpenclEnabled as jest.Mock;
+const mockQsvOpenclTonemap = isQsvOpenclTonemapEnabled as jest.Mock;
 
 const silentLog = {
   debug: () => {},
@@ -193,6 +198,7 @@ describe('buildFfmpegArgs: no-base Dolby Vision keeps the RPU', () => {
         tonemapAlgo: 'auto',
         sourceVideoCodec: 'hevc',
         dvNoBase: true,
+        sourceBitDepth: 10,
       },
     );
     expect(pipeline.effectiveHwAccel).toBe('qsv');
@@ -243,9 +249,11 @@ describe('buildFfmpegArgs: subtitle burn-in keeps the GPU pipeline', () => {
     'platform',
   )!;
   beforeEach(() => mockCudaTonemap.mockReturnValue(false));
-  afterEach(() =>
-    Object.defineProperty(process, 'platform', platformDescriptor),
-  );
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', platformDescriptor);
+    mockAmfOpencl.mockReturnValue(false);
+    mockQsvOpenclTonemap.mockReturnValue(false);
+  });
 
   it('NVENC: text burn-in keeps NVDEC + the tone-map, libass runs on the CPU tail', () => {
     const args = buildFfmpegArgs(
@@ -279,5 +287,44 @@ describe('buildFfmpegArgs: subtitle burn-in keeps the GPU pipeline', () => {
     expect(fc.match(/hwdownload/g)).toHaveLength(1);
     expect(fc).not.toContain('extra_hw_frames');
     expect(fc).toContain('[ov]format=yuv420p[vout]');
+  });
+
+  // The zero-copy chains repoint the default filter device to `ocl`, so a
+  // bare `hwupload` in the PGS composite would land there, not the encoder.
+  it('AMF + zero-copy probe on: PGS reupload targets d3d11va, not the ocl default', () => {
+    mockAmfOpencl.mockReturnValue(true);
+    Object.defineProperty(process, 'platform', {
+      value: 'win32',
+      configurable: true,
+    });
+    const args = buildFfmpegArgs(
+      opts({
+        hwAccel: 'amf',
+        tonemap: false,
+        burnIn: { type: 'image', filter: null, streamIndex: 3 },
+      }),
+      silentLog,
+    );
+    const fc = args[args.indexOf('-filter_complex') + 1];
+    expect(fc).toContain('hwupload=derive_device=d3d11va:extra_hw_frames=16');
+    expect(fc).not.toContain('hwupload=extra_hw_frames=16');
+  });
+
+  it('QSV Windows OpenCL tonemap: PGS reupload targets qsv, not the ocl default', () => {
+    mockQsvOpenclTonemap.mockReturnValue(true);
+    Object.defineProperty(process, 'platform', {
+      value: 'win32',
+      configurable: true,
+    });
+    const args = buildFfmpegArgs(
+      opts({
+        hwAccel: 'qsv',
+        burnIn: { type: 'image', filter: null, streamIndex: 3 },
+      }),
+      silentLog,
+    );
+    const fc = args[args.indexOf('-filter_complex') + 1];
+    expect(fc).toContain('hwupload=derive_device=qsv:extra_hw_frames=16');
+    expect(fc).not.toContain('hwupload=extra_hw_frames=16');
   });
 });

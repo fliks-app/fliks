@@ -876,6 +876,9 @@ export class StreamBuilderService {
       tonemapAlgo: this.activeStreamTracker.getTonemapAlgo(),
       sourceVideoCodec,
       dvNoBase: noBase,
+      // Mirrors the spawn's own derivation (transcoding.service.ts) so this
+      // stays the same resolver call with the same inputs.
+      sourceBitDepth: isSourceHdr || noBase ? 10 : 8,
     }).effectiveHwAccel;
 
     this.log.log(

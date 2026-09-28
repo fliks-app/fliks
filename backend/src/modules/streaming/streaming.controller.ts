@@ -86,6 +86,7 @@ import {
   isOpenclTonemapPath,
   isCudaTonemapPath,
 } from './transcoding/encode-pipeline';
+import { isAmfOpenclEnabled } from './transcoding/codec/amf-opencl-probe';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
@@ -1053,11 +1054,11 @@ export class StreamingController {
     const hwTonemap =
       response.hwAccel === 'qsv' || response.hwAccel === 'vaapi';
     const cudaTonemap = isCudaTonemapPath(!!response.tonemapping, response.hwAccel);
-    const openclTonemap = isOpenclTonemapPath(
-      !!response.tonemapping,
-      response.hwAccel,
-      dvNoBase,
-    );
+    // AMF's zero-copy chain has its own probe: report 'opencl' off it even
+    // when the CPU-bounce probe isOpenclTonemapPath reads failed.
+    const openclTonemap =
+      isOpenclTonemapPath(!!response.tonemapping, response.hwAccel, dvNoBase) ||
+      (response.hwAccel === 'amf' && isAmfOpenclEnabled());
     // VideoToolbox HW tone-map: scale_vt (no crop) or tonemap_videotoolbox
     // (crop); burn-in and no-base DV (RPU-blind either way) fall to CPU.
     const vtMetalTonemap =

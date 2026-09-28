@@ -5,6 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
 import { openclTonemapInitArgs } from '../hw-device';
+import { synthesiseHdrProbeSample } from './hdr-probe-sample';
 import type { HwAccelType } from '../types';
 
 const execFileAsync = promisify(execFile);
@@ -29,28 +30,7 @@ export async function runOpenclTonemapProbe(
     `fliks-opencl-tonemap-probe-${process.pid}.hevc`,
   );
   try {
-    // Synthesise a tiny HEVC Main10 PQ/BT.2020 clip — black frames are fine,
-    // we're only checking that the OpenCL tone-map filter graph plumbs.
-    await execFileAsync(
-      'ffmpeg',
-      [
-        '-hide_banner', '-loglevel', 'error', '-y',
-        '-f', 'lavfi',
-        '-i', 'nullsrc=size=320x180:rate=30,format=yuv420p10le',
-        '-frames:v', '4',
-        '-c:v', 'libx265',
-        '-color_primaries', 'bt2020',
-        '-color_trc', 'smpte2084',
-        '-colorspace', 'bt2020nc',
-        // Force the PQ transfer into the HEVC VUI — the -color_* flags alone
-        // don't reach the raw bitstream on some builds, and tonemap_opencl
-        // rejects a transfer=unknown source.
-        '-x265-params',
-        'repeat-headers=1:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc',
-        hdrSample,
-      ],
-      { timeout: 15_000 },
-    );
+    await synthesiseHdrProbeSample(hdrSample);
 
     // Mirror the session graph so a pass implies the real graph inits: HW
     // decode (NVDEC / d3d11va) coexisting with the OpenCL filter device. cuda

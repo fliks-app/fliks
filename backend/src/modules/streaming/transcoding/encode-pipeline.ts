@@ -2,20 +2,19 @@ import { requestedHwAccelFor } from './hw-detect';
 import { hostHasVaapi } from './hw-device';
 import { encoderRegistry } from './codec/encoders';
 import { isDecoderEnabled } from './codec/decoder-probe';
-import { findQsvNativeDecoder } from './codec/decoders';
+import { findQsvNativeDecoder, findAmfNativeDecoder } from './codec/decoders';
 import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
 import {
   isTonemapOpenclEnabled,
   isTonemapOpenclEnabledWithCrop,
 } from './codec/tonemap-opencl-probe';
 import { isQsvOpenclTonemapEnabled } from './codec/qsv-opencl-probe';
-import { isScaleD3d11Enabled } from './codec/scale-d3d11-probe';
 import { isAmfOpenclEnabled } from './codec/amf-opencl-probe';
 import { isOpenclTonemapEnabled } from './codec/opencl-tonemap-probe';
 import { isCudaTonemapEnabled } from './codec/cuda-tonemap-probe';
 import { resolveTonemapPath } from './tonemap-path';
 import { normaliseSourceCodec } from './codec/normalise';
-import type { CodecVariant } from './codec/types';
+import type { BitDepth, CodecVariant } from './codec/types';
 import type { HwAccelType, TonemapAlgo } from './types';
 
 /** NVENC's zero-copy HDR→SDR path, shared by `ffmpeg-args` and the
@@ -39,12 +38,6 @@ export function isOpenclTonemapPath(
   );
 }
 
-/** AMF's zero-copy D3D11↔OpenCL chain: scale and HDR tonemap both run on
- *  the decoder's D3D11 texture. Burn-in forces CPU frames, so it's excluded. */
-export function isAmfOpenclPath(hwAccel: string, burnIn: boolean): boolean {
-  return hwAccel === 'amf' && !burnIn && isAmfOpenclEnabled();
-}
-
 export interface EncodePipelineContext {
   /** Host-detected hwAccel (qsv / vaapi / nvenc / videotoolbox / none). */
   hwAccel: HwAccelType;
@@ -59,6 +52,9 @@ export interface EncodePipelineContext {
   /** Source has no HDR10/HLG base to fall back to (P5, or P10 with an
    *  unknown/0 compat id): see {@link dvHasNoBase}. */
   dvNoBase: boolean;
+  /** Source bit depth: gates the AMF native decoder (e.g. H.264 Hi10P
+   *  exceeds its 8-bit max) against a real source, not just its codec. */
+  sourceBitDepth: BitDepth;
 }
 
 export interface ResolvedEncodePipeline {
@@ -76,11 +72,8 @@ export interface ResolvedEncodePipeline {
   qsvCanCrop: boolean;
   /** tonemap_vaapi is the chosen tonemap step (the filter helpers' flag). */
   useVaapiTonemap: boolean;
-  /** Whole pipeline stays on the D3D11 device (d3d11 decode + scale_d3d11 +
-   *  AMF encode, zero-copy). Requires the scale_d3d11 filter (FFmpeg ≥ 8.1). */
-  amfFullGpuAvailable: boolean;
-  /** AMF's zero-copy D3D11↔OpenCL chain is available (see
-   *  {@link isAmfOpenclPath}). Covers SDR and HDR, with or without crop. */
+  /** Whole pipeline stays on the D3D11 device (d3d11 decode + OpenCL
+   *  scale/tonemap + AMF encode, zero-copy). Covers SDR and HDR, cropped or not. */
   amfOpenclAvailable: boolean;
 }
 
@@ -113,26 +106,16 @@ export function resolveEncodePipeline(
     !ctx.burnIn &&
     qsvNativeDecoder != null &&
     isDecoderEnabled(qsvNativeDecoder.id);
-  // Full-GPU AMF: d3d11 decode → scale_d3d11 → AMF encode, zero-copy. Scoped to
-  // the clean SDR case (crop needs an off-GPU pass, HDR→SDR uses the CPU/OpenCL
-  // tonemap chain). Gated on the d3d11-native decode probe AND the scale_d3d11
-  // filter probe (the filter only exists in FFmpeg ≥ 8.1 and some GPUs reject
-  // its output texture) so an unavailable filter degrades to the CPU scale
-  // instead of crashing every session.
-  const amfFullGpuAvailable =
-    ctx.hwAccel === 'amf' &&
-    !ctx.burnIn &&
-    !ctx.crop &&
-    !ctx.tonemap &&
-    normalisedSourceCodec != null &&
-    isDecoderEnabled(`${normalisedSourceCodec}_d3d11va_native_decode`) &&
-    isScaleD3d11Enabled();
-  // Zero-copy AMF OpenCL: same native d3d11 decoder, but covers crop and
-  // tonemap too (scale_opencl/tonemap_opencl instead of the buggy scale_d3d11).
+  // Zero-copy AMF OpenCL: d3d11 decode → scale_opencl/tonemap_opencl → AMF
+  // encode. maxBitDepth catches a source over the codec's usual depth (Hi10P).
+  const amfDecoder =
+    normalisedSourceCodec != null ? findAmfNativeDecoder(normalisedSourceCodec) : null;
   const amfOpenclAvailable =
-    isAmfOpenclPath(ctx.hwAccel, ctx.burnIn) &&
-    normalisedSourceCodec != null &&
-    isDecoderEnabled(`${normalisedSourceCodec}_d3d11va_native_decode`);
+    ctx.hwAccel === 'amf' &&
+    isAmfOpenclEnabled() &&
+    amfDecoder != null &&
+    ctx.sourceBitDepth <= amfDecoder.maxBitDepth &&
+    isDecoderEnabled(amfDecoder.id);
   // `auto` picks opencl when the boot probe enabled it, vaapi otherwise; the
   // explicit overrides bypass the probe. Drives both the qsv-native gate and
   // the useVaapiTonemap flag so the two stay in sync.
@@ -202,7 +185,6 @@ export function resolveEncodePipeline(
     qsvNativeAvailable,
     qsvCanCrop,
     useVaapiTonemap,
-    amfFullGpuAvailable,
     amfOpenclAvailable,
   };
 }
