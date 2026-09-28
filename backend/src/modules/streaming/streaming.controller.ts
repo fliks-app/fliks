@@ -1421,8 +1421,8 @@ export class StreamingController {
       : live?.audioPlan
         ? [live.audioPlan]
         : undefined;
-    // A P5 remux has no base layer: its standalone CODECS string (always PQ,
-    // even with an unspecified VUI) replaces the probed one, never alongside it.
+    // A no-base DV remux (P5, or P10.0) has no base layer: its standalone
+    // CODECS string (always PQ) replaces the probed one, never alongside it.
     const remuxDvStandalone =
       includeRemux && live?.dolbyVision ? dvStandaloneCodecs(v) : null;
     const playlist = this.transcodingService.generateMasterPlaylist({

@@ -1,6 +1,8 @@
 import Foundation
 import Capacitor
 import AVFoundation
+import VideoToolbox
+import CoreMedia
 
 @objc(HdrPlugin)
 public class HdrPlugin: CAPPlugin, CAPBridgedPlugin {
@@ -12,9 +14,22 @@ public class HdrPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func isSupported(_ call: CAPPluginCall) {
         let supported = AVPlayer.eligibleForHDRPlayback
-        // iOS has no public per-codec Dolby Vision probe; DV playback tracks HDR
-        // eligibility on AVPlayer (HDR-eligible iPhone/iPad/Apple TV models decode
-        // DV P5/P8.1), so the HDR signal doubles as the DV one.
-        call.resolve(["supported": supported, "dolbyVision": supported])
+        // iOS has no public per-codec Dolby Vision probe, so HDR eligibility
+        // stands in for profile 5; 8 and 10 need iOS 27 (AV1 needs its hardware too).
+        var profiles: [Int] = []
+        if supported {
+            profiles.append(5)
+            if #available(iOS 27.0, *) {
+                profiles.append(8)
+                if VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1) {
+                    profiles.append(10)
+                }
+            }
+        }
+        call.resolve([
+            "supported": supported,
+            "dolbyVision": supported,
+            "dolbyVisionProfiles": profiles,
+        ])
     }
 }

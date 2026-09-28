@@ -2,11 +2,12 @@
 process.env.UV_THREADPOOL_SIZE = '16';
 
 import { NestFactory, Reflector } from '@nestjs/core';
-import { ClassSerializerInterceptor, Logger, ValidationPipe } from '@nestjs/common';
+import { ClassSerializerInterceptor, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { AppModule } from './app.module';
 import { LogBufferService } from './modules/scheduler/log-buffer.service';
 import { ClientAbortExceptionFilter } from './common/filters/client-abort-exception.filter';
+import { TolerantValidationPipe } from './common/pipes/tolerant-validation.pipe';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -74,7 +75,7 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
   app.useGlobalPipes(
-    new ValidationPipe({
+    new TolerantValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,

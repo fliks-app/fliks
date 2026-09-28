@@ -56,8 +56,12 @@ export interface User {
 /** Public = instant follow + shared content; private = follow on approval. */
 export type ProfileVisibility = 'public' | 'private';
 
+/** A fresh /auth/me, login or register response: `features` rides along but
+ *  is split off before the user touches storage (see `adoptLiveUser`). */
+type LiveUser = User & { features?: string[] };
+
 interface LoginResponse {
-  user: User;
+  user: LiveUser;
   accessToken?: string;
   refreshToken?: string;
   /** UNIX seconds. */
@@ -122,6 +126,9 @@ export class AuthService {
   private readonly cookieAuth = !IS_STANDALONE_BUNDLE;
 
   private readonly _user = signal<User | null>(null);
+  /** Live-only: set from a fresh /auth/me, login or register response, never
+   *  from a stored session, so a downgraded server is never sent a stale flag. */
+  private readonly _serverFeatures = signal<string[]>([]);
   private _accessToken: string | null = null;
   private _refreshToken: string | null = null;
   /** In-flight refresh request shared across concurrent 401s so we only
@@ -191,6 +198,19 @@ export class AuthService {
     () => new Set(this.sessions.sessions().map((s) => s.serverUrl)),
   );
 
+  /** Whether the connected server advertises a capability flag. False until
+   *  a live response confirms it. */
+  hasServerFeature(feature: string): boolean {
+    return this._serverFeatures().includes(feature);
+  }
+
+  /** Split a live response's `features` out before the rest touches storage. */
+  private adoptLiveUser(user: LiveUser): User {
+    const { features, ...rest } = user;
+    this._serverFeatures.set(features ?? []);
+    return rest;
+  }
+
   /** Check if the current user has a specific permission. */
   hasPermission(perm: string): boolean {
     const u = this._user();
@@ -233,7 +253,8 @@ export class AuthService {
     const res = await firstValueFrom(
       this.http.post<LoginResponse>('/api/auth/login', { username, password }),
     );
-    await this.startSession(res.user, {
+    const user = this.adoptLiveUser(res.user);
+    await this.startSession(user, {
       accessToken: res.accessToken ?? null,
       refreshToken: res.refreshToken ?? '',
       refreshExpiresAt: secondsToMs(res.refreshTokenExpiresAt),
@@ -310,7 +331,8 @@ export class AuthService {
     // The interceptor reads these for the /auth/me below; startSession then
     // makes them the stored session.
     this.adoptSessionTokens(accessToken, refreshToken ?? null);
-    const user = await firstValueFrom(this.http.get<User>('/api/auth/me'));
+    const raw = await firstValueFrom(this.http.get<LiveUser>('/api/auth/me'));
+    const user = this.adoptLiveUser(raw);
     await this.startSession(user, {
       accessToken,
       refreshToken: refreshToken ?? '',
@@ -356,14 +378,15 @@ export class AuthService {
     }
 
     try {
-      const user = await firstValueFrom(this.http.get<User>('/api/auth/me'));
+      const raw = await firstValueFrom(this.http.get<LiveUser>('/api/auth/me'));
       // The server may answer as somebody else — a cookie that outlived its
       // account, a token that never belonged to this one.
-      if (user.id !== userId) {
+      if (raw.id !== userId) {
         await this.sessions.remove(serverUrl, userId);
         this.clearInMemorySession();
         return 'expired';
       }
+      const user = this.adoptLiveUser(raw);
       this._user.set(user);
       await this.sessions.updateUser(serverUrl, userId, user);
       return 'resumed';
@@ -573,7 +596,7 @@ export class AuthService {
 
   register(username: string, password: string, email?: string) {
     return firstValueFrom(
-      this.http.post<User>('/api/auth/register', { username, password, email }),
+      this.http.post<LiveUser>('/api/auth/register', { username, password, email }),
     );
   }
 
@@ -583,7 +606,8 @@ export class AuthService {
     const snapshot = this.loadPersistedSession();
     if (snapshot) this._user.set(snapshot);
     try {
-      const user = await firstValueFrom(this.http.get<User>('/api/auth/me'));
+      const raw = await firstValueFrom(this.http.get<LiveUser>('/api/auth/me'));
+      const user = this.adoptLiveUser(raw);
       this._user.set(user);
       await this.rememberUser(user);
     } catch {
@@ -601,7 +625,8 @@ export class AuthService {
    */
   async refreshUser(): Promise<void> {
     try {
-      const user = await firstValueFrom(this.http.get<User>('/api/auth/me'));
+      const raw = await firstValueFrom(this.http.get<LiveUser>('/api/auth/me'));
+      const user = this.adoptLiveUser(raw);
       this._user.set(user);
       await this.rememberUser(user);
     } catch {
@@ -630,8 +655,9 @@ export class AuthService {
       return of(true);
     }
 
-    return this.http.get<User>('/api/auth/me').pipe(
-      tap((u) => {
+    return this.http.get<LiveUser>('/api/auth/me').pipe(
+      tap((raw) => {
+        const u = this.adoptLiveUser(raw);
         this._user.set(u);
         void this.rememberUser(u);
       }),
@@ -647,8 +673,9 @@ export class AuthService {
    *  rotation means the credentials are dead; network errors are ignored so the
    *  snapshot keeps the app usable offline. */
   private validateSessionInBackground(): void {
-    this.http.get<User>('/api/auth/me').subscribe({
-      next: (user) => {
+    this.http.get<LiveUser>('/api/auth/me').subscribe({
+      next: (raw) => {
+        const user = this.adoptLiveUser(raw);
         this._user.set(user);
         void this.rememberUser(user);
       },
@@ -727,6 +754,7 @@ export class AuthService {
     this._streamTokenInFlight = null;
     this.adoptSessionTokens(null, null);
     this._user.set(null);
+    this._serverFeatures.set([]);
     this._sessionEpoch.update((n) => n + 1);
   }
 

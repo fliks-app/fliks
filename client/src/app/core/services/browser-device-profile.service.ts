@@ -4,6 +4,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 import { PlayerSettingsService } from './player-settings.service';
 import { DeviceService } from './device.service';
 import { ServerConfigService } from './server-config.service';
+import { AuthService } from './auth.service';
 import { ENGINE_TRAITS, engineKindFor } from './engine-traits';
 import { SystemInfoService } from './system-info.service';
 import { applyTizenAudioCodecs, tizenSupportsHevc } from './tizen-capabilities';
@@ -11,7 +12,13 @@ import { getDeviceName } from '../utils/device-info';
 import { environment } from '../../../environments/environment';
 
 interface HdrPlugin {
-  isSupported(): Promise<{ supported: boolean; dolbyVision?: boolean }>;
+  isSupported(): Promise<{
+    supported: boolean;
+    dolbyVision?: boolean;
+    /** iOS only: the DV profiles this device is eligible to decode AND
+     *  present, already resolved natively (see HdrPlugin.swift). */
+    dolbyVisionProfiles?: number[];
+  }>;
 }
 const Hdr = registerPlugin<HdrPlugin>('Hdr');
 
@@ -36,6 +43,9 @@ interface NativeVideoCaps {
    *  device's MediaCodec VideoCapabilities. Absent on platforms whose plugin
    *  doesn't report it, leaving the codec unconstrained as before. */
   resolutions?: Record<string, { width: number; height: number }>;
+  /** Android only: DV profiles the device's decoders report (not yet
+   *  intersected with the display; see `VideoCapabilitiesPlugin.java`). */
+  dolbyVisionProfiles?: number[];
 }
 interface VideoCapabilitiesPlugin {
   getSupported(): Promise<NativeVideoCaps>;
@@ -101,6 +111,9 @@ export interface DeviceProfile {
    *  panel type); webOS OLEDs assume it when the panel is HDR. Web/Shaka and
    *  Tizen stay false. Absent = false on the backend. */
   supportsDolbyVision?: boolean;
+  /** DV profiles this device can decode AND present, e.g. `[5, 8]`. Sent only
+   *  when the server advertises `deviceProfileExtensions` and non-empty. */
+  dolbyVisionProfiles?: number[];
   /** Client device category — selects the backend bitrate ladder.
    *  Capacitor native (iOS/Android app) → 'mobile'; web (incl. Cast sender) → 'desktop'. */
   deviceType: 'mobile' | 'desktop';
@@ -195,9 +208,13 @@ export class BrowserDeviceProfileService {
   private readonly device = inject(DeviceService);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly systemInfo = inject(SystemInfoService);
+  private readonly auth = inject(AuthService);
   private cachedProfile: DeviceProfile | null = null;
   private nativeHdr: boolean | null = null;
   private nativeDolbyVision: boolean | null = null;
+  /** iOS reports the resolved profile list directly; Android leaves this
+   *  null and the list comes from `nativeVideo.dolbyVisionProfiles` instead. */
+  private nativeDvProfiles: number[] | null = null;
   private nativeAudio: {
     codecs: string[];
     maxChannels: number;
@@ -213,6 +230,7 @@ export class BrowserDeviceProfileService {
         .then((r) => {
           this.nativeHdr = r.supported;
           this.nativeDolbyVision = r.dolbyVision ?? false;
+          this.nativeDvProfiles = r.dolbyVisionProfiles ?? null;
           this.cachedProfile = null;
         })
         .catch(() => { this.nativeHdr = false; this.nativeDolbyVision = false; });
@@ -251,7 +269,14 @@ export class BrowserDeviceProfileService {
     // overlay the current value on every call rather than baking a possibly-empty
     // value into the cache.
     const systemName = this.systemInfo.systemName() || undefined;
-    if (!needsOverride) return { ...this.cachedProfile, systemName };
+    // An unadvertised server 400s on an unknown field; an empty list is
+    // redundant with the boolean fallback. Omit it in both cases.
+    const dolbyVisionProfiles =
+      this.auth.hasServerFeature('deviceProfileExtensions') &&
+      this.cachedProfile.dolbyVisionProfiles?.length
+        ? this.cachedProfile.dolbyVisionProfiles
+        : undefined;
+    if (!needsOverride) return { ...this.cachedProfile, systemName, dolbyVisionProfiles };
     return {
       ...this.cachedProfile,
       systemName,
@@ -260,6 +285,7 @@ export class BrowserDeviceProfileService {
       supportsDolbyVision: forceDisableHdr
         ? false
         : this.cachedProfile.supportsDolbyVision,
+      dolbyVisionProfiles: forceDisableHdr ? undefined : dolbyVisionProfiles,
       useTs: useTsOverride,
     };
   }
@@ -546,18 +572,19 @@ export class BrowserDeviceProfileService {
     // The web (Shaka) path crops the same way in CSS, see `applyWebVideoCrop`.
     const cropsBlackBarsLocally = this.device.isDesktopNative() || isWeb;
 
-    // Dolby Vision passthrough capability, gated under supportsHdr (DV ⊆ HDR, so
-    // it never outlives HDR and the forceDisableHdr override stays consistent).
-    // iOS/Android report it from the native probe (DV HW decoder / DV panel
-    // type). Non-native targets (webOS `<video>`, desktop/web browsers) probe the
-    // DV codec strings directly: LG webOS pipelines answer canPlayType for
-    // dvh1/dvhe on DV panels, while browsers and HDR10-only TVs return empty and
-    // correctly stay false (no green/purple from a copied P5).
+    // DV profiles this device can decode AND present, gated under supportsHdr.
+    // iOS/Android resolve it natively; web/webOS probe per codec string.
+    const dolbyVisionProfiles: number[] = !supportsHdr
+      ? []
+      : Capacitor.isNativePlatform()
+        ? this.nativeDolbyVision
+          ? (this.nativeDvProfiles ?? this.nativeVideo?.dolbyVisionProfiles ?? [5, 8])
+          : []
+        : this.probeDolbyVisionProfiles(video, hasMSE);
+    // A [10]-only list must not read as P5/P8-capable to an old server that
+    // only understands this boolean.
     const supportsDolbyVision =
-      supportsHdr &&
-      (Capacitor.isNativePlatform()
-        ? this.nativeDolbyVision ?? false
-        : this.probeDolbyVision(video, hasMSE));
+      dolbyVisionProfiles.includes(5) || dolbyVisionProfiles.includes(8);
 
     const useTs = readUseTsOverride();
     if (useTs) console.warn('[DeviceProfile] useTs override active');
@@ -576,6 +603,7 @@ export class BrowserDeviceProfileService {
       tonemapsHdrLocally,
       cropsBlackBarsLocally,
       supportsDolbyVision,
+      dolbyVisionProfiles,
       deviceType: Capacitor.isNativePlatform() ? 'mobile' : 'desktop',
       deviceName: getDeviceName(),
       appVersion: isWeb ? undefined : environment.version,
@@ -631,16 +659,20 @@ export class BrowserDeviceProfileService {
     return !!video.canPlayType(full);
   }
 
-  /** Probe single-layer Dolby Vision decode (profiles 5 and 8, dvh1/dvhe tags).
-   *  Returns true only if the pipeline actually claims a DV codec — so DV panels
-   *  report true and HDR10-only displays / browsers report false. */
-  private probeDolbyVision(video: HTMLVideoElement, hasMSE: boolean): boolean {
-    return (
+  /** Probe single-layer Dolby Vision decode per profile (5, 8, 10), included
+   *  only if the pipeline actually claims that codec string. */
+  private probeDolbyVisionProfiles(video: HTMLVideoElement, hasMSE: boolean): number[] {
+    const profiles: number[] = [];
+    if (
       this.testCodec(video, hasMSE, 'video/mp4', 'dvh1.05.06') ||
+      this.testCodec(video, hasMSE, 'video/mp4', 'dvhe.05.06')
+    ) profiles.push(5);
+    if (
       this.testCodec(video, hasMSE, 'video/mp4', 'dvh1.08.06') ||
-      this.testCodec(video, hasMSE, 'video/mp4', 'dvhe.05.06') ||
       this.testCodec(video, hasMSE, 'video/mp4', 'dvhe.08.06')
-    );
+    ) profiles.push(8);
+    if (this.testCodec(video, hasMSE, 'video/mp4', 'dav1.10.06')) profiles.push(10);
+    return profiles;
   }
 
   /** Turn the native plugin's per-codec decode ceiling into a codec-condition
