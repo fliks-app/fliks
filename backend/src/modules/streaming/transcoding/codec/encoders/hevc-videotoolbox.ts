@@ -53,18 +53,15 @@ export const hevcVideotoolbox: EncoderDescriptor = {
   },
 };
 
-/** VT HEVC Main10 HDR10. The builder is implemented end-to-end, but
- *  `hevc_videotoolbox` has a documented history of silently degrading
- *  Main10 inputs to 8-bit on some FFmpeg builds (lisamelton report
- *  #106). Until the silent-fallback fix lands and ships in our pinned
- *  FFmpeg, `supportsHdrMetadata()` returns false so the registry routes
- *  HDR rungs to libx265 on Apple platforms. */
+/** VT HEVC Main10 HDR10 — Mac 2017+ (T2 / Apple Silicon). `hevc_videotoolbox`
+ *  has no `-master_display`/`-max_cll` option; it carries the source's HDR10
+ *  static metadata through from the input AVFrame side data instead. */
 export const hevcVideotoolboxHdr10: EncoderDescriptor = {
   id: 'hevc_videotoolbox_main10',
   hwAccel: 'videotoolbox',
   variant: { codec: 'hevc', bitDepth: 10, hdr: 'HDR10' },
   supports: () => true,
-  supportsHdrMetadata: () => false,
+  supportsHdrMetadata: () => true,
   codecString: (target: EncoderTarget) => hevcMain10CodecString(target),
   buildArgs(input: EncoderInput): string[] {
     const { target, early, filters } = input;
@@ -83,7 +80,7 @@ export const hevcVideotoolboxHdr10: EncoderDescriptor = {
       '-maxrate',
       bitrate,
       '-vf',
-      `${filters.cpuCropPrefix}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=p010le`,
+      `${filters.cpuCropPrefix}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=p010le${filters.burnInFilter}`,
       '-g',
       String(target.gopSize),
       '-keyint_min',
@@ -97,7 +94,8 @@ export const hevcVideotoolboxHdr10: EncoderDescriptor = {
   },
 };
 
-/** VT HEVC Main10 HLG variant — same silent-fallback caveat as HDR10. */
+/** VT HEVC Main10 HLG variant — same encoder path as HDR10, only the
+ *  transfer characteristic differs. */
 export const hevcVideotoolboxHlg: EncoderDescriptor = hlgFromHdr10(
   'hevc_videotoolbox_hlg',
   hevcVideotoolboxHdr10,

@@ -126,3 +126,26 @@ describe('pickPrimaryVariant, rejectCopy deprioritises the source codec', () => 
     }
   });
 });
+
+describe('pickPrimaryVariant on videotoolbox (macOS)', () => {
+  it('picks HEVC/Main10/HDR10 for an HDR AV1 source and an HEVC-only HDR client', () => {
+    const profile = {
+      deviceType: 'mobile',
+      supportsHdr: true,
+      directPlayProfiles: [
+        {
+          containers: ['mp4'],
+          videoCodecs: ['hevc', 'hvc1', 'h264', 'avc1'],
+          audioCodecs: ['aac'],
+        },
+      ],
+      codecConditions: [],
+    } as unknown as DeviceProfileDto;
+    const v = pickPrimaryVariant(
+      { width: 3840, height: 1608, hdr: 'HDR10', codec: 'av1' },
+      profile,
+      'videotoolbox',
+    );
+    expect(v).toEqual({ codec: 'hevc', bitDepth: 10, hdr: 'HDR10' });
+  });
+});
