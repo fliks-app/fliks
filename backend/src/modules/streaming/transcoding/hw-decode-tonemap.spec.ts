@@ -104,7 +104,8 @@ describe('buildFfmpegArgs: no-base Dolby Vision keeps the RPU', () => {
     expect(cli).toMatch(/-c:v (h264|hevc)_qsv\b/);
     expect(cli).not.toContain('libx264');
     expect(cli).not.toContain('libx265');
-    expect(cli).not.toContain('apply_dovi');
+    // No-base DV source (P5): the RPU is trustworthy, so apply it.
+    expect(cli).toContain('apply_dovi=1');
   });
 
   it('NVENC: tonemaps a no-base DV source via tonemap_opencl on an _nvenc encoder', () => {
@@ -112,7 +113,23 @@ describe('buildFfmpegArgs: no-base Dolby Vision keeps the RPU', () => {
     const cli = args.join(' ');
     expect(cli).toContain('-hwaccel cuda');
     expect(cli).toContain('tonemap_opencl');
+    expect(cli).toContain('apply_dovi=1');
     expect(cli).toMatch(/-c:v \w+_nvenc\b/);
+  });
+
+  it('NVENC: tonemaps a has-base DV source (P8.1) without applying its RPU', () => {
+    const args = buildFfmpegArgs(
+      opts({
+        hwAccel: 'nvenc',
+        sourceDvProfile: 8,
+        sourceDvBlSignalCompatId: 1,
+      }),
+      silentLog,
+    );
+    const cli = args.join(' ');
+    expect(cli).toContain('tonemap_opencl');
+    // Has-base (P8): the base layer is tone-mapped, no P7-FEL RPU carried over.
+    expect(cli).toContain('apply_dovi=0');
   });
 
   it('resolveEncodePipeline reports the same accel/encoder buildFfmpegArgs spawns', () => {

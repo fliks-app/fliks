@@ -1,4 +1,5 @@
 import type { EncoderInput } from '../../types';
+import { dvApplyDoviOpt } from '../../../ffmpeg-filter-graph';
 
 /** No decoder emits a literal qsv surface: both platforms decode natively,
  *  elsewhere, so `vpp_qsv` always needs this hwmap first. */
@@ -27,7 +28,7 @@ function qsvCropOpts(input: EncoderInput): string {
  *  because libva exposes more scaling-quality knobs (`extra_hw_frames`,
  *  native nv12 output) on every gen we care about. */
 export function qsvScaleFilter8bit(input: EncoderInput): string {
-  const { target, filters, tonemap, tonemapPath } = input;
+  const { target, filters, tonemap, tonemapPath, dvNoBase } = input;
   const w = target.width;
   const curve = input.tonemapCurve ?? 'hable';
   if (input.inputSurface === 'qsv' || input.inputSurface === 'd3d11') {
@@ -41,14 +42,14 @@ export function qsvScaleFilter8bit(input: EncoderInput): string {
         return (
           `${QSV_HWMAP}vpp_qsv=${cropOpts}w=${w}:h=${target.height}:format=p010le,` +
           `hwmap=derive_device=opencl,` +
-          `tonemap_opencl=tonemap=${curve}:t=bt709:m=bt709:p=bt709:format=nv12,` +
+          `tonemap_opencl=tonemap=${curve}:t=bt709:m=bt709:p=bt709:format=nv12:${dvApplyDoviOpt(dvNoBase)},` +
           `hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`
         );
       }
       return (
         `${QSV_HWMAP}vpp_qsv=${cropOpts}w=${w}:h=${target.height}:format=p010le,` +
         `hwmap=derive_device=opencl:mode=read,` +
-        `tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=${curve}:desat=0,` +
+        `tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=${curve}:desat=0:${dvApplyDoviOpt(dvNoBase)},` +
         `hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,` +
         `format=qsv`
       );

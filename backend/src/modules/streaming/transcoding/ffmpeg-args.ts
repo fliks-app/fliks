@@ -1179,6 +1179,7 @@ export function buildFfmpegArgs(
     tonemap,
     tonemapPath,
     tonemapCurve,
+    dvNoBase,
     hasBurnIn: !!burnIn?.filter,
     hasCrop: !!crop,
     hdrMetadata: sourceHdrMetadata,

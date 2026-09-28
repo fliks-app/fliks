@@ -1,5 +1,6 @@
 import { createHash } from 'crypto';
 import type { BitDepth, HdrFormat, VideoCodec } from './codec/types';
+import { dvHasNoBase } from './codec/dolby-vision';
 import { varStreamMapLayout } from './audio-layout';
 import { audioEncoderName, DEFAULT_AUDIO_PLAN } from './audio-encode';
 import type { SessionLayoutContext } from './session-profile';
@@ -55,8 +56,9 @@ export interface PlaybackProfile {
   /** {@link SessionContext.dolbyVision}: a DV session writes a `dvvC` box the
    *  init segment otherwise lacks, so it can never share a non-DV cache dir. */
   dolbyVision: boolean;
-  /** The session tone-maps a Dolby Vision source (any profile, RPU applied):
-   *  different pixels than a plain HDR→SDR tone-map, its own cache dir. */
+  /** The session tone-maps a no-base Dolby Vision source (RPU applied):
+   *  different pixels than a plain HDR→SDR tone-map, its own cache dir.
+   *  A has-base source (P7/P8) tone-maps its base layer, same as HDR10. */
   dvTonemap: boolean;
 }
 
@@ -156,6 +158,8 @@ export function buildPlaybackProfileFromContext(
     formatStart: ctx?.sourceFormatStart ?? ctx?.sourceStartPts ?? 0,
     sourceVersion: ctx?.sourceVersion ?? null,
     dolbyVision: ctx?.dolbyVision ?? false,
-    dvTonemap: !!ctx?.tonemap && ctx?.sourceDvProfile != null,
+    dvTonemap:
+      !!ctx?.tonemap &&
+      dvHasNoBase(ctx?.sourceDvProfile, ctx?.sourceDvBlSignalCompatId),
   };
 }

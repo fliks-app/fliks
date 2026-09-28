@@ -59,9 +59,22 @@ describe('qsvScaleFilter8bit', () => {
       'hwmap=derive_device=qsv,' +
         'vpp_qsv=w=1920:h=804:format=p010le,' +
         'hwmap=derive_device=opencl,' +
-        'tonemap_opencl=tonemap=hable:t=bt709:m=bt709:p=bt709:format=nv12,' +
+        'tonemap_opencl=tonemap=hable:t=bt709:m=bt709:p=bt709:format=nv12:apply_dovi=0,' +
         'hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv',
     );
+  });
+
+  it('sets apply_dovi=1 on the d3d11 OpenCL chain for a no-base DV source', () => {
+    expect(
+      qsvScaleFilter8bit(
+        input({
+          inputSurface: 'd3d11',
+          tonemap: true,
+          tonemapPath: 'opencl',
+          dvNoBase: true,
+        }),
+      ),
+    ).toContain(':format=nv12:apply_dovi=1,');
   });
 
   it('keeps the zero-copy QSV↔OpenCL chain for a Linux qsv surface', () => {
@@ -73,10 +86,23 @@ describe('qsvScaleFilter8bit', () => {
       'hwmap=derive_device=qsv,' +
         'vpp_qsv=w=1920:h=804:format=p010le,' +
         'hwmap=derive_device=opencl:mode=read,' +
-        'tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=hable:desat=0,' +
+        'tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=hable:desat=0:apply_dovi=0,' +
         'hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,' +
         'format=qsv',
     );
+  });
+
+  it('sets apply_dovi=1 on the Linux OpenCL chain for a no-base DV source', () => {
+    expect(
+      qsvScaleFilter8bit(
+        input({
+          inputSurface: 'qsv',
+          tonemap: true,
+          tonemapPath: 'opencl',
+          dvNoBase: true,
+        }),
+      ),
+    ).toContain(':desat=0:apply_dovi=1,');
   });
 
   it('honours the configured curve on the d3d11 OpenCL chain', () => {
