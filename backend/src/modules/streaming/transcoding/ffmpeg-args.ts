@@ -1259,8 +1259,8 @@ export function buildFfmpegArgs(
   };
   args.push(...encoder.buildArgs(encoderInput));
 
-  // A tail setparams beats frame tags reliably (fixes VAAPI/QSV/AMF tonemap
-  // crashes); METADATA_ONLY (vf_setparams.c) makes it safe on hw frames too.
+  // A tail setparams beats frame tags reliably (fixes VAAPI/QSV tonemap crashes);
+  // METADATA_ONLY (vf_setparams.c) tags hardware frames too, AMF included.
   const sdrTagStep =
     !isHdrOutput &&
     !useVtMetalPath &&

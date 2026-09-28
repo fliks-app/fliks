@@ -446,7 +446,6 @@ describe('buildFfmpegArgs: subtitle burn-in keeps the GPU pipeline', () => {
     const fc = args[args.indexOf('-filter_complex') + 1];
     expect(fc.match(/hwdownload/g)).toHaveLength(1);
     expect(fc).not.toContain('extra_hw_frames');
-    // setparams now runs on AMF too (see the sdrTagStep gate), tagged last.
     expect(fc).toContain(
       '[ov]format=yuv420p,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv[vout]',
     );

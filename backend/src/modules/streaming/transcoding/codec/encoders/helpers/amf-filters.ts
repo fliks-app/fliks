@@ -5,7 +5,7 @@ import { dvApplyDoviOpt } from '../../../ffmpeg-filter-graph';
 /** Whether the AMF `-vf` chain below lands on a D3D11 surface rather than CPU
  *  frames. Shared with the PGS burn-in composite (`hwdownload` before compositing). */
 export const amfVfEndsOnGpu = (i: EncoderInput): boolean =>
-  i.inputSurface === 'd3d11';
+  i.inputSurface === 'd3d11' && !i.hasBurnIn;
 
 /** Zero-copy AMF chain: hwmap to OpenCL, scale (+ crop, + tonemap for HDR),
  *  hwmap back to D3D11. Small params object (not `EncoderInput`) so the boot

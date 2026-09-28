@@ -86,8 +86,8 @@ import {
   isOpenclTonemapPath,
   isVtTonemapPath,
   isCudaTonemapPath,
+  resolveEncodePipeline,
 } from './transcoding/encode-pipeline';
-import { isAmfOpenclEnabled } from './transcoding/codec/amf-opencl-probe';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
@@ -1103,14 +1103,28 @@ export class StreamingController {
       resolved.mediaFile.streamInfo?.video?.[0]?.dvProfile,
       resolved.mediaFile.streamInfo?.video?.[0]?.dvBlSignalCompatId,
     );
+    const isSourceHdr = !!resolved.mediaFile.streamInfo?.video?.[0]?.hdrFormat;
     const hwTonemap =
       response.hwAccel === 'qsv' || response.hwAccel === 'vaapi';
     const cudaTonemap = isCudaTonemapPath(!!response.tonemapping, response.hwAccel);
-    // AMF's zero-copy chain has its own probe: report 'opencl' off it even
-    // when the CPU-bounce probe isOpenclTonemapPath reads failed.
+    // Same resolver + inputs as the spawn (stream-builder.service.ts), so the
+    // reported path can't drift from whether the AMF zero-copy chain actually runs.
+    const amfOpenclAvailable =
+      response.hwAccel === 'amf' &&
+      !!videoVariant &&
+      resolveEncodePipeline(videoVariant, {
+        hwAccel: response.hwAccel,
+        crop: hasCrop,
+        burnIn: !!burnIn?.filter,
+        tonemap: !!response.tonemapping,
+        tonemapAlgo: ss.tonemapAlgo,
+        sourceVideoCodec: resolved.mediaFile.streamInfo?.video?.[0]?.codec,
+        dvNoBase,
+        sourceBitDepth: isSourceHdr || dvNoBase ? 10 : 8,
+      }).amfOpenclAvailable;
     const openclTonemap =
       isOpenclTonemapPath(!!response.tonemapping, response.hwAccel, dvNoBase) ||
-      (response.hwAccel === 'amf' && isAmfOpenclEnabled());
+      amfOpenclAvailable;
     const vtMetalTonemap = isVtTonemapPath(
       !!response.tonemapping,
       response.hwAccel,

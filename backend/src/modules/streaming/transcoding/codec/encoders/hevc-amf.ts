@@ -62,8 +62,7 @@ export const hevcAmfHdr10: EncoderDescriptor = {
       'transcoding',
       '-profile:v',
       'main10',
-      // d3d11 is a hw pix_fmt already; pinning a software one forces an
-      // impossible auto-convert (same failure shape as av1_qsv/format=qsv).
+      // d3d11 input: the -vf picks the format; a software pin can't convert hw frames.
       ...(inputSurface === 'd3d11' ? [] : ['-pix_fmt', 'p010le']),
       '-quality',
       'balanced',
