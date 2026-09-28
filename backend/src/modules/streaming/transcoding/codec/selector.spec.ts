@@ -25,7 +25,7 @@ function nativeProfile(): DeviceProfileDto {
   } as unknown as DeviceProfileDto;
 }
 
-describe('pickPrimaryVariant — client decode-resolution gate', () => {
+describe('pickPrimaryVariant; client decode-resolution gate', () => {
   it('falls back to HEVC for a 4K AV1 source when the AV1 decoder caps at 2048', () => {
     const v = pickPrimaryVariant(
       { width: 3840, height: 2076, hdr: 'HDR10', codec: 'av1' },
@@ -36,7 +36,7 @@ describe('pickPrimaryVariant — client decode-resolution gate', () => {
     expect(v.hdr).toBe('HDR10');
   });
 
-  it('un-trips for a rotated (portrait) 4K frame — long/short edges compared', () => {
+  it('un-trips for a rotated (portrait) 4K frame; long/short edges compared', () => {
     const v = pickPrimaryVariant(
       { width: 2076, height: 3840, hdr: 'HDR10', codec: 'av1' },
       nativeProfile(),
@@ -124,5 +124,28 @@ describe('pickPrimaryVariant, rejectCopy deprioritises the source codec', () => 
     } finally {
       (isEncoderEnabled as jest.Mock).mockReturnValue(true);
     }
+  });
+});
+
+describe('pickPrimaryVariant on videotoolbox (macOS)', () => {
+  it('picks HEVC/Main10/HDR10 for an HDR AV1 source and an HEVC-only HDR client', () => {
+    const profile = {
+      deviceType: 'mobile',
+      supportsHdr: true,
+      directPlayProfiles: [
+        {
+          containers: ['mp4'],
+          videoCodecs: ['hevc', 'hvc1', 'h264', 'avc1'],
+          audioCodecs: ['aac'],
+        },
+      ],
+      codecConditions: [],
+    } as unknown as DeviceProfileDto;
+    const v = pickPrimaryVariant(
+      { width: 3840, height: 1608, hdr: 'HDR10', codec: 'av1' },
+      profile,
+      'videotoolbox',
+    );
+    expect(v).toEqual({ codec: 'hevc', bitDepth: 10, hdr: 'HDR10' });
   });
 });
