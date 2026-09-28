@@ -8,6 +8,9 @@ jest.mock('./codec/vpp-qsv-probe', () => ({
 jest.mock('./codec/qsv-opencl-probe', () => ({
   isQsvOpenclTonemapEnabled: jest.fn(() => false),
 }));
+jest.mock('./codec/vulkan-tonemap-probe', () => ({
+  isVulkanTonemapEnabled: jest.fn(() => false),
+}));
 
 import { resolveTonemapPath } from './tonemap-path';
 import {
@@ -16,11 +19,13 @@ import {
 } from './codec/tonemap-opencl-probe';
 import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
 import { isQsvOpenclTonemapEnabled } from './codec/qsv-opencl-probe';
+import { isVulkanTonemapEnabled } from './codec/vulkan-tonemap-probe';
 
 const openclNoCrop = isTonemapOpenclEnabled as jest.Mock;
 const openclCrop = isTonemapOpenclEnabledWithCrop as jest.Mock;
 const vppQsv = isVppQsvTonemapEnabled as jest.Mock;
 const qsvOpencl = isQsvOpenclTonemapEnabled as jest.Mock;
+const vulkanTonemap = isVulkanTonemapEnabled as jest.Mock;
 
 describe('resolveTonemapPath', () => {
   beforeEach(() => {
@@ -28,6 +33,7 @@ describe('resolveTonemapPath', () => {
     openclCrop.mockReturnValue(false);
     vppQsv.mockReturnValue(false);
     qsvOpencl.mockReturnValue(false);
+    vulkanTonemap.mockReturnValue(false);
   });
   it('passes explicit picks through unchanged, on any platform', () => {
     expect(resolveTonemapPath('qsv', { hasCrop: false }, 'win32')).toBe('qsv');
@@ -101,9 +107,31 @@ describe('resolveTonemapPath', () => {
 
   it('dvNoBase falls through to the normal (RPU-blind) resolution when the bridge is down', () => {
     // resolveEncodePipeline compensates: it forces the whole pipeline off HW
-    // whenever dvNoBase's tonemapPath isn't 'opencl', see its own spec.
+    // whenever dvNoBase's tonemapPath isn't 'opencl'/'vulkan', see its own spec.
     expect(
       resolveTonemapPath('vaapi', { hasCrop: false, dvNoBase: true }, 'linux'),
+    ).toBe('vaapi');
+  });
+
+  it('dvNoBase falls to vulkan (VAAPI host) when the opencl bridge is down but the vulkan probe passed', () => {
+    vulkanTonemap.mockReturnValue(true);
+    expect(
+      resolveTonemapPath('vaapi', { hasCrop: false, dvNoBase: true }, 'linux'),
+    ).toBe('vulkan');
+  });
+
+  it('dvNoBase prefers opencl over vulkan when both probes passed', () => {
+    openclNoCrop.mockReturnValue(true);
+    vulkanTonemap.mockReturnValue(true);
+    expect(
+      resolveTonemapPath('vaapi', { hasCrop: false, dvNoBase: true }, 'linux'),
+    ).toBe('opencl');
+  });
+
+  it('never picks vulkan on Windows (no VAAPI device) even if the probe somehow passed', () => {
+    vulkanTonemap.mockReturnValue(true);
+    expect(
+      resolveTonemapPath('vaapi', { hasCrop: false, dvNoBase: true }, 'win32'),
     ).toBe('vaapi');
   });
 });

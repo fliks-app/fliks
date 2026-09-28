@@ -3,12 +3,18 @@ import type { EncoderInput } from '../../types';
 /** Build the `-vf` value for an 8-bit VAAPI encode (h264 / hevc / av1_vaapi).
  *  All three encoders share this scale/tonemap chain on VAAPI surfaces; only
  *  their codec/profile/tag args differ. Branches:
+ *   - `tonemapVulkan`: libplacebo does its own scale + RPU-aware tonemap on
+ *     a Vulkan surface, so it replaces `scale_vaapi` (and `hwCropPrefix`)
+ *     entirely instead of prefixing it.
  *   - `tonemapVaapi`: tonemap on the VAAPI VPP, in place.
  *   - `tonemapOpencl`: OpenCL tonemap, mapped back onto a VAAPI surface.
  *   - default (crop/scale only): `scale_vaapi` → nv12. */
 export function vaapiScaleFilter8bit(input: EncoderInput): string {
   const { target, filters } = input;
   const w = target.width;
+  if (filters.tonemapVulkan) {
+    return filters.tonemapVulkan;
+  }
   if (filters.tonemapVaapi) {
     return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapVaapi}`;
   }

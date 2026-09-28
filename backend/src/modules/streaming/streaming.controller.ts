@@ -1044,10 +1044,13 @@ export class StreamingController {
             ? 'videotoolbox'
             : 'cpu'
       : null;
-    // The curve is a `tonemap`/`tonemap_opencl` operator, so it only applies to
-    // the opencl and CPU paths — the vpp_qsv / tonemap_vaapi LUTs ignore it.
+    // The curve is a `tonemap`/`tonemap_opencl`/libplacebo `tonemapping`
+    // operator, so it applies to the opencl, vulkan and CPU paths; the
+    // vpp_qsv / tonemap_vaapi LUTs ignore it.
     const tonemapCurve =
-      tonemapAlgo === 'opencl' || tonemapAlgo === 'cpu'
+      tonemapAlgo === 'opencl' ||
+      tonemapAlgo === 'vulkan' ||
+      tonemapAlgo === 'cpu'
         ? resolveTonemapCurve()
         : undefined;
 

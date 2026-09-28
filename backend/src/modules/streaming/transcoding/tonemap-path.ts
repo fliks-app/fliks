@@ -4,6 +4,7 @@ import {
 } from './codec/tonemap-opencl-probe';
 import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
 import { isQsvOpenclTonemapEnabled } from './codec/qsv-opencl-probe';
+import { isVulkanTonemapEnabled } from './codec/vulkan-tonemap-probe';
 import { hostHasVaapi } from './hw-device';
 import type { TonemapAlgo } from './types';
 
@@ -21,11 +22,14 @@ import type { TonemapAlgo } from './types';
  *    QSV is VAAPI-backed, so `'vaapi'` stays a valid on-GPU tone-map.
  *  - Explicit picks (`'vaapi'` / `'qsv'` / `'opencl'`) bypass the
  *    probe and trust the admin to know their hardware.
+ *  - `'vulkan'` is never picked here except for a no-base DV source: it
+ *    is the RPU-aware GPU fallback when the OpenCL bridge is down, not
+ *    a general HDR10/HLG path (`'auto'` for those is unchanged).
  *
  *  Shared between `ffmpeg-args` (which builds the filter chain) and
  *  the playback-info DTO (which surfaces the post-resolution value to
  *  the stats overlay) so the two never drift. */
-export type ResolvedTonemapPath = 'vaapi' | 'opencl' | 'qsv';
+export type ResolvedTonemapPath = 'vaapi' | 'opencl' | 'qsv' | 'vulkan';
 
 /** Windows QSV OpenCL is the CPU-bounce path (its own probe); elsewhere it's
  *  the VAAPI-derived bridge. */
@@ -43,8 +47,13 @@ export function resolveTonemapPath(
   platform: NodeJS.Platform = process.platform,
 ): ResolvedTonemapPath {
   // A no-base DV source has no HDR10/HLG fallback the RPU-blind vaapi/qsv
-  // tonemap can read, so the OpenCL bridge wins over the admin's pick.
-  if (opts.dvNoBase && openclBridgeOk(opts.hasCrop, platform)) return 'opencl';
+  // tonemap can read, so the OpenCL bridge wins over the admin's pick;
+  // the Vulkan (libplacebo) GPU path is the next choice when that bridge
+  // is down, ahead of falling to the CPU (see resolveEncodePipeline).
+  if (opts.dvNoBase) {
+    if (openclBridgeOk(opts.hasCrop, platform)) return 'opencl';
+    if (hostHasVaapi(platform) && isVulkanTonemapEnabled()) return 'vulkan';
+  }
   if (algo === 'auto') {
     if (openclBridgeOk(opts.hasCrop, platform)) return 'opencl';
     // No VAAPI device (Windows): 'vaapi' isn't a QSV path, so prefer the

@@ -28,6 +28,10 @@ export interface VideoFilterContext {
   tonemap: boolean;
   /** tonemap_vaapi is the chosen tone-map step (vs opencl / CPU). */
   useVaapiTonemap: boolean;
+  /** libplacebo (Vulkan) is the chosen tone-map step: the RPU-aware GPU
+   *  fallback for a no-base DV source when the OpenCL bridge is down (see
+   *  `resolveTonemapPath`). Mutually exclusive with `useVaapiTonemap`. */
+  useVulkanTonemap?: boolean;
   /** Source bit depth — picks the crop round-trip pixel format (10-bit → p010le
    *  so the HDR colour space survives the hwdownload → crop → hwupload trip). */
   sourceBitDepth: number;
@@ -57,10 +61,12 @@ export interface VideoFilterContext {
  *    → hwupload) for paths that crop off-GPU; the round-trip format matches the
  *    source bit depth so 10-bit HDR isn't silently clamped to 8-bit before the
  *    tone-map runs.
- *  - tone-map: three mutually-exclusive variants — opencl (vpp_qsv → hwmap
- *    opencl → tonemap_opencl → hwmap qsv), vaapi (tonemap_vaapi), and CPU
- *    (float → tonemap mobius → yuv420p). Burn-in forces the CPU path (libass
- *    needs CPU buffers), so the HW tone-maps are gated on no burn-in.
+ *  - tone-map: four mutually-exclusive variants; opencl (vpp_qsv → hwmap
+ *    opencl → tonemap_opencl → hwmap qsv), vaapi (tonemap_vaapi), vulkan
+ *    (hwmap drm → libplacebo → hwmap vaapi, the no-base DV GPU fallback
+ *    when the opencl bridge is down), and CPU (float → tonemap mobius →
+ *    yuv420p). Burn-in forces the CPU path (libass needs CPU buffers), so
+ *    the HW tone-maps are gated on no burn-in.
  */
 export function buildVideoFilters(
   ctx: VideoFilterContext,
@@ -70,6 +76,7 @@ export function buildVideoFilters(
     burnIn,
     tonemap,
     useVaapiTonemap,
+    useVulkanTonemap,
     sourceBitDepth,
     dvNoBase,
     tonemapCurve,
@@ -83,12 +90,26 @@ export function buildVideoFilters(
   const cpuCropPrefix = cropStr ? `${cropStr},` : '';
   const burnInFilter = burnIn?.filter ? `,${burnIn.filter}` : '';
   const tonemapOpencl =
-    tonemap && !useVaapiTonemap && !burnIn?.filter
+    tonemap && !useVaapiTonemap && !useVulkanTonemap && !burnIn?.filter
       ? `,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=${curve}:desat=0:${dvApplyDoviOpt(dvNoBase)}`
       : '';
   const tonemapVaapi =
     useVaapiTonemap && !burnIn?.filter
       ? ',tonemap_vaapi=format=nv12:t=bt709:p=bt709:m=bt709'
+      : '';
+  // Vulkan (libplacebo) tone-map: VAAPI decode → hwmap onto DRM → libplacebo
+  // (scale + tonemap + RPU) → hwmap back onto VAAPI for the encode. Crop is
+  // a libplacebo option (`crop_*`), not the hwdownload/crop/hwupload
+  // round-trip the other paths use; a Vulkan filter device can't derive a
+  // VAAPI surface for a CPU-side crop. `apply_dolbyvision` is libplacebo's
+  // name for the same apply-the-RPU rule as `dvApplyDoviOpt`.
+  const tonemapVulkan =
+    useVulkanTonemap && !burnIn?.filter
+      ? `hwmap=derive_device=drm,format=drm_prime,libplacebo=${
+          cropStr
+            ? `crop_w=${crop!.width}:crop_h=${crop!.height}:crop_x=${crop!.x}:crop_y=${crop!.y}:`
+            : ''
+        }w=${scaleWidth}:h=-2:upscaler=none:downscaler=none:format=bgra:tonemapping=${curve}:peak_detect=0:color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=pc:apply_dolbyvision=${dvNoBase ? 1 : 0},format=vulkan,hwmap=derive_device=vaapi,format=vaapi,scale_vaapi=format=nv12:out_range=tv`
       : '';
   // CPU tonemap chain: HDR (PQ/HLG BT.2020) → SDR (BT.709). The opening zscale
   // linearises the source transfer AND downscales to the output width in one
@@ -127,6 +148,7 @@ export function buildVideoFilters(
     hwCropPrefix,
     burnInFilter,
     tonemapVaapi,
+    tonemapVulkan,
     tonemapOpencl,
     tonemapCpu,
   };

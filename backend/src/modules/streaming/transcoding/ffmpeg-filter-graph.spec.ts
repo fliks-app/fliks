@@ -17,6 +17,7 @@ describe('buildVideoFilters', () => {
       hwCropPrefix: '',
       burnInFilter: '',
       tonemapVaapi: '',
+      tonemapVulkan: '',
       tonemapOpencl: '',
       tonemapCpu: '',
     });
@@ -98,6 +99,42 @@ describe('buildVideoFilters', () => {
     const f = buildVideoFilters({ ...base, tonemap: true, useVaapiTonemap: true });
     expect(f.tonemapVaapi).toContain('tonemap_vaapi=');
     expect(f.tonemapOpencl).toBe('');
+  });
+
+  it('vulkan tone-map when useVulkanTonemap: apply_dolbyvision=0 without dvNoBase', () => {
+    const f = buildVideoFilters({
+      ...base,
+      tonemap: true,
+      useVulkanTonemap: true,
+    });
+    expect(f.tonemapVulkan).toContain('libplacebo=');
+    expect(f.tonemapVulkan).toContain('apply_dolbyvision=0');
+    expect(f.tonemapVulkan).toContain('format=vulkan,hwmap=derive_device=vaapi');
+    expect(f.tonemapOpencl).toBe('');
+    expect(f.tonemapVaapi).toBe('');
+  });
+
+  it('vulkan tone-map applies the RPU (apply_dolbyvision=1) for a no-base DV source', () => {
+    const f = buildVideoFilters({
+      ...base,
+      tonemap: true,
+      useVulkanTonemap: true,
+      dvNoBase: true,
+    });
+    expect(f.tonemapVulkan).toContain('apply_dolbyvision=1');
+  });
+
+  it('vulkan crop goes into libplacebo crop_* options, not a hwdownload round-trip', () => {
+    const f = buildVideoFilters({
+      ...base,
+      tonemap: true,
+      useVulkanTonemap: true,
+      crop: { width: 1920, height: 800, x: 0, y: 140 },
+    });
+    expect(f.tonemapVulkan).toContain(
+      'crop_w=1920:crop_h=800:crop_x=0:crop_y=140:',
+    );
+    expect(f.tonemapVulkan).not.toContain('hwdownload');
   });
 
   it('burn-in forces CPU tone-map (HW tone-maps suppressed)', () => {

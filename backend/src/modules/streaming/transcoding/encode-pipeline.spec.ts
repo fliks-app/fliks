@@ -4,6 +4,7 @@ import type { CodecVariant } from './codec/types';
 import { isScaleD3d11Enabled } from './codec/scale-d3d11-probe';
 import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
 import { isTonemapOpenclEnabled } from './codec/tonemap-opencl-probe';
+import { isVulkanTonemapEnabled } from './codec/vulkan-tonemap-probe';
 
 jest.mock('./codec/scale-d3d11-probe', () => ({
   isScaleD3d11Enabled: jest.fn(() => false),
@@ -15,14 +16,19 @@ jest.mock('./codec/tonemap-opencl-probe', () => ({
   isTonemapOpenclEnabled: jest.fn(() => false),
   isTonemapOpenclEnabledWithCrop: jest.fn(() => false),
 }));
+jest.mock('./codec/vulkan-tonemap-probe', () => ({
+  isVulkanTonemapEnabled: jest.fn(() => false),
+}));
 
 const mockScaleD3d11 = isScaleD3d11Enabled as jest.Mock;
 const mockVppQsvTonemap = isVppQsvTonemapEnabled as jest.Mock;
 const mockTonemapOpencl = isTonemapOpenclEnabled as jest.Mock;
+const mockVulkanTonemap = isVulkanTonemapEnabled as jest.Mock;
 
 beforeEach(() => {
   mockVppQsvTonemap.mockReturnValue(false);
   mockTonemapOpencl.mockReturnValue(false);
+  mockVulkanTonemap.mockReturnValue(false);
 });
 
 const SDR_H264: CodecVariant = { codec: 'h264', bitDepth: 8, hdr: null };
@@ -97,6 +103,28 @@ describe('resolveEncodePipeline — Windows QSV routing', () => {
     expect(r.qsvNativeAvailable).toBe(true);
     expect(r.requestedHwAccel).toBe('qsv');
     expect(r.effectiveHwAccel).toBe('qsv');
+  });
+});
+
+describe('resolveEncodePipeline: Vulkan (libplacebo) tonemap', () => {
+  it('keeps a no-base DV source on VAAPI (not CPU) when the vulkan probe passed', () => {
+    mockVulkanTonemap.mockReturnValue(true);
+    const r = resolveEncodePipeline(
+      SDR_H264,
+      ctx({
+        hwAccel: 'vaapi',
+        tonemap: true,
+        tonemapAlgo: 'vaapi',
+        sourceVideoCodec: 'hevc',
+        dvNoBase: true,
+      }),
+      'linux',
+    );
+    expect(r.tonemapPath).toBe('vulkan');
+    expect(r.requestedHwAccel).toBe('vaapi');
+    expect(r.effectiveHwAccel).toBe('vaapi');
+    // libplacebo is a distinct filter step from tonemap_vaapi.
+    expect(r.useVaapiTonemap).toBe(false);
   });
 });
 

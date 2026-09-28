@@ -60,6 +60,7 @@ import {
 } from './codec/tonemap-opencl-probe';
 import { runOpenclTonemapProbe } from './codec/opencl-tonemap-probe';
 import { runQsvOpenclTonemapProbe } from './codec/qsv-opencl-probe';
+import { runVulkanTonemapProbe } from './codec/vulkan-tonemap-probe';
 import { runScaleD3d11Probe } from './codec/scale-d3d11-probe';
 import {
   generateMasterPlaylist,
@@ -201,6 +202,12 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     // headless).
     if (this.detectedHwAccel === 'nvenc' || this.detectedHwAccel === 'amf') {
       void runOpenclTonemapProbe(this.log, this.detectedHwAccel);
+    }
+    // Vulkan (libplacebo) GPU tone-map for a no-base DV source on a VAAPI
+    // host (AMD/Intel Linux): the alternative to the CPU tonemapx fallback
+    // when the OpenCL bridge is down. Linux-only; no VAAPI device elsewhere.
+    if (this.detectedHwAccel === 'vaapi' && process.platform === 'linux') {
+      void runVulkanTonemapProbe(this.log);
     }
     // Zero-copy AMD GPU scale for the AMF encode (scale_d3d11, needs FFmpeg
     // ≥ 8.1 and a GPU that accepts its output texture). Probed so an unavailable

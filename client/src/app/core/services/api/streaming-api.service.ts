@@ -36,11 +36,18 @@ export interface PlaybackInfoResponse {
    *  SUPPLEMENTAL-CODECS remux); false on a transcode, which drops DV. */
   dolbyVision?: boolean;
   /** Tone-map mechanism the backend actually runs: a HW path
-   *  (`'vaapi'` / `'opencl'` / `'qsv'`) on QSV/VAAPI encoders, or
+   *  (`'vaapi'` / `'opencl'` / `'qsv'` / `'vulkan'`) on QSV/VAAPI encoders, or
    *  `'cpu'` for the CPU chain (NVENC / libx26x / VideoToolbox
    *  fallback). Null when no tone-mapping pass runs on this session. */
-  tonemapAlgo?: 'vaapi' | 'opencl' | 'qsv' | 'videotoolbox' | 'cpu' | null;
-  /** Tone-map curve, set for the `opencl` and `cpu` paths (the LUTs ignore it). */
+  tonemapAlgo?:
+    | 'vaapi'
+    | 'opencl'
+    | 'qsv'
+    | 'vulkan'
+    | 'videotoolbox'
+    | 'cpu'
+    | null;
+  /** Tone-map curve, set for the `opencl`, `vulkan` and `cpu` paths (the LUTs ignore it). */
   tonemapCurve?: 'hable' | 'mobius' | 'reinhard';
   /** Cibles par rung (transcodage). */
   transcodeBitrateByQuality?: Record<

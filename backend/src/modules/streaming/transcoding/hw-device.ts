@@ -71,6 +71,24 @@ export function hostHasVaapi(
   return platform !== 'win32';
 }
 
+/** DRM + VAAPI + Vulkan device chain for the libplacebo tone-map: the decoder
+ *  stays on VAAPI, `hwmap=derive_device=drm` bridges the surface into
+ *  libplacebo's Vulkan filter device, then back onto VAAPI for the encode.
+ *  `-filter_hw_device vk` makes Vulkan the default so `hwmap` with no
+ *  explicit device still resolves. Linux only (needs libdrm + Vulkan). */
+export function vulkanTonemapInitArgs(): string[] {
+  return [
+    '-init_hw_device',
+    `drm=dr:${vaapiRenderNode()}`,
+    '-init_hw_device',
+    `vaapi=${VAAPI_DEVICE_ALIAS}@dr`,
+    '-init_hw_device',
+    'vulkan=vk@dr',
+    '-filter_hw_device',
+    'vk',
+  ];
+}
+
 /** OpenCL device + filter selector for the NVENC/CPU standalone tonemap
  *  chain (`hwupload,tonemap_opencl,hwdownload`). Defaults to `ocl` (auto-pick
  *  the first usable platform — the NVIDIA GPU on an NVENC host). Set

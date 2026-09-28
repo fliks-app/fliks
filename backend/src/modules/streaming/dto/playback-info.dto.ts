@@ -125,15 +125,24 @@ export interface PlaybackInfoResponse {
 
   /** Tone-map mechanism the session actually runs. `'vaapi'` / `'opencl'`
    *  / `'qsv'` for QSV/VAAPI encoders (after `auto` resolution + boot
-   *  probe); `'videotoolbox'` for the macOS `scale_vt` Metal path; `'cpu'`
-   *  for the CPU zscale chain (NVENC / libx26x / VideoToolbox with a
-   *  burn-in or crop). `null` when no tone-mapping pass runs. Stats overlays
-   *  show this value, not the (encoder-agnostic) admin pick. */
-  tonemapAlgo?: 'vaapi' | 'opencl' | 'qsv' | 'videotoolbox' | 'cpu' | null;
+   *  probe); `'vulkan'` for the libplacebo GPU path (a no-base DV source
+   *  when the opencl bridge is down); `'videotoolbox'` for the macOS
+   *  `scale_vt` Metal path; `'cpu'` for the CPU zscale chain (NVENC /
+   *  libx26x / VideoToolbox with a burn-in or crop). `null` when no
+   *  tone-mapping pass runs. Stats overlays show this value, not the
+   *  (encoder-agnostic) admin pick. */
+  tonemapAlgo?:
+    | 'vaapi'
+    | 'opencl'
+    | 'qsv'
+    | 'vulkan'
+    | 'videotoolbox'
+    | 'cpu'
+    | null;
 
-  /** Tone-map curve (`hable` / `mobius` / `reinhard`), set only when
-   *  `tonemapAlgo === 'cpu'`. Surfaced so the overlay names the exact
-   *  curve in use. */
+  /** Tone-map curve (`hable` / `mobius` / `reinhard`), set for the opencl,
+   *  vulkan and CPU paths. Surfaced so the overlay names the exact curve
+   *  in use. */
   tonemapCurve?: 'hable' | 'mobius' | 'reinhard';
 
   /**

@@ -7,11 +7,18 @@ jest.mock('./codec/tonemap-opencl-probe', () => ({
   isTonemapOpenclEnabled: jest.fn(() => true),
   isTonemapOpenclEnabledWithCrop: jest.fn(() => true),
 }));
+jest.mock('./codec/vulkan-tonemap-probe', () => ({
+  isVulkanTonemapEnabled: jest.fn(() => true),
+}));
 
 import { buildFfmpegArgs } from './ffmpeg-args';
 import type { BuildFfmpegArgsOptions } from './ffmpeg-args';
 import { resolveEncodePipeline } from './encode-pipeline';
 import type { CodecVariant } from './codec/types';
+import {
+  isTonemapOpenclEnabled,
+  isTonemapOpenclEnabledWithCrop,
+} from './codec/tonemap-opencl-probe';
 
 const silentLog = {
   debug: () => {},
@@ -148,5 +155,52 @@ describe('buildFfmpegArgs: no-base Dolby Vision keeps the RPU', () => {
     );
     expect(pipeline.effectiveHwAccel).toBe('qsv');
     expect(args.join(' ')).toContain(`-c:v ${pipeline.encoder?.id}`);
+  });
+});
+
+// AMD/Intel Linux with no OpenCL bridge: the Vulkan (libplacebo) path is the
+// RPU-aware GPU fallback instead of dropping a no-base DV source to CPU.
+describe('buildFfmpegArgs: no-base Dolby Vision on the Vulkan path', () => {
+  const openclNoCrop = isTonemapOpenclEnabled as jest.Mock;
+  const openclCrop = isTonemapOpenclEnabledWithCrop as jest.Mock;
+  beforeEach(() => {
+    openclNoCrop.mockReturnValue(false);
+    openclCrop.mockReturnValue(false);
+  });
+  afterEach(() => {
+    openclNoCrop.mockReturnValue(true);
+    openclCrop.mockReturnValue(true);
+  });
+
+  it('P5 on a VAAPI host: drm/vaapi/vulkan device chain, libplacebo tonemap, vaapi encode', () => {
+    const args = buildFfmpegArgs(
+      opts({ hwAccel: 'vaapi', sourceDvProfile: 5 }),
+      silentLog,
+    );
+    const cli = args.join(' ');
+    expect(cli).toContain('-init_hw_device drm=dr:/dev/dri/renderD128');
+    expect(cli).toContain('-init_hw_device vaapi=va@dr');
+    expect(cli).toContain('-init_hw_device vulkan=vk@dr');
+    expect(cli).toContain('-filter_hw_device vk');
+    expect(cli).toContain('-hwaccel vaapi');
+    expect(cli).toMatch(/-c:v (h264|hevc)_vaapi\b/);
+    const vf = vfOf(args);
+    expect(vf).toContain('hwmap=derive_device=drm,format=drm_prime,libplacebo=');
+    // No-base DV source (P5): the RPU is trustworthy, so apply it.
+    expect(vf).toContain('apply_dolbyvision=1');
+  });
+
+  it('P5 with crop: libplacebo crop_* options, no hwdownload round-trip', () => {
+    const args = buildFfmpegArgs(
+      opts({
+        hwAccel: 'vaapi',
+        sourceDvProfile: 5,
+        crop: { width: 1920, height: 800, x: 0, y: 140 },
+      }),
+      silentLog,
+    );
+    const vf = vfOf(args);
+    expect(vf).toContain('crop_w=1920:crop_h=800:crop_x=0:crop_y=140:');
+    expect(vf).not.toContain('hwdownload');
   });
 });
