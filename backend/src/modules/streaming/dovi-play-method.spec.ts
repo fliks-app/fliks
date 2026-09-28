@@ -65,6 +65,13 @@ const dvProfile8OnlyClient: DeviceProfileDto = {
   dolbyVisionProfiles: [8],
 } as never;
 
+// Lists profile 7, so its raw P7 decoder is trusted with the dual-layer file.
+const dvProfile7Client: DeviceProfileDto = {
+  ...hdrHevcClient,
+  supportsDolbyVision: true,
+  dolbyVisionProfiles: [7],
+} as never;
+
 // Lists profile 10 and can't raw-play MKV, so a P10.0 AV1 source remuxes.
 const dvProfile10Av1Client: DeviceProfileDto = {
   containers: ['mp4'],
@@ -227,6 +234,17 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
     const r = svc().evaluate(resolved(5, 0, undefined, 6), dvProfile8OnlyClient, 'tok');
     expect(r.response.playMethod).toBe('Transcode');
     expect(r.response.tonemapping).toBe(true);
+  });
+
+  it('remuxes raw P7 to HDR10 base for an HDR client that does not list profile 7', () => {
+    const r = svc().evaluate(resolved(7, 1, true, 6), dvHevcClient, 'tok');
+    expect(r.response.playMethod).toBe('DirectStream');
+    expect(r.response.dolbyVision).toBeFalsy();
+  });
+
+  it('DirectPlays raw P7 for a client that lists profile 7', () => {
+    const r = svc().evaluate(resolved(7, 1, true, 6), dvProfile7Client, 'tok');
+    expect(r.response.playMethod).toBe('DirectPlay');
   });
 
   it('remuxes P10.0 (dav1.10.LL standalone) for a client that lists profile 10', () => {

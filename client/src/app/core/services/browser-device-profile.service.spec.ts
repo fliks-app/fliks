@@ -178,4 +178,14 @@ describe('BrowserDeviceProfileService: dolbyVisionProfiles gating', () => {
     expect(service.getProfile().dolbyVisionProfiles).toEqual([5, 8, 10]);
     vi.unstubAllGlobals();
   });
+
+  it('adds profile 7 for the desktop shell, mpv decodes raw dual-layer P7', () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('probably');
+    vi.stubGlobal('matchMedia', () => ({ matches: true }));
+    const desktopDevice = { ...device, isDesktopNative: () => true } as DeviceService;
+    const service = configure(desktopDevice, { hasServerFeature: () => true });
+    expect(service.getProfile().dolbyVisionProfiles).toEqual([5, 8, 10, 7]);
+    expect(service.getProfile().supportsDolbyVision).toBe(true);
+    vi.unstubAllGlobals();
+  });
 });

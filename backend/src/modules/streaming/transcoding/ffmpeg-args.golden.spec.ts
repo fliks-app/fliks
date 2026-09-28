@@ -1765,6 +1765,49 @@ describe('buildRemuxArgs — golden (characterization)', () => {
     expect(args[args.indexOf('-tag:v') + 1]).toBe('hvc1');
   });
 
+  it('remux: DV+HDR10+ hybrid (HEVC) strips HDR10+ via hevc_metadata', () => {
+    const args = remuxArgs({
+      inputPath: '/media/in.mkv',
+      outputDir: '/cache/out',
+      audioPlan: { mode: 'copy', codec: 'aac' },
+      trustedStreamInfo: true,
+      sourceVideoCodec: 'hevc',
+      dolbyVision: true,
+      sourceDvProfile: 8,
+      hdr10Plus: true,
+    });
+    expect(args[args.indexOf('-bsf:v') + 1]).toBe(
+      'hevc_mp4toannexb,hevc_metadata=remove_hdr10plus=1',
+    );
+  });
+
+  it('remux: DV+HDR10+ hybrid (AV1) strips HDR10+ via av1_metadata', () => {
+    const args = remuxArgs({
+      inputPath: '/media/in.mkv',
+      outputDir: '/cache/out',
+      audioPlan: { mode: 'copy', codec: 'aac' },
+      trustedStreamInfo: true,
+      sourceVideoCodec: 'av1',
+      dolbyVision: true,
+      sourceDvProfile: 10,
+      sourceDvBlSignalCompatId: 1,
+      hdr10Plus: true,
+    });
+    expect(args[args.indexOf('-bsf:v') + 1]).toBe('av1_metadata=remove_hdr10plus=1');
+  });
+
+  it('remux: HDR10+ alone (no DV) never strips it', () => {
+    const args = remuxArgs({
+      inputPath: '/media/in.mkv',
+      outputDir: '/cache/out',
+      audioPlan: { mode: 'copy', codec: 'aac' },
+      trustedStreamInfo: true,
+      sourceVideoCodec: 'hevc',
+      hdr10Plus: true,
+    });
+    expect(args[args.indexOf('-bsf:v') + 1]).toBe('hevc_mp4toannexb');
+  });
+
   it('remux: a Dolby Vision session appends strict=unofficial so ffmpeg writes dvvC', () => {
     const args = remuxArgs({
       inputPath: '/media/in.mkv',

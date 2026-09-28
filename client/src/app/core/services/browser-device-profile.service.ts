@@ -581,6 +581,11 @@ export class BrowserDeviceProfileService {
           ? (this.nativeDvProfiles ?? this.nativeVideo?.dolbyVisionProfiles ?? [5, 8])
           : []
         : this.probeDolbyVisionProfiles(video, hasMSE);
+    // mpv decodes raw dual-layer P7 fine, unlike the browser codec-string probe
+    // above; trust it here the same way the container/codec list is overridden.
+    if (this.device.isDesktopNative() && supportsHdr && !dolbyVisionProfiles.includes(7)) {
+      dolbyVisionProfiles.push(7);
+    }
     // A [10]-only list must not read as P5/P8-capable to an old server that
     // only understands this boolean.
     const supportsDolbyVision =

@@ -8,10 +8,13 @@ import { FfprobeService, type MediaFileInfo } from '../../subtitles/ffprobe.serv
 import { SourceScanService, sourceVersion } from './source-scan.service';
 
 /** True once a video row predates `formatName`: it landed together with every
- *  other field this backfill fixes, so its absence alone flags the row stale. */
+ *  other field this backfill fixes, so its absence alone flags the row stale.
+ *  An HDR row that predates `hdr10Plus` is stale the same way. */
 export function needsReprobe(si: MediaFileInfo | null | undefined): boolean {
-  if (!si?.video?.[0]) return false;
-  return !si.formatName;
+  const v = si?.video?.[0];
+  if (!si || !v) return false;
+  if (!si.formatName) return true;
+  return !!v.hdrFormat && v.hdr10Plus === undefined;
 }
 
 /** Backfills a stale row's probe fields in the background, deduped per file

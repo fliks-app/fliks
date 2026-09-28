@@ -118,6 +118,9 @@ public class VideoCapabilitiesPlugin extends Plugin {
                     case MediaCodecInfo.CodecProfileLevel.DolbyVisionProfileDvheStn:
                         out.add(5);
                         break;
+                    case MediaCodecInfo.CodecProfileLevel.DolbyVisionProfileDvheDtb:
+                        out.add(7);
+                        break;
                     case MediaCodecInfo.CodecProfileLevel.DolbyVisionProfileDvheSt:
                         out.add(8);
                         break;

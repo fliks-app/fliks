@@ -26,6 +26,18 @@ describe('needsReprobe', () => {
   ])('is false when only %s is missing: formatName alone decides staleness', (_label, si) => {
     expect(needsReprobe(si as never)).toBe(false);
   });
+
+  it('is true for an HDR row that predates hdr10Plus', () => {
+    const hdrRow = { ...withVideo, video: [{ firstFrameSeconds: 0, hdrFormat: 'HDR10' }] };
+    expect(needsReprobe(hdrRow as never)).toBe(true);
+  });
+
+  it('is false once hdr10Plus is probed, true or false', () => {
+    const probedTrue = { ...withVideo, video: [{ hdrFormat: 'HDR10', hdr10Plus: true }] };
+    const probedFalse = { ...withVideo, video: [{ hdrFormat: 'HDR10', hdr10Plus: false }] };
+    expect(needsReprobe(probedTrue as never)).toBe(false);
+    expect(needsReprobe(probedFalse as never)).toBe(false);
+  });
 });
 
 describe('StaleProbeRescanService', () => {

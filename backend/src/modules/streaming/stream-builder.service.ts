@@ -592,6 +592,16 @@ export class StreamBuilderService {
     const canCopyVideo =
       copyableIgnoringGates && dvRemuxCopyAllowed && copyGates.every((g) => !g.active);
 
+    // A client without a real P7 decoder shows black video on the raw dual-layer
+    // file; force the remux (drops the EL/DV box) only when one is available.
+    if (dv.profile === 7 && !dvProfiles.includes(7) && canCopyVideo) {
+      if (directPlayResult.canDirectPlay) directPlayResult.canDirectPlay = false;
+      reasons.push({
+        flag: 'VideoDolbyVisionP7NotSupported',
+        message: 'Dolby Vision profile 7 (dual layer) is not supported by this client',
+      });
+    }
+
     if (profile.supportsDirectPlay === false && directPlayResult.canDirectPlay) {
       directPlayResult.canDirectPlay = false;
       reasons.push({

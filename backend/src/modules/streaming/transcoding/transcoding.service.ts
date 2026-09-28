@@ -1404,6 +1404,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         dolbyVision: ctx?.dolbyVision,
         sourceDvProfile: ctx?.sourceDvProfile,
         sourceDvBlSignalCompatId: ctx?.sourceDvBlSignalCompatId,
+        hdr10Plus: ctx?.sourceHdr10Plus,
       },
       this.log,
     );

@@ -41,6 +41,7 @@ export type SessionLayoutContext = Pick<
   | 'tonemap'
   | 'sourceDvProfile'
   | 'sourceDvBlSignalCompatId'
+  | 'sourceHdr10Plus'
 >;
 
 /** The session fields the cache profile hash is derived from. The timeline
@@ -72,6 +73,7 @@ export function sessionLayoutContext(
     tonemap: live?.tonemapping ?? false,
     sourceDvProfile: si?.video?.[0]?.dvProfile,
     sourceDvBlSignalCompatId: si?.video?.[0]?.dvBlSignalCompatId,
+    sourceHdr10Plus: si?.video?.[0]?.hdr10Plus,
   } satisfies Record<keyof SessionLayoutContext, unknown>;
 }
 
