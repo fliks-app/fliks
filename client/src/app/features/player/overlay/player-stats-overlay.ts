@@ -42,6 +42,8 @@ export interface PlayerStats {
   videoTranscodeReasons: string[];
   droppedFrames: number;
 
+  /** False when the source carries no audio stream: the audio section is hidden. */
+  hasAudio: boolean;
   audioLabel: string;
   audioStreamBitrate: string;
   audioDetailLine: string;

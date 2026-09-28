@@ -269,6 +269,7 @@ export class StreamBuilderService {
     const si = resolved.mediaFile.streamInfo;
     const v = si?.video?.[0];
     const audioStreams = si?.audio ?? [];
+    const hasAudio = audioStreams.length > 0;
     // The track the client asked for decides everything below; an index
     // outside the file falls back to the first track.
     const pickedAudio =
@@ -416,7 +417,7 @@ export class StreamBuilderService {
     );
 
     // --- Step 1: Try DirectPlay ---
-    const directPlayResult = this.tryDirectPlay(source, profile, reasons);
+    const directPlayResult = this.tryDirectPlay(source, profile, reasons, hasAudio);
     this.log.log(
       `audioDecision[file=${resolved.mediaFile.id}] tryDirectPlay → audioSupported=${directPlayResult.audioSupported}, containerSupported=${directPlayResult.containerSupported}, videoSupported=${directPlayResult.videoSupported}, reasons=${reasons.map((r) => r.flag).join('|') || '-'}`,
     );
@@ -708,6 +709,7 @@ export class StreamBuilderService {
             sourceCopyable,
             qualityLadder,
             selectedVariant.codec,
+            hasAudio,
           ),
           audioTracks: audioStreams.map((t, i) =>
             trackDto(t, i, copies[i], negotiatedStereoBps),
@@ -776,9 +778,14 @@ export class StreamBuilderService {
     );
     const audioPlans = groupDecisions.map((d) => d.plan);
     const pickedTrack = audioTracks[pickedAudio];
-    const audioPlan = pickedDecision?.plan ?? DEFAULT_AUDIO_PLAN;
+    // No audio stream: nothing to copy or encode, so this is never the
+    // DEFAULT_AUDIO_PLAN (AAC) fallback — that would wrongly claim an AAC
+    // transcode with no source track to back it.
+    const audioPlan: AudioPlan = hasAudio
+      ? (pickedDecision?.plan ?? DEFAULT_AUDIO_PLAN)
+      : { mode: 'copy', codec: '' };
     const rungAudioBps = (p: TranscodeProfile): number =>
-      audioOutputBitrateBps(audioPlan, parseBitrateToBps(p.audioBitrate));
+      hasAudio ? audioOutputBitrateBps(audioPlan, parseBitrateToBps(p.audioBitrate)) : 0;
     const canCopyAudio = audioPlan.mode === 'copy';
     const outputAudioCodec = audioPlan.codec;
     reasons.push(
@@ -859,6 +866,7 @@ export class StreamBuilderService {
             sourceCopyable,
             qualityLadder,
             selectedVariant.codec,
+            hasAudio,
           ),
           audioTracks,
           source,
@@ -942,6 +950,7 @@ export class StreamBuilderService {
           canCopyVideo,
           qualityLadder,
           selectedVariant.codec,
+          hasAudio,
         ),
         audioTracks,
         source,
@@ -991,6 +1000,7 @@ export class StreamBuilderService {
     videoCopyStream: boolean,
     ladder: TranscodeProfile[],
     targetCodec?: string,
+    hasAudio = true,
   ): QualityOption[] {
     const sourceW = source.width ?? 0;
     const sourceH = source.height ?? 0;
@@ -1011,8 +1021,11 @@ export class StreamBuilderService {
     // low-bitrate source up to the rung nominal, so the stats overlay (which
     // reads this list) shows the real target.
     const rungCtx = this.rungBitrateCtx(source, targetCodec);
+    // No audio stream: a rung's total is video-only, never the ladder's
+    // hypothetical audio budget.
     const totalOf = (p: TranscodeProfile) =>
-      cappedRungVideoBitrateBps(p, rungCtx) + parseBitrateToBps(p.audioBitrate);
+      cappedRungVideoBitrateBps(p, rungCtx) +
+      (hasAudio ? parseBitrateToBps(p.audioBitrate) : 0);
 
     // First non-eco entry = the source-resolution (top) rung.
     const topProfile = topNonEcoProfile(available);
@@ -1260,6 +1273,9 @@ export class StreamBuilderService {
     source: PlaybackInfoResponse['source'],
     profile: DeviceProfileDto,
     reasons: TranscodeReason[],
+    /** False when `streamInfo.audio` is empty: no codec to match, so audio
+     *  never blocks Direct Play. */
+    hasAudio: boolean,
   ): {
     canDirectPlay: boolean;
     containerSupported: boolean;
@@ -1279,15 +1295,17 @@ export class StreamBuilderService {
       if (dp.videoCodecs.includes(source.videoCodec)) videoSupported = true;
       if (dp.audioCodecs.includes(source.audioCodec)) audioSupported = true;
     }
+    if (!hasAudio) audioSupported = true;
 
     // Direct Play requires ONE profile entry to bind all three together — a
     // container from one entry paired with a codec from another is a
-    // combination the device never claimed it can play as-is.
+    // combination the device never claimed it can play as-is. No audio track
+    // means nothing to bind on that axis.
     const boundMatch = profile.directPlayProfiles.some(
       (dp) =>
         dp.containers.includes(source.container) &&
         dp.videoCodecs.includes(source.videoCodec) &&
-        dp.audioCodecs.includes(source.audioCodec),
+        (!hasAudio || dp.audioCodecs.includes(source.audioCodec)),
     );
 
     // Check fine-grained codec conditions on video

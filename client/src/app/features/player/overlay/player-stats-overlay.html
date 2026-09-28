@@ -75,26 +75,28 @@
         </section>
       }
 
-      <section>
-        <div class="font-bold text-white/90 mb-0.5 text-xs sm:text-sm">{{ 'player.stats_audio' | translate }}</div>
-        <div class="text-white/80 pl-2 space-y-0.5">
-          <div class="font-semibold">{{ s.audioLabel }}</div>
-          @if (s.audioStreamBitrate) {
-            <div class="text-white/75 text-xs sm:text-sm">
-              {{ 'player.stats_stream' | translate }}&nbsp;&nbsp;<span class="font-semibold tabular-nums">{{ s.audioStreamBitrate }}</span>
-            </div>
-          }
-          @if (s.audioDetailLine) {
-            <div class="text-white/70 text-[10px] sm:text-xs">{{ 'player.stats_sample_rate' | translate }}&nbsp;&nbsp;{{ s.audioDetailLine }}</div>
-          }
-          @if (s.audioPlaybackMode) {
-            <div class="text-white/60">&rarr; {{ s.audioPlaybackMode }}</div>
-          }
-          @if (s.audioTranscodeReasons.length) {
-            <div class="text-white/60">{{ 'player.stats_reasons' | translate }}&nbsp;&nbsp;<span class="font-semibold">{{ s.audioTranscodeReasons.join(', ') }}</span></div>
-          }
-        </div>
-      </section>
+      @if (s.hasAudio) {
+        <section>
+          <div class="font-bold text-white/90 mb-0.5 text-xs sm:text-sm">{{ 'player.stats_audio' | translate }}</div>
+          <div class="text-white/80 pl-2 space-y-0.5">
+            <div class="font-semibold">{{ s.audioLabel }}</div>
+            @if (s.audioStreamBitrate) {
+              <div class="text-white/75 text-xs sm:text-sm">
+                {{ 'player.stats_stream' | translate }}&nbsp;&nbsp;<span class="font-semibold tabular-nums">{{ s.audioStreamBitrate }}</span>
+              </div>
+            }
+            @if (s.audioDetailLine) {
+              <div class="text-white/70 text-[10px] sm:text-xs">{{ 'player.stats_sample_rate' | translate }}&nbsp;&nbsp;{{ s.audioDetailLine }}</div>
+            }
+            @if (s.audioPlaybackMode) {
+              <div class="text-white/60">&rarr; {{ s.audioPlaybackMode }}</div>
+            }
+            @if (s.audioTranscodeReasons.length) {
+              <div class="text-white/60">{{ 'player.stats_reasons' | translate }}&nbsp;&nbsp;<span class="font-semibold">{{ s.audioTranscodeReasons.join(', ') }}</span></div>
+            }
+          </div>
+        </section>
+      }
     }
   </div>
 }

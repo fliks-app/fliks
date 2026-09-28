@@ -751,6 +751,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
       videoTranscodeReasons: [],
       droppedFrames: engineStats?.droppedFrames ?? 0,
 
+      hasAudio: true,
       audioLabel: audioCodec,
       audioStreamBitrate: bitrate(variant?.audioBandwidth),
       audioDetailLine: '',

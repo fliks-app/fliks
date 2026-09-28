@@ -33,6 +33,9 @@ const silentLog = {
   error: () => {},
 } as unknown as Logger;
 
+const maps = (args: string[]): string[] =>
+  args.flatMap((a, i) => (a === '-map' ? [args[i + 1]] : []));
+
 const profile = (over: Partial<TranscodeProfile> = {}): TranscodeProfile => ({
   name: '1080p',
   maxWidth: 1920,
@@ -1626,6 +1629,19 @@ describe('buildRemuxArgs — golden (characterization)', () => {
        "/cache/out/index.m3u8",
      ]
     `);
+  });
+
+  it('remux: no audio stream maps no audio and encodes none', () => {
+    const args = remuxArgs({
+      inputPath: '/media/in.mp4',
+      outputDir: '/cache/out',
+      trustedStreamInfo: true,
+      sourceVideoCodec: 'h264',
+      audioStreams: [],
+    });
+    expect(maps(args)).toEqual(['0:v:0']);
+    expect(args).toContain('-an');
+    expect(args).not.toContain('-c:a');
   });
 
   it('remux: resume seeks to the keyframe boundary, transcodes incompatible audio', () => {
