@@ -40,10 +40,9 @@ import type {
  *  before CPU. Within HW, we keep platform-native first (QSV before
  *  VAAPI on Intel Linux to bias `vpp_qsv` crop). */
 const DESCRIPTORS: readonly DecoderDescriptor[] = [
-  // Intel modern path. Default qsv decoder emits VAAPI surfaces (drop-
-  // in compatible with the scale_vaapi-based encoder chains). A
-  // qsv-native variant emits QSV surfaces directly — selected only by
-  // paths that opt in (e.g. vpp_qsv crop).
+  // Intel modern path. Both decode on native VAAPI; the qsv-native variant
+  // (outputSurface: 'qsv') is a routing label picked only by paths that opt
+  // in (e.g. vpp_qsv crop), not a literal surface format.
   h264QsvDecoder,
   hevcQsvDecoder,
   av1QsvDecoder,

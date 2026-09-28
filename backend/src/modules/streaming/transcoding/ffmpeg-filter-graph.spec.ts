@@ -69,6 +69,13 @@ describe('buildVideoFilters', () => {
     expect(f.tonemapCpu).not.toContain('zscale');
   });
 
+  it('routes a no-base DV source through tonemapx on the CPU fallback', () => {
+    const f = buildVideoFilters({ ...base, tonemap: true, dvNoBase: true });
+    expect(f.tonemapCpu).toBe(
+      'scale=1920:-2,tonemapx=t=bt709:m=bt709:p=bt709:tonemap=hable:desat=0:format=yuv420p,',
+    );
+  });
+
   it('honours the tonemapCurve override', () => {
     const hable = buildVideoFilters({ ...base, tonemap: true });
     const mobius = buildVideoFilters({ ...base, tonemap: true, tonemapCurve: 'mobius' });

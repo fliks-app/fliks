@@ -27,21 +27,26 @@ import type { TonemapAlgo } from './types';
  *  the stats overlay) so the two never drift. */
 export type ResolvedTonemapPath = 'vaapi' | 'opencl' | 'qsv';
 
+/** Windows QSV OpenCL is the CPU-bounce path (its own probe); elsewhere it's
+ *  the VAAPI-derived bridge. */
+function openclBridgeOk(hasCrop: boolean, platform: NodeJS.Platform): boolean {
+  return platform === 'win32'
+    ? isQsvOpenclTonemapEnabled()
+    : hasCrop
+      ? isTonemapOpenclEnabledWithCrop()
+      : isTonemapOpenclEnabled();
+}
+
 export function resolveTonemapPath(
   algo: TonemapAlgo,
-  opts: { hasCrop: boolean } = { hasCrop: false },
+  opts: { hasCrop: boolean; dvNoBase?: boolean } = { hasCrop: false },
   platform: NodeJS.Platform = process.platform,
 ): ResolvedTonemapPath {
+  // A no-base DV source has no HDR10/HLG fallback the RPU-blind vaapi/qsv
+  // tonemap can read, so the OpenCL bridge wins over the admin's pick.
+  if (opts.dvNoBase && openclBridgeOk(opts.hasCrop, platform)) return 'opencl';
   if (algo === 'auto') {
-    // Windows QSV OpenCL is the CPU-bounce path (its own probe); elsewhere it's
-    // the VAAPI-derived bridge.
-    const openclOk =
-      platform === 'win32'
-        ? isQsvOpenclTonemapEnabled()
-        : opts.hasCrop
-          ? isTonemapOpenclEnabledWithCrop()
-          : isTonemapOpenclEnabled();
-    if (openclOk) return 'opencl';
+    if (openclBridgeOk(opts.hasCrop, platform)) return 'opencl';
     // No VAAPI device (Windows): 'vaapi' isn't a QSV path, so prefer the
     // vpp_qsv fixed-function LUT when its probe passed rather than force a
     // CPU encode.

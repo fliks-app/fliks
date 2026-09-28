@@ -3,9 +3,14 @@ import { Logger } from '@nestjs/common';
 jest.mock('./codec/opencl-tonemap-probe', () => ({
   isOpenclTonemapEnabled: jest.fn(() => true),
 }));
+jest.mock('./codec/tonemap-opencl-probe', () => ({
+  isTonemapOpenclEnabled: jest.fn(() => true),
+  isTonemapOpenclEnabledWithCrop: jest.fn(() => true),
+}));
 
 import { buildFfmpegArgs } from './ffmpeg-args';
 import type { BuildFfmpegArgsOptions } from './ffmpeg-args';
+import { resolveEncodePipeline } from './encode-pipeline';
 import type { CodecVariant } from './codec/types';
 
 const silentLog = {
@@ -81,5 +86,50 @@ describe('buildFfmpegArgs — HW decode on the OpenCL tone-map path (#729)', () 
     expect(cli).toContain('-init_hw_device opencl=ocl -filter_hw_device ocl');
     expect(args.filter((a) => a === 'opencl=ocl')).toHaveLength(1);
     expect(vfOf(args)).toContain('tonemap_opencl=');
+  });
+});
+
+// A no-base DV source (P5) must never decode on the qsv wrapper (drops the
+// RPU) or tonemap through a RPU-blind vaapi/qsv filter.
+describe('buildFfmpegArgs: no-base Dolby Vision keeps the RPU', () => {
+  const dv5 = (over: Partial<BuildFfmpegArgsOptions> = {}) =>
+    opts({ hwAccel: 'qsv', sourceDvProfile: 5, ...over });
+
+  it('QSV: decodes on native VAAPI (never the qsv wrapper) and tonemaps via tonemap_opencl', () => {
+    const args = buildFfmpegArgs(dv5(), silentLog);
+    const cli = args.join(' ');
+    expect(cli).toContain('-hwaccel vaapi');
+    expect(cli).not.toContain('-hwaccel qsv');
+    expect(cli).toContain('tonemap_opencl');
+    expect(cli).toMatch(/-c:v (h264|hevc)_qsv\b/);
+    expect(cli).not.toContain('libx264');
+    expect(cli).not.toContain('libx265');
+    expect(cli).not.toContain('apply_dovi');
+  });
+
+  it('NVENC: tonemaps a no-base DV source via tonemap_opencl on an _nvenc encoder', () => {
+    const args = buildFfmpegArgs(dv5({ hwAccel: 'nvenc' }), silentLog);
+    const cli = args.join(' ');
+    expect(cli).toContain('-hwaccel cuda');
+    expect(cli).toContain('tonemap_opencl');
+    expect(cli).toMatch(/-c:v \w+_nvenc\b/);
+  });
+
+  it('resolveEncodePipeline reports the same accel/encoder buildFfmpegArgs spawns', () => {
+    const args = buildFfmpegArgs(dv5(), silentLog);
+    const pipeline = resolveEncodePipeline(
+      H264_SDR,
+      {
+        hwAccel: 'qsv',
+        crop: false,
+        burnIn: false,
+        tonemap: true,
+        tonemapAlgo: 'auto',
+        sourceVideoCodec: 'hevc',
+        dvNoBase: true,
+      },
+    );
+    expect(pipeline.effectiveHwAccel).toBe('qsv');
+    expect(args.join(' ')).toContain(`-c:v ${pipeline.encoder?.id}`);
   });
 });

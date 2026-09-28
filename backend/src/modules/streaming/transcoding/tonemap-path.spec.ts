@@ -88,4 +88,22 @@ describe('resolveTonemapPath', () => {
     vppQsv.mockReturnValue(true);
     expect(resolveTonemapPath('auto', { hasCrop: false }, 'win32')).toBe('qsv');
   });
+
+  it('dvNoBase overrides an explicit vaapi/qsv pick with opencl when the bridge passed', () => {
+    openclNoCrop.mockReturnValue(true);
+    expect(
+      resolveTonemapPath('vaapi', { hasCrop: false, dvNoBase: true }, 'linux'),
+    ).toBe('opencl');
+    expect(
+      resolveTonemapPath('qsv', { hasCrop: false, dvNoBase: true }, 'linux'),
+    ).toBe('opencl');
+  });
+
+  it('dvNoBase falls through to the normal (RPU-blind) resolution when the bridge is down', () => {
+    // resolveEncodePipeline compensates: it forces the whole pipeline off HW
+    // whenever dvNoBase's tonemapPath isn't 'opencl', see its own spec.
+    expect(
+      resolveTonemapPath('vaapi', { hasCrop: false, dvNoBase: true }, 'linux'),
+    ).toBe('vaapi');
+  });
 });

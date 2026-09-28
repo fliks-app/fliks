@@ -2,30 +2,29 @@ import type { DecoderDescriptor } from './types';
 import type { VideoCodec } from '../types';
 import { qsvDeviceInitArgs, qsvViaD3d11DeviceInitArgs } from '../../hw-device';
 
-/** Build a QSV decoder descriptor for `codec`. Decode actually happens
- *  on the VAAPI driver (Linux Intel) — libavcodec wires the qsv encoder
- *  on top via the `qsv=qs@va` device that derives a QSV context from
- *  the VAAPI one. Frames hit the filter chain as VAAPI surfaces, which
- *  is what the existing `scale_vaapi → hwmap=qsv` encoder chains
- *  expect. The 'qsv'-encoder native vpp_qsv crop path takes a
- *  different decoder variant (see qsvNative below) so this default
- *  one stays drop-in compatible. */
-function qsvDecoder(codec: VideoCodec, maxBitDepth: 8 | 10): DecoderDescriptor {
+/** QSV decoder: native VAAPI, never the `-hwaccel qsv` wrapper (drops the
+ *  Dolby Vision RPU, fails outright on AV1). `native` only changes the id and
+ *  `outputSurface` label the `vpp_qsv` crop/scale path looks up by; the argv
+ *  is identical either way. */
+function qsvDecoder(
+  codec: VideoCodec,
+  maxBitDepth: 8 | 10,
+  native: boolean,
+): DecoderDescriptor {
   return {
-    id: `${codec}_qsv_decode`,
+    id: `${codec}_qsv${native ? '_native' : ''}_decode`,
     hwAccel: 'qsv',
     sourceCodec: codec,
     maxBitDepth,
-    // 'vaapi' rather than 'qsv': the decoder produces VAAPI surfaces
-    // that the qsv encoder filter chain hwmap's into qsv format. The
-    // qsv-native variant below emits QSV surfaces directly for chains
-    // (e.g. vpp_qsv crop) that consume them without hwmap.
-    outputSurface: 'vaapi',
-    // VAAPI-output QSV path: Linux-only (no VAAPI on Windows). win32 QSV
-    // always goes through qsvNativeDecoder below.
+    outputSurface: native ? 'qsv' : 'vaapi',
+    // VAAPI-backed QSV: Linux-only. win32 QSV always uses qsvD3d11Decoder below.
     supports: () => process.platform !== 'win32',
     buildInputArgs: () => [
       ...qsvDeviceInitArgs(),
+      // 'qs' (not 'va'): subtitle burn-in's bare hwupload (no explicit
+      // derive_device=) needs the default filter device to be the encoder's.
+      '-filter_hw_device',
+      'qs',
       '-hwaccel',
       'vaapi',
       '-hwaccel_output_format',
@@ -39,46 +38,9 @@ function qsvDecoder(codec: VideoCodec, maxBitDepth: 8 | 10): DecoderDescriptor {
   };
 }
 
-/** QSV-native decoder variant (Linux) — decodes on the iGPU (derived from
- *  VAAPI) and emits `qsv` surfaces the `vpp_qsv` encoder chain consumes
- *  directly, no hwmap. Selected by the vpp_qsv crop / scale paths. Windows
- *  uses {@link qsvD3d11Decoder} instead (see there for why). */
-function qsvNativeDecoder(
-  codec: VideoCodec,
-  maxBitDepth: 8 | 10,
-): DecoderDescriptor {
-  return {
-    id: `${codec}_qsv_native_decode`,
-    hwAccel: 'qsv',
-    sourceCodec: codec,
-    maxBitDepth,
-    outputSurface: 'qsv',
-    supports: () => process.platform !== 'win32',
-    buildInputArgs: () => [
-      ...qsvDeviceInitArgs(),
-      '-filter_hw_device',
-      'qs',
-      '-hwaccel',
-      'qsv',
-      '-hwaccel_output_format',
-      'qsv',
-      '-hwaccel_device',
-      'qs',
-      '-extra_hw_frames',
-      '32',
-      '-noautorotate',
-    ],
-  };
-}
-
-/** Windows QSV decoder — decodes on **D3D11VA** and derives QSV from the same
- *  D3D11 device (`qsv=qs@dx`). The frame lands as a `d3d11` surface; the QSV
- *  encoder filter maps it onto the QSV device (`hwmap=derive_device=qsv`)
- *  before `vpp_qsv`. Distinct from the native `-hwaccel qsv` decode
- *  ({@link qsvNativeDecoder}), which is avoided on Windows because its AV1 path
- *  fails on Intel/oneVPL for real streams (the tiny boot probe passes, a real
- *  2160p AV1 exits `-17`) while D3D11VA decode is solid. Pairs with the QSV
- *  encoders (`hwAccel: 'qsv'`). Windows-only. */
+/** Windows QSV decoder: D3D11VA, deriving QSV from the same device
+ *  (`qsv=qs@dx`). {@link qsvDecoder} is Linux-only (derives from a VAAPI
+ *  device Windows doesn't have), so this is the QSV encode-path decoder there. */
 function qsvD3d11Decoder(
   codec: VideoCodec,
   maxBitDepth: 8 | 10,
@@ -107,28 +69,13 @@ function qsvD3d11Decoder(
   };
 }
 
-export const h264QsvDecoder = qsvDecoder('h264', 8);
-export const hevcQsvDecoder = qsvDecoder('hevc', 10);
-export const av1QsvDecoder = qsvDecoder('av1', 10);
+export const h264QsvDecoder = qsvDecoder('h264', 8, false);
+export const hevcQsvDecoder = qsvDecoder('hevc', 10, false);
+export const av1QsvDecoder = qsvDecoder('av1', 10, false);
 
-export const h264QsvNativeDecoder = qsvNativeDecoder('h264', 8);
-export const hevcQsvNativeDecoder = qsvNativeDecoder('hevc', 10);
-/** AV1 QSV-native decode is force-disabled on the bundled jellyfin-ffmpeg 8.x:
- *  `av1_qsv` hits the oneVPL 2.9+ dynamic frame pool, whose surface allocation
- *  returns -17 on a real AV1 DPB (regression vs 7.1.x — verified on Iris Xe; a
- *  synthetic clip decodes fine so the boot probe can't catch it). AV1 therefore
- *  falls back to VAAPI *decode* only — the QSV *encoder* is unaffected and still
- *  runs (VAAPI decode → scale_vaapi → hwmap qsv → hevc/h264_qsv). Windows decodes
- *  AV1 on D3D11VA (av1QsvD3d11Decoder), so this only affects Linux.
- *
- *  Removal: flip to `false` once the shipped ffmpeg/oneVPL no longer regresses
- *  av1_qsv (e.g. a fixed 8.x point release, or reverting to a 7.1.x build). */
-const AV1_QSV_DECODE_BROKEN = true;
-
-export const av1QsvNativeDecoder: DecoderDescriptor = {
-  ...qsvNativeDecoder('av1', 10),
-  supports: () => !AV1_QSV_DECODE_BROKEN && process.platform !== 'win32',
-};
+export const h264QsvNativeDecoder = qsvDecoder('h264', 8, true);
+export const hevcQsvNativeDecoder = qsvDecoder('hevc', 10, true);
+export const av1QsvNativeDecoder = qsvDecoder('av1', 10, true);
 
 export const h264QsvD3d11Decoder = qsvD3d11Decoder('h264', 8);
 export const hevcQsvD3d11Decoder = qsvD3d11Decoder('hevc', 10);

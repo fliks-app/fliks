@@ -30,9 +30,9 @@ function input(over: Partial<EncoderInput>): EncoderInput {
 }
 
 describe('qsvScaleFilter8bit', () => {
-  it('emits vpp_qsv directly for a qsv-native (Linux) input surface', () => {
+  it('hwmaps onto QSV before vpp_qsv for a qsv-native (Linux) input surface', () => {
     expect(qsvScaleFilter8bit(input({ inputSurface: 'qsv' }))).toBe(
-      'vpp_qsv=w=1920:h=804:format=nv12',
+      'hwmap=derive_device=qsv,vpp_qsv=w=1920:h=804:format=nv12',
     );
   });
 
@@ -70,7 +70,8 @@ describe('qsvScaleFilter8bit', () => {
         input({ inputSurface: 'qsv', tonemap: true, tonemapPath: 'opencl' }),
       ),
     ).toBe(
-      'vpp_qsv=w=1920:h=804:format=p010le,' +
+      'hwmap=derive_device=qsv,' +
+        'vpp_qsv=w=1920:h=804:format=p010le,' +
         'hwmap=derive_device=opencl:mode=read,' +
         'tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=hable:desat=0,' +
         'hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,' +
@@ -130,14 +131,16 @@ describe('qsvScaleFilter8bit', () => {
           },
         }),
       ),
-    ).toBe('vpp_qsv=cw=1921:ch=800:cx=0:cy=0:w=1280:h=534:format=nv12');
+    ).toBe(
+      'hwmap=derive_device=qsv,vpp_qsv=cw=1921:ch=800:cx=0:cy=0:w=1280:h=534:format=nv12',
+    );
   });
 });
 
 describe('qsvScaleFilter10bit', () => {
-  it('emits vpp_qsv p010le directly for a qsv-native input surface', () => {
+  it('hwmaps onto QSV before vpp_qsv p010le for a qsv-native input surface', () => {
     expect(qsvScaleFilter10bit(input({ inputSurface: 'qsv' }))).toBe(
-      'vpp_qsv=w=1920:h=804:format=p010le',
+      'hwmap=derive_device=qsv,vpp_qsv=w=1920:h=804:format=p010le',
     );
   });
 
@@ -171,6 +174,8 @@ describe('qsvScaleFilter10bit', () => {
           },
         }),
       ),
-    ).toBe('vpp_qsv=cw=1921:ch=800:cx=0:cy=0:w=1280:h=534:format=p010le');
+    ).toBe(
+      'hwmap=derive_device=qsv,vpp_qsv=cw=1921:ch=800:cx=0:cy=0:w=1280:h=534:format=p010le',
+    );
   });
 });

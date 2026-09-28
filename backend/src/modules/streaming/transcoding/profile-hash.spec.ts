@@ -282,6 +282,21 @@ describe('buildPlaybackProfileFromContext', () => {
       hash({ tonemap: true }),
     );
   });
+
+  it('separates a P8 (has-base) DV tone-map from a plain HDR10 tone-map', () => {
+    const hash = (dv: boolean) =>
+      computeProfileHash(
+        buildPlaybackProfileFromContext(
+          {
+            tonemap: true,
+            videoVariant: { codec: 'hevc', bitDepth: 8, hdr: null },
+            ...(dv ? { sourceDvProfile: 8, sourceDvBlSignalCompatId: 1 } : {}),
+          },
+          3000,
+        ),
+      );
+    expect(hash(true)).not.toBe(hash(false));
+  });
 });
 
 describe('computeProfileHash — golden values (characterization)', () => {

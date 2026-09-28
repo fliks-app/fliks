@@ -233,7 +233,7 @@ export interface SessionContext {
    *  instead of a generic 1000-nit reference. */
   hdrMetadata?: import('./codec/types').HdrStaticMetadata;
   /** Dolby Vision profile + base-layer compat id, threaded from streamInfo so
-   *  ffmpeg-args can gate the P5 `tonemap_opencl=apply_dovi` tone-map. */
+   *  ffmpeg-args can keep a no-base source off the RPU-blind vaapi/qsv tonemap. */
   sourceDvProfile?: number;
   sourceDvBlSignalCompatId?: number;
   /** Delivered stream is Dolby Vision-presentable, frozen on the LiveSession
