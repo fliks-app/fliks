@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import type { BitDepth, HdrFormat, VideoCodec } from './codec/types';
 import { varStreamMapLayout } from './audio-layout';
 import { audioEncoderName, DEFAULT_AUDIO_PLAN } from './audio-encode';
-import type { SessionContext } from './types';
+import type { SessionLayoutContext } from './session-profile';
 
 /**
  * Client platform classes that may produce byte-incompatible segments
@@ -120,7 +120,7 @@ export function computeProfileHash(profile: PlaybackProfile): string {
  * a single backend run, which is all the cache layout requires.
  */
 export function buildPlaybackProfileFromContext(
-  ctx: SessionContext | undefined,
+  ctx: SessionLayoutContext | undefined,
   segmentDurationMs: number,
 ): PlaybackProfile {
   const videoVariant = ctx?.videoVariant;
