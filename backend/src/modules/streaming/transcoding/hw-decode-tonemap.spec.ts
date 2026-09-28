@@ -24,6 +24,7 @@ import { buildFfmpegArgs } from './ffmpeg-args';
 import type { BuildFfmpegArgsOptions } from './ffmpeg-args';
 import { resolveEncodePipeline } from './encode-pipeline';
 import type { CodecVariant } from './codec/types';
+import type { BurnInSubtitle } from './types';
 import {
   isTonemapOpenclEnabled,
   isTonemapOpenclEnabledWithCrop,
@@ -210,6 +211,95 @@ describe('buildFfmpegArgs: no-base Dolby Vision keeps the RPU', () => {
     );
     expect(pipeline.effectiveHwAccel).toBe('qsv');
     expect(args.join(' ')).toContain(`-c:v ${pipeline.encoder?.id}`);
+  });
+});
+
+describe('buildFfmpegArgs: VideoToolbox (macOS)', () => {
+  const platformDescriptor = Object.getOwnPropertyDescriptor(
+    process,
+    'platform',
+  )!;
+  beforeEach(() =>
+    Object.defineProperty(process, 'platform', {
+      value: 'darwin',
+      configurable: true,
+    }),
+  );
+  afterEach(() =>
+    Object.defineProperty(process, 'platform', platformDescriptor),
+  );
+
+  const vtOpts = (over: Partial<BuildFfmpegArgsOptions>) =>
+    opts({
+      hwAccel: 'videotoolbox',
+      profile: {
+        name: '1080p',
+        maxWidth: 1920,
+        maxHeight: 1080,
+        videoBitrate: '8M',
+        audioBitrate: '192k',
+      },
+      ...over,
+    });
+
+  it('P5 (no base) without crop: RPU-aware tonemap_videotoolbox, apply_dovi=1', () => {
+    const args = buildFfmpegArgs(
+      vtOpts({ sourceDvProfile: 5, sourceDvBlSignalCompatId: 0 }),
+      silentLog,
+    );
+    const cli = args.join(' ');
+    expect(vfOf(args)).toBe(
+      'scale_vt=w=1920:h=-2,tonemap_videotoolbox=tonemap=hable:t=bt709:m=bt709:p=bt709:range=tv:apply_dovi=1:format=nv12',
+    );
+    expect(cli).toContain('videotoolbox_vld');
+    expect(cli).not.toContain('tonemapx');
+    expect(cli).not.toContain('-color_primaries');
+  });
+
+  it('P8.1 (has base) with crop: apply_dovi=0', () => {
+    const args = buildFfmpegArgs(
+      vtOpts({
+        sourceDvProfile: 8,
+        sourceDvBlSignalCompatId: 1,
+        crop: { width: 3840, height: 1600, x: 0, y: 280 },
+      }),
+      silentLog,
+    );
+    expect(vfOf(args)).toContain('apply_dovi=0');
+  });
+
+  it('HDR10 without crop keeps the plain scale_vt chain', () => {
+    const args = buildFfmpegArgs(vtOpts({}), silentLog);
+    expect(vfOf(args)).toBe(
+      'scale_vt=w=1920:h=-2:color_matrix=bt709:color_primaries=bt709:color_transfer=bt709',
+    );
+  });
+
+  it('HDR10 with image burn-in never reaches the VT surface', () => {
+    const burnIn: BurnInSubtitle = { filter: null, type: 'image', streamIndex: 3 };
+    const args = buildFfmpegArgs(vtOpts({ burnIn }), silentLog);
+    const cli = args.join(' ');
+    expect(cli).not.toContain('videotoolbox_vld');
+    const fcIdx = args.indexOf('-filter_complex');
+    expect(fcIdx === -1 ? '' : args[fcIdx + 1]).not.toContain('scale_vt');
+  });
+
+  it('AV1 P10.0 (no base) without crop: native decoder before -i, RPU-aware tonemap_videotoolbox', () => {
+    const args = buildFfmpegArgs(
+      vtOpts({
+        sourceVideoCodec: 'av1',
+        sourceDvProfile: 10,
+        sourceDvBlSignalCompatId: 0,
+      }),
+      silentLog,
+    );
+    const cli = args.join(' ');
+    // Decoder's forced `-c:v av1` (first occurrence) must precede `-i`.
+    expect(args.indexOf('-c:v')).toBeLessThan(args.indexOf('-i'));
+    expect(args[args.indexOf('-c:v') + 1]).toBe('av1');
+    expect(cli).toContain('videotoolbox_vld');
+    expect(vfOf(args)).toContain('tonemap_videotoolbox');
+    expect(vfOf(args)).toContain('apply_dovi=1');
   });
 });
 

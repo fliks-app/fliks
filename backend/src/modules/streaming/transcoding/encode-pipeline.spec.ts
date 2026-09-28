@@ -1,4 +1,4 @@
-import { resolveEncodePipeline } from './encode-pipeline';
+import { resolveEncodePipeline, isVtTonemapPath } from './encode-pipeline';
 import type { EncodePipelineContext } from './encode-pipeline';
 import type { CodecVariant } from './codec/types';
 import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
@@ -197,5 +197,25 @@ describe('resolveEncodePipeline — AMF tonemap', () => {
       'win32',
     );
     expect(r.amfOpenclAvailable).toBe(false);
+  });
+});
+
+describe('isVtTonemapPath: darwin VideoToolbox routing', () => {
+  const platformDescriptor = Object.getOwnPropertyDescriptor(
+    process,
+    'platform',
+  )!;
+  beforeEach(() =>
+    Object.defineProperty(process, 'platform', {
+      value: 'darwin',
+      configurable: true,
+    }),
+  );
+  afterEach(() =>
+    Object.defineProperty(process, 'platform', platformDescriptor),
+  );
+
+  it('AV1 + VT + tonemap is eligible (native av1 decoder forces the hwaccel)', () => {
+    expect(isVtTonemapPath(true, 'videotoolbox', false, 'av1')).toBe(true);
   });
 });

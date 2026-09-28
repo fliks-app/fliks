@@ -14,9 +14,10 @@ export function resolveTonemapCurve(): TonemapCurve {
   return selectedCurve ?? 'hable';
 }
 
-/** `tonemap_opencl` RPU-reshaping option. The bundled ffmpeg defaults it to 1;
- *  only a no-base source (see `dvHasNoBase`) has a trustworthy RPU to apply,
- *  so every other source (including has-base P7/P8) must pass 0 explicitly. */
+/** `tonemap_opencl` (and `tonemap_videotoolbox`) RPU-reshaping option. The
+ *  bundled ffmpeg defaults it to 1; only a no-base source (see `dvHasNoBase`)
+ *  has a trustworthy RPU to apply, so every other source (including has-base
+ *  P7/P8) must pass 0 explicitly. */
 export function dvApplyDoviOpt(dvNoBase: boolean | undefined): string {
   return `apply_dovi=${dvNoBase ? 1 : 0}`;
 }

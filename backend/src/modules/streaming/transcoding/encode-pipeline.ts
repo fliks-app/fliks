@@ -2,7 +2,7 @@ import { requestedHwAccelFor } from './hw-detect';
 import { hostHasVaapi } from './hw-device';
 import { encoderRegistry } from './codec/encoders';
 import { isDecoderEnabled } from './codec/decoder-probe';
-import { findQsvNativeDecoder, findAmfNativeDecoder } from './codec/decoders';
+import { decoderRegistry, findQsvNativeDecoder, findAmfNativeDecoder } from './codec/decoders';
 import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
 import {
   isTonemapOpenclEnabled,
@@ -35,6 +35,25 @@ export function isOpenclTonemapPath(
     !isCudaTonemapPath(tonemap, hwAccel) &&
     isOpenclTonemapEnabled() &&
     (hwAccel === 'nvenc' || hwAccel === 'amf' || dvNoBase)
+  );
+}
+
+/** True when the session tone-maps on VideoToolbox's Metal surface
+ *  (RPU-aware `apply_dovi`); burn-in forces CPU. Shared with ffmpeg-args. */
+export function isVtTonemapPath(
+  tonemap: boolean,
+  hwAccel: string,
+  burnIn: boolean,
+  sourceVideoCodec: string | undefined,
+): boolean {
+  const codec = normaliseSourceCodec(sourceVideoCodec);
+  return (
+    tonemap &&
+    hwAccel === 'videotoolbox' &&
+    !burnIn &&
+    codec != null &&
+    decoderRegistry.resolve({ codec, bitDepth: 10 }, 'videotoolbox').hwAccel ===
+      'videotoolbox'
   );
 }
 

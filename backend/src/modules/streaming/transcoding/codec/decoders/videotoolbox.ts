@@ -11,6 +11,7 @@ import type { VideoCodec } from '../types';
 function videotoolboxDecoder(
   codec: VideoCodec,
   maxBitDepth: 8 | 10,
+  forceDecoder?: string,
 ): DecoderDescriptor {
   return {
     id: `${codec}_videotoolbox_decode`,
@@ -19,9 +20,17 @@ function videotoolboxDecoder(
     maxBitDepth,
     outputSurface: 'cpu',
     supports: () => process.platform === 'darwin',
-    buildInputArgs: () => ['-hwaccel', 'videotoolbox', '-noautorotate'],
+    buildInputArgs: () => [
+      '-hwaccel',
+      'videotoolbox',
+      ...(forceDecoder ? ['-c:v', forceDecoder] : []),
+      '-noautorotate',
+    ],
   };
 }
 
 export const h264VideotoolboxDecoder = videotoolboxDecoder('h264', 8);
 export const hevcVideotoolboxDecoder = videotoolboxDecoder('hevc', 10);
+/** ffmpeg defaults to `libdav1d`, which ignores the hwaccel; forcing
+ *  `-c:v av1` engages it, and that decoder is hardware-only (fails pre-M3). */
+export const av1VideotoolboxDecoder = videotoolboxDecoder('av1', 10, 'av1');

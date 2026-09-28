@@ -124,7 +124,8 @@ export interface PlaybackInfoResponse {
   dolbyVision?: boolean;
 
   /** Tone-map mechanism the session actually runs (post `auto` resolution +
-   *  boot probe), not the admin's encoder-agnostic pick. `null` = no pass. */
+   *  boot probe), not the admin's encoder-agnostic pick. `'videotoolbox'` is
+   *  the macOS `scale_vt`/`tonemap_videotoolbox` Metal path. `null` = no pass. */
   tonemapAlgo?:
     | 'vaapi'
     | 'opencl'
