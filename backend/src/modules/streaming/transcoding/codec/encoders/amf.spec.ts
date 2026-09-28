@@ -12,9 +12,13 @@ function makeInput(cfg: {
   tonemap?: boolean;
   crop?: boolean;
   dvNoBase?: boolean;
+  burnIn?: boolean;
 }): EncoderInput {
   const tonemap = cfg.tonemap ?? false;
   const crop = cfg.crop ? CROP : undefined;
+  const burnIn = cfg.burnIn
+    ? { type: 'text' as const, filter: "subtitles='/test.srt'" }
+    : undefined;
   return {
     variant: { codec: 'hevc', bitDepth: 8, hdr: null },
     target: {
@@ -33,6 +37,7 @@ function makeInput(cfg: {
     libx264BufsizeMb: '16M',
     filters: buildVideoFilters({
       crop,
+      burnIn,
       tonemap,
       useVaapiTonemap: false,
       sourceBitDepth: tonemap ? 10 : 8,
@@ -42,7 +47,7 @@ function makeInput(cfg: {
     tonemapPath: 'opencl',
     tonemapCurve: 'hable',
     dvNoBase: cfg.dvNoBase ?? false,
-    hasBurnIn: false,
+    hasBurnIn: !!cfg.burnIn,
     hasCrop: !!crop,
     inputSurface: cfg.inputSurface ?? 'cpu',
   };
@@ -127,6 +132,20 @@ describe('AMF encoders', () => {
       const vf = vfOf(enc.buildArgs(makeInput({ crop: true })));
       expect(vf).toContain('crop=');
     });
+
+    it('text burn-in on the CPU path appends the subtitles tail', () => {
+      const vf = vfOf(enc.buildArgs(makeInput({ burnIn: true })));
+      expect(vf.endsWith(",subtitles='/test.srt'")).toBe(true);
+    });
+
+    it('text burn-in on d3d11 downloads to nv12 with the subtitles tail, no reverse hwmap', () => {
+      const vf = vfOf(
+        enc.buildArgs(makeInput({ inputSurface: 'd3d11', burnIn: true })),
+      );
+      expect(vf).toBe(
+        "hwmap=derive_device=opencl:mode=read,scale_opencl=w=1920:h=1080:format=nv12,hwdownload,format=nv12,subtitles='/test.srt'",
+      );
+    });
   });
 
   describe.each(SDR)('%s zero-copy OpenCL tonemap (d3d11)', (_id, enc) => {
@@ -190,14 +209,28 @@ describe('AMF encoders', () => {
       expect(trc).toBe(id.endsWith('hlg') ? 'arib-std-b67' : 'smpte2084');
     });
 
-    it('does not claim HDR static-metadata support (AMF writes no mdcv/clli)', () => {
-      expect(enc.supportsHdrMetadata()).toBe(false);
+    it('claims HDR static-metadata support (amfenc.c reads mdcv/clli off the frame)', () => {
+      expect(enc.supportsHdrMetadata()).toBe(true);
     });
 
-    it('scales zero-copy via OpenCL on d3d11 input, p010le passthrough', () => {
-      const vf = vfOf(enc.buildArgs(makeInput({ inputSurface: 'd3d11' })));
-      expect(vf).toBe(
+    it('scales zero-copy via OpenCL on d3d11 input, p010le passthrough, no -pix_fmt', () => {
+      const args = enc.buildArgs(makeInput({ inputSurface: 'd3d11' }));
+      expect(flag(args, '-pix_fmt')).toBeUndefined();
+      expect(vfOf(args)).toBe(
         'hwmap=derive_device=opencl:mode=read,scale_opencl=w=1920:h=1080:format=p010le,hwmap=derive_device=d3d11va:mode=write:reverse=1,format=d3d11',
+      );
+    });
+
+    it('keeps -pix_fmt p010le on the CPU path', () => {
+      expect(flag(enc.buildArgs(makeInput({})), '-pix_fmt')).toBe('p010le');
+    });
+
+    it('text burn-in on d3d11 downloads to p010le with the subtitles tail, no reverse hwmap', () => {
+      const vf = vfOf(
+        enc.buildArgs(makeInput({ inputSurface: 'd3d11', burnIn: true })),
+      );
+      expect(vf).toBe(
+        "hwmap=derive_device=opencl:mode=read,scale_opencl=w=1920:h=1080:format=p010le,hwdownload,format=p010le,subtitles='/test.srt'",
       );
     });
   });

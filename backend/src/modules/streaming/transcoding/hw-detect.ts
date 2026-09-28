@@ -138,12 +138,13 @@ export async function detectHwAccel(
 }
 
 /** hwAccel types whose filter helper bounces to CPU only for `subtitles=...`,
- *  keeping decode/tonemap/encode on the GPU. AMF still forces CPU: no round-trip wired for it. */
+ *  keeping decode/tonemap on the GPU; AMF's encoder also takes those CPU frames directly. */
 const BURN_IN_CAPABLE_HW_ACCEL = new Set<HwAccelType>([
   'videotoolbox',
   'nvenc',
   'qsv',
   'vaapi',
+  'amf',
 ]);
 
 /** Map the host-detected hwAccel onto the slice the orchestrator should
