@@ -1055,6 +1055,7 @@ export class StreamingController {
       timeline,
       sourceVersion: held.version,
       dolbyVision: response.dolbyVision ?? false,
+      tonemapping: response.tonemapping,
     };
     const profileHash =
       response.playMethod === 'DirectPlay'
@@ -1153,7 +1154,6 @@ export class StreamingController {
       supportsIFrameTrickPlay: !!deviceProfile.supportsIFrameTrickPlay,
       probesSegZero: deviceProfile.probesSegZero,
       supportsAbr: deviceProfile.supportsAbr,
-      tonemapping: response.tonemapping,
       clientTonemap: response.clientTonemap ?? false,
       transcodeReasons: response.transcodeReasons,
       burnIn,

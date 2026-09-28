@@ -164,6 +164,7 @@ describe('SessionContextBuilder.build', () => {
 
   it('hashes a var_stream_map session at playback-info as every transcode request does', () => {
     const file = resolved(2);
+    file.mediaFile.streamInfo!.video[0].dvProfile = 5;
     const layout = (channels: number) => ({
       useTs: false,
       audioPlan: { mode: 'copy' as const, codec: 'aac' },
@@ -173,6 +174,7 @@ describe('SessionContextBuilder.build', () => {
       ],
       videoVariant: { codec: 'h264' as const, bitDepth: 8 as const, hdr: null },
       dolbyVision: true,
+      tonemapping: true,
     });
     const registry = new LiveSessionRegistry();
     const live = registry.create({

@@ -19,15 +19,12 @@ export type SessionLayout = Pick<
   | 'timeline'
   | 'sourceVersion'
   | 'dolbyVision'
+  | 'tonemapping'
 >;
 
-/** The session fields the cache profile hash is derived from. The timeline
- *  frozen at playback-info wins, so a rescan mid-playback moves no session. */
-export function sessionLayoutContext(
-  live: Partial<SessionLayout> | null | undefined,
-  si: MediaFileInfo | null | undefined,
-  label: string,
-): Pick<
+/** Every context field the cache profile hash may read: playback-info has
+ *  only these, so a hash input outside them forks it from the requests'. */
+export type SessionLayoutContext = Pick<
   SessionContext,
   | 'useTs'
   | 'videoOnly'
@@ -41,7 +38,18 @@ export function sessionLayoutContext(
   | 'sourceClockBreakSeconds'
   | 'sourceVersion'
   | 'dolbyVision'
-> {
+  | 'tonemap'
+  | 'sourceDvProfile'
+  | 'sourceDvBlSignalCompatId'
+>;
+
+/** The session fields the cache profile hash is derived from. The timeline
+ *  frozen at playback-info wins, so a rescan mid-playback moves no session. */
+export function sessionLayoutContext(
+  live: Partial<SessionLayout> | null | undefined,
+  si: MediaFileInfo | null | undefined,
+  label: string,
+): SessionLayoutContext {
   const useTs = live?.useTs ?? false;
   const timeline = live?.timeline ?? sourceTimeline(si, label);
   return {
@@ -61,7 +69,10 @@ export function sessionLayoutContext(
     sourceClockBreakSeconds: timeline.clockBreak,
     sourceVersion: live?.sourceVersion ?? undefined,
     dolbyVision: live?.dolbyVision ?? false,
-  };
+    tonemap: live?.tonemapping ?? false,
+    sourceDvProfile: si?.video?.[0]?.dvProfile,
+    sourceDvBlSignalCompatId: si?.video?.[0]?.dvBlSignalCompatId,
+  } satisfies Record<keyof SessionLayoutContext, unknown>;
 }
 
 /** Cache profile hash of a session, as `computeProfileHashForCtx` derives it
