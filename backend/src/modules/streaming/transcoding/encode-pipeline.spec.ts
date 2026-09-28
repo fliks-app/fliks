@@ -198,7 +198,7 @@ describe('isVtTonemapPath: darwin VideoToolbox routing', () => {
     expect(isVtTonemapPath(true, 'videotoolbox', true, 'hevc')).toBe(false);
   });
 
-  it('AV1 has no VT decoder, forces CPU', () => {
-    expect(isVtTonemapPath(true, 'videotoolbox', false, 'av1')).toBe(false);
+  it('AV1 + VT + tonemap is eligible (native av1 decoder forces the hwaccel)', () => {
+    expect(isVtTonemapPath(true, 'videotoolbox', false, 'av1')).toBe(true);
   });
 });

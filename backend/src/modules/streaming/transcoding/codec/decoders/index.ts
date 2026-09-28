@@ -28,6 +28,7 @@ export { findAmfNativeDecoder } from './d3d11va';
 import {
   h264VideotoolboxDecoder,
   hevcVideotoolboxDecoder,
+  av1VideotoolboxDecoder,
 } from './videotoolbox';
 import type {
   DecoderDescriptor,
@@ -61,6 +62,7 @@ const DESCRIPTORS: readonly DecoderDescriptor[] = [
   // Apple.
   h264VideotoolboxDecoder,
   hevcVideotoolboxDecoder,
+  av1VideotoolboxDecoder,
   // CPU last — always wins as fallback for any codec.
   cpuDecoder,
 ];

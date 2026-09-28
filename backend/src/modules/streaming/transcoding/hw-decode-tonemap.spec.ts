@@ -221,4 +221,23 @@ describe('buildFfmpegArgs: VideoToolbox (macOS)', () => {
     const fcIdx = args.indexOf('-filter_complex');
     expect(fcIdx === -1 ? '' : args[fcIdx + 1]).not.toContain('scale_vt');
   });
+
+  it('AV1 P10.0 (no base) without crop: native decoder before -i, RPU-aware tonemap_videotoolbox', () => {
+    const args = buildFfmpegArgs(
+      vtOpts({
+        sourceVideoCodec: 'av1',
+        sourceDvProfile: 10,
+        sourceDvBlSignalCompatId: 0,
+      }),
+      silentLog,
+    );
+    const cli = args.join(' ');
+    // The decoder's forced `-c:v av1` (first occurrence) must precede `-i`,
+    // ahead of the encoder's own later `-c:v hevc_videotoolbox`.
+    expect(args.indexOf('-c:v')).toBeLessThan(args.indexOf('-i'));
+    expect(args[args.indexOf('-c:v') + 1]).toBe('av1');
+    expect(cli).toContain('videotoolbox_vld');
+    expect(vfOf(args)).toContain('tonemap_videotoolbox');
+    expect(vfOf(args)).toContain('apply_dovi=1');
+  });
 });
