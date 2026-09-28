@@ -132,6 +132,10 @@ done
 mkdir -p "$RESOURCES/postgres/share/postgresql"
 cp -R "$PG_PREFIX/share/postgresql@18/"* "$RESOURCES/postgres/share/postgresql/" 2>/dev/null || \
     cp -R "$PG_PREFIX/share/postgresql/"* "$RESOURCES/postgres/share/postgresql/" 2>/dev/null || true
+if [ ! -f "$RESOURCES/postgres/share/postgresql/postgres.bki" ]; then
+    echo "Error: postgres.bki not bundled; initdb would fail on first launch" >&2
+    exit 1
+fi
 
 # Copy extension libraries (pg_trgm, plpgsql, etc.) so $libdir resolves
 # to our bundled versions — not the host's Homebrew (which may be a
