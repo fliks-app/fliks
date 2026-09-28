@@ -151,6 +151,12 @@ async function prepareSampleBitstreams(
   return samples;
 }
 
+/** Requires a real hardware surface, so a silent software fallback fails the
+ *  probe. The samples are 8-bit, hence nv12 whatever the decoder's depth. */
+export function hwDownloadFilterFor(d: DecoderDescriptor): string | null {
+  return d.outputSurface === 'cpu' ? null : 'hwdownload,format=nv12';
+}
+
 /** Run the descriptor's input args against a real bitstream, drop the
  *  decoded frame straight to a null muxer. Exit 0 ⇒ both the device
  *  init (when applicable) and the codec decode worked. */
@@ -158,6 +164,7 @@ async function probeOne(
   d: DecoderDescriptor,
   samplePath: string,
 ): Promise<boolean> {
+  const downloadFilter = hwDownloadFilterFor(d);
   const args = [
     '-hide_banner',
     '-loglevel',
@@ -167,6 +174,7 @@ async function probeOne(
     samplePath,
     '-frames:v',
     '1',
+    ...(downloadFilter ? ['-vf', downloadFilter] : []),
     '-f',
     'null',
     '-',
