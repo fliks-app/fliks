@@ -19,6 +19,7 @@ export type SessionLayout = Pick<
   | 'timeline'
   | 'sourceVersion'
   | 'dolbyVision'
+  | 'sourceHdr10Plus'
   | 'tonemapping'
 >;
 
@@ -41,6 +42,7 @@ export type SessionLayoutContext = Pick<
   | 'tonemap'
   | 'sourceDvProfile'
   | 'sourceDvBlSignalCompatId'
+  | 'sourceHdr10Plus'
 >;
 
 /** The session fields the cache profile hash is derived from. The timeline
@@ -72,6 +74,9 @@ export function sessionLayoutContext(
     tonemap: live?.tonemapping ?? false,
     sourceDvProfile: si?.video?.[0]?.dvProfile,
     sourceDvBlSignalCompatId: si?.video?.[0]?.dvBlSignalCompatId,
+    // Frozen, not re-read from si: a background reprobe fills this in later
+    // and must not fork the hash mid-session.
+    sourceHdr10Plus: live?.sourceHdr10Plus ?? false,
   } satisfies Record<keyof SessionLayoutContext, unknown>;
 }
 

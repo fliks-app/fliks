@@ -1,13 +1,11 @@
 import { resolveEncodePipeline, isVtTonemapPath } from './encode-pipeline';
 import type { EncodePipelineContext } from './encode-pipeline';
 import type { CodecVariant } from './codec/types';
-import { isScaleD3d11Enabled } from './codec/scale-d3d11-probe';
 import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
 import { isTonemapOpenclEnabled } from './codec/tonemap-opencl-probe';
+import { isVulkanTonemapEnabled } from './codec/vulkan-tonemap-probe';
+import { isAmfOpenclEnabled } from './codec/amf-opencl-probe';
 
-jest.mock('./codec/scale-d3d11-probe', () => ({
-  isScaleD3d11Enabled: jest.fn(() => false),
-}));
 jest.mock('./codec/vpp-qsv-probe', () => ({
   isVppQsvTonemapEnabled: jest.fn(() => false),
 }));
@@ -15,14 +13,23 @@ jest.mock('./codec/tonemap-opencl-probe', () => ({
   isTonemapOpenclEnabled: jest.fn(() => false),
   isTonemapOpenclEnabledWithCrop: jest.fn(() => false),
 }));
+jest.mock('./codec/vulkan-tonemap-probe', () => ({
+  isVulkanTonemapEnabled: jest.fn(() => false),
+}));
+jest.mock('./codec/amf-opencl-probe', () => ({
+  isAmfOpenclEnabled: jest.fn(() => false),
+}));
 
-const mockScaleD3d11 = isScaleD3d11Enabled as jest.Mock;
 const mockVppQsvTonemap = isVppQsvTonemapEnabled as jest.Mock;
 const mockTonemapOpencl = isTonemapOpenclEnabled as jest.Mock;
+const mockVulkanTonemap = isVulkanTonemapEnabled as jest.Mock;
+const mockAmfOpencl = isAmfOpenclEnabled as jest.Mock;
 
 beforeEach(() => {
   mockVppQsvTonemap.mockReturnValue(false);
   mockTonemapOpencl.mockReturnValue(false);
+  mockVulkanTonemap.mockReturnValue(false);
+  mockAmfOpencl.mockReturnValue(false);
 });
 
 const SDR_H264: CodecVariant = { codec: 'h264', bitDepth: 8, hdr: null };
@@ -36,6 +43,7 @@ function ctx(over: Partial<EncodePipelineContext>): EncodePipelineContext {
     tonemapAlgo: 'auto',
     sourceVideoCodec: 'h264',
     dvNoBase: false,
+    sourceBitDepth: 8,
     ...over,
   };
 }
@@ -100,14 +108,33 @@ describe('resolveEncodePipeline — Windows QSV routing', () => {
   });
 });
 
+describe('resolveEncodePipeline: Vulkan (libplacebo) tonemap', () => {
+  it('keeps a no-base DV source on VAAPI (not CPU) when the vulkan probe passed', () => {
+    mockVulkanTonemap.mockReturnValue(true);
+    const r = resolveEncodePipeline(
+      SDR_H264,
+      ctx({
+        hwAccel: 'vaapi',
+        tonemap: true,
+        tonemapAlgo: 'vaapi',
+        sourceVideoCodec: 'hevc',
+        dvNoBase: true,
+      }),
+      'linux',
+    );
+    expect(r.tonemapPath).toBe('vulkan');
+    expect(r.requestedHwAccel).toBe('vaapi');
+    expect(r.effectiveHwAccel).toBe('vaapi');
+    // libplacebo is a distinct filter step from tonemap_vaapi.
+    expect(r.useVaapiTonemap).toBe(false);
+  });
+});
+
 describe('resolveEncodePipeline — AMF tonemap', () => {
   const platformDescriptor = Object.getOwnPropertyDescriptor(
     process,
     'platform',
   )!;
-  beforeEach(() => {
-    mockScaleD3d11.mockReturnValue(false);
-  });
   afterEach(() => {
     Object.defineProperty(process, 'platform', platformDescriptor);
   });
@@ -145,33 +172,31 @@ describe('resolveEncodePipeline — AMF tonemap', () => {
     );
   };
 
-  it('uses the zero-copy scale_d3d11 path when its probe passed', () => {
-    mockScaleD3d11.mockReturnValue(true);
+  it('uses the zero-copy OpenCL path when its probe passed', () => {
+    mockAmfOpencl.mockReturnValue(true);
     const r = winAmfCleanSdr();
     expect(r.effectiveHwAccel).toBe('amf');
-    expect(r.amfFullGpuAvailable).toBe(true);
+    expect(r.amfOpenclAvailable).toBe(true);
   });
 
-  it('degrades to the CPU scale when the scale_d3d11 probe failed', () => {
-    // The filter is absent (FFmpeg < 8.1) or the GPU rejected its output
-    // texture — must NOT crash-cycle, just fall back.
+  it('degrades to the CPU scale when the OpenCL probe failed', () => {
     const r = winAmfCleanSdr();
     expect(r.effectiveHwAccel).toBe('amf');
-    expect(r.amfFullGpuAvailable).toBe(false);
+    expect(r.amfOpenclAvailable).toBe(false);
   });
 
-  it('keeps the CPU-decode path when the AMF encode tonemaps', () => {
-    mockScaleD3d11.mockReturnValue(true);
+  it('gates the native decoder on source bit depth (H.264 Hi10P exceeds it)', () => {
+    mockAmfOpencl.mockReturnValue(true);
     Object.defineProperty(process, 'platform', {
       value: 'win32',
       configurable: true,
     });
     const r = resolveEncodePipeline(
       SDR_H264,
-      ctx({ hwAccel: 'amf', tonemap: true, sourceVideoCodec: 'hevc' }),
+      ctx({ hwAccel: 'amf', sourceVideoCodec: 'h264', sourceBitDepth: 10 }),
       'win32',
     );
-    expect(r.amfFullGpuAvailable).toBe(false);
+    expect(r.amfOpenclAvailable).toBe(false);
   });
 });
 

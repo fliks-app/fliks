@@ -260,6 +260,11 @@ export class StreamBuilderService {
     /** The controller's already-frozen remux grid (see `freezeRemuxGrid`),
      *  fed back so the AudioEndsEarly check reads the exact grid served. */
     remuxGrid?: KeyframeGrid | null,
+    /** Whether the burn-in (if any) is TEXT, not image/PGS; matches
+     *  ffmpeg-args' `!!burnIn?.filter`. Only text forces the encode pipeline
+     *  off HW (libass needs CPU surfaces); PGS composites via filter_complex
+     *  without leaving the GPU. */
+    burnInIsText = false,
   ): EvaluateResult {
     const si = resolved.mediaFile.streamInfo;
     const v = si?.video?.[0];
@@ -458,9 +463,12 @@ export class StreamBuilderService {
       (dvWithBase && copySourceCodecString(v ?? {}) != null) || dvStandaloneCopy;
     // DirectPlay ships the raw file unmodified: report DV from profile/compat
     // alone, skipping the remux-only muxer validation dvWithBase/dvStandaloneCopy apply.
+    // P7 is dual-layer (never dv.singleLayer, so clientCanPresentDv excludes it
+    // structurally) but still reports DV once the client lists profile 7.
     const dvDirectPlayLabel =
-      clientCanPresentDv &&
-      (noBase || dv.compatId === 1 || dv.compatId === 4);
+      (clientCanPresentDv &&
+        (noBase || dv.compatId === 1 || dv.compatId === 4)) ||
+      (dv.profile === 7 && dvProfiles.includes(7));
     // HDR reaches an SDR client that tone-maps on its own — copied through, or
     // re-encoded on the HDR ladder. Surfaced in the stats overlay and the admin
     // dashboard, which would otherwise show no HDR step at all.
@@ -591,6 +599,16 @@ export class StreamBuilderService {
     ];
     const canCopyVideo =
       copyableIgnoringGates && dvRemuxCopyAllowed && copyGates.every((g) => !g.active);
+
+    // A client without a real P7 decoder shows black video on the raw dual-layer
+    // file; force the remux (strips the EL/RPU) only when one is available.
+    if (dv.profile === 7 && !dvProfiles.includes(7) && canCopyVideo) {
+      if (directPlayResult.canDirectPlay) directPlayResult.canDirectPlay = false;
+      reasons.push({
+        flag: 'VideoDolbyVisionP7NotSupported',
+        message: 'Dolby Vision profile 7 (dual layer) is not supported by this client',
+      });
+    }
 
     if (profile.supportsDirectPlay === false && directPlayResult.canDirectPlay) {
       directPlayResult.canDirectPlay = false;
@@ -866,11 +884,14 @@ export class StreamBuilderService {
     const effectiveHwAccel = resolveEncodePipeline(selectedVariant, {
       hwAccel: this.transcodingService.getDetectedHwAccel(),
       crop: needsCrop,
-      burnIn: needsBurnIn,
+      burnIn: burnInIsText,
       tonemap: transcodeTonemaps,
       tonemapAlgo: this.activeStreamTracker.getTonemapAlgo(),
       sourceVideoCodec,
       dvNoBase: noBase,
+      // Mirrors the spawn's own derivation (transcoding.service.ts) so this
+      // stays the same resolver call with the same inputs.
+      sourceBitDepth: isSourceHdr || noBase ? 10 : 8,
     }).effectiveHwAccel;
 
     this.log.log(

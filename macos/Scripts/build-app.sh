@@ -107,55 +107,59 @@ mkdir -p "$RESOURCES/node/bin"
 cp "$VENDORED/node/bin/node" "$RESOURCES/node/bin/"
 
 # ── PostgreSQL (from Homebrew installed, needs dylib bundling) ──
+# The bottle hardcodes /opt/homebrew/share/postgresql@18 and lib/postgresql@18, and only
+# resolves them relative to itself when run from <prefix>/Cellar/<formula>/<version>/bin.
+# Mirror that layout under postgres/ so a Mac without Homebrew finds share/ and lib/.
 echo "    [postgres] Copying PostgreSQL..."
-mkdir -p "$RESOURCES/postgres/bin" "$RESOURCES/postgres/lib" "$RESOURCES/postgres/share"
+PG_ROOT="$RESOURCES/postgres"
+PG_KEG="Cellar/postgresql@18/$(basename "$(cd "$PG_PREFIX" && pwd -P)")"
+PG_BIN="$PG_ROOT/$PG_KEG/bin"
+mkdir -p "$PG_BIN" "$PG_ROOT/lib/postgresql" "$PG_ROOT/share/postgresql@18"
+ln -s "$PG_KEG/bin" "$PG_ROOT/bin"
+ln -s ../../../lib "$PG_ROOT/$PG_KEG/lib"
+ln -s postgresql "$PG_ROOT/lib/postgresql@18"
 
 # Only copy the binaries we actually use.
 for pgbin in initdb pg_ctl postgres pg_isready createdb psql pg_dump; do
-    cp "$PG_PREFIX/bin/$pgbin" "$RESOURCES/postgres/bin/"
+    cp "$PG_PREFIX/bin/$pgbin" "$PG_BIN/"
 done
 
 # Copy the PostgreSQL internal shared library.
-cp "$PG_PREFIX/lib/postgresql/libpq.5.dylib" "$RESOURCES/postgres/lib/"
-install_name_tool -id "@loader_path/../lib/libpq.5.dylib" "$RESOURCES/postgres/lib/libpq.5.dylib"
+cp "$PG_PREFIX/lib/postgresql/libpq.5.dylib" "$PG_ROOT/lib/"
+install_name_tool -id "@loader_path/../lib/libpq.5.dylib" "$PG_ROOT/lib/libpq.5.dylib"
 
 # Rewrite CELLAR references in pg binaries to bundled libpq.
-for pgbin in "$RESOURCES/postgres/bin/"*; do
+for pgbin in "$PG_BIN/"*; do
     cellar_ref="$(otool -L "$pgbin" 2>/dev/null | awk '/libpq\.5\.dylib/ {print $1}' | grep -v '@' || true)"
     if [ -n "$cellar_ref" ]; then
         install_name_tool -change "$cellar_ref" "@executable_path/../lib/libpq.5.dylib" "$pgbin"
     fi
 done
 
-# Copy share directory (timezone data, SQL scripts needed by initdb).
-# Preserve the postgresql/ subdirectory so initdb -L finds it.
-mkdir -p "$RESOURCES/postgres/share/postgresql"
-cp -R "$PG_PREFIX/share/postgresql@18/"* "$RESOURCES/postgres/share/postgresql/" 2>/dev/null || \
-    cp -R "$PG_PREFIX/share/postgresql/"* "$RESOURCES/postgres/share/postgresql/" 2>/dev/null || true
+# Share directory: timezones, extension control files, SQL scripts needed by initdb.
+cp -R "$PG_PREFIX/share/postgresql/"* "$PG_ROOT/share/postgresql@18/"
+if [ ! -f "$PG_ROOT/share/postgresql@18/postgres.bki" ]; then
+    echo "Error: postgres.bki not bundled; initdb would fail on first launch" >&2
+    exit 1
+fi
 
 # Copy extension libraries (pg_trgm, plpgsql, etc.) so $libdir resolves
 # to our bundled versions — not the host's Homebrew (which may be a
 # different PG minor version with ABI-incompatible symbols).
-PG_EXTLIB="$PG_PREFIX/lib/postgresql"
-if [ -d "$PG_EXTLIB" ]; then
-    mkdir -p "$RESOURCES/postgres/lib/postgresql"
-    cp "$PG_EXTLIB"/*.dylib "$RESOURCES/postgres/lib/postgresql/" 2>/dev/null || true
-    echo "    [copy] $(ls "$RESOURCES/postgres/lib/postgresql/"*.dylib 2>/dev/null | wc -l | tr -d ' ') extension libraries"
-fi
+cp "$PG_PREFIX/lib/postgresql"/*.dylib "$PG_ROOT/lib/postgresql/"
+echo "    [copy] $(ls "$PG_ROOT/lib/postgresql/"*.dylib | wc -l | tr -d ' ') extension libraries"
 
 # Bundle Homebrew dylib dependencies for postgres binaries.
-bash "$SCRIPTS_DIR/bundle-dylibs.sh" "$RESOURCES/postgres/bin" "$RESOURCES/postgres/lib"
+bash "$SCRIPTS_DIR/bundle-dylibs.sh" "$PG_BIN" "$PG_ROOT/lib"
 
 # Also fix libpq's own Homebrew dependencies.
-bash "$SCRIPTS_DIR/bundle-dylibs.sh" "$RESOURCES/postgres/lib/libpq.5.dylib" "$RESOURCES/postgres/lib"
+bash "$SCRIPTS_DIR/bundle-dylibs.sh" "$PG_ROOT/lib/libpq.5.dylib" "$PG_ROOT/lib"
 
 # And the extension libs. These are dlopen'd by the postgres server at runtime
 # (plpgsql, pg_trgm, uuid-ossp, …) and pull the same Homebrew deps as the
 # binaries — chiefly gettext's libintl. The bin/ and libpq passes above don't
 # cover lib/postgresql/, so relocate their deps into the shared bundled lib/ too.
-if [ -d "$RESOURCES/postgres/lib/postgresql" ]; then
-    bash "$SCRIPTS_DIR/bundle-dylibs.sh" "$RESOURCES/postgres/lib/postgresql" "$RESOURCES/postgres/lib"
-fi
+bash "$SCRIPTS_DIR/bundle-dylibs.sh" "$PG_ROOT/lib/postgresql" "$PG_ROOT/lib"
 
 # ── FFmpeg (vendored jellyfin-ffmpeg, statically linked — no dylib fixup) ──
 echo "    [ffmpeg] Copying jellyfin-ffmpeg..."
@@ -196,9 +200,12 @@ sign() {
 # Every Mach-O inside the bundle: dylibs, the node/postgres/ffmpeg helpers, AND
 # native .node addons under backend/node_modules — notarization rejects any
 # unsigned executable. `file` filters out the (many) non-binary files.
-while IFS= read -r -d '' f; do
-    if file "$f" 2>/dev/null | grep -q 'Mach-O'; then sign "$f"; fi
-done < <(find "$RESOURCES" -type f -print0)
+# Each --timestamp is a network round-trip, so sign in parallel.
+export -f sign
+export SIGN_ID ENTITLEMENTS
+find "$RESOURCES" -type f \( -perm +111 -o -name '*.dylib' -o -name '*.node' -o -name '*.so' \) -print0 \
+    | xargs -0 -n1 -P "$(sysctl -n hw.ncpu)" bash -c \
+        'if file -b "$1" 2>/dev/null | grep -q Mach-O; then sign "$1"; fi' _
 
 # Outer app bundle last (seals the signed contents).
 sign "$APP_BUNDLE"
@@ -235,6 +242,13 @@ if [ -n "$stray" ]; then
     exit 1
 fi
 echo "    [verify] no bundled binary references /opt/homebrew"
+
+pg_share="$("$PG_ROOT/bin/initdb" --show -D "$(mktemp -d)" 2>&1 | sed -n 's/^share_path=//p')"
+if [ "$pg_share" != "$(cd "$PG_ROOT" && pwd -P)/share/postgresql@18" ]; then
+    echo "Error: bundled initdb resolves its share dir to '$pg_share', not the bundle."
+    exit 1
+fi
+echo "    [verify] postgres resolves share/ inside the bundle"
 
 # 3. ffmpeg must have zscale (libzimg) + the VideoToolbox tone-map — the HDR
 #    paths (crop / burn-in / DV) depend on them.

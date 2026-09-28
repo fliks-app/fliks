@@ -139,7 +139,8 @@
       "ContainerNotSupported": "Formato de contenedor no compatible",
       "ClientRequiresHls": "Requiere empaquetado HLS",
       "ClientCannotSwitchAudio": "El reproductor no puede cambiar de pista de audio en un archivo sin procesar",
-      "VideoBitrateNotSupported": "Tasa de bits demasiado alta"
+      "VideoBitrateNotSupported": "Tasa de bits demasiado alta",
+      "VideoDolbyVisionP7NotSupported": "Dolby Vision perfil 7 no compatible"
     },
     "preparing": "Preparando la transmisión…",
     "stats_delivery_mismatch": "Decisión del servidor: {{decision}} / Entregado: {{delivered}}",

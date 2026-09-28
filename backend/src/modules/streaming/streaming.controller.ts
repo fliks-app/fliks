@@ -82,7 +82,12 @@ import { resolveTonemapPath } from './transcoding/tonemap-path';
 import { resolveTonemapCurve } from './transcoding/ffmpeg-filter-graph';
 import { autoFfmpegSlots } from '../../common/utils/ffmpeg-slots';
 import { getPauseCapability } from './transcoding/ffmpeg-pause';
-import { isOpenclTonemapPath, isVtTonemapPath } from './transcoding/encode-pipeline';
+import {
+  isOpenclTonemapPath,
+  isVtTonemapPath,
+  isCudaTonemapPath,
+} from './transcoding/encode-pipeline';
+import { isAmfOpenclEnabled } from './transcoding/codec/amf-opencl-probe';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
@@ -844,6 +849,29 @@ export class StreamingController {
     const burnInSubtitleId = burnInSubtitleRaw
       ? parseInt(burnInSubtitleRaw, 10)
       : undefined;
+
+    // Resolved up front (not just before session creation below): the
+    // encode-pipeline decision (stream-builder's stats hwAccel) needs its
+    // `type` too, and for embedded text subs this also extracts the sidecar ;
+    // one resolve, reused for both.
+    let burnIn: BurnInSubtitle | null = null;
+    if (burnInSubtitleId) {
+      try {
+        const info = await this.subtitleBurnIn.resolve(
+          burnInSubtitleId,
+          mediaFileId,
+        );
+        burnIn = {
+          filter: this.subtitleBurnIn.buildFilter(info),
+          streamIndex: info.streamIndex,
+          type: info.type,
+        };
+      } catch (err) {
+        this.log.warn(
+          `Burn-in resolve failed for subtitle #${burnInSubtitleId}: ${err}`,
+        );
+      }
+    }
     const audioStreamRaw = firstQueryString(req.query, 'audioStreamIndex');
     const audioStreamIndex =
       audioStreamRaw != null ? parseInt(audioStreamRaw, 10) : undefined;
@@ -926,6 +954,9 @@ export class StreamingController {
       held.scan,
       ss.allowDirectStream,
       remuxGrid,
+      // Text-only, matching ffmpeg-args' `!!burnIn?.filter`: an image/PGS
+      // burn-in doesn't force the encode pipeline off HW, only text does.
+      !!burnIn?.filter,
     );
     const { response, useHdrLadder, videoVariant, muxFlavour } = evaluateResult;
     const sourceAudioCount = resolved.mediaFile.streamInfo?.audio?.length ?? 0;
@@ -1023,6 +1054,7 @@ export class StreamingController {
       timeline,
       sourceVersion: held.version,
       dolbyVision: response.dolbyVision ?? false,
+      sourceHdr10Plus: resolved.mediaFile.streamInfo?.video?.[0]?.hdr10Plus ?? false,
       tonemapping: response.tonemapping,
     };
     const profileHash =
@@ -1055,28 +1087,8 @@ export class StreamingController {
       episodeId ?? undefined,
     );
 
-    // Resolve the burn-in subtitle BEFORE creating the session: the transcode
-    // pre-spawns synchronously below, so resolving it async and patching the
-    // session afterwards raced the spawn and the first ffmpeg never carried the
-    // burn-in. For text subs this also extracts the sidecar up front.
-    let burnIn: BurnInSubtitle | null = null;
-    if (burnInSubtitleId) {
-      try {
-        const info = await this.subtitleBurnIn.resolve(
-          burnInSubtitleId,
-          mediaFileId,
-        );
-        burnIn = {
-          filter: this.subtitleBurnIn.buildFilter(info),
-          streamIndex: info.streamIndex,
-          type: info.type,
-        };
-      } catch (err) {
-        this.log.warn(
-          `Burn-in resolve failed for subtitle #${burnInSubtitleId}: ${err}`,
-        );
-      }
-    }
+    // burnIn was already resolved above (needed before evaluate() too), and
+    // must land on the session before the transcode pre-spawns below.
 
     // Surface the tonemap mechanism the session actually runs, not the admin
     // pick. QSV/VAAPI encoders run the HW tonemap (vaapi/opencl/qsv after
@@ -1093,11 +1105,12 @@ export class StreamingController {
     );
     const hwTonemap =
       response.hwAccel === 'qsv' || response.hwAccel === 'vaapi';
-    const openclTonemap = isOpenclTonemapPath(
-      !!response.tonemapping,
-      response.hwAccel,
-      dvNoBase,
-    );
+    const cudaTonemap = isCudaTonemapPath(!!response.tonemapping, response.hwAccel);
+    // AMF's zero-copy chain has its own probe: report 'opencl' off it even
+    // when the CPU-bounce probe isOpenclTonemapPath reads failed.
+    const openclTonemap =
+      isOpenclTonemapPath(!!response.tonemapping, response.hwAccel, dvNoBase) ||
+      (response.hwAccel === 'amf' && isAmfOpenclEnabled());
     const vtMetalTonemap = isVtTonemapPath(
       !!response.tonemapping,
       response.hwAccel,
@@ -1107,16 +1120,21 @@ export class StreamingController {
     const tonemapAlgo = response.tonemapping
       ? hwTonemap
         ? resolveTonemapPath(ss.tonemapAlgo, { hasCrop, dvNoBase })
-        : openclTonemap
-          ? 'opencl'
-          : vtMetalTonemap
-            ? 'videotoolbox'
-            : 'cpu'
+        : cudaTonemap
+          ? 'cuda'
+          : openclTonemap
+            ? 'opencl'
+            : vtMetalTonemap
+              ? 'videotoolbox'
+              : 'cpu'
       : null;
     // The curve is a `tonemap`/`tonemap_opencl` operator, so it only applies to
-    // the opencl and CPU paths; the vpp_qsv / tonemap_vaapi LUTs ignore it.
+    // the opencl/vulkan/CPU/cuda paths; the vpp_qsv / tonemap_vaapi LUTs ignore it.
     const tonemapCurve =
-      tonemapAlgo === 'opencl' || tonemapAlgo === 'cpu'
+      tonemapAlgo === 'opencl' ||
+      tonemapAlgo === 'vulkan' ||
+      tonemapAlgo === 'cpu' ||
+      tonemapAlgo === 'cuda'
         ? resolveTonemapCurve()
         : undefined;
 

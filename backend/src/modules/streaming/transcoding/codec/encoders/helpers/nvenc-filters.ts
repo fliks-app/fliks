@@ -1,48 +1,50 @@
 import type { EncoderInput } from '../../types';
 import { scaleEvenHeight } from './scale-filter';
 
-/** Build the `-vf` value for an 8-bit NVENC SDR encode (h264_nvenc /
- *  hevc_nvenc / av1_nvenc). NVENC encode and NVDEC decode are probed
- *  independently, so the encoder must handle whatever surface the decoder
- *  produced:
- *
- *  - `'cuda'` — NVDEC handed off GPU frames: the SDR crop+scale stays on
- *    the device with `scale_cuda` (crop bounces to CPU and back only when a
- *    manual crop is active). The HDR→SDR tonemap round-trips through CPU
- *    (mainline ffmpeg has no `tonemap_cuda`), so `hwdownload` pulls the
- *    frames down before the CPU tonemap chain.
- *  - `'cpu'` — software decode (NVDEC disabled or unable to decode this
- *    codec/bit depth): every filter runs on CPU and NVENC uploads the
- *    finished frames itself.
- *  - any other HW surface (`'vaapi'` from a decode-only VAAPI stack bridged
- *    in on an NVENC host, etc.): the frames live on another device that
- *    `scale_cuda` can't touch, so `hwdownload` pulls them to system memory
- *    and the CPU chain takes over — NVENC re-uploads on encode.
- *
- *  Only `scale_cuda` / `hwupload_cuda` require a CUDA surface; running them
- *  on non-CUDA frames aborts the graph with `Function not implemented`.
- */
+/** Whether the NVENC `-vf` chain below lands on a CUDA surface rather than
+ *  CPU frames. Shared with the PGS burn-in composite, which needs to know
+ *  whether to `hwdownload` before compositing. */
+export const nvencVfEndsOnGpu = (i: EncoderInput): boolean =>
+  i.tonemap ? !!i.filters.tonemapCuda : i.inputSurface === 'cuda';
+
+/** Build the `-vf` value for an 8-bit NVENC SDR encode. `'cuda'` input stays
+ *  on the device; other surfaces bounce through `hwdownload`/`hwupload_cuda`. */
 export function nvencScaleFilter8bit(input: EncoderInput): string {
-  const { target, filters, tonemap, hasCrop, inputSurface } = input;
+  const { target, filters, tonemap, hasCrop, hasBurnIn, inputSurface } = input;
   const w = target.width;
-  if (tonemap) {
+  let vf: string;
+  if (tonemap && filters.tonemapCuda) {
+    // Already on a CUDA surface with no crop: nothing to bounce.
+    const crop = filters.cpuCropPrefix;
+    const upload =
+      inputSurface === 'cuda' && !hasCrop
+        ? ''
+        : inputSurface === 'cpu'
+          ? `${crop}format=p010le,hwupload_cuda,`
+          : `hwdownload,format=p010le,${crop}hwupload_cuda,`;
+    vf = `${upload}scale_cuda=w=${w}:h=-2:format=p010le${filters.tonemapCuda}`;
+  } else if (tonemap) {
     // tonemapCpu already emits `format=yuv420p`; only the download prefix
     // differs. Tonemap implies a 10-bit HDR source, so download as p010le.
     const download =
       inputSurface === 'cpu' ? '' : 'hwdownload,format=p010le,';
-    return `${download}${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleEvenHeight(w)}`;
-  }
-  if (inputSurface === 'cuda') {
+    vf = `${download}${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleEvenHeight(w)}`;
+  } else if (inputSurface === 'cuda') {
     const nvCropFilter = hasCrop
       ? `hwdownload,format=nv12,${filters.cropStr},hwupload_cuda,`
       : '';
-    // scale_cuda keeps the decoder's native pixel format (no `format=`); the
-    // encoder owns the output bit depth (`-profile:v main` → 8-bit). Keeping
-    // format conversion out of the scaler decouples resize from pixel format.
-    return `${nvCropFilter}scale_cuda=w=${w}:h=-2`;
+    // Explicit nv12: a 10-bit source decodes to p010le even for this 8-bit
+    // rung, and scale_cuda otherwise keeps that native format untouched.
+    vf = `${nvCropFilter}scale_cuda=w=${w}:h=-2:format=nv12`;
+  } else {
+    const download = inputSurface === 'cpu' ? '' : 'hwdownload,format=nv12,';
+    vf = `${download}${filters.cpuCropPrefix}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=yuv420p`;
   }
-  const download = inputSurface === 'cpu' ? '' : 'hwdownload,format=nv12,';
-  return `${download}${filters.cpuCropPrefix}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=yuv420p`;
+  // Text burn-in needs CPU buffers for libass: bounce down only if the chain
+  // is still on a CUDA surface, keeping NVDEC + the tone-map on the GPU.
+  return hasBurnIn
+    ? `${vf}${nvencVfEndsOnGpu(input) ? ',hwdownload,format=nv12' : ''}${filters.burnInFilter}`
+    : vf;
 }
 
 /** Build the `-vf` value for a 10-bit NVENC HDR encode (hevc_nvenc
@@ -53,14 +55,19 @@ export function nvencScaleFilter8bit(input: EncoderInput): string {
  *  to the 8-bit SDR rung by the registry).
  */
 export function nvencScaleFilter10bit(input: EncoderInput): string {
-  const { target, filters, hasCrop, inputSurface } = input;
+  const { target, filters, hasCrop, hasBurnIn, inputSurface } = input;
   const w = target.width;
+  let vf: string;
   if (inputSurface === 'cuda') {
     const nvCropFilter = hasCrop
       ? `hwdownload,format=p010le,${filters.cropStr},hwupload_cuda,`
       : '';
-    return `${nvCropFilter}scale_cuda=w=${w}:h=-2:format=p010le`;
+    vf = `${nvCropFilter}scale_cuda=w=${w}:h=-2:format=p010le`;
+  } else {
+    const download = inputSurface === 'cpu' ? '' : 'hwdownload,format=p010le,';
+    vf = `${download}${filters.cpuCropPrefix}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=p010le`;
   }
-  const download = inputSurface === 'cpu' ? '' : 'hwdownload,format=p010le,';
-  return `${download}${filters.cpuCropPrefix}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=p010le`;
+  return hasBurnIn
+    ? `${vf}${nvencVfEndsOnGpu(input) ? ',hwdownload,format=p010le' : ''}${filters.burnInFilter}`
+    : vf;
 }

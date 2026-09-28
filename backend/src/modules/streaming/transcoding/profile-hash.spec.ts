@@ -29,6 +29,8 @@ const BASE: PlaybackProfile = {
   sourceVersion: null,
   dolbyVision: false,
   dvTonemap: false,
+  hdr10PlusStrip: false,
+  doviElStrip: false,
 };
 
 describe('computeProfileHash', () => {
@@ -297,6 +299,46 @@ describe('buildPlaybackProfileFromContext', () => {
       );
     // Has-base DV tone-maps its base layer, same pixels as plain HDR10.
     expect(hash(true)).toBe(hash(false));
+  });
+
+  it('separates a DV remux that strips HDR10+ from one that does not', () => {
+    const hash = (sourceHdr10Plus: boolean) =>
+      computeProfileHash(
+        buildPlaybackProfileFromContext({ dolbyVision: true, sourceHdr10Plus }, 3000),
+      );
+    expect(hash(true)).not.toBe(hash(false));
+  });
+
+  it('never marks the strip for a non-DV or non-hybrid session', () => {
+    expect(
+      buildPlaybackProfileFromContext({ sourceHdr10Plus: true }, 3000)
+        .hdr10PlusStrip,
+    ).toBe(false);
+    expect(
+      buildPlaybackProfileFromContext({ dolbyVision: true }, 3000)
+        .hdr10PlusStrip,
+    ).toBe(false);
+    // Hybrid HDR10+ flag alone, no DV: hash must equal the plain baseline.
+    expect(
+      computeProfileHash(
+        buildPlaybackProfileFromContext({ sourceHdr10Plus: true }, 3000),
+      ),
+    ).toBe(computeProfileHash(BASE));
+  });
+
+  it('separates a P7 remux that strips the EL/RPU from a non-P7 remux', () => {
+    const hash = (sourceDvProfile: number | undefined) =>
+      computeProfileHash(
+        buildPlaybackProfileFromContext({ dolbyVision: false, sourceDvProfile }, 3000),
+      );
+    expect(hash(7)).not.toBe(hash(undefined));
+  });
+
+  it('never marks the P7 strip once the remux is DV-eligible (never true for P7)', () => {
+    expect(
+      buildPlaybackProfileFromContext({ dolbyVision: true, sourceDvProfile: 7 }, 3000)
+        .doviElStrip,
+    ).toBe(false);
   });
 });
 

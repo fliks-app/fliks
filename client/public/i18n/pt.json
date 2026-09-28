@@ -139,7 +139,8 @@
       "ContainerNotSupported": "Formato de contêiner não suportado",
       "ClientRequiresHls": "Requer empacotamento HLS",
       "ClientCannotSwitchAudio": "O player não consegue trocar de faixa de áudio num ficheiro bruto",
-      "VideoBitrateNotSupported": "Débito demasiado elevado"
+      "VideoBitrateNotSupported": "Débito demasiado elevado",
+      "VideoDolbyVisionP7NotSupported": "Dolby Vision perfil 7 não suportado"
     },
     "preparing": "A preparar a transmissão…",
     "stats_delivery_mismatch": "Decisão do servidor: {{decision}} / Entregue: {{delivered}}",

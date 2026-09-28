@@ -1,4 +1,4 @@
-import { parseHdrStaticMetadata } from './ffprobe.service';
+import { hasHdr10PlusSideData, parseHdrStaticMetadata } from './ffprobe.service';
 
 const MASTERING_RATIONAL = {
   side_data_type: 'Mastering display metadata',
@@ -68,5 +68,23 @@ describe('parseHdrStaticMetadata', () => {
     const partial = { ...MASTERING_RATIONAL };
     delete (partial as Record<string, unknown>).max_luminance;
     expect(parseHdrStaticMetadata([partial])).toBeNull();
+  });
+});
+
+describe('hasHdr10PlusSideData', () => {
+  it('detects the SMPTE2094-40 side data on a DV+HDR10+ hybrid', () => {
+    expect(
+      hasHdr10PlusSideData([
+        MASTERING_RATIONAL,
+        { side_data_type: 'HDR Dynamic Metadata SMPTE2094-40 (HDR10+)' },
+        { side_data_type: 'Dolby Vision RPU Data' },
+      ]),
+    ).toBe(true);
+  });
+
+  it('is false for a plain HDR10/DV source and for absent side data', () => {
+    expect(hasHdr10PlusSideData([MASTERING_RATIONAL, CONTENT_LIGHT])).toBe(false);
+    expect(hasHdr10PlusSideData([])).toBe(false);
+    expect(hasHdr10PlusSideData(undefined)).toBe(false);
   });
 });

@@ -93,13 +93,22 @@ describe('detectHwAccel', () => {
 });
 
 describe('requestedHwAccelFor', () => {
-  it('forces CPU for burn-in on every non-VideoToolbox accel', () => {
+  it('forces CPU for burn-in on QSV/VAAPI', () => {
     expect(
       requestedHwAccelFor('qsv', { burnIn: true, crop: false }, 'win32'),
     ).toBe('none');
     expect(
-      requestedHwAccelFor('nvenc', { burnIn: true, crop: false }, 'linux'),
+      requestedHwAccelFor('vaapi', { burnIn: true, crop: false }, 'linux'),
     ).toBe('none');
+  });
+
+  it('keeps NVENC (and VideoToolbox) on burn-in: its own filter helper bounces to CPU', () => {
+    expect(
+      requestedHwAccelFor('nvenc', { burnIn: true, crop: false }, 'linux'),
+    ).toBe('nvenc');
+    expect(
+      requestedHwAccelFor('videotoolbox', { burnIn: true, crop: false }, 'darwin'),
+    ).toBe('videotoolbox');
   });
 
   it('falls a cropped QSV encode back to VAAPI on Linux when not native', () => {
