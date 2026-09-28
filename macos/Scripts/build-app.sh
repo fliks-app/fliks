@@ -196,9 +196,12 @@ sign() {
 # Every Mach-O inside the bundle: dylibs, the node/postgres/ffmpeg helpers, AND
 # native .node addons under backend/node_modules — notarization rejects any
 # unsigned executable. `file` filters out the (many) non-binary files.
-while IFS= read -r -d '' f; do
-    if file "$f" 2>/dev/null | grep -q 'Mach-O'; then sign "$f"; fi
-done < <(find "$RESOURCES" -type f -print0)
+# Each --timestamp is a network round-trip, so sign in parallel.
+export -f sign
+export SIGN_ID ENTITLEMENTS
+find "$RESOURCES" -type f \( -perm +111 -o -name '*.dylib' -o -name '*.node' -o -name '*.so' \) -print0 \
+    | xargs -0 -n1 -P "$(sysctl -n hw.ncpu)" bash -c \
+        'if file -b "$1" 2>/dev/null | grep -q Mach-O; then sign "$1"; fi' _
 
 # Outer app bundle last (seals the signed contents).
 sign "$APP_BUNDLE"

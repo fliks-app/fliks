@@ -5,6 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
 import { qsvDeviceInitArgs } from '../hw-device';
+import { synthesiseHdrProbeSample } from './hdr-probe-sample';
 
 const execFileAsync = promisify(execFile);
 
@@ -50,43 +51,7 @@ export async function runTonemapOpenclProbe(log: Logger): Promise<void> {
     `fliks-tonemap-opencl-probe-${process.pid}.hevc`,
   );
   try {
-    // Same synthesised HEVC Main10 PQ source as the vpp_qsv probe —
-    // black frames are fine, we're checking filter-graph plumbing.
-    await execFileAsync(
-      'ffmpeg',
-      [
-        '-hide_banner',
-        '-loglevel',
-        'error',
-        '-y',
-        '-f',
-        'lavfi',
-        '-i',
-        'nullsrc=size=320x180:rate=30,format=yuv420p10le',
-        '-frames:v',
-        '8',
-        '-c:v',
-        'libx265',
-        '-color_primaries',
-        'bt2020',
-        '-color_trc',
-        'smpte2084',
-        '-colorspace',
-        'bt2020nc',
-        '-x265-params',
-        [
-          'hdr-opt=1',
-          'repeat-headers=1',
-          'colorprim=bt2020',
-          'transfer=smpte2084',
-          'colormatrix=bt2020nc',
-          'master-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1)',
-          'max-cll=1000,400',
-        ].join(':'),
-        hdrSample,
-      ],
-      { timeout: 15_000 },
-    );
+    await synthesiseHdrProbeSample(hdrSample);
 
     // Probe 1: tonemap_opencl without the crop prefix — the path
     // session-time uses for uncropped HDR sources (typical 2160p

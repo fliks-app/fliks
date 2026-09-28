@@ -34,8 +34,23 @@ export function buildImageBurnInFilterComplex(ctx: {
    *  authored against the full source frame, so it must be cropped identically
    *  before scaling or the subtitle ends up oversized and mispositioned. */
   crop?: { width: number; height: number; x: number; y: number };
+  /** Whether `videoFilter` already reaches a GPU surface (else `hwdownload`
+   *  on CPU frames aborts the graph). Defaults to true. */
+  framesOnGpu?: boolean;
+  /** True when this session's default filter device is `ocl`, not the
+   *  encoder's own device: the reupload below must then name its device. */
+  openclFilterDevice?: boolean;
 }): string {
-  const { hwAccel, videoFilter, streamIndex: s, width: w, height: h, crop } = ctx;
+  const {
+    hwAccel,
+    videoFilter,
+    streamIndex: s,
+    width: w,
+    height: h,
+    crop,
+    framesOnGpu = true,
+    openclFilterDevice = false,
+  } = ctx;
   const tenBit = ctx.bitDepth >= 10;
   const input = `[0:${ctx.videoStreamIndex ?? 'v'}]`;
   const video = videoFilter ? `${input}${videoFilter}` : `${input}null`;
@@ -52,8 +67,9 @@ export function buildImageBurnInFilterComplex(ctx: {
   const hwFmt = tenBit ? 'p010le' : 'nv12';
 
   // CPU encode paths (libx264/libx265, VideoToolbox) already hand CPU frames —
-  // no device round-trip.
-  if (hwAccel === 'none' || hwAccel === 'videotoolbox') {
+  // no device round-trip. Same when the upstream chain already ended on CPU
+  // (an NVENC CPU/OpenCL tone-map bounce, or a CPU/VAAPI-bridged decode).
+  if (hwAccel === 'none' || hwAccel === 'videotoolbox' || !framesOnGpu) {
     if (tenBit) {
       return `${video}[v];${sub};[v][s]overlay[vout]`;
     }
@@ -62,14 +78,17 @@ export function buildImageBurnInFilterComplex(ctx: {
     );
   }
 
-  // HW encode paths: round-trip to CPU for the composite, then re-upload.
-  // VAAPI names its device: the default filter device can be Vulkan (DV tonemap).
+  // HW encode paths: round-trip to CPU for the composite, then re-upload. Named
+  // devices: VAAPI (default filter device can be Vulkan for DV tonemap) and the
+  // AMF/QSV OpenCL zero-copy chains (default filter device is `ocl`).
   const upload =
     hwAccel === 'nvenc'
       ? 'hwupload_cuda'
       : hwAccel === 'vaapi'
         ? 'hwupload=derive_device=vaapi:extra_hw_frames=16'
-        : 'hwupload=extra_hw_frames=16';
+        : openclFilterDevice
+          ? `hwupload=derive_device=${hwAccel === 'amf' ? 'd3d11va' : 'qsv'}:extra_hw_frames=16`
+          : 'hwupload=extra_hw_frames=16';
   if (tenBit) {
     return (
       `${video},hwdownload,format=${hwFmt}[v];` +

@@ -44,6 +44,9 @@ export interface VideoFilterContext {
    *  CPU zscale chain: see {@link isOpenclTonemapPath} in `encode-pipeline.ts`
    *  (NVENC/AMF, or a no-base DV source that needs the RPU-aware bounce). */
   openclTonemap?: boolean;
+  /** Route NVENC's HDR→SDR tone-map through `tonemap_cuda` (zero-copy).
+   *  See {@link isCudaTonemapPath} in `encode-pipeline.ts`. */
+  cudaTonemap?: boolean;
   /** Target output width. The CPU tone-map downscales to it in linear light
    *  before tone-mapping, so the (CPU-bound) tone curve + gamut conversion run
    *  at the output resolution instead of the source's — decisive on a 4K
@@ -87,6 +90,7 @@ export function buildVideoFilters(
     scaleWidth,
     scaleHeight,
     openclTonemap,
+    cudaTonemap,
   } = ctx;
   const curve = tonemapCurve ?? 'hable';
   const cropStr = crop
@@ -112,6 +116,12 @@ export function buildVideoFilters(
             ? `crop_w=${crop!.width}:crop_h=${crop!.height}:crop_x=${crop!.x}:crop_y=${crop!.y}:`
             : ''
         }w=${scaleWidth}:h=${scaleHeight ?? -2}:upscaler=none:downscaler=none:format=bgra:tonemapping=${curve}:peak_detect=0:color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=pc:apply_dolbyvision=${dvNoBase ? 1 : 0},format=vulkan,hwmap=derive_device=vaapi,format=vaapi,scale_vaapi=format=nv12:out_range=tv`
+      : '';
+  // The filter itself is a no-op on the round-trip question; nvenc-filters.ts
+  // decides whether the surface needs bouncing to CUDA before this runs.
+  const tonemapCuda =
+    tonemap && cudaTonemap
+      ? `,tonemap_cuda=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=${curve}:desat=0:${dvApplyDoviOpt(dvNoBase)}`
       : '';
   // CPU tonemap chain: HDR (PQ/HLG BT.2020) → SDR (BT.709). The opening zscale
   // linearises the source transfer AND downscales to the output width in one
@@ -152,6 +162,7 @@ export function buildVideoFilters(
     tonemapVaapi,
     tonemapVulkan,
     tonemapOpencl,
+    tonemapCuda,
     tonemapCpu,
   };
 }

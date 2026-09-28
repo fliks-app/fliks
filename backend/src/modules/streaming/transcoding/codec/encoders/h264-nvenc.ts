@@ -3,9 +3,8 @@ import { h264CodecString } from '../codec-strings';
 import { nvencScaleFilter8bit } from './helpers/nvenc-filters';
 import { NVENC_GOP_ARGS } from './helpers/nvenc-gop';
 
-/** NVIDIA NVENC H.264 encoder — Kepler and later. Tonemap path round-trips
- *  via CPU (hwdownload + scale + tonemap chain) because the CUDA filter
- *  graph has no native tonemap_cuda equivalent in mainline FFmpeg yet. */
+/** NVIDIA NVENC H.264 encoder, Kepler and later. Tone-maps via `tonemap_cuda`
+ *  (GPU, zero-copy) when probed, else the CPU/OpenCL bounce chain. */
 export const h264Nvenc: EncoderDescriptor = {
   id: 'h264_nvenc',
   hwAccel: 'nvenc',

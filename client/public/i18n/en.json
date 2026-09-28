@@ -144,7 +144,8 @@
       "ContainerNotSupported": "Container format not supported",
       "ClientRequiresHls": "Requires HLS packaging",
       "ClientCannotSwitchAudio": "The player can't switch audio tracks in a raw file",
-      "VideoBitrateNotSupported": "Bitrate too high"
+      "VideoBitrateNotSupported": "Bitrate too high",
+      "VideoDolbyVisionP7NotSupported": "Dolby Vision profile 7 not supported"
     },
     "preparing": "Preparing the stream…",
     "stats_delivery_mismatch": "Server decision: {{decision}} / Delivered: {{delivered}}",

@@ -20,6 +20,7 @@ describe('buildVideoFilters', () => {
       tonemapVaapi: '',
       tonemapVulkan: '',
       tonemapOpencl: '',
+      tonemapCuda: '',
       tonemapCpu: '',
     });
   });

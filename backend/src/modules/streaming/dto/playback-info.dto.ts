@@ -129,6 +129,7 @@ export interface PlaybackInfoResponse {
     | 'vaapi'
     | 'opencl'
     | 'qsv'
+    | 'cuda'
     | 'vulkan'
     | 'videotoolbox'
     | 'cpu'

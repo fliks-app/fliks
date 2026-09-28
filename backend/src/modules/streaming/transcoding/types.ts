@@ -239,6 +239,9 @@ export interface SessionContext {
   /** Delivered stream is Dolby Vision-presentable, frozen on the LiveSession
    *  at playback-info. Gates the remux muxer's `strict=unofficial`. */
   dolbyVision?: boolean;
+  /** Source carries HDR10+ dynamic metadata, set for any HDR10+ source; a DV
+   *  remux uses it to strip HDR10+ instead of sending both. */
+  sourceHdr10Plus?: boolean;
 }
 
 export interface TranscodeSession {

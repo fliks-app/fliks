@@ -6,6 +6,9 @@ describe('D3D11VA (AMF) decoders', () => {
     expect(h264D3d11vaNativeDecoder.outputSurface).toBe('d3d11');
     expect(joined).toContain('-hwaccel_output_format d3d11');
     expect(joined).toContain('-extra_hw_frames 32');
+    // M2: pinned to the AMD adapter, same device the OpenCL probe runs on.
+    expect(joined).toContain('d3d11va=dx:,vendor_id=0x1002');
+    expect(joined).toContain('-hwaccel_device dx');
   });
 
   it('the CPU-output decoder downloads immediately and stays lean', () => {

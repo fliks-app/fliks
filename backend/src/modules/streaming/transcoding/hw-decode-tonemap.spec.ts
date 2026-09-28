@@ -10,6 +10,15 @@ jest.mock('./codec/tonemap-opencl-probe', () => ({
 jest.mock('./codec/vulkan-tonemap-probe', () => ({
   isVulkanTonemapEnabled: jest.fn(() => true),
 }));
+jest.mock('./codec/cuda-tonemap-probe', () => ({
+  isCudaTonemapEnabled: jest.fn(() => false),
+}));
+jest.mock('./codec/amf-opencl-probe', () => ({
+  isAmfOpenclEnabled: jest.fn(() => false),
+}));
+jest.mock('./codec/qsv-opencl-probe', () => ({
+  isQsvOpenclTonemapEnabled: jest.fn(() => false),
+}));
 
 import { buildFfmpegArgs } from './ffmpeg-args';
 import type { BuildFfmpegArgsOptions } from './ffmpeg-args';
@@ -19,6 +28,13 @@ import {
   isTonemapOpenclEnabled,
   isTonemapOpenclEnabledWithCrop,
 } from './codec/tonemap-opencl-probe';
+import { isCudaTonemapEnabled } from './codec/cuda-tonemap-probe';
+import { isAmfOpenclEnabled } from './codec/amf-opencl-probe';
+import { isQsvOpenclTonemapEnabled } from './codec/qsv-opencl-probe';
+
+const mockCudaTonemap = isCudaTonemapEnabled as jest.Mock;
+const mockAmfOpencl = isAmfOpenclEnabled as jest.Mock;
+const mockQsvOpenclTonemap = isQsvOpenclTonemapEnabled as jest.Mock;
 
 const silentLog = {
   debug: () => {},
@@ -96,6 +112,44 @@ describe('buildFfmpegArgs — HW decode on the OpenCL tone-map path (#729)', () 
   });
 });
 
+// AMF's zero-copy D3D11↔OpenCL chain (replacing scale_d3d11, and the CPU-bounce
+// opencl tonemap) once its own boot probe passes.
+describe('buildFfmpegArgs: AMF zero-copy D3D11↔OpenCL chain (win32)', () => {
+  const platformDescriptor = Object.getOwnPropertyDescriptor(
+    process,
+    'platform',
+  )!;
+  beforeEach(() => {
+    mockAmfOpencl.mockReturnValue(true);
+    Object.defineProperty(process, 'platform', {
+      value: 'win32',
+      configurable: true,
+    });
+  });
+  afterEach(() => {
+    mockAmfOpencl.mockReturnValue(false);
+    Object.defineProperty(process, 'platform', platformDescriptor);
+  });
+
+  it('inits the named d3d11va/opencl devices once, decodes natively, no duplicate ocl', () => {
+    const args = buildFfmpegArgs(opts({ hwAccel: 'amf' }), silentLog);
+    const cli = args.join(' ');
+    expect(cli).toContain('-init_hw_device d3d11va=dx:,vendor_id=0x1002');
+    expect(cli).toContain('-init_hw_device opencl=ocl@dx');
+    expect(cli).toContain('-filter_hw_device ocl');
+    expect(cli).toContain('-hwaccel d3d11va -hwaccel_output_format d3d11');
+    expect(cli).toContain('-hwaccel_device dx');
+    // Single `ocl` device alias: the plain CPU-bounce opencl init must not
+    // also fire alongside the zero-copy one.
+    expect(args.filter((a) => a.startsWith('opencl=ocl'))).toHaveLength(1);
+    const vf = vfOf(args);
+    expect(vf).toContain('hwmap=derive_device=opencl:mode=read');
+    expect(vf).toContain('scale_opencl=');
+    expect(vf).toContain('tonemap_opencl=');
+    expect(vf).toContain('hwmap=derive_device=d3d11va:mode=write:reverse=1,format=d3d11');
+  });
+});
+
 // A no-base DV source (P5) must never decode on the qsv wrapper (drops the
 // RPU) or tonemap through a RPU-blind vaapi/qsv filter.
 describe('buildFfmpegArgs: no-base Dolby Vision keeps the RPU', () => {
@@ -151,6 +205,7 @@ describe('buildFfmpegArgs: no-base Dolby Vision keeps the RPU', () => {
         tonemapAlgo: 'auto',
         sourceVideoCodec: 'hevc',
         dvNoBase: true,
+        sourceBitDepth: 10,
       },
     );
     expect(pipeline.effectiveHwAccel).toBe('qsv');
@@ -194,5 +249,128 @@ describe('buildFfmpegArgs: no-base Dolby Vision on the Vulkan path', () => {
     expect(vf).not.toContain('hwdownload');
     // No-base DV source (P5): the RPU is trustworthy, so apply it.
     expect(vf).toContain('apply_dolbyvision=1');
+  });
+});
+
+// NVENC prefers tonemap_cuda (zero-copy) over the opencl bounce once its own
+// boot probe passes.
+describe('buildFfmpegArgs: NVENC tonemap_cuda once its probe passes', () => {
+  beforeEach(() => mockCudaTonemap.mockReturnValue(true));
+  afterEach(() => mockCudaTonemap.mockReturnValue(false));
+
+  it('P5 (no base): tonemap_cuda applies the RPU, no opencl device', () => {
+    const args = buildFfmpegArgs(
+      opts({ hwAccel: 'nvenc', sourceDvProfile: 5 }),
+      silentLog,
+    );
+    const cli = args.join(' ');
+    expect(cli).toContain('-hwaccel cuda -hwaccel_output_format cuda');
+    expect(cli).toContain('tonemap_cuda=');
+    expect(cli).toContain('apply_dovi=1');
+    expect(cli).not.toContain('tonemap_opencl');
+    expect(cli).not.toContain('opencl=ocl');
+  });
+
+  it('P8.1 (has base): tonemap_cuda without applying its RPU', () => {
+    const args = buildFfmpegArgs(
+      opts({
+        hwAccel: 'nvenc',
+        sourceDvProfile: 8,
+        sourceDvBlSignalCompatId: 1,
+      }),
+      silentLog,
+    );
+    const cli = args.join(' ');
+    expect(cli).toContain('tonemap_cuda=');
+    expect(cli).toContain('apply_dovi=0');
+    expect(cli).not.toContain('tonemap_opencl');
+  });
+});
+
+// Subtitle burn-in must not silently drop the GPU pipeline (NVENC text) or
+// break the PGS composite on a chain that already ends on CPU frames (AMF).
+describe('buildFfmpegArgs: subtitle burn-in keeps the GPU pipeline', () => {
+  const platformDescriptor = Object.getOwnPropertyDescriptor(
+    process,
+    'platform',
+  )!;
+  beforeEach(() => mockCudaTonemap.mockReturnValue(false));
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', platformDescriptor);
+    mockAmfOpencl.mockReturnValue(false);
+    mockQsvOpenclTonemap.mockReturnValue(false);
+  });
+
+  it('NVENC: text burn-in keeps NVDEC + the tone-map, libass runs on the CPU tail', () => {
+    const args = buildFfmpegArgs(
+      opts({
+        hwAccel: 'nvenc',
+        burnIn: { type: 'text', filter: "subtitles='/tmp/s.srt'" },
+      }),
+      silentLog,
+    );
+    const cli = args.join(' ');
+    expect(cli).toContain('-hwaccel cuda -hwaccel_output_format cuda');
+    expect(cli).toMatch(/-c:v \w+_nvenc\b/);
+    const vf = vfOf(args);
+    expect(vf).toContain('tonemap_opencl=');
+    expect(vf.endsWith(",subtitles='/tmp/s.srt'")).toBe(true);
+  });
+
+  it('AMF: PGS burn-in composites on the CPU chain with no stray hwdownload', () => {
+    Object.defineProperty(process, 'platform', {
+      value: 'win32',
+      configurable: true,
+    });
+    const args = buildFfmpegArgs(
+      opts({
+        hwAccel: 'amf',
+        burnIn: { type: 'image', filter: null, streamIndex: 3 },
+      }),
+      silentLog,
+    );
+    const fc = args[args.indexOf('-filter_complex') + 1];
+    expect(fc.match(/hwdownload/g)).toHaveLength(1);
+    expect(fc).not.toContain('extra_hw_frames');
+    expect(fc).toContain('[ov]format=yuv420p[vout]');
+  });
+
+  // The zero-copy chains repoint the default filter device to `ocl`, so a
+  // bare `hwupload` in the PGS composite would land there, not the encoder.
+  it('AMF + zero-copy probe on: PGS reupload targets d3d11va, not the ocl default', () => {
+    mockAmfOpencl.mockReturnValue(true);
+    Object.defineProperty(process, 'platform', {
+      value: 'win32',
+      configurable: true,
+    });
+    const args = buildFfmpegArgs(
+      opts({
+        hwAccel: 'amf',
+        tonemap: false,
+        burnIn: { type: 'image', filter: null, streamIndex: 3 },
+      }),
+      silentLog,
+    );
+    const fc = args[args.indexOf('-filter_complex') + 1];
+    expect(fc).toContain('hwupload=derive_device=d3d11va:extra_hw_frames=16');
+    expect(fc).not.toContain('hwupload=extra_hw_frames=16');
+  });
+
+  it('QSV Windows OpenCL tonemap: PGS reupload targets qsv, not the ocl default', () => {
+    mockQsvOpenclTonemap.mockReturnValue(true);
+    Object.defineProperty(process, 'platform', {
+      value: 'win32',
+      configurable: true,
+    });
+    const args = buildFfmpegArgs(
+      opts({
+        hwAccel: 'qsv',
+        burnIn: { type: 'image', filter: null, streamIndex: 3 },
+      }),
+      silentLog,
+    );
+    const fc = args[args.indexOf('-filter_complex') + 1];
+    expect(fc).toContain('hwupload=derive_device=qsv:extra_hw_frames=16');
+    expect(fc).not.toContain('hwupload=extra_hw_frames=16');
   });
 });

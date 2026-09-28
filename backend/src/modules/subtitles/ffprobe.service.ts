@@ -168,6 +168,9 @@ export interface VideoStreamInfo {
    *  encoder's master-display / max-cll so the display tonemaps to the source's
    *  real peak luminance instead of a generic 1000-nit reference. */
   hdrMetadata?: { masteringDisplay: string; maxCll: number; maxFall: number };
+  /** SMPTE 2094-40 dynamic metadata alongside the static HDR10/DV side data:
+   *  a hybrid source. Present (true or false) once probed. */
+  hdr10Plus?: boolean;
   crop?: CropInfo;
 }
 
@@ -486,6 +489,16 @@ export function parseHdrStaticMetadata(
   };
 }
 
+/** Whether a frame's side data carries SMPTE 2094-40 (HDR10+) dynamic metadata. */
+export function hasHdr10PlusSideData(sideDataList: unknown[] | undefined): boolean {
+  if (!Array.isArray(sideDataList)) return false;
+  return sideDataList.some(
+    (d) =>
+      (d as { side_data_type?: unknown })?.side_data_type ===
+      'HDR Dynamic Metadata SMPTE2094-40 (HDR10+)',
+  );
+}
+
 @Injectable()
 export class FfprobeService {
   private readonly logger = new Logger(FfprobeService.name);
@@ -659,6 +672,7 @@ export class FfprobeService {
           const meta = parseHdrStaticMetadata(first.sideData);
           if (meta) video[0].hdrMetadata = meta;
         }
+        video[0].hdr10Plus = hasHdr10PlusSideData(first.sideData);
       }
 
       const audio: AudioStreamInfo[] = streams
@@ -763,7 +777,12 @@ export class FfprobeService {
         [
           '-v', 'error',
           '-select_streams', String(stream.index),
-          '-show_entries', 'frame=pts,best_effort_timestamp,side_data_list',
+          // -show_entries only fills a nested section's fields when it's named
+          // here too; an unlisted frame_side_data prints empty objects.
+          '-show_entries',
+          'frame=pts,best_effort_timestamp,side_data_list' +
+            ':frame_side_data=side_data_type,red_x,red_y,green_x,green_y,blue_x,blue_y,' +
+            'white_point_x,white_point_y,min_luminance,max_luminance,max_content,max_average',
           '-of', 'json',
           videoPath,
         ],

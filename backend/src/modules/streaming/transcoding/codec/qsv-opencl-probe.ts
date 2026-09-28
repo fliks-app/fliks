@@ -4,6 +4,7 @@ import { unlink } from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
+import { synthesiseHdrProbeSample } from './hdr-probe-sample';
 
 const execFileAsync = promisify(execFile);
 
@@ -30,43 +31,7 @@ export async function runQsvOpenclTonemapProbe(log: Logger): Promise<void> {
     `fliks-qsv-opencl-probe-${process.pid}.hevc`,
   );
   try {
-    // Synthesise a tiny HEVC Main10 PQ HDR bitstream (same shape as the other
-    // tone-map probes — black frames are fine, we test the graph plumbing).
-    await execFileAsync(
-      'ffmpeg',
-      [
-        '-hide_banner',
-        '-loglevel',
-        'error',
-        '-y',
-        '-f',
-        'lavfi',
-        '-i',
-        'nullsrc=size=320x180:rate=30,format=yuv420p10le',
-        '-frames:v',
-        '8',
-        '-c:v',
-        'libx265',
-        '-color_primaries',
-        'bt2020',
-        '-color_trc',
-        'smpte2084',
-        '-colorspace',
-        'bt2020nc',
-        '-x265-params',
-        [
-          'hdr-opt=1',
-          'repeat-headers=1',
-          'colorprim=bt2020',
-          'transfer=smpte2084',
-          'colormatrix=bt2020nc',
-          'master-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1)',
-          'max-cll=1000,400',
-        ].join(':'),
-        hdrSample,
-      ],
-      { timeout: 15_000 },
-    );
+    await synthesiseHdrProbeSample(hdrSample);
 
     // The exact Windows chain a session runs: d3d11 decode → map to QSV →
     // vpp_qsv scale (p010) → map to OpenCL → tonemap → map back to QSV →

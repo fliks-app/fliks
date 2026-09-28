@@ -1,5 +1,6 @@
 import type { DecoderDescriptor } from './types';
 import type { VideoCodec } from '../types';
+import { amfD3d11OpenclInitArgs, D3D11VA_DEVICE_ALIAS } from '../../hw-device';
 
 /** Windows D3D11VA decode paired with an AMF encode. No
  *  `-hwaccel_output_format`, so FFmpeg downloads the decoded frames to
@@ -25,10 +26,10 @@ export const h264D3d11vaDecoder = d3d11vaDecoder('h264', 8);
 export const hevcD3d11vaDecoder = d3d11vaDecoder('hevc', 10);
 export const av1D3d11vaDecoder = d3d11vaDecoder('av1', 10);
 
-/** Full-GPU AMF variant: keeps the decoded frame on a D3D11 texture
- *  (`-hwaccel_output_format d3d11`) so `scale_d3d11` + `*_amf` run without a
- *  CPU round-trip. Selected only for the clean SDR path (no crop/tonemap/
- *  burn-in); the CPU-output decoder above stays the baseline. Windows-only. */
+/** Zero-copy AMF variant: keeps the decoded frame on a D3D11 texture, pinned
+ *  to the AMD adapter, with OpenCL derived from the same device so
+ *  `scale_opencl`/`tonemap_opencl` and `*_amf` run without a CPU round-trip.
+ *  The CPU-output decoder above stays the baseline. Windows-only. */
 function d3d11NativeDecoder(
   codec: VideoCodec,
   maxBitDepth: 8 | 10,
@@ -41,10 +42,13 @@ function d3d11NativeDecoder(
     outputSurface: 'd3d11',
     supports: () => process.platform === 'win32',
     buildInputArgs: () => [
+      ...amfD3d11OpenclInitArgs(),
       '-hwaccel',
       'd3d11va',
       '-hwaccel_output_format',
       'd3d11',
+      '-hwaccel_device',
+      D3D11VA_DEVICE_ALIAS,
       '-extra_hw_frames',
       '32',
       '-noautorotate',
@@ -56,8 +60,8 @@ export const h264D3d11vaNativeDecoder = d3d11NativeDecoder('h264', 8);
 export const hevcD3d11vaNativeDecoder = d3d11NativeDecoder('hevc', 10);
 export const av1D3d11vaNativeDecoder = d3d11NativeDecoder('av1', 10);
 
-/** Lookup a D3D11-native (full-GPU) decoder by source codec — exposed for
- *  the AMF scale_d3d11 path that bypasses the registry resolver. */
+/** Lookup a D3D11-native decoder by source codec, exposed for the AMF
+ *  zero-copy path that bypasses the registry resolver. */
 export function findAmfNativeDecoder(
   codec: 'h264' | 'hevc' | 'av1',
 ): DecoderDescriptor {
