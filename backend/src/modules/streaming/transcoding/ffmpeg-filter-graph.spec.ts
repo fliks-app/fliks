@@ -60,8 +60,14 @@ describe('buildVideoFilters', () => {
     // curve + gamut conversion run at output res, not the source's; vf_tonemap
     // needs linear light and the chain must convert primaries + transfer.
     expect(f.tonemapCpu).toBe(
-      'zscale=w=1280:h=-2:t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,',
+      'zscale=w=1280:h=-2:t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,' +
+        'sidedata=mode=delete:type=MASTERING_DISPLAY_METADATA,sidedata=mode=delete:type=CONTENT_LIGHT_LEVEL,sidedata=mode=delete:type=DYNAMIC_HDR_PLUS,',
     );
+  });
+
+  it('does not append the sidedata strip to tonemapx (verified clean on real HDR10 media)', () => {
+    const f = buildVideoFilters({ ...base, tonemap: true, dvNoBase: true });
+    expect(f.tonemapCpu).not.toContain('sidedata');
   });
 
   it('routes the tone-map through tonemap_opencl (GPU) when openclTonemap', () => {
@@ -115,15 +121,25 @@ describe('buildVideoFilters', () => {
     expect(f.tonemapVulkan).toContain('format=vulkan,hwmap=derive_device=vaapi');
   });
 
-  it('burn-in forces CPU tone-map (HW tone-maps suppressed)', () => {
+  it('burn-in keeps the opencl/vaapi GPU tone-maps (text burn-in stays on the GPU)', () => {
     const f = buildVideoFilters({
       ...base,
       tonemap: true,
       burnIn: { filter: 'subtitles=/tmp/x.ass' } as never,
     });
-    expect(f.tonemapOpencl).toBe('');
-    expect(f.tonemapVaapi).toBe('');
+    expect(f.tonemapOpencl).toContain('tonemap_opencl=');
     expect(f.burnInFilter).toBe(',subtitles=/tmp/x.ass');
     expect(f.tonemapCpu).toContain('tonemap=hable');
+  });
+
+  it('burn-in still suppresses vulkan (no-base DV fallback stays CPU-only with burn-in)', () => {
+    const f = buildVideoFilters({
+      ...base,
+      tonemap: true,
+      useVulkanTonemap: true,
+      dvNoBase: true,
+      burnIn: { filter: 'subtitles=/tmp/x.ass' } as never,
+    });
+    expect(f.tonemapVulkan).toBe('');
   });
 });

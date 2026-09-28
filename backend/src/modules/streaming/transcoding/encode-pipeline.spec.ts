@@ -1,4 +1,8 @@
-import { resolveEncodePipeline, isVtTonemapPath } from './encode-pipeline';
+import {
+  resolveEncodePipeline,
+  isVtTonemapPath,
+  isVtHdrPassthroughPath,
+} from './encode-pipeline';
 import type { EncodePipelineContext } from './encode-pipeline';
 import type { CodecVariant } from './codec/types';
 import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
@@ -128,6 +132,25 @@ describe('resolveEncodePipeline: Vulkan (libplacebo) tonemap', () => {
     // libplacebo is a distinct filter step from tonemap_vaapi.
     expect(r.useVaapiTonemap).toBe(false);
   });
+
+  it('drops a no-base DV source to CPU when text burn-in is active', () => {
+    mockVulkanTonemap.mockReturnValue(true);
+    const r = resolveEncodePipeline(
+      SDR_H264,
+      ctx({
+        hwAccel: 'vaapi',
+        burnIn: true,
+        tonemap: true,
+        tonemapAlgo: 'vaapi',
+        sourceVideoCodec: 'hevc',
+        dvNoBase: true,
+      }),
+      'linux',
+    );
+    expect(r.tonemapPath).toBe('vulkan');
+    expect(r.requestedHwAccel).toBe('none');
+    expect(r.effectiveHwAccel).toBe('none');
+  });
 });
 
 describe('resolveEncodePipeline — AMF tonemap', () => {
@@ -217,5 +240,33 @@ describe('isVtTonemapPath: darwin VideoToolbox routing', () => {
 
   it('AV1 + VT + tonemap is eligible (native av1 decoder forces the hwaccel)', () => {
     expect(isVtTonemapPath(true, 'videotoolbox', false, 'av1')).toBe(true);
+  });
+});
+
+describe('isVtHdrPassthroughPath: darwin VideoToolbox HDR10/HLG routing', () => {
+  const platformDescriptor = Object.getOwnPropertyDescriptor(
+    process,
+    'platform',
+  )!;
+  beforeEach(() =>
+    Object.defineProperty(process, 'platform', {
+      value: 'darwin',
+      configurable: true,
+    }),
+  );
+  afterEach(() =>
+    Object.defineProperty(process, 'platform', platformDescriptor),
+  );
+
+  it.each<[string, boolean, string, boolean, boolean, boolean]>([
+    ['HDR + VT + no crop/burn-in is eligible', true, 'videotoolbox', false, false, true],
+    ["not eligible when tonemapping (isVtTonemapPath's job)", false, 'videotoolbox', false, false, false],
+    ['not eligible with a crop (no VT crop filter)', true, 'videotoolbox', false, true, false],
+    ['not eligible with burn-in (libass needs CPU surfaces)', true, 'videotoolbox', true, false, false],
+    ['not eligible off VideoToolbox', true, 'vaapi', false, false, false],
+  ])('%s', (_name, isHdrOutput, hwAccel, burnIn, hasCrop, expected) => {
+    expect(
+      isVtHdrPassthroughPath(isHdrOutput, hwAccel, burnIn, hasCrop, 'hevc'),
+    ).toBe(expected);
   });
 });

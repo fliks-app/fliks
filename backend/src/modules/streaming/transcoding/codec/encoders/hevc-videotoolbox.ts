@@ -64,23 +64,30 @@ export const hevcVideotoolboxHdr10: EncoderDescriptor = {
   supportsHdrMetadata: () => true,
   codecString: (target: EncoderTarget) => hevcMain10CodecString(target),
   buildArgs(input: EncoderInput): string[] {
-    const { target, early, filters } = input;
+    const { target, early, filters, inputSurface } = input;
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
+    const onMetal = inputSurface === 'videotoolbox';
+    // Metal fast path: scale_vt resizes the p010 IOSurface in place, HDR
+    // tags untouched, instead of a CPU `format=p010le` scale.
+    const vf = onMetal
+      ? `scale_vt=w=${w}:h=-2`
+      : `${filters.cpuCropPrefix}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=p010le${filters.burnInFilter}`;
     return [
       '-c:v',
       'hevc_videotoolbox',
       '-profile:v',
       'main10',
       ...(early ? ['-realtime', '1'] : []),
-      '-pix_fmt',
-      'p010le',
+      // scale_vt's IOSurface output is already p010; -pix_fmt there fights
+      // the videotoolbox_vld chain instead of describing a CPU frame.
+      ...(onMetal ? [] : ['-pix_fmt', 'p010le']),
       '-b:v',
       bitrate,
       '-maxrate',
       bitrate,
       '-vf',
-      `${filters.cpuCropPrefix}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=p010le${filters.burnInFilter}`,
+      vf,
       '-g',
       String(target.gopSize),
       '-keyint_min',

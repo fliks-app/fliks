@@ -71,6 +71,13 @@ describe('hevc_videotoolbox HDR10/HLG', () => {
     expect(vf.endsWith(",subtitles='/sub.srt'")).toBe(true);
   });
 
+  it('uses scale_vt on the Metal surface for HDR passthrough (no crop, no burn-in)', () => {
+    const input = { ...makeInput(false), inputSurface: 'videotoolbox' as const };
+    const args = hevcVideotoolboxHdr10.buildArgs(input);
+    const vf = args[args.indexOf('-vf') + 1];
+    expect(vf).toBe('scale_vt=w=1920:h=-2');
+  });
+
   it('registry resolves the HDR10 HEVC/videotoolbox variant to the VT encoder, not a CPU fallback', () => {
     const enc = encoderRegistry.resolve(
       { codec: 'hevc', bitDepth: 10, hdr: 'HDR10' },
