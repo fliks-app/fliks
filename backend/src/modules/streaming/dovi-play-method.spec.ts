@@ -140,17 +140,17 @@ const resolved = (
   }) as never;
 
 describe('StreamBuilderService — Dolby Vision play-method', () => {
-  it('forces P5 to a tonemapping transcode with an SDR output variant', () => {
+  it('reshapes P5 into an HDR10 transcode for an HDR10-capable client', () => {
     const r = svc().evaluate(resolved(5, 0), hdrHevcClient, 'tok');
     expect(r.response.playMethod).toBe('Transcode');
-    expect(r.videoVariant?.hdr).toBeNull();
+    expect(r.videoVariant?.hdr).toBe('HDR10');
     expect(r.response.tonemapping).toBe(true);
     expect(
       r.response.transcodeReasons.some((x) => /Dolby Vision/.test(x.message)),
     ).toBe(true);
   });
 
-  it('forces P5 even with no HDR VUI (RPU-only metadata)', () => {
+  it('reshapes P5 into HDR10 even with no HDR VUI (RPU-only metadata)', () => {
     // Strip the HDR color tags so isSourceHdr would be false — dvP5 must still
     // force the transcode on its own.
     const r: any = resolved(5, 0);
@@ -159,8 +159,16 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
     r.mediaFile.streamInfo.video[0].colorPrimaries = undefined;
     const out = svc().evaluate(r, hdrHevcClient, 'tok');
     expect(out.response.playMethod).toBe('Transcode');
-    expect(out.videoVariant?.hdr).toBeNull();
+    expect(out.videoVariant?.hdr).toBe('HDR10');
     expect(out.response.tonemapping).toBe(true);
+  });
+
+  it('keeps P5 on the SDR tonemap for a client with no HDR10 display', () => {
+    const sdrClient = { ...hdrHevcClient, supportsHdr: false } as DeviceProfileDto;
+    const r = svc().evaluate(resolved(5, 0), sdrClient, 'tok');
+    expect(r.response.playMethod).toBe('Transcode');
+    expect(r.videoVariant?.hdr).toBeNull();
+    expect(r.response.tonemapping).toBe(true);
   });
 
   it('leaves DV 8.1 (HDR10-compatible base) on its HDR path', () => {

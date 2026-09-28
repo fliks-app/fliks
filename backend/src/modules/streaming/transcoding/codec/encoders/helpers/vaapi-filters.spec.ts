@@ -109,4 +109,12 @@ describe('vaapiScaleFilter10bit text burn-in', () => {
         "hwdownload,format=p010le,subtitles='/subs.srt',hwupload=derive_device=vaapi:extra_hw_frames=16",
     );
   });
+
+  it('routes a no-base DV HDR10 reshape through the opencl bounce', () => {
+    const tonemapOpencl =
+      ',hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=p010:t=smpte2084:p=bt2020:m=bt2020:r=tv:apply_dovi=1';
+    expect(vaapiScaleFilter10bit(input({ tonemapOpencl }))).toBe(
+      `scale_vaapi=w=1920:h=-2:extra_hw_frames=24${tonemapOpencl},hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi`,
+    );
+  });
 });

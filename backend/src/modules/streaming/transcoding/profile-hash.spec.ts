@@ -29,6 +29,7 @@ const BASE: PlaybackProfile = {
   sourceVersion: null,
   dolbyVision: false,
   dvTonemap: false,
+  dvTonemapHdr10: false,
   hdr10PlusStrip: false,
   doviElStrip: false,
 };
@@ -283,6 +284,21 @@ describe('buildPlaybackProfileFromContext', () => {
     expect(hash({ tonemap: true, sourceDvProfile: 5 })).not.toBe(
       hash({ tonemap: true }),
     );
+  });
+
+  it('separates a no-base DV reshape to HDR10 from the same source tone-mapped to SDR', () => {
+    const hash = (hdr: 'HDR10' | null) =>
+      computeProfileHash(
+        buildPlaybackProfileFromContext(
+          {
+            tonemap: true,
+            sourceDvProfile: 5,
+            videoVariant: { codec: 'hevc', bitDepth: hdr ? 10 : 8, hdr },
+          },
+          3000,
+        ),
+      );
+    expect(hash('HDR10')).not.toBe(hash(null));
   });
 
   it('does not fork the cache for a P8 (has-base) DV tone-map vs a plain HDR10 tone-map', () => {

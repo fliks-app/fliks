@@ -60,6 +60,9 @@ export interface PlaybackProfile {
    *  different pixels than a plain HDR→SDR tone-map, its own cache dir.
    *  A has-base source (P7/P8) tone-maps its base layer, same as HDR10. */
   dvTonemap: boolean;
+  /** A no-base DV reshape targeting HDR10 (PQ/BT.2020) rather than SDR: same
+   *  `dvTonemap` filter family, different output pixels; its own cache dir. */
+  dvTonemapHdr10: boolean;
   /** The remux strips HDR10+ dynamic metadata from a DV+HDR10+ hybrid source:
    *  different bytes than an un-stripped DV remux, its own cache dir. */
   hdr10PlusStrip: boolean;
@@ -104,6 +107,7 @@ function canonicalise(profile: PlaybackProfile): string {
     `sv=${profile.sourceVersion ?? ''}`,
     ...(profile.dolbyVision ? [`dv=1`] : []),
     ...(profile.dvTonemap ? [`dvt=1`] : []),
+    ...(profile.dvTonemap && profile.dvTonemapHdr10 ? [`dvt10=1`] : []),
     ...(profile.hdr10PlusStrip ? [`h10p=1`] : []),
     ...(profile.doviElStrip ? [`dvel=1`] : []),
   ].join('|');
@@ -169,6 +173,7 @@ export function buildPlaybackProfileFromContext(
     dvTonemap:
       !!ctx?.tonemap &&
       dvHasNoBase(ctx?.sourceDvProfile, ctx?.sourceDvBlSignalCompatId),
+    dvTonemapHdr10: videoVariant?.hdr === 'HDR10',
     hdr10PlusStrip: !!ctx?.dolbyVision && !!ctx?.sourceHdr10Plus,
     doviElStrip: ctx?.sourceDvProfile === 7 && !ctx?.dolbyVision,
   };

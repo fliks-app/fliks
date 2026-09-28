@@ -59,6 +59,11 @@ export interface VideoFilterContext {
    *  source with no HW decode (e.g. AV1 on a pre-Ampere NVIDIA GPU), where
    *  tone-mapping at 2160p drops below real-time. */
   scaleWidth: number;
+  /** No-base DV reshaped to HDR10 (PQ/BT.2020) instead of SDR: the RPU
+   *  reshape targets a static PQ signal, so no tone curve runs (`apply_dovi=1`
+   *  reshapes IPT to PQ, it doesn't compress dynamic range). Only ever set
+   *  alongside `dvNoBase`. */
+  hdr10Target?: boolean;
   /** Target output height, used only by the Vulkan path: libplacebo's `h=-2`
    *  derives from the uncropped input, so a crop needs the real height or
    *  `fit_mode=fill` stretches the picture. Other paths keep `h=-2`. */
@@ -97,6 +102,7 @@ export function buildVideoFilters(
     scaleHeight,
     openclTonemap,
     cudaTonemap,
+    hdr10Target,
   } = ctx;
   const curve = tonemapCurve ?? 'hable';
   const cropStr = crop
@@ -106,9 +112,13 @@ export function buildVideoFilters(
   const burnInFilter = burnIn?.filter ? `,${burnIn.filter}` : '';
   // Text burn-in stays on these two GPU tonemaps; the CPU round-trip is only
   // for `subtitles=...`, added later. Vulkan below still forces CPU for burn-in.
+  // HDR10 target: apply_dovi reshapes IPT straight to PQ, no tone curve; the
+  // opencl-verified recipe drops `tonemap=`/`desat=` and outputs p010, not nv12.
   const tonemapOpencl =
     tonemap && !useVaapiTonemap && !useVulkanTonemap
-      ? `,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=${curve}:desat=0:${dvApplyDoviOpt(dvNoBase)}`
+      ? hdr10Target
+        ? `,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=p010:t=smpte2084:p=bt2020:m=bt2020:r=tv:${dvApplyDoviOpt(dvNoBase)}`
+        : `,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=${curve}:desat=0:${dvApplyDoviOpt(dvNoBase)}`
       : '';
   const tonemapVaapi = useVaapiTonemap
     ? ',tonemap_vaapi=format=nv12:t=bt709:p=bt709:m=bt709'
@@ -126,9 +136,13 @@ export function buildVideoFilters(
       : '';
   // The filter itself is a no-op on the round-trip question; nvenc-filters.ts
   // decides whether the surface needs bouncing to CUDA before this runs.
+  // HDR10 target mirrors tonemap_opencl's verified recipe (same option
+  // surface); unverified on real NVENC hardware.
   const tonemapCuda =
     tonemap && cudaTonemap
-      ? `,tonemap_cuda=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=${curve}:desat=0:${dvApplyDoviOpt(dvNoBase)}`
+      ? hdr10Target
+        ? `,tonemap_cuda=format=p010:t=smpte2084:p=bt2020:m=bt2020:r=tv:${dvApplyDoviOpt(dvNoBase)}`
+        : `,tonemap_cuda=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=${curve}:desat=0:${dvApplyDoviOpt(dvNoBase)}`
       : '';
   // CPU tonemap chain: HDR (PQ/HLG BT.2020) → SDR (BT.709). The opening zscale
   // linearises the source transfer AND downscales to the output width in one
@@ -147,9 +161,13 @@ export function buildVideoFilters(
   // that reads the RPU.
   const tonemapCpu = tonemap
     ? openclTonemap
-      ? `format=p010le,hwupload,tonemap_opencl=t=bt709:m=bt709:p=bt709:tonemap=${curve}:desat=0:${dvApplyDoviOpt(dvNoBase)}:format=nv12,hwdownload,format=nv12,`
+      ? hdr10Target
+        ? `format=p010le,hwupload,tonemap_opencl=t=smpte2084:m=bt2020:p=bt2020:r=tv:${dvApplyDoviOpt(dvNoBase)}:format=p010,hwdownload,format=p010le,`
+        : `format=p010le,hwupload,tonemap_opencl=t=bt709:m=bt709:p=bt709:tonemap=${curve}:desat=0:${dvApplyDoviOpt(dvNoBase)}:format=nv12,hwdownload,format=nv12,`
       : dvNoBase
-        ? `scale=${scaleWidth}:-2,tonemapx=t=bt709:m=bt709:p=bt709:tonemap=${curve}:desat=0:format=yuv420p,`
+        ? hdr10Target
+          ? `scale=${scaleWidth}:-2,tonemapx=t=smpte2084:p=bt2020:m=bt2020:format=yuv420p10le:${dvApplyDoviOpt(dvNoBase)},`
+          : `scale=${scaleWidth}:-2,tonemapx=t=bt709:m=bt709:p=bt709:tonemap=${curve}:desat=0:format=yuv420p,`
         : `zscale=w=${scaleWidth}:h=-2:t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=${curve}:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,${HDR_STATIC_SIDEDATA_DELETE},`
     : '';
   // HW-crop round-trip: hwdownload → crop → hwupload. The explicit `format=`

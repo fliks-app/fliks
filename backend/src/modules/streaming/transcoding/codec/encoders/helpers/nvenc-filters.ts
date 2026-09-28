@@ -48,17 +48,31 @@ export function nvencScaleFilter8bit(input: EncoderInput): string {
 }
 
 /** Build the `-vf` value for a 10-bit NVENC HDR encode (hevc_nvenc
- *  main10, av1_nvenc hdr10 / hlg). Same surface split as the 8-bit path,
- *  but the pixels stay `p010le` end-to-end — there is no tonemap branch
- *  because a 10-bit HDR encoder is preserving HDR (tonemapping it would
- *  defeat the bitstream's HDR signaling; tonemap-to-SDR sources are routed
- *  to the 8-bit SDR rung by the registry).
+ *  main10, av1_nvenc hdr10 / hlg). Same surface split as the 8-bit path;
+ *  the pixels normally stay `p010le` end-to-end with no tonemap, since a
+ *  10-bit HDR encoder is preserving HDR (tonemapping it would defeat the
+ *  bitstream's HDR signaling; tonemap-to-SDR sources are routed to the
+ *  8-bit SDR rung by the registry). The exception is a no-base DV source
+ *  reshaped into HDR10 (see dvNoBaseHdr10Eligible), which still needs the
+ *  RPU-aware `tonemap_cuda`/`tonemap_opencl` bounce.
  */
 export function nvencScaleFilter10bit(input: EncoderInput): string {
-  const { target, filters, hasCrop, hasBurnIn, inputSurface } = input;
+  const { target, filters, tonemap, hasCrop, hasBurnIn, inputSurface } = input;
   const w = target.width;
   let vf: string;
-  if (inputSurface === 'cuda') {
+  if (tonemap && filters.tonemapCuda) {
+    const crop = filters.cpuCropPrefix;
+    const upload =
+      inputSurface === 'cuda' && !hasCrop
+        ? ''
+        : inputSurface === 'cpu'
+          ? `${crop}format=p010le,hwupload_cuda,`
+          : `hwdownload,format=p010le,${crop}hwupload_cuda,`;
+    vf = `${upload}scale_cuda=w=${w}:h=-2:format=p010le${filters.tonemapCuda}`;
+  } else if (tonemap) {
+    const download = inputSurface === 'cpu' ? '' : 'hwdownload,format=p010le,';
+    vf = `${download}${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleEvenHeight(w)}`;
+  } else if (inputSurface === 'cuda') {
     const nvCropFilter = hasCrop
       ? `hwdownload,format=p010le,${filters.cropStr},hwupload_cuda,`
       : '';

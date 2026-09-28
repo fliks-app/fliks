@@ -25,11 +25,17 @@ function makeInput(cfg: {
   crop?: boolean;
   sourceBitDepth?: number;
   cudaTonemap?: boolean;
+  dvNoBase?: boolean;
+  hdr10Target?: boolean;
 }): EncoderInput {
   const tonemap = cfg.tonemap ?? false;
   const crop = cfg.crop ? CROP : undefined;
   return {
-    variant: { codec: 'hevc', bitDepth: 8, hdr: null },
+    variant: {
+      codec: 'hevc',
+      bitDepth: 8,
+      hdr: cfg.hdr10Target ? 'HDR10' : null,
+    },
     target: {
       width: 1920,
       height: 1080,
@@ -51,9 +57,12 @@ function makeInput(cfg: {
       sourceBitDepth: cfg.sourceBitDepth ?? (tonemap ? 10 : 8),
       scaleWidth: 1920,
       cudaTonemap: cfg.cudaTonemap,
+      dvNoBase: cfg.dvNoBase,
+      hdr10Target: cfg.hdr10Target,
     }),
     tonemap,
     tonemapPath: 'opencl',
+    dvNoBase: cfg.dvNoBase,
     hasBurnIn: false,
     hasCrop: !!crop,
     inputSurface: cfg.inputSurface,
@@ -172,6 +181,28 @@ describe('NVENC encoders — surface-aware filter graph', () => {
         ),
       );
       expect(vf).toBe(expected);
+    });
+  });
+
+  // No-base DV reshaped into HDR10 (see dvNoBaseHdr10Eligible): still the
+  // zero-copy tonemap_cuda path, but PQ/BT.2020 output with no tone curve.
+  describe('hevc_nvenc_main10 (no-base DV -> HDR10 via cuda)', () => {
+    it('cuda decode: reshapes the RPU straight to a p010 PQ surface', () => {
+      const vf = vfOf(
+        hevcNvencHdr10.buildArgs(
+          makeInput({
+            inputSurface: 'cuda',
+            tonemap: true,
+            cudaTonemap: true,
+            dvNoBase: true,
+            hdr10Target: true,
+            sourceBitDepth: 10,
+          }),
+        ),
+      );
+      expect(vf).toBe(
+        'scale_cuda=w=1920:h=-2:format=p010le,tonemap_cuda=format=p010:t=smpte2084:p=bt2020:m=bt2020:r=tv:apply_dovi=1',
+      );
     });
   });
 
