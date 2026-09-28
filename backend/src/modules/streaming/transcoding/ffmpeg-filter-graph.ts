@@ -103,7 +103,7 @@ export function buildVideoFilters(
       ? ',tonemap_vaapi=format=nv12:t=bt709:p=bt709:m=bt709'
       : '';
   // Vulkan (libplacebo) tone-map. Crop is a libplacebo option (`crop_*`), not
-  // the hwdownload/crop/hwupload round-trip the other paths use — a Vulkan
+  // the hwdownload/crop/hwupload round-trip the other paths use; a Vulkan
   // filter device can't derive a VAAPI surface for a CPU-side crop.
   const tonemapVulkan =
     useVulkanTonemap && !burnIn?.filter

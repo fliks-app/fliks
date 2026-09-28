@@ -3,7 +3,7 @@ import type { EncoderInput } from '../../types';
 /** Build the `-vf` value for an 8-bit VAAPI encode (h264 / hevc / av1_vaapi).
  *  All three encoders share this scale/tonemap chain on VAAPI surfaces; only
  *  their codec/profile/tag args differ. Branches:
- *   - `tonemapVulkan`: libplacebo replaces `scale_vaapi` entirely — it
+ *   - `tonemapVulkan`: libplacebo replaces `scale_vaapi` entirely; it
  *     scales and tonemaps itself, on a Vulkan surface.
  *   - `tonemapVaapi`: tonemap on the VAAPI VPP, in place.
  *   - `tonemapOpencl`: OpenCL tonemap, mapped back onto a VAAPI surface.

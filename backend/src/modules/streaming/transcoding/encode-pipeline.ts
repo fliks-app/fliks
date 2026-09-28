@@ -126,7 +126,7 @@ export function resolveEncodePipeline(
       : isTonemapOpenclEnabled();
   // A no-base DV source has no RPU-aware vaapi/qsv tonemap: when neither GPU
   // bridge is actually usable, keep the pipeline off HW. Vulkan needs a VAAPI
-  // encoder and no burn-in — `resolveTonemapPath` doesn't know either.
+  // encoder and no burn-in; `resolveTonemapPath` doesn't know either.
   const vulkanUsable =
     tonemapPath === 'vulkan' &&
     ctx.tonemap &&

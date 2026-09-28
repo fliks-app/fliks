@@ -189,7 +189,7 @@ describe('buildFfmpegArgs: no-base Dolby Vision on the Vulkan path', () => {
     const vf = vfOf(args);
     expect(vf).toContain('crop_w=1920:crop_h=800:crop_x=0:crop_y=140:');
     // The crop's own height, not `h=-2` (libplacebo derives -2 from the
-    // uncropped input, stretching the picture — see resolveEncodePipeline).
+    // uncropped input, stretching the picture; see resolveEncodePipeline).
     expect(vf).toContain('w=1920:h=800:');
     expect(vf).not.toContain('hwdownload');
     // No-base DV source (P5): the RPU is trustworthy, so apply it.
