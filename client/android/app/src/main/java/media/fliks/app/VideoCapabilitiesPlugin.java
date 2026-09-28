@@ -35,6 +35,9 @@ public class VideoCapabilitiesPlugin extends Plugin {
         // Direct Play so a device whose HEVC/AV1 decoder tops out at 1080p
         // doesn't advertise unbounded support and black-screen on a 4K source.
         Map<String, int[]> maxRes = new HashMap<>();
+        // Decoder-reported DV profiles, not yet intersected with the display;
+        // the JS layer ANDs this with the Hdr plugin's display DV flag.
+        Set<Integer> dvProfiles = new HashSet<>();
         boolean hevcMain10 = false;
         boolean av1Main10 = false;
         try {
@@ -42,6 +45,9 @@ public class VideoCapabilitiesPlugin extends Plugin {
             for (MediaCodecInfo info : list.getCodecInfos()) {
                 if (info.isEncoder()) continue;
                 for (String type : info.getSupportedTypes()) {
+                    if ("video/dolby-vision".equalsIgnoreCase(type)) {
+                        collectDvProfiles(info, type, dvProfiles);
+                    }
                     String key = mimeToCodecKey(type);
                     if (key == null) continue;
                     codecs.add(key);
@@ -87,13 +93,42 @@ public class VideoCapabilitiesPlugin extends Plugin {
             resolutions.put(e.getKey(), wh);
         }
 
+        JSArray dvProfilesArr = new JSArray();
+        for (Integer p : dvProfiles) dvProfilesArr.put(p);
+
         JSObject result = new JSObject();
         result.put("videoCodecs", arr);
         result.put("hevcMain10", hevcMain10);
         result.put("av1Main10", av1Main10);
         result.put("containers", containers);
         result.put("resolutions", resolutions);
+        result.put("dolbyVisionProfiles", dvProfilesArr);
         call.resolve(result);
+    }
+
+    /** Maps a `video/dolby-vision` decoder's profileLevels onto DV profile numbers.
+     *  DolbyVisionProfileDvav110 (AV1, profile 10) is API 30+, but the field is a
+     *  compile-time constant, so referencing it is safe on any API level. */
+    private static void collectDvProfiles(MediaCodecInfo info, String type, Set<Integer> out) {
+        try {
+            MediaCodecInfo.CodecCapabilities caps = info.getCapabilitiesForType(type);
+            if (caps == null || caps.profileLevels == null) return;
+            for (MediaCodecInfo.CodecProfileLevel pl : caps.profileLevels) {
+                switch (pl.profile) {
+                    case MediaCodecInfo.CodecProfileLevel.DolbyVisionProfileDvheStn:
+                        out.add(5);
+                        break;
+                    case MediaCodecInfo.CodecProfileLevel.DolbyVisionProfileDvheSt:
+                        out.add(8);
+                        break;
+                    case MediaCodecInfo.CodecProfileLevel.DolbyVisionProfileDvav110:
+                        out.add(10);
+                        break;
+                    default:
+                        break;
+                }
+            }
+        } catch (Throwable ignored) { /* per-codec best-effort */ }
     }
 
     /** True when the decoder advertises a 10-bit (Main10) or HDR profile. */

@@ -2,6 +2,7 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsInt,
   IsNumber,
   IsObject,
   IsOptional,
@@ -10,6 +11,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { AllowExtraProperties } from '../../../common/pipes/tolerant-validation.pipe';
 
 export class DirectPlayProfile {
   @IsArray()
@@ -51,6 +53,7 @@ export class CodecCondition {
   maxHeight?: number;
 }
 
+@AllowExtraProperties()
 export class DeviceProfileDto {
   @IsArray()
   @ValidateNested({ each: true })
@@ -117,6 +120,13 @@ export class DeviceProfileDto {
   @IsBoolean()
   @IsOptional()
   supportsDolbyVision?: boolean;
+
+  /** DV profiles the device can decode AND present, e.g. `[5, 8]`. Absent
+   *  falls back to {@link supportsDolbyVision} (see `clientDvProfiles`). */
+  @IsArray()
+  @IsInt({ each: true })
+  @IsOptional()
+  dolbyVisionProfiles?: number[];
 
   /**
    * Client engine can play a raw progressive file served as-is (Direct Play).

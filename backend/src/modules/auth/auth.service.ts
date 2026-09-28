@@ -14,6 +14,7 @@ import { LoginDto, RegisterDto } from './dto/login.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { MediaServerType } from '../../common/enums';
 import { DEFAULT_ROLES } from '../../common/constants/permissions';
+import { SERVER_FEATURES } from '../../common/constants/server-features';
 import type { PublicUser } from '../users/users.service';
 import { RefreshTokenService } from './refresh-token.service';
 
@@ -130,6 +131,7 @@ export class AuthService {
       // Not hydrated here — callers that need libraryIds should use
       // UsersService.findOne(). Auth payloads don't carry ACL.
       libraryIds: [],
+      features: SERVER_FEATURES,
     };
   }
 

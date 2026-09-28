@@ -27,6 +27,8 @@ export type PublicUser = Omit<User, 'passwordHash' | 'userRole'> & {
   permissions: string[];
   /** IDs of libraries the user currently has access to. */
   libraryIds: number[];
+  /** Server capability flags, set only by AuthService.safeUser. */
+  features?: readonly string[];
 };
 
 @Injectable()

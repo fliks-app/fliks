@@ -1,3 +1,5 @@
+import type { DeviceProfileDto } from '../../dto/device-profile.dto';
+
 /** Dolby Vision classification derived from a stream's DOVI configuration
  *  record. Single-layer profiles (5, 8, 10) carry their DV inside the base
  *  NALs, so a raw stream copy preserves DV with no re-encode; dual-layer P7's
@@ -20,19 +22,20 @@ export interface DvStream {
   bitDepth?: number;
 }
 
+/** DV profiles a client can decode AND present; a bare boolean falls back to
+ *  [5, 8] and never implies profile 10. */
+export function clientDvProfiles(
+  p: Pick<DeviceProfileDto, 'dolbyVisionProfiles' | 'supportsDolbyVision'>,
+): number[] {
+  return p.dolbyVisionProfiles ?? (p.supportsDolbyVision === true ? [5, 8] : []);
+}
+
 export function deriveDvInfo(v?: DvStream): DvInfo {
   const profile = v?.dvProfile;
   const compatId = v?.dvBlSignalCompatId;
   const singleLayer =
     (profile === 5 || profile === 8 || profile === 10) && v?.dvElPresent !== true;
   return { profile, compatId, singleLayer };
-}
-
-/** Profile 5: single-layer IPT-PQ-C2 with no HDR10 base. A non-DV client that
- *  copies it renders green/purple, so it forces a tonemap transcode unless the
- *  client can present DV. */
-export function isDvProfile5(info: DvInfo): boolean {
-  return info.profile === 5 && info.singleLayer;
 }
 
 /** P5, or P10 with compat 0/unknown: no base layer, so a non-DV client must
@@ -58,9 +61,14 @@ export function dvSupplementalCodecs(v?: DvStream): string | null {
   return null;
 }
 
-/** RFC 8216bis CODECS for a standalone Profile 5 remux, which has no base
- *  layer to fall back to: `dvh1.05.LL`. Null without a probed level. */
+/** RFC 8216bis CODECS for a no-base remux: P5 (`dvh1.05.LL`) or P10.0
+ *  (`dav1.10.LL`, compat 0/unknown). Null without a probed level or match. */
 export function dvStandaloneCodecs(v?: DvStream): string | null {
-  if (v?.dvProfile !== 5 || !v?.dvLevel) return null;
-  return `dvh1.05.${String(v.dvLevel).padStart(2, '0')}`;
+  if (!v?.dvLevel) return null;
+  const level = String(v.dvLevel).padStart(2, '0');
+  if (v.dvProfile === 5) return `dvh1.05.${level}`;
+  if (v.dvProfile === 10 && (v.dvBlSignalCompatId === 0 || v.dvBlSignalCompatId == null)) {
+    return `dav1.10.${level}`;
+  }
+  return null;
 }
