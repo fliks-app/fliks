@@ -48,7 +48,7 @@ export async function runVulkanTonemapProbe(log: Logger): Promise<void> {
     );
 
     // The exact session graph: VAAPI decode -> hwmap onto DRM -> libplacebo
-    // (Vulkan) tonemap -> hwmap back onto VAAPI. No encode needed — the null
+    // (Vulkan) tonemap -> hwmap back onto VAAPI. No encode needed; the null
     // muxer accepts the VAAPI surface the chain ends on.
     await execFileAsync(
       'ffmpeg',
@@ -80,7 +80,7 @@ export async function runVulkanTonemapProbe(log: Logger): Promise<void> {
     await unlink(hdrSample).catch(() => {});
     probedOnce = true;
     log.log(
-      `[vulkan-tonemap-probe] enabled=${enabled} (${Date.now() - t0}ms)${failure ? ` — ${failure}` : ''}`,
+      `[vulkan-tonemap-probe] enabled=${enabled} (${Date.now() - t0}ms)${failure ? `; ${failure}` : ''}`,
     );
   }
 }
