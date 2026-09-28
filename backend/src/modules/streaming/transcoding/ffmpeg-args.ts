@@ -1073,6 +1073,9 @@ export function buildFfmpegArgs(
   // No HDR10/HLG base for a non-DV client to fall back to: the RPU-blind
   // vaapi/qsv tonemap must never run, see resolveEncodePipeline.
   const dvNoBase = dvHasNoBase(sourceDvProfile, sourceDvBlSignalCompatId);
+  // No-base DV reshaped into HDR10 rather than SDR (see stream-builder's
+  // dvNoBaseHdr10Eligible): the tonemap filters target PQ/BT.2020 output.
+  const dvNoBaseHdr10 = dvNoBase && variant.hdr === 'HDR10';
 
   // Image-based subtitle burn-in (PGS/VOBSUB) is composited via -filter_complex
   // below, reusing the encoder's video chain so the accelerated scale/tonemap
@@ -1238,6 +1241,7 @@ export function buildFfmpegArgs(
       scaleHeight: h,
       openclTonemap,
       cudaTonemap,
+      hdr10Target: dvNoBaseHdr10,
     }),
     tonemap,
     tonemapPath,

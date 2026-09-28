@@ -96,6 +96,57 @@ describe('buildVideoFilters', () => {
     );
   });
 
+  it('reshapes a no-base DV source to HDR10 via tonemap_opencl (no tone curve)', () => {
+    const f = buildVideoFilters({
+      ...base,
+      tonemap: true,
+      dvNoBase: true,
+      hdr10Target: true,
+    });
+    expect(f.tonemapOpencl).toBe(
+      ',hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=p010:t=smpte2084:p=bt2020:m=bt2020:r=tv:apply_dovi=1',
+    );
+    expect(f.tonemapOpencl).not.toContain('tonemap=hable');
+  });
+
+  it('reshapes a no-base DV source to HDR10 via tonemap_cuda (no tone curve)', () => {
+    const f = buildVideoFilters({
+      ...base,
+      tonemap: true,
+      dvNoBase: true,
+      hdr10Target: true,
+      cudaTonemap: true,
+    });
+    expect(f.tonemapCuda).toBe(
+      ',tonemap_cuda=format=p010:t=smpte2084:p=bt2020:m=bt2020:r=tv:apply_dovi=1',
+    );
+  });
+
+  it('reshapes a no-base DV source to HDR10 on the CPU tonemapx fallback', () => {
+    const f = buildVideoFilters({
+      ...base,
+      tonemap: true,
+      dvNoBase: true,
+      hdr10Target: true,
+    });
+    expect(f.tonemapCpu).toBe(
+      'scale=1920:-2,tonemapx=t=smpte2084:p=bt2020:m=bt2020:format=yuv420p10le:apply_dovi=1,',
+    );
+  });
+
+  it('reshapes a no-base DV source to HDR10 on the opencl-bounce CPU chain', () => {
+    const f = buildVideoFilters({
+      ...base,
+      tonemap: true,
+      dvNoBase: true,
+      hdr10Target: true,
+      openclTonemap: true,
+    });
+    expect(f.tonemapCpu).toBe(
+      'format=p010le,hwupload,tonemap_opencl=t=smpte2084:m=bt2020:p=bt2020:r=tv:apply_dovi=1:format=p010,hwdownload,format=p010le,',
+    );
+  });
+
   it('honours the tonemapCurve override', () => {
     const hable = buildVideoFilters({ ...base, tonemap: true });
     const mobius = buildVideoFilters({ ...base, tonemap: true, tonemapCurve: 'mobius' });

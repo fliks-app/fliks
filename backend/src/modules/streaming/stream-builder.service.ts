@@ -26,6 +26,7 @@ import {
 import { remuxBandwidthBps } from './transcoding/master-playlist';
 import { REMUX_STEREO_AUDIO_BITRATE } from './transcoding/ffmpeg-args';
 import { resolveEncodePipeline } from './transcoding/encode-pipeline';
+import { dvNoBaseHdr10PathSupported } from './transcoding/tonemap-path';
 import {
   DEFAULT_FPS,
   DEFAULT_SEGMENT_DURATION,
@@ -344,6 +345,24 @@ export class StreamBuilderService {
     // there's no HDR VUI to fall back to (an untagged P5), else the HDR format.
     const dvLabel = noBase ? `Dolby Vision P${dv.profile}` : source.hdrFormat;
     const clientSupportsHdr = profile.supportsHdr === true;
+    // Single-layer DV (P5/P8/P10) carries its RPU inside the base NALs, so a
+    // raw copy preserves it; dual-layer P7's EL can't ride HLS, so it's excluded.
+    const dvProfiles = clientDvProfiles(profile);
+    const clientListsDvProfile = dv.profile != null && dvProfiles.includes(dv.profile);
+    const detectedHwAccel = this.transcodingService.getDetectedHwAccel();
+    // No-base DV, an HDR10 display, a client that can't decode this DV
+    // profile at all, and a tonemap mechanism verified for a PQ target
+    // (see dvNoBaseHdr10PathSupported): reshape server-side into HDR10
+    // instead of the SDR fallback below.
+    const dvNoBaseHdr10Eligible =
+      noBase &&
+      clientSupportsHdr &&
+      !clientListsDvProfile &&
+      dvNoBaseHdr10PathSupported(
+        detectedHwAccel,
+        this.activeStreamTracker.getTonemapAlgo(),
+        { hasCrop: !!source.crop, hasBurnIn: burnInIsText },
+      );
     // Codec selector: picks the variant the encoder pipeline will produce
     // when the playback path lands on transcode. The result is threaded by
     // the controller onto every later session spawn via
@@ -355,12 +374,15 @@ export class StreamBuilderService {
     // encoder exists for a codec the client supports (HEVC Main10 on QSV,
     // AV1 via NVENC/libsvtav1, …). It returns an SDR variant when the client
     // lacks HDR display support or no HDR encoder is probed-OK.
-    const detectedHwAccel = this.transcodingService.getDetectedHwAccel();
     let selectedVariant = pickPrimaryVariant(
       {
         width: source.width ?? 0,
         height: source.height ?? 0,
-        hdr: noBase ? null : ((source.hdrFormat as CodecVariant['hdr']) ?? null),
+        hdr: noBase
+          ? dvNoBaseHdr10Eligible
+            ? 'HDR10'
+            : null
+          : ((source.hdrFormat as CodecVariant['hdr']) ?? null),
         codec: normaliseSourceCodec(source.videoCodec) ?? undefined,
       },
       profile,
@@ -375,12 +397,18 @@ export class StreamBuilderService {
     // CODECS string on `hdrVariant.codec`). `useHdrLadder` drives the HDR rung
     // naming and is threaded to the session by the controller.
     const useHdrLadder = selectedVariant.hdr != null;
+    // The selector actually landed an HDR10 encoder for the no-base DV
+    // reshape (it can still fall back to SDR when no HDR encoder resolved).
+    const dvNoBaseHdr10 = noBase && selectedVariant.hdr === 'HDR10';
     // Tone-map iff the source is HDR and the transcode ladder won't preserve
     // it (SDR client, or no HDR encoder for a client-supported codec). The
     // re-encode then runs the tonemap filter; copy paths (DirectPlay / remux)
     // never tone-map. AVPlayer rejects with -12927 if an H.264 re-encode
     // keeps the HDR VUI, hence the filter.
     const transcodeTonemaps = (isSourceHdr || noBase) && !useHdrLadder;
+    // Same filter machinery as transcodeTonemaps (RPU reshape via
+    // apply_dovi=1), targeting HDR10/PQ output instead of SDR/BT.709.
+    const runsTonemapFilter = transcodeTonemaps || dvNoBaseHdr10;
     // useHdrLadder and selectedVariant are returned to the controller
     // via EvaluateResult; the controller threads them onto the live
     // session rather than the service writing side-effects.
@@ -436,9 +464,6 @@ export class StreamBuilderService {
       directPlayResult.videoSupported &&
       directPlayResult.videoConditionsMet;
 
-    // Single-layer DV (P5/P8/P10) carries its RPU inside the base NALs, so a
-    // raw copy preserves it; dual-layer P7's EL can't ride HLS, so it's excluded.
-    const dvProfiles = clientDvProfiles(profile);
     // clientDvProfiles is the sole gate: the client must list this exact profile.
     const clientCanPresentDv =
       dv.singleLayer &&
@@ -485,10 +510,12 @@ export class StreamBuilderService {
       this.log.log(
         `hdrDecision[file=${resolved.mediaFile.id}] ${dvLabel} → SDR: supportsHdr=${clientSupportsHdr}, tonemapsHdrLocally=${profile.tonemapsHdrLocally === true}, supportsDolbyVision=${profile.supportsDolbyVision === true}, videoSupported=${directPlayResult.videoSupported}, videoConditionsMet=${directPlayResult.videoConditionsMet}`,
       );
-      if (transcodeTonemaps) {
+      if (runsTonemapFilter) {
         reasons.push({
           flag: 'VideoHdrNotSupported',
-          message: `HDR → SDR (tone mapping ${dvLabel})`,
+          message: dvNoBaseHdr10
+            ? `${dvLabel} → HDR10 (tone mapping)`
+            : `HDR → SDR (tone mapping ${dvLabel})`,
         });
       }
     }
@@ -869,12 +896,14 @@ export class StreamBuilderService {
 
     // --- Step 3: Full Transcode ---
     if (
-      transcodeTonemaps &&
+      runsTonemapFilter &&
       !reasons.some((r) => r.flag === 'VideoHdrNotSupported')
     ) {
       reasons.push({
         flag: 'VideoHdrNotSupported',
-        message: `HDR → SDR (tone mapping ${dvLabel})`,
+        message: dvNoBaseHdr10
+          ? `${dvLabel} → HDR10 (tone mapping)`
+          : `HDR → SDR (tone mapping ${dvLabel})`,
       });
     }
     // Report the encoder that will actually run via the SAME resolver
@@ -885,7 +914,7 @@ export class StreamBuilderService {
       hwAccel: this.transcodingService.getDetectedHwAccel(),
       crop: needsCrop,
       burnIn: burnInIsText,
-      tonemap: transcodeTonemaps,
+      tonemap: runsTonemapFilter,
       tonemapAlgo: this.activeStreamTracker.getTonemapAlgo(),
       sourceVideoCodec,
       dvNoBase: noBase,
@@ -929,7 +958,7 @@ export class StreamBuilderService {
         outputContainer: 'hls',
         quality: negotiatedQuality,
         hwAccel: effectiveHwAccel,
-        tonemapping: transcodeTonemaps,
+        tonemapping: runsTonemapFilter,
         clientTonemap,
         // A transcode re-encodes to H.264/HEVC/AV1 SDR or HDR10, never DV.
         dolbyVision: false,

@@ -38,8 +38,12 @@ export function amfOpenclFilter(opts: {
   const resetSar = cropStr ? ':reset_sar=1' : '';
   const scale = `scale_opencl=w=${width}:h=${height}${resetSar}`;
   // Tonemap: format left unset (p010 passthrough), tonemap_opencl sets it.
+  // outputFormat === 'p010le' only happens on the HDR10 descriptor, and a
+  // tonemap there is always a no-base DV reshape (see dvNoBaseHdr10Eligible).
   const step = tonemap
-    ? `${scale},tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=${curve}:desat=0:${dvApplyDoviOpt(dvNoBase)}`
+    ? outputFormat === 'p010le'
+      ? `${scale},tonemap_opencl=format=p010:t=smpte2084:p=bt2020:m=bt2020:r=tv:${dvApplyDoviOpt(dvNoBase)}`
+      : `${scale},tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=${curve}:desat=0:${dvApplyDoviOpt(dvNoBase)}`
     : `${scale}:format=${outputFormat}`;
   // Text burn-in: hwdownload straight off OpenCL, hand AMF CPU frames directly.
   // Its encoder takes nv12/p010le natively, no re-upload to d3d11 needed.
@@ -78,22 +82,28 @@ export function amfScaleFilter8bit(input: EncoderInput): string {
   return `${download}${filters.cpuCropPrefix}${tm}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=nv12${filters.burnInFilter}`;
 }
 
-/** `-vf` for a 10-bit AMF HDR encode. No tonemap branch — a 10-bit encoder
- *  preserves HDR; tonemap-to-SDR sources are routed to the 8-bit rung. */
+/** `-vf` for a 10-bit AMF HDR encode. Normally no tonemap; a 10-bit
+ *  encoder preserves HDR; tonemap-to-SDR sources are routed to the 8-bit
+ *  rung. The exception is a no-base DV source reshaped into HDR10 (see
+ *  dvNoBaseHdr10Eligible), which still needs the RPU-aware OpenCL bounce. */
 export function amfScaleFilter10bit(input: EncoderInput): string {
-  const { target, filters, inputSurface, hasBurnIn } = input;
+  const { target, filters, tonemap, tonemapCurve, dvNoBase, inputSurface, hasBurnIn } =
+    input;
   const w = target.width;
   if (inputSurface === 'd3d11') {
     return amfOpenclFilter({
       width: w,
       height: target.height,
       cropStr: filters.cropStr,
-      tonemap: false,
+      tonemap,
+      tonemapCurve,
+      dvNoBase,
       outputFormat: 'p010le',
       burnInFilter: hasBurnIn ? filters.burnInFilter : undefined,
     });
   }
   const download =
     inputSurface === 'cpu' ? '' : 'hwdownload,format=p010le,';
-  return `${download}${filters.cpuCropPrefix}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=p010le${filters.burnInFilter}`;
+  const tm = tonemap ? filters.tonemapCpu : '';
+  return `${download}${filters.cpuCropPrefix}${tm}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=p010le${filters.burnInFilter}`;
 }

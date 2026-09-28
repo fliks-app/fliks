@@ -6,7 +6,7 @@ import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
 import { isQsvOpenclTonemapEnabled } from './codec/qsv-opencl-probe';
 import { isVulkanTonemapEnabled } from './codec/vulkan-tonemap-probe';
 import { hostHasVaapi } from './hw-device';
-import type { TonemapAlgo } from './types';
+import type { HwAccelType, TonemapAlgo } from './types';
 
 /** Concrete filter chain the session-time graph will actually use,
  *  derived from the admin `TonemapAlgo` setting + boot probe results.
@@ -60,4 +60,20 @@ export function resolveTonemapPath(
     return 'vaapi';
   }
   return algo;
+}
+
+/** A no-base DV source reshaped to HDR10 (not SDR) is only verified on the
+ *  OpenCL bounce, NVENC's CUDA/OpenCL tonemaps, and the CPU tonemapx chain ;
+ *  not the Vulkan (libplacebo) or VideoToolbox Metal paths. Gates the variant
+ *  selector so those two keep falling back to the SDR tonemap instead of
+ *  tagging HDR10 metadata onto pixels their filter chain never produced. */
+export function dvNoBaseHdr10PathSupported(
+  hwAccel: HwAccelType,
+  algo: TonemapAlgo,
+  opts: { hasCrop: boolean; hasBurnIn: boolean },
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  if (hwAccel === 'videotoolbox') return false;
+  const path = resolveTonemapPath(algo, { hasCrop: opts.hasCrop, dvNoBase: true }, platform);
+  return !(path === 'vulkan' && hwAccel === 'vaapi' && !opts.hasBurnIn);
 }

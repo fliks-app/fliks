@@ -322,4 +322,69 @@ describe('qsvScaleFilter10bit', () => {
         "hwdownload,format=p010le,subtitles='/subs.srt',hwupload=extra_hw_frames=16",
     );
   });
+
+  it('reshapes a no-base DV source to HDR10 on the qsv-native OpenCL bounce', () => {
+    expect(
+      qsvScaleFilter10bit(
+        input({
+          inputSurface: 'qsv',
+          tonemap: true,
+          tonemapPath: 'opencl',
+          dvNoBase: true,
+        }),
+      ),
+    ).toBe(
+      'hwmap=derive_device=qsv,' +
+        'vpp_qsv=w=1920:h=804:format=p010le,' +
+        'hwmap=derive_device=opencl:mode=read,' +
+        'tonemap_opencl=format=p010:p=bt2020:t=smpte2084:m=bt2020:r=tv:apply_dovi=1,' +
+        'hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,' +
+        'format=qsv',
+    );
+  });
+
+  it('reshapes a no-base DV source to HDR10 on the d3d11 OpenCL bounce', () => {
+    expect(
+      qsvScaleFilter10bit(
+        input({
+          inputSurface: 'd3d11',
+          tonemap: true,
+          tonemapPath: 'opencl',
+          dvNoBase: true,
+        }),
+      ),
+    ).toBe(
+      'hwmap=derive_device=qsv,' +
+        'vpp_qsv=w=1920:h=804:format=p010le,' +
+        'hwmap=derive_device=opencl,' +
+        'tonemap_opencl=t=smpte2084:m=bt2020:p=bt2020:r=tv:format=p010:apply_dovi=1,' +
+        'hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv',
+    );
+  });
+
+  it('reshapes a no-base DV source to HDR10 via the vaapi-decode opencl bounce', () => {
+    expect(
+      qsvScaleFilter10bit(
+        input({
+          inputSurface: 'vaapi',
+          filters: {
+            cropStr: '',
+            cpuCropPrefix: '',
+            hwCropPrefix: '',
+            burnInFilter: '',
+            tonemapVaapi: '',
+            tonemapVulkan: '',
+            tonemapOpencl:
+              ',hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=p010:t=smpte2084:p=bt2020:m=bt2020:r=tv:apply_dovi=1',
+            tonemapCuda: '',
+            tonemapCpu: '',
+          },
+        }),
+      ),
+    ).toBe(
+      'scale_vaapi=w=1920:h=-2:extra_hw_frames=24,hwmap=derive_device=opencl:mode=read,' +
+        'tonemap_opencl=format=p010:t=smpte2084:p=bt2020:m=bt2020:r=tv:apply_dovi=1,' +
+        'hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv',
+    );
+  });
 });

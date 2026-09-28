@@ -1142,13 +1142,17 @@ export class StreamingController {
               ? 'videotoolbox'
               : 'cpu'
       : null;
+    // A no-base DV source reshaped into HDR10 runs no tone curve at all ;
+    // apply_dovi reshapes IPT straight to PQ (see dvNoBaseHdr10Eligible).
+    const dvNoBaseHdr10 = dvNoBase && videoVariant?.hdr === 'HDR10';
     // The curve is a `tonemap`/`tonemap_opencl` operator, so it only applies to
     // the opencl/vulkan/CPU/cuda paths; the vpp_qsv / tonemap_vaapi LUTs ignore it.
     const tonemapCurve =
-      tonemapAlgo === 'opencl' ||
-      tonemapAlgo === 'vulkan' ||
-      tonemapAlgo === 'cpu' ||
-      tonemapAlgo === 'cuda'
+      !dvNoBaseHdr10 &&
+      (tonemapAlgo === 'opencl' ||
+        tonemapAlgo === 'vulkan' ||
+        tonemapAlgo === 'cpu' ||
+        tonemapAlgo === 'cuda')
         ? resolveTonemapCurve()
         : undefined;
 

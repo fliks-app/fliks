@@ -87,17 +87,35 @@ export function qsvScaleFilter8bit(input: EncoderInput): string {
 
 /** Build the `-vf` value for a 10-bit QSV encode (hevc_qsv main10,
  *  av1_qsv hdr10). Same shape as {@link qsvScaleFilter8bit} but the
- *  HW surfaces stay in `p010le` and there are no tonemap branches —
- *  the encoder is producing HDR, so a tonemap would defeat the
- *  bitstream's HDR signaling. Tonemap-to-SDR HDR sources never reach
- *  a 10-bit HDR encoder; the registry routes them to an SDR rung
- *  with the matching 8-bit descriptor. */
+ *  HW surfaces stay in `p010le` and there is normally no tonemap
+ *  branch; the encoder is producing HDR, so a tonemap would defeat
+ *  the bitstream's HDR signaling. The one exception is a no-base DV
+ *  source reshaped into HDR10 (see dvNoBaseHdr10Eligible): tonemap
+ *  is on and `tonemapPath === 'opencl'` runs the RPU-aware bounce. */
 export function qsvScaleFilter10bit(input: EncoderInput): string {
-  const { target, filters } = input;
+  const { target, filters, tonemap, tonemapPath, dvNoBase } = input;
   const w = target.width;
   if (input.inputSurface === 'qsv' || input.inputSurface === 'd3d11') {
     // See qsvScaleFilter8bit: both surfaces need the hwmap onto QSV first.
-    return `${QSV_HWMAP}vpp_qsv=${qsvCropOpts(input)}w=${w}:h=${target.height}:format=p010le`;
+    const cropOpts = qsvCropOpts(input);
+    if (tonemap && tonemapPath === 'opencl') {
+      if (input.inputSurface === 'd3d11') {
+        return (
+          `${QSV_HWMAP}vpp_qsv=${cropOpts}w=${w}:h=${target.height}:format=p010le,` +
+          `hwmap=derive_device=opencl,` +
+          `tonemap_opencl=t=smpte2084:m=bt2020:p=bt2020:r=tv:format=p010:${dvApplyDoviOpt(dvNoBase)},` +
+          `hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`
+        );
+      }
+      return (
+        `${QSV_HWMAP}vpp_qsv=${cropOpts}w=${w}:h=${target.height}:format=p010le,` +
+        `hwmap=derive_device=opencl:mode=read,` +
+        `tonemap_opencl=format=p010:p=bt2020:t=smpte2084:m=bt2020:r=tv:${dvApplyDoviOpt(dvNoBase)},` +
+        `hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,` +
+        `format=qsv`
+      );
+    }
+    return `${QSV_HWMAP}vpp_qsv=${cropOpts}w=${w}:h=${target.height}:format=p010le`;
   }
   const isCpu = input.inputSurface === 'cpu';
   const cropPrefix = isCpu ? filters.cpuCropPrefix : filters.hwCropPrefix;
@@ -105,6 +123,9 @@ export function qsvScaleFilter10bit(input: EncoderInput): string {
   const burnInTail = input.hasBurnIn
     ? `,hwdownload,format=p010le${filters.burnInFilter},hwupload=extra_hw_frames=16`
     : '';
+  if (filters.tonemapOpencl) {
+    return `${cropPrefix}${cpuUpload}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv${burnInTail}`;
+  }
   return `${cropPrefix}${cpuUpload}scale_vaapi=w=${w}:h=-2:format=p010le:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv${burnInTail}`;
 }
 
