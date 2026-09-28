@@ -10,14 +10,19 @@ jest.mock('./codec/tonemap-opencl-probe', () => ({
 jest.mock('./codec/cuda-tonemap-probe', () => ({
   isCudaTonemapEnabled: jest.fn(() => false),
 }));
+jest.mock('./codec/amf-opencl-probe', () => ({
+  isAmfOpenclEnabled: jest.fn(() => false),
+}));
 
 import { buildFfmpegArgs } from './ffmpeg-args';
 import type { BuildFfmpegArgsOptions } from './ffmpeg-args';
 import { resolveEncodePipeline } from './encode-pipeline';
 import type { CodecVariant } from './codec/types';
 import { isCudaTonemapEnabled } from './codec/cuda-tonemap-probe';
+import { isAmfOpenclEnabled } from './codec/amf-opencl-probe';
 
 const mockCudaTonemap = isCudaTonemapEnabled as jest.Mock;
+const mockAmfOpencl = isAmfOpenclEnabled as jest.Mock;
 
 const silentLog = {
   debug: () => {},
@@ -92,6 +97,44 @@ describe('buildFfmpegArgs — HW decode on the OpenCL tone-map path (#729)', () 
     expect(cli).toContain('-init_hw_device opencl=ocl -filter_hw_device ocl');
     expect(args.filter((a) => a === 'opencl=ocl')).toHaveLength(1);
     expect(vfOf(args)).toContain('tonemap_opencl=');
+  });
+});
+
+// AMF's zero-copy D3D11↔OpenCL chain (replacing scale_d3d11, and the CPU-bounce
+// opencl tonemap) once its own boot probe passes.
+describe('buildFfmpegArgs: AMF zero-copy D3D11↔OpenCL chain (win32)', () => {
+  const platformDescriptor = Object.getOwnPropertyDescriptor(
+    process,
+    'platform',
+  )!;
+  beforeEach(() => {
+    mockAmfOpencl.mockReturnValue(true);
+    Object.defineProperty(process, 'platform', {
+      value: 'win32',
+      configurable: true,
+    });
+  });
+  afterEach(() => {
+    mockAmfOpencl.mockReturnValue(false);
+    Object.defineProperty(process, 'platform', platformDescriptor);
+  });
+
+  it('inits the named d3d11va/opencl devices once, decodes natively, no duplicate ocl', () => {
+    const args = buildFfmpegArgs(opts({ hwAccel: 'amf' }), silentLog);
+    const cli = args.join(' ');
+    expect(cli).toContain('-init_hw_device d3d11va=dx:,vendor_id=0x1002');
+    expect(cli).toContain('-init_hw_device opencl=ocl@dx');
+    expect(cli).toContain('-filter_hw_device ocl');
+    expect(cli).toContain('-hwaccel d3d11va -hwaccel_output_format d3d11');
+    expect(cli).toContain('-hwaccel_device dx');
+    // Single `ocl` device alias: the plain CPU-bounce opencl init must not
+    // also fire alongside the zero-copy one.
+    expect(args.filter((a) => a.startsWith('opencl=ocl'))).toHaveLength(1);
+    const vf = vfOf(args);
+    expect(vf).toContain('hwmap=derive_device=opencl:mode=read');
+    expect(vf).toContain('scale_opencl=');
+    expect(vf).toContain('tonemap_opencl=');
+    expect(vf).toContain('hwmap=derive_device=d3d11va:mode=write:reverse=1,format=d3d11');
   });
 });
 

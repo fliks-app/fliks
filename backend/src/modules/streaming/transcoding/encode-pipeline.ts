@@ -10,6 +10,7 @@ import {
 } from './codec/tonemap-opencl-probe';
 import { isQsvOpenclTonemapEnabled } from './codec/qsv-opencl-probe';
 import { isScaleD3d11Enabled } from './codec/scale-d3d11-probe';
+import { isAmfOpenclEnabled } from './codec/amf-opencl-probe';
 import { isOpenclTonemapEnabled } from './codec/opencl-tonemap-probe';
 import { isCudaTonemapEnabled } from './codec/cuda-tonemap-probe';
 import { resolveTonemapPath } from './tonemap-path';
@@ -36,6 +37,12 @@ export function isOpenclTonemapPath(
     isOpenclTonemapEnabled() &&
     (hwAccel === 'nvenc' || hwAccel === 'amf' || dvNoBase)
   );
+}
+
+/** AMF's zero-copy D3D11↔OpenCL chain: scale and HDR tonemap both run on
+ *  the decoder's D3D11 texture. Burn-in forces CPU frames, so it's excluded. */
+export function isAmfOpenclPath(hwAccel: string, burnIn: boolean): boolean {
+  return hwAccel === 'amf' && !burnIn && isAmfOpenclEnabled();
 }
 
 export interface EncodePipelineContext {
@@ -72,6 +79,9 @@ export interface ResolvedEncodePipeline {
   /** Whole pipeline stays on the D3D11 device (d3d11 decode + scale_d3d11 +
    *  AMF encode, zero-copy). Requires the scale_d3d11 filter (FFmpeg ≥ 8.1). */
   amfFullGpuAvailable: boolean;
+  /** AMF's zero-copy D3D11↔OpenCL chain is available (see
+   *  {@link isAmfOpenclPath}). Covers SDR and HDR, with or without crop. */
+  amfOpenclAvailable: boolean;
 }
 
 /**
@@ -117,6 +127,12 @@ export function resolveEncodePipeline(
     normalisedSourceCodec != null &&
     isDecoderEnabled(`${normalisedSourceCodec}_d3d11va_native_decode`) &&
     isScaleD3d11Enabled();
+  // Zero-copy AMF OpenCL: same native d3d11 decoder, but covers crop and
+  // tonemap too (scale_opencl/tonemap_opencl instead of the buggy scale_d3d11).
+  const amfOpenclAvailable =
+    isAmfOpenclPath(ctx.hwAccel, ctx.burnIn) &&
+    normalisedSourceCodec != null &&
+    isDecoderEnabled(`${normalisedSourceCodec}_d3d11va_native_decode`);
   // `auto` picks opencl when the boot probe enabled it, vaapi otherwise; the
   // explicit overrides bypass the probe. Drives both the qsv-native gate and
   // the useVaapiTonemap flag so the two stay in sync.
@@ -187,5 +203,6 @@ export function resolveEncodePipeline(
     qsvCanCrop,
     useVaapiTonemap,
     amfFullGpuAvailable,
+    amfOpenclAvailable,
   };
 }

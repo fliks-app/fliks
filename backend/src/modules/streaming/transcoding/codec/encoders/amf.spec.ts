@@ -11,6 +11,8 @@ function makeInput(cfg: {
   inputSurface?: SurfaceFormat;
   tonemap?: boolean;
   crop?: boolean;
+  dvNoBase?: boolean;
+  amfOpenclPath?: boolean;
 }): EncoderInput {
   const tonemap = cfg.tonemap ?? false;
   const crop = cfg.crop ? CROP : undefined;
@@ -39,9 +41,12 @@ function makeInput(cfg: {
     }),
     tonemap,
     tonemapPath: 'opencl',
+    tonemapCurve: 'hable',
+    dvNoBase: cfg.dvNoBase ?? false,
     hasBurnIn: false,
     hasCrop: !!crop,
     inputSurface: cfg.inputSurface ?? 'cpu',
+    amfOpenclPath: cfg.amfOpenclPath ?? false,
   };
 }
 
@@ -102,9 +107,19 @@ describe('AMF encoders', () => {
       expect(vf).not.toContain('hwdownload');
     });
 
-    it('scales on the D3D11 device (full-GPU) for d3d11 input', () => {
+    it('falls to the CPU scale on d3d11 input when the OpenCL probe is off (never scale_d3d11)', () => {
       const vf = vfOf(enc.buildArgs(makeInput({ inputSurface: 'd3d11' })));
-      expect(vf).toBe('scale_d3d11=width=1920:height=1080:format=nv12');
+      expect(vf).not.toContain('scale_d3d11');
+      expect(vf.startsWith('hwdownload,format=nv12,')).toBe(true);
+    });
+
+    it('scales zero-copy via OpenCL on d3d11 input when the probe is on', () => {
+      const vf = vfOf(
+        enc.buildArgs(makeInput({ inputSurface: 'd3d11', amfOpenclPath: true })),
+      );
+      expect(vf).toBe(
+        'hwmap=derive_device=opencl:mode=read,scale_opencl=w=1920:h=1080:reset_sar=1:format=nv12,hwmap=derive_device=d3d11va:mode=write:reverse=1,format=d3d11',
+      );
     });
 
     it('pulls non-CPU surfaces down before the CPU scale', () => {
@@ -120,6 +135,47 @@ describe('AMF encoders', () => {
     it('crops via the CPU crop prefix', () => {
       const vf = vfOf(enc.buildArgs(makeInput({ crop: true })));
       expect(vf).toContain('crop=');
+    });
+  });
+
+  describe.each(SDR)('%s zero-copy OpenCL tonemap (d3d11 + probe on)', (_id, enc) => {
+    it('HDR10 tonemaps via hwmap/scale_opencl/tonemap_opencl/reverse-hwmap with apply_dovi=0', () => {
+      const vf = vfOf(
+        enc.buildArgs(
+          makeInput({ inputSurface: 'd3d11', amfOpenclPath: true, tonemap: true }),
+        ),
+      );
+      expect(vf).toBe(
+        'hwmap=derive_device=opencl:mode=read,' +
+          'scale_opencl=w=1920:h=1080:reset_sar=1,' +
+          'tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=hable:desat=0:apply_dovi=0,' +
+          'hwmap=derive_device=d3d11va:mode=write:reverse=1,format=d3d11',
+      );
+    });
+
+    it('P5 (no-base DV) applies the RPU: apply_dovi=1', () => {
+      const vf = vfOf(
+        enc.buildArgs(
+          makeInput({
+            inputSurface: 'd3d11',
+            amfOpenclPath: true,
+            tonemap: true,
+            dvNoBase: true,
+          }),
+        ),
+      );
+      expect(vf).toContain('apply_dovi=1');
+    });
+
+    it('crops on the OpenCL surface with reset_sar', () => {
+      const vf = vfOf(
+        enc.buildArgs(
+          makeInput({ inputSurface: 'd3d11', amfOpenclPath: true, crop: true }),
+        ),
+      );
+      expect(vf).toContain(
+        'hwmap=derive_device=opencl:mode=read,crop=3840:1632:0:264,scale_opencl=w=1920:h=1080:reset_sar=1:format=nv12',
+      );
     });
   });
 

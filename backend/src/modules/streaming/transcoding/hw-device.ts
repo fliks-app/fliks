@@ -71,6 +71,19 @@ export function hostHasVaapi(
   return platform !== 'win32';
 }
 
+/** D3D11↔OpenCL interop device for the AMF zero-copy scale/tonemap chain,
+ *  pinned to the AMD adapter (`vendor_id=0x1002`). Windows-only. */
+export function amfD3d11OpenclInitArgs(): string[] {
+  return [
+    '-init_hw_device',
+    `d3d11va=${D3D11VA_DEVICE_ALIAS}:,vendor_id=0x1002`,
+    '-init_hw_device',
+    `opencl=ocl@${D3D11VA_DEVICE_ALIAS}`,
+    '-filter_hw_device',
+    'ocl',
+  ];
+}
+
 /** OpenCL device + filter selector for the NVENC/CPU standalone tonemap
  *  chain (`hwupload,tonemap_opencl,hwdownload`). Defaults to `ocl` (auto-pick
  *  the first usable platform — the NVIDIA GPU on an NVENC host). Set

@@ -124,6 +124,9 @@ export interface EncoderInput {
   dvNoBase?: boolean;
   hasBurnIn: boolean;
   hasCrop: boolean;
+  /** AMF's zero-copy D3D11↔OpenCL scale/tonemap chain is active (see
+   *  `isAmfOpenclPath`); `amf-filters` branches on this + `inputSurface === 'd3d11'`. */
+  amfOpenclPath?: boolean;
   /** Surface format on the decoder's output side. Encoders use it to
    *  pick the right scale / crop filter: when a QSV encoder receives
    *  QSV surfaces from a qsv-native decoder it can use `vpp_qsv` for

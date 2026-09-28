@@ -62,6 +62,7 @@ import { runOpenclTonemapProbe } from './codec/opencl-tonemap-probe';
 import { runCudaTonemapProbe } from './codec/cuda-tonemap-probe';
 import { runQsvOpenclTonemapProbe } from './codec/qsv-opencl-probe';
 import { runScaleD3d11Probe } from './codec/scale-d3d11-probe';
+import { runAmfOpenclProbe } from './codec/amf-opencl-probe';
 import {
   generateMasterPlaylist,
   getAvailableProfiles,
@@ -213,6 +214,9 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     // filter degrades to the CPU scale instead of crashing every session.
     if (this.detectedHwAccel === 'amf') {
       void runScaleD3d11Probe(this.log);
+      // Zero-copy AMD GPU scale + HDR tonemap via D3D11↔OpenCL interop,
+      // replacing scale_d3d11 (which scales the decoder's alignment padding).
+      void runAmfOpenclProbe(this.log);
     }
 
     // Tight cleanup cadence — paired with the live-session 30 s TTL +

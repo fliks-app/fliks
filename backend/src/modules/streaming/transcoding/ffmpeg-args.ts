@@ -56,7 +56,12 @@ import {
   DECODE_TIME_TOLERANCE_SECONDS,
   type KeyframeGrid,
 } from './segment-boundaries';
-import { openclTonemapInitArgs, qsvDeviceInitArgs } from './hw-device';
+import {
+  openclTonemapInitArgs,
+  qsvDeviceInitArgs,
+  amfD3d11OpenclInitArgs,
+  D3D11VA_DEVICE_ALIAS,
+} from './hw-device';
 import { buildVideoFilters, resolveTonemapCurve } from './ffmpeg-filter-graph';
 import { buildImageBurnInFilterComplex } from './subtitle-overlay-filter';
 import { nvencVfEndsOnGpu } from './codec/encoders/helpers/nvenc-filters';
@@ -645,6 +650,7 @@ function resolveDecodeStage(opts: {
   sourceVideoCodec: string | undefined;
   qsvNativeAvailable: boolean;
   amfFullGpuAvailable: boolean;
+  amfOpenclAvailable: boolean;
   effectiveHwAccel: HwAccelType;
   decodeHwAccel: HwAccelType;
   sourceBitDepth: BitDepth;
@@ -666,6 +672,7 @@ function resolveDecodeStage(opts: {
     sourceVideoCodec,
     qsvNativeAvailable,
     amfFullGpuAvailable,
+    amfOpenclAvailable,
     effectiveHwAccel,
     decodeHwAccel,
     sourceBitDepth,
@@ -695,11 +702,11 @@ function resolveDecodeStage(opts: {
           },
           effectiveHwAccel,
         ))
-      : amfFullGpuAvailable &&
+      : (amfFullGpuAvailable || amfOpenclAvailable) &&
           effectiveHwAccel === 'amf' &&
           normalisedSourceCodec
-        ? // Full-GPU AMF: D3D11-native decode so scale_d3d11 + AMF stay on the
-          // device with no CPU round-trip.
+        ? // D3D11-native decode: the OpenCL zero-copy chain or the full-GPU
+          // scale_d3d11 case both stay on the device, no CPU round-trip.
           findAmfNativeDecoder(normalisedSourceCodec)
         : decoderRegistry.resolve(
             {
@@ -710,7 +717,17 @@ function resolveDecodeStage(opts: {
             // CPU; an unreported one keeps the h264 assumption.
             sourceVideoCodec && !normalisedSourceCodec ? 'none' : decodeHwAccel,
           );
+  // The zero-copy AMF OpenCL chain needs a named D3D11 device (`dx`) so
+  // OpenCL can derive from the same texture the decoder writes into.
+  const amfOpenclDecode =
+    amfOpenclAvailable && effectiveHwAccel === 'amf' && !!normalisedSourceCodec;
+  if (amfOpenclDecode) {
+    args.push(...amfD3d11OpenclInitArgs());
+  }
   args.push(...decoder.buildInputArgs());
+  if (amfOpenclDecode) {
+    args.push('-hwaccel_device', D3D11VA_DEVICE_ALIAS);
+  }
   // A CPU decoder inits no device, yet the qsv encoder's filters need one.
   if (decoder.outputSurface === 'cpu' && effectiveHwAccel === 'qsv') {
     args.push(...qsvDeviceInitArgs(), '-filter_hw_device', 'qs');
@@ -776,7 +793,9 @@ function resolveDecodeStage(opts: {
   }
   // NVENC/AMF OpenCL tone-map: OpenCL as the default filter device so `hwupload`
   // lands on it, coexisting with the HW decode device (validated by the probe).
-  if (openclTonemap) {
+  // `!amfOpenclDecode`: the zero-copy AMF chain already inited its own `ocl`
+  // device above (derived from the d3d11 decode), so skip this one.
+  if (openclTonemap && !amfOpenclDecode) {
     args.push(...openclTonemapInitArgs());
   }
   // Windows QSV OpenCL tone-map (zero-copy): the frame maps D3D11→OpenCL and
@@ -1051,6 +1070,7 @@ export function buildFfmpegArgs(
     qsvNativeAvailable,
     useVaapiTonemap,
     amfFullGpuAvailable,
+    amfOpenclAvailable,
   } = resolveEncodePipeline(variant, {
     hwAccel,
     crop: !!crop,
@@ -1097,6 +1117,7 @@ export function buildFfmpegArgs(
     sourceVideoCodec,
     qsvNativeAvailable,
     amfFullGpuAvailable,
+    amfOpenclAvailable,
     effectiveHwAccel,
     decodeHwAccel,
     sourceBitDepth,
@@ -1195,6 +1216,9 @@ export function buildFfmpegArgs(
     dvNoBase,
     hasBurnIn: !!burnIn?.filter,
     hasCrop: !!crop,
+    // See isAmfOpenclPath: the amf-filters helper picks scale_opencl/
+    // tonemap_opencl on a d3d11 surface instead of the buggy scale_d3d11.
+    amfOpenclPath: amfOpenclAvailable && effectiveHwAccel === 'amf',
     hdrMetadata: sourceHdrMetadata,
     // Override to 'videotoolbox' when the Metal fast path is active —
     // the descriptor's static `outputSurface` is `'cpu'` because every
