@@ -478,6 +478,25 @@ describe('StreamBuilderService — audio that ends early', () => {
   });
 });
 
+describe('StreamBuilderService: no audio stream', () => {
+  it('direct plays a no-audio source the client can otherwise direct play', () => {
+    const r = evaluate([], tv, { ext: '.mp4' });
+    expect(r.playMethod).toBe('DirectPlay');
+    expect(flags(r).some((f) => f.startsWith('Audio'))).toBe(false);
+    expect(r.audioPlan).toEqual({ mode: 'copy', codec: '' });
+    expect(r.audioCopyStream).toBe(true);
+    expect(r.audioTracks).toEqual([]);
+  });
+
+  it('remuxes a no-audio source with no audio transcode reason when video forces it', () => {
+    const r = evaluate([], tv, { ext: '.mkv' });
+    expect(r.playMethod).toBe('DirectStream');
+    expect(flags(r).some((f) => f.startsWith('Audio'))).toBe(false);
+    expect(r.audioPlan).toEqual({ mode: 'copy', codec: '' });
+    expect(r.outputAudioCodec).toBe('');
+  });
+});
+
 describe('StreamBuilderService - audio track bitrate/sample rate', () => {
   it('reports the source values for a copied track', () => {
     const r = evaluate(

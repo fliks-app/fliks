@@ -1219,6 +1219,22 @@ describe('PlayerComponent stats overlay: delivery-based labels', () => {
     const stats = h.component.playerStats();
     expect(stats?.audioStreamBitrate).toBe('');
   });
+
+  it('hides the audio section for a source with no audio stream', () => {
+    const h = createHarness();
+    h.component.playbackInfo = buildPi(MAIN_FILE_ID, {
+      playMethod: 'DirectPlay',
+      audioCopyStream: true,
+      audioTracks: [],
+      outputAudioCodec: '',
+      source: { container: 'mp4', videoCodec: 'h264', audioCodec: '', durationSeconds: 100 },
+    });
+    h.component.lastStreamUrl = `stream://${MAIN_FILE_ID}?sid=sid-${MAIN_FILE_ID}`;
+    h.component.statsVisible.set(true);
+
+    const stats = h.component.playerStats();
+    expect(stats?.hasAudio).toBe(false);
+  });
 });
 
 describe('PlayerComponent: playerStats reads deliveredKind from the current stream URL', () => {

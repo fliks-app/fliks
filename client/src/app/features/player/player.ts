@@ -1034,6 +1034,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       .map(reasonLabel);
 
     // --- Audio ---
+    // `audioTracks: []` (or an explicitly empty source streamInfo.audio when
+    // offline) means the file truly has none; undefined means unknown metadata,
+    // not "no audio"; keep showing the section rather than assume neither.
+    const sourceAudioStreams = this.media?.files?.find(
+      (f) => f.id === this.mediaFileId,
+    )?.streamInfo?.audio;
+    const hasAudio =
+      pi?.audioTracks != null
+        ? pi.audioTracks.length > 0
+        : sourceAudioStreams != null
+          ? sourceAudioStreams.length > 0
+          : true;
     // Derive from the SELECTED track, not the source's primary stream, so the
     // line follows a language switch. `activeAudioTrackId()` is read so this
     // computed re-runs when the user changes audio track.
@@ -1113,6 +1125,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       droppedFrames: Number.isFinite(engineStats?.droppedFrames)
         ? engineStats!.droppedFrames
         : 0,
+      hasAudio,
       audioLabel,
       audioStreamBitrate,
       audioDetailLine,
