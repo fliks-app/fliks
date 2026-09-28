@@ -93,22 +93,35 @@ describe('detectHwAccel', () => {
 });
 
 describe('requestedHwAccelFor', () => {
-  it('forces CPU for burn-in on QSV/VAAPI', () => {
+  it('forces CPU for burn-in on AMF (no round-trip wired for it)', () => {
     expect(
-      requestedHwAccelFor('qsv', { burnIn: true, crop: false }, 'win32'),
-    ).toBe('none');
-    expect(
-      requestedHwAccelFor('vaapi', { burnIn: true, crop: false }, 'linux'),
+      requestedHwAccelFor('amf', { burnIn: true, crop: false }, 'win32'),
     ).toBe('none');
   });
 
-  it('keeps NVENC (and VideoToolbox) on burn-in: its own filter helper bounces to CPU', () => {
+  it('keeps QSV/VAAPI/NVENC/VideoToolbox on burn-in: each bounces to CPU only for subtitles=...', () => {
+    expect(
+      requestedHwAccelFor('qsv', { burnIn: true, crop: false }, 'win32'),
+    ).toBe('qsv');
+    expect(
+      requestedHwAccelFor('vaapi', { burnIn: true, crop: false }, 'linux'),
+    ).toBe('vaapi');
     expect(
       requestedHwAccelFor('nvenc', { burnIn: true, crop: false }, 'linux'),
     ).toBe('nvenc');
     expect(
       requestedHwAccelFor('videotoolbox', { burnIn: true, crop: false }, 'darwin'),
     ).toBe('videotoolbox');
+  });
+
+  it('still downgrades a cropped QSV burn-in to VAAPI on Linux (QSV cannot crop this way)', () => {
+    expect(
+      requestedHwAccelFor(
+        'qsv',
+        { burnIn: true, crop: true, qsvCanCrop: false },
+        'linux',
+      ),
+    ).toBe('vaapi');
   });
 
   it('falls a cropped QSV encode back to VAAPI on Linux when not native', () => {

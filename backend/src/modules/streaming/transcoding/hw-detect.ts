@@ -137,15 +137,21 @@ export async function detectHwAccel(
   return 'none';
 }
 
+/** hwAccel types whose filter helper bounces to CPU only for `subtitles=...`,
+ *  keeping decode/tonemap/encode on the GPU. AMF still forces CPU: no round-trip wired for it. */
+const BURN_IN_CAPABLE_HW_ACCEL = new Set<HwAccelType>([
+  'videotoolbox',
+  'nvenc',
+  'qsv',
+  'vaapi',
+]);
+
 /** Map the host-detected hwAccel onto the slice the orchestrator should
  *  ask the encoder registry for, applying the two pipeline-level
  *  filtering constraints:
  *
  *  - Subtitle burn-in needs CPU surfaces for libass — force `'none'`
- *    on QSV / VAAPI. VideoToolbox decode already lands in CPU buffers
- *    so libass works in-place; NVENC also stays (its own filter helper
- *    bounces to CPU just before `subtitles=...`, keeping NVDEC + the
- *    tone-map on the GPU for the rest of the chain).
+ *    unless the target is in {@link BURN_IN_CAPABLE_HW_ACCEL}.
  *  - QSV cannot crop on the vaapi-decode-then-hwmap chain (the
  *    fixed-size QSV frame pool rejects the variable output of CPU
  *    `crop` after hwupload back to vaapi). When the caller indicates
@@ -163,8 +169,7 @@ export function requestedHwAccelFor(
   needs: { burnIn: boolean; crop: boolean; qsvCanCrop?: boolean },
   platform: NodeJS.Platform = process.platform,
 ): HwAccelType {
-  if (needs.burnIn && detected !== 'videotoolbox' && detected !== 'nvenc')
-    return 'none';
+  if (needs.burnIn && !BURN_IN_CAPABLE_HW_ACCEL.has(detected)) return 'none';
   if (
     detected === 'qsv' &&
     needs.crop &&

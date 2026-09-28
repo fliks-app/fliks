@@ -9,18 +9,26 @@ import type { EncoderInput } from '../../types';
  *   - `tonemapOpencl`: OpenCL tonemap, mapped back onto a VAAPI surface.
  *   - default (crop/scale only): `scale_vaapi` → nv12. */
 export function vaapiScaleFilter8bit(input: EncoderInput): string {
-  const { target, filters } = input;
+  const { target, filters, hasBurnIn } = input;
   const w = target.width;
+  // Text burn-in bounces to CPU only for `subtitles=...`, then re-uploads.
+  // `derive_device` is explicit: the default filter device is Vulkan under tonemapVulkan below.
+  const burnInTail = hasBurnIn
+    ? `,hwdownload,format=nv12${filters.burnInFilter},hwupload=derive_device=vaapi:extra_hw_frames=16`
+    : '';
   if (filters.tonemapVulkan) {
     return filters.tonemapVulkan;
   }
   if (filters.tonemapVaapi) {
-    return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapVaapi}`;
+    // tonemap_vaapi's `format=nv12` is an internal option, not a pin: burn-in
+    // needs an explicit `format=vaapi` or ffmpeg 8.1 fails to renegotiate the link.
+    const pin = hasBurnIn ? ',format=vaapi' : '';
+    return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapVaapi}${pin}${burnInTail}`;
   }
   if (filters.tonemapOpencl) {
-    return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi`;
+    return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi${burnInTail}`;
   }
-  return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:format=nv12`;
+  return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:format=nv12${burnInTail}`;
 }
 
 /** Build the `-vf` value for a 10-bit VAAPI HDR encode (hevc/av1 main10). The

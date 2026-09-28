@@ -14,6 +14,11 @@ export function resolveTonemapCurve(): TonemapCurve {
   return selectedCurve ?? 'hable';
 }
 
+/** The bare zscale/tonemap chain doesn't drop HDR10 static metadata side data,
+ *  leaking a Mastering display SEI into SDR output (verified; tonemapx and GPU tonemaps don't leak). */
+const HDR_STATIC_SIDEDATA_DELETE =
+  'sidedata=mode=delete:type=MASTERING_DISPLAY_METADATA,sidedata=mode=delete:type=CONTENT_LIGHT_LEVEL,sidedata=mode=delete:type=DYNAMIC_HDR_PLUS';
+
 /** `tonemap_opencl` (and `tonemap_videotoolbox`) RPU-reshaping option. The
  *  bundled ffmpeg defaults it to 1; only a no-base source (see `dvHasNoBase`)
  *  has a trustworthy RPU to apply, so every other source (including has-base
@@ -99,14 +104,15 @@ export function buildVideoFilters(
     : '';
   const cpuCropPrefix = cropStr ? `${cropStr},` : '';
   const burnInFilter = burnIn?.filter ? `,${burnIn.filter}` : '';
+  // Text burn-in stays on these two GPU tonemaps; the CPU round-trip is only
+  // for `subtitles=...`, added later. Vulkan below still forces CPU for burn-in.
   const tonemapOpencl =
-    tonemap && !useVaapiTonemap && !useVulkanTonemap && !burnIn?.filter
+    tonemap && !useVaapiTonemap && !useVulkanTonemap
       ? `,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=${curve}:desat=0:${dvApplyDoviOpt(dvNoBase)}`
       : '';
-  const tonemapVaapi =
-    useVaapiTonemap && !burnIn?.filter
-      ? ',tonemap_vaapi=format=nv12:t=bt709:p=bt709:m=bt709'
-      : '';
+  const tonemapVaapi = useVaapiTonemap
+    ? ',tonemap_vaapi=format=nv12:t=bt709:p=bt709:m=bt709'
+    : '';
   // Vulkan (libplacebo) tone-map. Crop is a libplacebo option (`crop_*`), not
   // the hwdownload/crop/hwupload round-trip the other paths use; a Vulkan
   // filter device can't derive a VAAPI surface for a CPU-side crop.
@@ -144,7 +150,7 @@ export function buildVideoFilters(
       ? `format=p010le,hwupload,tonemap_opencl=t=bt709:m=bt709:p=bt709:tonemap=${curve}:desat=0:${dvApplyDoviOpt(dvNoBase)}:format=nv12,hwdownload,format=nv12,`
       : dvNoBase
         ? `scale=${scaleWidth}:-2,tonemapx=t=bt709:m=bt709:p=bt709:tonemap=${curve}:desat=0:format=yuv420p,`
-        : `zscale=w=${scaleWidth}:h=-2:t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=${curve}:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,`
+        : `zscale=w=${scaleWidth}:h=-2:t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=${curve}:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,${HDR_STATIC_SIDEDATA_DELETE},`
     : '';
   // HW-crop round-trip: hwdownload → crop → hwupload. The explicit `format=`
   // matches the source bit depth (p010le for 10-bit) so crop runs in the

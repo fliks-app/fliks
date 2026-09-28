@@ -51,6 +51,7 @@ import {
   resolveEncodePipeline,
   isOpenclTonemapPath,
   isVtTonemapPath,
+  isVtHdrPassthroughPath,
   isCudaTonemapPath,
 } from './encode-pipeline';
 import {
@@ -373,6 +374,12 @@ function colorTagArgs(c: SdrColorTags): string[] {
   ];
 }
 
+/** Forces the resolved colorimetry onto the frame itself: `-color_*` output
+ *  flags alone don't reach an "unspecified" source's SPS/VUI on ffmpeg 8.1. */
+function sdrColorSetparams(c: SdrColorTags): string {
+  return `setparams=color_primaries=${c.primaries}:color_trc=${c.transfer}:colorspace=${c.space}:range=${c.range},`;
+}
+
 export interface BuildFfmpegArgsOptions {
   inputPath: string;
   profile: TranscodeProfile;
@@ -654,6 +661,7 @@ function resolveDecodeStage(opts: {
   decodeHwAccel: HwAccelType;
   sourceBitDepth: BitDepth;
   tonemap: boolean;
+  isHdrOutput: boolean;
   hasBurnIn: boolean;
   hasCrop: boolean;
   useVaapiTonemap: boolean;
@@ -664,6 +672,7 @@ function resolveDecodeStage(opts: {
   decoder: ReturnType<typeof decoderRegistry.resolve>;
   useVtMetalPath: boolean;
   useVtHwTonemap: boolean;
+  useVtHdrPassthrough: boolean;
   qsvOpenclTonemap: boolean;
 } {
   const {
@@ -674,6 +683,7 @@ function resolveDecodeStage(opts: {
     decodeHwAccel,
     sourceBitDepth,
     tonemap,
+    isHdrOutput,
     hasBurnIn,
     hasCrop,
     useVaapiTonemap,
@@ -751,7 +761,16 @@ function resolveDecodeStage(opts: {
   // then hwdownloads for the cheap CPU crop. Both need videotoolbox_vld input.
   const useVtMetalPath = vtSurfaceEligible && !hasCrop;
   const useVtHwTonemap = vtSurfaceEligible && hasCrop;
-  if (useVtMetalPath || useVtHwTonemap) {
+  // HDR10/HLG passthrough: same VT decode as above, minus tonemap. scale_vt
+  // just resizes, leaving the source's BT.2020/PQ or HLG tags untouched.
+  const useVtHdrPassthrough = isVtHdrPassthroughPath(
+    isHdrOutput,
+    effectiveHwAccel,
+    hasBurnIn,
+    hasCrop,
+    sourceVideoCodec,
+  );
+  if (useVtMetalPath || useVtHwTonemap || useVtHdrPassthrough) {
     args.push('-hwaccel_output_format', 'videotoolbox_vld');
   }
 
@@ -816,6 +835,7 @@ function resolveDecodeStage(opts: {
     decoder,
     useVtMetalPath,
     useVtHwTonemap,
+    useVtHdrPassthrough,
     qsvOpenclTonemap,
   };
 }
@@ -1115,21 +1135,28 @@ export function buildFfmpegArgs(
   // needs to land for encode (qsv-native + vpp_qsv, vaapi + scale_vaapi, CPU +
   // hwdownload). `useVaapiTonemap` / `tonemapPath` / `qsvNativeAvailable` come
   // from resolveEncodePipeline above.
-  const { decodeArgs, decoder, useVtMetalPath, useVtHwTonemap, qsvOpenclTonemap } =
-    resolveDecodeStage({
-      sourceVideoCodec,
-      qsvNativeAvailable,
-      amfOpenclAvailable,
-      effectiveHwAccel,
-      decodeHwAccel,
-      sourceBitDepth,
-      tonemap: !!tonemap,
-      hasBurnIn: !!burnIn,
-      hasCrop: !!crop,
-      useVaapiTonemap,
-      openclTonemap,
-      tonemapPath,
-    });
+  const {
+    decodeArgs,
+    decoder,
+    useVtMetalPath,
+    useVtHwTonemap,
+    useVtHdrPassthrough,
+    qsvOpenclTonemap,
+  } = resolveDecodeStage({
+    sourceVideoCodec,
+    qsvNativeAvailable,
+    amfOpenclAvailable,
+    effectiveHwAccel,
+    decodeHwAccel,
+    sourceBitDepth,
+    tonemap: !!tonemap,
+    isHdrOutput,
+    hasBurnIn: !!burnIn,
+    hasCrop: !!crop,
+    useVaapiTonemap,
+    openclTonemap,
+    tonemapPath,
+  });
   args.push(...decodeArgs);
 
   // Declaring the SDR colorimetry on the input (SDR sources only) keeps the
@@ -1226,9 +1253,20 @@ export function buildFfmpegArgs(
     // IOSurfaces in this particular session. The encoder branches on
     // this to pick scale_vt vs the CPU tonemap chain.
     inputSurface:
-      useVtMetalPath || useVtHwTonemap ? 'videotoolbox' : decoder.outputSurface,
+      useVtMetalPath || useVtHwTonemap || useVtHdrPassthrough
+        ? 'videotoolbox'
+        : decoder.outputSurface,
   };
   args.push(...encoder.buildArgs(encoderInput));
+
+  // ffmpeg 8.1 lets an "unspecified" source's frame tags win over the
+  // `-color_*` flags below, so force them onto the frame itself here.
+  if (!isHdrOutput && !useVtMetalPath && !useVulkanTonemap && !tonemap) {
+    const vfIdx = args.indexOf('-vf');
+    if (vfIdx !== -1) {
+      args[vfIdx + 1] = `${sdrColorSetparams(sdrColor)}${args[vfIdx + 1]}`;
+    }
+  }
 
   // Bitmap subtitle burn-in: lift the encoder's `-vf` (the accelerated
   // scale/tonemap chain) into a `-filter_complex` and graft the subtitle

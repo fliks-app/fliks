@@ -64,15 +64,22 @@ export function qsvScaleFilter8bit(input: EncoderInput): string {
   // p010le keeps 10-bit precision for a following tonemap.
   const cpuUploadFmt = filters.tonemapVaapi || filters.tonemapOpencl ? 'p010le' : 'nv12';
   const cpuUpload = isCpu ? `format=${cpuUploadFmt},hwupload=derive_device=vaapi,` : '';
+  // Text burn-in bounces to CPU only for `subtitles=...`, then re-uploads.
+  // The qsv-native branch above never runs with burn-in (hasUsableQsvNativeDecoder), so only this one needs it.
+  const burnInTail = input.hasBurnIn
+    ? `,hwdownload,format=nv12${filters.burnInFilter},hwupload=extra_hw_frames=16`
+    : '';
   if (filters.tonemapVaapi) {
     // tonemap_vaapi does not output a QSV-native surface: passthrough=0 makes
     // vpp_qsv re-render it into one the encoder accepts.
-    return `${cropPrefix}${cpuUpload}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapVaapi},hwmap=derive_device=qsv,vpp_qsv=format=nv12:passthrough=0`;
+    // vpp_qsv's `format=` is an internal option, not a pin: burn-in needs an explicit `format=qsv` or ffmpeg 8.1 fails to renegotiate the link.
+    const pin = input.hasBurnIn ? ',format=qsv' : '';
+    return `${cropPrefix}${cpuUpload}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapVaapi},hwmap=derive_device=qsv,vpp_qsv=format=nv12:passthrough=0${pin}${burnInTail}`;
   }
   if (filters.tonemapOpencl) {
-    return `${cropPrefix}${cpuUpload}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`;
+    return `${cropPrefix}${cpuUpload}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv${burnInTail}`;
   }
-  return `${cropPrefix}${cpuUpload}scale_vaapi=w=${w}:h=-2:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`;
+  return `${cropPrefix}${cpuUpload}scale_vaapi=w=${w}:h=-2:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv${burnInTail}`;
 }
 
 /** Build the `-vf` value for a 10-bit QSV encode (hevc_qsv main10,

@@ -1,4 +1,8 @@
-import { resolveEncodePipeline, isVtTonemapPath } from './encode-pipeline';
+import {
+  resolveEncodePipeline,
+  isVtTonemapPath,
+  isVtHdrPassthroughPath,
+} from './encode-pipeline';
 import type { EncodePipelineContext } from './encode-pipeline';
 import type { CodecVariant } from './codec/types';
 import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
@@ -217,5 +221,51 @@ describe('isVtTonemapPath: darwin VideoToolbox routing', () => {
 
   it('AV1 + VT + tonemap is eligible (native av1 decoder forces the hwaccel)', () => {
     expect(isVtTonemapPath(true, 'videotoolbox', false, 'av1')).toBe(true);
+  });
+});
+
+describe('isVtHdrPassthroughPath: darwin VideoToolbox HDR10/HLG routing', () => {
+  const platformDescriptor = Object.getOwnPropertyDescriptor(
+    process,
+    'platform',
+  )!;
+  beforeEach(() =>
+    Object.defineProperty(process, 'platform', {
+      value: 'darwin',
+      configurable: true,
+    }),
+  );
+  afterEach(() =>
+    Object.defineProperty(process, 'platform', platformDescriptor),
+  );
+
+  it('HDR output + VT + no crop/burn-in is eligible for the Metal scale_vt path', () => {
+    expect(
+      isVtHdrPassthroughPath(true, 'videotoolbox', false, false, 'hevc'),
+    ).toBe(true);
+  });
+
+  it('is not eligible when tonemapping (that is isVtTonemapPath\'s job)', () => {
+    expect(isVtHdrPassthroughPath(false, 'videotoolbox', false, false, 'hevc')).toBe(
+      false,
+    );
+  });
+
+  it('is not eligible with a crop (no VT crop filter)', () => {
+    expect(isVtHdrPassthroughPath(true, 'videotoolbox', false, true, 'hevc')).toBe(
+      false,
+    );
+  });
+
+  it('is not eligible with burn-in (libass needs CPU surfaces)', () => {
+    expect(isVtHdrPassthroughPath(true, 'videotoolbox', true, false, 'hevc')).toBe(
+      false,
+    );
+  });
+
+  it('is not eligible off VideoToolbox', () => {
+    expect(isVtHdrPassthroughPath(true, 'vaapi', false, false, 'hevc')).toBe(
+      false,
+    );
   });
 });
