@@ -169,7 +169,7 @@ export interface VideoStreamInfo {
    *  real peak luminance instead of a generic 1000-nit reference. */
   hdrMetadata?: { masteringDisplay: string; maxCll: number; maxFall: number };
   /** SMPTE 2094-40 dynamic metadata alongside the static HDR10/DV side data:
-   *  a hybrid disc remux. Present (true or false) once probed. */
+   *  a hybrid source. Present (true or false) once probed. */
   hdr10Plus?: boolean;
   crop?: CropInfo;
 }
@@ -777,8 +777,8 @@ export class FfprobeService {
         [
           '-v', 'error',
           '-select_streams', String(stream.index),
-          // The bundled ffmpeg only fills a nested section's fields when it's
-          // named here too; an unlisted frame_side_data prints empty objects.
+          // -show_entries only fills a nested section's fields when it's named
+          // here too; an unlisted frame_side_data prints empty objects.
           '-show_entries',
           'frame=pts,best_effort_timestamp,side_data_list' +
             ':frame_side_data=side_data_type,red_x,red_y,green_x,green_y,blue_x,blue_y,' +

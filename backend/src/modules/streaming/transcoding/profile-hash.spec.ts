@@ -30,6 +30,7 @@ const BASE: PlaybackProfile = {
   dolbyVision: false,
   dvTonemap: false,
   hdr10PlusStrip: false,
+  doviElStrip: false,
 };
 
 describe('computeProfileHash', () => {
@@ -323,6 +324,21 @@ describe('buildPlaybackProfileFromContext', () => {
         buildPlaybackProfileFromContext({ sourceHdr10Plus: true }, 3000),
       ),
     ).toBe(computeProfileHash(BASE));
+  });
+
+  it('separates a P7 remux that strips the EL/RPU from a non-P7 remux', () => {
+    const hash = (sourceDvProfile: number | undefined) =>
+      computeProfileHash(
+        buildPlaybackProfileFromContext({ dolbyVision: false, sourceDvProfile }, 3000),
+      );
+    expect(hash(7)).not.toBe(hash(undefined));
+  });
+
+  it('never marks the P7 strip once the remux is DV-eligible (never true for P7)', () => {
+    expect(
+      buildPlaybackProfileFromContext({ dolbyVision: true, sourceDvProfile: 7 }, 3000)
+        .doviElStrip,
+    ).toBe(false);
   });
 });
 

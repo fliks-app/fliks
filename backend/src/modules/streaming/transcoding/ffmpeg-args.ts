@@ -1492,15 +1492,26 @@ export function buildRemuxArgs(
   // A DV remux drops HDR10+ dynamic metadata: sent alongside the RPU it can
   // confuse a DV client expecting one dynamic-metadata track, not two.
   const stripHdr10Plus = dolbyVision && hdr10Plus;
+  // A P7 (dual-layer) remux never carries a DV box (dolbyVision is always
+  // false for P7), so its enhancement-layer/RPU NALs are dead weight — strip
+  // them, leaving a clean plain HDR10 base.
+  const stripDoviEl = sourceDvProfile === 7 && !dolbyVision;
+  const hevcMetadataOpts = [
+    ...(stripDoviEl ? ['remove_dovi=1'] : []),
+    ...(stripHdr10Plus ? ['remove_hdr10plus=1'] : []),
+  ];
   const hevcArgs =
     sourceVideoCodec === 'hevc'
       ? [
           '-tag:v',
           dvNoBaseTag ? 'dvh1' : 'hvc1',
           '-bsf:v',
-          stripHdr10Plus
-            ? 'hevc_mp4toannexb,hevc_metadata=remove_hdr10plus=1'
-            : 'hevc_mp4toannexb',
+          [
+            'hevc_mp4toannexb',
+            ...(hevcMetadataOpts.length
+              ? [`hevc_metadata=${hevcMetadataOpts.join(':')}`]
+              : []),
+          ].join(','),
           '-max_muxing_queue_size',
           '2048',
         ]

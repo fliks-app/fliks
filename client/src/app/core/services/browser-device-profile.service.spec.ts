@@ -188,4 +188,15 @@ describe('BrowserDeviceProfileService: dolbyVisionProfiles gating', () => {
     expect(service.getProfile().supportsDolbyVision).toBe(true);
     vi.unstubAllGlobals();
   });
+
+  it('still lists profile 7 on an SDR desktop display (mpv tone-maps locally)', () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('probably');
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    const desktopDevice = { ...device, isDesktopNative: () => true } as DeviceService;
+    const service = configure(desktopDevice, { hasServerFeature: () => true });
+    expect(service.getProfile().dolbyVisionProfiles).toEqual([7]);
+    // 5/8 still require a real HDR display; only 7 bypasses supportsHdr.
+    expect(service.getProfile().supportsDolbyVision).toBe(false);
+    vi.unstubAllGlobals();
+  });
 });

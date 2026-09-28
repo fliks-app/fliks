@@ -121,12 +121,32 @@ describe('StaleProbeRescanService', () => {
     });
   });
 
-  it('never saves a probe that resolved with an error, the real ffprobe behaviour on a timeout or a corrupt header', async () => {
+  it('never saves a probe that resolved with an error, the real ffprobe behaviour on a timeout or a corrupt header, but still chains the scan on the existing row', async () => {
     const broken = { video: [], audio: [], subtitles: [], error: 'ffprobe file info failed: timed out' };
     const { svc, files, sourceScans } = setup({ streamInfo: stale }, broken);
     await expect(svc.scheduleIfNeeded(3, file, stale as never)).resolves.toBeUndefined();
     expect(files.update).not.toHaveBeenCalled();
-    expect(sourceScans.scheduleIfNeeded).not.toHaveBeenCalled();
+    expect(sourceScans.scheduleIfNeeded).toHaveBeenCalledWith(3, file, stale);
+  });
+
+  it('remembers a rejected re-probe and never retries it, even on a later play', async () => {
+    const broken = { video: [], audio: [], subtitles: [], error: 'ffprobe file info failed: timed out' };
+    const { svc, detectMediaFileInfo } = setup({ streamInfo: stale }, broken);
+    await svc.scheduleIfNeeded(3, file, stale as never);
+    await svc.scheduleIfNeeded(3, file, stale as never);
+    expect(detectMediaFileInfo).toHaveBeenCalledTimes(1);
+  });
+
+  it('remembers a re-probe that threw and never retries it', async () => {
+    const detectMediaFileInfo = jest.fn().mockRejectedValue(new Error('boom'));
+    const svc = new StaleProbeRescanService(
+      { detectMediaFileInfo } as never,
+      { findOne: jest.fn(), update: jest.fn() } as never,
+      { scheduleIfNeeded: jest.fn() } as never,
+    );
+    await svc.scheduleIfNeeded(3, file, stale as never);
+    await svc.scheduleIfNeeded(3, file, stale as never);
+    expect(detectMediaFileInfo).toHaveBeenCalledTimes(1);
   });
 
   it('never saves a probe that detected no streams at all', async () => {

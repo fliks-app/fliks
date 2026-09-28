@@ -7,9 +7,8 @@ import { MediaFile } from '../../media/entities/media-file.entity';
 import { FfprobeService, type MediaFileInfo } from '../../subtitles/ffprobe.service';
 import { SourceScanService, sourceVersion } from './source-scan.service';
 
-/** True once a video row predates `formatName`: it landed together with every
- *  other field this backfill fixes, so its absence alone flags the row stale.
- *  An HDR row that predates `hdr10Plus` is stale the same way. */
+/** True once a row predates `formatName`, or an HDR row predates `hdr10Plus`:
+ *  either absence alone flags it stale. */
 export function needsReprobe(si: MediaFileInfo | null | undefined): boolean {
   const v = si?.video?.[0];
   if (!si || !v) return false;
@@ -23,6 +22,9 @@ export function needsReprobe(si: MediaFileInfo | null | undefined): boolean {
 export class StaleProbeRescanService {
   private readonly log = new Logger(StaleProbeRescanService.name);
   private readonly inFlight = new Map<number, Promise<void>>();
+  /** Files whose re-probe came back rejected or threw, this process run.
+   *  Without this a broken re-probe retries — and fails — on every play. */
+  private readonly rejected = new Set<number>();
 
   constructor(
     private readonly ffprobe: FfprobeService,
@@ -32,13 +34,16 @@ export class StaleProbeRescanService {
   ) {}
 
   /** Re-probes `mediaFileId` when `streamInfo` needs it, else resolves immediately.
-   *  No-op while an attempt for the same file is already in flight. */
+   *  No-op while an attempt for the same file is already in flight, or a past
+   *  attempt for it was rejected/failed. */
   scheduleIfNeeded(
     mediaFileId: number,
     absolutePath: string,
     streamInfo: MediaFileInfo | null | undefined,
   ): Promise<void> {
-    if (!needsReprobe(streamInfo)) return Promise.resolve();
+    if (!needsReprobe(streamInfo) || this.rejected.has(mediaFileId)) {
+      return Promise.resolve();
+    }
     let attempt = this.inFlight.get(mediaFileId);
     if (!attempt) {
       attempt = this.reprobe(mediaFileId, absolutePath).finally(() =>
@@ -68,6 +73,10 @@ export class StaleProbeRescanService {
           `Re-probe of "${absolutePath}" (file #${mediaFileId}) looks broken: ` +
             `${fresh.error ?? 'no video stream detected'}; keeping the stored streamInfo`,
         );
+        this.rejected.add(mediaFileId);
+        // The keyframe scan is independent of the fields this backfill fixes;
+        // a rejected re-probe must not also block it on the existing row.
+        void this.sourceScans.scheduleIfNeeded(mediaFileId, absolutePath, file.streamInfo);
         return;
       }
       // Detected separately (cropdetect / the keyframe scan), never part of a
@@ -85,6 +94,7 @@ export class StaleProbeRescanService {
       this.log.warn(
         `Background re-probe failed for file #${mediaFileId}: ${(err as Error).message}`,
       );
+      this.rejected.add(mediaFileId);
     }
   }
 }

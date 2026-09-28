@@ -237,13 +237,31 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
   });
 
   it('remuxes raw P7 to HDR10 base for an HDR client that does not list profile 7', () => {
-    const r = svc().evaluate(resolved(7, 1, true, 6), dvHevcClient, 'tok');
+    const r = svc().evaluate(resolved(7, 6, true, 6), dvHevcClient, 'tok');
     expect(r.response.playMethod).toBe('DirectStream');
     expect(r.response.dolbyVision).toBeFalsy();
   });
 
   it('DirectPlays raw P7 for a client that lists profile 7', () => {
-    const r = svc().evaluate(resolved(7, 1, true, 6), dvProfile7Client, 'tok');
+    const r = svc().evaluate(resolved(7, 6, true, 6), dvProfile7Client, 'tok');
+    expect(r.response.playMethod).toBe('DirectPlay');
+  });
+
+  it('still DirectPlays raw P7 to a non-P7 client when Direct Stream is disabled', () => {
+    // No remux to fall back to (canCopyVideo false), so the P7 gate must not
+    // fire: DirectPlay stays rather than forcing a 4K re-encode.
+    const r = svc().evaluate(
+      resolved(7, 6, true, 6),
+      dvHevcClient,
+      'tok',
+      undefined,
+      undefined,
+      'directplay',
+      undefined,
+      undefined,
+      undefined,
+      false,
+    );
     expect(r.response.playMethod).toBe('DirectPlay');
   });
 

@@ -19,6 +19,7 @@ export type SessionLayout = Pick<
   | 'timeline'
   | 'sourceVersion'
   | 'dolbyVision'
+  | 'sourceHdr10Plus'
   | 'tonemapping'
 >;
 
@@ -73,7 +74,9 @@ export function sessionLayoutContext(
     tonemap: live?.tonemapping ?? false,
     sourceDvProfile: si?.video?.[0]?.dvProfile,
     sourceDvBlSignalCompatId: si?.video?.[0]?.dvBlSignalCompatId,
-    sourceHdr10Plus: si?.video?.[0]?.hdr10Plus,
+    // Frozen, not re-read from si: a background reprobe fills this in later
+    // and must not fork the hash mid-session.
+    sourceHdr10Plus: live?.sourceHdr10Plus ?? false,
   } satisfies Record<keyof SessionLayoutContext, unknown>;
 }
 

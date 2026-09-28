@@ -581,9 +581,10 @@ export class BrowserDeviceProfileService {
           ? (this.nativeDvProfiles ?? this.nativeVideo?.dolbyVisionProfiles ?? [5, 8])
           : []
         : this.probeDolbyVisionProfiles(video, hasMSE);
-    // mpv decodes raw dual-layer P7 fine, unlike the browser codec-string probe
-    // above; trust it here the same way the container/codec list is overridden.
-    if (this.device.isDesktopNative() && supportsHdr && !dolbyVisionProfiles.includes(7)) {
+    // mpv decodes raw dual-layer P7 fine and tone-maps it locally on an SDR
+    // display, so list it regardless of supportsHdr — unlike 5/8, presenting
+    // it doesn't need an HDR display.
+    if (this.device.isDesktopNative() && !dolbyVisionProfiles.includes(7)) {
       dolbyVisionProfiles.push(7);
     }
     // A [10]-only list must not read as P5/P8-capable to an old server that
