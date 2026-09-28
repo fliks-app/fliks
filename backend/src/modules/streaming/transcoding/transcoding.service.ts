@@ -59,8 +59,9 @@ import {
   runTonemapOpenclProbe,
 } from './codec/tonemap-opencl-probe';
 import { runOpenclTonemapProbe } from './codec/opencl-tonemap-probe';
+import { runCudaTonemapProbe } from './codec/cuda-tonemap-probe';
 import { runQsvOpenclTonemapProbe } from './codec/qsv-opencl-probe';
-import { runScaleD3d11Probe } from './codec/scale-d3d11-probe';
+import { runAmfOpenclProbe } from './codec/amf-opencl-probe';
 import {
   generateMasterPlaylist,
   getAvailableProfiles,
@@ -202,11 +203,16 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     if (this.detectedHwAccel === 'nvenc' || this.detectedHwAccel === 'amf') {
       void runOpenclTonemapProbe(this.log, this.detectedHwAccel);
     }
-    // Zero-copy AMD GPU scale for the AMF encode (scale_d3d11, needs FFmpeg
-    // ≥ 8.1 and a GPU that accepts its output texture). Probed so an unavailable
-    // filter degrades to the CPU scale instead of crashing every session.
+    // Zero-copy CUDA HDR→SDR tone-map: keeps decode → scale → tonemap →
+    // encode on CUDA surfaces when the bundled ffmpeg has tonemap_cuda.
+    if (this.detectedHwAccel === 'nvenc') {
+      void runCudaTonemapProbe(this.log);
+    }
+    // Zero-copy AMD GPU scale + HDR tonemap via D3D11↔OpenCL interop.
+    // Probed so an unavailable chain degrades to the CPU scale instead of
+    // crashing every session.
     if (this.detectedHwAccel === 'amf') {
-      void runScaleD3d11Probe(this.log);
+      void runAmfOpenclProbe(this.log);
     }
 
     // Tight cleanup cadence — paired with the live-session 30 s TTL +

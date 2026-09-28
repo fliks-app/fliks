@@ -260,6 +260,11 @@ export class StreamBuilderService {
     /** The controller's already-frozen remux grid (see `freezeRemuxGrid`),
      *  fed back so the AudioEndsEarly check reads the exact grid served. */
     remuxGrid?: KeyframeGrid | null,
+    /** Whether the burn-in (if any) is TEXT, not image/PGS; matches
+     *  ffmpeg-args' `!!burnIn?.filter`. Only text forces the encode pipeline
+     *  off HW (libass needs CPU surfaces); PGS composites via filter_complex
+     *  without leaving the GPU. */
+    burnInIsText = false,
   ): EvaluateResult {
     const si = resolved.mediaFile.streamInfo;
     const v = si?.video?.[0];
@@ -879,11 +884,14 @@ export class StreamBuilderService {
     const effectiveHwAccel = resolveEncodePipeline(selectedVariant, {
       hwAccel: this.transcodingService.getDetectedHwAccel(),
       crop: needsCrop,
-      burnIn: needsBurnIn,
+      burnIn: burnInIsText,
       tonemap: transcodeTonemaps,
       tonemapAlgo: this.activeStreamTracker.getTonemapAlgo(),
       sourceVideoCodec,
       dvNoBase: noBase,
+      // Mirrors the spawn's own derivation (transcoding.service.ts) so this
+      // stays the same resolver call with the same inputs.
+      sourceBitDepth: isSourceHdr || noBase ? 10 : 8,
     }).effectiveHwAccel;
 
     this.log.log(

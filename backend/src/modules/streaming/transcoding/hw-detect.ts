@@ -142,8 +142,10 @@ export async function detectHwAccel(
  *  filtering constraints:
  *
  *  - Subtitle burn-in needs CPU surfaces for libass — force `'none'`
- *    on QSV / VAAPI / NVENC. VideoToolbox decode already lands in CPU
- *    buffers so libass works in-place.
+ *    on QSV / VAAPI. VideoToolbox decode already lands in CPU buffers
+ *    so libass works in-place; NVENC also stays (its own filter helper
+ *    bounces to CPU just before `subtitles=...`, keeping NVDEC + the
+ *    tone-map on the GPU for the rest of the chain).
  *  - QSV cannot crop on the vaapi-decode-then-hwmap chain (the
  *    fixed-size QSV frame pool rejects the variable output of CPU
  *    `crop` after hwupload back to vaapi). When the caller indicates
@@ -161,7 +163,8 @@ export function requestedHwAccelFor(
   needs: { burnIn: boolean; crop: boolean; qsvCanCrop?: boolean },
   platform: NodeJS.Platform = process.platform,
 ): HwAccelType {
-  if (needs.burnIn && detected !== 'videotoolbox') return 'none';
+  if (needs.burnIn && detected !== 'videotoolbox' && detected !== 'nvenc')
+    return 'none';
   if (
     detected === 'qsv' &&
     needs.crop &&

@@ -6,7 +6,9 @@ import type { VideoCodec } from '../types';
  *  `-hwaccel_output_format cuda` the frames land in CPU memory, which
  *  is what the NVENC tonemap CPU path wants. We always set the output
  *  format here — the tonemap path uses `hwdownload` explicitly when it
- *  needs CPU buffers. */
+ *  needs CPU buffers. `-threads 1`: frame threading in the software
+ *  parser adds extra surfaces to the NVDEC decode pool, which nvdec
+ *  warns about past 32 in flight. */
 function cudaDecoder(
   codec: VideoCodec,
   maxBitDepth: 8 | 10,
@@ -23,6 +25,8 @@ function cudaDecoder(
       'cuda',
       '-hwaccel_output_format',
       'cuda',
+      '-threads',
+      '1',
       '-noautorotate',
     ],
   };

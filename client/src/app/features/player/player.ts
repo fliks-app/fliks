@@ -985,11 +985,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       vaapi: 'VAAPI',
       opencl: 'OpenCL',
       qsv: 'vpp_qsv',
+      cuda: 'CUDA',
       videotoolbox: 'VideoToolbox',
       cpu: 'CPU',
     };
-    // The opencl and CPU paths run a tunable curve (tonemap_opencl / tonemap),
-    // surfaced in parentheses; the vpp_qsv / VAAPI LUTs carry no curve.
+    // The cuda, opencl and CPU paths run a tunable curve (tonemap_cuda /
+    // tonemap_opencl / tonemap), surfaced in parentheses; the vpp_qsv / VAAPI
+    // LUTs carry no curve.
     const curve = pi?.tonemapCurve
       ? ` (${pi.tonemapCurve.charAt(0).toUpperCase()}${pi.tonemapCurve.slice(1)})`
       : '';

@@ -101,6 +101,7 @@ export interface EncoderInput {
     burnInFilter: string;
     tonemapVaapi: string;
     tonemapOpencl: string;
+    tonemapCuda: string;
     tonemapCpu: string;
   };
   /** True when the orchestrator is applying an HDR→SDR tonemap pass.

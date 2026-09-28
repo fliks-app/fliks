@@ -10,8 +10,8 @@ import type { BitDepth, VideoCodec } from '../types';
  *  - `'qsv'`         : routing label for the `vpp_qsv` encoder path; every
  *                      Linux QSV decoder decodes on native VAAPI regardless
  *  - `'cuda'`        : NVIDIA CUDA surface
- *  - `'d3d11'`       : Direct3D 11 texture (Windows) — the full-GPU AMF
- *                      path keeps frames here (scale_d3d11 → AMF encode)
+ *  - `'d3d11'`       : Direct3D 11 texture (Windows); the AMF zero-copy
+ *                      OpenCL path keeps frames here
  *  - `'videotoolbox'`: macOS IOSurface produced by VT decode (we keep
  *                      the descriptor's `outputSurface` at `'cpu'` for
  *                      now because the rest of the pipeline expects

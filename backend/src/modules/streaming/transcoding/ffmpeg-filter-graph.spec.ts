@@ -18,6 +18,7 @@ describe('buildVideoFilters', () => {
       burnInFilter: '',
       tonemapVaapi: '',
       tonemapOpencl: '',
+      tonemapCuda: '',
       tonemapCpu: '',
     });
   });
