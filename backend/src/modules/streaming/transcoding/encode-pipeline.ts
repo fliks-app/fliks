@@ -124,14 +124,16 @@ export function resolveEncodePipeline(
     : ctx.crop
       ? isTonemapOpenclEnabledWithCrop()
       : isTonemapOpenclEnabled();
-  // A no-base DV source has no RPU-aware vaapi/qsv tonemap (tonemap_vaapi,
-  // the vpp_qsv LUT): when neither GPU bridge (opencl, vulkan) is available,
-  // `tonemapPath` falls back to one of those, so keep the pipeline off HW.
-  const dvNoBaseNeedsCpu =
-    ctx.dvNoBase &&
+  // A no-base DV source has no RPU-aware vaapi/qsv tonemap: when neither GPU
+  // bridge is actually usable, keep the pipeline off HW. Vulkan needs a VAAPI
+  // encoder and no burn-in — `resolveTonemapPath` doesn't know either.
+  const vulkanUsable =
+    tonemapPath === 'vulkan' &&
     ctx.tonemap &&
-    tonemapPath !== 'opencl' &&
-    tonemapPath !== 'vulkan';
+    !ctx.burnIn &&
+    ctx.hwAccel === 'vaapi';
+  const dvNoBaseNeedsCpu =
+    ctx.dvNoBase && ctx.tonemap && tonemapPath !== 'opencl' && !vulkanUsable;
   // Keep the whole pipeline on QSV (no hwdownload→crop→hwupload round-trip):
   // crop-only always; tonemap via vpp_qsv LUT or via opencl when probed;
   // tonemap via vaapi is NOT qsv-native compatible.

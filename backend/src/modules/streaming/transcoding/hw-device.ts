@@ -71,11 +71,8 @@ export function hostHasVaapi(
   return platform !== 'win32';
 }
 
-/** DRM + VAAPI + Vulkan device chain for the libplacebo tone-map: the decoder
- *  stays on VAAPI, `hwmap=derive_device=drm` bridges the surface into
- *  libplacebo's Vulkan filter device, then back onto VAAPI for the encode.
- *  `-filter_hw_device vk` makes Vulkan the default so `hwmap` with no
- *  explicit device still resolves. Linux only (needs libdrm + Vulkan). */
+/** DRM + VAAPI + Vulkan device chain for the libplacebo tone-map, with Vulkan
+ *  as the default filter device. Linux only (needs libdrm + Vulkan). */
 export function vulkanTonemapInitArgs(): string[] {
   return [
     '-init_hw_device',

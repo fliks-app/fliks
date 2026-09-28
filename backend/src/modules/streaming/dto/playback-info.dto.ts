@@ -123,14 +123,8 @@ export interface PlaybackInfoResponse {
    *  SUPPLEMENTAL-CODECS remux); false on a transcode, which drops DV. */
   dolbyVision?: boolean;
 
-  /** Tone-map mechanism the session actually runs. `'vaapi'` / `'opencl'`
-   *  / `'qsv'` for QSV/VAAPI encoders (after `auto` resolution + boot
-   *  probe); `'vulkan'` for the libplacebo GPU path (a no-base DV source
-   *  when the opencl bridge is down); `'videotoolbox'` for the macOS
-   *  `scale_vt` Metal path; `'cpu'` for the CPU zscale chain (NVENC /
-   *  libx26x / VideoToolbox with a burn-in or crop). `null` when no
-   *  tone-mapping pass runs. Stats overlays show this value, not the
-   *  (encoder-agnostic) admin pick. */
+  /** Tone-map mechanism the session actually runs (post `auto` resolution +
+   *  boot probe), not the admin's encoder-agnostic pick. `null` = no pass. */
   tonemapAlgo?:
     | 'vaapi'
     | 'opencl'

@@ -62,10 +62,14 @@ export function buildImageBurnInFilterComplex(ctx: {
     );
   }
 
-  // HW encode paths: the chain ends on a GPU surface. Round-trip to CPU just
-  // for the composite, then re-upload to the encoder's device.
+  // HW encode paths: round-trip to CPU for the composite, then re-upload.
+  // VAAPI names its device: the default filter device can be Vulkan (DV tonemap).
   const upload =
-    hwAccel === 'nvenc' ? 'hwupload_cuda' : 'hwupload=extra_hw_frames=16';
+    hwAccel === 'nvenc'
+      ? 'hwupload_cuda'
+      : hwAccel === 'vaapi'
+        ? 'hwupload=derive_device=vaapi:extra_hw_frames=16'
+        : 'hwupload=extra_hw_frames=16';
   if (tenBit) {
     return (
       `${video},hwdownload,format=${hwFmt}[v];` +

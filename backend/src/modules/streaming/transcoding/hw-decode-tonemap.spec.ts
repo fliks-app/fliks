@@ -172,25 +172,7 @@ describe('buildFfmpegArgs: no-base Dolby Vision on the Vulkan path', () => {
     openclCrop.mockReturnValue(true);
   });
 
-  it('P5 on a VAAPI host: drm/vaapi/vulkan device chain, libplacebo tonemap, vaapi encode', () => {
-    const args = buildFfmpegArgs(
-      opts({ hwAccel: 'vaapi', sourceDvProfile: 5 }),
-      silentLog,
-    );
-    const cli = args.join(' ');
-    expect(cli).toContain('-init_hw_device drm=dr:/dev/dri/renderD128');
-    expect(cli).toContain('-init_hw_device vaapi=va@dr');
-    expect(cli).toContain('-init_hw_device vulkan=vk@dr');
-    expect(cli).toContain('-filter_hw_device vk');
-    expect(cli).toContain('-hwaccel vaapi');
-    expect(cli).toMatch(/-c:v (h264|hevc)_vaapi\b/);
-    const vf = vfOf(args);
-    expect(vf).toContain('hwmap=derive_device=drm,format=drm_prime,libplacebo=');
-    // No-base DV source (P5): the RPU is trustworthy, so apply it.
-    expect(vf).toContain('apply_dolbyvision=1');
-  });
-
-  it('P5 with crop: libplacebo crop_* options, no hwdownload round-trip', () => {
+  it('P5 with crop: drm/vaapi/vulkan chain, libplacebo crop_* + the real output height, no hwdownload', () => {
     const args = buildFfmpegArgs(
       opts({
         hwAccel: 'vaapi',
@@ -199,8 +181,18 @@ describe('buildFfmpegArgs: no-base Dolby Vision on the Vulkan path', () => {
       }),
       silentLog,
     );
+    const cli = args.join(' ');
+    expect(cli).toContain('-init_hw_device drm=dr:/dev/dri/renderD128');
+    expect(cli).toContain('-init_hw_device vulkan=vk@dr');
+    expect(cli).toContain('-filter_hw_device vk');
+    expect(cli).toMatch(/-c:v (h264|hevc)_vaapi\b/);
     const vf = vfOf(args);
     expect(vf).toContain('crop_w=1920:crop_h=800:crop_x=0:crop_y=140:');
+    // The crop's own height, not `h=-2` (libplacebo derives -2 from the
+    // uncropped input, stretching the picture — see resolveEncodePipeline).
+    expect(vf).toContain('w=1920:h=800:');
     expect(vf).not.toContain('hwdownload');
+    // No-base DV source (P5): the RPU is trustworthy, so apply it.
+    expect(vf).toContain('apply_dolbyvision=1');
   });
 });

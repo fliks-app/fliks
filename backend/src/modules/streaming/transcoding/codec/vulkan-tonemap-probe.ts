@@ -5,14 +5,13 @@ import * as os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
 import { vulkanTonemapInitArgs } from '../hw-device';
+import { buildVideoFilters } from '../ffmpeg-filter-graph';
 
 const execFileAsync = promisify(execFile);
 
 /** Standalone `libplacebo` (Vulkan) HDR->SDR capability on a VAAPI host: the
- *  Dolby Vision no-base GPU path an AMD/Intel Linux box can use instead of
- *  the CPU tonemapx fallback. Needs libdrm + a working Vulkan ICD alongside
- *  VAAPI, so it fails on hosts with no GPU Vulkan driver even though VAAPI
- *  itself works. Fail-closed until the boot probe confirms it. */
+ *  Dolby Vision no-base GPU fallback when the OpenCL bridge is down.
+ *  Fail-closed until the boot probe confirms it. */
 let probedOnce = false;
 let enabled = false;
 
@@ -49,7 +48,15 @@ export async function runVulkanTonemapProbe(log: Logger): Promise<void> {
 
     // The exact session graph: VAAPI decode -> hwmap onto DRM -> libplacebo
     // (Vulkan) tonemap -> hwmap back onto VAAPI. No encode needed; the null
-    // muxer accepts the VAAPI surface the chain ends on.
+    // muxer accepts the VAAPI surface the chain ends on. Built from the same
+    // `buildVideoFilters` the real session uses, so the two can't drift.
+    const vf = buildVideoFilters({
+      tonemap: true,
+      useVaapiTonemap: false,
+      useVulkanTonemap: true,
+      sourceBitDepth: 10,
+      scaleWidth: 320,
+    }).tonemapVulkan;
     await execFileAsync(
       'ffmpeg',
       [
@@ -59,13 +66,7 @@ export async function runVulkanTonemapProbe(log: Logger): Promise<void> {
         '-hwaccel_output_format', 'vaapi',
         '-hwaccel_device', 'va',
         '-i', hdrSample,
-        '-vf',
-        'hwmap=derive_device=drm,format=drm_prime,' +
-          'libplacebo=w=320:h=-2:upscaler=none:downscaler=none:format=bgra:' +
-          'tonemapping=hable:peak_detect=0:color_primaries=bt709:color_trc=bt709:' +
-          'colorspace=bt709:range=pc:apply_dolbyvision=0,' +
-          'format=vulkan,hwmap=derive_device=vaapi,format=vaapi,' +
-          'scale_vaapi=format=nv12:out_range=tv',
+        '-vf', vf,
         '-frames:v', '1',
         '-f', 'null', '-',
       ],

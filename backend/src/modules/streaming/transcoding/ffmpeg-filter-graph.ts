@@ -50,6 +50,10 @@ export interface VideoFilterContext {
    *  source with no HW decode (e.g. AV1 on a pre-Ampere NVIDIA GPU), where
    *  tone-mapping at 2160p drops below real-time. */
   scaleWidth: number;
+  /** Target output height, used only by the Vulkan path: libplacebo's `h=-2`
+   *  derives from the uncropped input, so a crop needs the real height or
+   *  `fit_mode=fill` stretches the picture. Other paths keep `h=-2`. */
+  scaleHeight?: number;
 }
 
 /**
@@ -81,6 +85,7 @@ export function buildVideoFilters(
     dvNoBase,
     tonemapCurve,
     scaleWidth,
+    scaleHeight,
     openclTonemap,
   } = ctx;
   const curve = tonemapCurve ?? 'hable';
@@ -97,19 +102,16 @@ export function buildVideoFilters(
     useVaapiTonemap && !burnIn?.filter
       ? ',tonemap_vaapi=format=nv12:t=bt709:p=bt709:m=bt709'
       : '';
-  // Vulkan (libplacebo) tone-map: VAAPI decode → hwmap onto DRM → libplacebo
-  // (scale + tonemap + RPU) → hwmap back onto VAAPI for the encode. Crop is
-  // a libplacebo option (`crop_*`), not the hwdownload/crop/hwupload
-  // round-trip the other paths use; a Vulkan filter device can't derive a
-  // VAAPI surface for a CPU-side crop. `apply_dolbyvision` is libplacebo's
-  // name for the same apply-the-RPU rule as `dvApplyDoviOpt`.
+  // Vulkan (libplacebo) tone-map. Crop is a libplacebo option (`crop_*`), not
+  // the hwdownload/crop/hwupload round-trip the other paths use — a Vulkan
+  // filter device can't derive a VAAPI surface for a CPU-side crop.
   const tonemapVulkan =
     useVulkanTonemap && !burnIn?.filter
       ? `hwmap=derive_device=drm,format=drm_prime,libplacebo=${
           cropStr
             ? `crop_w=${crop!.width}:crop_h=${crop!.height}:crop_x=${crop!.x}:crop_y=${crop!.y}:`
             : ''
-        }w=${scaleWidth}:h=-2:upscaler=none:downscaler=none:format=bgra:tonemapping=${curve}:peak_detect=0:color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=pc:apply_dolbyvision=${dvNoBase ? 1 : 0},format=vulkan,hwmap=derive_device=vaapi,format=vaapi,scale_vaapi=format=nv12:out_range=tv`
+        }w=${scaleWidth}:h=${scaleHeight ?? -2}:upscaler=none:downscaler=none:format=bgra:tonemapping=${curve}:peak_detect=0:color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=pc:apply_dolbyvision=${dvNoBase ? 1 : 0},format=vulkan,hwmap=derive_device=vaapi,format=vaapi,scale_vaapi=format=nv12:out_range=tv`
       : '';
   // CPU tonemap chain: HDR (PQ/HLG BT.2020) → SDR (BT.709). The opening zscale
   // linearises the source transfer AND downscales to the output width in one

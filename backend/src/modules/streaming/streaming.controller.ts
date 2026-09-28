@@ -1044,9 +1044,7 @@ export class StreamingController {
             ? 'videotoolbox'
             : 'cpu'
       : null;
-    // The curve is a `tonemap`/`tonemap_opencl`/libplacebo `tonemapping`
-    // operator, so it applies to the opencl, vulkan and CPU paths; the
-    // vpp_qsv / tonemap_vaapi LUTs ignore it.
+    // A tunable curve applies to opencl/vulkan/CPU; the vpp_qsv / vaapi LUTs ignore it.
     const tonemapCurve =
       tonemapAlgo === 'opencl' ||
       tonemapAlgo === 'vulkan' ||

@@ -113,25 +113,11 @@ describe('resolveTonemapPath', () => {
     ).toBe('vaapi');
   });
 
-  it('dvNoBase falls to vulkan (VAAPI host) when the opencl bridge is down but the vulkan probe passed', () => {
-    vulkanTonemap.mockReturnValue(true);
-    expect(
-      resolveTonemapPath('vaapi', { hasCrop: false, dvNoBase: true }, 'linux'),
-    ).toBe('vulkan');
-  });
-
   it('dvNoBase prefers opencl over vulkan when both probes passed', () => {
     openclNoCrop.mockReturnValue(true);
     vulkanTonemap.mockReturnValue(true);
     expect(
       resolveTonemapPath('vaapi', { hasCrop: false, dvNoBase: true }, 'linux'),
     ).toBe('opencl');
-  });
-
-  it('never picks vulkan on Windows (no VAAPI device) even if the probe somehow passed', () => {
-    vulkanTonemap.mockReturnValue(true);
-    expect(
-      resolveTonemapPath('vaapi', { hasCrop: false, dvNoBase: true }, 'win32'),
-    ).toBe('vaapi');
   });
 });

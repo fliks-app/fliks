@@ -203,9 +203,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     if (this.detectedHwAccel === 'nvenc' || this.detectedHwAccel === 'amf') {
       void runOpenclTonemapProbe(this.log, this.detectedHwAccel);
     }
-    // Vulkan (libplacebo) GPU tone-map for a no-base DV source on a VAAPI
-    // host (AMD/Intel Linux): the alternative to the CPU tonemapx fallback
-    // when the OpenCL bridge is down. Linux-only; no VAAPI device elsewhere.
+    // Vulkan (libplacebo) GPU tone-map: the no-base DV fallback when the
+    // OpenCL bridge is down. Linux-only; no VAAPI device elsewhere.
     if (this.detectedHwAccel === 'vaapi' && process.platform === 'linux') {
       void runVulkanTonemapProbe(this.log);
     }

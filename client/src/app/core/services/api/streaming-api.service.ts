@@ -35,10 +35,8 @@ export interface PlaybackInfoResponse {
   /** Delivered stream is Dolby Vision-presentable (raw DirectPlay, or a
    *  SUPPLEMENTAL-CODECS remux); false on a transcode, which drops DV. */
   dolbyVision?: boolean;
-  /** Tone-map mechanism the backend actually runs: a HW path
-   *  (`'vaapi'` / `'opencl'` / `'qsv'` / `'vulkan'`) on QSV/VAAPI encoders, or
-   *  `'cpu'` for the CPU chain (NVENC / libx26x / VideoToolbox
-   *  fallback). Null when no tone-mapping pass runs on this session. */
+  /** Tone-map mechanism the backend actually runs. Null when no
+   *  tone-mapping pass runs on this session. */
   tonemapAlgo?:
     | 'vaapi'
     | 'opencl'
