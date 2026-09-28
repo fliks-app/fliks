@@ -473,7 +473,7 @@ export class StreamBuilderService {
     // re-encoded on the HDR ladder. Surfaced in the stats overlay and the admin
     // dashboard, which would otherwise show no HDR step at all.
     const clientTonemap =
-      (clientCanPresentHdr || useHdrLadder) && !clientSupportsHdr;
+      (clientCanPresentHdr || clientCanPresentDv || useHdrLadder) && !clientSupportsHdr;
 
     // HDR/DV the client can't present as-is forces a transcode. Flag the
     // tone-map only when the re-encode is actually SDR — when the HDR ladder
