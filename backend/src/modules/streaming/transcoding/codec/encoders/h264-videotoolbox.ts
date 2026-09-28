@@ -35,7 +35,7 @@ export const h264Videotoolbox: EncoderDescriptor = {
       '-force_key_frames',
       input.forceKeyframesExpr,
     ];
-    // Metal fast path — see `hevc-videotoolbox.ts` for the surface rules.
+    // Metal fast path; see `hevc-videotoolbox.ts` for the surface rules.
     if (inputSurface === 'videotoolbox') {
       return [...common, '-vf', vtTonemapFilter(input), ...trailing];
     }
