@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 import type { BitDepth, HdrFormat, VideoCodec } from './codec/types';
 import { varStreamMapLayout } from './audio-layout';
 import { audioEncoderName, DEFAULT_AUDIO_PLAN } from './audio-encode';
+import { dvHasNoBase } from './codec/dolby-vision';
 import type { SessionContext } from './types';
 
 /**
@@ -55,6 +56,10 @@ export interface PlaybackProfile {
   /** {@link SessionContext.dolbyVision}: a DV session writes a `dvvC` box the
    *  init segment otherwise lacks, so it can never share a non-DV cache dir. */
   dolbyVision: boolean;
+  /** The session tone-maps a no-base DV source (P5/P10.0) through the dovi
+   *  OpenCL filter: different pixels than a plain HDR→SDR tone-map at the
+   *  same codec/bit-depth/hdr, so it needs its own cache dir. */
+  dvTonemap: boolean;
 }
 
 /** Segment timeline layout (edit lists, tfdt origin, audio alignment). Raised
@@ -92,6 +97,7 @@ function canonicalise(profile: PlaybackProfile): string {
     `fs=${profile.formatStart}`,
     `sv=${profile.sourceVersion ?? ''}`,
     ...(profile.dolbyVision ? [`dv=1`] : []),
+    ...(profile.dvTonemap ? [`dvt=1`] : []),
   ].join('|');
 }
 
@@ -152,5 +158,7 @@ export function buildPlaybackProfileFromContext(
     formatStart: ctx?.sourceFormatStart ?? ctx?.sourceStartPts ?? 0,
     sourceVersion: ctx?.sourceVersion ?? null,
     dolbyVision: ctx?.dolbyVision ?? false,
+    dvTonemap:
+      !!ctx?.tonemap && dvHasNoBase(ctx?.sourceDvProfile, ctx?.sourceDvBlSignalCompatId),
   };
 }

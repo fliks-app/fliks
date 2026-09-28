@@ -28,6 +28,7 @@ const BASE: PlaybackProfile = {
   formatStart: 0,
   sourceVersion: null,
   dolbyVision: false,
+  dvTonemap: false,
 };
 
 describe('computeProfileHash', () => {
@@ -272,6 +273,14 @@ describe('buildPlaybackProfileFromContext', () => {
       );
     expect(hash('100-1')).not.toBe(hash('100-2'));
     expect(hash(undefined)).toBe(computeProfileHash(BASE));
+  });
+
+  it('separates a no-base DV tone-map (P5/P10.0) from a plain HDR tone-map', () => {
+    const hash = (ctx: SessionContext) =>
+      computeProfileHash(buildPlaybackProfileFromContext(ctx, 3000));
+    expect(hash({ tonemap: true, sourceDvProfile: 5 })).not.toBe(
+      hash({ tonemap: true }),
+    );
   });
 });
 

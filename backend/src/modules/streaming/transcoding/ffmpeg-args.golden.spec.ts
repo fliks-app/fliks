@@ -1562,6 +1562,32 @@ describe('buildRemuxArgs — golden (characterization)', () => {
     ]);
   });
 
+  it('remux: Dolby Vision P5 (no HDR10/HLG base) tags dvh1 instead of hvc1', () => {
+    const args = remuxArgs({
+      inputPath: '/media/in.mkv',
+      outputDir: '/cache/out',
+      audioPlan: { mode: 'copy', codec: 'aac' },
+      trustedStreamInfo: true,
+      sourceVideoCodec: 'hevc',
+      dolbyVision: true,
+      sourceDvProfile: 5,
+    });
+    expect(args[args.indexOf('-tag:v') + 1]).toBe('dvh1');
+  });
+
+  it('remux: Dolby Vision P8.1 (HDR10 base) keeps hvc1', () => {
+    const args = remuxArgs({
+      inputPath: '/media/in.mkv',
+      outputDir: '/cache/out',
+      audioPlan: { mode: 'copy', codec: 'aac' },
+      trustedStreamInfo: true,
+      sourceVideoCodec: 'hevc',
+      dolbyVision: true,
+      sourceDvProfile: 8,
+    });
+    expect(args[args.indexOf('-tag:v') + 1]).toBe('hvc1');
+  });
+
   it('remux: a Dolby Vision session appends strict=unofficial so ffmpeg writes dvvC', () => {
     const args = remuxArgs({
       inputPath: '/media/in.mkv',

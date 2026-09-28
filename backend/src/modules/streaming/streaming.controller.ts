@@ -63,7 +63,7 @@ import {
   sourceTimeline,
 } from './transcoding/source-timeline';
 import { copySourceCodecString } from './transcoding/codec/codec-strings';
-import { dvSupplementalCodecs } from './transcoding/codec/dolby-vision';
+import { dvSupplementalCodecs, dvStandaloneCodecs } from './transcoding/codec/dolby-vision';
 import { LiveSessionRegistry, type LiveSession, type SessionKind } from './live-session.service';
 import * as path from 'path';
 import { SegmentPackagingService } from './services/segment-packaging.service';
@@ -1421,6 +1421,10 @@ export class StreamingController {
       : live?.audioPlan
         ? [live.audioPlan]
         : undefined;
+    // A P5 remux has no base layer: its standalone CODECS string (always PQ,
+    // even with an unspecified VUI) replaces the probed one, never alongside it.
+    const remuxDvStandalone =
+      includeRemux && live?.dolbyVision ? dvStandaloneCodecs(v) : null;
     const playlist = this.transcodingService.generateMasterPlaylist({
       mediaFileId,
       sourceWidth: w,
@@ -1448,13 +1452,14 @@ export class StreamingController {
       sdrVariant: sdrVariant && sdrVariant.hdr == null ? sdrVariant : undefined,
       // Copied stream: describe the bitstream as probed, not as a rung would
       // encode it (see copySourceCodecString).
-      remuxCodecs: includeRemux && v ? copySourceCodecString(v) : undefined,
+      remuxCodecs:
+        includeRemux && v ? (remuxDvStandalone ?? copySourceCodecString(v)) : undefined,
       remuxSupplementalCodecs:
         includeRemux && live?.dolbyVision ? dvSupplementalCodecs(v) : undefined,
       formatBitRate:
         si?.formatBitRate ?? (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0),
       sourceFrameRate,
-      sourceHdrFormat,
+      sourceHdrFormat: remuxDvStandalone ? 'HDR10' : sourceHdrFormat,
       subtitleRenditions,
       sourceVideoBitrateBps: resolveSourceVideoBitrateBps(
         v?.bitRate,

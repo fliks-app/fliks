@@ -13,12 +13,15 @@
  *     (needs the Linux-only `cl_intel_va_api_media_sharing` extension) on the
  *     Windows QSV OpenCL path. That zero-copy map is unused — the tone-map
  *     bounces through the CPU (`hwupload`) — so it's informational only.
+ *   - The hls muxer warns `Stream HEVC is not hvc1` on a P5 remux's deliberate
+ *     `dvh1` tag (see `buildRemuxArgs`); the hint to use `hvc1` is wrong here.
  */
 const BENIGN_STDERR_PATTERNS: RegExp[] = [
   /Could not find codec parameters for stream \d+ \(Subtitle:/,
   /Consider increasing the value for the 'analyzeduration'/,
   /QSV to OpenCL mapping not usable/,
   /cl_intel_va_api_media_sharing extension is required/,
+  /Stream HEVC is not hvc1, you should use tag:v hvc1 to set it\./,
 ];
 
 /** Strip {@link BENIGN_STDERR_PATTERNS} from a captured ffmpeg stderr blob so

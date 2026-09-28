@@ -42,6 +42,22 @@ const dvMp4OnlyClient: DeviceProfileDto = {
   maxAudioChannels: 6,
 } as never;
 
+// DV+AV1-capable client: proves P10.0 tone-maps even though the client
+// could otherwise present DV (it has no compatible base to fall back to).
+const dvAv1Client: DeviceProfileDto = {
+  containers: ['mkv'],
+  directPlayProfiles: [
+    { containers: ['mkv'], videoCodecs: ['av1'], audioCodecs: ['aac'] },
+  ],
+  codecConditions: [
+    { codec: 'av1', maxBitDepth: 10, maxWidth: 3840, maxHeight: 2160 },
+  ],
+  supportsHdr: true,
+  supportsDirectPlay: true,
+  supportsDolbyVision: true,
+  maxAudioChannels: 6,
+} as never;
+
 const resolved = (
   dvProfile?: number,
   dvBlSignalCompatId?: number,
@@ -71,6 +87,9 @@ const resolved = (
             hdrFormat: 'HDR10',
             colorTransfer: 'smpte2084',
             colorPrimaries: 'bt2020',
+            colorRange: 'tv',
+            colorSpace: 'bt2020nc',
+            pixelFormat: 'yuv420p10le',
             dvProfile,
             dvBlSignalCompatId,
             dvElPresent,
@@ -116,17 +135,20 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
   });
 
   it('DirectPlays P5 untouched for a client that can present DV', () => {
-    const r = svc().evaluate(resolved(5, 0), dvHevcClient, 'tok');
+    // A probed level is required: it also gates the quality list's `original`
+    // entry (dvP5Copy), so DirectPlay and the copy decision can't disagree.
+    const r = svc().evaluate(resolved(5, 0, undefined, 6), dvHevcClient, 'tok');
     expect(r.response.playMethod).toBe('DirectPlay');
     expect(r.response.videoCopyStream).toBe(true);
     expect(r.response.tonemapping).toBe(false);
+    expect(r.response.dolbyVision).toBe(true);
     expect(
       r.response.transcodeReasons.some((x) => /Dolby Vision/.test(x.message)),
     ).toBe(false);
   });
 
   it('DirectPlays P5 with RPU-only metadata (no HDR VUI) for a DV client', () => {
-    const r: any = resolved(5, 0);
+    const r: any = resolved(5, 0, undefined, 6);
     r.mediaFile.streamInfo.video[0].hdrFormat = undefined;
     r.mediaFile.streamInfo.video[0].colorTransfer = undefined;
     r.mediaFile.streamInfo.video[0].colorPrimaries = undefined;
@@ -135,13 +157,25 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
     expect(out.response.videoCopyStream).toBe(true);
   });
 
-  it('transcodes (not remuxes) P5 for a DV client that cannot raw-play the container', () => {
-    // iOS-style: MKV source can't DirectPlay, and the fMP4 remux would drop the
-    // DV config box → green/purple. P5 must tonemap instead of copy.
-    const r = svc().evaluate(resolved(5, 0), dvMp4OnlyClient, 'tok');
-    expect(r.response.playMethod).toBe('Transcode');
-    expect(r.response.videoCopyStream).toBeFalsy();
-    expect(r.response.tonemapping).toBe(true);
+  it('remuxes P5 (standalone CODECS) for a DV client that cannot raw-play the container', () => {
+    // iOS-style: MKV source can't DirectPlay, but a DV client with a probed
+    // level gets a `dvh1` remux tagged with the standalone CODECS string.
+    const r = svc().evaluate(resolved(5, 0, undefined, 6), dvMp4OnlyClient, 'tok');
+    expect(r.response.playMethod).toBe('DirectStream');
+    expect(r.response.dolbyVision).toBe(true);
+  });
+
+  it('transcodes P10.0 (no compatible base) with the dovi tonemap for an HDR AV1 client', () => {
+    const r: any = resolved(10, 0);
+    const v0 = r.mediaFile.streamInfo.video[0];
+    v0.codec = 'av1';
+    v0.hdrFormat = undefined;
+    v0.colorTransfer = undefined;
+    v0.colorPrimaries = undefined;
+    const out = svc().evaluate(r, dvAv1Client, 'tok');
+    expect(out.response.playMethod).toBe('Transcode');
+    expect(out.response.tonemapping).toBe(true);
+    expect(out.response.dolbyVision).toBe(false);
   });
 
   it('remuxes DV 8.1 with dolbyVision:true for a DV client that cannot raw-play the container', () => {

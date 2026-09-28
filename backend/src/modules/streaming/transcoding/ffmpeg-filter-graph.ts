@@ -24,8 +24,8 @@ export interface VideoFilterContext {
   /** Source bit depth — picks the crop round-trip pixel format (10-bit → p010le
    *  so the HDR colour space survives the hwdownload → crop → hwupload trip). */
   sourceBitDepth: number;
-  /** Dolby Vision P5 tone-map via `tonemap_opencl=apply_dovi` — applies the RPU
-   *  the standard tonemap can't read (IPT-PQ-C2 → green/purple otherwise). */
+  /** No-base Dolby Vision (P5/P10.0) tone-map via `tonemap_opencl=apply_dovi`,
+   *  applying the RPU the standard tonemap can't read. */
   doviOpencl?: boolean;
   /** CPU HDR→SDR tone-map curve (`hable` default, `mobius` optional). */
   tonemapCurve?: TonemapCurve;

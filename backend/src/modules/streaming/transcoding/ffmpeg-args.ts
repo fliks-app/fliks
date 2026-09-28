@@ -44,6 +44,7 @@ import {
 } from './codec/decoders';
 import { normaliseSourceCodec } from './codec/normalise';
 import { hevcMainTierCapBps } from './codec/codec-strings';
+import { dvHasNoBase } from './codec/dolby-vision';
 import { varStreamMapLayout } from './audio-layout';
 import { inputSeekSeconds } from './source-timeline';
 import { resolveEncodePipeline } from './encode-pipeline';
@@ -777,7 +778,7 @@ function resolveDecodeStage(opts: {
       args.splice(fhd, 0, '-init_hw_device', 'opencl=ocl@dx');
     }
   }
-  // OpenCL device for the DV Profile 5 RPU tone-map (`tonemap_opencl=apply_dovi`).
+  // OpenCL device for the no-base DV RPU tone-map (`tonemap_opencl=apply_dovi`).
   // The CPU-decoded frame hwuploads onto it.
   if (useDoviOpenclTonemap) {
     args.push(...openclTonemapInitArgs());
@@ -1016,14 +1017,11 @@ export function buildFfmpegArgs(
   }
   const variant: CodecVariant = videoVariant;
   const isHdrOutput = variant.hdr !== null;
-  // Dolby Vision Profile 5 (IPT-PQ-C2, no HDR10 base) applies its RPU in the
-  // OpenCL tone-map filter (`tonemap_opencl=apply_dovi=1`). The RPU is exposed
-  // as frame side-data by the software HEVC decoder, so this forces CPU decode,
-  // then hwupload → tonemap_opencl → hwdownload.
+  // A no-base DV source's RPU applies via `tonemap_opencl=apply_dovi=1`,
+  // exposed as frame side-data by the software decoder, forcing CPU decode.
   const useDoviOpenclTonemap =
     !!tonemap &&
-    sourceDvProfile === 5 &&
-    (sourceDvBlSignalCompatId === 0 || sourceDvBlSignalCompatId == null) &&
+    dvHasNoBase(sourceDvProfile, sourceDvBlSignalCompatId) &&
     isOpenclTonemapEnabled();
 
   // Image-based subtitle burn-in (PGS/VOBSUB) is composited via -filter_complex
@@ -1371,6 +1369,9 @@ export interface BuildRemuxArgsOptions {
   /** Session is Dolby Vision-eligible: writes a `dvvC` box into the init
    *  segment via `-hls_segment_options ...:strict=unofficial`. */
   dolbyVision?: boolean;
+  /** P5 has no HDR10/HLG base, which the bundled ffmpeg's mp4 muxer only tags
+   *  `dvcC` for under a `dvh1` sample entry; a plain `hvc1` silently drops it. */
+  sourceDvProfile?: number;
 }
 
 /** One `-f mp4` output per audio track: a growing fragmented file the assembler
@@ -1431,6 +1432,7 @@ export function buildRemuxArgs(
     audioTrackPlans,
     videoOnly = false,
     dolbyVision = false,
+    sourceDvProfile,
   } = opts;
 
   const args = ['-hide_banner', '-loglevel', 'warning'];
@@ -1470,7 +1472,9 @@ export function buildRemuxArgs(
   // HEVC needs Apple HLS conformance:
   //   - `-tag:v hvc1` writes parameter sets to the moov sample
   //     description; FFmpeg defaults to `hev1` (parameter sets inline
-  //     in mdat) which AVPlayer rejects on HLS.
+  //     in mdat) which AVPlayer rejects on HLS. P5 (no HDR10/HLG base) needs
+  //     `dvh1` instead: the bundled ffmpeg's muxer silently drops `dvcC`
+  //     under a plain `hvc1` tag.
   //   - `-bsf:v hevc_mp4toannexb` converts NAL units from mp4-style
   //     length-prefixed to annex-B start-code form, which is what the
   //     fmp4 muxer expects when emitting parameter sets to moov.
@@ -1479,11 +1483,12 @@ export function buildRemuxArgs(
   //     non-AAC audio inter-frame intervals (TrueHD, DTS) can
   //     overflow the default 1024-packet queue and crash the mux
   //     with "Too many packets buffered for output stream".
+  const dvP5Tag = dolbyVision && sourceDvProfile === 5;
   const hevcArgs =
     sourceVideoCodec === 'hevc'
       ? [
           '-tag:v',
-          'hvc1',
+          dvP5Tag ? 'dvh1' : 'hvc1',
           '-bsf:v',
           'hevc_mp4toannexb',
           '-max_muxing_queue_size',

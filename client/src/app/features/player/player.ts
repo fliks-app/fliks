@@ -849,22 +849,33 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       src?.width,
       src?.height,
     );
-    // A tonemapped delivery is SDR; corroborate DV with Shaka's own codec
-    // string (if reported) so a plain-HEVC fallback never claims DV.
+    // A tonemapped delivery is SDR; corroborate DV with the engine's own codec
+    // string (if reported) so a plain-HEVC/AV1 fallback never claims DV.
     const engineVideoCodec = activeVariant?.videoCodec?.toLowerCase();
     const showsDolbyVision =
       !!pi?.dolbyVision &&
       deliveredKind !== 'transcode' &&
-      (engineVideoCodec == null || engineVideoCodec.startsWith('dv'));
-    const hdrTag =
-      !src?.hdrFormat || pi?.tonemapping
-        ? ''
-        : showsDolbyVision
-          ? ` ${this.translate.instant('player.stats_dolby_vision_base', {
-              profile: src.hdrFormat === 'HLG' ? '8.4' : '8.1',
-              base: src.hdrFormat,
-            })}`
-          : ` ${src.hdrFormat}`;
+      (engineVideoCodec == null || /^(dv|dav1)/.test(engineVideoCodec));
+    // Real profile/compat, not guessed from hdrFormat: an untagged P5 source
+    // has no HDR VUI at all, so this must run before the `!src?.hdrFormat` case.
+    const dvStream = this.media?.files?.find((f) => f.id === this.mediaFileId)
+      ?.streamInfo?.video?.[0];
+    const hdrTag = pi?.tonemapping
+      ? ''
+      : showsDolbyVision && dvStream?.dvProfile != null
+        ? ` ${
+            dvStream.dvBlSignalCompatId
+              ? this.translate.instant('player.stats_dolby_vision_base', {
+                  profile: `${dvStream.dvProfile}.${dvStream.dvBlSignalCompatId}`,
+                  base: src?.hdrFormat ?? '',
+                })
+              : this.translate.instant('player.stats_dolby_vision', {
+                  profile: dvStream.dvProfile,
+                })
+          }`
+        : src?.hdrFormat
+          ? ` ${src.hdrFormat}`
+          : '';
     const codecName = (src?.videoCodec ?? '?').toUpperCase();
     const videoLabel = `${resLabel}${hdrTag} ${codecName}`;
 
