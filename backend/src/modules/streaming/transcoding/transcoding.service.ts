@@ -1546,11 +1546,21 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     id: string,
     session: TranscodeSession,
   ): void {
-    const processDone = session.process.exitCode !== null;
-    if (now - session.lastAccess > SESSION_TIMEOUT_MS && processDone) {
+    if (now - session.lastAccess <= SESSION_TIMEOUT_MS) return;
+    this.sessions.delete(id);
+    if (session.process.exitCode !== null) {
       this.log.log(`Cleanup stale (fallback) session: ${id}`);
-      this.sessions.delete(id);
+      return;
     }
+    // Nothing fetched from it for the whole window: an unpaired run would
+    // otherwise encode to the end of the source.
+    this.log.warn(
+      `Cleanup session ${id}: never paired with a live viewer and idle ${Math.round(
+        (now - session.lastAccess) / 1000,
+      )}s, killing ffmpeg (cache preserved)`,
+    );
+    session.intentionallyKilled = true;
+    void this.killProcess(session.process);
   }
 
   /** SIGKILL an ffmpeg process and wait for it to exit. Does NOT delete cache.

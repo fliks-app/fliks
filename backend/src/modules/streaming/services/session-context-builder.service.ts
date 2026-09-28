@@ -41,7 +41,6 @@ export class SessionContextBuilder {
       mediaType: resolved.media?.type,
       posterUrl: resolved.media?.posterUrl ?? null,
       transcodeReasons: live?.transcodeReasons ?? [],
-      tonemap: live?.tonemapping ?? false,
       burnInSubtitle: live?.burnIn ?? undefined,
       audioStreamIndex: live?.audioStreamIndex ?? undefined,
       // Honour the admin auto-crop toggle: when off, never feed a crop to the
@@ -82,8 +81,6 @@ export class SessionContextBuilder {
       ),
       isSourceHdr: !!si?.video?.[0]?.hdrFormat,
       hdrMetadata: si?.video?.[0]?.hdrMetadata,
-      sourceDvProfile: si?.video?.[0]?.dvProfile,
-      sourceDvBlSignalCompatId: si?.video?.[0]?.dvBlSignalCompatId,
     };
   }
 }
