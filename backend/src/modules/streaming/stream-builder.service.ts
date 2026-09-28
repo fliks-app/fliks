@@ -26,7 +26,6 @@ import {
 import { remuxBandwidthBps } from './transcoding/master-playlist';
 import { REMUX_STEREO_AUDIO_BITRATE } from './transcoding/ffmpeg-args';
 import { resolveEncodePipeline } from './transcoding/encode-pipeline';
-import { isOpenclTonemapEnabled } from './transcoding/codec/opencl-tonemap-probe';
 import {
   DEFAULT_FPS,
   DEFAULT_SEGMENT_DURATION,
@@ -864,20 +863,14 @@ export class StreamBuilderService {
     // ffmpeg-args uses, so the stats hwAccel can't drift from the real encode
     // (it picks up the registry's runtime CPU fallback and the QSV crop→VAAPI
     // splice). Same inputs the session will carry, so the result matches.
-    // A no-base DV source applies the dovi OpenCL tone-map, which ffmpeg-args
-    // forces onto the CPU for the whole pipeline (see useDoviOpenclTonemap):
-    // mirror that here so the reported accel doesn't still claim hardware.
-    const doviOpenclTonemap =
-      transcodeTonemaps && noBase && isOpenclTonemapEnabled();
     const effectiveHwAccel = resolveEncodePipeline(selectedVariant, {
-      hwAccel: doviOpenclTonemap
-        ? 'none'
-        : this.transcodingService.getDetectedHwAccel(),
+      hwAccel: this.transcodingService.getDetectedHwAccel(),
       crop: needsCrop,
       burnIn: needsBurnIn,
       tonemap: transcodeTonemaps,
       tonemapAlgo: this.activeStreamTracker.getTonemapAlgo(),
       sourceVideoCodec,
+      dvNoBase: noBase,
     }).effectiveHwAccel;
 
     this.log.log(

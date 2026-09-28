@@ -10,10 +10,27 @@ import {
 } from './codec/tonemap-opencl-probe';
 import { isQsvOpenclTonemapEnabled } from './codec/qsv-opencl-probe';
 import { isScaleD3d11Enabled } from './codec/scale-d3d11-probe';
+import { isOpenclTonemapEnabled } from './codec/opencl-tonemap-probe';
 import { resolveTonemapPath } from './tonemap-path';
 import { normaliseSourceCodec } from './codec/normalise';
 import type { CodecVariant } from './codec/types';
 import type { HwAccelType, TonemapAlgo } from './types';
+
+/** NVENC/AMF have no on-encoder tonemap, so it runs off-encoder through
+ *  `tonemap_opencl`; a no-base DV source needs that same RPU-aware bounce
+ *  even on an encoder that isn't nvenc/amf. Shared by `ffmpeg-args` (argv)
+ *  and the playback-info controller (stats label) so they can't drift. */
+export function isOpenclTonemapPath(
+  tonemap: boolean,
+  hwAccel: string,
+  dvNoBase: boolean,
+): boolean {
+  return (
+    tonemap &&
+    isOpenclTonemapEnabled() &&
+    (hwAccel === 'nvenc' || hwAccel === 'amf' || dvNoBase)
+  );
+}
 
 export interface EncodePipelineContext {
   /** Host-detected hwAccel (qsv / vaapi / nvenc / videotoolbox / none). */
@@ -26,6 +43,9 @@ export interface EncodePipelineContext {
   tonemap: boolean;
   tonemapAlgo: TonemapAlgo;
   sourceVideoCodec: string | undefined;
+  /** Source has no HDR10/HLG base to fall back to (P5, or P10 with an
+   *  unknown/0 compat id): see {@link dvHasNoBase}. */
+  dvNoBase: boolean;
 }
 
 export interface ResolvedEncodePipeline {
@@ -96,7 +116,7 @@ export function resolveEncodePipeline(
   // the useVaapiTonemap flag so the two stay in sync.
   const tonemapPath = resolveTonemapPath(
     ctx.tonemapAlgo,
-    { hasCrop: ctx.crop },
+    { hasCrop: ctx.crop, dvNoBase: ctx.dvNoBase },
     platform,
   );
   const tonemapOpenclOk = noVaapi
@@ -104,12 +124,18 @@ export function resolveEncodePipeline(
     : ctx.crop
       ? isTonemapOpenclEnabledWithCrop()
       : isTonemapOpenclEnabled();
+  // A no-base DV source has no RPU-aware vaapi/qsv tonemap (tonemap_vaapi,
+  // the vpp_qsv LUT): when the OpenCL bridge is unavailable, `tonemapPath`
+  // falls back to one of those, so keep the whole pipeline off HW instead.
+  const dvNoBaseNeedsCpu =
+    ctx.dvNoBase && ctx.tonemap && tonemapPath !== 'opencl';
   // Keep the whole pipeline on QSV (no hwdownload→crop→hwupload round-trip):
   // crop-only always; tonemap via vpp_qsv LUT or via opencl when probed;
   // tonemap via vaapi is NOT qsv-native compatible.
   // Without VAAPI (Windows) the qsv-native pipeline is the only QSV path, so
   // it's used for every session (not just crop/tonemap as on Linux).
   const qsvNativeAvailable =
+    !dvNoBaseNeedsCpu &&
     hasUsableQsvNativeDecoder &&
     (noVaapi ||
       ctx.crop ||
@@ -130,7 +156,10 @@ export function resolveEncodePipeline(
   // Without a VAAPI fallback (Windows), QSV without a viable native pipeline
   // (e.g. HDR tonemap with no vpp_qsv/opencl) has no fallback chain — drop to
   // CPU encode.
-  if (noVaapi && ctx.hwAccel === 'qsv' && !qsvNativeAvailable) {
+  if (
+    (noVaapi && ctx.hwAccel === 'qsv' && !qsvNativeAvailable) ||
+    (dvNoBaseNeedsCpu && (ctx.hwAccel === 'qsv' || ctx.hwAccel === 'vaapi'))
+  ) {
     requestedHwAccel = 'none';
   }
   const encoder = encoderRegistry.resolve(variant, requestedHwAccel);
@@ -138,7 +167,10 @@ export function resolveEncodePipeline(
   // AMF tonemaps HDR->SDR on CPU (no VAAPI to host the tonemap), so it needs
   // the CPU tonemap chain populated — never the vaapi in-place path.
   const useVaapiTonemap =
-    ctx.tonemap && tonemapPath === 'vaapi' && effectiveHwAccel !== 'amf';
+    !dvNoBaseNeedsCpu &&
+    ctx.tonemap &&
+    tonemapPath === 'vaapi' &&
+    effectiveHwAccel !== 'amf';
 
   return {
     requestedHwAccel,

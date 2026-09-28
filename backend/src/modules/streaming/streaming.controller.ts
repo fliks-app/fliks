@@ -63,7 +63,7 @@ import {
   sourceTimeline,
 } from './transcoding/source-timeline';
 import { copySourceCodecString } from './transcoding/codec/codec-strings';
-import { dvSupplementalCodecs, dvStandaloneCodecs } from './transcoding/codec/dolby-vision';
+import { dvSupplementalCodecs, dvStandaloneCodecs, dvHasNoBase } from './transcoding/codec/dolby-vision';
 import { LiveSessionRegistry, type LiveSession, type SessionKind } from './live-session.service';
 import * as path from 'path';
 import { SegmentPackagingService } from './services/segment-packaging.service';
@@ -82,7 +82,7 @@ import { resolveTonemapPath } from './transcoding/tonemap-path';
 import { resolveTonemapCurve } from './transcoding/ffmpeg-filter-graph';
 import { autoFfmpegSlots } from '../../common/utils/ffmpeg-slots';
 import { getPauseCapability } from './transcoding/ffmpeg-pause';
-import { isOpenclTonemapEnabled } from './transcoding/codec/opencl-tonemap-probe';
+import { isOpenclTonemapPath } from './transcoding/encode-pipeline';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
@@ -1020,18 +1020,24 @@ export class StreamingController {
     // VideoToolbox fallback always CPU. Report the real path (+ curve for the
     // opencl/CPU chains, which honour it) so the overlay shows what's running.
     const hasCrop = resolved.mediaFile.streamInfo?.video?.[0]?.crop != null;
+    const dvNoBase = dvHasNoBase(
+      resolved.mediaFile.streamInfo?.video?.[0]?.dvProfile,
+      resolved.mediaFile.streamInfo?.video?.[0]?.dvBlSignalCompatId,
+    );
     const hwTonemap =
       response.hwAccel === 'qsv' || response.hwAccel === 'vaapi';
-    const openclTonemap =
-      (response.hwAccel === 'nvenc' || response.hwAccel === 'amf') &&
-      isOpenclTonemapEnabled();
+    const openclTonemap = isOpenclTonemapPath(
+      !!response.tonemapping,
+      response.hwAccel,
+      dvNoBase,
+    );
     // VideoToolbox HW tone-map: scale_vt (no crop) or tonemap_videotoolbox
-    // (crop); burn-in still falls back to the CPU chain.
+    // (crop); burn-in and no-base DV (RPU-blind either way) fall to CPU.
     const vtMetalTonemap =
-      response.hwAccel === 'videotoolbox' && !burnInSubtitleId;
+      response.hwAccel === 'videotoolbox' && !burnInSubtitleId && !dvNoBase;
     const tonemapAlgo = response.tonemapping
       ? hwTonemap
-        ? resolveTonemapPath(ss.tonemapAlgo, { hasCrop })
+        ? resolveTonemapPath(ss.tonemapAlgo, { hasCrop, dvNoBase })
         : openclTonemap
           ? 'opencl'
           : vtMetalTonemap

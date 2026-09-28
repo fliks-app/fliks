@@ -3,6 +3,7 @@ import type { EncodePipelineContext } from './encode-pipeline';
 import type { CodecVariant } from './codec/types';
 import { isScaleD3d11Enabled } from './codec/scale-d3d11-probe';
 import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
+import { isTonemapOpenclEnabled } from './codec/tonemap-opencl-probe';
 
 jest.mock('./codec/scale-d3d11-probe', () => ({
   isScaleD3d11Enabled: jest.fn(() => false),
@@ -10,12 +11,18 @@ jest.mock('./codec/scale-d3d11-probe', () => ({
 jest.mock('./codec/vpp-qsv-probe', () => ({
   isVppQsvTonemapEnabled: jest.fn(() => false),
 }));
+jest.mock('./codec/tonemap-opencl-probe', () => ({
+  isTonemapOpenclEnabled: jest.fn(() => false),
+  isTonemapOpenclEnabledWithCrop: jest.fn(() => false),
+}));
 
 const mockScaleD3d11 = isScaleD3d11Enabled as jest.Mock;
 const mockVppQsvTonemap = isVppQsvTonemapEnabled as jest.Mock;
+const mockTonemapOpencl = isTonemapOpenclEnabled as jest.Mock;
 
 beforeEach(() => {
   mockVppQsvTonemap.mockReturnValue(false);
+  mockTonemapOpencl.mockReturnValue(false);
 });
 
 const SDR_H264: CodecVariant = { codec: 'h264', bitDepth: 8, hdr: null };
@@ -28,6 +35,7 @@ function ctx(over: Partial<EncodePipelineContext>): EncodePipelineContext {
     tonemap: false,
     tonemapAlgo: 'auto',
     sourceVideoCodec: 'h264',
+    dvNoBase: false,
     ...over,
   };
 }
@@ -54,6 +62,26 @@ describe('resolveEncodePipeline — Windows QSV routing', () => {
       'win32',
     );
     expect(r.qsvNativeAvailable).toBe(false);
+    expect(r.requestedHwAccel).toBe('none');
+    expect(r.effectiveHwAccel).toBe('none');
+  });
+
+  it('drops a no-base DV source to CPU when the OpenCL bridge is unavailable (Linux)', () => {
+    const r = resolveEncodePipeline(
+      SDR_H264,
+      ctx({
+        tonemap: true,
+        tonemapAlgo: 'vaapi',
+        sourceVideoCodec: 'hevc',
+        dvNoBase: true,
+      }),
+      'linux',
+    );
+    // tonemapPath falls back to 'vaapi' (RPU-blind), so the whole pipeline
+    // must come off HW rather than run tonemap_vaapi on a no-base source.
+    expect(r.tonemapPath).toBe('vaapi');
+    expect(r.qsvNativeAvailable).toBe(false);
+    expect(r.useVaapiTonemap).toBe(false);
     expect(r.requestedHwAccel).toBe('none');
     expect(r.effectiveHwAccel).toBe('none');
   });

@@ -47,14 +47,13 @@ import { hevcMainTierCapBps } from './codec/codec-strings';
 import { dvHasNoBase } from './codec/dolby-vision';
 import { varStreamMapLayout } from './audio-layout';
 import { inputSeekSeconds } from './source-timeline';
-import { resolveEncodePipeline } from './encode-pipeline';
+import { resolveEncodePipeline, isOpenclTonemapPath } from './encode-pipeline';
 import {
   DECODE_TIME_TOLERANCE_SECONDS,
   type KeyframeGrid,
 } from './segment-boundaries';
-import { openclTonemapInitArgs } from './hw-device';
+import { openclTonemapInitArgs, qsvDeviceInitArgs } from './hw-device';
 import { buildVideoFilters, resolveTonemapCurve } from './ffmpeg-filter-graph';
-import { isOpenclTonemapEnabled } from './codec/opencl-tonemap-probe';
 import { buildImageBurnInFilterComplex } from './subtitle-overlay-filter';
 
 /**
@@ -407,8 +406,8 @@ export interface BuildFfmpegArgsOptions {
    *  display tonemaps to the real peak luminance; the encoders fall back to a
    *  generic 1000-nit reference when absent. */
   sourceHdrMetadata?: HdrStaticMetadata;
-  /** Dolby Vision profile + base-layer compat id — gates the P5
-   *  `tonemap_opencl=apply_dovi` RPU tone-map. */
+  /** Dolby Vision profile + base-layer compat id: feeds `dvHasNoBase`, which
+   *  routes a no-base source off the RPU-blind vaapi/qsv tonemap. */
   sourceDvProfile?: number;
   sourceDvBlSignalCompatId?: number;
   /** Audio output decision — see {@link SessionContext.audioPlan}. When
@@ -650,7 +649,7 @@ function resolveDecodeStage(opts: {
   useVaapiTonemap: boolean;
   openclTonemap: boolean;
   tonemapPath: string;
-  useDoviOpenclTonemap: boolean;
+  dvNoBase: boolean;
 }): {
   decodeArgs: string[];
   decoder: ReturnType<typeof decoderRegistry.resolve>;
@@ -671,7 +670,7 @@ function resolveDecodeStage(opts: {
     useVaapiTonemap,
     openclTonemap,
     tonemapPath,
-    useDoviOpenclTonemap,
+    dvNoBase,
   } = opts;
   const args: string[] = [];
 
@@ -701,9 +700,15 @@ function resolveDecodeStage(opts: {
               codec: normalisedSourceCodec ?? 'h264',
               bitDepth: sourceBitDepth,
             },
-            decodeHwAccel,
+            // A reported codec with no hw decoder here (vp9, mpeg2video) decodes on the
+            // CPU; an unreported one keeps the h264 assumption.
+            sourceVideoCodec && !normalisedSourceCodec ? 'none' : decodeHwAccel,
           );
   args.push(...decoder.buildInputArgs());
+  // A CPU decoder inits no device, yet the qsv encoder's filters need one.
+  if (decoder.outputSurface === 'cpu' && effectiveHwAccel === 'qsv') {
+    args.push(...qsvDeviceInitArgs(), '-filter_hw_device', 'qs');
+  }
 
   // Full-Metal HDR opt-in. The h264/hevc_videotoolbox encoders can keep
   // the pipeline on IOSurface end-to-end when the only filter step is
@@ -714,11 +719,14 @@ function resolveDecodeStage(opts: {
   // input args here when the Metal fast path is eligible. The encoder
   // branches on `inputSurface === 'videotoolbox'` to pick the scale_vt
   // filter; falls back to the CPU tonemap chain otherwise.
+  // !dvNoBase: scale_vt and tonemap_videotoolbox are both RPU-blind, so a
+  // no-base DV source falls to the CPU tonemapx chain instead.
   const vtSurfaceEligible =
     decoder.hwAccel === 'videotoolbox' &&
     (encoderId === 'h264_videotoolbox' || encoderId === 'hevc_videotoolbox') &&
     tonemap &&
-    !hasBurnInFilter;
+    !hasBurnInFilter &&
+    !dvNoBase;
   // No crop: scale_vt keeps the SDR result on a VT surface. Crop: no VT crop
   // filter exists, so the encoder tone-maps on the surface (tonemap_videotoolbox)
   // then hwdownloads for the cheap CPU crop. Both need videotoolbox_vld input.
@@ -777,11 +785,6 @@ function resolveDecodeStage(opts: {
       args[fhd + 1] = 'ocl';
       args.splice(fhd, 0, '-init_hw_device', 'opencl=ocl@dx');
     }
-  }
-  // OpenCL device for the no-base DV RPU tone-map (`tonemap_opencl=apply_dovi`).
-  // The CPU-decoded frame hwuploads onto it.
-  if (useDoviOpenclTonemap) {
-    args.push(...openclTonemapInitArgs());
   }
 
   return { decodeArgs: args, decoder, useVtMetalPath, useVtHwTonemap };
@@ -1017,12 +1020,9 @@ export function buildFfmpegArgs(
   }
   const variant: CodecVariant = videoVariant;
   const isHdrOutput = variant.hdr !== null;
-  // A no-base DV source's RPU applies via `tonemap_opencl=apply_dovi=1`,
-  // exposed as frame side-data by the software decoder, forcing CPU decode.
-  const useDoviOpenclTonemap =
-    !!tonemap &&
-    dvHasNoBase(sourceDvProfile, sourceDvBlSignalCompatId) &&
-    isOpenclTonemapEnabled();
+  // No HDR10/HLG base for a non-DV client to fall back to: the RPU-blind
+  // vaapi/qsv tonemap must never run, see resolveEncodePipeline.
+  const dvNoBase = dvHasNoBase(sourceDvProfile, sourceDvBlSignalCompatId);
 
   // Image-based subtitle burn-in (PGS/VOBSUB) is composited via -filter_complex
   // below, reusing the encoder's video chain so the accelerated scale/tonemap
@@ -1042,12 +1042,13 @@ export function buildFfmpegArgs(
     useVaapiTonemap,
     amfFullGpuAvailable,
   } = resolveEncodePipeline(variant, {
-    hwAccel: useDoviOpenclTonemap ? 'none' : hwAccel,
+    hwAccel,
     crop: !!crop,
     burnIn: !!burnIn?.filter,
     tonemap: !!tonemap,
     tonemapAlgo,
     sourceVideoCodec,
+    dvNoBase,
   });
   // No encoder means the variant is unsupported on this host even after the
   // registry's CPU fallback.
@@ -1057,14 +1058,10 @@ export function buildFfmpegArgs(
     );
   }
 
-  // NVENC and AMF have no on-encoder HDR→SDR tone-map, so it runs off-encoder.
-  // When the OpenCL tone-map probe passed, route it through tonemap_opencl
-  // (GPU) instead of the CPU zscale chain — decisive on 4K where the CPU
-  // tone-map can't sustain real-time, and it offloads the (often weak) APU CPU.
-  const openclTonemap =
-    !!tonemap &&
-    (effectiveHwAccel === 'nvenc' || effectiveHwAccel === 'amf') &&
-    isOpenclTonemapEnabled();
+  // NVENC/AMF have no on-encoder tone-map (routes through tonemap_opencl
+  // instead of the CPU zscale chain); a no-base DV source shares the same
+  // RPU-aware GPU bounce. See isOpenclTonemapPath.
+  const openclTonemap = isOpenclTonemapPath(!!tonemap, effectiveHwAccel, dvNoBase);
   // GPU decode whenever available, including the tone-map path — the frame
   // reaches OpenCL via hwdownload→hwupload (a copy, no CUDA/D3D11↔OpenCL interop).
   const decodeHwAccel: HwAccelType = effectiveHwAccel;
@@ -1098,7 +1095,7 @@ export function buildFfmpegArgs(
     useVaapiTonemap,
     openclTonemap,
     tonemapPath,
-    useDoviOpenclTonemap,
+    dvNoBase,
   });
   args.push(...decodeArgs);
 
@@ -1174,7 +1171,7 @@ export function buildFfmpegArgs(
       tonemap,
       useVaapiTonemap,
       sourceBitDepth,
-      doviOpencl: useDoviOpenclTonemap,
+      dvNoBase,
       tonemapCurve,
       scaleWidth: w,
       openclTonemap,
@@ -1182,6 +1179,7 @@ export function buildFfmpegArgs(
     tonemap,
     tonemapPath,
     tonemapCurve,
+    dvNoBase,
     hasBurnIn: !!burnIn?.filter,
     hasCrop: !!crop,
     hdrMetadata: sourceHdrMetadata,

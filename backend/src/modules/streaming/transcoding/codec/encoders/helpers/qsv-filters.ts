@@ -1,23 +1,25 @@
 import type { EncoderInput } from '../../types';
+import { dvApplyDoviOpt } from '../../../ffmpeg-filter-graph';
 
-/** The d3d11→qsv hwmap prefix and vpp_qsv crop options, shared by the
- *  qsv-native/d3d11 branch of both bit-depth filter builders below. */
-function qsvNativeCropAndMap(input: EncoderInput): { qsvMap: string; cropOpts: string } {
-  const qsvMap = input.inputSurface === 'd3d11' ? 'hwmap=derive_device=qsv,' : '';
+/** No decoder emits a literal qsv surface: both platforms decode natively,
+ *  elsewhere, so `vpp_qsv` always needs this hwmap first. */
+const QSV_HWMAP = 'hwmap=derive_device=qsv,';
+
+/** vpp_qsv crop options for the qsv-native/d3d11 branch of both bit-depth
+ *  filter builders below. */
+function qsvCropOpts(input: EncoderInput): string {
   const cropArgs =
     input.hasCrop && input.filters.cropStr ? parseCropStr(input.filters.cropStr) : null;
-  const cropOpts = cropArgs
+  return cropArgs
     ? `cw=${cropArgs.w}:ch=${cropArgs.h}:cx=${cropArgs.x}:cy=${cropArgs.y}:`
     : '';
-  return { qsvMap, cropOpts };
 }
 
 /** Build the `-vf` value for an 8-bit QSV encode (h264_qsv / hevc_qsv).
  *  Branches on what we received from the decoder:
  *
- *  - `inputSurface === 'qsv'` (qsv-native decoder, no tonemap): use
- *    `vpp_qsv` for crop + scale + format on the QSV device. End-to-end
- *    QSV pipeline, no hwmap, no fixed-pool quirk on crop.
+ *  - `inputSurface === 'qsv'` (qsv-native decoder, no tonemap): hwmap onto
+ *    QSV, then `vpp_qsv` for crop + scale + format, no fixed-pool quirk on crop.
  *  - tonemapVaapi: keep on VAAPI surfaces, tonemap on the VPP (1 device).
  *  - tonemapOpencl: the admin curve via OpenCL, then hwmap to QSV.
  *  - default (vaapi surfaces, no tonemap): scale_vaapi → hwmap to QSV.
@@ -26,67 +28,51 @@ function qsvNativeCropAndMap(input: EncoderInput): { qsvMap: string; cropOpts: s
  *  because libva exposes more scaling-quality knobs (`extra_hw_frames`,
  *  native nv12 output) on every gen we care about. */
 export function qsvScaleFilter8bit(input: EncoderInput): string {
-  const { target, filters, tonemap, tonemapPath } = input;
+  const { target, filters, tonemap, tonemapPath, dvNoBase } = input;
   const w = target.width;
   const curve = input.tonemapCurve ?? 'hable';
   if (input.inputSurface === 'qsv' || input.inputSurface === 'd3d11') {
-    // Windows decodes on D3D11VA and hands the frame here as a `d3d11`
-    // surface; map it onto the QSV device before `vpp_qsv`. A Linux qsv-native
-    // input is already a QSV surface, so the prefix is empty.
-    // `vpp_qsv` does crop + scale + format on the QSV device in one
-    // pass — no CPU bounce, no hwmap. Tonemap is wired three ways:
-    //  - `tonemap=qsv`: enable vpp_qsv's fixed-function HDR LUT
-    //    (`tonemap=1`), output nv12 directly. Fastest path but the
-    //    Intel VPP LUT under-exposes on some iGPUs, hence the admin
-    //    override.
-    //  - `tonemap=opencl`: vpp_qsv outputs p010le (HDR preserved),
-    //    then hwmap → opencl, curve tonemap, hwmap back to qsv,
-    //    `format=qsv`. Two hwmaps but no CPU traffic — measured at
-    //    ~3× the throughput of the vaapi-decode chain on cropped 4K
-    //    HDR sources, with identical visual output.
-    //  - no tonemap (crop/scale only) — straight nv12 output.
-    // `target.height` is the same `profileResolution` value the master
-    // playlist's RESOLUTION advertises; render that exact height.
-    const { qsvMap, cropOpts } = qsvNativeCropAndMap(input);
+    // Both decode natively (VAAPI on Linux, D3D11VA on Windows), so the
+    // frame always needs the hwmap before `vpp_qsv` runs.
+    const cropOpts = qsvCropOpts(input);
     if (tonemap && tonemapPath === 'opencl') {
       if (input.inputSurface === 'd3d11') {
-        // Windows zero-copy (jellyfin-ffmpeg P010 D3D11↔OpenCL): crop + scale on
-        // vpp_qsv (p010, HDR kept) so the tone-map runs at output resolution,
-        // map onto OpenCL, tone-map, map back onto the QSV device. No CPU
-        // round-trip. vpp_qsv can't ingest a reverse-mapped OpenCL surface, so
-        // the scale precedes the OpenCL step.
+        // Windows zero-copy: vpp_qsv scale (p010, HDR kept) can't ingest a
+        // reverse-mapped OpenCL surface, so the scale precedes the OpenCL step.
         return (
-          `hwmap=derive_device=qsv,` +
-          `vpp_qsv=${cropOpts}w=${w}:h=${target.height}:format=p010le,` +
+          `${QSV_HWMAP}vpp_qsv=${cropOpts}w=${w}:h=${target.height}:format=p010le,` +
           `hwmap=derive_device=opencl,` +
-          `tonemap_opencl=tonemap=${curve}:t=bt709:m=bt709:p=bt709:format=nv12,` +
+          `tonemap_opencl=tonemap=${curve}:t=bt709:m=bt709:p=bt709:format=nv12:${dvApplyDoviOpt(dvNoBase)},` +
           `hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`
         );
       }
       return (
-        `vpp_qsv=${cropOpts}w=${w}:h=${target.height}:format=p010le,` +
+        `${QSV_HWMAP}vpp_qsv=${cropOpts}w=${w}:h=${target.height}:format=p010le,` +
         `hwmap=derive_device=opencl:mode=read,` +
-        `tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=${curve}:desat=0,` +
+        `tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=${curve}:desat=0:${dvApplyDoviOpt(dvNoBase)},` +
         `hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,` +
         `format=qsv`
       );
     }
     const tonemapOpt = tonemap ? 'tonemap=1:' : '';
-    return `${qsvMap}vpp_qsv=${tonemapOpt}${cropOpts}w=${w}:h=${target.height}:format=nv12`;
+    return `${QSV_HWMAP}vpp_qsv=${tonemapOpt}${cropOpts}w=${w}:h=${target.height}:format=nv12`;
   }
-  // hwCropPrefix = 'hwdownload,format=nv12,crop=…,hwupload=vaapi,' when
-  // a crop is needed and we're on the vaapi-input path. Prepending it
-  // lets scale_vaapi rebuild a fresh fixed-size pool from the cropped
-  // CPU frames — the QSV hwmap downstream then accepts the surfaces
-  // (the 'fixed-size pool' rejection only fires when the pool changes
-  // size mid-chain, which scale_vaapi avoids by reallocating).
+  // CPU frames crop in place, then upload to VAAPI: `derive_device` is needed
+  // because the default filter device is qs, which scale_vaapi rejects.
+  const isCpu = input.inputSurface === 'cpu';
+  const cropPrefix = isCpu ? filters.cpuCropPrefix : filters.hwCropPrefix;
+  // p010le keeps 10-bit precision for a following tonemap.
+  const cpuUploadFmt = filters.tonemapVaapi || filters.tonemapOpencl ? 'p010le' : 'nv12';
+  const cpuUpload = isCpu ? `format=${cpuUploadFmt},hwupload=derive_device=vaapi,` : '';
   if (filters.tonemapVaapi) {
-    return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapVaapi},hwmap=derive_device=qsv,format=qsv`;
+    // tonemap_vaapi does not output a QSV-native surface: passthrough=0 makes
+    // vpp_qsv re-render it into one the encoder accepts.
+    return `${cropPrefix}${cpuUpload}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapVaapi},hwmap=derive_device=qsv,vpp_qsv=format=nv12:passthrough=0`;
   }
   if (filters.tonemapOpencl) {
-    return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`;
+    return `${cropPrefix}${cpuUpload}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`;
   }
-  return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`;
+  return `${cropPrefix}${cpuUpload}scale_vaapi=w=${w}:h=-2:format=nv12:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`;
 }
 
 /** Build the `-vf` value for a 10-bit QSV encode (hevc_qsv main10,
@@ -100,12 +86,13 @@ export function qsvScaleFilter10bit(input: EncoderInput): string {
   const { target, filters } = input;
   const w = target.width;
   if (input.inputSurface === 'qsv' || input.inputSurface === 'd3d11') {
-    // See qsvScaleFilter8bit: Windows d3d11 input maps onto the QSV device
-    // first; Linux qsv-native input is already a QSV surface.
-    const { qsvMap, cropOpts } = qsvNativeCropAndMap(input);
-    return `${qsvMap}vpp_qsv=${cropOpts}w=${w}:h=${target.height}:format=p010le`;
+    // See qsvScaleFilter8bit: both surfaces need the hwmap onto QSV first.
+    return `${QSV_HWMAP}vpp_qsv=${qsvCropOpts(input)}w=${w}:h=${target.height}:format=p010le`;
   }
-  return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:format=p010le:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`;
+  const isCpu = input.inputSurface === 'cpu';
+  const cropPrefix = isCpu ? filters.cpuCropPrefix : filters.hwCropPrefix;
+  const cpuUpload = isCpu ? 'format=p010le,hwupload=derive_device=vaapi,' : '';
+  return `${cropPrefix}${cpuUpload}scale_vaapi=w=${w}:h=-2:format=p010le:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`;
 }
 
 function parseCropStr(

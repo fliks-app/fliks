@@ -282,6 +282,22 @@ describe('buildPlaybackProfileFromContext', () => {
       hash({ tonemap: true }),
     );
   });
+
+  it('does not fork the cache for a P8 (has-base) DV tone-map vs a plain HDR10 tone-map', () => {
+    const hash = (dv: boolean) =>
+      computeProfileHash(
+        buildPlaybackProfileFromContext(
+          {
+            tonemap: true,
+            videoVariant: { codec: 'hevc', bitDepth: 8, hdr: null },
+            ...(dv ? { sourceDvProfile: 8, sourceDvBlSignalCompatId: 1 } : {}),
+          },
+          3000,
+        ),
+      );
+    // Has-base DV tone-maps its base layer, same pixels as plain HDR10.
+    expect(hash(true)).toBe(hash(false));
+  });
 });
 
 describe('computeProfileHash — golden values (characterization)', () => {

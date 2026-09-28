@@ -46,6 +46,7 @@ describe('buildVideoFilters', () => {
   it('opencl tone-map when tonemap + not vaapi + no burn-in', () => {
     const f = buildVideoFilters({ ...base, tonemap: true });
     expect(f.tonemapOpencl).toContain('tonemap_opencl=');
+    expect(f.tonemapOpencl).toContain('apply_dovi=0');
     expect(f.tonemapVaapi).toBe('');
     expect(f.tonemapCpu).toContain('tonemap=hable');
   });
@@ -63,10 +64,27 @@ describe('buildVideoFilters', () => {
   it('routes the tone-map through tonemap_opencl (GPU) when openclTonemap', () => {
     const f = buildVideoFilters({ ...base, tonemap: true, openclTonemap: true });
     expect(f.tonemapCpu).toBe(
-      'format=p010le,hwupload,tonemap_opencl=t=bt709:m=bt709:p=bt709:tonemap=hable:desat=0:format=nv12,hwdownload,format=nv12,',
+      'format=p010le,hwupload,tonemap_opencl=t=bt709:m=bt709:p=bt709:tonemap=hable:desat=0:apply_dovi=0:format=nv12,hwdownload,format=nv12,',
     );
     // No CPU zscale tone-map when the GPU path is used.
     expect(f.tonemapCpu).not.toContain('zscale');
+  });
+
+  it('applies the RPU (apply_dovi=1) on the opencl bounce for a no-base DV source', () => {
+    const f = buildVideoFilters({
+      ...base,
+      tonemap: true,
+      openclTonemap: true,
+      dvNoBase: true,
+    });
+    expect(f.tonemapCpu).toContain(':desat=0:apply_dovi=1:format=nv12,');
+  });
+
+  it('routes a no-base DV source through tonemapx on the CPU fallback', () => {
+    const f = buildVideoFilters({ ...base, tonemap: true, dvNoBase: true });
+    expect(f.tonemapCpu).toBe(
+      'scale=1920:-2,tonemapx=t=bt709:m=bt709:p=bt709:tonemap=hable:desat=0:format=yuv420p,',
+    );
   });
 
   it('honours the tonemapCurve override', () => {

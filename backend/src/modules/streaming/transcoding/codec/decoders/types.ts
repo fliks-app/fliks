@@ -7,8 +7,8 @@ import type { BitDepth, VideoCodec } from '../types';
  *
  *  - `'cpu'`         : software frames (e.g. yuv420p in main memory)
  *  - `'vaapi'`       : libva surface, lives in iGPU/dGPU memory
- *  - `'qsv'`         : Intel Media SDK QSV surface (sibling of vaapi
- *                      but a different libavutil hwcontext)
+ *  - `'qsv'`         : routing label for the `vpp_qsv` encoder path; every
+ *                      Linux QSV decoder decodes on native VAAPI regardless
  *  - `'cuda'`        : NVIDIA CUDA surface
  *  - `'d3d11'`       : Direct3D 11 texture (Windows) — the full-GPU AMF
  *                      path keeps frames here (scale_d3d11 → AMF encode)

@@ -49,14 +49,18 @@ export class QsvExtractor implements ExtractorBackend {
       'error',
       '-threads',
       '1',
+      // Native VAAPI decode, not the `-hwaccel qsv` wrapper: the wrapper
+      // drops Dolby Vision RPU side data and fails outright on real AV1.
       '-init_hw_device',
-      `qsv=hw:${this.device}`,
+      `vaapi=va:${this.device}`,
+      '-init_hw_device',
+      'qsv=hw@va',
       '-filter_hw_device',
       'hw',
       '-hwaccel',
-      'qsv',
+      'vaapi',
       '-hwaccel_output_format',
-      'qsv',
+      'vaapi',
       '-noaccurate_seek',
       '-ss',
       String(seekSeconds),
@@ -66,10 +70,10 @@ export class QsvExtractor implements ExtractorBackend {
       inputPath,
       '-frames:v',
       '1',
-      // vpp_qsv crops with cw/ch/cx/cy and scales to w/h in a single pass
-      // on the GPU. We hwdownload the small output tile only.
+      // hwmap onto the qsv device first (the decoder emits vaapi surfaces);
+      // vpp_qsv then crops with cw/ch/cx/cy and scales to w/h in one GPU pass.
       '-vf',
-      `vpp_qsv=w=${thumbWidth}:h=${outH}:cw=${crop.width}:ch=${crop.height}:cx=${crop.x}:cy=${crop.y}:format=${pix},hwdownload,format=${pix}${hdr ? `,${tonemapChain(thumbWidth)}` : ''}`,
+      `hwmap=derive_device=qsv,vpp_qsv=w=${thumbWidth}:h=${outH}:cw=${crop.width}:ch=${crop.height}:cx=${crop.x}:cy=${crop.y}:format=${pix},hwdownload,format=${pix}${hdr ? `,${tonemapChain(thumbWidth)}` : ''}`,
       '-q:v',
       '5',
       '-y',
