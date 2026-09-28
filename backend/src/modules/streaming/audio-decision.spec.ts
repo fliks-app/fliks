@@ -478,7 +478,7 @@ describe('StreamBuilderService — audio that ends early', () => {
   });
 });
 
-describe('StreamBuilderService — no audio stream', () => {
+describe('StreamBuilderService: no audio stream', () => {
   it('direct plays a no-audio source the client can otherwise direct play', () => {
     const r = evaluate([], tv, { ext: '.mp4' });
     expect(r.playMethod).toBe('DirectPlay');

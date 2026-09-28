@@ -1036,7 +1036,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // --- Audio ---
     // `audioTracks: []` (or an explicitly empty source streamInfo.audio when
     // offline) means the file truly has none; undefined means unknown metadata,
-    // not "no audio" — keep showing the section rather than assume neither.
+    // not "no audio"; keep showing the section rather than assume neither.
     const sourceAudioStreams = this.media?.files?.find(
       (f) => f.id === this.mediaFileId,
     )?.streamInfo?.audio;

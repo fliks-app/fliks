@@ -779,7 +779,7 @@ export class StreamBuilderService {
     const audioPlans = groupDecisions.map((d) => d.plan);
     const pickedTrack = audioTracks[pickedAudio];
     // No audio stream: nothing to copy or encode, so this is never the
-    // DEFAULT_AUDIO_PLAN (AAC) fallback — that would wrongly claim an AAC
+    // DEFAULT_AUDIO_PLAN (AAC) fallback; that would wrongly claim an AAC
     // transcode with no source track to back it.
     const audioPlan: AudioPlan = hasAudio
       ? (pickedDecision?.plan ?? DEFAULT_AUDIO_PLAN)
