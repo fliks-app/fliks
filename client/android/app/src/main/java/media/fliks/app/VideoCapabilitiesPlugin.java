@@ -146,7 +146,7 @@ public class VideoCapabilitiesPlugin extends Plugin {
         } catch (Throwable ignored) { /* per-codec best-effort */ }
     }
 
-    /** True when this decoder can run more than one concurrent instance —
+    /** True when this decoder can run more than one concurrent instance:
      *  P7 needs one for the base layer and one for the enhancement layer. */
     private static boolean supportsMultiInstance(MediaCodecInfo info, String type) {
         try {

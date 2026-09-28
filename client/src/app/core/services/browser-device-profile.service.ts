@@ -582,7 +582,7 @@ export class BrowserDeviceProfileService {
           : []
         : this.probeDolbyVisionProfiles(video, hasMSE);
     // mpv decodes raw dual-layer P7 fine and tone-maps it locally on an SDR
-    // display, so list it regardless of supportsHdr — unlike 5/8, presenting
+    // display, so list it regardless of supportsHdr; unlike 5/8, presenting
     // it doesn't need an HDR display.
     if (this.device.isDesktopNative() && !dolbyVisionProfiles.includes(7)) {
       dolbyVisionProfiles.push(7);

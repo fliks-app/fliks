@@ -23,7 +23,7 @@ export class StaleProbeRescanService {
   private readonly log = new Logger(StaleProbeRescanService.name);
   private readonly inFlight = new Map<number, Promise<void>>();
   /** Files whose re-probe came back rejected or threw, this process run.
-   *  Without this a broken re-probe retries — and fails — on every play. */
+   *  Without this a broken re-probe retries, and fails, on every play. */
   private readonly rejected = new Set<number>();
 
   constructor(
