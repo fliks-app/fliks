@@ -31,9 +31,6 @@ function videotoolboxDecoder(
 
 export const h264VideotoolboxDecoder = videotoolboxDecoder('h264', 8);
 export const hevcVideotoolboxDecoder = videotoolboxDecoder('hevc', 10);
-/** ffmpeg's default AV1 decoder pick is `libdav1d`, which ignores
- *  `-hwaccel videotoolbox` silently and decodes on the CPU. Forcing the
- *  native `av1` decoder engages the hwaccel; that decoder has no software
- *  path, so it hard-fails on Macs without AV1 hardware (pre-M3) instead of
- *  degrading quietly; the probe below turns that into a disabled descriptor. */
+/** ffmpeg defaults to `libdav1d`, which ignores the hwaccel; forcing
+ *  `-c:v av1` engages it, and that decoder is hardware-only (fails pre-M3). */
 export const av1VideotoolboxDecoder = videotoolboxDecoder('av1', 10, 'av1');

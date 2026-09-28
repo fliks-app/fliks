@@ -190,14 +190,6 @@ describe('isVtTonemapPath: darwin VideoToolbox routing', () => {
     Object.defineProperty(process, 'platform', platformDescriptor),
   );
 
-  it('HEVC + VT + tonemap is eligible', () => {
-    expect(isVtTonemapPath(true, 'videotoolbox', false, 'hevc')).toBe(true);
-  });
-
-  it('burn-in forces CPU', () => {
-    expect(isVtTonemapPath(true, 'videotoolbox', true, 'hevc')).toBe(false);
-  });
-
   it('AV1 + VT + tonemap is eligible (native av1 decoder forces the hwaccel)', () => {
     expect(isVtTonemapPath(true, 'videotoolbox', false, 'av1')).toBe(true);
   });

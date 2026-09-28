@@ -232,8 +232,7 @@ describe('buildFfmpegArgs: VideoToolbox (macOS)', () => {
       silentLog,
     );
     const cli = args.join(' ');
-    // The decoder's forced `-c:v av1` (first occurrence) must precede `-i`,
-    // ahead of the encoder's own later `-c:v hevc_videotoolbox`.
+    // Decoder's forced `-c:v av1` (first occurrence) must precede `-i`.
     expect(args.indexOf('-c:v')).toBeLessThan(args.indexOf('-i'));
     expect(args[args.indexOf('-c:v') + 1]).toBe('av1');
     expect(cli).toContain('videotoolbox_vld');

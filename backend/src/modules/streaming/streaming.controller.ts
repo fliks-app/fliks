@@ -1013,48 +1013,6 @@ export class StreamingController {
       user,
     });
 
-    // Surface the tonemap mechanism the session actually runs, not the admin
-    // pick. QSV/VAAPI encoders run the HW tonemap (vaapi/opencl/qsv after
-    // `auto` resolution + boot probe); NVENC runs `tonemap_opencl` on the GPU
-    // when the OpenCL probe passed, else the CPU zscale chain; libx26x /
-    // VideoToolbox fallback always CPU. Report the real path (+ curve for the
-    // opencl/CPU chains, which honour it) so the overlay shows what's running.
-    const hasCrop = resolved.mediaFile.streamInfo?.video?.[0]?.crop != null;
-    const dvNoBase = dvHasNoBase(
-      resolved.mediaFile.streamInfo?.video?.[0]?.dvProfile,
-      resolved.mediaFile.streamInfo?.video?.[0]?.dvBlSignalCompatId,
-    );
-    const hwTonemap =
-      response.hwAccel === 'qsv' || response.hwAccel === 'vaapi';
-    const openclTonemap = isOpenclTonemapPath(
-      !!response.tonemapping,
-      response.hwAccel,
-      dvNoBase,
-    );
-    // VideoToolbox HW tone-map: scale_vt (no crop) or tonemap_videotoolbox
-    // (crop); burn-in, or a codec with no VT decoder, falls to CPU.
-    const vtMetalTonemap = isVtTonemapPath(
-      !!response.tonemapping,
-      response.hwAccel,
-      !!burnInSubtitleId,
-      resolved.mediaFile.streamInfo?.video?.[0]?.codec,
-    );
-    const tonemapAlgo = response.tonemapping
-      ? hwTonemap
-        ? resolveTonemapPath(ss.tonemapAlgo, { hasCrop, dvNoBase })
-        : openclTonemap
-          ? 'opencl'
-          : vtMetalTonemap
-            ? 'videotoolbox'
-            : 'cpu'
-      : null;
-    // The curve is a `tonemap`/`tonemap_opencl` operator, so it only applies to
-    // the opencl and CPU paths — the vpp_qsv / tonemap_vaapi LUTs ignore it.
-    const tonemapCurve =
-      tonemapAlgo === 'opencl' || tonemapAlgo === 'cpu'
-        ? resolveTonemapCurve()
-        : undefined;
-
     // The session's layout fields, stored on the LiveSession below and hashed
     // through the same function every HLS request rebuilds its context with.
     const sessionLayout = {
@@ -1119,6 +1077,48 @@ export class StreamingController {
         );
       }
     }
+
+    // Surface the tonemap mechanism the session actually runs, not the admin
+    // pick. QSV/VAAPI encoders run the HW tonemap (vaapi/opencl/qsv after
+    // `auto` resolution + boot probe); NVENC runs `tonemap_opencl` on the GPU
+    // when the OpenCL probe passed, else the CPU zscale chain; libx26x /
+    // VideoToolbox fallback always CPU. Report the real path (+ curve for the
+    // opencl/CPU chains, which honour it) so the overlay shows what's running.
+    // Reads `burnIn` (the resolved subtitle), not the raw query id, so a
+    // failed resolve reports the same CPU path the argv builder falls back to.
+    const hasCrop = resolved.mediaFile.streamInfo?.video?.[0]?.crop != null;
+    const dvNoBase = dvHasNoBase(
+      resolved.mediaFile.streamInfo?.video?.[0]?.dvProfile,
+      resolved.mediaFile.streamInfo?.video?.[0]?.dvBlSignalCompatId,
+    );
+    const hwTonemap =
+      response.hwAccel === 'qsv' || response.hwAccel === 'vaapi';
+    const openclTonemap = isOpenclTonemapPath(
+      !!response.tonemapping,
+      response.hwAccel,
+      dvNoBase,
+    );
+    const vtMetalTonemap = isVtTonemapPath(
+      !!response.tonemapping,
+      response.hwAccel,
+      !!burnIn,
+      resolved.mediaFile.streamInfo?.video?.[0]?.codec,
+    );
+    const tonemapAlgo = response.tonemapping
+      ? hwTonemap
+        ? resolveTonemapPath(ss.tonemapAlgo, { hasCrop, dvNoBase })
+        : openclTonemap
+          ? 'opencl'
+          : vtMetalTonemap
+            ? 'videotoolbox'
+            : 'cpu'
+      : null;
+    // The curve is a `tonemap`/`tonemap_opencl` operator, so it only applies to
+    // the opencl and CPU paths — the vpp_qsv / tonemap_vaapi LUTs ignore it.
+    const tonemapCurve =
+      tonemapAlgo === 'opencl' || tonemapAlgo === 'cpu'
+        ? resolveTonemapCurve()
+        : undefined;
 
     // A launch from another device counts for whoever started it. Resolved here
     // because this is where the playback that claims it actually begins.

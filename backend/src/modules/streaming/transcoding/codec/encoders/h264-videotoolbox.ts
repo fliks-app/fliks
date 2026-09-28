@@ -4,10 +4,7 @@ import { scaleEvenHeight } from './helpers/scale-filter';
 import { vtTonemapFilter } from './helpers/vt-filters';
 
 /** Apple VideoToolbox H.264 encoder — Mac 2011+ and all Apple Silicon.
- *  Two paths: full Metal pipeline with `scale_vt` HDR tonemap (no CPU
- *  round-trip) when only tonemap is requested, or CPU buffers + libsw
- *  filters when crop or subtitle burn-in is required (VT decode emits
- *  CPU buffers anyway, so software filters work in place). */
+ *  Tone-maps on the Metal surface when eligible, else falls back to CPU. */
 export const h264Videotoolbox: EncoderDescriptor = {
   id: 'h264_videotoolbox',
   hwAccel: 'videotoolbox',
@@ -38,9 +35,7 @@ export const h264Videotoolbox: EncoderDescriptor = {
       '-force_key_frames',
       input.forceKeyframesExpr,
     ];
-    // VideoToolbox surface path — see the matching comment in
-    // `hevc-videotoolbox.ts`. No crop → scale_vt; crop → tonemap_videotoolbox
-    // then hwdownload for the CPU crop.
+    // Metal fast path — see `hevc-videotoolbox.ts` for the surface rules.
     if (inputSurface === 'videotoolbox') {
       return [...common, '-vf', vtTonemapFilter(input), ...trailing];
     }

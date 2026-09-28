@@ -5,9 +5,7 @@ import { scaleEvenHeight } from './helpers/scale-filter';
 import { vtTonemapFilter } from './helpers/vt-filters';
 
 /** Apple VideoToolbox HEVC SDR encoder — Mac 2017+ (T2 / Apple Silicon).
- *  VT decode emits CPU-backed buffers, so the filter chain mirrors the
- *  H.264 VT path: software scale + lanczos + yuv420p, with optional
- *  burn-in subtitles spliced after `format=yuv420p`. */
+ *  Tone-maps on the Metal surface when eligible, else falls back to CPU. */
 export const hevcVideotoolbox: EncoderDescriptor = {
   id: 'hevc_videotoolbox',
   hwAccel: 'videotoolbox',
@@ -40,17 +38,12 @@ export const hevcVideotoolbox: EncoderDescriptor = {
       '-tag:v',
       'hvc1',
     ];
-    // VideoToolbox surface path (orchestrator set -hwaccel_output_format).
-    // No crop: scale_vt tone-maps + scales entirely on the Media Engine.
-    // Crop: no VT crop filter exists, so tone-map on the surface via
-    // tonemap_videotoolbox, then hwdownload for the cheap CPU crop + scale.
-    // Burn-in still takes the CPU fallback below.
+    // Metal fast path: crop and no-base DV still stay on the VT surface
+    // (tonemap_videotoolbox); only burn-in forces the CPU chain below.
     if (inputSurface === 'videotoolbox') {
       return [...common, '-vf', vtTonemapFilter(input), ...trailing];
     }
-    // CPU tonemap fallback — works on every macOS host even when the
-    // Metal fast path is inapplicable (burn-in, crop, or a future
-    // decoder that hands off CPU buffers).
+    // CPU fallback: burn-in, SDR passthrough, or a decoder with no VT surface.
     return [
       ...common,
       '-vf',

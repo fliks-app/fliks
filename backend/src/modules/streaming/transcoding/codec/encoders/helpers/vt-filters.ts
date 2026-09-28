@@ -2,10 +2,8 @@ import type { EncoderInput } from '../../types';
 import { dvApplyDoviOpt } from '../../../ffmpeg-filter-graph';
 import { scaleEvenHeight } from './scale-filter';
 
-/** Build the `-vf` value for the VideoToolbox Metal tone-map path, shared by
- *  `h264_videotoolbox` and `hevc_videotoolbox`. No crop: `scale_vt` is
- *  RPU-blind, so a no-base source (P5) needs `tonemap_videotoolbox` instead
- *  to apply the RPU; crop always routes through `tonemap_videotoolbox`. */
+/** Build the `-vf` for the VideoToolbox Metal tone-map path. No crop:
+ *  `scale_vt` is RPU-blind, so a no-base source needs `tonemap_videotoolbox`. */
 export function vtTonemapFilter(input: EncoderInput): string {
   const { target, filters, dvNoBase, hasCrop } = input;
   const w = target.width;

@@ -32,12 +32,8 @@ export function isOpenclTonemapPath(
   );
 }
 
-/** True when the session tone-maps on the VideoToolbox Metal surface
- *  (`scale_vt` / `tonemap_videotoolbox`, both RPU-aware via `apply_dovi`).
- *  Burn-in (text or image) forces CPU buffers; a codec with no VT decoder
- *  (AV1) resolves to a non-videotoolbox decoder, so it's excluded too.
- *  Shared by `ffmpeg-args` (argv) and the playback-info controller (stats
- *  label) so they can't drift. */
+/** True when the session tone-maps on VideoToolbox's Metal surface
+ *  (RPU-aware `apply_dovi`); burn-in forces CPU. Shared with ffmpeg-args. */
 export function isVtTonemapPath(
   tonemap: boolean,
   hwAccel: string,
