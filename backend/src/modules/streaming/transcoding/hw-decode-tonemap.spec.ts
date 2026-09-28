@@ -148,6 +148,8 @@ describe('buildFfmpegArgs: AMF zero-copy D3D11↔OpenCL chain (win32)', () => {
     expect(vf).toContain('scale_opencl=');
     expect(vf).toContain('tonemap_opencl=');
     expect(vf).toContain('hwmap=derive_device=d3d11va:mode=write:reverse=1,format=d3d11');
+    // setparams tags the SDR output on this tonemapped-HDR-source chain too.
+    expect(vf.endsWith(',setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv')).toBe(true);
   });
 });
 
@@ -407,6 +409,28 @@ describe('buildFfmpegArgs: subtitle burn-in keeps the GPU pipeline', () => {
     expect(vf.endsWith(",subtitles='/tmp/s.srt'")).toBe(true);
   });
 
+  it('AMF: text burn-in keeps d3d11va decode + tonemap_opencl, libass runs on the CPU tail', () => {
+    mockAmfOpencl.mockReturnValue(true);
+    Object.defineProperty(process, 'platform', {
+      value: 'win32',
+      configurable: true,
+    });
+    const args = buildFfmpegArgs(
+      opts({
+        hwAccel: 'amf',
+        burnIn: { type: 'text', filter: "subtitles='/tmp/s.srt'" },
+      }),
+      silentLog,
+    );
+    const cli = args.join(' ');
+    expect(cli).toContain('-hwaccel d3d11va -hwaccel_output_format d3d11');
+    expect(cli).toMatch(/-c:v \w+_amf\b/);
+    const vf = vfOf(args);
+    expect(vf).toContain('tonemap_opencl=');
+    expect(vf).not.toContain('hwmap=derive_device=d3d11va:mode=write:reverse=1');
+    expect(vf).toContain(",hwdownload,format=nv12,subtitles='/tmp/s.srt'");
+  });
+
   it('AMF: PGS burn-in composites on the CPU chain with no stray hwdownload', () => {
     Object.defineProperty(process, 'platform', {
       value: 'win32',
@@ -422,7 +446,9 @@ describe('buildFfmpegArgs: subtitle burn-in keeps the GPU pipeline', () => {
     const fc = args[args.indexOf('-filter_complex') + 1];
     expect(fc.match(/hwdownload/g)).toHaveLength(1);
     expect(fc).not.toContain('extra_hw_frames');
-    expect(fc).toContain('[ov]format=yuv420p[vout]');
+    expect(fc).toContain(
+      '[ov]format=yuv420p,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv[vout]',
+    );
   });
 
   // The zero-copy chains repoint the default filter device to `ocl`, so a

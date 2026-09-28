@@ -43,20 +43,17 @@ export const hevcAmf: EncoderDescriptor = {
   },
 };
 
-/** AMD AMF HEVC Main10 HDR10 encoder. HDR signaling rides the SPS VUI
- *  `-color_*` tags; AMF has no mastering-display SEI option, so it can't write
- *  the mdcv/clli metadata — `supportsHdrMetadata` is false so a source that
- *  carries it routes to the CPU encoder that preserves it (mirrors the QSV /
- *  VAAPI HDR descriptors, which report false for the same reason). */
+/** AMD AMF HEVC Main10 HDR10 encoder. amfenc.c's amf_save_hdr_metadata reads
+ *  mastering-display/CLL side data off the frame (PQ transfer only), no codec option needed. */
 export const hevcAmfHdr10: EncoderDescriptor = {
   id: 'hevc_amf_main10',
   hwAccel: 'amf',
   variant: { codec: 'hevc', bitDepth: 10, hdr: 'HDR10' },
   supports: () => process.platform === 'win32',
-  supportsHdrMetadata: () => false,
+  supportsHdrMetadata: () => true,
   codecString: (target: EncoderTarget) => hevcMain10CodecString(target),
   buildArgs(input: EncoderInput): string[] {
-    const { target } = input;
+    const { target, inputSurface } = input;
     const bitrate = `${target.videoBitrateBps}`;
     return [
       '-c:v',
@@ -65,8 +62,8 @@ export const hevcAmfHdr10: EncoderDescriptor = {
       'transcoding',
       '-profile:v',
       'main10',
-      '-pix_fmt',
-      'p010le',
+      // d3d11 input: the -vf picks the format; a software pin can't convert hw frames.
+      ...(inputSurface === 'd3d11' ? [] : ['-pix_fmt', 'p010le']),
       '-quality',
       'balanced',
       '-rc',

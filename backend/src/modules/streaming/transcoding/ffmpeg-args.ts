@@ -1259,14 +1259,13 @@ export function buildFfmpegArgs(
   };
   args.push(...encoder.buildArgs(encoderInput));
 
-  // A tail setparams beats frame tags reliably (fixes VAAPI/QSV tonemap
-  // crashes with -color_*); head placement would retag pre-tonemap HDR pixels.
+  // A tail setparams beats frame tags reliably (fixes VAAPI/QSV tonemap crashes);
+  // METADATA_ONLY (vf_setparams.c) tags hardware frames too, AMF included.
   const sdrTagStep =
     !isHdrOutput &&
     !useVtMetalPath &&
     !useVulkanTonemap &&
-    effectiveHwAccel !== 'nvenc' &&
-    effectiveHwAccel !== 'amf'
+    effectiveHwAccel !== 'nvenc'
       ? sdrColorSetparams(sdrColor)
       : null;
   if (sdrTagStep && !imageBurnIn) {

@@ -93,13 +93,7 @@ describe('detectHwAccel', () => {
 });
 
 describe('requestedHwAccelFor', () => {
-  it('forces CPU for burn-in on AMF (no round-trip wired for it)', () => {
-    expect(
-      requestedHwAccelFor('amf', { burnIn: true, crop: false }, 'win32'),
-    ).toBe('none');
-  });
-
-  it('keeps QSV/VAAPI/NVENC/VideoToolbox on burn-in: each bounces to CPU only for subtitles=...', () => {
+  it('keeps QSV/VAAPI/NVENC/VideoToolbox/AMF on burn-in: each bounces to CPU only for subtitles=...', () => {
     expect(
       requestedHwAccelFor('qsv', { burnIn: true, crop: false }, 'win32'),
     ).toBe('qsv');
@@ -112,6 +106,9 @@ describe('requestedHwAccelFor', () => {
     expect(
       requestedHwAccelFor('videotoolbox', { burnIn: true, crop: false }, 'darwin'),
     ).toBe('videotoolbox');
+    expect(
+      requestedHwAccelFor('amf', { burnIn: true, crop: false }, 'win32'),
+    ).toBe('amf');
   });
 
   it('still downgrades a cropped QSV burn-in to VAAPI on Linux (QSV cannot crop this way)', () => {

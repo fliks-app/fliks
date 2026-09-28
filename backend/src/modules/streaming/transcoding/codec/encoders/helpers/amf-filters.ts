@@ -5,7 +5,7 @@ import { dvApplyDoviOpt } from '../../../ffmpeg-filter-graph';
 /** Whether the AMF `-vf` chain below lands on a D3D11 surface rather than CPU
  *  frames. Shared with the PGS burn-in composite (`hwdownload` before compositing). */
 export const amfVfEndsOnGpu = (i: EncoderInput): boolean =>
-  i.inputSurface === 'd3d11';
+  i.inputSurface === 'd3d11' && !i.hasBurnIn;
 
 /** Zero-copy AMF chain: hwmap to OpenCL, scale (+ crop, + tonemap for HDR),
  *  hwmap back to D3D11. Small params object (not `EncoderInput`) so the boot
@@ -18,9 +18,19 @@ export function amfOpenclFilter(opts: {
   tonemapCurve?: TonemapCurve;
   dvNoBase?: boolean;
   outputFormat: 'nv12' | 'p010le';
+  /** Text burn-in tail (`,subtitles=...`), already comma-prefixed or empty. */
+  burnInFilter?: string;
 }): string {
-  const { width, height, cropStr, tonemap, tonemapCurve, dvNoBase, outputFormat } =
-    opts;
+  const {
+    width,
+    height,
+    cropStr,
+    tonemap,
+    tonemapCurve,
+    dvNoBase,
+    outputFormat,
+    burnInFilter,
+  } = opts;
   const curve = tonemapCurve ?? 'hable';
   const crop = cropStr ? `${cropStr},` : '';
   // reset_sar=1 only matters after a crop: it fixes the SAR the crop leaves
@@ -31,6 +41,11 @@ export function amfOpenclFilter(opts: {
   const step = tonemap
     ? `${scale},tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=${curve}:desat=0:${dvApplyDoviOpt(dvNoBase)}`
     : `${scale}:format=${outputFormat}`;
+  // Text burn-in: hwdownload straight off OpenCL, hand AMF CPU frames directly.
+  // Its encoder takes nv12/p010le natively, no re-upload to d3d11 needed.
+  if (burnInFilter) {
+    return `hwmap=derive_device=opencl:mode=read,${crop}${step},hwdownload,format=${outputFormat}${burnInFilter}`;
+  }
   return `hwmap=derive_device=opencl:mode=read,${crop}${step},hwmap=derive_device=d3d11va:mode=write:reverse=1,format=d3d11`;
 }
 
@@ -38,7 +53,8 @@ export function amfOpenclFilter(opts: {
  *  zero-copy decoder (see `isAmfOpenclPath`); otherwise frames are pulled
  *  down and scaled on the CPU. */
 export function amfScaleFilter8bit(input: EncoderInput): string {
-  const { target, filters, tonemap, tonemapCurve, dvNoBase, inputSurface } = input;
+  const { target, filters, tonemap, tonemapCurve, dvNoBase, inputSurface, hasBurnIn } =
+    input;
   const w = target.width;
   if (inputSurface === 'd3d11') {
     return amfOpenclFilter({
@@ -49,6 +65,7 @@ export function amfScaleFilter8bit(input: EncoderInput): string {
       tonemapCurve,
       dvNoBase,
       outputFormat: 'nv12',
+      burnInFilter: hasBurnIn ? filters.burnInFilter : undefined,
     });
   }
   const download =
@@ -58,13 +75,13 @@ export function amfScaleFilter8bit(input: EncoderInput): string {
         ? 'hwdownload,format=p010le,'
         : 'hwdownload,format=nv12,';
   const tm = tonemap ? filters.tonemapCpu : '';
-  return `${download}${filters.cpuCropPrefix}${tm}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=nv12`;
+  return `${download}${filters.cpuCropPrefix}${tm}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=nv12${filters.burnInFilter}`;
 }
 
 /** `-vf` for a 10-bit AMF HDR encode. No tonemap branch — a 10-bit encoder
  *  preserves HDR; tonemap-to-SDR sources are routed to the 8-bit rung. */
 export function amfScaleFilter10bit(input: EncoderInput): string {
-  const { target, filters, inputSurface } = input;
+  const { target, filters, inputSurface, hasBurnIn } = input;
   const w = target.width;
   if (inputSurface === 'd3d11') {
     return amfOpenclFilter({
@@ -73,9 +90,10 @@ export function amfScaleFilter10bit(input: EncoderInput): string {
       cropStr: filters.cropStr,
       tonemap: false,
       outputFormat: 'p010le',
+      burnInFilter: hasBurnIn ? filters.burnInFilter : undefined,
     });
   }
   const download =
     inputSurface === 'cpu' ? '' : 'hwdownload,format=p010le,';
-  return `${download}${filters.cpuCropPrefix}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=p010le`;
+  return `${download}${filters.cpuCropPrefix}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=p010le${filters.burnInFilter}`;
 }
