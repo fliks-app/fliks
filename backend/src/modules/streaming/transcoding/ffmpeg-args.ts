@@ -52,7 +52,7 @@ import {
   DECODE_TIME_TOLERANCE_SECONDS,
   type KeyframeGrid,
 } from './segment-boundaries';
-import { openclTonemapInitArgs } from './hw-device';
+import { openclTonemapInitArgs, qsvDeviceInitArgs } from './hw-device';
 import { buildVideoFilters, resolveTonemapCurve } from './ffmpeg-filter-graph';
 import { buildImageBurnInFilterComplex } from './subtitle-overlay-filter';
 
@@ -700,9 +700,15 @@ function resolveDecodeStage(opts: {
               codec: normalisedSourceCodec ?? 'h264',
               bitDepth: sourceBitDepth,
             },
-            decodeHwAccel,
+            // A reported codec with no hw decoder here (vp9, mpeg2video) decodes on the
+            // CPU; an unreported one keeps the h264 assumption.
+            sourceVideoCodec && !normalisedSourceCodec ? 'none' : decodeHwAccel,
           );
   args.push(...decoder.buildInputArgs());
+  // A CPU decoder inits no device, yet the qsv encoder's filters need one.
+  if (decoder.outputSurface === 'cpu' && effectiveHwAccel === 'qsv') {
+    args.push(...qsvDeviceInitArgs(), '-filter_hw_device', 'qs');
+  }
 
   // Full-Metal HDR opt-in. The h264/hevc_videotoolbox encoders can keep
   // the pipeline on IOSurface end-to-end when the only filter step is

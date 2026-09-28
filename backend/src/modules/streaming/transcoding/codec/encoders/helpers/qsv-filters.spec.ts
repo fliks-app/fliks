@@ -105,6 +105,16 @@ describe('qsvScaleFilter8bit', () => {
     ).toContain(':tonemap=reinhard:desat=0');
   });
 
+  it('uploads to VAAPI (not the default QSV filter device) for a CPU-decoded source', () => {
+    // A bare hwupload would target `-filter_hw_device qs` (QSV, set for
+    // burn-in) instead of VAAPI, which scale_vaapi then rejects.
+    expect(qsvScaleFilter8bit(input({ inputSurface: 'cpu' }))).toBe(
+      'format=nv12,hwupload=derive_device=vaapi,' +
+        'scale_vaapi=w=1920:h=-2:format=nv12:extra_hw_frames=24,' +
+        'hwmap=derive_device=qsv,format=qsv',
+    );
+  });
+
   it('renders target.height on a crop, not its own aspect-ratio rounding', () => {
     // target.height (534) is what profileResolution/buildOutputDimensions
     // computed for this crop; re-deriving it from cw/ch here rounded to 532.
