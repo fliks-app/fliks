@@ -4,7 +4,7 @@ import { hdrColorArgs, hlgFromHdr10 } from './helpers/hdr-variants';
 import { scaleEvenHeight } from './helpers/scale-filter';
 import { vtTonemapFilter } from './helpers/vt-filters';
 
-/** Apple VideoToolbox HEVC SDR encoder — Mac 2017+ (T2 / Apple Silicon).
+/** Apple VideoToolbox HEVC SDR encoder; Mac 2017+ (T2 / Apple Silicon).
  *  Tone-maps on the Metal surface when eligible, else falls back to CPU. */
 export const hevcVideotoolbox: EncoderDescriptor = {
   id: 'hevc_videotoolbox',
@@ -53,7 +53,7 @@ export const hevcVideotoolbox: EncoderDescriptor = {
   },
 };
 
-/** VT HEVC Main10 HDR10 — Mac 2017+ (T2 / Apple Silicon). `hevc_videotoolbox`
+/** VT HEVC Main10 HDR10; Mac 2017+ (T2 / Apple Silicon). `hevc_videotoolbox`
  *  has no `-master_display`/`-max_cll` option; it carries the source's HDR10
  *  static metadata through from the input AVFrame side data instead. */
 export const hevcVideotoolboxHdr10: EncoderDescriptor = {
@@ -94,7 +94,7 @@ export const hevcVideotoolboxHdr10: EncoderDescriptor = {
   },
 };
 
-/** VT HEVC Main10 HLG variant — same encoder path as HDR10, only the
+/** VT HEVC Main10 HLG variant; same encoder path as HDR10, only the
  *  transfer characteristic differs. */
 export const hevcVideotoolboxHlg: EncoderDescriptor = hlgFromHdr10(
   'hevc_videotoolbox_hlg',

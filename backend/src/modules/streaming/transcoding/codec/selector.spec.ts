@@ -25,7 +25,7 @@ function nativeProfile(): DeviceProfileDto {
   } as unknown as DeviceProfileDto;
 }
 
-describe('pickPrimaryVariant — client decode-resolution gate', () => {
+describe('pickPrimaryVariant; client decode-resolution gate', () => {
   it('falls back to HEVC for a 4K AV1 source when the AV1 decoder caps at 2048', () => {
     const v = pickPrimaryVariant(
       { width: 3840, height: 2076, hdr: 'HDR10', codec: 'av1' },
@@ -36,7 +36,7 @@ describe('pickPrimaryVariant — client decode-resolution gate', () => {
     expect(v.hdr).toBe('HDR10');
   });
 
-  it('un-trips for a rotated (portrait) 4K frame — long/short edges compared', () => {
+  it('un-trips for a rotated (portrait) 4K frame; long/short edges compared', () => {
     const v = pickPrimaryVariant(
       { width: 2076, height: 3840, hdr: 'HDR10', codec: 'av1' },
       nativeProfile(),
