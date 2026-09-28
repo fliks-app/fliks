@@ -14,9 +14,10 @@ const execFileAsync = promisify(execFile);
  *  hwdownload`. This is DISTINCT from the QSV probe in `tonemap-opencl-probe`,
  *  which tests the QSV↔OpenCL surface bridge (`hwmap`) and is meaningless on a
  *  pure-NVENC host. On NVIDIA, OpenCL rides the same compute stack as
- *  CUDA/NVENC (`libnvidia-opencl.so`) — no Vulkan/GLX — so it is the only way
- *  to keep the HDR→SDR tone-map on the GPU there (mainline ffmpeg has no
- *  `tonemap_cuda`). Fail-closed until the boot probe confirms it. */
+ *  CUDA/NVENC (`libnvidia-opencl.so`), no Vulkan/GLX, so it's the CPU-bounce
+ *  fallback for NVENC when `tonemap_cuda` isn't available (see
+ *  `cuda-tonemap-probe.ts`), and the only GPU path for AMF. Fail-closed until
+ *  the boot probe confirms it. */
 let probedOnce = false;
 let enabled = false;
 
@@ -91,7 +92,7 @@ export async function runOpenclTonemapProbe(
     await unlink(hdrSample).catch(() => {});
     probedOnce = true;
     log.log(
-      `[opencl-tonemap-probe] enabled=${enabled} (${Date.now() - t0}ms)${failure ? ` — ${failure}` : ''}`,
+      `[opencl-tonemap-probe] enabled=${enabled} (${Date.now() - t0}ms)${failure ? `: ${failure}` : ''}`,
     );
   }
 }

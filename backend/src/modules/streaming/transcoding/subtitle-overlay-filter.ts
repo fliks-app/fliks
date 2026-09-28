@@ -34,8 +34,22 @@ export function buildImageBurnInFilterComplex(ctx: {
    *  authored against the full source frame, so it must be cropped identically
    *  before scaling or the subtitle ends up oversized and mispositioned. */
   crop?: { width: number; height: number; x: number; y: number };
+  /** Whether `videoFilter` lands on the encoder's HW surface (needs a
+   *  `hwdownload` before compositing) rather than already-CPU frames (a
+   *  CPU/OpenCL tone-map bounce, or a CPU/VAAPI-bridged decode on NVENC):
+   *  `hwdownload` on frames already in system memory aborts the graph.
+   *  Defaults to true, matching every HW path's own round-trip. */
+  framesOnGpu?: boolean;
 }): string {
-  const { hwAccel, videoFilter, streamIndex: s, width: w, height: h, crop } = ctx;
+  const {
+    hwAccel,
+    videoFilter,
+    streamIndex: s,
+    width: w,
+    height: h,
+    crop,
+    framesOnGpu = true,
+  } = ctx;
   const tenBit = ctx.bitDepth >= 10;
   const input = `[0:${ctx.videoStreamIndex ?? 'v'}]`;
   const video = videoFilter ? `${input}${videoFilter}` : `${input}null`;
@@ -52,8 +66,9 @@ export function buildImageBurnInFilterComplex(ctx: {
   const hwFmt = tenBit ? 'p010le' : 'nv12';
 
   // CPU encode paths (libx264/libx265, VideoToolbox) already hand CPU frames —
-  // no device round-trip.
-  if (hwAccel === 'none' || hwAccel === 'videotoolbox') {
+  // no device round-trip. Same when the upstream chain already ended on CPU
+  // (an NVENC CPU/OpenCL tone-map bounce, or a CPU/VAAPI-bridged decode).
+  if (hwAccel === 'none' || hwAccel === 'videotoolbox' || !framesOnGpu) {
     if (tenBit) {
       return `${video}[v];${sub};[v][s]overlay[vout]`;
     }

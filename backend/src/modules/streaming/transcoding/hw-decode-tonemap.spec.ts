@@ -7,11 +7,17 @@ jest.mock('./codec/tonemap-opencl-probe', () => ({
   isTonemapOpenclEnabled: jest.fn(() => true),
   isTonemapOpenclEnabledWithCrop: jest.fn(() => true),
 }));
+jest.mock('./codec/cuda-tonemap-probe', () => ({
+  isCudaTonemapEnabled: jest.fn(() => false),
+}));
 
 import { buildFfmpegArgs } from './ffmpeg-args';
 import type { BuildFfmpegArgsOptions } from './ffmpeg-args';
 import { resolveEncodePipeline } from './encode-pipeline';
 import type { CodecVariant } from './codec/types';
+import { isCudaTonemapEnabled } from './codec/cuda-tonemap-probe';
+
+const mockCudaTonemap = isCudaTonemapEnabled as jest.Mock;
 
 const silentLog = {
   debug: () => {},
@@ -148,5 +154,40 @@ describe('buildFfmpegArgs: no-base Dolby Vision keeps the RPU', () => {
     );
     expect(pipeline.effectiveHwAccel).toBe('qsv');
     expect(args.join(' ')).toContain(`-c:v ${pipeline.encoder?.id}`);
+  });
+});
+
+// NVENC prefers tonemap_cuda (zero-copy) over the opencl bounce once its own
+// boot probe passes.
+describe('buildFfmpegArgs: NVENC tonemap_cuda once its probe passes', () => {
+  beforeEach(() => mockCudaTonemap.mockReturnValue(true));
+  afterEach(() => mockCudaTonemap.mockReturnValue(false));
+
+  it('P5 (no base): tonemap_cuda applies the RPU, no opencl device', () => {
+    const args = buildFfmpegArgs(
+      opts({ hwAccel: 'nvenc', sourceDvProfile: 5 }),
+      silentLog,
+    );
+    const cli = args.join(' ');
+    expect(cli).toContain('-hwaccel cuda -hwaccel_output_format cuda');
+    expect(cli).toContain('tonemap_cuda=');
+    expect(cli).toContain('apply_dovi=1');
+    expect(cli).not.toContain('tonemap_opencl');
+    expect(cli).not.toContain('opencl=ocl');
+  });
+
+  it('P8.1 (has base): tonemap_cuda without applying its RPU', () => {
+    const args = buildFfmpegArgs(
+      opts({
+        hwAccel: 'nvenc',
+        sourceDvProfile: 8,
+        sourceDvBlSignalCompatId: 1,
+      }),
+      silentLog,
+    );
+    const cli = args.join(' ');
+    expect(cli).toContain('tonemap_cuda=');
+    expect(cli).toContain('apply_dovi=0');
+    expect(cli).not.toContain('tonemap_opencl');
   });
 });

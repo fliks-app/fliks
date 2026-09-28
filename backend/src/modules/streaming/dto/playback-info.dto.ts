@@ -125,11 +125,13 @@ export interface PlaybackInfoResponse {
 
   /** Tone-map mechanism the session actually runs. `'vaapi'` / `'opencl'`
    *  / `'qsv'` for QSV/VAAPI encoders (after `auto` resolution + boot
-   *  probe); `'videotoolbox'` for the macOS `scale_vt` Metal path; `'cpu'`
-   *  for the CPU zscale chain (NVENC / libx26x / VideoToolbox with a
-   *  burn-in or crop). `null` when no tone-mapping pass runs. Stats overlays
-   *  show this value, not the (encoder-agnostic) admin pick. */
-  tonemapAlgo?: 'vaapi' | 'opencl' | 'qsv' | 'videotoolbox' | 'cpu' | null;
+   *  probe); `'cuda'` for NVENC's zero-copy `tonemap_cuda` (after its own
+   *  boot probe); `'videotoolbox'` for the macOS `scale_vt` Metal path;
+   *  `'cpu'` for the CPU zscale chain (NVENC without tonemap_cuda / libx26x /
+   *  VideoToolbox with a burn-in or crop). `null` when no tone-mapping pass
+   *  runs. Stats overlays show this value, not the (encoder-agnostic) admin
+   *  pick. */
+  tonemapAlgo?: 'vaapi' | 'opencl' | 'qsv' | 'cuda' | 'videotoolbox' | 'cpu' | null;
 
   /** Tone-map curve (`hable` / `mobius` / `reinhard`), set only when
    *  `tonemapAlgo === 'cpu'`. Surfaced so the overlay names the exact

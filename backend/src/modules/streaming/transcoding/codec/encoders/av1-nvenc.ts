@@ -11,9 +11,8 @@ import { AV1_NVENC_GOP_ARGS } from './helpers/nvenc-gop';
 /** NVIDIA NVENC AV1 encoder — Ada Lovelace (RTX 4000 series) and later.
  *  Pascal, Turing and Ampere don't ship the AV1 encode unit, so
  *  `supports()` returning true relies on the runtime fallback path
- *  catching the spawn error and downgrading to libsvtav1 there. Tonemap
- *  path round-trips via CPU like h264_nvenc — no tonemap_cuda in
- *  mainline FFmpeg. */
+ *  catching the spawn error and downgrading to libsvtav1 there. Tone-maps
+ *  via `tonemap_cuda` (GPU) when probed, else CPU/OpenCL like h264_nvenc. */
 export const av1Nvenc: EncoderDescriptor = {
   id: 'av1_nvenc',
   hwAccel: 'nvenc',

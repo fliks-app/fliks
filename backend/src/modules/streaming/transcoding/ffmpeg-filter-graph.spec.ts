@@ -18,6 +18,7 @@ describe('buildVideoFilters', () => {
       burnInFilter: '',
       tonemapVaapi: '',
       tonemapOpencl: '',
+      tonemapCuda: '',
       tonemapCpu: '',
     });
   });
@@ -68,6 +69,25 @@ describe('buildVideoFilters', () => {
     );
     // No CPU zscale tone-map when the GPU path is used.
     expect(f.tonemapCpu).not.toContain('zscale');
+  });
+
+  it('cuda tone-map (apply_dovi=0 for a has-base source)', () => {
+    const f = buildVideoFilters({ ...base, tonemap: true, cudaTonemap: true });
+    expect(f.tonemapCuda).toBe(
+      ',tonemap_cuda=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=hable:desat=0:apply_dovi=0',
+    );
+  });
+
+  it('cuda tone-map applies the RPU (apply_dovi=1) for a no-base DV source', () => {
+    const f = buildVideoFilters({
+      ...base,
+      tonemap: true,
+      cudaTonemap: true,
+      dvNoBase: true,
+    });
+    expect(f.tonemapCuda).toBe(
+      ',tonemap_cuda=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=hable:desat=0:apply_dovi=1',
+    );
   });
 
   it('applies the RPU (apply_dovi=1) on the opencl bounce for a no-base DV source', () => {

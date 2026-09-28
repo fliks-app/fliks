@@ -47,7 +47,11 @@ import { hevcMainTierCapBps } from './codec/codec-strings';
 import { dvHasNoBase } from './codec/dolby-vision';
 import { varStreamMapLayout } from './audio-layout';
 import { inputSeekSeconds } from './source-timeline';
-import { resolveEncodePipeline, isOpenclTonemapPath } from './encode-pipeline';
+import {
+  resolveEncodePipeline,
+  isOpenclTonemapPath,
+  isCudaTonemapPath,
+} from './encode-pipeline';
 import {
   DECODE_TIME_TOLERANCE_SECONDS,
   type KeyframeGrid,
@@ -760,7 +764,8 @@ function resolveDecodeStage(opts: {
     tonemap &&
     !useVaapiTonemap &&
     decoder.outputSurface === 'vaapi' &&
-    !openclTonemap
+    !openclTonemap &&
+    !isCudaTonemapPath(tonemap, effectiveHwAccel)
   ) {
     args.push('-init_hw_device', 'opencl=ocl:0.0');
   }
@@ -1058,9 +1063,13 @@ export function buildFfmpegArgs(
     );
   }
 
+  // NVENC's zero-copy path: tonemap_cuda stays on the CUDA surface, no CPU
+  // bounce. See isCudaTonemapPath.
+  const cudaTonemap = isCudaTonemapPath(!!tonemap, effectiveHwAccel);
   // NVENC/AMF have no on-encoder tone-map (routes through tonemap_opencl
   // instead of the CPU zscale chain); a no-base DV source shares the same
-  // RPU-aware GPU bounce. See isOpenclTonemapPath.
+  // RPU-aware GPU bounce. See isOpenclTonemapPath. Turns false by itself when
+  // cudaTonemap is active.
   const openclTonemap = isOpenclTonemapPath(!!tonemap, effectiveHwAccel, dvNoBase);
   // GPU decode whenever available, including the tone-map path — the frame
   // reaches OpenCL via hwdownload→hwupload (a copy, no CUDA/D3D11↔OpenCL interop).
@@ -1175,6 +1184,7 @@ export function buildFfmpegArgs(
       tonemapCurve,
       scaleWidth: w,
       openclTonemap,
+      cudaTonemap,
     }),
     tonemap,
     tonemapPath,
@@ -1202,6 +1212,12 @@ export function buildFfmpegArgs(
     const vfIdx = args.indexOf('-vf');
     const videoFilter = vfIdx !== -1 ? args[vfIdx + 1] : '';
     if (vfIdx !== -1) args.splice(vfIdx, 2);
+    // NVENC's own -vf chain lands on CPU frames for every branch except a
+    // cuda decode with no tonemap, or the tonemap_cuda pass: hwdownload on
+    // frames already in system memory aborts the graph.
+    const nvencFramesOnGpu =
+      effectiveHwAccel !== 'nvenc' ||
+      (tonemap ? cudaTonemap : encoderInput.inputSurface === 'cuda');
     args.push(
       '-filter_complex',
       buildImageBurnInFilterComplex({
@@ -1213,6 +1229,7 @@ export function buildFfmpegArgs(
         height: h,
         bitDepth: variant.bitDepth,
         crop,
+        framesOnGpu: nvencFramesOnGpu,
       }),
     );
   }

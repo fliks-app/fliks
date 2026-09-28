@@ -7,24 +7,35 @@ import { scaleEvenHeight } from './scale-filter';
  *  produced:
  *
  *  - `'cuda'` — NVDEC handed off GPU frames: the SDR crop+scale stays on
- *    the device with `scale_cuda` (crop bounces to CPU and back only when a
- *    manual crop is active). The HDR→SDR tonemap round-trips through CPU
- *    (mainline ffmpeg has no `tonemap_cuda`), so `hwdownload` pulls the
- *    frames down before the CPU tonemap chain.
+ *    the device with `scale_cuda`, and when `tonemap_cuda` probed the
+ *    HDR→SDR tonemap stays on the surface too (no CPU bounce); otherwise it
+ *    round-trips through CPU/OpenCL, so `hwdownload` pulls the frames down
+ *    first.
  *  - `'cpu'` — software decode (NVDEC disabled or unable to decode this
  *    codec/bit depth): every filter runs on CPU and NVENC uploads the
- *    finished frames itself.
+ *    finished frames itself, except the `tonemap_cuda` path, which uploads
+ *    explicitly to reach the CUDA-only filter.
  *  - any other HW surface (`'vaapi'` from a decode-only VAAPI stack bridged
  *    in on an NVENC host, etc.): the frames live on another device that
  *    `scale_cuda` can't touch, so `hwdownload` pulls them to system memory
- *    and the CPU chain takes over — NVENC re-uploads on encode.
+ *    first.
  *
- *  Only `scale_cuda` / `hwupload_cuda` require a CUDA surface; running them
- *  on non-CUDA frames aborts the graph with `Function not implemented`.
+ *  Only `scale_cuda` / `hwupload_cuda` / `tonemap_cuda` require a CUDA
+ *  surface; running them on non-CUDA frames aborts the graph with
+ *  `Function not implemented`.
  */
 export function nvencScaleFilter8bit(input: EncoderInput): string {
   const { target, filters, tonemap, hasCrop, inputSurface } = input;
   const w = target.width;
+  if (tonemap && filters.tonemapCuda) {
+    // Already on a CUDA surface with no crop: nothing to bounce. Otherwise
+    // (CPU/VAAPI input, or a crop that ran off-GPU) land on CUDA p010le first.
+    const upload =
+      inputSurface === 'cuda' && !hasCrop
+        ? ''
+        : `${inputSurface === 'cpu' ? '' : 'hwdownload,format=p010le,'}${filters.cpuCropPrefix}format=p010le,hwupload_cuda,`;
+    return `${upload}scale_cuda=w=${w}:h=-2:format=p010le${filters.tonemapCuda}`;
+  }
   if (tonemap) {
     // tonemapCpu already emits `format=yuv420p`; only the download prefix
     // differs. Tonemap implies a 10-bit HDR source, so download as p010le.

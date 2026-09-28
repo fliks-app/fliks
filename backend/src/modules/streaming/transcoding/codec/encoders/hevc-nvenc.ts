@@ -9,8 +9,8 @@ import {
 import { NVENC_GOP_ARGS } from './helpers/nvenc-gop';
 
 /** NVIDIA NVENC HEVC SDR encoder — Maxwell 2nd gen (GM20x) and later.
- *  Tonemap path round-trips via CPU because mainline FFmpeg still has no
- *  tonemap_cuda equivalent; HDR variants below stay on GPU end-to-end. */
+ *  Tone-maps via `tonemap_cuda` (GPU, zero-copy) when probed, else CPU/OpenCL;
+ *  HDR variants below stay on GPU end-to-end (no tonemap, HDR is preserved). */
 export const hevcNvenc: EncoderDescriptor = {
   id: 'hevc_nvenc',
   hwAccel: 'nvenc',

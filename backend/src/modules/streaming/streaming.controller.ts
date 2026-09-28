@@ -82,7 +82,10 @@ import { resolveTonemapPath } from './transcoding/tonemap-path';
 import { resolveTonemapCurve } from './transcoding/ffmpeg-filter-graph';
 import { autoFfmpegSlots } from '../../common/utils/ffmpeg-slots';
 import { getPauseCapability } from './transcoding/ffmpeg-pause';
-import { isOpenclTonemapPath } from './transcoding/encode-pipeline';
+import {
+  isOpenclTonemapPath,
+  isCudaTonemapPath,
+} from './transcoding/encode-pipeline';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
@@ -1026,6 +1029,7 @@ export class StreamingController {
     );
     const hwTonemap =
       response.hwAccel === 'qsv' || response.hwAccel === 'vaapi';
+    const cudaTonemap = isCudaTonemapPath(!!response.tonemapping, response.hwAccel);
     const openclTonemap = isOpenclTonemapPath(
       !!response.tonemapping,
       response.hwAccel,
@@ -1038,16 +1042,19 @@ export class StreamingController {
     const tonemapAlgo = response.tonemapping
       ? hwTonemap
         ? resolveTonemapPath(ss.tonemapAlgo, { hasCrop, dvNoBase })
-        : openclTonemap
-          ? 'opencl'
-          : vtMetalTonemap
-            ? 'videotoolbox'
-            : 'cpu'
+        : cudaTonemap
+          ? 'cuda'
+          : openclTonemap
+            ? 'opencl'
+            : vtMetalTonemap
+              ? 'videotoolbox'
+              : 'cpu'
       : null;
-    // The curve is a `tonemap`/`tonemap_opencl` operator, so it only applies to
-    // the opencl and CPU paths — the vpp_qsv / tonemap_vaapi LUTs ignore it.
+    // The curve is a `tonemap`/`tonemap_opencl`/`tonemap_cuda` operator, so it
+    // only applies to the cuda, opencl and CPU paths; the vpp_qsv /
+    // tonemap_vaapi LUTs ignore it.
     const tonemapCurve =
-      tonemapAlgo === 'opencl' || tonemapAlgo === 'cpu'
+      tonemapAlgo === 'opencl' || tonemapAlgo === 'cpu' || tonemapAlgo === 'cuda'
         ? resolveTonemapCurve()
         : undefined;
 

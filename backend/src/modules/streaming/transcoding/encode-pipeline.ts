@@ -11,15 +11,26 @@ import {
 import { isQsvOpenclTonemapEnabled } from './codec/qsv-opencl-probe';
 import { isScaleD3d11Enabled } from './codec/scale-d3d11-probe';
 import { isOpenclTonemapEnabled } from './codec/opencl-tonemap-probe';
+import { isCudaTonemapEnabled } from './codec/cuda-tonemap-probe';
 import { resolveTonemapPath } from './tonemap-path';
 import { normaliseSourceCodec } from './codec/normalise';
 import type { CodecVariant } from './codec/types';
 import type { HwAccelType, TonemapAlgo } from './types';
 
+/** NVENC's zero-copy HDR→SDR path: `tonemap_cuda` stays on the CUDA surface
+ *  end to end (no CPU/OpenCL bounce), when the boot probe confirmed the
+ *  bundled ffmpeg carries the filter. Shared by `ffmpeg-args` (argv) and the
+ *  playback-info controller (stats label) so they can't drift. */
+export function isCudaTonemapPath(tonemap: boolean, hwAccel: string): boolean {
+  return tonemap && hwAccel === 'nvenc' && isCudaTonemapEnabled();
+}
+
 /** NVENC/AMF have no on-encoder tonemap, so it runs off-encoder through
  *  `tonemap_opencl`; a no-base DV source needs that same RPU-aware bounce
- *  even on an encoder that isn't nvenc/amf. Shared by `ffmpeg-args` (argv)
- *  and the playback-info controller (stats label) so they can't drift. */
+ *  even on an encoder that isn't nvenc/amf. NVENC prefers `tonemap_cuda`
+ *  when it's available, see {@link isCudaTonemapPath}. Shared by
+ *  `ffmpeg-args` (argv) and the playback-info controller (stats label) so
+ *  they can't drift. */
 export function isOpenclTonemapPath(
   tonemap: boolean,
   hwAccel: string,
@@ -27,6 +38,7 @@ export function isOpenclTonemapPath(
 ): boolean {
   return (
     tonemap &&
+    !isCudaTonemapPath(tonemap, hwAccel) &&
     isOpenclTonemapEnabled() &&
     (hwAccel === 'nvenc' || hwAccel === 'amf' || dvNoBase)
   );
