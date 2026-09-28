@@ -12,11 +12,10 @@ export type BitDepth = 8 | 10;
  *  - HDR10: BT.2020 primaries + SMPTE-ST-2084 (PQ) transfer + static metadata
  *  - HLG:   BT.2020 primaries + ARIB STD-B67 transfer
  *
- *  Dolby Vision is NOT detected or signaled: ffprobe classifies HDR purely by
- *  colour tags, so a DV source resolves to HDR10 (profile 8.1 — its PQ base
- *  layer plays as HDR10, a graceful downgrade) or SDR (profile 5 — tonemapped
- *  imperfectly, since ffmpeg can't process the DV RPU). Full DV detection +
- *  passthrough is deferred to #368. */
+ *  Dolby Vision is detected separately (`dolby-vision.ts`, from the DOVI
+ *  config record) and drives tonemap/passthrough routing directly. This enum
+ *  still classifies by ffprobe's plain colour tags, so a DV source resolves
+ *  here to HDR10 (its PQ base layer) or SDR, same as any other source. */
 export type HdrFormat = 'HDR10' | 'HLG';
 
 /** HDR→SDR tone-map curve, shared by the CPU and GPU (tonemap_opencl) paths.

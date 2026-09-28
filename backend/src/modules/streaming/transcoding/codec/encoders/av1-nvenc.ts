@@ -1,7 +1,6 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { av1CodecString } from '../codec-strings';
 import { hdrColorArgs } from './helpers/hdr-variants';
-import { masterDisplayString, maxCllString } from './helpers/hdr-metadata';
 import {
   nvencScaleFilter10bit,
   nvencScaleFilter8bit,
@@ -45,11 +44,9 @@ export const av1Nvenc: EncoderDescriptor = {
   },
 };
 
-/** NVENC AV1 HDR10 — Ada writes the HDR10 static metadata SEI when
- *  `-master_display` and `-max_cll` are passed on the encoder. Static
- *  values match a 1000-nit BT.2020 mastering display with 400-nit MaxFALL,
- *  the common reference for UHD Blu-ray remasters and the dominant
- *  source-side authoring target. */
+/** NVENC AV1 HDR10; no `-master_display`/`-max_cll` CLI option exists for
+ *  av1_nvenc; the encoder reads mastering-display/CLL straight off the
+ *  input AVFrame side data and writes the OBU metadata itself. */
 export const av1NvencHdr10: EncoderDescriptor = {
   id: 'av1_nvenc_hdr10',
   hwAccel: 'nvenc',
@@ -81,10 +78,6 @@ export const av1NvencHdr10: EncoderDescriptor = {
       '-force_key_frames',
       input.forceKeyframesExpr,
       ...hdrColorArgs('HDR10'),
-      '-master_display',
-      masterDisplayString(input.hdrMetadata),
-      '-max_cll',
-      maxCllString(input.hdrMetadata),
     ];
   },
 };

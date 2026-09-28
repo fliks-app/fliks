@@ -1,5 +1,6 @@
 import { buildLiveFfmpegArgs, type LiveFfmpegArgsOptions } from './live-ffmpeg-args';
 import { LIVETV_USER_AGENT } from '../livetv-http';
+import { setSelectedRenderNode } from '../../streaming/transcoding/hw-device';
 
 function base(overrides: Partial<LiveFfmpegArgsOptions> = {}): LiveFfmpegArgsOptions {
   return {
@@ -85,6 +86,21 @@ describe('buildLiveFfmpegArgs', () => {
     const amf = buildLiveFfmpegArgs(base({ mode: 'transcode', hwAccel: 'amf' }));
     expect(flagValue(amf, '-c:v')).toBe('h264_amf');
     expect(amf).not.toContain('-hwaccel');
+  });
+
+  it('honours the admin render-node pin on qsv/vaapi, like the VOD path', () => {
+    setSelectedRenderNode('/dev/dri/renderD129');
+    try {
+      const qsv = buildLiveFfmpegArgs(base({ mode: 'transcode', hwAccel: 'qsv' }));
+      expect(qsv.join(' ')).toContain('vaapi=va:/dev/dri/renderD129');
+      expect(flagValue(qsv, '-hwaccel_device')).toBe('qs');
+
+      const vaapi = buildLiveFfmpegArgs(base({ mode: 'transcode', hwAccel: 'vaapi' }));
+      expect(vaapi.join(' ')).toContain('vaapi=va:/dev/dri/renderD129');
+      expect(flagValue(vaapi, '-hwaccel_device')).toBe('va');
+    } finally {
+      setSelectedRenderNode(null);
+    }
   });
 
   it('sets delete_segments and program_date_time', () => {

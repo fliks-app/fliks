@@ -1276,8 +1276,15 @@ export function buildFfmpegArgs(
   // Skipped on the VT Metal fast path: `scale_vt` already sets the IOSurface
   // metadata and the extra `-color_*` flags re-trigger a CPU `auto_scale` that
   // fails (-78) with no bridge back to a videotoolbox_vld surface.
-  // Same for Vulkan (-38): libplacebo already tags the frame itself.
-  if (!isHdrOutput && !useVtMetalPath && !useVulkanTonemap) {
+  // Same for Vulkan (-38): libplacebo already tags the frame itself. Same for
+  // pure VAAPI after `tonemap_vaapi` (exit 218): the QSV path isn't affected,
+  // it hwmaps off the VAAPI surface before the encoder sees these flags.
+  if (
+    !isHdrOutput &&
+    !useVtMetalPath &&
+    !useVulkanTonemap &&
+    !(useVaapiTonemap && effectiveHwAccel === 'vaapi')
+  ) {
     args.push(...colorTagArgs(sdrColor));
   }
 

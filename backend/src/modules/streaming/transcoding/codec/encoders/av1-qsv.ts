@@ -22,8 +22,6 @@ export const av1Qsv: EncoderDescriptor = {
       '-preset',
       preset,
       ...qsv.extra,
-      '-mbbrc',
-      '1',
       '-b:v',
       String(target.videoBitrateBps),
       '-maxrate',
@@ -44,17 +42,14 @@ export const av1Qsv: EncoderDescriptor = {
   },
 };
 
-/** Intel QSV AV1 HDR10 — same pipeline in p010le. `supportsHdrMetadata`
- *  is false: media-driver issue 1592 — `av1_qsv` has no mastering-display
- *  API, so the mdcv/clli SEI never reaches the bitstream. Registry routes
- *  HDR variants to the libsvtav1 fallback instead. Color tags are kept
- *  here for completeness in case the encoder ever gains the API. */
+/** Intel QSV AV1 HDR10; same pipeline in p010le. Confirmed on-device: the
+ *  bundled ffmpeg writes the mdcv/clli SEI through to the OBU on Arc/iGPU. */
 export const av1QsvHdr10: EncoderDescriptor = {
   id: 'av1_qsv_hdr10',
   hwAccel: 'qsv',
   variant: { codec: 'av1', bitDepth: 10, hdr: 'HDR10' },
   supports: () => true,
-  supportsHdrMetadata: () => false,
+  supportsHdrMetadata: () => true,
   codecString: (target: EncoderTarget) => av1CodecString(target, 10),
   buildArgs(input: EncoderInput): string[] {
     const { target, preset, qsv } = input;
@@ -66,8 +61,6 @@ export const av1QsvHdr10: EncoderDescriptor = {
       '-preset',
       preset,
       ...qsv.extra,
-      '-mbbrc',
-      '1',
       '-b:v',
       String(target.videoBitrateBps),
       '-maxrate',

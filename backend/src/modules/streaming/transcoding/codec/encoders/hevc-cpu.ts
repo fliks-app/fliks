@@ -41,6 +41,12 @@ export const hevcCpu: EncoderDescriptor = {
       String(target.gopSize),
       '-force_key_frames',
       input.forceKeyframesExpr,
+      '-forced-idr',
+      '1',
+      // x265's default open-gop=1 still emits CRA (not IDR) on a frame forced
+      // via pict_type alone; -forced-idr only takes effect with closed GOPs.
+      '-x265-params',
+      'open-gop=0',
       '-tag:v',
       'hvc1',
     ];
@@ -66,6 +72,8 @@ export const hevcCpuHdr10: EncoderDescriptor = {
     const x265Params = [
       'hdr-opt=1',
       'repeat-headers=1',
+      // See hevcCpu: open-gop=0 is required for -forced-idr to emit a true IDR.
+      'open-gop=0',
       'colorprim=bt2020',
       'transfer=smpte2084',
       'colormatrix=bt2020nc',
@@ -95,6 +103,8 @@ export const hevcCpuHdr10: EncoderDescriptor = {
       String(target.gopSize),
       '-force_key_frames',
       input.forceKeyframesExpr,
+      '-forced-idr',
+      '1',
       '-x265-params',
       x265Params,
       ...hdrColorArgs('HDR10'),
@@ -119,6 +129,7 @@ export const hevcCpuHlg: EncoderDescriptor = {
     const bitrate = `${target.videoBitrateBps}`;
     const x265Params = [
       'repeat-headers=1',
+      'open-gop=0',
       'colorprim=bt2020',
       'transfer=arib-std-b67',
       'colormatrix=bt2020nc',
@@ -146,6 +157,8 @@ export const hevcCpuHlg: EncoderDescriptor = {
       String(target.gopSize),
       '-force_key_frames',
       input.forceKeyframesExpr,
+      '-forced-idr',
+      '1',
       '-x265-params',
       x265Params,
       ...hdrColorArgs('HLG'),
