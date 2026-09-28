@@ -12,7 +12,6 @@ export function vaapiScaleFilter8bit(input: EncoderInput): string {
   const { target, filters, hasBurnIn } = input;
   const w = target.width;
   // Text burn-in bounces to CPU only for `subtitles=...`, then re-uploads.
-  // `derive_device` is explicit: the default filter device is Vulkan under tonemapVulkan below.
   const burnInTail = hasBurnIn
     ? `,hwdownload,format=nv12${filters.burnInFilter},hwupload=derive_device=vaapi:extra_hw_frames=16`
     : '';
@@ -20,10 +19,7 @@ export function vaapiScaleFilter8bit(input: EncoderInput): string {
     return filters.tonemapVulkan;
   }
   if (filters.tonemapVaapi) {
-    // tonemap_vaapi's `format=nv12` is an internal option, not a pin: burn-in
-    // needs an explicit `format=vaapi` or ffmpeg 8.1 fails to renegotiate the link.
-    const pin = hasBurnIn ? ',format=vaapi' : '';
-    return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapVaapi}${pin}${burnInTail}`;
+    return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapVaapi}${burnInTail}`;
   }
   if (filters.tonemapOpencl) {
     return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi${burnInTail}`;
@@ -35,6 +31,9 @@ export function vaapiScaleFilter8bit(input: EncoderInput): string {
  *  surface stays `p010le` with no tonemap — the encoder produces HDR, so the
  *  BT.2020/PQ signalling is preserved. */
 export function vaapiScaleFilter10bit(input: EncoderInput): string {
-  const { target, filters } = input;
-  return `${filters.hwCropPrefix}scale_vaapi=w=${target.width}:h=-2:format=p010le`;
+  const { target, filters, hasBurnIn } = input;
+  const burnInTail = hasBurnIn
+    ? `,hwdownload,format=p010le${filters.burnInFilter},hwupload=derive_device=vaapi:extra_hw_frames=16`
+    : '';
+  return `${filters.hwCropPrefix}scale_vaapi=w=${target.width}:h=-2:format=p010le${burnInTail}`;
 }

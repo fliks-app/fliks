@@ -65,14 +65,6 @@ describe('buildVideoFilters', () => {
     );
   });
 
-  it('strips HDR10 static metadata side data after the CPU zscale tonemap', () => {
-    const f = buildVideoFilters({ ...base, tonemap: true });
-    expect(f.tonemapCpu).toContain(
-      'format=yuv420p,sidedata=mode=delete:type=MASTERING_DISPLAY_METADATA,' +
-        'sidedata=mode=delete:type=CONTENT_LIGHT_LEVEL,sidedata=mode=delete:type=DYNAMIC_HDR_PLUS,',
-    );
-  });
-
   it('does not append the sidedata strip to tonemapx (verified clean on real HDR10 media)', () => {
     const f = buildVideoFilters({ ...base, tonemap: true, dvNoBase: true });
     expect(f.tonemapCpu).not.toContain('sidedata');

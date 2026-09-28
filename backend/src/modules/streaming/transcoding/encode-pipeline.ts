@@ -65,7 +65,7 @@ export function isVtTonemapPath(
 }
 
 /** HDR10/HLG passthrough on VT Metal: `scale_vt` keeps the p010 IOSurface
- *  end-to-end instead of a ~30x-slower CPU scale. Same constraints as the tonemap path, minus `tonemap`. */
+ *  end-to-end instead of a CPU scale. Same as the tonemap path, minus `tonemap`. */
 export function isVtHdrPassthroughPath(
   isHdrOutput: boolean,
   hwAccel: string,
@@ -210,9 +210,11 @@ export function resolveEncodePipeline(
   // Without a VAAPI fallback (Windows), QSV without a viable native pipeline
   // (e.g. HDR tonemap with no vpp_qsv/opencl) has no fallback chain — drop to
   // CPU encode.
+  // Vulkan tonemap has no burn-in bounce (libplacebo owns the whole surface).
   if (
     (noVaapi && ctx.hwAccel === 'qsv' && !qsvNativeAvailable) ||
-    (dvNoBaseNeedsCpu && (ctx.hwAccel === 'qsv' || ctx.hwAccel === 'vaapi'))
+    (dvNoBaseNeedsCpu && (ctx.hwAccel === 'qsv' || ctx.hwAccel === 'vaapi')) ||
+    (ctx.tonemap && tonemapPath === 'vulkan' && ctx.burnIn)
   ) {
     requestedHwAccel = 'none';
   }

@@ -132,6 +132,25 @@ describe('resolveEncodePipeline: Vulkan (libplacebo) tonemap', () => {
     // libplacebo is a distinct filter step from tonemap_vaapi.
     expect(r.useVaapiTonemap).toBe(false);
   });
+
+  it('drops a no-base DV source to CPU when text burn-in is active', () => {
+    mockVulkanTonemap.mockReturnValue(true);
+    const r = resolveEncodePipeline(
+      SDR_H264,
+      ctx({
+        hwAccel: 'vaapi',
+        burnIn: true,
+        tonemap: true,
+        tonemapAlgo: 'vaapi',
+        sourceVideoCodec: 'hevc',
+        dvNoBase: true,
+      }),
+      'linux',
+    );
+    expect(r.tonemapPath).toBe('vulkan');
+    expect(r.requestedHwAccel).toBe('none');
+    expect(r.effectiveHwAccel).toBe('none');
+  });
 });
 
 describe('resolveEncodePipeline — AMF tonemap', () => {
@@ -239,33 +258,15 @@ describe('isVtHdrPassthroughPath: darwin VideoToolbox HDR10/HLG routing', () => 
     Object.defineProperty(process, 'platform', platformDescriptor),
   );
 
-  it('HDR output + VT + no crop/burn-in is eligible for the Metal scale_vt path', () => {
+  it.each<[string, boolean, string, boolean, boolean, boolean]>([
+    ['HDR + VT + no crop/burn-in is eligible', true, 'videotoolbox', false, false, true],
+    ["not eligible when tonemapping (isVtTonemapPath's job)", false, 'videotoolbox', false, false, false],
+    ['not eligible with a crop (no VT crop filter)', true, 'videotoolbox', false, true, false],
+    ['not eligible with burn-in (libass needs CPU surfaces)', true, 'videotoolbox', true, false, false],
+    ['not eligible off VideoToolbox', true, 'vaapi', false, false, false],
+  ])('%s', (_name, isHdrOutput, hwAccel, burnIn, hasCrop, expected) => {
     expect(
-      isVtHdrPassthroughPath(true, 'videotoolbox', false, false, 'hevc'),
-    ).toBe(true);
-  });
-
-  it('is not eligible when tonemapping (that is isVtTonemapPath\'s job)', () => {
-    expect(isVtHdrPassthroughPath(false, 'videotoolbox', false, false, 'hevc')).toBe(
-      false,
-    );
-  });
-
-  it('is not eligible with a crop (no VT crop filter)', () => {
-    expect(isVtHdrPassthroughPath(true, 'videotoolbox', false, true, 'hevc')).toBe(
-      false,
-    );
-  });
-
-  it('is not eligible with burn-in (libass needs CPU surfaces)', () => {
-    expect(isVtHdrPassthroughPath(true, 'videotoolbox', true, false, 'hevc')).toBe(
-      false,
-    );
-  });
-
-  it('is not eligible off VideoToolbox', () => {
-    expect(isVtHdrPassthroughPath(true, 'vaapi', false, false, 'hevc')).toBe(
-      false,
-    );
+      isVtHdrPassthroughPath(isHdrOutput, hwAccel, burnIn, hasCrop, 'hevc'),
+    ).toBe(expected);
   });
 });

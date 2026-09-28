@@ -377,7 +377,7 @@ function colorTagArgs(c: SdrColorTags): string[] {
 /** Forces the resolved colorimetry onto the frame itself: `-color_*` output
  *  flags alone don't reach an "unspecified" source's SPS/VUI on ffmpeg 8.1. */
 function sdrColorSetparams(c: SdrColorTags): string {
-  return `setparams=color_primaries=${c.primaries}:color_trc=${c.transfer}:colorspace=${c.space}:range=${c.range},`;
+  return `setparams=color_primaries=${c.primaries}:color_trc=${c.transfer}:colorspace=${c.space}:range=${c.range}`;
 }
 
 export interface BuildFfmpegArgsOptions {
@@ -1259,13 +1259,19 @@ export function buildFfmpegArgs(
   };
   args.push(...encoder.buildArgs(encoderInput));
 
-  // ffmpeg 8.1 lets an "unspecified" source's frame tags win over the
-  // `-color_*` flags below, so force them onto the frame itself here.
-  if (!isHdrOutput && !useVtMetalPath && !useVulkanTonemap && !tonemap) {
+  // A tail setparams beats frame tags reliably (fixes VAAPI/QSV tonemap
+  // crashes with -color_*); head placement would retag pre-tonemap HDR pixels.
+  const sdrTagStep =
+    !isHdrOutput &&
+    !useVtMetalPath &&
+    !useVulkanTonemap &&
+    effectiveHwAccel !== 'nvenc' &&
+    effectiveHwAccel !== 'amf'
+      ? sdrColorSetparams(sdrColor)
+      : null;
+  if (sdrTagStep && !imageBurnIn) {
     const vfIdx = args.indexOf('-vf');
-    if (vfIdx !== -1) {
-      args[vfIdx + 1] = `${sdrColorSetparams(sdrColor)}${args[vfIdx + 1]}`;
-    }
+    if (vfIdx !== -1) args[vfIdx + 1] += `,${sdrTagStep}`;
   }
 
   // Bitmap subtitle burn-in: lift the encoder's `-vf` (the accelerated
@@ -1284,21 +1290,24 @@ export function buildFfmpegArgs(
         : effectiveHwAccel === 'amf'
           ? amfVfEndsOnGpu(encoderInput)
           : true;
+    const filterComplex = buildImageBurnInFilterComplex({
+      hwAccel: effectiveHwAccel,
+      videoFilter,
+      streamIndex: burnIn!.streamIndex!,
+      videoStreamIndex,
+      width: w,
+      height: h,
+      bitDepth: variant.bitDepth,
+      crop,
+      framesOnGpu,
+      // AMF's decoder always owns `ocl`; QSV only when it tonemaps this way.
+      openclFilterDevice: effectiveHwAccel === 'amf' || qsvOpenclTonemap,
+    });
     args.push(
       '-filter_complex',
-      buildImageBurnInFilterComplex({
-        hwAccel: effectiveHwAccel,
-        videoFilter,
-        streamIndex: burnIn!.streamIndex!,
-        videoStreamIndex,
-        width: w,
-        height: h,
-        bitDepth: variant.bitDepth,
-        crop,
-        framesOnGpu,
-        // AMF's decoder always owns `ocl`; QSV only when it tonemaps this way.
-        openclFilterDevice: effectiveHwAccel === 'amf' || qsvOpenclTonemap,
-      }),
+      sdrTagStep
+        ? filterComplex.replace('[vout]', `,${sdrTagStep}[vout]`)
+        : filterComplex,
     );
   }
   const videoMap = imageBurnIn ? '[vout]' : videoMapSpec(videoStreamIndex);

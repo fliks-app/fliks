@@ -228,9 +228,7 @@ describe('qsvScaleFilter8bit', () => {
     );
   });
 
-  it('pins format=qsv after tonemap_vaapi before the burn-in bounce', () => {
-    // tonemap_vaapi's `format=nv12` is an internal option, not a pixel-format
-    // pin, so skipping it breaks ffmpeg 8.1's link renegotiation (verified).
+  it('skips the vpp_qsv re-render after tonemap_vaapi when burning in text', () => {
     expect(
       qsvScaleFilter8bit(
         input({
@@ -251,7 +249,6 @@ describe('qsvScaleFilter8bit', () => {
       ),
     ).toBe(
       'scale_vaapi=w=1920:h=-2:extra_hw_frames=24,tonemap_vaapi=format=nv12:t=bt709:p=bt709:m=bt709,' +
-        'hwmap=derive_device=qsv,vpp_qsv=format=nv12:passthrough=0,format=qsv,' +
         "hwdownload,format=nv12,subtitles='/subs.srt',hwupload=extra_hw_frames=16",
     );
   });
@@ -298,6 +295,31 @@ describe('qsvScaleFilter10bit', () => {
       ),
     ).toBe(
       'hwmap=derive_device=qsv,vpp_qsv=cw=1921:ch=800:cx=0:cy=0:w=1280:h=534:format=p010le',
+    );
+  });
+
+  it('bounces to CPU for text burn-in on a Main10 HDR chain, then re-uploads', () => {
+    expect(
+      qsvScaleFilter10bit(
+        input({
+          inputSurface: 'vaapi',
+          hasBurnIn: true,
+          filters: {
+            cropStr: '',
+            cpuCropPrefix: '',
+            hwCropPrefix: '',
+            burnInFilter: ",subtitles='/subs.srt'",
+            tonemapVaapi: '',
+            tonemapVulkan: '',
+            tonemapOpencl: '',
+            tonemapCuda: '',
+            tonemapCpu: '',
+          },
+        }),
+      ),
+    ).toBe(
+      'scale_vaapi=w=1920:h=-2:format=p010le:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv,' +
+        "hwdownload,format=p010le,subtitles='/subs.srt',hwupload=extra_hw_frames=16",
     );
   });
 });

@@ -65,16 +65,19 @@ export function qsvScaleFilter8bit(input: EncoderInput): string {
   const cpuUploadFmt = filters.tonemapVaapi || filters.tonemapOpencl ? 'p010le' : 'nv12';
   const cpuUpload = isCpu ? `format=${cpuUploadFmt},hwupload=derive_device=vaapi,` : '';
   // Text burn-in bounces to CPU only for `subtitles=...`, then re-uploads.
-  // The qsv-native branch above never runs with burn-in (hasUsableQsvNativeDecoder), so only this one needs it.
+  // The qsv-native branch above never runs with burn-in, so only this needs it.
   const burnInTail = input.hasBurnIn
     ? `,hwdownload,format=nv12${filters.burnInFilter},hwupload=extra_hw_frames=16`
     : '';
   if (filters.tonemapVaapi) {
+    // Burn-in bounces to CPU right after anyway, so skip the vpp_qsv
+    // re-render and hwdownload straight off the VAAPI surface.
+    if (input.hasBurnIn) {
+      return `${cropPrefix}${cpuUpload}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapVaapi}${burnInTail}`;
+    }
     // tonemap_vaapi does not output a QSV-native surface: passthrough=0 makes
     // vpp_qsv re-render it into one the encoder accepts.
-    // vpp_qsv's `format=` is an internal option, not a pin: burn-in needs an explicit `format=qsv` or ffmpeg 8.1 fails to renegotiate the link.
-    const pin = input.hasBurnIn ? ',format=qsv' : '';
-    return `${cropPrefix}${cpuUpload}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapVaapi},hwmap=derive_device=qsv,vpp_qsv=format=nv12:passthrough=0${pin}${burnInTail}`;
+    return `${cropPrefix}${cpuUpload}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapVaapi},hwmap=derive_device=qsv,vpp_qsv=format=nv12:passthrough=0`;
   }
   if (filters.tonemapOpencl) {
     return `${cropPrefix}${cpuUpload}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv${burnInTail}`;
@@ -99,7 +102,10 @@ export function qsvScaleFilter10bit(input: EncoderInput): string {
   const isCpu = input.inputSurface === 'cpu';
   const cropPrefix = isCpu ? filters.cpuCropPrefix : filters.hwCropPrefix;
   const cpuUpload = isCpu ? 'format=p010le,hwupload=derive_device=vaapi,' : '';
-  return `${cropPrefix}${cpuUpload}scale_vaapi=w=${w}:h=-2:format=p010le:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv`;
+  const burnInTail = input.hasBurnIn
+    ? `,hwdownload,format=p010le${filters.burnInFilter},hwupload=extra_hw_frames=16`
+    : '';
+  return `${cropPrefix}${cpuUpload}scale_vaapi=w=${w}:h=-2:format=p010le:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv${burnInTail}`;
 }
 
 function parseCropStr(
