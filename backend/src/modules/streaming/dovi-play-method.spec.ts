@@ -72,6 +72,13 @@ const dvProfile7Client: DeviceProfileDto = {
   dolbyVisionProfiles: [7],
 } as never;
 
+// Windows desktop mpv: lists P5 but has no HDR display, so it tone-maps itself.
+const dvProfile5NoHdrClient: DeviceProfileDto = {
+  ...hdrHevcClient,
+  supportsHdr: false,
+  dolbyVisionProfiles: [5],
+} as never;
+
 // Lists profile 10 and can't raw-play MKV, so a P10.0 AV1 source remuxes.
 const dvProfile10Av1Client: DeviceProfileDto = {
   containers: ['mp4'],
@@ -245,6 +252,12 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
   it('DirectPlays raw P7 for a client that lists profile 7', () => {
     const r = svc().evaluate(resolved(7, 6, true, 6), dvProfile7Client, 'tok');
     expect(r.response.playMethod).toBe('DirectPlay');
+  });
+
+  it('DirectPlays P5 with clientTonemap true for a client with no HDR display', () => {
+    const r = svc().evaluate(resolved(5, 0, undefined, 6), dvProfile5NoHdrClient, 'tok');
+    expect(r.response.playMethod).toBe('DirectPlay');
+    expect(r.response.clientTonemap).toBe(true);
   });
 
   it('still DirectPlays raw P7 to a non-P7 client when Direct Stream is disabled', () => {

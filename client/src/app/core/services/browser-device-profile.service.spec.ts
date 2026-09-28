@@ -199,4 +199,27 @@ describe('BrowserDeviceProfileService: dolbyVisionProfiles gating', () => {
     expect(service.getProfile().supportsDolbyVision).toBe(false);
     vi.unstubAllGlobals();
   });
+
+  it('lists 5/7/8 on Windows desktop regardless of the MSE probe or supportsHdr', () => {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Electron/30.0.0',
+    );
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    const desktopDevice = { ...device, isDesktopNative: () => true } as DeviceService;
+    const service = configure(desktopDevice, { hasServerFeature: () => true });
+    expect(service.getProfile().dolbyVisionProfiles).toEqual([5, 7, 8]);
+    expect(service.getProfile().supportsDolbyVision).toBe(true);
+    vi.unstubAllGlobals();
+  });
+
+  it('does not force 5/8 on a non-Windows desktop', () => {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Electron/30.0.0',
+    );
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    const desktopDevice = { ...device, isDesktopNative: () => true } as DeviceService;
+    const service = configure(desktopDevice, { hasServerFeature: () => true });
+    expect(service.getProfile().dolbyVisionProfiles).toEqual([7]);
+    vi.unstubAllGlobals();
+  });
 });

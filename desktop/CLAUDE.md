@@ -36,9 +36,12 @@ it is NOT the menu-bar server host under `macos/`.
 - This single-window compositor is the only model that works under **Mutter/X11**:
   an embedded mpv child window can't be composited beneath a sibling transparent
   overlay there, so we composite ourselves.
-- Consequence: **HDR is SDR-tonemapped on Linux/Windows** (render API uses
-  `vo_gpu`, not gpu-next). Video plays; it just isn't true-HDR on screen. On
-  **macOS** the CAOpenGLLayer uses an RGBA16F backing + a **content-adaptive color
+- Consequence: **HDR is SDR-tonemapped on Linux** (self-compositor render API
+  uses `vo_gpu`, not gpu-next). Video plays; it just isn't true-HDR on screen.
+  **Windows** spawns mpv as a subprocess with `--vo=gpu-next`, which reshapes
+  Dolby Vision (and tonemaps HDR10/HLG) through libplacebo and outputs HDR10
+  when the display reports headroom. On **macOS** the CAOpenGLLayer uses an
+  RGBA16F backing + a **content-adaptive color
   pipeline** (`ApplyLayerColorConfig` in `native/player_mac/addon.mm`): on each
   video-reconfig it classifies the stream from `video-params/gamma`+`primaries`
   (SDR-709 / SDR-P3 / HDR10-PQ / HLG) and sets a matched
@@ -205,9 +208,10 @@ pkill -x electron        # NOT  pkill -f .../desktop
 
 ## Known constraints / gotchas
 
-- **HDR** → SDR tonemap only on **Linux/Windows** (see Architecture). Expected
-  there, not a bug. **macOS** attempts EDR passthrough for PQ/HLG on displays with
-  headroom and falls back to SDR tonemap otherwise.
+- **HDR** → SDR tonemap only on **Linux** (see Architecture). Expected there,
+  not a bug. **Windows** (gpu-next) and **macOS** (EDR passthrough) attempt
+  HDR/DV passthrough on displays with headroom and fall back to SDR tonemap
+  otherwise.
 - **Resume into a transcode** (seek to a high segment): the backend produces
   seg-0/init a beat after the playlist. mpv is configured to **reconnect on HTTP
   4xx/5xx** (`demuxer-lavf-o` for the hls manifest, `stream-lavf-o` for every

@@ -4,8 +4,9 @@ import type { EmbedBackend } from './types';
 /**
  * Windows embedding. mpv's `--wid` takes the framed window's HWND (Electron
  * returns it from getNativeWindowHandle); mpv reparents its video output as a
- * child of that window and renders with the gpu VO (D3D11). d3d11va does the
- * hardware decode.
+ * child of that window and renders with gpu-next (D3D11 via libplacebo),
+ * which reshapes Dolby Vision through its FFmpeg-decoded RPU. d3d11va does
+ * the hardware decode.
  *
  * UNTESTED on a real Windows box — the HWND format and the VO choice need
  * verifying on a device (see PR notes).
@@ -21,7 +22,7 @@ export class Win32EmbedBackend implements EmbedBackend {
     // value cast to uint32_t (all Windows handles are 32-bit)".
     const wid = handle.readUInt32LE(0);
     return {
-      args: [`--wid=${wid}`, '--vo=gpu', '--hwdec=auto'],
+      args: [`--wid=${wid}`, '--vo=gpu-next', '--hwdec=auto'],
     };
   }
 }

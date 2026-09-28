@@ -1,4 +1,4 @@
-import { detectBrowser } from '../utils/ua-parser';
+import { detectBrowser, detectOs } from '../utils/ua-parser';
 import { Injectable, inject } from '@angular/core';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { PlayerSettingsService } from './player-settings.service';
@@ -586,6 +586,12 @@ export class BrowserDeviceProfileService {
     // it doesn't need an HDR display.
     if (this.device.isDesktopNative() && !dolbyVisionProfiles.includes(7)) {
       dolbyVisionProfiles.push(7);
+    }
+    // Windows mpv (gpu-next) reshapes P5/P7/P8 via libplacebo regardless of
+    // display HDR support; macOS/Linux libmpv can't reshape, so they stay at P7.
+    if (this.device.isDesktopNative() && detectOs(navigator.userAgent) === 'Windows') {
+      dolbyVisionProfiles.length = 0;
+      dolbyVisionProfiles.push(5, 7, 8);
     }
     // A [10]-only list must not read as P5/P8-capable to an old server that
     // only understands this boolean.
