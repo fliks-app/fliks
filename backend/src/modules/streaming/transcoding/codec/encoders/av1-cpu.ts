@@ -1,7 +1,7 @@
 import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { av1CodecString } from '../codec-strings';
 import { hdrColorArgs } from './helpers/hdr-variants';
-import { masterDisplayString, maxCllString } from './helpers/hdr-metadata';
+import { svtMasterDisplayString, maxCllString } from './helpers/hdr-metadata';
 import { scaleEvenHeight } from './helpers/scale-filter';
 
 /** Maps a named ffmpeg preset onto the SVT-AV1 integer preset namespace
@@ -25,23 +25,16 @@ function svtAv1Preset(preset: string): string {
   }
 }
 
-/** SVT-AV1 in `SVT_AV1_PRED_RANDOM_ACCESS` (the only mode the ffmpeg
- *  wrapper enables for HLS-style segmented output) silently downgrades
- *  CBR → VBR and then strictly requires `maxrate > b:v` — equal values
- *  trip "Max Bitrate must be greater than Target Bitrate" and the
- *  encoder exits 234 before writing any segment (#147). Apply the same
- *  1.5× headroom the master-playlist BANDWIDTH attribute already uses
- *  for VBR-encoded variants, with a 2× buffer matching libx264/libx265
- *  convention. */
+/** SVT-AV1 4.x's max-bitrate param is CRF-only and errors under `-b:v`'s
+ *  VBR mode, so no `-maxrate` is set; `-bufsize` keeps the libx264/libx265
+ *  2x buffer convention. */
 function svtAv1Rates(videoBitrateBps: number): {
   bitrate: string;
-  maxrate: string;
   bufsize: string;
 } {
   const bps = Math.max(1, videoBitrateBps);
   return {
     bitrate: String(bps),
-    maxrate: String(Math.round(bps * 1.5)),
     bufsize: String(Math.round(bps * 2)),
   };
 }
@@ -61,7 +54,7 @@ export const av1Cpu: EncoderDescriptor = {
   buildArgs(input: EncoderInput): string[] {
     const { target, preset, filters } = input;
     const w = target.width;
-    const { bitrate, maxrate, bufsize } = svtAv1Rates(target.videoBitrateBps);
+    const { bitrate, bufsize } = svtAv1Rates(target.videoBitrateBps);
     return [
       '-c:v',
       'libsvtav1',
@@ -69,8 +62,6 @@ export const av1Cpu: EncoderDescriptor = {
       svtAv1Preset(preset),
       '-b:v',
       bitrate,
-      '-maxrate',
-      maxrate,
       '-bufsize',
       bufsize,
       '-vf',
@@ -85,10 +76,8 @@ export const av1Cpu: EncoderDescriptor = {
   },
 };
 
-/** libsvtav1 HDR10 — `enable-hdr=1` plus the same 1000-nit BT.2020
- *  mastering-display geometry NVENC writes, threaded through SVT-AV1's
- *  own `-svtav1-params` channel. ffmpeg-side `-color_*` flags are kept
- *  in lockstep so the SPS VUI matches the OBU metadata. */
+/** libsvtav1 HDR10: mastering-display (SVT's own decimal format, not
+ *  x265/NVENC's integer one) and content-light through `-svtav1-params`. */
 export const av1CpuHdr10: EncoderDescriptor = {
   id: 'libsvtav1_hdr10',
   hwAccel: 'none',
@@ -99,7 +88,7 @@ export const av1CpuHdr10: EncoderDescriptor = {
   buildArgs(input: EncoderInput): string[] {
     const { target, preset, filters } = input;
     const w = target.width;
-    const { bitrate, maxrate, bufsize } = svtAv1Rates(target.videoBitrateBps);
+    const { bitrate, bufsize } = svtAv1Rates(target.videoBitrateBps);
     return [
       '-c:v',
       'libsvtav1',
@@ -109,12 +98,10 @@ export const av1CpuHdr10: EncoderDescriptor = {
       svtAv1Preset(preset),
       '-b:v',
       bitrate,
-      '-maxrate',
-      maxrate,
       '-bufsize',
       bufsize,
       '-svtav1-params',
-      `enable-hdr=1:mastering-display=${masterDisplayString(input.hdrMetadata)}:content-light=${maxCllString(input.hdrMetadata)}`,
+      `mastering-display=${svtMasterDisplayString(input.hdrMetadata)}:content-light=${maxCllString(input.hdrMetadata)}`,
       '-vf',
       `${filters.cpuCropPrefix}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=yuv420p10le${filters.burnInFilter}`,
       '-g',
@@ -143,7 +130,7 @@ export const av1CpuHlg: EncoderDescriptor = {
   buildArgs(input: EncoderInput): string[] {
     const { target, preset, filters } = input;
     const w = target.width;
-    const { bitrate, maxrate, bufsize } = svtAv1Rates(target.videoBitrateBps);
+    const { bitrate, bufsize } = svtAv1Rates(target.videoBitrateBps);
     return [
       '-c:v',
       'libsvtav1',
@@ -153,8 +140,6 @@ export const av1CpuHlg: EncoderDescriptor = {
       svtAv1Preset(preset),
       '-b:v',
       bitrate,
-      '-maxrate',
-      maxrate,
       '-bufsize',
       bufsize,
       '-svtav1-params',
