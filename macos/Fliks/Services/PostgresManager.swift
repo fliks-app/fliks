@@ -28,14 +28,6 @@ actor PostgresManager {
         ]
     }
 
-    /// Bundle keeps `share/postgresql/`, Homebrew keeps `share/postgresql@18/`.
-    private var initdbShareDir: URL {
-        ["postgresql", "postgresql@18"]
-            .map { shareDir.appendingPathComponent($0) }
-            .first { FileManager.default.fileExists(atPath: $0.appendingPathComponent("postgres.bki").path) }
-            ?? shareDir.appendingPathComponent("postgresql")
-    }
-
     init(port: UInt16 = 5433) {
         self.binDir   = Paths.pgBinDir
         self.libDir   = Paths.pgLibDir
@@ -77,8 +69,6 @@ actor PostgresManager {
                 "--encoding=UTF-8",
                 "--locale=C",
                 "--pgdata=\(dataDir.path)",
-                // initdb's compiled-in share path points into the Homebrew Cellar, not the bundle.
-                "-L", initdbShareDir.path,
             ],
             environment: env,
             timeout: 60
