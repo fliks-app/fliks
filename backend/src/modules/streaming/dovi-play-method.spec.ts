@@ -158,8 +158,6 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
   });
 
   it('DirectPlays P5 untouched for a client that can present DV', () => {
-    // A probed level is required: it also gates the quality list's `original`
-    // entry (dvStandaloneCopy), so DirectPlay and the copy decision agree.
     const r = svc().evaluate(resolved(5, 0, undefined, 6), dvHevcClient, 'tok');
     expect(r.response.playMethod).toBe('DirectPlay');
     expect(r.response.videoCopyStream).toBe(true);
@@ -168,6 +166,19 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
     expect(
       r.response.transcodeReasons.some((x) => /Dolby Vision/.test(x.message)),
     ).toBe(false);
+  });
+
+  it('DirectPlays a level-less P5 for a DV client that can raw-play the container', () => {
+    // No probed dvLevel: DirectPlay ships raw bytes and needs no CODECS string.
+    const r = svc().evaluate(resolved(5, 0, undefined, undefined), dvHevcClient, 'tok');
+    expect(r.response.playMethod).toBe('DirectPlay');
+    expect(r.response.qualities?.some((q) => q.id === 'original')).toBe(true);
+  });
+
+  it('transcodes a level-less P5 for a DV client that cannot raw-play the container', () => {
+    // No level means no CODECS string, so the remux path is unavailable too.
+    const r = svc().evaluate(resolved(5, 0, undefined, undefined), dvMp4OnlyClient, 'tok');
+    expect(r.response.playMethod).toBe('Transcode');
   });
 
   it('DirectPlays P5 with RPU-only metadata (no HDR VUI) for a DV client', () => {

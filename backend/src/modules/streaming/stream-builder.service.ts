@@ -447,12 +447,14 @@ export class StreamBuilderService {
     // dv.singleLayer alone also matches P5/P8.2/P10.2; dvSupplementalCodecs
     // narrows to a real P8.1/8.4/10.1/10.4 base (and applies the muxer gate).
     const dvWithBase = clientCanPresentDv && dvSupplementalCodecs(v) != null;
-    // The standalone manifest string (P5, or P10.0) needs a probed level; this
-    // also gates the quality list's `original` entry, so it never disagrees.
+    // The standalone manifest string (P5, or P10.0) needs a probed level; only the
+    // remux builds one, DirectPlay ships the raw bytes and needs no CODECS string.
     const dvStandaloneCopy = clientCanPresentDv && dvStandaloneCodecs(v) != null;
-    // No-base DV (P5/P10.0) copies only to a client listing that profile;
-    // otherwise it tone-maps.
-    const dvCopyAllowed = !noBase || dvStandaloneCopy;
+    // No-base DV (P5/P10.0) DirectPlays to any client listing that profile, level or
+    // not; this also gates `sourceCopyable` so the two never disagree.
+    const dvCopyAllowed = !noBase || clientCanPresentDv;
+    // The remux is stricter: no-base DV only remuxes once a level lets it build CODECS.
+    const dvRemuxCopyAllowed = !noBase || dvStandaloneCopy;
     const dvRemuxEligible =
       (dvWithBase && copySourceCodecString(v ?? {}) != null) || dvStandaloneCopy;
     // DirectPlay ships the raw file unmodified: report DV from profile/compat
@@ -470,7 +472,7 @@ export class StreamBuilderService {
     // tone-map only when the re-encode is actually SDR — when the HDR ladder
     // preserves it the real blocker is whatever tryDirectPlay already
     // recorded (resolution, level, …).
-    if ((isSourceHdr && !clientCanPresentDynamicRange) || (noBase && !dvStandaloneCopy)) {
+    if ((isSourceHdr && !clientCanPresentDynamicRange) || !dvCopyAllowed) {
       if (directPlayResult.canDirectPlay)
         directPlayResult.canDirectPlay = false;
       this.log.log(
@@ -588,7 +590,8 @@ export class StreamBuilderService {
         message: 'Direct Stream (remux) is disabled on this server',
       },
     ];
-    const canCopyVideo = copyableIgnoringGates && copyGates.every((g) => !g.active);
+    const canCopyVideo =
+      copyableIgnoringGates && dvRemuxCopyAllowed && copyGates.every((g) => !g.active);
 
     if (profile.supportsDirectPlay === false && directPlayResult.canDirectPlay) {
       directPlayResult.canDirectPlay = false;
