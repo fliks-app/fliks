@@ -63,7 +63,9 @@ export function qsvScaleFilter8bit(input: EncoderInput): string {
   // (the 'fixed-size pool' rejection only fires when the pool changes
   // size mid-chain, which scale_vaapi avoids by reallocating).
   if (filters.tonemapVaapi) {
-    return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapVaapi},hwmap=derive_device=qsv,format=qsv`;
+    // tonemap_vaapi does not output a QSV-native surface: passthrough=0 makes
+    // vpp_qsv re-render it into one the encoder accepts.
+    return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapVaapi},hwmap=derive_device=qsv,vpp_qsv=format=nv12:passthrough=0`;
   }
   if (filters.tonemapOpencl) {
     return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`;

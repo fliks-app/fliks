@@ -135,6 +135,31 @@ describe('qsvScaleFilter8bit', () => {
       'hwmap=derive_device=qsv,vpp_qsv=cw=1921:ch=800:cx=0:cy=0:w=1280:h=534:format=nv12',
     );
   });
+
+  it('re-renders through vpp_qsv (passthrough off) after tonemap_vaapi on a vaapi surface', () => {
+    expect(
+      qsvScaleFilter8bit(
+        input({
+          inputSurface: 'vaapi',
+          hasCrop: true,
+          filters: {
+            cropStr: 'crop=1920:800:0:140',
+            cpuCropPrefix: '',
+            hwCropPrefix:
+              'hwdownload,format=p010le,crop=1920:800:0:140,hwupload=derive_device=vaapi,',
+            burnInFilter: '',
+            tonemapVaapi: ',tonemap_vaapi=format=nv12:t=bt709:p=bt709:m=bt709',
+            tonemapOpencl: '',
+            tonemapCpu: '',
+          },
+        }),
+      ),
+    ).toBe(
+      'hwdownload,format=p010le,crop=1920:800:0:140,hwupload=derive_device=vaapi,' +
+        'scale_vaapi=w=1920:h=-2:extra_hw_frames=24,tonemap_vaapi=format=nv12:t=bt709:p=bt709:m=bt709,' +
+        'hwmap=derive_device=qsv,vpp_qsv=format=nv12:passthrough=0',
+    );
+  });
 });
 
 describe('qsvScaleFilter10bit', () => {
