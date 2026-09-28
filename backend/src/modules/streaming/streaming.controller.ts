@@ -1074,10 +1074,12 @@ export class StreamingController {
               ? 'videotoolbox'
               : 'cpu'
       : null;
-    // Applies only to the cuda/opencl/CPU paths; the vpp_qsv / tonemap_vaapi
-    // LUTs ignore the curve.
+    // A tunable curve applies to opencl/vulkan/cpu/cuda; the vpp_qsv / vaapi LUTs ignore it.
     const tonemapCurve =
-      tonemapAlgo === 'opencl' || tonemapAlgo === 'cpu' || tonemapAlgo === 'cuda'
+      tonemapAlgo === 'opencl' ||
+      tonemapAlgo === 'vulkan' ||
+      tonemapAlgo === 'cpu' ||
+      tonemapAlgo === 'cuda'
         ? resolveTonemapCurve()
         : undefined;
 

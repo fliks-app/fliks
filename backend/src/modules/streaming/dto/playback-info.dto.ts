@@ -123,13 +123,21 @@ export interface PlaybackInfoResponse {
    *  SUPPLEMENTAL-CODECS remux); false on a transcode, which drops DV. */
   dolbyVision?: boolean;
 
-  /** Tone-map mechanism the session actually runs, not the admin pick; see
-   *  `resolveTonemapPath`/`isCudaTonemapPath`/`isOpenclTonemapPath`. */
-  tonemapAlgo?: 'vaapi' | 'opencl' | 'qsv' | 'cuda' | 'videotoolbox' | 'cpu' | null;
+  /** Tone-map mechanism the session actually runs (post `auto` resolution +
+   *  boot probe), not the admin's encoder-agnostic pick. `null` = no pass. */
+  tonemapAlgo?:
+    | 'vaapi'
+    | 'opencl'
+    | 'qsv'
+    | 'cuda'
+    | 'vulkan'
+    | 'videotoolbox'
+    | 'cpu'
+    | null;
 
-  /** Tone-map curve (`hable` / `mobius` / `reinhard`), set only when
-   *  `tonemapAlgo === 'cpu'`. Surfaced so the overlay names the exact
-   *  curve in use. */
+  /** Tone-map curve (`hable` / `mobius` / `reinhard`), set for the opencl,
+   *  vulkan and CPU paths. Surfaced so the overlay names the exact curve
+   *  in use. */
   tonemapCurve?: 'hable' | 'mobius' | 'reinhard';
 
   /**

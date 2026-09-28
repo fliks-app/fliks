@@ -7,6 +7,7 @@ const base = {
   useVaapiTonemap: false,
   sourceBitDepth: 8,
   scaleWidth: 1920,
+  scaleHeight: 1080,
 };
 
 describe('buildVideoFilters', () => {
@@ -17,6 +18,7 @@ describe('buildVideoFilters', () => {
       hwCropPrefix: '',
       burnInFilter: '',
       tonemapVaapi: '',
+      tonemapVulkan: '',
       tonemapOpencl: '',
       tonemapCuda: '',
       tonemapCpu: '',
@@ -99,6 +101,18 @@ describe('buildVideoFilters', () => {
     const f = buildVideoFilters({ ...base, tonemap: true, useVaapiTonemap: true });
     expect(f.tonemapVaapi).toContain('tonemap_vaapi=');
     expect(f.tonemapOpencl).toBe('');
+  });
+
+  it('vulkan tone-map applies the RPU (apply_dolbyvision=1) for a no-base DV source', () => {
+    const f = buildVideoFilters({
+      ...base,
+      tonemap: true,
+      useVulkanTonemap: true,
+      dvNoBase: true,
+    });
+    expect(f.tonemapVulkan).toContain('libplacebo=');
+    expect(f.tonemapVulkan).toContain('apply_dolbyvision=1');
+    expect(f.tonemapVulkan).toContain('format=vulkan,hwmap=derive_device=vaapi');
   });
 
   it('burn-in forces CPU tone-map (HW tone-maps suppressed)', () => {

@@ -71,6 +71,21 @@ export function hostHasVaapi(
   return platform !== 'win32';
 }
 
+/** DRM + VAAPI + Vulkan device chain for the libplacebo tone-map, with Vulkan
+ *  as the default filter device. Linux only (needs libdrm + Vulkan). */
+export function vulkanTonemapInitArgs(): string[] {
+  return [
+    '-init_hw_device',
+    `drm=dr:${vaapiRenderNode()}`,
+    '-init_hw_device',
+    `vaapi=${VAAPI_DEVICE_ALIAS}@dr`,
+    '-init_hw_device',
+    'vulkan=vk@dr',
+    '-filter_hw_device',
+    'vk',
+  ];
+}
+
 /** D3D11↔OpenCL interop device for the AMF zero-copy scale/tonemap chain,
  *  pinned to the AMD adapter (`vendor_id=0x1002`). Windows-only. */
 export function amfD3d11OpenclInitArgs(): string[] {

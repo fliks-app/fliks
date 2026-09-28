@@ -100,6 +100,7 @@ export interface EncoderInput {
     hwCropPrefix: string;
     burnInFilter: string;
     tonemapVaapi: string;
+    tonemapVulkan: string;
     tonemapOpencl: string;
     tonemapCuda: string;
     tonemapCpu: string;
@@ -115,7 +116,7 @@ export interface EncoderInput {
    *  CPU bounce, ~3× faster on cropped HDR than the
    *  `hwdownload→CPU crop→hwupload→scale_vaapi→opencl` chain. Only
    *  meaningful when `tonemap` is true. */
-  tonemapPath: 'vaapi' | 'opencl' | 'qsv';
+  tonemapPath: 'vaapi' | 'opencl' | 'qsv' | 'vulkan';
   /** Tone-map curve for the qsv-native OpenCL path (`tonemap_opencl`).
    *  Resolved from the admin setting; absent → `hable`. */
   tonemapCurve?: TonemapCurve;

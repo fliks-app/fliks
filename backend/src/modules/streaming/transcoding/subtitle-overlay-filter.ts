@@ -78,14 +78,17 @@ export function buildImageBurnInFilterComplex(ctx: {
     );
   }
 
-  // HW encode paths: the chain ends on a GPU surface. Round-trip to CPU just
-  // for the composite, then re-upload to the encoder's device.
+  // HW encode paths: round-trip to CPU for the composite, then re-upload. Named
+  // devices: VAAPI (default filter device can be Vulkan for DV tonemap) and the
+  // AMF/QSV OpenCL zero-copy chains (default filter device is `ocl`).
   const upload =
     hwAccel === 'nvenc'
       ? 'hwupload_cuda'
-      : openclFilterDevice
-        ? `hwupload=derive_device=${hwAccel === 'amf' ? 'd3d11va' : 'qsv'}:extra_hw_frames=16`
-        : 'hwupload=extra_hw_frames=16';
+      : hwAccel === 'vaapi'
+        ? 'hwupload=derive_device=vaapi:extra_hw_frames=16'
+        : openclFilterDevice
+          ? `hwupload=derive_device=${hwAccel === 'amf' ? 'd3d11va' : 'qsv'}:extra_hw_frames=16`
+          : 'hwupload=extra_hw_frames=16';
   if (tenBit) {
     return (
       `${video},hwdownload,format=${hwFmt}[v];` +

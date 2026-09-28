@@ -37,11 +37,19 @@ export interface PlaybackInfoResponse {
   dolbyVision?: boolean;
   /** Tone-map mechanism the backend actually runs: a HW path
    *  (`'vaapi'` / `'opencl'` / `'qsv'`) on QSV/VAAPI encoders, `'cuda'` for
-   *  NVENC's zero-copy tonemap_cuda, or `'cpu'` for the CPU chain (NVENC
-   *  without tonemap_cuda / libx26x / VideoToolbox fallback). Null when no
-   *  tone-mapping pass runs on this session. */
-  tonemapAlgo?: 'vaapi' | 'opencl' | 'qsv' | 'cuda' | 'videotoolbox' | 'cpu' | null;
-  /** Tone-map curve, set for the `cuda`, `opencl` and `cpu` paths (the LUTs ignore it). */
+   *  NVENC's zero-copy tonemap_cuda, `'vulkan'` for the libplacebo no-base DV
+   *  fallback, or `'cpu'` for the CPU chain. Null when no tone-mapping pass
+   *  runs on this session. */
+  tonemapAlgo?:
+    | 'vaapi'
+    | 'opencl'
+    | 'qsv'
+    | 'cuda'
+    | 'vulkan'
+    | 'videotoolbox'
+    | 'cpu'
+    | null;
+  /** Tone-map curve, set for the `cuda`, `opencl`, `vulkan` and `cpu` paths (the LUTs ignore it). */
   tonemapCurve?: 'hable' | 'mobius' | 'reinhard';
   /** Cibles par rung (transcodage). */
   transcodeBitrateByQuality?: Record<

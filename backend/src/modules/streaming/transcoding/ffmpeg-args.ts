@@ -56,7 +56,11 @@ import {
   DECODE_TIME_TOLERANCE_SECONDS,
   type KeyframeGrid,
 } from './segment-boundaries';
-import { openclTonemapInitArgs, qsvDeviceInitArgs } from './hw-device';
+import {
+  openclTonemapInitArgs,
+  qsvDeviceInitArgs,
+  vulkanTonemapInitArgs,
+} from './hw-device';
 import { buildVideoFilters, resolveTonemapCurve } from './ffmpeg-filter-graph';
 import { buildImageBurnInFilterComplex } from './subtitle-overlay-filter';
 import { nvencVfEndsOnGpu } from './codec/encoders/helpers/nvenc-filters';
@@ -719,6 +723,16 @@ function resolveDecodeStage(opts: {
   if (decoder.outputSurface === 'cpu' && effectiveHwAccel === 'qsv') {
     args.push(...qsvDeviceInitArgs(), '-filter_hw_device', 'qs');
   }
+  // Vulkan tone-map: swap the VAAPI decoder's own device init for the
+  // drm/vaapi/vulkan chain libplacebo needs; the rest of the decode args stay.
+  if (
+    tonemapPath === 'vulkan' &&
+    decoder.outputSurface === 'vaapi' &&
+    effectiveHwAccel === 'vaapi'
+  ) {
+    const fhd = args.indexOf('-filter_hw_device');
+    if (fhd !== -1) args.splice(0, fhd + 2, ...vulkanTonemapInitArgs());
+  }
 
   // Full-Metal HDR opt-in. The h264/hevc_videotoolbox encoders can keep
   // the pipeline on IOSurface end-to-end when the only filter step is
@@ -765,15 +779,15 @@ function resolveDecodeStage(opts: {
   // context, and the round-trip back to qsv uses an explicit
   // `derive_device=qsv` on the closing hwmap.
   // `!openclTonemap`: that path inits `ocl` below — skip here to avoid a
-  // duplicate `-init_hw_device` alias when a vaapi decoder feeds an AMF encode.
-  // NVENC never consumes this hwmap-based opencl device (its own tonemap
-  // reads `openclTonemap`/`cudaTonemap` instead), so excluding it outright
-  // avoids an unused device init when both of those probes fail.
+  // duplicate `-init_hw_device` alias when a vaapi decoder feeds an AMF/NVENC encode.
+  // `tonemapPath !== 'vulkan'`: that path's device init is already the
+  // drm/vaapi/vulkan chain above; it never touches opencl.
   if (
     tonemap &&
     !useVaapiTonemap &&
     decoder.outputSurface === 'vaapi' &&
     !openclTonemap &&
+    tonemapPath !== 'vulkan' &&
     effectiveHwAccel !== 'nvenc'
   ) {
     args.push('-init_hw_device', 'opencl=ocl:0.0');
@@ -1079,6 +1093,8 @@ export function buildFfmpegArgs(
       `No encoder for variant ${JSON.stringify(variant)} on ${requestedHwAccel}`,
     );
   }
+  const useVulkanTonemap =
+    tonemapPath === 'vulkan' && effectiveHwAccel === 'vaapi';
 
   // NVENC's zero-copy path: tonemap_cuda stays on the CUDA surface, no CPU
   // bounce. See isCudaTonemapPath.
@@ -1194,10 +1210,12 @@ export function buildFfmpegArgs(
       burnIn,
       tonemap,
       useVaapiTonemap,
+      useVulkanTonemap,
       sourceBitDepth,
       dvNoBase,
       tonemapCurve,
       scaleWidth: w,
+      scaleHeight: h,
       openclTonemap,
       cudaTonemap,
     }),
@@ -1265,7 +1283,8 @@ export function buildFfmpegArgs(
   // Skipped on the VT Metal fast path: `scale_vt` already sets the IOSurface
   // metadata and the extra `-color_*` flags re-trigger a CPU `auto_scale` that
   // fails (-78) with no bridge back to a videotoolbox_vld surface.
-  if (!isHdrOutput && !useVtMetalPath) {
+  // Same for Vulkan (-38): libplacebo already tags the frame itself.
+  if (!isHdrOutput && !useVtMetalPath && !useVulkanTonemap) {
     args.push(...colorTagArgs(sdrColor));
   }
 

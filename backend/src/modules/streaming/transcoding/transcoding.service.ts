@@ -61,6 +61,7 @@ import {
 import { runOpenclTonemapProbe } from './codec/opencl-tonemap-probe';
 import { runCudaTonemapProbe } from './codec/cuda-tonemap-probe';
 import { runQsvOpenclTonemapProbe } from './codec/qsv-opencl-probe';
+import { runVulkanTonemapProbe } from './codec/vulkan-tonemap-probe';
 import { runAmfOpenclProbe } from './codec/amf-opencl-probe';
 import {
   generateMasterPlaylist,
@@ -202,6 +203,11 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     // headless).
     if (this.detectedHwAccel === 'nvenc' || this.detectedHwAccel === 'amf') {
       void runOpenclTonemapProbe(this.log, this.detectedHwAccel);
+    }
+    // Vulkan (libplacebo) GPU tone-map: the no-base DV fallback when the
+    // OpenCL bridge is down. Linux-only; no VAAPI device elsewhere.
+    if (this.detectedHwAccel === 'vaapi' && process.platform === 'linux') {
+      void runVulkanTonemapProbe(this.log);
     }
     // Zero-copy CUDA HDR→SDR tone-map: keeps decode → scale → tonemap →
     // encode on CUDA surfaces when the bundled ffmpeg has tonemap_cuda.
