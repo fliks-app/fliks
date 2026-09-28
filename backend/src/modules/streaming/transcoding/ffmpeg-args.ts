@@ -47,7 +47,11 @@ import { hevcMainTierCapBps } from './codec/codec-strings';
 import { dvHasNoBase } from './codec/dolby-vision';
 import { varStreamMapLayout } from './audio-layout';
 import { inputSeekSeconds } from './source-timeline';
-import { resolveEncodePipeline, isOpenclTonemapPath } from './encode-pipeline';
+import {
+  resolveEncodePipeline,
+  isOpenclTonemapPath,
+  isVtTonemapPath,
+} from './encode-pipeline';
 import {
   DECODE_TIME_TOLERANCE_SECONDS,
   type KeyframeGrid,
@@ -642,14 +646,12 @@ function resolveDecodeStage(opts: {
   effectiveHwAccel: HwAccelType;
   decodeHwAccel: HwAccelType;
   sourceBitDepth: BitDepth;
-  encoderId: string;
   tonemap: boolean;
-  hasBurnInFilter: boolean;
+  hasBurnIn: boolean;
   hasCrop: boolean;
   useVaapiTonemap: boolean;
   openclTonemap: boolean;
   tonemapPath: string;
-  dvNoBase: boolean;
 }): {
   decodeArgs: string[];
   decoder: ReturnType<typeof decoderRegistry.resolve>;
@@ -663,14 +665,12 @@ function resolveDecodeStage(opts: {
     effectiveHwAccel,
     decodeHwAccel,
     sourceBitDepth,
-    encoderId,
     tonemap,
-    hasBurnInFilter,
+    hasBurnIn,
     hasCrop,
     useVaapiTonemap,
     openclTonemap,
     tonemapPath,
-    dvNoBase,
   } = opts;
   const args: string[] = [];
 
@@ -719,14 +719,12 @@ function resolveDecodeStage(opts: {
   // input args here when the Metal fast path is eligible. The encoder
   // branches on `inputSurface === 'videotoolbox'` to pick the scale_vt
   // filter; falls back to the CPU tonemap chain otherwise.
-  // !dvNoBase: scale_vt and tonemap_videotoolbox are both RPU-blind, so a
-  // no-base DV source falls to the CPU tonemapx chain instead.
-  const vtSurfaceEligible =
-    decoder.hwAccel === 'videotoolbox' &&
-    (encoderId === 'h264_videotoolbox' || encoderId === 'hevc_videotoolbox') &&
-    tonemap &&
-    !hasBurnInFilter &&
-    !dvNoBase;
+  const vtSurfaceEligible = isVtTonemapPath(
+    tonemap,
+    effectiveHwAccel,
+    hasBurnIn,
+    sourceVideoCodec,
+  );
   // No crop: scale_vt keeps the SDR result on a VT surface. Crop: no VT crop
   // filter exists, so the encoder tone-maps on the surface (tonemap_videotoolbox)
   // then hwdownloads for the cheap CPU crop. Both need videotoolbox_vld input.
@@ -1088,14 +1086,12 @@ export function buildFfmpegArgs(
     effectiveHwAccel,
     decodeHwAccel,
     sourceBitDepth,
-    encoderId: encoder.id,
     tonemap: !!tonemap,
-    hasBurnInFilter: !!burnIn?.filter,
+    hasBurnIn: !!burnIn,
     hasCrop: !!crop,
     useVaapiTonemap,
     openclTonemap,
     tonemapPath,
-    dvNoBase,
   });
   args.push(...decodeArgs);
 

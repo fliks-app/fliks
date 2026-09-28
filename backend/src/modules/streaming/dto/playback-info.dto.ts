@@ -125,10 +125,11 @@ export interface PlaybackInfoResponse {
 
   /** Tone-map mechanism the session actually runs. `'vaapi'` / `'opencl'`
    *  / `'qsv'` for QSV/VAAPI encoders (after `auto` resolution + boot
-   *  probe); `'videotoolbox'` for the macOS `scale_vt` Metal path; `'cpu'`
-   *  for the CPU zscale chain (NVENC / libx26x / VideoToolbox with a
-   *  burn-in or crop). `null` when no tone-mapping pass runs. Stats overlays
-   *  show this value, not the (encoder-agnostic) admin pick. */
+   *  probe); `'videotoolbox'` for the macOS `scale_vt`/`tonemap_videotoolbox`
+   *  Metal path; `'cpu'` for the CPU zscale chain (NVENC / libx26x /
+   *  VideoToolbox with a burn-in or an unsupported source codec). `null`
+   *  when no tone-mapping pass runs. Stats overlays show this value, not
+   *  the (encoder-agnostic) admin pick. */
   tonemapAlgo?: 'vaapi' | 'opencl' | 'qsv' | 'videotoolbox' | 'cpu' | null;
 
   /** Tone-map curve (`hable` / `mobius` / `reinhard`), set only when

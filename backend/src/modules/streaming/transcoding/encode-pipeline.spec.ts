@@ -1,4 +1,4 @@
-import { resolveEncodePipeline } from './encode-pipeline';
+import { resolveEncodePipeline, isVtTonemapPath } from './encode-pipeline';
 import type { EncodePipelineContext } from './encode-pipeline';
 import type { CodecVariant } from './codec/types';
 import { isScaleD3d11Enabled } from './codec/scale-d3d11-probe';
@@ -172,5 +172,33 @@ describe('resolveEncodePipeline — AMF tonemap', () => {
       'win32',
     );
     expect(r.amfFullGpuAvailable).toBe(false);
+  });
+});
+
+describe('isVtTonemapPath: darwin VideoToolbox routing', () => {
+  const platformDescriptor = Object.getOwnPropertyDescriptor(
+    process,
+    'platform',
+  )!;
+  beforeEach(() =>
+    Object.defineProperty(process, 'platform', {
+      value: 'darwin',
+      configurable: true,
+    }),
+  );
+  afterEach(() =>
+    Object.defineProperty(process, 'platform', platformDescriptor),
+  );
+
+  it('HEVC + VT + tonemap is eligible', () => {
+    expect(isVtTonemapPath(true, 'videotoolbox', false, 'hevc')).toBe(true);
+  });
+
+  it('burn-in forces CPU', () => {
+    expect(isVtTonemapPath(true, 'videotoolbox', true, 'hevc')).toBe(false);
+  });
+
+  it('AV1 has no VT decoder, forces CPU', () => {
+    expect(isVtTonemapPath(true, 'videotoolbox', false, 'av1')).toBe(false);
   });
 });

@@ -2,6 +2,7 @@ import type { EncoderDescriptor, EncoderInput, EncoderTarget } from '../types';
 import { hevcMain10CodecString, hevcMainCodecString } from '../codec-strings';
 import { hdrColorArgs, hlgFromHdr10 } from './helpers/hdr-variants';
 import { scaleEvenHeight } from './helpers/scale-filter';
+import { vtTonemapFilter } from './helpers/vt-filters';
 
 /** Apple VideoToolbox HEVC SDR encoder — Mac 2017+ (T2 / Apple Silicon).
  *  VT decode emits CPU-backed buffers, so the filter chain mirrors the
@@ -45,12 +46,7 @@ export const hevcVideotoolbox: EncoderDescriptor = {
     // tonemap_videotoolbox, then hwdownload for the cheap CPU crop + scale.
     // Burn-in still takes the CPU fallback below.
     if (inputSurface === 'videotoolbox') {
-      const vf = input.hasCrop
-        ? `tonemap_videotoolbox=tonemap=${input.tonemapCurve ?? 'hable'}:t=bt709:m=bt709:p=bt709:range=tv,` +
-          `hwdownload,format=p010le,${filters.cpuCropPrefix}` +
-          `scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=yuv420p`
-        : `scale_vt=w=${w}:h=-2:color_matrix=bt709:color_primaries=bt709:color_transfer=bt709`;
-      return [...common, '-vf', vf, ...trailing];
+      return [...common, '-vf', vtTonemapFilter(input), ...trailing];
     }
     // CPU tonemap fallback — works on every macOS host even when the
     // Metal fast path is inapplicable (burn-in, crop, or a future

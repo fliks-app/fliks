@@ -2,7 +2,7 @@ import { requestedHwAccelFor } from './hw-detect';
 import { hostHasVaapi } from './hw-device';
 import { encoderRegistry } from './codec/encoders';
 import { isDecoderEnabled } from './codec/decoder-probe';
-import { findQsvNativeDecoder } from './codec/decoders';
+import { decoderRegistry, findQsvNativeDecoder } from './codec/decoders';
 import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
 import {
   isTonemapOpenclEnabled,
@@ -29,6 +29,29 @@ export function isOpenclTonemapPath(
     tonemap &&
     isOpenclTonemapEnabled() &&
     (hwAccel === 'nvenc' || hwAccel === 'amf' || dvNoBase)
+  );
+}
+
+/** True when the session tone-maps on the VideoToolbox Metal surface
+ *  (`scale_vt` / `tonemap_videotoolbox`, both RPU-aware via `apply_dovi`).
+ *  Burn-in (text or image) forces CPU buffers; a codec with no VT decoder
+ *  (AV1) resolves to a non-videotoolbox decoder, so it's excluded too.
+ *  Shared by `ffmpeg-args` (argv) and the playback-info controller (stats
+ *  label) so they can't drift. */
+export function isVtTonemapPath(
+  tonemap: boolean,
+  hwAccel: string,
+  burnIn: boolean,
+  sourceVideoCodec: string | undefined,
+): boolean {
+  const codec = normaliseSourceCodec(sourceVideoCodec);
+  return (
+    tonemap &&
+    hwAccel === 'videotoolbox' &&
+    !burnIn &&
+    codec != null &&
+    decoderRegistry.resolve({ codec, bitDepth: 10 }, 'videotoolbox').hwAccel ===
+      'videotoolbox'
   );
 }
 

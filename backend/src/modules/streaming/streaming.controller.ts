@@ -82,7 +82,7 @@ import { resolveTonemapPath } from './transcoding/tonemap-path';
 import { resolveTonemapCurve } from './transcoding/ffmpeg-filter-graph';
 import { autoFfmpegSlots } from '../../common/utils/ffmpeg-slots';
 import { getPauseCapability } from './transcoding/ffmpeg-pause';
-import { isOpenclTonemapPath } from './transcoding/encode-pipeline';
+import { isOpenclTonemapPath, isVtTonemapPath } from './transcoding/encode-pipeline';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
@@ -1032,9 +1032,13 @@ export class StreamingController {
       dvNoBase,
     );
     // VideoToolbox HW tone-map: scale_vt (no crop) or tonemap_videotoolbox
-    // (crop); burn-in and no-base DV (RPU-blind either way) fall to CPU.
-    const vtMetalTonemap =
-      response.hwAccel === 'videotoolbox' && !burnInSubtitleId && !dvNoBase;
+    // (crop); burn-in, or a codec with no VT decoder, falls to CPU.
+    const vtMetalTonemap = isVtTonemapPath(
+      !!response.tonemapping,
+      response.hwAccel,
+      !!burnInSubtitleId,
+      resolved.mediaFile.streamInfo?.video?.[0]?.codec,
+    );
     const tonemapAlgo = response.tonemapping
       ? hwTonemap
         ? resolveTonemapPath(ss.tonemapAlgo, { hasCrop, dvNoBase })
