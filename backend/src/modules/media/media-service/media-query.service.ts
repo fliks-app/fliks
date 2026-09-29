@@ -1058,10 +1058,19 @@ export class MediaQueryService {
         lpId: query.languageProfileId,
       });
     }
-    if (query.missing === true) {
-      qb.andWhere('files.id IS NULL');
-    } else if (query.missing === false) {
-      qb.andWhere('files.id IS NOT NULL');
+    if (query.missing !== undefined) {
+      // A series is missing as soon as one monitored, aired episode is off disk.
+      const missingEpisode = `EXISTS (
+        SELECT 1 FROM seasons ms JOIN episodes me ON me."seasonId" = ms.id
+        WHERE ms."mediaId" = media.id AND ms."seasonNumber" > 0
+          AND ms.monitored = true AND me.monitored = true
+          AND me."airDate" <= CURRENT_DATE AND NOT ${onDiskSql('me')}
+      )`;
+      qb.andWhere(
+        query.missing
+          ? `(files.id IS NULL OR ${missingEpisode})`
+          : `(files.id IS NOT NULL AND NOT ${missingEpisode})`,
+      );
     }
     if (query.unidentified === true) {
       qb.andWhere(
