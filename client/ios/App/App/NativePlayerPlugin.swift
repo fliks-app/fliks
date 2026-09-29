@@ -85,6 +85,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setMaxResolution", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getPosition", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setPlaybackRate", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setQueueNav", returnType: CAPPluginReturnPromise),
     ]
 
     private var player: AVPlayer?
@@ -116,6 +117,10 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// every track call site can stay synchronous.
     private var audibleGroup: AVMediaSelectionGroup?
     private var legibleGroup: AVMediaSelectionGroup?
+    private lazy var nowPlaying = NowPlayingController(
+        emitEvent: { [weak self] name in self?.emitWindowEvent(name) },
+        didSeek: { [weak self] in self?.emitTimeUpdate() }
+    )
 
     /// Exposed for PipPlugin to access the player layer.
     public var activePlayerLayer: AVPlayerLayer? { playerLayer }
@@ -239,6 +244,10 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
         let startTime = call.getDouble("startTime") ?? 0
         let headers = parseHeaders(call.getObject("headers"))
+        let backgroundAudio = call.getBool("backgroundAudio") ?? false
+        let title = call.getString("title") ?? ""
+        let artist = call.getString("artist")
+        let artworkUrl = call.getString("artworkUrl")
 
         logLoad(urlString: urlString, startTime: startTime)
         dumpManifestForDebug(url: url, headers: headers)
@@ -262,6 +271,22 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             let player = self.attachPlayerItem(item)
             self.setupObservers()
             self.startPlayback(player: player, startTime: startTime)
+
+            // `.automatic` rather than `.pauses`: an explicit pause-on-background policy
+            // is not documented as exempting auto-PiP from inline.
+            player.audiovisualBackgroundPlaybackPolicy = backgroundAudio ? .continuesIfPossible : .automatic
+            if backgroundAudio {
+                self.nowPlaying.activate(
+                    player: player,
+                    title: title,
+                    artist: artist,
+                    artworkUrl: artworkUrl,
+                    headers: headers,
+                    streamHost: url.host
+                )
+            } else {
+                self.nowPlaying.deactivate(releaseSession: false)
+            }
 
             call.resolve()
         }
@@ -453,6 +478,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
                 toleranceBefore: .zero,
                 toleranceAfter: .zero
             ) { _ in
+                DispatchQueue.main.async { self?.nowPlaying.refresh() }
                 call.resolve()
             }
         }
@@ -466,6 +492,9 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             self?.layoutVideoLayer()
             self?.audibleGroup = nil
             self?.legibleGroup = nil
+            // Session and controls stay up: a load follows an episode or quality switch,
+            // and dropping the session mid-switch would let a locked app be suspended.
+            self?.nowPlaying.refresh()
             call.resolve()
         }
     }
@@ -804,6 +833,17 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         let rate = call.getFloat("rate") ?? 1.0
         DispatchQueue.main.async { [weak self] in
             self?.player?.rate = rate
+            self?.nowPlaying.refresh()
+            call.resolve()
+        }
+    }
+
+    @objc func setQueueNav(_ call: CAPPluginCall) {
+        let hasPrevious = call.getBool("hasPrevious") ?? false
+        let hasNext = call.getBool("hasNext") ?? false
+        let seekButtons = call.getBool("seekButtons") ?? false
+        DispatchQueue.main.async { [weak self] in
+            self?.nowPlaying.setQueueNav(hasPrevious: hasPrevious, hasNext: hasNext, seekButtons: seekButtons)
             call.resolve()
         }
     }
@@ -839,6 +879,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         ) { [weak self] item, _ in
             switch item.status {
             case .readyToPlay:
+                DispatchQueue.main.async { self?.nowPlaying.refresh() }
                 self?.emitTracksChanged()
                 // AVPlayer often reports `.readyToPlay` before the
                 // alternate-audio rendition playlists have been fetched, so
@@ -899,6 +940,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             // main thread, so the UIKit flag has to be hopped over.
             let awake = player.timeControlStatus != .paused
             DispatchQueue.main.async { UIApplication.shared.isIdleTimerDisabled = awake }
+            DispatchQueue.main.async { self?.nowPlaying.refresh() }
             switch player.timeControlStatus {
             case .paused:
                 self?.emitStateChanged("paused")
@@ -999,6 +1041,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         removeObservers()
         player?.pause()
         player = nil
+        nowPlaying.deactivate(releaseSession: true)
         playerLayer?.removeFromSuperlayer()
         playerLayer = nil
         playerView?.removeFromSuperview()
@@ -1032,6 +1075,13 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func emitStateChanged(_ state: String) {
         let js = "window.dispatchEvent(new CustomEvent('nativePlayerStateChanged', { detail: { state: '\(state)' } }));"
+        DispatchQueue.main.async { [weak self] in
+            self?.bridge?.webView?.evaluateJavaScript(js)
+        }
+    }
+
+    private func emitWindowEvent(_ name: String) {
+        let js = "window.dispatchEvent(new CustomEvent('\(name)'));"
         DispatchQueue.main.async { [weak self] in
             self?.bridge?.webView?.evaluateJavaScript(js)
         }

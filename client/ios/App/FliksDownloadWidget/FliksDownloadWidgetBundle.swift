@@ -5,5 +5,6 @@ import WidgetKit
 struct FliksDownloadWidgetBundle: WidgetBundle {
     var body: some Widget {
         DownloadLiveActivity()
+        RemoteLiveActivity()
     }
 }

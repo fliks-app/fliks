@@ -50,7 +50,8 @@ export class PlayerSettingsPageComponent {
   readonly autoSkipIntro = signal(this.initial.autoSkipIntro);
   readonly autoPlayNext = signal(this.initial.autoPlayNext);
   readonly backgroundAudio = signal(this.initial.backgroundAudio);
-  readonly showBackgroundAudio = this.device.isAndroidNative() && !this.device.isTv();
+  readonly showBackgroundAudio =
+    (this.device.isAndroidNative() || this.device.isIosNative()) && !this.device.isTv();
   readonly showHdrToggle = signal(this.deviceProfile.hardwareSupportsHdr);
 
   constructor() {

@@ -33,6 +33,13 @@
 		F1000001AAAA00000000000B /* BackGesturePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA00000000001B /* BackGesturePlugin.swift */; };
 		F954F4DC03C3615047B0AABF /* DownloadActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8546BB7ADC2E5B59E726E7ED /* DownloadActivityAttributes.swift */; };
 		F9D6B0DE0B5D3649DA0CC8B8 /* FliksDownloadWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2014FCBAA5253E0B35A8DFD6 /* FliksDownloadWidgetBundle.swift */; };
+		F1000001AAAA0000000000E1 /* NowPlayingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000D1 /* NowPlayingController.swift */; };
+		F1000001AAAA0000000000E2 /* RemoteNotificationPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000D2 /* RemoteNotificationPlugin.swift */; };
+		F1000001AAAA0000000000E3 /* RemoteActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000D3 /* RemoteActivityAttributes.swift */; };
+		F1000001AAAA0000000000E4 /* RemoteActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000D3 /* RemoteActivityAttributes.swift */; };
+		F1000001AAAA0000000000E5 /* RemoteActivityIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000D4 /* RemoteActivityIntents.swift */; };
+		F1000001AAAA0000000000E6 /* RemoteActivityIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000D4 /* RemoteActivityIntents.swift */; };
+		F1000001AAAA0000000000E7 /* RemoteLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000D5 /* RemoteLiveActivity.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -90,6 +97,11 @@
 		F1000001AAAA00000000001A /* OrientationPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrientationPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA00000000001B /* BackGesturePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackGesturePlugin.swift; sourceTree = "<group>"; };
 		FC68EB0AF532CFC21C3344DD /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
+		F1000001AAAA0000000000D1 /* NowPlayingController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingController.swift; sourceTree = "<group>"; };
+		F1000001AAAA0000000000D2 /* RemoteNotificationPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteNotificationPlugin.swift; sourceTree = "<group>"; };
+		F1000001AAAA0000000000D3 /* RemoteActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteActivityAttributes.swift; sourceTree = "<group>"; };
+		F1000001AAAA0000000000D4 /* RemoteActivityIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteActivityIntents.swift; sourceTree = "<group>"; };
+		F1000001AAAA0000000000D5 /* RemoteLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteLiveActivity.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -158,6 +170,8 @@
 				F1000001AAAA0000000000C9 /* VideoCapabilitiesPlugin.swift */,
 				F1000001AAAA000000000018 /* SubtitleOverlayView.swift */,
 				F1000001AAAA000000000019 /* DownloadPlugin.swift */,
+				F1000001AAAA0000000000D1 /* NowPlayingController.swift */,
+				F1000001AAAA0000000000D2 /* RemoteNotificationPlugin.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -183,6 +197,9 @@
 				8546BB7ADC2E5B59E726E7ED /* DownloadActivityAttributes.swift */,
 				B1CFB5B9999E3F369F363538 /* DownloadLiveActivity.swift */,
 				2014FCBAA5253E0B35A8DFD6 /* FliksDownloadWidgetBundle.swift */,
+				F1000001AAAA0000000000D3 /* RemoteActivityAttributes.swift */,
+				F1000001AAAA0000000000D4 /* RemoteActivityIntents.swift */,
+				F1000001AAAA0000000000D5 /* RemoteLiveActivity.swift */,
 				A89664499363506F1B6D7298 /* Info.plist */,
 			);
 			name = FliksDownloadWidget;
@@ -367,6 +384,10 @@
 				F1000001AAAA000000000008 /* SubtitleOverlayView.swift in Sources */,
 				F1000001AAAA000000000009 /* DownloadPlugin.swift in Sources */,
 				F954F4DC03C3615047B0AABF /* DownloadActivityAttributes.swift in Sources */,
+				F1000001AAAA0000000000E1 /* NowPlayingController.swift in Sources */,
+				F1000001AAAA0000000000E2 /* RemoteNotificationPlugin.swift in Sources */,
+				F1000001AAAA0000000000E3 /* RemoteActivityAttributes.swift in Sources */,
+				F1000001AAAA0000000000E5 /* RemoteActivityIntents.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -377,6 +398,9 @@
 				E767D512577E33EDD09F137D /* DownloadActivityAttributes.swift in Sources */,
 				A5BFFD74DD3ACBEA9EFFE03C /* DownloadLiveActivity.swift in Sources */,
 				F9D6B0DE0B5D3649DA0CC8B8 /* FliksDownloadWidgetBundle.swift in Sources */,
+				F1000001AAAA0000000000E4 /* RemoteActivityAttributes.swift in Sources */,
+				F1000001AAAA0000000000E6 /* RemoteActivityIntents.swift in Sources */,
+				F1000001AAAA0000000000E7 /* RemoteLiveActivity.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

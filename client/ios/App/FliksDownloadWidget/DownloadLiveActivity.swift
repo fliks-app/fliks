@@ -3,7 +3,7 @@ import SwiftUI
 import WidgetKit
 
 /// Fliks brand navy, matching the app's launch background.
-private let brandBackground = Color(red: 0x1d / 255, green: 0x23 / 255, blue: 0x2a / 255)
+let brandBackground = Color(red: 0x1d / 255, green: 0x23 / 255, blue: 0x2a / 255)
 
 private func percentLabel(_ progress: Double) -> String {
     progress.formatted(.percent.precision(.fractionLength(0)))

@@ -33,4 +33,14 @@ export class NotificationLike {
       if (this.target === target) this.liked.set(liked);
     }
   }
+
+  /** A toggle that already went out elsewhere (a Live Activity sends it natively): follow it
+   *  without calling the API again. */
+  noteToggled(): void {
+    const target = this.target;
+    const liked = this.liked();
+    if (!target || liked === null) return;
+    this.liked.set(!liked);
+    this.api.changed.set({ mediaId: target.mediaId });
+  }
 }

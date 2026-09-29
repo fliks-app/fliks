@@ -166,6 +166,11 @@ export class DeviceService {
     () => Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android',
   );
 
+  /** Running inside the Capacitor iOS WebView. */
+  readonly isIosNative = computed(
+    () => Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios',
+  );
+
   constructor() {
     this.applyOverrideFromUrl();
     const detected = detectDevice();
