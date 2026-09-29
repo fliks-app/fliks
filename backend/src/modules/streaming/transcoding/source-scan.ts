@@ -1,8 +1,8 @@
-import { spawn } from 'child_process';
 import { createReadStream } from 'fs';
 import { stat } from 'fs/promises';
 import { PassThrough, type Readable } from 'stream';
 import { Logger } from '@nestjs/common';
+import { spawnBackground, collectStderrTail } from '../../../common/utils/spawn-priority';
 import type { MediaFileInfo } from '../../subtitles/ffprobe.service';
 import {
   scanVideoPackets,
@@ -76,20 +76,21 @@ function readSource(
   background: boolean,
 ): { stream: Readable; done: Promise<void>; stop: () => void } {
   if (background && process.platform === 'linux') {
-    const cat = spawn('ionice', ['-c3', 'cat', '--', filePath], {
+    const cat = spawnBackground('cat', ['--', filePath], {
+      background: true,
+      io: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let stopped = false;
-    let stderr = '';
-    cat.stderr.on('data', (d: Buffer) => (stderr = (stderr + d.toString()).slice(-500)));
+    const stderr = collectStderrTail(cat.stderr!, 500);
     const done = new Promise<void>((resolve, reject) => {
       cat.on('error', reject);
       cat.on('close', (code) =>
-        stopped || code === 0 ? resolve() : reject(new Error(`read failed (${code}): ${stderr.trim()}`)),
+        stopped || code === 0 ? resolve() : reject(new Error(`read failed (${code}): ${stderr.get().trim()}`)),
       );
     });
     return {
-      stream: cat.stdout,
+      stream: cat.stdout!,
       done,
       stop: () => {
         stopped = true;
@@ -126,11 +127,9 @@ function walkAdts(
   streams.forEach((a, i) =>
     args.push('-map', `0:${a.streamIndex}`, '-c', 'copy', '-f', 'data', `pipe:${3 + i}`),
   );
-  const [cmd, cmdArgs] =
-    background && process.platform === 'linux'
-      ? ['nice', ['-n19', 'ffmpeg', ...args]]
-      : ['ffmpeg', args];
-  const proc = spawn(cmd, cmdArgs, {
+  const proc = spawnBackground('ffmpeg', args, {
+    background,
+    cpu: true,
     stdio: ['pipe', 'ignore', 'pipe', ...streams.map(() => 'pipe' as const)],
   });
   const walkers = streams.map((_, i) => {
@@ -138,8 +137,7 @@ function walkAdts(
     (proc.stdio[3 + i] as Readable).on('data', (d: Buffer) => walker.push(d));
     return walker;
   });
-  let stderr = '';
-  proc.stderr!.on('data', (d: Buffer) => (stderr = (stderr + d.toString()).slice(-1000)));
+  const stderr = collectStderrTail(proc.stderr!, 1000);
   proc.stdin!.on('error', () => {});
   input.on('error', () => proc.kill('SIGKILL'));
   input.pipe(proc.stdin!);
@@ -151,7 +149,7 @@ function walkAdts(
       resolve(out);
     };
     proc.on('error', (err) => settle(false, err.message));
-    proc.on('close', (code) => settle(code === 0, `ffmpeg exited ${code}: ${stderr.trim()}`));
+    proc.on('close', (code) => settle(code === 0, `ffmpeg exited ${code}: ${stderr.get().trim()}`));
   });
   return {
     result,

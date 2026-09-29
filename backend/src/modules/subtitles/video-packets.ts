@@ -1,8 +1,8 @@
-import { spawn } from 'child_process';
 import { createInterface } from 'readline';
 import { stat } from 'fs/promises';
 import * as path from 'path';
 import type { Readable } from 'stream';
+import { spawnBackground, collectStderrTail } from '../../common/utils/spawn-priority';
 
 /** A video keyframe packet, in source time. */
 export interface Keyframe {
@@ -125,11 +125,8 @@ export function ffprobeLines(
   opts: { timeoutMs: number; background?: boolean; input?: Readable },
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const proc =
-      opts.background && process.platform === 'linux'
-        ? spawn('ionice', ['-c3', 'nice', '-n19', 'ffprobe', ...args])
-        : spawn('ffprobe', args);
-    let stderr = '';
+    const proc = spawnBackground('ffprobe', args, { background: opts.background, io: true, cpu: true });
+    const stderr = collectStderrTail(proc.stderr!, 2000);
     let stopped = false;
     const stop = () => {
       stopped = true;
@@ -141,17 +138,14 @@ export function ffprobeLines(
     }, opts.timeoutMs);
     if (opts.input) {
       // A read ended early closes the pipe under the writer: EPIPE, not a failure.
-      proc.stdin.on('error', () => {});
+      proc.stdin!.on('error', () => {});
       opts.input.on('error', (err) => {
         stop();
         reject(err);
       });
-      opts.input.pipe(proc.stdin);
+      opts.input.pipe(proc.stdin!);
     }
-    proc.stderr.on('data', (d: Buffer) => {
-      stderr = (stderr + d.toString()).slice(-2000);
-    });
-    createInterface({ input: proc.stdout }).on('line', (line) => {
+    createInterface({ input: proc.stdout! }).on('line', (line) => {
       if (!stopped && line && !onLine(line)) stop();
     });
     proc.on('error', (err) => {
@@ -161,7 +155,7 @@ export function ffprobeLines(
     proc.on('close', (code) => {
       clearTimeout(timer);
       if (stopped || code === 0) resolve();
-      else reject(new Error(`ffprobe exited ${code}: ${stderr.trim()}`));
+      else reject(new Error(`ffprobe exited ${code}: ${stderr.get().trim()}`));
     });
   });
 }
