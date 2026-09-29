@@ -1059,14 +1059,13 @@ export class MediaQueryService {
       });
     }
     if (query.missing !== undefined) {
-      // A series is missing as soon as one monitored, aired episode is off disk. Mirrors
-      // AcquisitionCandidatesService's own predicate: media.monitored gates it too, and
-      // "today" is UTC, not whatever timezone the DB connection's CURRENT_DATE resolves to.
+      // A series is missing as soon as one monitored, aired episode is off disk, whether the
+      // series itself is monitored or not. "Today" is UTC, as acquisition computes it.
       const today = new Date().toISOString().slice(0, 10);
       const missingEpisode = `EXISTS (
         SELECT 1 FROM seasons ms JOIN episodes me ON me."seasonId" = ms.id
         WHERE ms."mediaId" = media.id AND ms."seasonNumber" > 0
-          AND media.monitored = true AND ms.monitored = true AND me.monitored = true
+          AND ms.monitored = true AND me.monitored = true
           AND me."airDate" <= :missingToday AND NOT ${onDiskSql('me')}
       )`;
       qb.andWhere(
