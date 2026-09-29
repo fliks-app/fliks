@@ -165,12 +165,26 @@ const VIEW_TRANSITION_CLASS = 'view-transitioning';
  * sit it out.
  */
 let running: Promise<void> = Promise.resolve();
+let animating: object | null = null;
 
-export function markViewTransition(transition: { finished: Promise<unknown> }): void {
+export function markViewTransition(transition: {
+  ready?: Promise<unknown>;
+  finished: Promise<unknown>;
+}): void {
   const root = document.documentElement;
   root.classList.add(VIEW_TRANSITION_CLASS);
-  const done = () => root.classList.remove(VIEW_TRANSITION_CLASS);
+  void transition.ready?.then(() => (animating = transition), () => {});
+  const done = () => {
+    root.classList.remove(VIEW_TRANSITION_CLASS);
+    if (animating === transition) animating = null;
+  };
   running = transition.finished.then(done, done);
+}
+
+/** Between capture and the end of the animation: a captured element removed
+ *  now makes the browser skip the whole transition. */
+export function viewTransitionAnimating(): boolean {
+  return animating !== null;
 }
 
 /** Settles once the running transition has. A navigation started before then
