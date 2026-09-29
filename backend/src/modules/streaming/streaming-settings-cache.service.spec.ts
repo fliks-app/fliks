@@ -22,7 +22,7 @@ describe('StreamingSettingsCache tuning resolution', () => {
     const s = await build().get();
     expect(s.cacheMaxBytes).toBe(20 * 1024 ** 3);
     expect(s.cacheTtlMs).toBe(4 * 3_600_000);
-    expect(s.tonemapCurve).toBe('hable');
+    expect(s.tonemapCurve).toBe('mobius');
     expect(s.tonemapAlgo).toBe('auto');
     expect(s.gpuRenderNode).toBe('auto');
     expect(s.ffmpegSlots).toBeNull();
@@ -54,7 +54,7 @@ describe('StreamingSettingsCache tuning resolution', () => {
     }).get();
     expect(s.cacheMaxBytes).toBe(20 * 1024 ** 3);
     expect(s.ffmpegSlots).toBeNull();
-    expect(s.tonemapCurve).toBe('hable');
+    expect(s.tonemapCurve).toBe('mobius');
     expect(s.tonemapAlgo).toBe('auto');
   });
 
@@ -78,7 +78,7 @@ describe('StreamingSettingsCache tuning resolution', () => {
 
     const s = await build().get();
     expect(s.tonemapAlgo).toBe('auto');
-    expect(s.tonemapCurve).toBe('hable');
+    expect(s.tonemapCurve).toBe('mobius');
     expect(s.gpuRenderNode).toBe('auto');
     expect(s.cacheMaxBytes).toBe(20 * 1024 ** 3);
     expect(s.cacheTtlMs).toBe(4 * 3_600_000);

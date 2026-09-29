@@ -1,4 +1,4 @@
-import type { EncoderInput } from '../../types';
+import { DEFAULT_TONEMAP_CURVE, type EncoderInput } from '../../types';
 import { dvApplyDoviOpt } from '../../../ffmpeg-filter-graph';
 import { scaleEvenHeight } from './scale-filter';
 
@@ -7,7 +7,7 @@ import { scaleEvenHeight } from './scale-filter';
 export function vtTonemapFilter(input: EncoderInput): string {
   const { target, filters, dvNoBase, hasCrop } = input;
   const w = target.width;
-  const curve = input.tonemapCurve ?? 'hable';
+  const curve = input.tonemapCurve ?? DEFAULT_TONEMAP_CURVE;
   const tm = `tonemap_videotoolbox=tonemap=${curve}:t=bt709:m=bt709:p=bt709:range=tv:${dvApplyDoviOpt(dvNoBase)}`;
   if (hasCrop) {
     return (

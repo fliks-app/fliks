@@ -1,4 +1,8 @@
-import type { EncoderInput, TonemapCurve } from '../../types';
+import {
+  DEFAULT_TONEMAP_CURVE,
+  type EncoderInput,
+  type TonemapCurve,
+} from '../../types';
 import { scaleEvenHeight } from './scale-filter';
 import { dvApplyDoviOpt } from '../../../ffmpeg-filter-graph';
 
@@ -31,7 +35,7 @@ export function amfOpenclFilter(opts: {
     outputFormat,
     burnInFilter,
   } = opts;
-  const curve = tonemapCurve ?? 'hable';
+  const curve = tonemapCurve ?? DEFAULT_TONEMAP_CURVE;
   const crop = cropStr ? `${cropStr},` : '';
   // reset_sar=1 only matters after a crop: it fixes the SAR the crop leaves
   // wrong; on an uncropped anamorphic source it would squash the picture.

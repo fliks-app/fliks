@@ -20,8 +20,10 @@ export type HdrFormat = 'HDR10' | 'HLG';
  *  `hable` is a filmic curve with a gentle highlight rolloff (retains specular
  *  detail on high-nit HDR10); `mobius` is punchier with a harder highlight knee;
  *  `reinhard` is the simplest global operator. Selected in Settings >
- *  Streaming, default `hable`. */
+ *  Streaming, default {@link DEFAULT_TONEMAP_CURVE}. */
 export type TonemapCurve = 'hable' | 'mobius' | 'reinhard';
+
+export const DEFAULT_TONEMAP_CURVE: TonemapCurve = 'mobius';
 
 /** Source HDR10 static metadata (SMPTE ST 2086 mastering display + CTA-861.3
  *  content light level), probed from the source and propagated into the encoder

@@ -37,7 +37,7 @@ export class StreamingSettingsComponent implements OnInit {
   readonly tonemapAlgo = signal('auto');
   /** HDR to SDR curve. Only the OpenCL and CPU paths apply it; the vpp_qsv and
    *  tonemap_vaapi fixed-function LUTs ignore it. */
-  readonly tonemapCurve = signal('hable');
+  readonly tonemapCurve = signal('mobius');
   /** Transcode-cache budget and retention. Blank = keep the server default
    *  (the env var, or 20 GB / 4 h). */
   readonly cacheMaxGb = signal('');

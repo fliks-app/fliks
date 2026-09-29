@@ -251,7 +251,7 @@ describe('buildFfmpegArgs: VideoToolbox (macOS)', () => {
     );
     const cli = args.join(' ');
     expect(vfOf(args)).toBe(
-      'scale_vt=w=1920:h=-2,tonemap_videotoolbox=tonemap=hable:t=bt709:m=bt709:p=bt709:range=tv:apply_dovi=1:format=nv12',
+      'scale_vt=w=1920:h=-2,tonemap_videotoolbox=tonemap=mobius:t=bt709:m=bt709:p=bt709:range=tv:apply_dovi=1:format=nv12',
     );
     expect(cli).toContain('videotoolbox_vld');
     expect(cli).not.toContain('tonemapx');

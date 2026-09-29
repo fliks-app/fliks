@@ -51,7 +51,7 @@ describe('buildVideoFilters', () => {
     expect(f.tonemapOpencl).toContain('tonemap_opencl=');
     expect(f.tonemapOpencl).toContain('apply_dovi=0');
     expect(f.tonemapVaapi).toBe('');
-    expect(f.tonemapCpu).toContain('tonemap=hable');
+    expect(f.tonemapCpu).toContain('tonemap=mobius');
   });
 
   it('CPU tone-map downscales in linear light, then converts BT.2020 → BT.709', () => {
@@ -60,7 +60,7 @@ describe('buildVideoFilters', () => {
     // curve + gamut conversion run at output res, not the source's; vf_tonemap
     // needs linear light and the chain must convert primaries + transfer.
     expect(f.tonemapCpu).toBe(
-      'zscale=w=1280:h=-2:t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,' +
+      'zscale=w=1280:h=-2:t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=mobius:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,' +
         'sidedata=mode=delete:type=MASTERING_DISPLAY_METADATA,sidedata=mode=delete:type=CONTENT_LIGHT_LEVEL,sidedata=mode=delete:type=DYNAMIC_HDR_PLUS,',
     );
   });
@@ -73,7 +73,7 @@ describe('buildVideoFilters', () => {
   it('routes the tone-map through tonemap_opencl (GPU) when openclTonemap', () => {
     const f = buildVideoFilters({ ...base, tonemap: true, openclTonemap: true });
     expect(f.tonemapCpu).toBe(
-      'format=p010le,hwupload,tonemap_opencl=t=bt709:m=bt709:p=bt709:tonemap=hable:desat=0:apply_dovi=0:format=nv12,hwdownload,format=nv12,',
+      'format=p010le,hwupload,tonemap_opencl=t=bt709:m=bt709:p=bt709:tonemap=mobius:desat=0:apply_dovi=0:format=nv12,hwdownload,format=nv12,',
     );
     // No CPU zscale tone-map when the GPU path is used.
     expect(f.tonemapCpu).not.toContain('zscale');
@@ -92,7 +92,7 @@ describe('buildVideoFilters', () => {
   it('routes a no-base DV source through tonemapx on the CPU fallback', () => {
     const f = buildVideoFilters({ ...base, tonemap: true, dvNoBase: true });
     expect(f.tonemapCpu).toBe(
-      'scale=1920:-2,tonemapx=t=bt709:m=bt709:p=bt709:tonemap=hable:desat=0:format=yuv420p,',
+      'scale=1920:-2,tonemapx=t=bt709:m=bt709:p=bt709:tonemap=mobius:desat=0:format=yuv420p,',
     );
   });
 
@@ -106,7 +106,7 @@ describe('buildVideoFilters', () => {
     expect(f.tonemapOpencl).toBe(
       ',hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=p010:t=smpte2084:p=bt2020:m=bt2020:r=tv:apply_dovi=1',
     );
-    expect(f.tonemapOpencl).not.toContain('tonemap=hable');
+    expect(f.tonemapOpencl).not.toContain('tonemap=mobius');
   });
 
   it('reshapes a no-base DV source to HDR10 via tonemap_cuda (no tone curve)', () => {
@@ -150,7 +150,7 @@ describe('buildVideoFilters', () => {
   it('honours the tonemapCurve override', () => {
     const hable = buildVideoFilters({ ...base, tonemap: true });
     const mobius = buildVideoFilters({ ...base, tonemap: true, tonemapCurve: 'mobius' });
-    expect(hable.tonemapCpu).toContain('tonemap=tonemap=hable:');
+    expect(hable.tonemapCpu).toContain('tonemap=tonemap=mobius:');
     expect(mobius.tonemapCpu).toContain('tonemap=tonemap=mobius:');
   });
 
@@ -180,7 +180,7 @@ describe('buildVideoFilters', () => {
     });
     expect(f.tonemapOpencl).toContain('tonemap_opencl=');
     expect(f.burnInFilter).toBe(',subtitles=/tmp/x.ass');
-    expect(f.tonemapCpu).toContain('tonemap=hable');
+    expect(f.tonemapCpu).toContain('tonemap=mobius');
   });
 
   it('burn-in still suppresses vulkan (no-base DV fallback stays CPU-only with burn-in)', () => {
