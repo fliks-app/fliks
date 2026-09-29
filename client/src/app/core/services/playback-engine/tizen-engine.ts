@@ -35,6 +35,7 @@ declare const webapis: {
     getState(): 'NONE' | 'IDLE' | 'READY' | 'PLAYING' | 'PAUSED';
     setDisplayRect(x: number, y: number, width: number, height: number): void;
     setDisplayMethod(method: string): void;
+    setVideoRoi?(x: number, y: number, width: number, height: number): void;
     setListener(listener: {
       onbufferingstart?: () => void;
       onbufferingprogress?: (percent: number) => void;
@@ -64,6 +65,10 @@ export const isTizenAvplayAvailable = (): boolean => {
     typeof (window as unknown as { webapis?: { avplay?: unknown } }).webapis?.avplay === 'object'
   );
 };
+
+/** Firmware that exposes the video region-of-interest API can crop letterbox bars on the plane. */
+export const isTizenCropSupported = (): boolean =>
+  isTizenAvplayAvailable() && typeof webapis.avplay.setVideoRoi === 'function';
 
 export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngine {
   /** Most recently `init()`'d instance. The shared AVPlay surface and
@@ -164,6 +169,35 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
         ? 'PLAYER_DISPLAY_MODE_CROPPED_FULL'
         : 'PLAYER_DISPLAY_MODE_LETTER_BOX');
     } catch { /* invalid in NONE — re-applied post-prepare */ }
+    this.applyCrop();
+  }
+
+  private _crop: { x: number; y: number; width: number; height: number } | null = null;
+  private _sourceSize = { width: 0, height: 0 };
+
+  /** Crop the letterbox bars on the video plane. Kept across load() and
+   *  re-applied post-prepare (the ROI can't be set before), only setCrop changes
+   *  it. Returns whether the crop will be in effect. */
+  setCrop(
+    rect: { x: number; y: number; width: number; height: number } | null | undefined,
+    sourceWidth: number,
+    sourceHeight: number,
+  ): boolean {
+    const valid = !!(rect?.width && rect.height && sourceWidth && sourceHeight);
+    this._crop = valid ? rect! : null;
+    this._sourceSize = { width: sourceWidth, height: sourceHeight };
+    this.applyCrop();
+    return valid && isTizenCropSupported();
+  }
+
+  private applyCrop(): void {
+    if (!isTizenCropSupported()) return;
+    const c = this._crop;
+    const { width: w, height: h } = this._sourceSize;
+    try {
+      if (c) webapis.avplay.setVideoRoi!(c.x / w, c.y / h, c.width / w, c.height / h);
+      else webapis.avplay.setVideoRoi!(0, 0, 1, 1);
+    } catch { /* invalid before prepare — re-applied post-prepare */ }
   }
 
   private _fillScreen = false;

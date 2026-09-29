@@ -47,13 +47,43 @@ describe('BrowserDeviceProfileService, cropsBlackBarsLocally', () => {
     expect(service.getProfile().cropsBlackBarsLocally).toBe(true);
   });
 
-  it('is false for a TV engine, Tizen/webOS have no client-side crop path', () => {
+  it('is false for webOS, it keeps the server crop', () => {
     const service = configure({
       isTv: () => true,
       tvPlatform: () => 'webos',
       isDesktopNative: () => false,
     } as DeviceService);
     expect(service.getProfile().cropsBlackBarsLocally).toBe(false);
+  });
+});
+
+describe('BrowserDeviceProfileService, cropsBlackBarsLocally on Tizen', () => {
+  const tizen = { isTv: () => true, tvPlatform: () => 'tizen', isDesktopNative: () => false } as DeviceService;
+
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    delete (window as unknown as { webapis?: unknown }).webapis;
+  });
+
+  it('is true when AVPlay exposes setVideoRoi', () => {
+    (window as unknown as { webapis: unknown }).webapis = { avplay: { setVideoRoi: () => {} } };
+    expect(configure(tizen).getProfile().cropsBlackBarsLocally).toBe(true);
+  });
+
+  it('is false when the firmware has no setVideoRoi', () => {
+    (window as unknown as { webapis: unknown }).webapis = { avplay: {} };
+    expect(configure(tizen).getProfile().cropsBlackBarsLocally).toBe(false);
+  });
+
+  it('never claims Dolby Vision, even when the WebView says it decodes dvh1', () => {
+    (window as unknown as { webapis: unknown }).webapis = {
+      avplay: {},
+      avinfo: { isHdrTvSupport: () => true },
+    };
+    vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('probably');
+    const profile = configure(tizen).getProfile();
+    expect(profile.dolbyVisionProfiles ?? []).toEqual([]);
+    expect(profile.supportsDolbyVision).toBe(false);
   });
 });
 

@@ -17,6 +17,7 @@ import { CastService } from '../../core/services/cast.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
 import { CastSettingsService } from '../../core/services/cast-settings.service';
 import { NativeEngine } from '../../core/services/playback-engine/native-engine';
+import { TizenEngine } from '../../core/services/playback-engine/tizen-engine';
 import { OfflineStorageService } from '../../core/services/offline-storage.service';
 import { OfflinePlaybackSyncService } from '../../core/services/offline-playback-sync.service';
 import { AutoDownloadService } from '../../core/services/auto-download.service';
@@ -1745,6 +1746,18 @@ describe('PlayerComponent: offline crop', () => {
     );
   });
 
+  it('hands the Tizen engine the stored rect with its source size', () => {
+    const h = createHarness();
+    const engine = Object.assign(Object.create(TizenEngine.prototype), { setCrop: vi.fn(() => true) });
+    h.component.engine = engine;
+    h.component.isOfflinePlayback = true;
+    h.component.playbackInfo = null;
+    h.component.offlineCrop = stored;
+
+    h.component.applyVideoCrop();
+    expect(engine.setCrop).toHaveBeenCalledWith(expect.objectContaining({ y: 140 }), 1920, 1080);
+  });
+
   it('applies nothing for a download without a stored crop', () => {
     const h = createHarness();
     h.component.isOfflinePlayback = true;
@@ -1813,5 +1826,33 @@ describe('PlayerComponent startup', () => {
 
     expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalledTimes(1);
     expect((h.streamingApi.getPlaybackInfo.mock.calls[0] as any[])[3]).toBe(1);
+  });
+
+  it('crops on the Tizen engine before its first load', async () => {
+    const h = createHarness();
+    const crop = { x: 0, y: 140, width: 1920, height: 800 };
+    h.streamingApi.getPlaybackInfo.mockResolvedValueOnce(
+      buildPi(MAIN_FILE_ID, {
+        source: { container: 'mp4', videoCodec: 'h264', audioCodec: 'aac', durationSeconds: 100, width: 1920, height: 1080, crop },
+      }),
+    );
+    (TestBed.inject(ActivatedRoute).snapshot.queryParams as any) = { mediaId: String(MEDIA_ID) };
+    const calls: string[] = [];
+    const engine = Object.assign(Object.create(TizenEngine.prototype), {
+      setCrop: vi.fn(() => (calls.push('setCrop'), true)),
+      load: vi.fn(async () => void calls.push('load')),
+      on: () => () => {},
+      setSubtitleStyle: () => {},
+      configure: () => {},
+    });
+    (h.component as any).isTizen = true;
+    h.component.createTizenEngine = async () => {
+      h.component.engine = engine;
+    };
+
+    await h.component.ngAfterViewInit().catch(() => {});
+
+    expect(engine.setCrop).toHaveBeenCalledWith(crop, 1920, 1080);
+    expect(calls.indexOf('setCrop')).toBeLessThan(calls.indexOf('load'));
   });
 });
