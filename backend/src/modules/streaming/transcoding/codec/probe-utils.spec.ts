@@ -17,13 +17,17 @@ describe('createCapabilityProbe', () => {
     const result = await probe.run(log, async () => {});
     expect(result).toBe(true);
     expect(probe.isEnabled()).toBe(true);
-    expect(log.log).toHaveBeenCalledWith(expect.stringContaining('[test-probe] enabled=true'));
+    expect(log.log).toHaveBeenCalledWith(
+      expect.stringContaining('[test-probe] enabled=true'),
+    );
   });
 
   it('disables and logs the stderr tail on a failed attempt', async () => {
     const probe = createCapabilityProbe('test-probe');
     const log = fakeLog();
-    const err = Object.assign(new Error('boom'), { stderr: 'line one\nline two\nline three' });
+    const err = Object.assign(new Error('boom'), {
+      stderr: 'line one\nline two\nline three',
+    });
     const result = await probe.run(log, async () => {
       throw err;
     });
@@ -32,7 +36,9 @@ describe('createCapabilityProbe', () => {
     expect(log.log).toHaveBeenCalledWith(
       expect.stringContaining('[test-probe] enabled=false'),
     );
-    expect(log.log).toHaveBeenCalledWith(expect.stringContaining('line two line three'));
+    expect(log.log).toHaveBeenCalledWith(
+      expect.stringContaining('line two line three'),
+    );
   });
 
   it('never rejects', async () => {
