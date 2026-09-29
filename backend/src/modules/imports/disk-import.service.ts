@@ -63,8 +63,9 @@ function seriesFolderOf(file: string, folderName: string): string {
   return match ?? path.dirname(file);
 }
 
-/** A `Sample`/`Extras` folder holds bonus clips, never the feature. */
-const SAMPLE_OR_EXTRAS_DIR_RE = /^(sample|extras?)$/i;
+/** Bonus-clip folders inside a title's folder; a scan-root child of that name is a title. */
+const BONUS_DIR_RE =
+  /^(samples?|extras?|featurettes?|trailers?|interviews|behind[ ._-]the[ ._-]scenes|deleted[ ._-]scenes)$/i;
 /** A release's sample clip ends with a `sample` token; a title merely starting with it does not. */
 const SAMPLE_FILE_RE = /(?:^|[.\-_ ])sample$/i;
 
@@ -885,7 +886,7 @@ export class DiskImportService {
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (SAMPLE_OR_EXTRAS_DIR_RE.test(entry.name)) continue;
+        if (depth > 0 && BONUS_DIR_RE.test(entry.name)) continue;
         subdirs.push(fullPath);
       } else if (
         VIDEO_EXTS.has(path.extname(entry.name).toLowerCase()) &&
