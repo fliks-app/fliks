@@ -18,7 +18,10 @@ import type { EmbedBackend } from './types';
 export class X11EmbedBackend implements EmbedBackend {
   readonly id = 'linux-x11';
 
-  resolve(videoWin: BrowserWindow): { args: string[]; env?: NodeJS.ProcessEnv } {
+  async resolve(
+    videoWin: BrowserWindow,
+    _mpvPath: string,
+  ): Promise<{ args: string[]; env?: NodeJS.ProcessEnv }> {
     const handle = videoWin.getNativeWindowHandle();
     const wid = handle.readUInt32LE(0); // X11 Window XID
 

@@ -9,6 +9,11 @@ import type { BrowserWindow } from 'electron';
 export interface EmbedBackend {
   readonly id: string;
   /** mpv output/embed args (e.g. `--wid`, `--vo`, `--hwdec`) and an optional
-   *  environment override (e.g. forcing X11 over Wayland) for this window. */
-  resolve(videoWin: BrowserWindow): { args: string[]; env?: NodeJS.ProcessEnv };
+   *  environment override (e.g. forcing X11 over Wayland) for this window.
+   *  Async: Windows probes gpu-next before picking a `--vo`. `mpvPath` is the
+   *  resolved binary, so that probe uses the same build as real playback. */
+  resolve(
+    videoWin: BrowserWindow,
+    mpvPath: string,
+  ): Promise<{ args: string[]; env?: NodeJS.ProcessEnv }>;
 }

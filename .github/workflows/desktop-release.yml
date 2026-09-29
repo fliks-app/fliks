@@ -15,9 +15,18 @@
 #      desktop/web so electron-builder ships it at resources/web.
 #   + a vendored self-contained libmpv into desktop/native/vendor per OS.
 #
-# Release checklist: bump the Windows mpv pin (MPV_WINBUILD_TAG below) when
-# convenient — upstream deletes releases after about a month, and past that the
-# build falls back to the newest one and warns instead of failing.
+# Release checklist: refresh the Windows mpv pin when convenient. Upstream
+# (zhongfly/mpv-winbuild) deletes releases after about a month, so we vendor
+# the exact 7z we build against into a Fliks-owned release instead of pointing
+# at upstream directly:
+#   1. Pick a build from https://github.com/zhongfly/mpv-winbuild/releases,
+#      download its `mpv-x86_64-*.7z` asset, and check it against that
+#      release's own `sha256.txt`.
+#   2. `gh release create mpv-winbuild-<upstream-tag> --repo fliks-app/fliks
+#      --prerelease --latest=false --notes "..." path/to/mpv-x86_64-*.7z`
+#   3. Update MPV_VENDOR_TAG / MPV_VENDOR_ASSET / MPV_VENDOR_SHA256 below.
+# The tag must never start with `v`; every `v*`/`desktop-v*` tag trigger in
+# this repo's workflows would otherwise fire on it.
 #
 # The native compositor addon (SDL2 + GLES/EGL) is LINUX-ONLY by design — it is
 # the OSR self-compositor needed under Mutter/X11. macOS and Windows embed mpv
@@ -195,33 +204,28 @@ jobs:
           echo "vendored libmpv OK: $(du -sh desktop/native/vendor | cut -f1)"
 
       # Windows embeds mpv via --wid by spawning a vendored mpv.exe, downloaded
-      # from a pinned zhongfly/mpv-winbuild release (MPV_WINBUILD_TAG below) so
-      # the Windows media/TLS stack only changes when that pin is bumped, not on
-      # every build. Upstream prunes old releases, so a stale pin falls back to
-      # the newest x86_64 build rather than failing the release.
+      # from a Fliks-owned release (MPV_VENDOR_TAG below), not upstream
+      # directly: zhongfly/mpv-winbuild prunes releases after about a month, so
+      # a pinned upstream tag 404s and used to silently fall back to whatever
+      # build happened to be newest; drifting the exact mpv build under test
+      # on every stale-pin run instead of failing loudly. sha256 is checked
+      # against the asset zhongfly published it with. See the release
+      # checklist at the top of this file for how to refresh the pin.
       - name: Vendor mpv (Windows)
         if: runner.os == 'Windows'
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MPV_WINBUILD_TAG: "2026-08-27-182fa6ca49"
+          MPV_VENDOR_TAG: "mpv-winbuild-2026-09-28-e470f8986e"
+          MPV_VENDOR_ASSET: "mpv-x86_64-20260928-git-e470f8986e.7z"
+          MPV_VENDOR_SHA256: "ddef3932aed791cdc3f2585e5798802e55171ab9dce06d3275bdd9ed2967774d"
         run: |
           set -euo pipefail
           dest=desktop/native/vendor
           mkdir -p "$dest"
-          # The `|| true` keeps `set -e` from firing on a grep-no-match / head
-          # SIGPIPE; the explicit guards below report the failure clearly. The
-          # API call is authenticated to avoid the unauthenticated shared-runner-IP rate limit.
-          api() { curl -fsSL -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/zhongfly/mpv-winbuild/$1"; }
-          pick() { grep -oE 'https://[^"]+mpv-x86_64-[0-9][^"]*\.7z' | head -1; }
-          url=$(api "releases/tags/$MPV_WINBUILD_TAG" | pick) || true
-          if [ -z "$url" ]; then
-            echo "::warning::pinned mpv release $MPV_WINBUILD_TAG is gone upstream — using the newest build instead, bump MPV_WINBUILD_TAG"
-            url=$(api "releases?per_page=10" | pick) || true
-          fi
-          test -n "$url" || { echo "::error::no mpv-x86_64 .7z asset on $MPV_WINBUILD_TAG nor the 10 newest releases"; exit 1; }
-          echo "Downloading mpv: $url"
+          url="https://github.com/${{ github.repository }}/releases/download/${MPV_VENDOR_TAG}/${MPV_VENDOR_ASSET}"
+          echo "Downloading mpv (Fliks-vendored): $url"
           curl -fsSL -o "$RUNNER_TEMP/mpv.7z" "$url"
+          echo "${MPV_VENDOR_SHA256}  $RUNNER_TEMP/mpv.7z" | sha256sum -c -
           7z x -y -o"$dest" "$RUNNER_TEMP/mpv.7z" >/dev/null
           if [ ! -f "$dest/mpv.exe" ]; then
             sub=$(find "$dest" -name mpv.exe -printf '%h\n' | head -1)

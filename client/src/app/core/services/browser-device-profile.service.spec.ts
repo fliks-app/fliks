@@ -222,4 +222,25 @@ describe('BrowserDeviceProfileService: dolbyVisionProfiles gating', () => {
     expect(service.getProfile().dolbyVisionProfiles).toEqual([7]);
     vi.unstubAllGlobals();
   });
+
+  it('drops 5/8 on Windows desktop once mpv reports it fell back off gpu-next', async () => {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Electron/30.0.0',
+    );
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    (window as unknown as { fliksDesktop: unknown }).fliksDesktop = {
+      getPlayerCapabilities: () => Promise.resolve({ canReshapeDolbyVision: false }),
+    };
+    try {
+      const desktopDevice = { ...device, isDesktopNative: () => true } as DeviceService;
+      const service = configure(desktopDevice, { hasServerFeature: () => true });
+      // Flush the constructor's getPlayerCapabilities() microtask before reading.
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(service.getProfile().dolbyVisionProfiles).toEqual([7]);
+    } finally {
+      delete (window as unknown as { fliksDesktop?: unknown }).fliksDesktop;
+      vi.unstubAllGlobals();
+    }
+  });
 });

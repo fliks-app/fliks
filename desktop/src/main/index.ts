@@ -281,6 +281,16 @@ app.whenReady().then(async () => {
     deviceName: deviceName(),
   }));
 
+  // Only Windows can fall back off gpu-next; every other backend reshapes DV
+  // (macOS) or never claims to (Linux tonemaps SDR-only, see device profile).
+  ipcMain.handle(IPC.getPlayerCapabilities, async () => {
+    if (process.platform !== 'win32') return { canReshapeDolbyVision: true };
+    const { resolveWindowsVo } = await import('./window/backends/gpu-next-probe');
+    const { resolveBundledMpv } = await import('./window/player-session');
+    const vo = await resolveWindowsVo(resolveBundledMpv() ?? 'mpv');
+    return { canReshapeDolbyVision: vo === 'gpu-next' };
+  });
+
   // In-app updater (electron-updater on installable builds, GitHub-release
   // detect-only on .deb/dev). Registered on every platform path so the renderer
   // can always query capability + listen for status.

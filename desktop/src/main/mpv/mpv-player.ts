@@ -459,6 +459,11 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
     return this.command(['set_property', prop, value]);
   }
 
+  /** Read an arbitrary mpv property (used by the Windows gpu-next startup probe). */
+  getProperty<T = unknown>(prop: string): Promise<T> {
+    return this.get<T>(prop);
+  }
+
   // ── NativePlayer-equivalent surface ──────────────────────────────────────
 
   async load(opts: DesktopLoadOptions): Promise<void> {
