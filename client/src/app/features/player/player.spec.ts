@@ -1061,7 +1061,7 @@ describe('PlayerComponent remux fallback (rejectCopy)', () => {
     );
     h.component.wireErrorRecovery(h.engine);
     // The first ngAfterViewInit load() sets this and hasn't resolved yet.
-    h.component.reloadingStream = true;
+    h.component.firstLoadPending = true;
 
     vi.useFakeTimers();
     try {
@@ -1072,7 +1072,7 @@ describe('PlayerComponent remux fallback (rejectCopy)', () => {
       expect(h.engine.loadCalls.length).toBe(0);
 
       // The first load settles.
-      h.component.reloadingStream = false;
+      h.component.firstLoadPending = false;
       await vi.advanceTimersByTimeAsync(200);
     } finally {
       vi.useRealTimers();

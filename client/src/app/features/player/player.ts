@@ -725,7 +725,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return this.authService.hasServerFeature(feature);
   }
   isReloadIdle(): boolean {
-    return !this.reloadingStream && !this.recoveringFromLostSession;
+    return !this.reloadingStream && !this.firstLoadPending && !this.recoveringFromLostSession;
   }
   hasError(): boolean {
     return !!this.state.error();
@@ -870,9 +870,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Hoisted so the catch can anchor a remux fallback at the resume point.
     let startTime: number | undefined = resumeTime ?? undefined;
 
-    // Held for the whole first load, like a reload: an engine `error` racing
-    // this pending load() must wait via isReloadIdle(), not fire a second one.
-    this.reloadingStream = true;
+    // An engine `error` racing this pending load() must wait via isReloadIdle(), not
+    // fire a second one. Not reloadingStream: that would drop post-load reloads (burn-in).
+    this.firstLoadPending = true;
     try {
       // Only use offline playback if explicitly requested via query param
       let offlineCheck: string | null = null;
@@ -1231,6 +1231,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         }
       }
 
+      this.firstLoadPending = false;
       this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, this.playbackMode());
       this.firstLoadSetupDone = true;
       await this.completePostLoadSetup(subsPromise, resumeTime);
@@ -1273,7 +1274,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       }
     } finally {
       this.state.loading.set(false);
-      this.reloadingStream = false;
+      this.firstLoadPending = false;
     }
 
     // Everything above awaits, so a back-out mid-launch runs ngOnDestroy first and
@@ -4196,6 +4197,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** True until a reload's `engine.load()` resolves: the window where an engine error is
    *  the expected teardown, unlike one raised during the post-load awaits. */
   private reloadLoadPending = false;
+  /** True until ngAfterViewInit's engine.load() settles; only {@link isReloadIdle} reads it. */
+  private firstLoadPending = false;
   /** Set once doReloadStream reaches a successful engine.load(). Lets the
    *  reloadStream catch tell a dead surface (failure before load) from a live
    *  one (a later throw over already-playing video). */
