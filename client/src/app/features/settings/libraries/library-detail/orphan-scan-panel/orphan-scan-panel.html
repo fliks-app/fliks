@@ -86,11 +86,11 @@
                     <label class="form-control flex-1 min-w-48">
                       <input type="text" class="input input-bordered input-sm w-full"
                         [placeholder]="'settings.libraries.scan_search_placeholder' | translate"
-                        [ngModel]="vm.query" (ngModelChange)="vm.query = $event"
+                        [ngModel]="vm.query" (ngModelChange)="edit(i, { query: $event })"
                         (keydown.enter)="search(i)" />
                     </label>
                     <input type="number" class="input input-bordered input-sm w-24"
-                      [ngModel]="vm.year" (ngModelChange)="vm.year = $event" placeholder="—" />
+                      [ngModel]="vm.year" (ngModelChange)="edit(i, { year: $event })" placeholder="—" />
                     <button type="button" class="btn btn-sm btn-ghost" (click)="search(i)" [disabled]="vm.searching">
                       @if (vm.searching) { <span class="loading loading-spinner loading-xs"></span> }
                       {{ 'settings.libraries.scan_search' | translate }}
@@ -166,7 +166,7 @@
                     <div class="flex justify-end">
                       <button type="button" class="btn btn-sm btn-primary"
                         [title]="reorganizeTooltip(vm)"
-                        (click)="link(i)" [disabled]="vm.linking || vm.searching">
+                        (click)="link(i)" [disabled]="vm.linking || vm.searching || !vm.searched">
                         @if (vm.linking) { <span class="loading loading-spinner loading-xs"></span> }
                         {{ (!vm.pick
                           ? 'settings.libraries.scan_add_unmatched'

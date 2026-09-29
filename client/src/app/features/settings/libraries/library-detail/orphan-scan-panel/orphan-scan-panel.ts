@@ -73,6 +73,9 @@ export class OrphanScanPanelComponent {
   readonly transfer = input<'copy' | 'move' | null>(null);
 
   private libraryId = 0;
+  private searchSeq = 0;
+  /** Latest search per group, so a slower earlier one can't overwrite it. */
+  private readonly latestSearch = new Map<number, number>();
   readonly anyLinked = signal(false);
 
   /** Nothing to render before the first scan runs. */
@@ -292,11 +295,26 @@ export class OrphanScanPanelComponent {
     );
   }
 
+  /** The results and pick belong to the old name: the group needs a new search. */
+  edit(index: number, partial: Partial<Pick<GroupVM, 'query' | 'year'>>) {
+    this.latestSearch.delete(index);
+    this.patch(index, {
+      ...partial,
+      results: [],
+      pick: null,
+      fromNfo: false,
+      searched: false,
+      searching: false,
+    });
+  }
+
   async search(index: number) {
     const vm = this.groups()[index];
     if (!vm) return;
     const query = vm.query.trim();
     if (!query) return;
+    const seq = ++this.searchSeq;
+    this.latestSearch.set(index, seq);
     this.patch(index, { searching: true, error: '' });
     try {
       const provider = vm.group.suggestedProvider;
@@ -304,6 +322,7 @@ export class OrphanScanPanelComponent {
         vm.group.mediaType === 'series'
           ? await this.metadata.searchTv(query, vm.year ?? undefined, provider)
           : await this.metadata.searchMovie(query, vm.year ?? undefined, provider);
+      if (this.latestSearch.get(index) !== seq) return;
 
       // Auto-select the match referenced by the .nfo id, if any.
       const nfo = vm.group.nfo;
@@ -324,6 +343,7 @@ export class OrphanScanPanelComponent {
         fromNfo: !!auto,
       });
     } catch (err: unknown) {
+      if (this.latestSearch.get(index) !== seq) return;
       this.patch(index, {
         searching: false,
         searched: true,
