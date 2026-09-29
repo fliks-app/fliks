@@ -466,6 +466,36 @@ describe('StreamingController.hlsPlaylist (transcode) freezes sourceFps', () => 
   });
 });
 
+describe('StreamingController.iframePlaylist freezes sourceFps', () => {
+  function playlistFor(live: Partial<LiveSession> | null, frameRate: string): Promise<string> {
+    const resolved = { mediaFile: { streamInfo: { video: [{ frameRate }] } } };
+    const controller = makeController({
+      streamingService: { resolveFile: jest.fn().mockResolvedValue(resolved) },
+      activeStreamTracker: { getSegmentDuration: () => 6 },
+      sessionRouter: { assertFresh: jest.fn(), findRequestSession: jest.fn().mockReturnValue(live) },
+    });
+    return new Promise((resolve) => {
+      const res = { setHeader: jest.fn(), send: resolve, status: jest.fn() };
+      void controller.iframePlaylist(
+        42,
+        { query: { duration: '25' }, user: { id: 7 } } as never,
+        res as never,
+      );
+    });
+  }
+  const firstExtinf = (m: string) => Number([...m.matchAll(/#EXTINF:([\d.]+),/g)][0][1]);
+
+  it("uses the session's frozen fps, not the fresh streamInfo a mid-session re-probe wrote", async () => {
+    const playlist = await playlistFor({ sourceFps: 23.81 }, '23.976');
+    expect(firstExtinf(playlist)).toBe(realSegmentSeconds(6, 23.81));
+  });
+
+  it('falls back to the current streamInfo fps with no live session', async () => {
+    const playlist = await playlistFor(null, '23.976');
+    expect(firstExtinf(playlist)).toBe(realSegmentSeconds(6, 23.976));
+  });
+});
+
 describe('StreamingController.embeddedSubtitle cue offset', () => {
   function bodyFor(live: Partial<LiveSession> | null): Promise<string> {
     const resolved = {

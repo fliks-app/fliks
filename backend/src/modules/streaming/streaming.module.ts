@@ -27,6 +27,7 @@ import { SessionRouter } from './services/session-router.service';
 import { SessionContextBuilder } from './services/session-context-builder.service';
 import { SourceScanService } from './services/source-scan.service';
 import { StaleProbeRescanService } from './services/stale-probe-rescan.service';
+import { ScanBackfillService } from './services/scan-backfill.service';
 import { MediaFileScan } from './entities/media-file-scan.entity';
 import { Command } from '../scheduler/entities/command.entity';
 import { AuthModule } from '../auth/auth.module';
@@ -78,6 +79,7 @@ import { SubtitlesModule } from '../subtitles/subtitles.module';
     SessionContextBuilder,
     SourceScanService,
     StaleProbeRescanService,
+    ScanBackfillService,
   ],
   exports: [
     SourceScanService,

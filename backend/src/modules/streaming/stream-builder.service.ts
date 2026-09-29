@@ -637,10 +637,14 @@ export class StreamBuilderService {
     // available and falling through to Transcode otherwise.
     if (dv.profile === 7 && !dvProfiles.includes(7)) {
       if (directPlayResult.canDirectPlay) directPlayResult.canDirectPlay = false;
-      reasons.push({
-        flag: 'VideoDolbyVisionP7NotSupported',
-        message: 'Dolby Vision profile 7 (dual layer) is not supported by this client',
-      });
+      // Only the actual cause: skip the reason when another gate (forced ladder,
+      // burn-in, crop, …) already made this source uncopyable on its own.
+      if (copyableIgnoringGates) {
+        reasons.push({
+          flag: 'VideoDolbyVisionP7NotSupported',
+          message: 'Dolby Vision profile 7 (dual layer) is not supported by this client',
+        });
+      }
     }
 
     if (profile.supportsDirectPlay === false && directPlayResult.canDirectPlay) {

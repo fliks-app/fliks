@@ -286,22 +286,16 @@ export function buildIFramePlaylist(
   );
 }
 
-function frameSeconds(
-  streamInfo: { video?: { frameRate?: string }[] } | null | undefined,
-): number {
-  return frameSecondsOf(parseSourceFps(streamInfo?.video?.[0]?.frameRate));
+/** `fps` must be the session's frozen rate (`live.sourceFps`) when one exists:
+ *  a raw streamInfo re-parse can drift off-grid after a background re-probe. */
+function frameSeconds(fps: number | undefined): number {
+  return frameSecondsOf(fps);
 }
 
 /** Trick-play grid: the variant's real segment length, so entry N is the IDR
- *  the encoder forces at N * that. */
-function iframeGrid(
-  streamInfo: { video?: { frameRate?: string }[] } | null | undefined,
-  segmentDuration: number,
-): number {
-  return realSegmentSeconds(
-    segmentDuration,
-    parseSourceFps(streamInfo?.video?.[0]?.frameRate),
-  );
+ *  the encoder forces at N * that. `fps` must be the frozen rate, see {@link frameSeconds}. */
+function iframeGrid(fps: number | undefined, segmentDuration: number): number {
+  return realSegmentSeconds(segmentDuration, fps);
 }
 
 /** VOD playlist with explicit per-segment durations. Used by the remux/copy
@@ -1509,11 +1503,15 @@ export class StreamingController {
       return;
     }
     const tokenParam = buildTokenParam(req);
+    const live = this.sessionRouter.findRequestSession(req, mediaFileId);
+    const sourceFps =
+      live?.sourceFps ??
+      parseSourceFps(resolved.mediaFile.streamInfo?.video?.[0]?.frameRate);
     const playlist = buildIFramePlaylist(
       duration,
       (seg) => `/api/stream/${mediaFileId}/iframe/seg-${seg}.ts${tokenParam}`,
-      iframeGrid(resolved.mediaFile.streamInfo, this.segDur()),
-      frameSeconds(resolved.mediaFile.streamInfo),
+      iframeGrid(sourceFps, this.segDur()),
+      frameSeconds(sourceFps),
     );
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -1546,11 +1544,13 @@ export class StreamingController {
       crop?.width ?? v?.width ?? 1920,
       crop?.height ?? v?.height ?? 1080,
     );
+    const live = this.sessionRouter.findRequestSession(req, mediaFileId);
+    const sourceFps = live?.sourceFps ?? parseSourceFps(v?.frameRate);
     const timeline = sourceTimeline(si, resolved.absolutePath);
     const args = buildIFrameSegmentArgs({
       inputPath: resolved.absolutePath,
       seekSeconds: inputSeekSeconds(
-        parseInt(match[1], 10) * iframeGrid(si, this.segDur()),
+        parseInt(match[1], 10) * iframeGrid(sourceFps, this.segDur()),
         timeline,
       ),
       width,
@@ -1786,18 +1786,17 @@ export class StreamingController {
     // (`RemuxSegmentAssembler`); a uniform grid would desync its durations.
     const isRemux = live?.kind === 'remux';
     const remuxDurations = isRemux ? (live.remuxGrid?.durations ?? null) : null;
+    const sourceFps =
+      live?.sourceFps ??
+      parseSourceFps(resolved.mediaFile.streamInfo?.video?.[0]?.frameRate);
     const playlist = remuxDurations
       ? buildVariableVodPlaylist(remuxDurations, segmentUrl, initUrl)
       : buildVodPlaylist(
           duration,
           segmentUrl,
           initUrl,
-          this.fallbackSegDuration(
-            isRemux,
-            live?.sourceFps ??
-              parseSourceFps(resolved.mediaFile.streamInfo?.video?.[0]?.frameRate),
-          ),
-          frameSeconds(resolved.mediaFile.streamInfo),
+          this.fallbackSegDuration(isRemux, sourceFps),
+          frameSeconds(sourceFps),
         );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -2129,7 +2128,7 @@ export class StreamingController {
           segmentUrl,
           initRef,
           this.fallbackSegDuration(quality === 'remux', sourceFps),
-          frameSeconds(resolved.mediaFile.streamInfo),
+          frameSeconds(sourceFps),
         );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');

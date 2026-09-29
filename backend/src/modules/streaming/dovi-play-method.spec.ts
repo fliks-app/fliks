@@ -325,6 +325,23 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
     });
     expect(r.response.playMethod).toBe('DirectStream');
     expect(r.response.dolbyVision).toBeFalsy();
+    // Copy would otherwise have been allowed: P7 support is the actual blocker.
+    expect(r.response.transcodeReasons.map((x) => x.flag)).toContain(
+      'VideoDolbyVisionP7NotSupported',
+    );
+  });
+
+  it('omits the P7 reason when subtitle burn-in already forces the transcode', () => {
+    const r = svc().evaluate({
+      resolved: resolved(7, 6, true, 6),
+      profile: dvHevcClient,
+      burnInSubtitleId: 1,
+      tokenParam: 'tok',
+    });
+    expect(r.response.playMethod).toBe('Transcode');
+    const flags = r.response.transcodeReasons.map((x) => x.flag);
+    expect(flags).toContain('SubtitleBurnIn');
+    expect(flags).not.toContain('VideoDolbyVisionP7NotSupported');
   });
 
   it('DirectPlays raw P7 for a client that lists profile 7', () => {
@@ -346,6 +363,9 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
       tokenParam: 'tok',
     });
     expect(r.response.playMethod).toBe('Transcode');
+    expect(r.response.transcodeReasons.map((x) => x.flag)).toEqual(
+      expect.arrayContaining(['VideoDolbyVisionP7NotSupported', 'MuxNotSupported']),
+    );
   });
 
   it('DirectPlays P5 with clientTonemap true for a client with no HDR display', () => {
