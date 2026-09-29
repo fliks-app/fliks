@@ -4,7 +4,7 @@ import { sourceBitrates } from '../transcoding';
 import type { SessionContext } from '../transcoding';
 import { parseSourceFps } from '../transcoding/constants';
 import { sessionLayoutContext } from '../transcoding/session-profile';
-import { seeksPastKeyframe } from '../transcoding/segment-boundaries';
+import { sourceIsMpegTs } from '../../subtitles/video-packets';
 import { ActiveStreamTracker } from '../active-stream-tracker.service';
 import { SessionRouter } from './session-router.service';
 import type { ResolvedFile } from '../streaming.service';
@@ -56,7 +56,7 @@ export class SessionContextBuilder {
       // The frozen value beats a mid-session re-probe; falls back to 24 when unknown.
       sourceFps: live?.sourceFps ?? parseSourceFps(si?.video?.[0]?.frameRate),
       videoStreamIndex: si?.video?.[0]?.streamIndex,
-      sourceSeeksPastKeyframe: seeksPastKeyframe(si, resolved.absolutePath),
+      sourceSeeksPastKeyframe: sourceIsMpegTs(si, resolved.absolutePath),
       // Source colorimetry — preserved through an SDR transcode so the output
       // signals the source's real matrix/primaries/transfer, not a forced BT.709.
       sourceColorSpace: si?.video?.[0]?.colorSpace,

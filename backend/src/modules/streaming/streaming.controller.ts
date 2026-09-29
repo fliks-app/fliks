@@ -454,19 +454,6 @@ export class StreamingController {
     return isRemux ? this.segDur() : realSegmentSeconds(this.segDur(), sourceFps);
   }
 
-  /** The keyframe grid a remux playback would keep, or null for the uniform one.
-   *  Computed once per request so evaluate()'s AudioEndsEarly check and the grid actually served can never disagree. */
-  private freezeRemuxGrid(
-    scan: SourceScan | null,
-    resolved: ResolvedFile,
-    origin: number,
-    segDur: number,
-  ): KeyframeGrid | null {
-    return scan
-      ? remuxSegmentGrid(scan, origin, segDur, resolved.mediaFile.streamInfo?.video?.[0]?.frameRate)
-      : null;
-  }
-
   /** Logs why a remux session fell back to the uniform grid. Called only once the
    *  play method is known, so a DirectPlay/Transcode outcome never logs about it. */
   private logRemuxGridFallback(
@@ -925,11 +912,11 @@ export class StreamingController {
     // Frozen alongside the timeline: a mid-session re-probe must not move the
     // grid a later seek respawn or playlist read on this session computes from.
     const sourceFps = parseSourceFps(resolved.mediaFile.streamInfo?.video?.[0]?.frameRate);
-    const remuxGrid = this.freezeRemuxGrid(
+    const remuxGrid = remuxSegmentGrid(
       held.scan,
-      resolved,
       timeline.origin,
       ss.segmentDuration,
+      resolved.mediaFile.streamInfo?.video?.[0]?.frameRate,
     );
     const evaluateResult = this.streamBuilder.evaluate({
       resolved,

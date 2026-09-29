@@ -1,9 +1,9 @@
 import {
   computeSegmentGrid,
   gridSegmentIndex,
-  seeksPastKeyframe,
   type Keyframe,
 } from './segment-boundaries';
+import { sourceIsMpegTs } from '../../subtitles/video-packets';
 
 const kf = (...pts: number[]): Keyframe[] => pts.map((p) => ({ pts: p, dts: p }));
 
@@ -70,12 +70,12 @@ describe('gridSegmentIndex', () => {
   });
 });
 
-describe('seeksPastKeyframe', () => {
+describe('sourceIsMpegTs', () => {
   it('is MPEG-TS, by format name or, unprobed, by extension', () => {
-    expect(seeksPastKeyframe({ formatName: 'mpegts' }, '/m/a.mkv')).toBe(true);
-    expect(seeksPastKeyframe({ formatName: 'matroska,webm' }, '/m/a.ts')).toBe(false);
-    expect(seeksPastKeyframe({ formatName: 'mov,mp4,m4a,3gp,3g2,mj2' }, '/m/a.mp4')).toBe(false);
-    expect(seeksPastKeyframe({}, '/m/a.MTS')).toBe(true);
-    expect(seeksPastKeyframe(undefined, '/m/a.mkv')).toBe(false);
+    expect(sourceIsMpegTs({ formatName: 'mpegts' }, '/m/a.mkv')).toBe(true);
+    expect(sourceIsMpegTs({ formatName: 'matroska,webm' }, '/m/a.ts')).toBe(false);
+    expect(sourceIsMpegTs({ formatName: 'mov,mp4,m4a,3gp,3g2,mj2' }, '/m/a.mp4')).toBe(false);
+    expect(sourceIsMpegTs({}, '/m/a.MTS')).toBe(true);
+    expect(sourceIsMpegTs(undefined, '/m/a.mkv')).toBe(false);
   });
 });
