@@ -20,15 +20,21 @@ describe('SourceScanService', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
+  const setsBreak = (files: { update: jest.Mock }, value: string) => {
+    expect(files.update).toHaveBeenCalledTimes(1);
+    const [id, { streamInfo }] = files.update.mock.calls[0];
+    expect(id).toBe(3);
+    expect(streamInfo()).toBe(
+      `jsonb_set("streamInfo", '{timestampBreakSeconds}', '${value}'::jsonb)`,
+    );
+  };
+
   const setup = (row: object | null = null) => {
     const scans = {
       findOne: jest.fn().mockResolvedValue(row),
       upsert: jest.fn().mockResolvedValue(undefined),
     };
-    const files = {
-      findOne: jest.fn().mockResolvedValue({ id: 3, streamInfo: ts }),
-      update: jest.fn().mockResolvedValue(undefined),
-    };
+    const files = { update: jest.fn().mockResolvedValue(undefined) };
     return { scans, files, svc: new SourceScanService(scans as never, files as never) };
   };
 
@@ -62,9 +68,7 @@ describe('SourceScanService', () => {
       { mediaFileId: 3, size: st.size, mtimeMs: st.mtimeMs, scan: result },
       ['mediaFileId'],
     );
-    expect(files.update).toHaveBeenCalledWith(3, {
-      streamInfo: { ...ts, timestampBreakSeconds: 32.8 },
-    });
+    setsBreak(files, '32.8');
   });
 
   it('skips a file scanned at its current version, and one without video', async () => {
@@ -76,19 +80,19 @@ describe('SourceScanService', () => {
     expect(scan).not.toHaveBeenCalled();
   });
 
-  it('restores a clock-break mark a rescan dropped from streamInfo, on lookup', async () => {
+  it('restores a dropped clock break in the caller streamInfo and the row', async () => {
     const st = fs.statSync(file);
     const { files, svc } = setup({ size: st.size, mtimeMs: st.mtimeMs, scan: result });
-    await svc.lookup(3, file);
-    expect(files.update).toHaveBeenCalledWith(3, {
-      streamInfo: { ...ts, timestampBreakSeconds: 32.8 },
-    });
+    const si = { ...ts } as { timestampBreakSeconds?: number };
+    await svc.lookup(3, file, si as never);
+    expect(si.timestampBreakSeconds).toBe(32.8);
+    setsBreak(files, '32.8');
   });
 
-  it('does not rewrite streamInfo when the clock-break mark already matches', async () => {
+  it('writes nothing when the break already matches or no streamInfo is given', async () => {
     const st = fs.statSync(file);
     const { files, svc } = setup({ size: st.size, mtimeMs: st.mtimeMs, scan: result });
-    files.findOne.mockResolvedValue({ id: 3, streamInfo: { ...ts, timestampBreakSeconds: 32.8 } });
+    await svc.lookup(3, file, { ...ts, timestampBreakSeconds: 32.8 } as never);
     await svc.lookup(3, file);
     expect(files.update).not.toHaveBeenCalled();
   });

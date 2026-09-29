@@ -628,12 +628,8 @@ export class RemuxSegmentAssembler {
     return true;
   }
 
-  /** Every complete (moof, mdat) pair past `a.offset`, each paired with the
-   *  offset past it: a trailing unpaired moof (its mdat still being written)
-   *  is left for the next call, which re-reads it once complete. The caller
-   *  advances `a.offset` only once a frame is actually consumed, so a failure
-   *  mid-batch (an atomic write throwing) re-reads from the failed frame
-   *  instead of skipping it. */
+  /** Every complete (moof, mdat) pair past `a.offset`, with the offset past it
+   *  for the caller to commit once consumed; a trailing unpaired moof waits. */
   private async readAudioFrames(a: AudioRendition): Promise<{ frame: RawFrame; offset: number }[]> {
     const boxes = await tailBoxes(a.file, a.offset);
     const frames: { frame: RawFrame; offset: number }[] = [];
@@ -649,7 +645,7 @@ export class RemuxSegmentAssembler {
   }
 
   /** Segment `i`'s planned source-time boundary, in integer ticks so two runs
-   *  never disagree on float noise — the grid's boundary, never this run's own drifting landing point. */
+   *  never disagree on float noise; never this run's own drifting landing point. */
   private boundaryTicks(a: AudioRendition, i: number): bigint {
     return BigInt(Math.round(planBoundarySeconds(this.plan, i) * a.timescale));
   }
@@ -878,6 +874,8 @@ async function tailBoxes(
     for (;;) {
       if (start + 8 > fileSize) break;
       const { bytesRead } = await fh.read(head, 0, 16, start);
+      // Size 0 ("to end of file") can't be told complete in a file still growing.
+      if (bytesRead >= 4 && head.readUInt32BE(0) === 0) break;
       const header = readBoxHeader(head.subarray(0, bytesRead), 0, start, fileSize);
       if (!header) break;
       const buf = Buffer.alloc(header.size);

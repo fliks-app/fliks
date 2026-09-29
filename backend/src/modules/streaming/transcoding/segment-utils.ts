@@ -39,8 +39,8 @@ export async function fileExists(p: string): Promise<boolean> {
   }
 }
 
-/** Where cached segments live: the flat layout, and the var_stream_map '0/'
- *  video subdir — the two are mutually exclusive per run, so check order doesn't matter. */
+/** Where cached segments live: flat, or the var_stream_map '0/' video subdir.
+ *  The layout is part of the profile hash, so one cache dir only holds one. */
 function segmentDirs(cachePath: string): string[] {
   return [cachePath, path.join(cachePath, '0')];
 }

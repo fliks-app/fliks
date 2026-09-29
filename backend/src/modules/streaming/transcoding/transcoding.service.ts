@@ -521,7 +521,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Wait-vs-respawn for a live remux run: reachable segments come from the
-   *  run's own progress (its assembler), never the directory — a killed run leaves islands there. */
+   *  run's own progress (its assembler), never the directory a killed run leaves islands in. */
   private async resolveRunningRemuxSegment(
     key: string,
     existing: TranscodeSession,
