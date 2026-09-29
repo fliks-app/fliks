@@ -103,6 +103,7 @@ public class VideoCapabilitiesPlugin extends Plugin {
         result.put("containers", containers);
         result.put("resolutions", resolutions);
         result.put("dolbyVisionProfiles", dvProfilesArr);
+        result.put("cropsBlackBars", true);
         call.resolve(result);
     }
 
