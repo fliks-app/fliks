@@ -438,23 +438,24 @@ export class HomeComponent implements OnInit, OnDestroy {
   private async loadAllSections(opts: { force?: boolean } = {}): Promise<void> {
     const force = !!opts.force;
     try {
-      const [libs, cw, recs, pls, likes] = await Promise.all([
+      // Uncached rows paint on arrival: awaiting them holds the skeleton over
+      // cached rows for as long as a dead link takes to fail.
+      void this.playlistsApi.list({ force }).then(
+        (pls) =>
+          this.playlists.set(
+            [...pls].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 20),
+          ),
+        () => undefined,
+      );
+      void this.likesApi.mine(undefined, { force }).then((likes) => this.likes.set(likes), () => undefined);
+      const [libs, cw, recs] = await Promise.all([
         this.librariesApi.listMine({ force }).catch(() => null),
         this.streamingApi.getContinueWatching(undefined, { force }).catch(() => null),
         this.streamingApi.getRecommendations({ force }).catch(() => null),
-        this.playlistsApi.list({ force }).catch(() => null),
-        this.likesApi.mine(undefined, { force }).catch(() => null),
       ]);
       if (libs) this.libraries.set(libs);
       if (cw) this.continueWatchingRaw.set(cw);
       if (recs) this.recommendations.set(recs);
-      if (pls)
-        this.playlists.set(
-          [...pls]
-            .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-            .slice(0, 20),
-        );
-      if (likes) this.likes.set(likes);
     } catch { /* ignore */ }
     await this.loadFilteredSections({ force });
   }
@@ -480,7 +481,12 @@ export class HomeComponent implements OnInit, OnDestroy {
     );
 
     try {
-      const [recent, calendar, libEntries, requests] = await Promise.all([
+      if (wantRequests) {
+        void this.requestsService
+          .list({ limit: 12 }, { force })
+          .then((r) => this.recentRequests.set(r.data), () => undefined);
+      }
+      const [recent, calendar, libEntries] = await Promise.all([
         this.mediaService.getRecentlyAdded(
           {
             mode,
@@ -508,16 +514,9 @@ export class HomeComponent implements OnInit, OnDestroy {
               .catch(() => [s.libraryId as number, [] as Media[]] as const),
           ),
         ),
-        wantRequests
-          ? this.requestsService
-              .list({ limit: 12 }, { force })
-              .then((r) => r.data)
-              .catch(() => null)
-          : Promise.resolve(null),
       ]);
       this.recentMedia.set(recent);
       this.libraryRecent.set(new Map(libEntries));
-      if (requests) this.recentRequests.set(requests);
       const upcoming = calendar
         .filter((e) => !e.hasFile && (e.event === 'digital' || e.event === 'airing' || e.event === 'release'))
         .sort((a, b) => a.date.localeCompare(b.date));
