@@ -26,6 +26,7 @@
 		F1000001AAAA000000000005 /* PipPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000015 /* PipPlugin.swift */; };
 		F1000001AAAA000000000006 /* CastPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000016 /* CastPlugin.swift */; };
 		F1000001AAAA000000000007 /* AudioCapabilitiesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000017 /* AudioCapabilitiesPlugin.swift */; };
+		F1000001AAAA0000000000C8 /* VideoCapabilitiesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000C9 /* VideoCapabilitiesPlugin.swift */; };
 		F1000001AAAA000000000008 /* SubtitleOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000018 /* SubtitleOverlayView.swift */; };
 		F1000001AAAA000000000009 /* DownloadPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000019 /* DownloadPlugin.swift */; };
 		F1000001AAAA00000000000A /* OrientationPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA00000000001A /* OrientationPlugin.swift */; };
@@ -83,6 +84,7 @@
 		F1000001AAAA000000000015 /* PipPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000016 /* CastPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000017 /* AudioCapabilitiesPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCapabilitiesPlugin.swift; sourceTree = "<group>"; };
+		F1000001AAAA0000000000C9 /* VideoCapabilitiesPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoCapabilitiesPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000018 /* SubtitleOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleOverlayView.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000019 /* DownloadPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA00000000001A /* OrientationPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrientationPlugin.swift; sourceTree = "<group>"; };
@@ -153,6 +155,7 @@
 				F1000001AAAA000000000015 /* PipPlugin.swift */,
 				F1000001AAAA000000000016 /* CastPlugin.swift */,
 				F1000001AAAA000000000017 /* AudioCapabilitiesPlugin.swift */,
+				F1000001AAAA0000000000C9 /* VideoCapabilitiesPlugin.swift */,
 				F1000001AAAA000000000018 /* SubtitleOverlayView.swift */,
 				F1000001AAAA000000000019 /* DownloadPlugin.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
@@ -360,6 +363,7 @@
 				F1000001AAAA000000000005 /* PipPlugin.swift in Sources */,
 				F1000001AAAA000000000006 /* CastPlugin.swift in Sources */,
 				F1000001AAAA000000000007 /* AudioCapabilitiesPlugin.swift in Sources */,
+				F1000001AAAA0000000000C8 /* VideoCapabilitiesPlugin.swift in Sources */,
 				F1000001AAAA000000000008 /* SubtitleOverlayView.swift in Sources */,
 				F1000001AAAA000000000009 /* DownloadPlugin.swift in Sources */,
 				F954F4DC03C3615047B0AABF /* DownloadActivityAttributes.swift in Sources */,

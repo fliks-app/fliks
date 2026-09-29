@@ -4,8 +4,8 @@ import { computeVideoCropStyle, type CropRect, type VideoCropStyle } from '../..
 /** What the controller needs from the player, so it never reaches into the
  *  component directly. */
 export interface WebVideoCropHost {
-  /** mpv crops decode-side; this controller only ever applies to CSS. */
-  isDesktopEngine(): boolean;
+  /** mpv and the native players crop at their own output, never in CSS. */
+  cropsAtOutput(): boolean;
   activeCropRect(): CropRect | undefined;
   sourceSize(): { width: number; height: number };
   fit(): 'contain' | 'cover';
@@ -43,7 +43,7 @@ export class WebVideoCropController {
   /** Re-fit the CSS crop to a new container box or decoded size: an
    *  anamorphic source reports its display size only once loaded. */
   refresh(): void {
-    if (this.host.isDesktopEngine()) return;
+    if (this.host.cropsAtOutput()) return;
     const crop = this.host.activeCropRect();
     const container = this.host.containerElement();
     const video = this.host.videoElement();

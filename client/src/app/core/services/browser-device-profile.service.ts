@@ -47,6 +47,8 @@ interface NativeVideoCaps {
   /** Android only: DV profiles the device's decoders report (not yet
    *  intersected with the display; see `VideoCapabilitiesPlugin.java`). */
   dolbyVisionProfiles?: number[];
+  /** The NativePlayer plugin implements `setCrop`; absent on builds without it. */
+  cropsBlackBars?: boolean;
 }
 interface VideoCapabilitiesPlugin {
   getSupported(): Promise<NativeVideoCaps>;
@@ -225,6 +227,11 @@ export class BrowserDeviceProfileService {
   /** Pessimistic until the desktop probe resolves: P7 only, never 5/8 a bridge can't reshape. */
   private desktopCanReshapeDolbyVision = false;
   private desktopProbe: Promise<void> | null = null;
+
+  /** Native (Capacitor) player whose plugin build implements `setCrop`. */
+  nativeCropsBlackBars(): boolean {
+    return Capacitor.isNativePlatform() && this.nativeVideo?.cropsBlackBars === true;
+  }
 
   constructor() {
     // Pre-fetch native HDR + audio + video capabilities (async, cached for
@@ -418,6 +425,11 @@ export class BrowserDeviceProfileService {
     // probe can miss it while the panel hardware-decodes it.
     if (this.nativeVideo && this.nativeVideo.videoCodecs.length) {
       const nv = this.nativeVideo;
+      // AVPlayer decodes what the WebView's WebKit probes, so its level ceiling
+      // is kept; on Android the WebView under-reports and the plugin owns it.
+      const probedLevels = new Map<string, number | undefined>(
+        Capacitor.getPlatform() === 'ios' ? codecConditions.map((c) => [c.codec, c.maxLevel]) : [],
+      );
       videoCodecs.length = 0;
       codecConditions.length = 0;
       containers.length = 0;
@@ -429,6 +441,7 @@ export class BrowserDeviceProfileService {
             codec: 'h264',
             profiles: ['baseline', 'constrained baseline', 'main', 'high'],
             maxBitDepth: 8,
+            ...this.levelCondition(probedLevels, 'h264'),
             ...this.nativeResCondition(nv, 'h264'),
           });
         } else if (c === 'hevc') {
@@ -437,6 +450,7 @@ export class BrowserDeviceProfileService {
             codec: 'hevc',
             profiles: nv.hevcMain10 ? ['main', 'main 10'] : ['main'],
             maxBitDepth: nv.hevcMain10 ? 10 : 8,
+            ...this.levelCondition(probedLevels, 'hevc'),
             ...this.nativeResCondition(nv, 'hevc'),
           });
         } else if (c === 'av1') {
@@ -591,7 +605,8 @@ export class BrowserDeviceProfileService {
     // crop. Every mpv backend qualifies, the Linux render API included, since
     // they all run the gl_video renderer that applies the rectangle.
     // The web (Shaka) path crops the same way in CSS, see `WebVideoCropController`.
-    const cropsBlackBarsLocally = this.device.isDesktopNative() || isWeb;
+    const cropsBlackBarsLocally =
+      this.device.isDesktopNative() || isWeb || this.nativeCropsBlackBars();
 
     // DV profiles this device can decode AND present, gated under supportsHdr.
     // iOS/Android resolve it natively; web/webOS probe per codec string.
@@ -722,6 +737,11 @@ export class BrowserDeviceProfileService {
   }
 
   /** Probe max H.264 level by testing progressively higher levels */
+  private levelCondition(levels: Map<string, number | undefined>, codec: string): { maxLevel?: number } {
+    const maxLevel = levels.get(codec);
+    return maxLevel === undefined ? {} : { maxLevel };
+  }
+
   private probeH264Level(video: HTMLVideoElement, hasMSE: boolean): number {
     // Level -> hex suffix in avc1 codec string
     const levels: [number, string][] = [

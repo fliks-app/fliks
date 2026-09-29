@@ -57,6 +57,90 @@ describe('BrowserDeviceProfileService, cropsBlackBarsLocally', () => {
   });
 });
 
+describe('BrowserDeviceProfileService, cropsBlackBarsLocally on Capacitor', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    vi.restoreAllMocks();
+  });
+
+  function nativeService(nativeVideo: Record<string, unknown> | null) {
+    vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true);
+    const service = configure({
+      isTv: () => false,
+      tvPlatform: () => null,
+      isDesktopNative: () => false,
+    } as DeviceService);
+    const internals = service as unknown as { nativeVideo: unknown; cachedProfile: unknown };
+    internals.nativeVideo = nativeVideo;
+    internals.cachedProfile = null;
+    return service;
+  }
+
+  const caps = { videoCodecs: ['h264'], hevcMain10: false, av1Main10: false, containers: ['mp4'] };
+
+  it('is true once the plugin reports cropsBlackBars', () => {
+    const service = nativeService({ ...caps, cropsBlackBars: true });
+    expect(service.getProfile().cropsBlackBarsLocally).toBe(true);
+    expect(service.nativeCropsBlackBars()).toBe(true);
+  });
+
+  it('is false when the plugin build does not report the capability', () => {
+    const service = nativeService(caps);
+    expect(service.getProfile().cropsBlackBarsLocally).toBe(false);
+    expect(service.nativeCropsBlackBars()).toBe(false);
+  });
+
+  it('is false before the capabilities probe resolves', () => {
+    const service = nativeService(null);
+    expect(service.getProfile().cropsBlackBarsLocally).toBe(false);
+  });
+});
+
+describe('BrowserDeviceProfileService, native codec levels', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  const caps = {
+    videoCodecs: ['h264', 'hevc'],
+    hevcMain10: true,
+    av1Main10: false,
+    containers: ['mp4'],
+  };
+
+  function nativeProfile(platform: string) {
+    vi.stubGlobal('MediaSource', {
+      isTypeSupported: (t: string) =>
+        /avc1\.(42E01E|42001E|42001F|640028|640029)/.test(t) || /hvc1\.\d\.\d\.L(120|123|150|153)\.B0/.test(t),
+    });
+    const service = configure({
+      isTv: () => false,
+      tvPlatform: () => null,
+      isDesktopNative: () => false,
+    } as DeviceService);
+    vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true);
+    vi.spyOn(Capacitor, 'getPlatform').mockReturnValue(platform as never);
+    const internals = service as unknown as { nativeVideo: unknown; cachedProfile: unknown };
+    internals.nativeVideo = caps;
+    internals.cachedProfile = null;
+    return service.getProfile();
+  }
+
+  it('iOS keeps the probed maxLevel of each codec the plugin reports', () => {
+    const conditions = nativeProfile('ios').codecConditions ?? [];
+    expect(conditions.find((c) => c.codec === 'h264')?.maxLevel).toBe(41);
+    expect(conditions.find((c) => c.codec === 'hevc')?.maxLevel).toBe(153);
+  });
+
+  it('Android leaves the level to the plugin', () => {
+    const conditions = nativeProfile('android').codecConditions ?? [];
+    expect(conditions.find((c) => c.codec === 'h264')?.maxLevel).toBeUndefined();
+    expect(conditions.find((c) => c.codec === 'hevc')?.maxLevel).toBeUndefined();
+  });
+});
+
 describe('BrowserDeviceProfileService: switchesDirectPlayAudio', () => {
   afterEach(() => {
     TestBed.resetTestingModule();

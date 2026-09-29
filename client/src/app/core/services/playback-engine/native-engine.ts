@@ -1,4 +1,4 @@
-import { NativePlayer } from '../../plugins/native-player.plugin';
+import { NativePlayer, type NativePlayerCrop } from '../../plugins/native-player.plugin';
 import {
   AbstractPlaybackEngine,
   type PlaybackEngine,
@@ -87,6 +87,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     this._initialized = false;
     this.unbindWindowEvents();
     this._activeTrackId = null;
+    this._crop = null;
     // Drop engine event subscribers (every other engine does this in destroy).
     // Without it, each player navigation leaks the previous component's
     // listeners onto the long-lived NativePlayer bridge.
@@ -125,6 +126,9 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     }
     if (this._fillScreen) {
       await NativePlayer.setFillScreen({ fill: true }).catch(() => {});
+    }
+    if (this._crop) {
+      await NativePlayer.setCrop(this._crop).catch(() => {});
     }
 
     // A new MediaItem resurfaces fresh text tracks: drop the stale resolved
@@ -174,6 +178,29 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   setFillScreen(fill: boolean): void {
     this._fillScreen = fill;
     NativePlayer.setFillScreen({ fill }).catch(() => {});
+  }
+
+  /** Set by the player from the device profile: only builds whose plugin
+   *  implements `setCrop` may receive it. */
+  cropSupported = false;
+  private _crop: NativePlayerCrop | null = null;
+
+  /** Crop the letterbox bars natively. Kept and re-applied after load(), the
+   *  native side drops it with the item. Returns whether the crop is in effect. */
+  setCrop(
+    rect: { x: number; y: number; width: number; height: number } | null | undefined,
+    sourceWidth: number,
+    sourceHeight: number,
+  ): boolean {
+    const crop =
+      this.cropSupported && rect?.width && rect.height && sourceWidth && sourceHeight
+        ? { ...rect, sourceWidth, sourceHeight }
+        : null;
+    this._crop = crop;
+    if (this.cropSupported) {
+      NativePlayer.setCrop(crop ?? {}).catch(() => {});
+    }
+    return crop !== null;
   }
 
   private _preloadedSubtitles: { url: string; language: string; label: string }[] = [];

@@ -31,6 +31,15 @@ export interface NativePlayerPosition {
   buffered: number;
 }
 
+export interface NativePlayerCrop {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  sourceWidth: number;
+  sourceHeight: number;
+}
+
 export type NativePlayerState =
   | 'idle'
   | 'playing'
@@ -109,6 +118,12 @@ export interface NativePlayerPlugin {
    *  The engines render outside the <video> element, so the CSS object-fit
    *  binding the browser path uses can't reach them. */
   setFillScreen(options: { fill: boolean }): Promise<void>;
+
+  /** Remove letterbox bars by showing only the given source-pixel rectangle.
+   *  `sourceWidth/Height` are the coded size the rectangle is expressed in.
+   *  An empty object clears the crop. iOS only, see `cropsBlackBars` in the
+   *  VideoCapabilities plugin. */
+  setCrop(options: NativePlayerCrop | Record<string, never>): Promise<void>;
 
   // ── Brightness ──
 

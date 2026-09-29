@@ -44,7 +44,7 @@ import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { PlaybackQueueService, QueueItem } from '../../core/services/playback-queue.service';
 import { buildSeriesQueueItems, resolvePlayableFile } from '../../shared/utils/media-play.util';
-import { buildPlayerStats, formatAudioLabel, formatAudioParts, inIntroRange, inOutroRange, parseAudioIndex, playbackModeOf, SpriteMetadata, widthForProfile, type CropRect } from '../../core/utils/player.utils';
+import { buildPlayerStats, formatAudioLabel, formatAudioParts, inIntroRange, inOutroRange, parseAudioIndex, playbackModeOf, SpriteMetadata, widthForProfile, type CropRect, type OfflineCrop } from '../../core/utils/player.utils';
 import { formatErrorDiagnostics, type PlaybackError } from '../../core/services/playback-engine/playback-error';
 import { environment } from '../../../environments/environment';
 import { normalizeLangCode } from '../../core/utils/language.utils';
@@ -463,6 +463,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Whether {@link applyVideoCrop} last handed mpv a crop; the overlay reads
    *  this instead of re-guessing from `pi`. */
   private readonly desktopCropApplied = signal(false);
+  private readonly nativeCropApplied = signal(false);
+  /** Crop stored with the offline copy; there is no playback-info to read it from. */
+  private offlineCrop: OfflineCrop | null = null;
   private readonly statsRefreshTick = signal(0);
   // ── Skip-intro state ──
   /** Episode-level intro marker received in playback-info (null for movies / no marker). */
@@ -800,9 +803,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       transcodeTierFromVariantHeight: (h, w) => this.qualityManager.transcodeTierFromVariantHeight(h, w),
       translate: this.translate,
       sourceVideoStream: this.currentFile()?.streamInfo?.video?.[0],
-      cropAppliedByPlayer: this.isDesktopNative ? this.desktopCropApplied() : this.webCrop.videoCropStyle() != null,
+      cropAppliedByPlayer: this.isDesktopNative
+        ? this.desktopCropApplied()
+        : this.isNativeEngine()
+          ? this.nativeCropApplied()
+          : this.webCrop.videoCropStyle() != null,
       isDesktopNative: this.isDesktopNative,
-      pipOrFullscreenActive: this.isPipOrNativeFullscreen(),
+      pipOrFullscreenActive: this.isPipOrNativeFullscreen() || (this.isNativeEngine() && this.inPipMode()),
       activeAudioTrackId,
       availableAudioTracks,
       activeAudioStreamIndex: this.activeAudioStreamIndex,
@@ -885,6 +892,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           return;
         }
         this.isOfflinePlayback = true;
+        this.offlineCrop =
+          this.dlCache.load().find((t) => t.mediaFileId === this.mediaFileId && t.status === 'ready')
+            ?.offlineCrop ?? null;
       }
 
       // Kick off playback-info in parallel with media/state load to save one
@@ -984,6 +994,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           // Desktop: the original container lives on disk; mpv plays it back
           // offline (file://) with full codec coverage + embedded tracks.
           await this.createDesktopEngine();
+          this.applyVideoCrop();
           await this.engine!.load(offlineCheck!, startTime);
           await this.loadOfflineSubtitles();
         } else if (this.isNative) {
@@ -991,6 +1002,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           await this.createNativeEngine();
           (this.engine as NativeEngine).setOffline(true);
           this.applyNativeSubtitleStyle();
+          this.applyVideoCrop();
 
           // Pre-load offline subtitles so they're included in ExoPlayer's MediaItem
           const offlineSubs = await this.getOfflineSubtitleConfigs();
@@ -1002,6 +1014,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         } else {
           // Web: Shaka offline URI ("offline:123") — IndexedDB-backed
           await this.createShakaEngine();
+          this.applyVideoCrop();
           await this.engine!.load(offlineCheck!, startTime);
         }
       } else {
@@ -1112,6 +1125,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           // Capacitor native players preload sidecar subs into the MediaItem for
           // direct play; HLS modes and the desktop mpv engine handle subs themselves.
           if (this.engine instanceof NativeEngine) {
+            this.applyVideoCrop();
             const ext =
               mode === 'direct'
                 ? (await subsPromise)
@@ -1509,6 +1523,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   private async createNativeEngine(): Promise<void> {
     const { engine } = await this.createSurface('native');
+    if (engine instanceof NativeEngine) {
+      engine.cropSupported = this.deviceProfileService.nativeCropsBlackBars();
+    }
     this.wireNativePlayerEngine(engine);
   }
 
@@ -4111,6 +4128,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** The rectangle this client should remove: only when this copy is the one
    *  playing (`videoCopyStream`) - a re-encode already cut it server-side. */
   activeCropRect(): CropRect | undefined {
+    if (this.isOfflinePlayback) return this.offlineCrop ?? undefined;
     return this.playbackInfo?.videoCopyStream ? this.playbackInfo.source?.crop : undefined;
   }
 
@@ -4125,14 +4143,22 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.desktopCropApplied.set(!!c && !!this.engine);
       return;
     }
+    if (this.engine instanceof NativeEngine) {
+      const { width, height } = this.sourceSize();
+      this.nativeCropApplied.set(this.engine.setCrop(c, width, height));
+      return;
+    }
     this.webCrop.refresh();
   }
 
   // ── WebVideoCropHost (see web-video-crop-controller.ts) ──
-  isDesktopEngine(): boolean {
-    return this.isDesktopNative;
+  cropsAtOutput(): boolean {
+    return this.isDesktopNative || this.isNativeEngine();
   }
   sourceSize(): { width: number; height: number } {
+    if (this.isOfflinePlayback) {
+      return { width: this.offlineCrop?.sourceWidth ?? 0, height: this.offlineCrop?.sourceHeight ?? 0 };
+    }
     return { width: this.playbackInfo?.source?.width ?? 0, height: this.playbackInfo?.source?.height ?? 0 };
   }
   fit(): 'contain' | 'cover' {
