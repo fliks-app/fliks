@@ -1,6 +1,7 @@
 import { ChildProcess } from 'child_process';
 import type { AudioPlan } from './audio-encode';
 import type { RemuxSegmentAssembler } from './remux-assembler';
+import type { TonemapCurve } from './codec/types';
 
 export interface TranscodeProfile {
   name: string;
@@ -123,6 +124,8 @@ export interface SessionContext {
    *  let the codec selector keep its built-in preference order). Forwarded
    *  to `ffmpeg-args` to override the default `useVaapiTonemap` decision. */
   tonemapAlgo?: TonemapAlgo;
+  /** Tone-map curve, frozen at playback-info: see `LiveSession.tonemapCurve`. */
+  tonemapCurve?: TonemapCurve;
   /** Source framerate (fps). Used to compute GOP = segmentDuration * fps. */
   sourceFps?: number;
   /** Source time of the first presented video frame (`sourceTimeline`): the

@@ -7,6 +7,7 @@ import {
 } from './profile-hash';
 import { sourceTimeline } from './source-timeline';
 import type { SessionContext } from './types';
+import { DEFAULT_TONEMAP_CURVE } from './codec/types';
 
 /** What playback-info freezes on the LiveSession and every HLS request of the
  *  session rebuilds its context, and so its cache hash, from. */
@@ -20,7 +21,11 @@ export type SessionLayout = Pick<
   | 'sourceVersion'
   | 'dolbyVision'
   | 'sourceHdr10Plus'
+  | 'sourceDvProfile'
+  | 'sourceDvBlSignalCompatId'
+  | 'audioStreams'
   | 'tonemapping'
+  | 'tonemapCurve'
 >;
 
 /** Every context field the cache profile hash may read: playback-info has
@@ -43,6 +48,7 @@ export type SessionLayoutContext = Pick<
   | 'sourceDvProfile'
   | 'sourceDvBlSignalCompatId'
   | 'sourceHdr10Plus'
+  | 'tonemapCurve'
 >;
 
 /** The session fields the cache profile hash is derived from. The timeline
@@ -59,8 +65,11 @@ export function sessionLayoutContext(
     // Multi-audio: video-only segments plus one var_stream_map rendition per
     // track, so the player switches client-side via EXT-X-MEDIA.
     videoOnly: audioLayout(si?.audio?.length ?? 0) === 'var-stream-map',
+    // Frozen off the LiveSession, not re-read from si: a rescan that rewrites
+    // track count/order mid-session must not desync it from audioPlan/
+    // audioTrackPlans (decided against the frozen layout at playback-info).
     // With `streamIndex`, so the single-track path maps `0:<abs>` too.
-    audioStreams: si?.audio ?? undefined,
+    audioStreams: live?.audioStreams ?? si?.audio ?? undefined,
     audioPlan: live?.audioPlan ?? undefined,
     audioTrackPlans: live?.audioTrackPlans ?? undefined,
     // Undefined only before a sid exists (the userId-based findCurrent fallback).
@@ -72,8 +81,16 @@ export function sessionLayoutContext(
     sourceVersion: live?.sourceVersion ?? undefined,
     dolbyVision: live?.dolbyVision ?? false,
     tonemap: live?.tonemapping ?? false,
-    sourceDvProfile: si?.video?.[0]?.dvProfile,
-    sourceDvBlSignalCompatId: si?.video?.[0]?.dvBlSignalCompatId,
+    tonemapCurve: live?.tonemapCurve ?? DEFAULT_TONEMAP_CURVE,
+    // Frozen: a stale-probe rescan mid-session must not move the DV decision.
+    // `live.sourceDvProfile` can legitimately be `null` (no DV), which must
+    // not fall through to a live re-read — gate on session presence instead.
+    sourceDvProfile: live
+      ? (live.sourceDvProfile ?? undefined)
+      : si?.video?.[0]?.dvProfile,
+    sourceDvBlSignalCompatId: live
+      ? (live.sourceDvBlSignalCompatId ?? undefined)
+      : si?.video?.[0]?.dvBlSignalCompatId,
     // Frozen, not re-read from si: a background reprobe fills this in later
     // and must not fork the hash mid-session.
     sourceHdr10Plus: live?.sourceHdr10Plus ?? false,

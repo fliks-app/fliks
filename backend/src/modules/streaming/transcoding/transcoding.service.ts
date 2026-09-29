@@ -1659,6 +1659,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       videoStreamIndex: ctx?.videoStreamIndex,
       encoderPreset: ctx?.encoderPreset,
       tonemapAlgo: ctx?.tonemapAlgo,
+      tonemapCurve: ctx?.tonemapCurve,
       sourceFps: ctx?.sourceFps,
       sourceColorSpace: ctx?.sourceColorSpace,
       sourceColorPrimaries: ctx?.sourceColorPrimaries,

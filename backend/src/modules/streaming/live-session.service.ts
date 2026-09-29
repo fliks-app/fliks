@@ -8,8 +8,12 @@ import { randomUUID } from 'crypto';
 import type { RemoteQualityRung } from '../scheduler/events.service';
 import { StreamLifetime } from './lifetime-constants';
 import type { TranscodeReason } from './dto/playback-info.dto';
-import type { BurnInSubtitle } from './transcoding';
-import type { CodecVariant } from './transcoding/codec/types';
+import type { AudioStreamMeta, BurnInSubtitle } from './transcoding';
+import {
+  DEFAULT_TONEMAP_CURVE,
+  type CodecVariant,
+  type TonemapCurve,
+} from './transcoding/codec/types';
 import type { AudioPlan } from './transcoding/audio-encode';
 import type { SourceTimeline } from './transcoding/source-timeline';
 import type { KeyframeGrid } from './transcoding/segment-boundaries';
@@ -138,6 +142,9 @@ export interface LiveSession {
   supportsAbr: boolean;
   videoVariant: CodecVariant | null;
   tonemapping: boolean;
+  /** Tone-map curve, frozen at playback-info from the admin setting: a
+   *  later admin change must not fork the cache of an in-progress session. */
+  tonemapCurve: TonemapCurve;
   /** HDR copied through to a client that tone-maps it locally. */
   clientTonemap: boolean;
   /** Delivered stream is Dolby Vision-presentable (see playback-info.dto). */
@@ -145,6 +152,14 @@ export interface LiveSession {
   /** Source carries HDR10+ dynamic metadata, frozen at playback-info: a
    *  background reprobe must not fork the cache hash mid-session. */
   sourceHdr10Plus: boolean;
+  /** Dolby Vision profile + base-layer compat id, frozen at playback-info: a
+   *  stale-probe rescan mid-session must not move the DV decision. */
+  sourceDvProfile: number | null;
+  sourceDvBlSignalCompatId: number | null;
+  /** Audio stream metadata, frozen at playback-info: a rescan that rewrites
+   *  track count/order mid-session must not desync `audioPlan`/`audioTrackPlans`
+   *  (decided against the frozen layout) from a re-read live one. */
+  audioStreams: AudioStreamMeta[] | null;
   transcodeReasons: TranscodeReason[];
   burnIn: BurnInSubtitle | null;
   encoderPreset: string;
@@ -202,9 +217,13 @@ export interface CreateLiveSessionInput {
   supportsAbr?: boolean;
   videoVariant?: CodecVariant | null;
   tonemapping?: boolean;
+  tonemapCurve?: TonemapCurve;
   clientTonemap?: boolean;
   dolbyVision?: boolean;
   sourceHdr10Plus?: boolean;
+  sourceDvProfile?: number | null;
+  sourceDvBlSignalCompatId?: number | null;
+  audioStreams?: AudioStreamMeta[] | null;
   transcodeReasons?: TranscodeReason[];
   burnIn?: BurnInSubtitle | null;
   encoderPreset?: string;
@@ -325,9 +344,13 @@ export function buildLiveSession(
       supportsAbr: input.supportsAbr ?? true,
       videoVariant: input.videoVariant ?? null,
       tonemapping: input.tonemapping ?? false,
+      tonemapCurve: input.tonemapCurve ?? DEFAULT_TONEMAP_CURVE,
       clientTonemap: input.clientTonemap ?? false,
       dolbyVision: input.dolbyVision ?? false,
       sourceHdr10Plus: input.sourceHdr10Plus ?? false,
+      sourceDvProfile: input.sourceDvProfile ?? null,
+      sourceDvBlSignalCompatId: input.sourceDvBlSignalCompatId ?? null,
+      audioStreams: input.audioStreams ?? null,
       transcodeReasons: input.transcodeReasons ?? [],
       burnIn: input.burnIn ?? null,
       encoderPreset: input.encoderPreset ?? 'faster',

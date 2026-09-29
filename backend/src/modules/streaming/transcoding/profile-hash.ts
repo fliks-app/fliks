@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import type { BitDepth, HdrFormat, VideoCodec } from './codec/types';
+import type { BitDepth, HdrFormat, TonemapCurve, VideoCodec } from './codec/types';
 import { dvHasNoBase } from './codec/dolby-vision';
 import { varStreamMapLayout } from './audio-layout';
 import { audioEncoderName, DEFAULT_AUDIO_PLAN } from './audio-encode';
@@ -69,6 +69,9 @@ export interface PlaybackProfile {
   /** A P7 remux strips the enhancement layer/RPU (see `buildRemuxArgs`):
    *  different bytes than an unstripped copy, its own cache dir. */
   doviElStrip: boolean;
+  /** Tone-map curve, only set while a tonemap is actually active — a curve
+   *  change must not fork the cache of a session that never tone-maps. */
+  tonemapCurve?: TonemapCurve;
 }
 
 /** Segment timeline layout (edit lists, tfdt origin, audio alignment). Raised
@@ -110,6 +113,7 @@ function canonicalise(profile: PlaybackProfile): string {
     ...(profile.dvTonemap && profile.dvTonemapHdr10 ? [`dvt10=1`] : []),
     ...(profile.hdr10PlusStrip ? [`h10p=1`] : []),
     ...(profile.doviElStrip ? [`dvel=1`] : []),
+    ...(profile.tonemapCurve ? [`tc=${profile.tonemapCurve}`] : []),
   ].join('|');
 }
 
@@ -176,5 +180,6 @@ export function buildPlaybackProfileFromContext(
     dvTonemapHdr10: videoVariant?.hdr === 'HDR10',
     hdr10PlusStrip: !!ctx?.dolbyVision && !!ctx?.sourceHdr10Plus,
     doviElStrip: ctx?.sourceDvProfile === 7 && !ctx?.dolbyVision,
+    tonemapCurve: ctx?.tonemap ? ctx?.tonemapCurve : undefined,
   };
 }
