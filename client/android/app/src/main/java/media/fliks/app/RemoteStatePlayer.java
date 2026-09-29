@@ -22,6 +22,7 @@ final class RemoteStatePlayer extends SimpleBasePlayer {
     }
 
     private static final int MAX_VOLUME = 100;
+    private static final long SEEK_INCREMENT_MS = 10_000;
     private final Sink sink;
     private MediaMetadata metadata = MediaMetadata.EMPTY;
     private boolean playing;
@@ -54,7 +55,8 @@ final class RemoteStatePlayer extends SimpleBasePlayer {
     protected State getState() {
         Commands.Builder commands = new Commands.Builder().addAll(
                 COMMAND_PLAY_PAUSE, COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM, COMMAND_GET_CURRENT_MEDIA_ITEM,
-                COMMAND_GET_METADATA, COMMAND_GET_TIMELINE, COMMAND_GET_DEVICE_VOLUME);
+                COMMAND_GET_METADATA, COMMAND_GET_TIMELINE, COMMAND_GET_DEVICE_VOLUME,
+                COMMAND_SEEK_BACK, COMMAND_SEEK_FORWARD);
         if (canSetVolume) {
             commands.addAll(COMMAND_SET_DEVICE_VOLUME_WITH_FLAGS, COMMAND_ADJUST_DEVICE_VOLUME_WITH_FLAGS);
         }
@@ -66,6 +68,8 @@ final class RemoteStatePlayer extends SimpleBasePlayer {
         return new State.Builder()
                 .setAvailableCommands(commands.build())
                 .setPlaylist(ImmutableList.of(item))
+                .setSeekBackIncrementMs(SEEK_INCREMENT_MS)
+                .setSeekForwardIncrementMs(SEEK_INCREMENT_MS)
                 .setPlayWhenReady(playing || buffering, PLAY_WHEN_READY_CHANGE_REASON_REMOTE)
                 .setPlaybackState(buffering ? STATE_BUFFERING : STATE_READY)
                 .setContentPositionMs(playing && !buffering

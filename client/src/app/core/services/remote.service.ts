@@ -149,6 +149,9 @@ export class RemoteService {
   private stateAt = 0;
   /** The session a stop retired, so only its own farewell heartbeat is ignored. */
   private stoppedSessionId: string | null = null;
+  /** Set by a stop until the target reports again: the listing can still carry
+   *  the ended session until the server expires it. */
+  private stoppedUntilReport = false;
   private observingSince = 0;
   private expectedMediaFileId: number | null = null;
   /** The detail page a browse just opened here, so mirroring it back to our
@@ -193,6 +196,7 @@ export class RemoteService {
   noteLoadSent(mediaFileId: number | null): void {
     this.expectedMediaFileId = mediaFileId;
     this.stoppedSessionId = null;
+    this.stoppedUntilReport = false;
     this.pinnedPosition.set(null);
     this.reportedState.set(null);
     this.observingSince = Date.now();
@@ -227,7 +231,9 @@ export class RemoteService {
    *  another within the same second, and a window swallowed the new one's
    *  first report. Read before the state is cleared. */
   noteStopSent(): void {
-    this.stoppedSessionId = this.reportedState()?.sessionId ?? null;
+    // Kept when the state is already gone: a stop cleared up front is noted twice.
+    this.stoppedSessionId = this.reportedState()?.sessionId ?? this.stoppedSessionId;
+    this.stoppedUntilReport = true;
     this.expectedMediaFileId = null;
     this.pinnedPosition.set(null);
     this.reportedState.set(null);
@@ -470,7 +476,8 @@ export class RemoteService {
         // target the listing shows as empty really has stopped.
         // The listing rebuilds playback from the live sessions, so it is the
         // only state a client that just picked an already-playing target has.
-        if (listed?.nowPlaying && !this.reportedState()) {
+        if (!listed?.nowPlaying) this.stoppedUntilReport = false;
+        if (listed?.nowPlaying && !this.reportedState() && !this.stoppedUntilReport) {
           this.reportedState.set(listed.nowPlaying);
           this.stateAt = Date.now();
         }
@@ -494,6 +501,7 @@ export class RemoteService {
     if (targetId && this.cast.isConnected()) this.cast.disconnect();
     this.selectedTargetId.set(targetId);
     this.reportedState.set(null);
+    this.stoppedUntilReport = false;
     this.selectedRow.set(null);
     this.clearOffline();
     this.expectedMediaFileId = null;
@@ -619,6 +627,7 @@ export class RemoteService {
       return;
     }
     this.stoppedSessionId = null;
+    this.stoppedUntilReport = false;
     // An exact test rather than a time window: the outgoing session flushes one
     // last heartbeat for the previous file as it navigates away.
     if (this.expectedMediaFileId !== null) {

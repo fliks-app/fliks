@@ -41,34 +41,50 @@ final class QueueSession {
                 .setId(id)
                 .setSessionActivity(PendingIntent.getActivity(context, 0, open, PendingIntent.FLAG_IMMUTABLE))
                 .setCallback(new Callback(handlers))
-                .setMediaButtonPreferences(buttons(context, false, null))
+                .setMediaButtonPreferences(buttons(context, false, null, false))
                 .build();
     }
 
-    /** `liked` null hides the heart: the item has no like state (yet). */
-    static void setState(Context context, MediaSession session, boolean hasNext, @androidx.annotation.Nullable Boolean liked) {
-        session.setMediaButtonPreferences(buttons(context, hasNext, liked));
+    /** `liked` null hides the heart: the item has no like state (yet). `seek`
+     *  swaps previous/next for ±10 s, for an item outside any queue. */
+    static void setState(Context context, MediaSession session, boolean hasNext,
+                         @androidx.annotation.Nullable Boolean liked, boolean seek) {
+        session.setMediaButtonPreferences(buttons(context, hasNext, liked, seek));
     }
 
     @OptIn(markerClass = UnstableApi.class)
-    private static ImmutableList<CommandButton> buttons(Context context, boolean hasNext, @androidx.annotation.Nullable Boolean liked) {
+    private static ImmutableList<CommandButton> buttons(Context context, boolean hasNext,
+                                                        @androidx.annotation.Nullable Boolean liked, boolean seek) {
         ImmutableList.Builder<CommandButton> buttons = ImmutableList.builder();
         buttons.add(new CommandButton.Builder(CommandButton.ICON_STOP)
                 .setSessionCommand(STOP)
                 .setDisplayName(context.getString(R.string.notification_stop))
                 .setSlots(CommandButton.SLOT_OVERFLOW)
                 .build());
-        buttons.add(new CommandButton.Builder(CommandButton.ICON_PREVIOUS)
-                .setSessionCommand(PREVIOUS)
-                .setDisplayName(context.getString(androidx.media3.ui.R.string.exo_controls_previous_description))
-                .setSlots(CommandButton.SLOT_BACK)
-                .build());
-        if (hasNext) {
-            buttons.add(new CommandButton.Builder(CommandButton.ICON_NEXT)
-                    .setSessionCommand(NEXT)
-                    .setDisplayName(context.getString(androidx.media3.ui.R.string.exo_controls_next_description))
+        if (seek) {
+            buttons.add(new CommandButton.Builder(CommandButton.ICON_SKIP_BACK_10)
+                    .setPlayerCommand(Player.COMMAND_SEEK_BACK)
+                    .setDisplayName(context.getString(androidx.media3.ui.R.string.exo_controls_rewind_description))
+                    .setSlots(CommandButton.SLOT_BACK)
+                    .build());
+            buttons.add(new CommandButton.Builder(CommandButton.ICON_SKIP_FORWARD_10)
+                    .setPlayerCommand(Player.COMMAND_SEEK_FORWARD)
+                    .setDisplayName(context.getString(androidx.media3.ui.R.string.exo_controls_fastforward_description))
                     .setSlots(CommandButton.SLOT_FORWARD)
                     .build());
+        } else {
+            buttons.add(new CommandButton.Builder(CommandButton.ICON_PREVIOUS)
+                    .setSessionCommand(PREVIOUS)
+                    .setDisplayName(context.getString(androidx.media3.ui.R.string.exo_controls_previous_description))
+                    .setSlots(CommandButton.SLOT_BACK)
+                    .build());
+            if (hasNext) {
+                buttons.add(new CommandButton.Builder(CommandButton.ICON_NEXT)
+                        .setSessionCommand(NEXT)
+                        .setDisplayName(context.getString(androidx.media3.ui.R.string.exo_controls_next_description))
+                        .setSlots(CommandButton.SLOT_FORWARD)
+                        .build());
+            }
         }
         if (liked != null) {
             buttons.add(new CommandButton.Builder(liked ? CommandButton.ICON_HEART_FILLED : CommandButton.ICON_HEART_UNFILLED)

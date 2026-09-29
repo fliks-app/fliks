@@ -19,6 +19,8 @@ export interface RemoteNotificationPlugin {
     hasNext: boolean;
     /** Null hides the heart. */
     liked: boolean | null;
+    /** ±10 s instead of previous/next. */
+    seekButtons: boolean;
   }): Promise<void>;
   clear(): Promise<void>;
 }

@@ -3,13 +3,20 @@ package media.fliks.app;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.OptIn;
 import androidx.media3.common.util.UnstableApi;
+import androidx.media3.session.CommandButton;
 import androidx.media3.session.DefaultMediaNotificationProvider;
+import androidx.media3.session.MediaNotification;
 import androidx.media3.session.MediaSession;
 import androidx.media3.session.MediaSessionService;
+
+import com.google.common.collect.ImmutableList;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,15 +39,24 @@ public class PlaybackService extends MediaSessionService {
         if (instance != null) instance.removeSession(session);
         if (!sessions.isEmpty()) return;
         context.stopService(new Intent(context, PlaybackService.class));
-        // A notification detached from the foreground on pause outlives the service.
-        context.getSystemService(NotificationManager.class)
-                .cancel(DefaultMediaNotificationProvider.DEFAULT_NOTIFICATION_ID);
+        // A notification detached from the foreground on pause outlives the service,
+        // and an update already queued can still post it: cancel now and once it has run.
+        Runnable cancel = () -> {
+            if (sessions.isEmpty()) {
+                context.getSystemService(NotificationManager.class)
+                        .cancel(DefaultMediaNotificationProvider.DEFAULT_NOTIFICATION_ID);
+            }
+        };
+        cancel.run();
+        new Handler(Looper.getMainLooper()).postDelayed(cancel, 500);
     }
 
+    @OptIn(markerClass = UnstableApi.class)
     @Override
     public void onCreate() {
         super.onCreate();
         instance = this;
+        setMediaNotificationProvider(new DetachAwareProvider(new DefaultMediaNotificationProvider(this)));
         for (MediaSession s : sessions) addSession(s);
     }
 
@@ -54,6 +70,37 @@ public class PlaybackService extends MediaSessionService {
     @Override
     public MediaSession onGetSession(MediaSession.ControllerInfo controllerInfo) {
         return sessions.isEmpty() ? null : sessions.get(0);
+    }
+
+    /** Media3 finishes an update (the artwork loads asynchronously) without checking
+     *  the session is still attached, which re-posts a notification for it. */
+    @OptIn(markerClass = UnstableApi.class)
+    private static final class DetachAwareProvider implements MediaNotification.Provider {
+        private final MediaNotification.Provider delegate;
+
+        DetachAwareProvider(MediaNotification.Provider delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public MediaNotification createNotification(MediaSession session,
+                ImmutableList<CommandButton> mediaButtonPreferences,
+                MediaNotification.ActionFactory actionFactory, Callback callback) {
+            return delegate.createNotification(session, mediaButtonPreferences, actionFactory,
+                    notification -> {
+                        if (sessions.contains(session)) callback.onNotificationChanged(notification);
+                    });
+        }
+
+        @Override
+        public boolean handleCustomCommand(MediaSession session, String action, Bundle extras) {
+            return delegate.handleCustomCommand(session, action, extras);
+        }
+
+        @Override
+        public NotificationChannelInfo getNotificationChannelInfo() {
+            return delegate.getNotificationChannelInfo();
+        }
     }
 
     /** The WebView driving both sessions goes with the task. The local player
