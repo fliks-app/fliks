@@ -154,6 +154,21 @@ describe('TranscodeCacheService', () => {
     expect(svc.size()).toBe(0);
   });
 
+  it('counts per-rendition subdirs and TTL-evicts them with their title dir', async () => {
+    const titleDir = path.join(CACHE_ROOT, 'u3', '39', 'multiaudio', '720p');
+    const segs = [0, 1].map((i) => path.join(titleDir, String(i), 'seg-0001.m4s'));
+    for (const seg of segs) await writeFile(seg, 2000);
+    await svc.runGc();
+    expect(svc.lookup(3, 39, 'multiaudio')?.totalBytes).toBe(4000);
+
+    const old = new Date(Date.now() - 10 * 60 * 60 * 1000);
+    for (const seg of segs) await fsp.utimes(seg, old, old);
+    await svc.runGc();
+    expect(svc.size()).toBe(0);
+    await svc.runGc();
+    expect(await svc.diskUsage()).toEqual({ entries: 0, bytes: 0 });
+  });
+
   it('never evicts a directory backed by a live session, even past TTL', async () => {
     const dir = path.join(CACHE_ROOT, 'u1', '1', 'liveliveee', '720p');
     const seg = path.join(dir, 'seg-0.m4s');

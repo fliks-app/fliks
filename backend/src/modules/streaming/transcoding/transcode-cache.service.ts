@@ -410,6 +410,11 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
         } catch {
           continue;
         }
+        // Eviction removes profile dirs only; drop the emptied title dir too.
+        if (profileDirs.length === 0) {
+          await fsp.rmdir(mediaPath).catch(() => {});
+          continue;
+        }
         for (const profileHash of profileDirs) {
           const cacheDir = path.join(mediaPath, profileHash);
           const entry = await this.indexEntry(
@@ -474,13 +479,13 @@ export class TranscodeCacheService implements OnModuleInit, OnModuleDestroy {
         } catch {
           continue;
         }
-        if (isDir && f.startsWith(RUN_DIR_PREFIX)) {
-          if (sweepRuns) {
+        if (isDir) {
+          if (sweepRuns && f.startsWith(RUN_DIR_PREFIX)) {
             await fsp.rm(filePath, { recursive: true, force: true });
             continue;
           }
-          // A live run's GOPs count against the budget like its segments.
-          size = await dirBytes(filePath);
+          // Live-run GOPs and per-rendition `<i>/` dirs count like segments.
+          ({ bytes: size, mtime } = await dirUsage(filePath));
         } else if (f === 'init.mp4' || /^init_\d+\.mp4$/.test(f)) {
           q.hasInit = true;
         } else if (segIndex !== null) {
@@ -536,26 +541,36 @@ async function readdirSafe(dir: string): Promise<string[]> {
 
 /** Recursively sum the byte size of every file under a directory. */
 async function dirBytes(dir: string): Promise<number> {
-  let total = 0;
+  return (await dirUsage(dir)).bytes;
+}
+
+/** Recursive byte total and newest file mtime under `dir`. */
+async function dirUsage(dir: string): Promise<{ bytes: number; mtime: number }> {
+  let bytes = 0;
+  let mtime = 0;
   let items: import('fs').Dirent[];
   try {
     items = await fsp.readdir(dir, { withFileTypes: true });
   } catch {
-    return 0;
+    return { bytes, mtime };
   }
   for (const item of items) {
     const full = path.join(dir, item.name);
     if (item.isDirectory()) {
-      total += await dirBytes(full);
+      const sub = await dirUsage(full);
+      bytes += sub.bytes;
+      mtime = Math.max(mtime, sub.mtime);
     } else {
       try {
-        total += (await fsp.stat(full)).size;
+        const stat = await fsp.stat(full);
+        bytes += stat.size;
+        mtime = Math.max(mtime, stat.mtimeMs);
       } catch {
         // File vanished mid-scan (GC / ffmpeg rename) — skip.
       }
     }
   }
-  return total;
+  return { bytes, mtime };
 }
 
 function parseSegmentIndex(filename: string): number | null {
