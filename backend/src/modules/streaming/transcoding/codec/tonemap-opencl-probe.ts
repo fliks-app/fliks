@@ -2,7 +2,8 @@ import { Logger } from '@nestjs/common';
 import { execFile } from 'child_process';
 import { unlink } from 'fs/promises';
 import { promisify } from 'util';
-import { qsvDeviceInitArgs, vaapiDeviceInitArgs } from '../hw-device';
+import { findQsvNativeDecoder } from './decoders';
+import { hevcVaapiDecoder } from './decoders/vaapi';
 import { synthesiseHdrProbeSample } from './hdr-probe-sample';
 import { ffmpegTail, probeSamplePath } from './probe-utils';
 
@@ -15,6 +16,7 @@ const execFileAsync = promisify(execFile);
 let probedOnce = false;
 let noCropEnabled = false;
 let withCropEnabled = false;
+let hdr10Enabled = false;
 
 /** True when tonemap_opencl can run on this host for sessions that
  *  DON'T add a CPU-side crop pass before the scale+tonemap chain. */
@@ -30,6 +32,12 @@ export function isTonemapOpenclEnabledWithCrop(): boolean {
   return probedOnce && withCropEnabled;
 }
 
+/** True when the `apply_dovi=1` HDR10-target reshape runs on this bridge,
+ *  distinct from the SDR nv12 recipe above (no `apply_dovi`). */
+export function isTonemapOpenclHdr10Enabled(): boolean {
+  return probedOnce && hdr10Enabled;
+}
+
 export async function runTonemapOpenclProbe(
   log: Logger,
   hwAccel: 'qsv' | 'vaapi',
@@ -40,28 +48,16 @@ export async function runTonemapOpenclProbe(
   try {
     await synthesiseHdrProbeSample(hdrSample);
 
-    // Device init matches the session: a QSV host adds `qsv=qs@va`, a VAAPI
-    // host has no QSV device at all.
-    //
-    // `-filter_hw_device va` (not `ocl`): without this the hwupload back to
-    // vaapi after the CPU crop fails with `Function not implemented` on
-    // Intel iHD because ENOSYS bubbles up from the opencl ICD when the
-    // default filter device is opencl. tonemap_opencl itself runs fine — it
-    // takes its device from the upstream `hwmap=derive_device=opencl` frame
-    // context.
+    // The real decoder descriptor, so `-filter_hw_device` (`qs` on QSV, `va`
+    // on VAAPI) can't drift from what a session actually runs.
+    const decoder = hwAccel === 'qsv' ? findQsvNativeDecoder('hevc')! : hevcVaapiDecoder;
     const baseArgs = [
       '-hide_banner',
       '-loglevel',
       'error',
-      ...(hwAccel === 'qsv' ? qsvDeviceInitArgs() : vaapiDeviceInitArgs()),
+      ...decoder.buildInputArgs(),
       '-init_hw_device',
       'opencl=ocl:0.0',
-      '-filter_hw_device',
-      'va',
-      '-hwaccel',
-      'vaapi',
-      '-hwaccel_output_format',
-      'vaapi',
       '-i',
       hdrSample,
     ];
@@ -90,7 +86,7 @@ export async function runTonemapOpenclProbe(
         [
           ...baseArgs,
           '-vf',
-          `scale_vaapi=w=288:h=160,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,${reverseMap}`,
+          `scale_vaapi=w=288:h=160:extra_hw_frames=24,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,${reverseMap}`,
           ...tail,
         ],
         { timeout: 20_000 },
@@ -100,6 +96,8 @@ export async function runTonemapOpenclProbe(
       noCropEnabled = false;
       failure = ffmpegTail(err);
     }
+    // Probes 2 and 3 are skipped below; a re-run must not keep their old pass.
+    if (!noCropEnabled) withCropEnabled = hdr10Enabled = false;
 
     // Probe 2: crop-prefixed chain. Some Intel iHD builds accept the
     // basic chain but fail this one — `auto` then has to keep
@@ -113,7 +111,7 @@ export async function runTonemapOpenclProbe(
           [
             ...baseArgs,
             '-vf',
-            `hwdownload,format=p010le,crop=288:160:16:8,hwupload=derive_device=vaapi,scale_vaapi=w=288:h=160,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,${reverseMap}`,
+            `hwdownload,format=p010le,crop=288:160:16:8,hwupload=derive_device=vaapi,scale_vaapi=w=288:h=160:extra_hw_frames=24,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,${reverseMap}`,
             ...tail,
           ],
           { timeout: 20_000 },
@@ -124,13 +122,45 @@ export async function runTonemapOpenclProbe(
         failure = ffmpegTail(err);
       }
     }
+
+    // Probe 3: the HDR10-target reshape (`apply_dovi=1`, PQ/BT.2020) a
+    // no-base DV session emits instead; hevc10 so the p010 surface is real.
+    if (noCropEnabled) {
+      try {
+        await execFileAsync(
+          'ffmpeg',
+          [
+            ...baseArgs,
+            '-vf',
+            `scale_vaapi=w=288:h=160:extra_hw_frames=24,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=p010:t=smpte2084:p=bt2020:m=bt2020:r=tv:apply_dovi=1,${reverseMap}`,
+            '-c:v',
+            hwAccel === 'qsv' ? 'hevc_qsv' : 'hevc_vaapi',
+            '-profile:v',
+            'main10',
+            '-preset',
+            'veryfast',
+            '-frames:v',
+            '1',
+            '-f',
+            'null',
+            '-',
+          ],
+          { timeout: 20_000 },
+        );
+        hdr10Enabled = true;
+      } catch (err) {
+        hdr10Enabled = false;
+        failure = ffmpegTail(err);
+      }
+    }
   } catch (err) {
+    noCropEnabled = withCropEnabled = hdr10Enabled = false;
     failure = ffmpegTail(err) || (err as Error).message;
   } finally {
     await unlink(hdrSample).catch(() => {});
     probedOnce = true;
     log.log(
-      `[tonemap-opencl-probe] noCrop=${noCropEnabled} withCrop=${withCropEnabled} (${Date.now() - t0}ms)${failure ? `: ${failure}` : ''}`,
+      `[tonemap-opencl-probe] noCrop=${noCropEnabled} withCrop=${withCropEnabled} hdr10=${hdr10Enabled} (${Date.now() - t0}ms)${failure ? `: ${failure}` : ''}`,
     );
   }
 }

@@ -6,9 +6,9 @@ import type { BitDepth, VideoCodec } from '../types';
  *  the format the encoder expects (see `surfaceBridge`).
  *
  *  - `'cpu'`         : software frames (e.g. yuv420p in main memory)
- *  - `'vaapi'`       : libva surface, lives in iGPU/dGPU memory
- *  - `'qsv'`         : routing label for the `vpp_qsv` encoder path; every
- *                      Linux QSV decoder decodes on native VAAPI regardless
+ *  - `'vaapi'`       : libva surface, lives in iGPU/dGPU memory (also every
+ *                      Linux QSV decoder; `qsvNative`, not this value, picks
+ *                      the `vpp_qsv` encoder path for those)
  *  - `'cuda'`        : NVIDIA CUDA surface
  *  - `'d3d11'`       : Direct3D 11 texture (Windows); the AMF zero-copy
  *                      OpenCL path keeps frames here
@@ -17,13 +17,7 @@ import type { BitDepth, VideoCodec } from '../types';
  *                      now because the rest of the pipeline expects
  *                      software frames on VT; future work can lift
  *                      that constraint). */
-export type SurfaceFormat =
-  | 'cpu'
-  | 'vaapi'
-  | 'qsv'
-  | 'cuda'
-  | 'd3d11'
-  | 'videotoolbox';
+export type SurfaceFormat = 'cpu' | 'vaapi' | 'cuda' | 'd3d11' | 'videotoolbox';
 
 /** Just enough source-side metadata for the decoder selector. Populated
  *  from ffprobe streamInfo at session-spawn time. */

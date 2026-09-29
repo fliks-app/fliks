@@ -26,7 +26,7 @@ function input(over: Partial<EncoderInput>): EncoderInput {
     tonemap: false,
     tonemapPath: 'qsv',
     hasCrop: false,
-    inputSurface: 'qsv',
+    inputSurface: 'vaapi',
     // Routing flag, not the surface value; false below for vaapi/cpu fixtures.
     qsvNative: true,
     ...over,
@@ -35,7 +35,7 @@ function input(over: Partial<EncoderInput>): EncoderInput {
 
 describe('qsvScaleFilter8bit', () => {
   it('hwmaps onto QSV before vpp_qsv for a qsv-native (Linux) input surface', () => {
-    expect(qsvScaleFilter8bit(input({ inputSurface: 'qsv' }))).toBe(
+    expect(qsvScaleFilter8bit(input({ inputSurface: 'vaapi' }))).toBe(
       'hwmap=derive_device=qsv,vpp_qsv=w=1920:h=804:format=nv12',
     );
   });
@@ -84,7 +84,7 @@ describe('qsvScaleFilter8bit', () => {
   it('keeps the zero-copy QSV↔OpenCL chain for a Linux qsv surface', () => {
     expect(
       qsvScaleFilter8bit(
-        input({ inputSurface: 'qsv', tonemap: true, tonemapPath: 'opencl' }),
+        input({ inputSurface: 'vaapi', tonemap: true, tonemapPath: 'opencl' }),
       ),
     ).toBe(
       'hwmap=derive_device=qsv,' +
@@ -100,7 +100,7 @@ describe('qsvScaleFilter8bit', () => {
     expect(
       qsvScaleFilter8bit(
         input({
-          inputSurface: 'qsv',
+          inputSurface: 'vaapi',
           tonemap: true,
           tonemapPath: 'opencl',
           dvNoBase: true,
@@ -126,7 +126,7 @@ describe('qsvScaleFilter8bit', () => {
     expect(
       qsvScaleFilter8bit(
         input({
-          inputSurface: 'qsv',
+          inputSurface: 'vaapi',
           tonemap: true,
           tonemapPath: 'opencl',
           tonemapCurve: 'reinhard',
@@ -151,7 +151,7 @@ describe('qsvScaleFilter8bit', () => {
     expect(
       qsvScaleFilter8bit(
         input({
-          inputSurface: 'qsv',
+          inputSurface: 'vaapi',
           hasCrop: true,
           target: {
             width: 1280,
@@ -261,7 +261,7 @@ describe('qsvScaleFilter8bit', () => {
 
 describe('qsvScaleFilter10bit', () => {
   it('hwmaps onto QSV before vpp_qsv p010le for a qsv-native input surface', () => {
-    expect(qsvScaleFilter10bit(input({ inputSurface: 'qsv' }))).toBe(
+    expect(qsvScaleFilter10bit(input({ inputSurface: 'vaapi' }))).toBe(
       'hwmap=derive_device=qsv,vpp_qsv=w=1920:h=804:format=p010le',
     );
   });
@@ -276,7 +276,7 @@ describe('qsvScaleFilter10bit', () => {
     expect(
       qsvScaleFilter10bit(
         input({
-          inputSurface: 'qsv',
+          inputSurface: 'vaapi',
           hasCrop: true,
           target: {
             width: 1280,
@@ -333,7 +333,7 @@ describe('qsvScaleFilter10bit', () => {
     expect(
       qsvScaleFilter10bit(
         input({
-          inputSurface: 'qsv',
+          inputSurface: 'vaapi',
           tonemap: true,
           tonemapPath: 'opencl',
           dvNoBase: true,

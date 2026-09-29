@@ -1,10 +1,19 @@
 import {
   isTonemapOpenclEnabled,
   isTonemapOpenclEnabledWithCrop,
+  isTonemapOpenclHdr10Enabled,
 } from './codec/tonemap-opencl-probe';
 import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
-import { isQsvOpenclTonemapEnabled } from './codec/qsv-opencl-probe';
+import {
+  isQsvOpenclTonemapEnabled,
+  isQsvOpenclTonemapHdr10Enabled,
+} from './codec/qsv-opencl-probe';
 import { isVulkanTonemapEnabled } from './codec/vulkan-tonemap-probe';
+import { isCudaTonemapEnabled, isCudaTonemapHdr10Enabled } from './codec/cuda-tonemap-probe';
+import {
+  isOpenclTonemapEnabled,
+  isOpenclTonemapHdr10Enabled,
+} from './codec/opencl-tonemap-probe';
 import { hostHasVaapi } from './hw-device';
 import type { HwAccelType, TonemapAlgo } from './types';
 
@@ -49,11 +58,8 @@ export function resolveTonemapPath(
   return algo;
 }
 
-/** A no-base DV source reshaped to HDR10 (not SDR) is only verified on the
- *  OpenCL bounce, NVENC's CUDA/OpenCL tonemaps, and the CPU tonemapx chain ;
- *  not the Vulkan (libplacebo) or VideoToolbox Metal paths. Gates the variant
- *  selector so those two keep falling back to the SDR tonemap instead of
- *  tagging HDR10 metadata onto pixels their filter chain never produced. */
+/** A no-base DV source reshaped to HDR10 needs its own probed `apply_dovi=1`
+ *  PQ recipe per GPU path; a passing SDR nv12 probe doesn't cover it. */
 export function dvNoBaseHdr10PathSupported(
   hwAccel: HwAccelType,
   algo: TonemapAlgo,
@@ -61,6 +67,23 @@ export function dvNoBaseHdr10PathSupported(
   platform: NodeJS.Platform = process.platform,
 ): boolean {
   if (hwAccel === 'videotoolbox') return false;
+  // NVENC/AMF resolve their tonemap step independently of resolveTonemapPath
+  // (see isCudaTonemapPath/isOpenclTonemapPath in encode-pipeline.ts).
+  if (hwAccel === 'nvenc') {
+    if (isCudaTonemapEnabled()) return isCudaTonemapHdr10Enabled();
+    if (isOpenclTonemapEnabled()) return isOpenclTonemapHdr10Enabled();
+    return true;
+  }
+  if (hwAccel === 'amf') {
+    return isOpenclTonemapEnabled() ? isOpenclTonemapHdr10Enabled() : true;
+  }
   const path = resolveTonemapPath(algo, { hasCrop: opts.hasCrop, dvNoBase: true }, platform);
+  if (path === 'opencl') {
+    return platform === 'win32'
+      ? isQsvOpenclTonemapHdr10Enabled()
+      : isTonemapOpenclHdr10Enabled();
+  }
+  // A no-base source without an opencl/vulkan bridge falls to the CPU
+  // tonemapx chain instead (see dvNoBaseNeedsCpu), which needs no HW probe.
   return !(path === 'vulkan' && hwAccel === 'vaapi' && !opts.hasBurnIn);
 }
