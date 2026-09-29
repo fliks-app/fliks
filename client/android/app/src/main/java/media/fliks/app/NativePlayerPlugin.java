@@ -67,6 +67,11 @@ public class NativePlayerPlugin extends Plugin {
     // Black view over the surface until the first frame; see create().
     private View shutter;
     private SubtitleOverlay subtitles;
+    private boolean fillScreen = false;
+    private VideoCropLayout.Crop crop;
+    // Presented size from onVideoSizeChanged (pixelWidthHeightRatio-corrected); 0 until known.
+    private float displayWidth = 0f;
+    private float displayHeight = 0f;
     private DefaultHttpDataSource.Factory httpFactory;
     private String currentHlsUrl;
     private int lastAudioTrackCount = -1;
@@ -122,6 +127,10 @@ public class NativePlayerPlugin extends Plugin {
             //
             aspectFrame = new AspectRatioFrameLayout(getContext());
             aspectFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
+
+            // Rotation, PiP and split-screen resize the wrapper without a fresh
+            // onVideoSizeChanged, so the crop is re-fit on every wrapper layout.
+            wrapper.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or_, ob) -> layoutVideo());
 
             surfaceView = new SurfaceView(getContext());
             aspectFrame.addView(surfaceView, new FrameLayout.LayoutParams(
@@ -197,6 +206,10 @@ public class NativePlayerPlugin extends Plugin {
                 surfaceView = null;
                 shutter = null;
             }
+            crop = null;
+            fillScreen = false;
+            displayWidth = 0f;
+            displayHeight = 0f;
             subtitleConfigs.clear();
             call.resolve();
         });
@@ -244,6 +257,12 @@ public class NativePlayerPlugin extends Plugin {
             // user manually seeks (which already clears it below) — clear here
             // too so a load looks identical from the user's perspective.
             if (this.subtitles != null) this.subtitles.clear();
+
+            // A new item's crop (if any) is re-sent by the TS layer after load().
+            crop = null;
+            displayWidth = 0f;
+            displayHeight = 0f;
+            layoutVideo();
 
             // HTTP data source with auth headers
             Map<String, String> headerMap = new HashMap<>();
@@ -445,10 +464,14 @@ public class NativePlayerPlugin extends Plugin {
                 }
 
                 @Override public void onVideoSizeChanged(@NonNull VideoSize videoSize) {
-                    if (aspectFrame != null && videoSize.width > 0 && videoSize.height > 0) {
-                        aspectFrame.setAspectRatio(
-                                videoSize.width * videoSize.pixelWidthHeightRatio / videoSize.height);
+                    if (videoSize.width > 0 && videoSize.height > 0) {
+                        displayWidth = videoSize.width * videoSize.pixelWidthHeightRatio;
+                        displayHeight = videoSize.height;
+                        if (aspectFrame != null) {
+                            aspectFrame.setAspectRatio(displayWidth / displayHeight);
+                        }
                     }
+                    layoutVideo();
                 }
 
                 @Override public void onRenderedFirstFrame() {
@@ -533,7 +556,13 @@ public class NativePlayerPlugin extends Plugin {
 
     @PluginMethod()
     public void stop(PluginCall call) {
-        mainHandler.post(() -> { stopPositionUpdates(); if (player != null) player.stop(); call.resolve(); });
+        mainHandler.post(() -> {
+            stopPositionUpdates();
+            if (player != null) player.stop();
+            crop = null;
+            layoutVideo();
+            call.resolve();
+        });
     }
 
     // ── Audio Tracks ──
@@ -684,16 +713,69 @@ public class NativePlayerPlugin extends Plugin {
     public void setFillScreen(PluginCall call) {
         boolean fill = call.getBoolean("fill", false);
         mainHandler.post(() -> {
-            // ZOOM crops the overflowing axis while keeping the aspect ratio
-            // (what object-fit: cover does on the browser path); FILL would
-            // stretch. The wrapper clips the overflow — clipChildren default.
-            if (aspectFrame != null) {
-                aspectFrame.setResizeMode(fill
-                        ? AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                        : AspectRatioFrameLayout.RESIZE_MODE_FIT);
-            }
+            fillScreen = fill;
+            layoutVideo();
             call.resolve();
         });
+    }
+
+    /** Crops letterbox bars by sizing aspectFrame past the clipping wrapper.
+     *  An absent or non-positive rectangle clears the crop. */
+    @PluginMethod()
+    public void setCrop(PluginCall call) {
+        Double w = call.getDouble("width");
+        Double h = call.getDouble("height");
+        Double sw = call.getDouble("sourceWidth");
+        Double sh = call.getDouble("sourceHeight");
+        VideoCropLayout.Crop next = null;
+        if (w != null && h != null && sw != null && sh != null && w > 0 && h > 0 && sw > 0 && sh > 0) {
+            double x = call.getDouble("x", 0.0);
+            double y = call.getDouble("y", 0.0);
+            next = new VideoCropLayout.Crop(
+                    (float) x, (float) y, w.floatValue(), h.floatValue(), sw.floatValue(), sh.floatValue());
+        }
+        final VideoCropLayout.Crop finalCrop = next;
+        mainHandler.post(() -> {
+            crop = finalCrop;
+            layoutVideo();
+            call.resolve();
+        });
+    }
+
+    /** No effective crop: MATCH_PARENT, FIT or ZOOM per fillScreen. A crop sizes
+     *  aspectFrame to the exact display frame (may overflow the wrapper) and FILLs it. */
+    private void layoutVideo() {
+        if (aspectFrame == null || wrapper == null) return;
+        int containerW = wrapper.getWidth();
+        int containerH = wrapper.getHeight();
+        int[] frame = containerW > 0 && containerH > 0
+                ? VideoCropLayout.frame(containerW, containerH, crop, displayWidth, displayHeight, fillScreen)
+                : null;
+
+        FrameLayout.LayoutParams next;
+        int resizeMode;
+        if (frame != null) {
+            // LEFT, not START: the offsets are physical, and START resolves to RIGHT in RTL.
+            next = new FrameLayout.LayoutParams(frame[2], frame[3], Gravity.TOP | Gravity.LEFT);
+            next.leftMargin = frame[0];
+            next.topMargin = frame[1];
+            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL;
+        } else {
+            next = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER);
+            resizeMode = fillScreen ? AspectRatioFrameLayout.RESIZE_MODE_ZOOM : AspectRatioFrameLayout.RESIZE_MODE_FIT;
+        }
+        aspectFrame.setResizeMode(resizeMode);
+
+        ViewGroup.LayoutParams current = aspectFrame.getLayoutParams();
+        if (!(current instanceof FrameLayout.LayoutParams) || !sameParams((FrameLayout.LayoutParams) current, next)) {
+            aspectFrame.setLayoutParams(next);
+        }
+    }
+
+    private static boolean sameParams(FrameLayout.LayoutParams a, FrameLayout.LayoutParams b) {
+        return a.width == b.width && a.height == b.height
+                && a.leftMargin == b.leftMargin && a.topMargin == b.topMargin && a.gravity == b.gravity;
     }
 
     // ── Brightness ──
