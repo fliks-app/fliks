@@ -35,7 +35,8 @@ import {
   getLadderForDevice,
   getHdrLadderForDevice,
   profileFitsSource,
-  resolveSourceVideoBitrateBps,
+  sourceBitrates,
+  hdrRungName,
   cappedRungVideoBitrateBps,
   parseBitrateToBps,
   type BurnInSubtitle,
@@ -642,10 +643,7 @@ export class StreamingController {
       // (`1080p`), so translate to the HDR equivalent so prewarm
       // doesn't spawn a doomed SDR session that the player will
       // immediately kill and replace with the matching HDR rung.
-      const targetQuality =
-        (session?.hdrLadder ?? false) && !startQuality.endsWith('-hdr')
-          ? `${startQuality}-hdr`
-          : startQuality;
+      const targetQuality = hdrRungName(startQuality, session?.hdrLadder ?? false);
       const startSegment = Math.max(
         0,
         secondsToSegmentIndex(
@@ -736,15 +734,7 @@ export class StreamingController {
     // one audio stream per source track, not one.
     const audioStreams = info?.audio ?? [];
     const audioTrackCount = Math.max(1, audioStreams.length);
-    const audioSumBps = audioStreams.reduce(
-      (sum, a) => sum + (a.bitRate ?? 0),
-      0,
-    );
-    const sourceVideoBitrateBps = resolveSourceVideoBitrateBps(
-      video?.bitRate,
-      info?.formatBitRate,
-      audioSumBps,
-    );
+    const sourceVideoBitrateBps = sourceBitrates(info).videoBitRate;
 
     const qualities: { key: string; label: string; estimatedSize: number }[] =
       [];
@@ -1483,6 +1473,8 @@ export class StreamingController {
     // CODECS string (always PQ) replaces the probed one, never alongside it.
     const remuxDvStandalone =
       includeRemux && live?.dolbyVision ? dvStandaloneCodecs(v) : null;
+    // Same derivation as playback-info's remuxMasterBandwidthBps.
+    const bitrates = sourceBitrates(si);
     const playlist = this.transcodingService.generateMasterPlaylist({
       mediaFileId,
       sourceWidth: w,
@@ -1514,16 +1506,11 @@ export class StreamingController {
         includeRemux && v ? (remuxDvStandalone ?? copySourceCodecString(v)) : undefined,
       remuxSupplementalCodecs:
         includeRemux && live?.dolbyVision ? dvSupplementalCodecs(v) : undefined,
-      formatBitRate:
-        si?.formatBitRate ?? (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0),
+      formatBitRate: bitrates.formatBitRate,
       sourceFrameRate,
       sourceHdrFormat: remuxDvStandalone ? 'HDR10' : sourceHdrFormat,
       subtitleRenditions,
-      sourceVideoBitrateBps: resolveSourceVideoBitrateBps(
-        v?.bitRate,
-        si?.formatBitRate,
-        (si?.audio ?? []).reduce((sum, a) => sum + (a?.bitRate ?? 0), 0),
-      ),
+      sourceVideoBitrateBps: bitrates.videoBitRate,
       sourceVideoCodec: (v?.codec ?? '').toLowerCase() || undefined,
       // Trick play rides the same IDR grid as the variant, so the frame the
       // playlist promises at index N is the one the encoder puts there.
@@ -1956,10 +1943,7 @@ export class StreamingController {
         // kills the in-flight HDR session via `getOrCreateSession`'s
         // quality-change path. Translate to the HDR rung when the master
         // is publishing the HDR ladder so the spawned session matches.
-        const quality =
-          (live?.hdrLadder ?? false) && !baseQuality.endsWith('-hdr')
-            ? `${baseQuality}-hdr`
-            : baseQuality;
+        const quality = hdrRungName(baseQuality, live?.hdrLadder ?? false);
         // An init anchors at the resume floor (the session playhead); a real
         // segment anchors at the one requested, never a stale heartbeat position.
         const startSeg = this.anchorSegment(live, null, isInit, segIndex);

@@ -15,6 +15,8 @@ export {
   profileResolution,
   resolveLadderRung,
   resolveSourceVideoBitrateBps,
+  sourceBitrates,
+  hdrRungName,
 } from './profiles';
 export { cappedRungVideoBitrateBps } from './quality-ladder';
 export { requestedHwAccelFor } from './hw-detect';

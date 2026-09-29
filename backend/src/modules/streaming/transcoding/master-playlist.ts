@@ -1,6 +1,7 @@
 import {
   getHdrLadderForDevice,
   getLadderForDevice,
+  hdrRungName,
   parseBitrateToBps,
   profileFitsSource,
   profileResolution,
@@ -183,10 +184,7 @@ function applyQualityPin(
   if (onlyQuality === 'remux' || onlyQuality === 'original') {
     return [topFittingProfile(ladder, sourceWidth, sourceHeight)];
   }
-  const wanted =
-    hdrSuffix && !onlyQuality.endsWith('-hdr')
-      ? `${onlyQuality}-hdr`
-      : onlyQuality;
+  const wanted = hdrRungName(onlyQuality, hdrSuffix);
   const picked = ladder.find((p) => p.name === wanted);
   return picked ? [picked] : ladder;
 }

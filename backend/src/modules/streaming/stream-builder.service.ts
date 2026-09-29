@@ -18,6 +18,7 @@ import {
   parseBitrateToBps,
   profileFitsSource,
   resolveSourceVideoBitrateBps,
+  sourceBitrates,
 } from './transcoding';
 import {
   cappedRungVideoBitrateBps,
@@ -282,20 +283,7 @@ export class StreamBuilderService {
         ? audioStreamIndex
         : 0;
     const a = audioStreams[pickedAudio];
-    const formatBitRate =
-      si?.formatBitRate != null && si.formatBitRate > 0
-        ? si.formatBitRate
-        : undefined;
-    const audioSumBitrate = audioStreams.reduce(
-      (sum, s) => sum + (s.bitRate ?? 0),
-      0,
-    );
-
-    const videoBitRate = resolveSourceVideoBitrateBps(
-      v?.bitRate,
-      formatBitRate,
-      audioSumBitrate,
-    );
+    const { videoBitRate, formatBitRate } = sourceBitrates(si);
 
     let audioBitRate = a?.bitRate;
     if (audioBitRate == null && formatBitRate != null && videoBitRate != null) {
@@ -442,6 +430,19 @@ export class StreamBuilderService {
     const clientCropsBlackBars = profile.cropsBlackBarsLocally === true;
 
     const reasons: TranscodeReason[] = [];
+    // Once per session: where HDR blocks the copy, or before a transcode that
+    // tone-maps for another reason.
+    const pushTonemapReason = (): void => {
+      if (!runsTonemapFilter || reasons.some((r) => r.flag === 'VideoHdrNotSupported')) {
+        return;
+      }
+      reasons.push({
+        flag: 'VideoHdrNotSupported',
+        message: dvNoBaseHdr10
+          ? `${dvLabel} → HDR10 (tone mapping)`
+          : `HDR → SDR (tone mapping ${dvLabel})`,
+      });
+    };
 
     // --- Audio decision diagnostics ---
     // Tracks every input that influences the "copy vs transcode" branch so
@@ -518,14 +519,7 @@ export class StreamBuilderService {
       this.log.log(
         `hdrDecision[file=${resolved.mediaFile.id}] ${dvLabel} → SDR: supportsHdr=${clientSupportsHdr}, tonemapsHdrLocally=${profile.tonemapsHdrLocally === true}, supportsDolbyVision=${profile.supportsDolbyVision === true}, videoSupported=${directPlayResult.videoSupported}, videoConditionsMet=${directPlayResult.videoConditionsMet}`,
       );
-      if (runsTonemapFilter) {
-        reasons.push({
-          flag: 'VideoHdrNotSupported',
-          message: dvNoBaseHdr10
-            ? `${dvLabel} → HDR10 (tone mapping)`
-            : `HDR → SDR (tone mapping ${dvLabel})`,
-        });
-      }
+      pushTonemapReason();
     }
 
     // Subtitle burn-in forces transcode
@@ -829,26 +823,12 @@ export class StreamBuilderService {
       // Same function the master playlist's own BANDWIDTH calls, so the
       // stats overlay never disagrees with it.
       const remuxBw = remuxBandwidthBps(source.videoBitRate, source.formatBitRate, audioPlans);
-      // Same scale as the master playlist's transcoded rungs — exposes
-      // a bitrate hint per quality so the stats overlay can plot the
-      // selected rung without re-deriving the bitrate ladder client-side.
-      const transcodeBitrateByQuality: NonNullable<
-        PlaybackInfoResponse['transcodeBitrateByQuality']
-      > = {};
-      // Key by the ladder actually offered (HDR rungs carry the `-hdr`
-      // suffix) so the stats overlay can resolve the selected rung's bitrate.
-      // Using the SDR `ladder` here left HDR / eco-hdr rungs unmatched, and
-      // the overlay fell back to the full remux bandwidth.
-      const rungCtx = this.rungBitrateCtx(source, selectedVariant.codec);
-      for (const p of qualityLadder) {
-        const videoBps = cappedRungVideoBitrateBps(p, rungCtx);
-        const audioBps = rungAudioBps(p);
-        transcodeBitrateByQuality[p.name] = {
-          videoBitrateBps: videoBps,
-          audioBitrateBps: audioBps,
-          totalBitrateBps: videoBps + audioBps,
-        };
-      }
+      const transcodeBitrateByQuality = this.transcodeBitrateByQuality(
+        source,
+        selectedVariant.codec,
+        qualityLadder,
+        rungAudioBps,
+      );
       return wrap(
         {
           mediaFileId: resolved.mediaFile.id,
@@ -891,17 +871,7 @@ export class StreamBuilderService {
     }
 
     // --- Step 3: Full Transcode ---
-    if (
-      runsTonemapFilter &&
-      !reasons.some((r) => r.flag === 'VideoHdrNotSupported')
-    ) {
-      reasons.push({
-        flag: 'VideoHdrNotSupported',
-        message: dvNoBaseHdr10
-          ? `${dvLabel} → HDR10 (tone mapping)`
-          : `HDR → SDR (tone mapping ${dvLabel})`,
-      });
-    }
+    pushTonemapReason();
     // Report the encoder that will actually run via the SAME resolver
     // ffmpeg-args uses, so the stats hwAccel can't drift from the real encode
     // (it picks up the registry's runtime CPU fallback and the QSV crop→VAAPI
@@ -923,22 +893,12 @@ export class StreamBuilderService {
       `Transcode for file ${resolved.mediaFile.id}: ${reasons.map((r) => r.flag).join(', ')} (audioOut=${outputAudioCodec}, copy=${canCopyAudio}, track=${pickedAudio})`,
     );
     const url = `/api/stream/${resolved.mediaFile.id}/master.m3u8${tokenParam}`;
-    const transcodeBitrateByQuality: NonNullable<
-      PlaybackInfoResponse['transcodeBitrateByQuality']
-    > = {};
-    // Key by the offered ladder (HDR/eco-hdr rungs carry `-hdr`) so the stats
-    // overlay resolves the selected rung instead of falling back to the full
-    // remux bandwidth.
-    const rungCtx = this.rungBitrateCtx(source, selectedVariant.codec);
-    for (const p of qualityLadder) {
-      const videoBps = cappedRungVideoBitrateBps(p, rungCtx);
-      const audioBps = rungAudioBps(p);
-      transcodeBitrateByQuality[p.name] = {
-        videoBitrateBps: videoBps,
-        audioBitrateBps: audioBps,
-        totalBitrateBps: videoBps + audioBps,
-      };
-    }
+    const transcodeBitrateByQuality = this.transcodeBitrateByQuality(
+      source,
+      selectedVariant.codec,
+      qualityLadder,
+      rungAudioBps,
+    );
     return wrap(
       {
         mediaFileId: resolved.mediaFile.id,
@@ -974,6 +934,28 @@ export class StreamBuilderService {
       },
       audioPlans,
     );
+  }
+
+  /** Per-rung bitrate hint on the manifest's scale, keyed by the offered
+   *  ladder (HDR rungs carry `-hdr`) so the stats overlay resolves the pick. */
+  private transcodeBitrateByQuality(
+    source: PlaybackInfoResponse['source'],
+    outputCodec: string | undefined,
+    ladder: TranscodeProfile[],
+    rungAudioBps: (p: TranscodeProfile) => number,
+  ): NonNullable<PlaybackInfoResponse['transcodeBitrateByQuality']> {
+    const rungCtx = this.rungBitrateCtx(source, outputCodec);
+    const out: NonNullable<PlaybackInfoResponse['transcodeBitrateByQuality']> = {};
+    for (const p of ladder) {
+      const videoBps = cappedRungVideoBitrateBps(p, rungCtx);
+      const audioBps = rungAudioBps(p);
+      out[p.name] = {
+        videoBitrateBps: videoBps,
+        audioBitrateBps: audioBps,
+        totalBitrateBps: videoBps + audioBps,
+      };
+    }
+    return out;
   }
 
   /** Per-rung bitrate context from the source + chosen output codec, so the
