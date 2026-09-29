@@ -1,11 +1,11 @@
 import { Logger } from '@nestjs/common';
 import { execFile } from 'child_process';
 import { unlink } from 'fs/promises';
-import * as os from 'os';
-import * as path from 'path';
 import { promisify } from 'util';
 import { vulkanTonemapInitArgs } from '../hw-device';
 import { buildVideoFilters } from '../ffmpeg-filter-graph';
+import { ffmpegTail, probeSamplePath } from './probe-utils';
+import { synthesiseHdrProbeSample } from './hdr-probe-sample';
 
 const execFileAsync = promisify(execFile);
 
@@ -22,29 +22,9 @@ export function isVulkanTonemapEnabled(): boolean {
 export async function runVulkanTonemapProbe(log: Logger): Promise<void> {
   const t0 = Date.now();
   let failure = '';
-  const hdrSample = path.join(
-    os.tmpdir(),
-    `fliks-vulkan-tonemap-probe-${process.pid}.hevc`,
-  );
+  const hdrSample = probeSamplePath('vulkan-tonemap');
   try {
-    // Same synthesised HEVC Main10 PQ source as the other tone-map probes.
-    await execFileAsync(
-      'ffmpeg',
-      [
-        '-hide_banner', '-loglevel', 'error', '-y',
-        '-f', 'lavfi',
-        '-i', 'nullsrc=size=320x180:rate=30,format=yuv420p10le',
-        '-frames:v', '4',
-        '-c:v', 'libx265',
-        '-color_primaries', 'bt2020',
-        '-color_trc', 'smpte2084',
-        '-colorspace', 'bt2020nc',
-        '-x265-params',
-        'repeat-headers=1:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc',
-        hdrSample,
-      ],
-      { timeout: 15_000 },
-    );
+    await synthesiseHdrProbeSample(hdrSample);
 
     // The exact session graph: VAAPI decode -> hwmap onto DRM -> libplacebo
     // (Vulkan) tonemap -> hwmap back onto VAAPI. No encode needed; the null
@@ -75,8 +55,7 @@ export async function runVulkanTonemapProbe(log: Logger): Promise<void> {
     enabled = true;
   } catch (err) {
     enabled = false;
-    const stderr = (err as { stderr?: string }).stderr?.trim();
-    failure = stderr ? stderr.split('\n').slice(-2).join(' ') : '';
+    failure = ffmpegTail(err);
   } finally {
     await unlink(hdrSample).catch(() => {});
     probedOnce = true;

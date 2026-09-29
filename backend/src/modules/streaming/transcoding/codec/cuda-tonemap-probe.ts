@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { ffmpegTail } from './probe-utils';
 
 const execFileAsync = promisify(execFile);
 
@@ -32,8 +33,7 @@ export async function runCudaTonemapProbe(log: Logger): Promise<void> {
     enabled = true;
   } catch (err) {
     enabled = false;
-    const stderr = (err as { stderr?: string }).stderr?.trim();
-    failure = stderr ? stderr.split('\n').slice(-2).join(' ') : '';
+    failure = ffmpegTail(err);
   } finally {
     probedOnce = true;
     log.log(

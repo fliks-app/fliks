@@ -1,12 +1,11 @@
 import { Logger } from '@nestjs/common';
 import { execFile } from 'child_process';
 import { unlink } from 'fs/promises';
-import * as os from 'os';
-import * as path from 'path';
 import { promisify } from 'util';
 import { findAmfNativeDecoder } from './decoders';
 import { amfOpenclFilter } from './encoders/helpers/amf-filters';
 import { synthesiseHdrProbeSample } from './hdr-probe-sample';
+import { ffmpegTail, probeSamplePath } from './probe-utils';
 
 const execFileAsync = promisify(execFile);
 
@@ -55,10 +54,7 @@ async function runOnce(
 export async function runAmfOpenclProbe(log: Logger): Promise<void> {
   const t0 = Date.now();
   let failure = '';
-  const hdrSample = path.join(
-    os.tmpdir(),
-    `fliks-amf-opencl-probe-${process.pid}.hevc`,
-  );
+  const hdrSample = probeSamplePath('amf-opencl');
   try {
     await synthesiseHdrProbeSample(hdrSample);
 
@@ -95,8 +91,7 @@ export async function runAmfOpenclProbe(log: Logger): Promise<void> {
     enabled = true;
   } catch (err) {
     enabled = false;
-    const stderr = (err as { stderr?: string }).stderr?.trim();
-    failure = stderr ? stderr.split('\n').slice(-2).join(' ') : '';
+    failure = ffmpegTail(err);
   } finally {
     await unlink(hdrSample).catch(() => {});
     probedOnce = true;
