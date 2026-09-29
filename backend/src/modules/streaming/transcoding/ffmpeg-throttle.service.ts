@@ -40,8 +40,7 @@ export function jobPlayheadSeconds(
   segmentDuration: number,
   sourceFps: number | undefined,
   // Remux indices sit on the keyframe grid, not a uniform one: convert
-  // through the assembler's own grid when there is one, the ladder's
-  // uniform segmentIndexToSeconds otherwise.
+  // through the assembler's grid when there is one, else segmentIndexToSeconds.
   remuxAssembler?: Pick<RemuxSegmentAssembler, 'segmentContentSeconds'> | null,
 ): number | null {
   if (live.length === 0) return null;

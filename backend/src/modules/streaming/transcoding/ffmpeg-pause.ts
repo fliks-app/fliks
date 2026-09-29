@@ -1,10 +1,8 @@
 import { Logger } from '@nestjs/common';
 import { spawn, type ChildProcess } from 'child_process';
 
-/** How this host's ffmpeg build can be paused mid-run:
- *  - `stdin`: the bundled ffmpeg's `p`/`u` stdin keys (Linux/Windows/macOS).
- *  - `signal`: POSIX SIGSTOP/SIGCONT fallback for a build without the key.
- *  - `none`: neither, a Windows build without the key has no fallback. */
+/** How this host's ffmpeg build pauses: `stdin` p/u keys, `signal`
+ *  (SIGSTOP/SIGCONT) as a POSIX fallback, or `none` on a Windows build lacking the key. */
 export type PauseCapability = 'stdin' | 'signal' | 'none';
 
 let capability: PauseCapability = 'none';
