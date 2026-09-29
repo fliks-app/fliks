@@ -130,7 +130,7 @@ export class LibraryIngestService {
       const ext = path.extname(file.path);
       const sourceBase = path.basename(file.path, ext);
 
-      let episodeId = file.episodeId;
+      let episodeId: number | undefined;
       let seasonId: number | undefined;
       let seasonNumber: number | undefined;
       let episodeNumber: number | undefined;
@@ -144,19 +144,21 @@ export class LibraryIngestService {
         seasonNumber = epNums?.season;
         episodeNumber = epNums?.episode;
 
-        if (episodeId != null) {
-          // Caller already matched the episode: its row is authoritative.
-          const ep = await this.episodeRepo.findOne({
-            where: { id: episodeId },
-            relations: ['season'],
-          });
-          if (ep) {
-            episodeNumber = ep.episodeNumber;
-            seasonNumber = ep.season?.seasonNumber ?? 1;
-            seasonId = ep.season?.id;
-            episodeTitle = ep.title ?? undefined;
-            airDate = ep.airDate ?? undefined;
-          }
+        // The caller's episode is authoritative only if it belongs to this media.
+        const ep =
+          file.episodeId != null
+            ? await this.episodeRepo.findOne({
+                where: { id: file.episodeId, season: { media: { id: media.id } } },
+                relations: ['season'],
+              })
+            : null;
+        if (ep) {
+          episodeId = ep.id;
+          episodeNumber = ep.episodeNumber;
+          seasonNumber = ep.season?.seasonNumber ?? 1;
+          seasonId = ep.season?.id;
+          episodeTitle = ep.title ?? undefined;
+          airDate = ep.airDate ?? undefined;
         } else if (epNums) {
           const season = await this.seasonRepo.findOne({
             where: { media: { id: media.id }, seasonNumber: epNums.season },
