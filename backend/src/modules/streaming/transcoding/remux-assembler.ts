@@ -18,9 +18,15 @@ import {
   makeBox,
   parseInitTracks,
   parseTrexDefaults,
+  readBoxHeader,
   readInitEdits,
   readTfdt,
   retimeFragments,
+  TRUN_DATA_OFFSET,
+  TRUN_SAMPLE_CTS,
+  TRUN_SAMPLE_DURATION,
+  TRUN_SAMPLE_FLAGS,
+  TRUN_SAMPLE_SIZE,
   trunSamples,
   u32,
   videoDecodeExtent,
@@ -745,19 +751,15 @@ async function* topBoxes(
   const head = Buffer.alloc(16);
   for (let start = 0; start < end; ) {
     const { bytesRead } = await fh.read(head, 0, head.length, start);
-    let size = bytesRead >= 8 ? head.readUInt32BE(0) : 0;
-    if (size === 1 && bytesRead === 16) size = Number(head.readBigUInt64BE(8));
-    else if (size === 0 && bytesRead >= 8) size = end - start;
-    if (size < 8 || start + size > end) {
-      throw new Error(`malformed box at byte ${start} of ${end}`);
-    }
+    const header = readBoxHeader(head.subarray(0, bytesRead), 0, start, end);
+    if (!header) throw new Error(`malformed box at byte ${start} of ${end}`);
     let moof: Buffer | null = null;
-    if (head.toString('latin1', 4, 8) === 'moof') {
-      moof = Buffer.alloc(size);
-      await fh.read(moof, 0, size, start);
+    if (header.type === 'moof') {
+      moof = Buffer.alloc(header.size);
+      await fh.read(moof, 0, header.size, start);
     }
-    yield { start, size, moof };
-    start += size;
+    yield { start, size: header.size, moof };
+    start += header.size;
   }
 }
 
@@ -814,14 +816,7 @@ function parseFrame(moof: Buffer, mdat: Buffer): RawFrame {
   return { tfdt: tfdt.value, sample: samples[0], data: mdat.subarray(mdatBody) };
 }
 
-// Mirror ISO-BMFF's trun flags (timeline.ts keeps its own copy private): the
-// one place in this codebase that WRITES a trun rather than reads one.
 const TFHD_BASE_IS_MOOF = 0x020000;
-const TRUN_DATA_OFFSET = 0x000001;
-const TRUN_SAMPLE_DURATION = 0x000100;
-const TRUN_SAMPLE_SIZE = 0x000200;
-const TRUN_SAMPLE_FLAGS = 0x000400;
-const TRUN_SAMPLE_CTS = 0x000800;
 
 /** Fullbox header: version(1) + flags(3), as one big-endian word. */
 function fullbox(version: number, flags: number): Buffer {
@@ -883,13 +878,12 @@ async function tailBoxes(
     for (;;) {
       if (start + 8 > fileSize) break;
       const { bytesRead } = await fh.read(head, 0, 16, start);
-      let size = bytesRead >= 8 ? head.readUInt32BE(0) : 0;
-      if (size === 1 && bytesRead === 16) size = Number(head.readBigUInt64BE(8));
-      if (size < 8 || start + size > fileSize) break;
-      const buf = Buffer.alloc(size);
-      await fh.read(buf, 0, size, start);
-      boxes.push({ type: head.toString('latin1', 4, 8), start, size, buf });
-      start += size;
+      const header = readBoxHeader(head.subarray(0, bytesRead), 0, start, fileSize);
+      if (!header) break;
+      const buf = Buffer.alloc(header.size);
+      await fh.read(buf, 0, header.size, start);
+      boxes.push({ type: header.type, start, size: header.size, buf });
+      start += header.size;
     }
     return boxes;
   } finally {

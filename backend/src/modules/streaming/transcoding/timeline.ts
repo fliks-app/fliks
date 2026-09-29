@@ -41,22 +41,35 @@ export interface TrackInfo {
   isVideo: boolean;
 }
 
+/** One box header at `off` in `buf` (`start`/`end` are the container's own
+ *  coordinates, since `buf` may be a standalone header read). Null when malformed. */
+export function readBoxHeader(
+  buf: Buffer,
+  off: number,
+  start: number,
+  end: number,
+): { type: string; size: number; payloadStart: number } | null {
+  const avail = buf.length - off;
+  let size = avail >= 8 ? buf.readUInt32BE(off) : 0;
+  let payloadStart = start + 8;
+  if (size === 1 && avail >= 16) {
+    size = Number(buf.readBigUInt64BE(off + 8));
+    payloadStart = start + 16;
+  } else if (size === 0 && avail >= 8) {
+    size = end - start;
+  }
+  if (size < 8 || start + size > end) return null;
+  return { type: buf.toString('latin1', off + 4, off + 8), size, payloadStart };
+}
+
 /** Iterate the boxes in `buf[start, end)`. */
 function* boxes(buf: Buffer, start: number, end: number): Generator<Box> {
   let off = start;
   while (off + 8 <= end) {
-    let size = buf.readUInt32BE(off);
-    const type = buf.toString('latin1', off + 4, off + 8);
-    let payloadStart = off + 8;
-    if (size === 1) {
-      size = Number(buf.readBigUInt64BE(off + 8));
-      payloadStart = off + 16;
-    } else if (size === 0) {
-      size = end - off;
-    }
-    if (size < 8 || off + size > end) break;
-    yield { type, start: off, size, payloadStart };
-    off += size;
+    const header = readBoxHeader(buf, off, off, end);
+    if (!header) break;
+    yield { type: header.type, start: off, size: header.size, payloadStart: header.payloadStart };
+    off += header.size;
   }
 }
 
@@ -363,12 +376,13 @@ export function firstTfdt(segBuf: Buffer, trackId: number): bigint | null {
 const TFHD_DEFAULT_DURATION = 0x000008;
 const TFHD_DEFAULT_SIZE = 0x000010;
 const TFHD_DEFAULT_FLAGS = 0x000020;
-const TRUN_DATA_OFFSET = 0x000001;
+// Exported: the one place in this codebase that WRITES a trun (remux-assembler.ts) shares these.
+export const TRUN_DATA_OFFSET = 0x000001;
 const TRUN_FIRST_SAMPLE_FLAGS = 0x000004;
-const TRUN_SAMPLE_DURATION = 0x000100;
-const TRUN_SAMPLE_SIZE = 0x000200;
-const TRUN_SAMPLE_FLAGS = 0x000400;
-const TRUN_SAMPLE_CTS = 0x000800;
+export const TRUN_SAMPLE_DURATION = 0x000100;
+export const TRUN_SAMPLE_SIZE = 0x000200;
+export const TRUN_SAMPLE_FLAGS = 0x000400;
+export const TRUN_SAMPLE_CTS = 0x000800;
 
 /** tfhd's own `track_ID` (fullbox(4) immediately followed by it, unlike
  *  tkhd's, which carries creation/modification timestamps first). */
