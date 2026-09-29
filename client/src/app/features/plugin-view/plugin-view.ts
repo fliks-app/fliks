@@ -329,6 +329,8 @@ export class PluginViewComponent implements OnDestroy {
       route: this.resourceUrl(a.route),
       confirmKey: a.confirmKey,
       result: a.result,
+      successKey: a.successKey,
+      afterSave: a.afterSave,
     };
   }
 

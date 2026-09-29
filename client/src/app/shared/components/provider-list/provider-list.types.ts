@@ -54,6 +54,10 @@ export interface ProviderRowAction {
   confirmKey?: string;
   /** How a `GET`'s answer renders (`ProvidersConfigPage.actions[].result`). */
   result?: { kind: 'table'; columns: TableColumn[]; emptyKey: string };
+  /** Toasted on success, interpolated with the response's fields. */
+  successKey?: string;
+  /** Also runs, unconfirmed, on the row the editor just saved when that row is enabled. */
+  afterSave?: boolean;
 }
 
 /** What a row reports about its own backoff, when the resource tracks one. Rendered as its own

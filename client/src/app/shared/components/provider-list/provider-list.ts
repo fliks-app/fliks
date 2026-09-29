@@ -385,9 +385,7 @@ export class ProviderListComponent implements OnInit {
       const id = this.editingId();
       // A switched implementation names a different driver: sending the old row's id
       // would merge its stored secret into a test against that other driver.
-      const savedImplementation = this.rows().find((r) => r.id === id)?.[
-        this.implementationKey()
-      ];
+      const savedImplementation = this.rows().find((r) => r.id === id)?.[this.implementationKey()];
       const sameImplementation = id != null && this.draftImplementation() === savedImplementation;
       this.testResult.set(
         await run({
@@ -424,15 +422,28 @@ export class ProviderListComponent implements OnInit {
 
     this.saving.set(true);
     const id = this.editingId();
+    let savedId: number | null = null;
     try {
-      if (id == null) await firstValueFrom(this.http.post(this.listUrl(), body));
-      else await firstValueFrom(this.http.put(`${this.listUrl()}/${id}`, body));
+      const saved =
+        id == null
+          ? await firstValueFrom(
+              this.http.post<Partial<ProviderInstance> | null>(this.listUrl(), body),
+            )
+          : await firstValueFrom(
+              this.http.put<Partial<ProviderInstance> | null>(`${this.listUrl()}/${id}`, body),
+            );
+      savedId = saved?.id ?? id;
       this.closeEditor();
       await this.reload();
     } catch {
       // handled by the global error interceptor
     } finally {
       this.saving.set(false);
+    }
+    const row = this.rows().find((r) => r.id === savedId);
+    if (!row?.enabled) return;
+    for (const action of this.rowActions()) {
+      if (action.afterSave && action.method !== 'GET') await this.mutateRow(row, action);
     }
   }
 
@@ -750,9 +761,20 @@ export class ProviderListComponent implements OnInit {
       this.resultDialog()?.nativeElement.showModal();
       return;
     }
+    await this.mutateRow(row, action);
+  }
+
+  private async mutateRow(row: ProviderInstance, action: ProviderRowAction): Promise<void> {
+    const url = resolveRowActionRoute(action.route, row.id);
+    if (!url) return;
     this.rowActionBusy.set(this.rowActionKey(row, action));
     try {
-      await firstValueFrom(this.http.request(action.method, url));
+      const res = await firstValueFrom(this.http.request<unknown>(action.method, url));
+      if (action.successKey) {
+        const params =
+          res && typeof res === 'object' ? (res as Record<string, unknown>) : undefined;
+        this.toast.success(this.translate.instant(action.successKey, params));
+      }
       await this.reload();
     } catch {
       // handled by the global error interceptor

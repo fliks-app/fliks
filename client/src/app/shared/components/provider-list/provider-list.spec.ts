@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { HttpClient } from '@angular/common/http';
-import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
+import { TranslateLoader, TranslateService, provideTranslateService } from '@ngx-translate/core';
 import { of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { ProviderListComponent, resolveRowActionRoute } from './provider-list';
@@ -605,6 +605,78 @@ describe('ProviderListComponent — characterisation', () => {
       method: 'GET',
       route: '/api/x/:id/:extra',
     });
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('runs an afterSave action on the row just created and toasts what it answered', async () => {
+    let rows: unknown[] = [];
+    const get = vi.fn(() => of(rows));
+    const post = vi.fn(() => {
+      rows = [
+        { id: 9, name: 'New', implementation: 'demo', enabled: true, priority: 0, settings: {} },
+      ];
+      return of(rows[0]);
+    });
+    const request = vi.fn(() => of({ created: 12 }));
+    const toast = { success: vi.fn(), error: vi.fn() };
+    const confirm = vi.fn(() => Promise.resolve(true));
+    const fixture = await createComponent(
+      { get, post, request },
+      {
+        toast,
+        confirmation: { confirm, alert: () => Promise.resolve() },
+        rowActions: [
+          {
+            labelKey: 'x.import',
+            method: 'POST',
+            route: '/api/x/:id/import',
+            confirmKey: 'x.sure',
+            successKey: 'x.done',
+            afterSave: true,
+          },
+        ],
+      },
+    );
+    TestBed.inject(TranslateService).setTranslation('en', { 'x.done': '{{created}} added' });
+    const c = fixture.componentInstance;
+    c.openCreate();
+    c.draftName.set('New');
+    c.draftValue.update((v) => ({ ...v, url: 'http://x' }));
+
+    await c.save();
+
+    expect(request).toHaveBeenCalledWith('POST', '/api/x/9/import');
+    expect(confirm).not.toHaveBeenCalled();
+    expect(toast.success).toHaveBeenCalledWith('12 added');
+  });
+
+  it('skips an afterSave action when the saved row is disabled', async () => {
+    const get = vi.fn(() =>
+      of([
+        {
+          id: 7,
+          name: 'A',
+          implementation: 'demo',
+          enabled: false,
+          priority: 1,
+          settings: { url: 'http://x' },
+        },
+      ]),
+    );
+    const request = vi.fn(() => of({}));
+    const fixture = await createComponent(
+      { get, put: () => of({ id: 7 }), request },
+      {
+        rowActions: [
+          { labelKey: 'x.import', method: 'POST', route: '/api/x/:id/import', afterSave: true },
+        ],
+      },
+    );
+    const c = fixture.componentInstance;
+    c.openEdit(c.rows()[0]);
+
+    await c.save();
+
     expect(request).not.toHaveBeenCalled();
   });
 });
