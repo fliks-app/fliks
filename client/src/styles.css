@@ -1390,7 +1390,8 @@ html.keyboard-open [data-alpha-index] {
    badges and the page-wide snapshot keep their own animations — a `*` selector
    outranked them and flipped the progress bar with the artwork. */
 app-media-card img,
-app-media-info-header img {
+app-media-info-header img,
+app-tmdb-preview img {
   view-transition-class: poster;
 }
 
@@ -1532,7 +1533,8 @@ html.vt-poster-in nav.navbar,
 html.vt-poster-out nav.navbar {
   view-transition-name: vt-topbar;
 }
-html.vt-poster-in app-media-info-header [data-hero-lead] {
+html.vt-poster-in app-media-info-header [data-hero-lead],
+html.vt-poster-in app-tmdb-preview [data-hero-lead] {
   view-transition-name: vt-hero-lead;
 }
 /* Set for the length of one transition; see muteHeroUntilDone. Important, or

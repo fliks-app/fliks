@@ -10,6 +10,8 @@ export interface MetadataSearchResult {
   overview: string;
   year: number | null;
   posterUrl: string | null;
+  /** The backdrop the preview hero opens on, so a card can hand it over. */
+  fanartUrl?: string | null;
   rating: number;
   genres: string[];
   /** TMDB genre ids — search-list results carry ids, not names. */
@@ -99,6 +101,7 @@ export interface PersonCreditItem {
   job?: string;
   department?: string;
   posterUrl: string | null;
+  fanartUrl?: string | null;
   releaseDate: string | null;
   rating: number;
 }

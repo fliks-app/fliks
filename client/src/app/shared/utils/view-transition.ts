@@ -35,12 +35,22 @@ export function stampPoster(
   episodeId?: number | null,
   overlay?: HTMLElement | null,
 ): void {
-  clearPosterStamps();
   // An episode page shows a still, not the series poster, so it pairs on its
   // own name: the series name would morph the card into the wrong image.
-  img.style.viewTransitionName = episodeId
-    ? `media-poster-ep-${episodeId}`
-    : `media-poster-${mediaId}`;
+  stampPosterNamed(
+    img,
+    episodeId ? `media-poster-ep-${episodeId}` : `media-poster-${mediaId}`,
+    overlay,
+  );
+}
+
+export function stampPosterNamed(
+  img: HTMLElement,
+  name: string,
+  overlay?: HTMLElement | null,
+): void {
+  clearPosterStamps();
+  img.style.viewTransitionName = name;
   img.setAttribute(STAMPED, '');
   // The morphing poster is painted above the page snapshot, so the card's own
   // badges only reappear when the animation ends unless they are lifted too.
@@ -71,6 +81,11 @@ export function muteHeroUntilDone(transition: { finished: Promise<unknown> }): v
   void transition.finished.then(done, done);
 }
 
+/** A provider id can equal a library id, so a preview page pairs on a name of its own. */
+export function previewPosterName(type: string, provider: string, externalId: string): string {
+  return `preview-poster-${type}-${provider}-${externalId}`;
+}
+
 export interface RouteNode {
   firstChild: RouteNode | null;
   routeConfig: { path?: string } | null;
@@ -81,6 +96,10 @@ const POSTER_ROUTES = new Set<string | undefined>([
   'movies/:id',
   'series/:id',
   'series/:id/episode/:episodeId',
+  'add/movie/:provider/:externalId',
+  'add/tv/:provider/:externalId',
+  'add/movie/:tmdbId',
+  'add/tv/:tmdbId',
 ]);
 
 /** The player pairs with nothing — it has no poster, and its own close animation

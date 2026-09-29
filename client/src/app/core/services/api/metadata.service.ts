@@ -14,6 +14,7 @@ export interface MetadataSearchResult {
   overview: string;
   year: number | null;
   posterUrl: string | null;
+  fanartUrl?: string | null;
   rating: number;
   genres: string[];
   genreIds?: number[];

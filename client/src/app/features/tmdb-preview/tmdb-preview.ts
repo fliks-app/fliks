@@ -46,10 +46,21 @@ import { ClampToggleDirective } from '../../shared/directives/clamp-toggle.direc
 import { CollapsibleSectionComponent } from '../../shared/components/collapsible-section/collapsible-section';
 import { PreviewSeasonsComponent } from './components/preview-seasons/preview-seasons.component';
 import { openTrailerExternally, trailerPlaysInline } from '../../shared/utils/trailer.util';
+import { previewPosterName } from '../../shared/utils/view-transition';
+import { ImgFadeInDirective } from '../../shared/directives/img-fade-in.directive';
+import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
+
+/** What the card that opened the page already knows, handed over in router state. */
+interface PreviewSeed {
+  externalId: string;
+  title: string;
+  posterUrl: string | null;
+  fanartUrl: string | null;
+}
 
 @Component({
   selector: 'app-tmdb-preview',
-  imports: [FormsModule, CurrencyPipe, DecimalPipe, NgTemplateOutlet, TranslatePipe, ResolveUrlPipe, LocaleDatePipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, HorizontalScrollerComponent, ClampToggleDirective, CollapsibleSectionComponent, PreviewSeasonsComponent, RequestDeclineModalComponent, RequestEditModalComponent, LucideFilm, LucideUser, LucidePlay, LucidePlus],
+  imports: [FormsModule, CurrencyPipe, DecimalPipe, NgTemplateOutlet, TranslatePipe, ResolveUrlPipe, LocaleDatePipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, HorizontalScrollerComponent, ClampToggleDirective, CollapsibleSectionComponent, PreviewSeasonsComponent, ImgFadeInDirective, CachedSrcDirective, RequestDeclineModalComponent, RequestEditModalComponent, LucideFilm, LucideUser, LucidePlay, LucidePlus],
   templateUrl: './tmdb-preview.html',
 })
 export class TmdbPreviewComponent implements OnInit, OnDestroy {
@@ -75,7 +86,6 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
   });
 
   readonly media = signal<MetadataDetails | null>(null);
-  readonly loading = signal(true);
   readonly error = signal('');
 
   readonly qualityProfiles = signal<{ id: number; name: string }[]>([]);
@@ -98,6 +108,29 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
       ?? this.route.snapshot.paramMap.get('tmdbId')
       ?? '';
   });
+
+  /** Read before the first render, so the poster the card stamped has its pair. */
+  private readonly seed: PreviewSeed | null = (() => {
+    const seed = (history.state as { preview?: PreviewSeed } | null)?.preview;
+    return seed?.externalId === this.externalId() ? seed : null;
+  })();
+
+  /** Title and artwork: the card's until the details land. */
+  readonly hero = computed(() => {
+    const m = this.media();
+    if (m) return { title: m.title, posterUrl: m.posterUrl, fanartUrl: m.fanartUrl ?? m.posterUrl };
+    const s = this.seed;
+    return s ? { title: s.title, posterUrl: s.posterUrl, fanartUrl: s.fanartUrl ?? s.posterUrl } : null;
+  });
+
+  /** A film fills more of the facts grid (release dates, budget, revenue) than a series. */
+  readonly skeletonFacts = computed(() =>
+    Array.from({ length: this.type() === 'series' ? 4 : 8 }, (_, i) => i),
+  );
+
+  readonly posterTransitionName = computed(() =>
+    previewPosterName(this.type() === 'series' ? 'tv' : 'movie', this.provider(), this.externalId()),
+  );
 
   readonly canImport = computed(() => this.auth.hasPermission('media.create'));
   readonly canRequest = computed(() => !this.canImport() && this.auth.hasPermission('requests.create'));
@@ -254,25 +287,14 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit() {
-    const type = this.type();
-    const provider = this.provider();
-    const externalId = this.externalId();
-
+    // Hero chrome from the first frame, so the skeleton sits where the page will.
+    this.navbar.enterHeroPage(this.seed?.title ?? '');
     // Feeds the request form and the manager's edit modal; the import modal
     // loads its own data on open.
-    if (this.canRequest() || this.canManageRequests()) {
-      const [qp, lp, libs] = await Promise.all([
-        this.profilesApi.getQualityProfiles(),
-        this.profilesApi.getLanguageProfiles(),
-        this.librariesApi.listMine(),
-      ]);
-      this.qualityProfiles.set(qp.map((p) => ({ id: p.id, name: p.name })));
-      this.languageProfiles.set(lp.map((p) => ({ id: p.id, name: p.name })));
-      this.libraries.set(libs);
-    }
+    if (this.canRequest() || this.canManageRequests()) void this.loadProfiles();
 
     try {
-      const details = await this.metadata.getDetails(provider, type, externalId);
+      const details = await this.metadata.getDetails(this.provider(), this.type(), this.externalId());
       if (this.destroyed) return;
       this.media.set(details);
       this.navbar.enterHeroPage(details.title, details.logoUrl);
@@ -286,9 +308,18 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
       }
     } catch {
       this.error.set(this.translate.instant('discover.preview_error'));
-    } finally {
-      this.loading.set(false);
     }
+  }
+
+  private async loadProfiles() {
+    const [qp, lp, libs] = await Promise.all([
+      this.profilesApi.getQualityProfiles(),
+      this.profilesApi.getLanguageProfiles(),
+      this.librariesApi.listMine(),
+    ]);
+    this.qualityProfiles.set(qp.map((p) => ({ id: p.id, name: p.name })));
+    this.languageProfiles.set(lp.map((p) => ({ id: p.id, name: p.name })));
+    this.libraries.set(libs);
   }
 
   /** Global active-request state for this title — drives the "déjà demandé"

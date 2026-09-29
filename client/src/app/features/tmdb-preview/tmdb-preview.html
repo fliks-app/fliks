@@ -46,164 +46,32 @@
   }
 </ng-template>
 
-@if (loading()) {
-  <div class="flex justify-center py-16">
-    <span class="loading loading-spinner loading-lg"></span>
-  </div>
-} @else if (error() && !media()) {
+@if (error() && !media()) {
   <div role="alert" class="alert alert-error">{{ error() }}</div>
-} @else if (media(); as m) {
+} @else {
 
   <!-- ===== MOBILE layout ===== -->
   <div class="md:hidden">
-    <app-mobile-fanart-hero [fanartUrl]="m.fanartUrl" />
+    <app-mobile-fanart-hero [fanartUrl]="hero()?.fanartUrl" [viewTransitionName]="posterTransitionName()" />
 
-    <div class="px-1 -mt-16 relative z-10">
-      <h1 class="text-3xl font-semibold tracking-tight leading-tight">{{ m.title }}</h1>
-      @if (m.originalTitle && m.originalTitle !== m.title) {
-        <p class="text-base-content/60 mt-1">{{ m.originalTitle }}</p>
+    <div data-hero-lead class="px-1 -mt-16 relative z-10">
+      @if (hero(); as h) {
+        <h1 class="text-3xl font-semibold tracking-tight leading-tight">{{ h.title }}</h1>
+      } @else {
+        <div class="h-9 w-2/3 bg-base-300/40 rounded animate-pulse"></div>
       }
-      @if (m.tagline) {
-        <p class="text-sm italic text-base-content/60 mt-1">{{ m.tagline }}</p>
-      }
-
-      <!-- Badges -->
-      <div class="flex flex-wrap items-center gap-1.5 mt-2 text-sm text-base-content/70">
-        @if (m.rating) {
-          <span class="flex items-center gap-0.5 text-warning font-semibold">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-            {{ m.rating | number:'1.1-1' }}
-          </span>
-        }
-        @if (m.year) { <span>{{ m.year }}</span> }
-        @if (m.runtime) { <span>{{ m.runtime }}min</span> }
-        @if (seasonsLabel()) { <span>{{ seasonsLabel() }}</span> }
-        @if (m.status && m.status !== 'unknown') { <span>{{ statusKey() | translate }}</span> }
-        <span class="badge badge-outline badge-sm">{{ typeLabelKey() | translate }}</span>
-      </div>
-
-      @if (m.genres.length) {
-        <div class="flex flex-wrap gap-1.5 mt-2">
-          @for (g of m.genres; track g) {
-            <span class="badge badge-ghost badge-sm">{{ g }}</span>
-          }
-        </div>
-      }
-
-      <!-- Action buttons -->
-      <div class="flex flex-wrap items-center gap-3 mt-4">
-        @if (showImportButton()) {
-          <button type="button" class="btn btn-primary flex-1 gap-2" (click)="openImportModal()">
-            <svg lucidePlus class="h-4 w-4"></svg>{{ 'discover.add_to_library' | translate }}
-          </button>
-        }
-        @if (canRequest()) {
-          @if (hasBlockingRequest()) {
-            <span class="badge badge-warning">{{ 'discover.already_requested' | translate }}</span>
-          } @else {
-            <button type="button" class="btn btn-secondary flex-1" (click)="openRequestModal()">
-              {{ 'discover.request' | translate }}
-            </button>
-          }
-        }
-        @if (trailerKey()) {
-          <button type="button" class="btn btn-outline gap-2" (click)="openTrailer()">
-            <svg lucidePlay class="h-4 w-4"></svg>{{ 'discover.watch_trailer' | translate }}
-          </button>
-        }
-      </div>
-      @if (canRequest() && !hasBlockingRequest() && requestedSeasons().length) {
-        <p class="text-xs text-warning mt-2">
-          {{ 'discover.seasons_already_requested' | translate:{ seasons: requestedSeasons().join(', ') } }}
-        </p>
-      }
-      <ng-container *ngTemplateOutlet="pendingRequestsPanel" />
-
-      @if (m.overview) {
-        <p [appClampToggle]="m.overview" #syn="clampToggle"
-           class="mt-3 text-sm text-base-content/80 leading-relaxed"
-           [class.line-clamp-4]="!syn.expanded()">{{ m.overview }}</p>
-        @if (syn.showToggle()) {
-          <button type="button" class="link link-primary no-underline hover:underline text-sm mt-1" (click)="syn.toggle()">
-            {{ (syn.expanded() ? 'common.show_less' : 'common.show_more') | translate }}
-          </button>
-        }
-      }
-
-      <!-- Metadata grid -->
-      <div class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm mt-4">
-        @if (directors().length) {
-          <div>
-            <span class="text-base-content/50 block">{{ 'discover.preview_director' | translate }}</span>
-            <span class="font-medium">{{ directorsLabel() }}</span>
-          </div>
-        }
-        @if (m.originalLanguage) {
-          <div>
-            <span class="text-base-content/50 block">{{ 'discover.preview_original_language' | translate }}</span>
-            <span class="font-medium">{{ originalLanguageLabel() }}</span>
-          </div>
-        }
-        @if (m.releaseDate) {
-          <div>
-            <span class="text-base-content/50 block">{{ 'discover.preview_release_date' | translate }}</span>
-            <span class="font-medium">{{ m.releaseDate | localeDate:{ dateStyle: 'long' } }}</span>
-          </div>
-        }
-        @if (m.inCinemas) {
-          <div>
-            <span class="text-base-content/50 block">{{ 'discover.preview_in_cinemas' | translate }}</span>
-            <span class="font-medium">{{ m.inCinemas | localeDate:{ dateStyle: 'long' } }}</span>
-          </div>
-        }
-        @if (m.digitalRelease) {
-          <div>
-            <span class="text-base-content/50 block">{{ 'discover.preview_digital' | translate }}</span>
-            <span class="font-medium">{{ m.digitalRelease | localeDate:{ dateStyle: 'long' } }}</span>
-          </div>
-        }
-        @if (m.productionCountries.length) {
-          <div>
-            <span class="text-base-content/50 block">{{ 'discover.preview_countries' | translate }}</span>
-            <span class="font-medium">{{ m.productionCountries.join(', ') }}</span>
-          </div>
-        }
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== DESKTOP layout =====
-       Page-wide fanart is handled by BackgroundService (same as
-       media-detail) — no inline bleed div here. md+ matches the
-       breakpoint media-info-header uses for its own desktop split. -->
-  <div class="hidden md:block relative">
-    <div
-      class="flex gap-6 lg:gap-10 relative z-20"
-      [style.padding-top]="!navbar.isHeroPage() || navbar.effectiveSidebarPinned() || tv.isTv() ? null : navbar.mobileNavbarVisible() ? 'calc(env(safe-area-inset-top, 0px) + 3rem)' : null"
-    >
-      <div class="shrink-0 w-[200px] xl:w-[220px] 2xl:w-[280px]">
-        @if (m.posterUrl) {
-          <img [src]="m.posterUrl | resolveUrl:'medium'" [alt]="m.title" class="w-full rounded-xl aspect-2/3 object-cover bg-base-300" />
-        } @else {
-          <div class="aspect-2/3 rounded-xl bg-base-300 flex items-center justify-center text-base-content/30">
-            <svg lucideFilm class="h-20 w-20" [strokeWidth]="1.5"></svg>
-          </div>
-        }
-      </div>
-
-      <div class="flex-1 min-w-0 pt-2">
-        <h1 class="text-4xl font-bold tracking-tight">{{ m.title }}</h1>
+      @if (media(); as m) {
         @if (m.originalTitle && m.originalTitle !== m.title) {
-          <p class="text-base-content/70 mt-1 text-lg">{{ m.originalTitle }}</p>
+          <p class="text-base-content/60 mt-1">{{ m.originalTitle }}</p>
         }
         @if (m.tagline) {
-          <p class="text-base italic text-base-content/60 mt-1">{{ m.tagline }}</p>
+          <p class="text-sm italic text-base-content/60 mt-1">{{ m.tagline }}</p>
         }
 
-        <!-- Metadata row — same plain-text style as media-detail. -->
-        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-base-content/60">
+        <!-- Badges -->
+        <div class="flex flex-wrap items-center gap-1.5 mt-2 text-sm text-base-content/70">
           @if (m.rating) {
-            <span class="flex items-center gap-1 text-warning font-semibold">
+            <span class="flex items-center gap-0.5 text-warning font-semibold">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
               {{ m.rating | number:'1.1-1' }}
             </span>
@@ -212,19 +80,21 @@
           @if (m.runtime) { <span>{{ m.runtime }}min</span> }
           @if (seasonsLabel()) { <span>{{ seasonsLabel() }}</span> }
           @if (m.status && m.status !== 'unknown') { <span>{{ statusKey() | translate }}</span> }
-          <span class="badge badge-outline">{{ typeLabelKey() | translate }}</span>
+          <span class="badge badge-outline badge-sm">{{ typeLabelKey() | translate }}</span>
         </div>
 
         @if (m.genres.length) {
-          <div class="flex flex-wrap gap-1.5 mt-4">
-            @for (g of m.genres; track g) { <span class="badge badge-ghost">{{ g }}</span> }
+          <div class="flex flex-wrap gap-1.5 mt-2">
+            @for (g of m.genres; track g) {
+              <span class="badge badge-ghost badge-sm">{{ g }}</span>
+            }
           </div>
         }
 
-        <!-- Action buttons — order + sizing matching media-detail's row. -->
-        <div class="flex flex-wrap items-center gap-2 mt-6">
+        <!-- Action buttons -->
+        <div class="flex flex-wrap items-center gap-3 mt-4">
           @if (showImportButton()) {
-            <button type="button" class="btn btn-primary gap-2" (click)="openImportModal()">
+            <button type="button" class="btn btn-primary flex-1 gap-2" (click)="openImportModal()">
               <svg lucidePlus class="h-4 w-4"></svg>{{ 'discover.add_to_library' | translate }}
             </button>
           }
@@ -232,7 +102,7 @@
             @if (hasBlockingRequest()) {
               <span class="badge badge-warning">{{ 'discover.already_requested' | translate }}</span>
             } @else {
-              <button type="button" class="btn btn-secondary" (click)="openRequestModal()">
+              <button type="button" class="btn btn-secondary flex-1" (click)="openRequestModal()">
                 {{ 'discover.request' | translate }}
               </button>
             }
@@ -244,20 +114,25 @@
           }
         </div>
         @if (canRequest() && !hasBlockingRequest() && requestedSeasons().length) {
-          <p class="text-sm text-warning mt-2">
+          <p class="text-xs text-warning mt-2">
             {{ 'discover.seasons_already_requested' | translate:{ seasons: requestedSeasons().join(', ') } }}
           </p>
         }
         <ng-container *ngTemplateOutlet="pendingRequestsPanel" />
 
         @if (m.overview) {
-          <p class="mt-4 text-base-content/90 leading-relaxed whitespace-pre-line">{{ m.overview }}</p>
+          <p [appClampToggle]="m.overview" #syn="clampToggle"
+             class="mt-3 text-sm text-base-content/80 leading-relaxed"
+             [class.line-clamp-4]="!syn.expanded()">{{ m.overview }}</p>
+          @if (syn.showToggle()) {
+            <button type="button" class="link link-primary no-underline hover:underline text-sm mt-1" (click)="syn.toggle()">
+              {{ (syn.expanded() ? 'common.show_less' : 'common.show_more') | translate }}
+            </button>
+          }
         }
 
-        <!-- Secondary metadata grid — kept inline because tmdb-preview's
-             `MetadataDetails` doesn't fit `app-media-info-extra`'s
-             `Media` input. Same visual cadence as that component. -->
-        <div class="grid grid-cols-2 gap-x-8 gap-y-3 text-sm mt-6">
+        <!-- Metadata grid -->
+        <div class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm mt-4">
           @if (directors().length) {
             <div>
               <span class="text-base-content/50 block">{{ 'discover.preview_director' | translate }}</span>
@@ -288,47 +163,228 @@
               <span class="font-medium">{{ m.digitalRelease | localeDate:{ dateStyle: 'long' } }}</span>
             </div>
           }
-          @if (m.physicalRelease) {
-            <div>
-              <span class="text-base-content/50 block">{{ 'discover.preview_physical' | translate }}</span>
-              <span class="font-medium">{{ m.physicalRelease | localeDate:{ dateStyle: 'long' } }}</span>
-            </div>
-          }
-          @if (m.budget) {
-            <div>
-              <span class="text-base-content/50 block">{{ 'discover.preview_budget' | translate }}</span>
-              <span class="font-medium">{{ m.budget | currency:'USD':'symbol':'1.0-0' }}</span>
-            </div>
-          }
-          @if (m.revenue) {
-            <div>
-              <span class="text-base-content/50 block">{{ 'discover.preview_revenue' | translate }}</span>
-              <span class="font-medium">{{ m.revenue | currency:'USD':'symbol':'1.0-0' }}</span>
-            </div>
-          }
           @if (m.productionCountries.length) {
             <div>
               <span class="text-base-content/50 block">{{ 'discover.preview_countries' | translate }}</span>
               <span class="font-medium">{{ m.productionCountries.join(', ') }}</span>
             </div>
           }
-          @if (m.productionCompanies.length) {
-            <div>
-              <span class="text-base-content/50 block">{{ 'discover.preview_studios' | translate }}</span>
-              <span class="font-medium">{{ m.productionCompanies.join(', ') }}</span>
-            </div>
-          }
-          @if (m.imdbId) {
-            <div>
-              <span class="text-base-content/50 block">IMDB</span>
-              <span class="font-medium">{{ m.imdbId }}</span>
-            </div>
-          }
-          <div>
-            <span class="text-base-content/50 block">TMDB</span>
-            <span class="font-medium">{{ m.tmdbId }}</span>
+        </div>
+      } @else {
+        <div class="animate-pulse" aria-hidden="true">
+          <div class="mt-2 h-4 w-1/3 bg-base-300/40 rounded"></div>
+          <div class="flex gap-3 mt-4">
+            <div class="h-12 flex-1 bg-base-300/40 rounded-lg"></div>
+            <div class="h-12 w-32 bg-base-300/40 rounded-lg"></div>
+          </div>
+          <div class="mt-4 space-y-2">
+            <div class="h-4 bg-base-300/40 rounded"></div>
+            <div class="h-4 bg-base-300/40 rounded"></div>
+            <div class="h-4 w-2/3 bg-base-300/40 rounded"></div>
+          </div>
+          <div class="grid grid-cols-2 gap-x-6 gap-y-3 mt-4">
+            @for (i of skeletonFacts(); track i) {
+              <div class="space-y-1"><div class="h-3 w-1/2 bg-base-300/40 rounded"></div><div class="h-4 w-3/4 bg-base-300/40 rounded"></div></div>
+            }
           </div>
         </div>
+      }
+    </div>
+  </div>
+
+  <!-- ===== DESKTOP layout =====
+       Page-wide fanart is handled by BackgroundService (same as
+       media-detail) — no inline bleed div here. md+ matches the
+       breakpoint media-info-header uses for its own desktop split. -->
+  <div class="hidden md:block relative">
+    <div
+      class="flex gap-6 lg:gap-10 relative z-20"
+      [style.padding-top]="!navbar.isHeroPage() || navbar.effectiveSidebarPinned() || tv.isTv() ? null : navbar.mobileNavbarVisible() ? 'calc(env(safe-area-inset-top, 0px) + 3rem)' : null"
+    >
+      <div class="shrink-0 w-[200px] xl:w-[220px] 2xl:w-[280px]">
+        @if (hero()?.posterUrl; as posterUrl) {
+          <img
+            appImgFadeIn
+            [cachedSrc]="posterUrl | resolveUrl:'medium'" [alt]="hero()!.title"
+            loading="eager" fetchpriority="high" decoding="async"
+            class="w-full rounded-xl aspect-2/3 object-cover bg-base-300"
+            [style.view-transition-name]="posterTransitionName()"
+          />
+        } @else if (media()) {
+          <div class="aspect-2/3 rounded-xl bg-base-300 flex items-center justify-center text-base-content/30">
+            <svg lucideFilm class="h-20 w-20" [strokeWidth]="1.5"></svg>
+          </div>
+        } @else {
+          <div class="aspect-2/3 rounded-xl bg-base-300/40 animate-pulse"></div>
+        }
+      </div>
+
+      <div class="flex-1 min-w-0 pt-2">
+        @if (hero(); as h) {
+          <h1 class="text-4xl font-bold tracking-tight">{{ h.title }}</h1>
+        } @else {
+          <div class="h-10 w-2/3 bg-base-300/40 rounded animate-pulse"></div>
+        }
+        @if (media(); as m) {
+          @if (m.originalTitle && m.originalTitle !== m.title) {
+            <p class="text-base-content/70 mt-1 text-lg">{{ m.originalTitle }}</p>
+          }
+          @if (m.tagline) {
+            <p class="text-base italic text-base-content/60 mt-1">{{ m.tagline }}</p>
+          }
+
+          <!-- Metadata row — same plain-text style as media-detail. -->
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-base-content/60">
+            @if (m.rating) {
+              <span class="flex items-center gap-1 text-warning font-semibold">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                {{ m.rating | number:'1.1-1' }}
+              </span>
+            }
+            @if (m.year) { <span>{{ m.year }}</span> }
+            @if (m.runtime) { <span>{{ m.runtime }}min</span> }
+            @if (seasonsLabel()) { <span>{{ seasonsLabel() }}</span> }
+            @if (m.status && m.status !== 'unknown') { <span>{{ statusKey() | translate }}</span> }
+            <span class="badge badge-outline">{{ typeLabelKey() | translate }}</span>
+          </div>
+
+          @if (m.genres.length) {
+            <div class="flex flex-wrap gap-1.5 mt-4">
+              @for (g of m.genres; track g) { <span class="badge badge-ghost">{{ g }}</span> }
+            </div>
+          }
+
+          <!-- Action buttons — order + sizing matching media-detail's row. -->
+          <div class="flex flex-wrap items-center gap-2 mt-6">
+            @if (showImportButton()) {
+              <button type="button" class="btn btn-primary gap-2" (click)="openImportModal()">
+                <svg lucidePlus class="h-4 w-4"></svg>{{ 'discover.add_to_library' | translate }}
+              </button>
+            }
+            @if (canRequest()) {
+              @if (hasBlockingRequest()) {
+                <span class="badge badge-warning">{{ 'discover.already_requested' | translate }}</span>
+              } @else {
+                <button type="button" class="btn btn-secondary" (click)="openRequestModal()">
+                  {{ 'discover.request' | translate }}
+                </button>
+              }
+            }
+            @if (trailerKey()) {
+              <button type="button" class="btn btn-outline gap-2" (click)="openTrailer()">
+                <svg lucidePlay class="h-4 w-4"></svg>{{ 'discover.watch_trailer' | translate }}
+              </button>
+            }
+          </div>
+          @if (canRequest() && !hasBlockingRequest() && requestedSeasons().length) {
+            <p class="text-sm text-warning mt-2">
+              {{ 'discover.seasons_already_requested' | translate:{ seasons: requestedSeasons().join(', ') } }}
+            </p>
+          }
+          <ng-container *ngTemplateOutlet="pendingRequestsPanel" />
+
+          @if (m.overview) {
+            <p class="mt-4 text-base-content/90 leading-relaxed whitespace-pre-line">{{ m.overview }}</p>
+          }
+
+          <!-- Secondary metadata grid — kept inline because tmdb-preview's
+               `MetadataDetails` doesn't fit `app-media-info-extra`'s
+               `Media` input. Same visual cadence as that component. -->
+          <div class="grid grid-cols-2 gap-x-8 gap-y-3 text-sm mt-6">
+            @if (directors().length) {
+              <div>
+                <span class="text-base-content/50 block">{{ 'discover.preview_director' | translate }}</span>
+                <span class="font-medium">{{ directorsLabel() }}</span>
+              </div>
+            }
+            @if (m.originalLanguage) {
+              <div>
+                <span class="text-base-content/50 block">{{ 'discover.preview_original_language' | translate }}</span>
+                <span class="font-medium">{{ originalLanguageLabel() }}</span>
+              </div>
+            }
+            @if (m.releaseDate) {
+              <div>
+                <span class="text-base-content/50 block">{{ 'discover.preview_release_date' | translate }}</span>
+                <span class="font-medium">{{ m.releaseDate | localeDate:{ dateStyle: 'long' } }}</span>
+              </div>
+            }
+            @if (m.inCinemas) {
+              <div>
+                <span class="text-base-content/50 block">{{ 'discover.preview_in_cinemas' | translate }}</span>
+                <span class="font-medium">{{ m.inCinemas | localeDate:{ dateStyle: 'long' } }}</span>
+              </div>
+            }
+            @if (m.digitalRelease) {
+              <div>
+                <span class="text-base-content/50 block">{{ 'discover.preview_digital' | translate }}</span>
+                <span class="font-medium">{{ m.digitalRelease | localeDate:{ dateStyle: 'long' } }}</span>
+              </div>
+            }
+            @if (m.physicalRelease) {
+              <div>
+                <span class="text-base-content/50 block">{{ 'discover.preview_physical' | translate }}</span>
+                <span class="font-medium">{{ m.physicalRelease | localeDate:{ dateStyle: 'long' } }}</span>
+              </div>
+            }
+            @if (m.budget) {
+              <div>
+                <span class="text-base-content/50 block">{{ 'discover.preview_budget' | translate }}</span>
+                <span class="font-medium">{{ m.budget | currency:'USD':'symbol':'1.0-0' }}</span>
+              </div>
+            }
+            @if (m.revenue) {
+              <div>
+                <span class="text-base-content/50 block">{{ 'discover.preview_revenue' | translate }}</span>
+                <span class="font-medium">{{ m.revenue | currency:'USD':'symbol':'1.0-0' }}</span>
+              </div>
+            }
+            @if (m.productionCountries.length) {
+              <div>
+                <span class="text-base-content/50 block">{{ 'discover.preview_countries' | translate }}</span>
+                <span class="font-medium">{{ m.productionCountries.join(', ') }}</span>
+              </div>
+            }
+            @if (m.productionCompanies.length) {
+              <div>
+                <span class="text-base-content/50 block">{{ 'discover.preview_studios' | translate }}</span>
+                <span class="font-medium">{{ m.productionCompanies.join(', ') }}</span>
+              </div>
+            }
+            @if (m.imdbId) {
+              <div>
+                <span class="text-base-content/50 block">IMDB</span>
+                <span class="font-medium">{{ m.imdbId }}</span>
+              </div>
+            }
+            <div>
+              <span class="text-base-content/50 block">TMDB</span>
+              <span class="font-medium">{{ m.tmdbId }}</span>
+            </div>
+          </div>
+        } @else {
+          <div class="animate-pulse" aria-hidden="true">
+            <div class="h-5 w-1/3 bg-base-300/40 rounded mt-3"></div>
+            <div class="flex gap-1.5 mt-4">
+              <div class="h-5 w-16 bg-base-300/40 rounded-full"></div>
+              <div class="h-5 w-20 bg-base-300/40 rounded-full"></div>
+            </div>
+            <div class="flex gap-2 mt-6">
+              <div class="h-10 w-44 bg-base-300/40 rounded-lg"></div>
+              <div class="h-10 w-36 bg-base-300/40 rounded-lg"></div>
+            </div>
+            <div class="mt-4 space-y-2">
+              <div class="h-4 bg-base-300/40 rounded"></div>
+              <div class="h-4 bg-base-300/40 rounded"></div>
+              <div class="h-4 w-2/3 bg-base-300/40 rounded"></div>
+            </div>
+            <div class="grid grid-cols-2 gap-x-8 gap-y-3 mt-6">
+              @for (i of skeletonFacts(); track i) {
+                <div class="space-y-1"><div class="h-3 w-1/4 bg-base-300/40 rounded"></div><div class="h-4 w-1/2 bg-base-300/40 rounded"></div></div>
+              }
+            </div>
+          </div>
+        }
       </div>
     </div>
   </div>
@@ -366,6 +422,18 @@
           </div>
         }
       </app-horizontal-scroller>
+    </section>
+  } @else if (!media()) {
+    <section class="px-1 md:px-0 mt-8 animate-pulse" aria-hidden="true">
+      <div class="h-6 w-32 bg-base-300/40 rounded mb-3"></div>
+      <div class="flex gap-4 overflow-hidden">
+        @for (i of [1, 2, 3, 4, 5, 6, 7, 8]; track i) {
+          <div class="shrink-0 w-24 flex flex-col items-center gap-1">
+            <div class="w-20 h-20 rounded-full bg-base-300/40"></div>
+            <div class="h-4 w-16 bg-base-300/40 rounded mt-1"></div>
+          </div>
+        }
+      </div>
     </section>
   }
 }
