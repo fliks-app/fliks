@@ -56,9 +56,10 @@ export const ORPHAN_IMPORT_PROGRESS = 'OrphanImport';
 
 /** The scanned group folder above `file`, or its own directory when none matches. Outermost
  *  wins: in `Show/Show/S01/e.mkv` the `tvshow.nfo` sits in the outer folder. Never climbs
- *  above `scanRoot` when given — otherwise an ancestor outside the scanned tree could match. */
+ *  above `scanRoot`, resolved like the preview's root; one that is no ancestor caps nothing. */
 function seriesFolderOf(file: string, folderName: string, scanRoot?: string): string {
-  const stopAt = scanRoot ? path.resolve(scanRoot) : null;
+  const root = scanRoot ? sanitizeFsPath(scanRoot) : '';
+  const stopAt = root ? path.resolve(root) : null;
   let match: string | null = null;
   for (let dir = path.dirname(file); dir !== path.dirname(dir); dir = path.dirname(dir)) {
     if (path.basename(dir) === folderName) match = dir;

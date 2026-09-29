@@ -748,7 +748,15 @@ describe('DiskImportService.relinkOrphans: files outside the library', () => {
     );
   });
 
-  it('does not climb above scanRoot into a same-named ancestor outside the scanned tree', async () => {
+  const staging = '/library/Sample Show/downloads/staging';
+  it.each([
+    [staging, `${staging}/Sample Show`],
+    // Pasted with a trailing slash and an invisible mark, as the preview root accepts it.
+    [`\u202a ${staging}/ `, `${staging}/Sample Show`],
+    // Not an ancestor of the file: caps nothing, the outermost match wins as before.
+    ['/elsewhere', '/library/Sample Show'],
+  ])('bounds the series-folder climb by scanRoot %j', async (scanRoot, expectedDir) => {
+    mockedFindLocalArtwork.mockClear();
     const { service, mediaRepo, mediaService } = makeService();
     Object.assign(service, {
       naming: {
@@ -773,7 +781,7 @@ describe('DiskImportService.relinkOrphans: files outside the library', () => {
         year: undefined,
         transfer: 'copy',
         // An ancestor above the scanned folder happens to share the show's name too.
-        scanRoot: '/library/Sample Show/downloads/staging',
+        scanRoot,
         files: [
           {
             filePath:
@@ -786,9 +794,8 @@ describe('DiskImportService.relinkOrphans: files outside the library', () => {
       null,
     );
 
-    // The scanned folder's own "Sample Show", not the one above scanRoot.
     expect(mockedFindLocalArtwork).toHaveBeenCalledWith(
-      '/library/Sample Show/downloads/staging/Sample Show',
+      expectedDir,
       undefined,
       { basenameOnly: false },
     );
