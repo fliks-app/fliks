@@ -44,8 +44,8 @@ import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { PlaybackQueueService, QueueItem } from '../../core/services/playback-queue.service';
 import { buildSeriesQueueItems, resolvePlayableFile } from '../../shared/utils/media-play.util';
-import { audioChannelsLabel, computeVideoCropStyle, deliveredKindFromVariant, formatAudioLabel, formatAudioParts, inIntroRange, inOutroRange, parseAudioIndex, playbackModeOf, SpriteMetadata, widthForProfile, type CropRect, type VideoCropStyle } from '../../core/utils/player.utils';
-import { classifyPlaybackError, formatErrorDiagnostics, isUndecodableError, userMessageKeyFor, type PlaybackError } from '../../core/services/playback-engine/playback-error';
+import { buildPlayerStats, computeVideoCropStyle, formatAudioLabel, formatAudioParts, inIntroRange, inOutroRange, parseAudioIndex, playbackModeOf, SpriteMetadata, widthForProfile, type CropRect, type VideoCropStyle } from '../../core/utils/player.utils';
+import { classifyPlaybackError, formatErrorDiagnostics, isUndecodableError, type PlaybackError } from '../../core/services/playback-engine/playback-error';
 import { environment } from '../../../environments/environment';
 import { normalizeLangCode } from '../../core/utils/language.utils';
 import {
@@ -350,6 +350,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   private saveInterval: ReturnType<typeof setInterval> | null = null;
+  /** {@link completePostLoadSetup} runs once per mount, from the first load or its copy fallback. */
+  private firstLoadSetupDone = false;
   private readonly skipIntroCue = new PausableTimeout(() => this.skipIntroVisible.set(false));
   private readonly nextEpisodeCue = new PausableTimeout(() => this.nextEpisodeVisible.set(false));
   /** True while the user is actively dragging / scrubbing the seekbar. */
@@ -517,8 +519,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Audio tracks from streamInfo for the Cast remote */
   readonly castAudioOptions = computed<CastAudioOption[]>(() => {
     this.mediaLoadedTick(); // recompute once this.media is populated on load
-    const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
-    return buildCastAudioOptions(file?.streamInfo?.audio, this.translate);
+    return buildCastAudioOptions(this.currentFile()?.streamInfo?.audio, this.translate);
   });
 
   /** True on every standalone bundle (Capacitor + Smart TV). Drives the
@@ -696,6 +697,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return this.media?.metadata?.originalLanguage ?? null;
   }
 
+  /** The playing file's record from `media.files`, looked up by `mediaFileId`. */
+  private currentFile() {
+    return this.media?.files?.find((f) => f.id === this.mediaFileId);
+  }
+
   /** Bumped whenever {@link media} is (re)assigned so reactive computeds re-run. */
   private readonly mediaLoadedTick = signal(0);
   private activeBurnInId: number | null = null;
@@ -705,10 +711,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly rejectCopyFileIds = new Set<number>();
 
   /** `deviceProfileService.getProfile()`, with `rejectCopy` forced on when
-   *  `mediaFileId` is a confirmed offender. */
+   *  `mediaFileId` is a confirmed offender and the server accepts the field
+   *  (`deviceProfileExtensions`; an unknown field 400s older servers). */
   private deviceProfileFor(mediaFileId: number): DeviceProfile {
     const profile = this.deviceProfileService.getProfile();
-    return this.rejectCopyFileIds.has(mediaFileId) ? { ...profile, rejectCopy: true } : profile;
+    return this.rejectCopyFileIds.has(mediaFileId) &&
+      this.authService.hasServerFeature('deviceProfileExtensions')
+      ? { ...profile, rejectCopy: true }
+      : profile;
   }
 
   readonly mediaTitle = signal('');
@@ -754,390 +764,49 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Read signals so Angular tracks them as dependencies. NB: currentTime()
     // is deliberately NOT read here — it ticks ~4Hz and nothing below uses it,
     // so the stats panel refreshes off statsRefreshTick (1Hz) instead.
-    const _quality = this.activeQualityId();
+    // Read here so an engine-level track switch (no playback-info refetch) reruns this.
+    const quality = this.activeQualityId();
     void this.statsRefreshTick();
+    const activeAudioTrackId = this.activeAudioTrackId();
+    const availableAudioTracks = this.availableAudioTracks();
+    const activeVariantOriginalVideoId = this.getActiveVariant()?.originalVideoId ?? null;
 
-    const pi = this.playbackInfo;
-    const src = pi?.source;
-    const engineStats = this.engine?.getStats();
-    const hw = this.hwAccel();
-    const activeVariant = engineStats?.activeVariant;
+    return buildPlayerStats({
+      quality,
+      pi: this.playbackInfo,
+      engineStats: this.engine?.getStats(),
+      hwAccel: this.hwAccel(),
+      isOfflinePlayback: this.isOfflinePlayback,
+      lastStreamUrl: this.lastStreamUrl,
+      activeVariantOriginalVideoId,
+      availableQualities: this.qualityManager.availableQualities(),
+      resolutionLabel: (w, h) => this.qualityManager.resolutionLabel(w, h),
+      transcodeTierFromVariantHeight: (h, w) => this.qualityManager.transcodeTierFromVariantHeight(h, w),
+      translate: this.translate,
+      sourceVideoStream: this.currentFile()?.streamInfo?.video?.[0],
+      cropAppliedByPlayer: this.isDesktopNative ? this.desktopCropApplied() : this.videoCropStyle() != null,
+      isDesktopNative: this.isDesktopNative,
+      pipOrFullscreenActive: this.isPipOrNativeFullscreen(),
+      activeAudioTrackId,
+      availableAudioTracks,
+      activeAudioStreamIndex: this.activeAudioStreamIndex,
+      sourceAudioStreams: this.currentFile()?.streamInfo?.audio,
+    });
+  });
 
-    const playingWidth = activeVariant?.width ?? src?.width;
-    const playingHeight = activeVariant?.height ?? src?.height;
-
-    // What the engine is ACTUALLY playing, never the server's playMethod
-    // decision alone, which a desynced stream URL can disagree with.
-    const deliveredKind = this.isOfflinePlayback || !this.lastStreamUrl
-      ? null
-      : deliveredKindFromVariant(this.lastStreamUrl, this.getActiveVariant()?.originalVideoId ?? null);
-    const effectiveVideoCopy = deliveredKind !== 'transcode';
-    // Without a negotiation (offline) nothing says what was copied: show no mode.
-    const deliveryKnown = !!pi && deliveredKind != null;
-    // Audio is decided independently: a lower video rung still copies a
-    // supported audio track (e.g. AC3 5.1) verbatim, so reflect audioCopyStream.
-    const effectiveAudioCopy = pi?.audioCopyStream ?? true;
-    // Per-track audio decision for the ACTIVE track. Multi-audio renditions
-    // switch client-side, so the picked track's copy/reason (top-level
-    // audioCopyStream / transcodeReasons) is wrong for any other track.
-    // availableAudioTracks() is in streamInfo.audio order (the i-th track maps
-    // to streamInfo.audio[i]), so the selected track's position is its backend
-    // audioTracks index. Reading both signals keeps this computed reactive to
-    // a track switch (engine-level shaka-* switches included — they never
-    // refetch playback-info).
-    const _activeAudioTrackId = this.activeAudioTrackId();
-    const _activeAudioPos = this.availableAudioTracks().findIndex(
-      (t) => t.id === _activeAudioTrackId,
-    );
-    const _activeAudioIndex =
-      _activeAudioPos >= 0 ? _activeAudioPos : (this.activeAudioStreamIndex ?? 0);
-    const activeAudioPlan = pi?.audioTracks?.find(
-      (t) => t.index === _activeAudioIndex,
-    );
-    const activeAudioCopy = activeAudioPlan?.copy ?? effectiveAudioCopy;
-
-    const formatBitrateBps = (bps: number): string => {
-      if (bps >= 1_000_000) return `${(bps / 1_000_000).toFixed(1)} Mbps`;
-      if (bps >= 1_000) return `${(bps / 1_000).toFixed(0)} kbps`;
-      return `${bps} bps`;
-    };
-
-    // --- Container (summary) ---
-    const totalContainerBps =
-      src?.formatBitRate ??
-      (src?.videoBitRate != null
-        ? (src.videoBitRate ?? 0) + (src.audioBitRate ?? 0)
-        : undefined);
-    const containerBitrate =
-      totalContainerBps != null && totalContainerBps > 0
-        ? formatBitrateBps(totalContainerBps)
-        : '?';
-
-    const isHls = deliveredKind != null && deliveredKind !== 'direct';
-    const outputFormat = isHls ? 'HLS' : '';
-    const outputFps = src?.frameRate ?? '';
-
-    // Letterbox crop detected at import time (ffprobe `cropdetect`).
-    const cropLine = src?.crop
-      ? `${src.crop.width}x${src.crop.height} (offset ${src.crop.x},${src.crop.y})`
-      : '';
-    // Read off what applyVideoCrop actually applied, not the delivery kind.
-    const cropAppliedByPlayer = this.isDesktopNative
-      ? this.desktopCropApplied()
-      : this.videoCropStyle() != null;
-    // PiP and iOS native fullscreen paint the decoded frame, bypassing the CSS crop.
+  /** PiP or iOS native fullscreen paint the decoded frame, bypassing the CSS crop. */
+  private isPipOrNativeFullscreen(): boolean {
     const video = this.videoEl()?.nativeElement as
       | (HTMLVideoElement & { webkitDisplayingFullscreen?: boolean })
       | undefined;
-    const cropBypassed =
-      cropAppliedByPlayer &&
-      !this.isDesktopNative &&
-      !!video &&
-      (document.pictureInPictureElement === video || !!video.webkitDisplayingFullscreen);
-
-    // --- Video label ---
-    // The header describes the SOURCE file (resolution + HDR + codec), matching
-    // the panel's `source → output` convention: the "→ Transcodage" line below
-    // carries the output codec/HW and the downscale target. Source dimensions
-    // keep the header stable across pinned-quality and ABR variant switches.
-    const active = this.getActiveVariant();
-    const urlMatch = active?.originalVideoId?.match(/\/(\d+p)\//);
-    const selectedQualityOpt = this.qualityManager
-      .availableQualities()
-      .find((q) => q.id === _quality);
-    const resLabel = this.qualityManager.resolutionLabel(
-      src?.width,
-      src?.height,
-    );
-    // A tonemapped delivery is SDR; corroborate DV with the engine's own codec
-    // string (if reported) so a plain-HEVC/AV1 fallback never claims DV.
-    const engineVideoCodec = activeVariant?.videoCodec?.toLowerCase();
-    const showsDolbyVision =
-      !!pi?.dolbyVision &&
-      deliveredKind !== 'transcode' &&
-      (engineVideoCodec == null || /^(dv|dav1)/.test(engineVideoCodec));
-    // Real profile/compat, not guessed from hdrFormat: an untagged P5 source
-    // has no HDR VUI at all, so this must run before the `!src?.hdrFormat` case.
-    const dvStream = this.media?.files?.find((f) => f.id === this.mediaFileId)
-      ?.streamInfo?.video?.[0];
-    const hdrTag = pi?.tonemapping
-      ? ''
-      : showsDolbyVision && dvStream?.dvProfile != null
-        ? ` ${
-            dvStream.dvBlSignalCompatId
-              ? this.translate.instant('player.stats_dolby_vision_base', {
-                  profile: `${dvStream.dvProfile}.${dvStream.dvBlSignalCompatId}`,
-                  base: src?.hdrFormat ?? '',
-                })
-              : this.translate.instant('player.stats_dolby_vision', {
-                  profile: dvStream.dvProfile,
-                })
-          }`
-        : src?.hdrFormat
-          ? ` ${src.hdrFormat}`
-          : '';
-    const codecName = (src?.videoCodec ?? '?').toUpperCase();
-    const videoLabel = `${resLabel}${hdrTag} ${codecName}`;
-
-    const rateMap = pi?.transcodeBitrateByQuality;
-    const qId = _quality;
-    const sourceA = src?.audioBitRate;
-
-    // Ladder targets describe a transcode only; a copy never borrows a rung's figure.
-    const isTranscodeDelivery = deliveredKind === 'transcode';
-
-    let selectedRateEntry: {
-      videoBitrateBps: number;
-      audioBitrateBps: number;
-      totalBitrateBps: number;
-    } | null = null;
-    if (isTranscodeDelivery) {
-      if (rateMap && qId !== 'auto' && qId !== 'original' && rateMap[qId]) {
-        selectedRateEntry = rateMap[qId];
-      } else if (rateMap && (qId === 'auto' || qId === 'original')) {
-        const tier = urlMatch?.[1] ?? this.qualityManager.transcodeTierFromVariantHeight(activeVariant?.height ?? 0, activeVariant?.width);
-        if (tier && rateMap[tier]) selectedRateEntry = rateMap[tier];
-      }
-    }
-
-    const validBps = (n: unknown): n is number =>
-      typeof n === 'number' && !Number.isNaN(n) && n > 0;
-
-    // Video stream bitrate
-    let videoStreamBitrate = '';
-    let serverStreamTotalBps: number | undefined;
-    // The rung's own video target (eco / -hdr rungs included); its audio budget
-    // is not spent when the audio is copied. A pinned rung's total stands in without it.
-    if (validBps(selectedRateEntry?.videoBitrateBps)) {
-      serverStreamTotalBps = selectedRateEntry!.videoBitrateBps;
-    } else if (
-      isTranscodeDelivery &&
-      _quality !== 'auto' &&
-      _quality !== 'original' &&
-      validBps(selectedQualityOpt?.totalBitrateBps)
-    ) {
-      serverStreamTotalBps = selectedQualityOpt!.totalBitrateBps;
-    } else if (deliveredKind != null && !isTranscodeDelivery && validBps(src?.videoBitRate)) {
-      // A copy's own video bitrate; remuxMasterBandwidthBps also counts audio.
-      serverStreamTotalBps = src!.videoBitRate;
-    } else if (deliveredKind === 'remux' && validBps(pi?.remuxMasterBandwidthBps)) {
-      serverStreamTotalBps = pi!.remuxMasterBandwidthBps;
-    }
-
-    if (serverStreamTotalBps != null && serverStreamTotalBps > 0) {
-      videoStreamBitrate = formatBitrateBps(serverStreamTotalBps);
-    } else {
-      const trackVbw = activeVariant?.videoBandwidth;
-      const shakaStreamBw = engineStats?.streamBandwidth;
-      if (validBps(trackVbw)) {
-        videoStreamBitrate = formatBitrateBps(trackVbw);
-      } else if (validBps(shakaStreamBw)) {
-        videoStreamBitrate = formatBitrateBps(shakaStreamBw);
-      }
-    }
-
-    const profileParts: string[] = [];
-    if (src?.videoProfile) profileParts.push(src.videoProfile);
-    if (src?.videoLevel) profileParts.push(String(src.videoLevel));
-    if (src?.frameRate) profileParts.push(`${src.frameRate} fps`);
-    const videoProfileLine = profileParts.join('  ') || '?';
-
-    // Delivery, not decision: `deliveredKind` already folds in a pinned rung,
-    // so a remux whose rung was pinned reports the transcode it actually is.
-    const streamTypeKey = deliveredKind ? `player.stats_stream_type_${deliveredKind}` : '';
-
-    // Flag when the server's decision disagrees with what's actually playing,
-    // instead of silently trusting either side.
-    const decisionKind = pi ? playbackModeOf(pi) : undefined;
-    const mismatch =
-      decisionKind && deliveredKind && decisionKind !== deliveredKind
-        ? this.translate.instant('player.stats_delivery_mismatch', {
-            decision: this.translate.instant(`player.stats_stream_type_${decisionKind}`),
-            delivered: this.translate.instant(`player.stats_stream_type_${deliveredKind}`),
-          })
-        : undefined;
-
-    // Playback mode for video
-    let videoPlaybackMode: string;
-    if (!deliveryKnown) {
-      videoPlaybackMode = '';
-    } else if (effectiveVideoCopy) {
-      videoPlaybackMode = this.translate.instant('player.stats_direct_playback');
-    } else {
-      const hwLabel: Record<string, string> = { qsv: 'QSV', vaapi: 'VAAPI', nvenc: 'NVENC', videotoolbox: 'Apple VT', none: 'CPU' };
-      const parts = [hwLabel[hw] ?? hw.toUpperCase()];
-      if (pi?.outputVideoCodec) parts.push(pi.outputVideoCodec.toUpperCase());
-      // HDR survives the transcode only when the source is HDR and we're not
-      // tonemapping to SDR — surface the format (HDR10 / HLG) that's emitted.
-      if (src?.hdrFormat && !pi?.tonemapping) parts.push(src.hdrFormat);
-      videoPlaybackMode = this.translate.instant('player.stats_transcoding', { hw: parts.join(' ') });
-    }
-    if (playingHeight && src?.height && playingHeight < src.height) {
-      videoPlaybackMode += ` \u2192 ${playingWidth}x${playingHeight}`;
-    }
-
-    // Tonemapping line. Show the ACTUALLY-used filter (post `auto`
-    // resolution + opencl-probe fallback), not the admin pick \u2014 when
-    // the boot probe failed, `auto` becomes `vaapi` even if the admin
-    // setting says `auto`/`opencl`. Source of truth is `pi.tonemapAlgo`
-    // set by the backend in playback-info.
-    const tonemapLabel: Record<string, string> = {
-      vaapi: 'VAAPI',
-      opencl: 'OpenCL',
-      qsv: 'vpp_qsv',
-      cuda: 'CUDA',
-      vulkan: 'Vulkan',
-      videotoolbox: 'VideoToolbox',
-      cpu: 'CPU',
-    };
-    // The cuda, opencl, vulkan and CPU paths run a tunable curve (tonemap_cuda /
-    // tonemap_opencl / libplacebo tonemapping / tonemap), surfaced in
-    // parentheses; the vpp_qsv / VAAPI LUTs carry no curve.
-    const curve = pi?.tonemapCurve
-      ? ` (${pi.tonemapCurve.charAt(0).toUpperCase()}${pi.tonemapCurve.slice(1)})`
-      : '';
-    const tonemapAlgoLabel = pi?.tonemapAlgo
-      ? `${tonemapLabel[pi.tonemapAlgo] ?? pi.tonemapAlgo}${curve}`
-      : '';
-    const tonemapping = pi?.tonemapping
-      ? tonemapAlgoLabel || 'enabled'
-      : pi?.clientTonemap
-        ? this.translate.instant('player.stats_tonemapping_client')
-        : '';
-
-    // Video: `Video*` flags plus `SubtitleBurnIn`. Audio: `Audio*` flags.
-    // Everything else (container/mux/server-policy) goes in the stream section, never dropped.
-    const allFlags = (pi?.transcodeReasons ?? []).map((r) => r.flag);
-    // Translate each flag to a human label so the overlay explains
-    // bitrate/quality-driven transcodes, not just raw codes. Unknown flags fall
-    // back to the raw token.
-    const reasonLabel = (flag: string) => {
-      const key = `player.transcode_reason.${flag}`;
-      const label = this.translate.instant(key, { codec: codecName });
-      return label === key ? flag : label;
-    };
-    const videoTranscodeReasons = effectiveVideoCopy
-      ? []
-      : allFlags
-          .filter((f) => f.startsWith('Video') || f === 'SubtitleBurnIn')
-          .map(reasonLabel);
-    // Reason for the ACTIVE track: prefer its per-track plan (correct after a
-    // client-side switch); fall back to the default-track flags when the
-    // backend didn't send per-track plans (older server).
-    const audioTranscodeReasons = activeAudioPlan
-      ? activeAudioPlan.reasonFlags.map(reasonLabel)
-      : effectiveAudioCopy
-        ? []
-        : allFlags.filter((f) => f.startsWith('Audio')).map(reasonLabel);
-    const streamTranscodeReasons = allFlags
-      .filter((f) => !f.startsWith('Video') && !f.startsWith('Audio') && f !== 'SubtitleBurnIn')
-      .map(reasonLabel);
-
-    // --- Audio ---
-    // `audioTracks: []` (or an explicitly empty source streamInfo.audio when
-    // offline) means the file truly has none; undefined means unknown metadata,
-    // not "no audio"; keep showing the section rather than assume neither.
-    const sourceAudioStreams = this.media?.files?.find(
-      (f) => f.id === this.mediaFileId,
-    )?.streamInfo?.audio;
-    const hasAudio =
-      pi?.audioTracks != null
-        ? pi.audioTracks.length > 0
-        : sourceAudioStreams != null
-          ? sourceAudioStreams.length > 0
-          : true;
-    // Derive from the SELECTED track, not the source's primary stream, so the
-    // line follows a language switch. `activeAudioTrackId()` is read so this
-    // computed re-runs when the user changes audio track.
-    const _audioTrackId = this.activeAudioTrackId();
-    const selectedAudio = this.availableAudioTracks().find(
-      (t) => t.id === _audioTrackId,
-    );
-    // Show the audio NAME exactly as the track selector renders it:
-    // selectedAudio.label is built by formatAudioLabel, which localizes the
-    // language and falls back to "Piste audio N" for untagged tracks instead of
-    // a raw "Und". Fall back to formatAudioLabel on the source's primary stream
-    // when no track is selected yet (tracks not populated).
-    const audioLabel =
-      selectedAudio?.label ??
-      formatAudioLabel(
-        {
-          language: src?.audioLanguage,
-          codec: src?.audioCodec,
-          channels: src?.audioChannels,
-        },
-        this.translate,
-        1,
-      );
-
-    // The active track's plan carries its own figures. `src` audio values describe
-    // the negotiated track, so they stand in only without a plan and for a copy.
-    const sourceAudioIsActive = !activeAudioPlan && deliveryKnown && activeAudioCopy;
-    let audioStreamBitrate = '';
-    if (validBps(activeAudioPlan?.bitrateBps)) {
-      audioStreamBitrate = formatBitrateBps(activeAudioPlan!.bitrateBps!);
-    } else if (sourceAudioIsActive && validBps(sourceA)) {
-      audioStreamBitrate = formatBitrateBps(sourceA);
-    } else if (validBps(activeVariant?.audioBandwidth)) {
-      audioStreamBitrate = formatBitrateBps(activeVariant!.audioBandwidth);
-    } else if (!activeAudioCopy && selectedRateEntry && validBps(selectedRateEntry.audioBitrateBps)) {
-      audioStreamBitrate = formatBitrateBps(selectedRateEntry.audioBitrateBps);
-    }
-
-    const activeSampleRate =
-      activeAudioPlan?.sampleRate ?? (sourceAudioIsActive ? src?.audioSampleRate : undefined);
-    const audioDetailLine = activeSampleRate ? `${activeSampleRate} Hz` : '';
-
-    let audioPlaybackMode: string;
-    if (!deliveryKnown) {
-      audioPlaybackMode = '';
-    } else if (activeAudioCopy) {
-      audioPlaybackMode = this.translate.instant('player.stats_direct_playback');
-    } else {
-      // Show the TARGET codec + channel layout (e.g. "OPUS - 5.1") so a downmix
-      // is visible. `outputChannels` comes from the active track's plan.
-      const outCodec = (
-        activeAudioPlan?.outputCodec ?? pi?.outputAudioCodec ?? 'aac'
-      ).toUpperCase();
-      const outLayout = audioChannelsLabel(activeAudioPlan?.outputChannels);
-      const codecLabel = outLayout ? `${outCodec} - ${outLayout}` : outCodec;
-      audioPlaybackMode = this.translate.instant('player.stats_transcode_audio', { codec: codecLabel });
-    }
-
-    return {
-      container: src?.container ?? '?',
-      containerBitrate,
-      outputFormat,
-      outputFps,
-      streamTypeKey,
-      mismatch,
-      streamTranscodeReasons,
-      videoLabel,
-      videoStreamBitrate,
-      videoProfileLine,
-      videoPlaybackMode,
-      crop: cropLine,
-      cropAppliedByPlayer,
-      cropBypassed,
-      tonemapping,
-      videoTranscodeReasons,
-      // Engine stats can read NaN before a quality switch settles; show 0.
-      droppedFrames: Number.isFinite(engineStats?.droppedFrames)
-        ? engineStats!.droppedFrames
-        : 0,
-      hasAudio,
-      audioLabel,
-      audioStreamBitrate,
-      audioDetailLine,
-      audioPlaybackMode,
-      audioTranscodeReasons,
-    };
-  });
+    return !!video && (document.pictureInPictureElement === video || !!video.webkitDisplayingFullscreen);
+  }
 
   // ── Lifecycle ──
 
   async ngAfterViewInit() {
     this.state.reset();
+    this.firstLoadSetupDone = false;
 
     // On native: listen to orientation changes (immersive handled by effect)
     if (this.isNative) {
@@ -1214,6 +883,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // startQuality/startAt let the backend pre-spawn ffmpeg right here
       // (instead of waiting for master.m3u8), overlapping encoder init with
       // the ~100–300ms gap before the player fetches the playlist.
+      await this.deviceProfileService.whenDesktopProbed();
       const deviceProfile = this.deviceProfileFor(this.mediaFileId);
       // The service is app-scoped: without this the request would carry the
       // previous media's rung instead of the user's saved one.
@@ -1324,7 +994,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       } else {
         // Pre-compute audio preference (for UI/state only — the backend
         // already picked an audio during the parallel playback-info call).
-        const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
+        const file = this.currentFile();
         const audioStreams: AudioStreamChoice[] = (file?.streamInfo as any)?.audio ?? [];
         const preselectedAudioIndex = this.playerSettings.resolveAudioStreamIndex(
           this.mediaFileId, audioStreams, this.mediaId, this.originalLanguage,
@@ -1335,9 +1005,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.playbackInfo = await playbackInfoPromise!;
         await this.maybeStartPreRoll(startTime);
         const pi = this.playbackInfo!;
-        this.introMarker.set(pi.markers?.intro ?? null);
-        this.outroMarker.set(pi.markers?.outro ?? null);
-        this.chapters.set(pi.chapters ?? []);
 
         // Mode, options + the rung the backend locked in, BEFORE load
         this.adoptPlaybackInfo(pi);
@@ -1552,115 +1219,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       }
 
       this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, this.playbackMode());
-
-      // Tracks and subtitles load beside playback: a slow subtitle list must not delay the first frame.
-      const trackSetupPromise = (async () => {
-        if (this.isOfflinePlayback) {
-          // Offline: load pre-downloaded subtitles from local storage (no API)
-          await this.loadOfflineSubtitles();
-          this.loadAudioTracks();
-        } else if (!this.availableSubtitles().length) {
-          // subsPromise was started in parallel with engine.load (Shaka + native);
-          // resolve it here, falling back to a direct fetch if none was started.
-          const subs = subsPromise
-            ? await subsPromise
-            : await this.trackManager.loadSubtitles(this.mediaId, this.mediaFileId, this.streamingApi, this.media);
-          this.availableSubtitles.set(subs);
-          this.loadAudioTracks();
-        } else {
-          this.loadAudioTracks();
-        }
-        await this.trackManager.autoSelectSubtitle(
-          this.availableSubtitles(),
-          this.availableAudioTracks(),
-          this.activeAudioTrackId(),
-          this.mediaFileId,
-          (sub) => this.selectSubtitle(sub),
-          this.mediaId,
-        );
-      })();
-      trackSetupPromise.catch((e) => console.warn('[player] track setup failed', e));
-
-      // If Cast is already connected, send to Cast
-      if (this.castService.isConnected() && !this.isNativeEngine()) {
-        // Let the subtitle list settle before handing off, so Cast gets the
-        // full list instead of whatever raced ahead of it.
-        await trackSetupPromise.catch(() => {});
-        await this.engine!.pause();
-        this.engine!.muted = true;
-        await this.engine!.unload();
-        const startPos = resumeTime ?? this.engine!.currentTime;
-        await this.startCastFromPlayer(startPos);
-      } else if (!this.isNativeEngine() || this.isDesktopNative) {
-        this.engine!.play().catch(() => {
-          // No user gesture on a device started remotely: the browser refuses
-          // autoplay. Reported, not just logged: a controller otherwise shows a
-          // paused device with no way to tell why, and its own play button is
-          // refused for the same reason.
-          console.warn('[player] autoplay blocked');
-          this.autoplayBlocked.set(true);
-          void this.savePosition(true);
-        });
-      }
-
-      // Hide controls after autoplay starts
-      this.chrome.resetHideTimer();
-
-      // Save position every 10s + immediately on seek
-      this.saveInterval = setInterval(() => this.savePosition(), 10_000);
-      this.resetStallWatchdog();
-      const video = this.videoEl()?.nativeElement;
-      if (video) video.addEventListener('seeked', this.onSeeked);
-
-      // Apply subtitle appearance + load thumbnail sprite metadata
-      this.applySubtitleStyle();
-      this.loadSpriteMetadata();
-
-      // Update stats every second
-      this.lastTickAt = Date.now();
-      this.statsInterval = setInterval(() => {
-        this.tickClockWatch();
-        this.checkStall();
-        const stats = this.engine?.getStats();
-        const variant = stats?.activeVariant;
-        if (variant?.height) {
-          // Extract profile name from active variant URL (e.g. "/720p/" → "720p")
-          const active = this.getActiveVariant();
-          const urlMatch = active?.originalVideoId?.match(/\/(\d+p)\//);
-          const label = urlMatch?.[1]
-            ?? this.qualityManager.resolutionLabel(variant.width, variant.height);
-          this.qualityManager.activeResolution.set(label);
-        }
-        if (this.statsVisible()) {
-          this.state.currentTime.set(this.engine?.currentTime ?? 0);
-          this.statsRefreshTick.update((n) => n + 1);
-        }
-      }, 1000);
+      this.firstLoadSetupDone = true;
+      await this.completePostLoadSetup(subsPromise, resumeTime);
 
     } catch (e: any) {
       console.error('[Player] Init error:', e?.code, e?.category, e?.data, e);
-      const msg = e?.message ?? String(e);
-      // Classify the caught error (HttpErrorResponse = a failed playback-info
-      // request, an object with a Shaka category, or an engine failure) so a
-      // transport fault is never mislabelled as an mpv/engine error.
-      const { source, code } = classifyPlaybackError(e);
-      if (!this.fallBackFromRemuxOnLoadError(e, startTime ?? 0)) {
-        const userMessage = this.translate.instant(
-          userMessageKeyFor({
-            source,
-            code,
-            category: e?.category,
-            dolbyVision: this.isDolbyVisionPassthrough(),
-          }),
-        );
-        this.state.setError(userMessage, {
-          source,
-          code,
-          category: e?.category,
-          severity: e?.severity,
-          data: e?.data,
-          message: msg,
-        });
+      const recovered = () => {
+        if (this.firstLoadSetupDone) return;
+        this.firstLoadSetupDone = true;
+        return this.completePostLoadSetup(subsPromise, resumeTime);
+      };
+      if (!this.fallBackFromRemuxOnLoadError(e, startTime ?? 0, recovered)) {
+        const userMessage = this.state.failWith(e, { dolbyVision: this.isDolbyVisionPassthrough() });
         // preRollAdvanceEffect handles a pre-roll failure; this teardown would
         // null the engine it needs, and the toast has no film-error to show.
         if (!this.preRollActive()) {
@@ -1966,10 +1536,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // PID switching instead of a full backend reload.
   }
 
-  /** Reconcile the engine's audio-track list against the backend streamInfo so
-   *  the dropdown labels match the media-detail header. Every engine that can
-   *  enumerate tracks needs this: the streamInfo fallback in loadAudioTracks
-   *  only covers an engine reporting none. */
   /** The playing file's audio stream info, in the order engines list tracks.
    *  Offline there's no media loaded, so it's the metadata captured on the
    *  download task at download time. */
@@ -1980,10 +1546,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         .find((t) => t.mediaFileId === this.mediaFileId && t.status === 'ready');
       return task?.audioStreams ?? [];
     }
-    const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
+    const file = this.currentFile();
     return (file?.streamInfo as any)?.audio ?? [];
   }
 
+  /** Reconcile the engine's audio-track list against the backend streamInfo so
+   *  the dropdown labels match the media-detail header. Every engine that can
+   *  enumerate tracks needs this: the streamInfo fallback in loadAudioTracks
+   *  only covers an engine reporting none. */
   private wireAudioTracks(engine: PlaybackEngine): void {
     engine.on('audioTracksChanged', (e) => {
       // Cross-reference engine tracks with streamInfo.audio so the dropdown
@@ -2511,6 +2081,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   ): Promise<void> {
     if (!this.engine || this.reloadingStream || mediaFileId === this.mediaFileId) return;
     this.reloadingStream = true;
+    this.reloadLoadPending = true;
     this.engine.resetRecoveryGuard();
     const previousSessionId = this.playbackInfo?.sessionId;
     let startTime: number | undefined;
@@ -2522,6 +2093,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // new getPlaybackInfo resolves reports no playMethod/hwAccel rather
       // than the previous episode's stale values.
       this.playbackInfo = null;
+      this.availableSubtitles.set([]);
+      this.activeSubtitleId.set(null);
 
       // Native engines must be stopped before a fresh load to avoid a freeze;
       // release the outgoing file's session (other devices on it stay alive).
@@ -2546,7 +2119,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.applyEpisodeMetadata();
       this.syncSeriesQueue();
 
-      const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
+      const file = this.currentFile();
       const knownDuration = (file?.streamInfo as any)?.durationSeconds;
       if (knownDuration && knownDuration > 0) this.state.duration.set(knownDuration);
 
@@ -2581,65 +2154,20 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         requestedQuality,
       );
       const pi = this.playbackInfo;
-      this.introMarker.set(pi.markers?.intro ?? null);
-      this.outroMarker.set(pi.markers?.outro ?? null);
-      this.chapters.set(pi.chapters ?? []);
       this.adoptPlaybackInfo(pi);
 
       const { url, mimeType } = this.buildPlayUrl({ startTime });
       await this.engine.load(url, startTime, mimeType);
+      this.reloadLoadPending = false;
       this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, this.playbackMode());
       this.restorePlaybackRate();
-
-      // Fresh subtitle + audio track lists for the new file, then auto-select.
-      const subs = await this.trackManager.loadSubtitles(
-        this.mediaId, this.mediaFileId, this.streamingApi, this.media,
-      );
-      this.availableSubtitles.set(subs);
-      this.loadAudioTracks();
-      await this.trackManager.autoSelectSubtitle(
-        this.availableSubtitles(),
-        this.availableAudioTracks(),
-        this.activeAudioTrackId(),
-        this.mediaFileId,
-        (sub) => this.selectSubtitle(sub),
-        this.mediaId,
-      );
-
-      // Refresh the seek-preview sprites for the new file.
-      this.spriteAbort?.abort();
-      void this.loadSpriteMetadata();
-
-      if (!this.isNativeEngine()) this.engine.play().catch(() => {});
-      // Reveal the controls across the switch so the new title/episode shows;
-      // the auto-hide countdown retracts them on the usual delay.
-      this.chrome.show();
+      await this.completeEpisodeSwitchSetup();
     } catch (e: any) {
-      if (this.fallBackFromRemuxOnLoadError(e, startTime ?? 0)) return;
-      // Map to a translated line (Shaka-shaped errors keep their category
-      // message, a failed playback-info request its transport status) and
-      // keep the raw engine/exception text in the diagnostics `message`
-      // field only — the card body never shows an untranslated string.
-      const { source, code } = classifyPlaybackError(e);
-      this.state.setError(
-        this.translate.instant(
-          userMessageKeyFor({
-            source,
-            code,
-            category: e?.category,
-            dolbyVision: this.isDolbyVisionPassthrough(),
-          }),
-        ),
-        {
-          source,
-          code,
-          category: e?.category,
-          data: e?.data,
-          message: e?.message ?? String(e),
-        },
-      );
+      if (this.fallBackFromRemuxOnLoadError(e, startTime ?? 0, () => this.completeEpisodeSwitchSetup())) return;
+      this.state.failWith(e, { dolbyVision: this.isDolbyVisionPassthrough() });
     } finally {
       this.reloadingStream = false;
+      this.reloadLoadPending = false;
       this.state.loading.set(false);
     }
   }
@@ -3258,13 +2786,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   /** Apply a freshly negotiated `pi`: playback mode, hw-accel, quality
-   *  ladder/pin, and crop. Shared so every reload path stays in sync. */
+   *  ladder/pin, crop, and markers/chapters. Shared so every reload path stays in sync. */
   private adoptPlaybackInfo(pi: PlaybackInfoResponse): void {
     this.state.playbackMode.set(playbackModeOf(pi));
     this.state.hwAccel.set(pi.hwAccel);
     this.qualityManager.buildQualityOptions(pi);
     this.qualityManager.adoptNegotiatedQuality(pi.quality);
     this.applyVideoCrop();
+    this.introMarker.set(pi.markers?.intro ?? null);
+    this.outroMarker.set(pi.markers?.outro ?? null);
+    this.chapters.set(pi.chapters ?? []);
   }
 
   /** Mint a fresh LiveSession via `playback-info` and reload the engine at
@@ -3405,6 +2936,126 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** The rejectCopy reload in flight, so a second report of the same failure
    *  (an `error` event plus the rejected load()) is absorbed, not carded. */
   private remuxFallback: Promise<void> | null = null;
+  /** Caller setup to run once the fallback reload succeeds; either report may supply it. */
+  private remuxFallbackOnRecovered: (() => Promise<void> | void) | undefined;
+
+  /** One-time setup after the first successful load (tracks, Cast/autoplay,
+   *  intervals, seeked listener, sprites), whether the load or its copy fallback succeeded. */
+  private async completePostLoadSetup(
+    subsPromise: Promise<any[]> | null, resumeTime: number | undefined,
+  ): Promise<void> {
+    // A fallback can settle after ngOnDestroy; its intervals would never be cleared.
+    if (this.destroyed || !this.engine) return;
+    // Tracks and subtitles load beside playback: a slow subtitle list must not delay the first frame.
+    const trackSetupPromise = (async () => {
+      if (this.isOfflinePlayback) {
+        // Offline: load pre-downloaded subtitles from local storage (no API)
+        await this.loadOfflineSubtitles();
+        this.loadAudioTracks();
+      } else if (!this.availableSubtitles().length) {
+        // subsPromise was started in parallel with engine.load (Shaka + native);
+        // resolve it here, falling back to a direct fetch if none was started.
+        const subs = subsPromise
+          ? await subsPromise
+          : await this.trackManager.loadSubtitles(this.mediaId, this.mediaFileId, this.streamingApi, this.media);
+        this.availableSubtitles.set(subs);
+        this.loadAudioTracks();
+      } else {
+        this.loadAudioTracks();
+      }
+      await this.trackManager.autoSelectSubtitle(
+        this.availableSubtitles(),
+        this.availableAudioTracks(),
+        this.activeAudioTrackId(),
+        this.mediaFileId,
+        (sub) => this.selectSubtitle(sub),
+        this.mediaId,
+      );
+    })();
+    trackSetupPromise.catch((e) => console.warn('[player] track setup failed', e));
+
+    // If Cast is already connected, send to Cast
+    if (this.castService.isConnected() && !this.isNativeEngine()) {
+      // Let the subtitle list settle before handing off, so Cast gets the
+      // full list instead of whatever raced ahead of it.
+      await trackSetupPromise.catch(() => {});
+      await this.engine!.pause();
+      this.engine!.muted = true;
+      await this.engine!.unload();
+      const startPos = resumeTime ?? this.engine!.currentTime;
+      await this.startCastFromPlayer(startPos);
+    } else if (!this.isNativeEngine() || this.isDesktopNative) {
+      this.engine!.play().catch(() => {
+        // No user gesture on a device started remotely: the browser refuses
+        // autoplay. Reported, not just logged: a controller otherwise shows a
+        // paused device with no way to tell why, and its own play button is
+        // refused for the same reason.
+        console.warn('[player] autoplay blocked');
+        this.autoplayBlocked.set(true);
+        void this.savePosition(true);
+      });
+    }
+
+    // Hide controls after autoplay starts
+    this.chrome.resetHideTimer();
+
+    // Save position every 10s + immediately on seek
+    this.saveInterval = setInterval(() => this.savePosition(), 10_000);
+    this.resetStallWatchdog();
+    const video = this.videoEl()?.nativeElement;
+    if (video) video.addEventListener('seeked', this.onSeeked);
+
+    // Apply subtitle appearance + load thumbnail sprite metadata
+    this.applySubtitleStyle();
+    this.loadSpriteMetadata();
+
+    // Update stats every second
+    this.lastTickAt = Date.now();
+    this.statsInterval = setInterval(() => {
+      this.tickClockWatch();
+      this.checkStall();
+      const stats = this.engine?.getStats();
+      const variant = stats?.activeVariant;
+      if (variant?.height) {
+        // Extract profile name from active variant URL (e.g. "/720p/" → "720p")
+        const active = this.getActiveVariant();
+        const urlMatch = active?.originalVideoId?.match(/\/(\d+p)\//);
+        const label = urlMatch?.[1]
+          ?? this.qualityManager.resolutionLabel(variant.width, variant.height);
+        this.qualityManager.activeResolution.set(label);
+      }
+      if (this.statsVisible()) {
+        this.state.currentTime.set(this.engine?.currentTime ?? 0);
+        this.statsRefreshTick.update((n) => n + 1);
+      }
+    }, 1000);
+  }
+
+  /** Post-load steps for an episode switch, run after its own load or its copy fallback. */
+  private async completeEpisodeSwitchSetup(): Promise<void> {
+    const subs = await this.trackManager.loadSubtitles(
+      this.mediaId, this.mediaFileId, this.streamingApi, this.media,
+    );
+    this.availableSubtitles.set(subs);
+    this.loadAudioTracks();
+    await this.trackManager.autoSelectSubtitle(
+      this.availableSubtitles(),
+      this.availableAudioTracks(),
+      this.activeAudioTrackId(),
+      this.mediaFileId,
+      (sub) => this.selectSubtitle(sub),
+      this.mediaId,
+    );
+
+    // Refresh the seek-preview sprites for the new file.
+    this.spriteAbort?.abort();
+    void this.loadSpriteMetadata();
+
+    if (!this.isNativeEngine()) this.engine?.play().catch(() => {});
+    // Reveal the controls across the switch so the new title/episode shows;
+    // the auto-hide countdown retracts them on the usual delay.
+    this.chrome.show();
+  }
 
   /** Wires the two ways a live session goes bad: `sessionExpired` (a backend
    *  410) recovers immediately; `error` routes to {@link maybeFallbackFromRemux}. */
@@ -3413,7 +3064,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       void this.recoverFromLostSession();
     });
     engine.on('error', (e) => {
-      if (this.reloadingStream || this.recoveringFromLostSession) return;
+      if (this.reloadLoadPending || this.recoveringFromLostSession) {
+        console.warn('[player] engine error dropped, a reload/recovery is already in flight', e);
+        return;
+      }
       this.maybeFallbackFromRemux(
         { source: e.source, code: e.code, message: e.message },
         this.engine?.currentTime || this.state.currentTime() || 0,
@@ -3422,28 +3076,41 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   /** {@link maybeFallbackFromRemux} for a caught load()/reload rejection: Shaka
-   *  throws load-time fatals (4032/4012) without emitting an `error` event. */
-  private fallBackFromRemuxOnLoadError(e: any, position: number): boolean {
+   *  throws load-time fatals (4032/4012) without emitting an `error` event.
+   *  `onRecovered` runs the post-load setup the caller's own catch skipped. */
+  private fallBackFromRemuxOnLoadError(
+    e: any, position: number, onRecovered?: () => Promise<void> | void,
+  ): boolean {
     const { source, code } = classifyPlaybackError(e);
-    return this.maybeFallbackFromRemux({ source, code, message: e?.message ?? String(e) }, position);
+    return this.maybeFallbackFromRemux(
+      { source, code, message: e?.message ?? String(e) }, position, onRecovered,
+    );
   }
 
-  /** A remux copy that's undecodable on this device: reject it and reload
-   *  once through `reloadStream`, never twice for the same session. True when handled here. */
+  /** An undecodable copy (DirectPlay or remux): reject it and reload once per session
+   *  through `reloadStream`; `rejectCopy` forces a transcode, so it can't loop. True when handled. */
   private maybeFallbackFromRemux(
     err: { source?: PlaybackError['source']; code?: number; message?: string },
     position: number,
+    onRecovered?: () => Promise<void> | void,
   ): boolean {
-    if (this.destroyed || this.playbackMode() !== 'remux') return false;
+    if (this.destroyed) return false;
+    if (this.playbackMode() !== 'remux' && this.playbackMode() !== 'direct') return false;
+    if (!this.authService.hasServerFeature('deviceProfileExtensions')) return false;
     if (!isUndecodableError(err)) return false;
     const sid = this.playbackInfo?.sessionId;
     if (!sid) return false;
-    if (this.remuxFallbackSid === sid) return this.remuxFallback != null;
+    if (this.remuxFallbackSid === sid) {
+      if (this.remuxFallback && onRecovered) this.remuxFallbackOnRecovered ??= onRecovered;
+      return this.remuxFallback != null;
+    }
     this.remuxFallbackSid = sid;
     this.rejectCopyFileIds.add(this.mediaFileId);
-    console.warn('[player] remux copy failed to decode, retrying with rejectCopy');
+    console.warn('[player] copy failed to decode, retrying with rejectCopy');
+    this.remuxFallbackOnRecovered = onRecovered;
     this.remuxFallback = this.runRemuxFallback(position).finally(() => {
       this.remuxFallback = null;
+      this.remuxFallbackOnRecovered = undefined;
     });
     return true;
   }
@@ -3456,9 +3123,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (!(await this.waitForReloadIdle())) {
         console.warn('[player] remux fallback dropped: another reload is still running');
         if (!this.state.error()) {
-          this.state.setError(
-            this.translate.instant(userMessageKeyFor({ source: 'session' })),
-            { source: 'session', message: 'remux fallback dropped: another reload is still running' },
+          this.state.failWith(
+            new Error('remux fallback dropped: another reload is still running'),
+            { source: 'session' },
           );
         }
         return;
@@ -3466,14 +3133,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // A recovery that settled meanwhile lowered the veil.
       this.state.setRecovering(true);
       await this.reloadStream(position);
+      await this.remuxFallbackOnRecovered?.();
     } catch (e) {
-      if (!this.state.error()) {
-        const { source, code } = classifyPlaybackError(e);
-        this.state.setError(
-          this.translate.instant(userMessageKeyFor({ source, code })),
-          { source, code, message: (e as any)?.message ?? String(e) },
-        );
-      }
+      if (!this.state.error()) this.state.failWith(e);
     } finally {
       this.state.setRecovering(false);
     }
@@ -3564,8 +3226,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private isDolbyVisionPassthrough(): boolean {
     const method = this.playbackInfo?.playMethod;
     if (method !== 'DirectPlay' && method !== 'DirectStream') return false;
-    const v = this.media?.files?.find((f) => f.id === this.mediaFileId)
-      ?.streamInfo?.video?.[0];
+    const v = this.currentFile()?.streamInfo?.video?.[0];
     return (v?.dvProfile ?? 0) > 0;
   }
 
@@ -3745,12 +3406,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // returning silently, which would leave a stuck spinner (recovering
       // still veiled) or a stale overlay with no way out.
       this.state.setRecovering(false);
-      if (!this.state.error()) {
-        this.state.setError(
-          this.translate.instant(userMessageKeyFor({ source: 'session' })),
-          { source: 'session' },
-        );
-      }
+      if (!this.state.error()) this.state.failWith(undefined, { source: 'session' });
       return;
     }
     if (this.castService.isConnected()) return;
@@ -3787,11 +3443,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } catch (e) {
       if (this.recoverAttempts >= this.maxRecoverAttempts) {
         this.state.setRecovering(false);
-        const { source, code } = classifyPlaybackError(e);
-        this.state.setError(
-          this.translate.instant(userMessageKeyFor({ source, code })),
-          { source, code, message: (e as any)?.message ?? String(e) },
-        );
+        this.state.failWith(e);
       } else {
         // Hold the recovering veil up across the backoff so the user sees a
         // reconnect, not a flash of the fatal overlay between attempts.
@@ -3821,11 +3473,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } catch (e) {
       // No retry path after a Cast disconnect — surface a terminal error
       // instead of leaving the local player silently dead.
-      const { source, code } = classifyPlaybackError(e);
-      this.state.setError(
-        this.translate.instant(userMessageKeyFor({ source, code })),
-        { source, code, message: (e as any)?.message ?? String(e) },
-      );
+      this.state.failWith(e);
     }
   }
 
@@ -4045,9 +3693,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const engineTracks = this.engine.getAudioTracks();
       // An engine that folds renditions by language enumerates fewer tracks
       // than the source: keep streamInfo so none leaves the menu.
-      const sourceAudioCount =
-        (this.media?.files?.find((f: any) => f.id === this.mediaFileId)
-          ?.streamInfo as any)?.audio?.length ?? 0;
+      const sourceAudioCount = (this.currentFile()?.streamInfo as any)?.audio?.length ?? 0;
       const foldsTracks =
         !!this.deviceProfileService.getProfile().dedupesAudioByLanguage &&
         engineTracks.length < sourceAudioCount;
@@ -4057,7 +3703,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         // via the engine. Only real engine-detected tracks are switchable.
         if (this.isOfflinePlayback) return;
         // Fallback: use streamInfo for online playback
-        const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
+        const file = this.currentFile();
         const si = file?.streamInfo as any;
         const audioList = si?.audio;
         if (audioList?.length > 1) {
@@ -4090,7 +3736,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // in streamInfo.audio order, so the i-th engine track maps to
       // streamInfo.audio[i]; use that to render the same label as the
       // streamInfo dropdown.
-      const file = this.media?.files?.find((f: any) => f.id === this.mediaFileId);
+      const file = this.currentFile();
       const audioList = (file?.streamInfo as any)?.audio ?? [];
       const tracks = engineTracks.map((t, i) => ({
         id: t.id,
@@ -4620,6 +4266,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  a second quick switch) must not run two getPlaybackInfo + load cycles at
    *  once — that races the engine and leaks a session. */
   private reloadingStream = false;
+  /** True until a reload's `engine.load()` resolves: the window where an engine error is
+   *  the expected teardown, unlike one raised during the post-load awaits. */
+  private reloadLoadPending = false;
   /** Set once doReloadStream reaches a successful engine.load(). Lets the
    *  reloadStream catch tell a dead surface (failure before load) from a live
    *  one (a later throw over already-playing video). */
@@ -4654,21 +4303,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         !this.destroyed &&
         !this.state.error()
       ) {
-        const { source, code } = classifyPlaybackError(e);
-        this.state.setError(
-          this.translate.instant(userMessageKeyFor({ source, code })),
-          { source, code, message: (e as any)?.message ?? String(e) },
-        );
+        this.state.failWith(e);
       }
       throw e;
     } finally {
       this.reloadingStream = false;
+      this.reloadLoadPending = false;
     }
   }
 
   private async doReloadStream(currentPos: number) {
     if (!this.engine) return;
     this.state.buffering.set(true);
+    this.reloadLoadPending = true;
     try {
       // Capture the user's play/pause intent before tearing the stream down — a
       // quality / audio / subtitle switch must not resume a paused player.
@@ -4705,7 +4352,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.reloadStartAt(currentPos),
       );
       const pi = this.playbackInfo;
-      this.introMarker.set(pi.markers?.intro ?? null);
       this.adoptPlaybackInfo(pi);
 
       const mode = this.playbackMode();
@@ -4716,6 +4362,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const { url, mimeType } = this.buildPlayUrl({ startTime: currentPos });
       await this.engine.load(url, currentPos, mimeType);
       this.reloadReachedPlayback = true;
+      this.reloadLoadPending = false;
 
       this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, mode);
       this.restorePlaybackRate();

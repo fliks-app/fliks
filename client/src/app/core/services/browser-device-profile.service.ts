@@ -222,9 +222,9 @@ export class BrowserDeviceProfileService {
     channelsByCodec?: Record<string, number>;
   } | null = null;
   private nativeVideo: NativeVideoCaps | null = null;
-  /** Optimistic until the desktop probe resolves; matches the other native
-   *  capability fields above, which read stale/default values until then too. */
-  private desktopCanReshapeDolbyVision = true;
+  /** Pessimistic until the desktop probe resolves: P7 only, never 5/8 a bridge can't reshape. */
+  private desktopCanReshapeDolbyVision = false;
+  private desktopProbe: Promise<void> | null = null;
 
   constructor() {
     // Pre-fetch native HDR + audio + video capabilities (async, cached for
@@ -247,13 +247,21 @@ export class BrowserDeviceProfileService {
     }
     // Windows mpv can fall back off gpu-next at startup (old driver); the flag
     // is only read on Windows, the one desktop backend that can reshape DV.
-    desktopBridgeOrNull()
+    this.desktopProbe = desktopBridgeOrNull()
       ?.getPlayerCapabilities()
       .then((r) => {
         this.desktopCanReshapeDolbyVision = r.canReshapeDolbyVision;
         this.cachedProfile = null;
       })
-      .catch(() => {});
+      .catch((e) => console.warn('[DeviceProfile] desktop capability probe failed', e))
+      .finally(() => { this.desktopProbe = null; }) ?? null;
+  }
+
+  /** Resolves once the desktop capability probe settles (or after `timeoutMs`), so a
+   *  play right after launch doesn't negotiate with the pessimistic default. */
+  whenDesktopProbed(timeoutMs = 4000): Promise<void> {
+    if (!this.desktopProbe) return Promise.resolve();
+    return Promise.race([this.desktopProbe, new Promise<void>((r) => setTimeout(r, timeoutMs))]);
   }
 
   /**
@@ -600,10 +608,8 @@ export class BrowserDeviceProfileService {
     if (this.device.isDesktopNative() && !dolbyVisionProfiles.includes(7)) {
       dolbyVisionProfiles.push(7);
     }
-    // Windows mpv (gpu-next) reshapes P5/P7/P8 via libplacebo regardless of
-    // display HDR support; macOS/Linux libmpv can't reshape, so they stay at P7.
-    // gpu-next itself can fail to init (old driver) and fall back to plain gpu,
-    // which only plays the P7 base layer; drop 5/8 when that happened.
+    // Windows mpv (gpu-next) reshapes P5/P7/P8 via libplacebo; a failed
+    // gpu-next init (old driver) falls back to a P7-only base layer.
     if (this.device.isDesktopNative() && detectOs(navigator.userAgent) === 'Windows') {
       dolbyVisionProfiles.length = 0;
       dolbyVisionProfiles.push(...(this.desktopCanReshapeDolbyVision ? [5, 7, 8] : [7]));

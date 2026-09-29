@@ -66,3 +66,45 @@ describe('PlayerStateService buffering latch', () => {
     expect(service.buffering()).toBe(false);
   });
 });
+
+/**
+ * fatalNoRetry survives setRecovering(true) (which only clears `error`), so a
+ * stale flag from a previous undecodable failure must not keep blocking
+ * checkStall's retries after a later recovery actually succeeds.
+ */
+describe('PlayerStateService fatalNoRetry', () => {
+  it('clears once recovery resolves without reintroducing an error', () => {
+    const { service } = setup();
+    service.setError('boom', { source: 'shaka', code: 3016 });
+    expect(service.fatalNoRetry()).toBe(true);
+    service.setRecovering(true);
+    service.setRecovering(false);
+    expect(service.fatalNoRetry()).toBe(false);
+  });
+
+  it('stays set when recovery re-fails with a new fatal error', () => {
+    const { service } = setup();
+    service.setError('boom', { source: 'shaka', code: 3016 });
+    service.setRecovering(true);
+    service.setError('boom again', { source: 'shaka', code: 3016 });
+    service.setRecovering(false);
+    expect(service.fatalNoRetry()).toBe(true);
+  });
+});
+
+describe('PlayerStateService.failWith', () => {
+  it('classifies a Shaka-shaped error and sets source/code/message', () => {
+    const { service } = setup();
+    const msg = service.failWith({ category: 4, code: 4032, message: 'nope' });
+    expect(service.error()?.source).toBe('shaka');
+    expect(service.error()?.code).toBe(4032);
+    expect(service.error()?.message).toBe('nope');
+    expect(msg).toBe('player.error_unsupported');
+  });
+
+  it('honors an explicit source override for a synthetic (non-exception) failure', () => {
+    const { service } = setup();
+    service.failWith(undefined, { source: 'session' });
+    expect(service.error()?.source).toBe('session');
+  });
+});

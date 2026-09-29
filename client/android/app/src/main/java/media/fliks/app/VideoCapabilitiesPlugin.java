@@ -40,9 +40,6 @@ public class VideoCapabilitiesPlugin extends Plugin {
         Set<Integer> dvProfiles = new HashSet<>();
         boolean hevcMain10 = false;
         boolean av1Main10 = false;
-        // P7 needs two concurrent HEVC decoder instances (base + enhancement
-        // layer), so a single-instance HEVC decoder can't really play it.
-        boolean hevcMultiInstance = false;
         try {
             MediaCodecList list = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
             for (MediaCodecInfo info : list.getCodecInfos()) {
@@ -50,9 +47,6 @@ public class VideoCapabilitiesPlugin extends Plugin {
                 for (String type : info.getSupportedTypes()) {
                     if ("video/dolby-vision".equalsIgnoreCase(type)) {
                         collectDvProfiles(info, type, dvProfiles);
-                    }
-                    if ("video/hevc".equalsIgnoreCase(type) && !hevcMultiInstance) {
-                        hevcMultiInstance = supportsMultiInstance(info, type);
                     }
                     String key = mimeToCodecKey(type);
                     if (key == null) continue;
@@ -76,12 +70,6 @@ public class VideoCapabilitiesPlugin extends Plugin {
                 }
             }
         } catch (Throwable ignored) { /* best-effort */ }
-
-        // P7's enhancement layer needs a second concurrent decoder instance; a
-        // single-instance HEVC decoder can't really deliver it.
-        if (dvProfiles.contains(7) && !hevcMultiInstance) {
-            dvProfiles.remove(7);
-        }
 
         JSArray arr = new JSArray();
         for (String c : codecs) arr.put(c);
@@ -144,17 +132,6 @@ public class VideoCapabilitiesPlugin extends Plugin {
                 }
             }
         } catch (Throwable ignored) { /* per-codec best-effort */ }
-    }
-
-    /** True when this decoder can run more than one concurrent instance:
-     *  P7 needs one for the base layer and one for the enhancement layer. */
-    private static boolean supportsMultiInstance(MediaCodecInfo info, String type) {
-        try {
-            MediaCodecInfo.CodecCapabilities caps = info.getCapabilitiesForType(type);
-            return caps != null && caps.getMaxSupportedInstances() > 1;
-        } catch (Throwable ignored) {
-            return false;
-        }
     }
 
     /** True when the decoder advertises a 10-bit (Main10) or HDR profile. */

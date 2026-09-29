@@ -1,6 +1,9 @@
 import type { TranslateService } from '@ngx-translate/core';
 import { localizeLanguage, normalizeLangCode } from './language.utils';
-import type { PlayMethod } from '../services/api/streaming-api.service';
+import type { PlayMethod, PlaybackInfoResponse } from '../services/api/streaming-api.service';
+import type { EngineStats } from '../services/playback-engine/playback-engine';
+import type { AudioStreamInfo, VideoStreamInfo } from '../services/api/media.service';
+import type { PlayerStats } from '../../features/player/overlay/player-stats-overlay';
 
 /** Pixel widths backing each ladder rung id (must match the backend
  *  `PROFILES` table). Used by NativeEngine + quality-manager to set
@@ -382,4 +385,373 @@ export function deliveredKindFromVariant(
   const hasRemux = /[?&]remux=1(?:&|$)/.test(url);
   const hasStartQuality = /[?&]startQuality=/.test(url);
   return hasRemux && !hasStartQuality ? 'remux' : 'transcode';
+}
+
+export interface BuildPlayerStatsParams {
+  quality: string;
+  pi: PlaybackInfoResponse | null;
+  engineStats: EngineStats | undefined;
+  hwAccel: string;
+  isOfflinePlayback: boolean;
+  lastStreamUrl: string;
+  /** `originalVideoId` of the engine's active variant (Shaka) — the profile
+   *  folder name and the `sid` `deliveredKindFromVariant` reads back. */
+  activeVariantOriginalVideoId: string | null | undefined;
+  availableQualities: { id: string; totalBitrateBps?: number }[];
+  resolutionLabel: (w?: number, h?: number) => string;
+  transcodeTierFromVariantHeight: (h: number, w?: number) => string | null;
+  translate: TranslateService;
+  sourceVideoStream: VideoStreamInfo | undefined;
+  /** True when THIS client removed the letterbox bars (copy delivery). */
+  cropAppliedByPlayer: boolean;
+  isDesktopNative: boolean;
+  /** PiP or iOS native fullscreen paints the full frame, bypassing the crop. */
+  pipOrFullscreenActive: boolean;
+  activeAudioTrackId: string | null;
+  availableAudioTracks: { id: string; label: string; language: string }[];
+  activeAudioStreamIndex: number | undefined;
+  sourceAudioStreams: AudioStreamInfo[] | undefined;
+}
+
+/** Pure derivation of the stats-overlay panel from the negotiated
+ *  playback-info, engine stats and player UI state. Extracted out of
+ *  PlayerComponent so this formatting logic is unit-testable without
+ *  mounting the component. */
+export function buildPlayerStats(p: BuildPlayerStatsParams): PlayerStats {
+  const { pi, engineStats, translate } = p;
+  const src = pi?.source;
+  const hw = p.hwAccel;
+  const activeVariant = engineStats?.activeVariant;
+
+  const playingWidth = activeVariant?.width ?? src?.width;
+  const playingHeight = activeVariant?.height ?? src?.height;
+
+  // What the engine is ACTUALLY playing, never the server's playMethod
+  // decision alone, which a desynced stream URL can disagree with.
+  const deliveredKind = p.isOfflinePlayback || !p.lastStreamUrl
+    ? null
+    : deliveredKindFromVariant(p.lastStreamUrl, p.activeVariantOriginalVideoId ?? null);
+  const effectiveVideoCopy = deliveredKind !== 'transcode';
+  // Without a negotiation (offline) nothing says what was copied: show no mode.
+  const deliveryKnown = !!pi && deliveredKind != null;
+  // Audio is decided independently: a lower video rung still copies a
+  // supported audio track (e.g. AC3 5.1) verbatim, so reflect audioCopyStream.
+  const effectiveAudioCopy = pi?.audioCopyStream ?? true;
+  // Per-track audio decision for the ACTIVE track. availableAudioTracks is in
+  // streamInfo.audio order (the i-th track maps to streamInfo.audio[i]), so
+  // the selected track's position is its backend audioTracks index.
+  const activeAudioPos = p.availableAudioTracks.findIndex(
+    (t) => t.id === p.activeAudioTrackId,
+  );
+  const activeAudioIndex =
+    activeAudioPos >= 0 ? activeAudioPos : (p.activeAudioStreamIndex ?? 0);
+  const activeAudioPlan = pi?.audioTracks?.find(
+    (t) => t.index === activeAudioIndex,
+  );
+  const activeAudioCopy = activeAudioPlan?.copy ?? effectiveAudioCopy;
+
+  const formatBitrateBps = (bps: number): string => {
+    if (bps >= 1_000_000) return `${(bps / 1_000_000).toFixed(1)} Mbps`;
+    if (bps >= 1_000) return `${(bps / 1_000).toFixed(0)} kbps`;
+    return `${bps} bps`;
+  };
+
+  // --- Container (summary) ---
+  const totalContainerBps =
+    src?.formatBitRate ??
+    (src?.videoBitRate != null
+      ? (src.videoBitRate ?? 0) + (src.audioBitRate ?? 0)
+      : undefined);
+  const containerBitrate =
+    totalContainerBps != null && totalContainerBps > 0
+      ? formatBitrateBps(totalContainerBps)
+      : '?';
+
+  const isHls = deliveredKind != null && deliveredKind !== 'direct';
+  const outputFormat = isHls ? 'HLS' : '';
+  const outputFps = src?.frameRate ?? '';
+
+  // Letterbox crop detected at import time (ffprobe `cropdetect`).
+  const cropLine = src?.crop
+    ? `${src.crop.width}x${src.crop.height} (offset ${src.crop.x},${src.crop.y})`
+    : '';
+  const cropAppliedByPlayer = p.cropAppliedByPlayer;
+  // PiP and iOS native fullscreen paint the decoded frame, bypassing the CSS crop.
+  const cropBypassed = cropAppliedByPlayer && !p.isDesktopNative && p.pipOrFullscreenActive;
+
+  // --- Video label ---
+  const urlMatch = p.activeVariantOriginalVideoId?.match(/\/(\d+p)\//);
+  const selectedQualityOpt = p.availableQualities.find((q) => q.id === p.quality);
+  const resLabel = p.resolutionLabel(src?.width, src?.height);
+  // A tonemapped delivery is SDR; corroborate DV with the engine's own codec
+  // string (if reported) so a plain-HEVC/AV1 fallback never claims DV.
+  const engineVideoCodec = activeVariant?.videoCodec?.toLowerCase();
+  const showsDolbyVision =
+    !!pi?.dolbyVision &&
+    deliveredKind !== 'transcode' &&
+    (engineVideoCodec == null || /^(dv|dav1)/.test(engineVideoCodec));
+  // Real profile/compat, not guessed from hdrFormat: an untagged P5 source
+  // has no HDR VUI at all, so this must run before the `!src?.hdrFormat` case.
+  const dvStream = p.sourceVideoStream;
+  const hdrTag = pi?.tonemapping
+    ? ''
+    : showsDolbyVision && dvStream?.dvProfile != null
+      ? ` ${
+          dvStream.dvBlSignalCompatId
+            ? translate.instant('player.stats_dolby_vision_base', {
+                profile: `${dvStream.dvProfile}.${dvStream.dvBlSignalCompatId}`,
+                base: src?.hdrFormat ?? '',
+              })
+            : translate.instant('player.stats_dolby_vision', {
+                profile: dvStream.dvProfile,
+              })
+        }`
+      : src?.hdrFormat
+        ? ` ${src.hdrFormat}`
+        : '';
+  const codecName = (src?.videoCodec ?? '?').toUpperCase();
+  const videoLabel = `${resLabel}${hdrTag} ${codecName}`;
+
+  const rateMap = pi?.transcodeBitrateByQuality;
+  const qId = p.quality;
+  const sourceA = src?.audioBitRate;
+
+  // Ladder targets describe a transcode only; a copy never borrows a rung's figure.
+  const isTranscodeDelivery = deliveredKind === 'transcode';
+
+  let selectedRateEntry: {
+    videoBitrateBps: number;
+    audioBitrateBps: number;
+    totalBitrateBps: number;
+  } | null = null;
+  if (isTranscodeDelivery) {
+    if (rateMap && qId !== 'auto' && qId !== 'original' && rateMap[qId]) {
+      selectedRateEntry = rateMap[qId];
+    } else if (rateMap && (qId === 'auto' || qId === 'original')) {
+      const tier = urlMatch?.[1] ?? p.transcodeTierFromVariantHeight(activeVariant?.height ?? 0, activeVariant?.width);
+      if (tier && rateMap[tier]) selectedRateEntry = rateMap[tier];
+    }
+  }
+
+  const validBps = (n: unknown): n is number =>
+    typeof n === 'number' && !Number.isNaN(n) && n > 0;
+
+  // Video stream bitrate
+  let videoStreamBitrate = '';
+  let serverStreamTotalBps: number | undefined;
+  // The rung's own video target (eco / -hdr rungs included); its audio budget
+  // is not spent when the audio is copied. A pinned rung's total stands in without it.
+  if (validBps(selectedRateEntry?.videoBitrateBps)) {
+    serverStreamTotalBps = selectedRateEntry!.videoBitrateBps;
+  } else if (
+    isTranscodeDelivery &&
+    qId !== 'auto' &&
+    qId !== 'original' &&
+    validBps(selectedQualityOpt?.totalBitrateBps)
+  ) {
+    serverStreamTotalBps = selectedQualityOpt!.totalBitrateBps;
+  } else if (deliveredKind != null && !isTranscodeDelivery && validBps(src?.videoBitRate)) {
+    // A copy's own video bitrate; remuxMasterBandwidthBps also counts audio.
+    serverStreamTotalBps = src!.videoBitRate;
+  } else if (deliveredKind === 'remux' && validBps(pi?.remuxMasterBandwidthBps)) {
+    serverStreamTotalBps = pi!.remuxMasterBandwidthBps;
+  }
+
+  if (serverStreamTotalBps != null && serverStreamTotalBps > 0) {
+    videoStreamBitrate = formatBitrateBps(serverStreamTotalBps);
+  } else {
+    const trackVbw = activeVariant?.videoBandwidth;
+    const shakaStreamBw = engineStats?.streamBandwidth;
+    if (validBps(trackVbw)) {
+      videoStreamBitrate = formatBitrateBps(trackVbw);
+    } else if (validBps(shakaStreamBw)) {
+      videoStreamBitrate = formatBitrateBps(shakaStreamBw);
+    }
+  }
+
+  const profileParts: string[] = [];
+  if (src?.videoProfile) profileParts.push(src.videoProfile);
+  if (src?.videoLevel) profileParts.push(String(src.videoLevel));
+  if (src?.frameRate) profileParts.push(`${src.frameRate} fps`);
+  const videoProfileLine = profileParts.join('  ') || '?';
+
+  // Delivery, not decision: `deliveredKind` already folds in a pinned rung,
+  // so a remux whose rung was pinned reports the transcode it actually is.
+  const streamTypeKey = deliveredKind ? `player.stats_stream_type_${deliveredKind}` : '';
+
+  // Flag when the server's decision disagrees with what's actually playing,
+  // instead of silently trusting either side.
+  const decisionKind = pi ? playbackModeOf(pi) : undefined;
+  const mismatch =
+    decisionKind && deliveredKind && decisionKind !== deliveredKind
+      ? translate.instant('player.stats_delivery_mismatch', {
+          decision: translate.instant(`player.stats_stream_type_${decisionKind}`),
+          delivered: translate.instant(`player.stats_stream_type_${deliveredKind}`),
+        })
+      : undefined;
+
+  // Playback mode for video
+  let videoPlaybackMode: string;
+  if (!deliveryKnown) {
+    videoPlaybackMode = '';
+  } else if (effectiveVideoCopy) {
+    videoPlaybackMode = translate.instant('player.stats_direct_playback');
+  } else {
+    const hwLabel: Record<string, string> = { qsv: 'QSV', vaapi: 'VAAPI', nvenc: 'NVENC', videotoolbox: 'Apple VT', none: 'CPU' };
+    const parts = [hwLabel[hw] ?? hw.toUpperCase()];
+    if (pi?.outputVideoCodec) parts.push(pi.outputVideoCodec.toUpperCase());
+    // HDR survives the transcode only when the source is HDR and we're not
+    // tonemapping to SDR — surface the format (HDR10 / HLG) that's emitted.
+    if (src?.hdrFormat && !pi?.tonemapping) parts.push(src.hdrFormat);
+    videoPlaybackMode = translate.instant('player.stats_transcoding', { hw: parts.join(' ') });
+  }
+  if (playingHeight && src?.height && playingHeight < src.height) {
+    videoPlaybackMode += ` → ${playingWidth}x${playingHeight}`;
+  }
+
+  // Show the filter ACTUALLY used (post auto-resolution + opencl-probe
+  // fallback), not the admin pick — `pi.tonemapAlgo` is the source of truth.
+  const tonemapLabel: Record<string, string> = {
+    vaapi: 'VAAPI',
+    opencl: 'OpenCL',
+    qsv: 'vpp_qsv',
+    cuda: 'CUDA',
+    vulkan: 'Vulkan',
+    videotoolbox: 'VideoToolbox',
+    cpu: 'CPU',
+  };
+  // cuda/opencl/vulkan/cpu run a tunable curve, shown in parentheses;
+  // vpp_qsv/VAAPI LUTs carry none.
+  const curve = pi?.tonemapCurve
+    ? ` (${pi.tonemapCurve.charAt(0).toUpperCase()}${pi.tonemapCurve.slice(1)})`
+    : '';
+  const tonemapAlgoLabel = pi?.tonemapAlgo
+    ? `${tonemapLabel[pi.tonemapAlgo] ?? pi.tonemapAlgo}${curve}`
+    : '';
+  const tonemapping = pi?.tonemapping
+    ? tonemapAlgoLabel || 'enabled'
+    : pi?.clientTonemap
+      ? translate.instant('player.stats_tonemapping_client')
+      : '';
+
+  // Video: `Video*` flags plus `SubtitleBurnIn`. Audio: `Audio*` flags.
+  // Everything else (container/mux/server-policy) goes in the stream section, never dropped.
+  const allFlags = (pi?.transcodeReasons ?? []).map((r) => r.flag);
+  // Translate each flag to a human label; unknown flags fall back to the raw token.
+  const reasonLabel = (flag: string) => {
+    const key = `player.transcode_reason.${flag}`;
+    const label = translate.instant(key, { codec: codecName });
+    return label === key ? flag : label;
+  };
+  const videoTranscodeReasons = effectiveVideoCopy
+    ? []
+    : allFlags
+        .filter((f) => f.startsWith('Video') || f === 'SubtitleBurnIn')
+        .map(reasonLabel);
+  // Prefer the active track's own per-track plan (correct after a client-side
+  // switch); fall back to the default-track flags on an older server.
+  const audioTranscodeReasons = activeAudioPlan
+    ? activeAudioPlan.reasonFlags.map(reasonLabel)
+    : effectiveAudioCopy
+      ? []
+      : allFlags.filter((f) => f.startsWith('Audio')).map(reasonLabel);
+  const streamTranscodeReasons = allFlags
+    .filter((f) => !f.startsWith('Video') && !f.startsWith('Audio') && f !== 'SubtitleBurnIn')
+    .map(reasonLabel);
+
+  // --- Audio ---
+  // `audioTracks: []` (or an explicitly empty source streamInfo.audio when
+  // offline) means the file truly has none; undefined means unknown metadata,
+  // not "no audio"; keep showing the section rather than assume neither.
+  const sourceAudioStreams = p.sourceAudioStreams;
+  const hasAudio =
+    pi?.audioTracks != null
+      ? pi.audioTracks.length > 0
+      : sourceAudioStreams != null
+        ? sourceAudioStreams.length > 0
+        : true;
+  // Derive from the SELECTED track, not the source's primary stream, so the
+  // line follows a language switch.
+  const selectedAudio = p.availableAudioTracks.find(
+    (t) => t.id === p.activeAudioTrackId,
+  );
+  // Show the audio NAME exactly as the track selector renders it:
+  // selectedAudio.label is built by formatAudioLabel, which localizes the
+  // language and falls back to "Piste audio N" for untagged tracks instead of
+  // a raw "Und". Fall back to formatAudioLabel on the source's primary stream
+  // when no track is selected yet (tracks not populated).
+  const audioLabel =
+    selectedAudio?.label ??
+    formatAudioLabel(
+      {
+        language: src?.audioLanguage,
+        codec: src?.audioCodec,
+        channels: src?.audioChannels,
+      },
+      translate,
+      1,
+    );
+
+  // The active track's plan carries its own figures. `src` audio values describe
+  // the negotiated track, so they stand in only without a plan and for a copy.
+  const sourceAudioIsActive = !activeAudioPlan && deliveryKnown && activeAudioCopy;
+  let audioStreamBitrate = '';
+  if (validBps(activeAudioPlan?.bitrateBps)) {
+    audioStreamBitrate = formatBitrateBps(activeAudioPlan!.bitrateBps!);
+  } else if (sourceAudioIsActive && validBps(sourceA)) {
+    audioStreamBitrate = formatBitrateBps(sourceA);
+  } else if (validBps(activeVariant?.audioBandwidth)) {
+    audioStreamBitrate = formatBitrateBps(activeVariant!.audioBandwidth);
+  } else if (!activeAudioCopy && selectedRateEntry && validBps(selectedRateEntry.audioBitrateBps)) {
+    audioStreamBitrate = formatBitrateBps(selectedRateEntry.audioBitrateBps);
+  }
+
+  const activeSampleRate =
+    activeAudioPlan?.sampleRate ?? (sourceAudioIsActive ? src?.audioSampleRate : undefined);
+  const audioDetailLine = activeSampleRate ? `${activeSampleRate} Hz` : '';
+
+  let audioPlaybackMode: string;
+  if (!deliveryKnown) {
+    audioPlaybackMode = '';
+  } else if (activeAudioCopy) {
+    audioPlaybackMode = translate.instant('player.stats_direct_playback');
+  } else {
+    // Show the TARGET codec + channel layout (e.g. "OPUS - 5.1") so a downmix
+    // is visible. `outputChannels` comes from the active track's plan.
+    const outCodec = (
+      activeAudioPlan?.outputCodec ?? pi?.outputAudioCodec ?? 'aac'
+    ).toUpperCase();
+    const outLayout = audioChannelsLabel(activeAudioPlan?.outputChannels);
+    const codecLabel = outLayout ? `${outCodec} - ${outLayout}` : outCodec;
+    audioPlaybackMode = translate.instant('player.stats_transcode_audio', { codec: codecLabel });
+  }
+
+  return {
+    container: src?.container ?? '?',
+    containerBitrate,
+    outputFormat,
+    outputFps,
+    streamTypeKey,
+    mismatch,
+    streamTranscodeReasons,
+    videoLabel,
+    videoStreamBitrate,
+    videoProfileLine,
+    videoPlaybackMode,
+    crop: cropLine,
+    cropAppliedByPlayer,
+    cropBypassed,
+    tonemapping,
+    videoTranscodeReasons,
+    // Engine stats can read NaN before a quality switch settles; show 0.
+    droppedFrames: Number.isFinite(engineStats?.droppedFrames)
+      ? engineStats!.droppedFrames
+      : 0,
+    hasAudio,
+    audioLabel,
+    audioStreamBitrate,
+    audioDetailLine,
+    audioPlaybackMode,
+    audioTranscodeReasons,
+  };
 }

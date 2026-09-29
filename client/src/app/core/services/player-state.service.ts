@@ -2,6 +2,7 @@ import { Injectable, effect, inject, signal } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { pausedFlagForState, type PlaybackEngine } from './playback-engine/playback-engine';
 import {
+  classifyPlaybackError,
   isNetworkOrAbort,
   isUndecodableError,
   userMessageKeyFor,
@@ -104,7 +105,12 @@ export class PlayerStateService {
 
   setRecovering(value: boolean): void {
     this.recovering = value;
-    if (value) this.error.set(null);
+    if (value) {
+      this.error.set(null);
+    } else if (!this.error()) {
+      // Recovered without a new error: drop the previous fatal classification.
+      this.fatalNoRetry.set(false);
+    }
   }
 
   setDolbyVisionProbe(probe: (() => boolean) | null): void {
@@ -125,6 +131,30 @@ export class PlayerStateService {
     };
     this.error.set(err);
     this.fatalNoRetry.set(isUndecodableError(err));
+  }
+
+  /** Classify a caught error and set it as the error card; returns the translated line.
+   *  `source` overrides classification for a synthetic (non-exception) failure. */
+  failWith(
+    e: unknown,
+    opts?: { dolbyVision?: boolean; source?: PlaybackError['source'] },
+  ): string {
+    const classified = classifyPlaybackError(e);
+    const source = opts?.source ?? classified.source;
+    const code = classified.code;
+    const err = e as { category?: number; severity?: number; data?: unknown[]; message?: string } | null | undefined;
+    const userMessage = this.translate.instant(
+      userMessageKeyFor({ source, code, category: err?.category, dolbyVision: opts?.dolbyVision }),
+    );
+    this.setError(userMessage, {
+      source,
+      code,
+      category: err?.category,
+      severity: err?.severity,
+      data: err?.data,
+      message: err?.message ?? (e == null ? undefined : String(e)),
+    });
+    return userMessage;
   }
 
   /** Bind a playback engine's events to our signals. Call this when the engine changes. */

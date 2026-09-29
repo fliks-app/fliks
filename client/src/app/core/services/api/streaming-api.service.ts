@@ -35,11 +35,8 @@ export interface PlaybackInfoResponse {
   /** Delivered stream is Dolby Vision-presentable (raw DirectPlay, or a
    *  SUPPLEMENTAL-CODECS remux); false on a transcode, which drops DV. */
   dolbyVision?: boolean;
-  /** Tone-map mechanism the backend actually runs: a HW path
-   *  (`'vaapi'` / `'opencl'` / `'qsv'`) on QSV/VAAPI encoders, `'cuda'` for
-   *  NVENC's zero-copy tonemap_cuda, `'vulkan'` for the libplacebo no-base DV
-   *  fallback, or `'cpu'` for the CPU chain. Null when no tone-mapping pass
-   *  runs on this session. */
+  /** Tone-map mechanism the backend actually runs; null when no tone-mapping
+   *  pass runs on this session. */
   tonemapAlgo?:
     | 'vaapi'
     | 'opencl'
@@ -260,8 +257,19 @@ export class StreamingApiService {
     return this.auth.playbackToken;
   }
 
-  /** Query string shared by every HLS URL builder below; the sole place that
-   *  drops `startQuality` when `remux` is set (would collapse the copy into a transcode). */
+  /** URL-encoded `key=value&...` in insertion order, skipping undefined and empty
+   *  strings (`true` -> `1`); the query builder for every method below. */
+  private buildQuery(parts: Record<string, string | number | true | undefined>): string {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(parts)) {
+      if (v === undefined || v === '') continue;
+      params.set(k, v === true ? '1' : String(v));
+    }
+    return params.toString();
+  }
+
+  /** Query string shared by every HLS URL builder below; drops `startQuality`
+   *  when `remux` is set (would collapse the copy into a transcode). */
   private hlsQuery(opts: {
     token?: string | null;
     sid?: string;
@@ -270,16 +278,14 @@ export class StreamingApiService {
     startAt?: number;
     device?: boolean;
   }): string {
-    const params: string[] = [];
-    if (opts.token) params.push(`token=${encodeURIComponent(opts.token)}`);
-    if (opts.sid) params.push(`sid=${encodeURIComponent(opts.sid)}`);
-    if (opts.remux) params.push('remux=1');
-    if (opts.startQuality && !opts.remux) {
-      params.push(`startQuality=${encodeURIComponent(opts.startQuality)}`);
-    }
-    if (opts.startAt != null) params.push(`startAt=${opts.startAt}`);
-    if (opts.device) params.push(`device=${this.deviceProfileService.getProfile().deviceType}`);
-    return params.join('&');
+    return this.buildQuery({
+      token: opts.token ?? undefined,
+      sid: opts.sid,
+      remux: opts.remux ? true : undefined,
+      startQuality: opts.startQuality && !opts.remux ? opts.startQuality : undefined,
+      startAt: opts.startAt,
+      device: opts.device ? this.deviceProfileService.getProfile().deviceType : undefined,
+    });
   }
 
   /** Authenticated HLS master playlist URL; `sessionId` bakes `?sid=...` into
@@ -335,13 +341,21 @@ export class StreamingApiService {
   }
 
   /** Same composition as {@link buildPlayUrl}, absolute through the Cast
-   *  receiver's stream base and its own token; never `device`. */
+   *  receiver's stream base and its own token; never `device`. DirectPlay keeps
+   *  its raw-file URL and mime, though the Cast profile doesn't negotiate it. */
   buildAbsolutePlayUrl(
-    pi: { playMethod: PlayMethod; playUrl: string },
+    pi: { playMethod: PlayMethod; playUrl: string; contentType?: string },
     castToken: string,
     opts: { sid?: string; startAt?: number; startQuality?: string } = {},
   ): { url: string; contentType: string } {
     const { path, remux } = this.parsePlayUrlFlags(pi.playUrl);
+    if (pi.playMethod === 'DirectPlay') {
+      const query = this.hlsQuery({ token: castToken, sid: opts.sid });
+      return {
+        url: query ? `${this.absoluteUrl(path)}?${query}` : this.absoluteUrl(path),
+        contentType: pi.contentType || 'video/mp4',
+      };
+    }
     const query = this.hlsQuery({
       token: castToken,
       sid: opts.sid,
@@ -361,10 +375,8 @@ export class StreamingApiService {
     const base = this.serverConfig.isNative
       ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}`)
       : `/api/stream/${mediaFileId}`;
-    const params: string[] = ['download=1'];
-    const token = this.playbackToken;
-    if (token) params.push(`token=${encodeURIComponent(token)}`);
-    return `${base}?${params.join('&')}`;
+    const query = this.buildQuery({ download: true, token: this.playbackToken ?? undefined });
+    return `${base}?${query}`;
   }
 
   /** URL for an "original"-quality download: DirectStream goes through
@@ -475,26 +487,17 @@ export class StreamingApiService {
     startAt?: number,
     download?: boolean,
   ): Promise<PlaybackInfoResponse> {
-    const token = this.playbackToken;
-    let params = token ? `?token=${encodeURIComponent(token)}` : '';
-    if (burnInSubtitleId) {
-      params += (params ? '&' : '?') + `burnInSubtitleId=${burnInSubtitleId}`;
-    }
-    if (audioStreamIndex != null) {
-      params += (params ? '&' : '?') + `audioStreamIndex=${audioStreamIndex}`;
-    }
-    if (startQuality) {
-      params += (params ? '&' : '?') + `startQuality=${encodeURIComponent(startQuality)}`;
-    }
-    if (startAt != null) {
-      params += (params ? '&' : '?') + `startAt=${startAt}`;
-    }
-    if (download) {
-      params += (params ? '&' : '?') + 'download=1';
-    }
+    const query = this.buildQuery({
+      token: this.playbackToken ?? undefined,
+      burnInSubtitleId: burnInSubtitleId || undefined,
+      audioStreamIndex: audioStreamIndex ?? undefined,
+      startQuality: startQuality || undefined,
+      startAt: startAt ?? undefined,
+      download: download ? true : undefined,
+    });
     return firstValueFrom(
       this.http.post<PlaybackInfoResponse>(
-        `/api/stream/${mediaFileId}/playback-info${params}`,
+        `/api/stream/${mediaFileId}/playback-info${query ? `?${query}` : ''}`,
         deviceProfile,
         { headers: this.sseConnectionHeaders() },
       ),

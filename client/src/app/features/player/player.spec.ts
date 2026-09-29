@@ -200,7 +200,7 @@ function createHarness(opts: {
       },
       { provide: StreamingApiService, useValue: streamingApi },
       { provide: MediaService, useValue: { getOne: vi.fn(async () => MOVIE) } },
-      { provide: BrowserDeviceProfileService, useValue: { getProfile: () => DEVICE_PROFILE } },
+      { provide: BrowserDeviceProfileService, useValue: { getProfile: () => DEVICE_PROFILE, whenDesktopProbed: () => Promise.resolve() } },
       { provide: SseService, useValue: { connectionId: () => null, lastEvent: () => null } },
       {
         provide: RemoteService,
@@ -217,6 +217,7 @@ function createHarness(opts: {
           streamToken: () => 'tok',
           accessToken: 'tok',
           user: () => ({ id: 1 }),
+          hasServerFeature: () => true,
         },
       },
       {
@@ -1531,6 +1532,32 @@ describe('PlayerComponent remux fallback on a rejected load', () => {
     expect(h.state.error()).toBeNull();
   });
 
+  it('reloadStream: a load-time fatal on DirectPlay also re-negotiates with rejectCopy (not remux-only)', async () => {
+    const h = createHarness();
+    h.component.playbackInfo = buildPi(MAIN_FILE_ID, { playMethod: 'DirectPlay', sessionId: 'sid-old' });
+    h.state.playbackMode.set('direct');
+    h.engine.currentTime = 12;
+    h.streamingApi.getPlaybackInfo
+      .mockResolvedValueOnce(buildPi(MAIN_FILE_ID, { playMethod: 'DirectPlay', sessionId: 'sid-new' }))
+      .mockResolvedValueOnce(TRANSCODE_PI());
+    failFirstLoad(h);
+
+    await h.component.reloadStream();
+
+    await vi.waitFor(() => expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(h.state.playbackMode()).toBe('transcode'));
+    expect(rejectCopyOf(h, 1)).toBe(true);
+    expect(h.state.error()).toBeNull();
+  });
+
+  it('does not fall back for a transcode delivery — only DirectPlay/remux serve the source bitstream untouched', async () => {
+    const h = createHarness();
+    h.component.playbackInfo = TRANSCODE_PI();
+    h.state.playbackMode.set('transcode');
+    expect(h.component.fallBackFromRemuxOnLoadError(UNDECODABLE, 0)).toBe(false);
+    expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
+  });
+
   it('reloadForEpisode: the new file falls back when its remux fails to load', async () => {
     const h = createHarness();
     h.component.mediaFileId = 7;
@@ -1589,10 +1616,13 @@ describe('PlayerComponent remux fallback on a rejected load', () => {
 
     // Shaka can both emit `error` and reject load() for the same failure.
     h.engine.emit('error', { source: 'shaka', code: 4032 });
-    expect(h.component.fallBackFromRemuxOnLoadError(UNDECODABLE, 12)).toBe(true);
+    const onRecovered = vi.fn();
+    expect(h.component.fallBackFromRemuxOnLoadError(UNDECODABLE, 12, onRecovered)).toBe(true);
 
     await vi.waitFor(() => expect(h.state.playbackMode()).toBe('transcode'));
     expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalledTimes(1);
+    // The catch's post-load setup still runs though the event started the fallback.
+    await vi.waitFor(() => expect(onRecovered).toHaveBeenCalledTimes(1));
     // Settled on the transcode: a later failure is no longer the copy's, so it cards normally.
     expect(h.component.fallBackFromRemuxOnLoadError(UNDECODABLE, 12)).toBe(false);
   });
@@ -1628,6 +1658,24 @@ describe('PlayerComponent remux fallback on a rejected load', () => {
     h.component.rejectCopyFileIds.add(MAIN_FILE_ID);
     expect(h.component.deviceProfileFor(MAIN_FILE_ID).rejectCopy).toBe(true);
     expect(h.component.deviceProfileFor(TRAILER_FILE_ID).rejectCopy).toBeUndefined();
+  });
+
+  it('rejectCopy is gated on deviceProfileExtensions: never sent to a server that would 400 on it', () => {
+    const h = createHarness();
+    const auth = TestBed.inject(AuthService) as unknown as { hasServerFeature: () => boolean };
+    auth.hasServerFeature = () => false;
+    h.component.rejectCopyFileIds.add(MAIN_FILE_ID);
+    expect(h.component.deviceProfileFor(MAIN_FILE_ID).rejectCopy).toBeUndefined();
+  });
+
+  it('the fallback itself is skipped (not just the field) when the server lacks deviceProfileExtensions', () => {
+    const h = createHarness();
+    const auth = TestBed.inject(AuthService) as unknown as { hasServerFeature: () => boolean };
+    auth.hasServerFeature = () => false;
+    h.component.playbackInfo = REMUX_PI();
+    h.state.playbackMode.set('remux');
+    expect(h.component.fallBackFromRemuxOnLoadError(UNDECODABLE, 0)).toBe(false);
+    expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
   });
 });
 

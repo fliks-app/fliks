@@ -49,6 +49,18 @@ export class TrackManagerService {
 
   // ── Audio track methods ──
 
+  /** Maps a `streams`-order index to its engine track: by position when the lists align,
+   *  else by language (webOS folds same-language streams into one track). */
+  private trackForStreamIndex<T extends { id: string; language: string }>(
+    idx: number,
+    streams: AudioStreamChoice[],
+    tracks: T[],
+  ): T | undefined {
+    if (streams.length === tracks.length) return tracks[idx];
+    const lang = normalizeLangCode(streams[idx]?.language);
+    return tracks.find((t) => normalizeLangCode(t.language) === lang);
+  }
+
   /**
    * Auto-select audio track based on user preferences.
    *
@@ -75,8 +87,9 @@ export class TrackManagerService {
     // stream info) when given, else on the tracks' languages alone.
     if (settings.rememberAudioSelections) {
       const saved = this.playerSettings.getRememberedAudioTrack(key);
-      const idx = saved ? matchRememberedAudio(saved, streams ?? tracks) : undefined;
-      const match = idx != null ? tracks[idx] : undefined;
+      const source = streams?.length ? streams : tracks;
+      const idx = saved ? matchRememberedAudio(saved, source) : undefined;
+      const match = idx != null ? this.trackForStreamIndex(idx, source, tracks) : undefined;
       if (match && match.id !== activeAudioTrackId) {
         onSelect(match.id);
         return;
@@ -102,9 +115,17 @@ export class TrackManagerService {
     if (!this.playerSettings.get().rememberAudioSelections) return;
     const pos = tracks.findIndex((t) => t.id === trackId);
     if (pos < 0) return;
+    const track = tracks[pos];
+    // Position only matches `streams` when the lists align; some engines
+    // (webOS) fold streamInfo entries that share a language into one track.
+    const streamInfo = !streams?.length
+      ? undefined
+      : streams.length === tracks.length
+        ? streams[pos]
+        : streams.find((s) => normalizeLangCode(s.language) === normalizeLangCode(track.language));
     this.playerSettings.saveRememberedAudioTrack(
       mediaId,
-      rememberedAudioKey(streams?.[pos] ?? tracks[pos]),
+      rememberedAudioKey(streamInfo ?? track),
     );
   }
 
