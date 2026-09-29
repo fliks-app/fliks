@@ -1,20 +1,34 @@
-import { HttpContextToken, HttpInterceptorFn, HttpErrorResponse } from '@angular/common/http';
+import { HttpContextToken, HttpInterceptorFn, HttpErrorResponse, HttpEventType } from '@angular/common/http';
 import { inject } from '@angular/core';
-import { catchError, throwError } from 'rxjs';
+import { catchError, filter, throwError, timeout, TimeoutError } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
 import { ToastService } from '../services/toast.service';
+import { NetworkService } from '../services/network.service';
 import { translatedServerMessage } from '../utils/server-message';
 
 /** Set on a request whose failure the caller reports itself. For a batch: one summary beats N
  *  toasts, none of which could say which row they came from. */
 export const SKIP_ERROR_TOAST = new HttpContextToken(() => false);
 
+/** A black-holed link (VPN up, no route) never fails a request on its own. */
+const API_GET_TIMEOUT_MS = 15_000;
+
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const toast = inject(ToastService);
   const translate = inject(TranslateService);
+  const network = inject(NetworkService);
+  const bounded = req.method === 'GET' && req.responseType === 'json' && req.url.includes('/api/');
 
   return next(req).pipe(
-    catchError((err: HttpErrorResponse) => {
+    // `Sent` fires at once; the deadline covers the wait for the answer.
+    filter((e) => !bounded || e.type !== HttpEventType.Sent),
+    bounded ? timeout(API_GET_TIMEOUT_MS) : (src) => src,
+    catchError((caught: HttpErrorResponse | TimeoutError) => {
+      const err =
+        caught instanceof TimeoutError
+          ? new HttpErrorResponse({ status: 0, statusText: 'Timeout', url: req.urlWithParams })
+          : caught;
+      if (err.status === 0 && req.url.includes('/api/')) network.reportDoubt();
       // Show toasts for client errors (400-499 except 408) + 500 + 503.
       // Skip: i18n, network errors, gateway errors, timeouts, offline, and
       // 401 — the auth guard handles unauth state by redirecting to the user

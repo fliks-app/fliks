@@ -87,6 +87,7 @@ const TAB_NONCE_KEY = 'fliks.remote.tabNonce';
  *  missed keepalives plus slack for a throttled timer. */
 const LIVENESS_TIMEOUT_MS = 80_000;
 const LIVENESS_CHECK_MS = 20_000;
+const DIAL_TIMEOUT_MS = 20_000;
 
 /** Series/movie title plus episode identity, kept as separate fields so a season
  *  import can lay them out rather than parsing a flattened string. `seasonNumber`
@@ -211,6 +212,14 @@ export class SseService implements OnDestroy {
     });
   }
 
+  /** A stalled stream sends no error: re-dial so a dead link surfaces in seconds. */
+  private readonly doubtEffect = effect(() => {
+    if (this.network.connectivityDoubt() === 0) return;
+    untracked(() => {
+      if (this.connected()) this.reconnect();
+    });
+  });
+
   /** Force reconnect (e.g. after app resume from background) */
   reconnect() {
     this.close();
@@ -282,11 +291,13 @@ export class SseService implements OnDestroy {
     // would otherwise stack one watchdog per attempt.
     if (this.livenessHandle) clearInterval(this.livenessHandle);
     this.livenessHandle = setInterval(() => {
-      // Only an open stream is ours to time out: the error path already owns
-      // its own backoff, and a throttled tab has no silence to measure.
-      if (this.eventSource?.readyState !== EventSource.OPEN) return;
+      // A closed source is the error path's to retry, and a throttled tab has no
+      // silence to measure. A dial into a dead link never errors, so it times out too.
+      const state = this.eventSource?.readyState;
+      if (state !== EventSource.OPEN && state !== EventSource.CONNECTING) return;
       if (document.visibilityState !== 'visible') return;
-      if (Date.now() - this.lastMessageAt < LIVENESS_TIMEOUT_MS) return;
+      const limit = state === EventSource.OPEN ? LIVENESS_TIMEOUT_MS : DIAL_TIMEOUT_MS;
+      if (Date.now() - this.lastMessageAt < limit) return;
       this.reconnect();
     }, LIVENESS_CHECK_MS);
     this.eventSource.onmessage = (event) => {

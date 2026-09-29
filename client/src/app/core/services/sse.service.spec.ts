@@ -83,7 +83,7 @@ function setupUnreachable(authenticated: boolean): SseService {
       { provide: ToastService, useValue: { info: () => {}, success: () => {}, error: () => {}, warning: () => {} } },
       { provide: ServerConfigService, useValue: { apiUrl: () => '' } },
       { provide: AuthService, useValue: { accessToken: () => null, isAuthenticated: () => authenticated, sessionEpoch: () => 0 } },
-      { provide: NetworkService, useValue: { isOnline: () => true } },
+      { provide: NetworkService, useValue: { isOnline: () => true, connectivityDoubt: () => 0 } },
     ],
   });
   return TestBed.inject(SseService);

@@ -9,6 +9,7 @@ import {
 } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { errorInterceptor } from './error.interceptor';
+import { NetworkService } from '../services/network.service';
 import { ToastService } from '../services/toast.service';
 
 // Mirrors the `errors.*` subset of public/i18n/en.json so assertions read the
@@ -60,6 +61,23 @@ describe('errorInterceptor', () => {
     client.get(url).subscribe({ error: () => {} });
     http.expectOne(url).flush(body, { statusText: 'Error', ...opts });
   }
+
+  it('fails a GET that never answers as a network error and reports the doubt', () => {
+    vi.useFakeTimers();
+    try {
+      const network = TestBed.inject(NetworkService);
+      let status: number | undefined;
+      client.get('/api/playlists').subscribe({ error: (e) => (status = e.status) });
+      const req = http.expectOne('/api/playlists');
+      vi.advanceTimersByTime(15_000);
+      expect(status).toBe(0);
+      expect(req.cancelled).toBe(true);
+      expect(network.connectivityDoubt()).toBe(1);
+      expect(toast.toasts()).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it("VERDICT: prefers a plugin error's own key over the status sentence", () => {
     fireAndFlush('/api/plugins/fliks.acme/1/releases', { error: { key: 'download.grab.errors.unprofiled' } }, { status: 409 });
