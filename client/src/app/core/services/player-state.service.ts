@@ -108,8 +108,7 @@ export class PlayerStateService {
     if (value) {
       this.error.set(null);
     } else if (!this.error()) {
-      // Recovery resolved without reintroducing an error — the fatal
-      // classification from the previous failure no longer applies.
+      // Recovered without a new error: drop the previous fatal classification.
       this.fatalNoRetry.set(false);
     }
   }
@@ -134,11 +133,7 @@ export class PlayerStateService {
     this.fatalNoRetry.set(isUndecodableError(err));
   }
 
-  /** Classify a caught error (HttpErrorResponse = a failed playback-info
-   *  request, an object with a Shaka category, or an engine failure) and set
-   *  it as the error card. The one place every catch block routes an
-   *  exception through, instead of re-deriving `classifyPlaybackError` +
-   *  `userMessageKeyFor` + `setError` at each call site.
+  /** Classify a caught error and set it as the error card; returns the translated line.
    *  `source` overrides classification for a synthetic (non-exception) failure. */
   failWith(
     e: unknown,
@@ -157,7 +152,7 @@ export class PlayerStateService {
       category: err?.category,
       severity: err?.severity,
       data: err?.data,
-      message: err?.message,
+      message: err?.message ?? (e == null ? undefined : String(e)),
     });
     return userMessage;
   }

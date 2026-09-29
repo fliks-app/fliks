@@ -49,10 +49,8 @@ export class TrackManagerService {
 
   // ── Audio track methods ──
 
-  /** Maps a `streams`-order index back to its engine track: same position
-   *  when the two lists align, else by language — some engines (webOS) fold
-   *  streamInfo entries that share a language into one track, so position
-   *  alone would point at the wrong (or a missing) track. */
+  /** Maps a `streams`-order index to its engine track: by position when the lists align,
+   *  else by language (webOS folds same-language streams into one track). */
   private trackForStreamIndex<T extends { id: string; language: string }>(
     idx: number,
     streams: AudioStreamChoice[],

@@ -350,9 +350,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   private saveInterval: ReturnType<typeof setInterval> | null = null;
-  /** Guards {@link completePostLoadSetup}: it must run exactly once per player
-   *  mount, whether the first load succeeds outright or only after the remux
-   *  fallback retries it — never again on a later quality/audio reload. */
+  /** {@link completePostLoadSetup} runs once per mount, from the first load or its copy fallback. */
   private firstLoadSetupDone = false;
   private readonly skipIntroCue = new PausableTimeout(() => this.skipIntroVisible.set(false));
   private readonly nextEpisodeCue = new PausableTimeout(() => this.nextEpisodeVisible.set(false));
@@ -713,8 +711,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly rejectCopyFileIds = new Set<number>();
 
   /** `deviceProfileService.getProfile()`, with `rejectCopy` forced on when
-   *  `mediaFileId` is a confirmed offender. Gated on `deviceProfileExtensions`
-   *  like `dolbyVisionProfiles` — an unadvertised field 400s a 4.2 server. */
+   *  `mediaFileId` is a confirmed offender and the server accepts the field
+   *  (`deviceProfileExtensions`; an unknown field 400s older servers). */
   private deviceProfileFor(mediaFileId: number): DeviceProfile {
     const profile = this.deviceProfileService.getProfile();
     return this.rejectCopyFileIds.has(mediaFileId) &&
@@ -766,9 +764,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Read signals so Angular tracks them as dependencies. NB: currentTime()
     // is deliberately NOT read here — it ticks ~4Hz and nothing below uses it,
     // so the stats panel refreshes off statsRefreshTick (1Hz) instead.
-    // activeAudioTrackId/availableAudioTracks are read here (not just inside
-    // buildPlayerStats) so this computed reruns on an engine-level track
-    // switch (shaka-* ids never refetch playback-info).
+    // Read here so an engine-level track switch (no playback-info refetch) reruns this.
     const quality = this.activeQualityId();
     void this.statsRefreshTick();
     const activeAudioTrackId = this.activeAudioTrackId();
@@ -798,8 +794,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     });
   });
 
-  /** PiP or iOS native fullscreen paint the decoded frame directly, bypassing
-   *  the CSS crop transform. */
+  /** PiP or iOS native fullscreen paint the decoded frame, bypassing the CSS crop. */
   private isPipOrNativeFullscreen(): boolean {
     const video = this.videoEl()?.nativeElement as
       | (HTMLVideoElement & { webkitDisplayingFullscreen?: boolean })
@@ -888,6 +883,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // startQuality/startAt let the backend pre-spawn ffmpeg right here
       // (instead of waiting for master.m3u8), overlapping encoder init with
       // the ~100–300ms gap before the player fetches the playlist.
+      await this.deviceProfileService.whenDesktopProbed();
       const deviceProfile = this.deviceProfileFor(this.mediaFileId);
       // The service is app-scoped: without this the request would carry the
       // previous media's rung instead of the user's saved one.
@@ -1223,8 +1219,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       }
 
       this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, this.playbackMode());
-      await this.completePostLoadSetup(subsPromise, resumeTime);
       this.firstLoadSetupDone = true;
+      await this.completePostLoadSetup(subsPromise, resumeTime);
 
     } catch (e: any) {
       console.error('[Player] Init error:', e?.code, e?.category, e?.data, e);
@@ -2097,9 +2093,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // new getPlaybackInfo resolves reports no playMethod/hwAccel rather
       // than the previous episode's stale values.
       this.playbackInfo = null;
-      // Same for subtitles — the outgoing episode's list is meaningless for
-      // the new file and must not linger through the reload window.
       this.availableSubtitles.set([]);
+      this.activeSubtitleId.set(null);
 
       // Native engines must be stopped before a fresh load to avoid a freeze;
       // release the outgoing file's session (other devices on it stay alive).
@@ -2791,9 +2786,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   /** Apply a freshly negotiated `pi`: playback mode, hw-accel, quality
-   *  ladder/pin, crop, and episode markers/chapters. Shared so every reload
-   *  path stays in sync — a partial marker update previously left a stale
-   *  intro/outro cue across some reload paths but not others. */
+   *  ladder/pin, crop, and markers/chapters. Shared so every reload path stays in sync. */
   private adoptPlaybackInfo(pi: PlaybackInfoResponse): void {
     this.state.playbackMode.set(playbackModeOf(pi));
     this.state.hwAccel.set(pi.hwAccel);
@@ -2943,15 +2936,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** The rejectCopy reload in flight, so a second report of the same failure
    *  (an `error` event plus the rejected load()) is absorbed, not carded. */
   private remuxFallback: Promise<void> | null = null;
+  /** Caller setup to run once the fallback reload succeeds; either report may supply it. */
+  private remuxFallbackOnRecovered: (() => Promise<void> | void) | undefined;
 
-  /** Everything that must run exactly once after the very first successful
-   *  `engine.load()` of a session: track/subtitle setup, the Cast handoff or
-   *  autoplay, the save/stats intervals, the seeked listener, subtitle style
-   *  and sprite metadata. Shared by the happy path and the remux fallback so
-   *  neither one can reach playback without the other's setup. */
+  /** One-time setup after the first successful load (tracks, Cast/autoplay,
+   *  intervals, seeked listener, sprites), whether the load or its copy fallback succeeded. */
   private async completePostLoadSetup(
     subsPromise: Promise<any[]> | null, resumeTime: number | undefined,
   ): Promise<void> {
+    // A fallback can settle after ngOnDestroy; its intervals would never be cleared.
+    if (this.destroyed || !this.engine) return;
     // Tracks and subtitles load beside playback: a slow subtitle list must not delay the first frame.
     const trackSetupPromise = (async () => {
       if (this.isOfflinePlayback) {
@@ -3037,10 +3031,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }, 1000);
   }
 
-  /** Post-load steps for an episode switch: fresh subtitle/audio lists for the
-   *  new file, auto-select, sprite refresh, resume playback and reveal chrome.
-   *  Runs once whether the switch's own load succeeds or only the remux
-   *  fallback's retry does. */
+  /** Post-load steps for an episode switch, run after its own load or its copy fallback. */
   private async completeEpisodeSwitchSetup(): Promise<void> {
     const subs = await this.trackManager.loadSubtitles(
       this.mediaId, this.mediaFileId, this.streamingApi, this.media,
@@ -3096,11 +3087,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     );
   }
 
-  /** An undecodable copy — DirectPlay (raw file) or remux (DirectStream), the
-   *  two modes serving the source bitstream untouched — rejected and reloaded
-   *  once through `reloadStream`, never twice for the same session. `rejectCopy`
-   *  forces the backend onto the transcode ladder, so this can't loop. True
-   *  when handled here. */
+  /** An undecodable copy (DirectPlay or remux): reject it and reload once per session
+   *  through `reloadStream`; `rejectCopy` forces a transcode, so it can't loop. True when handled. */
   private maybeFallbackFromRemux(
     err: { source?: PlaybackError['source']; code?: number; message?: string },
     position: number,
@@ -3112,21 +3100,24 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (!isUndecodableError(err)) return false;
     const sid = this.playbackInfo?.sessionId;
     if (!sid) return false;
-    if (this.remuxFallbackSid === sid) return this.remuxFallback != null;
+    if (this.remuxFallbackSid === sid) {
+      if (this.remuxFallback && onRecovered) this.remuxFallbackOnRecovered ??= onRecovered;
+      return this.remuxFallback != null;
+    }
     this.remuxFallbackSid = sid;
     this.rejectCopyFileIds.add(this.mediaFileId);
     console.warn('[player] copy failed to decode, retrying with rejectCopy');
-    this.remuxFallback = this.runRemuxFallback(position, onRecovered).finally(() => {
+    this.remuxFallbackOnRecovered = onRecovered;
+    this.remuxFallback = this.runRemuxFallback(position).finally(() => {
       this.remuxFallback = null;
+      this.remuxFallbackOnRecovered = undefined;
     });
     return true;
   }
 
   /** The load path that reported the failure still holds its reload guard, so
    *  wait for it before reloading. Always cards on failure: the copy is gone. */
-  private async runRemuxFallback(
-    position: number, onRecovered?: () => Promise<void> | void,
-  ): Promise<void> {
+  private async runRemuxFallback(position: number): Promise<void> {
     this.state.setRecovering(true);
     try {
       if (!(await this.waitForReloadIdle())) {
@@ -3142,7 +3133,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // A recovery that settled meanwhile lowered the veil.
       this.state.setRecovering(true);
       await this.reloadStream(position);
-      await onRecovered?.();
+      await this.remuxFallbackOnRecovered?.();
     } catch (e) {
       if (!this.state.error()) this.state.failWith(e);
     } finally {
@@ -4275,11 +4266,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  a second quick switch) must not run two getPlaybackInfo + load cycles at
    *  once — that races the engine and leaks a session. */
   private reloadingStream = false;
-  /** Narrower than {@link reloadingStream}: true only from the start of a
-   *  reload until its `engine.load()` resolves. `wireErrorRecovery` reads
-   *  this (not `reloadingStream`) to suppress the expected teardown error —
-   *  the slow post-load awaits (subtitle restore, track setup) must not also
-   *  swallow a real decode error on the freshly loaded stream. */
+  /** True until a reload's `engine.load()` resolves: the window where an engine error is
+   *  the expected teardown, unlike one raised during the post-load awaits. */
   private reloadLoadPending = false;
   /** Set once doReloadStream reaches a successful engine.load(). Lets the
    *  reloadStream catch tell a dead surface (failure before load) from a live

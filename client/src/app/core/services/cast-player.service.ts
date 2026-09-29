@@ -514,8 +514,7 @@ export class CastPlayerService {
     castInfo: { token: string; streamBaseUrl: string },
     autoplay: boolean,
   ) {
-    // getCastDeviceProfile lists no direct-play video codec, so the backend
-    // shouldn't hand back DirectPlay — warn loudly if that ever changes.
+    // getCastDeviceProfile lists no direct-play video codec: DirectPlay is unexpected here.
     if (pi.playMethod === 'DirectPlay') {
       console.warn('[cast] unexpected DirectPlay decision for a Cast session', pi);
     }

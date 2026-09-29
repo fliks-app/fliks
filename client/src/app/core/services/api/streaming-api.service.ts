@@ -257,21 +257,19 @@ export class StreamingApiService {
     return this.auth.playbackToken;
   }
 
-  /** `key=value&...` from every present, non-false value (`true` -> `1`),
-   *  URL-encoded and in insertion order — the one query-string builder
-   *  every URL/request method below goes through. */
+  /** URL-encoded `key=value&...` in insertion order, skipping undefined and empty
+   *  strings (`true` -> `1`); the query builder for every method below. */
   private buildQuery(parts: Record<string, string | number | true | undefined>): string {
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(parts)) {
-      if (v === undefined) continue;
+      if (v === undefined || v === '') continue;
       params.set(k, v === true ? '1' : String(v));
     }
     return params.toString();
   }
 
   /** Query string shared by every HLS URL builder below; drops `startQuality`
-   *  when `remux` is set (would collapse the copy into a transcode). Player's
-   *  own `resolveStartQuality` makes the same call earlier, before negotiation. */
+   *  when `remux` is set (would collapse the copy into a transcode). */
   private hlsQuery(opts: {
     token?: string | null;
     sid?: string;
@@ -343,10 +341,8 @@ export class StreamingApiService {
   }
 
   /** Same composition as {@link buildPlayUrl}, absolute through the Cast
-   *  receiver's stream base and its own token; never `device`. The current
-   *  Cast device profile never negotiates DirectPlay (see the caller), but
-   *  this still returns the right raw-file URL/mime rather than silently
-   *  mislabelling it as an HLS playlist if that ever changes. */
+   *  receiver's stream base and its own token; never `device`. DirectPlay keeps
+   *  its raw-file URL and mime, though the Cast profile doesn't negotiate it. */
   buildAbsolutePlayUrl(
     pi: { playMethod: PlayMethod; playUrl: string; contentType?: string },
     castToken: string,

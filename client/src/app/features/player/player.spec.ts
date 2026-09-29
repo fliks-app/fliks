@@ -200,7 +200,7 @@ function createHarness(opts: {
       },
       { provide: StreamingApiService, useValue: streamingApi },
       { provide: MediaService, useValue: { getOne: vi.fn(async () => MOVIE) } },
-      { provide: BrowserDeviceProfileService, useValue: { getProfile: () => DEVICE_PROFILE } },
+      { provide: BrowserDeviceProfileService, useValue: { getProfile: () => DEVICE_PROFILE, whenDesktopProbed: () => Promise.resolve() } },
       { provide: SseService, useValue: { connectionId: () => null, lastEvent: () => null } },
       {
         provide: RemoteService,
@@ -1616,10 +1616,13 @@ describe('PlayerComponent remux fallback on a rejected load', () => {
 
     // Shaka can both emit `error` and reject load() for the same failure.
     h.engine.emit('error', { source: 'shaka', code: 4032 });
-    expect(h.component.fallBackFromRemuxOnLoadError(UNDECODABLE, 12)).toBe(true);
+    const onRecovered = vi.fn();
+    expect(h.component.fallBackFromRemuxOnLoadError(UNDECODABLE, 12, onRecovered)).toBe(true);
 
     await vi.waitFor(() => expect(h.state.playbackMode()).toBe('transcode'));
     expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalledTimes(1);
+    // The catch's post-load setup still runs though the event started the fallback.
+    await vi.waitFor(() => expect(onRecovered).toHaveBeenCalledTimes(1));
     // Settled on the transcode: a later failure is no longer the copy's, so it cards normally.
     expect(h.component.fallBackFromRemuxOnLoadError(UNDECODABLE, 12)).toBe(false);
   });
