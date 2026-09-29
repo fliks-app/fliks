@@ -3,6 +3,7 @@ package media.fliks.app;
 import android.content.Context;
 
 import com.google.android.gms.cast.framework.CastOptions;
+import com.google.android.gms.cast.framework.media.CastMediaOptions;
 import com.google.android.gms.cast.framework.OptionsProvider;
 import com.google.android.gms.cast.framework.SessionProvider;
 
@@ -20,8 +21,13 @@ import java.util.List;
 public class CastOptionsProvider implements OptionsProvider {
     @Override
     public CastOptions getCastOptions(Context context) {
+        // RemoteNotificationPlugin owns the notification and the volume keys while casting.
         return new CastOptions.Builder()
             .setReceiverApplicationId(context.getString(R.string.cast_receiver_app_id))
+            .setCastMediaOptions(new CastMediaOptions.Builder()
+                .setNotificationOptions(null)
+                .setMediaSessionEnabled(false)
+                .build())
             .build();
     }
 

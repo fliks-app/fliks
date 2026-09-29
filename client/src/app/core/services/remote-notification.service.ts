@@ -1,22 +1,29 @@
 import { Injectable, Injector, effect, inject, untracked } from '@angular/core';
 import { RemoteNotification, type RemoteNotificationAction } from '../plugins/remote-notification.plugin';
 import { imageUrlWithSize } from '../pipes/resolve-url.pipe';
+import { CastPlaybackTarget } from './cast-playback-target';
 import { DeviceService } from './device.service';
 import { RemotePlaybackTarget } from './remote-playback-target';
 import { RemoteService } from './remote.service';
 import { ServerConfigService } from './server-config.service';
 
-/** Mirrors the remote-controlled device into an Android media notification and
- *  applies its controls. Pushed on each target report, not on every position
- *  tick: the native side extrapolates the position. */
+/** Mirrors the device this phone drives (a remote target or a Chromecast) into an
+ *  Android media notification and applies its controls. The position is read
+ *  untracked: the native side extrapolates it between state changes. */
 @Injectable({ providedIn: 'root' })
 export class RemoteNotificationService {
   private readonly device = inject(DeviceService);
   private readonly remote = inject(RemoteService);
-  private readonly target = inject(RemotePlaybackTarget);
+  private readonly remoteTarget = inject(RemotePlaybackTarget);
+  private readonly castTarget = inject(CastPlaybackTarget);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly injector = inject(Injector);
   private shown = false;
+
+  /** Same pick as the cast overlay. */
+  private get target() {
+    return this.remote.isRemoting() ? this.remoteTarget : this.castTarget;
+  }
 
   init(): void {
     if (!this.device.isAndroidNative()) return;
@@ -25,50 +32,51 @@ export class RemoteNotificationService {
       this.apply(action, value);
     });
     effect(() => {
-      const s = this.remote.targetState();
-      const art = this.target.fanartUrl();
-      const hasNext = this.target.canPlayNext();
-      const buffering = this.target.buffering();
-      const canSetVolume = this.target.canSetVolume();
-      if (!this.remote.isRemoting() || !s) {
+      const t = this.target;
+      // Each remote report re-syncs the extrapolated position.
+      this.remote.targetState();
+      if (!t.isConnected() || !t.hasMedia() || t.isIdle() || t.isStarting()) {
         if (this.shown) void RemoteNotification.clear().catch(() => {});
         this.shown = false;
         return;
       }
       this.shown = true;
-      const episode = s.episodeLabel ?? '';
+      const episode = t.episodeTitle();
+      const art = t.fanartUrl();
       void RemoteNotification.update({
-        title: episode || s.mediaTitle || '',
-        artist: episode ? (s.mediaTitle ?? undefined) : undefined,
+        title: episode || t.mediaTitle(),
+        artist: episode ? t.mediaTitle() : undefined,
         artworkUrl: art ? this.serverConfig.resolveUrl(imageUrlWithSize(art, 'medium')) : undefined,
-        playing: s.state === 'playing',
-        buffering,
-        position: untracked(this.remote.interpolatedPosition),
-        duration: s.durationSeconds ?? 0,
-        canSetVolume,
-        volume: s.volume ?? 1,
-        muted: s.muted ?? false,
-        hasNext,
+        playing: !t.isPaused(),
+        buffering: t.buffering(),
+        position: untracked(t.currentTime),
+        duration: t.duration(),
+        canSetVolume: t.canSetVolume(),
+        volume: t.volume(),
+        muted: t.muted(),
+        hasNext: t.canPlayNext(),
       }).catch(() => {});
     }, { injector: this.injector });
   }
 
   private apply(action: RemoteNotificationAction, value: number): void {
-    const targetId = this.remote.selectedTargetId();
-    if (!targetId) return;
+    const t = this.target;
+    if (!t.isConnected()) return;
     switch (action) {
       case 'play':
+        if (t.isPaused()) t.togglePlayPause();
+        break;
       case 'pause':
-        void this.remote.send(targetId, { action });
+        if (!t.isPaused()) t.togglePlayPause();
         break;
       case 'seek':
-        this.target.seek(value);
+        t.seek(value);
         break;
       case 'volume':
-        this.target.setVolume(value);
+        t.setVolume(value);
         break;
       case 'next':
-        this.target.playNext();
+        t.playNext();
         break;
     }
   }

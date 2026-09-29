@@ -1,9 +1,13 @@
 package media.fliks.app;
 
+import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.OptIn;
+import androidx.media3.common.util.UnstableApi;
+import androidx.media3.session.DefaultMediaNotificationProvider;
 import androidx.media3.session.MediaSession;
 import androidx.media3.session.MediaSessionService;
 
@@ -22,10 +26,15 @@ public class PlaybackService extends MediaSessionService {
         else context.startService(new Intent(context, PlaybackService.class));
     }
 
+    @OptIn(markerClass = UnstableApi.class)
     static void detach(Context context, MediaSession session) {
         sessions.remove(session);
         if (instance != null) instance.removeSession(session);
-        if (sessions.isEmpty()) context.stopService(new Intent(context, PlaybackService.class));
+        if (!sessions.isEmpty()) return;
+        context.stopService(new Intent(context, PlaybackService.class));
+        // A notification detached from the foreground on pause outlives the service.
+        context.getSystemService(NotificationManager.class)
+                .cancel(DefaultMediaNotificationProvider.DEFAULT_NOTIFICATION_ID);
     }
 
     @Override

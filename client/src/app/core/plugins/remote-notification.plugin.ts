@@ -1,6 +1,6 @@
 import { registerPlugin } from '@capacitor/core';
 
-/** Android notification for the device this phone remote-controls. Its controls
+/** Android notification for the device this phone drives (remote target or Cast). Its controls
  *  arrive as `remoteNotificationCommand` window events. */
 export interface RemoteNotificationPlugin {
   update(options: {
