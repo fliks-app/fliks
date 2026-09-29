@@ -952,7 +952,6 @@ export class StreamingController {
       audioStreamIndex,
       ss.segmentDuration,
       held.scan,
-      ss.allowDirectStream,
       remuxGrid,
       // Text-only, matching ffmpeg-args' `!!burnIn?.filter`: an image/PGS
       // burn-in doesn't force the encode pipeline off HW, only text does.

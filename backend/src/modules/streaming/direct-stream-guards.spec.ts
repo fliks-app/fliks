@@ -53,44 +53,20 @@ describe('StreamBuilderService - DirectStream guards', () => {
     expect(flags(r)).toContain('MuxNotSupported');
   });
 
-  it('DirectStream disabled server-side forces a transcode, flagged DirectStreamDisabled', () => {
-    const r = svc().evaluate(
-      resolved(),
-      profile(),
-      'tok',
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      /* allowDirectStream */ false,
-    );
-    expect(r.response.playMethod).toBe('Transcode');
-    expect(flags(r)).toContain('DirectStreamDisabled');
-  });
-
   it('does not blame a gate that changed nothing, when burn-in already forces the transcode', () => {
-    // Burn-in alone already makes the source uncopyable; useTs/rejectCopy/
-    // allowDirectStream=false never get the chance to flip anything here.
+    // Burn-in alone already makes the source uncopyable; useTs/rejectCopy
+    // never get the chance to flip anything here.
     const r = svc().evaluate(
       resolved(),
       profile({ useTs: true, rejectCopy: true }),
       'tok',
       /* burnInSubtitleId */ 7,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      /* allowDirectStream */ false,
     );
     expect(r.response.playMethod).toBe('Transcode');
     const f = flags(r);
     expect(f).toContain('SubtitleBurnIn');
     expect(f).not.toContain('MuxNotSupported');
     expect(f).not.toContain('ClientRejectedCopy');
-    expect(f).not.toContain('DirectStreamDisabled');
   });
 
   it('rejectCopy also rules out DirectPlay, which serves the same video bitstream', () => {

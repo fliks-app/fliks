@@ -49,14 +49,6 @@
       <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.segment_duration_help' | translate }}</span></label>
     </div>
 
-    <!-- DirectStream (remux). Off forces a transcode even when the video
-         could otherwise be copied into an HLS container as is. -->
-    <app-toggle-field
-      [(value)]="allowRemux"
-      [label]="'settings.streaming.allow_remux' | translate"
-      [hint]="'settings.streaming.allow_remux_help' | translate"
-    />
-
     <!-- Auto-crop black bars. Off = keep the bars and Direct Play / remux
          instead of forcing a re-encode just to crop (low-power servers). -->
     <app-toggle-field

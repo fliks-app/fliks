@@ -268,24 +268,6 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
     expect(r.response.clientTonemap).toBe(true);
   });
 
-  it('still DirectPlays raw P7 to a non-P7 client when Direct Stream is disabled', () => {
-    // No remux to fall back to (canCopyVideo false), so the P7 gate must not
-    // fire: DirectPlay stays rather than forcing a 4K re-encode.
-    const r = svc().evaluate(
-      resolved(7, 6, true, 6),
-      dvHevcClient,
-      'tok',
-      undefined,
-      undefined,
-      'directplay',
-      undefined,
-      undefined,
-      undefined,
-      false,
-    );
-    expect(r.response.playMethod).toBe('DirectPlay');
-  });
-
   it('remuxes P10.0 (dav1.10.LL standalone) for a client that lists profile 10', () => {
     const r: any = resolved(10, 0, undefined, 8);
     const v0 = r.mediaFile.streamInfo.video[0];

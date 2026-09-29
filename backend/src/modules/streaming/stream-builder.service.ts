@@ -257,7 +257,6 @@ export class StreamBuilderService {
     audioStreamIndex?: number,
     segmentDuration = DEFAULT_SEGMENT_DURATION,
     sourceScan?: SourceScan | null,
-    allowDirectStream = true,
     /** The controller's already-frozen remux grid (see `freezeRemuxGrid`),
      *  fed back so the AudioEndsEarly check reads the exact grid served. */
     remuxGrid?: KeyframeGrid | null,
@@ -619,11 +618,6 @@ export class StreamBuilderService {
         flag: 'ClientRejectedCopy',
         message: 'Client asked for a transcode instead of a copied stream',
       },
-      {
-        active: !allowDirectStream,
-        flag: 'DirectStreamDisabled',
-        message: 'Direct Stream (remux) is disabled on this server',
-      },
     ];
     const canCopyVideo =
       copyableIgnoringGates && dvRemuxCopyAllowed && copyGates.every((g) => !g.active);
@@ -972,7 +966,7 @@ export class StreamBuilderService {
         dolbyVision: false,
         transcodeBitrateByQuality,
         // canCopyVideo, not sourceCopyable: a source only gated off here
-        // (mux/reject/allowDirectStream) must not collapse to an uncapped 'original'.
+        // (mux/reject) must not collapse to an uncapped 'original'.
         qualities: this.buildQualityList(
           source,
           'Transcode',
