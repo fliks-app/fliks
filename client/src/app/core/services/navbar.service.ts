@@ -132,7 +132,12 @@ export class NavbarService {
           this.history.length = 0;
         } else if (popped) {
           // Nothing to push: this navigation IS the pop.
-        } else if (lastUrl && this.pathOf(lastUrl) !== this.pathOf(e.urlAfterRedirects)) {
+        } else if (
+          lastUrl &&
+          // A player is never a back target, whichever way it was left.
+          !lastUrl.startsWith('/watch') &&
+          this.pathOf(lastUrl) !== this.pathOf(e.urlAfterRedirects)
+        ) {
           // Only a real page change (path differs) pushes a back entry. A
           // query-only change on the same path — library tabs, filters, sort,
           // all written with replaceUrl — is in-page state, so back returns to
