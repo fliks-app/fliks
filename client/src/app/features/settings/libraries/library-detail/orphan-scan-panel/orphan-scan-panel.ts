@@ -77,6 +77,8 @@ export class OrphanScanPanelComponent {
   readonly transfer = input<TransferMethod | null>(null);
 
   private libraryId = 0;
+  /** Set only by `scanPath`: caps how far the server's series-folder lookup climbs. */
+  private scanRoot: string | undefined;
   private searchSeq = 0;
   /** Latest search per group, so a slower earlier one can't overwrite it. */
   private readonly latestSearch = new Map<number, number>();
@@ -139,6 +141,7 @@ export class OrphanScanPanelComponent {
 
   async scanLibrary(libraryId: number) {
     this.libraryId = libraryId;
+    this.scanRoot = undefined;
     await this.load(() => this.importsApi.scanOrphans(libraryId));
   }
 
@@ -150,6 +153,7 @@ export class OrphanScanPanelComponent {
     libraryId = 0,
   ) {
     this.libraryId = libraryId;
+    this.scanRoot = path;
     await this.load(() =>
       this.importsApi.previewOrphans({ path, mediaTypes, preferredProvider: provider }),
     );
@@ -278,6 +282,7 @@ export class OrphanScanPanelComponent {
       // A root-level movie has no folder to move into; the server refuses it anyway.
       reorganize: pick && group.folderName !== '' ? this.reorganize() : false,
       transfer: this.transfer() ?? undefined,
+      scanRoot: this.scanRoot,
       files: group.files.map((f) => ({
         filePath: f.filePath,
         seasonNumber: f.seasonNumber ?? undefined,

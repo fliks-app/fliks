@@ -55,11 +55,14 @@ export const ORPHAN_SCAN_PROGRESS = 'OrphanScan';
 export const ORPHAN_IMPORT_PROGRESS = 'OrphanImport';
 
 /** The scanned group folder above `file`, or its own directory when none matches. Outermost
- *  wins: in `Show/Show/S01/e.mkv` the `tvshow.nfo` sits in the outer folder. */
-function seriesFolderOf(file: string, folderName: string): string {
+ *  wins: in `Show/Show/S01/e.mkv` the `tvshow.nfo` sits in the outer folder. Never climbs
+ *  above `scanRoot` when given — otherwise an ancestor outside the scanned tree could match. */
+function seriesFolderOf(file: string, folderName: string, scanRoot?: string): string {
+  const stopAt = scanRoot ? path.resolve(scanRoot) : null;
   let match: string | null = null;
   for (let dir = path.dirname(file); dir !== path.dirname(dir); dir = path.dirname(dir)) {
     if (path.basename(dir) === folderName) match = dir;
+    if (dir === stopAt) break;
   }
   return match ?? path.dirname(file);
 }
@@ -635,7 +638,7 @@ export class DiskImportService {
       dto.type !== MediaType.SERIES
         ? path.dirname(sample)
         : dto.transfer
-          ? seriesFolderOf(sample, dto.folderName)
+          ? seriesFolderOf(sample, dto.folderName, dto.scanRoot)
           : path.join(library.path!, dto.folderName);
     // A root movie's artworkDir IS the shared library root: generic sidecar
     // names (poster.jpg, movie.nfo, ...) there belong to no title in particular.

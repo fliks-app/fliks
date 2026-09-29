@@ -719,4 +719,50 @@ describe('DiskImportService.relinkOrphans: files outside the library', () => {
       { basenameOnly: false },
     );
   });
+
+  it('does not climb above scanRoot into a same-named ancestor outside the scanned tree', async () => {
+    const { service, mediaRepo, mediaService } = makeService();
+    Object.assign(service, {
+      naming: {
+        getFormats: jest.fn().mockResolvedValue({ seriesFolder: '{Series Title}' }),
+        applySeriesFolderFormat: (_f: string, d: { seriesTitle: string }) => d.seriesTitle,
+      },
+    });
+    jest
+      .spyOn(service, 'confirmImport')
+      .mockResolvedValue({ imported: 1, alreadyPresent: 0, errors: [] });
+    mediaRepo.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(unmatchedRow(12, 'Sample Show', MediaType.SERIES));
+    mediaService.createUnmatched.mockResolvedValue({ id: 12 });
+    mediaService.ensureSeriesEpisode.mockResolvedValue({ episodeId: 5, created: false });
+
+    await service.relinkOrphans(
+      dto({
+        type: MediaType.SERIES,
+        folderName: 'Sample Show',
+        title: 'Sample Show',
+        year: undefined,
+        transfer: 'copy',
+        // An ancestor above the scanned folder happens to share the show's name too.
+        scanRoot: '/library/Sample Show/downloads/staging',
+        files: [
+          {
+            filePath:
+              '/library/Sample Show/downloads/staging/Sample Show/S01/Sample.Show.S01E01.mkv',
+            seasonNumber: 1,
+            episodeNumber: 1,
+          },
+        ],
+      }),
+      null,
+    );
+
+    // The scanned folder's own "Sample Show", not the one above scanRoot.
+    expect(mockedFindLocalArtwork).toHaveBeenCalledWith(
+      '/library/Sample Show/downloads/staging/Sample Show',
+      undefined,
+      { basenameOnly: false },
+    );
+  });
 });

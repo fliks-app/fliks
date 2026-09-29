@@ -85,6 +85,12 @@ export class RelinkOrphansDto {
   @IsString()
   folderName: string;
 
+  /** The folder the client originally scanned this group from. Caps how far a
+   *  series-folder lookup climbs above it; absent for older clients. */
+  @IsOptional()
+  @IsString()
+  scanRoot?: string;
+
   /**
    * When true, move + rename the files into the library's naming layout
    * (reusing the disk-import pipeline) instead of linking them in place.

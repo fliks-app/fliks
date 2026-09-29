@@ -69,6 +69,8 @@ export interface RelinkOrphansBody {
   folderName: string;
   reorganize?: boolean;
   transfer?: TransferMethod;
+  /** The folder this group was scanned from; caps a series-folder lookup on the server. */
+  scanRoot?: string;
   files: RelinkFile[];
 }
 
