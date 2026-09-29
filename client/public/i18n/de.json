@@ -471,6 +471,8 @@
     "player_auto_skip_intro_hint": "Überspringt das Intro automatisch, wenn es erkannt wird. Sie können jederzeit manuell zurückspringen.",
     "player_auto_play_next": "Automatische Wiedergabe der nächsten Folge",
     "player_auto_play_next_hint": "Am Ende einer Folge wird automatisch die nächste Folge der Serie abgespielt.",
+    "player_background_audio": "Wiedergabe im Hintergrund",
+    "player_background_audio_hint": "Der Ton läuft bei gesperrtem Bildschirm oder im Hintergrund weiter, mit einer Wiedergabebenachrichtigung.",
     "tab_subtitles": "Untertitel",
     "sub_preferred_lang": "Bevorzugte Sprache für Untertitel",
     "sub_mode": "Untertitelmodus",

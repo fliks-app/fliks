@@ -110,6 +110,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   ): Promise<void> {
     this.resetFirstFrame();
     this.lastTimeUpdatePos = -1;
+    const info = this.mediaInfo?.();
     // Direct play / offline inject external sidecars via setPreloadedSubtitles
     // (empty for transcode/remux, which carry subs as HLS renditions).
     await NativePlayer.load({
@@ -118,6 +119,10 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
       headers,
       offline: this._offline,
       subtitles: this._preloadedSubtitles,
+      backgroundAudio: !!info,
+      title: info?.title,
+      artist: info?.artist,
+      artworkUrl: info?.artworkUrl,
     });
 
     // Apply subtitle style settings
@@ -183,6 +188,11 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   /** Set by the player from the device profile: only builds whose plugin
    *  implements `setCrop` may receive it. */
   cropSupported = false;
+  /** Set by the player, read on every load: null keeps playback tied to the screen. */
+  mediaInfo: (() => { title: string; artist?: string; artworkUrl?: string }) | null = null;
+  /** The notification's queue buttons. */
+  onNext: (() => void) | null = null;
+  onPrevious: (() => void) | null = null;
   private _crop: NativePlayerCrop | null = null;
 
   /** Crop the letterbox bars natively. Kept and re-applied after load(), the
@@ -419,6 +429,9 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
       window.addEventListener(eventName, fn);
       this.listeners.push({ event: eventName, fn });
     };
+
+    bind('nativePlayerNext', () => this.onNext?.());
+    bind('nativePlayerPrevious', () => this.onPrevious?.());
 
     bind('nativePlayerStateChanged', (e: Event) => {
       const detail = (e as CustomEvent).detail;

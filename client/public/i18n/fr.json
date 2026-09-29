@@ -471,6 +471,8 @@
     "player_auto_skip_intro_hint": "Saute automatiquement l'intro quand elle est détectée. Vous pouvez toujours revenir en arrière manuellement.",
     "player_auto_play_next": "Lecture automatique de l'épisode suivant",
     "player_auto_play_next_hint": "À la fin d'un épisode, enchaîne automatiquement sur le suivant de la série.",
+    "player_background_audio": "Lecture en arrière-plan",
+    "player_background_audio_hint": "Le son continue écran verrouillé ou hors de l'application, avec une notification de lecture.",
     "tab_subtitles": "Sous-titres",
     "sub_preferred_lang": "Langue préférée pour les sous-titres",
     "sub_mode": "Mode des sous-titres",

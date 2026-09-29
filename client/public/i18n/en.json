@@ -471,6 +471,8 @@
     "player_auto_skip_intro_hint": "Automatically skips the intro when it is detected. You can always rewind manually.",
     "player_auto_play_next": "Automatically play next episode",
     "player_auto_play_next_hint": "At the end of an episode, automatically continues with the next one in the series.",
+    "player_background_audio": "Background playback",
+    "player_background_audio_hint": "Sound keeps playing with the screen locked or the app in the background, with a playback notification.",
     "tab_subtitles": "Subtitles",
     "sub_preferred_lang": "Preferred subtitle language",
     "sub_mode": "Subtitle mode",

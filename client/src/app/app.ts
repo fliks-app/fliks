@@ -7,6 +7,7 @@ import { SplashScreen } from '@capacitor/splash-screen';
 import { AuthService } from './core/services/auth.service';
 import { CastPlayerService } from './core/services/cast-player.service';
 import { SseService } from './core/services/sse.service';
+import { RemoteNotificationService } from './core/services/remote-notification.service';
 import { DownloadManagerService } from './core/services/download-manager.service';
 import { AutoDownloadService } from './core/services/auto-download.service';
 import { BrowserDeviceProfileService } from './core/services/browser-device-profile.service';
@@ -42,6 +43,7 @@ export class App implements OnInit, OnDestroy {
   private readonly tvKeyboard = inject(TvKeyboardDeferralService);
   private readonly castPlayer = inject(CastPlayerService);
   private readonly sse = inject(SseService);
+  private readonly remoteNotification = inject(RemoteNotificationService);
   /** Injected to ensure DownloadManagerService singleton is created (authEffect, nativeEffect). */
   private readonly dlManager = inject(DownloadManagerService);
   /** Injected so the auto-download reconciler runs on auth-ready (native, non-TV). */
@@ -93,6 +95,7 @@ export class App implements OnInit, OnDestroy {
     // Watch for a fresher PWA build emitted by the Angular service worker
     // — when one lands, full-reload the tab so the new asset map is live.
     this.pwaAutoUpdate.init();
+    this.remoteNotification.init();
 
     this.initInputModalityTracking();
 

@@ -16,6 +16,7 @@ import androidx.annotation.OptIn;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
+import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
@@ -34,6 +35,7 @@ import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.LoadControl;
 import androidx.media3.exoplayer.analytics.AnalyticsListener;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.session.MediaSession;
 import java.util.ArrayList;
 import java.util.List;
 import androidx.media3.ui.AspectRatioFrameLayout;
@@ -98,6 +100,10 @@ public class NativePlayerPlugin extends Plugin {
     // cold-prepare race below where the video renderer never enables — only the
     // latter warrants the unstick seek. Reset on each load().
     private boolean videoRendererEnabled = false;
+    // Only exists while background audio is on: it is what keeps playback alive off-screen.
+    private MediaSession mediaSession;
+    private boolean hasNext = false;
+    private boolean hasPrevious = false;
     private final List<MediaItem.SubtitleConfiguration> subtitleConfigs = new ArrayList<>();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private Handler positionHandler;
@@ -190,6 +196,7 @@ public class NativePlayerPlugin extends Plugin {
             android.webkit.WebView webView = getBridge().getWebView();
             if (webView != null) webView.setBackgroundColor(Color.BLACK);
             stopPositionUpdates();
+            releaseMediaSession();
             if (player != null) {
                 player.release();
                 player = null;
@@ -240,6 +247,10 @@ public class NativePlayerPlugin extends Plugin {
         JSObject headers = call.getObject("headers", new JSObject());
         JSArray subtitles = call.getArray("subtitles", new JSArray());
         boolean offline = call.getBoolean("offline", false);
+        boolean backgroundAudio = call.getBoolean("backgroundAudio", false);
+        String title = call.getString("title", "");
+        String artist = call.getString("artist", "");
+        String artworkUrl = call.getString("artworkUrl");
 
         if (url == null) {
             call.reject("URL is required");
@@ -247,6 +258,7 @@ public class NativePlayerPlugin extends Plugin {
         }
 
         mainHandler.post(() -> {
+            if (!backgroundAudio) releaseMediaSession();
             if (player != null) player.release();
 
             // SubtitleView holds whatever cues the previous player last emitted —
@@ -502,7 +514,13 @@ public class NativePlayerPlugin extends Plugin {
             if (!subtitleConfigs.isEmpty()) {
                 itemBuilder.setSubtitleConfigurations(subtitleConfigs);
             }
+            itemBuilder.setMediaMetadata(new MediaMetadata.Builder()
+                    .setTitle(title).setArtist(artist)
+                    .setArtworkUri(artworkUrl != null ? Uri.parse(artworkUrl) : null).build());
             player.setMediaItem(itemBuilder.build());
+            // Swapping the player keeps the notification in place across episodes.
+            if (mediaSession != null) mediaSession.setPlayer(player);
+            else if (backgroundAudio) startMediaSession();
             lastAudioTrackCount = -1; // Reset so emitTracksChanged fires for new media
             videoBootstrapDone = false; // Arm cold-prepare bug bootstrap
             firstFrameSignaled = false; // Re-arm the first-frame veil signal
@@ -525,6 +543,51 @@ public class NativePlayerPlugin extends Plugin {
             startPositionUpdates();
             call.resolve();
         });
+    }
+
+    /** Screen lock or a leave without PiP: unless background audio keeps a media
+     *  session, playback is muted by the OS yet keeps the locks and the download. */
+    @Override
+    protected void handleOnStop() {
+        super.handleOnStop();
+        if (player != null && mediaSession == null && !getActivity().isInPictureInPictureMode()) {
+            player.pause();
+        }
+    }
+
+    private void startMediaSession() {
+        mediaSession = QueueSession.build(getContext(), player, "local",
+                () -> {
+                    if (hasPrevious) emitWindowEvent("nativePlayerPrevious");
+                    else if (player != null) player.seekTo(0);
+                },
+                () -> emitWindowEvent("nativePlayerNext"));
+        QueueSession.setHasNext(getContext(), mediaSession, hasNext);
+        PlaybackService.attach(getContext(), mediaSession);
+    }
+
+    private void emitWindowEvent(String name) {
+        getBridge().getWebView().evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent('" + name + "'));", null);
+    }
+
+    @PluginMethod()
+    public void setQueueNav(PluginCall call) {
+        boolean previous = call.getBoolean("hasPrevious", false);
+        boolean next = call.getBoolean("hasNext", false);
+        mainHandler.post(() -> {
+            hasPrevious = previous;
+            hasNext = next;
+            if (mediaSession != null) QueueSession.setHasNext(getContext(), mediaSession, hasNext);
+            call.resolve();
+        });
+    }
+
+    private void releaseMediaSession() {
+        if (mediaSession == null) return;
+        PlaybackService.detach(getContext(), mediaSession);
+        mediaSession.release();
+        mediaSession = null;
     }
 
     @PluginMethod()

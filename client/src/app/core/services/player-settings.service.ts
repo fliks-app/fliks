@@ -52,6 +52,8 @@ export interface PlayerSettings {
   autoSkipIntro: boolean;
   // Play the next episode automatically when one finishes (series).
   autoPlayNext: boolean;
+  /** Android: keep the sound going with the screen off or the app left. */
+  backgroundAudio: boolean;
 }
 
 /** Empty stays empty: it is the "no preference" value, not a language. */
@@ -83,6 +85,7 @@ const DEFAULTS: PlayerSettings = {
   subtitleTopMargin: 5,
   autoSkipIntro: false,
   autoPlayNext: true,
+  backgroundAudio: false,
 };
 
 /** The audio-stream fields the track selection reads. */
