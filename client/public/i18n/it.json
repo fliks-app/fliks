@@ -147,6 +147,9 @@
       "VideoDolbyVisionP7NotSupported": "Dolby Vision profilo 7 non supportato"
     },
     "preparing": "Preparazione del flusso…",
+    "airplay_playing_on": "In riproduzione su {{name}}",
+    "airplay_playing": "In riproduzione tramite AirPlay",
+    "error_airplay_unsupported": "Questo dispositivo AirPlay non può riprodurre questo video.",
     "stats_delivery_mismatch": "Decisione server: {{decision}} / Consegnato: {{delivered}}",
     "stats_dolby_vision_base": "Dolby Vision {{profile}}, base {{base}}",
     "stats_dolby_vision": "Dolby Vision {{profile}}"
@@ -2561,6 +2564,8 @@
     "empty_state": "Nessun dispositivo trovato sulla rete.",
     "searching": "Ricerca dispositivi…",
     "chromecast_row": "Chromecast…",
+    "airplay_row": "AirPlay",
+    "airplay_connected": "Connesso",
     "disconnect_row": "Disconnetti",
     "owned_by": "Dispositivo di {{username}}",
     "error_cast_select_failed": "Impossibile connettersi a quel Chromecast.",

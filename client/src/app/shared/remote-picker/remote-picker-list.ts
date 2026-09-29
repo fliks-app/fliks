@@ -2,6 +2,7 @@ import { Component, Signal, computed, inject, input, output, signal } from '@ang
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { RouterLink } from '@angular/router';
 import {
+  LucideAirplay,
   LucideCast,
   LucideMonitor,
   LucideSmartphone,
@@ -9,6 +10,7 @@ import {
   LucidePlus,
   LucideTv,
 } from '@lucide/angular';
+import { AirPlayService } from '../../core/services/airplay.service';
 import { CastService } from '../../core/services/cast.service';
 import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
 import { RemoteService, RemoteTarget } from '../../core/services/remote.service';
@@ -19,9 +21,9 @@ import { parseDeviceLabel } from '../../core/utils/format-device-label';
 const LAST_USED_KEY = 'fliks.remote.lastUsedPickerRow';
 
 export interface PickerRow {
-  kind: 'remote' | 'cast' | 'cast-web';
+  kind: 'remote' | 'cast' | 'cast-web' | 'airplay';
   id: string;
-  icon: 'tv' | 'tablet' | 'phone' | 'monitor' | 'cast';
+  icon: 'tv' | 'tablet' | 'phone' | 'monitor' | 'cast' | 'airplay';
   label: string;
   subtitle: string | null;
   /** Casting to this row already: pressing it leaves the device instead. */
@@ -38,7 +40,7 @@ export interface PickerRow {
   standalone: true,
   imports: [
     TranslatePipe,
-    LucideTv, LucideTablet, LucideSmartphone, LucideMonitor, LucideCast, LucidePlus,
+    LucideTv, LucideTablet, LucideSmartphone, LucideMonitor, LucideCast, LucideAirplay, LucidePlus,
     RouterLink,
   ],
   styles: [':host { display: block; }'],
@@ -53,6 +55,7 @@ export class RemotePickerListComponent {
 
   protected readonly remote = inject(RemoteService);
   protected readonly castService = inject(CastService);
+  private readonly airPlay = inject(AirPlayService);
   private readonly castTarget = inject(CastPlaybackTarget);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
@@ -95,6 +98,18 @@ export class RemotePickerListComponent {
         connected: d.connected,
       });
     }
+    if (this.airPlay.available()) {
+      const name = this.airPlay.deviceName();
+      const active = this.airPlay.routeActive() || this.airPlay.videoActive();
+      rows.push({
+        kind: 'airplay',
+        id: 'airplay',
+        icon: 'airplay',
+        label: this.translate.instant('remote.airplay_row'),
+        subtitle: name ?? (active ? this.translate.instant('remote.airplay_connected') : null),
+        connected: active,
+      });
+    }
     for (const t of this.remote.targets()) {
       rows.push({
         kind: 'remote',
@@ -106,10 +121,10 @@ export class RemotePickerListComponent {
           : null,
       });
     }
-    // Cast devices pinned above the remote targets, last-used first inside each
-    // group. The sort is stable, so rows that tie keep discovery order.
+    // AirPlay, then Cast devices, then remote targets, last-used first inside
+    // each group. The sort is stable, so rows that tie keep discovery order.
     const last = this.lastUsedId();
-    const group = (r: PickerRow) => (r.kind === 'remote' ? 1 : 0);
+    const group = (r: PickerRow) => (r.kind === 'airplay' ? 0 : r.kind === 'remote' ? 2 : 1);
     const recent = (r: PickerRow) => (r.id === last ? 0 : 1);
     rows.sort((a, b) => group(a) - group(b) || recent(a) - recent(b));
     return rows;
@@ -128,6 +143,14 @@ export class RemotePickerListComponent {
   }
 
   selectRow(row: PickerRow): void {
+    // The system picker is also where AirPlay is left, so `connected` changes
+    // nothing here.
+    if (row.kind === 'airplay') {
+      this.setLastUsed(row.id);
+      if (this.delegate()) this.picked.emit(row);
+      else this.airPlay.showPicker();
+      return;
+    }
     // Pressing the device already being cast to is the only way out of a Cast
     // session: the control card can stop the media but never leaves the device.
     if (row.connected) {

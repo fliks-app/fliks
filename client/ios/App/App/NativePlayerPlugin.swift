@@ -96,6 +96,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private var timeControlObserver: NSKeyValueObservation?
     private var firstFrameObserver: NSKeyValueObservation?
     private var presentationSizeObserver: NSKeyValueObservation?
+    private var externalPlaybackObserver: NSKeyValueObservation?
+    private var externalPlaybackActive = false
     private var firstFrameEmitted = false
     private var fillScreen = false
     private var videoCrop: VideoCrop?
@@ -403,6 +405,9 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         let player = AVPlayer(playerItem: item)
         player.automaticallyWaitsToMinimizeStalling = true
+        // A mirrored screen hands the video to the receiver full screen
+        // instead of mirroring the app UI around it.
+        player.usesExternalPlaybackWhileExternalScreenIsActive = true
         self.player = player
         if playerLayer == nil, let view = playerView {
             let layer = AVPlayerLayer(player: player)
@@ -554,34 +559,45 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     // MARK: - Subtitle Tracks
 
     @objc func getSubtitleTracks(_ call: CAPPluginCall) {
-        DispatchQueue.main.async { [weak self] in
-            var tracks: [[String: Any]] = []
-
-            if self?.player?.currentItem != nil,
-               let group = self?.legibleGroup {
-                for (index, option) in group.options.enumerated() {
-                    let locale = option.locale ?? Locale(identifier: "und")
-                    tracks.append([
-                        "id": "text-\(index)",
-                        "language": locale.language.languageCode?.identifier ?? "und",
-                        "label": option.displayName,
-                        // displayName == the manifest NAME (the rendition's
-                        // stable id); the engine matches the picked track by it.
-                        "forced": option.hasMediaCharacteristic(.containsOnlyForcedSubtitles),
-                    ])
-                }
-            }
-
-            call.resolve(["tracks": tracks])
+        Task { @MainActor [weak self] in
+            let group = await self?.loadedLegibleGroup()
+            call.resolve(["tracks": group.map(Self.subtitleTracks) ?? []])
         }
+    }
+
+    /// Subtitle rows for JS. displayName == the manifest NAME (the rendition's
+    /// stable id); the engine matches the picked track by it.
+    private static func subtitleTracks(_ group: AVMediaSelectionGroup) -> [[String: Any]] {
+        group.options.enumerated().map { index, option in
+            let locale = option.locale ?? Locale(identifier: "und")
+            return [
+                "id": "text-\(index)",
+                "language": locale.language.languageCode?.identifier ?? "und",
+                "label": option.displayName,
+                "forced": option.hasMediaCharacteristic(.containsOnlyForcedSubtitles),
+            ]
+        }
+    }
+
+    /// The cached legible group, read from the asset again while it is empty:
+    /// the `.readyToPlay` load can settle before the asset lists its options
+    /// and nothing else refills the cache for that item.
+    @MainActor
+    private func loadedLegibleGroup() async -> AVMediaSelectionGroup? {
+        if let group = legibleGroup, !group.options.isEmpty { return group }
+        guard let item = player?.currentItem else { return nil }
+        let group = try? await item.asset.loadMediaSelectionGroup(for: .legible)
+        guard player?.currentItem === item else { return nil }
+        if let group = group { legibleGroup = group }
+        return group
     }
 
     @objc func selectSubtitleTrack(_ call: CAPPluginCall) {
         let id = call.getString("id")
 
-        DispatchQueue.main.async { [weak self] in
-            guard let item = self?.player?.currentItem,
-                  let group = self?.legibleGroup else {
+        Task { @MainActor [weak self] in
+            guard let group = await self?.loadedLegibleGroup(),
+                  let item = self?.player?.currentItem else {
                 call.resolve()
                 return
             }
@@ -630,7 +646,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// system's user-preference styling (the box) out of the delivered cues.
     private func attachLegibleOutput(to item: AVPlayerItem) {
         let output = AVPlayerItemLegibleOutput()
-        output.suppressesPlayerRendering = true
+        output.suppressesPlayerRendering = !externalPlaybackActive
         output.textStylingResolution = .sourceAndRulesOnly
         output.setDelegate(self, queue: legibleQueue)
         item.add(output)
@@ -685,6 +701,24 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
               let group = legibleGroup else { return }
         item.select(option, in: group)
         pipDeselectedSubtitle = nil
+    }
+
+    /// The overlay is a subview on the phone, so a receiver never sees it:
+    /// while AirPlay carries the video, AVPlayer renders the native caption.
+    /// Emits on every call, but only a change touches the subtitle state, which
+    /// PiP also drives.
+    private func setExternalPlayback(_ active: Bool) {
+        defer { emitExternalPlayback(active) }
+        guard active != externalPlaybackActive else { return }
+        externalPlaybackActive = active
+        subtitleOutput?.suppressesPlayerRendering = !active
+        subtitleOverlay?.isHidden = active
+        if active { subtitleOverlay?.render([]) }
+    }
+
+    private func emitExternalPlayback(_ active: Bool) {
+        let js = "window.dispatchEvent(new CustomEvent('nativePlayerExternalPlaybackChanged', { detail: { active: \(active) } }));"
+        bridge?.webView?.evaluateJavaScript(js)
     }
 
     // MARK: - Brightness
@@ -938,7 +972,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             // Screen stays awake while advancing or stalled mid-play; a pause
             // (user pause or end of item) lets it sleep. KVO can land off the
             // main thread, so the UIKit flag has to be hopped over.
-            let awake = player.timeControlStatus != .paused
+            // Over AirPlay the receiver shows the video: the phone may sleep.
+            let awake = player.timeControlStatus != .paused && !player.isExternalPlaybackActive
             DispatchQueue.main.async { UIApplication.shared.isIdleTimerDisabled = awake }
             DispatchQueue.main.async { self?.nowPlaying.refresh() }
             switch player.timeControlStatus {
@@ -968,6 +1003,22 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
                 self.emitFirstFrame()
             }
         }
+
+        externalPlaybackObserver = player.observe(\.isExternalPlaybackActive, options: [.initial, .new]) { [weak self] player, _ in
+            let active = player.isExternalPlaybackActive
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                UIApplication.shared.isIdleTimerDisabled = player.timeControlStatus != .paused && !active
+                self.setExternalPlayback(active)
+            }
+        }
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleRateChange(_:)),
+            name: AVPlayer.rateDidChangeNotification,
+            object: player
+        )
 
         // Ended detection
         NotificationCenter.default.addObserver(
@@ -1017,6 +1068,32 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    /// A receiver that cannot play the stream stops the player without an item
+    /// error: the only trace is a drop to rate 0 nobody asked for (a pause from
+    /// the app reports `.setRateCalled`, an interruption its own reason).
+    @objc private func handleRateChange(_ notification: Notification) {
+        let reason = notification.userInfo?[AVPlayer.rateDidChangeReasonKey] as? AVPlayer.RateDidChangeReason
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            guard self.externalPlaybackActive,
+                  let player = self.player, player.rate == 0,
+                  reason == nil || reason == .setRateFailed,
+                  !self.atEnd(player) else { return }
+            self.emitExternalPlaybackFailed(reason: "rate dropped to 0 (\(reason?.rawValue ?? "no reason"))")
+        }
+    }
+
+    private func emitExternalPlaybackFailed(reason: String) {
+        let data = try? JSONSerialization.data(withJSONObject: ["reason": reason])
+        let detail = data.flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        bridge?.webView?.evaluateJavaScript("window.dispatchEvent(new CustomEvent('nativePlayerExternalPlaybackFailed', { detail: \(detail) }));")
+    }
+
+    private func atEnd(_ player: AVPlayer) -> Bool {
+        guard let duration = player.currentItem?.duration.seconds, duration.isFinite else { return false }
+        return player.currentTime().seconds >= duration - 1
+    }
+
     @objc private func playerDidFinishPlaying() {
         emitStateChanged("ended")
     }
@@ -1034,11 +1111,14 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         firstFrameObserver = nil
         timeControlObserver?.invalidate()
         timeControlObserver = nil
+        externalPlaybackObserver?.invalidate()
+        externalPlaybackObserver = nil
         NotificationCenter.default.removeObserver(self)
     }
 
     private func cleanup() {
         removeObservers()
+        setExternalPlayback(false)
         player?.pause()
         player = nil
         nowPlaying.deactivate(releaseSession: true)
@@ -1156,18 +1236,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             }
         }
 
-        var subtitleTracks: [[String: Any]] = []
-        if let group = legibleGroup {
-            for (index, option) in group.options.enumerated() {
-                let locale = option.locale ?? Locale(identifier: "und")
-                subtitleTracks.append([
-                    "id": "text-\(index)",
-                    "language": locale.language.languageCode?.identifier ?? "und",
-                    "label": option.displayName,
-                    "forced": option.hasMediaCharacteristic(.containsOnlyForcedSubtitles),
-                ])
-            }
-        }
+        let subtitleTracks = legibleGroup.map(Self.subtitleTracks) ?? []
 
         let audioData = try? JSONSerialization.data(withJSONObject: audioTracks)
         let audioJson = String(data: audioData ?? Data(), encoding: .utf8) ?? "[]"

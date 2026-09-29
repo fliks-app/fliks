@@ -70,7 +70,7 @@
            player's own dropdown / sheet so it survives fullscreen. -->
       @if (canPickDevice()) {
         <div class="dropdown dropdown-end" [class.dropdown-open]="openDropdown() === 'devices'">
-          <button type="button" class="btn btn-ghost btn-circle btn-md" [class.text-info]="castConnected()" [class.text-white]="!castConnected() && !castConnecting()" [disabled]="castConnecting()" [attr.aria-label]="'remote.picker_title' | translate" (click)="isMobileTouch() ? openSheet('devices') : toggleDropdown('devices', $event)">
+          <button type="button" class="btn btn-ghost btn-circle btn-md" [class.text-info]="castConnected() || airPlayConnected()" [class.text-white]="!castConnected() && !airPlayConnected() && !castConnecting()" [disabled]="castConnecting()" [attr.aria-label]="'remote.picker_title' | translate" (click)="isMobileTouch() ? openSheet('devices') : toggleDropdown('devices', $event)">
             @if (castConnecting()) {
               <span class="loading loading-spinner loading-md"></span>
             } @else {

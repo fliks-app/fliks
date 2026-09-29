@@ -101,6 +101,9 @@ export type EngineEventMap = {
    *  and the player tries one cheap recovery before surfacing a fatal
    *  error to the UI. */
   sessionExpired: void;
+  /** The AirPlay receiver stopped playback it could not play (native iOS).
+   *  No item error comes with it, the player just pauses. */
+  externalPlaybackFailed: { reason: string };
 };
 
 export type EngineEvent = keyof EngineEventMap;

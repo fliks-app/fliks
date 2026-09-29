@@ -10,7 +10,7 @@
     @if (castService.connecting()) {
       <span class="loading loading-spinner loading-sm"></span>
     } @else {
-      <svg lucideCast class="h-5 w-5 md:h-6 md:w-6" [class.text-info]="castService.isConnected()"></svg>
+      <svg lucideCast class="h-5 w-5 md:h-6 md:w-6" [class.text-info]="castService.isConnected() || airPlay.routeActive() || airPlay.videoActive()"></svg>
     }
   </button>
 

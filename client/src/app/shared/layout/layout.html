@@ -114,7 +114,7 @@
             <svg lucideCast class="h-5 w-5 text-info"></svg>
             <span class="text-xs font-medium truncate max-w-24">{{ formatDevice(target.userAgent, target.systemName, target.deviceName) }}</span>
           </button>
-        } @else if (!device.isTv() && (castService.isAvailable() || remote.targets().length > 0)) {
+        } @else if (!device.isTv() && (castService.isAvailable() || airPlay.available() || remote.targets().length > 0)) {
           <app-remote-picker />
         }
         <app-user-menu />
@@ -164,7 +164,7 @@
             <svg lucideCast class="h-5 w-5 text-info"></svg>
             <span class="text-xs font-medium truncate max-w-32">{{ formatDevice(target.userAgent, target.systemName, target.deviceName) }}</span>
           </button>
-        } @else if (!device.isTv() && (castService.isAvailable() || remote.targets().length > 0)) {
+        } @else if (!device.isTv() && (castService.isAvailable() || airPlay.available() || remote.targets().length > 0)) {
           <app-remote-picker />
         }
         <app-user-menu />

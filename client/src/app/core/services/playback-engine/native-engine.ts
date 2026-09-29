@@ -334,7 +334,10 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
             index: Number(track.index) || 0,
           }
         : null;
-    this.resolveSubtitle();
+    // No list yet means the plugin has none cached: asking again makes it
+    // re-read the asset.
+    if (this._nativeSubtitleTracks.length === 0) this.refreshSubtitleTracks();
+    else this.resolveSubtitle();
   }
 
   setTextVisibility(visible: boolean): void {
@@ -490,6 +493,10 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
       // Text tracks are now available — refresh them and apply any pending
       // (default / saved) subtitle selection that raced ahead of load().
       this.refreshSubtitleTracks();
+    });
+
+    bind('nativePlayerExternalPlaybackFailed', (e: Event) => {
+      this.emit('externalPlaybackFailed', { reason: (e as CustomEvent).detail?.reason ?? '' });
     });
 
     bind('nativePlayerFirstFrame', () => {
