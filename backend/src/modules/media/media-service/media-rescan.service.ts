@@ -33,6 +33,7 @@ import { PostImportQueueService } from '../../../common/post-import/post-import-
 import { MediaMetadataService } from './media-metadata.service';
 import { relativePathUnderMediaRoot } from '../../../common/utils/media-path.util';
 import { VIDEO_EXTS } from '../../../common/constants/video-extensions';
+import { isBonusDir, isSampleFile } from '../../../common/utils/bonus-content.util';
 import { buildMediaProgressSubject } from '../../../common/utils/media-progress-subject.util';
 
 type ProbeResult = Awaited<ReturnType<FfprobeService['detectMediaFileInfo']>>;
@@ -470,6 +471,12 @@ export class MediaRescanService {
       `Rescan: started — media #${mediaId} "${media.title}" root="${mediaDir}"`,
     );
 
+    // Already-linked files are exempt from the bonus/sample filter below: only a
+    // newly-discovered file can be skipped by it.
+    const linkedRelPaths = new Set(
+      (media.files ?? []).map((f) => f.relativePath.replace(/\\/g, '/')),
+    );
+
     // 1. Collect video files on disk. A media with no folder of its own sits
     // at the library root, shared by every sibling root-level movie: walking
     // it would pick up their files too, so only its own known files are stat'd.
@@ -480,6 +487,8 @@ export class MediaRescanService {
         mediaDir,
         0,
         mediaId,
+        mediaDir,
+        linkedRelPaths,
       );
       for (const f of rawDiskFiles) {
         const rel = relativePathUnderMediaRoot(mediaDir, f);
@@ -514,9 +523,7 @@ export class MediaRescanService {
         `Rescan[media #${mediaId}]: no video file on disk, ${dbFiles.length} file(s) still in DB (orphan rows will be removed if paths do not match)`,
       );
     }
-    const dbRelPaths = new Set(
-      dbFiles.map((f) => f.relativePath.replace(/\\/g, '/')),
-    );
+    const dbRelPaths = linkedRelPaths;
 
     let added = 0;
     let removed = 0;
@@ -1070,6 +1077,8 @@ export class MediaRescanService {
     dir: string,
     depth: number,
     mediaId: number,
+    mediaRoot: string,
+    linkedRelPaths: ReadonlySet<string>,
   ): Promise<string[]> {
     if (depth > 3) {
       this.log.warn(
@@ -1088,6 +1097,9 @@ export class MediaRescanService {
       );
       return [];
     }
+    // Below the media's own folder only: a bonus/sample child is skipped for a
+    // newly-discovered file, but one already linked to a media_file row is kept.
+    const inBonusDir = depth > 0 && isBonusDir(path.basename(dir));
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
@@ -1096,11 +1108,20 @@ export class MediaRescanService {
             fullPath,
             depth + 1,
             mediaId,
+            mediaRoot,
+            linkedRelPaths,
           )),
         );
-      } else if (VIDEO_EXTS.has(path.extname(entry.name).toLowerCase())) {
-        files.push(fullPath);
+        continue;
       }
+      if (!VIDEO_EXTS.has(path.extname(entry.name).toLowerCase())) continue;
+      const rel = relativePathUnderMediaRoot(mediaRoot, fullPath);
+      if (rel && linkedRelPaths.has(rel)) {
+        files.push(fullPath);
+        continue;
+      }
+      if (inBonusDir || isSampleFile(entry.name)) continue;
+      files.push(fullPath);
     }
     return files;
   }

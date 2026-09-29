@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
 import { VIDEO_EXTS } from '../../common/constants/video-extensions';
+import { isBonusDir, isSampleFile } from '../../common/utils/bonus-content.util';
 
 export interface NamingFormats {
   movie: string;
@@ -425,8 +426,13 @@ export class NamingService {
       for (const entry of entries) {
         const fullPath = path.join(dirPath, entry.name);
         if (entry.isDirectory()) {
+          // `dirPath` is already a release/title folder, so a bonus child is below its root.
+          if (isBonusDir(entry.name)) continue;
           results.push(...this.findAllVideoFiles(fullPath));
-        } else if (VIDEO_EXTS.has(path.extname(entry.name).toLowerCase())) {
+        } else if (
+          VIDEO_EXTS.has(path.extname(entry.name).toLowerCase()) &&
+          !isSampleFile(entry.name)
+        ) {
           const stat = fs.statSync(fullPath);
           results.push({ filePath: fullPath, size: stat.size });
         }

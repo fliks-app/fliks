@@ -44,6 +44,7 @@ import { PostImportQueueService } from '../../common/post-import/post-import-que
 import { MediaServersService } from '../media-servers/media-servers.service';
 import { VIDEO_EXTS } from '../../common/constants/video-extensions';
 import { sanitizeFsPath } from '../../common/utils/fs-path.util';
+import { isBonusDir, isSampleFile } from '../../common/utils/bonus-content.util';
 
 /** The scan shares a 30-connection pool with everything else the server is
  *  serving; unbounded fan-out starved it and the UI stalled until the scan ended. */
@@ -62,12 +63,6 @@ function seriesFolderOf(file: string, folderName: string): string {
   }
   return match ?? path.dirname(file);
 }
-
-/** Bonus-clip folders inside a title's folder; a scan-root child of that name is a title. */
-const BONUS_DIR_RE =
-  /^(samples?|extras?|featurettes?|trailers?|interviews|behind[ ._-]the[ ._-]scenes|deleted[ ._-]scenes)$/i;
-/** A release's sample clip ends with a `sample` token; a title merely starting with it does not. */
-const SAMPLE_FILE_RE = /(?:^|[.\-_ ])sample$/i;
 
 /** The season/episode the caller already resolved (client-side parse, or a season-pack's own
  *  numbering), when it gave both. `undefined` leaves the caller's own fallback to decide. */
@@ -886,11 +881,11 @@ export class DiskImportService {
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (depth > 0 && BONUS_DIR_RE.test(entry.name)) continue;
+        if (depth > 0 && isBonusDir(entry.name)) continue;
         subdirs.push(fullPath);
       } else if (
         VIDEO_EXTS.has(path.extname(entry.name).toLowerCase()) &&
-        !SAMPLE_FILE_RE.test(path.basename(entry.name, path.extname(entry.name)))
+        !isSampleFile(entry.name)
       ) {
         files.push(fullPath);
       }
