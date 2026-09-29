@@ -107,6 +107,8 @@ export function buildVideoFilters(
     : '';
   const cpuCropPrefix = cropStr ? `${cropStr},` : '';
   const burnInFilter = burnIn?.filter ? `,${burnIn.filter}` : '';
+  // `hdr10Target` only ever reaches here once dvNoBaseHdr10PathSupported
+  // (tonemap-path.ts) confirmed this exact opencl/cuda recipe was probed OK.
   const tonemapOpencl =
     tonemap && !useVaapiTonemap && !useVulkanTonemap
       ? `,hwmap=derive_device=opencl:mode=read,tonemap_opencl=${tonemapOpenclOpts({ hdr10Target, curve, dvNoBase })}`
@@ -117,6 +119,7 @@ export function buildVideoFilters(
   // Vulkan (libplacebo) tone-map. Crop is a libplacebo option (`crop_*`), not
   // the hwdownload/crop/hwupload round-trip the other paths use; a Vulkan
   // filter device can't derive a VAAPI surface for a CPU-side crop.
+  // No HDR10-target output exists here: `apply_dolbyvision` targets only bt709 SDR.
   const tonemapVulkan =
     useVulkanTonemap && !burnIn?.filter
       ? `hwmap=derive_device=drm,format=drm_prime,libplacebo=${
