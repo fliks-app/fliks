@@ -5,7 +5,7 @@ import { promisify } from 'util';
 import { findAmfNativeDecoder } from './decoders';
 import { amfOpenclFilter } from './encoders/helpers/amf-filters';
 import { synthesiseHdrProbeSample } from './hdr-probe-sample';
-import { ffmpegTail, probeSamplePath } from './probe-utils';
+import { createCapabilityProbe, probeSamplePath } from './probe-utils';
 
 const execFileAsync = promisify(execFile);
 
@@ -13,12 +13,9 @@ const execFileAsync = promisify(execFile);
  *  texture to OpenCL, `scale_opencl`/`tonemap_opencl`, `hwmap` back to D3D11
  *  for the AMF encode, no CPU round-trip. Covers both SDR scale and HDR
  *  tonemap. Fail-closed, win32-only in practice (AMF is Windows). */
-let probedOnce = false;
-let enabled = false;
+const probe = createCapabilityProbe('amf-opencl-probe');
 
-export function isAmfOpenclEnabled(): boolean {
-  return probedOnce && enabled;
-}
+export const isAmfOpenclEnabled = probe.isEnabled;
 
 /** Runs one encode with `-vf` built from `amfOpenclFilter`, the same helper
  *  a real session calls, over the given decoder input args. */
@@ -52,51 +49,43 @@ async function runOnce(
 }
 
 export async function runAmfOpenclProbe(log: Logger): Promise<void> {
-  const t0 = Date.now();
-  let failure = '';
   const hdrSample = probeSamplePath('amf-opencl');
-  try {
-    await synthesiseHdrProbeSample(hdrSample);
+  await probe.run(log, async () => {
+    try {
+      await synthesiseHdrProbeSample(hdrSample);
 
-    // Same decoder descriptor a session picks, so the probe pins the same
-    // AMD adapter it would decode on.
-    const decodeArgs = findAmfNativeDecoder('hevc').buildInputArgs();
+      // Same decoder descriptor a session picks, so the probe pins the same
+      // AMD adapter it would decode on.
+      const decodeArgs = findAmfNativeDecoder('hevc').buildInputArgs();
 
-    // HDR10 tonemap, the h264_amf HDR→SDR case.
-    await runOnce(
-      decodeArgs,
-      hdrSample,
-      amfOpenclFilter({
-        width: 320,
-        height: 180,
-        cropStr: '',
-        tonemap: true,
-        outputFormat: 'nv12',
-      }),
-      ['h264_amf'],
-    );
-    // 10-bit passthrough scale, the hevc_amf HDR10 rung (no tonemap).
-    await runOnce(
-      decodeArgs,
-      hdrSample,
-      amfOpenclFilter({
-        width: 320,
-        height: 180,
-        cropStr: '',
-        tonemap: false,
-        outputFormat: 'p010le',
-      }),
-      ['hevc_amf', '-profile:v', 'main10'],
-    );
-    enabled = true;
-  } catch (err) {
-    enabled = false;
-    failure = ffmpegTail(err);
-  } finally {
-    await unlink(hdrSample).catch(() => {});
-    probedOnce = true;
-    log.log(
-      `[amf-opencl-probe] enabled=${enabled} (${Date.now() - t0}ms)${failure ? `: ${failure}` : ''}`,
-    );
-  }
+      // HDR10 tonemap, the h264_amf HDR→SDR case.
+      await runOnce(
+        decodeArgs,
+        hdrSample,
+        amfOpenclFilter({
+          width: 320,
+          height: 180,
+          cropStr: '',
+          tonemap: true,
+          outputFormat: 'nv12',
+        }),
+        ['h264_amf'],
+      );
+      // 10-bit passthrough scale, the hevc_amf HDR10 rung (no tonemap).
+      await runOnce(
+        decodeArgs,
+        hdrSample,
+        amfOpenclFilter({
+          width: 320,
+          height: 180,
+          cropStr: '',
+          tonemap: false,
+          outputFormat: 'p010le',
+        }),
+        ['hevc_amf', '-profile:v', 'main10'],
+      );
+    } finally {
+      await unlink(hdrSample).catch(() => {});
+    }
+  });
 }
