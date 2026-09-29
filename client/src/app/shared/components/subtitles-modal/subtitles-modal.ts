@@ -22,6 +22,7 @@ import { formatSubtitleLabel, formatSubtitleParts } from '../../../core/utils/pl
 import { guessLanguageFromFilename, localizeLanguage } from '../../../core/utils/language.utils';
 import {
   isImageBasedSubtitleCodec,
+  isAssSubtitle,
   isOcrSupportedSubtitleCodec,
 } from '../../../core/utils/subtitle-codecs';
 import { SUBTITLE_LANGUAGE_CODES } from '../../../core/constants/subtitle-languages';
@@ -261,13 +262,18 @@ export class SubtitlesModalComponent {
                 ['media_detail.action_reverse_rtl', 'arrow-right-left', 'reverseRtl'],
                 ['media_detail.action_convert_srt', 'file-text', 'convertToSrt'],
               ] as const
-            ).map(([labelKey, icon, action]) => ({
-              labelKey,
-              icon,
-              run: run((s) =>
-                this.postProcessSubtitle({ subtitleId: s.id, action }),
-              ),
-            })),
+            )
+              // Convert is a server no-op outside ASS/SSA; OCR fixes target our own OCR output.
+              .filter(
+                ([, , action]) =>
+                  (action !== 'convertToSrt' || isAssSubtitle(sub)) &&
+                  (action !== 'ocrFixes' || sub.providerType === 'ocr'),
+              )
+              .map(([labelKey, icon, action]) => ({
+                labelKey,
+                icon,
+                run: run((s) => void this.confirmPostProcess(s, labelKey, action)),
+              })),
           },
         );
         if ((sub.score ?? 0) !== 100) {
@@ -281,15 +287,18 @@ export class SubtitlesModalComponent {
       }
     }
 
+    // Only a provider download has an id the search could hand back again.
+    if (sub.providerFileId) {
+      actions.push({
+        labelKey: 'media_detail.action_blacklist',
+        icon: 'ban',
+        tone: 'warning',
+        section: 'remove',
+        run: run((s) => this.blacklistSubtitle(s)),
+      });
+    }
     if (!embedded) {
       actions.push(
-        {
-          labelKey: 'media_detail.action_blacklist',
-          icon: 'ban',
-          tone: 'warning',
-          section: 'remove',
-          run: run((s) => this.blacklistSubtitle(s)),
-        },
         {
           labelKey: 'media_detail.action_delete',
           icon: 'trash-2',
@@ -750,7 +759,29 @@ export class SubtitlesModalComponent {
     await this.loadSubtitles(this.mediaId());
   }
 
+  private async confirmPostProcess(sub: SubtitleFileRow, labelKey: string, action: string) {
+    const label = this.translate.instant(labelKey);
+    if (
+      !(await this.confirmation.confirm({
+        title: label,
+        message: this.translate.instant(`${labelKey}_confirm`),
+        confirmLabel: label,
+      }))
+    )
+      return;
+    await this.postProcessSubtitle({ subtitleId: sub.id, action });
+  }
+
   async blacklistSubtitle(sub: SubtitleFileRow) {
+    if (
+      !(await this.confirmation.confirm({
+        title: this.translate.instant('media_detail.action_blacklist'),
+        message: this.translate.instant('media_detail.confirm_blacklist_subtitle'),
+        confirmLabel: this.translate.instant('media_detail.action_blacklist'),
+        variant: 'warning',
+      }))
+    )
+      return;
     await this.subActions.blacklist(this.mediaId(), sub, this.subtitles);
   }
 

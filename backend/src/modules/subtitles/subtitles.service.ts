@@ -950,6 +950,8 @@ export class SubtitlesService {
     sourceTitle?: string;
     reason?: string;
   }): Promise<SubtitleBlacklist> {
+    if (!dto.providerType || !dto.providerFileId)
+      throw new BadRequestException('Only a provider download can be blacklisted');
     const entry = this.blacklistRepo.create(dto);
     return this.blacklistRepo.save(entry);
   }
