@@ -198,15 +198,15 @@ sign() {
 }
 
 # Every Mach-O inside the bundle: dylibs, the node/postgres/ffmpeg helpers, AND
-# native .node addons under backend/node_modules — notarization rejects any
-# unsigned executable. A name/perm prefilter here would miss a non-executable
-# .bundle or a versioned lib (libfoo.so.1), so `file -b` alone decides.
-# Each --timestamp is a network round-trip, so sign in parallel.
+# native .node addons. `file -b` decides (name/perm would miss a .bundle);
+# restricted to executable/shared-library/bundle so .o objects and dSYM
+# companions, which codesign refuses, are skipped. Sign in parallel: each
+# --timestamp is a network round-trip.
 export -f sign
 export SIGN_ID ENTITLEMENTS
 find "$RESOURCES" -type f -print0 \
     | xargs -0 -n1 -P "$(sysctl -n hw.ncpu)" bash -c \
-        'if file -b "$1" 2>/dev/null | grep -q Mach-O; then sign "$1"; fi' _
+        'if file -b "$1" 2>/dev/null | grep -qE "Mach-O.*(executable|shared library|bundle)"; then sign "$1"; fi' _
 
 # Outer app bundle last (seals the signed contents).
 sign "$APP_BUNDLE"
