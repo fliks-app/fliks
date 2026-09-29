@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as readline from 'readline';
 import { getDataDir } from '../../common/constants/paths';
 
 /**
@@ -39,9 +40,16 @@ export class BackupService {
     const fd = fs.openSync(filePath, 'w');
     try {
       // --clean --if-exists: the restore runs against a populated database.
+      // --no-privileges: grants name plugin roles a fresh cluster lacks; provisioning re-grants.
       await this.run(
         'pg_dump',
-        [...this.connectionArgs(), '--clean', '--if-exists', '--no-owner'],
+        [
+          ...this.connectionArgs(),
+          '--clean',
+          '--if-exists',
+          '--no-owner',
+          '--no-privileges',
+        ],
         fd,
       );
     } catch (err) {
@@ -87,6 +95,7 @@ export class BackupService {
   async restore(filename: string): Promise<void> {
     const filePath = this.getBackupPath(filename);
     this.log.warn(`Restoring backup: ${filename}`);
+    await this.ensurePluginRoles(filePath);
     // ON_ERROR_STOP: without it psql reports success after skipping every
     // statement that failed, leaving a half-restored database.
     await this.run('psql', [
@@ -97,6 +106,33 @@ export class BackupService {
       filePath,
     ]);
     this.log.log(`Backup restored: ${filename}`);
+  }
+
+  /** Older dumps grant to plugin roles; a missing one aborts the restore at its first GRANT. */
+  private async ensurePluginRoles(filePath: string): Promise<void> {
+    const roles = new Set<string>();
+    const lines = readline.createInterface({
+      input: fs.createReadStream(filePath),
+      crlfDelay: Infinity,
+    });
+    for await (const line of lines) {
+      const role = /^GRANT .+ TO (plugin_[a-z0-9_]{1,56});$/.exec(line)?.[1];
+      if (role) roles.add(role);
+    }
+    if (roles.size === 0) return;
+    const creates = [...roles]
+      .map(
+        (role) =>
+          `IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${role}') THEN CREATE ROLE "${role}" LOGIN; END IF;`,
+      )
+      .join(' ');
+    await this.run('psql', [
+      ...this.connectionArgs(),
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-c',
+      `DO $$ BEGIN ${creates} END $$`,
+    ]);
   }
 
   /** Resolved inside the backup dir: the name reaches here from a request. */

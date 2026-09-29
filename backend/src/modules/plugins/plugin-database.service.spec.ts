@@ -12,6 +12,8 @@ interface Recorder {
 interface Fixtures {
   roleExists?: boolean;
   schemaOwner?: string;
+  /** Relations in the plugin schema the fake catalog reports as owned by the core role. */
+  coreOwnedRelations?: readonly string[];
   /** Names the fake probe resolves to a `public` `BASE TABLE` carrying an `id` column. */
   baseTables?: readonly string[];
   /** Rows the fake catalog returns for `findUnsafeCoreRefFks`, in Postgres's own column shape. */
@@ -26,7 +28,8 @@ function makeRecorder(): Recorder {
 function respondFor(fixtures: Fixtures) {
   return (sql: string, parameters: unknown[]): unknown[] => {
     if (sql.includes('FROM pg_roles')) return fixtures.roleExists ? [{ x: 1 }] : [];
-    if (sql.includes('FROM pg_namespace')) return fixtures.schemaOwner ? [{ owner: fixtures.schemaOwner }] : [];
+    if (sql.includes('FROM pg_class')) return (fixtures.coreOwnedRelations ?? []).map((relname) => ({ relname }));
+    if (sql.includes('FROM pg_namespace')) return fixtures.schemaOwner ? [{ owner: fixtures.schemaOwner, core: 'fliks' }] : [];
     if (sql.includes('information_schema')) {
       const table = parameters[0] as string;
       return fixtures.baseTables?.includes(table) ? [{ table_type: 'BASE TABLE' }] : [];
@@ -192,10 +195,11 @@ describe('PluginDatabaseService.provision', () => {
       'query',
       'query',
       'query',
+      'query',
       'commitTransaction',
       'release',
     ]);
-    expect(recorder.queries).toHaveLength(10);
+    expect(recorder.queries).toHaveLength(11);
     const sql = recorder.queries.map((q) => normalizeSql(q.sql));
     const probe =
       "SELECT t.table_type FROM information_schema.columns c JOIN information_schema.tables t ON t.table_schema = c.table_schema AND t.table_name = c.table_name WHERE c.table_schema = 'public' AND c.table_name = $1 AND c.column_name = 'id'";
@@ -207,13 +211,17 @@ describe('PluginDatabaseService.provision', () => {
     expect(recorder.queries[2].parameters).toEqual(['plugin_acme_tool']);
     expect(sql[3]).toMatch(/^CREATE ROLE "plugin_acme_tool" LOGIN PASSWORD '[0-9a-f]{48}'$/);
     expect(sql[4]).toBe('CREATE SCHEMA IF NOT EXISTS "plugin_acme_tool" AUTHORIZATION "plugin_acme_tool"');
-    expect(sql[5]).toBe('SELECT pg_get_userbyid(nspowner) AS owner FROM pg_namespace WHERE nspname = $1');
+    expect(sql[5]).toBe(
+      'SELECT pg_get_userbyid(nspowner) AS owner, current_user AS core FROM pg_namespace WHERE nspname = $1',
+    );
     expect(recorder.queries[5].parameters).toEqual(['plugin_acme_tool']);
-    expect(sql[6]).toBe('GRANT USAGE ON SCHEMA public TO "plugin_acme_tool"');
-    expect(sql[7]).toBe('REVOKE REFERENCES ON ALL TABLES IN SCHEMA public FROM "plugin_acme_tool"');
-    expect(sql[8]).toBe('GRANT REFERENCES (id) ON public."media" TO "plugin_acme_tool"');
-    expect(sql[9]).toBe('GRANT REFERENCES (id) ON public."episodes" TO "plugin_acme_tool"');
-    // Positions 6/7 (usage/revoke) precede 8/9 (grants) in `recorder.queries`, which is push order == execution order.
+    expect(sql[6]).toMatch(/^SELECT c\.relname FROM pg_class c/);
+    expect(recorder.queries[6].parameters).toEqual(['plugin_acme_tool']);
+    expect(sql[7]).toBe('GRANT USAGE ON SCHEMA public TO "plugin_acme_tool"');
+    expect(sql[8]).toBe('REVOKE REFERENCES ON ALL TABLES IN SCHEMA public FROM "plugin_acme_tool"');
+    expect(sql[9]).toBe('GRANT REFERENCES (id) ON public."media" TO "plugin_acme_tool"');
+    expect(sql[10]).toBe('GRANT REFERENCES (id) ON public."episodes" TO "plugin_acme_tool"');
+    // Positions 7/8 (usage/revoke) precede 9/10 (grants) in `recorder.queries`, which is push order == execution order.
   });
 
   it('skips CREATE ROLE when pg_roles already reports the role', async () => {
@@ -225,6 +233,29 @@ describe('PluginDatabaseService.provision', () => {
 
     const sql = recorder.queries.map((q) => normalizeSql(q.sql));
     expect(sql.some((s) => s.startsWith('CREATE ROLE'))).toBe(false);
+  });
+
+  it('adopts a schema and relations a restore left owned by the core role', async () => {
+    const recorder = makeRecorder();
+    const dataSource = fakeDataSource(recorder, {
+      roleExists: false,
+      schemaOwner: 'fliks',
+      coreOwnedRelations: ['_migrations', 'items'],
+      baseTables: [],
+    });
+    const manifest = minimalProcessManifest({}, { id: 'acme.tool', database: { schema: true, coreRefs: [] } });
+
+    await service(dataSource).provision(manifest);
+
+    const sql = recorder.queries.map((q) => normalizeSql(q.sql));
+    expect(sql).toEqual(
+      expect.arrayContaining([
+        'ALTER SCHEMA "plugin_acme_tool" OWNER TO "plugin_acme_tool"',
+        'ALTER TABLE "plugin_acme_tool"."_migrations" OWNER TO "plugin_acme_tool"',
+        'ALTER TABLE "plugin_acme_tool"."items" OWNER TO "plugin_acme_tool"',
+      ]),
+    );
+    expect(recorder.events).toContain('commitTransaction');
   });
 
   it('throws, rolls back and grants nothing when the schema already exists owned by a different role', async () => {

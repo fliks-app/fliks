@@ -61,6 +61,34 @@ describe('BackupService', () => {
     });
   });
 
+  describe('restore', () => {
+    it('creates the plugin roles an older dump grants to before replaying it', async () => {
+      fs.writeFileSync(
+        path.join(backups, 'old.sql'),
+        [
+          'CREATE SCHEMA plugin_acme_tool;',
+          'GRANT USAGE ON SCHEMA public TO plugin_acme_tool;',
+          'GRANT REFERENCES(id) ON TABLE public.media TO plugin_acme_tool;',
+          'GRANT SELECT ON TABLE public.media TO "evil; DROP TABLE x";',
+        ].join('\n'),
+      );
+      const calls: string[][] = [];
+      jest
+        .spyOn(service as unknown as { run: (c: string, a: string[]) => Promise<void> }, 'run')
+        .mockImplementation(async (_cmd, args) => {
+          calls.push(args);
+        });
+
+      await service.restore('old.sql');
+
+      expect(calls).toHaveLength(2);
+      const sql = calls[0][calls[0].indexOf('-c') + 1];
+      expect(sql.match(/CREATE ROLE/g)).toHaveLength(1);
+      expect(sql).toContain('CREATE ROLE "plugin_acme_tool" LOGIN');
+      expect(calls[1]).toContain('-f');
+    });
+  });
+
   describe('pruneOldBackups', () => {
     it('keeps the seven newest and removes the rest', () => {
       for (let day = 1; day <= 9; day++) write(`fliks-backup-${day}.sql`, day);
