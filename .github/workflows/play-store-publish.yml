@@ -12,6 +12,10 @@
 # checks out that tag, builds + attaches the signed APK, and skips the
 # Play Store upload entirely.
 #
+# To (re)publish to the Amazon Appstore only (e.g. after a Play Store-only
+# failure, or to retry without rebuilding), dispatch with `amazon_tag` set:
+# it downloads that tag's already-attached APK and skips the Android build.
+#
 # Promotion from `internal` → `alpha`/`beta`/`production` stays a
 # manual click in Play Console; this workflow never touches anything
 # beyond what the dispatch input asks for.
@@ -40,6 +44,10 @@ on:
         description: 'Existing release tag to (re)build a signed APK for and attach to its GitHub release, e.g. v1.8.0. APK-only — skips the Play Store upload. Leave empty for a normal Play Store run.'
         type: string
         default: ''
+      amazon_tag:
+        description: 'Existing release tag to (re)publish to the Amazon Appstore only, e.g. v1.8.0. Skips the Android build and the Play Store upload entirely. Leave empty for a normal run.'
+        type: string
+        default: ''
 
 permissions:
   # `write` so the signed APK can be attached to the GitHub release that
@@ -48,6 +56,8 @@ permissions:
 
 jobs:
   build-and-publish:
+    # `amazon_tag` re-publishes an already-attached APK to Amazon only.
+    if: github.event.inputs.amazon_tag == ''
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -108,6 +118,14 @@ jobs:
           cd android
           ./gradlew bundleRelease
 
+      - name: Upload the signed AAB for the Play Store job
+        if: github.event.inputs.apk_tag == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-aab
+          path: client/android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 1
+
       # Signed APK for direct sideloading, attached to the GitHub release.
       # Runs on every `v*` tag push, and on an `apk_tag` dispatch that targets
       # an already-released tag. Same release signingConfig that signs the AAB.
@@ -144,8 +162,22 @@ jobs:
         run: gh release upload "${{ steps.apk.outputs.tag }}" "${{ steps.apk.outputs.path }}" --clobber
         working-directory: ${{ github.workspace }}
 
+  # Separate job so a Play Store failure (rejected release notes, a transient API
+  # error) can't skip amazon-appstore, which only needs the APK-attach job above.
+  publish-play-store:
+    needs: build-and-publish
+    if: github.event.inputs.apk_tag == ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: signed-aab
+          path: client/android/app/build/outputs/bundle/release
+
       - name: Extract latest release notes from CHANGELOG.md
-        if: github.event.inputs.apk_tag == ''
+        working-directory: client
         # release-please writes one section per release in the format
         # `## [X.Y.Z]` (followed by the date). Awk grabs everything
         # between the first such header and the next one — that is
@@ -167,7 +199,6 @@ jobs:
           fi
 
       - name: Upload to Play Store
-        if: github.event.inputs.apk_tag == ''
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
@@ -191,14 +222,21 @@ jobs:
   # just attached to the release, then commits the edit, which sends it to Amazon review.
   amazon-appstore:
     needs: build-and-publish
-    if: startsWith(github.ref, 'refs/tags/v')
+    # `always()`: build-and-publish is skipped (not failed) on an amazon-only
+    # dispatch, and a skipped dependency would otherwise skip this job too.
+    if: always() && (needs.build-and-publish.result == 'success' || github.event.inputs.amazon_tag != '') && (startsWith(github.ref, 'refs/tags/v') || github.event.inputs.amazon_tag != '')
     runs-on: ubuntu-latest
+    # Two tags racing for the same open Amazon edit (`reuse-any-open-edit` below)
+    # would clobber each other's changes; serialize per app, not per tag.
+    concurrency:
+      group: amazon-appstore
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      AMAZON_TAG: ${{ github.event.inputs.amazon_tag || github.ref_name }}
       APP: https://developer.amazon.com/api/appstore/v1/applications/${{ secrets.AMAZON_APPSTORE_APP_ID }}
     steps:
       - name: Download the signed APK from the release
-        run: gh release download "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" -p 'Fliks-*.apk' -O fliks.apk
+        run: gh release download "$AMAZON_TAG" -R "$GITHUB_REPOSITORY" -p 'Fliks-*.apk' -O fliks.apk
 
       - name: Replace the APK and commit the edit
         env:
@@ -206,10 +244,16 @@ jobs:
           CLIENT_SECRET: ${{ secrets.AMAZON_APPSTORE_CLIENT_SECRET }}
         run: |
           set -euo pipefail
-          token=$(curl -sf https://api.amazon.com/auth/o2/token \
+          # --fail-with-body (not -s alone): a token failure prints Amazon's error
+          # body instead of vanishing, without ever echoing the token/secret itself.
+          token=$(curl -sS --fail-with-body https://api.amazon.com/auth/o2/token \
             -d grant_type=client_credentials -d scope=appstore::apps:readwrite \
             --data-urlencode "client_id=$CLIENT_ID" --data-urlencode "client_secret=$CLIENT_SECRET" \
             | jq -r .access_token)
+          if [ -z "$token" ] || [ "$token" = "null" ]; then
+            echo "::error::failed to obtain an Amazon Appstore access token"
+            exit 1
+          fi
           auth="Authorization: Bearer $token"
           etag() { curl -sf -D - -o /dev/null -H "$auth" "$1" | awk 'tolower($1)=="etag:" {print $2}' | tr -d '\r'; }
 
