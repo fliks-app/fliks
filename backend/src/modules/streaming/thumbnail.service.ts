@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { execFile, spawn, type ChildProcess } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { existsSync } from 'fs';
 import * as fsp from 'fs/promises';
@@ -28,16 +28,9 @@ import {
   formatMediaProgressSubject,
   type MediaProgressSubject,
 } from '../../common/utils/media-progress-subject.util';
+import { spawnBackground } from '../../common/utils/spawn-priority';
 
 const execFileAsync = promisify(execFile);
-
-/** Spawn with low I/O and CPU priority (ionice idle + nice 19) on Linux. */
-function spawnLowPriority(cmd: string, args: string[]): ChildProcess {
-  if (process.platform === 'linux') {
-    return spawn('ionice', ['-c3', 'nice', '-n19', cmd, ...args]);
-  }
-  return spawn(cmd, args);
-}
 
 export interface SpriteMetadata {
   interval: number;
@@ -678,7 +671,11 @@ export class ThumbnailService implements OnModuleInit {
             thumbWidth: THUMB_WIDTH,
             hdr,
           });
-          const proc = spawnLowPriority('ffmpeg', args);
+          const proc = spawnBackground('ffmpeg', args, {
+            background: true,
+            io: true,
+            cpu: true,
+          });
           let stderr = '';
           proc.stderr?.on('data', (chunk: Buffer) => {
             if (stderr.length < 4096) stderr += chunk.toString();
@@ -734,7 +731,11 @@ export class ThumbnailService implements OnModuleInit {
             '-y',
             spritePath,
           ];
-          const proc = spawnLowPriority('ffmpeg', args);
+          const proc = spawnBackground('ffmpeg', args, {
+            background: true,
+            io: true,
+            cpu: true,
+          });
           let stderr = '';
           proc.stderr?.on('data', (chunk: Buffer) => {
             if (stderr.length < 16 * 1024) stderr += chunk.toString();
