@@ -1,4 +1,5 @@
 import { decodeHtmlEntities } from '../utils/decode-html-entities';
+import { VIDEO_EXTS } from '../constants/video-extensions';
 import { parseSeasonEpisode } from './season-episode.parser';
 
 /**
@@ -70,7 +71,11 @@ const METADATA_CUT_RE = /\b(?:2160p|1080p|720p|480p|4K|UHD|BluRay|BDRip|WEB-?DL|
  * realistic torrent names from public + private trackers.
  */
 export function extractMediaTitle(rawName: string): ExtractedRelease {
-  const decoded = decodeHtmlEntities(rawName).replace(/\.torrent$/i, '');
+  let decoded = decodeHtmlEntities(rawName).replace(/\.torrent$/i, '');
+  const dot = decoded.lastIndexOf('.');
+  if (dot > 0 && VIDEO_EXTS.has(decoded.slice(dot).toLowerCase())) {
+    decoded = decoded.slice(0, dot);
+  }
   const se = parseSeasonEpisode(decoded);
 
   // Year scan happens over the full string so we can keep a year that

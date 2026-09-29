@@ -2013,6 +2013,7 @@
       "scan_group_movie": "Filme",
       "scan_group_series": "Série",
       "scan_search_placeholder": "Procurar um título…",
+      "scan_year_placeholder": "Ano",
       "scan_search": "Pesquisar",
       "scan_no_match": "Nenhum resultado. Refine a pesquisa.",
       "scan_from_nfo": "a partir de .nfo",

@@ -2028,6 +2028,7 @@
       "scan_group_movie": "Movie",
       "scan_group_series": "Series",
       "scan_search_placeholder": "Search for a title…",
+      "scan_year_placeholder": "Year",
       "scan_search": "Search",
       "scan_no_match": "No results. Refine the search.",
       "scan_from_nfo": "from .nfo",

@@ -90,7 +90,8 @@
                         (keydown.enter)="search(i)" />
                     </label>
                     <input type="number" class="input input-bordered input-sm w-24"
-                      [ngModel]="vm.year" (ngModelChange)="edit(i, { year: $event })" placeholder="—" />
+                      [ngModel]="vm.year" (ngModelChange)="edit(i, { year: $event })"
+                      [placeholder]="'settings.libraries.scan_year_placeholder' | translate" />
                     <button type="button" class="btn btn-sm btn-ghost" (click)="search(i)" [disabled]="vm.searching">
                       @if (vm.searching) { <span class="loading loading-spinner loading-xs"></span> }
                       {{ 'settings.libraries.scan_search' | translate }}
