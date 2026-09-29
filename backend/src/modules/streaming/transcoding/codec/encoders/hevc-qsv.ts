@@ -55,11 +55,9 @@ export const hevcQsv: EncoderDescriptor = {
   },
 };
 
-/** Intel QSV HEVC Main10 encoder — Kaby Lake gen7 and above. The only
- *  HW HEVC path with reliable HDR10 / HLG metadata propagation on
- *  mainline FFmpeg. Color tags come from the input AVFrame; the
- *  `-color_*` flags here are belt-and-suspenders for encoder builds
- *  that ignore AVFrame metadata. */
+/** Intel QSV HEVC Main10 encoder — Kaby Lake gen7 and above. Color tags come
+ *  from the input AVFrame; the `-color_*` flags here are belt-and-suspenders
+ *  for encoder builds that ignore AVFrame metadata. */
 export const hevcQsvHdr10: EncoderDescriptor = {
   id: 'hevc_qsv_main10',
   hwAccel: 'qsv',

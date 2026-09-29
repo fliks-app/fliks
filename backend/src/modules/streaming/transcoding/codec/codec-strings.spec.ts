@@ -23,7 +23,7 @@ const target = (
 });
 
 describe('audioGroupCodecString', () => {
-  // ffprobe's names on jellyfin-ffmpeg 8.1.
+  // ffprobe's profile names on the bundled ffmpeg.
   const he = { codec: 'aac', profile: 'HE-AAC' };
   const hev2 = { codec: 'aac', profile: 'HE-AACv2' };
   const lc = { codec: 'aac', profile: 'LC' };
