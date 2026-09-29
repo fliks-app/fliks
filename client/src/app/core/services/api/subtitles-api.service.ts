@@ -13,7 +13,7 @@ export interface SubtitleFileRow {
   forced: boolean;
   hearingImpaired: boolean;
   providerType: string;
-  providerFileId: string;
+  providerFileId?: string | null;
   /** Relative to media folder (same idea as video MediaFile.relativePath) */
   relativePath?: string | null;
   status: string;

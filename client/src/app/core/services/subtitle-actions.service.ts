@@ -28,6 +28,7 @@ export class SubtitleActionsService {
   }
 
   async blacklist(mediaId: number, sub: SubtitleFileRow, subtitles: WritableSignal<SubtitleFileRow[]>) {
+    if (!sub.providerFileId) return;
     try {
       await this.subtitlesApi.addToBlacklist({
         providerType: sub.providerType,
