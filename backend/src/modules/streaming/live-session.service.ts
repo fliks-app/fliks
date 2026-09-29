@@ -156,9 +156,8 @@ export interface LiveSession {
    *  stale-probe rescan mid-session must not move the DV decision. */
   sourceDvProfile: number | null;
   sourceDvBlSignalCompatId: number | null;
-  /** Audio stream metadata, frozen at playback-info: a rescan that rewrites
-   *  track count/order mid-session must not desync `audioPlan`/`audioTrackPlans`
-   *  (decided against the frozen layout) from a re-read live one. */
+  /** Audio streams, frozen at playback-info: `audioPlan`/`audioTrackPlans` were
+   *  decided against this layout, whatever a later rescan reorders. */
   audioStreams: AudioStreamMeta[] | null;
   transcodeReasons: TranscodeReason[];
   burnIn: BurnInSubtitle | null;

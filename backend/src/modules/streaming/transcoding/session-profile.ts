@@ -82,9 +82,8 @@ export function sessionLayoutContext(
     dolbyVision: live?.dolbyVision ?? false,
     tonemap: live?.tonemapping ?? false,
     tonemapCurve: live?.tonemapCurve ?? DEFAULT_TONEMAP_CURVE,
-    // Frozen: a stale-probe rescan mid-session must not move the DV decision.
-    // `live.sourceDvProfile` can legitimately be `null` (no DV), which must
-    // not fall through to a live re-read — gate on session presence instead.
+    // Frozen against a stale-probe rescan; a `null` (no DV) profile must not
+    // fall through to a re-read, hence the gate on the session itself.
     sourceDvProfile: live
       ? (live.sourceDvProfile ?? undefined)
       : si?.video?.[0]?.dvProfile,

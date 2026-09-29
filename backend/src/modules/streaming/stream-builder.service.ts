@@ -248,8 +248,8 @@ export interface EvaluateResult {
   /** Per-rendition audio output, in `streamInfo.audio` order: what a
    *  var_stream_map encode of the session emits. */
   audioPlans: AudioPlan[];
-  /** Whether a transcoded rung of this session runs a tonemap filter,
-   *  regardless of the play method actually picked (see `sessionLayout`). */
+  /** Whether a transcoded rung runs a tonemap, whatever the play method: a remux
+   *  session can later serve a transcoded rung under the same sid. */
   transcodeTonemapping: boolean;
 }
 
@@ -356,12 +356,8 @@ export class StreamBuilderService {
     // raw copy preserves it; dual-layer P7's EL can't ride HLS, so it's excluded.
     const dvProfiles = clientDvProfiles(profile);
     const detectedHwAccel = this.transcodingService.getDetectedHwAccel();
-    // No-base DV, an HDR10 display, and a tonemap mechanism verified for a
-    // PQ target (see dvNoBaseHdr10PathSupported): reshape server-side into
-    // HDR10 instead of the SDR fallback below. Applies whenever the session
-    // actually transcodes — including a DV-capable client forced off
-    // DirectPlay by another gate, which would otherwise get a worse SDR
-    // tonemap than an HDR10-only client.
+    // No-base DV on an HDR10 display with a PQ-verified tonemap (see
+    // dvNoBaseHdr10PathSupported): any transcode reshapes to HDR10, not SDR.
     const dvNoBaseHdr10Eligible =
       noBase &&
       clientSupportsHdr &&
@@ -429,10 +425,6 @@ export class StreamBuilderService {
       videoVariant: selectedVariant,
       muxFlavour: hlsMux,
       audioPlans,
-      // The would-transcode tonemap decision, independent of the play method
-      // actually picked: a remux session can still later serve a transcoded
-      // rung under the same sid, which must tonemap even though the frozen
-      // `response.tonemapping` reports `false` for the DirectStream itself.
       transcodeTonemapping: runsTonemapFilter,
     });
     const needsBurnIn = !!burnInSubtitleId;

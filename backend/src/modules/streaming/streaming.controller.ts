@@ -1046,9 +1046,8 @@ export class StreamingController {
       sourceDvBlSignalCompatId:
         resolved.mediaFile.streamInfo?.video?.[0]?.dvBlSignalCompatId ?? null,
       audioStreams: resolved.mediaFile.streamInfo?.audio ?? null,
-      // The would-transcode decision, not `response.tonemapping`: a remux
-      // session (tonemapping: false) can still later serve a transcoded rung
-      // under the same sid, which must tonemap too.
+      // Not `response.tonemapping`: a remux session's later transcoded rung
+      // under the same sid must tonemap too.
       tonemapping: evaluateResult.transcodeTonemapping,
       // Frozen from the admin setting: a later curve change must not move an
       // in-progress session's cache dir or mix segments of both curves.
