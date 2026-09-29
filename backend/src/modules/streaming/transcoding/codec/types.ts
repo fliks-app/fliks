@@ -124,12 +124,13 @@ export interface EncoderInput {
   dvNoBase?: boolean;
   hasBurnIn: boolean;
   hasCrop: boolean;
-  /** Surface format on the decoder's output side. Encoders use it to
-   *  pick the right scale / crop filter: when a QSV encoder receives
-   *  QSV surfaces from a qsv-native decoder it can use `vpp_qsv` for
-   *  both crop and scale; when it receives VAAPI surfaces (default
-   *  Linux path) it stays on the `scale_vaapi → hwmap=qsv` chain. */
+  /** Surface format on the decoder's output side. Encoders use it to pick
+   *  the right scale / crop filter (e.g. VAAPI surfaces stay on the
+   *  `scale_vaapi → hwmap=qsv` chain). */
   inputSurface: import('./decoders/types').SurfaceFormat;
+  /** `vpp_qsv` crop/scale on the QSV device instead of the VAAPI-derived
+   *  `scale_vaapi → hwmap=qsv` chain; see `qsvNative` in encode-pipeline.ts. */
+  qsvNative?: boolean;
   /** Source HDR10 static metadata, when the probe recovered it. Encoders feed
    *  it into `master-display` / `max-cll`; absent → generic 1000-nit fallback. */
   hdrMetadata?: HdrStaticMetadata;

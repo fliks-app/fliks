@@ -54,13 +54,14 @@ export function amfOpenclFilter(opts: {
   return `hwmap=derive_device=opencl:mode=read,${crop}${step},hwmap=derive_device=d3d11va:mode=write:reverse=1,format=d3d11`;
 }
 
-/** `-vf` for an 8-bit AMF encode. A D3D11 surface only ever comes from the
- *  zero-copy decoder (see `isAmfOpenclPath`); otherwise frames are pulled
- *  down and scaled on the CPU. */
-export function amfScaleFilter8bit(input: EncoderInput): string {
+/** `-vf` for an AMF encode at the given bit depth. A D3D11 surface only ever
+ *  comes from the zero-copy decoder (see `isAmfOpenclPath`); otherwise frames
+ *  are pulled down and scaled on the CPU. */
+function amfScaleFilter(input: EncoderInput, bitDepth: 8 | 10): string {
   const { target, filters, tonemap, tonemapCurve, dvNoBase, inputSurface, hasBurnIn } =
     input;
   const w = target.width;
+  const fmt = bitDepth === 8 ? 'nv12' : 'p010le';
   if (inputSurface === 'd3d11') {
     return amfOpenclFilter({
       width: w,
@@ -69,42 +70,23 @@ export function amfScaleFilter8bit(input: EncoderInput): string {
       tonemap,
       tonemapCurve,
       dvNoBase,
-      outputFormat: 'nv12',
+      outputFormat: fmt,
       burnInFilter: hasBurnIn ? filters.burnInFilter : undefined,
     });
   }
+  // 10-bit downloads always need p010le precision; 8-bit only needs it ahead of a tonemap.
   const download =
     inputSurface === 'cpu'
       ? ''
-      : tonemap
+      : bitDepth === 10 || tonemap
         ? 'hwdownload,format=p010le,'
         : 'hwdownload,format=nv12,';
   const tm = tonemap ? filters.tonemapCpu : '';
-  return `${download}${filters.cpuCropPrefix}${tm}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=nv12${filters.burnInFilter}`;
+  return `${download}${filters.cpuCropPrefix}${tm}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=${fmt}${filters.burnInFilter}`;
 }
 
-/** `-vf` for a 10-bit AMF HDR encode. Normally no tonemap; a 10-bit
- *  encoder preserves HDR; tonemap-to-SDR sources are routed to the 8-bit
- *  rung. The exception is a no-base DV source reshaped into HDR10 (see
- *  dvNoBaseHdr10Eligible), which still needs the RPU-aware OpenCL bounce. */
-export function amfScaleFilter10bit(input: EncoderInput): string {
-  const { target, filters, tonemap, tonemapCurve, dvNoBase, inputSurface, hasBurnIn } =
-    input;
-  const w = target.width;
-  if (inputSurface === 'd3d11') {
-    return amfOpenclFilter({
-      width: w,
-      height: target.height,
-      cropStr: filters.cropStr,
-      tonemap,
-      tonemapCurve,
-      dvNoBase,
-      outputFormat: 'p010le',
-      burnInFilter: hasBurnIn ? filters.burnInFilter : undefined,
-    });
-  }
-  const download =
-    inputSurface === 'cpu' ? '' : 'hwdownload,format=p010le,';
-  const tm = tonemap ? filters.tonemapCpu : '';
-  return `${download}${filters.cpuCropPrefix}${tm}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=p010le${filters.burnInFilter}`;
-}
+export const amfScaleFilter8bit = (input: EncoderInput): string =>
+  amfScaleFilter(input, 8);
+
+export const amfScaleFilter10bit = (input: EncoderInput): string =>
+  amfScaleFilter(input, 10);

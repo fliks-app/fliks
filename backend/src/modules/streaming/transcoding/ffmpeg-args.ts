@@ -659,7 +659,7 @@ function buildAudioAndMuxerArgs(opts: {
  */
 function resolveDecodeStage(opts: {
   sourceVideoCodec: string | undefined;
-  qsvNativeAvailable: boolean;
+  qsvNative: boolean;
   amfOpenclAvailable: boolean;
   effectiveHwAccel: HwAccelType;
   decodeHwAccel: HwAccelType;
@@ -681,7 +681,7 @@ function resolveDecodeStage(opts: {
 } {
   const {
     sourceVideoCodec,
-    qsvNativeAvailable,
+    qsvNative,
     amfOpenclAvailable,
     effectiveHwAccel,
     decodeHwAccel,
@@ -700,12 +700,10 @@ function resolveDecodeStage(opts: {
   // amfOpenclDecode computed once: reused below for the decoder pick and to
   // skip the duplicate `ocl` init when the decoder already owns that device.
   const amfOpenclDecode = amfOpenclAvailable && effectiveHwAccel === 'amf';
-  // Opt into the qsv-native decoder when the qsv crop path is in use
+  // Opt into the qsv-native decode routing when the qsv crop path is in use
   // (pre-flighted above so requestedHwAccelFor could keep us on QSV).
-  // The default qsv decoder emits VAAPI surfaces — kept as the safe
-  // baseline for every other QSV path.
   const decoder: ReturnType<typeof decoderRegistry.resolve> =
-    qsvNativeAvailable && effectiveHwAccel === 'qsv' && normalisedSourceCodec
+    qsvNative && normalisedSourceCodec
       ? (findQsvNativeDecoder(normalisedSourceCodec) ??
         decoderRegistry.resolve(
           {
@@ -808,6 +806,8 @@ function resolveDecodeStage(opts: {
     tonemap &&
     !useVaapiTonemap &&
     decoder.outputSurface === 'vaapi' &&
+    // qsv-native also decodes on physical VAAPI, but vpp_qsv tonemaps in place.
+    !qsvNative &&
     !openclTonemap &&
     tonemapPath !== 'vulkan' &&
     effectiveHwAccel !== 'nvenc'
@@ -1110,7 +1110,7 @@ export function buildFfmpegArgs(
     encoder,
     effectiveHwAccel,
     tonemapPath,
-    qsvNativeAvailable,
+    qsvNative,
     useVaapiTonemap,
     amfOpenclAvailable,
   } = pipeline;
@@ -1146,7 +1146,7 @@ export function buildFfmpegArgs(
   // The decoder picks how the source is brought into memory (HW device init +
   // `-hwaccel`); the encoder's `hwAccel` + `inputSurface` decide where the frame
   // needs to land for encode (qsv-native + vpp_qsv, vaapi + scale_vaapi, CPU +
-  // hwdownload). `useVaapiTonemap` / `tonemapPath` / `qsvNativeAvailable` come
+  // hwdownload). `useVaapiTonemap` / `tonemapPath` / `qsvNative` come
   // from resolveEncodePipeline above.
   const {
     decodeArgs,
@@ -1157,7 +1157,7 @@ export function buildFfmpegArgs(
     qsvOpenclTonemap,
   } = resolveDecodeStage({
     sourceVideoCodec,
-    qsvNativeAvailable,
+    qsvNative,
     amfOpenclAvailable,
     effectiveHwAccel,
     decodeHwAccel,
@@ -1269,6 +1269,7 @@ export function buildFfmpegArgs(
       useVtMetalPath || useVtHwTonemap || useVtHdrPassthrough
         ? 'videotoolbox'
         : decoder.outputSurface,
+    qsvNative,
   };
   args.push(...encoder.buildArgs(encoderInput));
 

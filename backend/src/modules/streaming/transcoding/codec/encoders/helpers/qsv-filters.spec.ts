@@ -27,6 +27,8 @@ function input(over: Partial<EncoderInput>): EncoderInput {
     tonemapPath: 'qsv',
     hasCrop: false,
     inputSurface: 'qsv',
+    // Routing flag, not the surface value; false below for vaapi/cpu fixtures.
+    qsvNative: true,
     ...over,
   } as unknown as EncoderInput;
 }
@@ -136,7 +138,7 @@ describe('qsvScaleFilter8bit', () => {
   it('uploads to VAAPI (not the default QSV filter device) for a CPU-decoded source', () => {
     // A bare hwupload would target `-filter_hw_device qs` (QSV, set for
     // burn-in) instead of VAAPI, which scale_vaapi then rejects.
-    expect(qsvScaleFilter8bit(input({ inputSurface: 'cpu' }))).toBe(
+    expect(qsvScaleFilter8bit(input({ inputSurface: 'cpu', qsvNative: false }))).toBe(
       'format=nv12,hwupload=derive_device=vaapi,' +
         'scale_vaapi=w=1920:h=-2:format=nv12:extra_hw_frames=24,' +
         'hwmap=derive_device=qsv,format=qsv',
@@ -181,6 +183,7 @@ describe('qsvScaleFilter8bit', () => {
       qsvScaleFilter8bit(
         input({
           inputSurface: 'vaapi',
+          qsvNative: false,
           hasCrop: true,
           filters: {
             cropStr: 'crop=1920:800:0:140',
@@ -208,6 +211,7 @@ describe('qsvScaleFilter8bit', () => {
       qsvScaleFilter8bit(
         input({
           inputSurface: 'vaapi',
+          qsvNative: false,
           hasBurnIn: true,
           filters: {
             cropStr: '',
@@ -233,6 +237,7 @@ describe('qsvScaleFilter8bit', () => {
       qsvScaleFilter8bit(
         input({
           inputSurface: 'vaapi',
+          qsvNative: false,
           hasBurnIn: true,
           filters: {
             cropStr: '',
@@ -303,6 +308,7 @@ describe('qsvScaleFilter10bit', () => {
       qsvScaleFilter10bit(
         input({
           inputSurface: 'vaapi',
+          qsvNative: false,
           hasBurnIn: true,
           filters: {
             cropStr: '',
@@ -367,6 +373,7 @@ describe('qsvScaleFilter10bit', () => {
       qsvScaleFilter10bit(
         input({
           inputSurface: 'vaapi',
+          qsvNative: false,
           filters: {
             cropStr: '',
             cpuCropPrefix: '',

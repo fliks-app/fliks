@@ -18,8 +18,8 @@ function qsvCropOpts(input: EncoderInput): string {
 /** Build the `-vf` value for an 8-bit QSV encode (h264_qsv / hevc_qsv).
  *  Branches on what we received from the decoder:
  *
- *  - `inputSurface === 'qsv'` (qsv-native decoder, no tonemap): hwmap onto
- *    QSV, then `vpp_qsv` for crop + scale + format, no fixed-pool quirk on crop.
+ *  - `qsvNative` (no tonemap): hwmap onto QSV, then `vpp_qsv` for crop +
+ *    scale + format, no fixed-pool quirk on crop.
  *  - tonemapVaapi: keep on VAAPI surfaces, tonemap on the VPP (1 device).
  *  - tonemapOpencl: the admin curve via OpenCL, then hwmap to QSV.
  *  - default (vaapi surfaces, no tonemap): scale_vaapi → hwmap to QSV.
@@ -31,7 +31,7 @@ export function qsvScaleFilter8bit(input: EncoderInput): string {
   const { target, filters, tonemap, tonemapPath, dvNoBase } = input;
   const w = target.width;
   const curve = input.tonemapCurve ?? DEFAULT_TONEMAP_CURVE;
-  if (input.inputSurface === 'qsv' || input.inputSurface === 'd3d11') {
+  if (input.qsvNative) {
     // Both decode natively (VAAPI on Linux, D3D11VA on Windows), so the
     // frame always needs the hwmap before `vpp_qsv` runs.
     const cropOpts = qsvCropOpts(input);
@@ -97,7 +97,7 @@ export function qsvScaleFilter10bit(input: EncoderInput): string {
   const { target, filters, tonemap, tonemapPath, dvNoBase } = input;
   const w = target.width;
   const curve = input.tonemapCurve ?? DEFAULT_TONEMAP_CURVE;
-  if (input.inputSurface === 'qsv' || input.inputSurface === 'd3d11') {
+  if (input.qsvNative) {
     // See qsvScaleFilter8bit: both surfaces need the hwmap onto QSV first.
     const cropOpts = qsvCropOpts(input);
     if (tonemap && tonemapPath === 'opencl') {

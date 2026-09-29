@@ -3,20 +3,15 @@ import type { VideoCodec } from '../types';
 import { qsvDeviceInitArgs, qsvViaD3d11DeviceInitArgs } from '../../hw-device';
 
 /** QSV decoder: native VAAPI, never the `-hwaccel qsv` wrapper (drops the
- *  Dolby Vision RPU, fails outright on AV1). `native` only changes the id and
- *  `outputSurface` label the `vpp_qsv` crop/scale path looks up by; the argv
- *  is identical either way. */
-function qsvDecoder(
-  codec: VideoCodec,
-  maxBitDepth: 8 | 10,
-  native: boolean,
-): DecoderDescriptor {
+ *  Dolby Vision RPU, fails outright on AV1). The native `vpp_qsv` routing is
+ *  the pipeline's `qsvNative` flag, not a property of the decoder. */
+function qsvDecoder(codec: VideoCodec, maxBitDepth: 8 | 10): DecoderDescriptor {
   return {
-    id: `${codec}_qsv${native ? '_native' : ''}_decode`,
+    id: `${codec}_qsv_decode`,
     hwAccel: 'qsv',
     sourceCodec: codec,
     maxBitDepth,
-    outputSurface: native ? 'qsv' : 'vaapi',
+    outputSurface: 'vaapi',
     // VAAPI-backed QSV: Linux-only. win32 QSV always uses qsvD3d11Decoder below.
     supports: () => process.platform !== 'win32',
     buildInputArgs: () => [
@@ -69,13 +64,9 @@ function qsvD3d11Decoder(
   };
 }
 
-export const h264QsvDecoder = qsvDecoder('h264', 8, false);
-export const hevcQsvDecoder = qsvDecoder('hevc', 10, false);
-export const av1QsvDecoder = qsvDecoder('av1', 10, false);
-
-export const h264QsvNativeDecoder = qsvDecoder('h264', 8, true);
-export const hevcQsvNativeDecoder = qsvDecoder('hevc', 10, true);
-export const av1QsvNativeDecoder = qsvDecoder('av1', 10, true);
+export const h264QsvDecoder = qsvDecoder('h264', 8);
+export const hevcQsvDecoder = qsvDecoder('hevc', 10);
+export const av1QsvDecoder = qsvDecoder('av1', 10);
 
 export const h264QsvD3d11Decoder = qsvD3d11Decoder('h264', 8);
 export const hevcQsvD3d11Decoder = qsvD3d11Decoder('hevc', 10);
