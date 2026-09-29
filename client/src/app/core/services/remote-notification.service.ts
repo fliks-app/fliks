@@ -1,29 +1,23 @@
 import { Injectable, Injector, effect, inject, untracked } from '@angular/core';
 import { RemoteNotification, type RemoteNotificationAction } from '../plugins/remote-notification.plugin';
 import { imageUrlWithSize } from '../pipes/resolve-url.pipe';
-import { CastPlaybackTarget } from './cast-playback-target';
 import { DeviceService } from './device.service';
 import { RemotePlaybackTarget } from './remote-playback-target';
 import { RemoteService } from './remote.service';
 import { ServerConfigService } from './server-config.service';
 
-/** Mirrors the device this phone drives (a remote target or a Chromecast) into an
- *  Android media notification and applies its controls. The position is read
- *  untracked: the native side extrapolates it between state changes. */
+/** Mirrors the remote target this phone drives into an Android media notification
+ *  and applies its controls. The position is read untracked: the native side
+ *  extrapolates it between state changes. Cast keeps the Cast SDK's notification,
+ *  which Play Services would otherwise duplicate. */
 @Injectable({ providedIn: 'root' })
 export class RemoteNotificationService {
   private readonly device = inject(DeviceService);
   private readonly remote = inject(RemoteService);
-  private readonly remoteTarget = inject(RemotePlaybackTarget);
-  private readonly castTarget = inject(CastPlaybackTarget);
+  private readonly target = inject(RemotePlaybackTarget);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly injector = inject(Injector);
   private shown = false;
-
-  /** Same pick as the cast overlay. */
-  private get target() {
-    return this.remote.isRemoting() ? this.remoteTarget : this.castTarget;
-  }
 
   init(): void {
     if (!this.device.isAndroidNative()) return;
@@ -35,7 +29,7 @@ export class RemoteNotificationService {
       const t = this.target;
       // Each remote report re-syncs the extrapolated position.
       this.remote.targetState();
-      if (!t.isConnected() || !t.hasMedia() || t.isIdle() || t.isStarting()) {
+      if (!this.remote.isRemoting() || !t.hasMedia() || t.isIdle() || t.isStarting()) {
         if (this.shown) void RemoteNotification.clear().catch(() => {});
         this.shown = false;
         return;
