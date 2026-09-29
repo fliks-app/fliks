@@ -234,6 +234,37 @@ describe('LibraryIngestService.ingest', () => {
     expect(h.episodeRepo.update).toHaveBeenCalledWith(9002, { hasFile: true });
   });
 
+  it('ignores a caller episode that belongs to another media', async () => {
+    const h = buildHarness();
+    const srcFile = path.join(srcDir, 'Other.Show.S01E03.1080p.mkv');
+    fs.writeFileSync(srcFile, 'z'.repeat(2048));
+
+    h.mediaRepo.findOne.mockResolvedValue(
+      buildSeries({ id: 20, path: '/library/tv/Nova Skyline' }),
+    );
+    h.seasonRepo.findOne.mockResolvedValue({ id: 700, seasonNumber: 1 });
+    h.episodeRepo.findOne.mockImplementation(async ({ where }) =>
+      where.id === 555 ? null : { id: 7003, episodeNumber: 3, title: null },
+    );
+
+    const result = await h.service.ingest({
+      mediaId: 20,
+      files: [{ path: srcFile, episodeId: 555 }],
+      transfer: 'copy',
+      fallbackQuality: 'WEBDL-1080p',
+      sourceLabel: 'Nova Skyline',
+    });
+
+    expect(h.episodeRepo.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 555, season: { media: { id: 20 } } },
+      }),
+    );
+    expect(result.imported[0].file.episode).toEqual({ id: 7003 });
+    expect(h.episodeRepo.update).toHaveBeenCalledWith(7003, { hasFile: true });
+    expect(h.episodeRepo.update).not.toHaveBeenCalledWith(555, expect.anything());
+  });
+
   it('refuses to place a grabbed file at the library root when the media has no folder of its own', async () => {
     const h = buildHarness();
     const srcFile = path.join(srcDir, 'sample.movie.2001.1080p.mkv');
