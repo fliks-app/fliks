@@ -241,7 +241,9 @@
     "check": "Vérifier les mises à jour",
     "up_to_date": "Votre application est à jour.",
     "check_failed": "Échec de la vérification des mises à jour.",
-    "store_managed": "Les mises à jour de cette application sont gérées par votre store."
+    "store_managed": "Les mises à jour de cette application sont gérées par votre store.",
+    "never_ahead_of_server": "Masquer les mises à jour plus récentes que le serveur",
+    "never_ahead_of_server_hint": "Le bouton de mise à jour reste masqué tant que le serveur a une version inférieure."
   },
   "display_settings": {
     "title": "Affichage",
@@ -2701,7 +2703,9 @@
     "installing": "Installation et redémarrage…",
     "install": "Installer",
     "open_release": "Voir la version",
-    "error": "Échec de la mise à jour"
+    "error": "Échec de la mise à jour",
+    "ahead_of_server": "Cette version est plus récente que votre serveur ({{server}}). Certaines fonctionnalités peuvent ne pas marcher tant que le serveur n'est pas mis à jour.",
+    "hide_until_server": "Masquer jusqu'à la mise à jour du serveur"
   },
   "plugin_view": {
     "unavailable_title": "Cette page n'est pas disponible",

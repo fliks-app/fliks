@@ -290,6 +290,13 @@ export class SystemController {
     return { ok: true, supervisor };
   }
 
+  /** Any signed-in client: the desktop app compares its own update against it. */
+  @Get('version')
+  @CheckPolicies(() => true)
+  version(): { version: string } {
+    return { version: APP_VERSION };
+  }
+
   @Get('update')
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
   async update(): Promise<UpdateStatus> {

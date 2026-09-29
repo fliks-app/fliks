@@ -6,7 +6,12 @@ import {
   viewChild,
 } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideDownload, LucideExternalLink, LucideRocket } from '@lucide/angular';
+import {
+  LucideDownload,
+  LucideExternalLink,
+  LucideRocket,
+  LucideTriangleAlert,
+} from '@lucide/angular';
 import { AppUpdateService } from '../../../core/services/app-update.service';
 import { MarkdownPipe } from '../../pipes/markdown.pipe';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
@@ -26,6 +31,7 @@ import { ModalFooterComponent } from '../modal-footer';
     LucideDownload,
     LucideExternalLink,
     LucideRocket,
+    LucideTriangleAlert,
     ModalHeaderComponent,
   ],
   templateUrl: './app-update-modal.html',
@@ -113,6 +119,11 @@ export class AppUpdateModalComponent {
 
   close(): void {
     this.dialog()?.nativeElement.close();
+  }
+
+  hideUntilServerUpdates(): void {
+    this.update.hideUntilServerUpdates();
+    this.close();
   }
 
   onAction(): void {

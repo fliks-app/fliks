@@ -241,7 +241,9 @@
     "check": "Nach Updates suchen",
     "up_to_date": "Ihre App ist auf dem neuesten Stand.",
     "check_failed": "Prüfung auf Updates fehlgeschlagen.",
-    "store_managed": "Die Updates dieser App werden von Ihrem Store verwaltet."
+    "store_managed": "Die Updates dieser App werden von Ihrem Store verwaltet.",
+    "never_ahead_of_server": "Client-Updates ausblenden, die neuer als der Server sind",
+    "never_ahead_of_server_hint": "Die Update-Schaltfläche bleibt verborgen, solange der Server älter ist."
   },
   "display_settings": {
     "title": "Anzeige",
@@ -2701,7 +2703,9 @@
     "installing": "Installation und Neustart…",
     "install": "Installieren",
     "open_release": "Version ansehen",
-    "error": "Update fehlgeschlagen"
+    "error": "Update fehlgeschlagen",
+    "ahead_of_server": "Diese Version ist neuer als dein Server ({{server}}). Manche Funktionen gehen erst nach einem Server-Update.",
+    "hide_until_server": "Bis zum Server-Update ausblenden"
   },
   "plugin_view": {
     "unavailable_title": "Diese Seite ist nicht verfügbar",

@@ -19,6 +19,15 @@
       }
     </div>
 
+    @if (update.mode() === 'desktop') {
+      <app-toggle-field
+        [value]="update.neverAheadOfServer()"
+        (valueChange)="update.setNeverAheadOfServer($event)"
+        [label]="'update_settings.never_ahead_of_server' | translate"
+        [hint]="'update_settings.never_ahead_of_server_hint' | translate"
+      />
+    }
+
     @if (!canCheck()) {
       <div class="alert bg-base-200">
         <span class="text-sm">{{ 'update_settings.store_managed' | translate }}</span>
@@ -57,6 +66,15 @@
               · {{ info.releaseDate | localeDate:{ dateStyle: 'medium' } }}
             }
           </p>
+
+          @if (update.aheadOfServer()) {
+            <div role="alert" class="alert alert-warning mb-3">
+              <svg lucideTriangleAlert class="h-5 w-5 shrink-0"></svg>
+              <span class="text-sm">
+                {{ 'update.ahead_of_server' | translate: { server: update.serverVersion() } }}
+              </span>
+            </div>
+          }
 
           <div class="rounded-box bg-base-100 p-3 max-h-72 overflow-y-auto mb-4">
             @if (info.releaseNotes) {

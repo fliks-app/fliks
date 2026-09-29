@@ -19,6 +19,20 @@
         }
       </p>
 
+      @if (update.aheadOfServer()) {
+        <div role="alert" class="alert alert-warning mb-3 flex-col items-start gap-2">
+          <div class="flex items-start gap-2">
+            <svg lucideTriangleAlert class="h-5 w-5 shrink-0"></svg>
+            <span class="text-sm">
+              {{ 'update.ahead_of_server' | translate: { server: update.serverVersion() } }}
+            </span>
+          </div>
+          <button class="btn btn-sm btn-ghost self-end" (click)="hideUntilServerUpdates()">
+            {{ 'update.hide_until_server' | translate }}
+          </button>
+        </div>
+      }
+
       <div class="rounded-box bg-base-200 p-3 max-h-72 overflow-y-auto mb-4">
         @if (info.releaseNotes) {
           <div

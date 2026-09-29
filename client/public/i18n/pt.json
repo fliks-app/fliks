@@ -241,7 +241,9 @@
     "check": "Procurar atualizações",
     "up_to_date": "A sua aplicação está atualizada.",
     "check_failed": "Falha ao procurar atualizações.",
-    "store_managed": "As atualizações desta aplicação são geridas pela sua loja."
+    "store_managed": "As atualizações desta aplicação são geridas pela sua loja.",
+    "never_ahead_of_server": "Ocultar atualizações mais recentes que o servidor",
+    "never_ahead_of_server_hint": "O botão de atualização fica oculto enquanto o servidor tiver uma versão anterior."
   },
   "display_settings": {
     "title": "Visualização",
@@ -2701,7 +2703,9 @@
     "installing": "A instalar e reiniciar…",
     "install": "Instalar",
     "open_release": "Ver a versão",
-    "error": "Falha na atualização"
+    "error": "Falha na atualização",
+    "ahead_of_server": "Esta versão é mais recente que o seu servidor ({{server}}). Algumas funções podem falhar até o servidor ser atualizado.",
+    "hide_until_server": "Ocultar até o servidor ser atualizado"
   },
   "plugin_view": {
     "unavailable_title": "Esta página não está disponível",
