@@ -96,6 +96,8 @@ export async function runTonemapOpenclProbe(
       noCropEnabled = false;
       failure = ffmpegTail(err);
     }
+    // Probes 2 and 3 are skipped below; a re-run must not keep their old pass.
+    if (!noCropEnabled) withCropEnabled = hdr10Enabled = false;
 
     // Probe 2: crop-prefixed chain. Some Intel iHD builds accept the
     // basic chain but fail this one — `auto` then has to keep
@@ -152,6 +154,7 @@ export async function runTonemapOpenclProbe(
       }
     }
   } catch (err) {
+    noCropEnabled = withCropEnabled = hdr10Enabled = false;
     failure = ffmpegTail(err) || (err as Error).message;
   } finally {
     await unlink(hdrSample).catch(() => {});

@@ -116,6 +116,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
   /** `undefined` until the first `applyStreamingSettings` call, so boot
    *  doesn't treat the initial admin pin as a re-pin. */
   private lastGpuRenderNode: string | undefined;
+  /** At most one probe chain on the GPU at a time; re-pins during a run
+   *  coalesce into one follow-up run against the latest node. */
+  private probeChainRunning = false;
+  private probeChainRerun = false;
   constructor(
     private readonly cacheService: TranscodeCacheService,
     private readonly liveSessions: LiveSessionRegistry,
@@ -162,7 +166,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     await runAudioEncoderProbe(this.log);
     // Runs async, serialised (see runBootProbeChain); the codec/decoder
     // selectors default to "usable" until it lands.
-    void this.runBootProbeChain();
+    void this.scheduleProbeChain(false);
 
     // Tight cleanup cadence — paired with the live-session 30 s TTL +
     // 60 s job grace, this puts ffmpeg death within ~100 s of the last
@@ -284,14 +288,33 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       this.log.log(
         `GPU re-pinned to ${ss.gpuRenderNode} (admin setting); re-running the boot probe chain`,
       );
-      // Re-detect too: the new render node may belong to a different vendor's
-      // device than the one `this.detectedHwAccel` was resolved against.
-      void (async () => {
-        this.detectedHwAccel = await detectHwAccel(this.log);
-        await this.runBootProbeChain();
-      })().catch((err: Error) =>
-        this.log.warn(`[gpu-re-pin] boot probe re-run aborted: ${err.message}`),
-      );
+      void this.scheduleProbeChain(true);
+    }
+  }
+
+  /** Runs the probe chain now, or once more after the in-flight one. `redetect`
+   *  re-resolves the vendor first: a new render node may be another GPU's. */
+  private async scheduleProbeChain(redetect: boolean): Promise<void> {
+    if (this.probeChainRunning) {
+      this.probeChainRerun = true;
+      return;
+    }
+    this.probeChainRunning = true;
+    try {
+      let redetectNow = redetect;
+      do {
+        this.probeChainRerun = false;
+        try {
+          if (redetectNow) this.detectedHwAccel = await detectHwAccel(this.log);
+          await this.runBootProbeChain();
+        } catch (err) {
+          this.log.warn(`[probe-chain] aborted: ${(err as Error).message}`);
+        }
+        // Only a re-pin queues a follow-up run.
+        redetectNow = true;
+      } while (this.probeChainRerun);
+    } finally {
+      this.probeChainRunning = false;
     }
   }
 

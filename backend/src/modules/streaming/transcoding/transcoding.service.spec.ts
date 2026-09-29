@@ -117,6 +117,29 @@ describe('TranscodingService.applyStreamingSettings GPU re-pin', () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
+  it('never overlaps chains: re-pins during a run coalesce into one follow-up run', async () => {
+    const service = makeService();
+    let running = 0;
+    let maxRunning = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const spy = jest.spyOn(service, 'runBootProbeChain').mockImplementation(async () => {
+      maxRunning = Math.max(maxRunning, ++running);
+      if (spy.mock.calls.length === 1) await gate;
+      running--;
+    });
+    const boot = service.scheduleProbeChain(false);
+    service.applyStreamingSettings({ ...baseSettings, gpuRenderNode: '/dev/dri/renderD128' });
+    service.applyStreamingSettings({ ...baseSettings, gpuRenderNode: '/dev/dri/renderD129' });
+    service.applyStreamingSettings({ ...baseSettings, gpuRenderNode: '/dev/dri/renderD130' });
+    await flush();
+    expect(spy).toHaveBeenCalledTimes(1);
+    release();
+    await boot;
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(maxRunning).toBe(1);
+  });
+
   it('does not re-run when the same setting is re-applied (e.g. every playback-info)', async () => {
     const service = makeService();
     const spy = jest.spyOn(service, 'runBootProbeChain').mockResolvedValue(undefined);

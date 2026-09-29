@@ -135,8 +135,10 @@ export async function runEncoderProbes(
 
   // Only the VAAPI HDR10 descriptors read this; skip the extra spawn otherwise.
   if (hwDescriptors.some((d) => d.hwAccel === 'vaapi' && d.variant.hdr === 'HDR10')) {
-    vaapiIhdCheckedNode = vaapiRenderNode();
+    const node = vaapiRenderNode();
+    // Assigned together once settled: a re-pin re-probe never exposes a mixed pair.
     vaapiIsIntelIhd = await detectVaapiIntelDriver(log);
+    vaapiIhdCheckedNode = node;
     log.log(
       `[encoder-probe] vaapiWritesHdrMetadata=${vaapiIsIntelIhd} (node=${vaapiIhdCheckedNode})`,
     );
