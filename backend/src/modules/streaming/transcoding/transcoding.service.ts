@@ -32,7 +32,7 @@ import {
 } from './ffmpeg-args';
 import { RemuxSegmentAssembler, remuxAssemblyPlan } from './remux-assembler';
 import type { KeyframeGrid } from './segment-boundaries';
-import { keyframeAtOrBefore } from '../../subtitles/video-packets';
+import { keyframeAtOrBefore } from './video-packets';
 import { varStreamMapLayout } from './audio-layout';
 import {
   matchTimingWarnings,

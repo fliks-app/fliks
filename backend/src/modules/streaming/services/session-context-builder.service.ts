@@ -4,7 +4,7 @@ import { sourceBitrates } from '../transcoding';
 import type { SessionContext } from '../transcoding';
 import { parseSourceFps } from '../transcoding/constants';
 import { sessionLayoutContext } from '../transcoding/session-profile';
-import { sourceIsMpegTs } from '../../subtitles/video-packets';
+import { sourceIsMpegTs } from '../transcoding/video-packets';
 import { ActiveStreamTracker } from '../active-stream-tracker.service';
 import { SessionRouter } from './session-router.service';
 import type { ResolvedFile } from '../streaming.service';

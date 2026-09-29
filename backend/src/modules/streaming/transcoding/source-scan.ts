@@ -8,7 +8,7 @@ import {
   scanVideoPackets,
   sourceIsMpegTs,
   type Keyframe,
-} from '../../subtitles/video-packets';
+} from './video-packets';
 
 /** What one read of a whole source file tells playback; kept per file version. */
 export interface SourceScan {

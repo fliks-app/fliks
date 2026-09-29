@@ -1,4 +1,4 @@
-import { type Keyframe } from '../../subtitles/video-packets';
+import { type Keyframe } from './video-packets';
 import { frameSecondsOf, parseSourceFps } from './constants';
 import type { SourceScan } from './source-scan';
 

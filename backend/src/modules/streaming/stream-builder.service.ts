@@ -72,7 +72,7 @@ import {
   sourceTimeline,
   videoPresentationStart,
 } from './transcoding/source-timeline';
-import { sourceIsMpegTs } from '../subtitles/video-packets';
+import { sourceIsMpegTs } from './transcoding/video-packets';
 import { aacConfigMayChange, type SourceScan } from './transcoding/source-scan';
 import type { KeyframeGrid } from './transcoding/segment-boundaries';
 

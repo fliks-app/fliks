@@ -3,7 +3,7 @@ import {
   gridSegmentIndex,
   type Keyframe,
 } from './segment-boundaries';
-import { sourceIsMpegTs } from '../../subtitles/video-packets';
+import { sourceIsMpegTs } from './video-packets';
 
 const kf = (...pts: number[]): Keyframe[] => pts.map((p) => ({ pts: p, dts: p }));
 
