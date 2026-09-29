@@ -472,7 +472,7 @@
     "player_auto_play_next": "Riproduzione automatica dell'episodio successivo",
     "player_auto_play_next_hint": "Alla fine di un episodio, passa automaticamente al successivo della serie.",
     "player_background_audio": "Riproduzione in background",
-    "player_background_audio_hint": "L'audio continua a schermo bloccato o con l'app in background, con una notifica di riproduzione.",
+    "player_background_audio_hint": "L'audio continua a schermo bloccato o con l'app in background, con i controlli di riproduzione nella schermata di blocco.",
     "tab_subtitles": "Sottotitoli",
     "sub_preferred_lang": "Lingua preferita per i sottotitoli",
     "sub_mode": "Modalità dei sottotitoli",

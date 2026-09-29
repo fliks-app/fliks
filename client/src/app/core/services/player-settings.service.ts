@@ -52,7 +52,7 @@ export interface PlayerSettings {
   autoSkipIntro: boolean;
   // Play the next episode automatically when one finishes (series).
   autoPlayNext: boolean;
-  /** Android: keep the sound going with the screen off or the app left. */
+  /** Android and iOS: keep the sound going with the screen off or the app left. */
   backgroundAudio: boolean;
 }
 

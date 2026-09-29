@@ -84,7 +84,7 @@ export interface NativePlayerPlugin {
     subtitles?: { url: string; language: string; label: string }[];
     /** Use CacheDataSource for offline playback (Android). */
     offline?: boolean;
-    /** Keep playing off-screen behind a media notification (Android). */
+    /** Keep playing off-screen behind lock-screen media controls (Android, iOS). */
     backgroundAudio?: boolean;
     /** Notification metadata. */
     title?: string;
@@ -95,7 +95,8 @@ export interface NativePlayerPlugin {
   /** Notification buttons: next shows only with `hasNext`; previous always shows
    *  and restarts the item without `hasPrevious`; the heart shows once `liked`
    *  is known; `seekButtons` swaps previous/next for ±10 s. Taps fire
-   *  `nativePlayerNext` / `Previous` / `Stop` / `ToggleLike`. */
+   *  `nativePlayerNext` / `Previous` / `Stop` / `ToggleLike`. iOS has no stop or
+   *  heart button and ignores `liked`. */
   setQueueNav(options: {
     hasPrevious: boolean;
     hasNext: boolean;

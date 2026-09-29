@@ -2069,7 +2069,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const liked = this.notificationLike.liked();
     // Nothing to step through outside a queue (a film): ±10 s instead.
     const seekButtons = !this.queue.active();
-    if (this.device.isAndroidNative()) {
+    if (this.device.isAndroidNative() || this.device.isIosNative()) {
       NativePlayer.setQueueNav({ hasPrevious, hasNext, liked, seekButtons }).catch(() => {});
     }
   });

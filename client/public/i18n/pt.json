@@ -472,7 +472,7 @@
     "player_auto_play_next": "Reprodução automática do episódio seguinte",
     "player_auto_play_next_hint": "No fim de um episódio, avança automaticamente para o seguinte da série.",
     "player_background_audio": "Reprodução em segundo plano",
-    "player_background_audio_hint": "O som continua com o ecrã bloqueado ou a aplicação em segundo plano, com uma notificação de reprodução.",
+    "player_background_audio_hint": "O som continua com o ecrã bloqueado ou a aplicação em segundo plano, com controlos de reprodução no ecrã de bloqueio.",
     "tab_subtitles": "Legendas",
     "sub_preferred_lang": "Idioma preferido para as legendas",
     "sub_mode": "Modo das legendas",
