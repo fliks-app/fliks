@@ -1,5 +1,4 @@
-import type { MediaFileInfo } from '../../subtitles/ffprobe.service';
-import { sourceIsMpegTs, type Keyframe } from '../../subtitles/video-packets';
+import type { Keyframe } from './video-packets';
 import { frameSecondsOf, parseSourceFps } from './constants';
 import type { SourceScan } from './source-scan';
 
@@ -23,15 +22,6 @@ export interface KeyframeGrid {
   keyframes: Keyframe[];
   /** Index in `keyframes` of each segment's first keyframe, then their count. */
   firstKeyframe: number[];
-}
-
-/** MPEG-TS seeks to a byte position and lands up to a GOP past its target; the
- *  other demuxers land on the keyframe at or before it. */
-export function seeksPastKeyframe(
-  si: Pick<MediaFileInfo, 'formatName'> | null | undefined,
-  filePath: string,
-): boolean {
-  return sourceIsMpegTs(si, filePath);
 }
 
 /** Cut at the first keyframe past a target advancing `segDur` per cut, from the
@@ -80,14 +70,15 @@ export function gridSegmentIndex(
   return boundaries.length - 2;
 }
 
-/** The keyframe grid of a scanned source on the timeline starting at `origin`,
- *  or null when the scan holds no keyframe past it. */
+/** The keyframe grid a remux would keep for `scan` on the timeline starting at
+ *  `origin`, or null with no scan yet or no keyframe past `origin`. */
 export function remuxSegmentGrid(
-  scan: Pick<SourceScan, 'keyframes' | 'end'>,
+  scan: Pick<SourceScan, 'keyframes' | 'end'> | null,
   origin: number,
   segDur: number,
   frameRate: string | undefined,
 ): KeyframeGrid | null {
+  if (!scan) return null;
   return computeSegmentGrid(
     scan.keyframes,
     origin,

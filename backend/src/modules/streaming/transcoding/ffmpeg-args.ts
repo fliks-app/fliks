@@ -445,7 +445,7 @@ export interface BuildFfmpegArgsOptions {
   /** Container start the input `-ss` counts from. Defaults to `sourceStartPts`. */
   sourceFormatStart?: number;
   /** Decode time of the keyframe at or before a seeked run's first frame, the input
-   *  seek of a demuxer landing after its target (`seeksPastKeyframe`). */
+   *  seek of a demuxer landing after its target (`sourceIsMpegTs`). */
   seekKeyframeDts?: number;
   /** Source time an MPEG-TS clock breaks at: the run stops reading there, as
    *  the playlist ends there (`sourceTimeline`). */

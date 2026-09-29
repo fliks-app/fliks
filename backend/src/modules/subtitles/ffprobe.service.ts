@@ -8,7 +8,7 @@ import { subtitleFlagsFromTitle } from '../../common/constants/subtitle-flags';
 import { existsSync } from 'fs';
 import { stat } from 'fs/promises';
 import { vaapiRenderNode } from '../streaming/transcoding/hw-device';
-import { ffprobeLines } from './video-packets';
+import { ffprobeLines } from '../../common/utils/ffprobe-lines';
 import { mapWithConcurrency } from '../../common/utils/concurrency';
 import { ffmpegSlots, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
 
