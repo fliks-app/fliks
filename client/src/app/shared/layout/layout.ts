@@ -528,7 +528,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   retryConnection() {
     this.retrying.set(true);
     this.sse.reconnect();
-    setTimeout(() => this.retrying.set(false), 20_000);
+    setTimeout(() => this.retrying.set(false), 10_000);
   }
 
   toggleCastOverlay() {

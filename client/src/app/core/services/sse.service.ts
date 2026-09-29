@@ -86,8 +86,8 @@ const TAB_NONCE_KEY = 'fliks.remote.tabNonce';
 /** Silence worth reconnecting on: the server pings every 30s, so this is two
  *  missed keepalives plus slack for a throttled timer. */
 const LIVENESS_TIMEOUT_MS = 80_000;
-const LIVENESS_CHECK_MS = 20_000;
-const DIAL_TIMEOUT_MS = 20_000;
+const LIVENESS_CHECK_MS = 5_000;
+const DIAL_TIMEOUT_MS = 10_000;
 
 /** Series/movie title plus episode identity, kept as separate fields so a season
  *  import can lay them out rather than parsing a flattened string. `seasonNumber`
