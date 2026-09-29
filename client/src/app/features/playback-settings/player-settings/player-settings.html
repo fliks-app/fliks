@@ -68,6 +68,14 @@
       [hint]="'playback_settings.player_auto_play_next_hint' | translate"
     />
 
+    @if (showBackgroundAudio) {
+      <app-toggle-field
+        [(value)]="backgroundAudio"
+        [label]="'playback_settings.player_background_audio' | translate"
+        [hint]="'playback_settings.player_background_audio_hint' | translate"
+      />
+    }
+
     <button class="btn btn-ghost btn-sm text-error gap-2 self-start" (click)="clearAudioSelections()">
       <svg lucideTrash2 class="h-4 w-4"></svg>
       {{ 'playback_settings.player_clear_saved' | translate }}

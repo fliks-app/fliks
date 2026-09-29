@@ -39,6 +39,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(CastPlugin.class);
         registerPlugin(DownloadNotificationPlugin.class);
         registerPlugin(NativePlayerPlugin.class);
+        registerPlugin(RemoteNotificationPlugin.class);
         super.onCreate(savedInstanceState);
 
         // Request notification permission (Android 13+)

@@ -3,6 +3,8 @@ package media.fliks.app;
 import android.content.Context;
 
 import com.google.android.gms.cast.framework.CastOptions;
+import com.google.android.gms.cast.framework.media.CastMediaOptions;
+import com.google.android.gms.cast.framework.media.NotificationOptions;
 import com.google.android.gms.cast.framework.OptionsProvider;
 import com.google.android.gms.cast.framework.SessionProvider;
 
@@ -20,8 +22,16 @@ import java.util.List;
 public class CastOptionsProvider implements OptionsProvider {
     @Override
     public CastOptions getCastOptions(Context context) {
+        // Explicit: without CastMediaOptions the SDK creates no session, and Play
+        // Services posts its own artless notification instead.
         return new CastOptions.Builder()
             .setReceiverApplicationId(context.getString(R.string.cast_receiver_app_id))
+            .setCastMediaOptions(new CastMediaOptions.Builder()
+                .setNotificationOptions(new NotificationOptions.Builder()
+                    .setTargetActivityClassName(MainActivity.class.getName())
+                    .build())
+                .setMediaSessionEnabled(true)
+                .build())
             .build();
     }
 

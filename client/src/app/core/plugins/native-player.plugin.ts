@@ -84,7 +84,18 @@ export interface NativePlayerPlugin {
     subtitles?: { url: string; language: string; label: string }[];
     /** Use CacheDataSource for offline playback (Android). */
     offline?: boolean;
+    /** Keep playing off-screen behind a media notification (Android). */
+    backgroundAudio?: boolean;
+    /** Notification metadata. */
+    title?: string;
+    artist?: string;
+    artworkUrl?: string;
   }): Promise<void>;
+
+  /** Notification queue buttons: next shows only with `hasNext`; previous always
+   *  shows and restarts the item without `hasPrevious`. Taps fire
+   *  `nativePlayerNext` / `nativePlayerPrevious`. */
+  setQueueNav(options: { hasPrevious: boolean; hasNext: boolean }): Promise<void>;
 
   play(): Promise<void>;
   pause(): Promise<void>;

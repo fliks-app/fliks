@@ -9,6 +9,7 @@ import {
 import { BrowserDeviceProfileService } from '../../../core/services/browser-device-profile.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { DeviceService } from '../../../core/services/device.service';
 import { persistOnChange } from '../../../core/utils/persist-on-change';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { SelectFieldComponent } from '../../../shared/components/forms/select-field/select-field';
@@ -33,6 +34,7 @@ export class PlayerSettingsPageComponent {
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
+  private readonly device = inject(DeviceService);
 
   readonly languageOptions = LANGUAGE_CODE_OPTIONS;
   readonly audioModeOptions = AUDIO_SELECTION_MODE_OPTIONS;
@@ -47,6 +49,8 @@ export class PlayerSettingsPageComponent {
   readonly showEcoQualities = signal(this.initial.showEcoQualities);
   readonly autoSkipIntro = signal(this.initial.autoSkipIntro);
   readonly autoPlayNext = signal(this.initial.autoPlayNext);
+  readonly backgroundAudio = signal(this.initial.backgroundAudio);
+  readonly showBackgroundAudio = this.device.isAndroidNative() && !this.device.isTv();
   readonly showHdrToggle = signal(this.deviceProfile.hardwareSupportsHdr);
 
   constructor() {
@@ -59,6 +63,7 @@ export class PlayerSettingsPageComponent {
         showEcoQualities: this.showEcoQualities(),
         autoSkipIntro: this.autoSkipIntro(),
         autoPlayNext: this.autoPlayNext(),
+        backgroundAudio: this.backgroundAudio(),
       }),
       // Spread first: other pages own fields of this store.
       (values) => this.ps.save({ ...this.ps.get(), ...values }),

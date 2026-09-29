@@ -65,6 +65,7 @@ import { NativeEngine } from '../../core/services/playback-engine/native-engine'
 import { DesktopEngine } from '../../core/services/playback-engine/desktop-engine';
 import { TizenEngine, isTizenAvplayAvailable } from '../../core/services/playback-engine/tizen-engine';
 import { NativePlayer } from '../../core/plugins/native-player.plugin';
+import { imageUrlWithSize } from '../../core/pipes/resolve-url.pipe';
 import { PlayerStateService } from '../../core/services/player-state.service';
 import { TrackManagerService, SubtitleOption } from '../../core/services/track-manager.service';
 import { QualityManagerService } from '../../core/services/quality-manager.service';
@@ -1529,6 +1530,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const { engine } = await this.createSurface('native');
     if (engine instanceof NativeEngine) {
       engine.cropSupported = this.deviceProfileService.nativeCropsBlackBars();
+      if (this.playerSettings.get().backgroundAudio) {
+        engine.mediaInfo = () => {
+          const art = this.media?.fanartUrl || this.media?.posterUrl;
+          return {
+            title: this.episodeTitle() || this.mediaTitle(),
+            artist: this.episodeTitle() ? this.mediaTitle() : undefined,
+            artworkUrl: art ? this.serverConfig.resolveUrl(imageUrlWithSize(art, 'medium')) : undefined,
+          };
+        };
+        engine.onNext = () => void this.advance();
+        engine.onPrevious = () => void this.playQueueItem(this.queue.index() - 1);
+      }
     }
     this.wireNativePlayerEngine(engine);
   }
@@ -2039,6 +2052,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   );
 
   /** Reveal the next-episode cue once each time the playhead enters the outro. */
+  private readonly notificationQueueEffect = effect(() => {
+    const hasNext = this.upNext() !== null;
+    const hasPrevious = !this.preRollActive() && this.queue.active() && this.queue.index() > 0;
+    if (this.device.isAndroidNative()) {
+      NativePlayer.setQueueNav({ hasPrevious, hasNext }).catch(() => {});
+    }
+  });
+
   private readonly nextEpisodeCueEffect = effect(() => {
     if (this.showNextEpisodeButton()) {
       if (this.nextEpisodeCueArmed) return;
