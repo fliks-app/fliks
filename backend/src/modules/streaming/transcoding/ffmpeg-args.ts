@@ -30,12 +30,14 @@ import type {
   TonemapAlgo,
   TranscodeProfile,
 } from './types';
-import type {
-  BitDepth,
-  CodecVariant,
-  EncoderInput,
-  HdrStaticMetadata,
-  VideoCodec,
+import {
+  DEFAULT_TONEMAP_CURVE,
+  type BitDepth,
+  type CodecVariant,
+  type EncoderInput,
+  type HdrStaticMetadata,
+  type TonemapCurve,
+  type VideoCodec,
 } from './codec/types';
 import {
   decoderRegistry,
@@ -49,10 +51,9 @@ import { varStreamMapLayout } from './audio-layout';
 import { inputSeekSeconds } from './source-timeline';
 import {
   resolveEncodePipeline,
-  isOpenclTonemapPath,
+  resolveTonemapReport,
   isVtTonemapPath,
   isVtHdrPassthroughPath,
-  isCudaTonemapPath,
 } from './encode-pipeline';
 import {
   DECODE_TIME_TOLERANCE_SECONDS,
@@ -63,7 +64,7 @@ import {
   qsvDeviceInitArgs,
   vulkanTonemapInitArgs,
 } from './hw-device';
-import { buildVideoFilters, resolveTonemapCurve } from './ffmpeg-filter-graph';
+import { buildVideoFilters } from './ffmpeg-filter-graph';
 import { buildImageBurnInFilterComplex } from './subtitle-overlay-filter';
 import { nvencVfEndsOnGpu } from './codec/encoders/helpers/nvenc-filters';
 import { amfVfEndsOnGpu } from './codec/encoders/helpers/amf-filters';
@@ -457,6 +458,9 @@ export interface BuildFfmpegArgsOptions {
   /** HDR → SDR tone-mapping algorithm (admin override). Defaults to `'auto'`
    *  which preserves the historical vaapi-when-available preference. */
   tonemapAlgo?: TonemapAlgo;
+  /** Tone-map curve, frozen at playback-info (`LiveSession.tonemapCurve`).
+   *  Defaults to {@link DEFAULT_TONEMAP_CURVE} for a non-HLS caller. */
+  tonemapCurve?: TonemapCurve;
   sourceFps?: number;
   /** Source colorimetry (ffprobe names). An SDR transcode preserves these on
    *  input and output; undefined/`unknown` falls back to BT.709 limited. */
@@ -738,7 +742,13 @@ function resolveDecodeStage(opts: {
     effectiveHwAccel === 'vaapi'
   ) {
     const fhd = args.indexOf('-filter_hw_device');
-    if (fhd !== -1) args.splice(0, fhd + 2, ...vulkanTonemapInitArgs());
+    if (fhd !== -1) {
+      // Drop the VAAPI device-init block (args[0..fhd+1]) and keep whatever
+      // decode args the decoder appended after it.
+      const decodeTail = args.slice(fhd + 2);
+      args.length = 0;
+      args.push(...vulkanTonemapInitArgs(), ...decodeTail);
+    }
   }
 
   // Full-Metal HDR opt-in. The h264/hevc_videotoolbox encoders can keep
@@ -784,10 +794,8 @@ function resolveDecodeStage(opts: {
   // `hwupload=derive_device=vaapi` step in `hwCropPrefix` needs to
   // resolve correctly. Setting `-filter_hw_device ocl` would re-route
   // every device-less filter through opencl, and Intel iHD reports
-  // `Query format failed: Function not implemented` (ENOSYS) when
-  // hwupload tries to materialise a vaapi context from an opencl
-  // default — the visible failure for cropped HDR sessions was
-  // `Parsed_hwupload_3: Query format failed` followed by exit=218.
+  // ENOSYS when hwupload tries to materialise a vaapi context from an
+  // opencl default.
   // `tonemap_opencl` doesn't need to be the default device: it picks
   // its device from the upstream `hwmap=derive_device=opencl` frame
   // context, and the round-trip back to qsv uses an explicit
@@ -945,6 +953,7 @@ export function buildFfmpegArgs(
     sourceDvProfile,
     sourceDvBlSignalCompatId,
     tonemapAlgo = 'auto',
+    tonemapCurve = DEFAULT_TONEMAP_CURVE,
   } = opts;
 
   // Segment container choice. `useTs` stays as the emergency fallback
@@ -1086,15 +1095,7 @@ export function buildFfmpegArgs(
   // also uses (so the stats hwAccel can't drift from the encoder that runs):
   // the requested-vs-effective hwAccel, the encoder (with registry CPU
   // fallback), the tone-map path, and the QSV-native eligibility.
-  const {
-    requestedHwAccel,
-    encoder,
-    effectiveHwAccel,
-    tonemapPath,
-    qsvNativeAvailable,
-    useVaapiTonemap,
-    amfOpenclAvailable,
-  } = resolveEncodePipeline(variant, {
+  const pipeline = resolveEncodePipeline(variant, {
     hwAccel,
     crop: !!crop,
     burnIn: !!burnIn?.filter,
@@ -1104,6 +1105,15 @@ export function buildFfmpegArgs(
     dvNoBase,
     sourceBitDepth,
   });
+  const {
+    requestedHwAccel,
+    encoder,
+    effectiveHwAccel,
+    tonemapPath,
+    qsvNativeAvailable,
+    useVaapiTonemap,
+    amfOpenclAvailable,
+  } = pipeline;
   // No encoder means the variant is unsupported on this host even after the
   // registry's CPU fallback.
   if (!encoder) {
@@ -1111,15 +1121,15 @@ export function buildFfmpegArgs(
       `No encoder for variant ${JSON.stringify(variant)} on ${requestedHwAccel}`,
     );
   }
-  const useVulkanTonemap =
-    tonemapPath === 'vulkan' && effectiveHwAccel === 'vaapi';
-
-  // NVENC's zero-copy path: tonemap_cuda stays on the CUDA surface, no CPU
-  // bounce. See isCudaTonemapPath.
-  const cudaTonemap = isCudaTonemapPath(!!tonemap, effectiveHwAccel);
-  // NVENC/AMF's off-encoder tone-map fallback; false by itself when
-  // cudaTonemap is active. See isOpenclTonemapPath.
-  const openclTonemap = isOpenclTonemapPath(!!tonemap, effectiveHwAccel, dvNoBase);
+  // Same resolver as the playback-info tonemap report, so the stats name this step.
+  const { useVulkanTonemap, cudaTonemap, openclTonemap } = resolveTonemapReport(pipeline, {
+    tonemap: !!tonemap,
+    dvNoBase,
+    burnIn: !!burnIn,
+    sourceVideoCodec,
+    hdr10Target: dvNoBaseHdr10,
+    curve: tonemapCurve,
+  });
   // GPU decode whenever available, including the tone-map path — the frame
   // reaches OpenCL via hwdownload→hwupload (a copy, no CUDA/D3D11↔OpenCL interop).
   const decodeHwAccel: HwAccelType = effectiveHwAccel;
@@ -1207,7 +1217,6 @@ export function buildFfmpegArgs(
     args.push('-ss', formatSeconds(alignStartSeconds));
   }
 
-  const tonemapCurve = resolveTonemapCurve();
   const encoderInput: EncoderInput = {
     variant,
     target: {
@@ -1263,8 +1272,8 @@ export function buildFfmpegArgs(
   };
   args.push(...encoder.buildArgs(encoderInput));
 
-  // A tail setparams beats frame tags reliably (fixes VAAPI/QSV tonemap crashes);
-  // METADATA_ONLY (vf_setparams.c) tags hardware frames too, AMF included.
+  // A tail setparams beats frame tags reliably: METADATA_ONLY (vf_setparams.c)
+  // tags hardware frames too, AMF included.
   const sdrTagStep =
     !isHdrOutput &&
     !useVtMetalPath &&

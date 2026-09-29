@@ -66,13 +66,12 @@ const resolvedWith = (audio: Track[], videoStart: number | null = 0) =>
 // 'eco-1080p' forces the Transcode ladder regardless of copy-compatibility
 // (see negotiated-quality.spec.ts), so the per-track audio decision runs.
 const transcode = (audio: Track[], profile = client, videoStart: number | null = 0) =>
-  svc().evaluate(
-    resolvedWith(audio, videoStart),
+  svc().evaluate({
+    resolved: resolvedWith(audio, videoStart),
     profile,
-    'tok',
-    undefined,
-    'eco-1080p',
-  ).response;
+    tokenParam: 'tok',
+    requestedQuality: 'eco-1080p',
+  }).response;
 
 describe('StreamBuilderService — audio start offset', () => {
   it('forces an offset multi-audio track to transcode instead of copy', () => {
@@ -123,11 +122,11 @@ describe('StreamBuilderService — audio start offset', () => {
 
   it('routes the remux copy decision through the same predicate', () => {
     // Container outside the profile → DirectStream (remux) with a copyable video.
-    const r = svc().evaluate(
-      resolvedWith([{ startTimeSeconds: 1, codec: 'eac3', channels: 6 }]),
-      profileWith(['eac3'], {}, ['mp4']),
-      'tok',
-    ).response;
+    const r = svc().evaluate({
+      resolved: resolvedWith([{ startTimeSeconds: 1, codec: 'eac3', channels: 6 }]),
+      profile: profileWith(['eac3'], {}, ['mp4']),
+      tokenParam: 'tok',
+    }).response;
     expect(r.playMethod).toBe('DirectStream');
     expect(r.audioCopyStream).toBe(false);
     expect(r.audioPlan).toEqual({

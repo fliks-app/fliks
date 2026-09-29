@@ -42,6 +42,31 @@ export function resolveSourceVideoBitrateBps(
   return undefined;
 }
 
+/** A source's bitrates as every consumer reads them: container bitrate (unset
+ *  when 0) and the video estimate derived from it and the summed audio. */
+export function sourceBitrates(
+  si:
+    | {
+        formatBitRate?: number | null;
+        video?: { bitRate?: number | null }[];
+        audio?: { bitRate?: number | null }[];
+      }
+    | null
+    | undefined,
+): { videoBitRate?: number; formatBitRate?: number } {
+  const formatBitRate =
+    si?.formatBitRate != null && si.formatBitRate > 0 ? si.formatBitRate : undefined;
+  const audioSumBitrate = (si?.audio ?? []).reduce((sum, a) => sum + (a?.bitRate ?? 0), 0);
+  return {
+    videoBitRate: resolveSourceVideoBitrateBps(
+      si?.video?.[0]?.bitRate,
+      formatBitRate,
+      audioSumBitrate,
+    ),
+    formatBitRate,
+  };
+}
+
 /**
  * Cap a ladder rung's video bitrate to what the source actually needs, so a
  * forced transcode (crop, explicit rung, …) never *inflates* the bitrate above
@@ -257,6 +282,11 @@ export function getHdrLadderForDevice(
  *  string emission in master-playlist (hvc1.* + VIDEO-RANGE=PQ). */
 export function isHdrProfile(name: string): boolean {
   return name.endsWith('-hdr');
+}
+
+/** A rung id as the session's ladder names it: HDR ladder rungs carry `-hdr`. */
+export function hdrRungName(quality: string, hdrLadder: boolean): string {
+  return hdrLadder && !isHdrProfile(quality) ? `${quality}-hdr` : quality;
 }
 
 /** True when a profile is small enough to encode on the source. Compares

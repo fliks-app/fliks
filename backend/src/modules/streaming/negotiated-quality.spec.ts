@@ -61,31 +61,41 @@ const resolved = (hdr: boolean) =>
 
 describe('StreamBuilderService — negotiated quality', () => {
   it('reports the source rung on a copy path', () => {
-    const r = svc().evaluate(resolved(false), client, 'tok');
+    const r = svc().evaluate({ resolved: resolved(false), profile: client, tokenParam: 'tok' });
     expect(r.response.playMethod).toBe('DirectPlay');
     expect(r.response.quality).toBe('original');
   });
 
   it('reports the eco rung it locked in', () => {
-    const r = svc().evaluate(resolved(false), client, 'tok', undefined, 'eco-1080p');
+    const r = svc().evaluate({
+      resolved: resolved(false),
+      profile: client,
+      tokenParam: 'tok',
+      requestedQuality: 'eco-1080p',
+    });
     expect(r.response.playMethod).toBe('Transcode');
     expect(r.response.quality).toBe('eco-1080p');
   });
 
   it('keeps an eco request on the eco rung of the HDR ladder', () => {
-    const r = svc().evaluate(
-      resolved(true),
-      localTonemapClient,
-      'tok',
-      undefined,
-      'eco-1080p',
-    );
+    const r = svc().evaluate({
+      resolved: resolved(true),
+      profile: localTonemapClient,
+      tokenParam: 'tok',
+      requestedQuality: 'eco-1080p',
+    });
     expect(r.response.playMethod).toBe('Transcode');
     expect(r.response.quality).toBe('eco-1080p-hdr');
   });
 
   it('reports auto when nothing is pinned', () => {
-    const r = svc().evaluate(resolved(false), client, 'tok', undefined, 'auto', 'abr');
+    const r = svc().evaluate({
+      resolved: resolved(false),
+      profile: client,
+      tokenParam: 'tok',
+      requestedQuality: 'auto',
+      settings: { autoQualityMode: 'abr' },
+    });
     expect(r.response.playMethod).toBe('Transcode');
     expect(r.response.quality).toBe('auto');
   });

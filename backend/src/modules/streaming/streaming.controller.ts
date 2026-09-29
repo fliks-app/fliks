@@ -35,7 +35,8 @@ import {
   getLadderForDevice,
   getHdrLadderForDevice,
   profileFitsSource,
-  resolveSourceVideoBitrateBps,
+  sourceBitrates,
+  hdrRungName,
   cappedRungVideoBitrateBps,
   parseBitrateToBps,
   type BurnInSubtitle,
@@ -43,7 +44,6 @@ import {
   type TranscodeSession,
 } from './transcoding';
 import { tsHeadroom } from './transcoding/ffmpeg-args';
-import type { HwAccelType } from './transcoding/types';
 import {
   DEFAULT_SEGMENT_DURATION,
   EARLY_PROBE_SEGMENTS,
@@ -64,7 +64,7 @@ import {
   sourceTimeline,
 } from './transcoding/source-timeline';
 import { copySourceCodecString } from './transcoding/codec/codec-strings';
-import { dvSupplementalCodecs, dvStandaloneCodecs, dvHasNoBase } from './transcoding/codec/dolby-vision';
+import { dvSupplementalCodecs, dvStandaloneCodecs } from './transcoding/codec/dolby-vision';
 import { LiveSessionRegistry, type LiveSession, type SessionKind } from './live-session.service';
 import * as path from 'path';
 import { SegmentPackagingService } from './services/segment-packaging.service';
@@ -79,15 +79,12 @@ import {
   buildIFrameSegmentArgs,
   iframeResolution,
 } from './transcoding/iframe-trick-play';
-import { resolveTonemapPath } from './transcoding/tonemap-path';
-import { resolveTonemapCurve } from './transcoding/ffmpeg-filter-graph';
 import { autoFfmpegSlots } from '../../common/utils/ffmpeg-slots';
 import { getPauseCapability } from './transcoding/ffmpeg-pause';
 import {
-  isOpenclTonemapPath,
-  isVtTonemapPath,
-  isCudaTonemapPath,
+  encodePipelineInputs,
   resolveEncodePipeline,
+  resolveTonemapReport,
 } from './transcoding/encode-pipeline';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
@@ -643,10 +640,7 @@ export class StreamingController {
       // (`1080p`), so translate to the HDR equivalent so prewarm
       // doesn't spawn a doomed SDR session that the player will
       // immediately kill and replace with the matching HDR rung.
-      const targetQuality =
-        (session?.hdrLadder ?? false) && !startQuality.endsWith('-hdr')
-          ? `${startQuality}-hdr`
-          : startQuality;
+      const targetQuality = hdrRungName(startQuality, session?.hdrLadder ?? false);
       const startSegment = Math.max(
         0,
         secondsToSegmentIndex(
@@ -737,15 +731,7 @@ export class StreamingController {
     // one audio stream per source track, not one.
     const audioStreams = info?.audio ?? [];
     const audioTrackCount = Math.max(1, audioStreams.length);
-    const audioSumBps = audioStreams.reduce(
-      (sum, a) => sum + (a.bitRate ?? 0),
-      0,
-    );
-    const sourceVideoBitrateBps = resolveSourceVideoBitrateBps(
-      video?.bitRate,
-      info?.formatBitRate,
-      audioSumBps,
-    );
+    const sourceVideoBitrateBps = sourceBitrates(info).videoBitRate;
 
     const qualities: { key: string; label: string; estimatedSize: number }[] =
       [];
@@ -851,10 +837,8 @@ export class StreamingController {
       ? parseInt(burnInSubtitleRaw, 10)
       : undefined;
 
-    // Resolved up front (not just before session creation below): the
-    // encode-pipeline decision (stream-builder's stats hwAccel) needs its
-    // `type` too, and for embedded text subs this also extracts the sidecar ;
-    // one resolve, reused for both.
+    // Resolved up front: the encode-pipeline decision needs its `type` too,
+    // one resolve reused for both.
     let burnIn: BurnInSubtitle | null = null;
     if (burnInSubtitleId) {
       try {
@@ -923,12 +907,12 @@ export class StreamingController {
       resolved.mediaFile.streamInfo,
     );
 
-    // Before the decision below, which reads them.
+    // For the session contexts later HLS requests build from them.
     this.activeStreamTracker.setSegmentDuration(ss.segmentDuration);
     this.activeStreamTracker.setTonemapAlgo(ss.tonemapAlgo);
     this.activeStreamTracker.setAutoCropEnabled(ss.autoCropEnabled);
-    // Re-push the admin settings (GPU pin, tone-map curve, cache budget, job
-    // slots) so a change applies without a restart.
+    // Re-push the admin settings (GPU pin, cache budget, job slots) so a
+    // change applies without a restart.
     this.transcodingService.applyStreamingSettings(ss);
 
     // Quality the client is requesting (absent / 'auto' = let the server
@@ -947,21 +931,20 @@ export class StreamingController {
       timeline.origin,
       ss.segmentDuration,
     );
-    const evaluateResult = this.streamBuilder.evaluate(
+    const evaluateResult = this.streamBuilder.evaluate({
       resolved,
-      deviceProfile,
+      profile: deviceProfile,
       tokenParam,
-      burnInSubtitleId,
-      startQuality,
-      ss.autoQualityMode,
+      settings: ss,
+      // A failed resolve (burnIn still null) must not tell evaluate() there's
+      // a burn-in — that loses DirectPlay for a subtitle nothing will render.
+      burnInSubtitleId: burnIn ? burnInSubtitleId : undefined,
+      burnInIsText: !!burnIn?.filter,
+      requestedQuality: startQuality,
       audioStreamIndex,
-      ss.segmentDuration,
-      held.scan,
+      sourceScan: held.scan,
       remuxGrid,
-      // Text-only, matching ffmpeg-args' `!!burnIn?.filter`: an image/PGS
-      // burn-in doesn't force the encode pipeline off HW, only text does.
-      !!burnIn?.filter,
-    );
+    });
     const { response, useHdrLadder, videoVariant, muxFlavour } = evaluateResult;
     const sourceAudioCount = resolved.mediaFile.streamInfo?.audio?.length ?? 0;
     const effectiveUseTs = muxFlavour === 'ts';
@@ -1059,7 +1042,16 @@ export class StreamingController {
       sourceVersion: held.version,
       dolbyVision: response.dolbyVision ?? false,
       sourceHdr10Plus: resolved.mediaFile.streamInfo?.video?.[0]?.hdr10Plus ?? false,
-      tonemapping: response.tonemapping,
+      sourceDvProfile: resolved.mediaFile.streamInfo?.video?.[0]?.dvProfile ?? null,
+      sourceDvBlSignalCompatId:
+        resolved.mediaFile.streamInfo?.video?.[0]?.dvBlSignalCompatId ?? null,
+      audioStreams: resolved.mediaFile.streamInfo?.audio ?? null,
+      // Not `response.tonemapping`: a remux session's later transcoded rung
+      // under the same sid must tonemap too.
+      tonemapping: evaluateResult.transcodeTonemapping,
+      // Frozen from the admin setting: a later curve change must not move an
+      // in-progress session's cache dir or mix segments of both curves.
+      tonemapCurve: ss.tonemapCurve,
     };
     const profileHash =
       response.playMethod === 'DirectPlay'
@@ -1091,76 +1083,33 @@ export class StreamingController {
       episodeId ?? undefined,
     );
 
-    // burnIn was already resolved above (needed before evaluate() too), and
-    // must land on the session before the transcode pre-spawns below.
-
     // Surface the tonemap mechanism the session actually runs, not the admin
-    // pick. QSV/VAAPI encoders run the HW tonemap (vaapi/opencl/qsv after
-    // `auto` resolution + boot probe); NVENC runs `tonemap_opencl` on the GPU
-    // when the OpenCL probe passed, else the CPU zscale chain; libx26x /
-    // VideoToolbox fallback always CPU. Report the real path (+ curve for the
-    // opencl/CPU chains, which honour it) so the overlay shows what's running.
-    // Reads `burnIn` (the resolved subtitle), not the raw query id, so a
-    // failed resolve reports the same CPU path the argv builder falls back to.
-    const hasCrop = resolved.mediaFile.streamInfo?.video?.[0]?.crop != null;
-    const dvNoBase = dvHasNoBase(
-      resolved.mediaFile.streamInfo?.video?.[0]?.dvProfile,
-      resolved.mediaFile.streamInfo?.video?.[0]?.dvBlSignalCompatId,
-    );
-    const isSourceHdr = !!resolved.mediaFile.streamInfo?.video?.[0]?.hdrFormat;
-    const hwTonemap =
-      response.hwAccel === 'qsv' || response.hwAccel === 'vaapi';
-    const cudaTonemap = isCudaTonemapPath(!!response.tonemapping, response.hwAccel);
-    // Same resolver + inputs as the spawn (stream-builder.service.ts), so the
-    // reported path can't drift from the chain the spawn builds (AMF zero-copy, qsv→vaapi).
-    const pipeline =
-      videoVariant &&
-      resolveEncodePipeline(videoVariant, {
-        hwAccel: response.hwAccel as HwAccelType,
-        crop: hasCrop,
-        burnIn: !!burnIn?.filter,
-        tonemap: !!response.tonemapping,
-        tonemapAlgo: ss.tonemapAlgo,
-        sourceVideoCodec: resolved.mediaFile.streamInfo?.video?.[0]?.codec,
-        dvNoBase,
-        sourceBitDepth: isSourceHdr || dvNoBase ? 10 : 8,
-      });
-    const amfOpenclAvailable = response.hwAccel === 'amf' && !!pipeline?.amfOpenclAvailable;
-    const openclTonemap =
-      isOpenclTonemapPath(!!response.tonemapping, response.hwAccel, dvNoBase) ||
-      amfOpenclAvailable;
-    const vtMetalTonemap = isVtTonemapPath(
-      !!response.tonemapping,
-      response.hwAccel,
-      !!burnIn,
-      resolved.mediaFile.streamInfo?.video?.[0]?.codec,
-    );
-    const tonemapAlgo = response.tonemapping
-      ? hwTonemap
-        ? pipeline?.useVaapiTonemap
-          ? 'vaapi'
-          : resolveTonemapPath(ss.tonemapAlgo, { hasCrop, dvNoBase })
-        : cudaTonemap
-          ? 'cuda'
-          : openclTonemap
-            ? 'opencl'
-            : vtMetalTonemap
-              ? 'videotoolbox'
-              : 'cpu'
-      : null;
-    // A no-base DV source reshaped into HDR10 runs no tone curve at all ;
-    // apply_dovi reshapes IPT straight to PQ (see dvNoBaseHdr10Eligible).
-    const dvNoBaseHdr10 = dvNoBase && videoVariant?.hdr === 'HDR10';
-    // The curve is a `tonemap`/`tonemap_opencl` operator, so it only applies to
-    // the opencl/vulkan/CPU/cuda paths; the vpp_qsv / tonemap_vaapi LUTs ignore it.
-    const tonemapCurve =
-      !dvNoBaseHdr10 &&
-      (tonemapAlgo === 'opencl' ||
-        tonemapAlgo === 'vulkan' ||
-        tonemapAlgo === 'cpu' ||
-        tonemapAlgo === 'cuda')
-        ? resolveTonemapCurve()
-        : undefined;
+    // pick: the spawn's own pipeline inputs, through the resolver ffmpeg-args uses.
+    const v0 = resolved.mediaFile.streamInfo?.video?.[0];
+    const pipelineInputs = encodePipelineInputs({
+      hwAccel: this.transcodingService.getDetectedHwAccel(),
+      crop: ss.autoCropEnabled && v0?.crop != null,
+      textBurnIn: !!burnIn?.filter,
+      tonemap: !!response.tonemapping,
+      tonemapAlgo: ss.tonemapAlgo,
+      sourceVideoCodec: (v0?.codec ?? '').toLowerCase() || undefined,
+      isSourceHdr: !!v0?.hdrFormat,
+      sourceDvProfile: v0?.dvProfile,
+      sourceDvBlSignalCompatId: v0?.dvBlSignalCompatId,
+    });
+    const tonemapReport =
+      response.tonemapping && videoVariant
+        ? resolveTonemapReport(resolveEncodePipeline(videoVariant, pipelineInputs), {
+            tonemap: true,
+            dvNoBase: pipelineInputs.dvNoBase,
+            burnIn: !!burnIn,
+            sourceVideoCodec: pipelineInputs.sourceVideoCodec,
+            hdr10Target: pipelineInputs.dvNoBase && videoVariant.hdr === 'HDR10',
+            curve: ss.tonemapCurve,
+          })
+        : null;
+    const tonemapAlgo = tonemapReport?.path ?? null;
+    const tonemapCurve = tonemapReport?.curve;
 
     // A launch from another device counts for whoever started it. Resolved here
     // because this is where the playback that claims it actually begins.
@@ -1408,15 +1357,19 @@ export class StreamingController {
     // pass-through on the stored variant actually being HDR (defensive against
     // an SDR variant left behind a stale hdrLadder flag).
     const liveVariant = live?.videoVariant ?? null;
+    // A no-base DV source (e.g. P5) has no `sourceHdrFormat`; the live
+    // variant's HDR format (set by evaluate()) is the fallback source of truth.
+    const hdrFormat = sourceHdrFormat ?? liveVariant?.hdr ?? undefined;
     const hdrPassThrough =
-      (live?.hdrLadder ?? false) && sourceHdrFormat && liveVariant?.hdr != null
+      (live?.hdrLadder ?? false) && hdrFormat && liveVariant?.hdr != null
         ? {
-            hdrFormat: sourceHdrFormat,
+            hdrFormat,
             hdrVariant: liveVariant,
             videoBitRateBps: v?.bitRate ?? undefined,
           }
         : undefined;
-    const audioStreams = si?.audio ?? [];
+    // Frozen at playback-info, like the segments' own layout.
+    const audioStreams = live?.audioStreams ?? si?.audio ?? [];
     // Multi-audio is exposed via separate EXT-X-MEDIA renditions so the
     // player can switch audio client-side without a reload. Every rendition
     // is listed even when the user has picked a specific track — the picked
@@ -1465,7 +1418,9 @@ export class StreamingController {
         : undefined;
 
     const sdrVariant = liveVariant;
-    const sourceFrameRate = parseSourceFps(v?.frameRate);
+    // Frozen at playback-info: a mid-session re-probe must not move the
+    // FRAME-RATE attribute or the I-frame grid the segments were cut on.
+    const sourceFrameRate = live?.sourceFps ?? parseSourceFps(v?.frameRate);
     // The group's renditions (a remux copy also muxes every track, one per
     // EXT-X-MEDIA rendition), or the muxed track alone.
     const audioPlans = useExtXMedia
@@ -1477,6 +1432,8 @@ export class StreamingController {
     // CODECS string (always PQ) replaces the probed one, never alongside it.
     const remuxDvStandalone =
       includeRemux && live?.dolbyVision ? dvStandaloneCodecs(v) : null;
+    // Same derivation as playback-info's remuxMasterBandwidthBps.
+    const bitrates = sourceBitrates(si);
     const playlist = this.transcodingService.generateMasterPlaylist({
       mediaFileId,
       sourceWidth: w,
@@ -1508,16 +1465,11 @@ export class StreamingController {
         includeRemux && v ? (remuxDvStandalone ?? copySourceCodecString(v)) : undefined,
       remuxSupplementalCodecs:
         includeRemux && live?.dolbyVision ? dvSupplementalCodecs(v) : undefined,
-      formatBitRate:
-        si?.formatBitRate ?? (v?.bitRate ?? 0) + (si?.audio?.[0]?.bitRate ?? 0),
+      formatBitRate: bitrates.formatBitRate,
       sourceFrameRate,
       sourceHdrFormat: remuxDvStandalone ? 'HDR10' : sourceHdrFormat,
       subtitleRenditions,
-      sourceVideoBitrateBps: resolveSourceVideoBitrateBps(
-        v?.bitRate,
-        si?.formatBitRate,
-        (si?.audio ?? []).reduce((sum, a) => sum + (a?.bitRate ?? 0), 0),
-      ),
+      sourceVideoBitrateBps: bitrates.videoBitRate,
       sourceVideoCodec: (v?.codec ?? '').toLowerCase() || undefined,
       // Trick play rides the same IDR grid as the variant, so the frame the
       // playlist promises at index N is the one the encoder puts there.
@@ -1855,7 +1807,8 @@ export class StreamingController {
           initUrl,
           this.fallbackSegDuration(
             isRemux,
-            parseSourceFps(resolved.mediaFile.streamInfo?.video?.[0]?.frameRate),
+            live?.sourceFps ??
+              parseSourceFps(resolved.mediaFile.streamInfo?.video?.[0]?.frameRate),
           ),
           frameSeconds(resolved.mediaFile.streamInfo),
         );
@@ -1949,10 +1902,7 @@ export class StreamingController {
         // kills the in-flight HDR session via `getOrCreateSession`'s
         // quality-change path. Translate to the HDR rung when the master
         // is publishing the HDR ladder so the spawned session matches.
-        const quality =
-          (live?.hdrLadder ?? false) && !baseQuality.endsWith('-hdr')
-            ? `${baseQuality}-hdr`
-            : baseQuality;
+        const quality = hdrRungName(baseQuality, live?.hdrLadder ?? false);
         // An init anchors at the resume floor (the session playhead); a real
         // segment anchors at the one requested, never a stale heartbeat position.
         const startSeg = this.anchorSegment(live, null, isInit, segIndex);

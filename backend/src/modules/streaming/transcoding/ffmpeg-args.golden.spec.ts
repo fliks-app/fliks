@@ -299,6 +299,23 @@ describe('buildFfmpegArgs — CPU golden argv (characterization)', () => {
     `);
   });
 
+  it('uses the frozen tonemapCurve option, not a module-global default', () => {
+    const vf = (curve: 'hable' | 'mobius') => {
+      const args = buildFfmpegArgs(
+        opts({
+          videoVariant: H264_SDR,
+          tonemap: true,
+          sourceBitDepth: 10,
+          tonemapCurve: curve,
+        }),
+        silentLog,
+      );
+      return args[args.indexOf('-vf') + 1];
+    };
+    expect(vf('hable')).toContain('tonemap=hable');
+    expect(vf('mobius')).toContain('tonemap=mobius');
+  });
+
   it('HEVC HDR10 -> SDR tonemap (CPU tonemap filter chain)', () => {
     expect(
       buildFfmpegArgs(

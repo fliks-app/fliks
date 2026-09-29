@@ -41,8 +41,7 @@ import {
 } from './ffmpeg-stderr';
 import { detectHwAccel } from './hw-detect';
 import { setSelectedRenderNode, vaapiRenderNode } from './hw-device';
-import { setSelectedTonemapCurve } from './ffmpeg-filter-graph';
-import { dvHasNoBase } from './codec/dolby-vision';
+import { encodePipelineInputs } from './encode-pipeline';
 import { setFfmpegSlots } from '../../../common/utils/ffmpeg-slots';
 import { enumerateGpus, type GpuInfo } from './gpu-registry';
 import { ALL_DESCRIPTORS, encoderRegistry } from './codec/encoders';
@@ -313,7 +312,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
    *  every playback-info, so a change applies without a restart. */
   applyStreamingSettings(ss: StreamingSettings): void {
     setSelectedRenderNode(ss.gpuRenderNode);
-    setSelectedTonemapCurve(ss.tonemapCurve);
     setFfmpegSlots(ss.ffmpegSlots);
     this.cacheService.setLimits({
       ttlMs: ss.cacheTtlMs,
@@ -1659,6 +1657,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       videoStreamIndex: ctx?.videoStreamIndex,
       encoderPreset: ctx?.encoderPreset,
       tonemapAlgo: ctx?.tonemapAlgo,
+      tonemapCurve: ctx?.tonemapCurve,
       sourceFps: ctx?.sourceFps,
       sourceColorSpace: ctx?.sourceColorSpace,
       sourceColorPrimaries: ctx?.sourceColorPrimaries,
@@ -1670,11 +1669,17 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       videoVariant: ctx?.videoVariant,
       sourceVideoCodec: ctx?.sourceVideoCodec,
       sourceVideoBitrateBps: ctx?.sourceVideoBitrateBps,
-      sourceBitDepth:
-        ctx?.isSourceHdr ||
-        dvHasNoBase(ctx?.sourceDvProfile, ctx?.sourceDvBlSignalCompatId)
-          ? 10
-          : 8,
+      sourceBitDepth: encodePipelineInputs({
+        hwAccel: call.hwAccel,
+        crop: !!ctx?.crop,
+        textBurnIn: !!ctx?.burnInSubtitle?.filter,
+        tonemap: ctx?.tonemap ?? false,
+        tonemapAlgo: ctx?.tonemapAlgo,
+        sourceVideoCodec: ctx?.sourceVideoCodec,
+        isSourceHdr: !!ctx?.isSourceHdr,
+        sourceDvProfile: ctx?.sourceDvProfile,
+        sourceDvBlSignalCompatId: ctx?.sourceDvBlSignalCompatId,
+      }).sourceBitDepth,
       sourceWidth: ctx?.sourceWidth,
       sourceHeight: ctx?.sourceHeight,
       sourceHdrMetadata: ctx?.hdrMetadata,

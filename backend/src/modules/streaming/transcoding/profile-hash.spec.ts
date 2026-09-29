@@ -356,6 +356,31 @@ describe('buildPlaybackProfileFromContext', () => {
         .doviElStrip,
     ).toBe(false);
   });
+
+  it('separates the cache by tonemap curve only while tonemapping is active', () => {
+    const hash = (tonemap: boolean, tonemapCurve: 'hable' | 'mobius') =>
+      computeProfileHash(
+        buildPlaybackProfileFromContext({ tonemap, tonemapCurve }, 3000),
+      );
+    expect(hash(true, 'hable')).not.toBe(hash(true, 'mobius'));
+    // No tonemap running: a curve change must not fork a copy/DirectStream cache.
+    expect(hash(false, 'hable')).toBe(hash(false, 'mobius'));
+  });
+
+  it('keeps the curve out of an HDR10-output reshape, which runs no tone curve', () => {
+    const videoVariant = { codec: 'hevc', bitDepth: 10, hdr: 'HDR10' } as const;
+    expect(
+      buildPlaybackProfileFromContext({ tonemap: true, tonemapCurve: 'hable', videoVariant }, 3000)
+        .tonemapCurve,
+    ).toBeUndefined();
+  });
+
+  it('drops the curve from the hash entirely when there is no tonemap', () => {
+    expect(
+      buildPlaybackProfileFromContext({ tonemap: false, tonemapCurve: 'hable' }, 3000)
+        .tonemapCurve,
+    ).toBeUndefined();
+  });
 });
 
 describe('computeProfileHash — golden values (characterization)', () => {

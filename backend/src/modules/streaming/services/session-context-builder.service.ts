@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { Request } from 'express';
-import { resolveSourceVideoBitrateBps } from '../transcoding';
+import { sourceBitrates } from '../transcoding';
 import type { SessionContext } from '../transcoding';
 import { parseSourceFps } from '../transcoding/constants';
 import { sessionLayoutContext } from '../transcoding/session-profile';
@@ -74,11 +74,7 @@ export class SessionContextBuilder {
         (si?.video?.[0]?.codec ?? '').toLowerCase() || undefined,
       sourceWidth: si?.video?.[0]?.width,
       sourceHeight: si?.video?.[0]?.height,
-      sourceVideoBitrateBps: resolveSourceVideoBitrateBps(
-        si?.video?.[0]?.bitRate,
-        si?.formatBitRate,
-        (si?.audio ?? []).reduce((sum, a) => sum + (a?.bitRate ?? 0), 0),
-      ),
+      sourceVideoBitrateBps: sourceBitrates(si).videoBitRate,
       isSourceHdr: !!si?.video?.[0]?.hdrFormat,
       hdrMetadata: si?.video?.[0]?.hdrMetadata,
     };

@@ -548,6 +548,19 @@ describe('StreamingController.hlsAudioPlaylist (remux rendition)', () => {
       [6.006, 6.006, 6.006, 6.006, 0.976],
     );
   });
+
+  it('uses the frozen live.sourceFps, not a live re-parse of streamInfo, for the fallback grid', async () => {
+    // streamInfo says 25fps (would give an even 6,6,6,6,1 grid); the session
+    // froze 23.976fps at playback-info — a mid-session re-probe must not move it.
+    expect(
+      extinf(
+        await playlistFor(
+          { kind: 'transcode', remuxGrid: null, sourceFps: 23.976 },
+          '25',
+        ),
+      ),
+    ).toEqual([6.006, 6.006, 6.006, 6.006, 0.976]);
+  });
 });
 
 describe('StreamingController.hlsMaster - multi-audio remux publishes the group', () => {
@@ -612,6 +625,72 @@ describe('StreamingController.hlsMaster - multi-audio remux publishes the group'
     const opts = generateMasterPlaylist.mock.calls[0][0];
     expect(opts.audioStreams).toBeUndefined();
     expect(opts.audioPlans).toEqual([{ mode: 'copy', codec: 'aac', channels: 2 }]);
+  });
+});
+
+describe('StreamingController.hlsMaster - frame rate freeze', () => {
+  it('uses the frozen live.sourceFps, not a live re-parse of streamInfo', async () => {
+    const resolved = {
+      mediaFile: {
+        streamInfo: {
+          // A mid-session re-probe would rewrite this; the session froze 23.976.
+          video: [{ width: 1920, height: 1080, frameRate: '25' }],
+          audio: [{ codec: 'aac' }],
+        },
+      },
+    };
+    const generateMasterPlaylist = jest.fn().mockReturnValue('#EXTM3U');
+    const controller = makeController({
+      streamingService: { resolveFile: jest.fn().mockResolvedValue(resolved) },
+      transcodingService: { generateMasterPlaylist },
+      activeStreamTracker: { getSegmentDuration: () => 6 },
+      liveSessions: { update: jest.fn() },
+      sessionRouter: {
+        assertFresh: jest.fn(),
+        findRequestSession: jest.fn().mockReturnValue({ sourceFps: 23.976 }),
+      },
+    });
+    const res = { setHeader: jest.fn(), send: jest.fn(), status: jest.fn() };
+    await controller.hlsMaster(42, { query: {}, user: { id: 7 } } as never, res as never);
+    const opts = generateMasterPlaylist.mock.calls[0][0];
+    expect(opts.sourceFrameRate).toBe(23.976);
+  });
+});
+
+describe('StreamingController.hlsMaster - no-base DV falls back to the live variant HDR format', () => {
+  it('emits hdrPassThrough from videoVariant.hdr when sourceHdrFormat is unset', async () => {
+    const resolved = {
+      mediaFile: {
+        streamInfo: {
+          // No hdrFormat tag: an untagged no-base DV (P5) source.
+          video: [{ width: 1920, height: 1080, frameRate: '24' }],
+          audio: [{ codec: 'aac' }],
+        },
+      },
+    };
+    const generateMasterPlaylist = jest.fn().mockReturnValue('#EXTM3U');
+    const controller = makeController({
+      streamingService: { resolveFile: jest.fn().mockResolvedValue(resolved) },
+      transcodingService: { generateMasterPlaylist },
+      activeStreamTracker: { getSegmentDuration: () => 6 },
+      liveSessions: { update: jest.fn() },
+      sessionRouter: {
+        assertFresh: jest.fn(),
+        findRequestSession: jest.fn().mockReturnValue({
+          hdrLadder: true,
+          videoVariant: { codec: 'hevc', bitDepth: 10, hdr: 'HDR10' },
+        }),
+      },
+    });
+    const res = { setHeader: jest.fn(), send: jest.fn(), status: jest.fn() };
+    await controller.hlsMaster(42, { query: {}, user: { id: 7 } } as never, res as never);
+    const opts = generateMasterPlaylist.mock.calls[0][0];
+    expect(opts.hdrPassThrough).toEqual({
+      hdrFormat: 'HDR10',
+      hdrVariant: { codec: 'hevc', bitDepth: 10, hdr: 'HDR10' },
+      videoBitRateBps: undefined,
+    });
+    expect(opts.sdrVariant).toBeUndefined();
   });
 });
 

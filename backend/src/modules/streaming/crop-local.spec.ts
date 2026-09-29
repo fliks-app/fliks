@@ -71,13 +71,13 @@ const hasCropReason = (r: { response: { transcodeReasons: { flag: string }[] } }
 
 describe('StreamBuilderService — client-side black-bar crop', () => {
   it('re-encodes a cropped source for a client that cannot crop', () => {
-    const r = svc().evaluate(resolved(), client, 'tok');
+    const r = svc().evaluate({ resolved: resolved(), profile: client, tokenParam: 'tok' });
     expect(r.response.playMethod).toBe('Transcode');
     expect(hasCropReason(r)).toBe(true);
   });
 
   it('DirectPlays it for a client that crops at its own output', () => {
-    const r = svc().evaluate(resolved(), croppingClient, 'tok');
+    const r = svc().evaluate({ resolved: resolved(), profile: croppingClient, tokenParam: 'tok' });
     expect(r.response.playMethod).toBe('DirectPlay');
     expect(r.response.videoCopyStream).toBe(true);
     expect(hasCropReason(r)).toBe(false);
@@ -91,7 +91,11 @@ describe('StreamBuilderService — client-side black-bar crop', () => {
   });
 
   it('DirectStreams (remux) it for a client that crops locally but has no raw Direct Play', () => {
-    const r = svc().evaluate(resolved(), croppingWebClient, 'tok');
+    const r = svc().evaluate({
+      resolved: resolved(),
+      profile: croppingWebClient,
+      tokenParam: 'tok',
+    });
     expect(r.response.playMethod).toBe('DirectStream');
     expect(r.response.videoCopyStream).toBe(true);
     expect(hasCropReason(r)).toBe(false);
@@ -104,11 +108,21 @@ describe('StreamBuilderService — client-side black-bar crop', () => {
   });
 
   it('leaves another transcode reason alone — the server still crops there', () => {
-    const burnIn = svc().evaluate(resolved(), croppingClient, 'tok', 7);
+    const burnIn = svc().evaluate({
+      resolved: resolved(),
+      profile: croppingClient,
+      tokenParam: 'tok',
+      burnInSubtitleId: 7,
+    });
     expect(burnIn.response.playMethod).toBe('Transcode');
     expect(burnIn.response.videoCopyStream).toBe(false);
 
-    const lowerRung = svc().evaluate(resolved(), croppingClient, 'tok', undefined, '1080p');
+    const lowerRung = svc().evaluate({
+      resolved: resolved(),
+      profile: croppingClient,
+      tokenParam: 'tok',
+      requestedQuality: '1080p',
+    });
     expect(lowerRung.response.playMethod).toBe('Transcode');
     expect(lowerRung.response.videoCopyStream).toBe(false);
   });

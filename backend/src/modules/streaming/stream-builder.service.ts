@@ -18,6 +18,7 @@ import {
   parseBitrateToBps,
   profileFitsSource,
   resolveSourceVideoBitrateBps,
+  sourceBitrates,
 } from './transcoding';
 import {
   cappedRungVideoBitrateBps,
@@ -25,17 +26,19 @@ import {
 } from './transcoding/quality-ladder';
 import { remuxBandwidthBps } from './transcoding/master-playlist';
 import { REMUX_STEREO_AUDIO_BITRATE } from './transcoding/ffmpeg-args';
-import { resolveEncodePipeline } from './transcoding/encode-pipeline';
+import {
+  encodePipelineInputs,
+  resolveEncodePipeline,
+} from './transcoding/encode-pipeline';
 import { dvNoBaseHdr10PathSupported } from './transcoding/tonemap-path';
 import {
   DEFAULT_FPS,
-  DEFAULT_SEGMENT_DURATION,
   frameSecondsOf,
   parseSourceFps,
   realSegmentSeconds,
   uniformSegmentCount,
 } from './transcoding/constants';
-import { ActiveStreamTracker } from './active-stream-tracker.service';
+import type { StreamingSettings } from './streaming-settings-cache.service';
 import {
   bucketResolutionHeight,
   resolutionFitsCap,
@@ -209,6 +212,28 @@ function audioChannelCap(profile: DeviceProfileDto, codec: string): number {
   );
 }
 
+/** The admin settings a decision reads, passed in rather than read off shared state. */
+export type EvaluateSettings = Pick<
+  StreamingSettings,
+  'autoCropEnabled' | 'tonemapAlgo' | 'autoQualityMode' | 'segmentDuration'
+>;
+
+export interface EvaluateInput {
+  resolved: ResolvedFile;
+  profile: DeviceProfileDto;
+  tokenParam: string;
+  settings: EvaluateSettings;
+  burnInSubtitleId?: number;
+  /** Text (not image/PGS) burn-in, as ffmpeg-args' `!!burnIn?.filter`: only
+   *  libass forces the pipeline off HW. */
+  burnInIsText?: boolean;
+  requestedQuality?: string;
+  audioStreamIndex?: number;
+  sourceScan?: SourceScan | null;
+  /** The controller's frozen remux grid, so AudioEndsEarly reads the grid served. */
+  remuxGrid?: KeyframeGrid | null;
+}
+
 /**
  * What stream-builder hands back: the public playback-info response,
  * plus the two side-band decisions the controller threads onto the
@@ -223,6 +248,9 @@ export interface EvaluateResult {
   /** Per-rendition audio output, in `streamInfo.audio` order: what a
    *  var_stream_map encode of the session emits. */
   audioPlans: AudioPlan[];
+  /** Whether a transcoded rung runs a tonemap, whatever the play method: a remux
+   *  session can later serve a transcoded rung under the same sid. */
+  transcodeTonemapping: boolean;
 }
 
 /**
@@ -239,33 +267,25 @@ export interface EvaluateResult {
 export class StreamBuilderService {
   private readonly log = new Logger(StreamBuilderService.name);
 
-  constructor(
-    private readonly transcodingService: TranscodingService,
-    private readonly activeStreamTracker: ActiveStreamTracker,
-  ) {}
+  constructor(private readonly transcodingService: TranscodingService) {}
 
   /**
    * Evaluate a media file against a device profile and return the playback decision.
    */
-  evaluate(
-    resolved: ResolvedFile,
-    profile: DeviceProfileDto,
-    tokenParam: string,
-    burnInSubtitleId?: number,
-    requestedQuality?: string,
-    autoQualityMode: 'directplay' | 'abr' = 'directplay',
-    audioStreamIndex?: number,
-    segmentDuration = DEFAULT_SEGMENT_DURATION,
-    sourceScan?: SourceScan | null,
-    /** The controller's already-frozen remux grid (see `freezeRemuxGrid`),
-     *  fed back so the AudioEndsEarly check reads the exact grid served. */
-    remuxGrid?: KeyframeGrid | null,
-    /** Whether the burn-in (if any) is TEXT, not image/PGS; matches
-     *  ffmpeg-args' `!!burnIn?.filter`. Only text forces the encode pipeline
-     *  off HW (libass needs CPU surfaces); PGS composites via filter_complex
-     *  without leaving the GPU. */
-    burnInIsText = false,
-  ): EvaluateResult {
+  evaluate(input: EvaluateInput): EvaluateResult {
+    const {
+      resolved,
+      profile,
+      tokenParam,
+      settings,
+      burnInSubtitleId,
+      burnInIsText = false,
+      requestedQuality,
+      audioStreamIndex,
+      sourceScan,
+      remuxGrid,
+    } = input;
+    const { autoQualityMode, segmentDuration } = settings;
     const si = resolved.mediaFile.streamInfo;
     const v = si?.video?.[0];
     const audioStreams = si?.audio ?? [];
@@ -279,20 +299,7 @@ export class StreamBuilderService {
         ? audioStreamIndex
         : 0;
     const a = audioStreams[pickedAudio];
-    const formatBitRate =
-      si?.formatBitRate != null && si.formatBitRate > 0
-        ? si.formatBitRate
-        : undefined;
-    const audioSumBitrate = audioStreams.reduce(
-      (sum, s) => sum + (s.bitRate ?? 0),
-      0,
-    );
-
-    const videoBitRate = resolveSourceVideoBitrateBps(
-      v?.bitRate,
-      formatBitRate,
-      audioSumBitrate,
-    );
+    const { videoBitRate, formatBitRate } = sourceBitrates(si);
 
     let audioBitRate = a?.bitRate;
     if (audioBitRate == null && formatBitRate != null && videoBitRate != null) {
@@ -308,7 +315,7 @@ export class StreamBuilderService {
     // Admin auto-crop toggle. Gates both the play-method decision (needsCrop)
     // and the crop surfaced in the response, so the stats overlay shows the
     // crop actually applied — not merely the one cropdetect found at import.
-    const autoCropEnabled = this.activeStreamTracker.getAutoCropEnabled();
+    const autoCropEnabled = settings.autoCropEnabled;
 
     const source = {
       container: sourceContainer,
@@ -348,19 +355,15 @@ export class StreamBuilderService {
     // Single-layer DV (P5/P8/P10) carries its RPU inside the base NALs, so a
     // raw copy preserves it; dual-layer P7's EL can't ride HLS, so it's excluded.
     const dvProfiles = clientDvProfiles(profile);
-    const clientListsDvProfile = dv.profile != null && dvProfiles.includes(dv.profile);
     const detectedHwAccel = this.transcodingService.getDetectedHwAccel();
-    // No-base DV, an HDR10 display, a client that can't decode this DV
-    // profile at all, and a tonemap mechanism verified for a PQ target
-    // (see dvNoBaseHdr10PathSupported): reshape server-side into HDR10
-    // instead of the SDR fallback below.
+    // No-base DV on an HDR10 display with a PQ-verified tonemap (see
+    // dvNoBaseHdr10PathSupported): any transcode reshapes to HDR10, not SDR.
     const dvNoBaseHdr10Eligible =
       noBase &&
       clientSupportsHdr &&
-      !clientListsDvProfile &&
       dvNoBaseHdr10PathSupported(
         detectedHwAccel,
-        this.activeStreamTracker.getTonemapAlgo(),
+        settings.tonemapAlgo,
         { hasCrop: !!source.crop, hasBurnIn: burnInIsText },
       );
     // Codec selector: picks the variant the encoder pipeline will produce
@@ -422,6 +425,7 @@ export class StreamBuilderService {
       videoVariant: selectedVariant,
       muxFlavour: hlsMux,
       audioPlans,
+      transcodeTonemapping: runsTonemapFilter,
     });
     const needsBurnIn = !!burnInSubtitleId;
     // Cropping black bars forces a re-encode. When the admin disables auto-crop
@@ -434,6 +438,19 @@ export class StreamBuilderService {
     const clientCropsBlackBars = profile.cropsBlackBarsLocally === true;
 
     const reasons: TranscodeReason[] = [];
+    // Once per session: where HDR blocks the copy, or before a transcode that
+    // tone-maps for another reason.
+    const pushTonemapReason = (): void => {
+      if (!runsTonemapFilter || reasons.some((r) => r.flag === 'VideoHdrNotSupported')) {
+        return;
+      }
+      reasons.push({
+        flag: 'VideoHdrNotSupported',
+        message: dvNoBaseHdr10
+          ? `${dvLabel} → HDR10 (tone mapping)`
+          : `HDR → SDR (tone mapping ${dvLabel})`,
+      });
+    };
 
     // --- Audio decision diagnostics ---
     // Tracks every input that influences the "copy vs transcode" branch so
@@ -510,14 +527,7 @@ export class StreamBuilderService {
       this.log.log(
         `hdrDecision[file=${resolved.mediaFile.id}] ${dvLabel} → SDR: supportsHdr=${clientSupportsHdr}, tonemapsHdrLocally=${profile.tonemapsHdrLocally === true}, supportsDolbyVision=${profile.supportsDolbyVision === true}, videoSupported=${directPlayResult.videoSupported}, videoConditionsMet=${directPlayResult.videoConditionsMet}`,
       );
-      if (runsTonemapFilter) {
-        reasons.push({
-          flag: 'VideoHdrNotSupported',
-          message: dvNoBaseHdr10
-            ? `${dvLabel} → HDR10 (tone mapping)`
-            : `HDR → SDR (tone mapping ${dvLabel})`,
-        });
-      }
+      pushTonemapReason();
     }
 
     // Subtitle burn-in forces transcode
@@ -623,8 +633,9 @@ export class StreamBuilderService {
       copyableIgnoringGates && dvRemuxCopyAllowed && copyGates.every((g) => !g.active);
 
     // A client without a real P7 decoder shows black video on the raw dual-layer
-    // file; force the remux (strips the EL/RPU) only when one is available.
-    if (dv.profile === 7 && !dvProfiles.includes(7) && canCopyVideo) {
+    // file; always block DirectPlay, remuxing (strips the EL/RPU) when copy is
+    // available and falling through to Transcode otherwise.
+    if (dv.profile === 7 && !dvProfiles.includes(7)) {
       if (directPlayResult.canDirectPlay) directPlayResult.canDirectPlay = false;
       reasons.push({
         flag: 'VideoDolbyVisionP7NotSupported',
@@ -769,19 +780,9 @@ export class StreamBuilderService {
           )
         : undefined,
     );
-    const pickedStream = audioStreams[pickedAudio];
-    const pickedDecision =
-      canCopyVideo && pickedStream && !multiAudioLayout
-        ? this.decideAudio(
-            [pickedStream],
-            v,
-            profile,
-            hlsMux,
-            sourceMpegTs,
-            sourceScan,
-            undefined,
-          )[0]
-        : groupDecisions[pickedAudio];
+    // `!multiAudioLayout` means audioStreams has at most one track, so
+    // groupDecisions was already computed over exactly `[pickedStream]`.
+    const pickedDecision = groupDecisions[pickedAudio];
     // The top-level plan and reasons are the picked track's, which
     // `audioTracks` describes as `playUrl` delivers it. A DirectStream encodes
     // any transcoded track at buildRemuxArgs' own fixed budget, never the
@@ -790,12 +791,7 @@ export class StreamBuilderService {
       ? parseBitrateToBps(REMUX_STEREO_AUDIO_BITRATE)
       : negotiatedStereoBps;
     const audioTracks = audioStreams.map((t, i) =>
-      trackDto(
-        t,
-        i,
-        i === pickedAudio ? pickedDecision : groupDecisions[i],
-        trackStereoBps,
-      ),
+      trackDto(t, i, groupDecisions[i], trackStereoBps),
     );
     const audioPlans = groupDecisions.map((d) => d.plan);
     const pickedTrack = audioTracks[pickedAudio];
@@ -835,26 +831,12 @@ export class StreamBuilderService {
       // Same function the master playlist's own BANDWIDTH calls, so the
       // stats overlay never disagrees with it.
       const remuxBw = remuxBandwidthBps(source.videoBitRate, source.formatBitRate, audioPlans);
-      // Same scale as the master playlist's transcoded rungs — exposes
-      // a bitrate hint per quality so the stats overlay can plot the
-      // selected rung without re-deriving the bitrate ladder client-side.
-      const transcodeBitrateByQuality: NonNullable<
-        PlaybackInfoResponse['transcodeBitrateByQuality']
-      > = {};
-      // Key by the ladder actually offered (HDR rungs carry the `-hdr`
-      // suffix) so the stats overlay can resolve the selected rung's bitrate.
-      // Using the SDR `ladder` here left HDR / eco-hdr rungs unmatched, and
-      // the overlay fell back to the full remux bandwidth.
-      const rungCtx = this.rungBitrateCtx(source, selectedVariant.codec);
-      for (const p of qualityLadder) {
-        const videoBps = cappedRungVideoBitrateBps(p, rungCtx);
-        const audioBps = rungAudioBps(p);
-        transcodeBitrateByQuality[p.name] = {
-          videoBitrateBps: videoBps,
-          audioBitrateBps: audioBps,
-          totalBitrateBps: videoBps + audioBps,
-        };
-      }
+      const transcodeBitrateByQuality = this.transcodeBitrateByQuality(
+        source,
+        selectedVariant.codec,
+        qualityLadder,
+        rungAudioBps,
+      );
       return wrap(
         {
           mediaFileId: resolved.mediaFile.id,
@@ -897,54 +879,36 @@ export class StreamBuilderService {
     }
 
     // --- Step 3: Full Transcode ---
-    if (
-      runsTonemapFilter &&
-      !reasons.some((r) => r.flag === 'VideoHdrNotSupported')
-    ) {
-      reasons.push({
-        flag: 'VideoHdrNotSupported',
-        message: dvNoBaseHdr10
-          ? `${dvLabel} → HDR10 (tone mapping)`
-          : `HDR → SDR (tone mapping ${dvLabel})`,
-      });
-    }
+    pushTonemapReason();
     // Report the encoder that will actually run via the SAME resolver
     // ffmpeg-args uses, so the stats hwAccel can't drift from the real encode
     // (it picks up the registry's runtime CPU fallback and the QSV crop→VAAPI
     // splice). Same inputs the session will carry, so the result matches.
-    const effectiveHwAccel = resolveEncodePipeline(selectedVariant, {
-      hwAccel: this.transcodingService.getDetectedHwAccel(),
-      crop: needsCrop,
-      burnIn: burnInIsText,
-      tonemap: runsTonemapFilter,
-      tonemapAlgo: this.activeStreamTracker.getTonemapAlgo(),
-      sourceVideoCodec,
-      dvNoBase: noBase,
-      // Mirrors the spawn's own derivation (transcoding.service.ts) so this
-      // stays the same resolver call with the same inputs.
-      sourceBitDepth: isSourceHdr || noBase ? 10 : 8,
-    }).effectiveHwAccel;
+    const effectiveHwAccel = resolveEncodePipeline(
+      selectedVariant,
+      encodePipelineInputs({
+        hwAccel: this.transcodingService.getDetectedHwAccel(),
+        crop: needsCrop,
+        textBurnIn: burnInIsText,
+        tonemap: runsTonemapFilter,
+        tonemapAlgo: settings.tonemapAlgo,
+        sourceVideoCodec: sourceVideoCodec || undefined,
+        isSourceHdr,
+        sourceDvProfile: dv.profile,
+        sourceDvBlSignalCompatId: dv.compatId,
+      }),
+    ).effectiveHwAccel;
 
     this.log.log(
       `Transcode for file ${resolved.mediaFile.id}: ${reasons.map((r) => r.flag).join(', ')} (audioOut=${outputAudioCodec}, copy=${canCopyAudio}, track=${pickedAudio})`,
     );
     const url = `/api/stream/${resolved.mediaFile.id}/master.m3u8${tokenParam}`;
-    const transcodeBitrateByQuality: NonNullable<
-      PlaybackInfoResponse['transcodeBitrateByQuality']
-    > = {};
-    // Key by the offered ladder (HDR/eco-hdr rungs carry `-hdr`) so the stats
-    // overlay resolves the selected rung instead of falling back to the full
-    // remux bandwidth.
-    const rungCtx = this.rungBitrateCtx(source, selectedVariant.codec);
-    for (const p of qualityLadder) {
-      const videoBps = cappedRungVideoBitrateBps(p, rungCtx);
-      const audioBps = rungAudioBps(p);
-      transcodeBitrateByQuality[p.name] = {
-        videoBitrateBps: videoBps,
-        audioBitrateBps: audioBps,
-        totalBitrateBps: videoBps + audioBps,
-      };
-    }
+    const transcodeBitrateByQuality = this.transcodeBitrateByQuality(
+      source,
+      selectedVariant.codec,
+      qualityLadder,
+      rungAudioBps,
+    );
     return wrap(
       {
         mediaFileId: resolved.mediaFile.id,
@@ -980,6 +944,28 @@ export class StreamBuilderService {
       },
       audioPlans,
     );
+  }
+
+  /** Per-rung bitrate hint on the manifest's scale, keyed by the offered
+   *  ladder (HDR rungs carry `-hdr`) so the stats overlay resolves the pick. */
+  private transcodeBitrateByQuality(
+    source: PlaybackInfoResponse['source'],
+    outputCodec: string | undefined,
+    ladder: TranscodeProfile[],
+    rungAudioBps: (p: TranscodeProfile) => number,
+  ): NonNullable<PlaybackInfoResponse['transcodeBitrateByQuality']> {
+    const rungCtx = this.rungBitrateCtx(source, outputCodec);
+    const out: NonNullable<PlaybackInfoResponse['transcodeBitrateByQuality']> = {};
+    for (const p of ladder) {
+      const videoBps = cappedRungVideoBitrateBps(p, rungCtx);
+      const audioBps = rungAudioBps(p);
+      out[p.name] = {
+        videoBitrateBps: videoBps,
+        audioBitrateBps: audioBps,
+        totalBitrateBps: videoBps + audioBps,
+      };
+    }
+    return out;
   }
 
   /** Per-rung bitrate context from the source + chosen output codec, so the

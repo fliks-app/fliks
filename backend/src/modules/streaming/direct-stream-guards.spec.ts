@@ -37,18 +37,26 @@ const flags = (r: ReturnType<StreamBuilderService['evaluate']>) =>
 
 describe('StreamBuilderService - DirectStream guards', () => {
   it('remuxes by default (baseline)', () => {
-    const r = svc().evaluate(resolved(), profile(), 'tok');
+    const r = svc().evaluate({ resolved: resolved(), profile: profile(), tokenParam: 'tok' });
     expect(r.response.playMethod).toBe('DirectStream');
   });
 
   it('rejectCopy forces a transcode, flagged ClientRejectedCopy', () => {
-    const r = svc().evaluate(resolved(), profile({ rejectCopy: true }), 'tok');
+    const r = svc().evaluate({
+      resolved: resolved(),
+      profile: profile({ rejectCopy: true }),
+      tokenParam: 'tok',
+    });
     expect(r.response.playMethod).toBe('Transcode');
     expect(flags(r)).toContain('ClientRejectedCopy');
   });
 
   it('a TS-mux session never gets DirectStream, flagged MuxNotSupported', () => {
-    const r = svc().evaluate(resolved(), profile({ useTs: true }), 'tok');
+    const r = svc().evaluate({
+      resolved: resolved(),
+      profile: profile({ useTs: true }),
+      tokenParam: 'tok',
+    });
     expect(r.response.playMethod).toBe('Transcode');
     expect(flags(r)).toContain('MuxNotSupported');
   });
@@ -56,12 +64,12 @@ describe('StreamBuilderService - DirectStream guards', () => {
   it('does not blame a gate that changed nothing, when burn-in already forces the transcode', () => {
     // Burn-in alone already makes the source uncopyable; useTs/rejectCopy
     // never get the chance to flip anything here.
-    const r = svc().evaluate(
-      resolved(),
-      profile({ useTs: true, rejectCopy: true }),
-      'tok',
-      /* burnInSubtitleId */ 7,
-    );
+    const r = svc().evaluate({
+      resolved: resolved(),
+      profile: profile({ useTs: true, rejectCopy: true }),
+      tokenParam: 'tok',
+      burnInSubtitleId: 7,
+    });
     expect(r.response.playMethod).toBe('Transcode');
     const f = flags(r);
     expect(f).toContain('SubtitleBurnIn');
@@ -70,16 +78,16 @@ describe('StreamBuilderService - DirectStream guards', () => {
   });
 
   it('rejectCopy also rules out DirectPlay, which serves the same video bitstream', () => {
-    const r = svc().evaluate(
-      resolved(),
-      profile({
+    const r = svc().evaluate({
+      resolved: resolved(),
+      profile: profile({
         rejectCopy: true,
         directPlayProfiles: [
           { containers: ['mkv'], videoCodecs: ['h264'], audioCodecs: ['aac'] },
         ],
       }),
-      'tok',
-    );
+      tokenParam: 'tok',
+    });
     expect(r.response.playMethod).toBe('Transcode');
     expect(r.response.transcodeReasons.map((x) => x.flag)).toContain('ClientRejectedCopy');
   });

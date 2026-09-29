@@ -6,6 +6,7 @@ import {
   buildPlaybackProfileFromContext,
   computeProfileHash,
 } from '../transcoding';
+import type { AudioStreamMeta } from '../transcoding';
 import type { ResolvedFile } from '../streaming.service';
 
 function resolved(audioCount: number): ResolvedFile {
@@ -104,6 +105,7 @@ describe('SessionContextBuilder.build', () => {
   it('threads the frozen decision off the LiveSession when present', () => {
     sessionRouter.findRequestSession.mockReturnValue({
       tonemapping: true,
+      tonemapCurve: 'hable',
       deviceType: 'mobile',
       useTs: true,
       videoVariant: { codec: 'av1', bitDepth: 10, hdr: 'HDR10' },
@@ -111,6 +113,7 @@ describe('SessionContextBuilder.build', () => {
     });
     const ctx = builder.build(req, resolved(1), 1);
     expect(ctx.tonemap).toBe(true);
+    expect(ctx.tonemapCurve).toBe('hable');
     expect(ctx.deviceType).toBe('mobile');
     expect(ctx.useTs).toBe(true);
     expect(ctx.videoVariant).toEqual({ codec: 'av1', bitDepth: 10, hdr: 'HDR10' });
@@ -120,6 +123,7 @@ describe('SessionContextBuilder.build', () => {
   it('falls back to safe defaults with no LiveSession', () => {
     const ctx = builder.build(req, resolved(1), 1);
     expect(ctx.tonemap).toBe(false);
+    expect(ctx.tonemapCurve).toBe('mobius');
     expect(ctx.deviceType).toBe('desktop');
     expect(ctx.useTs).toBe(false);
     expect(ctx.videoVariant).toBeUndefined();
@@ -160,6 +164,42 @@ describe('SessionContextBuilder.build', () => {
     });
     expect(builder.build(req, rescanned, 1).sourceFps).toBe(23.81);
     registry.onModuleDestroy();
+  });
+
+  it('keeps audioStreams and the DV profile frozen at playback-info through a rescan', () => {
+    const registry = new LiveSessionRegistry();
+    const live = registry.create({
+      userId: 7,
+      username: 'u',
+      kind: 'transcode',
+      mediaFileId: 1,
+      sourceDvProfile: 5,
+      sourceDvBlSignalCompatId: 0,
+      audioStreams: [{ language: 'en', bitRate: 128000 } as AudioStreamMeta],
+    });
+    sessionRouter.findRequestSession.mockReturnValue(live);
+    const rescanned = resolved(2);
+    Object.assign(rescanned.mediaFile.streamInfo!.video[0], {
+      dvProfile: 8,
+      dvBlSignalCompatId: 1,
+    });
+    const ctx = builder.build(req, rescanned, 1);
+    expect(ctx.sourceDvProfile).toBe(5);
+    expect(ctx.sourceDvBlSignalCompatId).toBe(0);
+    expect(ctx.audioStreams).toEqual([{ language: 'en', bitRate: 128000 }]);
+    registry.onModuleDestroy();
+  });
+
+  it('falls back to the live streamInfo read when no LiveSession exists yet', () => {
+    const file = resolved(1);
+    Object.assign(file.mediaFile.streamInfo!.video[0], {
+      dvProfile: 7,
+      dvBlSignalCompatId: 6,
+    });
+    const ctx = builder.build(req, file, 1);
+    expect(ctx.sourceDvProfile).toBe(7);
+    expect(ctx.sourceDvBlSignalCompatId).toBe(6);
+    expect(ctx.audioStreams).toHaveLength(1);
   });
 
   it('hashes a var_stream_map session at playback-info as every transcode request does', () => {

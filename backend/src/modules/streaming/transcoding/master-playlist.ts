@@ -1,6 +1,7 @@
 import {
   getHdrLadderForDevice,
   getLadderForDevice,
+  hdrRungName,
   parseBitrateToBps,
   profileFitsSource,
   profileResolution,
@@ -183,10 +184,7 @@ function applyQualityPin(
   if (onlyQuality === 'remux' || onlyQuality === 'original') {
     return [topFittingProfile(ladder, sourceWidth, sourceHeight)];
   }
-  const wanted =
-    hdrSuffix && !onlyQuality.endsWith('-hdr')
-      ? `${onlyQuality}-hdr`
-      : onlyQuality;
+  const wanted = hdrRungName(onlyQuality, hdrSuffix);
   const picked = ladder.find((p) => p.name === wanted);
   return picked ? [picked] : ladder;
 }
@@ -314,6 +312,9 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
   const lines = ['#EXTM3U', '#EXT-X-VERSION:7', '#EXT-X-INDEPENDENT-SEGMENTS'];
 
   const plans = audioPlans?.length ? audioPlans : [DEFAULT_AUDIO_PLAN];
+  // An audio-less source's remux BANDWIDTH must agree with playback-info's
+  // (which sees the real empty `audioPlans`, not this DEFAULT_AUDIO_PLAN filler).
+  const remuxAudioPlans = noAudio ? [] : plans;
   // A group shares one output codec (`decideAudio`).
   const outputAudioCodec = plans[0].codec;
   const audioCodec = audioGroupCodecString(plans);
@@ -404,7 +405,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
         remuxSupplementalCodecs,
         formatBitRate,
         sourceVideoBitrateBps,
-        audioPlans: plans,
+        audioPlans: remuxAudioPlans,
       });
       pushIFrameStream(lines);
       return lines.join('\n');
@@ -481,7 +482,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
       remuxSupplementalCodecs,
       formatBitRate,
       sourceVideoBitrateBps,
-      audioPlans: plans,
+      audioPlans: remuxAudioPlans,
     });
     pushIFrameStream(lines);
     return lines.join('\n');

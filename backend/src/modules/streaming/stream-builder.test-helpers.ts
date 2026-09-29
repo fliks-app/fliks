@@ -1,14 +1,27 @@
-import { StreamBuilderService } from './stream-builder.service';
+import {
+  StreamBuilderService,
+  type EvaluateInput,
+  type EvaluateResult,
+  type EvaluateSettings,
+} from './stream-builder.service';
+import { DEFAULT_SEGMENT_DURATION } from './transcoding/constants';
 
-/** Shared fake-dependency constructor for StreamBuilderService specs: no HW
- *  accel, no tone-map override, crop off unless asked. */
-export function makeStreamBuilder(opts: { autoCrop?: boolean } = {}): StreamBuilderService {
-  const { autoCrop = false } = opts;
-  return new StreamBuilderService(
-    { getDetectedHwAccel: () => 'none' } as never,
-    {
-      getAutoCropEnabled: () => autoCrop,
-      getTonemapAlgo: () => 'auto',
-    } as never,
-  );
+/** StreamBuilderService on fake dependencies (no HW accel), whose evaluate()
+ *  fills in the admin settings: no tone-map override, crop off unless asked. */
+export function makeStreamBuilder(opts: { autoCrop?: boolean } = {}): {
+  evaluate(
+    input: Omit<EvaluateInput, 'settings'> & { settings?: Partial<EvaluateSettings> },
+  ): EvaluateResult;
+} {
+  const svc = new StreamBuilderService({ getDetectedHwAccel: () => 'none' } as never);
+  const defaults: EvaluateSettings = {
+    autoCropEnabled: opts.autoCrop ?? false,
+    tonemapAlgo: 'auto',
+    autoQualityMode: 'directplay',
+    segmentDuration: DEFAULT_SEGMENT_DURATION,
+  };
+  return {
+    evaluate: (input) =>
+      svc.evaluate({ ...input, settings: { ...defaults, ...input.settings } }),
+  };
 }

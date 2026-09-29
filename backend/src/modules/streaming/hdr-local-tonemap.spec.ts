@@ -63,14 +63,18 @@ const resolved = () =>
 
 describe('StreamBuilderService — client-side HDR tone-mapping', () => {
   it('tonemaps server-side for an SDR client without the flag', () => {
-    const r = svc().evaluate(resolved(), sdrClient, 'tok');
+    const r = svc().evaluate({ resolved: resolved(), profile: sdrClient, tokenParam: 'tok' });
     expect(r.response.playMethod).toBe('Transcode');
     expect(r.response.tonemapping).toBe(true);
     expect(r.response.clientTonemap).toBeFalsy();
   });
 
   it('DirectPlays HDR for a client that tone-maps locally', () => {
-    const r = svc().evaluate(resolved(), localTonemapClient, 'tok');
+    const r = svc().evaluate({
+      resolved: resolved(),
+      profile: localTonemapClient,
+      tokenParam: 'tok',
+    });
     expect(r.response.playMethod).toBe('DirectPlay');
     expect(r.response.videoCopyStream).toBe(true);
     expect(r.response.tonemapping).toBe(false);
@@ -78,7 +82,12 @@ describe('StreamBuilderService — client-side HDR tone-mapping', () => {
   });
 
   it('keeps HDR through a lower rung instead of tone-mapping server-side', () => {
-    const r = svc().evaluate(resolved(), localTonemapClient, 'tok', undefined, '720p-hdr');
+    const r = svc().evaluate({
+      resolved: resolved(),
+      profile: localTonemapClient,
+      tokenParam: 'tok',
+      requestedQuality: '720p-hdr',
+    });
     expect(r.response.playMethod).toBe('Transcode');
     expect(r.videoVariant?.hdr).toBe('HDR10');
     expect(r.response.tonemapping).toBe(false);
@@ -86,7 +95,11 @@ describe('StreamBuilderService — client-side HDR tone-mapping', () => {
   });
 
   it('keeps HDR through a crop-forced transcode', () => {
-    const r = svc(true).evaluate(resolved(), localTonemapClient, 'tok');
+    const r = svc(true).evaluate({
+      resolved: resolved(),
+      profile: localTonemapClient,
+      tokenParam: 'tok',
+    });
     expect(r.response.playMethod).toBe('Transcode');
     expect(r.videoVariant?.hdr).toBe('HDR10');
     expect(r.response.tonemapping).toBe(false);
@@ -94,7 +107,7 @@ describe('StreamBuilderService — client-side HDR tone-mapping', () => {
   });
 
   it('still tone-maps a crop-forced transcode for a plain SDR client', () => {
-    const r = svc(true).evaluate(resolved(), sdrClient, 'tok');
+    const r = svc(true).evaluate({ resolved: resolved(), profile: sdrClient, tokenParam: 'tok' });
     expect(r.response.playMethod).toBe('Transcode');
     expect(r.videoVariant?.hdr).toBeNull();
     expect(r.response.tonemapping).toBe(true);

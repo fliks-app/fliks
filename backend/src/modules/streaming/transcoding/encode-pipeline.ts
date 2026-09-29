@@ -10,7 +10,8 @@ import { isOpenclTonemapEnabled } from './codec/opencl-tonemap-probe';
 import { isCudaTonemapEnabled } from './codec/cuda-tonemap-probe';
 import { openclBridgeOk, resolveTonemapPath } from './tonemap-path';
 import { normaliseSourceCodec } from './codec/normalise';
-import type { BitDepth, CodecVariant } from './codec/types';
+import { dvHasNoBase } from './codec/dolby-vision';
+import type { BitDepth, CodecVariant, TonemapCurve } from './codec/types';
 import type { HwAccelType, TonemapAlgo } from './types';
 
 const logger = new Logger('EncodePipeline');
@@ -241,5 +242,95 @@ export function resolveEncodePipeline(
     qsvCanCrop,
     useVaapiTonemap,
     amfOpenclAvailable,
+  };
+}
+
+/** {@link resolveEncodePipeline}'s context from the session's source facts, so
+ *  the stats, the tonemap report and the spawn all resolve the same pipeline. */
+export function encodePipelineInputs(src: {
+  hwAccel: HwAccelType;
+  crop: boolean;
+  /** Text burn-in only: an image burn-in composites without leaving the GPU. */
+  textBurnIn: boolean;
+  tonemap: boolean;
+  tonemapAlgo: TonemapAlgo | undefined;
+  sourceVideoCodec: string | undefined;
+  isSourceHdr: boolean;
+  sourceDvProfile: number | null | undefined;
+  sourceDvBlSignalCompatId: number | null | undefined;
+}): EncodePipelineContext {
+  const dvNoBase = dvHasNoBase(
+    src.sourceDvProfile ?? undefined,
+    src.sourceDvBlSignalCompatId ?? undefined,
+  );
+  return {
+    hwAccel: src.hwAccel,
+    crop: src.crop,
+    burnIn: src.textBurnIn,
+    tonemap: src.tonemap,
+    tonemapAlgo: src.tonemapAlgo ?? 'auto',
+    sourceVideoCodec: src.sourceVideoCodec,
+    dvNoBase,
+    sourceBitDepth: src.isSourceHdr || dvNoBase ? 10 : 8,
+  };
+}
+
+export type TonemapReportPath =
+  | 'vaapi'
+  | 'qsv'
+  | 'opencl'
+  | 'vulkan'
+  | 'cuda'
+  | 'videotoolbox'
+  | 'cpu';
+
+/** The tone-map step a resolved pipeline runs: the flags ffmpeg-args builds its
+ *  filters from, and the path + curve the stats overlay reports for them. */
+export function resolveTonemapReport(
+  pipeline: ResolvedEncodePipeline,
+  opts: {
+    tonemap: boolean;
+    dvNoBase: boolean;
+    /** Any burn-in: the VT Metal surface can't take either kind. */
+    burnIn: boolean;
+    sourceVideoCodec: string | undefined;
+    /** No-base DV reshaped to HDR10: `apply_dovi` runs no tone curve. */
+    hdr10Target: boolean;
+    curve: TonemapCurve;
+  },
+): {
+  useVulkanTonemap: boolean;
+  cudaTonemap: boolean;
+  openclTonemap: boolean;
+  path: TonemapReportPath | null;
+  curve: TonemapCurve | undefined;
+} {
+  const hw = pipeline.effectiveHwAccel;
+  const useVulkanTonemap = pipeline.tonemapPath === 'vulkan' && hw === 'vaapi';
+  const cudaTonemap = isCudaTonemapPath(opts.tonemap, hw);
+  const openclTonemap = isOpenclTonemapPath(opts.tonemap, hw, opts.dvNoBase);
+  const path: TonemapReportPath | null = !opts.tonemap
+    ? null
+    : hw === 'qsv' || hw === 'vaapi'
+      ? pipeline.useVaapiTonemap
+        ? 'vaapi'
+        : pipeline.tonemapPath
+      : cudaTonemap
+        ? 'cuda'
+        : openclTonemap || (hw === 'amf' && pipeline.amfOpenclAvailable)
+          ? 'opencl'
+          : isVtTonemapPath(opts.tonemap, hw, opts.burnIn, opts.sourceVideoCodec)
+            ? 'videotoolbox'
+            : 'cpu';
+  // The vpp_qsv / tonemap_vaapi LUTs and VT's own tonemap ignore the curve.
+  const curveApplies =
+    !opts.hdr10Target &&
+    (path === 'opencl' || path === 'vulkan' || path === 'cpu' || path === 'cuda');
+  return {
+    useVulkanTonemap,
+    cudaTonemap,
+    openclTonemap,
+    path,
+    curve: curveApplies ? opts.curve : undefined,
   };
 }
