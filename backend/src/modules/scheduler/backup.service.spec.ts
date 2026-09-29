@@ -86,6 +86,7 @@ describe('BackupService', () => {
       expect(sql.match(/CREATE ROLE/g)).toHaveLength(1);
       expect(sql).toContain('CREATE ROLE "plugin_acme_tool" LOGIN');
       expect(calls[1]).toContain('-f');
+      expect(calls[1]).toContain('--single-transaction');
     });
   });
 
