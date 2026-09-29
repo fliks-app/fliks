@@ -1461,11 +1461,13 @@
     "success": "Succès",
     "selections_cleared": "Sélections effacées",
     "retry": "Réessayer",
-    "offline_banner": "Mode hors-ligne — les données affichées peuvent ne pas être à jour",
     "secret_clear": "Effacer la valeur enregistrée",
     "secret_keep": "La conserver",
     "secret_will_clear": "La valeur enregistrée sera supprimée à l'enregistrement.",
     "label_colon": "{{label}} :"
+  },
+  "connectivity": {
+    "server_unreachable": "Serveur injoignable"
   },
   "pagination": {
     "label": "Pagination",

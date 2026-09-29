@@ -97,7 +97,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly libraryPrefs = inject(LibraryPrefsService);
   private readonly countsApi = inject(CountsApiService);
   readonly serverConfig = inject(ServerConfigService);
-  private readonly sse = inject(SseService);
+  readonly sse = inject(SseService);
   private readonly downloadManager = inject(DownloadManagerService);
   // Instantiate eagerly from the shell so it records the page the user was on
   // BEFORE the first player open. It is `providedIn: 'root'` but otherwise only
