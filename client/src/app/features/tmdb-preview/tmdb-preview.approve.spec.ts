@@ -109,7 +109,8 @@ describe('TmdbPreviewComponent.ngOnInit', () => {
     fixture.destroy();
     await pending;
 
-    expect(navbar.enterHeroPage).not.toHaveBeenCalled();
+    // Only the synchronous entry made before the details were requested.
+    expect(navbar.enterHeroPage).toHaveBeenCalledTimes(1);
   });
 });
 

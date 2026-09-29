@@ -37,7 +37,7 @@ export class PreviewSeasonsComponent {
   readonly externalId = input.required<string>();
 
   readonly seasons = signal<MetadataSeason[]>([]);
-  readonly loading = signal(false);
+  readonly loading = signal(true);
   readonly failed = signal(false);
   readonly activeSeasonNumber = signal<number | null>(null);
 

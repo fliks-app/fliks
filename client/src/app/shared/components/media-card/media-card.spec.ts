@@ -15,7 +15,7 @@ import { PlayableMediaService } from '../../../core/services/playable-media.serv
 import { NavbarService } from '../../../core/services/navbar.service';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
 import type { SlotId, UiContribution } from '@fliks/plugin-contract/ui';
-import { stampPoster } from '../../utils/view-transition';
+import { clearPosterStamps, stampPoster } from '../../utils/view-transition';
 
 /**
  * Characterisation test for the card's contextual actions menu. Captures the
@@ -676,6 +676,36 @@ describe('media-card poster morph opt-out', () => {
     expect(stale.style.viewTransitionName).toBe('');
 
     stale.remove();
+    delete (document as unknown as { startViewTransition?: unknown }).startViewTransition;
+  });
+});
+
+describe('media-card preview handoff', () => {
+  it('seeds the preview page and pairs on the preview name, not a library id', async () => {
+    (document as unknown as { startViewTransition: unknown }).startViewTransition = () => ({
+      finished: Promise.resolve(),
+    });
+    const h = await createFixture(FULL_MEMBER, {
+      imageUrl: '/api/images/poster.jpg',
+      title: 'Placeholder',
+      link: ['/add/tv', 'tvdb', '42'],
+    });
+    const card = h.fixture.componentInstance;
+
+    expect(card.navState()).toEqual({
+      preview: {
+        externalId: '42',
+        title: 'Placeholder',
+        posterUrl: '/api/images/poster.jpg',
+        fanartUrl: null,
+      },
+    });
+    (card as unknown as { flagPosterForTransition(): void }).flagPosterForTransition();
+    expect(h.fixture.nativeElement.querySelector('img').style.viewTransitionName).toBe(
+      'preview-poster-tv-tvdb-42',
+    );
+
+    clearPosterStamps();
     delete (document as unknown as { startViewTransition?: unknown }).startViewTransition;
   });
 });

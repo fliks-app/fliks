@@ -40,6 +40,7 @@ export interface PersonProviderCreditItem {
   job?: string;
   department?: string;
   posterUrl: string | null;
+  fanartUrl?: string | null;
   releaseDate: string | null;
   rating: number;
   /** Id of the library media holding this work, null when it is not owned. */

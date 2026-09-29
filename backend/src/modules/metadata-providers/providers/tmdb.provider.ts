@@ -696,6 +696,9 @@ export class TmdbProvider implements IMetadataProvider {
         posterUrl: c.poster_path
           ? `${TMDB_IMAGE_BASE}/w500${c.poster_path}`
           : null,
+        fanartUrl: c.backdrop_path
+          ? `${TMDB_IMAGE_BASE}/original${c.backdrop_path}`
+          : null,
         releaseDate: c.release_date ?? c.first_air_date ?? null,
         rating: c.vote_average ?? 0,
       })),
@@ -707,6 +710,9 @@ export class TmdbProvider implements IMetadataProvider {
         department: c.department,
         posterUrl: c.poster_path
           ? `${TMDB_IMAGE_BASE}/w500${c.poster_path}`
+          : null,
+        fanartUrl: c.backdrop_path
+          ? `${TMDB_IMAGE_BASE}/original${c.backdrop_path}`
           : null,
         releaseDate: c.release_date ?? c.first_air_date ?? null,
         rating: c.vote_average ?? 0,
@@ -754,6 +760,9 @@ export class TmdbProvider implements IMetadataProvider {
       posterUrl: r.poster_path
         ? `${TMDB_IMAGE_BASE}/w500${r.poster_path}`
         : null,
+      fanartUrl: r.backdrop_path
+        ? `${TMDB_IMAGE_BASE}/original${r.backdrop_path}`
+        : null,
       rating: r.vote_average ?? 0,
       genres: [],
       genreIds: r.genre_ids ?? [],
@@ -771,6 +780,9 @@ export class TmdbProvider implements IMetadataProvider {
       year: r.first_air_date ? parseInt(r.first_air_date) : null,
       posterUrl: r.poster_path
         ? `${TMDB_IMAGE_BASE}/w500${r.poster_path}`
+        : null,
+      fanartUrl: r.backdrop_path
+        ? `${TMDB_IMAGE_BASE}/original${r.backdrop_path}`
         : null,
       rating: r.vote_average ?? 0,
       genres: [],

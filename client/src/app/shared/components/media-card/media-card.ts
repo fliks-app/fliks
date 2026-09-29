@@ -13,7 +13,7 @@ import { IdentifyModalService } from '../../../core/services/identify-modal.serv
 import { TrackingModalService } from '../../../core/services/tracking-modal.service';
 import { CardActionsDirective } from '../../directives/card-actions.directive';
 import { SpoilerDirective } from '../../directives/spoiler.directive';
-import { clearPosterStamps, stampPoster } from '../../utils/view-transition';
+import { clearPosterStamps, previewPosterName, stampPoster, stampPosterNamed } from '../../utils/view-transition';
 import { armPageSlide } from '../../utils/page-slide';
 import { ServerConfigService } from '../../../core/services/server-config.service';
 import { imageUrlWithSize } from '../../../core/pipes/resolve-url.pipe';
@@ -226,6 +226,17 @@ export class MediaCardComponent {
    * replaces it with the full Media a moment later.
    */
   readonly navState = computed(() => {
+    const preview = this.previewTarget();
+    if (preview) {
+      return {
+        preview: {
+          externalId: preview.externalId,
+          title: this._title(),
+          posterUrl: this._img(),
+          fanartUrl: this.fanartUrl(),
+        },
+      };
+    }
     const episodeId = this.episodeIdFromLink();
     if (episodeId != null) {
       // With the series in hand the episode page resolves everything out of the
@@ -294,6 +305,12 @@ export class MediaCardComponent {
     });
     this.cardActionsService.show();
   }
+
+  /** A `/add/<movie|tv>/[provider/]<id>` link: a title the library does not hold. */
+  private readonly previewTarget = computed(() => {
+    const hit = this.link()?.join('/').match(/^\/add\/(movie|tv)\/(?:([^/]+)\/)?([^/]+)$/);
+    return hit ? { type: hit[1], provider: hit[2] ?? 'tmdb', externalId: hit[3] } : null;
+  });
 
   /** Episode id when [link] targets an episode page, null otherwise. */
   private episodeIdFromLink(): number | null {
@@ -397,8 +414,17 @@ export class MediaCardComponent {
       clearPosterStamps();
       return;
     }
-    const id = this.resolveMediaId();
     const img = this.imgRef()?.nativeElement;
+    const preview = this.previewTarget();
+    if (preview && img) {
+      stampPosterNamed(
+        img,
+        previewPosterName(preview.type, preview.provider, preview.externalId),
+        this.overlayRef()?.nativeElement,
+      );
+      return;
+    }
+    const id = this.resolveMediaId();
     if (id == null || !img) return;
     stampPoster(img, id, this.episodeIdFromLink(), this.overlayRef()?.nativeElement);
   }

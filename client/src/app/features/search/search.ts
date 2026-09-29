@@ -736,15 +736,13 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     return 'pending';
   }
 
-  onExternalCardClick(row: MetadataSearchResult) {
+  externalLink(row: MetadataSearchResult): string[] {
     if (row.existingMediaId) {
-      const prefix = row.existingMediaType === 'series' ? '/series' : '/movies';
-      void this.router.navigate([prefix, row.existingMediaId]);
-    } else {
-      const provider = row.provider ?? 'tmdb';
-      const externalId = provider === 'tvdb' ? String(row.tvdbId ?? row.tmdbId) : String(row.tmdbId);
-      const prefix = row.mediaType === 'series' ? '/add/tv' : '/add/movie';
-      void this.router.navigate([prefix, provider, externalId]);
+      return [row.existingMediaType === 'series' ? '/series' : '/movies', String(row.existingMediaId)];
     }
+    const provider = row.provider ?? 'tmdb';
+    const externalId = provider === 'tvdb' ? String(row.tvdbId ?? row.tmdbId) : String(row.tmdbId);
+    return [row.mediaType === 'series' ? '/add/tv' : '/add/movie', provider, externalId];
   }
+
 }

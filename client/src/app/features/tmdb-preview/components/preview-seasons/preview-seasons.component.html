@@ -1,6 +1,21 @@
 @if (loading()) {
-  <div class="flex justify-center py-8">
-    <span class="loading loading-spinner"></span>
+  <div class="animate-pulse" aria-hidden="true">
+    <div class="flex gap-2 mb-4">
+      @for (i of [1, 2, 3]; track i) {
+        <div class="h-8 w-24 bg-base-300/40 rounded-lg"></div>
+      }
+    </div>
+    <ul class="divide-y divide-base-content/10 border-t border-base-content/10">
+      @for (i of [1, 2, 3]; track i) {
+        <li class="grid grid-cols-[auto_1fr] gap-x-3 sm:gap-x-4 py-3">
+          <div class="w-28 sm:w-48 lg:w-56 aspect-video rounded-lg bg-base-300/40"></div>
+          <div class="space-y-2">
+            <div class="h-5 w-1/2 bg-base-300/40 rounded"></div>
+            <div class="h-4 w-1/4 bg-base-300/40 rounded"></div>
+          </div>
+        </li>
+      }
+    </ul>
   </div>
 } @else if (failed()) {
   <p class="text-sm text-warning py-2">{{ 'discover.seasons_failed' | translate }}</p>

@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MobileFanartHeroComponent } from './mobile-fanart-hero';
 import { ServerConfigService } from '../../core/services/server-config.service';
+import { markViewTransition } from '../utils/view-transition';
 
 /** A single <img> whose src changes cuts to the new picture the moment it
  *  decodes, so a swap fades the outgoing one out over the incoming one. The
@@ -53,6 +54,25 @@ describe('MobileFanartHeroComponent — cross-fade on swap', () => {
     outgoing.dispatchEvent(new Event('animationend'));
     fixture.detectChanges();
     expect(sources(fixture)).toEqual(['/b.jpg']);
+  });
+
+  it('keeps the captured image until a running morph ends', async () => {
+    const fixture = createFixture();
+    let finish!: () => void;
+    const finished = new Promise<void>((r) => (finish = r));
+    markViewTransition({ ready: Promise.resolve(), finished });
+    await Promise.resolve();
+
+    fixture.componentRef.setInput('fanartUrl', '/b.jpg');
+    fixture.detectChanges();
+    // Replacing the element now would make the browser skip the morph.
+    expect(sources(fixture)).toEqual(['/a.jpg']);
+
+    finish();
+    await finished;
+    await new Promise((r) => setTimeout(r));
+    fixture.detectChanges();
+    expect(sources(fixture)[0]).toBe('/b.jpg');
   });
 
   it('renders no image without a url', () => {
