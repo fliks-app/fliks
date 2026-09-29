@@ -1079,6 +1079,7 @@ export class MediaRescanService {
     mediaId: number,
     mediaRoot: string,
     linkedRelPaths: ReadonlySet<string>,
+    underBonusDir = false,
   ): Promise<string[]> {
     if (depth > 3) {
       this.log.warn(
@@ -1099,7 +1100,7 @@ export class MediaRescanService {
     }
     // Below the media's own folder only: a bonus/sample child is skipped for a
     // newly-discovered file, but one already linked to a media_file row is kept.
-    const inBonusDir = depth > 0 && isBonusDir(path.basename(dir));
+    const inBonusDir = underBonusDir || (depth > 0 && isBonusDir(path.basename(dir)));
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
@@ -1110,6 +1111,7 @@ export class MediaRescanService {
             mediaId,
             mediaRoot,
             linkedRelPaths,
+            inBonusDir,
           )),
         );
         continue;

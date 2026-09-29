@@ -251,7 +251,7 @@ describe('MediaRescanService.rescanFiles — quality from probe results', () => 
   });
 });
 
-describe('MediaRescanService.rescanFiles — bonus folders and sample files', () => {
+describe('MediaRescanService.rescanFiles - bonus folders and sample files', () => {
   let mediaDir: string;
 
   beforeEach(() => {
@@ -280,9 +280,11 @@ describe('MediaRescanService.rescanFiles — bonus folders and sample files', ()
     const h = buildHarness();
     const extrasDir = path.join(mediaDir, 'Extras');
     fs.mkdirSync(extrasDir);
-    // New, never linked: a sample clip and an unlinked Extras file — both skipped.
+    // New, never linked: a sample clip and unlinked Extras files, nested or not, are skipped.
     fs.writeFileSync(path.join(mediaDir, 'Ember.Horizon.2001.1080p-sample.mkv'), 'x');
     fs.writeFileSync(path.join(extrasDir, 'making-of.mkv'), 'x');
+    fs.mkdirSync(path.join(extrasDir, 'Part 1'));
+    fs.writeFileSync(path.join(extrasDir, 'Part 1', 'clip.mkv'), 'x');
     // Already linked to a media_file row: kept even though it lives in Extras.
     fs.writeFileSync(path.join(extrasDir, 'behind-the-scenes.mkv'), 'x');
     const dbFile = {

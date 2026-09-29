@@ -1,9 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import * as fs from 'fs';
 import * as path from 'path';
-import { VIDEO_EXTS } from '../../common/constants/video-extensions';
-import { isBonusDir, isSampleFile } from '../../common/utils/bonus-content.util';
 
 export interface NamingFormats {
   movie: string;
@@ -405,43 +402,6 @@ export class NamingService {
   parseSeasonNumber(sourceTitle: string): number | null {
     const m = sourceTitle.match(/[Ss](\d{1,2})(?![Ee.\d])/);
     return m ? parseInt(m[1], 10) : null;
-  }
-
-  findLargestVideoFile(
-    dirPath: string,
-  ): { filePath: string; size: number } | null {
-    const all = this.findAllVideoFiles(dirPath);
-    if (!all.length) return null;
-    return all.reduce((best, f) => (f.size > best.size ? f : best));
-  }
-
-  /**
-   * Find all video files recursively in a directory.
-   * Sorted by filename for natural episode order.
-   */
-  findAllVideoFiles(dirPath: string): { filePath: string; size: number }[] {
-    const results: { filePath: string; size: number }[] = [];
-    try {
-      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-      for (const entry of entries) {
-        const fullPath = path.join(dirPath, entry.name);
-        if (entry.isDirectory()) {
-          // `dirPath` is already a release/title folder, so a bonus child is below its root.
-          if (isBonusDir(entry.name)) continue;
-          results.push(...this.findAllVideoFiles(fullPath));
-        } else if (
-          VIDEO_EXTS.has(path.extname(entry.name).toLowerCase()) &&
-          !isSampleFile(entry.name)
-        ) {
-          const stat = fs.statSync(fullPath);
-          results.push({ filePath: fullPath, size: stat.size });
-        }
-      }
-    } catch {
-      // ignore
-    }
-    results.sort((a, b) => a.filePath.localeCompare(b.filePath));
-    return results;
   }
 
   private sanitize(name: string): string {
