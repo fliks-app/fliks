@@ -222,10 +222,9 @@ export class BrowserDeviceProfileService {
     channelsByCodec?: Record<string, number>;
   } | null = null;
   private nativeVideo: NativeVideoCaps | null = null;
-  /** Pessimistic until the desktop probe resolves — false narrows the
-   *  advertised profiles to 7 rather than risking 5/8 on a bridge that can't
-   *  reshape yet. */
+  /** Pessimistic until the desktop probe resolves: P7 only, never 5/8 a bridge can't reshape. */
   private desktopCanReshapeDolbyVision = false;
+  private desktopProbe: Promise<void> | null = null;
 
   constructor() {
     // Pre-fetch native HDR + audio + video capabilities (async, cached for
@@ -248,13 +247,21 @@ export class BrowserDeviceProfileService {
     }
     // Windows mpv can fall back off gpu-next at startup (old driver); the flag
     // is only read on Windows, the one desktop backend that can reshape DV.
-    desktopBridgeOrNull()
+    this.desktopProbe = desktopBridgeOrNull()
       ?.getPlayerCapabilities()
       .then((r) => {
         this.desktopCanReshapeDolbyVision = r.canReshapeDolbyVision;
         this.cachedProfile = null;
       })
-      .catch((e) => console.warn('[DeviceProfile] desktop capability probe failed', e));
+      .catch((e) => console.warn('[DeviceProfile] desktop capability probe failed', e))
+      .finally(() => { this.desktopProbe = null; }) ?? null;
+  }
+
+  /** Resolves once the desktop capability probe settles (or after `timeoutMs`), so a
+   *  play right after launch doesn't negotiate with the pessimistic default. */
+  whenDesktopProbed(timeoutMs = 4000): Promise<void> {
+    if (!this.desktopProbe) return Promise.resolve();
+    return Promise.race([this.desktopProbe, new Promise<void>((r) => setTimeout(r, timeoutMs))]);
   }
 
   /**

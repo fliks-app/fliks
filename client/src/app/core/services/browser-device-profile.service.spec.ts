@@ -258,9 +258,7 @@ describe('BrowserDeviceProfileService: dolbyVisionProfiles gating', () => {
     try {
       const desktopDevice = { ...device, isDesktopNative: () => true } as DeviceService;
       const service = configure(desktopDevice, { hasServerFeature: () => true });
-      // Flush the constructor's getPlayerCapabilities() microtask before reading.
-      await Promise.resolve();
-      await Promise.resolve();
+      await service.whenDesktopProbed();
       expect(service.getProfile().dolbyVisionProfiles).toEqual([5, 7, 8]);
       expect(service.getProfile().supportsDolbyVision).toBe(true);
     } finally {
