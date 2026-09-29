@@ -328,8 +328,7 @@ export class OrphanScanPanelComponent {
     const seq = ++this.searchSeq;
     this.latestSearch.set(index, seq);
     this.patch(index, { searching: true, error: '' });
-    // A slower request from a scan a newer `load()` already replaced must never patch
-    // into today's groups, even if its own index happens to still carry this `seq`.
+    // A reply from a scan a newer `load()` replaced must not patch the new groups.
     const stale = () => generation !== this.scanGeneration || this.latestSearch.get(index) !== seq;
     try {
       const provider = vm.group.suggestedProvider;
@@ -412,7 +411,7 @@ export class OrphanScanPanelComponent {
           ),
         );
       } else if (res.alreadyPresent > 0 && !res.errors.length) {
-        // Every file already sits at its destination — a safe re-run, not a failure.
+        // Every file already sits at its destination: a no-op re-run, not a failure.
         this.patch(index, { linking: false, done: true });
         this.toast.info(
           this.translate.instant('settings.libraries.scan_already_present', {
@@ -457,8 +456,6 @@ export class OrphanScanPanelComponent {
   async autoImportAll() {
     this.autoImporting.set(true);
     try {
-      // Each group resolves independently, but linking copies/moves real files server-side:
-      // capped at AUTO_IMPORT_CONCURRENCY so the batch doesn't fire every group at once.
       const indices = this.groups().map((_, i) => i);
       for (let s = 0; s < indices.length; s += AUTO_IMPORT_CONCURRENCY) {
         await Promise.all(

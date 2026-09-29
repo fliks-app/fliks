@@ -154,7 +154,7 @@ export class LibraryIngestService {
             : null;
         if (file.episodeId != null && !ep) {
           this.logger.warn(
-            `Ingest[${req.sourceLabel}]: episode #${file.episodeId} does not belong to media #${media.id} — falling back to filename parsing`,
+            `Ingest[${req.sourceLabel}]: episode #${file.episodeId} does not belong to media #${media.id}, falling back to filename parsing`,
           );
         }
         if (ep) {

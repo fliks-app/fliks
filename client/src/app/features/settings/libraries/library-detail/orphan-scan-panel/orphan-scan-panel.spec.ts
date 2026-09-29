@@ -251,8 +251,7 @@ describe('OrphanScanPanelComponent: scan generation', () => {
           : Promise.resolve([result(11, 'First')]),
     });
     await panel.scanPath('/medias', ['movie'], 'tmdb');
-    // Page 2 (index 20) is searched here, standing in for the user opening it —
-    // load() itself only auto-searches page 1.
+    // Page 2 (index 20): load() itself only auto-searches page 1.
     const stalePending = panel.search(20);
     await vi.waitFor(() => expect(release).toBeDefined());
 
@@ -264,8 +263,7 @@ describe('OrphanScanPanelComponent: scan generation', () => {
     release([result(99, 'Wrong group')]);
     await stalePending;
 
-    // The reply belonged to the first scan's own group 20 — it must never land on
-    // the second scan's group 20, an unrelated, not-yet-searched group.
+    // The reply belongs to the first scan's group 20, not the second scan's.
     expect(panel.groups()[20].searched).toBe(false);
     expect(panel.groups()[20].pick).toBeNull();
   });

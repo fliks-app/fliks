@@ -334,9 +334,8 @@ export class PluginViewComponent implements OnDestroy {
     };
   }
 
-  /** `actions[].scope: 'list'` — rendered once above the rows, run with no draft. Honours
-   *  `successKey` the same way a row action's `mutateRow` does: the contract doesn't scope
-   *  it to rows, so a list action left it silent even on a real mutation. */
+  /** `actions[].scope: 'list'` — rendered once above the rows, run with no draft. Toasts
+   *  `successKey` like a row action does. */
   providerListActions(view: ProvidersView): ProviderListAction[] {
     return (view.actions ?? [])
       .filter((a) => a.scope === 'list')

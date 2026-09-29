@@ -41,7 +41,7 @@ export interface RelinkResult {
   mediaId: number;
   created: boolean;
   linked: number;
-  /** Files whose destination was already taken — a safe no-op re-run, not a failure. */
+  /** Files already at their destination: a no-op re-run, not a failure. */
   alreadyPresent: number;
   errors: string[];
 }
