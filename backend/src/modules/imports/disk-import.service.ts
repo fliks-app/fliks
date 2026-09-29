@@ -6,7 +6,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
@@ -43,6 +43,7 @@ import { LibraryIngestService } from '../../common/library-ingest/library-ingest
 import { PostImportQueueService } from '../../common/post-import/post-import-queue.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
 import { VIDEO_EXTS } from '../../common/constants/video-extensions';
+import { sanitizeFsPath } from '../../common/utils/fs-path.util';
 
 /** The scan shares a 30-connection pool with everything else the server is
  *  serving; unbounded fan-out starved it and the UI stalled until the scan ended. */
@@ -52,12 +53,32 @@ const SCAN_CONCURRENCY = 8;
 export const ORPHAN_SCAN_PROGRESS = 'OrphanScan';
 export const ORPHAN_IMPORT_PROGRESS = 'OrphanImport';
 
-/** The scanned group folder above `file`, or its own directory when none matches. */
+/** The scanned group folder above `file`, or its own directory when none matches. Outermost
+ *  wins: in `Show/Show/S01/e.mkv` the `tvshow.nfo` sits in the outer folder. */
 function seriesFolderOf(file: string, folderName: string): string {
+  let match: string | null = null;
   for (let dir = path.dirname(file); dir !== path.dirname(dir); dir = path.dirname(dir)) {
-    if (path.basename(dir) === folderName) return dir;
+    if (path.basename(dir) === folderName) match = dir;
   }
-  return path.dirname(file);
+  return match ?? path.dirname(file);
+}
+
+/** Bonus-clip folders inside a title's folder; a scan-root child of that name is a title. */
+const BONUS_DIR_RE =
+  /^(samples?|extras?|featurettes?|trailers?|interviews|behind[ ._-]the[ ._-]scenes|deleted[ ._-]scenes)$/i;
+/** A release's sample clip ends with a `sample` token; a title merely starting with it does not. */
+const SAMPLE_FILE_RE = /(?:^|[.\-_ ])sample$/i;
+
+/** The season/episode the caller already resolved (client-side parse, or a season-pack's own
+ *  numbering), when it gave both. `undefined` leaves the caller's own fallback to decide. */
+function callerEpNums(f: {
+  seasonNumber?: number;
+  episodeNumber?: number;
+  episodeEnd?: number;
+}): { season: number; episode: number; episodeEnd: number | null } | undefined {
+  return f.seasonNumber != null && f.episodeNumber != null
+    ? { season: f.seasonNumber, episode: f.episodeNumber, episodeEnd: f.episodeEnd ?? null }
+    : undefined;
 }
 
 @Injectable()
@@ -128,7 +149,7 @@ export class DiskImportService {
    * the creation wizard picks its matches before the library is written.
    */
   async previewOrphans(dto: PreviewOrphansDto): Promise<OrphanScanResult> {
-    const root = path.resolve(dto.path);
+    const root = path.resolve(sanitizeFsPath(dto.path));
     let stat: fs.Stats;
     try {
       stat = await fsp.stat(root);
@@ -350,7 +371,8 @@ export class DiskImportService {
           const res = await this.relinkOrphans(item, userId);
           if (res.created) created++;
           linked += res.linked;
-          if (res.linked === 0) failed++;
+          // Files already at their destination make a no-op re-run, not a failure.
+          if (res.linked === 0 && res.alreadyPresent === 0) failed++;
         } catch (e) {
           failed++;
           this.logger.warn(
@@ -412,13 +434,13 @@ export class DiskImportService {
     }
 
     let linked = 0;
+    let alreadyPresent = 0;
     let slotCreated = false;
     const errors: string[] = [];
 
     if (dto.reorganize || dto.transfer) {
-      // Move + rename into the library's naming layout by delegating to the
-      // existing disk-import pipeline (handles folder/file naming, companions,
-      // MediaFile creation, ffprobe enrich and subtitle scheduling).
+      // Move/copy + rename into the library's naming layout (folder/file naming,
+      // companions, MediaFile creation, ffprobe enrich and subtitle scheduling).
       if (!media.library) media.library = library;
       const entries: ImportFileEntry[] = [];
       for (const f of dto.files) {
@@ -426,13 +448,7 @@ export class DiskImportService {
         let episodeId: number | undefined;
         if (media.type === MediaType.SERIES) {
           const epNums =
-            f.seasonNumber != null && f.episodeNumber != null
-              ? {
-                  season: f.seasonNumber,
-                  episode: f.episodeNumber,
-                  episodeEnd: f.episodeEnd ?? null,
-                }
-              : this.naming.parseEpisodeNumbers(filename, f.filePath);
+            callerEpNums(f) ?? this.naming.parseEpisodeNumbers(filename, f.filePath);
           if (!epNums) {
             const special = await this.matchSpecialFile(media.id, f.filePath);
             if (!special) {
@@ -460,6 +476,7 @@ export class DiskImportService {
           uniquifyOnCollision: !dto.transfer,
         });
         linked = res.imported;
+        alreadyPresent = res.alreadyPresent;
         errors.push(...res.errors);
       }
     } else {
@@ -479,14 +496,7 @@ export class DiskImportService {
 
       for (const f of dto.files) {
         const absPath = path.resolve(f.filePath);
-        const epNums =
-          f.seasonNumber != null && f.episodeNumber != null
-            ? {
-                season: f.seasonNumber,
-                episode: f.episodeNumber,
-                episodeEnd: f.episodeEnd ?? null,
-              }
-            : undefined;
+        const epNums = callerEpNums(f);
         const res = await this.mediaService.linkExistingFileInPlace({
           media,
           absPath,
@@ -524,15 +534,16 @@ export class DiskImportService {
 
     // A newly created unmatched row that failed to link any file is dead
     // weight: for a root movie especially, an ambiguous folderName '' twin
-    // would otherwise linger and confuse the next reuse lookup.
-    if (!dto.externalId && created && linked === 0) {
+    // would otherwise linger and confuse the next reuse lookup. A file already at its
+    // destination is served by this row, so it stays.
+    if (!dto.externalId && created && linked === 0 && alreadyPresent === 0) {
       await this.mediaRepo.delete(media.id);
     }
 
     this.logger.log(
-      `Orphan relink — media #${media.id} created=${created} linked=${linked} errors=${errors.length}`,
+      `Orphan relink — media #${media.id} created=${created} linked=${linked} alreadyPresent=${alreadyPresent} errors=${errors.length}`,
     );
-    return { mediaId: media.id, created, linked, errors };
+    return { mediaId: media.id, created, linked, alreadyPresent, errors };
   }
 
   /** Reuse the media holding this external id, or import it. */
@@ -587,6 +598,24 @@ export class DiskImportService {
     return { media, created };
   }
 
+  /** Concurrent relinks sharing a natural key would both miss the lookup and insert twice.
+   *  ponytail: in-process only; needs a DB-level guard if the backend ever runs as several. */
+  private readonly unmatchedLocks = new Map<string, Promise<unknown>>();
+
+  private withKeyedLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    const prior = this.unmatchedLocks.get(key) ?? Promise.resolve();
+    const run = prior.then(fn, fn);
+    const settled = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.unmatchedLocks.set(key, settled);
+    void settled.then(() => {
+      if (this.unmatchedLocks.get(key) === settled) this.unmatchedLocks.delete(key);
+    });
+    return run;
+  }
+
   /**
    * No external id: reuse the media already pinned to this folder, or create one from the
    * guessed/corrected title. Natural key is (library, type, folderName).
@@ -597,62 +626,12 @@ export class DiskImportService {
     addedByUserId: number | null,
   ): Promise<{ media: Media; created: boolean }> {
     const sample = path.resolve(dto.files[0].filePath);
-    const title =
-      dto.title?.trim() ||
-      extractMediaTitle(path.basename(sample)).title ||
-      dto.folderName;
-    // External files get the library's naming layout; in-place files keep their own folder.
-    const folderName = dto.transfer
-      ? await this.namedFolder(dto.type, title, dto.year)
-      : dto.folderName;
-    const where = {
-      library: { id: library.id },
-      type: dto.type,
-      folderName,
-      tmdbId: IsNull(),
-      tvdbId: IsNull(),
-      imdbId: IsNull(),
-    };
-    if (folderName === '') {
-      // Every root-level movie shares folderName '': disambiguate reuse by its
-      // own file, or unrelated titles would collapse into the first one found.
-      const wanted = new Set(dto.files.map((f) => path.basename(f.filePath)));
-      const candidates = await this.mediaRepo.find({
-        where,
-        relations: ['library', 'files'],
-      });
-      const existing = candidates.find((m) =>
-        (m.files ?? []).some((f) => wanted.has(f.relativePath)),
-      );
-      if (existing) return { media: existing, created: false };
-    } else {
-      const existing = await this.mediaRepo.findOne({
-        where,
-        relations: ['library', 'files'],
-      });
-      if (existing) return { media: existing, created: false };
-    }
-
     const artworkDir =
       dto.type !== MediaType.SERIES
         ? path.dirname(sample)
         : dto.transfer
           ? seriesFolderOf(sample, dto.folderName)
           : path.join(library.path!, dto.folderName);
-    if (!dto.transfer) {
-      // Checked independently: a crafted folderName must not escape the root even
-      // when the sample file itself is a valid path under it.
-      const libraryRoot = path.resolve(library.path!);
-      const resolvedArtworkDir = path.resolve(artworkDir);
-      if (
-        relativePathUnderMediaRoot(library.path, sample) == null ||
-        (resolvedArtworkDir !== libraryRoot &&
-          !resolvedArtworkDir.startsWith(libraryRoot + path.sep))
-      ) {
-        throw new BadRequestException('File outside the library root');
-      }
-    }
-
     // A root movie's artworkDir IS the shared library root: generic sidecar
     // names (poster.jpg, movie.nfo, ...) there belong to no title in particular.
     const isRootMovie = dto.folderName === '';
@@ -660,41 +639,99 @@ export class DiskImportService {
       dto.type === MediaType.SERIES
         ? undefined
         : path.basename(sample, path.extname(sample));
-    const nfo =
+    const readNfo = async () =>
       dto.type === MediaType.SERIES
         ? (await this.nfo.readNfoFile(path.join(artworkDir, 'tvshow.nfo'))) ??
           (await this.nfo.readForVideoFile(sample))
         : isRootMovie
           ? await this.nfo.readNfoFile(path.join(artworkDir, `${artworkBasename}.nfo`))
           : await this.nfo.readForVideoFile(sample);
-    const artwork = await findLocalArtwork(artworkDir, artworkBasename, {
-      basenameOnly: isRootMovie,
-    });
 
-    const created = await this.mediaService.createUnmatched(
-      {
-        title,
-        year: dto.year,
+    const guessed =
+      dto.title?.trim() ||
+      extractMediaTitle(path.basename(sample)).title ||
+      dto.folderName;
+    // Transfer names the folder after the title and year the row stores, so it reads the
+    // .nfo first, with createUnmatched's own rule: its title only replaces a folder fallback.
+    const transferNfo = dto.transfer ? await readNfo() : null;
+    const title =
+      transferNfo?.title && guessed === dto.folderName ? transferNfo.title : guessed;
+    const year = dto.year ?? transferNfo?.year ?? undefined;
+    // External files get the library's naming layout; in-place files keep their own folder.
+    const folderName = dto.transfer
+      ? await this.namedFolder(dto.type, title, year)
+      : dto.folderName;
+
+    return this.withKeyedLock(`${library.id}:${dto.type}:${folderName}`, async () => {
+      // Whoever already owns this folder is reused, identified or not.
+      const where = {
+        library: { id: library.id },
         type: dto.type,
-        libraryId: dto.libraryId,
         folderName,
-        qualityProfileId: dto.qualityProfileId,
-        languageProfileId: dto.languageProfileId,
-        libraryDefaultQualityProfileId: library.defaultQualityProfileId,
-        libraryDefaultLanguageProfileId: library.defaultLanguageProfileId,
-        nfo: nfo ?? undefined,
-        artwork,
-      },
-      addedByUserId,
-    );
-    const media = await this.mediaRepo.findOne({
-      where: { id: created.id },
-      relations: ['library', 'files'],
+      };
+      if (folderName === '') {
+        // Every root-level movie shares folderName '': disambiguate reuse by its
+        // own file, or unrelated titles would collapse into the first one found.
+        const wanted = new Set(dto.files.map((f) => path.basename(f.filePath)));
+        const candidates = await this.mediaRepo.find({
+          where,
+          relations: ['library', 'files'],
+        });
+        const existing = candidates.find((m) =>
+          (m.files ?? []).some((f) => wanted.has(f.relativePath)),
+        );
+        if (existing) return { media: existing, created: false };
+      } else {
+        const existing = await this.mediaRepo.findOne({
+          where,
+          relations: ['library', 'files'],
+        });
+        if (existing) return { media: existing, created: false };
+      }
+
+      if (!dto.transfer) {
+        // Checked independently: a crafted folderName must not escape the root even
+        // when the sample file itself is a valid path under it.
+        const libraryRoot = path.resolve(library.path!);
+        const resolvedArtworkDir = path.resolve(artworkDir);
+        if (
+          relativePathUnderMediaRoot(library.path, sample) == null ||
+          (resolvedArtworkDir !== libraryRoot &&
+            !resolvedArtworkDir.startsWith(libraryRoot + path.sep))
+        ) {
+          throw new BadRequestException('File outside the library root');
+        }
+      }
+      const nfo = dto.transfer ? transferNfo : await readNfo();
+      const artwork = await findLocalArtwork(artworkDir, artworkBasename, {
+        basenameOnly: isRootMovie,
+      });
+      const created = await this.mediaService.createUnmatched(
+        {
+          title,
+          year,
+          type: dto.type,
+          libraryId: dto.libraryId,
+          folderName,
+          qualityProfileId: dto.qualityProfileId,
+          languageProfileId: dto.languageProfileId,
+          libraryDefaultQualityProfileId: library.defaultQualityProfileId,
+          libraryDefaultLanguageProfileId: library.defaultLanguageProfileId,
+          // The folder is already named after `title`: the .nfo must not replace it.
+          nfo: (dto.transfer && nfo ? { ...nfo, title: undefined } : nfo) ?? undefined,
+          artwork,
+        },
+        addedByUserId,
+      );
+      const media = await this.mediaRepo.findOne({
+        where: { id: created.id },
+        relations: ['library', 'files'],
+      });
+      if (!media) {
+        throw new BadRequestException('Media not found after import');
+      }
+      return { media, created: true };
     });
-    if (!media) {
-      throw new BadRequestException('Media not found after import');
-    }
-    return { media, created: true };
   }
 
   /**
@@ -713,8 +750,9 @@ export class DiskImportService {
     imports: ImportFileEntry[],
     method: TransferMethod,
     opts: { uniquifyOnCollision?: boolean } = {},
-  ): Promise<{ imported: number; errors: string[] }> {
+  ): Promise<{ imported: number; alreadyPresent: number; errors: string[] }> {
     let imported = 0;
+    let alreadyPresent = 0;
     const errors: string[] = [];
 
     const formats = await this.naming.getFormats();
@@ -730,13 +768,21 @@ export class DiskImportService {
           continue;
         }
 
-        // Verify the source still exists before we touch the DB.
+        // The path comes from the request: only an existing regular video file is copied/moved.
+        let sourceStat: fs.Stats;
         try {
-          await fsp.stat(entry.filePath);
+          sourceStat = await fsp.stat(entry.filePath);
         } catch {
           errors.push(
             `${path.basename(entry.filePath)}: source file not found`,
           );
+          continue;
+        }
+        if (
+          !sourceStat.isFile() ||
+          !VIDEO_EXTS.has(path.extname(entry.filePath).toLowerCase())
+        ) {
+          errors.push(`${path.basename(entry.filePath)}: not a video file`);
           continue;
         }
 
@@ -788,10 +834,10 @@ export class DiskImportService {
           transfer: method,
           fallbackQuality: entry.quality,
           sourceLabel: media.title,
-          force: entry.force,
           uniquifyOnCollision: opts.uniquifyOnCollision,
         });
         imported += result.imported.length;
+        alreadyPresent += result.alreadyPresent.length;
         if (result.imported.length) {
           void this.mediaServers.dispatch('library.rescan', {
             title: media.title,
@@ -805,7 +851,7 @@ export class DiskImportService {
       }
     }
 
-    return { imported, errors };
+    return { imported, alreadyPresent, errors };
   }
 
   private async namedFolder(
@@ -839,8 +885,13 @@ export class DiskImportService {
     const subdirs: string[] = [];
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) subdirs.push(fullPath);
-      else if (VIDEO_EXTS.has(path.extname(entry.name).toLowerCase())) {
+      if (entry.isDirectory()) {
+        if (depth > 0 && BONUS_DIR_RE.test(entry.name)) continue;
+        subdirs.push(fullPath);
+      } else if (
+        VIDEO_EXTS.has(path.extname(entry.name).toLowerCase()) &&
+        !SAMPLE_FILE_RE.test(path.basename(entry.name, path.extname(entry.name)))
+      ) {
         files.push(fullPath);
       }
     }

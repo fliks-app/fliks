@@ -2023,6 +2023,7 @@
       "scan_expand_all": "Espandi tutto",
       "scan_collapse_all": "Comprimi tutto",
       "scan_linked": "{{count}} file collegato/i",
+      "scan_already_present": "{{count}} file già presente/i, niente da importare",
       "scan_nothing_linked": "Nessun file collegato (duplicato già presente nel file multimediale).",
       "scan_error": "Analisi fallita.",
       "scan_files": "{{count}} file",

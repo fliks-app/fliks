@@ -96,10 +96,11 @@ export class BackupService {
     const filePath = this.getBackupPath(filename);
     this.log.warn(`Restoring backup: ${filename}`);
     await this.ensurePluginRoles(filePath);
-    // ON_ERROR_STOP: without it psql reports success after skipping every
-    // statement that failed, leaving a half-restored database.
+    // ON_ERROR_STOP: without it psql reports success after skipping every failed
+    // statement. --single-transaction rolls the whole restore back on the first error.
     await this.run('psql', [
       ...this.connectionArgs(),
+      '--single-transaction',
       '-v',
       'ON_ERROR_STOP=1',
       '-f',

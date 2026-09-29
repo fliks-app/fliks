@@ -334,14 +334,21 @@ export class PluginViewComponent implements OnDestroy {
     };
   }
 
-  /** `actions[].scope: 'list'` — rendered once above the rows, run with no draft. */
+  /** `actions[].scope: 'list'` — rendered once above the rows, run with no draft. Toasts
+   *  `successKey` like a row action does. */
   providerListActions(view: ProvidersView): ProviderListAction[] {
     return (view.actions ?? [])
       .filter((a) => a.scope === 'list')
       .map((a) => ({
         labelKey: a.labelKey,
         run: async () => {
-          await firstValueFrom(this.http.request(a.method, this.resourceUrl(a.route), { body: {} }));
+          const res = await firstValueFrom(
+            this.http.request(a.method, this.resourceUrl(a.route), { body: {} }),
+          );
+          if (a.successKey) {
+            const params = res && typeof res === 'object' ? (res as Record<string, unknown>) : undefined;
+            this.toast.success(this.translate.instant(a.successKey, params));
+          }
         },
       }));
   }

@@ -263,6 +263,7 @@ describe('LibraryIngestService.ingest', () => {
     expect(result.imported[0].file.episode).toEqual({ id: 7003 });
     expect(h.episodeRepo.update).toHaveBeenCalledWith(7003, { hasFile: true });
     expect(h.episodeRepo.update).not.toHaveBeenCalledWith(555, expect.anything());
+    expect(h.logger.warn).toHaveBeenCalledWith(expect.stringContaining('episode #555'));
   });
 
   it('refuses to place a grabbed file at the library root when the media has no folder of its own', async () => {

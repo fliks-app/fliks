@@ -41,5 +41,7 @@ export interface RelinkResult {
   mediaId: number;
   created: boolean;
   linked: number;
+  /** Files already at their destination: a no-op re-run, not a failure. */
+  alreadyPresent: number;
   errors: string[];
 }

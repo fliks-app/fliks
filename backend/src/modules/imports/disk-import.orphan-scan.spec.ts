@@ -112,6 +112,47 @@ describe('orphan scan', () => {
     expect(res.orphanCount).toBe(2);
   });
 
+  it('filters sample clips and bonus folders out of a title folder', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'orphan-scan-sample-'));
+    try {
+      const movie = path.join(dir, 'Movie Two (2010)');
+      await fs.mkdir(movie, { recursive: true });
+      await fs.writeFile(path.join(movie, 'Movie.Two.2010.1080p.mkv'), 'x');
+      await fs.writeFile(path.join(movie, 'Movie.Two.2010.1080p-sample.mkv'), 'x');
+      await fs.mkdir(path.join(movie, 'Sample'), { recursive: true });
+      await fs.writeFile(path.join(movie, 'Sample', 'sample.mkv'), 'x');
+      await fs.mkdir(path.join(movie, 'Extras'), { recursive: true });
+      await fs.writeFile(path.join(movie, 'Extras', 'behind-the-scenes.mkv'), 'x');
+      await fs.mkdir(path.join(movie, 'Featurettes'), { recursive: true });
+      await fs.writeFile(path.join(movie, 'Featurettes', 'making-of.mkv'), 'x');
+      // A scan-root folder with a bonus-like name is a title of its own.
+      await fs.mkdir(path.join(dir, 'Featurettes'), { recursive: true });
+      await fs.writeFile(path.join(dir, 'Featurettes', 'Placeholder.Title.mkv'), 'x');
+
+      const res = await service.previewOrphans({ path: dir });
+
+      expect(res.scannedFiles).toBe(2);
+      expect(res.groups.flatMap((g) => g.files.map((f) => f.filename)).sort()).toEqual([
+        'Movie.Two.2010.1080p.mkv',
+        'Placeholder.Title.mkv',
+      ]);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('sanitizes a Windows "copy as path" control character before resolving the root', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'orphan-scan-bidi-'));
+    try {
+      await fs.writeFile(path.join(dir, 'stray.mkv'), 'x');
+      const res = await service.previewOrphans({ path: `‪${dir}` });
+      expect(res.libraryPath).toBe(path.resolve(dir));
+      expect(res.scannedFiles).toBe(1);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('a series file directly at the library root is not groupable and not counted as an orphan', async () => {
     const seriesRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'orphan-scan-series-root-'));
     try {

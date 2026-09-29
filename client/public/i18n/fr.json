@@ -2038,6 +2038,7 @@
       "scan_expand_all": "Déplier tout",
       "scan_collapse_all": "Replier tout",
       "scan_linked": "{{count}} fichier(s) lié(s)",
+      "scan_already_present": "{{count}} fichier(s) déjà présent(s), rien à importer",
       "scan_nothing_linked": "Aucun fichier lié (doublon déjà présent dans le média).",
       "scan_error": "Échec de l'analyse.",
       "scan_files": "{{count}} fichier(s)",

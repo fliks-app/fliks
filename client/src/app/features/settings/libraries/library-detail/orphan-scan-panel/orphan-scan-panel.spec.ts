@@ -91,7 +91,7 @@ function setup(folders: string[], metadataOverrides: Record<string, unknown> = {
       }),
       { provide: ImportsApiService, useValue: importsApi as unknown as ImportsApiService },
       { provide: MetadataService, useValue: metadata as unknown as MetadataService },
-      { provide: ToastService, useValue: { success: () => undefined } },
+      { provide: ToastService, useValue: { success: () => undefined, info: () => undefined } },
     ],
   });
   const fixture = TestBed.createComponent(OrphanScanPanelComponent);
@@ -140,6 +140,132 @@ describe('OrphanScanPanelComponent.importAll', () => {
 
     await panel.importAll(7);
     expect(relinked[0].externalId).toBe('22');
+  });
+});
+
+describe('OrphanScanPanelComponent.autoImportAll', () => {
+  it('caps concurrent relinks instead of firing every group at once', async () => {
+    const folders = Array.from({ length: 7 }, (_, i) => `F${i}`);
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const importsApi = {
+      previewOrphans: () => Promise.resolve(scanResult(folders)),
+      relinkOrphansBatch: () => Promise.resolve({ queued: 0 }),
+      relinkOrphans: async (body: RelinkOrphansBody) => {
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((r) => setTimeout(r, 0));
+        inFlight--;
+        return {
+          mediaId: 1,
+          created: true,
+          linked: body.files.length,
+          alreadyPresent: 0,
+          errors: [],
+        };
+      },
+    };
+    const metadata = {
+      searchMovie: () => Promise.resolve([result(11, 'First')]),
+      searchTv: () => Promise.resolve([]),
+    };
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTranslateService({
+          lang: 'en',
+          loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
+        }),
+        { provide: ImportsApiService, useValue: importsApi as unknown as ImportsApiService },
+        { provide: MetadataService, useValue: metadata as unknown as MetadataService },
+        { provide: ToastService, useValue: { success: () => undefined, info: () => undefined } },
+      ],
+    });
+    const panel = TestBed.createComponent(OrphanScanPanelComponent).componentInstance;
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+
+    await panel.autoImportAll();
+
+    expect(maxInFlight).toBe(3);
+    expect(panel.groups().every((g) => g.done)).toBe(true);
+  });
+});
+
+describe('OrphanScanPanelComponent.link: files already present', () => {
+  it('marks the group done with an info toast instead of a false error', async () => {
+    const folders = ['Alpha'];
+    const importsApi = {
+      previewOrphans: () => Promise.resolve(scanResult(folders)),
+      relinkOrphansBatch: () => Promise.resolve({ queued: 0 }),
+      relinkOrphans: () =>
+        Promise.resolve({
+          mediaId: 1,
+          created: false,
+          linked: 0,
+          alreadyPresent: 1,
+          errors: [],
+        }),
+    };
+    const metadata = {
+      searchMovie: () => Promise.resolve([result(11, 'First')]),
+      searchTv: () => Promise.resolve([]),
+    };
+    let infoMessage = '';
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTranslateService({
+          lang: 'en',
+          loader: {
+            provide: TranslateLoader,
+            useValue: { getTranslation: () => of({ settings: { libraries: { scan_already_present: '1 already present' } } }) },
+          },
+        }),
+        { provide: ImportsApiService, useValue: importsApi as unknown as ImportsApiService },
+        { provide: MetadataService, useValue: metadata as unknown as MetadataService },
+        {
+          provide: ToastService,
+          useValue: { success: () => undefined, info: (m: string) => (infoMessage = m) },
+        },
+      ],
+    });
+    const panel = TestBed.createComponent(OrphanScanPanelComponent).componentInstance;
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+
+    await panel.link(0);
+
+    expect(panel.groups()[0].done).toBe(true);
+    expect(panel.groups()[0].error).toBe('');
+    expect(infoMessage).toBe('1 already present');
+  });
+});
+
+describe('OrphanScanPanelComponent: scan generation', () => {
+  it('drops a reply from an earlier scan instead of patching the wrong group in a newer one', async () => {
+    const folders = Array.from({ length: 21 }, (_, i) => `A${i}`);
+    let release!: (r: MetadataSearchResult[]) => void;
+    const { panel } = setup(folders, {
+      searchMovie: (query: string) =>
+        query === 'A20'
+          ? new Promise<MetadataSearchResult[]>((r) => (release = r))
+          : Promise.resolve([result(11, 'First')]),
+    });
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+    // Page 2 (index 20): load() itself only auto-searches page 1.
+    const stalePending = panel.search(20);
+    await vi.waitFor(() => expect(release).toBeDefined());
+
+    // A second scan (the library changed) replaces the groups before that search resolves.
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+    expect(panel.groups()).toHaveLength(21);
+    expect(panel.groups()[20].searched).toBe(false);
+
+    release([result(99, 'Wrong group')]);
+    await stalePending;
+
+    // The reply belongs to the first scan's group 20, not the second scan's.
+    expect(panel.groups()[20].searched).toBe(false);
+    expect(panel.groups()[20].pick).toBeNull();
   });
 });
 

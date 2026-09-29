@@ -2038,6 +2038,7 @@
       "scan_expand_all": "Expand all",
       "scan_collapse_all": "Collapse all",
       "scan_linked": "{{count}} file(s) linked",
+      "scan_already_present": "{{count}} file(s) already present, nothing to import",
       "scan_nothing_linked": "No file linked (duplicate already present in the media).",
       "scan_error": "Scan failed.",
       "scan_files": "{{count}} file(s)",

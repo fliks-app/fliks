@@ -2023,6 +2023,7 @@
       "scan_expand_all": "Alle aufklappen",
       "scan_collapse_all": "Alle einklappen",
       "scan_linked": "{{count}} Datei(en) verknüpft",
+      "scan_already_present": "{{count}} Datei(en) bereits vorhanden, nichts zu importieren",
       "scan_nothing_linked": "Keine Datei verknüpft (Duplikat bereits im Medium vorhanden).",
       "scan_error": "Scan fehlgeschlagen.",
       "scan_files": "{{count}} Datei(en)",

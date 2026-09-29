@@ -50,4 +50,16 @@ describe('atomic file writes', () => {
     }
     expect(fs.readFileSync(path.join(dir, 'a.json'), 'utf8')).toBe('{}');
   });
+
+  it('does not retry EACCES outside Windows, where it is a real permission error', async () => {
+    if (process.platform === 'win32') return;
+    const rename = jest.spyOn(fs.promises, 'rename');
+    rename.mockRejectedValueOnce(Object.assign(new Error('denied'), { code: 'EACCES' }));
+    try {
+      await expect(writeFileAtomic(path.join(dir, 'b.json'), '{}')).rejects.toThrow('denied');
+      expect(rename).toHaveBeenCalledTimes(1);
+    } finally {
+      rename.mockRestore();
+    }
+  });
 });
