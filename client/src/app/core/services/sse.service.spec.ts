@@ -2,11 +2,13 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
+import { vi } from 'vitest';
 import { SseService } from './sse.service';
 import { DownloadProgressService } from './download-progress.service';
 import { ToastService } from './toast.service';
 import { ServerConfigService } from './server-config.service';
 import { AuthService } from './auth.service';
+import { NetworkService } from './network.service';
 
 /**
  * The seam between the wire and the store. `download.progress` carries a media's whole set, so
@@ -66,5 +68,58 @@ describe('SseService — download.progress', () => {
     sse.handleEvent({ type: 'download.progress', mediaId: 1, mediaType: 'series', downloads: null });
 
     expect(store.progress().has(1)).toBe(true);
+  });
+});
+
+function setupUnreachable(authenticated: boolean): SseService {
+  TestBed.resetTestingModule();
+  TestBed.configureTestingModule({
+    providers: [
+      provideZonelessChangeDetection(),
+      provideTranslateService({
+        lang: 'en',
+        loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
+      }),
+      { provide: ToastService, useValue: { info: () => {}, success: () => {}, error: () => {}, warning: () => {} } },
+      { provide: ServerConfigService, useValue: { apiUrl: () => '' } },
+      { provide: AuthService, useValue: { accessToken: () => null, isAuthenticated: () => authenticated, sessionEpoch: () => 0 } },
+      { provide: NetworkService, useValue: { isOnline: () => true } },
+    ],
+  });
+  return TestBed.inject(SseService);
+}
+
+describe('SseService: serverUnreachable', () => {
+  it('flips true only after the debounce, and clears as soon as connectionId returns', () => {
+    vi.useFakeTimers();
+    try {
+      const sse = setupUnreachable(true);
+      TestBed.tick();
+      expect(sse.serverUnreachable()).toBe(false);
+
+      vi.advanceTimersByTime(4999);
+      expect(sse.serverUnreachable()).toBe(false);
+
+      vi.advanceTimersByTime(1);
+      expect(sse.serverUnreachable()).toBe(true);
+
+      sse.connectionId.set('conn-1');
+      TestBed.tick();
+      expect(sse.serverUnreachable()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('never flags unreachable while logged out: nothing is trying to connect', () => {
+    vi.useFakeTimers();
+    try {
+      const sse = setupUnreachable(false);
+      TestBed.tick();
+      vi.advanceTimersByTime(10_000);
+      expect(sse.serverUnreachable()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

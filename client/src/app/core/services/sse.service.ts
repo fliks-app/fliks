@@ -1,10 +1,11 @@
-import { Injectable, signal, inject, effect, untracked, OnDestroy } from '@angular/core';
+import { Injectable, signal, computed, inject, effect, untracked, OnDestroy } from '@angular/core';
 import { Subject } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
 import { ToastService } from './toast.service';
 import { ServerConfigService } from './server-config.service';
 import { AuthService } from './auth.service';
 import { DownloadProgressService } from './download-progress.service';
+import { NetworkService } from './network.service';
 import { MediaType } from '../enums/media-type.enum';
 import { DownloadProgressState } from '../enums/download-progress-state.enum';
 import { invalidatePrefix } from '../interceptors/cache.interceptor';
@@ -12,6 +13,9 @@ import { getOrCreateDeviceId } from '../utils/device-info';
 import { DeviceService } from './device.service';
 import { SystemInfoService } from './system-info.service';
 import { currentTargetId } from './remote-target-id';
+
+/** A brief Wi-Fi handoff or the resume-reconnect race shouldn't flash a banner. */
+const UNREACHABLE_DEBOUNCE_MS = 5000;
 
 export interface SseEvent {
   type: string;
@@ -128,6 +132,7 @@ export class SseService implements OnDestroy {
   private readonly downloadProgress = inject(DownloadProgressService);
   private readonly device = inject(DeviceService);
   private readonly systemInfo = inject(SystemInfoService);
+  private readonly network = inject(NetworkService);
 
   readonly activeProgress = signal<Map<string, TaskProgress>>(new Map());
   readonly lastEvent = signal<SseEvent | null>(null);
@@ -137,6 +142,11 @@ export class SseService implements OnDestroy {
   /** Issued by the backend on SSE connect — bound to live sessions so admin
    *  remote-control reaches only this device/tab. */
   readonly connectionId = signal<string | null>(null);
+  /** A confirmed, live SSE stream. */
+  readonly connected = computed(() => this.connectionId() !== null);
+  /** `connected` (folded with the device's own network state) debounced by
+   *  {@link UNREACHABLE_DEBOUNCE_MS}. Read by the layout shell to show its banner. */
+  readonly serverUnreachable = signal(false);
   /** `deviceId#tabNonce`. Stable across this tab's SSE reconnects: unlike
    *  `connectionId`, reminted server-side every time: and unique per screen,
    *  unlike the device id, which two tabs of one browser share. */
@@ -162,6 +172,7 @@ export class SseService implements OnDestroy {
   private lastMessageAt = 0;
   private livenessHandle: ReturnType<typeof setInterval> | null = null;
   private readonly onOnline = () => void this.connect();
+  private unreachableTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     // The stream is authenticated as one account: detach on a session change
@@ -175,6 +186,27 @@ export class SseService implements OnDestroy {
         // is watching any more.
         this.downloadProgress.reset();
         this.activeProgress.set(new Map());
+      });
+    });
+
+    // Debounced so a Wi-Fi wake-up or the resume-reconnect race doesn't flash the banner.
+    // Logged-out is never "unreachable": nothing is trying to connect.
+    effect(() => {
+      const reachable = this.network.isOnline() && this.connected();
+      const authenticated = this.auth.isAuthenticated();
+      untracked(() => {
+        if (reachable || !authenticated) {
+          if (this.unreachableTimer) {
+            clearTimeout(this.unreachableTimer);
+            this.unreachableTimer = null;
+          }
+          this.serverUnreachable.set(false);
+          return;
+        }
+        this.unreachableTimer ??= setTimeout(
+          () => this.serverUnreachable.set(true),
+          UNREACHABLE_DEBOUNCE_MS,
+        );
       });
     });
   }
@@ -511,5 +543,6 @@ export class SseService implements OnDestroy {
 
   ngOnDestroy() {
     this.close();
+    if (this.unreachableTimer) clearTimeout(this.unreachableTimer);
   }
 }

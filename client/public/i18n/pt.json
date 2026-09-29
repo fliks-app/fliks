@@ -1464,11 +1464,13 @@
     "success": "Sucesso",
     "selections_cleared": "Seleções limpas",
     "retry": "Tentar novamente",
-    "offline_banner": "Modo offline — os dados apresentados podem não estar atualizados",
     "secret_clear": "Apagar o valor guardado",
     "secret_keep": "Manter",
     "secret_will_clear": "O valor guardado será removido ao guardar.",
     "label_colon": "{{label}}:"
+  },
+  "connectivity": {
+    "server_unreachable": "Servidor inacessível"
   },
   "pagination": {
     "label": "Paginação",
