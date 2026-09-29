@@ -5,8 +5,11 @@ import * as path from 'path';
 /** Names every temp file `writeAtomically` leaves beside its destination. */
 export const ATOMIC_TEMP_PREFIX = '.fliks-tmp-';
 
-/** Rename errors a scanner or indexer holding the file raises on Windows. */
-const TRANSIENT_RENAME_CODES = new Set(['EPERM', 'EBUSY', 'EACCES']);
+/** Rename errors a scanner or indexer holding the file raises on Windows. Elsewhere EPERM and
+ *  EACCES are real permission errors, so only EBUSY is retried. */
+const TRANSIENT_RENAME_CODES = new Set(
+  process.platform === 'win32' ? ['EPERM', 'EBUSY', 'EACCES'] : ['EBUSY'],
+);
 const RENAME_ATTEMPTS = 5;
 const RENAME_RETRY_MS = 100;
 
