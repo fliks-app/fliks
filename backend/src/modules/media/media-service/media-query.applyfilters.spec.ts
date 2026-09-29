@@ -126,6 +126,18 @@ describe('MediaQueryService.applyFilters', () => {
     );
   });
 
+  it('counts a series with files but a missing monitored episode as missing', () => {
+    const missing = fakeQueryBuilder();
+    (service as any).applyFilters(missing, { missing: true } as SearchMediaDto);
+    const [clause] = clauses(missing);
+    expect(clause).toMatch(/^\(files\.id IS NULL OR EXISTS \(/);
+    expect(clause).toContain('me.monitored = true');
+
+    const downloaded = fakeQueryBuilder();
+    (service as any).applyFilters(downloaded, { missing: false } as SearchMediaDto);
+    expect(clauses(downloaded)[0]).toMatch(/^\(files\.id IS NOT NULL AND NOT EXISTS \(/);
+  });
+
   it('keeps the single-genre and exact-year branches for other callers', () => {
     const qb = fakeQueryBuilder();
 
