@@ -1,8 +1,8 @@
 import { DEFAULT_TONEMAP_CURVE, type EncoderInput } from '../../types';
-import { dvApplyDoviOpt } from '../../../ffmpeg-filter-graph';
+import { dvApplyDoviOpt, tonemapOpenclOpts } from '../../../ffmpeg-filter-graph';
 
-/** No decoder emits a literal qsv surface: both platforms decode natively,
- *  elsewhere, so `vpp_qsv` always needs this hwmap first. */
+/** No decoder emits a literal qsv surface (vaapi on Linux, d3d11 on Windows),
+ *  so `vpp_qsv` always needs this hwmap first. */
 const QSV_HWMAP = 'hwmap=derive_device=qsv,';
 
 /** vpp_qsv crop options for the qsv-native/d3d11 branch of both bit-depth
@@ -36,20 +36,21 @@ export function qsvScaleFilter8bit(input: EncoderInput): string {
     // frame always needs the hwmap before `vpp_qsv` runs.
     const cropOpts = qsvCropOpts(input);
     if (tonemap && tonemapPath === 'opencl') {
+      const opts = tonemapOpenclOpts({ curve, dvNoBase });
       if (input.inputSurface === 'd3d11') {
         // Windows zero-copy: vpp_qsv scale (p010, HDR kept) can't ingest a
         // reverse-mapped OpenCL surface, so the scale precedes the OpenCL step.
         return (
           `${QSV_HWMAP}vpp_qsv=${cropOpts}w=${w}:h=${target.height}:format=p010le,` +
           `hwmap=derive_device=opencl,` +
-          `tonemap_opencl=tonemap=${curve}:t=bt709:m=bt709:p=bt709:format=nv12:${dvApplyDoviOpt(dvNoBase)},` +
+          `tonemap_opencl=${opts},` +
           `hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`
         );
       }
       return (
         `${QSV_HWMAP}vpp_qsv=${cropOpts}w=${w}:h=${target.height}:format=p010le,` +
         `hwmap=derive_device=opencl:mode=read,` +
-        `tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=${curve}:desat=0:${dvApplyDoviOpt(dvNoBase)},` +
+        `tonemap_opencl=${opts},` +
         `hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,` +
         `format=qsv`
       );
@@ -95,24 +96,34 @@ export function qsvScaleFilter8bit(input: EncoderInput): string {
 export function qsvScaleFilter10bit(input: EncoderInput): string {
   const { target, filters, tonemap, tonemapPath, dvNoBase } = input;
   const w = target.width;
+  const curve = input.tonemapCurve ?? DEFAULT_TONEMAP_CURVE;
   if (input.inputSurface === 'qsv' || input.inputSurface === 'd3d11') {
     // See qsvScaleFilter8bit: both surfaces need the hwmap onto QSV first.
     const cropOpts = qsvCropOpts(input);
     if (tonemap && tonemapPath === 'opencl') {
+      const opts = tonemapOpenclOpts({ hdr10Target: true, curve, dvNoBase });
       if (input.inputSurface === 'd3d11') {
         return (
           `${QSV_HWMAP}vpp_qsv=${cropOpts}w=${w}:h=${target.height}:format=p010le,` +
           `hwmap=derive_device=opencl,` +
-          `tonemap_opencl=t=smpte2084:m=bt2020:p=bt2020:r=tv:format=p010:${dvApplyDoviOpt(dvNoBase)},` +
+          `tonemap_opencl=${opts},` +
           `hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv`
         );
       }
       return (
         `${QSV_HWMAP}vpp_qsv=${cropOpts}w=${w}:h=${target.height}:format=p010le,` +
         `hwmap=derive_device=opencl:mode=read,` +
-        `tonemap_opencl=format=p010:p=bt2020:t=smpte2084:m=bt2020:r=tv:${dvApplyDoviOpt(dvNoBase)},` +
+        `tonemap_opencl=${opts},` +
         `hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,` +
         `format=qsv`
+      );
+    }
+    // No other tonemap step exists on this surface (the vpp_qsv LUT isn't
+    // RPU-aware): a caller asking for tonemap here would silently ship
+    // untouched HDR pixels under an SDR/HDR10 tag.
+    if (tonemap) {
+      throw new Error(
+        'qsvScaleFilter10bit: tonemap requested with no opencl chain on a qsv-native surface',
       );
     }
     return `${QSV_HWMAP}vpp_qsv=${cropOpts}w=${w}:h=${target.height}:format=p010le`;
@@ -125,6 +136,11 @@ export function qsvScaleFilter10bit(input: EncoderInput): string {
     : '';
   if (filters.tonemapOpencl) {
     return `${cropPrefix}${cpuUpload}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv${burnInTail}`;
+  }
+  if (tonemap) {
+    throw new Error(
+      'qsvScaleFilter10bit: tonemap requested with no opencl chain on a vaapi-derived surface',
+    );
   }
   return `${cropPrefix}${cpuUpload}scale_vaapi=w=${w}:h=-2:format=p010le:extra_hw_frames=24,hwmap=derive_device=qsv,format=qsv${burnInTail}`;
 }

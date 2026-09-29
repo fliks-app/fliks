@@ -1,31 +1,17 @@
 import { Logger } from '@nestjs/common';
 import { execFile } from 'child_process';
 import { unlink } from 'fs/promises';
-import * as os from 'os';
-import * as path from 'path';
 import { promisify } from 'util';
-import { qsvDeviceInitArgs } from '../hw-device';
+import { qsvDeviceInitArgs, vaapiDeviceInitArgs } from '../hw-device';
 import { synthesiseHdrProbeSample } from './hdr-probe-sample';
+import { ffmpegTail, probeSamplePath } from './probe-utils';
 
 const execFileAsync = promisify(execFile);
 
-/** Result of the tonemap_opencl capability probe. OpenCL HDR→SDR
- *  tonemapping requires (a) `libOpenCL.so` available to ffmpeg, (b) a
- *  platform driver registered with the ICD loader (Intel
- *  `intel-opencl-icd`, NVIDIA `nvidia-opencl-icd`, …), AND (c) a
- *  working QSV↔OpenCL bridge — some Intel hosts report
- *  `QSV to OpenCL mapping not usable` and the encoder crashes with
- *  exit=218 mid-segment. macOS is also a no-go (Apple deprecated
- *  OpenCL in 10.14 and ffmpeg-on-mac drops it more often than not).
- *
- *  We probe TWO chains separately because some Intel iHD builds
- *  accept the tonemap-only opencl pipeline but fail the cropped
- *  variant: the extra `hwdownload → crop → hwupload=vaapi → …`
- *  prefix changes the surface format that reaches the final
- *  `hwmap=qsv:reverse=1` step and trips the bridge. Splitting the
- *  capability lets a cropped HDR session fall back to tonemap_vaapi
- *  while an uncropped HDR session keeps using opencl for better
- *  mid-tone restoration. */
+/** Whether `tonemap_opencl` works on this host's VAAPI↔OpenCL bridge, probed
+ *  both without and with a CPU-side crop prefix — some Intel iHD builds
+ *  accept one chain but not the other, so an uncropped HDR session can use
+ *  opencl while a cropped one falls back to tonemap_vaapi. */
 let probedOnce = false;
 let noCropEnabled = false;
 let withCropEnabled = false;
@@ -44,30 +30,31 @@ export function isTonemapOpenclEnabledWithCrop(): boolean {
   return probedOnce && withCropEnabled;
 }
 
-export async function runTonemapOpenclProbe(log: Logger): Promise<void> {
+export async function runTonemapOpenclProbe(
+  log: Logger,
+  hwAccel: 'qsv' | 'vaapi',
+): Promise<void> {
   const t0 = Date.now();
-  const hdrSample = path.join(
-    os.tmpdir(),
-    `fliks-tonemap-opencl-probe-${process.pid}.hevc`,
-  );
+  let failure = '';
+  const hdrSample = probeSamplePath('tonemap-opencl');
   try {
     await synthesiseHdrProbeSample(hdrSample);
 
-    // Probe 1: tonemap_opencl without the crop prefix — the path
-    // session-time uses for uncropped HDR sources (typical 2160p
-    // HDR10 movie at full source aspect).
+    // Decode + device init match the real session: QSV derives its device
+    // from VAAPI on Linux, so a QSV host also gets the `qsv=qs@va` device;
+    // a VAAPI-detected host has no QSV device at all.
     //
-    // `-filter_hw_device va` (not `ocl`): without this the hwupload
-    // back to vaapi after the CPU crop fails with `Function not
-    // implemented` on Intel iHD because ENOSYS bubbles up from the
-    // opencl ICD when the default filter device is opencl. tonemap_
-    // opencl itself runs fine — it takes its device from the
-    // upstream `hwmap=derive_device=opencl` frame context.
+    // `-filter_hw_device va` (not `ocl`): without this the hwupload back to
+    // vaapi after the CPU crop fails with `Function not implemented` on
+    // Intel iHD because ENOSYS bubbles up from the opencl ICD when the
+    // default filter device is opencl. tonemap_opencl itself runs fine — it
+    // takes its device from the upstream `hwmap=derive_device=opencl` frame
+    // context.
     const baseArgs = [
       '-hide_banner',
       '-loglevel',
       'error',
-      ...qsvDeviceInitArgs(),
+      ...(hwAccel === 'qsv' ? qsvDeviceInitArgs() : vaapiDeviceInitArgs()),
       '-init_hw_device',
       'opencl=ocl:0.0',
       '-filter_hw_device',
@@ -79,9 +66,17 @@ export async function runTonemapOpenclProbe(log: Logger): Promise<void> {
       '-i',
       hdrSample,
     ];
+    // A QSV session reverse-maps the tone-mapped surface onto QSV and
+    // encodes h264_qsv (see qsv-filters.ts); a VAAPI session stays on VAAPI
+    // and encodes h264_vaapi (see vaapi-filters.ts) — testing the wrong
+    // tail on a VAAPI host gives a false read on a chain no session runs.
+    const reverseMap =
+      hwAccel === 'qsv'
+        ? 'hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv'
+        : 'hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi';
     const tail = [
       '-c:v',
-      'h264_qsv',
+      hwAccel === 'qsv' ? 'h264_qsv' : 'h264_vaapi',
       '-preset',
       'veryfast',
       '-frames:v',
@@ -90,20 +85,23 @@ export async function runTonemapOpenclProbe(log: Logger): Promise<void> {
       'null',
       '-',
     ];
+    // Probe 1: tonemap_opencl without the crop prefix — the path
+    // session-time uses for uncropped HDR sources.
     try {
       await execFileAsync(
         'ffmpeg',
         [
           ...baseArgs,
           '-vf',
-          'scale_vaapi=w=288:h=160,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv',
+          `scale_vaapi=w=288:h=160,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,${reverseMap}`,
           ...tail,
         ],
         { timeout: 20_000 },
       );
       noCropEnabled = true;
-    } catch {
+    } catch (err) {
       noCropEnabled = false;
+      failure = ffmpegTail(err);
     }
 
     // Probe 2: crop-prefixed chain. Some Intel iHD builds accept the
@@ -118,21 +116,22 @@ export async function runTonemapOpenclProbe(log: Logger): Promise<void> {
           [
             ...baseArgs,
             '-vf',
-            'hwdownload,format=p010le,crop=288:160:16:8,hwupload=derive_device=vaapi,scale_vaapi=w=288:h=160,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv',
+            `hwdownload,format=p010le,crop=288:160:16:8,hwupload=derive_device=vaapi,scale_vaapi=w=288:h=160,hwmap=derive_device=opencl:mode=read,tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=reinhard:desat=0,${reverseMap}`,
             ...tail,
           ],
           { timeout: 20_000 },
         );
         withCropEnabled = true;
-      } catch {
+      } catch (err) {
         withCropEnabled = false;
+        failure = ffmpegTail(err);
       }
     }
   } finally {
     await unlink(hdrSample).catch(() => {});
     probedOnce = true;
     log.log(
-      `[tonemap-opencl-probe] noCrop=${noCropEnabled} withCrop=${withCropEnabled} (${Date.now() - t0}ms)`,
+      `[tonemap-opencl-probe] noCrop=${noCropEnabled} withCrop=${withCropEnabled} (${Date.now() - t0}ms)${failure ? `: ${failure}` : ''}`,
     );
   }
 }

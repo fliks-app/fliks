@@ -38,7 +38,12 @@ const MASTER_DISPLAY_RE =
 export function svtMasterDisplayString(meta?: HdrStaticMetadata): string {
   const raw = masterDisplayString(meta);
   const m = raw.match(MASTER_DISPLAY_RE);
-  if (!m) return raw;
+  if (!m) {
+    // The integer format is either the generic constant above or probed
+    // straight into this shape (see HdrStaticMetadata) — a mismatch means a
+    // caller changed the format without updating this converter.
+    throw new Error(`svtMasterDisplayString: unparseable master-display value: ${raw}`);
+  }
   const [gx, gy, bx, by, rx, ry, wx, wy, lmax, lmin] = m.slice(1).map(Number);
   const chroma = (v: number) => Number((v / 50000).toFixed(5));
   const lum = (v: number) => Number((v / 10000).toFixed(5));

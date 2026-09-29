@@ -4,7 +4,7 @@ import {
   type TonemapCurve,
 } from '../../types';
 import { scaleEvenHeight } from './scale-filter';
-import { dvApplyDoviOpt } from '../../../ffmpeg-filter-graph';
+import { tonemapOpenclOpts } from '../../../ffmpeg-filter-graph';
 
 /** Whether the AMF `-vf` chain below lands on a D3D11 surface rather than CPU
  *  frames. Shared with the PGS burn-in composite (`hwdownload` before compositing). */
@@ -41,13 +41,10 @@ export function amfOpenclFilter(opts: {
   // wrong; on an uncropped anamorphic source it would squash the picture.
   const resetSar = cropStr ? ':reset_sar=1' : '';
   const scale = `scale_opencl=w=${width}:h=${height}${resetSar}`;
-  // Tonemap: format left unset (p010 passthrough), tonemap_opencl sets it.
   // outputFormat === 'p010le' only happens on the HDR10 descriptor, and a
   // tonemap there is always a no-base DV reshape (see dvNoBaseHdr10Eligible).
   const step = tonemap
-    ? outputFormat === 'p010le'
-      ? `${scale},tonemap_opencl=format=p010:t=smpte2084:p=bt2020:m=bt2020:r=tv:${dvApplyDoviOpt(dvNoBase)}`
-      : `${scale},tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=${curve}:desat=0:${dvApplyDoviOpt(dvNoBase)}`
+    ? `${scale},tonemap_opencl=${tonemapOpenclOpts({ hdr10Target: outputFormat === 'p010le', curve, dvNoBase })}`
     : `${scale}:format=${outputFormat}`;
   // Text burn-in: hwdownload straight off OpenCL, hand AMF CPU frames directly.
   // Its encoder takes nv12/p010le natively, no re-upload to d3d11 needed.

@@ -8,31 +8,18 @@ import { isVulkanTonemapEnabled } from './codec/vulkan-tonemap-probe';
 import { hostHasVaapi } from './hw-device';
 import type { HwAccelType, TonemapAlgo } from './types';
 
-/** Concrete filter chain the session-time graph will actually use,
- *  derived from the admin `TonemapAlgo` setting + boot probe results.
- *
- *  - `'auto'` resolves to `'opencl'` when the matching boot probe
- *    enabled it (separate probes run with and without a crop prefix
- *    because some Intel iHD builds accept the basic opencl chain but
- *    fail the cropped variant). Otherwise it falls back to `'qsv'` on
- *    Windows (the vpp_qsv fixed-function LUT) when that probe passed,
- *    and to `'vaapi'` elsewhere. The Windows split matters because
- *    Windows has no VAAPI device: `'vaapi'` there is not a QSV path at
- *    all, so it would force the session onto a CPU encode. On Linux
- *    QSV is VAAPI-backed, so `'vaapi'` stays a valid on-GPU tone-map.
- *  - Explicit picks (`'vaapi'` / `'qsv'` / `'opencl'`) bypass the
- *    probe and trust the admin to know their hardware.
- *  - `'vulkan'` only comes from a no-base DV source with the OpenCL bridge
- *    down; `'auto'` for HDR10/HLG is unchanged.
- *
- *  Shared between `ffmpeg-args` (which builds the filter chain) and
- *  the playback-info DTO (which surfaces the post-resolution value to
- *  the stats overlay) so the two never drift. */
+/** Concrete filter chain the session-time graph will use, derived from the
+ *  admin `TonemapAlgo` setting + boot probe results. `'auto'` prefers opencl,
+ *  then (Windows only, no VAAPI device) the vpp_qsv LUT, then vaapi; explicit
+ *  picks bypass the probe. `'vulkan'` only comes from a no-base DV source
+ *  with the OpenCL bridge down. Shared by `ffmpeg-args` and the playback-info
+ *  DTO so the built chain and the reported stats can't drift. */
 export type ResolvedTonemapPath = 'vaapi' | 'opencl' | 'qsv' | 'vulkan';
 
-/** Windows QSV OpenCL is the CPU-bounce path (its own probe); elsewhere it's
- *  the VAAPI-derived bridge. */
-function openclBridgeOk(hasCrop: boolean, platform: NodeJS.Platform): boolean {
+/** Windows QSV OpenCL is the zero-copy D3D11↔OpenCL bridge (its own probe);
+ *  elsewhere it's the VAAPI-derived bridge. Shared with `encode-pipeline.ts`
+ *  so the two can't drift on which probe backs `tonemapAlgo='auto'`. */
+export function openclBridgeOk(hasCrop: boolean, platform: NodeJS.Platform): boolean {
   return platform === 'win32'
     ? isQsvOpenclTonemapEnabled()
     : hasCrop
