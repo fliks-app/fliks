@@ -508,6 +508,39 @@ describe('PlayerComponent pre-roll', () => {
 
 });
 
+describe('PlayerComponent startup pause', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  it('one tap pauses during launch, the next plays', () => {
+    const h = createHarness();
+    h.state.reset();
+    h.component.onTogglePlay();
+    expect(h.engine.pause).toHaveBeenCalledTimes(1);
+    expect(h.state.uiPaused()).toBe(true);
+    h.component.lastTogglePlayAt = 0;
+    h.component.onTogglePlay();
+    expect(h.engine.play).toHaveBeenCalledTimes(1);
+    expect(h.state.uiPaused()).toBe(false);
+  });
+
+  it('a remote pause during launch shows play', async () => {
+    const h = createHarness();
+    h.state.reset();
+    await h.component.applyRemoteCommand({ action: 'pause' });
+    expect(h.state.startingPlayback()).toBe(false);
+    expect(h.state.uiPaused()).toBe(true);
+  });
+
+  it('an admin pause during launch shows play', () => {
+    const h = createHarness();
+    h.state.reset();
+    h.component.pausePlayback();
+    expect(h.state.uiPaused()).toBe(true);
+  });
+});
+
 describe('PlayerComponent wake / resume', () => {
   afterEach(() => {
     TestBed.resetTestingModule();

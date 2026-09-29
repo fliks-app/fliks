@@ -403,6 +403,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Buffering has lasted long enough to be worth a word on screen. */
   readonly preparing = signal(false);
   readonly paused = this.state.paused;
+  readonly uiPaused = this.state.uiPaused;
+  readonly autoplayBlocked = this.state.autoplayBlocked;
   readonly currentTime = this.state.currentTime;
   readonly duration = this.state.duration;
   readonly volume = this.state.volume;
@@ -446,7 +448,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  would otherwise retract it before the playhead landed. */
   private readonly _chromePins = (this.chrome.configure({
     pinned: computed(
-      () => this.paused() || this.buffering() || this.seekDragging() || this.state.seekLocked(),
+      () => this.uiPaused() || this.buffering() || this.seekDragging() || this.state.seekLocked(),
     ),
   }), null);
   private readonly copyFallback = inject(CopyFallbackController);
@@ -538,7 +540,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Just connected — mute/pause local engine
       try {
         if (this.engine && !this.isNativeEngine()) {
-          this.engine.pause().catch(() => {});
+          void this.pausePlayback();
           this.engine.muted = true;
         }
       } catch { /* engine may not be ready yet */ }
@@ -594,7 +596,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       else if (cmd.action === 'play') this.castService.play();
       else if (cmd.action === 'stop') { this.castService.disconnect(); this.onBack(); }
     } else if (this.engine) {
-      if (cmd.action === 'pause') this.engine.pause().catch(() => {});
+      if (cmd.action === 'pause') void this.pausePlayback();
       else if (cmd.action === 'play') this.engine.play().catch(() => {});
       else if (cmd.action === 'stop') this.onBack();
     }
@@ -624,7 +626,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // Sync play/pause state to PiP action button
   private readonly pipPlaybackEffect = effect(() => {
     if (!this.isNative) return;
-    Pip.updatePlaybackState({ playing: !this.paused() }).catch(() => {});
+    Pip.updatePlaybackState({ playing: !this.uiPaused() }).catch(() => {});
   });
 
   /** Hide the controls bar the moment the first frame of the new
@@ -1667,23 +1669,28 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const now = Date.now();
     if (now - this.lastTogglePlayAt < this.togglePlayCoalesceMs) return;
     this.lastTogglePlayAt = now;
-    // Decide off the engine's live transport state rather than the `paused()`
-    // signal, which mirrors the async DOM/bridge play/pause events and lags a
-    // tap, so reading it can issue two same-direction commands. On the web
-    // <video> the getter is exact (paused flips synchronously); the native
-    // engine mirrors its bridge state, which the coalesce window covers.
+    // Decide off what the control shows, so a tap during launch pauses.
     // Reflect the target in the UI immediately instead of waiting for the
     // engine's `stateChanged` round-trip (on the desktop mpv backend that loop
     // — IPC → mpv property-observe → IPC back — can lag ~1s). The engine event
     // reasserts the real state, and a rejected command reverts to it.
-    if (this.engine.paused) {
+    if (this.uiPaused()) {
       this.state.paused.set(false);
       this.engine.play().catch(() => this.state.paused.set(this.engine?.paused ?? true));
       this.chrome.resetHideTimer();
     } else {
-      this.state.paused.set(true);
-      this.engine.pause().catch(() => this.state.paused.set(this.engine?.paused ?? true));
+      void this.pausePlayback();
     }
+  }
+
+  /** Every intentional pause goes through here so the launch stops counting as
+   *  in flight. */
+  private pausePlayback(): Promise<void> {
+    this.state.startingPlayback.set(false);
+    this.state.paused.set(true);
+    return (this.engine?.pause() ?? Promise.resolve()).catch(() =>
+      this.state.paused.set(this.engine?.paused ?? true),
+    );
   }
 
   onSeekDragChange(dragging: boolean) {
@@ -2408,8 +2415,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         if (casting) {
           this.castService.pause();
         } else if (this.engine) {
-          this.state.paused.set(true);
-          this.engine.pause().catch(() => this.state.paused.set(this.engine?.paused ?? true));
+          void this.pausePlayback();
         }
         // A remote pause is a remote viewer stepping in, so surface the controls
         // the way a local pause does rather than freezing on a bare frame.
@@ -2512,9 +2518,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     await this.savePosition(true);
   }
 
-  /** Set when the browser refused to start playback without a user gesture, and
-   *  cleared as soon as anything actually plays. */
-  readonly autoplayBlocked = signal(false);
   private readonly autoplayClearEffect = effect(() => {
     if (!this.state.videoStarted()) return;
     untracked(() => {
@@ -2529,7 +2532,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  funnels through the engine's state, so one effect covers them all. */
   private lastReportedPaused: { fileId: number; paused: boolean } | null = null;
   private readonly transportReportEffect = effect(() => {
-    const paused = this.paused();
+    const paused = this.uiPaused();
     untracked(() => this.reportTransportChange(paused));
   });
 
@@ -2660,7 +2663,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  the controls to the cast overlay, which lives outside the player route. */
   private handOffToRemote(targetId: string): void {
     const position = Math.floor(this.engine?.currentTime ?? 0);
-    if (this.engine) this.engine.pause().catch(() => {});
+    void this.pausePlayback();
     this.remoteService.selectTarget(targetId);
     void this.remoteService.send(targetId, {
       action: 'load',
@@ -2683,7 +2686,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     const wasPlaying = this.engine && !this.engine.paused;
     const currentPos = this.engine?.currentTime ?? 0;
-    if (this.engine) this.engine.pause().catch(() => {});
+    void this.pausePlayback();
 
     connect();
 
@@ -3002,7 +3005,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Let the subtitle list settle before handing off, so Cast gets the
       // full list instead of whatever raced ahead of it.
       await trackSetupPromise.catch(() => {});
-      await this.engine!.pause();
+      await this.pausePlayback();
       this.engine!.muted = true;
       await this.engine!.unload();
       const startPos = resumeTime ?? this.engine!.currentTime;
@@ -3074,7 +3077,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.spriteAbort?.abort();
     void this.loadSpriteMetadata();
 
-    if (!this.isNativeEngine()) this.engine?.play().catch(() => {});
+    if (!this.isNativeEngine()) this.engine?.play().catch(() => this.autoplayBlocked.set(true));
     // Reveal the controls across the switch so the new title/episode shows;
     // the auto-hide countdown retracts them on the usual delay.
     this.chrome.show();
@@ -4465,7 +4468,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const sessionId = this.activeSessionId();
     if (sessionId) {
       payload.sessionId = sessionId;
-      payload.state = this.paused() ? 'paused' : 'playing';
+      payload.state = this.uiPaused() ? 'paused' : 'playing';
       // This device's own truth: while casting, the local engine is
       // deliberately muted (castSyncEffect) and must not be reported as the
       // target's volume.
