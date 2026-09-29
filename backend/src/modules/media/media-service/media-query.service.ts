@@ -1059,17 +1059,21 @@ export class MediaQueryService {
       });
     }
     if (query.missing !== undefined) {
-      // A series is missing as soon as one monitored, aired episode is off disk.
+      // A series is missing as soon as one monitored, aired episode is off disk. Mirrors
+      // AcquisitionCandidatesService's own predicate: media.monitored gates it too, and
+      // "today" is UTC, not whatever timezone the DB connection's CURRENT_DATE resolves to.
+      const today = new Date().toISOString().slice(0, 10);
       const missingEpisode = `EXISTS (
         SELECT 1 FROM seasons ms JOIN episodes me ON me."seasonId" = ms.id
         WHERE ms."mediaId" = media.id AND ms."seasonNumber" > 0
-          AND ms.monitored = true AND me.monitored = true
-          AND me."airDate" <= CURRENT_DATE AND NOT ${onDiskSql('me')}
+          AND media.monitored = true AND ms.monitored = true AND me.monitored = true
+          AND me."airDate" <= :missingToday AND NOT ${onDiskSql('me')}
       )`;
       qb.andWhere(
         query.missing
           ? `(files.id IS NULL OR ${missingEpisode})`
           : `(files.id IS NOT NULL AND NOT ${missingEpisode})`,
+        { missingToday: today },
       );
     }
     if (query.unidentified === true) {

@@ -129,9 +129,16 @@ describe('MediaQueryService.applyFilters', () => {
   it('counts a series with files but a missing monitored episode as missing', () => {
     const missing = fakeQueryBuilder();
     (service as any).applyFilters(missing, { missing: true } as SearchMediaDto);
-    const [clause] = clauses(missing);
+    const [clause, params] = missing.andWhereCalls[0];
     expect(clause).toMatch(/^\(files\.id IS NULL OR EXISTS \(/);
     expect(clause).toContain('me.monitored = true');
+    // Matches AcquisitionCandidatesService's own gate: an unmonitored series
+    // never counts as missing, even with monitored gaps in its episodes.
+    expect(clause).toContain('media.monitored = true');
+    // "Today" is computed in app code (UTC), never the DB's own CURRENT_DATE.
+    expect(clause).not.toContain('CURRENT_DATE');
+    expect(clause).toContain(':missingToday');
+    expect(params).toEqual({ missingToday: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) });
 
     const downloaded = fakeQueryBuilder();
     (service as any).applyFilters(downloaded, { missing: false } as SearchMediaDto);
