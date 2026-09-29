@@ -15,6 +15,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
 import { CastSettingsService } from '../../core/services/cast-settings.service';
+import { NativeEngine } from '../../core/services/playback-engine/native-engine';
 import { OfflineStorageService } from '../../core/services/offline-storage.service';
 import { OfflinePlaybackSyncService } from '../../core/services/offline-playback-sync.service';
 import { AutoDownloadService } from '../../core/services/auto-download.service';
@@ -1671,5 +1672,49 @@ describe('PlayerComponent stats overlay: offline delivery', () => {
     expect(stats?.videoPlaybackMode).toBe('');
     expect(stats?.audioPlaybackMode).toBe('');
     expect(stats?.mismatch).toBeUndefined();
+  });
+});
+
+describe('PlayerComponent: offline crop', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  const stored = { x: 0, y: 140, width: 1920, height: 800, sourceWidth: 1920, sourceHeight: 1080 };
+
+  it('feeds the crop stored with the download through the desktop mpv path', () => {
+    const h = createHarness();
+    h.component.isDesktopNative = true;
+    h.component.isOfflinePlayback = true;
+    h.component.playbackInfo = null;
+    h.component.offlineCrop = stored;
+
+    expect(h.component.sourceSize()).toEqual({ width: 1920, height: 1080 });
+    h.component.applyVideoCrop();
+    expect(h.engine.configure).toHaveBeenCalledWith({ videoCrop: '1920x800+0+140' });
+  });
+
+  it('hands the native engine the stored rect with its source size', () => {
+    const h = createHarness();
+    const engine = Object.assign(Object.create(NativeEngine.prototype), { setCrop: vi.fn(() => true) });
+    h.component.engine = engine;
+    h.component.isOfflinePlayback = true;
+    h.component.playbackInfo = null;
+    h.component.offlineCrop = stored;
+
+    h.component.applyVideoCrop();
+    expect(engine.setCrop).toHaveBeenCalledWith(
+      { x: 0, y: 140, width: 1920, height: 800, sourceWidth: 1920, sourceHeight: 1080 },
+      1920,
+      1080,
+    );
+  });
+
+  it('applies nothing for a download without a stored crop', () => {
+    const h = createHarness();
+    h.component.isOfflinePlayback = true;
+    h.component.playbackInfo = null;
+    h.component.offlineCrop = null;
+    expect(h.component.activeCropRect()).toBeUndefined();
   });
 });

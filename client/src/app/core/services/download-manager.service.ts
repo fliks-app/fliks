@@ -10,7 +10,7 @@ import { DownloadNotificationService } from './download-notification.service';
 import { AuthService } from './auth.service';
 import { BrowserDeviceProfileService } from './browser-device-profile.service';
 import { TranslateService } from '@ngx-translate/core';
-import { formatSubtitleLabel } from '../utils/player.utils';
+import { formatSubtitleLabel, offlineCropOf } from '../utils/player.utils';
 import { AppSettingsService } from './app-settings.service';
 import { DownloadSettingsService } from './download-settings.service';
 import { ImageCacheService } from './image-cache.service';
@@ -296,6 +296,7 @@ export class DownloadManagerService {
     );
     const hlsUrl = this.streamingApi.resolveDownloadUrl(mediaFileId, quality, playbackInfo);
     task.hlsUrl = hlsUrl;
+    task.offlineCrop = offlineCropOf(playbackInfo);
 
     this.titles.set(taskId, { title, episode });
     this.persistTask(task);

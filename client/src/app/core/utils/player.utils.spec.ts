@@ -1,4 +1,4 @@
-import { buildPlayerStats, computeVideoCropStyle, deliveredKindFromVariant, type BuildPlayerStatsParams } from './player.utils';
+import { buildPlayerStats, computeVideoCropStyle, deliveredKindFromVariant, offlineCropOf, type BuildPlayerStatsParams } from './player.utils';
 import type { PlaybackInfoResponse } from '../services/api/streaming-api.service';
 
 const translate = { instant: (k: string) => k } as BuildPlayerStatsParams['translate'];
@@ -279,5 +279,24 @@ describe('computeVideoCropStyle', () => {
       fit: 'contain',
     });
     expect(style).toEqual({ width: 768, height: 576, translateX: 0, translateY: -48 });
+  });
+});
+
+describe('offlineCropOf', () => {
+  const source = { width: 1920, height: 1080, crop: { x: 0, y: 140, width: 1920, height: 800 } };
+
+  it('keeps the rectangle and source size for a copy stream', () => {
+    expect(offlineCropOf({ videoCopyStream: true, source } as any)).toEqual({
+      x: 0, y: 140, width: 1920, height: 800, sourceWidth: 1920, sourceHeight: 1080,
+    });
+  });
+
+  it('keeps nothing for a re-encode, the server already cropped it', () => {
+    expect(offlineCropOf({ videoCopyStream: false, source } as any)).toBeUndefined();
+  });
+
+  it('keeps nothing without a detected crop', () => {
+    expect(offlineCropOf({ videoCopyStream: true, source: { width: 1920, height: 1080 } } as any)).toBeUndefined();
+    expect(offlineCropOf(null)).toBeUndefined();
   });
 });

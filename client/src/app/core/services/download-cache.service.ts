@@ -2,6 +2,7 @@ import { Injectable, signal, untracked, inject, effect } from '@angular/core';
 import { AuthService } from './auth.service';
 import { ServerConfigService } from './server-config.service';
 import { StorageScopeService } from './storage-scope.service';
+import type { OfflineCrop } from '../utils/player.utils';
 
 /** Client-side download task tracked in localStorage. */
 export interface DownloadTask {
@@ -26,6 +27,8 @@ export interface DownloadTask {
   sizeBytes?: number;
   /** Pre-downloaded subtitle metadata for offline playback. */
   offlineSubtitles?: { key: string; language: string; label: string; forced?: boolean }[];
+  /** Letterbox rectangle the player removes at playback; absent when the copy was cropped server-side. */
+  offlineCrop?: OfflineCrop;
   /** Audio stream info for offline audio track picker. */
   audioStreams?: { language?: string; title?: string; codec?: string; channels?: number }[];
   media?: {

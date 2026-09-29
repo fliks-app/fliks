@@ -5,12 +5,55 @@ import AVKit
 import CoreMedia
 import UIKit
 
-/// UIView subclass that keeps its first CALayer sublayer (the AVPlayerLayer) sized to bounds.
+/// Letterbox crop of the video, in source pixels.
+struct VideoCrop: Equatable {
+    var x: CGFloat
+    var y: CGFloat
+    var width: CGFloat
+    var height: CGFloat
+    var sourceWidth: CGFloat
+    var sourceHeight: CGFloat
+}
+
+/// Mirrors `computeVideoCropStyle` (player.utils.ts): the AVPlayerLayer frame
+/// that maps the crop rect onto the container, aspect-fit or aspect-fill.
+enum VideoCropLayout {
+    /// `display` is the presented size (anamorphic-corrected); nil falls back to the source size.
+    static func layerFrame(container: CGSize, crop: VideoCrop?, display: CGSize?, fill: Bool) -> CGRect? {
+        guard let crop = crop,
+              container.width > 0, container.height > 0,
+              crop.sourceWidth > 0, crop.sourceHeight > 0,
+              crop.width > 0, crop.height > 0 else { return nil }
+        if crop.width >= crop.sourceWidth && crop.height >= crop.sourceHeight { return nil }
+        var dw = crop.sourceWidth
+        var dh = crop.sourceHeight
+        if let d = display, d.width > 0, d.height > 0 {
+            dw = d.width
+            dh = d.height
+        }
+        let sx = dw / crop.sourceWidth
+        let sy = dh / crop.sourceHeight
+        let cropW = crop.width * sx
+        let cropH = crop.height * sy
+        let scaleX = container.width / cropW
+        let scaleY = container.height / cropH
+        let scale = fill ? max(scaleX, scaleY) : min(scaleX, scaleY)
+        return CGRect(
+            x: (container.width - cropW * scale) / 2 - crop.x * sx * scale,
+            y: (container.height - cropH * scale) / 2 - crop.y * sy * scale,
+            width: dw * scale,
+            height: dh * scale
+        )
+    }
+}
+
+/// Clips the AVPlayerLayer, which the plugin may size beyond bounds to crop the video.
 private class PlayerContainerView: UIView {
+    var onLayout: (() -> Void)?
+
     override func layoutSubviews() {
         super.layoutSubviews()
-        // Resize the AVPlayerLayer to match the view bounds on rotation
-        layer.sublayers?.first { $0 is AVPlayerLayer }?.frame = bounds
+        onLayout?()
     }
 }
 
@@ -37,6 +80,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "selectSubtitleTrack", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setSubtitleStyle", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setFillScreen", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setCrop", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setBrightness", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setMaxResolution", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getPosition", returnType: CAPPluginReturnPromise),
@@ -50,7 +94,10 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private var statusObserver: NSKeyValueObservation?
     private var timeControlObserver: NSKeyValueObservation?
     private var firstFrameObserver: NSKeyValueObservation?
+    private var presentationSizeObserver: NSKeyValueObservation?
     private var firstFrameEmitted = false
+    private var fillScreen = false
+    private var videoCrop: VideoCrop?
     private var savedBrightness: CGFloat?
     /// Cues are pulled off the selected legible track via this output with
     /// player rendering suppressed, then drawn by `subtitleOverlay` so the app
@@ -96,7 +143,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             self.bridge?.webView?.evaluateJavaScript("console.warn('[NativePlayer] reassert: \(state)');")
 
             if layer.player !== player { layer.player = player }
-            layer.frame = view.bounds
+            self.layoutVideoLayer()
             if !layer.isReadyForDisplay {
                 let gravity = layer.videoGravity
                 layer.videoGravity = .resize
@@ -127,6 +174,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
             let view = PlayerContainerView(frame: frame)
             view.backgroundColor = .black
+            view.clipsToBounds = true
+            view.onLayout = { [weak self] in self?.layoutVideoLayer() }
 
             if isFullScreen {
                 view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -174,7 +223,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
                 width: width < 0 ? UIScreen.main.bounds.width : CGFloat(width),
                 height: height < 0 ? UIScreen.main.bounds.height : CGFloat(height)
             )
-            self?.playerLayer?.frame = self?.playerView?.bounds ?? .zero
+            self?.layoutVideoLayer()
             call.resolve()
         }
     }
@@ -197,6 +246,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.removeObservers()
+            self.videoCrop = nil
             self.firstFrameEmitted = false
             self.player?.pause()
             self.subtitleOverlay?.render([])
@@ -331,11 +381,11 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         self.player = player
         if playerLayer == nil, let view = playerView {
             let layer = AVPlayerLayer(player: player)
-            layer.frame = view.bounds
             layer.videoGravity = .resizeAspect
             // Index 0 keeps the video beneath the subtitle overlay subview.
             view.layer.insertSublayer(layer, at: 0)
             playerLayer = layer
+            layoutVideoLayer()
         } else {
             playerLayer?.player = player
         }
@@ -412,6 +462,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         DispatchQueue.main.async { [weak self] in
             self?.player?.pause()
             self?.player?.replaceCurrentItem(with: nil)
+            self?.videoCrop = nil
+            self?.layoutVideoLayer()
             self?.audibleGroup = nil
             self?.legibleGroup = nil
             call.resolve()
@@ -616,9 +668,53 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         let fill = call.getBool("fill") ?? false
 
         DispatchQueue.main.async { [weak self] in
-            self?.playerLayer?.videoGravity = fill ? .resizeAspectFill : .resizeAspect
+            self?.fillScreen = fill
+            self?.layoutVideoLayer()
             call.resolve()
         }
+    }
+
+    /// Crops letterbox bars by sizing the layer past the clipping container.
+    /// An absent or non-positive rectangle clears the crop.
+    @objc func setCrop(_ call: CAPPluginCall) {
+        var crop: VideoCrop?
+        if let w = call.getDouble("width"), let h = call.getDouble("height"),
+           let sw = call.getDouble("sourceWidth"), let sh = call.getDouble("sourceHeight"),
+           w > 0, h > 0, sw > 0, sh > 0 {
+            crop = VideoCrop(
+                x: CGFloat(call.getDouble("x") ?? 0),
+                y: CGFloat(call.getDouble("y") ?? 0),
+                width: CGFloat(w),
+                height: CGFloat(h),
+                sourceWidth: CGFloat(sw),
+                sourceHeight: CGFloat(sh)
+            )
+        }
+        DispatchQueue.main.async { [weak self] in
+            self?.videoCrop = crop
+            self?.layoutVideoLayer()
+            call.resolve()
+        }
+    }
+
+    /// The layer follows the container unless a crop applies, in which case its
+    /// frame is computed exactly so `.resizeAspect` adds no bars of its own.
+    private func layoutVideoLayer() {
+        guard let layer = playerLayer, let view = playerView else { return }
+        let display = player?.currentItem?.presentationSize
+        let cropped = VideoCropLayout.layerFrame(
+            container: view.bounds.size, crop: videoCrop, display: display, fill: fillScreen
+        )
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if let frame = cropped {
+            layer.videoGravity = .resizeAspect
+            layer.frame = frame
+        } else {
+            layer.videoGravity = fillScreen ? .resizeAspectFill : .resizeAspect
+            layer.frame = view.bounds
+        }
+        CATransaction.commit()
     }
 
     @objc func setBrightness(_ call: CAPPluginCall) {
@@ -723,6 +819,13 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             queue: .main
         ) { [weak self] _ in
             self?.emitTimeUpdate()
+        }
+
+        // Anamorphic sources report their display size only once loaded.
+        presentationSizeObserver = player.currentItem?.observe(
+            \.presentationSize, options: [.new]
+        ) { [weak self] _, _ in
+            DispatchQueue.main.async { self?.layoutVideoLayer() }
         }
 
         // Item status. `.initial` catches a warm asset that flipped to
@@ -883,6 +986,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         statusObserver?.invalidate()
         statusObserver = nil
+        presentationSizeObserver?.invalidate()
+        presentationSizeObserver = nil
         firstFrameObserver?.invalidate()
         firstFrameObserver = nil
         timeControlObserver?.invalidate()
@@ -898,6 +1003,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         playerLayer = nil
         playerView?.removeFromSuperview()
         playerView = nil
+        videoCrop = nil
+        fillScreen = false
         subtitleOutput = nil
         subtitleOverlay?.removeFromSuperview()
         subtitleOverlay = nil

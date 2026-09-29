@@ -314,6 +314,20 @@ export interface CropRect {
   y: number;
 }
 
+/** A crop the client must apply itself, with the source size it is expressed in. */
+export interface OfflineCrop extends CropRect {
+  sourceWidth: number;
+  sourceHeight: number;
+}
+
+/** The rectangle to persist with a download: only a copy stream keeps the bars
+ *  (a re-encode was already cropped server-side). */
+export function offlineCropOf(pi: PlaybackInfoResponse | null | undefined): OfflineCrop | undefined {
+  const { crop, width, height } = pi?.source ?? {};
+  if (!pi?.videoCopyStream || !crop || !width || !height) return undefined;
+  return { ...crop, sourceWidth: width, sourceHeight: height };
+}
+
 export interface VideoCropStyle {
   /** Video element's own box, in the source's aspect ratio, pair with
    *  `object-fit: fill` (never distorts, the box already carries that AR). */

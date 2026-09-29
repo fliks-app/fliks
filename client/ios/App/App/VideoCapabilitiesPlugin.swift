@@ -38,6 +38,7 @@ public class VideoCapabilitiesPlugin: CAPPlugin, CAPBridgedPlugin {
             "hevcMain10": hevc,
             "av1Main10": av1,
             "containers": ["mp4", "m4v", "mov"],
+            "cropsBlackBars": true,
         ])
     }
 }

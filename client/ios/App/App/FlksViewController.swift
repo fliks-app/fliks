@@ -24,6 +24,7 @@ class FlksViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(NativePlayerPlugin())
         bridge?.registerPluginInstance(HdrPlugin())
         bridge?.registerPluginInstance(AudioCapabilitiesPlugin())
+        bridge?.registerPluginInstance(VideoCapabilitiesPlugin())
         bridge?.registerPluginInstance(ImmersivePlugin())
         bridge?.registerPluginInstance(OrientationPlugin())
         bridge?.registerPluginInstance(PipPlugin())
