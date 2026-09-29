@@ -392,6 +392,19 @@ describe('generateMasterPlaylist — remux variant (copy path)', () => {
     expect(line).toContain('BANDWIDTH=9640000,AVERAGE-BANDWIDTH=9640000');
   });
 
+  it('never adds a phantom audio rendition to BANDWIDTH for an audio-less source', () => {
+    // audioStreams: [] signals no-audio; a stray `audioPlans` entry (the
+    // placeholder plan a no-audio session still carries) must not count.
+    const line = streamInfLines(
+      remuxMaster({
+        sourceVideoBitrateBps: 9_000_000,
+        audioStreams: [],
+        audioPlans: [{ mode: 'copy', codec: '' }] as AudioPlan[],
+      }),
+    )[0];
+    expect(line).toContain('BANDWIDTH=9000000,AVERAGE-BANDWIDTH=9000000');
+  });
+
   it('falls back to the ladder when the user pinned a rung', () => {
     const m = remuxMaster({ onlyQuality: '720p' });
     const lines = streamInfLines(m);
