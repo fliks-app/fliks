@@ -132,8 +132,8 @@
       <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.tonemap_curve' | translate }}</span></label>
       <select
     appTvSelect class="select select-bordered w-full" [ngModel]="tonemapCurve()" (ngModelChange)="tonemapCurve.set($event)">
-        <option value="hable">hable ({{ 'settings.streaming.default' | translate }})</option>
-        <option value="mobius">mobius</option>
+        <option value="mobius">mobius ({{ 'settings.streaming.default' | translate }})</option>
+        <option value="hable">hable</option>
         <option value="reinhard">reinhard</option>
       </select>
       <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.tonemap_curve_help' | translate }}</span></label>
