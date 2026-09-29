@@ -486,10 +486,12 @@ public class NativePlayerPlugin extends Plugin {
             if (shutter != null) shutter.setVisibility(View.VISIBLE);
             videoRendererEnabled = false; // Re-arm the cold-prepare renderer probe
 
-            // Disable text tracks by default — user selects via UI
+            // Disable text tracks by default — user selects via UI. No preferred audio
+            // language: the device locale would override the master's DEFAULT rendition.
             player.setTrackSelectionParameters(
                     player.getTrackSelectionParameters().buildUpon()
                             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                            .setPreferredAudioLanguages()
                             .build());
             // seekTo BEFORE prepare: ExoPlayer queues the seek and applies it
             // once sources are ready. Calling seekTo AFTER prepare can race with

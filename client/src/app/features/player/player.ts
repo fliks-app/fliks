@@ -899,15 +899,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             ?.offlineCrop ?? null;
       }
 
-      // Kick off playback-info in parallel with media/state load to save one
-      // serial round-trip. preselectedAudioIndex is passed as undefined since
-      // we don't have the file's audio streams yet; users with a saved audio
-      // language preference may land on the backend's default audio on first
-      // play of a file and trigger the existing audio-switch reload if they
-      // change it — same flow as switching audio mid-playback.
-      // startQuality/startAt let the backend pre-spawn ffmpeg right here
-      // (instead of waiting for master.m3u8), overlapping encoder init with
-      // the ~100–300ms gap before the player fetches the playlist.
+      // playback-info runs as soon as the media is known: the audio index it
+      // carries decides which rendition the master marks DEFAULT, and the
+      // native players start on that one. startQuality/startAt let the backend
+      // pre-spawn ffmpeg right here (instead of waiting for master.m3u8).
       await this.deviceProfileService.whenDesktopProbed();
       const deviceProfile = this.deviceProfileFor(this.mediaFileId);
       // The service is app-scoped: without this the request would carry the
@@ -915,16 +910,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.qualityManager.restorePreference();
       const prewarmQuality = this.resolveStartQuality();
       const prewarmStartAt = resumeTime;
-      const playbackInfoPromise = this.isOfflinePlayback
-        ? null
-        : this.streamingApi.getPlaybackInfo(
-            this.mediaFileId,
-            deviceProfile,
-            undefined,
-            undefined,
-            prewarmQuality,
-            prewarmStartAt,
-          );
+      let playbackInfoPromise: ReturnType<StreamingApiService['getPlaybackInfo']> | null = null;
+      const requestPlaybackInfo = () => {
+        if (this.isOfflinePlayback || playbackInfoPromise) return;
+        playbackInfoPromise = this.streamingApi.getPlaybackInfo(
+          this.mediaFileId,
+          deviceProfile,
+          undefined,
+          this.activeAudioStreamIndex,
+          prewarmQuality,
+          prewarmStartAt,
+        );
+      };
       // Mint the long-lived stream JWT in parallel with media/state/playback-info
       // load instead of serially before engine init — it's on the time-to-first-
       // frame critical path. Awaited just before the manifest/Bearer headers are
@@ -936,14 +933,22 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Load media info + playback state in parallel
       // No stopSessions here — getOrCreateSession handles stale sessions naturally
       if (this.mediaId && !this.isOfflinePlayback) {
-        const [media, playbackState] = await Promise.all([
-          this.mediaService.getOne(this.mediaId),
+        const mediaPromise = this.mediaService.getOne(this.mediaId);
+        const statePromise =
           startTime == null
             ? this.streamingApi.getPlaybackState(this.mediaId, this.episodeId).catch(() => null)
-            : Promise.resolve(null),
-        ]);
-
+            : Promise.resolve(null);
+        const media = await mediaPromise;
         this.media = media;
+        this.activeAudioStreamIndex = this.playerSettings.resolveAudioStreamIndex(
+          this.mediaFileId,
+          (this.currentFile()?.streamInfo as any)?.audio ?? [],
+          this.mediaId,
+          this.originalLanguage,
+        );
+        requestPlaybackInfo();
+        const playbackState = await statePromise;
+
         this.mediaLoadedTick.update(v => v + 1);
         this.mediaTitle.set(media.title);
         this.mediaLogoUrl.set(media.logoUrl ?? null);
@@ -1020,16 +1025,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           await this.engine!.load(offlineCheck!, startTime);
         }
       } else {
-        // Pre-compute audio preference (for UI/state only — the backend
-        // already picked an audio during the parallel playback-info call).
-        const file = this.currentFile();
-        const audioStreams: AudioStreamChoice[] = (file?.streamInfo as any)?.audio ?? [];
-        const preselectedAudioIndex = this.playerSettings.resolveAudioStreamIndex(
-          this.mediaFileId, audioStreams, this.mediaId, this.originalLanguage,
-        );
-        this.activeAudioStreamIndex = preselectedAudioIndex;
-
         // Await playback-info (kicked off in parallel with media load above)
+        requestPlaybackInfo();
         this.playbackInfo = await playbackInfoPromise!;
         await this.maybeStartPreRoll(startTime);
         const pi = this.playbackInfo!;
