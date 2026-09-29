@@ -69,6 +69,15 @@ export interface DesktopSystemInfo {
   deviceName: string;
 }
 
+/** Runtime playback capabilities the device profile can't infer from the UA.
+ *  `canReshapeDolbyVision` is false when Windows mpv fell back from gpu-next to
+ *  plain `--vo=gpu` (old driver / low D3D11 feature level): gpu can decode and
+ *  play a Dolby Vision file but can't reshape the RPU (profiles 5/8), only the
+ *  base layer (profile 7). True on every other platform/backend. */
+export interface DesktopPlayerCapabilities {
+  canReshapeDolbyVision: boolean;
+}
+
 /** main → renderer event envelope, sent on the single IPC.event channel. */
 export type DesktopEvent =
   | { type: 'ready' }
@@ -113,6 +122,8 @@ export const IPC = {
   destroy: 'player:destroy',
   /** Host OS identity (name + version), resolved natively. */
   getSystemInfo: 'system:info',
+  /** Runtime playback capabilities (e.g. Dolby Vision reshape support). */
+  getPlayerCapabilities: 'player:getCapabilities',
   /** main → renderer (one channel, discriminated by DesktopEvent.type). */
   event: 'player:event',
 } as const;
@@ -253,6 +264,7 @@ export interface FliksDesktopApi {
   destroy(): Promise<void>;
   /** Native host OS identity (e.g. { systemName: "macOS 26" }). */
   getSystemInfo(): Promise<DesktopSystemInfo>;
+  getPlayerCapabilities(): Promise<DesktopPlayerCapabilities>;
   on(handler: (event: DesktopEvent) => void): () => void;
 }
 

@@ -15,7 +15,7 @@ import { IPC, type DesktopEvent, type DesktopRect } from '../../shared/contract'
  * at native/vendor/mpv (macOS) or native/vendor/mpv.exe (Windows), which
  * electron-builder ships + asarUnpacks via the native/vendor/** glob.
  */
-function resolveBundledMpv(): string | undefined {
+export function resolveBundledMpv(): string | undefined {
   const base = app.isPackaged
     ? app.getAppPath().replace(/app\.asar$/, 'app.asar.unpacked')
     : app.getAppPath();
@@ -216,7 +216,7 @@ export class PlayerSession {
     sync();
 
     // The video window's native handle is only valid once it has painted.
-    this.mpv = this.createPlayer();
+    this.mpv = await this.createPlayer();
     this.forwardEvents(this.mpv);
     await this.mpv.start();
     this.emit({ type: 'ready' });
@@ -229,11 +229,12 @@ export class PlayerSession {
    *   • Windows (and other --wid embed platforms) — an mpv subprocess embedded
    *     via the platform EmbedBackend's args.
    */
-  private createPlayer(): PlayerBackend {
+  private async createPlayer(): Promise<PlayerBackend> {
     if (process.platform === 'darwin') return new MacMpvPlayer(this.videoWin);
+    const mpvPath = resolveBundledMpv() ?? 'mpv';
     const backend = createEmbedBackend();
-    const { args, env } = backend.resolve(this.videoWin);
-    return new MpvPlayer({ baseArgs: args, env, mpvPath: resolveBundledMpv() });
+    const { args, env } = await backend.resolve(this.videoWin, mpvPath);
+    return new MpvPlayer({ baseArgs: args, env, mpvPath });
   }
 
   private forwardEvents(mpv: PlayerBackend): void {

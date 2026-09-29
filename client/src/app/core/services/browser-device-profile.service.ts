@@ -10,6 +10,7 @@ import { SystemInfoService } from './system-info.service';
 import { applyTizenAudioCodecs, tizenSupportsHevc } from './tizen-capabilities';
 import { getDeviceName } from '../utils/device-info';
 import { environment } from '../../../environments/environment';
+import { desktopBridgeOrNull } from '../plugins/desktop-player.bridge';
 
 interface HdrPlugin {
   isSupported(): Promise<{
@@ -221,6 +222,9 @@ export class BrowserDeviceProfileService {
     channelsByCodec?: Record<string, number>;
   } | null = null;
   private nativeVideo: NativeVideoCaps | null = null;
+  /** Optimistic until the desktop probe resolves; matches the other native
+   *  capability fields above, which read stale/default values until then too. */
+  private desktopCanReshapeDolbyVision = true;
 
   constructor() {
     // Pre-fetch native HDR + audio + video capabilities (async, cached for
@@ -241,6 +245,15 @@ export class BrowserDeviceProfileService {
         .then((r) => { this.nativeVideo = r; this.cachedProfile = null; })
         .catch(() => { this.nativeVideo = null; });
     }
+    // Windows mpv can fall back off gpu-next at startup (old driver); every
+    // other desktop backend reshapes DV, so this only ever narrows Windows.
+    desktopBridgeOrNull()
+      ?.getPlayerCapabilities()
+      .then((r) => {
+        this.desktopCanReshapeDolbyVision = r.canReshapeDolbyVision;
+        this.cachedProfile = null;
+      })
+      .catch(() => {});
   }
 
   /**
@@ -589,9 +602,11 @@ export class BrowserDeviceProfileService {
     }
     // Windows mpv (gpu-next) reshapes P5/P7/P8 via libplacebo regardless of
     // display HDR support; macOS/Linux libmpv can't reshape, so they stay at P7.
+    // gpu-next itself can fail to init (old driver) and fall back to plain gpu,
+    // which only plays the P7 base layer; drop 5/8 when that happened.
     if (this.device.isDesktopNative() && detectOs(navigator.userAgent) === 'Windows') {
       dolbyVisionProfiles.length = 0;
-      dolbyVisionProfiles.push(5, 7, 8);
+      dolbyVisionProfiles.push(...(this.desktopCanReshapeDolbyVision ? [5, 7, 8] : [7]));
     }
     // A [10]-only list must not read as P5/P8-capable to an old server that
     // only understands this boolean.

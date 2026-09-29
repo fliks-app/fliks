@@ -61,6 +61,13 @@ export interface DesktopSystemInfo {
   deviceName: string;
 }
 
+/** `canReshapeDolbyVision` is false when Windows mpv fell back from gpu-next to
+ *  plain `--vo=gpu`: it can play a Dolby Vision file's base layer (profile 7)
+ *  but can't reshape the RPU (profiles 5/8). True on every other backend. */
+export interface DesktopPlayerCapabilities {
+  canReshapeDolbyVision: boolean;
+}
+
 export type DesktopPlayerState = 'idle' | 'playing' | 'paused' | 'buffering' | 'ended' | 'error';
 
 export type DesktopEvent =
@@ -103,6 +110,7 @@ export interface FliksDesktopApi {
   destroy(): Promise<void>;
   /** Native host OS identity (e.g. { systemName: "macOS 26" }). */
   getSystemInfo(): Promise<DesktopSystemInfo>;
+  getPlayerCapabilities(): Promise<DesktopPlayerCapabilities>;
   on(handler: (event: DesktopEvent) => void): () => void;
 }
 
