@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { CACHE_BYPASS_HEADER } from '../../interceptors/cache.interceptor';
@@ -33,6 +33,9 @@ export interface LikedItem {
 @Injectable({ providedIn: 'root' })
 export class LikesApiService {
   private readonly http = inject(HttpClient);
+  /** Bumped after every like/unlike, so a view kept alive elsewhere (a cached
+   *  detail page under a notification's heart) can refetch its state. */
+  readonly changed = signal<{ mediaId: number } | null>(null);
 
   private headers(force?: boolean) {
     return force ? { headers: { [CACHE_BYPASS_HEADER]: '1' } } : {};
@@ -56,13 +59,13 @@ export class LikesApiService {
     );
   }
 
-  like(target: LikeTarget) {
-    return firstValueFrom(this.http.post<void>('/api/likes', target));
+  async like(target: LikeTarget) {
+    await firstValueFrom(this.http.post<void>('/api/likes', target));
+    this.changed.set({ mediaId: target.mediaId });
   }
 
-  unlike(target: LikeTarget) {
-    return firstValueFrom(
-      this.http.delete<void>('/api/likes', { body: target }),
-    );
+  async unlike(target: LikeTarget) {
+    await firstValueFrom(this.http.delete<void>('/api/likes', { body: target }));
+    this.changed.set({ mediaId: target.mediaId });
   }
 }

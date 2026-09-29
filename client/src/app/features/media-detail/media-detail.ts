@@ -2115,6 +2115,12 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     }
   });
 
+  private readonly likeChangedEffect = effect(() => {
+    const changed = this.likesApi.changed();
+    const id = untracked(this.media)?.id;
+    if (changed && changed.mediaId === id) void this.loadLikeState(id);
+  });
+
   private async loadLikeState(id: number): Promise<void> {
     try {
       this.likeState.set(await this.likesApi.state(id, { force: true }));
