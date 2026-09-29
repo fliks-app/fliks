@@ -18,7 +18,7 @@ export {
 } from './profiles';
 export { cappedRungVideoBitrateBps } from './quality-ladder';
 export { requestedHwAccelFor } from './hw-detect';
-export { resolveTonemapPath, type ResolvedTonemapPath } from './tonemap-path';
+export { resolveTonemapPath } from './tonemap-path';
 export { encoderRegistry } from './codec/encoders';
 export { sessionKey } from './session-key';
 export {

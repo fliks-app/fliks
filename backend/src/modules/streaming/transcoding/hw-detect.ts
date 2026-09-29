@@ -137,40 +137,19 @@ export async function detectHwAccel(
   return 'none';
 }
 
-/** hwAccel types whose filter helper bounces to CPU only for `subtitles=...`,
- *  keeping decode/tonemap on the GPU; AMF's encoder also takes those CPU frames directly. */
-const BURN_IN_CAPABLE_HW_ACCEL = new Set<HwAccelType>([
-  'videotoolbox',
-  'nvenc',
-  'qsv',
-  'vaapi',
-  'amf',
-]);
-
-/** Map the host-detected hwAccel onto the slice the orchestrator should
- *  ask the encoder registry for, applying the two pipeline-level
- *  filtering constraints:
- *
- *  - Subtitle burn-in needs CPU surfaces for libass — force `'none'`
- *    unless the target is in {@link BURN_IN_CAPABLE_HW_ACCEL}.
- *  - QSV cannot crop on the vaapi-decode-then-hwmap chain (the
- *    fixed-size QSV frame pool rejects the variable output of CPU
- *    `crop` after hwupload back to vaapi). When the caller indicates
- *    `qsvCanCrop=true` we stay on QSV — that flag means the caller has
- *    a qsv-native decoder + `vpp_qsv` filter path ready, which crops
- *    on the QSV device without touching vaapi pools. Without it we
- *    fall back to VAAPI like before — except on Windows, where there is
- *    no VAAPI and QSV always crops natively via `vpp_qsv`.
- *
- *  Centralised here so `ffmpeg-args` and `stream-builder` (the stats
- *  overlay path) can't drift on the rule. The registry still has the
- *  final say at resolve time. */
+/** Map the host-detected hwAccel onto the slice the orchestrator should ask
+ *  the encoder registry for. QSV cannot crop on the vaapi-decode-then-hwmap
+ *  chain (the fixed-size QSV frame pool rejects the variable output of a CPU
+ *  `crop` after hwupload back to vaapi), so a cropped QSV session without a
+ *  ready qsv-native path (`qsvCanCrop`) falls back to VAAPI — except on
+ *  Windows, which has no VAAPI and always crops QSV natively via `vpp_qsv`.
+ *  Centralised so `ffmpeg-args` and `stream-builder` can't drift on the rule;
+ *  the registry still has the final say at resolve time. */
 export function requestedHwAccelFor(
   detected: HwAccelType,
   needs: { burnIn: boolean; crop: boolean; qsvCanCrop?: boolean },
   platform: NodeJS.Platform = process.platform,
 ): HwAccelType {
-  if (needs.burnIn && !BURN_IN_CAPABLE_HW_ACCEL.has(detected)) return 'none';
   if (
     detected === 'qsv' &&
     needs.crop &&

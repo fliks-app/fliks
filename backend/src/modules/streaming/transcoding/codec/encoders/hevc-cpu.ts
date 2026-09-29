@@ -63,7 +63,7 @@ export const hevcCpuHdr10: EncoderDescriptor = {
   supportsHdrMetadata: () => true,
   codecString: (target: EncoderTarget) => hevcMain10CodecString(target),
   buildArgs(input: EncoderInput): string[] {
-    const { target, preset, filters, tonemap, libx264BufsizeMb } = input;
+    const { target, preset, filters, libx264BufsizeMb } = input;
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
     const x265Params = [
@@ -77,9 +77,9 @@ export const hevcCpuHdr10: EncoderDescriptor = {
       `master-display=${masterDisplayString(input.hdrMetadata)}`,
       `max-cll=${maxCllString(input.hdrMetadata)}`,
     ].join(':');
-    // tonemap here is always a no-base DV source reshaped into HDR10 (see
-    // dvNoBaseHdr10Eligible): filters.tonemapCpu already carries the RPU
-    // reshape (tonemapx, apply_dovi=1) and the 10-bit output format.
+    // A populated filters.tonemapCpu here is always a no-base DV source
+    // reshaped into HDR10 (see dvNoBaseHdr10Eligible): tonemapx with
+    // apply_dovi=1 and the 10-bit output format already applied.
     return [
       '-c:v',
       'libx265',
@@ -96,7 +96,7 @@ export const hevcCpuHdr10: EncoderDescriptor = {
       '-bufsize',
       libx264BufsizeMb,
       '-vf',
-      `${filters.cpuCropPrefix}${tonemap ? filters.tonemapCpu : ''}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=yuv420p10le${filters.burnInFilter}`,
+      `${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=yuv420p10le${filters.burnInFilter}`,
       '-g',
       String(target.gopSize),
       '-keyint_min',
