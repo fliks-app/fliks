@@ -128,9 +128,8 @@ export interface EncoderInput {
    *  the right scale / crop filter (e.g. VAAPI surfaces stay on the
    *  `scale_vaapi → hwmap=qsv` chain). */
   inputSurface: import('./decoders/types').SurfaceFormat;
-  /** Whole pipeline stays on the QSV device (qsv-native decode + `vpp_qsv`
-   *  crop/scale) rather than the VAAPI-derived `scale_vaapi → hwmap=qsv`
-   *  chain. Resolved once in `encode-pipeline.ts`; `qsvScaleFilter*` reads it. */
+  /** `vpp_qsv` crop/scale on the QSV device instead of the VAAPI-derived
+   *  `scale_vaapi → hwmap=qsv` chain; see `qsvNative` in encode-pipeline.ts. */
   qsvNative?: boolean;
   /** Source HDR10 static metadata, when the probe recovered it. Encoders feed
    *  it into `master-display` / `max-cll`; absent → generic 1000-nit fallback. */

@@ -121,9 +121,8 @@ export interface ResolvedEncodePipeline {
   tonemapPath: ReturnType<typeof resolveTonemapPath>;
   /** Whole pipeline stays on the QSV device (qsv-native decode + vpp_qsv). */
   qsvNativeAvailable: boolean;
-  /** `qsvNativeAvailable` narrowed to sessions that actually land on the QSV
-   *  encoder — the routing flag `qsv-filters.ts` and the decode stage read to
-   *  pick the native vpp_qsv chain over the VAAPI-derived one. */
+  /** `qsvNativeAvailable` on a session that lands on the QSV encoder: picks the
+   *  native vpp_qsv chain over the VAAPI-derived one (decode stage + qsv-filters). */
   qsvNative: boolean;
   /** QSV can perform the crop (native, or via the vaapi-decode splice). */
   qsvCanCrop: boolean;

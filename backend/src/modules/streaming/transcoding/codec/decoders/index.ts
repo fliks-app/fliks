@@ -38,9 +38,8 @@ import type {
  *  before CPU. Within HW, we keep platform-native first (QSV before
  *  VAAPI on Intel Linux to bias `vpp_qsv` crop). */
 const DESCRIPTORS: readonly DecoderDescriptor[] = [
-  // Intel modern path: decodes on native VAAPI. Whether a session routes its
-  // vpp_qsv crop/scale through this decoder natively is a pipeline flag
-  // (see qsvNative in encode-pipeline.ts), not a separate descriptor.
+  // Intel modern path: decodes on native VAAPI. The vpp_qsv native routing is
+  // the pipeline's `qsvNative` flag, not a separate descriptor.
   h264QsvDecoder,
   hevcQsvDecoder,
   av1QsvDecoder,
@@ -104,9 +103,8 @@ class StaticDecoderRegistry implements DecoderRegistry {
   }
 }
 
-/** Full list of compiled-in decoder descriptors, plus the Windows QSV/AMF
- *  D3D11 variants which aren't in `DESCRIPTORS` (platform-gated, looked up
- *  by id rather than resolved). Both lists are used by the boot probe. */
+/** Every compiled-in decoder for the boot probe: `DESCRIPTORS` plus the
+ *  Windows QSV/AMF D3D11 variants, which are looked up rather than resolved. */
 export const ALL_DECODERS: readonly DecoderDescriptor[] = [
   ...DESCRIPTORS,
   h264QsvD3d11Decoder,

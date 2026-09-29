@@ -7,8 +7,8 @@ import { scaleEvenHeight } from './scale-filter';
 export const nvencVfEndsOnGpu = (i: EncoderInput): boolean =>
   i.tonemap ? !!i.filters.tonemapCuda : i.inputSurface === 'cuda';
 
-/** Build the `-vf` value for an NVENC encode at the given bit depth.
- *  `'cuda'` input stays on the device; other surfaces bounce through `hwdownload`/`hwupload_cuda`. */
+/** Build the `-vf` value for an NVENC encode at the given bit depth. `'cuda'`
+ *  input stays on the device; other surfaces bounce through `hwdownload`/`hwupload_cuda`. */
 function nvencScaleFilter(input: EncoderInput, bitDepth: 8 | 10): string {
   const { target, filters, tonemap, hasCrop, hasBurnIn, inputSurface } = input;
   const w = target.width;
@@ -35,6 +35,7 @@ function nvencScaleFilter(input: EncoderInput, bitDepth: 8 | 10): string {
     const nvCropFilter = hasCrop
       ? `hwdownload,format=${fmt},${filters.cropStr},hwupload_cuda,`
       : '';
+    // Explicit format: a 10-bit source decodes to p010le even on the 8-bit rung.
     vf = `${nvCropFilter}scale_cuda=w=${w}:h=-2:format=${fmt}`;
   } else {
     const download = inputSurface === 'cpu' ? '' : `hwdownload,format=${fmt},`;

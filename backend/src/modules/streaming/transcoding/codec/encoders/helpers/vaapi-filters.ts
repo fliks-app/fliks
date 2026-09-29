@@ -1,7 +1,7 @@
 import type { EncoderInput } from '../../types';
 
-/** Build the `-vf` value for a VAAPI encode at the given bit depth.
- *  `tonemapVulkan`/`tonemapVaapi` only apply at 8-bit; 10-bit throws on an unhandled tonemap. */
+/** Build the `-vf` value for a VAAPI encode at the given bit depth. Vulkan/VAAPI
+ *  tonemaps are 8-bit only; 10-bit throws on a tonemap without an OpenCL chain. */
 function vaapiScaleFilter(input: EncoderInput, bitDepth: 8 | 10): string {
   const { target, filters, hasBurnIn, tonemap } = input;
   const w = target.width;

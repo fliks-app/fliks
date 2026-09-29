@@ -3,9 +3,8 @@ import type { VideoCodec } from '../types';
 import { qsvDeviceInitArgs, qsvViaD3d11DeviceInitArgs } from '../../hw-device';
 
 /** QSV decoder: native VAAPI, never the `-hwaccel qsv` wrapper (drops the
- *  Dolby Vision RPU, fails outright on AV1). Whether a session routes its
- *  `vpp_qsv` crop/scale through this decoder natively is a pipeline-level
- *  choice (`qsvNative` in encode-pipeline.ts), not a property of the decoder. */
+ *  Dolby Vision RPU, fails outright on AV1). The native `vpp_qsv` routing is
+ *  the pipeline's `qsvNative` flag, not a property of the decoder. */
 function qsvDecoder(codec: VideoCodec, maxBitDepth: 8 | 10): DecoderDescriptor {
   return {
     id: `${codec}_qsv_decode`,

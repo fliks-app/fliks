@@ -14,9 +14,6 @@ describe('QSV encode-path decoders', () => {
     expect(d?.hwAccel).toBe('qsv');
   });
 
-  // Off Windows, findQsvNativeDecoder returns the same descriptor the
-  // registry resolves generally: native-vs-default was a routing label
-  // (qsvNative on the resolved pipeline now), never a decode-argv difference.
   it('findQsvNativeDecoder picks the same VAAPI-backed decoder off Windows', () => {
     const d = findQsvNativeDecoder('av1', 'linux');
     expect(d?.id).toBe('av1_qsv_decode');
