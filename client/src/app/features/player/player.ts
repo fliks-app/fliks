@@ -45,7 +45,7 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { PlaybackQueueService, QueueItem } from '../../core/services/playback-queue.service';
 import { buildSeriesQueueItems, resolvePlayableFile } from '../../shared/utils/media-play.util';
 import { buildPlayerStats, computeVideoCropStyle, formatAudioLabel, formatAudioParts, inIntroRange, inOutroRange, parseAudioIndex, playbackModeOf, SpriteMetadata, widthForProfile, type CropRect, type VideoCropStyle } from '../../core/utils/player.utils';
-import { classifyPlaybackError, formatErrorDiagnostics, isUndecodableError, type PlaybackError } from '../../core/services/playback-engine/playback-error';
+import { formatErrorDiagnostics, type PlaybackError } from '../../core/services/playback-engine/playback-error';
 import { environment } from '../../../environments/environment';
 import { normalizeLangCode } from '../../core/utils/language.utils';
 import {
@@ -99,6 +99,7 @@ import { LucideInfo, LucideX } from '@lucide/angular';
 import { PlayerControlsComponent } from './controls/player-controls';
 import { PlayerErrorOverlayComponent } from './overlay/player-error-overlay';
 import { ControlsVisibilityService } from './controls/controls-visibility';
+import { CopyFallbackController } from './copy-fallback-controller';
 import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats-overlay';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 
@@ -156,7 +157,7 @@ class PausableTimeout {
 @Component({
   imports: [TranslatePipe, LucideInfo, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, PlayerErrorOverlayComponent, DefaultFocusDirective],
   templateUrl: './player.html',
-  providers: [ControlsVisibilityService],
+  providers: [ControlsVisibilityService, CopyFallbackController],
   encapsulation: ViewEncapsulation.None,
   styles: [`
     .player-container {
@@ -447,6 +448,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       () => this.paused() || this.buffering() || this.seekDragging() || this.state.seekLocked(),
     ),
   }), null);
+  private readonly copyFallback = inject(CopyFallbackController);
+  private readonly _copyFallbackAttach = (this.copyFallback.attach(this), null);
   readonly inPipMode = signal(false);
   readonly pipAvailable = signal(true);
   readonly canLockOrientation = Capacitor.getPlatform() === 'ios';
@@ -499,9 +502,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const key = this.preRollCurrent()?.labelKey;
     return key ? this.translate.instant(key) : this.episodeTitle();
   });
-  /** How long a pre-roll transition or a remux fallback waits out an in-flight reload. */
-  private static readonly RELOAD_IDLE_WAIT_MS = 3_000;
-
   /** Remaining items, consumed FIFO by {@link advancePreRoll}. */
   private preRollRest: PreRollItem[] = [];
   /** File to land on once the list is exhausted. */
@@ -706,19 +706,40 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly mediaLoadedTick = signal(0);
   private activeBurnInId: number | null = null;
   private activeAudioStreamIndex: number | undefined;
-  /** Files whose copy this device failed to decode: every later playback-info
-   *  for them asks `rejectCopy`, so no reload bounces back onto that copy. */
-  private readonly rejectCopyFileIds = new Set<number>();
 
   /** `deviceProfileService.getProfile()`, with `rejectCopy` forced on when
-   *  `mediaFileId` is a confirmed offender and the server accepts the field
-   *  (`deviceProfileExtensions`; an unknown field 400s older servers). */
+   *  {@link CopyFallbackController} has confirmed `mediaFileId` an offender. */
   private deviceProfileFor(mediaFileId: number): DeviceProfile {
     const profile = this.deviceProfileService.getProfile();
-    return this.rejectCopyFileIds.has(mediaFileId) &&
-      this.authService.hasServerFeature('deviceProfileExtensions')
+    return this.copyFallback.shouldForceRejectCopy(mediaFileId)
       ? { ...profile, rejectCopy: true }
       : profile;
+  }
+
+  // ── CopyFallbackHost (see copy-fallback-controller.ts) ──
+  isDestroyed(): boolean {
+    return this.destroyed;
+  }
+  currentSid(): string | undefined {
+    return this.playbackInfo?.sessionId;
+  }
+  currentMediaFileId(): number {
+    return this.mediaFileId;
+  }
+  hasServerFeature(feature: string): boolean {
+    return this.authService.hasServerFeature(feature);
+  }
+  isReloadIdle(): boolean {
+    return !this.reloadingStream && !this.recoveringFromLostSession;
+  }
+  hasError(): boolean {
+    return !!this.state.error();
+  }
+  failWith(e: unknown, opts?: { source?: PlaybackError['source'] }): void {
+    this.state.failWith(e, opts);
+  }
+  setRecovering(recovering: boolean): void {
+    this.state.setRecovering(recovering);
   }
 
   readonly mediaTitle = signal('');
@@ -1378,7 +1399,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     try {
       // `reloadForEpisode` refuses while another reload is in flight. Consuming the item first
       // would strand the run on a finished one, with nothing left to re-trigger this.
-      await this.waitForReloadIdle();
+      await this.copyFallback.waitForReloadIdle();
       const next = this.preRollRest.shift();
       if (next) this.preRollCurrent.set(next);
       const fileId = next ? next.mediaFileId : this.preRollMainFileId;
@@ -2930,15 +2951,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  in the background once the user has navigated away. */
   private destroyed = false;
 
-  /** Session the copy-rejection fallback already retried once for. Keyed by
-   *  sid (not a plain boolean) so the next negotiation re-arms it. */
-  private remuxFallbackSid: string | undefined;
-  /** The rejectCopy reload in flight, so a second report of the same failure
-   *  (an `error` event plus the rejected load()) is absorbed, not carded. */
-  private remuxFallback: Promise<void> | null = null;
-  /** Caller setup to run once the fallback reload succeeds; either report may supply it. */
-  private remuxFallbackOnRecovered: (() => Promise<void> | void) | undefined;
-
   /** One-time setup after the first successful load (tracks, Cast/autoplay,
    *  intervals, seeked listener, sprites), whether the load or its copy fallback succeeded. */
   private async completePostLoadSetup(
@@ -3058,7 +3070,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   /** Wires the two ways a live session goes bad: `sessionExpired` (a backend
-   *  410) recovers immediately; `error` routes to {@link maybeFallbackFromRemux}. */
+   *  410) recovers immediately; `error` routes to {@link CopyFallbackController.maybeFallback}. */
   private wireErrorRecovery(engine: PlaybackEngine): void {
     engine.on('sessionExpired', () => {
       void this.recoverFromLostSession();
@@ -3068,87 +3080,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         console.warn('[player] engine error dropped, a reload/recovery is already in flight', e);
         return;
       }
-      this.maybeFallbackFromRemux(
+      this.copyFallback.maybeFallback(
         { source: e.source, code: e.code, message: e.message },
         this.engine?.currentTime || this.state.currentTime() || 0,
       );
     });
   }
 
-  /** {@link maybeFallbackFromRemux} for a caught load()/reload rejection: Shaka
-   *  throws load-time fatals (4032/4012) without emitting an `error` event.
-   *  `onRecovered` runs the post-load setup the caller's own catch skipped. */
+  /** Delegates to {@link CopyFallbackController.fallBackFromLoadError}. */
   private fallBackFromRemuxOnLoadError(
     e: any, position: number, onRecovered?: () => Promise<void> | void,
   ): boolean {
-    const { source, code } = classifyPlaybackError(e);
-    return this.maybeFallbackFromRemux(
-      { source, code, message: e?.message ?? String(e) }, position, onRecovered,
-    );
-  }
-
-  /** An undecodable copy (DirectPlay or remux): reject it and reload once per session
-   *  through `reloadStream`; `rejectCopy` forces a transcode, so it can't loop. True when handled. */
-  private maybeFallbackFromRemux(
-    err: { source?: PlaybackError['source']; code?: number; message?: string },
-    position: number,
-    onRecovered?: () => Promise<void> | void,
-  ): boolean {
-    if (this.destroyed) return false;
-    if (this.playbackMode() !== 'remux' && this.playbackMode() !== 'direct') return false;
-    if (!this.authService.hasServerFeature('deviceProfileExtensions')) return false;
-    if (!isUndecodableError(err)) return false;
-    const sid = this.playbackInfo?.sessionId;
-    if (!sid) return false;
-    if (this.remuxFallbackSid === sid) {
-      if (this.remuxFallback && onRecovered) this.remuxFallbackOnRecovered ??= onRecovered;
-      return this.remuxFallback != null;
-    }
-    this.remuxFallbackSid = sid;
-    this.rejectCopyFileIds.add(this.mediaFileId);
-    console.warn('[player] copy failed to decode, retrying with rejectCopy');
-    this.remuxFallbackOnRecovered = onRecovered;
-    this.remuxFallback = this.runRemuxFallback(position).finally(() => {
-      this.remuxFallback = null;
-      this.remuxFallbackOnRecovered = undefined;
-    });
-    return true;
-  }
-
-  /** The load path that reported the failure still holds its reload guard, so
-   *  wait for it before reloading. Always cards on failure: the copy is gone. */
-  private async runRemuxFallback(position: number): Promise<void> {
-    this.state.setRecovering(true);
-    try {
-      if (!(await this.waitForReloadIdle())) {
-        console.warn('[player] remux fallback dropped: another reload is still running');
-        if (!this.state.error()) {
-          this.state.failWith(
-            new Error('remux fallback dropped: another reload is still running'),
-            { source: 'session' },
-          );
-        }
-        return;
-      }
-      // A recovery that settled meanwhile lowered the veil.
-      this.state.setRecovering(true);
-      await this.reloadStream(position);
-      await this.remuxFallbackOnRecovered?.();
-    } catch (e) {
-      if (!this.state.error()) this.state.failWith(e);
-    } finally {
-      this.state.setRecovering(false);
-    }
-  }
-
-  /** Resolves true once no reload or session recovery holds the engine, false
-   *  if one is still running after {@link RELOAD_IDLE_WAIT_MS}. */
-  private async waitForReloadIdle(): Promise<boolean> {
-    const deadline = Date.now() + PlayerComponent.RELOAD_IDLE_WAIT_MS;
-    while ((this.reloadingStream || this.recoveringFromLostSession) && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    return !this.reloadingStream && !this.recoveringFromLostSession;
+    return this.copyFallback.fallBackFromLoadError(e, position, onRecovered);
   }
 
   /** Re-baseline the stall watchdog so the next {@link stallTimeoutMs} window
@@ -4277,7 +4220,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Reload the stream (e.g. when toggling burn-in subtitles or switching
    *  audio). User-initiated, so re-arm the native recovery guard and serialise
    *  against any concurrent reload/recovery. `at` overrides the resume anchor. */
-  private async reloadStream(at?: number) {
+  async reloadStream(at?: number) {
     if (!this.engine || this.reloadingStream) return;
     this.reloadingStream = true;
     this.reloadReachedPlayback = false;
