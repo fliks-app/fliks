@@ -1,9 +1,10 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Capacitor } from '@capacitor/core';
 import { firstValueFrom } from 'rxjs';
 import { DeviceService } from './device.service';
 import { AuthService } from './auth.service';
+import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import {
   desktopUpdaterOrNull,
   type DesktopUpdateStatus,
@@ -27,6 +28,38 @@ export interface UpdateInfoView {
   releaseNotes: string | null;
   releaseUrl: string | null;
   releaseDate: string | null;
+}
+
+const HIDE_UNTIL_KEY = 'fliks.updateHiddenForServer';
+const NEVER_AHEAD_KEY = 'fliks.updateNeverAheadOfServer';
+
+/** Numeric x.y.z compare, pre-release/build suffix dropped. */
+function isNewer(a: string, b: string): boolean {
+  const parse = (v: string) => v.trim().replace(/^v/i, '').split(/[-+]/)[0].split('.').map(Number);
+  const x = parse(a);
+  const y = parse(b);
+  if ([...x, ...y].some(Number.isNaN)) return false;
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
+  }
+  return false;
+}
+
+function readPref(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writePref(key: string, value: string | null): void {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+    /* storage unavailable: the preference lasts for this session only */
+  }
 }
 
 interface ServerUpdateStatus {
@@ -66,12 +99,32 @@ export class AppUpdateService {
   readonly releasesUrl = signal<string | null>(null);
   readonly errorMessage = signal<string | null>(null);
 
+  /** Version of the connected server; desktop mode only. */
+  readonly serverVersion = signal<string | null>(null);
+  /** The desktop update would run a client newer than its server. */
+  readonly aheadOfServer = computed(() => {
+    const next = this.info()?.version;
+    const server = this.serverVersion();
+    return this.mode() === 'desktop' && !!next && !!server && isNewer(next, server);
+  });
+  /** Server version the user hid the topbar button for. */
+  readonly hiddenForServer = signal(readPref(HIDE_UNTIL_KEY));
+  readonly neverAheadOfServer = signal(readPref(NEVER_AHEAD_KEY) === 'true');
+
+  private readonly hiddenAhead = computed(
+    () =>
+      this.aheadOfServer() &&
+      (this.neverAheadOfServer() || this.hiddenForServer() === this.serverVersion()),
+  );
+
   /** Gate for showing the topbar update button. */
   readonly available = computed(
-    () => this.state() === 'available' || this.state() === 'downloaded',
+    () =>
+      (this.state() === 'available' || this.state() === 'downloaded') && !this.hiddenAhead(),
   );
 
   private serverChecked = false;
+  private serverVersionFetched = false;
 
   constructor() {
     if (this.desktop) this.wireDesktop();
@@ -83,11 +136,31 @@ export class AppUpdateService {
         void this.checkServer();
       }
     });
+
+    effect(() => {
+      if (this.mode() === 'desktop' && this.auth.user() && this.info() && !this.serverVersionFetched) {
+        this.serverVersionFetched = true;
+        void this.fetchServerVersion();
+      }
+    });
+  }
+
+  /** Hide the topbar button until the server moves off its current version. */
+  hideUntilServerUpdates(): void {
+    const v = this.serverVersion();
+    this.hiddenForServer.set(v);
+    writePref(HIDE_UNTIL_KEY, v);
+  }
+
+  setNeverAheadOfServer(on: boolean): void {
+    this.neverAheadOfServer.set(on);
+    writePref(NEVER_AHEAD_KEY, on ? 'true' : null);
   }
 
   /** Trigger a fresh check (used by a manual "check for updates" action). */
   async check(): Promise<void> {
     if (this.mode() === 'desktop') {
+      if (this.auth.user()) void this.fetchServerVersion();
       await this.desktop?.check();
     } else if (this.mode() === 'server') {
       this.serverChecked = true;
@@ -143,6 +216,19 @@ export class AppUpdateService {
       case 'error':
         this.errorMessage.set(status.message);
         break;
+    }
+  }
+
+  private async fetchServerVersion(): Promise<void> {
+    try {
+      const { version } = await firstValueFrom(
+        this.http.get<{ version: string }>('/api/system/version', {
+          context: new HttpContext().set(SKIP_ERROR_TOAST, true),
+        }),
+      );
+      this.serverVersion.set(version);
+    } catch {
+      // Unknown server version: never warn, never hide.
     }
   }
 

@@ -6,10 +6,12 @@ import {
   LucideDownload,
   LucideExternalLink,
   LucideRocket,
+  LucideTriangleAlert,
 } from '@lucide/angular';
 import { AppUpdateService } from '../../../core/services/app-update.service';
 import { MarkdownPipe } from '../../../shared/pipes/markdown.pipe';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
+import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 
 /** Full-page counterpart to the topbar update button: shows the running
  *  version, lets the user re-check on demand, and surfaces the check result —
@@ -20,6 +22,7 @@ import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
   selector: 'app-update-settings',
   imports: [
     LocaleDatePipe,
+    ToggleFieldComponent,
     TranslatePipe,
     MarkdownPipe,
     LucideCircleAlert,
@@ -27,6 +30,7 @@ import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
     LucideDownload,
     LucideExternalLink,
     LucideRocket,
+    LucideTriangleAlert,
   ],
   templateUrl: './update-settings.html',
   styles: [

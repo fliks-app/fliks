@@ -19,6 +19,15 @@
       }
     </div>
 
+    @if (update.mode() === 'desktop') {
+      <app-toggle-field
+        [value]="update.neverAheadOfServer()"
+        (valueChange)="update.setNeverAheadOfServer($event)"
+        [label]="'update_settings.never_ahead_of_server' | translate"
+        [hint]="'update_settings.never_ahead_of_server_hint' | translate"
+      />
+    }
+
     @if (!canCheck()) {
       <div class="alert bg-base-200">
         <span class="text-sm">{{ 'update_settings.store_managed' | translate }}</span>
@@ -41,7 +50,11 @@
     }
 
     @if (update.info(); as info) {
-      @if (!upToDate()) {
+      @if (!upToDate() && update.aheadOfServer() && update.neverAheadOfServer()) {
+        <p class="text-sm opacity-70">
+          {{ 'update_settings.hidden_ahead' | translate: { version: info.version, server: update.serverVersion() } }}
+        </p>
+      } @else if (!upToDate()) {
         <div class="rounded-box bg-base-200 p-4">
           <div class="flex items-center gap-2 mb-1">
             <svg lucideRocket class="h-5 w-5 text-primary"></svg>
@@ -57,6 +70,15 @@
               · {{ info.releaseDate | localeDate:{ dateStyle: 'medium' } }}
             }
           </p>
+
+          @if (update.aheadOfServer()) {
+            <div role="alert" class="rounded-box border border-warning/50 bg-warning/10 p-3 mb-3 flex items-start gap-2">
+              <svg lucideTriangleAlert class="h-5 w-5 shrink-0 text-warning"></svg>
+              <span class="text-sm">
+                {{ 'update.ahead_of_server' | translate: { server: update.serverVersion() } }}
+              </span>
+            </div>
+          }
 
           <div class="rounded-box bg-base-100 p-3 max-h-72 overflow-y-auto mb-4">
             @if (info.releaseNotes) {

@@ -241,7 +241,10 @@
     "check": "Buscar actualizaciones",
     "up_to_date": "Su aplicación está actualizada.",
     "check_failed": "Error al buscar actualizaciones.",
-    "store_managed": "Las actualizaciones de esta aplicación las gestiona su tienda."
+    "store_managed": "Las actualizaciones de esta aplicación las gestiona su tienda.",
+    "never_ahead_of_server": "Ocultar actualizaciones más recientes que el servidor",
+    "never_ahead_of_server_hint": "El botón de actualización queda oculto mientras el servidor tenga una versión anterior.",
+    "hidden_ahead": "La versión {{version}} está disponible pero oculta mientras el servidor use {{server}}."
   },
   "display_settings": {
     "title": "Pantalla",
@@ -2701,7 +2704,9 @@
     "installing": "Instalando y reiniciando…",
     "install": "Instalar",
     "open_release": "Ver la versión",
-    "error": "Error de la actualización"
+    "error": "Error de la actualización",
+    "ahead_of_server": "Esta versión es más reciente que tu servidor ({{server}}). Algunas funciones pueden fallar hasta que se actualice el servidor.",
+    "hide_until_server": "Ocultar hasta que se actualice el servidor"
   },
   "plugin_view": {
     "unavailable_title": "Esta página no está disponible",
