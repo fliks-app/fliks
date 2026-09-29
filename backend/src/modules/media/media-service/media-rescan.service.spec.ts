@@ -251,6 +251,64 @@ describe('MediaRescanService.rescanFiles — quality from probe results', () => 
   });
 });
 
+describe('MediaRescanService.rescanFiles - bonus folders and sample files', () => {
+  let mediaDir: string;
+
+  beforeEach(() => {
+    mediaDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rescan-bonus-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(mediaDir, { recursive: true, force: true });
+  });
+
+  function movieMedia(over: Record<string, unknown>) {
+    return {
+      id: 8,
+      title: 'Ember Horizon',
+      type: MediaType.MOVIE,
+      folderName: 'Ember Horizon (2001)',
+      files: [],
+      get path() {
+        return mediaDir;
+      },
+      ...over,
+    };
+  }
+
+  it('skips a new sample clip and a new Extras file, but keeps an already-linked one', async () => {
+    const h = buildHarness();
+    const extrasDir = path.join(mediaDir, 'Extras');
+    fs.mkdirSync(extrasDir);
+    // New, never linked: a sample clip and unlinked Extras files, nested or not, are skipped.
+    fs.writeFileSync(path.join(mediaDir, 'Ember.Horizon.2001.1080p-sample.mkv'), 'x');
+    fs.writeFileSync(path.join(extrasDir, 'making-of.mkv'), 'x');
+    fs.mkdirSync(path.join(extrasDir, 'Part 1'));
+    fs.writeFileSync(path.join(extrasDir, 'Part 1', 'clip.mkv'), 'x');
+    // Already linked to a media_file row: kept even though it lives in Extras.
+    fs.writeFileSync(path.join(extrasDir, 'behind-the-scenes.mkv'), 'x');
+    const dbFile = {
+      id: 30,
+      relativePath: 'Extras/behind-the-scenes.mkv',
+      size: 1,
+      quality: 'WEBDL-1080p',
+      streamInfo: null,
+    };
+    h.mediaRepo.findOne.mockResolvedValue(movieMedia({ files: [dbFile] }));
+    h.ffprobe.detectMediaFileInfo.mockResolvedValue({
+      video: [{ width: 1920, height: 1080 }],
+      audio: [],
+      subtitles: [],
+    });
+
+    const res = await h.service.rescanFiles(8, { skipWarmup: true });
+
+    expect(res.added).toBe(0);
+    expect(res.removed).toBe(0);
+    expect(res.updated).toBe(1);
+  });
+});
+
 describe('MediaRescanService.rescanFiles - a movie with no folder of its own', () => {
   let mediaDir: string;
 

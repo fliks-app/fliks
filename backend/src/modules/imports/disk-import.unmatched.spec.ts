@@ -27,6 +27,7 @@ const dto = (overrides: Partial<RelinkOrphansDto> = {}): RelinkOrphansDto =>
 
 function makeService() {
   const mediaRepo = { findOne: jest.fn(), find: jest.fn(), update: jest.fn(), delete: jest.fn() };
+  const fileRepo = { count: jest.fn().mockResolvedValue(0) };
   const mediaService = {
     importMedia: jest.fn(),
     createUnmatched: jest.fn(),
@@ -44,7 +45,7 @@ function makeService() {
   mockedFindLocalArtwork.mockResolvedValue({});
   const service = new DiskImportService(
     mediaRepo as never,
-    null as never, // fileRepo
+    fileRepo as never,
     null as never, // seasonRepo
     mediaService as never,
     null as never, // naming
@@ -57,7 +58,17 @@ function makeService() {
     events as never,
     { upsertPending: jest.fn(), upsertRunning: jest.fn(), remove: jest.fn() } as never,
   );
-  return { service, mediaRepo, mediaService, libraries, metadata, events, postImportQueue, nfo };
+  return {
+    service,
+    mediaRepo,
+    fileRepo,
+    mediaService,
+    libraries,
+    metadata,
+    events,
+    postImportQueue,
+    nfo,
+  };
 }
 
 const unmatchedRow = (id: number, folderName: string, type = MediaType.MOVIE) => ({
@@ -593,6 +604,52 @@ describe('DiskImportService.relinkOrphans: movie files directly at the library r
     expect(res.linked).toBe(0);
     expect(mediaRepo.delete).toHaveBeenCalledWith(5);
   });
+
+  it('keeps the row when a concurrent group already linked a file to it', async () => {
+    const { service, mediaRepo, mediaService, fileRepo } = makeService();
+    mediaRepo.find.mockResolvedValueOnce([]);
+    mediaRepo.findOne.mockResolvedValueOnce(unmatchedRow(6, ''));
+    mediaService.createUnmatched.mockResolvedValue({ id: 6 });
+    mediaService.linkExistingFileInPlace.mockResolvedValue({
+      error: 'file outside the media folder',
+    });
+    // A concurrent relink reused this row and linked its own file first.
+    fileRepo.count.mockResolvedValueOnce(1);
+
+    const res = await service.relinkOrphans(rootDto(), null);
+
+    expect(res.linked).toBe(0);
+    expect(fileRepo.count).toHaveBeenCalledWith({ where: { media: { id: 6 } } });
+    expect(mediaRepo.delete).not.toHaveBeenCalled();
+  });
+
+  it('keeps the row while a concurrent group that reused it is still linking', async () => {
+    const { service, mediaRepo, mediaService, fileRepo } = makeService();
+    const row = unmatchedRow(7, 'Sample Movie (2009)');
+    mediaRepo.findOne
+      .mockResolvedValueOnce(null) // first group: nothing to reuse
+      .mockResolvedValueOnce(row) // first group: reload after create
+      .mockResolvedValueOnce(row); // second group: reuses the new row
+    mediaService.createUnmatched.mockResolvedValue({ id: 7 });
+    let finishSecond!: () => void;
+    mediaService.linkExistingFileInPlace.mockImplementation(({ absPath }: { absPath: string }) =>
+      absPath.endsWith('a.mkv')
+        ? Promise.resolve({ error: 'unreadable' })
+        : new Promise((resolve) => {
+            finishSecond = () => resolve({ fileId: 9, episodeId: null, created: false });
+          }),
+    );
+    const folder = '/media/Sample Movie (2009)';
+
+    const first = service.relinkOrphans(dto({ files: [{ filePath: `${folder}/a.mkv` }] }), null);
+    const second = service.relinkOrphans(dto({ files: [{ filePath: `${folder}/b.mkv` }] }), null);
+    await first;
+
+    expect(mediaRepo.delete).not.toHaveBeenCalled();
+    expect(fileRepo.count).not.toHaveBeenCalled();
+    finishSecond();
+    await expect(second).resolves.toMatchObject({ mediaId: 7, linked: 1 });
+  });
 });
 
 describe('DiskImportService.relinkOrphans: files outside the library', () => {
@@ -686,6 +743,59 @@ describe('DiskImportService.relinkOrphans: files outside the library', () => {
     // The outer `/downloads/Sample Show`, not the inner directory the season sits in.
     expect(mockedFindLocalArtwork).toHaveBeenCalledWith(
       '/downloads/Sample Show',
+      undefined,
+      { basenameOnly: false },
+    );
+  });
+
+  const staging = '/library/Sample Show/downloads/staging';
+  it.each([
+    [staging, `${staging}/Sample Show`],
+    // Pasted with a trailing slash and an invisible mark, as the preview root accepts it.
+    [`\u202a ${staging}/ `, `${staging}/Sample Show`],
+    // Not an ancestor of the file: caps nothing, the outermost match wins as before.
+    ['/elsewhere', '/library/Sample Show'],
+  ])('bounds the series-folder climb by scanRoot %j', async (scanRoot, expectedDir) => {
+    mockedFindLocalArtwork.mockClear();
+    const { service, mediaRepo, mediaService } = makeService();
+    Object.assign(service, {
+      naming: {
+        getFormats: jest.fn().mockResolvedValue({ seriesFolder: '{Series Title}' }),
+        applySeriesFolderFormat: (_f: string, d: { seriesTitle: string }) => d.seriesTitle,
+      },
+    });
+    jest
+      .spyOn(service, 'confirmImport')
+      .mockResolvedValue({ imported: 1, alreadyPresent: 0, errors: [] });
+    mediaRepo.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(unmatchedRow(12, 'Sample Show', MediaType.SERIES));
+    mediaService.createUnmatched.mockResolvedValue({ id: 12 });
+    mediaService.ensureSeriesEpisode.mockResolvedValue({ episodeId: 5, created: false });
+
+    await service.relinkOrphans(
+      dto({
+        type: MediaType.SERIES,
+        folderName: 'Sample Show',
+        title: 'Sample Show',
+        year: undefined,
+        transfer: 'copy',
+        // An ancestor above the scanned folder happens to share the show's name too.
+        scanRoot,
+        files: [
+          {
+            filePath:
+              '/library/Sample Show/downloads/staging/Sample Show/S01/Sample.Show.S01E01.mkv',
+            seasonNumber: 1,
+            episodeNumber: 1,
+          },
+        ],
+      }),
+      null,
+    );
+
+    expect(mockedFindLocalArtwork).toHaveBeenCalledWith(
+      expectedDir,
       undefined,
       { basenameOnly: false },
     );

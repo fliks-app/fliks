@@ -44,6 +44,7 @@ import { PostImportQueueService } from '../../common/post-import/post-import-que
 import { MediaServersService } from '../media-servers/media-servers.service';
 import { VIDEO_EXTS } from '../../common/constants/video-extensions';
 import { sanitizeFsPath } from '../../common/utils/fs-path.util';
+import { isBonusDir, isSampleFile } from '../../common/utils/bonus-content.util';
 
 /** The scan shares a 30-connection pool with everything else the server is
  *  serving; unbounded fan-out starved it and the UI stalled until the scan ended. */
@@ -54,20 +55,18 @@ export const ORPHAN_SCAN_PROGRESS = 'OrphanScan';
 export const ORPHAN_IMPORT_PROGRESS = 'OrphanImport';
 
 /** The scanned group folder above `file`, or its own directory when none matches. Outermost
- *  wins: in `Show/Show/S01/e.mkv` the `tvshow.nfo` sits in the outer folder. */
-function seriesFolderOf(file: string, folderName: string): string {
+ *  wins: in `Show/Show/S01/e.mkv` the `tvshow.nfo` sits in the outer folder. Never climbs
+ *  above `scanRoot`, resolved like the preview's root; one that is no ancestor caps nothing. */
+function seriesFolderOf(file: string, folderName: string, scanRoot?: string): string {
+  const root = scanRoot ? sanitizeFsPath(scanRoot) : '';
+  const stopAt = root ? path.resolve(root) : null;
   let match: string | null = null;
   for (let dir = path.dirname(file); dir !== path.dirname(dir); dir = path.dirname(dir)) {
     if (path.basename(dir) === folderName) match = dir;
+    if (dir === stopAt) break;
   }
   return match ?? path.dirname(file);
 }
-
-/** Bonus-clip folders inside a title's folder; a scan-root child of that name is a title. */
-const BONUS_DIR_RE =
-  /^(samples?|extras?|featurettes?|trailers?|interviews|behind[ ._-]the[ ._-]scenes|deleted[ ._-]scenes)$/i;
-/** A release's sample clip ends with a `sample` token; a title merely starting with it does not. */
-const SAMPLE_FILE_RE = /(?:^|[.\-_ ])sample$/i;
 
 /** The season/episode the caller already resolved (client-side parse, or a season-pack's own
  *  numbering), when it gave both. `undefined` leaves the caller's own fallback to decide. */
@@ -423,14 +422,13 @@ export class DiskImportService {
       throw new BadRequestException('Reorganize needs a title with its own folder');
     }
 
-    const { media, created } = dto.externalId
-      ? await this.findOrImportIdentified(dto, addedByUserId)
-      : await this.findOrCreateUnmatched(dto, library, addedByUserId);
-
-    if (media.library && media.library.id !== dto.libraryId) {
-      throw new BadRequestException(
-        `Media already belongs to another library ("${media.library.name}")`,
-      );
+    let media: Media;
+    let created: boolean;
+    let lockKey: string | undefined;
+    if (dto.externalId) {
+      ({ media, created } = await this.findOrImportIdentified(dto, addedByUserId));
+    } else {
+      ({ media, created, lockKey } = await this.findOrCreateUnmatched(dto, library, addedByUserId));
     }
 
     let linked = 0;
@@ -438,106 +436,121 @@ export class DiskImportService {
     let slotCreated = false;
     const errors: string[] = [];
 
-    if (dto.reorganize || dto.transfer) {
-      // Move/copy + rename into the library's naming layout (folder/file naming,
-      // companions, MediaFile creation, ffprobe enrich and subtitle scheduling).
-      if (!media.library) media.library = library;
-      const entries: ImportFileEntry[] = [];
-      for (const f of dto.files) {
-        const filename = path.basename(f.filePath);
-        let episodeId: number | undefined;
-        if (media.type === MediaType.SERIES) {
-          const epNums =
-            callerEpNums(f) ?? this.naming.parseEpisodeNumbers(filename, f.filePath);
-          if (!epNums) {
-            const special = await this.matchSpecialFile(media.id, f.filePath);
-            if (!special) {
-              errors.push(`${filename}: no SxxEyy pattern found`);
-              continue;
-            }
-            episodeId = special.id;
-          } else {
-            const ep = await this.mediaService.ensureSeriesEpisode(media, epNums);
-            episodeId = ep.episodeId ?? undefined;
-            slotCreated ||= ep.created;
-          }
-        }
-        entries.push({
-          filePath: f.filePath,
-          mediaId: media.id,
-          episodeId,
-          quality: parseReleaseQuality(filename).quality.name,
-          targetLibraryId: dto.libraryId,
-        });
-      }
-      if (entries.length) {
-        // A re-run of the same external import lands on its own files: skip, don't duplicate.
-        const res = await this.confirmImport(entries, dto.transfer ?? 'move', {
-          uniquifyOnCollision: !dto.transfer,
-        });
-        linked = res.imported;
-        alreadyPresent = res.alreadyPresent;
-        errors.push(...res.errors);
-      }
-    } else {
-      // Link in place — pin the media to the orphan's on-disk folder so
-      // `relativePath` stays valid, but only when it has no files yet.
-      if (
-        (media.files?.length ?? 0) === 0 &&
-        media.folderName !== dto.folderName
-      ) {
-        await this.mediaRepo.update(media.id, {
-          library: { id: library.id } as Library,
-          folderName: dto.folderName,
-        });
-        media.folderName = dto.folderName;
-      }
-      if (!media.library) media.library = library;
-
-      for (const f of dto.files) {
-        const absPath = path.resolve(f.filePath);
-        const epNums = callerEpNums(f);
-        const res = await this.mediaService.linkExistingFileInPlace({
-          media,
-          absPath,
-          epNums,
-        });
-        if ('error' in res) {
-          errors.push(`${path.basename(f.filePath)}: ${res.error}`);
-          continue;
-        }
-        linked++;
-        slotCreated ||= res.created;
-        this.postImportQueue.enqueue({ mediaFileId: res.fileId });
-      }
-      // The reorganize branch above emits this from LibraryIngestService.
-      if (linked > 0) {
-        this.events.emitDomain({
-          type: 'media.files.imported',
-          mediaId: media.id,
-          source: 'disk',
-        });
-      }
-    }
-
-    // Backfill metadata for any season/episode slot invented while linking.
-    // An unmatched media has no provider id to refresh from, it would just throw.
-    if (media.type === MediaType.SERIES && slotCreated && hasProviderId(media)) {
-      try {
-        await this.metadata.refreshSeriesEpisodes(media);
-      } catch (e) {
-        this.logger.warn(
-          `Orphan relink: refreshSeriesEpisodes failed — ${(e as Error).message}`,
+    try {
+      if (media.library && media.library.id !== dto.libraryId) {
+        throw new BadRequestException(
+          `Media already belongs to another library ("${media.library.name}")`,
         );
       }
-    }
 
-    // A newly created unmatched row that failed to link any file is dead
-    // weight: for a root movie especially, an ambiguous folderName '' twin
-    // would otherwise linger and confuse the next reuse lookup. A file already at its
-    // destination is served by this row, so it stays.
-    if (!dto.externalId && created && linked === 0 && alreadyPresent === 0) {
-      await this.mediaRepo.delete(media.id);
+      if (dto.reorganize || dto.transfer) {
+        // Move/copy + rename into the library's naming layout (folder/file naming,
+        // companions, MediaFile creation, ffprobe enrich and subtitle scheduling).
+        if (!media.library) media.library = library;
+        const entries: ImportFileEntry[] = [];
+        for (const f of dto.files) {
+          const filename = path.basename(f.filePath);
+          let episodeId: number | undefined;
+          if (media.type === MediaType.SERIES) {
+            const epNums =
+              callerEpNums(f) ?? this.naming.parseEpisodeNumbers(filename, f.filePath);
+            if (!epNums) {
+              const special = await this.matchSpecialFile(media.id, f.filePath);
+              if (!special) {
+                errors.push(`${filename}: no SxxEyy pattern found`);
+                continue;
+              }
+              episodeId = special.id;
+            } else {
+              const ep = await this.mediaService.ensureSeriesEpisode(media, epNums);
+              episodeId = ep.episodeId ?? undefined;
+              slotCreated ||= ep.created;
+            }
+          }
+          entries.push({
+            filePath: f.filePath,
+            mediaId: media.id,
+            episodeId,
+            quality: parseReleaseQuality(filename).quality.name,
+            targetLibraryId: dto.libraryId,
+          });
+        }
+        if (entries.length) {
+          // A re-run of the same external import lands on its own files: skip, don't duplicate.
+          const res = await this.confirmImport(entries, dto.transfer ?? 'move', {
+            uniquifyOnCollision: !dto.transfer,
+          });
+          linked = res.imported;
+          alreadyPresent = res.alreadyPresent;
+          errors.push(...res.errors);
+        }
+      } else {
+        // Link in place — pin the media to the orphan's on-disk folder so
+        // `relativePath` stays valid, but only when it has no files yet.
+        if (
+          (media.files?.length ?? 0) === 0 &&
+          media.folderName !== dto.folderName
+        ) {
+          await this.mediaRepo.update(media.id, {
+            library: { id: library.id } as Library,
+            folderName: dto.folderName,
+          });
+          media.folderName = dto.folderName;
+        }
+        if (!media.library) media.library = library;
+
+        for (const f of dto.files) {
+          const absPath = path.resolve(f.filePath);
+          const epNums = callerEpNums(f);
+          const res = await this.mediaService.linkExistingFileInPlace({
+            media,
+            absPath,
+            epNums,
+          });
+          if ('error' in res) {
+            errors.push(`${path.basename(f.filePath)}: ${res.error}`);
+            continue;
+          }
+          linked++;
+          slotCreated ||= res.created;
+          this.postImportQueue.enqueue({ mediaFileId: res.fileId });
+        }
+        // The reorganize branch above emits this from LibraryIngestService.
+        if (linked > 0) {
+          this.events.emitDomain({
+            type: 'media.files.imported',
+            mediaId: media.id,
+            source: 'disk',
+          });
+        }
+      }
+
+      // Backfill metadata for any season/episode slot invented while linking.
+      // An unmatched media has no provider id to refresh from, it would just throw.
+      if (media.type === MediaType.SERIES && slotCreated && hasProviderId(media)) {
+        try {
+          await this.metadata.refreshSeriesEpisodes(media);
+        } catch (e) {
+          this.logger.warn(
+            `Orphan relink: refreshSeriesEpisodes failed — ${(e as Error).message}`,
+          );
+        }
+      }
+
+      // A newly created unmatched row that failed to link any file is dead
+      // weight: for a root movie especially, an ambiguous folderName '' twin
+      // would otherwise linger and confuse the next reuse lookup. A file already at its
+      // destination is served by this row, so it stays. Under its creation lock, and only
+      // when no concurrent relink that reused the row is still linking into it.
+      if (!dto.externalId && created && linked === 0 && alreadyPresent === 0 && lockKey) {
+        await this.withKeyedLock(lockKey, async () => {
+          if (this.unmatchedHolders.get(media.id) !== 1) return;
+          const files = await this.fileRepo.count({ where: { media: { id: media.id } } });
+          if (files === 0) await this.mediaRepo.delete(media.id);
+        });
+      }
+    } finally {
+      if (lockKey) this.releaseUnmatched(media.id);
     }
 
     this.logger.log(
@@ -616,6 +629,15 @@ export class DiskImportService {
     return run;
   }
 
+  /** Relinks currently linking into each unmatched row they created or reused. */
+  private readonly unmatchedHolders = new Map<number, number>();
+
+  private releaseUnmatched(mediaId: number): void {
+    const n = (this.unmatchedHolders.get(mediaId) ?? 1) - 1;
+    if (n > 0) this.unmatchedHolders.set(mediaId, n);
+    else this.unmatchedHolders.delete(mediaId);
+  }
+
   /**
    * No external id: reuse the media already pinned to this folder, or create one from the
    * guessed/corrected title. Natural key is (library, type, folderName).
@@ -624,13 +646,13 @@ export class DiskImportService {
     dto: RelinkOrphansDto,
     library: Library,
     addedByUserId: number | null,
-  ): Promise<{ media: Media; created: boolean }> {
+  ): Promise<{ media: Media; created: boolean; lockKey: string }> {
     const sample = path.resolve(dto.files[0].filePath);
     const artworkDir =
       dto.type !== MediaType.SERIES
         ? path.dirname(sample)
         : dto.transfer
-          ? seriesFolderOf(sample, dto.folderName)
+          ? seriesFolderOf(sample, dto.folderName, dto.scanRoot)
           : path.join(library.path!, dto.folderName);
     // A root movie's artworkDir IS the shared library root: generic sidecar
     // names (poster.jpg, movie.nfo, ...) there belong to no title in particular.
@@ -662,7 +684,8 @@ export class DiskImportService {
       ? await this.namedFolder(dto.type, title, year)
       : dto.folderName;
 
-    return this.withKeyedLock(`${library.id}:${dto.type}:${folderName}`, async () => {
+    const lockKey = `${library.id}:${dto.type}:${folderName}`;
+    const reuseOrCreate = async (): Promise<{ media: Media; created: boolean }> => {
       // Whoever already owns this folder is reused, identified or not.
       const where = {
         library: { id: library.id },
@@ -731,7 +754,14 @@ export class DiskImportService {
         throw new BadRequestException('Media not found after import');
       }
       return { media, created: true };
+    };
+    const result = await this.withKeyedLock(lockKey, async () => {
+      const r = await reuseOrCreate();
+      // Taken inside the lock, so a concurrent cleanup sees this holder before deleting.
+      this.unmatchedHolders.set(r.media.id, (this.unmatchedHolders.get(r.media.id) ?? 0) + 1);
+      return r;
     });
+    return { ...result, lockKey };
   }
 
   /**
@@ -886,11 +916,11 @@ export class DiskImportService {
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (depth > 0 && BONUS_DIR_RE.test(entry.name)) continue;
+        if (depth > 0 && isBonusDir(entry.name)) continue;
         subdirs.push(fullPath);
       } else if (
         VIDEO_EXTS.has(path.extname(entry.name).toLowerCase()) &&
-        !SAMPLE_FILE_RE.test(path.basename(entry.name, path.extname(entry.name)))
+        !isSampleFile(entry.name)
       ) {
         files.push(fullPath);
       }
