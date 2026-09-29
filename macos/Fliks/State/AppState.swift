@@ -18,21 +18,15 @@ final class AppState: ObservableObject {
     /// Periodic Postgres health check timer.
     private var healthCheckTimer: Timer?
 
+    /// The start in flight, if any: a shutdown cancels and awaits it, or it
+    /// would spawn node or Postgres after the stop and outlive the app.
+    private var startupTask: Task<Void, Never>?
+
     init() {
         self.postgresManager = PostgresManager(port: config.pgPort)
 
-        // Clean shutdown on app termination.
-        NotificationCenter.default.addObserver(
-            forName: NSApplication.willTerminateNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self else { return }
-            Task { await self.shutdown() }
-        }
-
         // Start the server stack on launch.
-        Task { await startAll() }
+        startupTask = Task { await startAll() }
     }
 
     // MARK: - Lifecycle
@@ -47,6 +41,7 @@ final class AppState: ObservableObject {
             try await postgresManager.initialize()
             try await postgresManager.start()
             try await postgresManager.createDatabaseIfNeeded()
+            try Task.checkCancellation()
 
             // 2. Node.js backend
             serverState = .startingBackend
@@ -82,6 +77,9 @@ final class AppState: ObservableObject {
         serverState = .stopping
         healthCheckTimer?.invalidate()
         healthCheckTimer = nil
+        startupTask?.cancel()
+        await startupTask?.value
+        startupTask = nil
 
         await nodeManager.stop()
         try? await postgresManager.stop()
@@ -92,7 +90,9 @@ final class AppState: ObservableObject {
     /// Restart: stop everything, then start again.
     func restart() async {
         await shutdown()
-        await startAll()
+        let task = Task { await startAll() }
+        startupTask = task
+        await task.value
     }
 
     /// Open the web UI in the default browser.
@@ -108,9 +108,9 @@ final class AppState: ObservableObject {
         serverState = .error("Backend crashed (exit \(exitCode))")
 
         // Auto-restart after a delay.
-        Task {
+        startupTask = Task {
             try? await Task.sleep(for: .seconds(3))
-            guard case .error = self.serverState else { return }
+            guard !Task.isCancelled, case .error = self.serverState else { return }
             logger.info("Auto-restarting backend...")
             self.serverState = .startingBackend
             let env = BackendEnvironment(port: self.config.port, dbPort: self.config.pgPort)

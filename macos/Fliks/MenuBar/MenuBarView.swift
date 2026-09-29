@@ -52,10 +52,7 @@ struct MenuBarView: View {
         Divider()
 
         Button("Quit Fliks") {
-            Task {
-                await appState.shutdown()
-                NSApp.terminate(nil)
-            }
+            NSApp.terminate(nil)
         }
         .keyboardShortcut("q")
     }
