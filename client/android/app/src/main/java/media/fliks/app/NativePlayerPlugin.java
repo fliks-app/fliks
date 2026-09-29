@@ -105,6 +105,7 @@ public class NativePlayerPlugin extends Plugin {
     private boolean hasNext = false;
     private boolean hasPrevious = false;
     private Boolean liked;
+    private boolean seekButtons;
     private final List<MediaItem.SubtitleConfiguration> subtitleConfigs = new ArrayList<>();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private Handler positionHandler;
@@ -357,6 +358,8 @@ public class NativePlayerPlugin extends Plugin {
                     .setMediaSourceFactory(mediaSourceFactory)
                     .setLoadControl(loadControl)
                     .setWakeMode(C.WAKE_MODE_NETWORK)
+                    .setSeekBackIncrementMs(10_000)
+                    .setSeekForwardIncrementMs(10_000)
                     .build();
             // CONTENT_TYPE_MOVIE flags the stream as cinematic so the framework
             // routes it through the surround-capable HDMI path; without this
@@ -566,7 +569,7 @@ public class NativePlayerPlugin extends Plugin {
             @Override public void stop() { emitWindowEvent("nativePlayerStop"); }
             @Override public void toggleLike() { emitWindowEvent("nativePlayerToggleLike"); }
         });
-        QueueSession.setState(getContext(), mediaSession, hasNext, liked);
+        QueueSession.setState(getContext(), mediaSession, hasNext, liked, seekButtons);
         PlaybackService.attach(getContext(), mediaSession);
     }
 
@@ -580,11 +583,13 @@ public class NativePlayerPlugin extends Plugin {
         boolean previous = call.getBoolean("hasPrevious", false);
         boolean next = call.getBoolean("hasNext", false);
         Boolean like = call.getBoolean("liked");
+        boolean seek = call.getBoolean("seekButtons", false);
         mainHandler.post(() -> {
             hasPrevious = previous;
             hasNext = next;
             liked = like;
-            if (mediaSession != null) QueueSession.setState(getContext(), mediaSession, hasNext, liked);
+            seekButtons = seek;
+            if (mediaSession != null) QueueSession.setState(getContext(), mediaSession, hasNext, liked, seekButtons);
             call.resolve();
         });
     }

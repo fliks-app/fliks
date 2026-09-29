@@ -38,19 +38,24 @@ public class RemoteNotificationPlugin extends Plugin {
         boolean muted = call.getBoolean("muted", false);
         boolean hasNext = call.getBoolean("hasNext", false);
         Boolean liked = call.getBoolean("liked");
+        boolean seekButtons = call.getBoolean("seekButtons", false);
         mainHandler.post(() -> {
             if (session == null) {
                 player = new RemoteStatePlayer(Looper.getMainLooper(), (action, value) -> emit(action, value));
                 session = QueueSession.build(getContext(), player, "remote", new QueueSession.Handlers() {
                     @Override public void previous() { emit("seek", 0); }
                     @Override public void next() { emit("next", 0); }
-                    @Override public void stop() { emit("stop", 0); }
+                    // Released here: in the background the WebView may not clear it for a while.
+                    @Override public void stop() {
+                        emit("stop", 0);
+                        release();
+                    }
                     @Override public void toggleLike() { emit("like", 0); }
                 });
                 PlaybackService.attach(getContext(), session);
             }
             player.update(metadata, playing, buffering, positionMs, durationMs, canSetVolume, volume, muted);
-            QueueSession.setState(getContext(), session, hasNext, liked);
+            QueueSession.setState(getContext(), session, hasNext, liked, seekButtons);
             call.resolve();
         });
     }

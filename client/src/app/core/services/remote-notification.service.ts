@@ -56,6 +56,8 @@ export class RemoteNotificationService {
         muted: t.muted(),
         hasNext: t.canPlayNext(),
         liked: this.like.liked(),
+        // The target reports no queue; a film has nothing to step through.
+        seekButtons: !s?.episodeId,
       }).catch(() => {});
     }, { injector: this.injector });
   }
@@ -80,6 +82,10 @@ export class RemoteNotificationService {
         t.playNext();
         break;
       case 'stop':
+        // Native has already dropped the notification; clear the state now so
+        // no update recreates it before the stop round-trips.
+        this.shown = false;
+        this.remote.noteStopSent();
         t.stopPlayback();
         break;
       case 'like':
