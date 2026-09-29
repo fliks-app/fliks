@@ -1,5 +1,7 @@
 import {
   deriveDvInfo,
+  dvAppliesRpu,
+  dvHasHlgBase,
   dvSupplementalCodecs,
   dvStandaloneCodecs,
 } from './dolby-vision';
@@ -81,5 +83,28 @@ describe('dvStandaloneCodecs', () => {
     expect(dvStandaloneCodecs({ dvProfile: 5, dvBlSignalCompatId: 0 })).toBeNull();
     expect(dvStandaloneCodecs({ dvProfile: 8, dvBlSignalCompatId: 1, dvLevel: 6 })).toBeNull();
     expect(dvStandaloneCodecs({ dvProfile: 10, dvBlSignalCompatId: 1, dvLevel: 8 })).toBeNull();
+  });
+});
+
+describe('dvHasHlgBase', () => {
+  it('is true for P8.4 and P10.4', () => {
+    expect(dvHasHlgBase(8, 4)).toBe(true);
+    expect(dvHasHlgBase(10, 4)).toBe(true);
+  });
+
+  it('is false for P8.1 and P5', () => {
+    expect(dvHasHlgBase(8, 1)).toBe(false);
+    expect(dvHasHlgBase(5, 0)).toBe(false);
+  });
+});
+
+describe('dvAppliesRpu', () => {
+  it('is true for no-base (P5) and HLG-base (P8.4) sources', () => {
+    expect(dvAppliesRpu(5, 0)).toBe(true);
+    expect(dvAppliesRpu(8, 4)).toBe(true);
+  });
+
+  it('is false for a PQ base (P8.1)', () => {
+    expect(dvAppliesRpu(8, 1)).toBe(false);
   });
 });

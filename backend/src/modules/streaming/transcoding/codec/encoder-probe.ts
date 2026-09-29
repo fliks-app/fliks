@@ -237,6 +237,7 @@ export function probeEncoderInput(d: EncoderDescriptor): EncoderInput {
     },
     tonemap: false,
     tonemapPath: 'vaapi',
+    dvApplyRpu: false,
     hasBurnIn: false,
     hasCrop: false,
     inputSurface: probeInputSurface(d.hwAccel),

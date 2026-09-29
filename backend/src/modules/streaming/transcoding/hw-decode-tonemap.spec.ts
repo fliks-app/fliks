@@ -29,6 +29,7 @@ import {
   isTonemapOpenclEnabled,
   isTonemapOpenclEnabledWithCrop,
 } from './codec/tonemap-opencl-probe';
+import { isOpenclTonemapEnabled } from './codec/opencl-tonemap-probe';
 import { isCudaTonemapEnabled } from './codec/cuda-tonemap-probe';
 import { isAmfOpenclEnabled } from './codec/amf-opencl-probe';
 import { isQsvOpenclTonemapEnabled } from './codec/qsv-opencl-probe';
@@ -196,6 +197,20 @@ describe('buildFfmpegArgs: no-base Dolby Vision keeps the RPU', () => {
     expect(cli).toContain('apply_dovi=0');
   });
 
+  it('NVENC: applies the RPU of an HLG-base DV source (P8.4)', () => {
+    const args = buildFfmpegArgs(
+      opts({
+        hwAccel: 'nvenc',
+        sourceDvProfile: 8,
+        sourceDvBlSignalCompatId: 4,
+      }),
+      silentLog,
+    );
+    const cli = args.join(' ');
+    expect(cli).toContain('tonemap_opencl');
+    expect(cli).toContain('apply_dovi=1');
+  });
+
   it('resolveEncodePipeline reports the same accel/encoder buildFfmpegArgs spawns', () => {
     const args = buildFfmpegArgs(dv5(), silentLog);
     const pipeline = resolveEncodePipeline(
@@ -208,6 +223,7 @@ describe('buildFfmpegArgs: no-base Dolby Vision keeps the RPU', () => {
         tonemapAlgo: 'auto',
         sourceVideoCodec: 'hevc',
         dvNoBase: true,
+        dvApplyRpu: true,
         sourceBitDepth: 10,
       },
     );
@@ -270,6 +286,38 @@ describe('buildFfmpegArgs: VideoToolbox (macOS)', () => {
     expect(vfOf(args)).toContain('apply_dovi=0');
   });
 
+  it('P8.4 (HLG base) without crop: RPU-aware tonemap_videotoolbox, apply_dovi=1', () => {
+    const args = buildFfmpegArgs(
+      vtOpts({ sourceDvProfile: 8, sourceDvBlSignalCompatId: 4 }),
+      silentLog,
+    );
+    expect(vfOf(args)).toBe(
+      'scale_vt=w=1920:h=-2,tonemap_videotoolbox=tonemap=mobius:t=bt709:m=bt709:p=bt709:range=tv:apply_dovi=1:format=nv12',
+    );
+  });
+
+  it('P8.4 (HLG base) with crop: apply_dovi=1', () => {
+    const args = buildFfmpegArgs(
+      vtOpts({
+        sourceDvProfile: 8,
+        sourceDvBlSignalCompatId: 4,
+        crop: { width: 3840, height: 1600, x: 0, y: 280 },
+      }),
+      silentLog,
+    );
+    expect(vfOf(args)).toContain('apply_dovi=1');
+  });
+
+  it('P8.1 (PQ base) without crop keeps the plain scale_vt chain', () => {
+    const args = buildFfmpegArgs(
+      vtOpts({ sourceDvProfile: 8, sourceDvBlSignalCompatId: 1 }),
+      silentLog,
+    );
+    expect(vfOf(args)).toBe(
+      'scale_vt=w=1920:h=-2:color_matrix=bt709:color_primaries=bt709:color_transfer=bt709',
+    );
+  });
+
   it('HDR10 without crop keeps the plain scale_vt chain', () => {
     const args = buildFfmpegArgs(vtOpts({}), silentLog);
     expect(vfOf(args)).toBe(
@@ -310,11 +358,15 @@ describe('buildFfmpegArgs: VideoToolbox (macOS)', () => {
 describe('buildFfmpegArgs: no-base Dolby Vision on the Vulkan path', () => {
   const openclNoCrop = isTonemapOpenclEnabled as jest.Mock;
   const openclCrop = isTonemapOpenclEnabledWithCrop as jest.Mock;
+  // The DRM/VAAPI/Vulkan chain is Linux-only (hostHasVaapi).
+  const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')!;
   beforeEach(() => {
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
     openclNoCrop.mockReturnValue(false);
     openclCrop.mockReturnValue(false);
   });
   afterEach(() => {
+    Object.defineProperty(process, 'platform', platformDescriptor);
     openclNoCrop.mockReturnValue(true);
     openclCrop.mockReturnValue(true);
   });
@@ -341,6 +393,91 @@ describe('buildFfmpegArgs: no-base Dolby Vision on the Vulkan path', () => {
     expect(vf).not.toContain('hwdownload');
     // No-base DV source (P5): the RPU is trustworthy, so apply it.
     expect(vf).toContain('apply_dolbyvision=1');
+  });
+});
+
+describe('buildFfmpegArgs: HLG-base Dolby Vision (P8.4) on Linux', () => {
+  const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  const mockOpenclHost = isOpenclTonemapEnabled as jest.Mock;
+  beforeEach(() =>
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true }),
+  );
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', platformDescriptor);
+    mockOpenclHost.mockReturnValue(true);
+  });
+
+  const dv84 = (over: Partial<BuildFfmpegArgsOptions> = {}) =>
+    opts({ sourceDvProfile: 8, sourceDvBlSignalCompatId: 4, ...over });
+
+  it('QSV: tonemap_opencl applies the RPU', () => {
+    const cli = buildFfmpegArgs(dv84({ hwAccel: 'qsv' }), silentLog).join(' ');
+    expect(cli).toContain('tonemap_opencl');
+    expect(cli).toContain('apply_dovi=1');
+    expect(cli).toMatch(/-c:v (h264|hevc)_qsv\b/);
+    expect(cli).not.toContain('-filter_hw_device ocl');
+  });
+
+  it('VAAPI: keeps the HW encoder and applies the RPU via tonemap_opencl', () => {
+    const cli = buildFfmpegArgs(dv84({ hwAccel: 'vaapi' }), silentLog).join(' ');
+    expect(cli).toContain('tonemap_opencl');
+    expect(cli).toContain('apply_dovi=1');
+    expect(cli).toMatch(/-c:v (h264|hevc)_vaapi\b/);
+    expect(cli).not.toContain('-filter_hw_device ocl');
+  });
+
+  it('VAAPI, OpenCL down: stays on the RPU-blind tonemap_vaapi instead of the CPU', () => {
+    const openclNoCrop = isTonemapOpenclEnabled as jest.Mock;
+    openclNoCrop.mockReturnValue(false);
+    try {
+      const cli = buildFfmpegArgs(dv84({ hwAccel: 'vaapi' }), silentLog).join(' ');
+      expect(cli).toContain('tonemap_vaapi');
+      expect(cli).toMatch(/-c:v (h264|hevc)_vaapi\b/);
+    } finally {
+      openclNoCrop.mockReturnValue(true);
+    }
+  });
+
+  it('a non-tonemap HLG passthrough session keeps the P8.1 tonemap path', () => {
+    const hlg: CodecVariant = { codec: 'hevc', bitDepth: 10, hdr: 'HLG' };
+    const ctx = (compat: number) => ({
+      hwAccel: 'qsv' as const,
+      crop: false,
+      burnIn: false,
+      tonemap: false,
+      tonemapAlgo: 'vaapi' as const,
+      sourceVideoCodec: 'hevc',
+      dvNoBase: false,
+      dvApplyRpu: compat === 4,
+      sourceBitDepth: 10 as const,
+    });
+    const p84 = resolveEncodePipeline(hlg, ctx(4), 'linux');
+    const p81 = resolveEncodePipeline(hlg, ctx(1), 'linux');
+    expect(p84.tonemapPath).toBe('vaapi');
+    expect(p84.tonemapPath).toBe(p81.tonemapPath);
+  });
+
+  it('CPU encode: applies the RPU through the OpenCL bounce', () => {
+    const cli = buildFfmpegArgs(dv84({ hwAccel: 'none' }), silentLog).join(' ');
+    expect(cli).toContain('-filter_hw_device ocl');
+    expect(cli).toContain('tonemap_opencl=');
+    expect(cli).toContain('apply_dovi=1');
+  });
+
+  it('CPU encode, OpenCL down: zscale chain, no tonemapx', () => {
+    mockOpenclHost.mockReturnValue(false);
+    const cli = buildFfmpegArgs(dv84({ hwAccel: 'none' }), silentLog).join(' ');
+    expect(cli).toContain('zscale');
+    expect(cli).not.toContain('tonemapx');
+    expect(cli).not.toContain('tonemap_opencl');
+  });
+
+  it('P8.1 (PQ base) on QSV keeps apply_dovi=0', () => {
+    const cli = buildFfmpegArgs(
+      opts({ hwAccel: 'qsv', sourceDvProfile: 8, sourceDvBlSignalCompatId: 1 }),
+      silentLog,
+    ).join(' ');
+    expect(cli).toContain('apply_dovi=0');
   });
 });
 
@@ -376,6 +513,14 @@ describe('buildFfmpegArgs: NVENC tonemap_cuda once its probe passes', () => {
     expect(cli).toContain('tonemap_cuda=');
     expect(cli).toContain('apply_dovi=0');
     expect(cli).not.toContain('tonemap_opencl');
+  });
+  it('P8.4 (HLG base): tonemap_cuda applies its RPU', () => {
+    const cli = buildFfmpegArgs(
+      opts({ hwAccel: 'nvenc', sourceDvProfile: 8, sourceDvBlSignalCompatId: 4 }),
+      silentLog,
+    ).join(' ');
+    expect(cli).toContain('tonemap_cuda=');
+    expect(cli).toContain('apply_dovi=1');
   });
 });
 

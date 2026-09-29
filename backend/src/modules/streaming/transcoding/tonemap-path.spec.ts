@@ -145,6 +145,20 @@ describe('resolveTonemapPath', () => {
     ).toBe('vaapi');
   });
 
+  it('dvApplyRpu overrides an explicit vaapi pick with opencl when the bridge passed', () => {
+    openclNoCrop.mockReturnValue(true);
+    expect(
+      resolveTonemapPath('vaapi', { hasCrop: false, dvApplyRpu: true }, 'linux'),
+    ).toBe('opencl');
+  });
+
+  it('dvApplyRpu never forces vulkan: keeps the admin pick when the bridge is down', () => {
+    vulkanTonemap.mockReturnValue(true);
+    expect(
+      resolveTonemapPath('vaapi', { hasCrop: false, dvApplyRpu: true }, 'linux'),
+    ).toBe('vaapi');
+  });
+
   it('dvNoBase prefers opencl over vulkan when both probes passed', () => {
     openclNoCrop.mockReturnValue(true);
     vulkanTonemap.mockReturnValue(true);

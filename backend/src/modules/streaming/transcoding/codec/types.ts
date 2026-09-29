@@ -119,9 +119,9 @@ export interface EncoderInput {
   /** Tone-map curve for the qsv-native OpenCL path (`tonemap_opencl`).
    *  Resolved from the admin setting; absent → {@link DEFAULT_TONEMAP_CURVE}. */
   tonemapCurve?: TonemapCurve;
-  /** No-base Dolby Vision source (see `dvHasNoBase`): the qsv-native OpenCL
-   *  chain passes `apply_dovi=1` instead of the default 0. */
-  dvNoBase?: boolean;
+  /** DV source whose RPU the GPU tone-maps must apply (see `dvAppliesRpu`):
+   *  `apply_dovi=1` instead of 0. */
+  dvApplyRpu: boolean;
   hasBurnIn: boolean;
   hasCrop: boolean;
   /** Surface format on the decoder's output side. Encoders use it to pick

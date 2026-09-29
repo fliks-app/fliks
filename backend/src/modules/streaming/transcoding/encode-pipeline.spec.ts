@@ -49,6 +49,7 @@ function ctx(over: Partial<EncodePipelineContext>): EncodePipelineContext {
     tonemapAlgo: 'auto',
     sourceVideoCodec: 'h264',
     dvNoBase: false,
+    dvApplyRpu: false,
     sourceBitDepth: 8,
     ...over,
   };
@@ -92,6 +93,7 @@ describe('resolveEncodePipeline — Windows QSV routing', () => {
         tonemapAlgo: 'vaapi',
         sourceVideoCodec: 'hevc',
         dvNoBase: true,
+        dvApplyRpu: true,
       }),
       'linux',
     );
@@ -144,6 +146,7 @@ describe('resolveEncodePipeline: Vulkan (libplacebo) tonemap', () => {
         tonemapAlgo: 'vaapi',
         sourceVideoCodec: 'hevc',
         dvNoBase: true,
+        dvApplyRpu: true,
       }),
       'linux',
     );
@@ -165,6 +168,7 @@ describe('resolveEncodePipeline: Vulkan (libplacebo) tonemap', () => {
         tonemapAlgo: 'vaapi',
         sourceVideoCodec: 'hevc',
         dvNoBase: true,
+        dvApplyRpu: true,
       }),
       'linux',
     );
@@ -309,6 +313,7 @@ describe('resolveTonemapReport', () => {
     return resolveTonemapReport(resolveEncodePipeline(SDR_H264, inputs, 'linux'), {
       tonemap: true,
       dvNoBase: inputs.dvNoBase,
+      dvApplyRpu: inputs.dvApplyRpu,
       burnIn: false,
       sourceVideoCodec: 'hevc',
       hdr10Target,

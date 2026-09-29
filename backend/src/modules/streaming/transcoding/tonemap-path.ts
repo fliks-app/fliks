@@ -20,9 +20,11 @@ import type { HwAccelType, TonemapAlgo } from './types';
 /** Concrete filter chain the session-time graph will use, derived from the
  *  admin `TonemapAlgo` setting + boot probe results. `'auto'` prefers opencl,
  *  then (Windows only, no VAAPI device) the vpp_qsv LUT, then vaapi; explicit
- *  picks bypass the probe. `'vulkan'` only comes from a no-base DV source
- *  with the OpenCL bridge down. Shared by `ffmpeg-args` and the playback-info
- *  DTO so the built chain and the reported stats can't drift. */
+ *  picks bypass the probe, but a DV source that needs its RPU applied
+ *  overrides them with opencl when the bridge passed. `'vulkan'` only comes
+ *  from a no-base DV source with the OpenCL bridge down. Shared by
+ *  `ffmpeg-args` and the playback-info DTO so the built chain and the
+ *  reported stats can't drift. */
 export type ResolvedTonemapPath = 'vaapi' | 'opencl' | 'qsv' | 'vulkan';
 
 /** Windows QSV OpenCL is the zero-copy D3D11↔OpenCL bridge (its own probe);
@@ -38,7 +40,7 @@ export function openclBridgeOk(hasCrop: boolean, platform: NodeJS.Platform): boo
 
 export function resolveTonemapPath(
   algo: TonemapAlgo,
-  opts: { hasCrop: boolean; dvNoBase?: boolean } = { hasCrop: false },
+  opts: { hasCrop: boolean; dvNoBase?: boolean; dvApplyRpu?: boolean } = { hasCrop: false },
   platform: NodeJS.Platform = process.platform,
 ): ResolvedTonemapPath {
   // A no-base DV source overrides the admin's pick: OpenCL first, then
@@ -47,8 +49,12 @@ export function resolveTonemapPath(
     if (openclBridgeOk(opts.hasCrop, platform)) return 'opencl';
     if (hostHasVaapi(platform) && isVulkanTonemapEnabled()) return 'vulkan';
   }
+  // An HLG base maps far too dark without its RPU but stays watchable, so
+  // OpenCL is preferred without forcing Vulkan.
+  if ((algo === 'auto' || opts.dvApplyRpu) && openclBridgeOk(opts.hasCrop, platform)) {
+    return 'opencl';
+  }
   if (algo === 'auto') {
-    if (openclBridgeOk(opts.hasCrop, platform)) return 'opencl';
     // No VAAPI device (Windows): 'vaapi' isn't a QSV path, so prefer the
     // vpp_qsv fixed-function LUT when its probe passed rather than force a
     // CPU encode.

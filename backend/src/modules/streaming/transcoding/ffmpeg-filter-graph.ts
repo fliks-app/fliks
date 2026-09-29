@@ -11,11 +11,11 @@ const HDR_STATIC_SIDEDATA_DELETE =
   'sidedata=mode=delete:type=MASTERING_DISPLAY_METADATA,sidedata=mode=delete:type=CONTENT_LIGHT_LEVEL,sidedata=mode=delete:type=DYNAMIC_HDR_PLUS';
 
 /** `tonemap_opencl` (and `tonemap_videotoolbox`) RPU-reshaping option. The
- *  bundled ffmpeg defaults it to 1; only a no-base source (see `dvHasNoBase`)
- *  has a trustworthy RPU to apply, so every other source (including has-base
- *  P7/P8) must pass 0 explicitly. */
-export function dvApplyDoviOpt(dvNoBase: boolean | undefined): string {
-  return `apply_dovi=${dvNoBase ? 1 : 0}`;
+ *  bundled ffmpeg defaults it to 1; only a source that `dvAppliesRpu` needs it
+ *  applied, so every other source (including PQ-base P7/P8.1) must pass 0
+ *  explicitly. */
+export function dvApplyDoviOpt(applyRpu: boolean | undefined): string {
+  return `apply_dovi=${applyRpu ? 1 : 0}`;
 }
 
 /** Shared `tonemap_opencl`/`tonemap_cuda` option string — same option surface
@@ -23,12 +23,12 @@ export function dvApplyDoviOpt(dvNoBase: boolean | undefined): string {
 export function tonemapOpenclOpts(opts: {
   hdr10Target?: boolean;
   curve: TonemapCurve;
-  dvNoBase?: boolean;
+  applyRpu?: boolean;
 }): string {
-  const { hdr10Target, curve, dvNoBase } = opts;
+  const { hdr10Target, curve, applyRpu } = opts;
   return hdr10Target
-    ? `format=p010:t=smpte2084:p=bt2020:m=bt2020:r=tv:${dvApplyDoviOpt(dvNoBase)}`
-    : `format=nv12:p=bt709:t=bt709:m=bt709:tonemap=${curve}:desat=0:${dvApplyDoviOpt(dvNoBase)}`;
+    ? `format=p010:t=smpte2084:p=bt2020:m=bt2020:r=tv:${dvApplyDoviOpt(applyRpu)}`
+    : `format=nv12:p=bt709:t=bt709:m=bt709:tonemap=${curve}:desat=0:${dvApplyDoviOpt(applyRpu)}`;
 }
 
 export interface VideoFilterContext {
@@ -48,11 +48,13 @@ export interface VideoFilterContext {
   /** No-base Dolby Vision source: the CPU fallback chain reads the RPU via
    *  `tonemapx` instead of the RPU-blind `zscale` chain. */
   dvNoBase?: boolean;
+  /** DV source whose RPU the GPU tone-maps apply: see `dvAppliesRpu`. */
+  dvApplyRpu: boolean;
   /** HDR→SDR tone-map curve; absent falls back to {@link DEFAULT_TONEMAP_CURVE}. */
   tonemapCurve?: TonemapCurve;
   /** Route the HDR→SDR tone-map through `tonemap_opencl` (GPU) instead of the
    *  CPU zscale chain: see {@link isOpenclTonemapPath} in `encode-pipeline.ts`
-   *  (NVENC/AMF, or a no-base DV source that needs the RPU-aware bounce). */
+   *  (NVENC/AMF, or a DV source that needs the RPU-aware bounce). */
   openclTonemap?: boolean;
   /** Route NVENC's HDR→SDR tone-map through `tonemap_cuda` (zero-copy).
    *  See {@link isCudaTonemapPath} in `encode-pipeline.ts`. */
@@ -94,6 +96,7 @@ export function buildVideoFilters(
     useVulkanTonemap,
     sourceBitDepth,
     dvNoBase,
+    dvApplyRpu,
     tonemapCurve,
     scaleWidth,
     scaleHeight,
@@ -111,7 +114,7 @@ export function buildVideoFilters(
   // (tonemap-path.ts) confirmed this exact opencl/cuda recipe was probed OK.
   const tonemapOpencl =
     tonemap && !useVaapiTonemap && !useVulkanTonemap
-      ? `,hwmap=derive_device=opencl:mode=read,tonemap_opencl=${tonemapOpenclOpts({ hdr10Target, curve, dvNoBase })}`
+      ? `,hwmap=derive_device=opencl:mode=read,tonemap_opencl=${tonemapOpenclOpts({ hdr10Target, curve, applyRpu: dvApplyRpu })}`
       : '';
   const tonemapVaapi = useVaapiTonemap
     ? ',tonemap_vaapi=format=nv12:t=bt709:p=bt709:m=bt709'
@@ -126,25 +129,26 @@ export function buildVideoFilters(
           cropStr
             ? `crop_w=${crop!.width}:crop_h=${crop!.height}:crop_x=${crop!.x}:crop_y=${crop!.y}:`
             : ''
-        }w=${scaleWidth}:h=${scaleHeight ?? -2}:upscaler=none:downscaler=none:format=bgra:tonemapping=${curve}:peak_detect=0:color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=pc:apply_dolbyvision=${dvNoBase ? 1 : 0},format=vulkan,hwmap=derive_device=vaapi,format=vaapi,scale_vaapi=format=nv12:out_range=tv`
+        }w=${scaleWidth}:h=${scaleHeight ?? -2}:upscaler=none:downscaler=none:format=bgra:tonemapping=${curve}:peak_detect=0:color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=pc:apply_dolbyvision=${dvApplyRpu ? 1 : 0},format=vulkan,hwmap=derive_device=vaapi,format=vaapi,scale_vaapi=format=nv12:out_range=tv`
       : '';
   // nvenc-filters.ts decides whether the surface needs bouncing to CUDA
   // before this runs; the filter itself is a no-op on that question.
   const tonemapCuda =
     tonemap && cudaTonemap
-      ? `,tonemap_cuda=${tonemapOpenclOpts({ hdr10Target, curve, dvNoBase })}`
+      ? `,tonemap_cuda=${tonemapOpenclOpts({ hdr10Target, curve, applyRpu: dvApplyRpu })}`
       : '';
   // CPU tonemap: HDR (PQ/HLG BT.2020) → SDR (BT.709). The opening zscale both
   // linearises the transfer (vf_tonemap needs linear light) and downscales to
   // the output width, so the tone curve + gamut conversion run at output res
   // instead of the source's — real-time vs a stall on a 4K/no-HW-decode source.
   // dvNoBase (non-opencl case) routes through `tonemapx`, the only CPU filter
-  // that reads the DV RPU.
+  // that reads the DV RPU. It only reshapes vdr_rpu_profile 0 (P5): measured
+  // no effect on an HLG base.
   const tonemapCpu = tonemap
     ? openclTonemap
       ? hdr10Target
-        ? `format=p010le,hwupload,tonemap_opencl=t=smpte2084:m=bt2020:p=bt2020:r=tv:${dvApplyDoviOpt(dvNoBase)}:format=p010,hwdownload,format=p010le,`
-        : `format=p010le,hwupload,tonemap_opencl=t=bt709:m=bt709:p=bt709:tonemap=${curve}:desat=0:${dvApplyDoviOpt(dvNoBase)}:format=nv12,hwdownload,format=nv12,`
+        ? `format=p010le,hwupload,tonemap_opencl=t=smpte2084:m=bt2020:p=bt2020:r=tv:${dvApplyDoviOpt(dvApplyRpu)}:format=p010,hwdownload,format=p010le,`
+        : `format=p010le,hwupload,tonemap_opencl=t=bt709:m=bt709:p=bt709:tonemap=${curve}:desat=0:${dvApplyDoviOpt(dvApplyRpu)}:format=nv12,hwdownload,format=nv12,`
       : dvNoBase
         ? hdr10Target
           ? `scale=${scaleWidth}:-2,tonemapx=t=smpte2084:p=bt2020:m=bt2020:format=yuv420p10le:${dvApplyDoviOpt(dvNoBase)},`
