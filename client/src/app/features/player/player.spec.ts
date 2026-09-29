@@ -1002,7 +1002,7 @@ describe('PlayerComponent remux fallback (rejectCopy)', () => {
       source: { container: 'mp4', videoCodec: 'h264', audioCodec: 'aac', durationSeconds: 100, crop },
     });
     // Stale crop from before the fallback: replaced, never stacked on a server-side crop.
-    h.component.videoCropStyle.set({ transform: 'stale' } as any);
+    h.component.webCrop.videoCropStyle.set({ transform: 'stale' } as any);
     h.component.availableSubtitles.set([
       { id: 'sub-1', label: 'English', url: '/subs/1.vtt', language: 'en', burnIn: false },
     ]);
@@ -1021,7 +1021,7 @@ describe('PlayerComponent remux fallback (rejectCopy)', () => {
     h.engine.emit('error', { source: 'shaka', code: 4032 });
     await flush();
 
-    expect(h.component.videoCropStyle()).toBeNull();
+    expect(h.component.webCrop.videoCropStyle()).toBeNull();
     expect(h.engine.addTextTrack).toHaveBeenCalledWith('/subs/1.vtt', 'en', 'English', undefined);
     expect(h.engine.selectTextTrack).toHaveBeenCalledWith({ id: 'sub-1' });
     expect(h.engine.setTextVisibility).toHaveBeenCalledWith(true);
@@ -1331,7 +1331,7 @@ describe('PlayerComponent: cropAppliedByPlayer reads what was actually applied',
     h.component.statsVisible.set(true);
     expect(h.component.playerStats()?.cropAppliedByPlayer).toBe(false);
 
-    h.component.videoCropStyle.set({ width: 100, height: 100, translateX: 0, translateY: 0 });
+    h.component.webCrop.videoCropStyle.set({ width: 100, height: 100, translateX: 0, translateY: 0 });
     expect(h.component.playerStats()?.cropAppliedByPlayer).toBe(true);
   });
 
@@ -1424,7 +1424,7 @@ describe('PlayerComponent: refreshSidAndReload adopts the fresh decision', () =>
 
     expect(h.state.playbackMode()).toBe('transcode');
     // videoCopyStream flipped false server-side (it re-encoded): the client must not double-crop.
-    expect(h.component.videoCropStyle()).toBeNull();
+    expect(h.component.webCrop.videoCropStyle()).toBeNull();
   });
 });
 

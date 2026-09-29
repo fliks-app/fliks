@@ -44,7 +44,7 @@ import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { PlaybackQueueService, QueueItem } from '../../core/services/playback-queue.service';
 import { buildSeriesQueueItems, resolvePlayableFile } from '../../shared/utils/media-play.util';
-import { buildPlayerStats, computeVideoCropStyle, formatAudioLabel, formatAudioParts, inIntroRange, inOutroRange, parseAudioIndex, playbackModeOf, SpriteMetadata, widthForProfile, type CropRect, type VideoCropStyle } from '../../core/utils/player.utils';
+import { buildPlayerStats, formatAudioLabel, formatAudioParts, inIntroRange, inOutroRange, parseAudioIndex, playbackModeOf, SpriteMetadata, widthForProfile, type CropRect } from '../../core/utils/player.utils';
 import { formatErrorDiagnostics, type PlaybackError } from '../../core/services/playback-engine/playback-error';
 import { environment } from '../../../environments/environment';
 import { normalizeLangCode } from '../../core/utils/language.utils';
@@ -100,6 +100,7 @@ import { PlayerControlsComponent } from './controls/player-controls';
 import { PlayerErrorOverlayComponent } from './overlay/player-error-overlay';
 import { ControlsVisibilityService } from './controls/controls-visibility';
 import { CopyFallbackController } from './copy-fallback-controller';
+import { WebVideoCropController } from './web-video-crop-controller';
 import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats-overlay';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 
@@ -157,7 +158,7 @@ class PausableTimeout {
 @Component({
   imports: [TranslatePipe, LucideInfo, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, PlayerErrorOverlayComponent, DefaultFocusDirective],
   templateUrl: './player.html',
-  providers: [ControlsVisibilityService, CopyFallbackController],
+  providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController],
   encapsulation: ViewEncapsulation.None,
   styles: [`
     .player-container {
@@ -450,6 +451,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }), null);
   private readonly copyFallback = inject(CopyFallbackController);
   private readonly _copyFallbackAttach = (this.copyFallback.attach(this), null);
+  readonly webCrop = inject(WebVideoCropController);
+  private readonly _webCropAttach = (this.webCrop.attach(this), null);
   readonly inPipMode = signal(false);
   readonly pipAvailable = signal(true);
   readonly canLockOrientation = Capacitor.getPlatform() === 'ios';
@@ -457,14 +460,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly isLandscape = signal(screen.orientation?.type?.startsWith('landscape') ?? false);
   readonly statsVisible = signal(false);
   readonly fillScreen = signal(false);
-  /** Web-crop box (see `applyWebVideoCrop`); null keeps the template's plain
-   *  `object-fit: contain/cover` binding. */
-  readonly videoCropStyle = signal<VideoCropStyle | null>(null);
-  readonly videoCropTransform = computed(() => {
-    const s = this.videoCropStyle();
-    return s ? `translate(${s.translateX}px, ${s.translateY}px)` : null;
-  });
-  private cropResizeObserver: ResizeObserver | null = null;
   /** Whether {@link applyVideoCrop} last handed mpv a crop; the overlay reads
    *  this instead of re-guessing from `pi`. */
   private readonly desktopCropApplied = signal(false);
@@ -805,7 +800,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       transcodeTierFromVariantHeight: (h, w) => this.qualityManager.transcodeTierFromVariantHeight(h, w),
       translate: this.translate,
       sourceVideoStream: this.currentFile()?.streamInfo?.video?.[0],
-      cropAppliedByPlayer: this.isDesktopNative ? this.desktopCropApplied() : this.videoCropStyle() != null,
+      cropAppliedByPlayer: this.isDesktopNative ? this.desktopCropApplied() : this.webCrop.videoCropStyle() != null,
       isDesktopNative: this.isDesktopNative,
       pipOrFullscreenActive: this.isPipOrNativeFullscreen(),
       activeAudioTrackId,
@@ -834,13 +829,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       screen.orientation?.addEventListener('change', this.onOrientationChange);
     }
 
-    // The container's own box (not window resize) is what the web crop
-    // transform needs, it also catches fullscreen toggles and iOS reflow.
-    if (typeof ResizeObserver !== 'undefined') {
-      this.cropResizeObserver = new ResizeObserver(() => this.refreshWebCrop());
-      const container = this.containerEl()?.nativeElement;
-      if (container) this.cropResizeObserver.observe(container);
-    }
+    this.webCrop.init();
 
     // Eager backdrop from router state — set BEFORE any await so the
     // loading screen renders on the first tick instead of popping in
@@ -1312,7 +1301,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy() {
     this.destroyed = true;
-    this.cropResizeObserver?.disconnect();
+    this.webCrop.destroy();
     if (this.forcedSaveTrailing) clearTimeout(this.forcedSaveTrailing);
     this.remoteCommandSub.unsubscribe();
     this.savePosition();
@@ -4116,17 +4105,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** The rectangle this client should remove: only when this copy is the one
    *  playing (`videoCopyStream`) - a re-encode already cut it server-side. */
-  private activeCropRect(): CropRect | undefined {
+  activeCropRect(): CropRect | undefined {
     return this.playbackInfo?.videoCopyStream ? this.playbackInfo.source?.crop : undefined;
   }
 
-  /** Re-fit the CSS crop to a new container box or decoded size: an anamorphic
-   *  source reports its display size only once loaded. mpv crops decode-side. */
-  protected refreshWebCrop(): void {
-    if (!this.isDesktopNative) this.applyWebVideoCrop(this.activeCropRect());
-  }
-
-  /** Push the black-bar rectangle onto the active engine. */
+  /** Push the black-bar rectangle onto the active engine: mpv crops
+   *  decode-side, every other engine gets {@link WebVideoCropController}'s CSS crop. */
   private applyVideoCrop(): void {
     const c = this.activeCropRect();
     if (this.isDesktopNative) {
@@ -4136,28 +4120,24 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.desktopCropApplied.set(!!c && !!this.engine);
       return;
     }
-    this.applyWebVideoCrop(c);
+    this.webCrop.refresh();
   }
 
-  /** CSS crop for the `<video>` element every non-desktop engine renders
-   *  into; PiP and iOS native fullscreen bypass it (see `cropBypassed`). */
-  private applyWebVideoCrop(c?: CropRect): void {
-    const container = this.containerEl()?.nativeElement;
-    const video = this.videoEl()?.nativeElement;
-    const style =
-      c && container
-        ? computeVideoCropStyle({
-            sourceWidth: this.playbackInfo?.source?.width ?? 0,
-            sourceHeight: this.playbackInfo?.source?.height ?? 0,
-            displayWidth: video?.videoWidth || undefined,
-            displayHeight: video?.videoHeight || undefined,
-            crop: c,
-            containerWidth: container.clientWidth,
-            containerHeight: container.clientHeight,
-            fit: this.fillScreen() ? 'cover' : 'contain',
-          })
-        : null;
-    this.videoCropStyle.set(style);
+  // ── WebVideoCropHost (see web-video-crop-controller.ts) ──
+  isDesktopEngine(): boolean {
+    return this.isDesktopNative;
+  }
+  sourceSize(): { width: number; height: number } {
+    return { width: this.playbackInfo?.source?.width ?? 0, height: this.playbackInfo?.source?.height ?? 0 };
+  }
+  fit(): 'contain' | 'cover' {
+    return this.fillScreen() ? 'cover' : 'contain';
+  }
+  containerElement(): HTMLElement | undefined {
+    return this.containerEl()?.nativeElement;
+  }
+  videoElement(): HTMLVideoElement | undefined {
+    return this.videoEl()?.nativeElement;
   }
 
   async onSelectQualityById(id: string) {
