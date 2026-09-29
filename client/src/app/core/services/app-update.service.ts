@@ -111,8 +111,7 @@ export class AppUpdateService {
   readonly hiddenForServer = signal(readPref(HIDE_UNTIL_KEY));
   readonly neverAheadOfServer = signal(readPref(NEVER_AHEAD_KEY) === 'true');
 
-  /** The user chose to hide this update because the server is older. */
-  readonly hiddenAhead = computed(
+  private readonly hiddenAhead = computed(
     () =>
       this.aheadOfServer() &&
       (this.neverAheadOfServer() || this.hiddenForServer() === this.serverVersion()),

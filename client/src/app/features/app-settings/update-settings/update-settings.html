@@ -50,7 +50,7 @@
     }
 
     @if (update.info(); as info) {
-      @if (!upToDate() && update.hiddenAhead()) {
+      @if (!upToDate() && update.aheadOfServer() && update.neverAheadOfServer()) {
         <p class="text-sm opacity-70">
           {{ 'update_settings.hidden_ahead' | translate: { version: info.version, server: update.serverVersion() } }}
         </p>
