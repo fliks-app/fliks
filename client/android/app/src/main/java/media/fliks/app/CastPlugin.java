@@ -91,6 +91,7 @@ public class CastPlugin extends Plugin {
             runOnMainThread(() -> {
                 sessionPending = false;
                 castSession = null;
+                resumeState = null;
                 releaseWifiLock();
                 notifyJS("connected", false);
             });
@@ -233,7 +234,7 @@ public class CastPlugin extends Plugin {
                 startRouteDiscovery();
 
                 // A session outlives the WebView (Back, reopening from the Cast
-                // notification): hand it and its media back so JS can adopt them.
+                // notification): hand it and the sender's saved state back.
                 castSession = sessionManager.getCurrentCastSession();
                 // Discovery has only just started, so this is usually false; the
                 // route callback raises it as soon as a receiver answers.
@@ -242,9 +243,8 @@ public class CastPlugin extends Plugin {
                     ? castSession.getRemoteMediaClient() : null;
                 if (client != null) {
                     result.put("connected", true);
-                    JSObject media = activeMedia(client);
-                    if (media != null) {
-                        result.put("media", media);
+                    if (resumeState != null && client.getMediaInfo() != null) {
+                        result.put("resume", resumeState);
                         startMediaPolling(client);
                     }
                 }
@@ -256,14 +256,16 @@ public class CastPlugin extends Plugin {
         });
     }
 
-    /** What the receiver plays, from the MediaInfo this sender loaded. */
-    private JSObject activeMedia(RemoteMediaClient client) {
-        MediaInfo info = client.getMediaInfo();
-        if (info == null || info.getContentId() == null) return null;
-        JSObject media = new JSObject().put("url", info.getContentId());
-        JSONObject custom = info.getCustomData();
-        if (custom != null) media.put("customData", custom);
-        return media;
+    /** The sender's cast state, kept by the process across WebView reloads. */
+    private static JSObject resumeState;
+
+    @PluginMethod()
+    public void setResumeState(PluginCall call) {
+        JSObject state = call.getObject("state");
+        runOnMainThread(() -> {
+            resumeState = state;
+            call.resolve();
+        });
     }
 
     @PluginMethod()
