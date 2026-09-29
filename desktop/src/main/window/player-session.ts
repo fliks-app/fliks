@@ -233,7 +233,7 @@ export class PlayerSession {
   /**
    * Pick the playback backend for the current OS:
    *   • macOS — in-process libmpv rendered into a CAOpenGLLayer on the video
-   *     window's NSView (mpv's subprocess --wid crashes there).
+   *     window's NSView (mpv's subprocess ignores --wid there).
    *   • Windows (and other --wid embed platforms) — an mpv subprocess embedded
    *     via the platform EmbedBackend's args.
    */

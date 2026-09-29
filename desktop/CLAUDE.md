@@ -24,8 +24,9 @@ it is NOT the menu-bar server host under `macos/`.
   3. **macOS** — `MacMpvPlayer` (`src/main/mpv/mac-mpv-player.ts`) wraps the
      **in-process** libmpv addon `native/player_mac/addon.mm`, which renders into
      a `CAOpenGLLayer` on the videoWin's NSView (render API, `vo=libmpv`,
-     `hwdec=videotoolbox`, EDR/HDR-capable). mpv's subprocess `--wid` crashes on
-     macOS, so it CAN'T use backend #2; and the macOS window server composites
+     `hwdec=videotoolbox`, EDR/HDR-capable). mpv's subprocess `--wid` doesn't
+     embed on macOS (0.41 ignores the handle and opens its own window), so it
+     CAN'T use backend #2; and the macOS window server composites
      sibling windows correctly, so it doesn't need #1's self-compositor — it
      reuses the Windows-style 3-window `PlayerSession` instead.
 
@@ -52,6 +53,9 @@ it is NOT the menu-bar server host under `macos/`.
   set — it is inert on the render API (needs `vo=gpu-next` + a compatible
   swapchain). `FLIKS_HDR=no` forces the whole pipeline to SDR. On-device
   validation + a `CAMetalLayer` migration for `CAEDRMetadata` are tracked in #605.
+  Dolby Vision P5 can't be reshaped locally on macOS: the render API only offers
+  `gl_video`, which never applies the RPU, and has no gpu-next backend (upstream
+  mpv PR #16818 is still a draft), so P5 stays a server transcode.
 
 The three buildable units: **native addon** (C++), **main/preload bundle**
 (esbuild), **Angular client** (`../client`).
