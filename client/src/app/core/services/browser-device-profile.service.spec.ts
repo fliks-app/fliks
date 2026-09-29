@@ -74,6 +74,17 @@ describe('BrowserDeviceProfileService, cropsBlackBarsLocally on Tizen', () => {
     (window as unknown as { webapis: unknown }).webapis = { avplay: {} };
     expect(configure(tizen).getProfile().cropsBlackBarsLocally).toBe(false);
   });
+
+  it('never claims Dolby Vision, even when the WebView says it decodes dvh1', () => {
+    (window as unknown as { webapis: unknown }).webapis = {
+      avplay: {},
+      avinfo: { isHdrTvSupport: () => true },
+    };
+    vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('probably');
+    const profile = configure(tizen).getProfile();
+    expect(profile.dolbyVisionProfiles ?? []).toEqual([]);
+    expect(profile.supportsDolbyVision).toBe(false);
+  });
 });
 
 describe('BrowserDeviceProfileService, cropsBlackBarsLocally on Capacitor', () => {

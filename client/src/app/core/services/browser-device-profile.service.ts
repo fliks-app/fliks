@@ -610,8 +610,10 @@ export class BrowserDeviceProfileService {
       this.device.isDesktopNative() || isWeb || this.nativeCropsBlackBars() || isTizenCropSupported();
 
     // DV profiles this device can decode AND present, gated under supportsHdr.
-    // iOS/Android resolve it natively; web/webOS probe per codec string.
-    const dolbyVisionProfiles: number[] = !supportsHdr
+    // iOS/Android resolve it natively; web/webOS probe per codec string. Samsung
+    // TVs have no Dolby Vision, and a WebView probe would ask the wrong decoder
+    // (AVPlay plays, not <video>).
+    const dolbyVisionProfiles: number[] = !supportsHdr || tvPlatform === 'tizen'
       ? []
       : Capacitor.isNativePlatform()
         ? this.nativeDolbyVision
