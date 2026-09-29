@@ -9,7 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { Readable } from 'stream';
-import { spawn, type SpawnOptions } from 'child_process';
+import type { SpawnOptions } from 'child_process';
 import { randomUUID } from 'crypto';
 import * as fsSync from 'fs';
 import * as fs from 'fs/promises';
@@ -25,6 +25,7 @@ import { normalizeLanguageCode } from '../../common/constants/app-languages';
 import type { SubtitleRenditionMeta } from './transcoding/types';
 import { assToVtt, srtToVtt } from './subtitle-vtt.util';
 import { withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
+import { spawnBackground } from '../../common/utils/spawn-priority';
 import {
   ATOMIC_TEMP_PREFIX,
   writeFileAtomic,
@@ -698,10 +699,12 @@ export class SubtitleStreamService implements OnModuleInit {
           timeout: EXTRACT_TIMEOUT_MS,
           signal,
         };
-        const proc =
-          background && process.platform === 'linux'
-            ? spawn('ionice', ['-c3', 'nice', '-n19', 'ffmpeg', ...args], opts)
-            : spawn('ffmpeg', args, opts);
+        const proc = spawnBackground('ffmpeg', args, {
+          ...opts,
+          background,
+          io: true,
+          cpu: true,
+        });
         let stderrTail = '';
         proc.stderr?.on('data', (chunk: Buffer) => {
           stderrTail = (stderrTail + chunk.toString()).slice(-2000);

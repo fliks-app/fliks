@@ -11,6 +11,7 @@ import { vaapiRenderNode } from '../streaming/transcoding/hw-device';
 import { ffprobeLines } from '../../common/utils/ffprobe-lines';
 import { mapWithConcurrency } from '../../common/utils/concurrency';
 import { ffmpegSlots, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
+import { priorityExecFileArgs } from '../../common/utils/spawn-priority';
 
 const execFileAsync = promisify(execFile);
 
@@ -1121,10 +1122,11 @@ export class FfprobeService {
       'null',
       '-',
     ];
-    const [cmd, args] =
-      process.platform === 'linux'
-        ? ['ionice', ['-c3', 'nice', '-n19', 'ffmpeg', ...ffmpegArgs]]
-        : ['ffmpeg', ffmpegArgs];
+    const [cmd, args] = priorityExecFileArgs('ffmpeg', ffmpegArgs, {
+      background: true,
+      io: true,
+      cpu: true,
+    });
     try {
       const { stderr } = await withFfmpegSlot(() =>
         execFileAsync(cmd, args, { timeout: 30_000 }),

@@ -11,6 +11,10 @@ import { Season } from '../media/entities/season.entity';
 import { EpisodeMarker } from './entities/episode-marker.entity';
 import { SettingsService } from '../settings/settings.service';
 import { ffmpegSlots, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
+import {
+  spawnBackground,
+  priorityExecFileArgs,
+} from '../../common/utils/spawn-priority';
 
 const execFileAsync = promisify(execFile);
 
@@ -816,10 +820,11 @@ export class IntroDetectionService {
     maxSeconds: number,
   ): Promise<Fingerprint> {
     const fpcalcArgs = ['-raw', '-length', String(maxSeconds), absPath];
-    const [cmd, args] =
-      process.platform === 'linux'
-        ? ['ionice', ['-c3', 'nice', '-n19', 'fpcalc', ...fpcalcArgs]]
-        : ['fpcalc', fpcalcArgs];
+    const [cmd, args] = priorityExecFileArgs('fpcalc', fpcalcArgs, {
+      background: true,
+      io: true,
+      cpu: true,
+    });
     const { stdout } = await withFfmpegSlot(() =>
       execFileAsync(cmd, args, {
         timeout: 180_000,
@@ -881,10 +886,11 @@ export class IntroDetectionService {
         '-',
       ];
       // Low I/O + CPU priority for background detection
-      const ffmpeg =
-        process.platform === 'linux'
-          ? spawn('ionice', ['-c3', 'nice', '-n19', 'ffmpeg', ...ffmpegArgs])
-          : spawn('ffmpeg', ffmpegArgs);
+      const ffmpeg = spawnBackground('ffmpeg', ffmpegArgs, {
+        background: true,
+        io: true,
+        cpu: true,
+      });
       const fpcalc = spawn(
         'fpcalc',
         ['-raw', '-length', String(lengthSec), '-'],
@@ -897,7 +903,7 @@ export class IntroDetectionService {
       fpcalc.stdout.on('data', (d) => (stdout += d.toString()));
       fpcalc.stderr.on('data', (d) => (fpcalcErr += d.toString()));
       ffmpeg.stderr?.on('data', (d) => (ffmpegErr += d.toString()));
-      ffmpeg.stdout.pipe(fpcalc.stdin);
+      ffmpeg.stdout!.pipe(fpcalc.stdin);
       ffmpeg.on('error', reject);
       fpcalc.on('error', reject);
 
