@@ -1,6 +1,7 @@
 package media.fliks.app;
 
 import android.content.Context;
+import android.os.Build;
 import android.net.wifi.WifiManager;
 import android.util.Log;
 
@@ -160,7 +161,11 @@ public class CastPlugin extends Plugin {
         if (wifiLock == null) {
             WifiManager wm = (WifiManager) getContext().getApplicationContext()
                     .getSystemService(Context.WIFI_SERVICE);
-            wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "fliks:cast");
+            @SuppressWarnings("deprecation")
+            int mode = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                    ? WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+                    : WifiManager.WIFI_MODE_FULL_HIGH_PERF;
+            wifiLock = wm.createWifiLock(mode, "fliks:cast");
         }
         if (!wifiLock.isHeld()) wifiLock.acquire();
     }

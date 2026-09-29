@@ -1,13 +1,10 @@
 package media.fliks.app;
 
-import android.os.Build;
-import android.view.View;
 import android.view.Window;
-import android.view.WindowInsets;
-import android.view.WindowInsetsController;
-import android.view.WindowManager;
 
 import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -16,7 +13,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 /**
  * Capacitor plugin to toggle Android immersive mode.
- * Hides status bar, navigation bar, and optionally draws behind the notch/cutout.
+ * Hides status bar and navigation bar; the cutout mode stays the app-wide baseline.
  *
  * Usage from JS:
  *   Immersive.enter({ displayBehindNotch: true })
@@ -27,7 +24,6 @@ public class ImmersivePlugin extends Plugin {
 
     @PluginMethod()
     public void enter(PluginCall call) {
-        boolean behindNotch = call.getBoolean("displayBehindNotch", false);
 
         getActivity().runOnUiThread(() -> {
             Window window = getActivity().getWindow();
@@ -38,33 +34,11 @@ public class ImmersivePlugin extends Plugin {
                 ((MainActivity) getActivity()).setImmersiveMode(true);
             }
 
-            // Cutout / notch
-            if (behindNotch && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                WindowManager.LayoutParams lp = window.getAttributes();
-                lp.layoutInDisplayCutoutMode =
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
-                window.setAttributes(lp);
-            }
-
-            // Hide system bars
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                WindowInsetsController controller = window.getInsetsController();
-                if (controller != null) {
-                    controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
-                    controller.setSystemBarsBehavior(
-                        WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                    );
-                }
-            } else {
-                window.getDecorView().setSystemUiVisibility(
-                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                    | View.SYSTEM_UI_FLAG_FULLSCREEN
-                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                    | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                );
-            }
+            WindowInsetsControllerCompat controller =
+                WindowCompat.getInsetsController(window, window.getDecorView());
+            controller.hide(WindowInsetsCompat.Type.systemBars());
+            controller.setSystemBarsBehavior(
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
             call.resolve();
         });
     }
@@ -103,34 +77,8 @@ public class ImmersivePlugin extends Plugin {
                 ((MainActivity) getActivity()).setImmersiveMode(false);
             }
 
-            // Keep drawing into the short-edge cutout (the app-wide baseline),
-            // not DEFAULT — DEFAULT re-letterboxes the landscape punch-hole
-            // with a black bar once the player closes.
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                WindowManager.LayoutParams lp = window.getAttributes();
-                lp.layoutInDisplayCutoutMode =
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
-                window.setAttributes(lp);
-            }
-
-            // Show system bars
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                WindowInsetsController controller = window.getInsetsController();
-                if (controller != null) {
-                    controller.show(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
-                }
-            } else {
-                // On pre-R, `SYSTEM_UI_FLAG_VISIBLE` (== 0) wipes every
-                // flag including the LAYOUT_FULLSCREEN bits that make
-                // the WebView draw under the system bars. Keep those
-                // bits so layout stays edge-to-edge while the bars
-                // themselves become visible again.
-                window.getDecorView().setSystemUiVisibility(
-                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                );
-            }
+            WindowCompat.getInsetsController(window, window.getDecorView())
+                .show(WindowInsetsCompat.Type.systemBars());
             // Re-assert edge-to-edge now the bars are shown again: keep the
             // WebView drawing under them (full width) and re-dispatch the
             // insets + transparent bar colours. Without this the returning

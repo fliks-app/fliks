@@ -22,7 +22,7 @@ import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy;
  *
  * Override the retry decision: for the response codes the default
  * marks as terminal, return a backoff delay (1s, 2s, 4s, 8s, …)
- * capped by {@link DefaultLoadErrorHandlingPolicy#DEFAULT_TRACK_BLACKLIST_MS}.
+ * capped by {@link DefaultLoadErrorHandlingPolicy#DEFAULT_TRACK_EXCLUSION_MS}.
  * Combined with a higher {@code minimumLoadableRetryCount}, the
  * loader keeps probing for ~10s before surfacing the error — long
  * enough to absorb the ffmpeg cold-start.
@@ -53,7 +53,7 @@ public class RetryHttp404LoadErrorPolicy extends DefaultLoadErrorHandlingPolicy 
                 // policy's blacklist window so we don't keep retrying
                 // a permanently-dead URL forever.
                 long delay = 1000L * (1L << Math.min(info.errorCount - 1, 4));
-                return Math.min(delay, DEFAULT_TRACK_BLACKLIST_MS);
+                return Math.min(delay, DEFAULT_TRACK_EXCLUSION_MS);
             }
         }
         return super.getRetryDelayMsFor(info);
