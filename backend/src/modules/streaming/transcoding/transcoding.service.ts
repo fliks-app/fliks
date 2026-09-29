@@ -164,60 +164,47 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     // wait for it, but the codec selector defaults to "every encoder
     // usable" until the probe completes (the runtime fallback layer
     // catches stragglers).
-    void runEncoderProbes(ALL_DESCRIPTORS, this.log, this.detectedHwAccel);
+    const encoderProbes = runEncoderProbes(ALL_DESCRIPTORS, this.log, this.detectedHwAccel);
     // Same one-frame validation pass on the decoder side: synthesise a
     // tiny bitstream per codec, hand it to each descriptor under its
-    // real `-hwaccel ...` setup, drop the frame to /dev/null. Both
-    // probes fire fire-and-forget — by the time a transcode session
-    // actually runs, both maps are populated.
+    // real `-hwaccel ...` setup, drop the frame to /dev/null.
     void runDecoderProbes(ALL_DECODERS, this.log);
-    // Probe whether the iGPU's fixed-function HDR tone-mapping unit
-    // is wired up. Only the upstream `vpp_qsv tonemap=1` path uses
-    // it; gates the single-pass HDR→SDR chain in the QSV encoder
-    // filter helpers. Skipped on non-Intel hosts so AMD / NVIDIA / macOS
-    // boots don't burn ~30s on two doomed ffmpeg sub-processes (each
-    // probe times out at 15s on hosts without the qsv encoder).
-    if (this.detectedHwAccel === 'qsv') {
-      void runVppQsvTonemapProbe(this.log);
-      // Windows QSV OpenCL tone-map (CPU-bounce). The VAAPI-based
-      // tonemap-opencl probe below can't run here (no VAAPI on Windows).
-      if (process.platform === 'win32') {
-        void runQsvOpenclTonemapProbe(this.log);
+    // Tone-map probes share the GPU with the encoder probes: run them after,
+    // one at a time (concurrent contexts give false negatives, encoder-probe.ts).
+    void (async () => {
+      await encoderProbes.catch(() => {});
+      const hwAccel = this.detectedHwAccel;
+      if (hwAccel === 'qsv') {
+        await runVppQsvTonemapProbe(this.log);
+        // No VAAPI on Windows, so the QSV device needs its own bridge probe.
+        if (process.platform === 'win32') {
+          await runQsvOpenclTonemapProbe(this.log);
+        }
       }
-    }
-    // tonemap_opencl probe runs on every Linux Intel host (QSV or VAAPI):
-    // both paths can route through the opencl tonemap chain at session
-    // time, but the QSV↔OpenCL bridge is fragile and we need to know
-    // upfront whether `tonemapAlgo='auto'` can safely default to opencl.
-    if (
-      (this.detectedHwAccel === 'qsv' || this.detectedHwAccel === 'vaapi') &&
-      process.platform !== 'win32'
-    ) {
-      void runTonemapOpenclProbe(this.log);
-    }
-    // Standalone OpenCL tone-map — the GPU HDR→SDR path for NVENC and AMF
-    // (neither has an on-encoder tonemap; OpenCL rides the same compute stack
-    // as CUDA/NVENC and AMD's driver, unlike the GLX/Vulkan chain which fails
-    // headless).
-    if (this.detectedHwAccel === 'nvenc' || this.detectedHwAccel === 'amf') {
-      void runOpenclTonemapProbe(this.log, this.detectedHwAccel);
-    }
-    // Vulkan (libplacebo) GPU tone-map: the no-base DV fallback when the
-    // OpenCL bridge is down. Linux-only; no VAAPI device elsewhere.
-    if (this.detectedHwAccel === 'vaapi' && process.platform === 'linux') {
-      void runVulkanTonemapProbe(this.log);
-    }
-    // Zero-copy CUDA HDR→SDR tone-map: keeps decode → scale → tonemap →
-    // encode on CUDA surfaces when the bundled ffmpeg has tonemap_cuda.
-    if (this.detectedHwAccel === 'nvenc') {
-      void runCudaTonemapProbe(this.log);
-    }
-    // Zero-copy AMD GPU scale + HDR tonemap via D3D11↔OpenCL interop.
-    // Probed so an unavailable chain degrades to the CPU scale instead of
-    // crashing every session.
-    if (this.detectedHwAccel === 'amf') {
-      void runAmfOpenclProbe(this.log);
-    }
+      if ((hwAccel === 'qsv' || hwAccel === 'vaapi') && process.platform !== 'win32') {
+        await runTonemapOpenclProbe(this.log, hwAccel);
+      }
+      // Standalone OpenCL tone-map: NVENC and AMF have no on-encoder tonemap,
+      // and OpenCL is the one compute stack that works headless on both.
+      if (hwAccel === 'nvenc' || hwAccel === 'amf') {
+        await runOpenclTonemapProbe(this.log, hwAccel);
+      }
+      // Vulkan (libplacebo): the no-base DV fallback when the OpenCL bridge
+      // is down. Linux-only; no VAAPI device elsewhere.
+      if (hwAccel === 'vaapi' && process.platform === 'linux') {
+        await runVulkanTonemapProbe(this.log);
+      }
+      // Zero-copy CUDA HDR→SDR tone-map: decode → scale → tonemap → encode
+      // stays on CUDA surfaces when the bundled ffmpeg has tonemap_cuda.
+      if (hwAccel === 'nvenc') {
+        await runCudaTonemapProbe(this.log);
+      }
+      // Zero-copy AMD scale + HDR tonemap via D3D11↔OpenCL interop; probed so
+      // an unavailable chain degrades to the CPU scale instead of crashing.
+      if (hwAccel === 'amf') {
+        await runAmfOpenclProbe(this.log);
+      }
+    })().catch((err: Error) => this.log.warn(`[tonemap-probes] aborted: ${err.message}`));
 
     // Tight cleanup cadence — paired with the live-session 30 s TTL +
     // 60 s job grace, this puts ffmpeg death within ~100 s of the last

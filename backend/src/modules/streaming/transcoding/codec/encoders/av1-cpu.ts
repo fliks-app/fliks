@@ -86,12 +86,12 @@ export const av1CpuHdr10: EncoderDescriptor = {
   supportsHdrMetadata: () => true,
   codecString: (target: EncoderTarget) => av1CodecString(target, 10),
   buildArgs(input: EncoderInput): string[] {
-    const { target, preset, filters, tonemap } = input;
+    const { target, preset, filters } = input;
     const w = target.width;
     const { bitrate, bufsize } = svtAv1Rates(target.videoBitrateBps);
-    // tonemap here is always a no-base DV source reshaped into HDR10 (see
-    // dvNoBaseHdr10Eligible): filters.tonemapCpu already carries the RPU
-    // reshape (tonemapx, apply_dovi=1) and the 10-bit output format.
+    // A populated filters.tonemapCpu here is always a no-base DV source
+    // reshaped into HDR10 (see dvNoBaseHdr10Eligible): tonemapx with
+    // apply_dovi=1 and the 10-bit output format already applied.
     return [
       '-c:v',
       'libsvtav1',
@@ -106,7 +106,7 @@ export const av1CpuHdr10: EncoderDescriptor = {
       '-svtav1-params',
       `mastering-display=${svtMasterDisplayString(input.hdrMetadata)}:content-light=${maxCllString(input.hdrMetadata)}`,
       '-vf',
-      `${filters.cpuCropPrefix}${tonemap ? filters.tonemapCpu : ''}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=yuv420p10le${filters.burnInFilter}`,
+      `${filters.cpuCropPrefix}${filters.tonemapCpu}scale=${w}:${scaleEvenHeight(w)}:flags=lanczos,format=yuv420p10le${filters.burnInFilter}`,
       '-g',
       String(target.gopSize),
       '-keyint_min',

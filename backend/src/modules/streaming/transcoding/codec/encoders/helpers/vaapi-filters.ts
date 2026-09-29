@@ -32,13 +32,18 @@ export function vaapiScaleFilter8bit(input: EncoderInput): string {
  *  as-is. `tonemapOpencl` is the one exception: a no-base DV source reshaped
  *  into HDR10 still needs the RPU-aware OpenCL bounce (see dvNoBaseHdr10Eligible). */
 export function vaapiScaleFilter10bit(input: EncoderInput): string {
-  const { target, filters, hasBurnIn } = input;
+  const { target, filters, hasBurnIn, tonemap } = input;
   const w = target.width;
   const burnInTail = hasBurnIn
     ? `,hwdownload,format=p010le${filters.burnInFilter},hwupload=derive_device=vaapi:extra_hw_frames=16`
     : '';
   if (filters.tonemapOpencl) {
     return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:extra_hw_frames=24${filters.tonemapOpencl},hwmap=derive_device=vaapi:mode=write:reverse=1,format=vaapi${burnInTail}`;
+  }
+  // No other tonemap step exists at 10-bit: shipping the plain scale here
+  // would tag raw HDR pixels with whatever the caller intended as output.
+  if (tonemap) {
+    throw new Error('vaapiScaleFilter10bit: tonemap requested with no opencl chain');
   }
   return `${filters.hwCropPrefix}scale_vaapi=w=${w}:h=-2:format=p010le${burnInTail}`;
 }

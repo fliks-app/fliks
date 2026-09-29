@@ -43,6 +43,7 @@ import {
   type TranscodeSession,
 } from './transcoding';
 import { tsHeadroom } from './transcoding/ffmpeg-args';
+import type { HwAccelType } from './transcoding/types';
 import {
   DEFAULT_SEGMENT_DURATION,
   EARLY_PROBE_SEGMENTS,
@@ -1111,12 +1112,11 @@ export class StreamingController {
       response.hwAccel === 'qsv' || response.hwAccel === 'vaapi';
     const cudaTonemap = isCudaTonemapPath(!!response.tonemapping, response.hwAccel);
     // Same resolver + inputs as the spawn (stream-builder.service.ts), so the
-    // reported path can't drift from whether the AMF zero-copy chain actually runs.
-    const amfOpenclAvailable =
-      response.hwAccel === 'amf' &&
-      !!videoVariant &&
+    // reported path can't drift from the chain the spawn builds (AMF zero-copy, qsv→vaapi).
+    const pipeline =
+      videoVariant &&
       resolveEncodePipeline(videoVariant, {
-        hwAccel: response.hwAccel,
+        hwAccel: response.hwAccel as HwAccelType,
         crop: hasCrop,
         burnIn: !!burnIn?.filter,
         tonemap: !!response.tonemapping,
@@ -1124,7 +1124,8 @@ export class StreamingController {
         sourceVideoCodec: resolved.mediaFile.streamInfo?.video?.[0]?.codec,
         dvNoBase,
         sourceBitDepth: isSourceHdr || dvNoBase ? 10 : 8,
-      }).amfOpenclAvailable;
+      });
+    const amfOpenclAvailable = response.hwAccel === 'amf' && !!pipeline?.amfOpenclAvailable;
     const openclTonemap =
       isOpenclTonemapPath(!!response.tonemapping, response.hwAccel, dvNoBase) ||
       amfOpenclAvailable;
@@ -1136,7 +1137,9 @@ export class StreamingController {
     );
     const tonemapAlgo = response.tonemapping
       ? hwTonemap
-        ? resolveTonemapPath(ss.tonemapAlgo, { hasCrop, dvNoBase })
+        ? pipeline?.useVaapiTonemap
+          ? 'vaapi'
+          : resolveTonemapPath(ss.tonemapAlgo, { hasCrop, dvNoBase })
         : cudaTonemap
           ? 'cuda'
           : openclTonemap

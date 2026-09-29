@@ -1,9 +1,4 @@
-import type {
-  CodecVariant,
-  EncoderDescriptor,
-  EncoderRegistry,
-  HdrFormat,
-} from '../types';
+import type { CodecVariant, EncoderDescriptor, EncoderRegistry } from '../types';
 import type { HwAccelType } from '../../types';
 import { isEncoderEnabled } from '../encoder-probe';
 import { h264Qsv } from './h264-qsv';
@@ -119,13 +114,7 @@ export const ALL_DESCRIPTORS = DESCRIPTORS;
  *  `null` HDR — SDR rungs never resolve to HDR descriptors and vice
  *  versa. */
 function variantMatches(d: CodecVariant, q: CodecVariant): boolean {
-  return (
-    d.codec === q.codec && d.bitDepth === q.bitDepth && sameHdr(d.hdr, q.hdr)
-  );
-}
-
-function sameHdr(a: HdrFormat | null, b: HdrFormat | null): boolean {
-  return a === b;
+  return d.codec === q.codec && d.bitDepth === q.bitDepth && d.hdr === q.hdr;
 }
 
 export const encoderRegistry: EncoderRegistry = new StaticRegistry();

@@ -9,6 +9,7 @@ import {
   vaapiDeviceInitArgs,
   vaapiRenderNode,
 } from '../hw-device';
+import { ffmpegTail } from './probe-utils';
 
 const execFileAsync = promisify(execFile);
 
@@ -50,7 +51,7 @@ export function vaapiWritesHdrMetadata(): boolean {
 
 /** ffmpeg logs the VAAPI driver's vendor string at verbose level during
  *  device init, so this needs no `vainfo` dependency and no real encode. */
-async function detectVaapiIntelDriver(): Promise<boolean> {
+async function detectVaapiIntelDriver(log: Logger): Promise<boolean> {
   try {
     const { stderr } = await execFileAsync(
       'ffmpeg',
@@ -72,7 +73,8 @@ async function detectVaapiIntelDriver(): Promise<boolean> {
       { timeout: 10_000 },
     );
     return /VAAPI driver:\s*Intel iHD/i.test(stderr);
-  } catch {
+  } catch (err) {
+    log.log(`[encoder-probe] VAAPI driver detection failed: ${ffmpegTail(err)}`);
     return false;
   }
 }
@@ -134,7 +136,10 @@ export async function runEncoderProbes(
   // Only the VAAPI HDR10 descriptors read this; skip the extra spawn otherwise.
   if (hwDescriptors.some((d) => d.hwAccel === 'vaapi' && d.variant.hdr === 'HDR10')) {
     vaapiIhdCheckedNode = vaapiRenderNode();
-    vaapiIsIntelIhd = await detectVaapiIntelDriver();
+    vaapiIsIntelIhd = await detectVaapiIntelDriver(log);
+    log.log(
+      `[encoder-probe] vaapiWritesHdrMetadata=${vaapiIsIntelIhd} (node=${vaapiIhdCheckedNode})`,
+    );
   }
 
   const runOne = async (
@@ -149,12 +154,10 @@ export async function runEncoderProbes(
     return { id: d.id, ok };
   };
 
-  // CPU probes in parallel (no shared state). Every HW probe runs
-  // strictly serially after the previous one finishes — QSV and VAAPI
-  // are nominally different `hwAccel`s but on Linux Intel they share
-  // a single iGPU device, and running them in parallel families still
-  // produced the 'internal encoding error 24' false negatives we were
-  // chasing.
+  // CPU probes in parallel (no shared state). Every HW probe runs strictly
+  // serially — QSV and VAAPI are nominally different `hwAccel`s but share a
+  // single iGPU device on Linux Intel, and concurrent contexts there produce
+  // 'internal encoding error 24' false negatives.
   const cpuTask = Promise.all(cpuDescriptors.map(runOne));
 
   const hwTask = (async () => {
@@ -244,11 +247,9 @@ async function probeOne(d: EncoderDescriptor): Promise<boolean> {
   // representative pipeline:
   //
   //  - VAAPI: `-init_hw_device vaapi=va ... -vf format=NV12,hwupload`.
-  //    Format step matters — `yuv420p,hwupload` produces a VAAPI
-  //    surface whose internal layout h264_vaapi rejects with
-  //    'internal encoding error 24' at 320x180 specifically (probe
-  //    false-negative we hit). nv12 / p010le sidestep the small-frame
-  //    layout quirk.
+  //    Format step matters — `yuv420p,hwupload` produces a VAAPI surface
+  //    whose internal layout h264_vaapi rejects with 'internal encoding
+  //    error 24' at 320x180 specifically; nv12 / p010le sidestep it.
   //  - QSV: the platform device chain from `hw-device.ts` (native
   //    `qsv=qs` on Windows, `vaapi=va` + `qsv=qs@va` on Linux), then
   //    `hwupload,format=qsv`. Feeding qsv surfaces (not raw lavfi CPU

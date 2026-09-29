@@ -1,21 +1,29 @@
+import { Logger } from '@nestjs/common';
 import { requestedHwAccelFor } from './hw-detect';
 import { hostHasVaapi } from './hw-device';
 import { encoderRegistry } from './codec/encoders';
 import { isDecoderEnabled } from './codec/decoder-probe';
 import { decoderRegistry, findQsvNativeDecoder, findAmfNativeDecoder } from './codec/decoders';
 import { isVppQsvTonemapEnabled } from './codec/vpp-qsv-probe';
-import {
-  isTonemapOpenclEnabled,
-  isTonemapOpenclEnabledWithCrop,
-} from './codec/tonemap-opencl-probe';
-import { isQsvOpenclTonemapEnabled } from './codec/qsv-opencl-probe';
 import { isAmfOpenclEnabled } from './codec/amf-opencl-probe';
 import { isOpenclTonemapEnabled } from './codec/opencl-tonemap-probe';
 import { isCudaTonemapEnabled } from './codec/cuda-tonemap-probe';
-import { resolveTonemapPath } from './tonemap-path';
+import { openclBridgeOk, resolveTonemapPath } from './tonemap-path';
 import { normaliseSourceCodec } from './codec/normalise';
 import type { BitDepth, CodecVariant } from './codec/types';
 import type { HwAccelType, TonemapAlgo } from './types';
+
+const logger = new Logger('EncodePipeline');
+
+// Resolved on every playback-info and spawn: log the misconfiguration once.
+let qsvTonemapFallbackWarned = false;
+function warnQsvTonemapFallbackOnce(toVaapi: boolean): void {
+  if (qsvTonemapFallbackWarned) return;
+  qsvTonemapFallbackWarned = true;
+  logger.warn(
+    `tonemapAlgo=qsv: no vpp_qsv tonemap for this session (LUT probe, burn-in or decoder); using ${toVaapi ? 'tonemap_vaapi' : 'a CPU encode'}`,
+  );
+}
 
 /** NVENC's zero-copy HDR→SDR path, shared by `ffmpeg-args` and the
  *  playback-info controller so the argv and the stats label can't drift. */
@@ -121,16 +129,9 @@ export interface ResolvedEncodePipeline {
   amfOpenclAvailable: boolean;
 }
 
-/**
- * Resolve the encode pipeline for a frozen output variant on this host: the
- * requested vs effective hwAccel, the encoder descriptor (with registry CPU
- * fallback), the tone-map path, and the QSV-native eligibility. Single source of
- * truth shared by the segment builder (ffmpeg-args, which then drives the argv +
- * decoder) and the playback decision (stream-builder, which reports the
- * effective hwAccel in the stats) so the reported encoder can't drift from the
- * one that actually runs. Pure: depends only on the inputs + the boot-time
- * encoder/decoder/tonemap probe state (stable between playback-info and spawn).
- */
+/** Resolve the encode pipeline for a frozen output variant on this host. Pure
+ *  and shared by ffmpeg-args (argv) and stream-builder (stats) so neither can
+ *  report an encoder that doesn't match what the other actually runs. */
 export function resolveEncodePipeline(
   variant: CodecVariant,
   ctx: EncodePipelineContext,
@@ -168,11 +169,7 @@ export function resolveEncodePipeline(
     { hasCrop: ctx.crop, dvNoBase: ctx.dvNoBase },
     platform,
   );
-  const tonemapOpenclOk = noVaapi
-    ? isQsvOpenclTonemapEnabled()
-    : ctx.crop
-      ? isTonemapOpenclEnabledWithCrop()
-      : isTonemapOpenclEnabled();
+  const tonemapOpenclOk = openclBridgeOk(ctx.crop, platform);
   // A no-base DV source has no RPU-aware vaapi/qsv tonemap: when neither GPU
   // bridge is actually usable, keep the pipeline off HW. Vulkan needs a VAAPI
   // encoder and no burn-in; `resolveTonemapPath` doesn't know either.
@@ -220,13 +217,20 @@ export function resolveEncodePipeline(
   }
   const encoder = encoderRegistry.resolve(variant, requestedHwAccel);
   const effectiveHwAccel: HwAccelType = encoder?.hwAccel ?? 'none';
+  // tonemapAlgo='qsv' without the vpp_qsv LUT has no qsv step of its own: run
+  // the same tonemap_vaapi chain as 'vaapi' rather than the unprobed OpenCL one.
+  const qsvTonemapFallsBackToVaapi =
+    ctx.tonemap && tonemapPath === 'qsv' && !qsvNativeAvailable && !noVaapi;
+  if (ctx.tonemap && tonemapPath === 'qsv' && !qsvNativeAvailable && ctx.hwAccel === 'qsv') {
+    warnQsvTonemapFallbackOnce(qsvTonemapFallsBackToVaapi);
+  }
   // AMF tonemaps HDR->SDR on CPU (no VAAPI to host the tonemap), so it needs
   // the CPU tonemap chain populated — never the vaapi in-place path.
   const useVaapiTonemap =
     !dvNoBaseNeedsCpu &&
     ctx.tonemap &&
-    tonemapPath === 'vaapi' &&
-    effectiveHwAccel !== 'amf';
+    effectiveHwAccel !== 'amf' &&
+    (tonemapPath === 'vaapi' || qsvTonemapFallsBackToVaapi);
 
   return {
     requestedHwAccel,

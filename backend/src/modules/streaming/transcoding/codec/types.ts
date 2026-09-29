@@ -117,7 +117,7 @@ export interface EncoderInput {
    *  meaningful when `tonemap` is true. */
   tonemapPath: 'vaapi' | 'opencl' | 'qsv' | 'vulkan';
   /** Tone-map curve for the qsv-native OpenCL path (`tonemap_opencl`).
-   *  Resolved from the admin setting; absent → `hable`. */
+   *  Resolved from the admin setting; absent → {@link DEFAULT_TONEMAP_CURVE}. */
   tonemapCurve?: TonemapCurve;
   /** No-base Dolby Vision source (see `dvHasNoBase`): the qsv-native OpenCL
    *  chain passes `apply_dovi=1` instead of the default 0. */

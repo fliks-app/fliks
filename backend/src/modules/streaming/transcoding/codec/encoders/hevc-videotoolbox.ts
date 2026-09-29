@@ -64,10 +64,15 @@ export const hevcVideotoolboxHdr10: EncoderDescriptor = {
   supportsHdrMetadata: () => true,
   codecString: (target: EncoderTarget) => hevcMain10CodecString(target),
   buildArgs(input: EncoderInput): string[] {
-    const { target, early, filters, inputSurface } = input;
+    const { target, early, filters, inputSurface, tonemap } = input;
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
     const onMetal = inputSurface === 'videotoolbox';
+    // No RPU-aware tonemap exists here (dvNoBaseHdr10PathSupported excludes
+    // videotoolbox): the plain scale would tag untouched pixels as HDR10.
+    if (tonemap) {
+      throw new Error('hevc_videotoolbox_main10: tonemap requested but not supported');
+    }
     // Metal fast path: scale_vt resizes the p010 IOSurface in place, HDR
     // tags untouched, instead of a CPU `format=p010le` scale.
     const vf = onMetal

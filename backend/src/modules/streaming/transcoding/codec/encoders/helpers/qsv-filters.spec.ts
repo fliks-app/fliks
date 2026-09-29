@@ -61,7 +61,7 @@ describe('qsvScaleFilter8bit', () => {
       'hwmap=derive_device=qsv,' +
         'vpp_qsv=w=1920:h=804:format=p010le,' +
         'hwmap=derive_device=opencl,' +
-        'tonemap_opencl=tonemap=mobius:t=bt709:m=bt709:p=bt709:format=nv12:apply_dovi=0,' +
+        'tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=mobius:desat=0:apply_dovi=0,' +
         'hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv',
     );
   });
@@ -76,7 +76,7 @@ describe('qsvScaleFilter8bit', () => {
           dvNoBase: true,
         }),
       ),
-    ).toContain(':format=nv12:apply_dovi=1,');
+    ).toContain(':desat=0:apply_dovi=1,');
   });
 
   it('keeps the zero-copy QSV↔OpenCL chain for a Linux qsv surface', () => {
@@ -117,7 +117,7 @@ describe('qsvScaleFilter8bit', () => {
           tonemapCurve: 'mobius',
         }),
       ),
-    ).toContain('tonemap_opencl=tonemap=mobius:');
+    ).toContain(':tonemap=mobius:desat=0');
   });
 
   it('honours the configured curve on the Linux OpenCL chain', () => {
@@ -337,7 +337,7 @@ describe('qsvScaleFilter10bit', () => {
       'hwmap=derive_device=qsv,' +
         'vpp_qsv=w=1920:h=804:format=p010le,' +
         'hwmap=derive_device=opencl:mode=read,' +
-        'tonemap_opencl=format=p010:p=bt2020:t=smpte2084:m=bt2020:r=tv:apply_dovi=1,' +
+        'tonemap_opencl=format=p010:t=smpte2084:p=bt2020:m=bt2020:r=tv:apply_dovi=1,' +
         'hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,' +
         'format=qsv',
     );
@@ -357,7 +357,7 @@ describe('qsvScaleFilter10bit', () => {
       'hwmap=derive_device=qsv,' +
         'vpp_qsv=w=1920:h=804:format=p010le,' +
         'hwmap=derive_device=opencl,' +
-        'tonemap_opencl=t=smpte2084:m=bt2020:p=bt2020:r=tv:format=p010:apply_dovi=1,' +
+        'tonemap_opencl=format=p010:t=smpte2084:p=bt2020:m=bt2020:r=tv:apply_dovi=1,' +
         'hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv',
     );
   });
