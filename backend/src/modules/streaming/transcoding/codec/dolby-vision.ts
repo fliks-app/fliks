@@ -47,6 +47,15 @@ export function dvHasNoBase(
   return profile === 5 || (profile === 10 && (compat === 0 || compat == null));
 }
 
+/** P8.4/P10.4: HLG base with no static HDR metadata. Apple's HLG→SDR
+ *  conversion of that base alone maps far too dark; the RPU carries the grade. */
+export function dvHasHlgBase(
+  profile: number | undefined,
+  compat: number | undefined,
+): boolean {
+  return (profile === 8 || profile === 10) && compat === 4;
+}
+
 /** RFC 8216bis SUPPLEMENTAL-CODECS for a DV base layer (P8→`dvh1.08.LL`,
  *  P10→`dav1.10.LL`); null unless it passes the bundled ffmpeg's dvcC/dvvC gate. */
 export function dvSupplementalCodecs(v?: DvStream): string | null {

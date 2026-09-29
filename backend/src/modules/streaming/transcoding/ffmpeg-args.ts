@@ -46,7 +46,7 @@ import {
 } from './codec/decoders';
 import { normaliseSourceCodec } from './codec/normalise';
 import { hevcMainTierCapBps } from './codec/codec-strings';
-import { dvHasNoBase } from './codec/dolby-vision';
+import { dvHasHlgBase, dvHasNoBase } from './codec/dolby-vision';
 import { varStreamMapLayout } from './audio-layout';
 import { inputSeekSeconds } from './source-timeline';
 import {
@@ -1256,6 +1256,7 @@ export function buildFfmpegArgs(
     tonemapPath,
     tonemapCurve,
     dvNoBase,
+    dvHlgBase: dvHasHlgBase(sourceDvProfile, sourceDvBlSignalCompatId),
     hasBurnIn: !!burnIn?.filter,
     hasCrop: !!crop,
     hdrMetadata: sourceHdrMetadata,

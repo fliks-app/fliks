@@ -270,6 +270,38 @@ describe('buildFfmpegArgs: VideoToolbox (macOS)', () => {
     expect(vfOf(args)).toContain('apply_dovi=0');
   });
 
+  it('P8.4 (HLG base) without crop: RPU-aware tonemap_videotoolbox, apply_dovi=1', () => {
+    const args = buildFfmpegArgs(
+      vtOpts({ sourceDvProfile: 8, sourceDvBlSignalCompatId: 4 }),
+      silentLog,
+    );
+    expect(vfOf(args)).toBe(
+      'scale_vt=w=1920:h=-2,tonemap_videotoolbox=tonemap=mobius:t=bt709:m=bt709:p=bt709:range=tv:apply_dovi=1:format=nv12',
+    );
+  });
+
+  it('P8.4 (HLG base) with crop: apply_dovi=1', () => {
+    const args = buildFfmpegArgs(
+      vtOpts({
+        sourceDvProfile: 8,
+        sourceDvBlSignalCompatId: 4,
+        crop: { width: 3840, height: 1600, x: 0, y: 280 },
+      }),
+      silentLog,
+    );
+    expect(vfOf(args)).toContain('apply_dovi=1');
+  });
+
+  it('P8.1 (PQ base) without crop keeps the plain scale_vt chain', () => {
+    const args = buildFfmpegArgs(
+      vtOpts({ sourceDvProfile: 8, sourceDvBlSignalCompatId: 1 }),
+      silentLog,
+    );
+    expect(vfOf(args)).toBe(
+      'scale_vt=w=1920:h=-2:color_matrix=bt709:color_primaries=bt709:color_transfer=bt709',
+    );
+  });
+
   it('HDR10 without crop keeps the plain scale_vt chain', () => {
     const args = buildFfmpegArgs(vtOpts({}), silentLog);
     expect(vfOf(args)).toBe(

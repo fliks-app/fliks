@@ -122,6 +122,8 @@ export interface EncoderInput {
   /** No-base Dolby Vision source (see `dvHasNoBase`): the qsv-native OpenCL
    *  chain passes `apply_dovi=1` instead of the default 0. */
   dvNoBase?: boolean;
+  /** DV over an HLG base (see `dvHasHlgBase`): the VT tone-map applies the RPU. */
+  dvHlgBase?: boolean;
   hasBurnIn: boolean;
   hasCrop: boolean;
   /** Surface format on the decoder's output side. Encoders use it to pick
