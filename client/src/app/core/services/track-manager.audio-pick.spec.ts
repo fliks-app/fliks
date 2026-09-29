@@ -99,4 +99,41 @@ describe('TrackManagerService audio track mapping — engine folds by language',
     service.saveAudioSelection('audio-2', alignedTracks as any, 1, streams);
     expect(save).toHaveBeenCalledWith(1, 'fr:main:2');
   });
+
+  it('selects nothing when the track started on is the one resolved before load', () => {
+    const service = setup();
+    vi.spyOn(service['playerSettings'], 'get').mockReturnValue(
+      { rememberAudioSelections: true } as any,
+    );
+    vi.spyOn(service['playerSettings'], 'getRememberedAudioTrack').mockReturnValue('fra:main:6');
+    const alignedTracks = [
+      { id: 'audio-0', language: 'eng' },
+      { id: 'audio-1', language: 'fra' },
+      { id: 'audio-2', language: 'fra' },
+    ];
+    const preloadIndex = service['playerSettings'].resolveAudioStreamIndex(1, streams, 1, null);
+    expect(preloadIndex).toBe(1);
+    const onSelect = vi.fn();
+    service.autoSelectAudioTrack(
+      alignedTracks, 1, 1, `audio-${preloadIndex}`, onSelect, undefined, streams,
+    );
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('keeps the remembered track once active, whatever the language mode targets', () => {
+    const service = setup();
+    vi.spyOn(service['playerSettings'], 'get').mockReturnValue(
+      { rememberAudioSelections: true } as any,
+    );
+    vi.spyOn(service['playerSettings'], 'getRememberedAudioTrack').mockReturnValue('fra:main:6');
+    vi.spyOn(service['playerSettings'], 'audioLanguage').mockReturnValue('eng');
+    const alignedTracks = [
+      { id: 'audio-0', language: 'eng' },
+      { id: 'audio-1', language: 'fra' },
+      { id: 'audio-2', language: 'fra' },
+    ];
+    const onSelect = vi.fn();
+    service.autoSelectAudioTrack(alignedTracks, 1, 1, 'audio-1', onSelect, 'eng', streams);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
 });

@@ -1,4 +1,4 @@
-import { Injectable, effect, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { pausedFlagForState, type PlaybackEngine } from './playback-engine/playback-engine';
 import {
@@ -30,6 +30,17 @@ export class PlayerStateService {
    *  browser can't decode — that only flaps the card/spinner. */
   readonly fatalNoRetry = signal(false);
   readonly paused = signal(true);
+  /** A session autoplays: until the engine reports `playing`, or the viewer
+   *  pauses or the launch fails, it is in flight. Engines report
+   *  `paused`/`buffering` between ready and playing. */
+  readonly startingPlayback = signal(true);
+  /** Set when the browser refused to start playback without a user gesture, and
+   *  cleared as soon as anything actually plays. */
+  readonly autoplayBlocked = signal(false);
+  /** The transport the viewer sees: never paused mid-launch unless refused. */
+  readonly uiPaused = computed(
+    () => this.paused() && (!this.startingPlayback() || this.autoplayBlocked()),
+  );
   readonly currentTime = signal(0);
   readonly duration = signal(0);
   /** Raw output level (0..1), independent of {@link muted}. Mirrors the engine
@@ -176,6 +187,9 @@ export class PlayerStateService {
     engine.on('stateChanged', (e) => {
       const paused = pausedFlagForState(e.state);
       if (paused !== undefined) this.paused.set(paused);
+      if (e.state === 'playing' || e.state === 'error' || e.state === 'ended') {
+        this.startingPlayback.set(false);
+      }
       // Never latch it while paused: the only clear path needs a playhead that
       // advances, so a stall reported after a pause would spin forever and the
       // play button hides behind it. The engine re-reports on resume.
@@ -233,6 +247,7 @@ export class PlayerStateService {
         this.buffering.set(true);
         return;
       }
+      this.startingPlayback.set(false);
       const source = e.source ?? 'engine';
       // A DV passthrough that fails to decode wins over everything else (even a
       // platform errorKey): tell the user Dolby Vision failed on this device.
@@ -268,6 +283,7 @@ export class PlayerStateService {
     this.error.set(null);
     this.fatalNoRetry.set(false);
     this.paused.set(true);
+    this.startingPlayback.set(true);
     this.currentTime.set(0);
     this.duration.set(0);
     this.buffering.set(false);

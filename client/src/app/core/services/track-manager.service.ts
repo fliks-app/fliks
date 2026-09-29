@@ -90,8 +90,8 @@ export class TrackManagerService {
       const source = streams?.length ? streams : tracks;
       const idx = saved ? matchRememberedAudio(saved, source) : undefined;
       const match = idx != null ? this.trackForStreamIndex(idx, source, tracks) : undefined;
-      if (match && match.id !== activeAudioTrackId) {
-        onSelect(match.id);
+      if (match) {
+        if (match.id !== activeAudioTrackId) onSelect(match.id);
         return;
       }
     }

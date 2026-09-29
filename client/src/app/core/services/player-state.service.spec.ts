@@ -108,3 +108,48 @@ describe('PlayerStateService.failWith', () => {
     expect(service.error()?.source).toBe('session');
   });
 });
+
+describe('PlayerStateService startup transport', () => {
+  it('never exposes paused between ready and playing', () => {
+    const { service, state } = setup();
+    service.reset();
+    state('paused');
+    state('buffering');
+    expect(service.paused()).toBe(true);
+    expect(service.uiPaused()).toBe(false);
+    state('playing');
+    expect(service.uiPaused()).toBe(false);
+  });
+
+  it('shows play for a refused autoplay', () => {
+    const { service, state } = setup();
+    service.reset();
+    state('paused');
+    service.autoplayBlocked.set(true);
+    expect(service.uiPaused()).toBe(true);
+  });
+
+  it('shows play for a pause after playback started', () => {
+    const { service, state } = setup();
+    service.reset();
+    state('playing');
+    state('paused');
+    expect(service.uiPaused()).toBe(true);
+  });
+
+  it('stops counting the launch as in flight on an engine error event', () => {
+    const { service, state, fire } = setup();
+    service.reset();
+    state('paused');
+    fire('error', { source: 'engine', code: 1 });
+    expect(service.startingPlayback()).toBe(false);
+  });
+
+  it('arms again for the next session', () => {
+    const { service, state } = setup();
+    state('playing');
+    service.reset();
+    state('paused');
+    expect(service.uiPaused()).toBe(false);
+  });
+});
