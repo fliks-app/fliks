@@ -1,4 +1,4 @@
-node_modules/
+node_modules
 dist/
 release/
 # The Angular client the CI stages here (cp client/dist/... → web/) for
