@@ -41,6 +41,13 @@ describe('SourceScanService', () => {
     expect(await svc.lookup(3, file)).toEqual({ scan: null, version: sourceVersion(now) });
   });
 
+  it('falls back to no scan instead of rejecting when the scan row lookup fails', async () => {
+    const st = fs.statSync(file);
+    const { scans, svc } = setup();
+    scans.findOne.mockRejectedValue(new Error('connection terminated'));
+    await expect(svc.lookup(3, file)).resolves.toEqual({ scan: null, version: sourceVersion(st) });
+  });
+
   it('scans once for concurrent callers, stores it, and the clock break on the row', async () => {
     const scan = jest.spyOn(sourceScan, 'scanSource').mockResolvedValue(result);
     const { scans, files, svc } = setup();
@@ -67,6 +74,23 @@ describe('SourceScanService', () => {
     await svc.scheduleIfNeeded(3, file, ts as never);
     await svc.scheduleIfNeeded(3, file, { ...ts, video: [] } as never);
     expect(scan).not.toHaveBeenCalled();
+  });
+
+  it('restores a clock-break mark a rescan dropped from streamInfo, on lookup', async () => {
+    const st = fs.statSync(file);
+    const { files, svc } = setup({ size: st.size, mtimeMs: st.mtimeMs, scan: result });
+    await svc.lookup(3, file);
+    expect(files.update).toHaveBeenCalledWith(3, {
+      streamInfo: { ...ts, timestampBreakSeconds: 32.8 },
+    });
+  });
+
+  it('does not rewrite streamInfo when the clock-break mark already matches', async () => {
+    const st = fs.statSync(file);
+    const { files, svc } = setup({ size: st.size, mtimeMs: st.mtimeMs, scan: result });
+    files.findOne.mockResolvedValue({ id: 3, streamInfo: { ...ts, timestampBreakSeconds: 32.8 } });
+    await svc.lookup(3, file);
+    expect(files.update).not.toHaveBeenCalled();
   });
 
   it('drops a scan of a file that changed under it', async () => {

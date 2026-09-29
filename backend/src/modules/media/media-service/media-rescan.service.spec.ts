@@ -138,6 +138,22 @@ describe('MediaRescanService.enrichMediaFileFromDisk — quality from probe resu
     expect(dbFile.quality).toBe('WEBDL-1080p');
     expect(h.mediaFileRepo.save).not.toHaveBeenCalled();
   });
+
+  it('carries the stored clock-break mark into the fresh probe result', async () => {
+    const h = buildHarness();
+    const dbFile = dbFileIn(mediaDir, 'Ember.Horizon.2022.1080p.WEB-DL-RELGRP.mkv', 'WEBDL-1080p');
+    dbFile.streamInfo = { timestampBreakSeconds: 32.8 } as never;
+    h.mediaFileRepo.findOne.mockResolvedValue(dbFile);
+    h.ffprobe.detectMediaFileInfo.mockResolvedValue({
+      video: [{ width: 1920, height: 1080 }],
+      audio: [],
+      subtitles: [],
+    });
+
+    await h.service.enrichMediaFileFromDisk(5);
+
+    expect((dbFile.streamInfo as any).timestampBreakSeconds).toBe(32.8);
+  });
 });
 
 describe('MediaRescanService.rescanFiles — quality from probe results', () => {
@@ -182,6 +198,29 @@ describe('MediaRescanService.rescanFiles — quality from probe results', () => 
     await h.service.rescanFiles(8, { skipWarmup: true });
 
     expect(dbFile.quality).toBe('WEBDL-1080p');
+  });
+
+  it('carries the stored clock-break mark into the refresh probe result', async () => {
+    const h = buildHarness();
+    const filename = 'Ember.Horizon.2022.1080p.WEB-DL-RELGRP.mkv';
+    fs.writeFileSync(path.join(mediaDir, filename), 'video-bytes');
+    const dbFile = {
+      id: 9,
+      relativePath: filename,
+      size: 11,
+      quality: 'WEBDL-1080p',
+      streamInfo: { video: [], timestampBreakSeconds: 32.8 } as never,
+    };
+    h.mediaRepo.findOne.mockResolvedValue(movieMedia({ files: [dbFile] }));
+    h.ffprobe.detectMediaFileInfo.mockResolvedValue({
+      video: [{ width: 1920, height: 1080 }],
+      audio: [],
+      subtitles: [],
+    });
+
+    await h.service.rescanFiles(8, { skipWarmup: true });
+
+    expect((dbFile.streamInfo as any).timestampBreakSeconds).toBe(32.8);
   });
 
   it('never deletes anything inside the media folder: a .cache directory survives', async () => {

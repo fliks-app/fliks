@@ -622,27 +622,28 @@ export class RemuxSegmentAssembler {
     return true;
   }
 
-  /** Every complete (moof, mdat) pair past `a.offset`, advancing it: a
-   *  trailing unpaired moof (its mdat still being written) is left for the
-   *  next call, which re-reads it once complete. */
-  private async readAudioFrames(a: AudioRendition): Promise<RawFrame[]> {
+  /** Every complete (moof, mdat) pair past `a.offset`, each paired with the
+   *  offset past it: a trailing unpaired moof (its mdat still being written)
+   *  is left for the next call, which re-reads it once complete. The caller
+   *  advances `a.offset` only once a frame is actually consumed, so a failure
+   *  mid-batch (an atomic write throwing) re-reads from the failed frame
+   *  instead of skipping it. */
+  private async readAudioFrames(a: AudioRendition): Promise<{ frame: RawFrame; offset: number }[]> {
     const boxes = await tailBoxes(a.file, a.offset);
-    const frames: RawFrame[] = [];
+    const frames: { frame: RawFrame; offset: number }[] = [];
     let i = 0;
     while (i + 1 < boxes.length && boxes[i].type === 'moof' && boxes[i + 1].type === 'mdat') {
-      frames.push(parseFrame(boxes[i].buf, boxes[i + 1].buf));
-      a.offset = boxes[i + 1].start + boxes[i + 1].size;
+      frames.push({
+        frame: parseFrame(boxes[i].buf, boxes[i + 1].buf),
+        offset: boxes[i + 1].start + boxes[i + 1].size,
+      });
       i += 2;
     }
     return frames;
   }
 
-  /** Source-time boundary of served segment `i`, in `a`'s own timescale
-   *  ticks, compared as integers so two runs never flip on float noise
-   *  right at a boundary. The grid's real boundary, or (uniform fallback)
-   *  `segmentDuration` multiples from the plan's own origin — never the
-   *  run's own landing point, which drifts from the video's fixed grid
-   *  by whatever the run's own start is offset from segment 0. */
+  /** Segment `i`'s planned source-time boundary, in integer ticks so two runs
+   *  never disagree on float noise — the grid's boundary, never this run's own drifting landing point. */
   private boundaryTicks(a: AudioRendition, i: number): bigint {
     return BigInt(Math.round(planBoundarySeconds(this.plan, i) * a.timescale));
   }
@@ -693,13 +694,14 @@ export class RemuxSegmentAssembler {
 
   private async pumpAudioFrames(a: AudioRendition): Promise<void> {
     if (a.delta == null && !(await this.openAudioRun(a))) return;
-    for (const frame of await this.readAudioFrames(a)) {
+    for (const { frame, offset } of await this.readAudioFrames(a)) {
       if (!a.deltaClamped) {
         if (frame.tfdt + a.delta! < 0n) a.delta = -frame.tfdt;
         a.deltaClamped = true;
       }
       if (!this.hasMoreSegments(a)) break;
       await this.groupAudioFrame(a, frame);
+      a.offset = offset;
     }
   }
 
@@ -837,6 +839,9 @@ function buildFragment(
   data: Buffer[],
 ): Buffer {
   const useCts = samples.some((s) => s.cts != null);
+  // Version 0's cts is unsigned by spec; a negative value only round-trips
+  // through a reader if the box says version 1 (signed).
+  const trunVersion = samples.some((s) => (s.cts ?? 0) < 0) ? 1 : 0;
   const mfhd = makeBox('mfhd', [fullbox(0, 0), u32(sequenceNumber)]);
   const tfhd = makeBox('tfhd', [fullbox(0, TFHD_BASE_IS_MOOF), u32(trackId)]);
   const tfdtValue = Buffer.alloc(8);
@@ -849,7 +854,7 @@ function buildFragment(
       TRUN_SAMPLE_SIZE |
       TRUN_SAMPLE_FLAGS |
       (useCts ? TRUN_SAMPLE_CTS : 0);
-    const parts = [fullbox(0, flags), u32(samples.length), u32(dataOffset)];
+    const parts = [fullbox(trunVersion, flags), u32(samples.length), u32(dataOffset)];
     for (const s of samples) {
       parts.push(u32(s.duration), u32(s.size), u32(s.flags));
       if (useCts) parts.push(u32(s.cts ?? 0));

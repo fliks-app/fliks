@@ -79,6 +79,8 @@ export class FfmpegThrottleService implements OnModuleInit, OnModuleDestroy {
   /** Set once a settings-load failure has been logged, so a hiccup doesn't
    *  spam a warning on every 5s tick until it recovers. */
   private settingsErrorLogged = false;
+  /** Guards against an overlapping tick when one runs past CHECK_INTERVAL_MS. */
+  private ticking = false;
 
   constructor(
     private readonly transcoding: TranscodingService,
@@ -96,6 +98,16 @@ export class FfmpegThrottleService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async tick(): Promise<void> {
+    if (this.ticking) return;
+    this.ticking = true;
+    try {
+      await this.tickOnce();
+    } finally {
+      this.ticking = false;
+    }
+  }
+
+  private async tickOnce(): Promise<void> {
     if (getPauseCapability() === 'none') return;
     let settings: Awaited<ReturnType<StreamingSettingsCache['get']>>;
     try {

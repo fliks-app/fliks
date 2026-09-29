@@ -117,6 +117,11 @@ export class MediaRescanService {
     if (!streamInfo) return;
 
     dbFile.size = diskSize;
+    // A fresh probe never carries the clock-break mark the background source
+    // scan stored; carry it over so re-enriching a file can't drop it.
+    if (dbFile.streamInfo?.timestampBreakSeconds != null) {
+      streamInfo.streamInfo.timestampBreakSeconds = dbFile.streamInfo.timestampBreakSeconds;
+    }
     dbFile.streamInfo = streamInfo.streamInfo;
     // No usable video dimensions: keep the file's existing quality rather than
     // downgrading it to the filename-only 480p fallback.
@@ -688,6 +693,11 @@ export class MediaRescanService {
         if (streamInfo.video[0]) {
           streamInfo.video[0].crop = (dbFile.streamInfo as any).video[0].crop;
         }
+      }
+      // A fresh probe never carries the clock-break mark the background source
+      // scan stored; carry it over so a rescan can't drop it.
+      if (dbFile.streamInfo?.timestampBreakSeconds != null) {
+        streamInfo.timestampBreakSeconds = dbFile.streamInfo.timestampBreakSeconds;
       }
       dbFile.streamInfo = streamInfo;
       // No usable video dimensions: keep the existing quality instead of

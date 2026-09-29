@@ -36,7 +36,9 @@ export class SourceScanService {
     private readonly files: Repository<MediaFile>,
   ) {}
 
-  /** The stored scan of the file as it is now. Never scans. */
+  /** The stored scan of the file as it is now. Never scans. A rescan can
+   *  clobber `streamInfo.timestampBreakSeconds` (it re-probes wholesale); this
+   *  restores it from the still-valid scan row so every reader self-heals. */
   async lookup(mediaFileId: number, absolutePath: string): Promise<HeldScan> {
     let st: { size: number; mtimeMs: number };
     try {
@@ -45,9 +47,17 @@ export class SourceScanService {
       this.log.warn(`Cannot stat ${absolutePath}: ${(err as Error).message}`);
       return { scan: null, version: null };
     }
-    const row = await this.scans.findOne({ where: { mediaFileId } });
-    const current = row?.size === st.size && row.mtimeMs === st.mtimeMs;
-    return { scan: current ? row.scan : null, version: sourceVersion(st) };
+    try {
+      const row = await this.scans.findOne({ where: { mediaFileId } });
+      const current = row?.size === st.size && row.mtimeMs === st.mtimeMs;
+      if (current && row.scan.breakSeconds != null) {
+        await this.storeClockBreak(mediaFileId, path.basename(absolutePath), row.scan);
+      }
+      return { scan: current ? row.scan : null, version: sourceVersion(st) };
+    } catch (err) {
+      this.log.warn(`Scan lookup failed for file #${mediaFileId}: ${(err as Error).message}`);
+      return { scan: null, version: sourceVersion(st) };
+    }
   }
 
   /** Scan the file unless its current version was, in the background budget.
@@ -100,16 +110,18 @@ export class SourceScanService {
     }
   }
 
-  /** The timeline reads the break off the stream info (`sourceTimeline`). */
+  /** The timeline reads the break off the stream info (`sourceTimeline`).
+   *  Idempotent: a no-op once stored, so `lookup` can call it on every request. */
   private async storeClockBreak(mediaFileId: number, label: string, scan: SourceScan) {
-    // Re-read: a rescan may have replaced the stream info meanwhile.
     const file = await this.files.findOne({ where: { id: mediaFileId } });
     if (!file?.streamInfo) return;
+    const next = scan.breakSeconds ?? null;
+    if ((file.streamInfo.timestampBreakSeconds ?? null) === next) return;
     await this.files.update(mediaFileId, {
-      streamInfo: { ...file.streamInfo, timestampBreakSeconds: scan.breakSeconds ?? null },
+      streamInfo: { ...file.streamInfo, timestampBreakSeconds: next },
     });
-    if (scan.breakSeconds != null) {
-      this.log.warn(`"${label}": the timestamps break at ${scan.breakSeconds}s; playback ends there`);
+    if (next != null) {
+      this.log.warn(`"${label}": the timestamps break at ${next}s; playback ends there`);
     }
   }
 }
