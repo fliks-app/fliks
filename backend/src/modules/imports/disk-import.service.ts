@@ -418,9 +418,14 @@ export class DiskImportService {
       throw new BadRequestException('Reorganize needs a title with its own folder');
     }
 
-    const { media, created } = dto.externalId
-      ? await this.findOrImportIdentified(dto, addedByUserId)
-      : await this.findOrCreateUnmatched(dto, library, addedByUserId);
+    let media: Media;
+    let created: boolean;
+    let lockKey: string | undefined;
+    if (dto.externalId) {
+      ({ media, created } = await this.findOrImportIdentified(dto, addedByUserId));
+    } else {
+      ({ media, created, lockKey } = await this.findOrCreateUnmatched(dto, library, addedByUserId));
+    }
 
     if (media.library && media.library.id !== dto.libraryId) {
       throw new BadRequestException(
@@ -530,9 +535,14 @@ export class DiskImportService {
     // A newly created unmatched row that failed to link any file is dead
     // weight: for a root movie especially, an ambiguous folderName '' twin
     // would otherwise linger and confuse the next reuse lookup. A file already at its
-    // destination is served by this row, so it stays.
-    if (!dto.externalId && created && linked === 0 && alreadyPresent === 0) {
-      await this.mediaRepo.delete(media.id);
+    // destination is served by this row, so it stays. Guarded by the same lock as its
+    // creation, and re-checked inside it: a concurrent group can reuse the row and link
+    // its own file between our creation and this delete.
+    if (!dto.externalId && created && linked === 0 && alreadyPresent === 0 && lockKey) {
+      await this.withKeyedLock(lockKey, async () => {
+        const stillEmpty = (await this.fileRepo.count({ where: { media: { id: media.id } } })) === 0;
+        if (stillEmpty) await this.mediaRepo.delete(media.id);
+      });
     }
 
     this.logger.log(
@@ -619,7 +629,7 @@ export class DiskImportService {
     dto: RelinkOrphansDto,
     library: Library,
     addedByUserId: number | null,
-  ): Promise<{ media: Media; created: boolean }> {
+  ): Promise<{ media: Media; created: boolean; lockKey: string }> {
     const sample = path.resolve(dto.files[0].filePath);
     const artworkDir =
       dto.type !== MediaType.SERIES
@@ -657,7 +667,8 @@ export class DiskImportService {
       ? await this.namedFolder(dto.type, title, year)
       : dto.folderName;
 
-    return this.withKeyedLock(`${library.id}:${dto.type}:${folderName}`, async () => {
+    const lockKey = `${library.id}:${dto.type}:${folderName}`;
+    const result = await this.withKeyedLock(lockKey, async () => {
       // Whoever already owns this folder is reused, identified or not.
       const where = {
         library: { id: library.id },
@@ -727,6 +738,7 @@ export class DiskImportService {
       }
       return { media, created: true };
     });
+    return { ...result, lockKey };
   }
 
   /**

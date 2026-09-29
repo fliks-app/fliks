@@ -27,6 +27,7 @@ const dto = (overrides: Partial<RelinkOrphansDto> = {}): RelinkOrphansDto =>
 
 function makeService() {
   const mediaRepo = { findOne: jest.fn(), find: jest.fn(), update: jest.fn(), delete: jest.fn() };
+  const fileRepo = { count: jest.fn().mockResolvedValue(0) };
   const mediaService = {
     importMedia: jest.fn(),
     createUnmatched: jest.fn(),
@@ -44,7 +45,7 @@ function makeService() {
   mockedFindLocalArtwork.mockResolvedValue({});
   const service = new DiskImportService(
     mediaRepo as never,
-    null as never, // fileRepo
+    fileRepo as never,
     null as never, // seasonRepo
     mediaService as never,
     null as never, // naming
@@ -57,7 +58,17 @@ function makeService() {
     events as never,
     { upsertPending: jest.fn(), upsertRunning: jest.fn(), remove: jest.fn() } as never,
   );
-  return { service, mediaRepo, mediaService, libraries, metadata, events, postImportQueue, nfo };
+  return {
+    service,
+    mediaRepo,
+    fileRepo,
+    mediaService,
+    libraries,
+    metadata,
+    events,
+    postImportQueue,
+    nfo,
+  };
 }
 
 const unmatchedRow = (id: number, folderName: string, type = MediaType.MOVIE) => ({
@@ -592,6 +603,24 @@ describe('DiskImportService.relinkOrphans: movie files directly at the library r
 
     expect(res.linked).toBe(0);
     expect(mediaRepo.delete).toHaveBeenCalledWith(5);
+  });
+
+  it('keeps the row when a concurrent group already linked a file to it', async () => {
+    const { service, mediaRepo, mediaService, fileRepo } = makeService();
+    mediaRepo.find.mockResolvedValueOnce([]);
+    mediaRepo.findOne.mockResolvedValueOnce(unmatchedRow(6, ''));
+    mediaService.createUnmatched.mockResolvedValue({ id: 6 });
+    mediaService.linkExistingFileInPlace.mockResolvedValue({
+      error: 'file outside the media folder',
+    });
+    // A concurrent relink reused this row and linked its own file first.
+    fileRepo.count.mockResolvedValueOnce(1);
+
+    const res = await service.relinkOrphans(rootDto(), null);
+
+    expect(res.linked).toBe(0);
+    expect(fileRepo.count).toHaveBeenCalledWith({ where: { media: { id: 6 } } });
+    expect(mediaRepo.delete).not.toHaveBeenCalled();
   });
 });
 
