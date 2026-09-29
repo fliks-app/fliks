@@ -901,7 +901,11 @@ export class StreamingController {
 
     // Never waits on a scan: an unscanned file plays without one and is scanned
     // for its next plays. Skipped on a stale row until the re-probe below chains it.
-    const held = await this.sourceScans.lookup(mediaFileId, resolved.absolutePath);
+    const held = await this.sourceScans.lookup(
+      mediaFileId,
+      resolved.absolutePath,
+      resolved.mediaFile.streamInfo,
+    );
     const staleProbe = needsReprobe(resolved.mediaFile.streamInfo);
     if (!held.scan && !staleProbe) {
       void this.sourceScans.scheduleIfNeeded(

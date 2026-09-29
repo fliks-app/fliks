@@ -88,13 +88,23 @@ export class StaleProbeRescanService {
       }
       await this.files.update(mediaFileId, { streamInfo: fresh });
       this.log.log(`Re-probed stale streamInfo for file #${mediaFileId} "${absolutePath}"`);
-      // The prior scan (if any) ran against the stale row; redo it fresh now.
+      // A no-op unless the scan is missing or stale: the bytes (hence its
+      // stored version) didn't change, only the streamInfo just fixed above.
       void this.sourceScans.scheduleIfNeeded(mediaFileId, absolutePath, fresh);
     } catch (err) {
       this.log.warn(
         `Background re-probe failed for file #${mediaFileId}: ${(err as Error).message}`,
       );
       this.rejected.add(mediaFileId);
+      // The keyframe scan doesn't depend on this backfill succeeding.
+      try {
+        const file = await this.files.findOne({ where: { id: mediaFileId } });
+        if (file?.streamInfo) {
+          void this.sourceScans.scheduleIfNeeded(mediaFileId, absolutePath, file.streamInfo);
+        }
+      } catch {
+        /* best-effort: the file row itself is unreachable too */
+      }
     }
   }
 }

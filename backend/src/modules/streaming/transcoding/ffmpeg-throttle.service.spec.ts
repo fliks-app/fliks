@@ -1,4 +1,10 @@
-import { decideThrottle, isThrottleEligible, jobPlayheadSeconds } from './ffmpeg-throttle.service';
+import {
+  decideThrottle,
+  isThrottleEligible,
+  jobPlayheadSeconds,
+  FfmpegThrottleService,
+} from './ffmpeg-throttle.service';
+import { setPauseCapabilityForTest } from './ffmpeg-pause';
 
 describe('decideThrottle', () => {
   it('pauses once ahead exceeds the threshold', () => {
@@ -53,6 +59,32 @@ describe('jobPlayheadSeconds (multi-viewer max)', () => {
     const live = [{ position: 0, lastRequestedSegment: 4 }];
     const remuxAssembler = { segmentContentSeconds: (i: number) => (i === 4 ? 35 : 0) };
     expect(jobPlayheadSeconds(live, 6, undefined, remuxAssembler)).toBe(35);
+  });
+});
+
+describe('FfmpegThrottleService: tick re-entrancy', () => {
+  it('drops an overlapping tick instead of running two at once', async () => {
+    setPauseCapabilityForTest('signal');
+    let resolveSettings!: () => void;
+    const settings = {
+      get: jest.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveSettings = () =>
+              resolve({ throttleEnabled: false, throttleThresholdSeconds: 90 });
+          }),
+      ),
+    };
+    const transcoding = { getActiveSessions: jest.fn().mockReturnValue([]) };
+    const svc = new FfmpegThrottleService(transcoding as never, {} as never, settings as never);
+    const tick = (svc as unknown as { tick(): Promise<void> }).tick.bind(svc);
+
+    const first = tick();
+    const second = tick();
+    expect(settings.get).toHaveBeenCalledTimes(1);
+    resolveSettings();
+    await Promise.all([first, second]);
+    expect(settings.get).toHaveBeenCalledTimes(1);
   });
 });
 

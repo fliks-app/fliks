@@ -39,6 +39,12 @@ export async function fileExists(p: string): Promise<boolean> {
   }
 }
 
+/** Where cached segments live: flat, or the var_stream_map '0/' video subdir.
+ *  The layout is part of the profile hash, so one cache dir only holds one. */
+function segmentDirs(cachePath: string): string[] {
+  return [cachePath, path.join(cachePath, '0')];
+}
+
 /** Check if a segment (or its predecessor) exists. Checks .m4s, .ts, root, and subdir 0/. */
 export async function segmentNearby(
   cachePath: string,
@@ -47,7 +53,7 @@ export async function segmentNearby(
   const num = String(segment).padStart(4, '0');
   const prevNum = segment > 0 ? String(segment - 1).padStart(4, '0') : null;
   const exts = ['.m4s', '.ts'];
-  const dirs = [cachePath, path.join(cachePath, '0')];
+  const dirs = segmentDirs(cachePath);
   for (const dir of dirs) {
     for (const ext of exts) {
       if (await fileExists(path.join(dir, `seg-${num}${ext}`))) return true;
@@ -70,7 +76,7 @@ export async function segmentWithinReach(
   lookback: number,
 ): Promise<boolean> {
   const exts = ['.m4s', '.ts'];
-  const dirs = [cachePath, path.join(cachePath, '0')];
+  const dirs = segmentDirs(cachePath);
   const lowest = Math.max(0, from - lookback);
   for (let seg = from; seg >= lowest; seg--) {
     const num = String(seg).padStart(4, '0');
@@ -86,7 +92,7 @@ export async function segmentWithinReach(
 /** Highest ffmpeg-numbered segment written to `cachePath` (flat layout, or
  *  the var_stream_map '0/' video subdir), or -1 before any segment lands. */
 export async function latestSegmentNumber(cachePath: string): Promise<number> {
-  const dirs = [path.join(cachePath, '0'), cachePath];
+  const dirs = segmentDirs(cachePath);
   for (const dir of dirs) {
     let files: string[];
     try {
@@ -162,7 +168,7 @@ export function firstMissingSegment(
   maxLookahead = 2000,
 ): number | null {
   const exts = ['.m4s', '.ts'];
-  const dirs = [cachePath, path.join(cachePath, '0')];
+  const dirs = segmentDirs(cachePath);
   for (let seg = fromSegment; seg < fromSegment + maxLookahead; seg++) {
     const num = String(seg).padStart(4, '0');
     let found = false;

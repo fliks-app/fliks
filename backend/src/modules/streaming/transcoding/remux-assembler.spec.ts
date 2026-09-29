@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import type { Logger } from '@nestjs/common';
+import * as atomicFile from '../../../common/utils/atomic-file';
 import {
   RemuxSegmentAssembler,
   remuxAssemblyPlan,
@@ -532,6 +533,75 @@ describe('RemuxSegmentAssembler: multi-audio (one growing file per track)', () =
       expect(sampleCounts(buf)).toEqual([4]);
     }
     expect(fs.existsSync(gopDir)).toBe(false);
+  });
+
+  it('re-reads the failed frame on retry instead of skipping it: an atomic write throwing mid-batch must not leave an audio hole', async () => {
+    writeVideoGops([0, 2, 4, 6, 8, 10]);
+    writeAudioTrack(0, 10, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    const real = atomicFile.writeFileAtomic;
+    let thrown = false;
+    const spy = jest.spyOn(atomicFile, 'writeFileAtomic').mockImplementation((dest, data) => {
+      if (!thrown && dest.toString().endsWith('seg-0001.m4s')) {
+        thrown = true;
+        throw new Error('disk full');
+      }
+      return real(dest, data);
+    });
+    try {
+      const asm = new RemuxSegmentAssembler(plan(grid), log, 'test-multi-retry');
+      asm.start();
+      await asm.finish(true);
+    } finally {
+      spy.mockRestore();
+    }
+
+    const rendition = path.join(dir, '1');
+    expect(segsIn(rendition)).toEqual(['seg-0000.m4s', 'seg-0001.m4s', 'seg-0002.m4s']);
+    for (const n of [0, 1, 2]) {
+      const buf = fs.readFileSync(path.join(rendition, `seg-000${n}.m4s`));
+      expect(sampleCounts(buf)).toEqual([4]);
+    }
+  });
+
+  it('writes trun version 1 for a negative CTS: version 0 is unsigned and cannot round-trip it', async () => {
+    writeVideoGops([0, 1]);
+    const negCtsFrame = (trackId: number, cts: number): Buffer => {
+      const ctsBuf = Buffer.alloc(4);
+      ctsBuf.writeInt32BE(cts, 0);
+      const trun = box(
+        'trun',
+        Buffer.concat([
+          fullbox(0, TRUN_EXPLICIT_SAMPLE | 0x000800),
+          u32(1),
+          u32(0),
+          u32(1024),
+          u32(2),
+          u32(0x02000000),
+          ctsBuf,
+        ]),
+      );
+      const tfhd = box('tfhd', Buffer.concat([fullbox(0, TFHD_BASE_IS_MOOF), u32(trackId)]));
+      const tfdtBox = box('tfdt', Buffer.concat([fullbox(1, 0), u64(0n)]));
+      return Buffer.concat([
+        box('moof', box('traf', Buffer.concat([tfhd, tfdtBox, trun]))),
+        box('mdat', Buffer.alloc(2)),
+      ]);
+    };
+    fs.writeFileSync(
+      path.join(gopDir, 'a0.mp4'),
+      Buffer.concat([
+        box('ftyp', Buffer.alloc(4)),
+        box('moov', trak(10, 48000, 'soun', 0)),
+        negCtsFrame(10, -5),
+      ]),
+    );
+    const asm = new RemuxSegmentAssembler(plan(null), log, 'test-multi-negcts');
+    asm.start();
+    await asm.finish(true);
+
+    const buf = fs.readFileSync(path.join(dir, '1', 'seg-0000.m4s'));
+    const trunAt = buf.indexOf('trun');
+    expect(buf.readUInt8(trunAt + 4)).toBe(1);
   });
 
   it('skips a served segment with no audio at all: a track that ends early', async () => {

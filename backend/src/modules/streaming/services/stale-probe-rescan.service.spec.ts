@@ -149,6 +149,22 @@ describe('StaleProbeRescanService', () => {
     expect(detectMediaFileInfo).toHaveBeenCalledTimes(1);
   });
 
+  it('still chains the keyframe scan on the existing row when the re-probe itself throws', async () => {
+    const detectMediaFileInfo = jest.fn().mockRejectedValue(new Error('boom'));
+    const files = {
+      findOne: jest.fn().mockResolvedValue({ streamInfo: stale }),
+      update: jest.fn(),
+    };
+    const sourceScans = { scheduleIfNeeded: jest.fn().mockResolvedValue(undefined) };
+    const svc = new StaleProbeRescanService(
+      { detectMediaFileInfo } as never,
+      files as never,
+      sourceScans as never,
+    );
+    await svc.scheduleIfNeeded(3, file, stale as never);
+    expect(sourceScans.scheduleIfNeeded).toHaveBeenCalledWith(3, file, stale);
+  });
+
   it('never saves a probe that detected no streams at all', async () => {
     const broken = { video: [], audio: [], subtitles: [], formatName: 'mov,mp4', error: 'No streams detected' };
     const { svc, files } = setup({ streamInfo: stale }, broken);

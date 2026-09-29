@@ -155,10 +155,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       /* settings unavailable at boot: keep the env/derived defaults */
     }
 
-    // Audio encoders carry no HW/driver risk, so a plain `-encoders` listing
-    // check is enough, independent of hwAccel; runs on every platform. Awaited
-    // (unlike the probes below): a playback-info during it would hash/align
-    // the session as native aac, wrong for the rest of that session's life.
+    // Awaited (unlike the probes below): a playback-info during it would
+    // hash/align the session as native aac for the rest of its life.
     await runAudioEncoderProbe(this.log);
     // Probe every compiled-in encoder. Each runs a single black-frame
     // ffmpeg encode; the descriptors that fail to open are blacklisted
@@ -522,8 +520,8 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return audioIndex != null ? assembler.audioFrontier(audioIndex) : assembler.videoFrontier();
   }
 
-  /** Wait-vs-respawn for a live remux run: reachable segments are decided
-   *  from the run's own progress (its assembler), never the killed-run-island-prone directory. */
+  /** Wait-vs-respawn for a live remux run: reachable segments come from the
+   *  run's own progress (its assembler), never the directory a killed run leaves islands in. */
   private async resolveRunningRemuxSegment(
     key: string,
     existing: TranscodeSession,

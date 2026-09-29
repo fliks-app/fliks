@@ -1,6 +1,7 @@
 import {
   makeBox,
   parseInitTracks,
+  readBoxHeader,
   readInitEdits,
   retimeFragments,
   rewriteSegmentTfdt,
@@ -263,3 +264,31 @@ describe('track edits', () => {
   });
 });
 
+
+describe('readBoxHeader', () => {
+  const head = (size: number, type: string, large?: bigint) => {
+    const b = Buffer.alloc(large != null ? 16 : 8);
+    b.writeUInt32BE(size, 0);
+    b.write(type, 4, 'latin1');
+    if (large != null) b.writeBigUInt64BE(large, 8);
+    return b;
+  };
+
+  it('reads a 32-bit size, a 64-bit largesize, and size 0 as to the end', () => {
+    expect(readBoxHeader(head(24, 'moof'), 0, 100, 200)).toEqual(
+      { type: 'moof', size: 24, payloadStart: 108 },
+    );
+    expect(readBoxHeader(head(1, 'mdat', 40n), 0, 100, 200)).toEqual(
+      { type: 'mdat', size: 40, payloadStart: 116 },
+    );
+    expect(readBoxHeader(head(0, 'mdat'), 0, 100, 200)).toEqual(
+      { type: 'mdat', size: 100, payloadStart: 108 },
+    );
+  });
+
+  it('rejects a box past the end, a largesize with no room for it, and a short read', () => {
+    expect(readBoxHeader(head(120, 'moof'), 0, 100, 200)).toBeNull();
+    expect(readBoxHeader(head(1, 'mdat'), 0, 100, 200)).toBeNull();
+    expect(readBoxHeader(head(24, 'moof').subarray(0, 6), 0, 100, 200)).toBeNull();
+  });
+});

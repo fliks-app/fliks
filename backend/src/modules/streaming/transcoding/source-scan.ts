@@ -188,6 +188,12 @@ export async function scanSource(
   read.stream.pipe(forAudio);
   read.stream.on('error', (err) => [forVideo, forAudio].forEach((b) => b.destroy(err)));
   const adts = walkAdts(forAudio, aac, si.formatStartSeconds ?? 0, size, background);
+  // A tolerated early ffmpeg exit leaves forAudio unread; unpiping it here
+  // stops its backpressure from stalling the shared read forVideo depends on.
+  void adts.result.then(() => {
+    read.stream.unpipe(forAudio);
+    forAudio.resume();
+  });
   try {
     const packets = await scanVideoPackets(filePath, video, { mpegTs, background, input: forVideo });
     // The video scan stops at a clock break; nothing after it is served.
@@ -198,7 +204,7 @@ export async function scanSource(
   } catch (err) {
     read.stop();
     adts.end();
-    await adts.result;
+    await Promise.allSettled([read.done, adts.result]);
     throw err;
   }
 }

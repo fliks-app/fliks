@@ -36,8 +36,13 @@ export class SourceScanService {
     private readonly files: Repository<MediaFile>,
   ) {}
 
-  /** The stored scan of the file as it is now. Never scans. */
-  async lookup(mediaFileId: number, absolutePath: string): Promise<HeldScan> {
+  /** The stored scan of the file as it is now. Never scans. Given the caller's
+   *  `streamInfo`, puts back a clock break a re-probe dropped, in it and the row. */
+  async lookup(
+    mediaFileId: number,
+    absolutePath: string,
+    streamInfo?: MediaFileInfo | null,
+  ): Promise<HeldScan> {
     let st: { size: number; mtimeMs: number };
     try {
       st = await stat(absolutePath);
@@ -45,9 +50,20 @@ export class SourceScanService {
       this.log.warn(`Cannot stat ${absolutePath}: ${(err as Error).message}`);
       return { scan: null, version: null };
     }
-    const row = await this.scans.findOne({ where: { mediaFileId } });
-    const current = row?.size === st.size && row.mtimeMs === st.mtimeMs;
-    return { scan: current ? row.scan : null, version: sourceVersion(st) };
+    try {
+      const row = await this.scans.findOne({ where: { mediaFileId } });
+      const current = row?.size === st.size && row.mtimeMs === st.mtimeMs;
+      const breakSeconds = current ? row.scan.breakSeconds : undefined;
+      if (streamInfo && breakSeconds != null && streamInfo.timestampBreakSeconds !== breakSeconds) {
+        streamInfo.timestampBreakSeconds = breakSeconds;
+        await this.storeClockBreak(mediaFileId, path.basename(absolutePath), breakSeconds)
+          .catch((err: Error) => this.log.warn(`Clock break not restored: ${err.message}`));
+      }
+      return { scan: current ? row.scan : null, version: sourceVersion(st) };
+    } catch (err) {
+      this.log.warn(`Scan lookup failed for file #${mediaFileId}: ${(err as Error).message}`);
+      return { scan: null, version: sourceVersion(st) };
+    }
   }
 
   /** Scan the file unless its current version was, in the background budget.
@@ -94,22 +110,23 @@ export class SourceScanService {
       this.log.log(
         `"${label}" scanned in ${Date.now() - t0} ms: ${scan.keyframes.length} keyframes`,
       );
-      if (sourceIsMpegTs(streamInfo, absolutePath)) await this.storeClockBreak(mediaFileId, label, scan);
+      if (sourceIsMpegTs(streamInfo, absolutePath)) {
+        await this.storeClockBreak(mediaFileId, label, scan.breakSeconds ?? null);
+      }
     } catch (err) {
       this.log.warn(`Source scan failed for "${label}": ${(err as Error).message}`);
     }
   }
 
-  /** The timeline reads the break off the stream info (`sourceTimeline`). */
-  private async storeClockBreak(mediaFileId: number, label: string, scan: SourceScan) {
-    // Re-read: a rescan may have replaced the stream info meanwhile.
-    const file = await this.files.findOne({ where: { id: mediaFileId } });
-    if (!file?.streamInfo) return;
+  /** The timeline reads the break off the stream info (`sourceTimeline`). Sets
+   *  that one key in place, so a re-probe written meanwhile isn't overwritten. */
+  private async storeClockBreak(mediaFileId: number, label: string, breakSeconds: number | null) {
+    const value = JSON.stringify(breakSeconds);
     await this.files.update(mediaFileId, {
-      streamInfo: { ...file.streamInfo, timestampBreakSeconds: scan.breakSeconds ?? null },
+      streamInfo: () => `jsonb_set("streamInfo", '{timestampBreakSeconds}', '${value}'::jsonb)`,
     });
-    if (scan.breakSeconds != null) {
-      this.log.warn(`"${label}": the timestamps break at ${scan.breakSeconds}s; playback ends there`);
+    if (breakSeconds != null) {
+      this.log.warn(`"${label}": the timestamps break at ${breakSeconds}s; playback ends there`);
     }
   }
 }
