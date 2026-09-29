@@ -200,15 +200,18 @@ describe('BrowserDeviceProfileService: dolbyVisionProfiles gating', () => {
     vi.unstubAllGlobals();
   });
 
-  it('lists 5/7/8 on Windows desktop regardless of the MSE probe or supportsHdr', () => {
+  it('stays pessimistic (7 only) on Windows desktop before the capability bridge answers', () => {
     vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Electron/30.0.0',
     );
     vi.stubGlobal('matchMedia', () => ({ matches: false }));
     const desktopDevice = { ...device, isDesktopNative: () => true } as DeviceService;
     const service = configure(desktopDevice, { hasServerFeature: () => true });
-    expect(service.getProfile().dolbyVisionProfiles).toEqual([5, 7, 8]);
-    expect(service.getProfile().supportsDolbyVision).toBe(true);
+    // No bridge is wired up in this test, so the constructor's probe never
+    // resolves — the pessimistic default holds, same as a bridge that answers
+    // canReshapeDolbyVision: false.
+    expect(service.getProfile().dolbyVisionProfiles).toEqual([7]);
+    expect(service.getProfile().supportsDolbyVision).toBe(false);
     vi.unstubAllGlobals();
   });
 
@@ -238,6 +241,28 @@ describe('BrowserDeviceProfileService: dolbyVisionProfiles gating', () => {
       await Promise.resolve();
       await Promise.resolve();
       expect(service.getProfile().dolbyVisionProfiles).toEqual([7]);
+    } finally {
+      delete (window as unknown as { fliksDesktop?: unknown }).fliksDesktop;
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('lists 5/7/8 on Windows desktop once the bridge confirms it can reshape', async () => {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Electron/30.0.0',
+    );
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    (window as unknown as { fliksDesktop: unknown }).fliksDesktop = {
+      getPlayerCapabilities: () => Promise.resolve({ canReshapeDolbyVision: true }),
+    };
+    try {
+      const desktopDevice = { ...device, isDesktopNative: () => true } as DeviceService;
+      const service = configure(desktopDevice, { hasServerFeature: () => true });
+      // Flush the constructor's getPlayerCapabilities() microtask before reading.
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(service.getProfile().dolbyVisionProfiles).toEqual([5, 7, 8]);
+      expect(service.getProfile().supportsDolbyVision).toBe(true);
     } finally {
       delete (window as unknown as { fliksDesktop?: unknown }).fliksDesktop;
       vi.unstubAllGlobals();

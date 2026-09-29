@@ -222,9 +222,10 @@ export class BrowserDeviceProfileService {
     channelsByCodec?: Record<string, number>;
   } | null = null;
   private nativeVideo: NativeVideoCaps | null = null;
-  /** Optimistic until the desktop probe resolves; matches the other native
-   *  capability fields above, which read stale/default values until then too. */
-  private desktopCanReshapeDolbyVision = true;
+  /** Pessimistic until the desktop probe resolves — false narrows the
+   *  advertised profiles to 7 rather than risking 5/8 on a bridge that can't
+   *  reshape yet. */
+  private desktopCanReshapeDolbyVision = false;
 
   constructor() {
     // Pre-fetch native HDR + audio + video capabilities (async, cached for
@@ -253,7 +254,7 @@ export class BrowserDeviceProfileService {
         this.desktopCanReshapeDolbyVision = r.canReshapeDolbyVision;
         this.cachedProfile = null;
       })
-      .catch(() => {});
+      .catch((e) => console.warn('[DeviceProfile] desktop capability probe failed', e));
   }
 
   /**
@@ -600,10 +601,8 @@ export class BrowserDeviceProfileService {
     if (this.device.isDesktopNative() && !dolbyVisionProfiles.includes(7)) {
       dolbyVisionProfiles.push(7);
     }
-    // Windows mpv (gpu-next) reshapes P5/P7/P8 via libplacebo regardless of
-    // display HDR support; macOS/Linux libmpv can't reshape, so they stay at P7.
-    // gpu-next itself can fail to init (old driver) and fall back to plain gpu,
-    // which only plays the P7 base layer; drop 5/8 when that happened.
+    // Windows mpv (gpu-next) reshapes P5/P7/P8 via libplacebo; a failed
+    // gpu-next init (old driver) falls back to a P7-only base layer.
     if (this.device.isDesktopNative() && detectOs(navigator.userAgent) === 'Windows') {
       dolbyVisionProfiles.length = 0;
       dolbyVisionProfiles.push(...(this.desktopCanReshapeDolbyVision ? [5, 7, 8] : [7]));
