@@ -4,6 +4,8 @@ import android.os.Build;
 import android.util.Log;
 import android.view.Display;
 
+import androidx.core.content.ContextCompat;
+
 import java.util.Arrays;
 import java.util.List;
 
@@ -38,17 +40,14 @@ public class HdrPlugin extends Plugin {
             Log.i(TAG, "HDR reported unsupported: " + Build.MANUFACTURER
                     + " gates the HDR brightness boost on an app whitelist");
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Display display = getActivity().getWindowManager().getDefaultDisplay();
-            Display.HdrCapabilities hdrCaps = display.getHdrCapabilities();
-            if (hdrCaps != null) {
-                int[] types = hdrCaps.getSupportedHdrTypes();
-                supported = types != null && types.length > 0;
-                if (types != null) {
-                    for (int t : types) {
-                        if (t == Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION) {
-                            dolbyVision = true;
-                            break;
-                        }
+            Display display = ContextCompat.getDisplayOrDefault(getActivity());
+            int[] types = supportedHdrTypes(display);
+            supported = types != null && types.length > 0;
+            if (types != null) {
+                for (int t : types) {
+                    if (t == Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION) {
+                        dolbyVision = true;
+                        break;
                     }
                 }
             }
@@ -58,5 +57,14 @@ public class HdrPlugin extends Plugin {
         result.put("supported", supported);
         result.put("dolbyVision", dolbyVision);
         call.resolve(result);
+    }
+
+    @SuppressWarnings("deprecation")
+    private static int[] supportedHdrTypes(Display display) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            return display.getMode().getSupportedHdrTypes();
+        }
+        Display.HdrCapabilities caps = display.getHdrCapabilities();
+        return caps != null ? caps.getSupportedHdrTypes() : null;
     }
 }

@@ -1076,12 +1076,6 @@ public class NativePlayerPlugin extends Plugin {
         if (!name.isEmpty() && !name.equals(code)) {
             return name.substring(0, 1).toUpperCase() + name.substring(1);
         }
-        // Fallback for 3-letter codes (fre→fr, eng→en)
-        loc = new Locale(code);
-        name = loc.getDisplayLanguage(Locale.getDefault());
-        if (!name.isEmpty() && !name.equals(code)) {
-            return name.substring(0, 1).toUpperCase() + name.substring(1);
-        }
         return code;
     }
 

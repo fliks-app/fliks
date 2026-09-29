@@ -13,6 +13,7 @@ import androidx.media3.exoplayer.offline.DownloadManager;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -70,19 +71,24 @@ public class DownloadNotificationPlugin extends Plugin {
     public void removeDownload(PluginCall call) {
         String id = call.getString("id", "");
         DownloadManager dm = FlixDownloadUtil.getDownloadManager(getContext());
-        dm.addListener(new DownloadManager.Listener() {
+        AtomicBoolean done = new AtomicBoolean(false);
+        DownloadManager.Listener listener = new DownloadManager.Listener() {
             @Override
             public void onDownloadRemoved(DownloadManager manager, Download download) {
-                if (download.request.id.equals(id)) {
+                if (download.request.id.equals(id) && done.compareAndSet(false, true)) {
                     dm.removeListener(this);
                     call.resolve();
                 }
             }
-        });
+        };
+        dm.addListener(listener);
         FlixDownloadUtil.removeDownload(getContext(), id);
         // Timeout fallback — resolve after 3s if event never fires
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (!call.isReleased()) call.resolve();
+            if (done.compareAndSet(false, true)) {
+                dm.removeListener(listener);
+                call.resolve();
+            }
         }, 3000);
     }
 
