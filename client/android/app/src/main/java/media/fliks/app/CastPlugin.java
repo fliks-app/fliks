@@ -91,6 +91,7 @@ public class CastPlugin extends Plugin {
             runOnMainThread(() -> {
                 sessionPending = false;
                 castSession = null;
+                resumeState = null;
                 releaseWifiLock();
                 notifyJS("connected", false);
             });
@@ -232,15 +233,38 @@ public class CastPlugin extends Plugin {
                 sessionManager.addSessionManagerListener(sessionListener, CastSession.class);
                 startRouteDiscovery();
 
-                // Check if already connected
+                // A session outlives the WebView (Back, reopening from the Cast
+                // notification): hand it and the sender's saved state back.
                 castSession = sessionManager.getCurrentCastSession();
                 // Discovery has only just started, so this is usually false; the
                 // route callback raises it as soon as a receiver answers.
-                call.resolve(new JSObject().put("available", hasCastRoute()));
+                JSObject result = new JSObject().put("available", hasCastRoute());
+                RemoteMediaClient client = castSession != null && castSession.isConnected()
+                    ? castSession.getRemoteMediaClient() : null;
+                if (client != null) {
+                    result.put("connected", true);
+                    if (resumeState != null && client.getMediaInfo() != null) {
+                        result.put("resume", resumeState);
+                        startMediaPolling(client);
+                    }
+                }
+                call.resolve(result);
             } catch (Exception e) {
                 Log.e(TAG, "Cast init failed", e);
                 call.resolve(new JSObject().put("available", false));
             }
+        });
+    }
+
+    /** The sender's cast state, kept by the process across WebView reloads. */
+    private static JSObject resumeState;
+
+    @PluginMethod()
+    public void setResumeState(PluginCall call) {
+        JSObject state = call.getObject("state");
+        runOnMainThread(() -> {
+            resumeState = state;
+            call.resolve();
         });
     }
 

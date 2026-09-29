@@ -1,4 +1,4 @@
-import { Injectable, effect, inject, signal } from '@angular/core';
+import { Injectable, effect, inject, signal, untracked } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { CastService } from './cast.service';
 import { CastSettingsService } from './cast-settings.service';
@@ -103,6 +103,27 @@ export function buildCastQualityOptions(
   return qualities
     .filter(q => q.id !== 'original' && q.height <= heightCap)
     .map(q => ({ id: q.id, label: q.label, lowBandwidth: q.lowBandwidth }));
+}
+
+/** Everything {@link CastPlayerService} needs to take a session over again. */
+interface CastResumeState {
+  mediaFileId: number;
+  mediaId: number;
+  episodeId: number | undefined;
+  mediaTitle: string;
+  episodeTitle: string;
+  fanartUrl: string | null;
+  playbackMode: PlaybackMode;
+  liveSessionId: string | null;
+  subtitleInfos: SubtitleInfo[];
+  availableSubtitles: CastSubtitleOption[];
+  availableQualities: CastQualityOption[];
+  availableAudioTracks: CastAudioOption[];
+  activeQualityId: string;
+  activeSubtitleId: string | null;
+  activeAudioTrackId: string | null;
+  activeBurnInId: number | null;
+  activeAudioStreamIndex: number | undefined;
 }
 
 interface SubtitleInfo {
@@ -379,6 +400,51 @@ export class CastPlayerService {
     this.loadSpriteMetadata(opts.mediaFileId);
   }
 
+  private resumeState(): CastResumeState {
+    return {
+      mediaFileId: this.mediaFileId(),
+      mediaId: this.mediaId(),
+      episodeId: this.episodeId(),
+      mediaTitle: this.mediaTitle(),
+      episodeTitle: this.episodeTitle(),
+      fanartUrl: this.fanartUrl(),
+      playbackMode: this.playbackMode(),
+      liveSessionId: this.liveSessionId(),
+      subtitleInfos: this.subtitleInfos,
+      availableSubtitles: this.availableSubtitles(),
+      availableQualities: this.availableQualities(),
+      availableAudioTracks: this.availableAudioTracks(),
+      activeQualityId: this.activeQualityId(),
+      activeSubtitleId: this.activeSubtitleId(),
+      activeAudioTrackId: this.activeAudioTrackId(),
+      activeBurnInId: this.activeBurnInId,
+      activeAudioStreamIndex: this.activeAudioStreamIndex,
+    };
+  }
+
+  private restore(s: CastResumeState): void {
+    this.mediaFileId.set(s.mediaFileId);
+    this.mediaId.set(s.mediaId);
+    this.episodeId.set(s.episodeId);
+    this.mediaTitle.set(s.mediaTitle);
+    this.episodeTitle.set(s.episodeTitle);
+    this.fanartUrl.set(s.fanartUrl);
+    this.playbackMode.set(s.playbackMode);
+    this.liveSessionId.set(s.liveSessionId);
+    this.subtitleInfos = s.subtitleInfos;
+    this.availableSubtitles.set(s.availableSubtitles);
+    this.availableQualities.set(s.availableQualities);
+    this.availableAudioTracks.set(s.availableAudioTracks);
+    this.activeQualityId.set(s.activeQualityId);
+    this.activeSubtitleId.set(s.activeSubtitleId);
+    this.activeAudioTrackId.set(s.activeAudioTrackId);
+    this.activeBurnInId = s.activeBurnInId;
+    this.activeAudioStreamIndex = s.activeAudioStreamIndex;
+    this.hasMedia.set(true);
+    this.startPositionSaving();
+    this.loadSpriteMetadata(s.mediaFileId);
+  }
+
   /** Clear Cast media state (on disconnect/stop). Saves position first
    *  and kills the backend transcode session so its ffmpeg stops; without
    *  this the session lingers until SESSION_TIMEOUT_MS, holding HW
@@ -425,6 +491,16 @@ export class CastPlayerService {
           if (!this.cast.isConnected() && this.hasMedia()) this.clear();
         }, CastPlayerService.DISCONNECT_GRACE_MS);
       }
+    });
+    effect(() => {
+      const state = this.cast.resumedState() as CastResumeState | null;
+      if (state && !untracked(this.hasMedia)) untracked(() => this.restore(state));
+    });
+    // The native side keeps this across a WebView reload, so the session can be
+    // taken over as it was left without reloading the receiver.
+    effect(() => {
+      if (!this.hasMedia()) return;
+      this.cast.saveResumeState(this.resumeState());
     });
     // On every session connect, ask the receiver which audio/video codecs
     // its MediaSource accepts and cache the answer by device name. The
