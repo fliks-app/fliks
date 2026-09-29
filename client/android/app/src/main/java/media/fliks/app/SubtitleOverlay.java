@@ -187,8 +187,8 @@ class SubtitleOverlay {
             targetW = Math.round(targetW * 1.6f);
             targetH = Math.round(targetH * 1.6f);
         }
-        // A crop sizes the SurfaceView past the screen, so videoW can exceed
-        // screenW — clamp so a PGS cue never overflows the visible area.
+        // A crop or fill sizes the SurfaceView past the screen, so videoW can
+        // exceed screenW; clamp so a PGS cue never overflows the visible area.
         if (screenW > 0 && targetW > screenW) {
             targetH = Math.round(targetH * (float) screenW / targetW);
             targetW = screenW;

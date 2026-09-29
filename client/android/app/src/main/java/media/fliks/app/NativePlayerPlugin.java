@@ -128,8 +128,8 @@ public class NativePlayerPlugin extends Plugin {
             aspectFrame = new AspectRatioFrameLayout(getContext());
             aspectFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
 
-            // Rotation, PiP and split-screen all resize the wrapper without a
-            // fresh onVideoSizeChanged — re-fit the crop against the new bounds.
+            // Rotation, PiP and split-screen resize the wrapper without a fresh
+            // onVideoSizeChanged, so the crop is re-fit on every wrapper layout.
             wrapper.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or_, ob) -> layoutVideo());
 
             surfaceView = new SurfaceView(getContext());
@@ -260,6 +260,8 @@ public class NativePlayerPlugin extends Plugin {
 
             // A new item's crop (if any) is re-sent by the TS layer after load().
             crop = null;
+            displayWidth = 0f;
+            displayHeight = 0f;
             layoutVideo();
 
             // HTTP data source with auth headers
@@ -740,9 +742,8 @@ public class NativePlayerPlugin extends Plugin {
         });
     }
 
-    /** With no effective crop, restore today's behaviour (MATCH_PARENT, FIT/ZOOM
-     *  per fillScreen). With one, size aspectFrame to the exact display frame
-     *  (may overflow the wrapper, which clips) and let it FILL that frame. */
+    /** No effective crop: MATCH_PARENT, FIT or ZOOM per fillScreen. A crop sizes
+     *  aspectFrame to the exact display frame (may overflow the wrapper) and FILLs it. */
     private void layoutVideo() {
         if (aspectFrame == null || wrapper == null) return;
         int containerW = wrapper.getWidth();
@@ -754,7 +755,8 @@ public class NativePlayerPlugin extends Plugin {
         FrameLayout.LayoutParams next;
         int resizeMode;
         if (frame != null) {
-            next = new FrameLayout.LayoutParams(frame[2], frame[3], Gravity.TOP | Gravity.START);
+            // LEFT, not START: the offsets are physical, and START resolves to RIGHT in RTL.
+            next = new FrameLayout.LayoutParams(frame[2], frame[3], Gravity.TOP | Gravity.LEFT);
             next.leftMargin = frame[0];
             next.topMargin = frame[1];
             resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL;
