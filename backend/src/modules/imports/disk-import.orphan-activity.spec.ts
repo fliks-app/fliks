@@ -17,7 +17,6 @@ function makeService(registry: ActivityRegistryService) {
     null as never, // mediaRepo
     null as never, // fileRepo
     null as never, // seasonRepo
-    null as never, // episodeRepo
     null as never, // mediaService
     null as never, // naming
     null as never, // libraries — makes every relinkOrphans throw

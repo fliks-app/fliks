@@ -38,7 +38,6 @@ function makeService(nfo: NfoMetadataService) {
     null as never, // mediaRepo
     null as never, // fileRepo
     null as never, // seasonRepo
-    null as never, // episodeRepo
     null as never, // mediaService
     naming,
     null as never, // libraries

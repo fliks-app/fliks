@@ -1,9 +1,11 @@
 <div class="flex items-center justify-between gap-3">
-  <label class="label cursor-pointer justify-start gap-3 max-w-max">
-    <input type="checkbox" class="toggle toggle-sm toggle-primary"
-      [ngModel]="reorganize()" (ngModelChange)="reorganize.set($event)" />
-    <span class="label-text">{{ 'settings.libraries.scan_reorganize' | translate }}</span>
-  </label>
+  @if (!transfer()) {
+    <label class="label cursor-pointer justify-start gap-3 max-w-max">
+      <input type="checkbox" class="toggle toggle-sm toggle-primary"
+        [ngModel]="reorganize()" (ngModelChange)="reorganize.set($event)" />
+      <span class="label-text">{{ 'settings.libraries.scan_reorganize' | translate }}</span>
+    </label>
+  }
   @if (groups().length > 0 && !scanning()) {
     <button type="button" class="btn btn-ghost btn-sm gap-1" (click)="toggleAll()">
       @if (allExpanded()) {
@@ -20,7 +22,7 @@
 @if (started()) {
   @if (!scanning() && !scanError()) {
     <p class="text-sm text-base-content/60">
-      {{ (deferLink() ? 'settings.libraries.scan_found_count' : 'settings.libraries.scan_orphan_count')
+      {{ (deferLink() || transfer() ? 'settings.libraries.scan_found_count' : 'settings.libraries.scan_orphan_count')
         | translate: { count: orphanCount() } }}
     </p>
   }
@@ -41,7 +43,7 @@
       <div role="alert" class="alert alert-error">{{ scanError() }}</div>
     } @else if (groups().length === 0) {
       <p class="text-center py-10 text-base-content/50">
-        {{ (deferLink() ? 'settings.libraries.scan_no_files' : 'settings.libraries.scan_no_orphans') | translate }}
+        {{ (deferLink() || transfer() ? 'settings.libraries.scan_no_files' : 'settings.libraries.scan_no_orphans') | translate }}
       </p>
     } @else {
       <div class="flex flex-col gap-3">
@@ -166,11 +168,13 @@
                         [title]="reorganizeTooltip(vm)"
                         (click)="link(i)" [disabled]="vm.linking || vm.searching">
                         @if (vm.linking) { <span class="loading loading-spinner loading-xs"></span> }
-                        {{ (vm.pick?.existingMediaId
-                          ? 'settings.libraries.scan_relink_existing'
-                          : vm.pick
-                            ? 'settings.libraries.scan_link'
-                            : 'settings.libraries.scan_add_unmatched') | translate }}
+                        {{ (!vm.pick
+                          ? 'settings.libraries.scan_add_unmatched'
+                          : transfer()
+                            ? 'import_disk.import'
+                            : vm.pick.existingMediaId
+                              ? 'settings.libraries.scan_relink_existing'
+                              : 'settings.libraries.scan_link') | translate }}
                       </button>
                     </div>
                   }

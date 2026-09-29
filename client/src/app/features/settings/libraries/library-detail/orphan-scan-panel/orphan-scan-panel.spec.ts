@@ -95,7 +95,7 @@ function setup(folders: string[], metadataOverrides: Record<string, unknown> = {
     ],
   });
   const fixture = TestBed.createComponent(OrphanScanPanelComponent);
-  return { panel: fixture.componentInstance, relinked, linked };
+  return { panel: fixture.componentInstance, fixture, relinked, linked };
 }
 
 describe('OrphanScanPanelComponent.importAll', () => {
@@ -356,5 +356,16 @@ describe('OrphanScanPanelComponent pagination', () => {
     await panel.goToPage(2);
     expect(panel.pagedGroups().length).toBe(5);
     expect(panel.groups().filter((g) => g.searched).length).toBe(25);
+  });
+});
+
+describe('OrphanScanPanelComponent in transfer mode', () => {
+  it('links into the scanned library with the chosen transfer method', async () => {
+    const { panel, fixture, linked } = setup(['Alpha']);
+    fixture.componentRef.setInput('transfer', 'copy');
+    await panel.scanPath('/downloads', ['movie'], 'tmdb', 7);
+    await panel.link(0);
+
+    expect(linked.map((b) => [b.libraryId, b.externalId, b.transfer])).toEqual([[7, '11', 'copy']]);
   });
 });

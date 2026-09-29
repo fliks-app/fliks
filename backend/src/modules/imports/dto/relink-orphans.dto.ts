@@ -3,6 +3,7 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -90,6 +91,11 @@ export class RelinkOrphansDto {
   @IsOptional()
   @IsBoolean()
   reorganize?: boolean;
+
+  /** Files sit outside the library: copy or move them into its naming layout. */
+  @IsOptional()
+  @IsIn(['copy', 'move'])
+  transfer?: 'copy' | 'move';
 
   @IsArray()
   @ArrayMinSize(1)

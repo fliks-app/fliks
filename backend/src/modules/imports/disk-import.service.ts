@@ -12,7 +12,6 @@ import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
-import { sanitizeFsPath } from '../../common/utils/fs-path.util';
 import { Media } from '../media/entities/media.entity';
 import { hasProviderId } from '../media/media-identity.util';
 import { MediaFile } from '../media/entities/media-file.entity';
@@ -21,7 +20,7 @@ import { Episode } from '../media/entities/episode.entity';
 import { Library } from '../libraries/entities/library.entity';
 import { MediaType } from '../../common/enums';
 import { parseReleaseQuality, extractMediaTitle } from '../../common/release-parsing';
-import { ImportFileEntry } from './dto/confirm-disk-import.dto';
+import { ImportFileEntry } from './import-file-entry';
 import { RelinkOrphansDto } from './dto/relink-orphans.dto';
 import { PreviewOrphansDto } from './dto/preview-orphans.dto';
 import {
@@ -45,23 +44,6 @@ import { PostImportQueueService } from '../../common/post-import/post-import-que
 import { MediaServersService } from '../media-servers/media-servers.service';
 import { VIDEO_EXTS } from '../../common/constants/video-extensions';
 
-export interface ScanCandidate {
-  filePath: string;
-  filename: string;
-  size: number;
-  qualityName: string;
-  qualityId: number;
-  seasonNumber: number | null;
-  episodeNumber: number | null;
-  mediaId: number | null;
-  mediaTitle: string | null;
-  mediaYear: number | null;
-  mediaType: string | null;
-  episodeId: number | null;
-  episodeTitle: string | null;
-  existingQuality: string | null;
-}
-
 /** The scan shares a 30-connection pool with everything else the server is
  *  serving; unbounded fan-out starved it and the UI stalled until the scan ended. */
 const SCAN_CONCURRENCY = 8;
@@ -70,50 +52,12 @@ const SCAN_CONCURRENCY = 8;
 export const ORPHAN_SCAN_PROGRESS = 'OrphanScan';
 export const ORPHAN_IMPORT_PROGRESS = 'OrphanImport';
 
-export interface NormalizedTitles {
-  normTitle: string;
-  normOriginal: string;
-}
-
-type ScanMedia = Pick<
-  Media,
-  'id' | 'title' | 'originalTitle' | 'year' | 'type'
-> &
-  NormalizedTitles;
-
-export function normalizeTitle(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-/** Pure so the scan can hoist normalization out of its per-file loop. */
-export function matchMedia<T extends NormalizedTitles>(
-  extractedTitle: string,
-  allMedia: readonly T[],
-): T | null {
-  const target = normalizeTitle(extractedTitle);
-  if (!target) return null;
-
-  // Exact match
-  let match = allMedia.find(
-    (m) => m.normTitle === target || m.normOriginal === target,
-  );
-  if (match) return match;
-
-  // Target starts with media title (e.g. "inception 2010" -> "inception")
-  match = allMedia.find(
-    (m) => m.normTitle.length >= 2 && target.startsWith(m.normTitle),
-  );
-  if (match) return match;
-
-  // Media title starts with target
-  match = allMedia.find(
-    (m) => m.normTitle.length >= 3 && m.normTitle.startsWith(target),
-  );
-  return match ?? null;
+/** The scanned group folder above `file`, or its own directory when none matches. */
+function seriesFolderOf(file: string, folderName: string): string {
+  for (let dir = path.dirname(file); dir !== path.dirname(dir); dir = path.dirname(dir)) {
+    if (path.basename(dir) === folderName) return dir;
+  }
+  return path.dirname(file);
 }
 
 @Injectable()
@@ -127,8 +71,6 @@ export class DiskImportService {
     private readonly fileRepo: Repository<MediaFile>,
     @InjectRepository(Season)
     private readonly seasonRepo: Repository<Season>,
-    @InjectRepository(Episode)
-    private readonly episodeRepo: Repository<Episode>,
     @Inject(forwardRef(() => MediaService))
     private readonly mediaService: MediaService,
     private readonly naming: NamingService,
@@ -437,8 +379,9 @@ export class DiskImportService {
 
   /**
    * Re-create a media from the chosen TMDB/TVDB match and link the orphan
-   * file(s) to it IN PLACE (no move). Reuses an existing media when the
-   * external id is already present.
+   * file(s) to it in place, or move/copy them into the naming layout
+   * (`reorganize`/`transfer`). Reuses an existing media when the external id
+   * is already present.
    */
   async relinkOrphans(
     dto: RelinkOrphansDto,
@@ -450,10 +393,11 @@ export class DiskImportService {
         `Library "${library.name}" does not accept ${dto.type}`,
       );
     }
-    if (!dto.externalId && dto.reorganize) {
+    const reorganizeInPlace = dto.reorganize && !dto.transfer;
+    if (!dto.externalId && reorganizeInPlace) {
       throw new BadRequestException('Reorganize needs an identified title');
     }
-    if (dto.folderName === '' && dto.reorganize) {
+    if (dto.folderName === '' && reorganizeInPlace) {
       throw new BadRequestException('Reorganize needs a title with its own folder');
     }
 
@@ -471,7 +415,7 @@ export class DiskImportService {
     let slotCreated = false;
     const errors: string[] = [];
 
-    if (dto.reorganize) {
+    if (dto.reorganize || dto.transfer) {
       // Move + rename into the library's naming layout by delegating to the
       // existing disk-import pipeline (handles folder/file naming, companions,
       // MediaFile creation, ffprobe enrich and subtitle scheduling).
@@ -511,8 +455,9 @@ export class DiskImportService {
         });
       }
       if (entries.length) {
-        const res = await this.confirmImport(entries, 'move', {
-          uniquifyOnCollision: true,
+        // A re-run of the same external import lands on its own files: skip, don't duplicate.
+        const res = await this.confirmImport(entries, dto.transfer ?? 'move', {
+          uniquifyOnCollision: !dto.transfer,
         });
         linked = res.imported;
         errors.push(...res.errors);
@@ -651,15 +596,24 @@ export class DiskImportService {
     library: Library,
     addedByUserId: number | null,
   ): Promise<{ media: Media; created: boolean }> {
+    const sample = path.resolve(dto.files[0].filePath);
+    const title =
+      dto.title?.trim() ||
+      extractMediaTitle(path.basename(sample)).title ||
+      dto.folderName;
+    // External files get the library's naming layout; in-place files keep their own folder.
+    const folderName = dto.transfer
+      ? await this.namedFolder(dto.type, title, dto.year)
+      : dto.folderName;
     const where = {
       library: { id: library.id },
       type: dto.type,
-      folderName: dto.folderName,
+      folderName,
       tmdbId: IsNull(),
       tvdbId: IsNull(),
       imdbId: IsNull(),
     };
-    if (dto.folderName === '') {
+    if (folderName === '') {
       // Every root-level movie shares folderName '': disambiguate reuse by its
       // own file, or unrelated titles would collapse into the first one found.
       const wanted = new Set(dto.files.map((f) => path.basename(f.filePath)));
@@ -679,21 +633,24 @@ export class DiskImportService {
       if (existing) return { media: existing, created: false };
     }
 
-    const sample = path.resolve(dto.files[0].filePath);
     const artworkDir =
-      dto.type === MediaType.SERIES
-        ? path.join(library.path!, dto.folderName)
-        : path.dirname(sample);
-    // Checked independently: a crafted folderName must not escape the root even
-    // when the sample file itself is a valid path under it.
-    const libraryRoot = path.resolve(library.path!);
-    const resolvedArtworkDir = path.resolve(artworkDir);
-    if (
-      relativePathUnderMediaRoot(library.path, sample) == null ||
-      (resolvedArtworkDir !== libraryRoot &&
-        !resolvedArtworkDir.startsWith(libraryRoot + path.sep))
-    ) {
-      throw new BadRequestException('File outside the library root');
+      dto.type !== MediaType.SERIES
+        ? path.dirname(sample)
+        : dto.transfer
+          ? seriesFolderOf(sample, dto.folderName)
+          : path.join(library.path!, dto.folderName);
+    if (!dto.transfer) {
+      // Checked independently: a crafted folderName must not escape the root even
+      // when the sample file itself is a valid path under it.
+      const libraryRoot = path.resolve(library.path!);
+      const resolvedArtworkDir = path.resolve(artworkDir);
+      if (
+        relativePathUnderMediaRoot(library.path, sample) == null ||
+        (resolvedArtworkDir !== libraryRoot &&
+          !resolvedArtworkDir.startsWith(libraryRoot + path.sep))
+      ) {
+        throw new BadRequestException('File outside the library root');
+      }
     }
 
     // A root movie's artworkDir IS the shared library root: generic sidecar
@@ -716,14 +673,11 @@ export class DiskImportService {
 
     const created = await this.mediaService.createUnmatched(
       {
-        title:
-          dto.title?.trim() ||
-          extractMediaTitle(path.basename(sample)).title ||
-          dto.folderName,
+        title,
         year: dto.year,
         type: dto.type,
         libraryId: dto.libraryId,
-        folderName: dto.folderName,
+        folderName,
         qualityProfileId: dto.qualityProfileId,
         languageProfileId: dto.languageProfileId,
         libraryDefaultQualityProfileId: library.defaultQualityProfileId,
@@ -741,60 +695,6 @@ export class DiskImportService {
       throw new BadRequestException('Media not found after import');
     }
     return { media, created: true };
-  }
-
-  async scanFolder(folderPath: string): Promise<ScanCandidate[]> {
-    const resolved = path.resolve(sanitizeFsPath(folderPath));
-    this.logger.log(`Disk library scan started — folder="${resolved}"`);
-    let stat: fs.Stats;
-    try {
-      stat = await fsp.stat(resolved);
-    } catch {
-      throw new BadRequestException(
-        `Path "${resolved}" does not exist or is not accessible`,
-      );
-    }
-    if (!stat.isDirectory()) {
-      throw new BadRequestException(`Path "${resolved}" is not a directory`);
-    }
-
-    const videoFiles = await this.collectVideoFiles(resolved, 0);
-    if (!videoFiles.length) return [];
-
-    const rows = await this.mediaRepo.find({
-      select: ['id', 'title', 'originalTitle', 'year', 'type'],
-    });
-    // Normalize once: matchMedia scans the whole list per file, and re-running
-    // the regexes there made the scan O(files x media) in regex work alone.
-    const allMedia: ScanMedia[] = rows.map((m) => ({
-      ...m,
-      normTitle: normalizeTitle(m.title),
-      normOriginal: normalizeTitle(m.originalTitle ?? ''),
-    }));
-
-    // `buildCandidate` may invent a fresh season / episode slot for any file
-    // that references one we haven't pulled metadata for yet. Collect the
-    // owning media so we can backfill those rows (titles, overviews, stills)
-    // via the shared series refresh, instead of leaving them bare in the UI.
-    const dirty = new Set<number>();
-    const candidates = await mapWithConcurrency(
-      videoFiles,
-      SCAN_CONCURRENCY,
-      (f) => this.buildCandidate(f, allMedia, dirty),
-    );
-    for (const mediaId of dirty) {
-      try {
-        const media = await this.mediaRepo.findOne({ where: { id: mediaId } });
-        if (media && media.type === MediaType.SERIES) {
-          await this.metadata.refreshSeriesEpisodes(media);
-        }
-      } catch (err) {
-        this.logger.warn(
-          `Disk scan: refreshSeriesEpisodes #${mediaId} failed — ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-    }
-    return candidates;
   }
 
   /**
@@ -908,6 +808,20 @@ export class DiskImportService {
     return { imported, errors };
   }
 
+  private async namedFolder(
+    type: MediaType,
+    title: string,
+    year?: number,
+  ): Promise<string> {
+    const formats = await this.naming.getFormats();
+    return type === MediaType.MOVIE
+      ? this.naming.applyMovieFolderFormat(formats.movieFolder, { title, year })
+      : this.naming.applySeriesFolderFormat(formats.seriesFolder, {
+          seriesTitle: title,
+          year,
+        });
+  }
+
   // ---------------------------------------------------------------------------
 
   private async collectVideoFiles(
@@ -939,90 +853,6 @@ export class DiskImportService {
     return files;
   }
 
-  private async buildCandidate(
-    filePath: string,
-    allMedia: ScanMedia[],
-    dirtyMediaIds?: Set<number>,
-  ): Promise<ScanCandidate> {
-    const filename = path.basename(filePath);
-    let size = 0;
-    try {
-      size = (await fsp.stat(filePath)).size;
-    } catch {
-      /* ignore */
-    }
-
-    const { quality } = parseReleaseQuality(filename);
-    const epNums = this.naming.parseEpisodeNumbers(filename, filePath);
-    const extractedTitle = this.extractTitle(filename);
-    const matched = matchMedia(extractedTitle, allMedia);
-
-    let episodeId: number | null = null;
-    let episodeTitle: string | null = null;
-    let special: Episode | null = null;
-
-    if (matched?.type === 'series' && !epNums) {
-      special = await this.matchSpecialFile(matched.id, filePath);
-      episodeId = special?.id ?? null;
-      episodeTitle = special?.title ?? null;
-    }
-
-    if (matched?.type === 'series' && epNums) {
-      let season = await this.seasonRepo.findOne({
-        where: { media: { id: matched.id }, seasonNumber: epNums.season },
-      });
-      if (!season) {
-        season = await this.seasonRepo.save(
-          this.seasonRepo.create({
-            media: { id: matched.id } as Media,
-            seasonNumber: epNums.season,
-            monitored: epNums.season > 0,
-          }),
-        );
-        dirtyMediaIds?.add(matched.id);
-      }
-      let ep = await this.episodeRepo.findOne({
-        where: { season: { id: season.id }, episodeNumber: epNums.episode },
-      });
-      if (!ep) {
-        ep = await this.episodeRepo.save(
-          this.episodeRepo.create({
-            season,
-            episodeNumber: epNums.episode,
-            endEpisodeNumber: epNums.episodeEnd ?? null,
-            monitored: true,
-          }),
-        );
-        dirtyMediaIds?.add(matched.id);
-      } else if (
-        epNums.episodeEnd != null &&
-        ep.endEpisodeNumber !== epNums.episodeEnd
-      ) {
-        ep.endEpisodeNumber = epNums.episodeEnd;
-        await this.episodeRepo.save(ep);
-      }
-      episodeId = ep.id;
-      episodeTitle = ep.title ?? null;
-    }
-
-    return {
-      filePath,
-      filename,
-      size,
-      qualityName: quality.name,
-      qualityId: quality.id,
-      seasonNumber: epNums?.season ?? (special ? 0 : null),
-      episodeNumber: epNums?.episode ?? special?.episodeNumber ?? null,
-      mediaId: matched?.id ?? null,
-      mediaTitle: matched?.title ?? null,
-      mediaYear: matched?.year ?? null,
-      mediaType: matched?.type ?? null,
-      episodeId,
-      episodeTitle,
-      existingQuality: null,
-    };
-  }
-
   /**
    * A file that names itself a special but no episode number: match it against the season-0
    * rows by title. Never creates a row — an unplaceable special stays unmatched rather than
@@ -1041,21 +871,4 @@ export class DiskImportService {
       season?.episodes ?? [],
     );
   }
-
-  private extractTitle(filename: string): string {
-    let name = path.basename(filename, path.extname(filename));
-    name = name.replace(/[._]/g, ' ');
-    // Cut off at quality markers or episode pattern
-    name = name.replace(/\s*\b(2160|4k|uhd|1080|720|480p?)\b.*/i, '');
-    name = name.replace(
-      /\s*\b(bluray|blu.?ray|web.?dl|web.?rip|hdtv|dvdrip|bdrip|remux)\b.*/i,
-      '',
-    );
-    name = name.replace(/\s*\b(x264|x265|xvid|h264|h265|hevc|avc)\b.*/i, '');
-    name = name.replace(/\s*[Ss]\d{1,2}[Ee]\d{1,3}.*/i, '');
-    // Remove trailing year
-    name = name.replace(/\s*[\[(]?\d{4}[\])]?\s*$/, '');
-    return name.trim().toLowerCase();
-  }
-
 }
