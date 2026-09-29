@@ -1,7 +1,10 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { SettingsService } from '../settings/settings.service';
 import { StreamLifetime } from './lifetime-constants';
-import type { TonemapCurve } from './transcoding/codec/types';
+import {
+  DEFAULT_TONEMAP_CURVE,
+  type TonemapCurve,
+} from './transcoding/codec/types';
 import type { TonemapAlgo } from './transcoding/types';
 
 export type { TonemapAlgo, TonemapCurve };
@@ -190,7 +193,7 @@ export class StreamingSettingsCache implements OnModuleInit {
       segmentDuration: parseFloat(duration ?? '3') || 3,
       qsvPreset: (qsvPreset ?? 'faster') as StreamingSettings['qsvPreset'],
       tonemapAlgo: algo,
-      tonemapCurve: curve ?? 'hable',
+      tonemapCurve: curve ?? DEFAULT_TONEMAP_CURVE,
       cacheMaxBytes:
         maxGb != null ? Math.round(maxGb * GB) : StreamLifetime.cacheMaxBytes(),
       cacheTtlMs:

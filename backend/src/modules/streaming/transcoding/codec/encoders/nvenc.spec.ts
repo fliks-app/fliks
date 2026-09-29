@@ -102,7 +102,7 @@ describe('NVENC encoders — surface-aware filter graph', () => {
       expect(vf).toContain('hwdownload,format=p010le,');
       // CPU tonemap must downscale in linear light + convert gamut.
       expect(vf).toContain('zscale=w=1920:h=-2:t=linear');
-      expect(vf).toContain('tonemap=tonemap=hable');
+      expect(vf).toContain('tonemap=tonemap=mobius');
     });
 
     it('cpu decode + tonemap: no hwdownload, downscale-then-tonemap on CPU', () => {
@@ -111,14 +111,14 @@ describe('NVENC encoders — surface-aware filter graph', () => {
       expect(vf).not.toContain('scale_cuda');
       // Downscale to the output width in linear light before the tone curve.
       expect(vf.startsWith('zscale=w=1920:h=-2:t=linear:npl=100,')).toBe(true);
-      expect(vf).toContain('tonemap=tonemap=hable');
+      expect(vf).toContain('tonemap=tonemap=mobius');
     });
 
     it('vaapi decode + tonemap: hwdownload bridge before the CPU chain', () => {
       const vf = vfOf(enc.buildArgs(makeInput({ inputSurface: 'vaapi', tonemap: true })));
       expect(vf.startsWith('hwdownload,format=p010le,')).toBe(true);
       expect(vf).not.toContain('scale_cuda');
-      expect(vf).toContain('tonemap=tonemap=hable');
+      expect(vf).toContain('tonemap=tonemap=mobius');
     });
 
     it('cuda decode, no tonemap: scale_cuda forces nv12 (a 10-bit source must not leak p010le onto an 8-bit rung)', () => {
@@ -162,17 +162,17 @@ describe('NVENC encoders — surface-aware filter graph', () => {
       [
         'cuda, no crop: stays on the surface end to end',
         { inputSurface: 'cuda' as SurfaceFormat, crop: false },
-        'scale_cuda=w=1920:h=-2:format=p010le,tonemap_cuda=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=hable:desat=0:apply_dovi=0',
+        'scale_cuda=w=1920:h=-2:format=p010le,tonemap_cuda=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=mobius:desat=0:apply_dovi=0',
       ],
       [
         'cuda + crop: rounds off the surface for the CPU crop, then back',
         { inputSurface: 'cuda' as SurfaceFormat, crop: true },
-        'hwdownload,format=p010le,crop=3840:1632:0:264,hwupload_cuda,scale_cuda=w=1920:h=-2:format=p010le,tonemap_cuda=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=hable:desat=0:apply_dovi=0',
+        'hwdownload,format=p010le,crop=3840:1632:0:264,hwupload_cuda,scale_cuda=w=1920:h=-2:format=p010le,tonemap_cuda=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=mobius:desat=0:apply_dovi=0',
       ],
       [
         'cpu decode: uploads once to reach the CUDA-only filter',
         { inputSurface: 'cpu' as SurfaceFormat, crop: false },
-        'format=p010le,hwupload_cuda,scale_cuda=w=1920:h=-2:format=p010le,tonemap_cuda=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=hable:desat=0:apply_dovi=0',
+        'format=p010le,hwupload_cuda,scale_cuda=w=1920:h=-2:format=p010le,tonemap_cuda=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=mobius:desat=0:apply_dovi=0',
       ],
     ])('%s', (_desc, cfg, expected) => {
       const vf = vfOf(

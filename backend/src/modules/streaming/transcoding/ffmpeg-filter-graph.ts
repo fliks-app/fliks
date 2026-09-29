@@ -1,5 +1,9 @@
 import type { BurnInSubtitle } from './types';
-import type { EncoderInput, TonemapCurve } from './codec/types';
+import {
+  DEFAULT_TONEMAP_CURVE,
+  type EncoderInput,
+  type TonemapCurve,
+} from './codec/types';
 
 /** Admin-selected curve (`streaming_tonemap_curve`), pushed in by
  *  {@link setSelectedTonemapCurve}. */
@@ -11,7 +15,7 @@ export function setSelectedTonemapCurve(curve: TonemapCurve | null): void {
 
 /** Tone-map curve in force. Shared by the CPU and GPU tone-map paths. */
 export function resolveTonemapCurve(): TonemapCurve {
-  return selectedCurve ?? 'hable';
+  return selectedCurve ?? DEFAULT_TONEMAP_CURVE;
 }
 
 /** The bare zscale/tonemap chain doesn't drop HDR10 static metadata side data,
@@ -104,7 +108,7 @@ export function buildVideoFilters(
     cudaTonemap,
     hdr10Target,
   } = ctx;
-  const curve = tonemapCurve ?? 'hable';
+  const curve = tonemapCurve ?? DEFAULT_TONEMAP_CURVE;
   const cropStr = crop
     ? `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}`
     : '';

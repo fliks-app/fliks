@@ -1,4 +1,4 @@
-import type { EncoderInput } from '../../types';
+import { DEFAULT_TONEMAP_CURVE, type EncoderInput } from '../../types';
 import { dvApplyDoviOpt } from '../../../ffmpeg-filter-graph';
 
 /** No decoder emits a literal qsv surface: both platforms decode natively,
@@ -30,7 +30,7 @@ function qsvCropOpts(input: EncoderInput): string {
 export function qsvScaleFilter8bit(input: EncoderInput): string {
   const { target, filters, tonemap, tonemapPath, dvNoBase } = input;
   const w = target.width;
-  const curve = input.tonemapCurve ?? 'hable';
+  const curve = input.tonemapCurve ?? DEFAULT_TONEMAP_CURVE;
   if (input.inputSurface === 'qsv' || input.inputSurface === 'd3d11') {
     // Both decode natively (VAAPI on Linux, D3D11VA on Windows), so the
     // frame always needs the hwmap before `vpp_qsv` runs.
