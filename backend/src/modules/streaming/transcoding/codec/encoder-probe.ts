@@ -193,8 +193,9 @@ const PROBE_QSV_EXTRA = ['-forced_idr', '1', '-adaptive_i', '0', '-bf', '0', '-b
 
 function probeInputSurface(hwAccel: HwAccelType): SurfaceFormat {
   switch (hwAccel) {
+    // Every Linux QSV decoder outputs on native VAAPI (see SurfaceFormat);
+    // the filter string this picks is stripped from the probe argv anyway.
     case 'qsv':
-      return 'qsv';
     case 'vaapi':
       return 'vaapi';
     case 'nvenc':

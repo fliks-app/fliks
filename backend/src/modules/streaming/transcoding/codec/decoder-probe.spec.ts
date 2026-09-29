@@ -22,6 +22,6 @@ describe('hwDownloadFilterFor', () => {
   });
 
   it('downloads the 8-bit probe sample as nv12, even on a 10-bit decoder', () => {
-    expect(hwDownloadFilterFor(descriptor('qsv', 10))).toBe('hwdownload,format=nv12');
+    expect(hwDownloadFilterFor(descriptor('vaapi', 10))).toBe('hwdownload,format=nv12');
   });
 });
