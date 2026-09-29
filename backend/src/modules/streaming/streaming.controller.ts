@@ -1116,6 +1116,7 @@ export class StreamingController {
       mediaTitle: resolved.media?.title ?? null,
       mediaType: resolved.media?.type ?? null,
       posterUrl: resolved.media?.posterUrl ?? null,
+      fanartUrl: resolved.media?.fanartUrl ?? null,
       profileHash,
       quality: typeof startQuality === 'string' ? startQuality : null,
       kind,

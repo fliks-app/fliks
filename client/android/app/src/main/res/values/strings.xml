@@ -12,4 +12,7 @@
       client/src/environments/environment.ts.
     -->
     <string name="cast_receiver_app_id">66BF4DAE</string>
+    <string name="notification_stop">Stop</string>
+    <string name="notification_like">Like</string>
+    <string name="notification_unlike">Unlike</string>
 </resources>

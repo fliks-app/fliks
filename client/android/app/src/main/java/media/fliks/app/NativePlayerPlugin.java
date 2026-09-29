@@ -104,6 +104,7 @@ public class NativePlayerPlugin extends Plugin {
     private MediaSession mediaSession;
     private boolean hasNext = false;
     private boolean hasPrevious = false;
+    private Boolean liked;
     private final List<MediaItem.SubtitleConfiguration> subtitleConfigs = new ArrayList<>();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private Handler positionHandler;
@@ -556,13 +557,16 @@ public class NativePlayerPlugin extends Plugin {
     }
 
     private void startMediaSession() {
-        mediaSession = QueueSession.build(getContext(), player, "local",
-                () -> {
-                    if (hasPrevious) emitWindowEvent("nativePlayerPrevious");
-                    else if (player != null) player.seekTo(0);
-                },
-                () -> emitWindowEvent("nativePlayerNext"));
-        QueueSession.setHasNext(getContext(), mediaSession, hasNext);
+        mediaSession = QueueSession.build(getContext(), player, "local", new QueueSession.Handlers() {
+            @Override public void previous() {
+                if (hasPrevious) emitWindowEvent("nativePlayerPrevious");
+                else if (player != null) player.seekTo(0);
+            }
+            @Override public void next() { emitWindowEvent("nativePlayerNext"); }
+            @Override public void stop() { emitWindowEvent("nativePlayerStop"); }
+            @Override public void toggleLike() { emitWindowEvent("nativePlayerToggleLike"); }
+        });
+        QueueSession.setState(getContext(), mediaSession, hasNext, liked);
         PlaybackService.attach(getContext(), mediaSession);
     }
 
@@ -575,10 +579,12 @@ public class NativePlayerPlugin extends Plugin {
     public void setQueueNav(PluginCall call) {
         boolean previous = call.getBoolean("hasPrevious", false);
         boolean next = call.getBoolean("hasNext", false);
+        Boolean like = call.getBoolean("liked");
         mainHandler.post(() -> {
             hasPrevious = previous;
             hasNext = next;
-            if (mediaSession != null) QueueSession.setHasNext(getContext(), mediaSession, hasNext);
+            liked = like;
+            if (mediaSession != null) QueueSession.setState(getContext(), mediaSession, hasNext, liked);
             call.resolve();
         });
     }

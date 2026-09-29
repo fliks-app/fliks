@@ -44,6 +44,7 @@ export interface LiveSession {
   mediaTitle: string | null;
   mediaType: string | null;
   posterUrl: string | null;
+  fanartUrl: string | null;
   /** Routing hash for this playback's transcode job (base hash + instanceId). */
   profileHash: string | null;
   /** Un-suffixed byte-layout hash; used to detect a concurrent sibling (#638). */
@@ -188,6 +189,7 @@ export interface CreateLiveSessionInput {
   mediaTitle?: string | null;
   mediaType?: string | null;
   posterUrl?: string | null;
+  fanartUrl?: string | null;
   profileHash?: string | null;
   quality?: string | null;
   attributedUserId?: number | null;
@@ -293,6 +295,7 @@ export function buildLiveSession(
       mediaTitle: input.mediaTitle ?? null,
       mediaType: input.mediaType ?? null,
       posterUrl: input.posterUrl ?? null,
+      fanartUrl: input.fanartUrl ?? null,
       profileHash: input.profileHash ?? null,
       profileBase: input.profileHash ?? null,
       instanceId: null,

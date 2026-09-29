@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="notification_stop">Interrompi</string>
+    <string name="notification_like">Mi piace</string>
+    <string name="notification_unlike">Non mi piace più</string>
+</resources>

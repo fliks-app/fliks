@@ -17,10 +17,12 @@ export interface RemoteNotificationPlugin {
     volume: number;
     muted: boolean;
     hasNext: boolean;
+    /** Null hides the heart. */
+    liked: boolean | null;
   }): Promise<void>;
   clear(): Promise<void>;
 }
 
-export type RemoteNotificationAction = 'play' | 'pause' | 'seek' | 'volume' | 'next';
+export type RemoteNotificationAction = 'play' | 'pause' | 'seek' | 'volume' | 'next' | 'stop' | 'like';
 
 export const RemoteNotification = registerPlugin<RemoteNotificationPlugin>('RemoteNotification');

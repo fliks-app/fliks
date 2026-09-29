@@ -66,6 +66,8 @@ import { DesktopEngine } from '../../core/services/playback-engine/desktop-engin
 import { TizenEngine, isTizenAvplayAvailable } from '../../core/services/playback-engine/tizen-engine';
 import { NativePlayer } from '../../core/plugins/native-player.plugin';
 import { imageUrlWithSize } from '../../core/pipes/resolve-url.pipe';
+import { NotificationLike } from '../../core/services/notification-like';
+import { LikesApiService } from '../../core/services/api/likes-api.service';
 import { PlayerStateService } from '../../core/services/player-state.service';
 import { TrackManagerService, SubtitleOption } from '../../core/services/track-manager.service';
 import { QualityManagerService } from '../../core/services/quality-manager.service';
@@ -1541,6 +1543,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         };
         engine.onNext = () => void this.advance();
         engine.onPrevious = () => void this.playQueueItem(this.queue.index() - 1);
+        engine.onStop = () => this.onBack();
+        engine.onToggleLike = () => void this.notificationLike.toggle();
       }
     }
     this.wireNativePlayerEngine(engine);
@@ -2052,11 +2056,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   );
 
   /** Reveal the next-episode cue once each time the playhead enters the outro. */
+  private readonly notificationLike = new NotificationLike(inject(LikesApiService));
+  private readonly notificationLikeEffect = effect(() => {
+    this.mediaLoadedTick();
+    if (!this.device.isAndroidNative() || !this.playerSettings.settings().backgroundAudio) return;
+    untracked(() => void this.notificationLike.track(this.mediaId, this.episodeId));
+  });
+
   private readonly notificationQueueEffect = effect(() => {
     const hasNext = this.upNext() !== null;
     const hasPrevious = !this.preRollActive() && this.queue.active() && this.queue.index() > 0;
+    const liked = this.notificationLike.liked();
     if (this.device.isAndroidNative()) {
-      NativePlayer.setQueueNav({ hasPrevious, hasNext }).catch(() => {});
+      NativePlayer.setQueueNav({ hasPrevious, hasNext, liked }).catch(() => {});
     }
   });
 

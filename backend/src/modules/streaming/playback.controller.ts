@@ -279,6 +279,7 @@ export class PlaybackController {
             mediaTitle: updated.mediaTitle,
             episodeLabel: updated.episodeLabel,
             posterUrl: updated.posterUrl,
+            fanartUrl: updated.fanartUrl,
             positionSeconds: updated.position,
             durationSeconds: body.durationSeconds,
             state: updated.state,

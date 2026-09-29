@@ -19,6 +19,7 @@ export interface RemoteNowPlaying {
   mediaTitle: string | null;
   episodeLabel: string | null;
   posterUrl: string | null;
+  fanartUrl?: string | null;
   positionSeconds: number;
   durationSeconds: number;
   state: 'playing' | 'paused' | 'buffering';
@@ -637,6 +638,7 @@ export class RemoteService {
       mediaTitle: s.mediaTitle,
       episodeLabel: s.episodeLabel,
       posterUrl: s.posterUrl,
+      fanartUrl: s.fanartUrl,
       positionSeconds: s.positionSeconds,
       durationSeconds: s.durationSeconds,
       state: s.state,

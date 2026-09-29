@@ -92,10 +92,10 @@ export interface NativePlayerPlugin {
     artworkUrl?: string;
   }): Promise<void>;
 
-  /** Notification queue buttons: next shows only with `hasNext`; previous always
-   *  shows and restarts the item without `hasPrevious`. Taps fire
-   *  `nativePlayerNext` / `nativePlayerPrevious`. */
-  setQueueNav(options: { hasPrevious: boolean; hasNext: boolean }): Promise<void>;
+  /** Notification buttons: next shows only with `hasNext`; previous always shows
+   *  and restarts the item without `hasPrevious`; the heart shows once `liked`
+   *  is known. Taps fire `nativePlayerNext` / `Previous` / `Stop` / `ToggleLike`. */
+  setQueueNav(options: { hasPrevious: boolean; hasNext: boolean; liked: boolean | null }): Promise<void>;
 
   play(): Promise<void>;
   pause(): Promise<void>;

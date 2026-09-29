@@ -57,6 +57,8 @@ export interface RemoteState {
   mediaTitle: string | null;
   episodeLabel: string | null;
   posterUrl: string | null;
+  /** Absent from an older server. */
+  fanartUrl?: string | null;
   positionSeconds: number;
   durationSeconds: number;
   state: 'playing' | 'paused' | 'buffering';
