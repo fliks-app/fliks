@@ -6,9 +6,6 @@ import {
   h264QsvDecoder,
   hevcQsvDecoder,
   av1QsvDecoder,
-  h264QsvNativeDecoder,
-  hevcQsvNativeDecoder,
-  av1QsvNativeDecoder,
   h264QsvD3d11Decoder,
   hevcQsvD3d11Decoder,
   av1QsvD3d11Decoder,
@@ -41,9 +38,9 @@ import type {
  *  before CPU. Within HW, we keep platform-native first (QSV before
  *  VAAPI on Intel Linux to bias `vpp_qsv` crop). */
 const DESCRIPTORS: readonly DecoderDescriptor[] = [
-  // Intel modern path. Both decode on native VAAPI; the qsv-native variant
-  // (outputSurface: 'qsv') is a routing label picked only by paths that opt
-  // in (e.g. vpp_qsv crop), not a literal surface format.
+  // Intel modern path: decodes on native VAAPI. Whether a session routes its
+  // vpp_qsv crop/scale through this decoder natively is a pipeline flag
+  // (see qsvNative in encode-pipeline.ts), not a separate descriptor.
   h264QsvDecoder,
   hevcQsvDecoder,
   av1QsvDecoder,
@@ -107,15 +104,11 @@ class StaticDecoderRegistry implements DecoderRegistry {
   }
 }
 
-/** Full list of compiled-in decoder descriptors, plus the qsv-native
- *  variants which aren't in `DESCRIPTORS` (the resolver skips them
- *  unless an opt-in path requests them by id). Both lists are used by
- *  the boot probe. */
+/** Full list of compiled-in decoder descriptors, plus the Windows QSV/AMF
+ *  D3D11 variants which aren't in `DESCRIPTORS` (platform-gated, looked up
+ *  by id rather than resolved). Both lists are used by the boot probe. */
 export const ALL_DECODERS: readonly DecoderDescriptor[] = [
   ...DESCRIPTORS,
-  h264QsvNativeDecoder,
-  hevcQsvNativeDecoder,
-  av1QsvNativeDecoder,
   h264QsvD3d11Decoder,
   hevcQsvD3d11Decoder,
   av1QsvD3d11Decoder,
@@ -127,7 +120,7 @@ export const ALL_DECODERS: readonly DecoderDescriptor[] = [
 /** Lookup the QSV encode-path decoder for `codec` — exposed for the vpp_qsv
  *  crop / scale path that bypasses the registry resolver. Windows decodes on
  *  D3D11VA and maps into QSV ({@link h264QsvD3d11Decoder}); every other
- *  platform decodes qsv-native (derived from VAAPI). */
+ *  platform decodes on the same VAAPI-backed descriptor `DESCRIPTORS` uses. */
 export function findQsvNativeDecoder(
   codec: 'h264' | 'hevc' | 'av1',
   platform: NodeJS.Platform = process.platform,
@@ -135,11 +128,11 @@ export function findQsvNativeDecoder(
   const win = platform === 'win32';
   switch (codec) {
     case 'h264':
-      return win ? h264QsvD3d11Decoder : h264QsvNativeDecoder;
+      return win ? h264QsvD3d11Decoder : h264QsvDecoder;
     case 'hevc':
-      return win ? hevcQsvD3d11Decoder : hevcQsvNativeDecoder;
+      return win ? hevcQsvD3d11Decoder : hevcQsvDecoder;
     case 'av1':
-      return win ? av1QsvD3d11Decoder : av1QsvNativeDecoder;
+      return win ? av1QsvD3d11Decoder : av1QsvDecoder;
   }
 }
 

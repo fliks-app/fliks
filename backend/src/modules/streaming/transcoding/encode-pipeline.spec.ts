@@ -58,6 +58,7 @@ describe('resolveEncodePipeline — Windows QSV routing', () => {
   it('routes an SDR QSV session through the qsv-native pipeline on Windows', () => {
     const r = resolveEncodePipeline(SDR_H264, ctx({}), 'win32');
     expect(r.qsvNativeAvailable).toBe(true);
+    expect(r.qsvNative).toBe(true);
     expect(r.effectiveHwAccel).toBe('qsv');
   });
 
@@ -66,6 +67,7 @@ describe('resolveEncodePipeline — Windows QSV routing', () => {
     // Native is reserved for crop / GPU-tonemap on Linux; plain SDR stays on
     // the scale_vaapi -> hwmap chain.
     expect(r.qsvNativeAvailable).toBe(false);
+    expect(r.qsvNative).toBe(false);
     expect(r.effectiveHwAccel).toBe('qsv');
   });
 
@@ -76,6 +78,8 @@ describe('resolveEncodePipeline — Windows QSV routing', () => {
       'win32',
     );
     expect(r.qsvNativeAvailable).toBe(false);
+    // effectiveHwAccel fell to CPU too, so the encoder-facing flag agrees.
+    expect(r.qsvNative).toBe(false);
     expect(r.requestedHwAccel).toBe('none');
     expect(r.effectiveHwAccel).toBe('none');
   });
@@ -95,6 +99,7 @@ describe('resolveEncodePipeline — Windows QSV routing', () => {
     // must come off HW rather than run tonemap_vaapi on a no-base source.
     expect(r.tonemapPath).toBe('vaapi');
     expect(r.qsvNativeAvailable).toBe(false);
+    expect(r.qsvNative).toBe(false);
     expect(r.useVaapiTonemap).toBe(false);
     expect(r.requestedHwAccel).toBe('none');
     expect(r.effectiveHwAccel).toBe('none');
@@ -109,6 +114,7 @@ describe('resolveEncodePipeline — Windows QSV routing', () => {
     );
     expect(r.tonemapPath).toBe('qsv');
     expect(r.qsvNativeAvailable).toBe(true);
+    expect(r.qsvNative).toBe(true);
     expect(r.requestedHwAccel).toBe('qsv');
     expect(r.effectiveHwAccel).toBe('qsv');
   });
@@ -121,6 +127,7 @@ describe('resolveEncodePipeline — Windows QSV routing', () => {
     );
     expect(r.tonemapPath).toBe('qsv');
     expect(r.qsvNativeAvailable).toBe(false);
+    expect(r.qsvNative).toBe(false);
     expect(r.useVaapiTonemap).toBe(true);
     expect(r.effectiveHwAccel).toBe('qsv');
   });

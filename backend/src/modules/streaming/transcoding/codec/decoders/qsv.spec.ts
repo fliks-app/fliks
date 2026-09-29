@@ -1,7 +1,7 @@
 import {
-  h264QsvNativeDecoder,
-  hevcQsvNativeDecoder,
-  av1QsvNativeDecoder,
+  h264QsvDecoder,
+  hevcQsvDecoder,
+  av1QsvDecoder,
   h264QsvD3d11Decoder,
 } from './qsv';
 import { findQsvNativeDecoder } from './index';
@@ -14,10 +14,14 @@ describe('QSV encode-path decoders', () => {
     expect(d?.hwAccel).toBe('qsv');
   });
 
-  it('findQsvNativeDecoder picks the qsv-native decoder off Windows', () => {
+  // Off Windows, findQsvNativeDecoder returns the same descriptor the
+  // registry resolves generally: native-vs-default was a routing label
+  // (qsvNative on the resolved pipeline now), never a decode-argv difference.
+  it('findQsvNativeDecoder picks the same VAAPI-backed decoder off Windows', () => {
     const d = findQsvNativeDecoder('av1', 'linux');
-    expect(d?.id).toBe('av1_qsv_native_decode');
-    expect(d?.outputSurface).toBe('qsv');
+    expect(d?.id).toBe('av1_qsv_decode');
+    expect(d?.outputSurface).toBe('vaapi');
+    expect(d).toBe(av1QsvDecoder);
   });
 
   it('the Windows decoder decodes on D3D11VA and derives QSV from the same device', () => {
@@ -31,15 +35,15 @@ describe('QSV encode-path decoders', () => {
     expect(joined).not.toContain('-hwaccel qsv');
   });
 
-  it('the qsv-native decoder is off-Windows-only, the d3d11 one Windows-only', () => {
+  it('the Linux decoder is off-Windows-only, the d3d11 one Windows-only', () => {
     // supports() reads the real process.platform (linux under CI).
-    expect(h264QsvNativeDecoder.supports()).toBe(process.platform !== 'win32');
+    expect(h264QsvDecoder.supports()).toBe(process.platform !== 'win32');
     expect(h264QsvD3d11Decoder.supports()).toBe(process.platform === 'win32');
   });
 
-  it('av1 qsv-native decode is available off-Windows (native VAAPI, not the broken wrapper)', () => {
-    expect(av1QsvNativeDecoder.supports()).toBe(process.platform !== 'win32');
-    expect(hevcQsvNativeDecoder.supports()).toBe(process.platform !== 'win32');
-    expect(h264QsvNativeDecoder.supports()).toBe(process.platform !== 'win32');
+  it('av1/hevc qsv decode is available off-Windows (native VAAPI, not the broken wrapper)', () => {
+    expect(av1QsvDecoder.supports()).toBe(process.platform !== 'win32');
+    expect(hevcQsvDecoder.supports()).toBe(process.platform !== 'win32');
+    expect(h264QsvDecoder.supports()).toBe(process.platform !== 'win32');
   });
 });
