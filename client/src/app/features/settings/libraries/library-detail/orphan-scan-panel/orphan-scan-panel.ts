@@ -219,8 +219,10 @@ export class OrphanScanPanelComponent {
 
   /** Search every listed group not yet searched, capped at SEARCH_CONCURRENCY concurrent requests. */
   private async searchBatched(indices: number[]) {
+    const generation = this.scanGeneration;
     const unsearched = indices.filter((i) => !this.groups()[i].searched);
     for (let s = 0; s < unsearched.length; s += SEARCH_CONCURRENCY) {
+      if (generation !== this.scanGeneration) return;
       await Promise.all(
         unsearched.slice(s, s + SEARCH_CONCURRENCY).map((i) => this.search(i)),
       );
@@ -408,9 +410,10 @@ export class OrphanScanPanelComponent {
       const res = await this.importsApi.relinkOrphans(
         this.relinkBody(this.libraryId, vm, vm.pick),
       );
+      // The server linked it either way: the library still needs its refresh.
+      if (res.linked > 0) this.anyLinked.set(true);
       if (generation !== this.scanGeneration) return;
       if (res.linked > 0) {
-        this.anyLinked.set(true);
         this.patch(index, { linking: false, done: true });
         this.toast.success(
           this.translate.instant(
@@ -446,12 +449,15 @@ export class OrphanScanPanelComponent {
   }
 
   async linkAll() {
+    const generation = this.scanGeneration;
     const indices = this.groups()
       .map((g, i) => ({ g, i }))
       .filter(({ g }) => !g.done && !g.linking)
       .map(({ i }) => i);
     await this.searchBatched(indices);
     for (const i of indices) {
+      // Indices point into this scan's groups, not a newer one's.
+      if (generation !== this.scanGeneration) return;
       if (this.groups()[i].error) continue;
       await this.link(i);
     }
@@ -465,10 +471,13 @@ export class OrphanScanPanelComponent {
   async autoImportAll() {
     this.autoImporting.set(true);
     try {
+      const generation = this.scanGeneration;
       const indices = this.groups().map((_, i) => i);
       for (let s = 0; s < indices.length; s += AUTO_IMPORT_CONCURRENCY) {
         await Promise.all(
-          indices.slice(s, s + AUTO_IMPORT_CONCURRENCY).map((i) => this.autoLinkOne(i)),
+          indices
+            .slice(s, s + AUTO_IMPORT_CONCURRENCY)
+            .map((i) => this.autoLinkOne(i, generation)),
         );
       }
     } finally {
@@ -476,11 +485,11 @@ export class OrphanScanPanelComponent {
     }
   }
 
-  private async autoLinkOne(index: number) {
+  private async autoLinkOne(index: number, generation: number) {
     const vm = this.groups()[index];
-    if (vm.done || vm.linking) return;
+    if (generation !== this.scanGeneration || !vm || vm.done || vm.linking) return;
     if (!vm.searched) await this.search(index);
-    if (this.groups()[index].error) return;
+    if (generation !== this.scanGeneration || this.groups()[index].error) return;
     // No provider match: still add it, unmatched, rather than leave it behind.
     const best = this.bestMatch(this.groups()[index]);
     this.patch(index, { pick: best });

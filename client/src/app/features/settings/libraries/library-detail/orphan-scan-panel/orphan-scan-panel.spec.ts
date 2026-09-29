@@ -323,6 +323,48 @@ describe('OrphanScanPanelComponent.linkAll', () => {
     const last = linked.find((b) => b.folderName === 'F24');
     expect(last?.externalId).toBe('11');
   });
+
+  it('stops at a rescan instead of linking the newer scan\'s groups by index', async () => {
+    const releases: ((r: unknown) => void)[] = [];
+    const linked: RelinkOrphansBody[] = [];
+    const importsApi = {
+      previewOrphans: () => Promise.resolve(scanResult(['Alpha', 'Beta'])),
+      relinkOrphansBatch: () => Promise.resolve({ queued: 0 }),
+      relinkOrphans: (body: RelinkOrphansBody) => {
+        linked.push(body);
+        return new Promise((r) => releases.push(r));
+      },
+    };
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTranslateService({
+          lang: 'en',
+          loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
+        }),
+        { provide: ImportsApiService, useValue: importsApi as unknown as ImportsApiService },
+        {
+          provide: MetadataService,
+          useValue: {
+            searchMovie: () => Promise.resolve([result(11, 'First')]),
+            searchTv: () => Promise.resolve([]),
+          } as unknown as MetadataService,
+        },
+        { provide: ToastService, useValue: { success: () => undefined, info: () => undefined } },
+      ],
+    });
+    const panel = TestBed.createComponent(OrphanScanPanelComponent).componentInstance;
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+
+    const all = panel.linkAll();
+    await vi.waitFor(() => expect(releases.length).toBe(1));
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+    releases[0]({ mediaId: 1, created: true, linked: 1, alreadyPresent: 0, errors: [] });
+    await all;
+
+    expect(linked.map((b) => b.folderName)).toEqual(['Alpha']);
+    expect(panel.anyLinked()).toBe(true);
+  });
 });
 
 describe('OrphanScanPanelComponent: a group whose search errored', () => {
