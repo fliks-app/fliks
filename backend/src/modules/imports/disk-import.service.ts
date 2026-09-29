@@ -430,122 +430,126 @@ export class DiskImportService {
       ({ media, created, lockKey } = await this.findOrCreateUnmatched(dto, library, addedByUserId));
     }
 
-    if (media.library && media.library.id !== dto.libraryId) {
-      throw new BadRequestException(
-        `Media already belongs to another library ("${media.library.name}")`,
-      );
-    }
-
     let linked = 0;
     let alreadyPresent = 0;
     let slotCreated = false;
     const errors: string[] = [];
 
-    if (dto.reorganize || dto.transfer) {
-      // Move/copy + rename into the library's naming layout (folder/file naming,
-      // companions, MediaFile creation, ffprobe enrich and subtitle scheduling).
-      if (!media.library) media.library = library;
-      const entries: ImportFileEntry[] = [];
-      for (const f of dto.files) {
-        const filename = path.basename(f.filePath);
-        let episodeId: number | undefined;
-        if (media.type === MediaType.SERIES) {
-          const epNums =
-            callerEpNums(f) ?? this.naming.parseEpisodeNumbers(filename, f.filePath);
-          if (!epNums) {
-            const special = await this.matchSpecialFile(media.id, f.filePath);
-            if (!special) {
-              errors.push(`${filename}: no SxxEyy pattern found`);
-              continue;
-            }
-            episodeId = special.id;
-          } else {
-            const ep = await this.mediaService.ensureSeriesEpisode(media, epNums);
-            episodeId = ep.episodeId ?? undefined;
-            slotCreated ||= ep.created;
-          }
-        }
-        entries.push({
-          filePath: f.filePath,
-          mediaId: media.id,
-          episodeId,
-          quality: parseReleaseQuality(filename).quality.name,
-          targetLibraryId: dto.libraryId,
-        });
-      }
-      if (entries.length) {
-        // A re-run of the same external import lands on its own files: skip, don't duplicate.
-        const res = await this.confirmImport(entries, dto.transfer ?? 'move', {
-          uniquifyOnCollision: !dto.transfer,
-        });
-        linked = res.imported;
-        alreadyPresent = res.alreadyPresent;
-        errors.push(...res.errors);
-      }
-    } else {
-      // Link in place — pin the media to the orphan's on-disk folder so
-      // `relativePath` stays valid, but only when it has no files yet.
-      if (
-        (media.files?.length ?? 0) === 0 &&
-        media.folderName !== dto.folderName
-      ) {
-        await this.mediaRepo.update(media.id, {
-          library: { id: library.id } as Library,
-          folderName: dto.folderName,
-        });
-        media.folderName = dto.folderName;
-      }
-      if (!media.library) media.library = library;
-
-      for (const f of dto.files) {
-        const absPath = path.resolve(f.filePath);
-        const epNums = callerEpNums(f);
-        const res = await this.mediaService.linkExistingFileInPlace({
-          media,
-          absPath,
-          epNums,
-        });
-        if ('error' in res) {
-          errors.push(`${path.basename(f.filePath)}: ${res.error}`);
-          continue;
-        }
-        linked++;
-        slotCreated ||= res.created;
-        this.postImportQueue.enqueue({ mediaFileId: res.fileId });
-      }
-      // The reorganize branch above emits this from LibraryIngestService.
-      if (linked > 0) {
-        this.events.emitDomain({
-          type: 'media.files.imported',
-          mediaId: media.id,
-          source: 'disk',
-        });
-      }
-    }
-
-    // Backfill metadata for any season/episode slot invented while linking.
-    // An unmatched media has no provider id to refresh from, it would just throw.
-    if (media.type === MediaType.SERIES && slotCreated && hasProviderId(media)) {
-      try {
-        await this.metadata.refreshSeriesEpisodes(media);
-      } catch (e) {
-        this.logger.warn(
-          `Orphan relink: refreshSeriesEpisodes failed — ${(e as Error).message}`,
+    try {
+      if (media.library && media.library.id !== dto.libraryId) {
+        throw new BadRequestException(
+          `Media already belongs to another library ("${media.library.name}")`,
         );
       }
-    }
 
-    // A newly created unmatched row that failed to link any file is dead
-    // weight: for a root movie especially, an ambiguous folderName '' twin
-    // would otherwise linger and confuse the next reuse lookup. A file already at its
-    // destination is served by this row, so it stays. Guarded by the same lock as its
-    // creation, and re-checked inside it: a concurrent group can reuse the row and link
-    // its own file between our creation and this delete.
-    if (!dto.externalId && created && linked === 0 && alreadyPresent === 0 && lockKey) {
-      await this.withKeyedLock(lockKey, async () => {
-        const stillEmpty = (await this.fileRepo.count({ where: { media: { id: media.id } } })) === 0;
-        if (stillEmpty) await this.mediaRepo.delete(media.id);
-      });
+      if (dto.reorganize || dto.transfer) {
+        // Move/copy + rename into the library's naming layout (folder/file naming,
+        // companions, MediaFile creation, ffprobe enrich and subtitle scheduling).
+        if (!media.library) media.library = library;
+        const entries: ImportFileEntry[] = [];
+        for (const f of dto.files) {
+          const filename = path.basename(f.filePath);
+          let episodeId: number | undefined;
+          if (media.type === MediaType.SERIES) {
+            const epNums =
+              callerEpNums(f) ?? this.naming.parseEpisodeNumbers(filename, f.filePath);
+            if (!epNums) {
+              const special = await this.matchSpecialFile(media.id, f.filePath);
+              if (!special) {
+                errors.push(`${filename}: no SxxEyy pattern found`);
+                continue;
+              }
+              episodeId = special.id;
+            } else {
+              const ep = await this.mediaService.ensureSeriesEpisode(media, epNums);
+              episodeId = ep.episodeId ?? undefined;
+              slotCreated ||= ep.created;
+            }
+          }
+          entries.push({
+            filePath: f.filePath,
+            mediaId: media.id,
+            episodeId,
+            quality: parseReleaseQuality(filename).quality.name,
+            targetLibraryId: dto.libraryId,
+          });
+        }
+        if (entries.length) {
+          // A re-run of the same external import lands on its own files: skip, don't duplicate.
+          const res = await this.confirmImport(entries, dto.transfer ?? 'move', {
+            uniquifyOnCollision: !dto.transfer,
+          });
+          linked = res.imported;
+          alreadyPresent = res.alreadyPresent;
+          errors.push(...res.errors);
+        }
+      } else {
+        // Link in place — pin the media to the orphan's on-disk folder so
+        // `relativePath` stays valid, but only when it has no files yet.
+        if (
+          (media.files?.length ?? 0) === 0 &&
+          media.folderName !== dto.folderName
+        ) {
+          await this.mediaRepo.update(media.id, {
+            library: { id: library.id } as Library,
+            folderName: dto.folderName,
+          });
+          media.folderName = dto.folderName;
+        }
+        if (!media.library) media.library = library;
+
+        for (const f of dto.files) {
+          const absPath = path.resolve(f.filePath);
+          const epNums = callerEpNums(f);
+          const res = await this.mediaService.linkExistingFileInPlace({
+            media,
+            absPath,
+            epNums,
+          });
+          if ('error' in res) {
+            errors.push(`${path.basename(f.filePath)}: ${res.error}`);
+            continue;
+          }
+          linked++;
+          slotCreated ||= res.created;
+          this.postImportQueue.enqueue({ mediaFileId: res.fileId });
+        }
+        // The reorganize branch above emits this from LibraryIngestService.
+        if (linked > 0) {
+          this.events.emitDomain({
+            type: 'media.files.imported',
+            mediaId: media.id,
+            source: 'disk',
+          });
+        }
+      }
+
+      // Backfill metadata for any season/episode slot invented while linking.
+      // An unmatched media has no provider id to refresh from, it would just throw.
+      if (media.type === MediaType.SERIES && slotCreated && hasProviderId(media)) {
+        try {
+          await this.metadata.refreshSeriesEpisodes(media);
+        } catch (e) {
+          this.logger.warn(
+            `Orphan relink: refreshSeriesEpisodes failed — ${(e as Error).message}`,
+          );
+        }
+      }
+
+      // A newly created unmatched row that failed to link any file is dead
+      // weight: for a root movie especially, an ambiguous folderName '' twin
+      // would otherwise linger and confuse the next reuse lookup. A file already at its
+      // destination is served by this row, so it stays. Under its creation lock, and only
+      // when no concurrent relink that reused the row is still linking into it.
+      if (!dto.externalId && created && linked === 0 && alreadyPresent === 0 && lockKey) {
+        await this.withKeyedLock(lockKey, async () => {
+          if (this.unmatchedHolders.get(media.id) !== 1) return;
+          const files = await this.fileRepo.count({ where: { media: { id: media.id } } });
+          if (files === 0) await this.mediaRepo.delete(media.id);
+        });
+      }
+    } finally {
+      if (lockKey) this.releaseUnmatched(media.id);
     }
 
     this.logger.log(
@@ -624,6 +628,15 @@ export class DiskImportService {
     return run;
   }
 
+  /** Relinks currently linking into each unmatched row they created or reused. */
+  private readonly unmatchedHolders = new Map<number, number>();
+
+  private releaseUnmatched(mediaId: number): void {
+    const n = (this.unmatchedHolders.get(mediaId) ?? 1) - 1;
+    if (n > 0) this.unmatchedHolders.set(mediaId, n);
+    else this.unmatchedHolders.delete(mediaId);
+  }
+
   /**
    * No external id: reuse the media already pinned to this folder, or create one from the
    * guessed/corrected title. Natural key is (library, type, folderName).
@@ -671,7 +684,7 @@ export class DiskImportService {
       : dto.folderName;
 
     const lockKey = `${library.id}:${dto.type}:${folderName}`;
-    const result = await this.withKeyedLock(lockKey, async () => {
+    const reuseOrCreate = async (): Promise<{ media: Media; created: boolean }> => {
       // Whoever already owns this folder is reused, identified or not.
       const where = {
         library: { id: library.id },
@@ -740,6 +753,12 @@ export class DiskImportService {
         throw new BadRequestException('Media not found after import');
       }
       return { media, created: true };
+    };
+    const result = await this.withKeyedLock(lockKey, async () => {
+      const r = await reuseOrCreate();
+      // Taken inside the lock, so a concurrent cleanup sees this holder before deleting.
+      this.unmatchedHolders.set(r.media.id, (this.unmatchedHolders.get(r.media.id) ?? 0) + 1);
+      return r;
     });
     return { ...result, lockKey };
   }

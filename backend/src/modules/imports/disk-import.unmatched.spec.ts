@@ -622,6 +622,34 @@ describe('DiskImportService.relinkOrphans: movie files directly at the library r
     expect(fileRepo.count).toHaveBeenCalledWith({ where: { media: { id: 6 } } });
     expect(mediaRepo.delete).not.toHaveBeenCalled();
   });
+
+  it('keeps the row while a concurrent group that reused it is still linking', async () => {
+    const { service, mediaRepo, mediaService, fileRepo } = makeService();
+    const row = unmatchedRow(7, 'Sample Movie (2009)');
+    mediaRepo.findOne
+      .mockResolvedValueOnce(null) // first group: nothing to reuse
+      .mockResolvedValueOnce(row) // first group: reload after create
+      .mockResolvedValueOnce(row); // second group: reuses the new row
+    mediaService.createUnmatched.mockResolvedValue({ id: 7 });
+    let finishSecond!: () => void;
+    mediaService.linkExistingFileInPlace.mockImplementation(({ absPath }: { absPath: string }) =>
+      absPath.endsWith('a.mkv')
+        ? Promise.resolve({ error: 'unreadable' })
+        : new Promise((resolve) => {
+            finishSecond = () => resolve({ fileId: 9, episodeId: null, created: false });
+          }),
+    );
+    const folder = '/media/Sample Movie (2009)';
+
+    const first = service.relinkOrphans(dto({ files: [{ filePath: `${folder}/a.mkv` }] }), null);
+    const second = service.relinkOrphans(dto({ files: [{ filePath: `${folder}/b.mkv` }] }), null);
+    await first;
+
+    expect(mediaRepo.delete).not.toHaveBeenCalled();
+    expect(fileRepo.count).not.toHaveBeenCalled();
+    finishSecond();
+    await expect(second).resolves.toMatchObject({ mediaId: 7, linked: 1 });
+  });
 });
 
 describe('DiskImportService.relinkOrphans: files outside the library', () => {
