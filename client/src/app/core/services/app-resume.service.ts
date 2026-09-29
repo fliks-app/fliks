@@ -22,6 +22,11 @@ export class AppResumeService {
 
   private backgroundedAt: number | null = null;
 
+  /** Refresh data pages now, e.g. once a lost server is reachable again. */
+  refresh(): void {
+    this._resume$.next();
+  }
+
   /** Call when the app goes to the background (Capacitor `pause`). */
   markBackgrounded(): void {
     this.backgroundedAt = Date.now();

@@ -42,6 +42,7 @@ import { TrackingModalHostComponent } from '../components/tracking-modal-host/tr
 import { UserMenuComponent } from '../components/user-menu';
 import { AppUpdateModalComponent } from '../components/app-update-modal/app-update-modal';
 import { AppUpdateService } from '../../core/services/app-update.service';
+import { AppResumeService } from '../../core/services/app-resume.service';
 import { AddToPlaylistService } from '../../core/services/add-to-playlist.service';
 import { RecommendService } from '../../core/services/recommend.service';
 import { LucideIconComponent } from '../components/lucide-icon';
@@ -98,6 +99,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly countsApi = inject(CountsApiService);
   readonly serverConfig = inject(ServerConfigService);
   readonly sse = inject(SseService);
+  private readonly appResume = inject(AppResumeService);
   private readonly downloadManager = inject(DownloadManagerService);
   // Instantiate eagerly from the shell so it records the page the user was on
   // BEFORE the first player open. It is `providedIn: 'root'` but otherwise only
@@ -509,8 +511,24 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.navbar.goBack();
   }
 
+  /** Set by Retry, cleared by the next connection outcome or the dial timeout. */
+  readonly retrying = signal(false);
+  private wasUnreachable = false;
+
+  private readonly reconnectedEffect = effect(() => {
+    const unreachable = this.sse.serverUnreachable();
+    const connected = this.sse.connected();
+    untracked(() => {
+      if (connected) this.retrying.set(false);
+      if (this.wasUnreachable && !unreachable) this.appResume.refresh();
+      this.wasUnreachable = unreachable;
+    });
+  });
+
   retryConnection() {
-    window.location.reload();
+    this.retrying.set(true);
+    this.sse.reconnect();
+    setTimeout(() => this.retrying.set(false), 10_000);
   }
 
   toggleCastOverlay() {
