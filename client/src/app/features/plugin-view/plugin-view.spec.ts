@@ -9,6 +9,7 @@ import { vi } from 'vitest';
 import { PluginViewComponent } from './plugin-view';
 import { NavbarService } from '../../core/services/navbar.service';
 import { PluginUiRegistryService } from '../../core/plugin-ui/plugin-ui-registry.service';
+import { ToastService } from '../../core/services/toast.service';
 import type { AnyConfigPage } from './view-kinds.types';
 
 async function settle(fixture: ComponentFixture<unknown>) {
@@ -399,6 +400,49 @@ describe('PluginViewComponent', () => {
     expect(rowActions[0]!.route).toBe('/api/plugins/fliks.a/providers/:id/stats');
     // Dropping `result` here would make the renderer hide the button entirely.
     expect(rowActions[0]!.result?.columns.map((c) => c.key)).toEqual(['date']);
+    http.verify();
+  });
+
+  it('toasts a list-scope action\'s successKey the same way a row action does', async () => {
+    const { fixture, http } = createComponent(
+      { pluginId: 'fliks.a', view: 'providers' },
+      {
+        hasPlugin: () => true,
+        configPage: () => ({
+          kind: 'providers',
+          id: 'x',
+          labelKey: 'x.title',
+          list: '/providers',
+          implementations: '/implementations',
+          actions: [
+            {
+              id: 'clear-all',
+              labelKey: 'x.clear_all',
+              method: 'DELETE',
+              route: '/providers/cooldowns',
+              scope: 'list',
+              successKey: 'ok',
+            },
+          ],
+        }),
+      },
+    );
+    fixture.detectChanges();
+    http.expectOne({ url: '/api/plugins/fliks.a/implementations', method: 'GET' }).flush([]);
+    await settle(fixture);
+    http.expectOne({ url: '/api/plugins/fliks.a/providers', method: 'GET' }).flush([]);
+    await settle(fixture);
+
+    const toast = TestBed.inject(ToastService);
+    const success = vi.spyOn(toast, 'success');
+    const [listAction] = fixture.componentInstance.providerListActions(
+      fixture.componentInstance.providersView()!,
+    );
+    const run = listAction!.run();
+    http.expectOne({ url: '/api/plugins/fliks.a/providers/cooldowns', method: 'DELETE' }).flush({});
+    await run;
+
+    expect(success).toHaveBeenCalledWith('All good');
     http.verify();
   });
 
