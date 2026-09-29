@@ -14,12 +14,14 @@ public class HdrPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func isSupported(_ call: CAPPluginCall) {
         let supported = AVPlayer.eligibleForHDRPlayback
-        // eligibleForHDRPlayback covers profiles 5 and 8.4 per Apple's "Incorporating
-        // HDR video with Dolby Vision" doc; 10 (AV1) has a real hardware probe instead.
+        // Apple's HLS spec lists P5 and P10 (AV1) for iOS; P8.1 lands in iOS 27. The
+        // list can't say "8.4 only", so 8 waits for 27 (8.x still plays via its base layer).
         var profiles: [Int] = []
         if supported {
             profiles.append(5)
-            profiles.append(8)
+            if #available(iOS 27.0, *) {
+                profiles.append(8)
+            }
             if #available(iOS 17.0, *), VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1) {
                 profiles.append(10)
             }
