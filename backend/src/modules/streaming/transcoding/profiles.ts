@@ -43,7 +43,7 @@ export function resolveSourceVideoBitrateBps(
 }
 
 /** A source's bitrates as every consumer reads them: container bitrate (unset
- *  when 0), summed audio, and the video estimate derived from both. */
+ *  when 0) and the video estimate derived from it and the summed audio. */
 export function sourceBitrates(
   si:
     | {
@@ -53,7 +53,7 @@ export function sourceBitrates(
       }
     | null
     | undefined,
-): { videoBitRate?: number; formatBitRate?: number; audioSumBitrate: number } {
+): { videoBitRate?: number; formatBitRate?: number } {
   const formatBitRate =
     si?.formatBitRate != null && si.formatBitRate > 0 ? si.formatBitRate : undefined;
   const audioSumBitrate = (si?.audio ?? []).reduce((sum, a) => sum + (a?.bitRate ?? 0), 0);
@@ -64,7 +64,6 @@ export function sourceBitrates(
       audioSumBitrate,
     ),
     formatBitRate,
-    audioSumBitrate,
   };
 }
 
