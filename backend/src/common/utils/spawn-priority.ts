@@ -19,9 +19,10 @@ export function spawnBackground(
   args: string[],
   opts: SpawnOptions & PriorityOpts,
 ): ChildProcess {
-  const prefix = priorityPrefix(opts);
+  const { background, io, cpu, ...spawnOpts } = opts;
+  const prefix = priorityPrefix({ background, io, cpu });
   const [head, ...rest] = prefix.length ? prefix : [cmd];
-  return spawn(head, prefix.length ? [...rest, cmd, ...args] : args, opts);
+  return spawn(head, prefix.length ? [...rest, cmd, ...args] : args, spawnOpts);
 }
 
 /** Same priority prefix as `spawnBackground`, for `execFile`-style callers:
