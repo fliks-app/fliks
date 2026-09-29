@@ -285,6 +285,7 @@ function stateFrame(targetId: string): SseEvent {
     mediaTitle: 'Title',
     episodeLabel: null,
     posterUrl: null,
+    fanartUrl: null,
     positionSeconds: 10,
     durationSeconds: 100,
     state: 'playing',

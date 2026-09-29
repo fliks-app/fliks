@@ -193,6 +193,8 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   /** The notification's queue buttons. */
   onNext: (() => void) | null = null;
   onPrevious: (() => void) | null = null;
+  onStop: (() => void) | null = null;
+  onToggleLike: (() => void) | null = null;
   private _crop: NativePlayerCrop | null = null;
 
   /** Crop the letterbox bars natively. Kept and re-applied after load(), the
@@ -432,6 +434,8 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
 
     bind('nativePlayerNext', () => this.onNext?.());
     bind('nativePlayerPrevious', () => this.onPrevious?.());
+    bind('nativePlayerStop', () => this.onStop?.());
+    bind('nativePlayerToggleLike', () => this.onToggleLike?.());
 
     bind('nativePlayerStateChanged', (e: Event) => {
       const detail = (e as CustomEvent).detail;

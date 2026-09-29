@@ -2,6 +2,8 @@ import { Injectable, Injector, effect, inject, untracked } from '@angular/core';
 import { RemoteNotification, type RemoteNotificationAction } from '../plugins/remote-notification.plugin';
 import { imageUrlWithSize } from '../pipes/resolve-url.pipe';
 import { DeviceService } from './device.service';
+import { LikesApiService } from './api/likes-api.service';
+import { NotificationLike } from './notification-like';
 import { RemotePlaybackTarget } from './remote-playback-target';
 import { RemoteService } from './remote.service';
 import { ServerConfigService } from './server-config.service';
@@ -17,6 +19,8 @@ export class RemoteNotificationService {
   private readonly target = inject(RemotePlaybackTarget);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly injector = inject(Injector);
+  private readonly like = new NotificationLike(inject(LikesApiService));
+
   private shown = false;
 
   init(): void {
@@ -35,8 +39,10 @@ export class RemoteNotificationService {
         return;
       }
       this.shown = true;
+      const s = this.remote.targetState();
+      untracked(() => void this.like.track(s?.mediaId, s?.episodeId));
       const episode = t.episodeTitle();
-      const art = t.fanartUrl();
+      const art = s?.fanartUrl || t.fanartUrl();
       void RemoteNotification.update({
         title: episode || t.mediaTitle(),
         artist: episode ? t.mediaTitle() : undefined,
@@ -49,6 +55,7 @@ export class RemoteNotificationService {
         volume: t.volume(),
         muted: t.muted(),
         hasNext: t.canPlayNext(),
+        liked: this.like.liked(),
       }).catch(() => {});
     }, { injector: this.injector });
   }
@@ -71,6 +78,12 @@ export class RemoteNotificationService {
         break;
       case 'next':
         t.playNext();
+        break;
+      case 'stop':
+        t.stopPlayback();
+        break;
+      case 'like':
+        void this.like.toggle();
         break;
     }
   }

@@ -37,15 +37,20 @@ public class RemoteNotificationPlugin extends Plugin {
         int volume = (int) Math.round(call.getDouble("volume", 1.0) * 100);
         boolean muted = call.getBoolean("muted", false);
         boolean hasNext = call.getBoolean("hasNext", false);
+        Boolean liked = call.getBoolean("liked");
         mainHandler.post(() -> {
             if (session == null) {
                 player = new RemoteStatePlayer(Looper.getMainLooper(), (action, value) -> emit(action, value));
-                session = QueueSession.build(getContext(), player, "remote",
-                        () -> emit("seek", 0), () -> emit("next", 0));
+                session = QueueSession.build(getContext(), player, "remote", new QueueSession.Handlers() {
+                    @Override public void previous() { emit("seek", 0); }
+                    @Override public void next() { emit("next", 0); }
+                    @Override public void stop() { emit("stop", 0); }
+                    @Override public void toggleLike() { emit("like", 0); }
+                });
                 PlaybackService.attach(getContext(), session);
             }
             player.update(metadata, playing, buffering, positionMs, durationMs, canSetVolume, volume, muted);
-            QueueSession.setHasNext(getContext(), session, hasNext);
+            QueueSession.setState(getContext(), session, hasNext, liked);
             call.resolve();
         });
     }

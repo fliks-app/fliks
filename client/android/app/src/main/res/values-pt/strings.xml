@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="notification_stop">Parar</string>
+    <string name="notification_like">Gosto</string>
+    <string name="notification_unlike">Já não gosto</string>
+</resources>

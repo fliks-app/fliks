@@ -309,6 +309,7 @@ export interface RemoteStatePayload {
   mediaTitle: string | null;
   episodeLabel: string | null;
   posterUrl: string | null;
+  fanartUrl: string | null;
   positionSeconds: number;
   durationSeconds: number;
   state: 'playing' | 'paused' | 'buffering';
