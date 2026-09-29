@@ -1,6 +1,6 @@
-import { Injectable, effect, inject, signal } from '@angular/core';
+import { Injectable, effect, inject, signal, untracked } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
-import { CastService } from './cast.service';
+import { CastService, type CastResumedMedia } from './cast.service';
 import { CastSettingsService } from './cast-settings.service';
 import { StreamingApiService, type PlayMethod } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
@@ -379,6 +379,25 @@ export class CastPlayerService {
     this.loadSpriteMetadata(opts.mediaFileId);
   }
 
+  /** Take over a session this sender left running, without reloading it on the
+   *  receiver: the file and sid come off the stream URL. Track pickers stay
+   *  empty until the next load, as rebuilding them would start a new session. */
+  private adopt(media: CastResumedMedia): void {
+    const mediaFileId = Number(/\/api\/stream\/(\d+)\//.exec(media.url)?.[1]);
+    const c = media.customData;
+    if (!mediaFileId || !c?.mediaId) return;
+    this.mediaFileId.set(mediaFileId);
+    this.mediaId.set(c.mediaId);
+    this.episodeId.set(c.episodeId ?? undefined);
+    this.mediaTitle.set(c.title ?? '');
+    this.episodeTitle.set(c.subtitle ?? '');
+    this.fanartUrl.set(c.posterUrl || null);
+    this.liveSessionId.set(new URL(media.url).searchParams.get('sid'));
+    this.hasMedia.set(true);
+    this.startPositionSaving();
+    this.loadSpriteMetadata(mediaFileId);
+  }
+
   /** Clear Cast media state (on disconnect/stop). Saves position first
    *  and kills the backend transcode session so its ffmpeg stops; without
    *  this the session lingers until SESSION_TIMEOUT_MS, holding HW
@@ -425,6 +444,10 @@ export class CastPlayerService {
           if (!this.cast.isConnected() && this.hasMedia()) this.clear();
         }, CastPlayerService.DISCONNECT_GRACE_MS);
       }
+    });
+    effect(() => {
+      const media = this.cast.resumedMedia();
+      if (media && !untracked(this.hasMedia)) untracked(() => this.adopt(media));
     });
     // On every session connect, ask the receiver which audio/video codecs
     // its MediaSource accepts and cache the answer by device name. The

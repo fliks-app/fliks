@@ -91,8 +91,26 @@ export interface CastTextTrackStyle {
   edgeColor: string;
 }
 
+/** What a session this sender left running plays: the loaded URL and the
+ *  customData sent with it. */
+export interface CastResumedMedia {
+  url: string;
+  customData?: {
+    title?: string;
+    subtitle?: string;
+    posterUrl?: string;
+    mediaId?: number;
+    episodeId?: number;
+  };
+}
+
 interface NativeCastPlugin {
-  initialize(opts: { appId: string }): Promise<{ available: boolean }>;
+  /** `connected` + `media` when a session outlived the WebView. */
+  initialize(opts: { appId: string }): Promise<{
+    available: boolean;
+    connected?: boolean;
+    media?: CastResumedMedia;
+  }>;
   isConnected(): Promise<{ connected: boolean }>;
   requestSession(): Promise<void>;
   /** Native-only device enumeration + selection backing the unified picker
@@ -157,6 +175,8 @@ export class CastService implements OnDestroy {
    *  entry points are hidden when nothing can be cast to. */
   readonly isAvailable = signal(false);
   readonly isConnected = signal(false);
+  /** Set once at startup when a session and its media survived a WebView reload. */
+  readonly resumedMedia = signal<CastResumedMedia | null>(null);
   /** True while waiting for the Cast session to establish. Written only through
    *  {@link beginConnecting} / {@link endConnecting}: the trigger it drives is
    *  disabled while it is set, so a connect whose outcome never arrives would
@@ -242,8 +262,10 @@ export class CastService implements OnDestroy {
 
   private async initNative() {
     try {
-      const { available } = await CastBridge.initialize({ appId: CAST_APP_ID });
-      this.isAvailable.set(available);
+      const { available, connected, media } = await CastBridge.initialize({ appId: CAST_APP_ID });
+      this.isAvailable.set(available || !!connected);
+      if (connected) this.isConnected.set(true);
+      if (media) this.resumedMedia.set(media);
       if (available) void this.getCastDevices();
 
       // Listen for native Cast events

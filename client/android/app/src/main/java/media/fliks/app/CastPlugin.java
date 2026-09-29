@@ -232,16 +232,38 @@ public class CastPlugin extends Plugin {
                 sessionManager.addSessionManagerListener(sessionListener, CastSession.class);
                 startRouteDiscovery();
 
-                // Check if already connected
+                // A session outlives the WebView (Back, reopening from the Cast
+                // notification): hand it and its media back so JS can adopt them.
                 castSession = sessionManager.getCurrentCastSession();
                 // Discovery has only just started, so this is usually false; the
                 // route callback raises it as soon as a receiver answers.
-                call.resolve(new JSObject().put("available", hasCastRoute()));
+                JSObject result = new JSObject().put("available", hasCastRoute());
+                RemoteMediaClient client = castSession != null && castSession.isConnected()
+                    ? castSession.getRemoteMediaClient() : null;
+                if (client != null) {
+                    result.put("connected", true);
+                    JSObject media = activeMedia(client);
+                    if (media != null) {
+                        result.put("media", media);
+                        startMediaPolling(client);
+                    }
+                }
+                call.resolve(result);
             } catch (Exception e) {
                 Log.e(TAG, "Cast init failed", e);
                 call.resolve(new JSObject().put("available", false));
             }
         });
+    }
+
+    /** What the receiver plays, from the MediaInfo this sender loaded. */
+    private JSObject activeMedia(RemoteMediaClient client) {
+        MediaInfo info = client.getMediaInfo();
+        if (info == null || info.getContentId() == null) return null;
+        JSObject media = new JSObject().put("url", info.getContentId());
+        JSONObject custom = info.getCustomData();
+        if (custom != null) media.put("customData", custom);
+        return media;
     }
 
     @PluginMethod()
