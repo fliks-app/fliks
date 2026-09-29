@@ -181,7 +181,12 @@
           <span class="text-sm">{{ 'connectivity.server_unreachable' | translate }}</span>
           <div class="flex items-center gap-1">
             <a routerLink="/downloads" [state]="{ rootEntry: true }" class="btn btn-sm btn-ghost">{{ 'downloads.title' | translate }}</a>
-            <button class="btn btn-sm btn-ghost" (click)="retryConnection()">{{ 'common.retry' | translate }}</button>
+            <button class="btn btn-sm btn-ghost" [disabled]="retrying()" (click)="retryConnection()">
+              @if (retrying()) {
+                <span class="loading loading-spinner loading-xs"></span>
+              }
+              {{ 'common.retry' | translate }}
+            </button>
           </div>
         </div>
       }
