@@ -2250,7 +2250,7 @@
       "translation_libretranslate_url": "URL do servidor",
       "translation_libretranslate_url_hint": "Aponte para o seu contentor LibreTranslate, ex. http://libretranslate:5000.",
       "translation_api_key_optional": "Chave de API (opcional)",
-      "translation_new": "Novo fornecedor",
+      "translation_new": "Adicionar um fornecedor",
       "translation_concurrency": "Paralelismo máx.",
       "translation_empty": "Ainda não há nenhum fornecedor de tradução configurado.",
       "translation_col_engine": "Motor",
