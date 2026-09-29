@@ -14,7 +14,11 @@ describe('ScanBackfillService.tick', () => {
     resolveFile?: jest.Mock;
   } = {}) => {
     freeSlots.mockReturnValue(2);
-    const files = { query: jest.fn().mockResolvedValue((opts.pendingIds ?? []).map((id) => ({ id }))) };
+    const files = {
+      query: jest.fn(async (_sql: string, [after]: number[]) =>
+        (opts.pendingIds ?? []).filter((id) => id > after).slice(0, 1).map((id) => ({ id })),
+      ),
+    };
     const streamingService = {
       resolveFile:
         opts.resolveFile ??
@@ -31,6 +35,7 @@ describe('ScanBackfillService.tick', () => {
       sourceScans as never,
       liveSessions as never,
     );
+    Object.assign(svc, { startedAt: 0 });
     return { svc, files, streamingService, sourceScans, liveSessions };
   };
 
@@ -90,5 +95,19 @@ describe('ScanBackfillService.tick', () => {
     resolveFile.mockClear();
     await svc.tick();
     expect(resolveFile).not.toHaveBeenCalled();
+  });
+
+  it('moves past a file whose scan left no row instead of rescanning it every tick', async () => {
+    const { svc, sourceScans } = setup({ pendingIds: [7, 9] });
+    await svc.tick();
+    await svc.tick();
+    expect(sourceScans.scheduleIfNeeded.mock.calls.map((c) => c[0])).toEqual([7, 9]);
+  });
+
+  it('waits out the boot delay', async () => {
+    const { svc, sourceScans } = setup({ pendingIds: [7] });
+    Object.assign(svc, { startedAt: Date.now() });
+    await svc.tick();
+    expect(sourceScans.scheduleIfNeeded).not.toHaveBeenCalled();
   });
 });

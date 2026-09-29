@@ -363,6 +363,9 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
       tokenParam: 'tok',
     });
     expect(r.response.playMethod).toBe('Transcode');
+    expect(r.response.transcodeReasons.map((x) => x.flag)).toEqual(
+      expect.arrayContaining(['VideoDolbyVisionP7NotSupported', 'MuxNotSupported']),
+    );
   });
 
   it('DirectPlays P5 with clientTonemap true for a client with no HDR display', () => {

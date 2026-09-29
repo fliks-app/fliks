@@ -286,7 +286,7 @@ export function buildIFramePlaylist(
   );
 }
 
-/** `fps` must be the session's frozen rate (`live.sourceFps`) when one exists —
+/** `fps` must be the session's frozen rate (`live.sourceFps`) when one exists:
  *  a raw streamInfo re-parse can drift off-grid after a background re-probe. */
 function frameSeconds(fps: number | undefined): number {
   return frameSecondsOf(fps);
