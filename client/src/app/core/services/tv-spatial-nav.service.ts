@@ -46,15 +46,12 @@ interface ContainerNode {
   activeChild: HTMLElement | null;
 }
 
-/** Minimum ms between focus moves. A held key (auto-repeat) and fast taps both
- *  fire faster than a smooth scroll settles, which judders as each move
- *  retargets the animation. Pace moves to this interval; the dispatcher is
- *  leading + trailing so no press is dropped, only delayed. */
-const NAV_MIN_INTERVAL_MS = 300;
-
 /** Page scroll step (px) when an up/down move has no focusable neighbour — lets
  *  the user reach non-focusable info content below the last card. */
 const PAGE_SCROLL_AMOUNT_PX = 300;
+
+/** Held-key pacing: auto-repeat outruns smooth scrolls and judders. Taps are never paced. */
+const REPEAT_MIN_INTERVAL_MS = 200;
 
 @Injectable({ providedIn: 'root' })
 export class TvSpatialNavService {
@@ -62,11 +59,7 @@ export class TvSpatialNavService {
   private readonly defaultFocus = inject(DefaultFocusService);
   private readonly destroyRef = inject(DestroyRef);
   private bound = false;
-  /** Timestamp of the last performed spatial-nav move (for pacing). */
   private lastNavAt = 0;
-  private pendingNavTimer: ReturnType<typeof setTimeout> | null = null;
-  private pendingNavDir: 'left' | 'right' | 'up' | 'down' = 'down';
-  private pendingCrossZones = false;
   /** Registered containers, keyed by their host element. */
   private readonly containers = new Map<HTMLElement, ContainerNode>();
   /** Cached whole-document focusable list, reused until the DOM mutates. When
@@ -285,34 +278,10 @@ export class TvSpatialNavService {
     e.preventDefault();
     // crossZones = !e.repeat: a deliberate (non-repeat) press may leave the
     // current zone; a held key's repeats stay inside it.
-    this.dispatchMove(dir, !e.repeat);
-  }
-
-  /** Pace focus moves: a held key or a fast double-tap can fire smooth scrolls
-   *  faster than they settle, which judders. Leading + trailing — the first
-   *  move runs now, any move within the window is coalesced into one trailing
-   *  move at the window's end (latest direction wins), so no press is lost. */
-  private dispatchMove(dir: 'left' | 'right' | 'up' | 'down', crossZones: boolean) {
-    if (this.pendingNavTimer !== null) {
-      this.pendingNavDir = dir;
-      // A fresh press (repeat=false → crossZones true) mid-window re-enables
-      // crossing for the trailing move; held repeats keep it false.
-      this.pendingCrossZones ||= crossZones;
-      return;
-    }
-    const wait = NAV_MIN_INTERVAL_MS - (Date.now() - this.lastNavAt);
-    if (wait <= 0) {
-      this.lastNavAt = Date.now();
-      this.performMove(dir, crossZones);
-      return;
-    }
-    this.pendingNavDir = dir;
-    this.pendingCrossZones = crossZones;
-    this.pendingNavTimer = setTimeout(() => {
-      this.pendingNavTimer = null;
-      this.lastNavAt = Date.now();
-      this.performMove(this.pendingNavDir, this.pendingCrossZones);
-    }, wait);
+    const now = Date.now();
+    if (e.repeat && now - this.lastNavAt < REPEAT_MIN_INTERVAL_MS) return;
+    this.lastNavAt = now;
+    this.performMove(dir, !e.repeat);
   }
 
   /** Move focus to the neighbour in `dir`, or scroll the page when none exists.
@@ -390,10 +359,8 @@ export class TvSpatialNavService {
     while (Math.abs(this.wheelAcc) >= STEP) {
       const dir = this.wheelAcc > 0 ? 'down' : 'up';
       this.wheelAcc -= dir === 'down' ? STEP : -STEP;
-      // Same paced dispatcher as the D-pad, so a fast spin can't fire smooth
-      // scrolls faster than they settle. crossZones: a wheel is a scroll
-      // gesture, not a discrete press, so it may leave the current zone.
-      this.dispatchMove(dir, true);
+      // A wheel is a scroll gesture, not a discrete press, so it may leave the current zone.
+      this.performMove(dir, true);
     }
   }
 
@@ -474,8 +441,10 @@ export class TvSpatialNavService {
     // candidates — in-line (same row) candidates are always considered
     // so the user can step out of the row toward a same-band element
     // outside it (typically: the layout sidebar on the left).
+    const parentRow = horizontal ? this.findParentContainer(active) : null;
     const activeScroller = horizontal
       ? active.closest<HTMLElement>(SCROLLER_SELECTOR)
+        ?? (parentRow?.orientation === 'horizontal' ? parentRow.el : null)
       : null;
 
     // Three-pass selection:
