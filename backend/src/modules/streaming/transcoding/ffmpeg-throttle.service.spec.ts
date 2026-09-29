@@ -1,7 +1,11 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import {
   decideThrottle,
   isThrottleEligible,
   jobPlayheadSeconds,
+  runLeadSeconds,
   FfmpegThrottleService,
 } from './ffmpeg-throttle.service';
 import { setPauseCapabilityForTest } from './ffmpeg-pause';
@@ -101,5 +105,89 @@ describe('isThrottleEligible', () => {
   it('includes a plain main or remux run with no pinned viewer', () => {
     expect(isThrottleEligible('main', [{ pinned: false }])).toBe(true);
     expect(isThrottleEligible('remux', [])).toBe(true);
+  });
+});
+
+describe('runLeadSeconds', () => {
+  const span = { startSeconds: 1650, frontierSeconds: 1800 };
+
+  it('is the frontier minus a playhead inside the run', () => {
+    expect(runLeadSeconds(span, 1700)).toBe(100);
+    expect(runLeadSeconds(span, 1650)).toBe(150);
+  });
+
+  it('is zero for a playhead behind the run start (unreported resume, older cached output)', () => {
+    expect(runLeadSeconds(span, 0)).toBe(0);
+    expect(runLeadSeconds(span, 1600)).toBe(0);
+  });
+});
+
+describe('FfmpegThrottleService: transcode run frontier', () => {
+  const segmentDuration = 6;
+  let dir: string;
+
+  beforeEach(() => {
+    setPauseCapabilityForTest('signal');
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'throttle-'));
+  });
+
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const writeSegments = (from: number, to: number) => {
+    for (let i = from; i <= to; i++) {
+      fs.writeFileSync(path.join(dir, `seg-${String(i).padStart(4, '0')}.m4s`), '');
+    }
+  };
+
+  const setup = (position: number) => {
+    const kill = jest.fn();
+    const session = {
+      id: 'run',
+      mediaFileId: 1,
+      userId: 1,
+      baseProfileHash: 'hash',
+      variant: { kind: 'main' },
+      cachePath: dir,
+      startSegment: 275,
+      segmentDuration,
+      process: { exitCode: null, kill },
+    };
+    const svc = new FfmpegThrottleService(
+      { getActiveSessions: () => [session] } as never,
+      {
+        listForJob: () => [{ position, lastRequestedSegment: null, pinned: false }],
+      } as never,
+      { get: () => Promise.resolve({ throttleEnabled: true, throttleThresholdSeconds: 90 }) } as never,
+    );
+    const tick = (svc as unknown as { tickOnce(): Promise<void> }).tickOnce.bind(svc);
+    return { session, kill, tick };
+  };
+
+  it("ignores another process's segments past a gap before the run's first one", async () => {
+    writeSegments(310, 360);
+    const { session, kill, tick } = setup(275 * segmentDuration);
+    await tick();
+    expect(kill).not.toHaveBeenCalled();
+    expect(session).not.toHaveProperty('throttlePaused', true);
+  });
+
+  it("measures the run's own unbroken output and pauses once it leads by the threshold", async () => {
+    writeSegments(275, 280);
+    const { session, kill, tick } = setup(275 * segmentDuration);
+    await tick();
+    expect(kill).not.toHaveBeenCalled();
+
+    writeSegments(281, 300);
+    await tick();
+    expect(kill).toHaveBeenCalledWith('SIGSTOP');
+    expect(session).toHaveProperty('throttlePaused', true);
+    expect(session).toHaveProperty('throttleFrontierSegment', 301);
+  });
+
+  it('does not pause against a viewer that has not reported a position inside the run', async () => {
+    writeSegments(275, 300);
+    const { kill, tick } = setup(0);
+    await tick();
+    expect(kill).not.toHaveBeenCalled();
   });
 });

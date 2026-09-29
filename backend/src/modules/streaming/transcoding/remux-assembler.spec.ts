@@ -913,6 +913,12 @@ describe('RemuxSegmentAssembler.canServe (wait vs respawn)', () => {
       expect(asm.frontierSeconds()).toBeCloseTo(13 * 3, 5);
     });
 
+    it('pairs with runStartSeconds, the start of the first segment the run assembled', () => {
+      expect(bare(10).runStartSeconds()).toBeNull();
+      const asm = open(bare(10), 13, 10, 1000);
+      expect(asm.runStartSeconds()).toBeCloseTo(10 * 3, 5);
+    });
+
     it('reads the real grid boundary at the frontier segment when one exists', () => {
       const withGrid = new RemuxSegmentAssembler(
         remuxAssemblyPlan({

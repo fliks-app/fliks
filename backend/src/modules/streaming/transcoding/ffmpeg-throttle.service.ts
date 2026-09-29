@@ -5,7 +5,7 @@ import type { TranscodeSession } from './types';
 import { LiveSessionRegistry, type LiveSession } from '../live-session.service';
 import { StreamingSettingsCache } from '../streaming-settings-cache.service';
 import { DEFAULT_SEGMENT_DURATION, segmentIndexToSeconds } from './constants';
-import { latestSegmentNumber } from './segment-utils';
+import { firstMissingSegment } from './segment-utils';
 import type { SessionVariant } from './variant';
 import {
   detectPauseCapability,
@@ -30,6 +30,22 @@ export function decideThrottle(o: {
   if (!o.paused && o.aheadSeconds > o.thresholdSeconds) return 'pause';
   if (o.paused && o.aheadSeconds <= o.thresholdSeconds / 2) return 'resume';
   return 'noop';
+}
+
+/** Span this run has produced itself, in content seconds: from its first
+ *  segment to the start of the first one it has yet to write. */
+export interface RunSpan {
+  startSeconds: number;
+  frontierSeconds: number;
+}
+
+/** How far the run's own output leads the viewer. A playhead behind the run's
+ *  first segment is either consuming older cached output or has not reported
+ *  yet (a resume starts at 0): it says nothing about this run, so it leads by
+ *  nothing and the run is never paused against it. */
+export function runLeadSeconds(span: RunSpan, playhead: number): number {
+  if (playhead < span.startSeconds) return 0;
+  return span.frontierSeconds - playhead;
 }
 
 /** Furthest-ahead viewer across every LiveSession sharing this job: a
@@ -125,14 +141,14 @@ export class FfmpegThrottleService implements OnModuleInit, OnModuleDestroy {
         continue;
       }
       try {
-        await this.checkOne(session, settings.throttleThresholdSeconds);
+        this.checkOne(session, settings.throttleThresholdSeconds);
       } catch (err) {
         this.log.warn(`[${session.id}] throttle check failed: ${(err as Error).message}`);
       }
     }
   }
 
-  private async checkOne(session: TranscodeSession, thresholdSeconds: number): Promise<void> {
+  private checkOne(session: TranscodeSession, thresholdSeconds: number): void {
     if (session.process.exitCode !== null) return;
     const live = session.baseProfileHash
       ? this.liveSessions.listForJob(
@@ -148,28 +164,41 @@ export class FfmpegThrottleService implements OnModuleInit, OnModuleDestroy {
     const segmentDuration = session.segmentDuration ?? DEFAULT_SEGMENT_DURATION;
     const playhead = jobPlayheadSeconds(live, segmentDuration, session.sourceFps, session.remuxAssembler);
     if (playhead == null) return;
-    const frontier = await this.frontierSeconds(session, segmentDuration);
-    if (frontier == null) return;
+    const span = this.runSpan(session, segmentDuration);
+    if (span == null) return;
     const decision = decideThrottle({
-      aheadSeconds: frontier - playhead,
+      aheadSeconds: runLeadSeconds(span, playhead),
       paused: !!session.throttlePaused,
       thresholdSeconds,
     });
-    if (decision === 'pause') this.pause(session, frontier, playhead);
-    else if (decision === 'resume') this.resume(session, frontier, playhead);
+    if (decision === 'pause') this.pause(session, span.frontierSeconds, playhead);
+    else if (decision === 'resume') this.resume(session, span.frontierSeconds, playhead);
   }
 
-  /** Remux: the assembler's own content-time frontier. Transcode ladder: the
-   *  highest segment number on disk, there is no assembler, ffmpeg writes
-   *  its own segments straight to the session dir. */
-  private async frontierSeconds(
-    session: TranscodeSession,
-    segmentDuration: number,
-  ): Promise<number | null> {
-    if (session.remuxAssembler) return session.remuxAssembler.frontierSeconds();
-    const latest = await latestSegmentNumber(session.cachePath);
-    if (latest < 0) return null;
-    return segmentIndexToSeconds(latest + 1, segmentDuration, session.sourceFps);
+  /** Only what this run wrote counts: the cache dir can also hold segments
+   *  from earlier runs or from an ffmpeg outliving a crashed backend, and
+   *  measuring those would pause a run before it wrote the viewer's segment.
+   *  Remux: the assembler's own frontier. Transcode ladder: the unbroken
+   *  sequence from the run's `-start_number`, which the spawn purged first.
+   *  Null until the run's first segment lands. */
+  private runSpan(session: TranscodeSession, segmentDuration: number): RunSpan | null {
+    const assembler = session.remuxAssembler;
+    if (assembler) {
+      const startSeconds = assembler.runStartSeconds();
+      const frontierSeconds = assembler.frontierSeconds();
+      return startSeconds == null || frontierSeconds == null
+        ? null
+        : { startSeconds, frontierSeconds };
+    }
+    const start = session.startSegment ?? 0;
+    const next = firstMissingSegment(session.cachePath, session.throttleFrontierSegment ?? start);
+    if (next == null) return null;
+    session.throttleFrontierSegment = next;
+    if (next === start) return null;
+    return {
+      startSeconds: segmentIndexToSeconds(start, segmentDuration, session.sourceFps),
+      frontierSeconds: segmentIndexToSeconds(next, segmentDuration, session.sourceFps),
+    };
   }
 
   private pause(session: TranscodeSession, frontier: number, playhead: number): void {

@@ -71,6 +71,11 @@ actor NodeManager {
         }
         let crashCallback = onCrash
         proc.terminationHandler = { process in
+            // Node leads its own process group, which every ffmpeg and plugin
+            // it spawns joins. A node that dies without its shutdown hooks
+            // (SIGKILL, crash) leaves them running, an ffmpeg still writing
+            // into the transcode cache the next backend serves from.
+            kill(-process.processIdentifier, SIGKILL)
             let code = process.terminationStatus
             Task {
                 let intentional = await intentionalCheck()
