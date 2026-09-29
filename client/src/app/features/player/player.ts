@@ -811,7 +811,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           ? this.nativeCropApplied()
           : this.webCrop.videoCropStyle() != null,
       isDesktopNative: this.isDesktopNative,
-      pipOrFullscreenActive: this.isPipOrNativeFullscreen() || (this.isNativeEngine() && this.inPipMode()),
+      // iOS PiP (AVPictureInPicture) renders the full frame, bypassing the crop;
+      // Android PiP keeps the same view hierarchy, so the crop still applies.
+      pipOrFullscreenActive:
+        this.isPipOrNativeFullscreen() ||
+        (this.isNativeEngine() && this.inPipMode() && Capacitor.getPlatform() === 'ios'),
       activeAudioTrackId,
       availableAudioTracks,
       activeAudioStreamIndex: this.activeAudioStreamIndex,

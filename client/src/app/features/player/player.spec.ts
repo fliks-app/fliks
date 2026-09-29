@@ -2,6 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixtureAutoDetect, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router } from '@angular/router';
 import { provideTranslateService, TranslateLoader } from '@ngx-translate/core';
+import { Capacitor } from '@capacitor/core';
 import { of, Subject } from 'rxjs';
 import { vi, afterEach, describe, it, expect } from 'vitest';
 import { PlayerComponent } from './player';
@@ -1750,6 +1751,38 @@ describe('PlayerComponent: offline crop', () => {
     h.component.playbackInfo = null;
     h.component.offlineCrop = null;
     expect(h.component.activeCropRect()).toBeUndefined();
+  });
+});
+
+describe('PlayerComponent: native PiP bypasses the crop on iOS only', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    vi.restoreAllMocks();
+  });
+
+  function nativeCropInPip(platform: string) {
+    vi.spyOn(Capacitor, 'getPlatform').mockReturnValue(platform as never);
+    const h = createHarness();
+    const engine = Object.assign(Object.create(NativeEngine.prototype), { setCrop: vi.fn(() => true) });
+    h.component.engine = engine;
+    h.component.isNativeEngine.set(true);
+    h.component.isOfflinePlayback = true;
+    h.component.playbackInfo = null;
+    h.component.offlineCrop = { x: 0, y: 140, width: 1920, height: 800, sourceWidth: 1920, sourceHeight: 1080 };
+    h.component.applyVideoCrop();
+    h.component.inPipMode.set(true);
+    h.component.statsVisible.set(true);
+    return h;
+  }
+
+  it('AVPictureInPicture renders the full frame, so the crop reads as bypassed', () => {
+    const h = nativeCropInPip('ios');
+    expect(h.component.playerStats()?.cropBypassed).toBe(true);
+  });
+
+  it('Android keeps the same view hierarchy in PiP, so the crop still applies', () => {
+    const h = nativeCropInPip('android');
+    expect(h.component.playerStats()?.cropBypassed).toBe(false);
   });
 });
 

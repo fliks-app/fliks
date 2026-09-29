@@ -121,8 +121,8 @@ export interface NativePlayerPlugin {
 
   /** Remove letterbox bars by showing only the given source-pixel rectangle.
    *  `sourceWidth/Height` are the coded size the rectangle is expressed in.
-   *  An empty object clears the crop. iOS only, see `cropsBlackBars` in the
-   *  VideoCapabilities plugin. */
+   *  An empty object clears the crop. Only builds reporting `cropsBlackBars`
+   *  in the VideoCapabilities plugin implement it. */
   setCrop(options: NativePlayerCrop | Record<string, never>): Promise<void>;
 
   // ── Brightness ──
