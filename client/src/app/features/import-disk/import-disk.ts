@@ -4,10 +4,9 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { FolderPickerService } from '../../core/services/folder-picker.service';
 import { LibrariesApiService, Library } from '../../core/services/api/libraries-api.service';
+import { TransferMethod } from '../../core/services/api/imports-api.service';
 import { MediaType } from '../../core/enums/media-type.enum';
 import { OrphanScanPanelComponent } from '../settings/libraries/library-detail/orphan-scan-panel/orphan-scan-panel';
-
-export type ImportMethod = 'copy' | 'move';
 
 @Component({
   selector: 'app-import-disk',
@@ -21,7 +20,7 @@ export class ImportDiskComponent implements OnInit {
   readonly scanPanel = viewChild<OrphanScanPanelComponent>('panel');
 
   readonly folderPath = signal('');
-  readonly method = signal<ImportMethod>('copy');
+  readonly method = signal<TransferMethod>('copy');
   readonly libraries = signal<Library[]>([]);
   readonly librariesLoading = signal(true);
   readonly libraryId = signal<number | null>(null);

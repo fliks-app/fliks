@@ -2023,6 +2023,7 @@
       "scan_expand_all": "Desplegar todo",
       "scan_collapse_all": "Plegar todo",
       "scan_linked": "{{count}} archivo(s) vinculado(s)",
+      "scan_already_present": "{{count}} archivo(s) ya presente(s), nada que importar",
       "scan_nothing_linked": "No se ha vinculado ningún archivo (duplicado ya presente en el medio).",
       "scan_error": "Error del análisis.",
       "scan_files": "{{count}} archivo(s)",

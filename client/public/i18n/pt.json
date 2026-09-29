@@ -2023,6 +2023,7 @@
       "scan_expand_all": "Expandir tudo",
       "scan_collapse_all": "Recolher tudo",
       "scan_linked": "{{count}} ficheiro(s) associado(s)",
+      "scan_already_present": "{{count}} ficheiro(s) já presente(s), nada a importar",
       "scan_nothing_linked": "Nenhum ficheiro associado (duplicado já presente no media).",
       "scan_error": "Falha na análise.",
       "scan_files": "{{count}} ficheiro(s)",

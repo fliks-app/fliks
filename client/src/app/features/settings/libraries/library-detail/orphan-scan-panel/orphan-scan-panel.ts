@@ -25,10 +25,14 @@ import {
   OrphanGroup,
   OrphanScanResult,
   RelinkOrphansBody,
+  TransferMethod,
 } from '../../../../../core/services/api/imports-api.service';
 
 const PAGE_SIZE = 20;
 const SEARCH_CONCURRENCY = 8;
+/** Each unit copies/moves real files server-side; unlike a metadata search, unbounded
+ *  fan-out here means dozens of full videos copying at once. */
+const AUTO_IMPORT_CONCURRENCY = 3;
 
 interface GroupVM {
   group: OrphanGroup;
@@ -70,12 +74,15 @@ export class OrphanScanPanelComponent {
   /** Collect picks without linking — the library does not exist yet. */
   readonly deferLink = input(false);
   /** The scanned folder is outside the library: copy or move each title into it. */
-  readonly transfer = input<'copy' | 'move' | null>(null);
+  readonly transfer = input<TransferMethod | null>(null);
 
   private libraryId = 0;
   private searchSeq = 0;
   /** Latest search per group, so a slower earlier one can't overwrite it. */
   private readonly latestSearch = new Map<number, number>();
+  /** Bumped on every `load()`: guards a scan still in flight (library switched mid-scan)
+   *  from patching results into the groups of a scan that replaced it. */
+  private scanGeneration = 0;
   readonly anyLinked = signal(false);
 
   /** Nothing to render before the first scan runs. */
@@ -149,6 +156,8 @@ export class OrphanScanPanelComponent {
   }
 
   private async load(scan: () => Promise<OrphanScanResult>) {
+    const generation = ++this.scanGeneration;
+    this.latestSearch.clear();
     this.started.set(true);
     this.anyLinked.set(false);
     this.scanError.set('');
@@ -161,6 +170,7 @@ export class OrphanScanPanelComponent {
     this.scanning.set(true);
     try {
       const res = await scan();
+      if (generation !== this.scanGeneration) return;
       this.scannedFiles.set(res.scannedFiles);
       this.orphanCount.set(res.orphanCount);
       this.groups.set(
@@ -180,11 +190,12 @@ export class OrphanScanPanelComponent {
         })),
       );
     } catch (err: unknown) {
+      if (generation !== this.scanGeneration) return;
       this.scanError.set(this.failure('scan', err));
     } finally {
-      this.scanning.set(false);
+      if (generation === this.scanGeneration) this.scanning.set(false);
     }
-    await this.searchPage();
+    if (generation === this.scanGeneration) await this.searchPage();
   }
 
   async goToPage(page: number) {
@@ -313,16 +324,20 @@ export class OrphanScanPanelComponent {
     if (!vm) return;
     const query = vm.query.trim();
     if (!query) return;
+    const generation = this.scanGeneration;
     const seq = ++this.searchSeq;
     this.latestSearch.set(index, seq);
     this.patch(index, { searching: true, error: '' });
+    // A slower request from a scan a newer `load()` already replaced must never patch
+    // into today's groups, even if its own index happens to still carry this `seq`.
+    const stale = () => generation !== this.scanGeneration || this.latestSearch.get(index) !== seq;
     try {
       const provider = vm.group.suggestedProvider;
       const results =
         vm.group.mediaType === 'series'
           ? await this.metadata.searchTv(query, vm.year ?? undefined, provider)
           : await this.metadata.searchMovie(query, vm.year ?? undefined, provider);
-      if (this.latestSearch.get(index) !== seq) return;
+      if (stale()) return;
 
       // Auto-select the match referenced by the .nfo id, if any.
       const nfo = vm.group.nfo;
@@ -343,7 +358,7 @@ export class OrphanScanPanelComponent {
         fromNfo: !!auto,
       });
     } catch (err: unknown) {
-      if (this.latestSearch.get(index) !== seq) return;
+      if (stale()) return;
       this.patch(index, {
         searching: false,
         searched: true,
@@ -396,6 +411,14 @@ export class OrphanScanPanelComponent {
             { count: res.linked },
           ),
         );
+      } else if (res.alreadyPresent > 0 && !res.errors.length) {
+        // Every file already sits at its destination — a safe re-run, not a failure.
+        this.patch(index, { linking: false, done: true });
+        this.toast.info(
+          this.translate.instant('settings.libraries.scan_already_present', {
+            count: res.alreadyPresent,
+          }),
+        );
       } else {
         // Nothing linked — typically a duplicate of a file already attached
         // to the media. Surface it on the group instead of marking it done.
@@ -434,9 +457,14 @@ export class OrphanScanPanelComponent {
   async autoImportAll() {
     this.autoImporting.set(true);
     try {
-      // Each group resolves independently — search, pick, link run
-      // concurrently so the whole batch isn't gated on the slowest item.
-      await Promise.all(this.groups().map((_, i) => this.autoLinkOne(i)));
+      // Each group resolves independently, but linking copies/moves real files server-side:
+      // capped at AUTO_IMPORT_CONCURRENCY so the batch doesn't fire every group at once.
+      const indices = this.groups().map((_, i) => i);
+      for (let s = 0; s < indices.length; s += AUTO_IMPORT_CONCURRENCY) {
+        await Promise.all(
+          indices.slice(s, s + AUTO_IMPORT_CONCURRENCY).map((i) => this.autoLinkOne(i)),
+        );
+      }
     } finally {
       this.autoImporting.set(false);
     }

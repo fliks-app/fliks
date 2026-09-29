@@ -46,6 +46,9 @@ export interface PreviewOrphansBody {
   preferredProvider?: string | null;
 }
 
+/** Files sit outside the library: copy or move them into its naming layout. */
+export type TransferMethod = 'copy' | 'move';
+
 export interface RelinkFile {
   filePath: string;
   seasonNumber?: number;
@@ -65,7 +68,7 @@ export interface RelinkOrphansBody {
   languageProfileId?: number;
   folderName: string;
   reorganize?: boolean;
-  transfer?: 'copy' | 'move';
+  transfer?: TransferMethod;
   files: RelinkFile[];
 }
 
@@ -73,6 +76,8 @@ export interface RelinkResult {
   mediaId: number;
   created: boolean;
   linked: number;
+  /** Files whose destination was already taken — a safe no-op re-run, not a failure. */
+  alreadyPresent: number;
   errors: string[];
 }
 
