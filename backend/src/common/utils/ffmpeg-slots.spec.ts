@@ -49,6 +49,19 @@ describe('withFfmpegSlot', () => {
     expect(maxConcurrent).toBeLessThanOrEqual(2);
   });
 
+  it('freeFfmpegSlots tracks held slots as they are acquired and released', async () => {
+    const { withFfmpegSlot, setFfmpegSlots, freeFfmpegSlots } = loadWith();
+    setFfmpegSlots(2);
+    expect(freeFfmpegSlots()).toBe(2);
+    let release!: () => void;
+    const held = withFfmpegSlot(() => new Promise<void>((r) => (release = r)));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(freeFfmpegSlots()).toBe(1);
+    release();
+    await held;
+    expect(freeFfmpegSlots()).toBe(2);
+  });
+
   it('releases the slot when fn rejects', async () => {
     const { withFfmpegSlot, setFfmpegSlots } = loadWith();
     setFfmpegSlots(1);

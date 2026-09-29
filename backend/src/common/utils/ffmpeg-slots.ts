@@ -72,6 +72,13 @@ export function ffmpegSlots(): number {
 let active = 0;
 const waiters: (() => void)[] = [];
 
+/** Slots not currently held. A low-priority caller checks this before
+ *  `withFfmpegSlot` so it never queues ahead of an interactive job that
+ *  arrives moments later — the FIFO queue has no notion of priority. */
+export function freeFfmpegSlots(): number {
+  return slots - active;
+}
+
 /** Admin override (`streaming_ffmpeg_slots`); null or <1 restores the
  *  cgroup/CPU-derived budget. Shrinking below `active` lets the running jobs
  *  drain down to the new cap instead of killing them. */
