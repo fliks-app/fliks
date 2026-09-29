@@ -203,8 +203,8 @@ jobs:
           test -z "$ours" || { echo "::error::bundled libs unresolved on a clean box:"; echo "$ours"; exit 1; }
           echo "vendored libmpv OK: $(du -sh desktop/native/vendor | cut -f1)"
 
-      # Vendored from a Fliks-owned release (MPV_VENDOR_TAG), not upstream directly —
-      # zhongfly/mpv-winbuild prunes releases after ~a month. Refresh the pin per the checklist at the top of this file.
+      # From a Fliks-owned release (MPV_VENDOR_TAG): zhongfly/mpv-winbuild prunes its
+      # releases after about a month. Refresh the pin per the checklist at the top.
       - name: Vendor mpv (Windows)
         if: runner.os == 'Windows'
         shell: bash

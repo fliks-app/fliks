@@ -244,16 +244,13 @@ jobs:
           CLIENT_SECRET: ${{ secrets.AMAZON_APPSTORE_CLIENT_SECRET }}
         run: |
           set -euo pipefail
-          # --fail-with-body (not -s alone): a token failure prints Amazon's error
-          # body instead of vanishing, without ever echoing the token/secret itself.
-          token=$(curl -sS --fail-with-body https://api.amazon.com/auth/o2/token \
+          # Only an error body is printed: a successful one carries the token.
+          resp=$(curl -sS --fail-with-body https://api.amazon.com/auth/o2/token \
             -d grant_type=client_credentials -d scope=appstore::apps:readwrite \
-            --data-urlencode "client_id=$CLIENT_ID" --data-urlencode "client_secret=$CLIENT_SECRET" \
-            | jq -r .access_token)
-          if [ -z "$token" ] || [ "$token" = "null" ]; then
-            echo "::error::failed to obtain an Amazon Appstore access token"
-            exit 1
-          fi
+            --data-urlencode "client_id=$CLIENT_ID" --data-urlencode "client_secret=$CLIENT_SECRET") \
+            || { echo "::error::Amazon token request failed: $resp"; exit 1; }
+          token=$(jq -r '.access_token // empty' <<<"$resp")
+          [ -n "$token" ] || { echo "::error::Amazon token response has no access_token"; exit 1; }
           auth="Authorization: Bearer $token"
           etag() { curl -sf -D - -o /dev/null -H "$auth" "$1" | awk 'tolower($1)=="etag:" {print $2}' | tr -d '\r'; }
 
