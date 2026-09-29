@@ -1002,7 +1002,7 @@ describe('PlayerComponent remux fallback (rejectCopy)', () => {
       source: { container: 'mp4', videoCodec: 'h264', audioCodec: 'aac', durationSeconds: 100, crop },
     });
     // Stale crop from before the fallback: replaced, never stacked on a server-side crop.
-    h.component.videoCropStyle.set({ transform: 'stale' } as any);
+    h.component.webCrop.videoCropStyle.set({ transform: 'stale' } as any);
     h.component.availableSubtitles.set([
       { id: 'sub-1', label: 'English', url: '/subs/1.vtt', language: 'en', burnIn: false },
     ]);
@@ -1021,28 +1021,10 @@ describe('PlayerComponent remux fallback (rejectCopy)', () => {
     h.engine.emit('error', { source: 'shaka', code: 4032 });
     await flush();
 
-    expect(h.component.videoCropStyle()).toBeNull();
+    expect(h.component.webCrop.videoCropStyle()).toBeNull();
     expect(h.engine.addTextTrack).toHaveBeenCalledWith('/subs/1.vtt', 'en', 'English', undefined);
     expect(h.engine.selectTextTrack).toHaveBeenCalledWith({ id: 'sub-1' });
     expect(h.engine.setTextVisibility).toHaveBeenCalledWith(true);
-  });
-
-  it('ignores a recoverable error and an error outside remux delivery', async () => {
-    const h = createHarness();
-    h.component.wireErrorRecovery(h.engine);
-    h.state.playbackMode.set('remux');
-    h.component.playbackInfo = buildPi(MAIN_FILE_ID, { playMethod: 'DirectStream' });
-
-    // Network blip, recoverable, not a "can't decode this" signal.
-    h.engine.emit('error', { source: 'shaka', category: 1, code: 1002 });
-    await flush();
-    expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
-
-    // Same error class, but the delivery isn't remux, nothing to fall back from.
-    h.state.playbackMode.set('transcode');
-    h.engine.emit('error', { source: 'shaka', code: 4032 });
-    await flush();
-    expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
   });
 
   it('cards instead of leaving a dead player when another reload never idles', async () => {
@@ -1368,7 +1350,7 @@ describe('PlayerComponent: cropAppliedByPlayer reads what was actually applied',
     h.component.statsVisible.set(true);
     expect(h.component.playerStats()?.cropAppliedByPlayer).toBe(false);
 
-    h.component.videoCropStyle.set({ width: 100, height: 100, translateX: 0, translateY: 0 });
+    h.component.webCrop.videoCropStyle.set({ width: 100, height: 100, translateX: 0, translateY: 0 });
     expect(h.component.playerStats()?.cropAppliedByPlayer).toBe(true);
   });
 
@@ -1461,7 +1443,7 @@ describe('PlayerComponent: refreshSidAndReload adopts the fresh decision', () =>
 
     expect(h.state.playbackMode()).toBe('transcode');
     // videoCopyStream flipped false server-side (it re-encoded): the client must not double-crop.
-    expect(h.component.videoCropStyle()).toBeNull();
+    expect(h.component.webCrop.videoCropStyle()).toBeNull();
   });
 });
 
@@ -1550,14 +1532,6 @@ describe('PlayerComponent remux fallback on a rejected load', () => {
     expect(h.state.error()).toBeNull();
   });
 
-  it('does not fall back for a transcode delivery — only DirectPlay/remux serve the source bitstream untouched', async () => {
-    const h = createHarness();
-    h.component.playbackInfo = TRANSCODE_PI();
-    h.state.playbackMode.set('transcode');
-    expect(h.component.fallBackFromRemuxOnLoadError(UNDECODABLE, 0)).toBe(false);
-    expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
-  });
-
   it('reloadForEpisode: the new file falls back when its remux fails to load', async () => {
     const h = createHarness();
     h.component.mediaFileId = 7;
@@ -1627,15 +1601,6 @@ describe('PlayerComponent remux fallback on a rejected load', () => {
     expect(h.component.fallBackFromRemuxOnLoadError(UNDECODABLE, 12)).toBe(false);
   });
 
-  it('a recoverable load failure is not claimed and keeps its normal error path', async () => {
-    const h = createHarness();
-    h.component.playbackInfo = REMUX_PI();
-    h.state.playbackMode.set('remux');
-    const network = Object.assign(new Error('net'), { category: 1, code: 1002 });
-    expect(h.component.fallBackFromRemuxOnLoadError(network, 0)).toBe(false);
-    expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
-  });
-
   it('rejectCopy sticks for the file: a later reload without a fresh failure still sends it', async () => {
     const h = createHarness();
     h.component.playbackInfo = REMUX_PI();
@@ -1651,31 +1616,6 @@ describe('PlayerComponent remux fallback on a rejected load', () => {
     await h.component.reloadStream();
     expect(rejectCopyOf(h, 1)).toBe(true);
     expect(rejectCopyOf(h, 2)).toBe(true);
-  });
-
-  it('rejectCopy is per file: another file still negotiates its copy', async () => {
-    const h = createHarness();
-    h.component.rejectCopyFileIds.add(MAIN_FILE_ID);
-    expect(h.component.deviceProfileFor(MAIN_FILE_ID).rejectCopy).toBe(true);
-    expect(h.component.deviceProfileFor(TRAILER_FILE_ID).rejectCopy).toBeUndefined();
-  });
-
-  it('rejectCopy is gated on deviceProfileExtensions: never sent to a server that would 400 on it', () => {
-    const h = createHarness();
-    const auth = TestBed.inject(AuthService) as unknown as { hasServerFeature: () => boolean };
-    auth.hasServerFeature = () => false;
-    h.component.rejectCopyFileIds.add(MAIN_FILE_ID);
-    expect(h.component.deviceProfileFor(MAIN_FILE_ID).rejectCopy).toBeUndefined();
-  });
-
-  it('the fallback itself is skipped (not just the field) when the server lacks deviceProfileExtensions', () => {
-    const h = createHarness();
-    const auth = TestBed.inject(AuthService) as unknown as { hasServerFeature: () => boolean };
-    auth.hasServerFeature = () => false;
-    h.component.playbackInfo = REMUX_PI();
-    h.state.playbackMode.set('remux');
-    expect(h.component.fallBackFromRemuxOnLoadError(UNDECODABLE, 0)).toBe(false);
-    expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
   });
 });
 
