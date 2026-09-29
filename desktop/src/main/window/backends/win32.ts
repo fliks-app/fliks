@@ -1,17 +1,13 @@
 import type { BrowserWindow } from 'electron';
 import type { EmbedBackend } from './types';
+import { readWindowHandle } from './types';
 import { resolveWindowsVo } from './gpu-next-probe';
 
 /**
- * Windows embedding. mpv's `--wid` takes the framed window's HWND (Electron
- * returns it from getNativeWindowHandle); mpv reparents its video output as a
- * child of that window and renders with gpu-next (D3D11 via libplacebo),
- * which reshapes Dolby Vision through its FFmpeg-decoded RPU, when the driver
- * supports it; `resolveWindowsVo` falls back to plain `--vo=gpu` otherwise.
- * d3d11va does the hardware decode either way.
+ * Windows embedding via mpv's `--wid` (reparents its video output as a child of
+ * the given HWND); d3d11va decodes with either VO.
  *
- * UNTESTED on a real Windows box — the HWND format and the VO choice need
- * verifying on a device (see PR notes).
+ * UNTESTED on a real Windows box: the HWND format and both VOs need verifying.
  */
 export class Win32EmbedBackend implements EmbedBackend {
   readonly id = 'windows';
@@ -20,13 +16,10 @@ export class Win32EmbedBackend implements EmbedBackend {
     videoWin: BrowserWindow,
     mpvPath: string,
   ): Promise<{ args: string[]; env?: NodeJS.ProcessEnv }> {
-    const handle = videoWin.getNativeWindowHandle();
-    // The HWND lives in the low dword even on win64; mpv parses --wid as a signed
-    // int and REJECTS negative values, so read it as an unsigned 32-bit (the high
-    // dword is sign-extension padding) — mirrors x11.ts. mpv docs: "Pass it as
-    // value cast to uint32_t (all Windows handles are 32-bit)".
-    const wid = handle.readUInt32LE(0);
-    const vo = await resolveWindowsVo(mpvPath);
+    const wid = readWindowHandle(videoWin);
+    // A failed probe also covers a crash or hang, which a VO list can't fall back
+    // from; the list only catches a gpu-next init failure the probe didn't see.
+    const vo = (await resolveWindowsVo(mpvPath)) === 'gpu-next' ? 'gpu-next,gpu' : 'gpu';
     return {
       args: [`--wid=${wid}`, `--vo=${vo}`, '--hwdec=auto'],
     };

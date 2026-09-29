@@ -61,9 +61,8 @@ export interface DesktopSystemInfo {
   deviceName: string;
 }
 
-/** `canReshapeDolbyVision` is false when Windows mpv fell back from gpu-next to
- *  plain `--vo=gpu`: it can play a Dolby Vision file's base layer (profile 7)
- *  but can't reshape the RPU (profiles 5/8). True on every other backend. */
+/** `canReshapeDolbyVision` is true only when Windows mpv runs gpu-next (reshapes the
+ *  profile 5/8 RPU); plain `--vo=gpu` and macOS/Linux play only the profile 7 base layer. */
 export interface DesktopPlayerCapabilities {
   canReshapeDolbyVision: boolean;
 }

@@ -70,10 +70,7 @@ export interface DesktopSystemInfo {
 }
 
 /** Runtime playback capabilities the device profile can't infer from the UA.
- *  `canReshapeDolbyVision` is false when Windows mpv fell back from gpu-next to
- *  plain `--vo=gpu` (old driver / low D3D11 feature level): gpu can decode and
- *  play a Dolby Vision file but can't reshape the RPU (profiles 5/8), only the
- *  base layer (profile 7). True on every other platform/backend. */
+ *  True only when Windows mpv's probe confirmed `gpu-next` init; false everywhere else. */
 export interface DesktopPlayerCapabilities {
   canReshapeDolbyVision: boolean;
 }

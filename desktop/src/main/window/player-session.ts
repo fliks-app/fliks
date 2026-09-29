@@ -70,6 +70,9 @@ export class PlayerSession {
   private videoWin!: BrowserWindow;
   private uiWin!: BrowserWindow;
   private mpv: PlayerBackend | null = null;
+  /** Set by destroy(); createPlayer() can await the (slow, Windows gpu-next)
+   *  probe for several seconds, during which the window may already have closed. */
+  private destroyed = false;
 
   async start(opts: PlayerSessionOptions): Promise<void> {
     const { rendererUrl, preloadPath, iconPath } = opts;
@@ -216,7 +219,12 @@ export class PlayerSession {
     sync();
 
     // The video window's native handle is only valid once it has painted.
-    this.mpv = await this.createPlayer();
+    const mpv = await this.createPlayer();
+    if (this.destroyed) {
+      await mpv.destroy().catch(() => {});
+      return;
+    }
+    this.mpv = mpv;
     this.forwardEvents(this.mpv);
     await this.mpv.start();
     this.emit({ type: 'ready' });
@@ -306,6 +314,7 @@ export class PlayerSession {
   }
 
   async destroy(): Promise<void> {
+    this.destroyed = true;
     setPlaybackKeepAwake(false);
     await this.mpv?.destroy();
     this.mpv = null;
