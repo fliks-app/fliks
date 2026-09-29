@@ -75,7 +75,12 @@
     "subtitle_track_n": "Sottotitolo {{index}}",
     "subtitle_forced": "Forzato",
     "subtitle_hearing_impaired": "Non udenti",
+    "subtitle_source": {
+      "translated": "Tradotto",
+      "ocr": "OCR"
+    },
     "playback_error": "La riproduzione è fallita.",
+    "subtitle_load_failed": "Impossibile caricare quella traccia di sottotitoli.",
     "error_aborted": "Riproduzione interrotta.",
     "error_network": "Errore di rete durante la riproduzione.",
     "error_decode": "Errore di decodifica del video.",
@@ -1077,6 +1082,7 @@
     "translate_processing": "Traduzione",
     "translation_in_progress": "Traduzione dei sottotitoli in corso: {{langs}}",
     "translate_target_language": "Lingua di destinazione",
+    "translate_provider": "Fornitore di traduzione",
     "translate_no_providers": "Nessun fornitore di traduzione configurato. Chiedi a un amministratore di aggiungerne uno nelle impostazioni.",
     "translate_hint": "Crea un nuovo sottotitolo traducendo questo. La traduzione viene eseguita in background e mantiene la sincronizzazione originale.",
     "translation_started": "Traduzione avviata — il sottotitolo apparirà una volta pronto.",
@@ -1125,6 +1131,7 @@
     "col_sub_title": "Titolo",
     "search": "Cerca",
     "no_subtitle_results": "Nessun risultato trovato.",
+    "subtitle_downloads": "{{count}} download",
     "confirm_delete_subtitle": "Eliminare questo sottotitolo?",
     "confirm_delete_subtitle_processing": "Questa traduzione è ancora in corso. Eliminarla non fermerà l'esecuzione.",
     "rejection": {
@@ -1427,6 +1434,7 @@
     "delete": "Elimina",
     "edit": "Modifica",
     "actions": "Azioni",
+    "download": "Scarica",
     "refresh": "Aggiorna",
     "active": "Attivo",
     "disabled": "Disattivato",
@@ -1731,6 +1739,13 @@
       "title": "Profili di lingua",
       "subtitle": "Definisci le lingue audio accettate e i sottotitoli da scaricare automaticamente.",
       "new": "Nuovo profilo",
+      "hi_label": "Non udenti",
+      "hi_mode": {
+        "prefer": "Preferire",
+        "avoid": "Evitare",
+        "require": "Richiedere",
+        "forbid": "Vietare"
+      },
       "col_name": "Nome",
       "col_audio_count": "Lingue audio",
       "col_subtitle_count": "Lingue sottotitoli",
@@ -2170,6 +2185,8 @@
       "title": "Fornitori di sottotitoli",
       "subtitle": "Configura le fonti di download dei sottotitoli.",
       "new": "Nuovo fornitore",
+      "download_title": "Fornitori di download",
+      "download_hint": "Fonti interrogate per scaricare i file dei sottotitoli.",
       "empty": "Nessun fornitore. Aggiungi OpenSubtitles, Subdl…",
       "load_error": "Impossibile caricare i fornitori.",
       "save_error": "Salvataggio non riuscito.",
@@ -2232,7 +2249,15 @@
       "translation_openai_model": "Modello",
       "translation_libretranslate_url": "URL del server",
       "translation_libretranslate_url_hint": "Punta al tuo container LibreTranslate, es. http://libretranslate:5000.",
-      "translation_api_key_optional": "Chiave API (opzionale)"
+      "translation_api_key_optional": "Chiave API (opzionale)",
+      "translation_new": "Aggiungi un fornitore",
+      "translation_concurrency": "Parallelismo max.",
+      "translation_empty": "Nessun fornitore di traduzione configurato ancora.",
+      "translation_col_engine": "Motore",
+      "translation_default": "Predefinito",
+      "translation_editor_create": "Nuovo fornitore di traduzione",
+      "translation_editor_edit": "Modifica il fornitore di traduzione",
+      "translation_set_default": "Usa come predefinito"
     },
     "schedulers": {
       "title": "Attività pianificate",
@@ -2672,6 +2697,7 @@
     "unknown_plugin": "Il plugin a cui appartiene questa pagina non è installato.",
     "unknown_view": "Questo plugin non ha una pagina con questo nome.",
     "unsupported_kind": "Questa pagina non è ancora supportata dalla tua versione di Fliks.",
+    "implementations_load_error": "Impossibile caricare i tipi di fornitore: alcuni campi qui sotto potrebbero mancare.",
     "webhook_test_ok": "Evento di test consegnato a {{count}} endpoint.",
     "webhook_test_unconfigured": "Nessun endpoint configurato: non è stato inviato nulla.",
     "webhook_test_failed": "Consegna di test non riuscita: {{detail}}"
