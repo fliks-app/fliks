@@ -51,10 +51,9 @@ import { varStreamMapLayout } from './audio-layout';
 import { inputSeekSeconds } from './source-timeline';
 import {
   resolveEncodePipeline,
-  isOpenclTonemapPath,
+  resolveTonemapReport,
   isVtTonemapPath,
   isVtHdrPassthroughPath,
-  isCudaTonemapPath,
 } from './encode-pipeline';
 import {
   DECODE_TIME_TOLERANCE_SECONDS,
@@ -1096,15 +1095,7 @@ export function buildFfmpegArgs(
   // also uses (so the stats hwAccel can't drift from the encoder that runs):
   // the requested-vs-effective hwAccel, the encoder (with registry CPU
   // fallback), the tone-map path, and the QSV-native eligibility.
-  const {
-    requestedHwAccel,
-    encoder,
-    effectiveHwAccel,
-    tonemapPath,
-    qsvNativeAvailable,
-    useVaapiTonemap,
-    amfOpenclAvailable,
-  } = resolveEncodePipeline(variant, {
+  const pipeline = resolveEncodePipeline(variant, {
     hwAccel,
     crop: !!crop,
     burnIn: !!burnIn?.filter,
@@ -1114,6 +1105,15 @@ export function buildFfmpegArgs(
     dvNoBase,
     sourceBitDepth,
   });
+  const {
+    requestedHwAccel,
+    encoder,
+    effectiveHwAccel,
+    tonemapPath,
+    qsvNativeAvailable,
+    useVaapiTonemap,
+    amfOpenclAvailable,
+  } = pipeline;
   // No encoder means the variant is unsupported on this host even after the
   // registry's CPU fallback.
   if (!encoder) {
@@ -1121,15 +1121,15 @@ export function buildFfmpegArgs(
       `No encoder for variant ${JSON.stringify(variant)} on ${requestedHwAccel}`,
     );
   }
-  const useVulkanTonemap =
-    tonemapPath === 'vulkan' && effectiveHwAccel === 'vaapi';
-
-  // NVENC's zero-copy path: tonemap_cuda stays on the CUDA surface, no CPU
-  // bounce. See isCudaTonemapPath.
-  const cudaTonemap = isCudaTonemapPath(!!tonemap, effectiveHwAccel);
-  // NVENC/AMF's off-encoder tone-map fallback; false by itself when
-  // cudaTonemap is active. See isOpenclTonemapPath.
-  const openclTonemap = isOpenclTonemapPath(!!tonemap, effectiveHwAccel, dvNoBase);
+  // Same resolver as the playback-info tonemap report, so the stats name this step.
+  const { useVulkanTonemap, cudaTonemap, openclTonemap } = resolveTonemapReport(pipeline, {
+    tonemap: !!tonemap,
+    dvNoBase,
+    burnIn: !!burnIn,
+    sourceVideoCodec,
+    hdr10Target: dvNoBaseHdr10,
+    curve: tonemapCurve,
+  });
   // GPU decode whenever available, including the tone-map path — the frame
   // reaches OpenCL via hwdownload→hwupload (a copy, no CUDA/D3D11↔OpenCL interop).
   const decodeHwAccel: HwAccelType = effectiveHwAccel;

@@ -44,7 +44,6 @@ import {
   type TranscodeSession,
 } from './transcoding';
 import { tsHeadroom } from './transcoding/ffmpeg-args';
-import type { HwAccelType } from './transcoding/types';
 import {
   DEFAULT_SEGMENT_DURATION,
   EARLY_PROBE_SEGMENTS,
@@ -65,7 +64,7 @@ import {
   sourceTimeline,
 } from './transcoding/source-timeline';
 import { copySourceCodecString } from './transcoding/codec/codec-strings';
-import { dvSupplementalCodecs, dvStandaloneCodecs, dvHasNoBase } from './transcoding/codec/dolby-vision';
+import { dvSupplementalCodecs, dvStandaloneCodecs } from './transcoding/codec/dolby-vision';
 import { LiveSessionRegistry, type LiveSession, type SessionKind } from './live-session.service';
 import * as path from 'path';
 import { SegmentPackagingService } from './services/segment-packaging.service';
@@ -80,14 +79,12 @@ import {
   buildIFrameSegmentArgs,
   iframeResolution,
 } from './transcoding/iframe-trick-play';
-import { resolveTonemapPath } from './transcoding/tonemap-path';
 import { autoFfmpegSlots } from '../../common/utils/ffmpeg-slots';
 import { getPauseCapability } from './transcoding/ffmpeg-pause';
 import {
-  isOpenclTonemapPath,
-  isVtTonemapPath,
-  isCudaTonemapPath,
+  encodePipelineInputs,
   resolveEncodePipeline,
+  resolveTonemapReport,
 } from './transcoding/encode-pipeline';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
@@ -1091,66 +1088,32 @@ export class StreamingController {
     );
 
     // Surface the tonemap mechanism the session actually runs, not the admin
-    // pick, so the overlay reports what's really running.
-    const hasCrop = resolved.mediaFile.streamInfo?.video?.[0]?.crop != null;
-    const dvNoBase = dvHasNoBase(
-      resolved.mediaFile.streamInfo?.video?.[0]?.dvProfile,
-      resolved.mediaFile.streamInfo?.video?.[0]?.dvBlSignalCompatId,
-    );
-    const isSourceHdr = !!resolved.mediaFile.streamInfo?.video?.[0]?.hdrFormat;
-    const hwTonemap =
-      response.hwAccel === 'qsv' || response.hwAccel === 'vaapi';
-    const cudaTonemap = isCudaTonemapPath(!!response.tonemapping, response.hwAccel);
-    // Same resolver + inputs as the spawn (stream-builder.service.ts), so the
-    // reported path can't drift from the chain the spawn builds (AMF zero-copy, qsv→vaapi).
-    const pipeline =
-      videoVariant &&
-      resolveEncodePipeline(videoVariant, {
-        hwAccel: response.hwAccel as HwAccelType,
-        crop: hasCrop,
-        burnIn: !!burnIn?.filter,
-        tonemap: !!response.tonemapping,
-        tonemapAlgo: ss.tonemapAlgo,
-        sourceVideoCodec: resolved.mediaFile.streamInfo?.video?.[0]?.codec,
-        dvNoBase,
-        sourceBitDepth: isSourceHdr || dvNoBase ? 10 : 8,
-      });
-    const amfOpenclAvailable = response.hwAccel === 'amf' && !!pipeline?.amfOpenclAvailable;
-    const openclTonemap =
-      isOpenclTonemapPath(!!response.tonemapping, response.hwAccel, dvNoBase) ||
-      amfOpenclAvailable;
-    const vtMetalTonemap = isVtTonemapPath(
-      !!response.tonemapping,
-      response.hwAccel,
-      !!burnIn,
-      resolved.mediaFile.streamInfo?.video?.[0]?.codec,
-    );
-    const tonemapAlgo = response.tonemapping
-      ? hwTonemap
-        ? pipeline?.useVaapiTonemap
-          ? 'vaapi'
-          : resolveTonemapPath(ss.tonemapAlgo, { hasCrop, dvNoBase })
-        : cudaTonemap
-          ? 'cuda'
-          : openclTonemap
-            ? 'opencl'
-            : vtMetalTonemap
-              ? 'videotoolbox'
-              : 'cpu'
-      : null;
-    // A no-base DV source reshaped into HDR10 runs no tone curve at all ;
-    // apply_dovi reshapes IPT straight to PQ (see dvNoBaseHdr10Eligible).
-    const dvNoBaseHdr10 = dvNoBase && videoVariant?.hdr === 'HDR10';
-    // The curve is a `tonemap`/`tonemap_opencl` operator, so it only applies to
-    // the opencl/vulkan/CPU/cuda paths; the vpp_qsv / tonemap_vaapi LUTs ignore it.
-    const tonemapCurve =
-      !dvNoBaseHdr10 &&
-      (tonemapAlgo === 'opencl' ||
-        tonemapAlgo === 'vulkan' ||
-        tonemapAlgo === 'cpu' ||
-        tonemapAlgo === 'cuda')
-        ? ss.tonemapCurve
-        : undefined;
+    // pick: the spawn's own pipeline inputs, through the resolver ffmpeg-args uses.
+    const v0 = resolved.mediaFile.streamInfo?.video?.[0];
+    const pipelineInputs = encodePipelineInputs({
+      hwAccel: this.transcodingService.getDetectedHwAccel(),
+      crop: ss.autoCropEnabled && v0?.crop != null,
+      textBurnIn: !!burnIn?.filter,
+      tonemap: !!response.tonemapping,
+      tonemapAlgo: ss.tonemapAlgo,
+      sourceVideoCodec: (v0?.codec ?? '').toLowerCase() || undefined,
+      isSourceHdr: !!v0?.hdrFormat,
+      sourceDvProfile: v0?.dvProfile,
+      sourceDvBlSignalCompatId: v0?.dvBlSignalCompatId,
+    });
+    const tonemapReport =
+      response.tonemapping && videoVariant
+        ? resolveTonemapReport(resolveEncodePipeline(videoVariant, pipelineInputs), {
+            tonemap: true,
+            dvNoBase: pipelineInputs.dvNoBase,
+            burnIn: !!burnIn,
+            sourceVideoCodec: pipelineInputs.sourceVideoCodec,
+            hdr10Target: pipelineInputs.dvNoBase && videoVariant.hdr === 'HDR10',
+            curve: ss.tonemapCurve,
+          })
+        : null;
+    const tonemapAlgo = tonemapReport?.path ?? null;
+    const tonemapCurve = tonemapReport?.curve;
 
     // A launch from another device counts for whoever started it. Resolved here
     // because this is where the playback that claims it actually begins.

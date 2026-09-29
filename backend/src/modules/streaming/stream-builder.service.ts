@@ -26,7 +26,10 @@ import {
 } from './transcoding/quality-ladder';
 import { remuxBandwidthBps } from './transcoding/master-playlist';
 import { REMUX_STEREO_AUDIO_BITRATE } from './transcoding/ffmpeg-args';
-import { resolveEncodePipeline } from './transcoding/encode-pipeline';
+import {
+  encodePipelineInputs,
+  resolveEncodePipeline,
+} from './transcoding/encode-pipeline';
 import { dvNoBaseHdr10PathSupported } from './transcoding/tonemap-path';
 import {
   DEFAULT_FPS,
@@ -876,18 +879,20 @@ export class StreamBuilderService {
     // ffmpeg-args uses, so the stats hwAccel can't drift from the real encode
     // (it picks up the registry's runtime CPU fallback and the QSV crop→VAAPI
     // splice). Same inputs the session will carry, so the result matches.
-    const effectiveHwAccel = resolveEncodePipeline(selectedVariant, {
-      hwAccel: this.transcodingService.getDetectedHwAccel(),
-      crop: needsCrop,
-      burnIn: burnInIsText,
-      tonemap: runsTonemapFilter,
-      tonemapAlgo: this.activeStreamTracker.getTonemapAlgo(),
-      sourceVideoCodec,
-      dvNoBase: noBase,
-      // Mirrors the spawn's own derivation (transcoding.service.ts) so this
-      // stays the same resolver call with the same inputs.
-      sourceBitDepth: isSourceHdr || noBase ? 10 : 8,
-    }).effectiveHwAccel;
+    const effectiveHwAccel = resolveEncodePipeline(
+      selectedVariant,
+      encodePipelineInputs({
+        hwAccel: this.transcodingService.getDetectedHwAccel(),
+        crop: needsCrop,
+        textBurnIn: burnInIsText,
+        tonemap: runsTonemapFilter,
+        tonemapAlgo: this.activeStreamTracker.getTonemapAlgo(),
+        sourceVideoCodec: sourceVideoCodec || undefined,
+        isSourceHdr,
+        sourceDvProfile: dv.profile,
+        sourceDvBlSignalCompatId: dv.compatId,
+      }),
+    ).effectiveHwAccel;
 
     this.log.log(
       `Transcode for file ${resolved.mediaFile.id}: ${reasons.map((r) => r.flag).join(', ')} (audioOut=${outputAudioCodec}, copy=${canCopyAudio}, track=${pickedAudio})`,

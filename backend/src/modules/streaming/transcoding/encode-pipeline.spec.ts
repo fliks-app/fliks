@@ -1,5 +1,7 @@
 import {
+  encodePipelineInputs,
   resolveEncodePipeline,
+  resolveTonemapReport,
   isVtTonemapPath,
   isVtHdrPassthroughPath,
 } from './encode-pipeline';
@@ -280,5 +282,38 @@ describe('isVtHdrPassthroughPath: darwin VideoToolbox HDR10/HLG routing', () => 
     expect(
       isVtHdrPassthroughPath(isHdrOutput, hwAccel, burnIn, hasCrop, 'hevc'),
     ).toBe(expected);
+  });
+});
+
+describe('resolveTonemapReport', () => {
+  const report = (sourceDvProfile: number | null, hdr10Target: boolean) => {
+    const inputs = encodePipelineInputs({
+      hwAccel: 'none',
+      crop: false,
+      textBurnIn: false,
+      tonemap: true,
+      tonemapAlgo: 'auto',
+      sourceVideoCodec: 'hevc',
+      isSourceHdr: sourceDvProfile == null,
+      sourceDvProfile,
+      sourceDvBlSignalCompatId: sourceDvProfile == null ? null : 0,
+    });
+    expect(inputs.sourceBitDepth).toBe(10);
+    return resolveTonemapReport(resolveEncodePipeline(SDR_H264, inputs, 'linux'), {
+      tonemap: true,
+      dvNoBase: inputs.dvNoBase,
+      burnIn: false,
+      sourceVideoCodec: 'hevc',
+      hdr10Target,
+      curve: 'hable',
+    });
+  };
+
+  it('reports the CPU chain with its curve', () => {
+    expect(report(null, false)).toMatchObject({ path: 'cpu', curve: 'hable' });
+  });
+
+  it('drops the curve for an HDR10 reshape, which runs none', () => {
+    expect(report(5, true).curve).toBeUndefined();
   });
 });
