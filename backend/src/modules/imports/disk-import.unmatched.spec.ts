@@ -117,15 +117,16 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
     expect(res.mediaId).toBe(42);
   });
 
-  it('keeps the transferred folder name in sync by not letting the .nfo override its title/year', async () => {
+  it('names a transferred folder after the .nfo year the row stores', async () => {
     const { service, mediaRepo, mediaService, nfo } = makeService();
     Object.assign(service, {
       naming: {
-        getFormats: jest.fn().mockResolvedValue({ movieFolder: '{title}' }),
-        applyMovieFolderFormat: (_f: string, d: { title: string }) => d.title,
+        getFormats: jest.fn().mockResolvedValue({ movieFolder: '{title} ({year})' }),
+        applyMovieFolderFormat: (_f: string, d: { title: string; year?: number }) =>
+          `${d.title} (${d.year})`,
       },
     });
-    nfo.readForVideoFile.mockResolvedValue({ title: 'Totally Different Title', year: 1999 });
+    nfo.readForVideoFile.mockResolvedValue({ title: 'Other Placeholder', year: 1999 });
     mediaRepo.findOne
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(unmatchedRow(20, 'Sample Movie Two'));
@@ -145,12 +146,14 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
       null,
     );
 
+    expect(mediaRepo.findOne.mock.calls[0][0].where.folderName).toBe('Sample Movie Two (1999)');
     expect(mediaService.createUnmatched).toHaveBeenCalledWith(
       expect.objectContaining({
+        // A real filename guess outranks the .nfo title; the .nfo still fills the year.
         title: 'Sample Movie Two',
-        year: undefined,
-        folderName: 'Sample Movie Two',
-        nfo: expect.objectContaining({ title: undefined, year: undefined }),
+        year: 1999,
+        folderName: 'Sample Movie Two (1999)',
+        nfo: expect.objectContaining({ title: undefined, year: 1999 }),
       }),
       null,
     );
@@ -334,8 +337,7 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
 
     await service.relinkOrphans(dto(), null);
 
-    // An identified media already anchored to this folder must stay visible to the
-    // lookup — filtering it out would leave a second, unmatched row for the same folder.
+    // An identified owner of the folder is reused, not shadowed by a second row.
     const lookupWhere = mediaRepo.findOne.mock.calls[0][0].where;
     expect(lookupWhere).not.toHaveProperty('tmdbId');
     expect(lookupWhere).not.toHaveProperty('tvdbId');
