@@ -322,6 +322,10 @@ export interface ProvidersConfigPage extends ConfigPageBase {
     /** How core renders what a `GET` answers — an array of rows, in declared columns.
      *  A `GET` without it renders no button: core has no domain view to fall back on. */
     result?: { kind: 'table'; columns: TableColumn[]; emptyKey: string };
+    /** Toasted after a successful mutation, interpolated with the fields of what it answered. */
+    successKey?: string;
+    /** Also runs, unconfirmed, on the row the editor just saved when that row is enabled. `scope: 'row'` only. */
+    afterSave?: boolean;
   }[];
   reorderable?: boolean;
   /** Adds a selection column and the bulk actions that act on it (enable, disable, delete, and
