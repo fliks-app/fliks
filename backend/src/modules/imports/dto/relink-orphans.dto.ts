@@ -14,6 +14,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { MediaType } from '../../../common/enums';
+import type { TransferMethod } from '../../../common/services/file-transfer.service';
 
 export class RelinkFileDto {
   @IsString()
@@ -95,7 +96,7 @@ export class RelinkOrphansDto {
   /** Files sit outside the library: copy or move them into its naming layout. */
   @IsOptional()
   @IsIn(['copy', 'move'])
-  transfer?: 'copy' | 'move';
+  transfer?: TransferMethod;
 
   @IsArray()
   @ArrayMinSize(1)

@@ -117,6 +117,45 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
     expect(res.mediaId).toBe(42);
   });
 
+  it('keeps the transferred folder name in sync by not letting the .nfo override its title/year', async () => {
+    const { service, mediaRepo, mediaService, nfo } = makeService();
+    Object.assign(service, {
+      naming: {
+        getFormats: jest.fn().mockResolvedValue({ movieFolder: '{title}' }),
+        applyMovieFolderFormat: (_f: string, d: { title: string }) => d.title,
+      },
+    });
+    nfo.readForVideoFile.mockResolvedValue({ title: 'Totally Different Title', year: 1999 });
+    mediaRepo.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(unmatchedRow(20, 'Sample Movie Two'));
+    mediaService.createUnmatched.mockResolvedValue({ id: 20 });
+    jest
+      .spyOn(service, 'confirmImport')
+      .mockResolvedValue({ imported: 1, alreadyPresent: 0, errors: [] });
+
+    await service.relinkOrphans(
+      dto({
+        transfer: 'copy',
+        title: undefined,
+        year: undefined,
+        folderName: 'sample.movie.two.download',
+        files: [{ filePath: '/downloads/Sample.Movie.Two.2010.1080p.mkv' }],
+      }),
+      null,
+    );
+
+    expect(mediaService.createUnmatched).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Sample Movie Two',
+        year: undefined,
+        folderName: 'Sample Movie Two',
+        nfo: expect.objectContaining({ title: undefined, year: undefined }),
+      }),
+      null,
+    );
+  });
+
   it('reads a series folder for artwork with no filename basename', async () => {
     const { service, mediaRepo, mediaService } = makeService();
     const seriesDto = dto({
@@ -279,6 +318,61 @@ describe('DiskImportService.relinkOrphans: creating an unmatched title', () => {
     await expect(
       service.relinkOrphans(dto({ reorganize: true }), null),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  it('looks up the folder reuse without restricting to rows that have no provider id', async () => {
+    const { service, mediaRepo, mediaService } = makeService();
+    mediaRepo.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(unmatchedRow(42, 'Sample Movie (2009)'));
+    mediaService.createUnmatched.mockResolvedValue({ id: 42 });
+    mediaService.linkExistingFileInPlace.mockResolvedValue({
+      fileId: 1,
+      episodeId: null,
+      created: false,
+    });
+
+    await service.relinkOrphans(dto(), null);
+
+    // An identified media already anchored to this folder must stay visible to the
+    // lookup — filtering it out would leave a second, unmatched row for the same folder.
+    const lookupWhere = mediaRepo.findOne.mock.calls[0][0].where;
+    expect(lookupWhere).not.toHaveProperty('tmdbId');
+    expect(lookupWhere).not.toHaveProperty('tvdbId');
+    expect(lookupWhere).not.toHaveProperty('imdbId');
+  });
+
+  it('serialises concurrent creates sharing the same library/type/folder key', async () => {
+    const { service } = makeService();
+    const order: string[] = [];
+    let releaseA!: () => void;
+    const gateA = new Promise<void>((r) => (releaseA = r));
+
+    const withKeyedLock = (
+      service as unknown as {
+        withKeyedLock<T>(key: string, fn: () => Promise<T>): Promise<T>;
+      }
+    ).withKeyedLock.bind(service);
+
+    const callA = withKeyedLock('1:movie:Same Folder', async () => {
+      order.push('A-start');
+      await gateA;
+      order.push('A-end');
+      return 'a';
+    });
+    const callB = withKeyedLock('1:movie:Same Folder', async () => {
+      order.push('B-start');
+      return 'b';
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(order).toEqual(['A-start']);
+
+    releaseA();
+    expect(await callA).toBe('a');
+    expect(await callB).toBe('b');
+    expect(order).toEqual(['A-start', 'A-end', 'B-start']);
   });
 
   it('skips the series episode metadata backfill for an unmatched title', async () => {
@@ -510,7 +604,7 @@ describe('DiskImportService.relinkOrphans: files outside the library', () => {
     });
     const confirmImport = jest
       .spyOn(service, 'confirmImport')
-      .mockResolvedValue({ imported: 1, errors: [] });
+      .mockResolvedValue({ imported: 1, alreadyPresent: 0, errors: [] });
     mediaRepo.findOne
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(unmatchedRow(9, 'Sample Show', MediaType.SERIES));
@@ -550,5 +644,48 @@ describe('DiskImportService.relinkOrphans: files outside the library', () => {
       { uniquifyOnCollision: false },
     );
     expect(res.linked).toBe(1);
+  });
+
+  it('picks the outermost ancestor when a season folder repeats the show name', async () => {
+    const { service, mediaRepo, mediaService } = makeService();
+    Object.assign(service, {
+      naming: {
+        getFormats: jest.fn().mockResolvedValue({ seriesFolder: '{Series Title}' }),
+        applySeriesFolderFormat: (_f: string, d: { seriesTitle: string }) => d.seriesTitle,
+      },
+    });
+    jest
+      .spyOn(service, 'confirmImport')
+      .mockResolvedValue({ imported: 1, alreadyPresent: 0, errors: [] });
+    mediaRepo.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(unmatchedRow(11, 'Sample Show', MediaType.SERIES));
+    mediaService.createUnmatched.mockResolvedValue({ id: 11 });
+    mediaService.ensureSeriesEpisode.mockResolvedValue({ episodeId: 4, created: false });
+
+    await service.relinkOrphans(
+      dto({
+        type: MediaType.SERIES,
+        folderName: 'Sample Show',
+        title: 'Sample Show',
+        year: undefined,
+        transfer: 'copy',
+        files: [
+          {
+            filePath: '/downloads/Sample Show/Sample Show/S01/Sample.Show.S01E01.mkv',
+            seasonNumber: 1,
+            episodeNumber: 1,
+          },
+        ],
+      }),
+      null,
+    );
+
+    // The outer `/downloads/Sample Show`, not the inner directory the season sits in.
+    expect(mockedFindLocalArtwork).toHaveBeenCalledWith(
+      '/downloads/Sample Show',
+      undefined,
+      { basenameOnly: false },
+    );
   });
 });

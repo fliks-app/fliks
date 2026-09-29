@@ -6,5 +6,4 @@ export interface ImportFileEntry {
   /** Library that owns the destination. The file is copied/moved under
    *  its root folder, never registered in place. */
   targetLibraryId: number;
-  force?: boolean;
 }
