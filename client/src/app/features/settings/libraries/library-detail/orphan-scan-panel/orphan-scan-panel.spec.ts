@@ -369,3 +369,56 @@ describe('OrphanScanPanelComponent in transfer mode', () => {
     expect(linked.map((b) => [b.libraryId, b.externalId, b.transfer])).toEqual([[7, '11', 'copy']]);
   });
 });
+
+describe('OrphanScanPanelComponent.edit', () => {
+  const byQuery = {
+    searchMovie: (query: string) =>
+      Promise.resolve(query === 'Renamed' ? [result(33, 'Renamed')] : [result(11, 'First')]),
+  };
+
+  it('searches a renamed group again instead of importing the old name match', async () => {
+    const { panel, relinked } = setup(['Alpha', 'Beta'], byQuery);
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+    panel.edit(1, { query: 'Renamed' });
+
+    expect(panel.groups()[1].pick).toBeNull();
+    await panel.importAll(7);
+    expect(relinked.map((b) => [b.folderName, b.externalId])).toEqual([
+      ['Alpha', '11'],
+      ['Beta', '33'],
+    ]);
+  });
+
+  it('saves the edited name on the group it was typed in when added unmatched', async () => {
+    const { panel, linked } = setup(['Alpha', 'Beta'], byQuery);
+    await panel.scanPath('/medias', ['movie'], 'tmdb');
+    panel.edit(1, { query: 'Renamed' });
+    await panel.search(1);
+    panel.pickUnmatched(1);
+    await panel.link(1);
+
+    expect(linked).toHaveLength(1);
+    expect(linked[0].folderName).toBe('Beta');
+    expect(linked[0].title).toBe('Renamed');
+    expect(linked[0].externalId).toBeUndefined();
+  });
+
+  it('drops a search that finishes after the name changed', async () => {
+    let release!: () => void;
+    const { panel } = setup(['Alpha'], {
+      searchMovie: (query: string) =>
+        query === 'Alpha'
+          ? new Promise((r) => (release = () => r([result(11, 'First')])))
+          : Promise.resolve([result(33, 'Renamed')]),
+    });
+    const scanned = panel.scanPath('/medias', ['movie'], 'tmdb');
+    await vi.waitFor(() => expect(release).toBeDefined());
+    panel.edit(0, { query: 'Renamed' });
+    await panel.search(0);
+    release();
+    await scanned;
+
+    expect(panel.groups()[0].pick?.tmdbId).toBe(33);
+    expect(panel.groups()[0].searching).toBe(false);
+  });
+});
