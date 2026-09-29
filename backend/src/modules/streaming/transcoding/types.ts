@@ -136,7 +136,7 @@ export interface SessionContext {
   /** Identity of the source file's bytes (size + mtime): segments cut from a
    *  replaced file never serve for the new one. */
   sourceVersion?: string;
-  /** The demuxer lands after a seek target (`seeksPastKeyframe`). */
+  /** The demuxer lands after a seek target (`sourceIsMpegTs`). */
   sourceSeeksPastKeyframe?: boolean;
   /** Source time an MPEG-TS clock breaks at: runs stop reading there. */
   sourceClockBreakSeconds?: number;

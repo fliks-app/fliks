@@ -449,7 +449,7 @@ describe('StreamBuilderService — audio that ends early', () => {
   it('never derives its own grid from scan, only the frozen grid it is handed decides', () => {
     // Same scan as above, but nothing frozen and passed in: falls back to the
     // plain (ungridded) segment length instead of quietly recomputing one from
-    // scan, so this decision can never drift from what freezeRemuxGrid served.
+    // scan, so this decision can never drift from what remuxSegmentGrid served.
     const scan = {
       keyframes: Array.from({ length: 10 }, (_, i) => ({ pts: i * 10, dts: i * 10 })),
       end: 100,

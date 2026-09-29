@@ -1,4 +1,4 @@
-import { type Keyframe } from './video-packets';
+import type { Keyframe } from './video-packets';
 import { frameSecondsOf, parseSourceFps } from './constants';
 import type { SourceScan } from './source-scan';
 
@@ -70,9 +70,8 @@ export function gridSegmentIndex(
   return boundaries.length - 2;
 }
 
-/** The keyframe grid a remux would keep for `scan`, or null with no scan yet or
- *  no keyframe past `origin`. Frozen once per request so evaluate()'s
- *  AudioEndsEarly check and the grid actually served can never disagree. */
+/** The keyframe grid a remux would keep for `scan` on the timeline starting at
+ *  `origin`, or null with no scan yet or no keyframe past `origin`. */
 export function remuxSegmentGrid(
   scan: Pick<SourceScan, 'keyframes' | 'end'> | null,
   origin: number,
