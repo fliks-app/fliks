@@ -75,7 +75,12 @@
     "subtitle_track_n": "Legenda {{index}}",
     "subtitle_forced": "Forçado",
     "subtitle_hearing_impaired": "Surdos",
+    "subtitle_source": {
+      "translated": "Traduzido",
+      "ocr": "OCR"
+    },
     "playback_error": "A reprodução falhou.",
+    "subtitle_load_failed": "Não foi possível carregar essa faixa de legendas.",
     "error_aborted": "Reprodução interrompida.",
     "error_network": "Erro de rede durante a reprodução.",
     "error_decode": "Erro ao descodificar o vídeo.",
@@ -1077,6 +1082,7 @@
     "translate_processing": "Traduzindo",
     "translation_in_progress": "A traduzir legendas: {{langs}}",
     "translate_target_language": "Idioma de destino",
+    "translate_provider": "Fornecedor de tradução",
     "translate_no_providers": "Nenhum fornecedor de tradução configurado. Peça a um administrador para adicionar um nas definições.",
     "translate_hint": "Cria uma nova legenda traduzindo esta. A tradução é executada em segundo plano e mantém a sincronização original.",
     "translation_started": "Tradução iniciada — a legenda aparecerá quando estiver pronta.",
@@ -1125,6 +1131,7 @@
     "col_sub_title": "Título",
     "search": "Pesquisar",
     "no_subtitle_results": "Nenhum resultado encontrado.",
+    "subtitle_downloads": "{{count}} transferências",
     "confirm_delete_subtitle": "Eliminar esta legenda?",
     "confirm_delete_subtitle_processing": "Esta tradução ainda está em curso. Eliminá-la não interrompe a execução.",
     "rejection": {
@@ -1427,6 +1434,7 @@
     "delete": "Eliminar",
     "edit": "Editar",
     "actions": "Ações",
+    "download": "Transferir",
     "refresh": "Atualizar",
     "active": "Ativo",
     "disabled": "Desativado",
@@ -1731,6 +1739,13 @@
       "title": "Perfis de idioma",
       "subtitle": "Defina os idiomas de áudio aceites e as legendas a transferir automaticamente.",
       "new": "Novo perfil",
+      "hi_label": "Surdos",
+      "hi_mode": {
+        "prefer": "Preferir",
+        "avoid": "Evitar",
+        "require": "Exigir",
+        "forbid": "Proibir"
+      },
       "col_name": "Nome",
       "col_audio_count": "Idiomas de áudio",
       "col_subtitle_count": "Idiomas de legendas",
@@ -2170,6 +2185,8 @@
       "title": "Fornecedores de legendas",
       "subtitle": "Configure as fontes de transferência de legendas.",
       "new": "Novo fornecedor",
+      "download_title": "Fornecedores de transferência",
+      "download_hint": "Fontes pesquisadas para transferir ficheiros de legendas.",
       "empty": "Nenhum fornecedor. Adicione OpenSubtitles, Subdl…",
       "load_error": "Não foi possível carregar os fornecedores.",
       "save_error": "Não foi possível guardar.",
@@ -2232,7 +2249,15 @@
       "translation_openai_model": "Modelo",
       "translation_libretranslate_url": "URL do servidor",
       "translation_libretranslate_url_hint": "Aponte para o seu contentor LibreTranslate, ex. http://libretranslate:5000.",
-      "translation_api_key_optional": "Chave de API (opcional)"
+      "translation_api_key_optional": "Chave de API (opcional)",
+      "translation_new": "Novo fornecedor",
+      "translation_concurrency": "Paralelismo máx.",
+      "translation_empty": "Ainda não há nenhum fornecedor de tradução configurado.",
+      "translation_col_engine": "Motor",
+      "translation_default": "Predefinição",
+      "translation_editor_create": "Novo fornecedor de tradução",
+      "translation_editor_edit": "Editar o fornecedor de tradução",
+      "translation_set_default": "Usar como predefinição"
     },
     "schedulers": {
       "title": "Tarefas agendadas",
@@ -2672,6 +2697,7 @@
     "unknown_plugin": "O plugin ao qual esta página pertence não está instalado.",
     "unknown_view": "Este plugin não tem nenhuma página com esse nome.",
     "unsupported_kind": "Esta página ainda não é suportada pela sua versão do Fliks.",
+    "implementations_load_error": "Não foi possível carregar os tipos de fornecedor: alguns campos abaixo podem estar em falta.",
     "webhook_test_ok": "Evento de teste entregue a {{count}} ponto(s) de entrada.",
     "webhook_test_unconfigured": "Nenhum ponto de entrada configurado — nada foi enviado.",
     "webhook_test_failed": "A entrega de teste falhou: {{detail}}"

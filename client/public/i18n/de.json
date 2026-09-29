@@ -75,7 +75,12 @@
     "subtitle_track_n": "Untertitel {{index}}",
     "subtitle_forced": "Erzwungen",
     "subtitle_hearing_impaired": "Hörgeschädigt",
+    "subtitle_source": {
+      "translated": "Übersetzt",
+      "ocr": "OCR"
+    },
     "playback_error": "Wiedergabe fehlgeschlagen.",
+    "subtitle_load_failed": "Diese Untertitelspur konnte nicht geladen werden.",
     "error_aborted": "Wiedergabe abgebrochen.",
     "error_network": "Netzwerkfehler während der Wiedergabe.",
     "error_decode": "Fehler beim Dekodieren des Videos.",
@@ -1077,6 +1082,7 @@
     "translate_processing": "Übersetzen",
     "translation_in_progress": "Untertitel werden übersetzt: {{langs}}",
     "translate_target_language": "Zielsprache",
+    "translate_provider": "Übersetzungsanbieter",
     "translate_no_providers": "Kein Übersetzungsanbieter konfiguriert. Bitten Sie einen Administrator, in den Einstellungen einen hinzuzufügen.",
     "translate_hint": "Erstellt einen neuen Untertitel, indem dieser übersetzt wird. Die Übersetzung läuft im Hintergrund und behält das ursprüngliche Timing bei.",
     "translation_started": "Übersetzung gestartet — der Untertitel erscheint, sobald er fertig ist.",
@@ -1125,6 +1131,7 @@
     "col_sub_title": "Titel",
     "search": "Suchen",
     "no_subtitle_results": "Keine Ergebnisse gefunden.",
+    "subtitle_downloads": "{{count}} Downloads",
     "confirm_delete_subtitle": "Diesen Untertitel löschen?",
     "confirm_delete_subtitle_processing": "Diese Übersetzung läuft noch. Sie zu löschen stoppt den Lauf nicht.",
     "rejection": {
@@ -1427,6 +1434,7 @@
     "delete": "Löschen",
     "edit": "Bearbeiten",
     "actions": "Aktionen",
+    "download": "Herunterladen",
     "refresh": "Aktualisieren",
     "active": "Aktiv",
     "disabled": "Deaktiviert",
@@ -1731,6 +1739,13 @@
       "title": "Sprachprofile",
       "subtitle": "Legen Sie die akzeptierten Audiosprachen und die automatisch herunterzuladenden Untertitel fest.",
       "new": "Neues Profil",
+      "hi_label": "Hörgeschädigt",
+      "hi_mode": {
+        "prefer": "Bevorzugen",
+        "avoid": "Vermeiden",
+        "require": "Verlangen",
+        "forbid": "Verbieten"
+      },
       "col_name": "Name",
       "col_audio_count": "Audiosprachen",
       "col_subtitle_count": "Untertitelsprachen",
@@ -2170,6 +2185,8 @@
       "title": "Untertitel-Anbieter",
       "subtitle": "Konfigurieren Sie die Download-Quellen für Untertitel.",
       "new": "Neuer Anbieter",
+      "download_title": "Download-Anbieter",
+      "download_hint": "Quellen, die zum Herunterladen von Untertiteldateien durchsucht werden.",
       "empty": "Kein Anbieter. Fügen Sie OpenSubtitles, Subdl… hinzu.",
       "load_error": "Die Anbieter konnten nicht geladen werden.",
       "save_error": "Speichern nicht möglich.",
@@ -2232,7 +2249,15 @@
       "translation_openai_model": "Modell",
       "translation_libretranslate_url": "Server-URL",
       "translation_libretranslate_url_hint": "Verweisen Sie auf Ihren LibreTranslate-Container, z. B. http://libretranslate:5000.",
-      "translation_api_key_optional": "API-Schlüssel (optional)"
+      "translation_api_key_optional": "API-Schlüssel (optional)",
+      "translation_new": "Neuer Anbieter",
+      "translation_concurrency": "Max. parallel",
+      "translation_empty": "Noch kein Übersetzungsanbieter konfiguriert.",
+      "translation_col_engine": "Engine",
+      "translation_default": "Standard",
+      "translation_editor_create": "Neuer Übersetzungsanbieter",
+      "translation_editor_edit": "Übersetzungsanbieter bearbeiten",
+      "translation_set_default": "Als Standard verwenden"
     },
     "schedulers": {
       "title": "Geplante Aufgaben",
@@ -2672,6 +2697,7 @@
     "unknown_plugin": "Das Plugin, zu dem diese Seite gehört, ist nicht installiert.",
     "unknown_view": "Dieses Plugin hat keine Seite mit diesem Namen.",
     "unsupported_kind": "Diese Seite wird von deiner Fliks-Version noch nicht unterstützt.",
+    "implementations_load_error": "Die Anbietertypen konnten nicht geladen werden: einige Felder unten fehlen möglicherweise.",
     "webhook_test_ok": "Testereignis an {{count}} Endpunkt(e) geliefert.",
     "webhook_test_unconfigured": "Noch kein Endpunkt konfiguriert — es wurde nichts gesendet.",
     "webhook_test_failed": "Testzustellung fehlgeschlagen: {{detail}}"
