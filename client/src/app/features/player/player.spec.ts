@@ -1048,6 +1048,40 @@ describe('PlayerComponent remux fallback (rejectCopy)', () => {
     expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
     expect(h.state.error()).toBeTruthy();
   });
+
+  it('an error during the still-pending first load waits for it instead of racing a second load()', async () => {
+    const h = createHarness();
+    h.state.playbackMode.set('remux');
+    h.component.playbackInfo = buildPi(MAIN_FILE_ID, {
+      playMethod: 'DirectStream',
+      playUrl: `/api/stream/${MAIN_FILE_ID}/master.m3u8?token=t&remux=1`,
+    });
+    h.streamingApi.getPlaybackInfo.mockResolvedValueOnce(
+      buildPi(MAIN_FILE_ID, { playMethod: 'Transcode', playUrl: `/api/stream/${MAIN_FILE_ID}/master.m3u8?token=t` }),
+    );
+    h.component.wireErrorRecovery(h.engine);
+    // The first ngAfterViewInit load() sets this and hasn't resolved yet.
+    h.component.reloadingStream = true;
+
+    vi.useFakeTimers();
+    try {
+      h.engine.emit('error', { source: 'shaka', code: 4032 });
+      await vi.advanceTimersByTimeAsync(500);
+      // Still waiting on the first load: no second load() fired yet.
+      expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
+      expect(h.engine.loadCalls.length).toBe(0);
+
+      // The first load settles.
+      h.component.reloadingStream = false;
+      await vi.advanceTimersByTimeAsync(200);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalledTimes(1);
+    expect(h.engine.loadCalls.length).toBe(1);
+    expect(h.state.playbackMode()).toBe('transcode');
+  });
 });
 
 describe('PlayerComponent selectSubtitle Cast guard', () => {

@@ -870,6 +870,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Hoisted so the catch can anchor a remux fallback at the resume point.
     let startTime: number | undefined = resumeTime ?? undefined;
 
+    // Held for the whole first load, like a reload: an engine `error` racing
+    // this pending load() must wait via isReloadIdle(), not fire a second one.
+    this.reloadingStream = true;
     try {
       // Only use offline playback if explicitly requested via query param
       let offlineCheck: string | null = null;
@@ -1270,6 +1273,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       }
     } finally {
       this.state.loading.set(false);
+      this.reloadingStream = false;
     }
 
     // Everything above awaits, so a back-out mid-launch runs ngOnDestroy first and
