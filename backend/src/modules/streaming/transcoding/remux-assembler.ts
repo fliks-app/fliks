@@ -320,6 +320,12 @@ export class RemuxSegmentAssembler {
     return this.opened ? this.segmentContentSeconds(this.next) : null;
   }
 
+  /** Content-time start of the run's first assembled segment. Null before
+   *  landing. */
+  runStartSeconds(): number | null {
+    return this.opened ? this.segmentContentSeconds(this.openStartSegment) : null;
+  }
+
   /** Content-time start of served segment `i`, on the keyframe grid's real
    *  spacing: shared by {@link frontierSeconds} and the throttle service. */
   segmentContentSeconds(i: number): number {
