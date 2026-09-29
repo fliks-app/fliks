@@ -15,6 +15,16 @@ import type { HwAccelType, TonemapAlgo } from './types';
 
 const logger = new Logger('EncodePipeline');
 
+// Resolved on every playback-info and spawn: log the misconfiguration once.
+let qsvTonemapFallbackWarned = false;
+function warnQsvTonemapFallbackOnce(toVaapi: boolean): void {
+  if (qsvTonemapFallbackWarned) return;
+  qsvTonemapFallbackWarned = true;
+  logger.warn(
+    `tonemapAlgo=qsv: no vpp_qsv tonemap for this session (LUT probe, burn-in or decoder); using ${toVaapi ? 'tonemap_vaapi' : 'a CPU encode'}`,
+  );
+}
+
 /** NVENC's zero-copy HDR→SDR path, shared by `ffmpeg-args` and the
  *  playback-info controller so the argv and the stats label can't drift. */
 export function isCudaTonemapPath(tonemap: boolean, hwAccel: string): boolean {
@@ -207,17 +217,12 @@ export function resolveEncodePipeline(
   }
   const encoder = encoderRegistry.resolve(variant, requestedHwAccel);
   const effectiveHwAccel: HwAccelType = encoder?.hwAccel ?? 'none';
-  // An explicit admin tonemapAlgo='qsv' pick with no usable vpp_qsv LUT (older
-  // iGPU generation, or a decode path that isn't qsv-native) has no other qsv
-  // tonemap step of its own: fall back to tonemap_vaapi on the same VAAPI
-  // surfaces instead of defaulting into the unrelated OpenCL bridge (which
-  // buildVideoFilters would otherwise populate for "not vaapi, not vulkan").
+  // tonemapAlgo='qsv' without the vpp_qsv LUT has no qsv step of its own: run
+  // the same tonemap_vaapi chain as 'vaapi' rather than the unprobed OpenCL one.
   const qsvTonemapFallsBackToVaapi =
     ctx.tonemap && tonemapPath === 'qsv' && !qsvNativeAvailable && !noVaapi;
-  if (ctx.tonemap && tonemapPath === 'qsv' && !qsvNativeAvailable) {
-    logger.warn(
-      `tonemapAlgo=qsv has no usable vpp_qsv LUT on this host; falling back to ${qsvTonemapFallsBackToVaapi ? 'tonemap_vaapi' : 'a CPU encode'}`,
-    );
+  if (ctx.tonemap && tonemapPath === 'qsv' && !qsvNativeAvailable && ctx.hwAccel === 'qsv') {
+    warnQsvTonemapFallbackOnce(qsvTonemapFallsBackToVaapi);
   }
   // AMF tonemaps HDR->SDR on CPU (no VAAPI to host the tonemap), so it needs
   // the CPU tonemap chain populated — never the vaapi in-place path.

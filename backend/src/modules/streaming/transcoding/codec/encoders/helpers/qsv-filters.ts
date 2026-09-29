@@ -118,9 +118,8 @@ export function qsvScaleFilter10bit(input: EncoderInput): string {
         `format=qsv`
       );
     }
-    // No other tonemap step exists on this surface (the vpp_qsv LUT isn't
-    // RPU-aware): a caller asking for tonemap here would silently ship
-    // untouched HDR pixels under an SDR/HDR10 tag.
+    // The vpp_qsv LUT isn't RPU-aware: without opencl there is no tonemap
+    // step here, and shipping the plain scale would mis-tag raw HDR pixels.
     if (tonemap) {
       throw new Error(
         'qsvScaleFilter10bit: tonemap requested with no opencl chain on a qsv-native surface',

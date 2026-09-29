@@ -68,9 +68,8 @@ export const hevcVideotoolboxHdr10: EncoderDescriptor = {
     const w = target.width;
     const bitrate = `${target.videoBitrateBps}`;
     const onMetal = inputSurface === 'videotoolbox';
-    // No RPU-aware tonemap chain exists on this descriptor (see
-    // dvNoBaseHdr10PathSupported, which excludes videotoolbox entirely):
-    // shipping the plain scale here would tag untouched pixels as HDR10.
+    // No RPU-aware tonemap exists here (dvNoBaseHdr10PathSupported excludes
+    // videotoolbox): the plain scale would tag untouched pixels as HDR10.
     if (tonemap) {
       throw new Error('hevc_videotoolbox_main10: tonemap requested but not supported');
     }

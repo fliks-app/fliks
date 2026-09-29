@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import { execFile } from 'child_process';
 import { unlink } from 'fs/promises';
 import { promisify } from 'util';
-import { qsvDeviceInitArgs, qsvViaD3d11DeviceInitArgs } from '../hw-device';
+import { findQsvNativeDecoder } from './decoders';
 import { ffmpegTail, probeSamplePath } from './probe-utils';
 import { synthesiseHdrProbeSample } from './hdr-probe-sample';
 
@@ -25,24 +25,16 @@ export async function runVppQsvTonemapProbe(log: Logger): Promise<void> {
   try {
     await synthesiseHdrProbeSample(hdrSample);
 
-    // Decode the same way a real session does (decoders/qsv.ts: VAAPI on
-    // Linux, D3D11VA on Windows — never the `-hwaccel qsv` wrapper), hwmap
-    // onto QSV, run vpp_qsv tonemap, encode 1 frame with h264_qsv.
-    const win = process.platform === 'win32';
-    const decodeInit = win ? qsvViaD3d11DeviceInitArgs() : qsvDeviceInitArgs();
-    const decodeHwaccel = win
-      ? ['-hwaccel', 'd3d11va', '-hwaccel_output_format', 'd3d11', '-hwaccel_device', 'dx']
-      : ['-hwaccel', 'vaapi', '-hwaccel_output_format', 'vaapi', '-hwaccel_device', 'va'];
+    // The session's own qsv-native decoder (VAAPI on Linux, D3D11VA on
+    // Windows), so the probe can't drift from the argv a session runs.
+    const decodeArgs = findQsvNativeDecoder('hevc')!.buildInputArgs();
     await execFileAsync(
       'ffmpeg',
       [
         '-hide_banner',
         '-loglevel',
         'error',
-        ...decodeInit,
-        '-filter_hw_device',
-        'qs',
-        ...decodeHwaccel,
+        ...decodeArgs,
         '-i',
         hdrSample,
         '-vf',

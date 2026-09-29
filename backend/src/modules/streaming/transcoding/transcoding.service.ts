@@ -169,13 +169,10 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     // tiny bitstream per codec, hand it to each descriptor under its
     // real `-hwaccel ...` setup, drop the frame to /dev/null.
     void runDecoderProbes(ALL_DECODERS, this.log);
-    // The HW tone-map probes below share the same iGPU/dGPU context as the
-    // encoder probes above (and each other): run them strictly after the
-    // encoder probes finish, one at a time — concurrent contexts on the
-    // same device produce false negatives (see encoder-probe.ts). Still
-    // fire-and-forget from module init's perspective.
+    // Tone-map probes share the GPU with the encoder probes: run them after,
+    // one at a time (concurrent contexts give false negatives, encoder-probe.ts).
     void (async () => {
-      await encoderProbes;
+      await encoderProbes.catch(() => {});
       const hwAccel = this.detectedHwAccel;
       if (hwAccel === 'qsv') {
         await runVppQsvTonemapProbe(this.log);
@@ -207,7 +204,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
       if (hwAccel === 'amf') {
         await runAmfOpenclProbe(this.log);
       }
-    })();
+    })().catch((err: Error) => this.log.warn(`[tonemap-probes] aborted: ${err.message}`));
 
     // Tight cleanup cadence — paired with the live-session 30 s TTL +
     // 60 s job grace, this puts ffmpeg death within ~100 s of the last

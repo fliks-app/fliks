@@ -33,6 +33,11 @@ describe('svtMasterDisplayString', () => {
       'G(0.265,0.69)B(0.15,0.06)R(0.68,0.32)WP(0.3127,0.329)L(1000,0.0001)',
     );
   });
+  it('falls back to the generic reference on an unparseable value', () => {
+    expect(
+      svtMasterDisplayString({ ...SOURCE, masteringDisplay: 'G(-1,2)B(3,4)' }),
+    ).toBe('G(0.265,0.69)B(0.15,0.06)R(0.68,0.32)WP(0.3127,0.329)L(1000,0.0001)');
+  });
 });
 
 describe('maxCllString', () => {

@@ -1,4 +1,7 @@
+import { Logger } from '@nestjs/common';
 import type { HdrStaticMetadata } from '../../types';
+
+const logger = new Logger('HdrMetadata');
 
 /** Generic 1000-nit BT.2020 HDR10 reference, used when the source carried no
  *  ST 2086 mastering-display metadata — the encoder still emits a valid (if
@@ -37,12 +40,10 @@ const MASTER_DISPLAY_RE =
  */
 export function svtMasterDisplayString(meta?: HdrStaticMetadata): string {
   const raw = masterDisplayString(meta);
-  const m = raw.match(MASTER_DISPLAY_RE);
+  let m = raw.match(MASTER_DISPLAY_RE);
   if (!m) {
-    // The integer format is either the generic constant above or probed
-    // straight into this shape (see HdrStaticMetadata) — a mismatch means a
-    // caller changed the format without updating this converter.
-    throw new Error(`svtMasterDisplayString: unparseable master-display value: ${raw}`);
+    logger.warn(`unparseable master-display "${raw}", using the generic reference`);
+    m = GENERIC_MASTER_DISPLAY.match(MASTER_DISPLAY_RE)!;
   }
   const [gx, gy, bx, by, rx, ry, wx, wy, lmax, lmin] = m.slice(1).map(Number);
   const chroma = (v: number) => Number((v / 50000).toFixed(5));

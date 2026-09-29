@@ -110,6 +110,18 @@ describe('resolveEncodePipeline — Windows QSV routing', () => {
     expect(r.requestedHwAccel).toBe('qsv');
     expect(r.effectiveHwAccel).toBe('qsv');
   });
+
+  it('runs tonemap_vaapi for an explicit qsv pick without the vpp_qsv LUT (Linux)', () => {
+    const r = resolveEncodePipeline(
+      SDR_H264,
+      ctx({ tonemap: true, tonemapAlgo: 'qsv', sourceVideoCodec: 'hevc' }),
+      'linux',
+    );
+    expect(r.tonemapPath).toBe('qsv');
+    expect(r.qsvNativeAvailable).toBe(false);
+    expect(r.useVaapiTonemap).toBe(true);
+    expect(r.effectiveHwAccel).toBe('qsv');
+  });
 });
 
 describe('resolveEncodePipeline: Vulkan (libplacebo) tonemap', () => {

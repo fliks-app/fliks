@@ -40,9 +40,8 @@ export async function runTonemapOpenclProbe(
   try {
     await synthesiseHdrProbeSample(hdrSample);
 
-    // Decode + device init match the real session: QSV derives its device
-    // from VAAPI on Linux, so a QSV host also gets the `qsv=qs@va` device;
-    // a VAAPI-detected host has no QSV device at all.
+    // Device init matches the session: a QSV host adds `qsv=qs@va`, a VAAPI
+    // host has no QSV device at all.
     //
     // `-filter_hw_device va` (not `ocl`): without this the hwupload back to
     // vaapi after the CPU crop fails with `Function not implemented` on
@@ -66,10 +65,8 @@ export async function runTonemapOpenclProbe(
       '-i',
       hdrSample,
     ];
-    // A QSV session reverse-maps the tone-mapped surface onto QSV and
-    // encodes h264_qsv (see qsv-filters.ts); a VAAPI session stays on VAAPI
-    // and encodes h264_vaapi (see vaapi-filters.ts) — testing the wrong
-    // tail on a VAAPI host gives a false read on a chain no session runs.
+    // Same tail as the session: QSV maps back onto QSV (qsv-filters.ts),
+    // VAAPI stays on VAAPI (vaapi-filters.ts).
     const reverseMap =
       hwAccel === 'qsv'
         ? 'hwmap=derive_device=qsv:mode=write:reverse=1:extra_hw_frames=16,format=qsv'
@@ -127,6 +124,8 @@ export async function runTonemapOpenclProbe(
         failure = ffmpegTail(err);
       }
     }
+  } catch (err) {
+    failure = ffmpegTail(err) || (err as Error).message;
   } finally {
     await unlink(hdrSample).catch(() => {});
     probedOnce = true;
