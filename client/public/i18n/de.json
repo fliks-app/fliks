@@ -243,7 +243,8 @@
     "check_failed": "Prüfung auf Updates fehlgeschlagen.",
     "store_managed": "Die Updates dieser App werden von Ihrem Store verwaltet.",
     "never_ahead_of_server": "Client-Updates ausblenden, die neuer als der Server sind",
-    "never_ahead_of_server_hint": "Die Update-Schaltfläche bleibt verborgen, solange der Server älter ist."
+    "never_ahead_of_server_hint": "Die Update-Schaltfläche bleibt verborgen, solange der Server älter ist.",
+    "hidden_ahead": "Version {{version}} ist verfügbar, bleibt aber ausgeblendet, solange der Server {{server}} nutzt."
   },
   "display_settings": {
     "title": "Anzeige",

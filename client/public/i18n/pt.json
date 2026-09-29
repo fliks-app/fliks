@@ -243,7 +243,8 @@
     "check_failed": "Falha ao procurar atualizações.",
     "store_managed": "As atualizações desta aplicação são geridas pela sua loja.",
     "never_ahead_of_server": "Ocultar atualizações mais recentes que o servidor",
-    "never_ahead_of_server_hint": "O botão de atualização fica oculto enquanto o servidor tiver uma versão anterior."
+    "never_ahead_of_server_hint": "O botão de atualização fica oculto enquanto o servidor tiver uma versão anterior.",
+    "hidden_ahead": "A versão {{version}} está disponível, mas oculta enquanto o servidor estiver na {{server}}."
   },
   "display_settings": {
     "title": "Visualização",

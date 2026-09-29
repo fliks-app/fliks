@@ -243,7 +243,8 @@
     "check_failed": "Failed to check for updates.",
     "store_managed": "Updates for this app are managed by your store.",
     "never_ahead_of_server": "Hide client updates newer than the server",
-    "never_ahead_of_server_hint": "The update button stays hidden while the server runs an older version."
+    "never_ahead_of_server_hint": "The update button stays hidden while the server runs an older version.",
+    "hidden_ahead": "Version {{version}} is available but hidden while the server runs {{server}}."
   },
   "display_settings": {
     "title": "Display",

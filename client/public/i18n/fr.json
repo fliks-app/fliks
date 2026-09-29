@@ -243,7 +243,8 @@
     "check_failed": "Échec de la vérification des mises à jour.",
     "store_managed": "Les mises à jour de cette application sont gérées par votre store.",
     "never_ahead_of_server": "Masquer les mises à jour plus récentes que le serveur",
-    "never_ahead_of_server_hint": "Le bouton de mise à jour reste masqué tant que le serveur a une version inférieure."
+    "never_ahead_of_server_hint": "Le bouton de mise à jour reste masqué tant que le serveur a une version inférieure.",
+    "hidden_ahead": "La version {{version}} est disponible mais masquée tant que le serveur est en {{server}}."
   },
   "display_settings": {
     "title": "Affichage",

@@ -243,7 +243,8 @@
     "check_failed": "Verifica degli aggiornamenti fallita.",
     "store_managed": "Gli aggiornamenti di questa applicazione sono gestiti dal tuo store.",
     "never_ahead_of_server": "Nascondi gli aggiornamenti più recenti del server",
-    "never_ahead_of_server_hint": "Il pulsante di aggiornamento resta nascosto finché il server ha una versione precedente."
+    "never_ahead_of_server_hint": "Il pulsante di aggiornamento resta nascosto finché il server ha una versione precedente.",
+    "hidden_ahead": "La versione {{version}} è disponibile ma nascosta finché il server è alla {{server}}."
   },
   "display_settings": {
     "title": "Visualizzazione",

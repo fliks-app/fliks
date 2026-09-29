@@ -50,7 +50,11 @@
     }
 
     @if (update.info(); as info) {
-      @if (!upToDate()) {
+      @if (!upToDate() && update.hiddenAhead()) {
+        <p class="text-sm opacity-70">
+          {{ 'update_settings.hidden_ahead' | translate: { version: info.version, server: update.serverVersion() } }}
+        </p>
+      } @else if (!upToDate()) {
         <div class="rounded-box bg-base-200 p-4">
           <div class="flex items-center gap-2 mb-1">
             <svg lucideRocket class="h-5 w-5 text-primary"></svg>
@@ -68,8 +72,8 @@
           </p>
 
           @if (update.aheadOfServer()) {
-            <div role="alert" class="alert alert-warning mb-3">
-              <svg lucideTriangleAlert class="h-5 w-5 shrink-0"></svg>
+            <div role="alert" class="rounded-box border border-warning/50 bg-warning/10 p-3 mb-3 flex items-start gap-2">
+              <svg lucideTriangleAlert class="h-5 w-5 shrink-0 text-warning"></svg>
               <span class="text-sm">
                 {{ 'update.ahead_of_server' | translate: { server: update.serverVersion() } }}
               </span>

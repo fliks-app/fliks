@@ -20,16 +20,18 @@
       </p>
 
       @if (update.aheadOfServer()) {
-        <div role="alert" class="alert alert-warning mb-3 flex-col items-start gap-2">
+        <div role="alert" class="rounded-box border border-warning/50 bg-warning/10 p-3 mb-3">
           <div class="flex items-start gap-2">
-            <svg lucideTriangleAlert class="h-5 w-5 shrink-0"></svg>
-            <span class="text-sm">
-              {{ 'update.ahead_of_server' | translate: { server: update.serverVersion() } }}
-            </span>
+            <svg lucideTriangleAlert class="h-5 w-5 shrink-0 text-warning"></svg>
+            <div class="flex flex-col items-start gap-2">
+              <p class="text-sm">
+                {{ 'update.ahead_of_server' | translate: { server: update.serverVersion() } }}
+              </p>
+              <button class="btn btn-xs btn-outline btn-warning" (click)="hideUntilServerUpdates()">
+                {{ 'update.hide_until_server' | translate }}
+              </button>
+            </div>
           </div>
-          <button class="btn btn-sm btn-ghost self-end" (click)="hideUntilServerUpdates()">
-            {{ 'update.hide_until_server' | translate }}
-          </button>
         </div>
       }
 
