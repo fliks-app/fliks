@@ -231,4 +231,26 @@ describe('NavbarService', () => {
     // for the home route instead of walking into the branch it came from.
     expect(router.url).toBe('/');
   });
+  /** The player's own exits replace /watch, but a remount detours through `/`
+   *  and records it as a page; back from the detail page must not reopen it. */
+  it('never records a player URL as a back target', async () => {
+    TestBed.configureTestingModule({
+      providers: [provideRouter([{ path: '**', component: PageStub }])],
+    });
+    const navbar = TestBed.inject(NavbarService);
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/movies/1');
+    await router.navigateByUrl('/watch/1');
+    await router.navigateByUrl('/', { skipLocationChange: true });
+    await router.navigateByUrl('/watch/2', { replaceUrl: true });
+    navbar.markAsBackNavigation();
+    await router.navigateByUrl('/movies/1', { replaceUrl: true });
+
+    expect(navbar.backDepth).toBe(2);
+    navbar.goBack();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    navbar.goBack();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(router.url).not.toMatch(/^\/watch/);
+  });
 });
