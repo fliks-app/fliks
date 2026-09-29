@@ -378,9 +378,6 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         let player = AVPlayer(playerItem: item)
         player.automaticallyWaitsToMinimizeStalling = true
-        // The system language would otherwise override the master's DEFAULT
-        // rendition, which the client picks from the user's audio preference.
-        player.appliesMediaSelectionCriteriaAutomatically = false
         self.player = player
         if playerLayer == nil, let view = playerView {
             let layer = AVPlayerLayer(player: player)

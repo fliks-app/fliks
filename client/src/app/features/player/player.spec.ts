@@ -28,6 +28,7 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { PlaybackQueueService } from '../../core/services/playback-queue.service';
 import { TrackManagerService } from '../../core/services/track-manager.service';
 import { QualityManagerService } from '../../core/services/quality-manager.service';
+import { PlayerSettingsService } from '../../core/services/player-settings.service';
 import { DeviceService } from '../../core/services/device.service';
 import { DesktopEngine } from '../../core/services/playback-engine/desktop-engine';
 
@@ -1749,5 +1750,35 @@ describe('PlayerComponent: offline crop', () => {
     h.component.playbackInfo = null;
     h.component.offlineCrop = null;
     expect(h.component.activeCropRect()).toBeUndefined();
+  });
+});
+
+describe('PlayerComponent startup', () => {
+  afterEach(() => {
+    localStorage.clear();
+    TestBed.resetTestingModule();
+  });
+
+  it('negotiates playback once, with the audio index resolved from the preferred language', async () => {
+    const h = createHarness();
+    const audio = [{ language: 'eng' }, { language: 'fra' }];
+    const media = {
+      ...MOVIE,
+      files: [{ ...MOVIE.files![0], streamInfo: { durationSeconds: 100, audio } as any }],
+    };
+    TestBed.inject(MediaService).getOne = vi.fn(async () => media) as any;
+    TestBed.inject(PlayerSettingsService).patch({
+      audioSelectionMode: 'preferred',
+      preferredAudioLanguage: 'fra',
+    });
+    (TestBed.inject(ActivatedRoute).snapshot.queryParams as any) = { mediaId: String(MEDIA_ID) };
+    h.component.createShakaEngine = async () => {
+      h.component.engine = h.engine;
+    };
+
+    await h.component.ngAfterViewInit();
+
+    expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalledTimes(1);
+    expect((h.streamingApi.getPlaybackInfo.mock.calls[0] as any[])[3]).toBe(1);
   });
 });
