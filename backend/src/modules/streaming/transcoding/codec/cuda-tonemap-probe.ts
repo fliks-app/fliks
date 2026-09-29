@@ -1,23 +1,18 @@
 import { Logger } from '@nestjs/common';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { ffmpegTail } from './probe-utils';
+import { createCapabilityProbe } from './probe-utils';
 
 const execFileAsync = promisify(execFile);
 
 /** Whether `tonemap_cuda` works on this host, keeping the HDR→SDR tone-map on
  *  the CUDA surface end to end. Fail-closed; falls back to the OpenCL bounce. */
-let probedOnce = false;
-let enabled = false;
+const probe = createCapabilityProbe('cuda-tonemap-probe');
 
-export function isCudaTonemapEnabled(): boolean {
-  return probedOnce && enabled;
-}
+export const isCudaTonemapEnabled = probe.isEnabled;
 
 export async function runCudaTonemapProbe(log: Logger): Promise<void> {
-  const t0 = Date.now();
-  let failure = '';
-  try {
+  await probe.run(log, async () => {
     await execFileAsync(
       'ffmpeg',
       [
@@ -30,14 +25,5 @@ export async function runCudaTonemapProbe(log: Logger): Promise<void> {
       ],
       { timeout: 15_000 },
     );
-    enabled = true;
-  } catch (err) {
-    enabled = false;
-    failure = ffmpegTail(err);
-  } finally {
-    probedOnce = true;
-    log.log(
-      `[cuda-tonemap-probe] enabled=${enabled} (${Date.now() - t0}ms)${failure ? `: ${failure}` : ''}`,
-    );
-  }
+  });
 }
