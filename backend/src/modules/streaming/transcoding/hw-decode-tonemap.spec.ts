@@ -342,11 +342,15 @@ describe('buildFfmpegArgs: VideoToolbox (macOS)', () => {
 describe('buildFfmpegArgs: no-base Dolby Vision on the Vulkan path', () => {
   const openclNoCrop = isTonemapOpenclEnabled as jest.Mock;
   const openclCrop = isTonemapOpenclEnabledWithCrop as jest.Mock;
+  // The DRM/VAAPI/Vulkan chain is Linux-only (hostHasVaapi).
+  const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')!;
   beforeEach(() => {
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
     openclNoCrop.mockReturnValue(false);
     openclCrop.mockReturnValue(false);
   });
   afterEach(() => {
+    Object.defineProperty(process, 'platform', platformDescriptor);
     openclNoCrop.mockReturnValue(true);
     openclCrop.mockReturnValue(true);
   });

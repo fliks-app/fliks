@@ -456,6 +456,13 @@ describe('buildFfmpegArgs — CPU golden argv (characterization)', () => {
 });
 
 describe('buildFfmpegArgs — QSV/VAAPI matrix golden argv (characterization)', () => {
+  // VAAPI/QSV device chains are Linux-only (hostHasVaapi).
+  const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  beforeEach(() =>
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true }),
+  );
+  afterEach(() => Object.defineProperty(process, 'platform', platformDescriptor));
+
   it('QSV HEVC SDR 1080p', () => {
     expect(
       buildFfmpegArgs(
