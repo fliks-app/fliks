@@ -209,9 +209,11 @@ pkill -x electron        # NOT  pkill -f .../desktop
 ## Known constraints / gotchas
 
 - **HDR** → SDR tonemap only on **Linux** (see Architecture). Expected there,
-  not a bug. **Windows** (gpu-next) and **macOS** (EDR passthrough) attempt
-  HDR/DV passthrough on displays with headroom and fall back to SDR tonemap
-  otherwise.
+  not a bug. **Windows** (gpu-next) reshapes Dolby Vision and passes through
+  HDR10/HLG on displays with headroom. **macOS** (EDR passthrough) passes
+  through HDR10/HLG only — `addon.mm` has no Dolby Vision RPU handling, so a DV
+  file falls back to whatever base layer/tonemap mpv produces without it. Both
+  fall back to SDR tonemap when the display reports no headroom.
 - **Resume into a transcode** (seek to a high segment): the backend produces
   seg-0/init a beat after the playlist. mpv is configured to **reconnect on HTTP
   4xx/5xx** (`demuxer-lavf-o` for the hls manifest, `stream-lavf-o` for every
