@@ -8,9 +8,14 @@ export type ImageSize = 'thumb' | 'medium' | 'full';
  *  other local image it requires an authenticated caller — see LivetvController. */
 const LIVETV_LOGO_PATH = '/api/livetv/channels/';
 
-/** Append the pre-generated variant to a local image URL. Remote URLs (TMDB
- *  direct, manual override) are left untouched — see {@link ResolveUrlPipe}. */
+/** TMDB serves its own sizes: an `original` backdrop is up to 3840 px wide. */
+const TMDB_ORIGINAL = /^(https:\/\/image\.tmdb\.org\/t\/p\/)original\//;
+const TMDB_WIDTH: Record<ImageSize, string> = { thumb: 'w780', medium: 'w1280', full: 'original' };
+
+/** Append the pre-generated variant to a local image URL, or pick TMDB's own
+ *  size. Other remote URLs (manual override) are left untouched. */
 export function imageUrlWithSize(url: string, size: ImageSize): string {
+  if (TMDB_ORIGINAL.test(url)) return url.replace(TMDB_ORIGINAL, `$1${TMDB_WIDTH[size]}/`);
   if (!url.startsWith('/api/images/') && !url.startsWith(LIVETV_LOGO_PATH)) return url;
   const sep = url.includes('?') ? '&' : '?';
   return `${url}${sep}size=${size}`;

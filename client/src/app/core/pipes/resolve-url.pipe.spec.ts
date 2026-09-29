@@ -24,6 +24,13 @@ describe('imageUrlWithSize', () => {
     expect(imageUrlWithSize(remote, 'thumb')).toBe(remote);
   });
 
+  it('picks a TMDB width for an original backdrop, keeping original for full', () => {
+    const backdrop = 'https://image.tmdb.org/t/p/original/x.jpg';
+    expect(imageUrlWithSize(backdrop, 'medium')).toBe('https://image.tmdb.org/t/p/w1280/x.jpg');
+    expect(imageUrlWithSize(backdrop, 'thumb')).toBe('https://image.tmdb.org/t/p/w780/x.jpg');
+    expect(imageUrlWithSize(backdrop, 'full')).toBe(backdrop);
+  });
+
   it('also appends the size to a Live TV channel logo URL', () => {
     expect(imageUrlWithSize('/api/livetv/channels/12/logo', 'thumb')).toBe(
       '/api/livetv/channels/12/logo?size=thumb',
