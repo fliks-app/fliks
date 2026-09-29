@@ -2,7 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { randomBytes } from 'crypto';
-import { DataSource } from 'typeorm';
+import { DataSource, QueryRunner } from 'typeorm';
 import { MAX_PLUGIN_ID_LENGTH, PLUGIN_ID_PATTERN } from './archive';
 import { PluginInstallException } from './plugin-install.exception';
 import type { ProcessPluginManifest } from '../../common/plugin-contract';
@@ -117,12 +117,17 @@ export class PluginDatabaseService {
 
       await queryRunner.query(`CREATE SCHEMA IF NOT EXISTS "${identifier}" AUTHORIZATION "${identifier}"`);
       const ownerRows = await queryRunner.query(
-        'SELECT pg_get_userbyid(nspowner) AS owner FROM pg_namespace WHERE nspname = $1',
+        'SELECT pg_get_userbyid(nspowner) AS owner, current_user AS core FROM pg_namespace WHERE nspname = $1',
         [identifier],
       );
-      if (ownerRows[0]?.owner !== identifier) {
-        throw new Error(`schema "${identifier}" already exists, owned by "${ownerRows[0]?.owner}"`);
+      const owner = ownerRows[0]?.owner;
+      // A `--no-owner` restore hands the schema and everything in it to the core role.
+      if (owner !== undefined && owner === ownerRows[0]?.core) {
+        await queryRunner.query(`ALTER SCHEMA "${identifier}" OWNER TO "${identifier}"`);
+      } else if (owner !== identifier) {
+        throw new Error(`schema "${identifier}" already exists, owned by "${owner}"`);
       }
+      await this.adoptCoreOwnedRelations(queryRunner, identifier);
 
       await queryRunner.query(`GRANT USAGE ON SCHEMA public TO "${identifier}"`);
       await queryRunner.query(`REVOKE REFERENCES ON ALL TABLES IN SCHEMA public FROM "${identifier}"`);
@@ -137,6 +142,25 @@ export class PluginDatabaseService {
       throw asProvisionFailure(err);
     } finally {
       await queryRunner.release();
+    }
+  }
+
+  /**
+   * Gives the plugin back the relations a restore created as the core role, so its migrations can
+   * alter them. Sequences go last: a serial's sequence follows its table's owner change.
+   *
+   * ponytail: relations only; add types and routines once a plugin's migrations create them.
+   */
+  private async adoptCoreOwnedRelations(queryRunner: QueryRunner, identifier: string): Promise<void> {
+    const rows = await queryRunner.query(
+      `SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = $1 AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
+          AND pg_get_userbyid(c.relowner) = current_user
+        ORDER BY c.relkind = 'S', c.relname`,
+      [identifier],
+    );
+    for (const { relname } of rows as { relname: string }[]) {
+      await queryRunner.query(`ALTER TABLE ${quoteIdent(identifier)}.${quoteIdent(relname)} OWNER TO "${identifier}"`);
     }
   }
 
