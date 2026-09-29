@@ -126,6 +126,18 @@ describe('StreamingApiService.buildPlayUrl / buildAbsolutePlayUrl', () => {
     expect(url).toContain('startQuality=1080p');
     expect(url).not.toContain('remux=1');
   });
+
+  it('buildAbsolutePlayUrl returns the raw-file URL/mime for a DirectPlay decision', () => {
+    const { url, contentType } = service.buildAbsolutePlayUrl(
+      { playMethod: 'DirectPlay', playUrl: '/api/stream/1?token=sender-secret', contentType: 'video/x-matroska' },
+      'cast-token',
+      { sid: 'sid1' },
+    );
+    expect(url).not.toContain('sender-secret');
+    expect(url).toContain('token=cast-token');
+    expect(url).not.toContain('.m3u8');
+    expect(contentType).toBe('video/x-matroska');
+  });
 });
 
 describe('StreamingApiService.resolveDownloadUrl', () => {

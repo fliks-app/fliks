@@ -16,8 +16,9 @@ export interface PlayerStats {
    *  disagree. Empty otherwise. */
   mismatch?: string;
   /** `transcodeReasons` flags that are neither video- nor audio-specific:
-   *  why DirectStream/DirectPlay wasn't used at all. */
-  streamTranscodeReasons: string[];
+   *  why DirectStream/DirectPlay wasn't used at all. Defaults to empty —
+   *  live playback has no such decision to report. */
+  streamTranscodeReasons?: string[];
 
   videoLabel: string;
   videoStreamBitrate: string;
@@ -27,10 +28,11 @@ export interface PlayerStats {
    *  the source was flagged by cropdetect. Empty when no crop. */
   crop: string;
   /** True when this client removed the bars (copy delivery); false when the
-   *  server did (re-encode). Meaningless when `crop` is empty. */
-  cropAppliedByPlayer: boolean;
-  /** Player crop not painting: PiP and iOS native fullscreen show the full frame. */
-  cropBypassed: boolean;
+   *  server did (re-encode). Meaningless when `crop` is empty. Defaults false. */
+  cropAppliedByPlayer?: boolean;
+  /** Player crop not painting: PiP and iOS native fullscreen show the full
+   *  frame. Defaults false — live playback has no crop overlay to bypass. */
+  cropBypassed?: boolean;
   /** HDR → SDR tone-mapping filter the backend actually picked
    *  (after `auto` resolution + opencl-probe fallback). Empty when no
    *  tone-mapping pass runs on this session. */
@@ -42,8 +44,9 @@ export interface PlayerStats {
   videoTranscodeReasons: string[];
   droppedFrames: number;
 
-  /** False when the source carries no audio stream: the audio section is hidden. */
-  hasAudio: boolean;
+  /** False when the source carries no audio stream: the audio section is
+   *  hidden. Defaults true. */
+  hasAudio?: boolean;
   audioLabel: string;
   audioStreamBitrate: string;
   audioDetailLine: string;
