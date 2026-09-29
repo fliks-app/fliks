@@ -2561,8 +2561,6 @@
     "error_cast_select_failed": "Impossibile connettersi a quel Chromecast.",
     "error_command_failed": "Impossibile raggiungere quel dispositivo.",
     "error_no_response": "Quel dispositivo non risponde.",
-    "notification_on_device": "Su {{device}}",
-    "notification_stale": "Non aggiornato, apri Fliks per aggiornare",
     "stop_controlling": "Smetti di controllare",
     "stop_playback": "Interrompi la riproduzione",
     "idle_message": "Nessun contenuto in riproduzione",

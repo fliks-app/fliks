@@ -1,45 +1,33 @@
 import { Injectable, Injector, effect, inject, untracked } from '@angular/core';
-import { TranslateService } from '@ngx-translate/core';
-import { RemoteNotification, type RemoteNotificationCommand } from '../plugins/remote-notification.plugin';
+import { RemoteNotification, type RemoteNotificationAction } from '../plugins/remote-notification.plugin';
 import { imageUrlWithSize } from '../pipes/resolve-url.pipe';
 import { DeviceService } from './device.service';
 import { LikesApiService } from './api/likes-api.service';
 import { NotificationLike } from './notification-like';
-import { RemotePlaybackTarget, remoteOverlayOpen } from './remote-playback-target';
+import { RemotePlaybackTarget } from './remote-playback-target';
 import { RemoteService } from './remote.service';
 import { ServerConfigService } from './server-config.service';
-import { AuthService } from './auth.service';
-import { SseService } from './sse.service';
-import { parseDeviceLabel } from '../utils/format-device-label';
 
-/** Mirrors the remote target this phone drives into a native notification and applies its
- *  controls: a media notification on Android, a Live Activity on iOS. The position is read
- *  untracked: the native side extrapolates it between state changes. Cast keeps the Cast SDK's
- *  notification, which Play Services would otherwise duplicate.
- *
- *  On iOS the WebView is suspended in the background, so the buttons send their command natively
- *  (hence the connection in the payload) and report back with `sent`. */
+/** Mirrors the remote target this phone drives into an Android media notification
+ *  and applies its controls. The position is read untracked: the native side
+ *  extrapolates it between state changes. Cast keeps the Cast SDK's notification,
+ *  which Play Services would otherwise duplicate. */
 @Injectable({ providedIn: 'root' })
 export class RemoteNotificationService {
   private readonly device = inject(DeviceService);
   private readonly remote = inject(RemoteService);
   private readonly target = inject(RemotePlaybackTarget);
   private readonly serverConfig = inject(ServerConfigService);
-  private readonly auth = inject(AuthService);
-  private readonly sse = inject(SseService);
-  private readonly translate = inject(TranslateService);
   private readonly injector = inject(Injector);
   private readonly like = new NotificationLike(inject(LikesApiService));
 
   private shown = false;
 
   init(): void {
-    const ios = this.device.isIosNative() && !this.device.isTv();
-    if (!this.device.isAndroidNative() && !ios) return;
+    if (!this.device.isAndroidNative()) return;
     window.addEventListener('remoteNotificationCommand', (e) => {
-      const { action, value, sent } = (e as CustomEvent<RemoteNotificationCommand>).detail;
-      if (sent) this.applySent(action);
-      else this.apply(action, value);
+      const { action, value } = (e as CustomEvent<{ action: RemoteNotificationAction; value: number }>).detail;
+      this.apply(action, value);
     });
     effect(() => {
       const t = this.target;
@@ -59,7 +47,6 @@ export class RemoteNotificationService {
         title: episode || t.mediaTitle(),
         artist: episode ? t.mediaTitle() : undefined,
         artworkUrl: art ? this.serverConfig.resolveUrl(imageUrlWithSize(art, 'medium')) : undefined,
-        ...(ios ? this.iosFields(s) : {}),
         playing: !t.isPaused(),
         buffering: t.buffering(),
         position: untracked(t.currentTime),
@@ -75,42 +62,7 @@ export class RemoteNotificationService {
     }, { injector: this.injector });
   }
 
-  private iosFields(s: ReturnType<RemoteService['targetState']>) {
-    const selected = this.remote.selectedTarget();
-    const label = selected ? parseDeviceLabel(selected.userAgent, selected.systemName, selected.deviceName) : null;
-    const poster = s?.posterUrl;
-    return {
-      serverUrl: this.serverConfig.serverUrl(),
-      accessToken: this.auth.accessToken ?? undefined,
-      targetId: this.remote.selectedTargetId() ?? undefined,
-      byTargetId: this.sse.targetId() ?? undefined,
-      mediaId: s?.mediaId ?? undefined,
-      episodeId: s?.episodeId ?? undefined,
-      thumbnailUrl: poster ? this.serverConfig.resolveUrl(imageUrlWithSize(poster, 'thumb')) : undefined,
-      deviceName: label
-        ? this.translate.instant('remote.notification_on_device', {
-            device: this.translate.instant(label.key, label.params),
-          })
-        : undefined,
-      staleLabel: this.translate.instant('remote.notification_stale'),
-    };
-  }
-
-  /** The command already went out natively: only the local bookkeeping is left. `shown` stays
-   *  set after a stop, so the next run of the effect clears the activity and lifts its guard. */
-  private applySent(action: RemoteNotificationCommand['action']): void {
-    switch (action) {
-      case 'stop':
-        this.remote.noteStopSent();
-        remoteOverlayOpen.set(false);
-        break;
-      case 'like':
-        this.like.noteToggled();
-        break;
-    }
-  }
-
-  private apply(action: RemoteNotificationCommand['action'], value: number): void {
+  private apply(action: RemoteNotificationAction, value: number): void {
     const t = this.target;
     if (!t.isConnected()) return;
     switch (action) {

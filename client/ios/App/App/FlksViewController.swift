@@ -30,7 +30,6 @@ class FlksViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(PipPlugin())
         bridge?.registerPluginInstance(CastPlugin())
         bridge?.registerPluginInstance(DownloadPlugin())
-        bridge?.registerPluginInstance(RemoteNotificationPlugin())
         bridge?.registerPluginInstance(BackGesturePlugin())
     }
 

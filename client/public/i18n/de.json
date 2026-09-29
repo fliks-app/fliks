@@ -2561,8 +2561,6 @@
     "error_cast_select_failed": "Verbindung zu diesem Chromecast fehlgeschlagen.",
     "error_command_failed": "Gerät nicht erreichbar.",
     "error_no_response": "Dieses Gerät antwortet nicht.",
-    "notification_on_device": "Auf {{device}}",
-    "notification_stale": "Nicht aktuell – zum Aktualisieren Fliks öffnen",
     "stop_controlling": "Steuerung beenden",
     "stop_playback": "Wiedergabe beenden",
     "idle_message": "Keine Wiedergabe",
