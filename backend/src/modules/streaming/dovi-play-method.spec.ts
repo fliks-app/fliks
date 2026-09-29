@@ -141,7 +141,11 @@ const resolved = (
 
 describe('StreamBuilderService — Dolby Vision play-method', () => {
   it('reshapes P5 into an HDR10 transcode for an HDR10-capable client', () => {
-    const r = svc().evaluate(resolved(5, 0), hdrHevcClient, 'tok');
+    const r = svc().evaluate({
+      resolved: resolved(5, 0),
+      profile: hdrHevcClient,
+      tokenParam: 'tok',
+    });
     expect(r.response.playMethod).toBe('Transcode');
     expect(r.videoVariant?.hdr).toBe('HDR10');
     expect(r.response.tonemapping).toBe(true);
@@ -157,7 +161,7 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
     r.mediaFile.streamInfo.video[0].hdrFormat = undefined;
     r.mediaFile.streamInfo.video[0].colorTransfer = undefined;
     r.mediaFile.streamInfo.video[0].colorPrimaries = undefined;
-    const out = svc().evaluate(r, hdrHevcClient, 'tok');
+    const out = svc().evaluate({ resolved: r, profile: hdrHevcClient, tokenParam: 'tok' });
     expect(out.response.playMethod).toBe('Transcode');
     expect(out.videoVariant?.hdr).toBe('HDR10');
     expect(out.response.tonemapping).toBe(true);
@@ -171,21 +175,29 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
       ...dvHevcClient,
       rejectCopy: true,
     } as never;
-    const r = svc().evaluate(resolved(5, 0, undefined, 6), dvRejectCopyClient, 'tok');
+    const r = svc().evaluate({
+      resolved: resolved(5, 0, undefined, 6),
+      profile: dvRejectCopyClient,
+      tokenParam: 'tok',
+    });
     expect(r.response.playMethod).toBe('Transcode');
     expect(r.videoVariant?.hdr).toBe('HDR10');
   });
 
   it('keeps P5 on the SDR tonemap for a client with no HDR10 display', () => {
     const sdrClient = { ...hdrHevcClient, supportsHdr: false } as DeviceProfileDto;
-    const r = svc().evaluate(resolved(5, 0), sdrClient, 'tok');
+    const r = svc().evaluate({ resolved: resolved(5, 0), profile: sdrClient, tokenParam: 'tok' });
     expect(r.response.playMethod).toBe('Transcode');
     expect(r.videoVariant?.hdr).toBeNull();
     expect(r.response.tonemapping).toBe(true);
   });
 
   it('leaves DV 8.1 (HDR10-compatible base) on its HDR path', () => {
-    const r = svc().evaluate(resolved(8, 1), hdrHevcClient, 'tok');
+    const r = svc().evaluate({
+      resolved: resolved(8, 1),
+      profile: hdrHevcClient,
+      tokenParam: 'tok',
+    });
     expect(
       r.response.transcodeReasons.some((x) => /Dolby Vision/.test(x.message)),
     ).toBe(false);
@@ -193,7 +205,11 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
   });
 
   it('DirectPlays P5 untouched for a client that can present DV', () => {
-    const r = svc().evaluate(resolved(5, 0, undefined, 6), dvHevcClient, 'tok');
+    const r = svc().evaluate({
+      resolved: resolved(5, 0, undefined, 6),
+      profile: dvHevcClient,
+      tokenParam: 'tok',
+    });
     expect(r.response.playMethod).toBe('DirectPlay');
     expect(r.response.videoCopyStream).toBe(true);
     expect(r.response.tonemapping).toBe(false);
@@ -205,14 +221,22 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
 
   it('DirectPlays a level-less P5 for a DV client that can raw-play the container', () => {
     // No probed dvLevel: DirectPlay ships raw bytes and needs no CODECS string.
-    const r = svc().evaluate(resolved(5, 0, undefined, undefined), dvHevcClient, 'tok');
+    const r = svc().evaluate({
+      resolved: resolved(5, 0, undefined, undefined),
+      profile: dvHevcClient,
+      tokenParam: 'tok',
+    });
     expect(r.response.playMethod).toBe('DirectPlay');
     expect(r.response.qualities?.some((q) => q.id === 'original')).toBe(true);
   });
 
   it('transcodes a level-less P5 for a DV client that cannot raw-play the container', () => {
     // No level means no CODECS string, so the remux path is unavailable too.
-    const r = svc().evaluate(resolved(5, 0, undefined, undefined), dvMp4OnlyClient, 'tok');
+    const r = svc().evaluate({
+      resolved: resolved(5, 0, undefined, undefined),
+      profile: dvMp4OnlyClient,
+      tokenParam: 'tok',
+    });
     expect(r.response.playMethod).toBe('Transcode');
   });
 
@@ -221,7 +245,7 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
     r.mediaFile.streamInfo.video[0].hdrFormat = undefined;
     r.mediaFile.streamInfo.video[0].colorTransfer = undefined;
     r.mediaFile.streamInfo.video[0].colorPrimaries = undefined;
-    const out = svc().evaluate(r, dvHevcClient, 'tok');
+    const out = svc().evaluate({ resolved: r, profile: dvHevcClient, tokenParam: 'tok' });
     expect(out.response.playMethod).toBe('DirectPlay');
     expect(out.response.videoCopyStream).toBe(true);
   });
@@ -229,7 +253,11 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
   it('remuxes P5 (standalone CODECS) for a DV client that cannot raw-play the container', () => {
     // iOS-style: MKV source can't DirectPlay, but a DV client with a probed
     // level gets a `dvh1` remux tagged with the standalone CODECS string.
-    const r = svc().evaluate(resolved(5, 0, undefined, 6), dvMp4OnlyClient, 'tok');
+    const r = svc().evaluate({
+      resolved: resolved(5, 0, undefined, 6),
+      profile: dvMp4OnlyClient,
+      tokenParam: 'tok',
+    });
     expect(r.response.playMethod).toBe('DirectStream');
     expect(r.response.dolbyVision).toBe(true);
   });
@@ -237,7 +265,11 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
   it('a P5 remux still reports the transcode tonemap decision for a later rung switch', () => {
     // response.tonemapping is false (this session's play method is DirectStream),
     // but a same-sid switch to a transcoded rung must still apply_dovi reshape.
-    const r = svc().evaluate(resolved(5, 0, undefined, 6), dvMp4OnlyClient, 'tok');
+    const r = svc().evaluate({
+      resolved: resolved(5, 0, undefined, 6),
+      profile: dvMp4OnlyClient,
+      tokenParam: 'tok',
+    });
     expect(r.response.playMethod).toBe('DirectStream');
     expect(r.response.tonemapping).toBe(false);
     expect(r.transcodeTonemapping).toBe(true);
@@ -250,37 +282,57 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
     v0.hdrFormat = undefined;
     v0.colorTransfer = undefined;
     v0.colorPrimaries = undefined;
-    const out = svc().evaluate(r, dvAv1Client, 'tok');
+    const out = svc().evaluate({ resolved: r, profile: dvAv1Client, tokenParam: 'tok' });
     expect(out.response.playMethod).toBe('Transcode');
     expect(out.response.tonemapping).toBe(true);
     expect(out.response.dolbyVision).toBe(false);
   });
 
   it('remuxes DV 8.1 with dolbyVision:true for a DV client that cannot raw-play the container', () => {
-    const r = svc().evaluate(resolved(8, 1, undefined, 6), dvMp4OnlyClient, 'tok');
+    const r = svc().evaluate({
+      resolved: resolved(8, 1, undefined, 6),
+      profile: dvMp4OnlyClient,
+      tokenParam: 'tok',
+    });
     expect(r.response.playMethod).toBe('DirectStream');
     expect(r.response.dolbyVision).toBe(true);
   });
 
   it('never flags dolbyVision for an HDR-only client (no DV declared)', () => {
-    const r = svc().evaluate(resolved(8, 1, undefined, 6), hdrHevcClient, 'tok');
+    const r = svc().evaluate({
+      resolved: resolved(8, 1, undefined, 6),
+      profile: hdrHevcClient,
+      tokenParam: 'tok',
+    });
     expect(r.response.dolbyVision).toBeFalsy();
   });
 
   it('forces P5 to transcode for a client that lists only profile 8', () => {
-    const r = svc().evaluate(resolved(5, 0, undefined, 6), dvProfile8OnlyClient, 'tok');
+    const r = svc().evaluate({
+      resolved: resolved(5, 0, undefined, 6),
+      profile: dvProfile8OnlyClient,
+      tokenParam: 'tok',
+    });
     expect(r.response.playMethod).toBe('Transcode');
     expect(r.response.tonemapping).toBe(true);
   });
 
   it('remuxes raw P7 to HDR10 base for an HDR client that does not list profile 7', () => {
-    const r = svc().evaluate(resolved(7, 6, true, 6), dvHevcClient, 'tok');
+    const r = svc().evaluate({
+      resolved: resolved(7, 6, true, 6),
+      profile: dvHevcClient,
+      tokenParam: 'tok',
+    });
     expect(r.response.playMethod).toBe('DirectStream');
     expect(r.response.dolbyVision).toBeFalsy();
   });
 
   it('DirectPlays raw P7 for a client that lists profile 7', () => {
-    const r = svc().evaluate(resolved(7, 6, true, 6), dvProfile7Client, 'tok');
+    const r = svc().evaluate({
+      resolved: resolved(7, 6, true, 6),
+      profile: dvProfile7Client,
+      tokenParam: 'tok',
+    });
     expect(r.response.playMethod).toBe('DirectPlay');
   });
 
@@ -288,12 +340,20 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
     // useTs blocks the remux copy path (muxRejectsCopy); the P7 guard must still
     // block DirectPlay and fall through to Transcode instead of leaving it on.
     const tsProfile = { ...dvHevcClient, useTs: true } as DeviceProfileDto;
-    const r = svc().evaluate(resolved(7, 6, true, 6), tsProfile, 'tok');
+    const r = svc().evaluate({
+      resolved: resolved(7, 6, true, 6),
+      profile: tsProfile,
+      tokenParam: 'tok',
+    });
     expect(r.response.playMethod).toBe('Transcode');
   });
 
   it('DirectPlays P5 with clientTonemap true for a client with no HDR display', () => {
-    const r = svc().evaluate(resolved(5, 0, undefined, 6), dvProfile5NoHdrClient, 'tok');
+    const r = svc().evaluate({
+      resolved: resolved(5, 0, undefined, 6),
+      profile: dvProfile5NoHdrClient,
+      tokenParam: 'tok',
+    });
     expect(r.response.playMethod).toBe('DirectPlay');
     expect(r.response.clientTonemap).toBe(true);
   });
@@ -305,7 +365,7 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
     v0.hdrFormat = undefined;
     v0.colorTransfer = undefined;
     v0.colorPrimaries = undefined;
-    const out = svc().evaluate(r, dvProfile10Av1Client, 'tok');
+    const out = svc().evaluate({ resolved: r, profile: dvProfile10Av1Client, tokenParam: 'tok' });
     expect(out.response.playMethod).toBe('DirectStream');
     expect(out.response.dolbyVision).toBe(true);
   });

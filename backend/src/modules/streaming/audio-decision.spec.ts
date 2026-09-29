@@ -67,15 +67,14 @@ const evaluate = (
   p: DeviceProfileDto,
   opts: { ext?: string; quality?: string; pick?: number } = {},
 ): PlaybackInfoResponse =>
-  svc().evaluate(
-    file(audio, opts.ext),
-    p,
-    '',
-    undefined,
-    opts.quality,
-    'directplay',
-    opts.pick,
-  ).response;
+  svc().evaluate({
+    resolved: file(audio, opts.ext),
+    profile: p,
+    tokenParam: '',
+    requestedQuality: opts.quality,
+    audioStreamIndex: opts.pick,
+    settings: { autoQualityMode: 'directplay' },
+  }).response;
 
 const flags = (r: PlaybackInfoResponse) =>
   r.transcodeReasons.map((x) => x.flag);
@@ -230,17 +229,13 @@ describe('StreamBuilderService — one audio decision per track', () => {
 
   it('copies AAC from MPEG-TS once a scan saw its format hold', () => {
     const scanned = (audioConfigChanges: Record<number, boolean> | null) =>
-      svc().evaluate(
-        file([{ codec: 'aac', channels: 2 }], '.ts'),
-        tv,
-        '',
-        undefined,
-        undefined,
-        'directplay',
-        undefined,
-        3,
-        audioConfigChanges && { keyframes: [], end: 100, audioConfigChanges },
-      ).response;
+      svc().evaluate({
+        resolved: file([{ codec: 'aac', channels: 2 }], '.ts'),
+        profile: tv,
+        tokenParam: '',
+        sourceScan: audioConfigChanges && { keyframes: [], end: 100, audioConfigChanges },
+        settings: { autoQualityMode: 'directplay', segmentDuration: 3 },
+      }).response;
     expect(scanned({ 1: false }).audioPlan).toEqual({
       mode: 'copy',
       codec: 'aac',
@@ -319,15 +314,13 @@ describe('StreamBuilderService — picked audio track', () => {
       { codec: 'aac', channels: 2 },
       { codec: 'ac3', channels: 6 },
     ];
-    const svcr = svc().evaluate(
-      file(stereoAc3),
-      tv,
-      '',
-      undefined,
-      undefined,
-      'directplay',
-      0,
-    );
+    const svcr = svc().evaluate({
+      resolved: file(stereoAc3),
+      profile: tv,
+      tokenParam: '',
+      audioStreamIndex: 0,
+      settings: { autoQualityMode: 'directplay' },
+    });
     const ds = svcr.response;
     expect(ds.playMethod).toBe('DirectStream');
     // The group's shared codec is ac3 (track 1 forces it); the picked track
@@ -347,15 +340,13 @@ describe('StreamBuilderService — picked audio track', () => {
       { codec: 'aac', channels: 2 },
       { codec: 'ac3', channels: 6 },
     ];
-    const ds = svc().evaluate(
-      file(stereoAc3),
-      tv,
-      '',
-      undefined,
-      undefined,
-      'directplay',
-      0,
-    ).response;
+    const ds = svc().evaluate({
+      resolved: file(stereoAc3),
+      profile: tv,
+      tokenParam: '',
+      audioStreamIndex: 0,
+      settings: { autoQualityMode: 'directplay' },
+    }).response;
     // 8 Mbps video + the 6ch ac3 rendition's own 576 kbps (the group's other
     // rendition, transcoded stereo ac3, is smaller and never added on top).
     expect(ds.remuxMasterBandwidthBps).toBe(8_576_000);
@@ -443,8 +434,14 @@ describe('StreamBuilderService — audio that ends early', () => {
     // Same grid the controller would freeze and serve, fed back in like it does.
     const { origin } = sourceTimeline(streamInfo, (f as { absolutePath: string }).absolutePath);
     const grid = remuxSegmentGrid(scan, origin, 3, streamInfo.video![0].frameRate);
-    const r = svc().evaluate(f, tv, '', undefined, undefined, 'directplay', undefined, 3, scan, grid)
-      .response;
+    const r = svc().evaluate({
+      resolved: f,
+      profile: tv,
+      tokenParam: '',
+      sourceScan: scan,
+      remuxGrid: grid,
+      settings: { autoQualityMode: 'directplay', segmentDuration: 3 },
+    }).response;
     expect(r.playMethod).toBe('DirectStream');
     expect(r.audioTracks![1].copy).toBe(true);
   });
@@ -458,8 +455,13 @@ describe('StreamBuilderService — audio that ends early', () => {
       end: 100,
       audioConfigChanges: {},
     };
-    const r = svc().evaluate(file(pair(95)), tv, '', undefined, undefined, 'directplay', undefined, 3, scan)
-      .response;
+    const r = svc().evaluate({
+      resolved: file(pair(95)),
+      profile: tv,
+      tokenParam: '',
+      sourceScan: scan,
+      settings: { autoQualityMode: 'directplay', segmentDuration: 3 },
+    }).response;
     expect(r.audioTracks![1].copy).toBe(false);
     expect(r.audioTracks![1].reasonFlags).toEqual(['AudioEndsEarly']);
   });

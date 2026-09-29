@@ -907,7 +907,7 @@ export class StreamingController {
       resolved.mediaFile.streamInfo,
     );
 
-    // Before the decision below, which reads them.
+    // For the session contexts later HLS requests build from them.
     this.activeStreamTracker.setSegmentDuration(ss.segmentDuration);
     this.activeStreamTracker.setTonemapAlgo(ss.tonemapAlgo);
     this.activeStreamTracker.setAutoCropEnabled(ss.autoCropEnabled);
@@ -931,23 +931,20 @@ export class StreamingController {
       timeline.origin,
       ss.segmentDuration,
     );
-    const evaluateResult = this.streamBuilder.evaluate(
+    const evaluateResult = this.streamBuilder.evaluate({
       resolved,
-      deviceProfile,
+      profile: deviceProfile,
       tokenParam,
+      settings: ss,
       // A failed resolve (burnIn still null) must not tell evaluate() there's
       // a burn-in — that loses DirectPlay for a subtitle nothing will render.
-      burnIn ? burnInSubtitleId : undefined,
-      startQuality,
-      ss.autoQualityMode,
+      burnInSubtitleId: burnIn ? burnInSubtitleId : undefined,
+      burnInIsText: !!burnIn?.filter,
+      requestedQuality: startQuality,
       audioStreamIndex,
-      ss.segmentDuration,
-      held.scan,
+      sourceScan: held.scan,
       remuxGrid,
-      // Text-only, matching ffmpeg-args' `!!burnIn?.filter`: an image/PGS
-      // burn-in doesn't force the encode pipeline off HW, only text does.
-      !!burnIn?.filter,
-    );
+    });
     const { response, useHdrLadder, videoVariant, muxFlavour } = evaluateResult;
     const sourceAudioCount = resolved.mediaFile.streamInfo?.audio?.length ?? 0;
     const effectiveUseTs = muxFlavour === 'ts';

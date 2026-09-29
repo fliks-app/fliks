@@ -33,13 +33,12 @@ import {
 import { dvNoBaseHdr10PathSupported } from './transcoding/tonemap-path';
 import {
   DEFAULT_FPS,
-  DEFAULT_SEGMENT_DURATION,
   frameSecondsOf,
   parseSourceFps,
   realSegmentSeconds,
   uniformSegmentCount,
 } from './transcoding/constants';
-import { ActiveStreamTracker } from './active-stream-tracker.service';
+import type { StreamingSettings } from './streaming-settings-cache.service';
 import {
   bucketResolutionHeight,
   resolutionFitsCap,
@@ -213,6 +212,28 @@ function audioChannelCap(profile: DeviceProfileDto, codec: string): number {
   );
 }
 
+/** The admin settings a decision reads, passed in rather than read off shared state. */
+export type EvaluateSettings = Pick<
+  StreamingSettings,
+  'autoCropEnabled' | 'tonemapAlgo' | 'autoQualityMode' | 'segmentDuration'
+>;
+
+export interface EvaluateInput {
+  resolved: ResolvedFile;
+  profile: DeviceProfileDto;
+  tokenParam: string;
+  settings: EvaluateSettings;
+  burnInSubtitleId?: number;
+  /** Text (not image/PGS) burn-in, as ffmpeg-args' `!!burnIn?.filter`: only
+   *  libass forces the pipeline off HW. */
+  burnInIsText?: boolean;
+  requestedQuality?: string;
+  audioStreamIndex?: number;
+  sourceScan?: SourceScan | null;
+  /** The controller's frozen remux grid, so AudioEndsEarly reads the grid served. */
+  remuxGrid?: KeyframeGrid | null;
+}
+
 /**
  * What stream-builder hands back: the public playback-info response,
  * plus the two side-band decisions the controller threads onto the
@@ -246,33 +267,25 @@ export interface EvaluateResult {
 export class StreamBuilderService {
   private readonly log = new Logger(StreamBuilderService.name);
 
-  constructor(
-    private readonly transcodingService: TranscodingService,
-    private readonly activeStreamTracker: ActiveStreamTracker,
-  ) {}
+  constructor(private readonly transcodingService: TranscodingService) {}
 
   /**
    * Evaluate a media file against a device profile and return the playback decision.
    */
-  evaluate(
-    resolved: ResolvedFile,
-    profile: DeviceProfileDto,
-    tokenParam: string,
-    burnInSubtitleId?: number,
-    requestedQuality?: string,
-    autoQualityMode: 'directplay' | 'abr' = 'directplay',
-    audioStreamIndex?: number,
-    segmentDuration = DEFAULT_SEGMENT_DURATION,
-    sourceScan?: SourceScan | null,
-    /** The controller's already-frozen remux grid (see `freezeRemuxGrid`),
-     *  fed back so the AudioEndsEarly check reads the exact grid served. */
-    remuxGrid?: KeyframeGrid | null,
-    /** Whether the burn-in (if any) is TEXT, not image/PGS; matches
-     *  ffmpeg-args' `!!burnIn?.filter`. Only text forces the encode pipeline
-     *  off HW (libass needs CPU surfaces); PGS composites via filter_complex
-     *  without leaving the GPU. */
-    burnInIsText = false,
-  ): EvaluateResult {
+  evaluate(input: EvaluateInput): EvaluateResult {
+    const {
+      resolved,
+      profile,
+      tokenParam,
+      settings,
+      burnInSubtitleId,
+      burnInIsText = false,
+      requestedQuality,
+      audioStreamIndex,
+      sourceScan,
+      remuxGrid,
+    } = input;
+    const { autoQualityMode, segmentDuration } = settings;
     const si = resolved.mediaFile.streamInfo;
     const v = si?.video?.[0];
     const audioStreams = si?.audio ?? [];
@@ -302,7 +315,7 @@ export class StreamBuilderService {
     // Admin auto-crop toggle. Gates both the play-method decision (needsCrop)
     // and the crop surfaced in the response, so the stats overlay shows the
     // crop actually applied — not merely the one cropdetect found at import.
-    const autoCropEnabled = this.activeStreamTracker.getAutoCropEnabled();
+    const autoCropEnabled = settings.autoCropEnabled;
 
     const source = {
       container: sourceContainer,
@@ -354,7 +367,7 @@ export class StreamBuilderService {
       clientSupportsHdr &&
       dvNoBaseHdr10PathSupported(
         detectedHwAccel,
-        this.activeStreamTracker.getTonemapAlgo(),
+        settings.tonemapAlgo,
         { hasCrop: !!source.crop, hasBurnIn: burnInIsText },
       );
     // Codec selector: picks the variant the encoder pipeline will produce
@@ -886,7 +899,7 @@ export class StreamBuilderService {
         crop: needsCrop,
         textBurnIn: burnInIsText,
         tonemap: runsTonemapFilter,
-        tonemapAlgo: this.activeStreamTracker.getTonemapAlgo(),
+        tonemapAlgo: settings.tonemapAlgo,
         sourceVideoCodec: sourceVideoCodec || undefined,
         isSourceHdr,
         sourceDvProfile: dv.profile,
