@@ -60,16 +60,16 @@ export function sessionLayoutContext(
 ): SessionLayoutContext {
   const useTs = live?.useTs ?? false;
   const timeline = live?.timeline ?? sourceTimeline(si, label);
+  // Frozen off the LiveSession: a rescan that rewrites track count/order must
+  // not desync it from audioPlan/audioTrackPlans, decided against this layout.
+  const audioStreams = live?.audioStreams ?? si?.audio ?? undefined;
   return {
     useTs,
     // Multi-audio: video-only segments plus one var_stream_map rendition per
     // track, so the player switches client-side via EXT-X-MEDIA.
-    videoOnly: audioLayout(si?.audio?.length ?? 0) === 'var-stream-map',
-    // Frozen off the LiveSession, not re-read from si: a rescan that rewrites
-    // track count/order mid-session must not desync it from audioPlan/
-    // audioTrackPlans (decided against the frozen layout at playback-info).
+    videoOnly: audioLayout(audioStreams?.length ?? 0) === 'var-stream-map',
     // With `streamIndex`, so the single-track path maps `0:<abs>` too.
-    audioStreams: live?.audioStreams ?? si?.audio ?? undefined,
+    audioStreams,
     audioPlan: live?.audioPlan ?? undefined,
     audioTrackPlans: live?.audioTrackPlans ?? undefined,
     // Undefined only before a sid exists (the userId-based findCurrent fallback).

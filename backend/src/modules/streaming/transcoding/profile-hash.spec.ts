@@ -367,6 +367,14 @@ describe('buildPlaybackProfileFromContext', () => {
     expect(hash(false, 'hable')).toBe(hash(false, 'mobius'));
   });
 
+  it('keeps the curve out of an HDR10-output reshape, which runs no tone curve', () => {
+    const videoVariant = { codec: 'hevc', bitDepth: 10, hdr: 'HDR10' } as const;
+    expect(
+      buildPlaybackProfileFromContext({ tonemap: true, tonemapCurve: 'hable', videoVariant }, 3000)
+        .tonemapCurve,
+    ).toBeUndefined();
+  });
+
   it('drops the curve from the hash entirely when there is no tonemap', () => {
     expect(
       buildPlaybackProfileFromContext({ tonemap: false, tonemapCurve: 'hable' }, 3000)

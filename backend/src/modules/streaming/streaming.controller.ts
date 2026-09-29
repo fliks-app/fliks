@@ -1419,7 +1419,8 @@ export class StreamingController {
             videoBitRateBps: v?.bitRate ?? undefined,
           }
         : undefined;
-    const audioStreams = si?.audio ?? [];
+    // Frozen at playback-info, like the segments' own layout.
+    const audioStreams = live?.audioStreams ?? si?.audio ?? [];
     // Multi-audio is exposed via separate EXT-X-MEDIA renditions so the
     // player can switch audio client-side without a reload. Every rendition
     // is listed even when the user has picked a specific track — the picked

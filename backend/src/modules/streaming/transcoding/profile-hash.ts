@@ -69,8 +69,8 @@ export interface PlaybackProfile {
   /** A P7 remux strips the enhancement layer/RPU (see `buildRemuxArgs`):
    *  different bytes than an unstripped copy, its own cache dir. */
   doviElStrip: boolean;
-  /** Tone-map curve, only set while a tonemap is actually active — a curve
-   *  change must not fork the cache of a session that never tone-maps. */
+  /** Tone-map curve, set only for an SDR-output tonemap: a copy or an HDR10
+   *  reshape runs no curve, so a curve change must not fork its cache. */
   tonemapCurve?: TonemapCurve;
 }
 
@@ -180,6 +180,7 @@ export function buildPlaybackProfileFromContext(
     dvTonemapHdr10: videoVariant?.hdr === 'HDR10',
     hdr10PlusStrip: !!ctx?.dolbyVision && !!ctx?.sourceHdr10Plus,
     doviElStrip: ctx?.sourceDvProfile === 7 && !ctx?.dolbyVision,
-    tonemapCurve: ctx?.tonemap ? ctx?.tonemapCurve : undefined,
+    tonemapCurve:
+      ctx?.tonemap && videoVariant?.hdr == null ? ctx?.tonemapCurve : undefined,
   };
 }
