@@ -79,7 +79,13 @@ function createFixture(media: Promise<unknown> = new Promise(() => {})) {
       },
       { provide: AddToPlaylistService, useValue: {} },
       { provide: RecommendService, useValue: {} },
-      { provide: LikesApiService, useValue: { state: vi.fn(async () => ({ media: false, seasonIds: [], episodeIds: [] })) } },
+      {
+        provide: LikesApiService,
+        useValue: {
+          state: vi.fn(async () => ({ media: false, seasonIds: [], episodeIds: [] })),
+          changed: signal(null),
+        },
+      },
     ],
   });
   // State-only: the header's own render pulls in the whole detail page's
