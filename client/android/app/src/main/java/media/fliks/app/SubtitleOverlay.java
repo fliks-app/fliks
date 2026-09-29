@@ -102,8 +102,7 @@ class SubtitleOverlay {
         bottomMargin = bottomMarginFraction;
         topMargin = topMarginFraction;
         applyTextSize();
-        subtitleView.setBottomPaddingFraction(
-                SubtitleView.DEFAULT_BOTTOM_PADDING_FRACTION + bottomMargin);
+        subtitleView.setBottomPaddingFraction(bottomMargin);
     }
 
     /** A decoder that pins bottom cues to a line (SSA, tx3g) bypasses the bottom
@@ -117,7 +116,7 @@ class SubtitleOverlay {
                 && (c.lineType == Cue.LINE_TYPE_FRACTION ? c.line > 0.6f : c.line < 0);
         if (!pinnedBottom) return c;
         return c.buildUpon()
-                .setLine(1f - SubtitleView.DEFAULT_BOTTOM_PADDING_FRACTION - bottomMargin,
+                .setLine(1f - bottomMargin,
                         Cue.LINE_TYPE_FRACTION)
                 .setLineAnchor(Cue.ANCHOR_TYPE_END).build();
     }
