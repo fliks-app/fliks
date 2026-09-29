@@ -88,7 +88,10 @@ function createFixture() {
       { provide: RecommendService, useValue: {} },
       {
         provide: LikesApiService,
-        useValue: { state: vi.fn(async () => ({ media: false, seasonIds: [], episodeIds: [] })) },
+        useValue: {
+          state: vi.fn(async () => ({ media: false, seasonIds: [], episodeIds: [] })),
+          changed: signal(null),
+        },
       },
     ],
   });

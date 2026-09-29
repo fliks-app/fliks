@@ -113,7 +113,13 @@ function createHarness(media: Media, isAdmin: boolean) {
       { provide: ScrollMemoryService, useValue: { activate: vi.fn(), deactivate: vi.fn(), restoreSticky: vi.fn() } },
       { provide: AddToPlaylistService, useValue: {} },
       { provide: RecommendService, useValue: {} },
-      { provide: LikesApiService, useValue: { state: vi.fn(async () => ({ media: false, seasonIds: [], episodeIds: [] })) } },
+      {
+        provide: LikesApiService,
+        useValue: {
+          state: vi.fn(async () => ({ media: false, seasonIds: [], episodeIds: [] })),
+          changed: signal(null),
+        },
+      },
     ],
   });
 
