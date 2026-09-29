@@ -1027,8 +1027,27 @@ describe('PlayerComponent remux fallback (rejectCopy)', () => {
     expect(h.engine.setTextVisibility).toHaveBeenCalledWith(true);
   });
 
-  // Gating (recoverable error, wrong delivery) and the idle-reload timeout
-  // are pure CopyFallbackController logic — see copy-fallback-controller.spec.ts.
+  it('cards instead of leaving a dead player when another reload never idles', async () => {
+    const h = createHarness();
+    h.state.playbackMode.set('remux');
+    h.component.playbackInfo = buildPi(MAIN_FILE_ID, {
+      playMethod: 'DirectStream',
+      playUrl: `/api/stream/${MAIN_FILE_ID}/master.m3u8?token=t&remux=1`,
+    });
+    h.component.reloadingStream = true; // another reload in flight, never clears
+
+    vi.useFakeTimers();
+    try {
+      const handled = h.component.fallBackFromRemuxOnLoadError({ category: 4, code: 4032 }, 0);
+      expect(handled).toBe(true);
+      await vi.advanceTimersByTimeAsync(3_100);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
+    expect(h.state.error()).toBeTruthy();
+  });
 });
 
 describe('PlayerComponent selectSubtitle Cast guard', () => {
@@ -1513,9 +1532,6 @@ describe('PlayerComponent remux fallback on a rejected load', () => {
     expect(h.state.error()).toBeNull();
   });
 
-  // Gating (wrong delivery, no server feature, recoverable error) is pure
-  // CopyFallbackController logic — see copy-fallback-controller.spec.ts.
-
   it('reloadForEpisode: the new file falls back when its remux fails to load', async () => {
     const h = createHarness();
     h.component.mediaFileId = 7;
@@ -1601,9 +1617,6 @@ describe('PlayerComponent remux fallback on a rejected load', () => {
     expect(rejectCopyOf(h, 1)).toBe(true);
     expect(rejectCopyOf(h, 2)).toBe(true);
   });
-
-  // rejectCopyFileIds/deviceProfileExtensions gating on its own is pure
-  // CopyFallbackController logic — see copy-fallback-controller.spec.ts.
 });
 
 describe('PlayerComponent stats overlay: offline delivery', () => {

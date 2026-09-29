@@ -69,6 +69,14 @@ describe('CopyFallbackController: gating', () => {
     expect(host.reloadStream).not.toHaveBeenCalled();
   });
 
+  it('classifies a rejected load(): a recoverable Error stays unclaimed, a 4032 is claimed', () => {
+    const host = createHost();
+    const controller = createController(host);
+    const network = Object.assign(new Error('net'), { category: 1, code: 1002 });
+    expect(controller.fallBackFromLoadError(network, 0)).toBe(false);
+    expect(controller.fallBackFromLoadError({ category: 4, code: 4032 }, 0)).toBe(true);
+  });
+
   it('ignores a failure with no session id', () => {
     const host = createHost({ currentSid: () => undefined });
     const controller = createController(host);

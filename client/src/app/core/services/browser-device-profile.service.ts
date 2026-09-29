@@ -590,7 +590,7 @@ export class BrowserDeviceProfileService {
     // `video-crop` cuts the bars at the VO: free, and hwdec-safe unlike a lavfi
     // crop. Every mpv backend qualifies, the Linux render API included, since
     // they all run the gl_video renderer that applies the rectangle.
-    // The web (Shaka) path crops the same way in CSS, see `applyWebVideoCrop`.
+    // The web (Shaka) path crops the same way in CSS, see `WebVideoCropController`.
     const cropsBlackBarsLocally = this.device.isDesktopNative() || isWeb;
 
     // DV profiles this device can decode AND present, gated under supportsHdr.

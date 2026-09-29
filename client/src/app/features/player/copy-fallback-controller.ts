@@ -21,13 +21,8 @@ export interface CopyFallbackHost {
 const DEVICE_PROFILE_EXTENSIONS_FEATURE = 'deviceProfileExtensions';
 const RELOAD_IDLE_WAIT_MS = 3_000;
 
-/**
- * Owns the DirectPlay/remux -> transcode fallback: when a copy delivery turns
- * out undecodable, reject it once per session and reload through `rejectCopy`
- * so the backend forces a transcode. Provided per player component and wired
- * to it via {@link attach}, since Angular can't inject constructor args into
- * a component-scoped service.
- */
+/** DirectPlay/remux -> transcode fallback: an undecodable copy is rejected once
+ *  per session and reloaded with `rejectCopy`. One per player, bound via {@link attach}. */
 @Injectable()
 export class CopyFallbackController {
   private host!: CopyFallbackHost;
@@ -125,8 +120,7 @@ export class CopyFallbackController {
   }
 
   /** Resolves true once no reload or session recovery holds the engine, false
-   *  if one is still running after {@link RELOAD_IDLE_WAIT_MS}. Also used
-   *  outside the fallback path (pre-roll advance) to wait out the same guard. */
+   *  if one is still running after {@link RELOAD_IDLE_WAIT_MS}. */
   async waitForReloadIdle(): Promise<boolean> {
     const deadline = Date.now() + RELOAD_IDLE_WAIT_MS;
     while (!this.host.isReloadIdle() && Date.now() < deadline) {

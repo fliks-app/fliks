@@ -13,12 +13,8 @@ export interface WebVideoCropHost {
   videoElement(): HTMLVideoElement | undefined;
 }
 
-/**
- * Owns the CSS crop applied to the `<video>` element every non-desktop
- * engine renders into: the black bars from a source's own letterboxing are
- * cut by scaling/translating the element itself. Provided per player
- * component and wired to it via {@link attach}.
- */
+/** CSS crop of the `<video>` every non-desktop engine renders into; PiP and iOS
+ *  native fullscreen bypass it (`cropBypassed`). One per player, bound via {@link attach}. */
 @Injectable()
 export class WebVideoCropController {
   private host!: WebVideoCropHost;
@@ -36,8 +32,7 @@ export class WebVideoCropController {
   }
 
   /** The container's own box (not window resize) is what the crop transform
-   *  needs — it also catches fullscreen toggles and iOS reflow. Call once
-   *  the view (and its container element) exists. */
+   *  needs, it also catches fullscreen toggles and iOS reflow. Needs the view. */
   init(): void {
     if (typeof ResizeObserver === 'undefined') return;
     this.resizeObserver = new ResizeObserver(() => this.refresh());
