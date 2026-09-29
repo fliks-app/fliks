@@ -397,17 +397,9 @@ describe('StreamBuilderService — picked audio track', () => {
     ).toBe('DirectPlay');
   });
 
-  it('keeps Direct Play when a no-switch client has nothing to switch or no remux', () => {
+  it('keeps Direct Play when a no-switch client has nothing to switch', () => {
     const noSwitch = profile(['aac'], { switchesDirectPlayAudio: false });
     expect(evaluate([{ codec: 'aac' }], noSwitch, { ext: '.mp4' }).playMethod).toBe('DirectPlay');
-    const twoAac: Track[] = [
-      { codec: 'aac', language: 'eng' },
-      { codec: 'aac', language: 'fre' },
-    ];
-    const remuxOff = svc().evaluate(
-      file(twoAac, '.mp4'), noSwitch, '', undefined, undefined, 'directplay', undefined, 3, undefined, false,
-    ).response;
-    expect(remuxOff.playMethod).toBe('DirectPlay');
   });
 
   it('leaves Direct Play for a second same-language track an engine folds away', () => {
@@ -451,7 +443,7 @@ describe('StreamBuilderService — audio that ends early', () => {
     // Same grid the controller would freeze and serve, fed back in like it does.
     const { origin } = sourceTimeline(streamInfo, (f as { absolutePath: string }).absolutePath);
     const grid = remuxSegmentGrid(scan, origin, 3, streamInfo.video![0].frameRate);
-    const r = svc().evaluate(f, tv, '', undefined, undefined, 'directplay', undefined, 3, scan, true, grid)
+    const r = svc().evaluate(f, tv, '', undefined, undefined, 'directplay', undefined, 3, scan, grid)
       .response;
     expect(r.playMethod).toBe('DirectStream');
     expect(r.audioTracks![1].copy).toBe(true);

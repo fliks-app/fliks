@@ -51,7 +51,6 @@ export class StreamingSettingsComponent implements OnInit {
   readonly autoCropEnabled = signal(true);
   /** When off, a session that could copy the video is transcoded instead -
    *  no DirectStream (remux) offered at all. Default on. */
-  readonly allowRemux = signal(true);
   /** Pauses a streaming run once it gets too far ahead of the viewer, and
    *  resumes it as the viewer catches up. Default on. */
   readonly throttleEnabled = signal(true);
@@ -94,7 +93,6 @@ export class StreamingSettingsComponent implements OnInit {
       this.segmentDuration.set(all['streaming_segment_duration'] ?? '3');
       this.qsvPreset.set(all['streaming_qsv_preset'] ?? 'faster');
       this.autoCropEnabled.set(all['streaming_auto_crop_enabled'] !== 'false');
-      this.allowRemux.set(all['streaming_allow_direct_stream'] !== 'false');
       this.throttleEnabled.set(all['streaming_throttle_enabled'] !== 'false');
       this.throttleThresholdSeconds.set(all['streaming_throttle_threshold_seconds'] ?? '90');
       this.autoQualityMode.set(
@@ -147,7 +145,6 @@ export class StreamingSettingsComponent implements OnInit {
         streaming_auto_quality_mode: this.autoQualityMode(),
         streaming_subtitle_prewarm: this.subtitlePrewarm(),
         streaming_auto_crop_enabled: String(this.autoCropEnabled()),
-        streaming_allow_direct_stream: String(this.allowRemux()),
         streaming_throttle_enabled: String(this.throttleEnabled()),
         streaming_throttle_threshold_seconds: this.throttleThresholdSeconds(),
       });
