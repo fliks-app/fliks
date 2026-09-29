@@ -223,6 +223,9 @@ export interface EvaluateResult {
   /** Per-rendition audio output, in `streamInfo.audio` order: what a
    *  var_stream_map encode of the session emits. */
   audioPlans: AudioPlan[];
+  /** Whether a transcoded rung of this session runs a tonemap filter,
+   *  regardless of the play method actually picked (see `sessionLayout`). */
+  transcodeTonemapping: boolean;
 }
 
 /**
@@ -348,16 +351,16 @@ export class StreamBuilderService {
     // Single-layer DV (P5/P8/P10) carries its RPU inside the base NALs, so a
     // raw copy preserves it; dual-layer P7's EL can't ride HLS, so it's excluded.
     const dvProfiles = clientDvProfiles(profile);
-    const clientListsDvProfile = dv.profile != null && dvProfiles.includes(dv.profile);
     const detectedHwAccel = this.transcodingService.getDetectedHwAccel();
-    // No-base DV, an HDR10 display, a client that can't decode this DV
-    // profile at all, and a tonemap mechanism verified for a PQ target
-    // (see dvNoBaseHdr10PathSupported): reshape server-side into HDR10
-    // instead of the SDR fallback below.
+    // No-base DV, an HDR10 display, and a tonemap mechanism verified for a
+    // PQ target (see dvNoBaseHdr10PathSupported): reshape server-side into
+    // HDR10 instead of the SDR fallback below. Applies whenever the session
+    // actually transcodes — including a DV-capable client forced off
+    // DirectPlay by another gate, which would otherwise get a worse SDR
+    // tonemap than an HDR10-only client.
     const dvNoBaseHdr10Eligible =
       noBase &&
       clientSupportsHdr &&
-      !clientListsDvProfile &&
       dvNoBaseHdr10PathSupported(
         detectedHwAccel,
         this.activeStreamTracker.getTonemapAlgo(),
@@ -422,6 +425,11 @@ export class StreamBuilderService {
       videoVariant: selectedVariant,
       muxFlavour: hlsMux,
       audioPlans,
+      // The would-transcode tonemap decision, independent of the play method
+      // actually picked: a remux session can still later serve a transcoded
+      // rung under the same sid, which must tonemap even though the frozen
+      // `response.tonemapping` reports `false` for the DirectStream itself.
+      transcodeTonemapping: runsTonemapFilter,
     });
     const needsBurnIn = !!burnInSubtitleId;
     // Cropping black bars forces a re-encode. When the admin disables auto-crop
@@ -623,8 +631,9 @@ export class StreamBuilderService {
       copyableIgnoringGates && dvRemuxCopyAllowed && copyGates.every((g) => !g.active);
 
     // A client without a real P7 decoder shows black video on the raw dual-layer
-    // file; force the remux (strips the EL/RPU) only when one is available.
-    if (dv.profile === 7 && !dvProfiles.includes(7) && canCopyVideo) {
+    // file; always block DirectPlay, remuxing (strips the EL/RPU) when copy is
+    // available and falling through to Transcode otherwise.
+    if (dv.profile === 7 && !dvProfiles.includes(7)) {
       if (directPlayResult.canDirectPlay) directPlayResult.canDirectPlay = false;
       reasons.push({
         flag: 'VideoDolbyVisionP7NotSupported',
@@ -769,19 +778,9 @@ export class StreamBuilderService {
           )
         : undefined,
     );
-    const pickedStream = audioStreams[pickedAudio];
-    const pickedDecision =
-      canCopyVideo && pickedStream && !multiAudioLayout
-        ? this.decideAudio(
-            [pickedStream],
-            v,
-            profile,
-            hlsMux,
-            sourceMpegTs,
-            sourceScan,
-            undefined,
-          )[0]
-        : groupDecisions[pickedAudio];
+    // `!multiAudioLayout` means audioStreams has at most one track, so
+    // groupDecisions was already computed over exactly `[pickedStream]`.
+    const pickedDecision = groupDecisions[pickedAudio];
     // The top-level plan and reasons are the picked track's, which
     // `audioTracks` describes as `playUrl` delivers it. A DirectStream encodes
     // any transcoded track at buildRemuxArgs' own fixed budget, never the
@@ -790,12 +789,7 @@ export class StreamBuilderService {
       ? parseBitrateToBps(REMUX_STEREO_AUDIO_BITRATE)
       : negotiatedStereoBps;
     const audioTracks = audioStreams.map((t, i) =>
-      trackDto(
-        t,
-        i,
-        i === pickedAudio ? pickedDecision : groupDecisions[i],
-        trackStereoBps,
-      ),
+      trackDto(t, i, groupDecisions[i], trackStereoBps),
     );
     const audioPlans = groupDecisions.map((d) => d.plan);
     const pickedTrack = audioTracks[pickedAudio];

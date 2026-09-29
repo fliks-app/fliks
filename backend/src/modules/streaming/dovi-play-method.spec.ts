@@ -163,6 +163,19 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
     expect(out.response.tonemapping).toBe(true);
   });
 
+  it('reshapes P5 into HDR10 for a DV-capable client forced off DirectPlay/remux by another gate', () => {
+    // Lists profile 5 (so it could DV DirectPlay/remux) but rejectCopy forces
+    // an actual transcode anyway: it should get the same HDR10 reshape as an
+    // HDR10-only client, not a worse SDR tonemap.
+    const dvRejectCopyClient: DeviceProfileDto = {
+      ...dvHevcClient,
+      rejectCopy: true,
+    } as never;
+    const r = svc().evaluate(resolved(5, 0, undefined, 6), dvRejectCopyClient, 'tok');
+    expect(r.response.playMethod).toBe('Transcode');
+    expect(r.videoVariant?.hdr).toBe('HDR10');
+  });
+
   it('keeps P5 on the SDR tonemap for a client with no HDR10 display', () => {
     const sdrClient = { ...hdrHevcClient, supportsHdr: false } as DeviceProfileDto;
     const r = svc().evaluate(resolved(5, 0), sdrClient, 'tok');
@@ -221,6 +234,15 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
     expect(r.response.dolbyVision).toBe(true);
   });
 
+  it('a P5 remux still reports the transcode tonemap decision for a later rung switch', () => {
+    // response.tonemapping is false (this session's play method is DirectStream),
+    // but a same-sid switch to a transcoded rung must still apply_dovi reshape.
+    const r = svc().evaluate(resolved(5, 0, undefined, 6), dvMp4OnlyClient, 'tok');
+    expect(r.response.playMethod).toBe('DirectStream');
+    expect(r.response.tonemapping).toBe(false);
+    expect(r.transcodeTonemapping).toBe(true);
+  });
+
   it('transcodes P10.0 (no compatible base) with the dovi tonemap for an HDR AV1 client', () => {
     const r: any = resolved(10, 0);
     const v0 = r.mediaFile.streamInfo.video[0];
@@ -260,6 +282,14 @@ describe('StreamBuilderService — Dolby Vision play-method', () => {
   it('DirectPlays raw P7 for a client that lists profile 7', () => {
     const r = svc().evaluate(resolved(7, 6, true, 6), dvProfile7Client, 'tok');
     expect(r.response.playMethod).toBe('DirectPlay');
+  });
+
+  it('transcodes (never DirectPlays) raw P7 for a non-P7 client when no copy is available', () => {
+    // useTs blocks the remux copy path (muxRejectsCopy); the P7 guard must still
+    // block DirectPlay and fall through to Transcode instead of leaving it on.
+    const tsProfile = { ...dvHevcClient, useTs: true } as DeviceProfileDto;
+    const r = svc().evaluate(resolved(7, 6, true, 6), tsProfile, 'tok');
+    expect(r.response.playMethod).toBe('Transcode');
   });
 
   it('DirectPlays P5 with clientTonemap true for a client with no HDR display', () => {
