@@ -24,6 +24,9 @@ const config: CapacitorConfig = {
     // as a flash. launchAutoHide:false is the key flag — the rest is style.
     SplashScreen: {
       launchAutoHide: false,
+      // A fade hands the splash view over to the app; some OEMs (OxygenOS) drop the
+      // system splash first, flashing the bare app for a few frames before the copy lands.
+      launchFadeOutDuration: 0,
       backgroundColor: '#1d232a',
       androidSplashResourceName: 'splash_themed',
       // CENTER (not CENTER_CROP) keeps the splash drawable at its native
