@@ -48,7 +48,7 @@ import type { SlotId, UiContribution } from '@fliks/plugin-contract/ui';
 // decide sidebar vs. phone-dock rendering — mocked so fixtures can force either.
 const nativeState = vi.hoisted(() => ({ value: false }));
 vi.mock('@capacitor/core', () => ({
-  Capacitor: { isNativePlatform: () => nativeState.value },
+  Capacitor: { isNativePlatform: () => nativeState.value, getPlatform: () => (nativeState.value ? 'android' : 'web') },
   registerPlugin: () => ({ setLightStatusBar: () => Promise.resolve() }),
 }));
 vi.mock('@capacitor/keyboard', () => ({
