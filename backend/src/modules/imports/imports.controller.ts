@@ -29,8 +29,6 @@ import { SeerrRequestImportService } from './seerr-request-import.service';
 import { DiskImportService } from './disk-import.service';
 import { ImportApiDto } from './dto/import-api.dto';
 import { TestConnectionDto } from './dto/test-connection.dto';
-import { ScanFolderDto } from './dto/scan-folder.dto';
-import { ConfirmDiskImportDto } from './dto/confirm-disk-import.dto';
 import { PreviewImportDto } from './dto/preview-import.dto';
 
 @Controller('imports')
@@ -165,22 +163,6 @@ export class ImportsController {
       this.events.emit({ type: 'seerr.import.failed', error: '' });
     });
     return { ok: true };
-  }
-
-  // ---------------------------------------------------------------------------
-  // Disk import
-  // ---------------------------------------------------------------------------
-
-  @Post('disk/scan')
-  @CheckPolicies((ability) => ability.can(Action.Create, Media))
-  diskScan(@Body() dto: ScanFolderDto) {
-    return this.diskImport.scanFolder(dto.folderPath);
-  }
-
-  @Post('disk/confirm')
-  @CheckPolicies((ability) => ability.can(Action.Create, Media))
-  diskConfirm(@Body() dto: ConfirmDiskImportDto) {
-    return this.diskImport.confirmImport(dto.imports, dto.method);
   }
 
   // ---------------------------------------------------------------------------

@@ -69,6 +69,8 @@ export class OrphanScanPanelComponent {
 
   /** Collect picks without linking — the library does not exist yet. */
   readonly deferLink = input(false);
+  /** The scanned folder is outside the library: copy or move each title into it. */
+  readonly transfer = input<'copy' | 'move' | null>(null);
 
   private libraryId = 0;
   readonly anyLinked = signal(false);
@@ -130,9 +132,14 @@ export class OrphanScanPanelComponent {
     await this.load(() => this.importsApi.scanOrphans(libraryId));
   }
 
-  /** Scan a bare folder for a library that is not created yet. */
-  async scanPath(path: string, mediaTypes: MediaType[], provider: string | null) {
-    this.libraryId = 0;
+  /** Scan a bare folder, for a library not created yet (0) or one it imports into. */
+  async scanPath(
+    path: string,
+    mediaTypes: MediaType[],
+    provider: string | null,
+    libraryId = 0,
+  ) {
+    this.libraryId = libraryId;
     await this.load(() =>
       this.importsApi.previewOrphans({ path, mediaTypes, preferredProvider: provider }),
     );
@@ -256,6 +263,7 @@ export class OrphanScanPanelComponent {
       folderName: group.folderName,
       // A root-level movie has no folder to move into; the server refuses it anyway.
       reorganize: pick && group.folderName !== '' ? this.reorganize() : false,
+      transfer: this.transfer() ?? undefined,
       files: group.files.map((f) => ({
         filePath: f.filePath,
         seasonNumber: f.seasonNumber ?? undefined,
@@ -343,7 +351,7 @@ export class OrphanScanPanelComponent {
 
   /** Why the reorganize toggle is ignored for this group's link button, or '' when it applies. */
   reorganizeTooltip(vm: GroupVM): string {
-    if (!this.reorganize()) return '';
+    if (this.transfer() || !this.reorganize()) return '';
     if (!vm.pick) return this.translate.instant('settings.libraries.scan_reorganize_needs_match');
     if (vm.group.folderName === '') {
       return this.translate.instant('settings.libraries.scan_reorganize_needs_folder');
@@ -363,9 +371,10 @@ export class OrphanScanPanelComponent {
         this.anyLinked.set(true);
         this.patch(index, { linking: false, done: true });
         this.toast.success(
-          this.translate.instant('settings.libraries.scan_linked', {
-            count: res.linked,
-          }),
+          this.translate.instant(
+            this.transfer() ? 'import_disk.imported' : 'settings.libraries.scan_linked',
+            { count: res.linked },
+          ),
         );
       } else {
         // Nothing linked — typically a duplicate of a file already attached

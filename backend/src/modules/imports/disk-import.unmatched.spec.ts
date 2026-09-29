@@ -46,7 +46,6 @@ function makeService() {
     mediaRepo as never,
     null as never, // fileRepo
     null as never, // seasonRepo
-    null as never, // episodeRepo
     mediaService as never,
     null as never, // naming
     libraries as never,
@@ -497,5 +496,59 @@ describe('DiskImportService.relinkOrphans: movie files directly at the library r
 
     expect(res.linked).toBe(0);
     expect(mediaRepo.delete).toHaveBeenCalledWith(5);
+  });
+});
+
+describe('DiskImportService.relinkOrphans: files outside the library', () => {
+  it('names the new unmatched title by the library layout and copies its files in', async () => {
+    const { service, mediaRepo, mediaService } = makeService();
+    Object.assign(service, {
+      naming: {
+        getFormats: jest.fn().mockResolvedValue({ seriesFolder: '{Series Title}' }),
+        applySeriesFolderFormat: (_f: string, d: { seriesTitle: string }) => d.seriesTitle,
+      },
+    });
+    const confirmImport = jest
+      .spyOn(service, 'confirmImport')
+      .mockResolvedValue({ imported: 1, errors: [] });
+    mediaRepo.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(unmatchedRow(9, 'Sample Show', MediaType.SERIES));
+    mediaService.createUnmatched.mockResolvedValue({ id: 9 });
+    mediaService.ensureSeriesEpisode.mockResolvedValue({ episodeId: 3, created: false });
+
+    const res = await service.relinkOrphans(
+      dto({
+        type: MediaType.SERIES,
+        folderName: 'sample.show.complete',
+        title: 'Sample Show',
+        year: undefined,
+        transfer: 'copy',
+        files: [
+          {
+            filePath: '/downloads/sample.show.complete/S01/Sample.Show.S01E01.mkv',
+            seasonNumber: 1,
+            episodeNumber: 1,
+          },
+        ],
+      }),
+      null,
+    );
+
+    expect(mockedFindLocalArtwork).toHaveBeenCalledWith(
+      '/downloads/sample.show.complete',
+      undefined,
+      { basenameOnly: false },
+    );
+    expect(mediaService.createUnmatched).toHaveBeenCalledWith(
+      expect.objectContaining({ folderName: 'Sample Show', libraryId: 1 }),
+      null,
+    );
+    expect(confirmImport).toHaveBeenCalledWith(
+      [expect.objectContaining({ mediaId: 9, episodeId: 3, targetLibraryId: 1 })],
+      'copy',
+      { uniquifyOnCollision: false },
+    );
+    expect(res.linked).toBe(1);
   });
 });

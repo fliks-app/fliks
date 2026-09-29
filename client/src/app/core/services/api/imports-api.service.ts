@@ -65,6 +65,7 @@ export interface RelinkOrphansBody {
   languageProfileId?: number;
   folderName: string;
   reorganize?: boolean;
+  transfer?: 'copy' | 'move';
   files: RelinkFile[];
 }
 
