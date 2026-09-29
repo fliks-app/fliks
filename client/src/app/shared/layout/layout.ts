@@ -25,6 +25,7 @@ import { CountsApiService } from '../../core/services/api/counts-api.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { SseService } from '../../core/services/sse.service';
 import { CastService } from '../../core/services/cast.service';
+import { AirPlayService } from '../../core/services/airplay.service';
 import { RemoteService } from '../../core/services/remote.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
@@ -137,6 +138,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly pageScroller = inject(PageScrollerService);
   readonly networkService = inject(NetworkService);
   readonly castService = inject(CastService);
+  readonly airPlay = inject(AirPlayService);
   readonly remote = inject(RemoteService);
   readonly navbar = inject(NavbarService);
   readonly background = inject(BackgroundService);

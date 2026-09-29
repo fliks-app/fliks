@@ -98,7 +98,8 @@ interface OrientationPlugin {
 }
 const Orientation = registerPlugin<OrientationPlugin>('Orientation');
 
-import { LucideInfo, LucideX } from '@lucide/angular';
+import { LucideAirplay, LucideInfo, LucideX } from '@lucide/angular';
+import { AirPlayService } from '../../core/services/airplay.service';
 import { PlayerControlsComponent } from './controls/player-controls';
 import { PlayerErrorOverlayComponent } from './overlay/player-error-overlay';
 import { ControlsVisibilityService } from './controls/controls-visibility';
@@ -159,7 +160,7 @@ class PausableTimeout {
 }
 
 @Component({
-  imports: [TranslatePipe, LucideInfo, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, PlayerErrorOverlayComponent, DefaultFocusDirective],
+  imports: [TranslatePipe, LucideAirplay, LucideInfo, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, PlayerErrorOverlayComponent, DefaultFocusDirective],
   templateUrl: './player.html',
   providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController],
   encapsulation: ViewEncapsulation.None,
@@ -276,6 +277,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly remoteService = inject(RemoteService);
   private readonly authService = inject(AuthService);
   readonly castService = inject(CastService);
+  readonly airPlay = inject(AirPlayService);
+  private detachAirPlay: () => void = () => {};
   private readonly castPlayerService = inject(CastPlayerService);
   private readonly castSettings = inject(CastSettingsService);
   private readonly serverConfig = inject(ServerConfigService);
@@ -710,13 +713,21 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private activeBurnInId: number | null = null;
   private activeAudioStreamIndex: number | undefined;
 
+  /** Files an AirPlay receiver refused in HDR: renegotiated SDR from then on. */
+  private readonly sdrFallbackFileIds = new Set<number>();
+
   /** `deviceProfileService.getProfile()`, with `rejectCopy` forced on when
-   *  {@link CopyFallbackController} has confirmed `mediaFileId` an offender. */
+   *  {@link CopyFallbackController} has confirmed `mediaFileId` an offender,
+   *  and HDR off once an AirPlay receiver refused it. */
   private deviceProfileFor(mediaFileId: number): DeviceProfile {
-    const profile = this.deviceProfileService.getProfile();
-    return this.copyFallback.shouldForceRejectCopy(mediaFileId)
-      ? { ...profile, rejectCopy: true }
-      : profile;
+    let profile = this.deviceProfileService.getProfile();
+    if (this.copyFallback.shouldForceRejectCopy(mediaFileId)) {
+      profile = { ...profile, rejectCopy: true };
+    }
+    if (this.sdrFallbackFileIds.has(mediaFileId)) {
+      profile = { ...profile, supportsHdr: false, supportsDolbyVision: false, dolbyVisionProfiles: undefined };
+    }
+    return profile;
   }
 
   // ── CopyFallbackHost (see copy-fallback-controller.ts) ──
@@ -846,6 +857,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
 
     this.webCrop.init();
+    const video = this.videoEl()?.nativeElement;
+    if (video) this.detachAirPlay = this.airPlay.attachVideo(video);
 
     // Eager backdrop from router state — set BEFORE any await so the
     // loading screen renders on the first tick instead of popping in
@@ -1328,6 +1341,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   ngOnDestroy() {
     this.destroyed = true;
     this.webCrop.destroy();
+    this.detachAirPlay();
     if (this.forcedSaveTrailing) clearTimeout(this.forcedSaveTrailing);
     this.remoteCommandSub.unsubscribe();
     this.savePosition();
@@ -2682,6 +2696,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** A destination picked from the player's own list takes over the running
    *  playback at its current position, then the player steps aside. */
   async onPickDevice(row: PickerRow): Promise<void> {
+    // AirPlay reroutes this very playback: nothing to hand off. Synchronous,
+    // Safari only opens its picker inside the click.
+    if (row.kind === 'airplay') {
+      this.airPlay.showPicker();
+      return;
+    }
     if (row.kind === 'remote') {
       this.handOffToRemote(row.id);
       return;
@@ -3126,6 +3146,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     engine.on('sessionExpired', () => {
       void this.recoverFromLostSession();
     });
+    engine.on('externalPlaybackFailed', ({ reason }) => {
+      void this.onExternalPlaybackFailed(reason);
+    });
     engine.on('error', (e) => {
       if (this.reloadLoadPending || this.recoveringFromLostSession) {
         console.warn('[player] engine error dropped, a reload/recovery is already in flight', e);
@@ -3136,6 +3159,38 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.engine?.currentTime || this.state.currentTime() || 0,
       );
     });
+  }
+
+  /** A receiver that can't show HDR refuses an HDR-only master, so an HDR
+   *  stream is renegotiated SDR once; past that, card rather than sit paused
+   *  on a spinner. */
+  private async onExternalPlaybackFailed(reason: string): Promise<void> {
+    if (this.destroyed || this.castService.isConnected()) return;
+    const id = this.mediaFileId;
+    const pi = this.playbackInfo;
+    const trySdr = !!pi?.source?.hdrFormat && !pi.tonemapping && !this.sdrFallbackFileIds.has(id);
+    if (!this.engine || !trySdr) {
+      this.state.setError(this.translate.instant('player.error_airplay_unsupported'), {
+        message: `AirPlay receiver stopped playback: ${reason}`,
+      });
+      return;
+    }
+    this.sdrFallbackFileIds.add(id);
+    this.state.setRecovering(true);
+    try {
+      if (!(await this.copyFallback.waitForReloadIdle())) {
+        this.state.setError(this.translate.instant('player.error_airplay_unsupported'), {
+          message: 'AirPlay SDR fallback dropped: another reload is still running',
+        });
+        return;
+      }
+      this.state.setRecovering(true);
+      await this.reloadStream(this.engine.currentTime);
+    } catch (e) {
+      if (!this.state.error()) this.state.failWith(e);
+    } finally {
+      this.state.setRecovering(false);
+    }
   }
 
   /** Delegates to {@link CopyFallbackController.fallBackFromLoadError}. */

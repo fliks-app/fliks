@@ -2,6 +2,7 @@ import { Component, inject, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideCast } from '@lucide/angular';
 import { DropdownMenuComponent } from '../components/dropdown-menu';
+import { AirPlayService } from '../../core/services/airplay.service';
 import { CastService } from '../../core/services/cast.service';
 import { RemotePickerListComponent } from './remote-picker-list';
 
@@ -16,6 +17,7 @@ import { RemotePickerListComponent } from './remote-picker-list';
 })
 export class RemotePickerComponent {
   protected readonly castService = inject(CastService);
+  protected readonly airPlay = inject(AirPlayService);
   private readonly list = viewChild(RemotePickerListComponent);
 
   /** The dropdown owns its own open state, with no exposed "just opened"

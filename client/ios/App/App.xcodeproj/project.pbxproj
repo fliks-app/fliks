@@ -34,6 +34,7 @@
 		F954F4DC03C3615047B0AABF /* DownloadActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8546BB7ADC2E5B59E726E7ED /* DownloadActivityAttributes.swift */; };
 		F9D6B0DE0B5D3649DA0CC8B8 /* FliksDownloadWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2014FCBAA5253E0B35A8DFD6 /* FliksDownloadWidgetBundle.swift */; };
 		F1000001AAAA0000000000E1 /* NowPlayingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000D1 /* NowPlayingController.swift */; };
+		F1000001AAAA0000000000E2 /* AirPlayPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000D2 /* AirPlayPlugin.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -92,6 +93,7 @@
 		F1000001AAAA00000000001B /* BackGesturePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackGesturePlugin.swift; sourceTree = "<group>"; };
 		FC68EB0AF532CFC21C3344DD /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
 		F1000001AAAA0000000000D1 /* NowPlayingController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingController.swift; sourceTree = "<group>"; };
+		F1000001AAAA0000000000D2 /* AirPlayPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirPlayPlugin.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -161,6 +163,7 @@
 				F1000001AAAA000000000018 /* SubtitleOverlayView.swift */,
 				F1000001AAAA000000000019 /* DownloadPlugin.swift */,
 				F1000001AAAA0000000000D1 /* NowPlayingController.swift */,
+				F1000001AAAA0000000000D2 /* AirPlayPlugin.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -371,6 +374,7 @@
 				F1000001AAAA000000000009 /* DownloadPlugin.swift in Sources */,
 				F954F4DC03C3615047B0AABF /* DownloadActivityAttributes.swift in Sources */,
 				F1000001AAAA0000000000E1 /* NowPlayingController.swift in Sources */,
+				F1000001AAAA0000000000E2 /* AirPlayPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

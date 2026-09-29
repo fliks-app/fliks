@@ -328,6 +328,8 @@ export class PlayerControlsComponent {
    *  target is online. Same gate as the top bar's picker. */
   readonly canPickDevice = input(false);
   readonly castConnected = input(false);
+  /** Audio or video goes to an AirPlay receiver: tints the device button. */
+  readonly airPlayConnected = input(false);
   readonly castConnecting = input(false);
   readonly spriteUrl = input<string | null>(null);
   readonly spriteMetadata = input<SpriteMetadata | null>(null);
