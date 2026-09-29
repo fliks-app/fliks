@@ -8,6 +8,7 @@ import { AuthService } from './auth.service';
 import { ENGINE_TRAITS, engineKindFor } from './engine-traits';
 import { SystemInfoService } from './system-info.service';
 import { applyTizenAudioCodecs, tizenSupportsHevc } from './tizen-capabilities';
+import { isTizenCropSupported } from './playback-engine/tizen-engine';
 import { getDeviceName } from '../utils/device-info';
 import { environment } from '../../../environments/environment';
 import { desktopBridgeOrNull } from '../plugins/desktop-player.bridge';
@@ -606,7 +607,7 @@ export class BrowserDeviceProfileService {
     // they all run the gl_video renderer that applies the rectangle.
     // The web (Shaka) path crops the same way in CSS, see `WebVideoCropController`.
     const cropsBlackBarsLocally =
-      this.device.isDesktopNative() || isWeb || this.nativeCropsBlackBars();
+      this.device.isDesktopNative() || isWeb || this.nativeCropsBlackBars() || isTizenCropSupported();
 
     // DV profiles this device can decode AND present, gated under supportsHdr.
     // iOS/Android resolve it natively; web/webOS probe per codec string.

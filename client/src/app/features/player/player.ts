@@ -1066,6 +1066,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             await this.createWebOsEngine();
           } else {
             await this.createTizenEngine();
+            this.applyVideoCrop();
           }
           this.applyNativeSubtitleStyle();
 
@@ -4147,7 +4148,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.desktopCropApplied.set(!!c && !!this.engine);
       return;
     }
-    if (this.engine instanceof NativeEngine) {
+    if (this.engine instanceof NativeEngine || this.engine instanceof TizenEngine) {
       const { width, height } = this.sourceSize();
       this.nativeCropApplied.set(this.engine.setCrop(c, width, height));
       return;
