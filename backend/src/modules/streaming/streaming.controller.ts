@@ -924,8 +924,8 @@ export class StreamingController {
     this.activeStreamTracker.setSegmentDuration(ss.segmentDuration);
     this.activeStreamTracker.setTonemapAlgo(ss.tonemapAlgo);
     this.activeStreamTracker.setAutoCropEnabled(ss.autoCropEnabled);
-    // Re-push the admin settings (GPU pin, tone-map curve, cache budget, job
-    // slots) so a change applies without a restart.
+    // Re-push the admin settings (GPU pin, cache budget, job slots) so a
+    // change applies without a restart.
     this.transcodingService.applyStreamingSettings(ss);
 
     // Quality the client is requesting (absent / 'auto' = let the server

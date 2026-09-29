@@ -5,19 +5,6 @@ import {
   type TonemapCurve,
 } from './codec/types';
 
-/** Admin-selected curve (`streaming_tonemap_curve`), pushed in by
- *  {@link setSelectedTonemapCurve}. */
-let selectedCurve: TonemapCurve | null = null;
-
-export function setSelectedTonemapCurve(curve: TonemapCurve | null): void {
-  selectedCurve = curve;
-}
-
-/** Tone-map curve in force. Shared by the CPU and GPU tone-map paths. */
-export function resolveTonemapCurve(): TonemapCurve {
-  return selectedCurve ?? DEFAULT_TONEMAP_CURVE;
-}
-
 /** The bare zscale/tonemap chain doesn't drop HDR10 static metadata side data,
  *  leaking a Mastering display SEI into SDR output (verified; tonemapx and GPU tonemaps don't leak). */
 const HDR_STATIC_SIDEDATA_DELETE =

@@ -41,7 +41,6 @@ import {
 } from './ffmpeg-stderr';
 import { detectHwAccel } from './hw-detect';
 import { setSelectedRenderNode, vaapiRenderNode } from './hw-device';
-import { setSelectedTonemapCurve } from './ffmpeg-filter-graph';
 import { dvHasNoBase } from './codec/dolby-vision';
 import { setFfmpegSlots } from '../../../common/utils/ffmpeg-slots';
 import { enumerateGpus, type GpuInfo } from './gpu-registry';
@@ -313,7 +312,6 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
    *  every playback-info, so a change applies without a restart. */
   applyStreamingSettings(ss: StreamingSettings): void {
     setSelectedRenderNode(ss.gpuRenderNode);
-    setSelectedTonemapCurve(ss.tonemapCurve);
     setFfmpegSlots(ss.ffmpegSlots);
     this.cacheService.setLimits({
       ttlMs: ss.cacheTtlMs,
