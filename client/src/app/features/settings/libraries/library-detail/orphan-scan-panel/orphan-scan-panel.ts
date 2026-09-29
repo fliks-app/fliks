@@ -396,11 +396,14 @@ export class OrphanScanPanelComponent {
   async link(index: number) {
     const vm = this.groups()[index];
     if (!vm || vm.linking || vm.done) return;
+    // A reply from a link a newer `load()` replaced must not patch the new groups.
+    const generation = this.scanGeneration;
     this.patch(index, { linking: true, error: '' });
     try {
       const res = await this.importsApi.relinkOrphans(
         this.relinkBody(this.libraryId, vm, vm.pick),
       );
+      if (generation !== this.scanGeneration) return;
       if (res.linked > 0) {
         this.anyLinked.set(true);
         this.patch(index, { linking: false, done: true });
@@ -429,6 +432,7 @@ export class OrphanScanPanelComponent {
         });
       }
     } catch (err: unknown) {
+      if (generation !== this.scanGeneration) return;
       this.patch(index, {
         linking: false,
         error: this.failure(`link "${vm.group.folderName}"`, err),
