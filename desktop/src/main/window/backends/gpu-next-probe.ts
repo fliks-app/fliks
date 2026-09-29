@@ -7,10 +7,8 @@ let cached: Promise<'gpu-next' | 'gpu'> | null = null;
 const POLL_DEADLINE_MS = 3000;
 const POLL_INTERVAL_MS = 100;
 
-/** Probes whether gpu-next actually initialises here (old drivers / low D3D11
- *  feature levels fail it silently, with no error) via a throwaway hidden mpv.
- *  Cached for the process lifetime — `mpvPath` is read only on the first call,
- *  since the resolved binary never changes mid-session. */
+/** Whether gpu-next initialises here (old drivers / low D3D11 feature levels fail it
+ *  silently), via a throwaway hidden mpv. Cached per process: only the first `mpvPath` counts. */
 export function resolveWindowsVo(mpvPath: string): Promise<'gpu-next' | 'gpu'> {
   if (!cached) cached = probe(mpvPath);
   return cached;
@@ -40,8 +38,8 @@ async function probe(mpvPath: string): Promise<'gpu-next' | 'gpu'> {
   }
 }
 
-// mpv creates the VO in its idle loop, after the IPC server already accepts
-// connections — poll current-vo instead of reading it once after a fixed delay.
+// mpv creates the --force-window VO in its idle loop, after the IPC server is
+// already accepting, so current-vo can still be unset on the first read.
 async function pollCurrentVo(player: MpvPlayer): Promise<string | undefined> {
   const deadline = performance.now() + POLL_DEADLINE_MS;
   for (;;) {

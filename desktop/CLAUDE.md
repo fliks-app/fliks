@@ -211,7 +211,7 @@ pkill -x electron        # NOT  pkill -f .../desktop
 - **HDR** → SDR tonemap only on **Linux** (see Architecture). Expected there,
   not a bug. **Windows** (gpu-next) reshapes Dolby Vision and passes through
   HDR10/HLG on displays with headroom. **macOS** (EDR passthrough) passes
-  through HDR10/HLG only — `addon.mm` has no Dolby Vision RPU handling, so a DV
+  through HDR10/HLG only: `addon.mm` has no Dolby Vision RPU handling, so a DV
   file falls back to whatever base layer/tonemap mpv produces without it. Both
   fall back to SDR tonemap when the display reports no headroom.
 - **Resume into a transcode** (seek to a high segment): the backend produces

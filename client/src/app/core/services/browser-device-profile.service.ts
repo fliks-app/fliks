@@ -245,8 +245,8 @@ export class BrowserDeviceProfileService {
         .then((r) => { this.nativeVideo = r; this.cachedProfile = null; })
         .catch(() => { this.nativeVideo = null; });
     }
-    // Windows mpv can fall back off gpu-next at startup (old driver); every
-    // other desktop backend reshapes DV, so this only ever narrows Windows.
+    // Windows mpv can fall back off gpu-next at startup (old driver); the flag
+    // is only read on Windows, the one desktop backend that can reshape DV.
     desktopBridgeOrNull()
       ?.getPlayerCapabilities()
       .then((r) => {

@@ -14,6 +14,9 @@ export function readWindowHandle(win: BrowserWindow): number {
 export interface EmbedBackend {
   readonly id: string;
   /** mpv output/embed args (e.g. `--wid`, `--vo`, `--hwdec`) and an optional
-   *  environment override for this window. */
-  resolve(videoWin: BrowserWindow): Promise<{ args: string[]; env?: NodeJS.ProcessEnv }>;
+   *  environment override; `mpvPath` lets the gpu-next probe use the playback build. */
+  resolve(
+    videoWin: BrowserWindow,
+    mpvPath: string,
+  ): Promise<{ args: string[]; env?: NodeJS.ProcessEnv }>;
 }

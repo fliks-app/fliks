@@ -221,8 +221,6 @@ export class PlayerSession {
     // The video window's native handle is only valid once it has painted.
     const mpv = await this.createPlayer();
     if (this.destroyed) {
-      // The session was torn down while createPlayer() was still awaiting its
-      // (possibly multi-second) probe — kill the orphaned player, don't adopt it.
       await mpv.destroy().catch(() => {});
       return;
     }
@@ -243,7 +241,7 @@ export class PlayerSession {
     if (process.platform === 'darwin') return new MacMpvPlayer(this.videoWin);
     const mpvPath = resolveBundledMpv() ?? 'mpv';
     const backend = createEmbedBackend();
-    const { args, env } = await backend.resolve(this.videoWin);
+    const { args, env } = await backend.resolve(this.videoWin, mpvPath);
     return new MpvPlayer({ baseArgs: args, env, mpvPath });
   }
 
