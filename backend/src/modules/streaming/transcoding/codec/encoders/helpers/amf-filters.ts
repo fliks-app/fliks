@@ -20,7 +20,7 @@ export function amfOpenclFilter(opts: {
   cropStr: string;
   tonemap: boolean;
   tonemapCurve?: TonemapCurve;
-  dvNoBase?: boolean;
+  applyRpu?: boolean;
   outputFormat: 'nv12' | 'p010le';
   /** Text burn-in tail (`,subtitles=...`), already comma-prefixed or empty. */
   burnInFilter?: string;
@@ -31,7 +31,7 @@ export function amfOpenclFilter(opts: {
     cropStr,
     tonemap,
     tonemapCurve,
-    dvNoBase,
+    applyRpu,
     outputFormat,
     burnInFilter,
   } = opts;
@@ -44,7 +44,7 @@ export function amfOpenclFilter(opts: {
   // outputFormat === 'p010le' only happens on the HDR10 descriptor, and a
   // tonemap there is always a no-base DV reshape (see dvNoBaseHdr10Eligible).
   const step = tonemap
-    ? `${scale},tonemap_opencl=${tonemapOpenclOpts({ hdr10Target: outputFormat === 'p010le', curve, dvNoBase })}`
+    ? `${scale},tonemap_opencl=${tonemapOpenclOpts({ hdr10Target: outputFormat === 'p010le', curve, applyRpu })}`
     : `${scale}:format=${outputFormat}`;
   // Text burn-in: hwdownload straight off OpenCL, hand AMF CPU frames directly.
   // Its encoder takes nv12/p010le natively, no re-upload to d3d11 needed.
@@ -58,8 +58,7 @@ export function amfOpenclFilter(opts: {
  *  comes from the zero-copy decoder (see `isAmfOpenclPath`); otherwise frames
  *  are pulled down and scaled on the CPU. */
 function amfScaleFilter(input: EncoderInput, bitDepth: 8 | 10): string {
-  const { target, filters, tonemap, tonemapCurve, dvNoBase, inputSurface, hasBurnIn } =
-    input;
+  const { target, filters, tonemap, tonemapCurve, dvApplyRpu, inputSurface, hasBurnIn } = input;
   const w = target.width;
   const fmt = bitDepth === 8 ? 'nv12' : 'p010le';
   if (inputSurface === 'd3d11') {
@@ -69,7 +68,7 @@ function amfScaleFilter(input: EncoderInput, bitDepth: 8 | 10): string {
       cropStr: filters.cropStr,
       tonemap,
       tonemapCurve,
-      dvNoBase,
+      applyRpu: dvApplyRpu,
       outputFormat: fmt,
       burnInFilter: hasBurnIn ? filters.burnInFilter : undefined,
     });

@@ -1083,6 +1083,7 @@ export class StreamingController {
         ? resolveTonemapReport(resolveEncodePipeline(videoVariant, pipelineInputs), {
             tonemap: true,
             dvNoBase: pipelineInputs.dvNoBase,
+            dvApplyRpu: pipelineInputs.dvApplyRpu,
             burnIn: !!burnIn,
             sourceVideoCodec: pipelineInputs.sourceVideoCodec,
             hdr10Target: pipelineInputs.dvNoBase && videoVariant.hdr === 'HDR10',

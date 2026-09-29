@@ -10,7 +10,7 @@ import { isOpenclTonemapEnabled } from './codec/opencl-tonemap-probe';
 import { isCudaTonemapEnabled } from './codec/cuda-tonemap-probe';
 import { openclBridgeOk, resolveTonemapPath } from './tonemap-path';
 import { normaliseSourceCodec } from './codec/normalise';
-import { dvHasNoBase } from './codec/dolby-vision';
+import { dvAppliesRpu, dvHasNoBase } from './codec/dolby-vision';
 import type { BitDepth, CodecVariant, TonemapCurve } from './codec/types';
 import type { HwAccelType, TonemapAlgo } from './types';
 
@@ -33,17 +33,23 @@ export function isCudaTonemapPath(tonemap: boolean, hwAccel: string): boolean {
 }
 
 /** NVENC/AMF's off-encoder tonemap (falls back from `tonemap_cuda`, see
- *  {@link isCudaTonemapPath}); a no-base DV source needs the same RPU-aware bounce. */
+ *  {@link isCudaTonemapPath}); a no-base DV source needs the same RPU-aware
+ *  bounce, and so does one whose RPU must be applied (`dvApplyRpu`) on a
+ *  CPU encode. qsv/vaapi/videotoolbox keep their own filter device. */
 export function isOpenclTonemapPath(
   tonemap: boolean,
   hwAccel: string,
   dvNoBase: boolean,
+  dvApplyRpu: boolean,
 ): boolean {
   return (
     tonemap &&
     !isCudaTonemapPath(tonemap, hwAccel) &&
     isOpenclTonemapEnabled() &&
-    (hwAccel === 'nvenc' || hwAccel === 'amf' || dvNoBase)
+    (hwAccel === 'nvenc' ||
+      hwAccel === 'amf' ||
+      dvNoBase ||
+      (dvApplyRpu && hwAccel === 'none'))
   );
 }
 
@@ -105,6 +111,8 @@ export interface EncodePipelineContext {
   /** Source has no HDR10/HLG base to fall back to (P5, or P10 with an
    *  unknown/0 compat id): see {@link dvHasNoBase}. */
   dvNoBase: boolean;
+  /** DV source whose RPU the GPU tone-maps must apply: see {@link dvAppliesRpu}. */
+  dvApplyRpu: boolean;
   /** Source bit depth: gates the AMF native decoder (e.g. H.264 Hi10P
    *  exceeds its 8-bit max) against a real source, not just its codec. */
   sourceBitDepth: BitDepth;
@@ -170,7 +178,7 @@ export function resolveEncodePipeline(
   // the useVaapiTonemap flag so the two stay in sync.
   const tonemapPath = resolveTonemapPath(
     ctx.tonemapAlgo,
-    { hasCrop: ctx.crop, dvNoBase: ctx.dvNoBase },
+    { hasCrop: ctx.crop, dvNoBase: ctx.dvNoBase, dvApplyRpu: ctx.tonemap && ctx.dvApplyRpu },
     platform,
   );
   const tonemapOpenclOk = openclBridgeOk(ctx.crop, platform);
@@ -276,6 +284,10 @@ export function encodePipelineInputs(src: {
     tonemapAlgo: src.tonemapAlgo ?? 'auto',
     sourceVideoCodec: src.sourceVideoCodec,
     dvNoBase,
+    dvApplyRpu: dvAppliesRpu(
+      src.sourceDvProfile ?? undefined,
+      src.sourceDvBlSignalCompatId ?? undefined,
+    ),
     sourceBitDepth: src.isSourceHdr || dvNoBase ? 10 : 8,
   };
 }
@@ -296,6 +308,7 @@ export function resolveTonemapReport(
   opts: {
     tonemap: boolean;
     dvNoBase: boolean;
+    dvApplyRpu: boolean;
     /** Any burn-in: the VT Metal surface can't take either kind. */
     burnIn: boolean;
     sourceVideoCodec: string | undefined;
@@ -313,7 +326,12 @@ export function resolveTonemapReport(
   const hw = pipeline.effectiveHwAccel;
   const useVulkanTonemap = pipeline.tonemapPath === 'vulkan' && hw === 'vaapi';
   const cudaTonemap = isCudaTonemapPath(opts.tonemap, hw);
-  const openclTonemap = isOpenclTonemapPath(opts.tonemap, hw, opts.dvNoBase);
+  const openclTonemap = isOpenclTonemapPath(
+    opts.tonemap,
+    hw,
+    opts.dvNoBase,
+    opts.dvApplyRpu,
+  );
   const path: TonemapReportPath | null = !opts.tonemap
     ? null
     : hw === 'qsv' || hw === 'vaapi'

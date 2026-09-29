@@ -46,7 +46,7 @@ import {
 } from './codec/decoders';
 import { normaliseSourceCodec } from './codec/normalise';
 import { hevcMainTierCapBps } from './codec/codec-strings';
-import { dvHasHlgBase, dvHasNoBase } from './codec/dolby-vision';
+import { dvAppliesRpu, dvHasNoBase } from './codec/dolby-vision';
 import { varStreamMapLayout } from './audio-layout';
 import { inputSeekSeconds } from './source-timeline';
 import {
@@ -425,8 +425,9 @@ export interface BuildFfmpegArgsOptions {
    *  display tonemaps to the real peak luminance; the encoders fall back to a
    *  generic 1000-nit reference when absent. */
   sourceHdrMetadata?: HdrStaticMetadata;
-  /** Dolby Vision profile + base-layer compat id: feeds `dvHasNoBase`, which
-   *  routes a no-base source off the RPU-blind vaapi/qsv tonemap. */
+  /** Dolby Vision profile + base-layer compat id: feeds `dvHasNoBase` (routes
+   *  a no-base source off the RPU-blind vaapi/qsv tonemap) and `dvAppliesRpu`
+   *  (GPU tone-maps apply the RPU for no-base and HLG-base sources). */
   sourceDvProfile?: number;
   sourceDvBlSignalCompatId?: number;
   /** Audio output decision — see {@link SessionContext.audioPlan}. When
@@ -1082,6 +1083,7 @@ export function buildFfmpegArgs(
   // No HDR10/HLG base for a non-DV client to fall back to: the RPU-blind
   // vaapi/qsv tonemap must never run, see resolveEncodePipeline.
   const dvNoBase = dvHasNoBase(sourceDvProfile, sourceDvBlSignalCompatId);
+  const dvApplyRpu = dvAppliesRpu(sourceDvProfile, sourceDvBlSignalCompatId);
   // No-base DV reshaped into HDR10 rather than SDR (see stream-builder's
   // dvNoBaseHdr10Eligible): the tonemap filters target PQ/BT.2020 output.
   const dvNoBaseHdr10 = dvNoBase && variant.hdr === 'HDR10';
@@ -1103,6 +1105,7 @@ export function buildFfmpegArgs(
     tonemapAlgo,
     sourceVideoCodec,
     dvNoBase,
+    dvApplyRpu,
     sourceBitDepth,
   });
   const {
@@ -1125,6 +1128,7 @@ export function buildFfmpegArgs(
   const { useVulkanTonemap, cudaTonemap, openclTonemap } = resolveTonemapReport(pipeline, {
     tonemap: !!tonemap,
     dvNoBase,
+    dvApplyRpu,
     burnIn: !!burnIn,
     sourceVideoCodec,
     hdr10Target: dvNoBaseHdr10,
@@ -1245,6 +1249,7 @@ export function buildFfmpegArgs(
       useVulkanTonemap,
       sourceBitDepth,
       dvNoBase,
+      dvApplyRpu,
       tonemapCurve,
       scaleWidth: w,
       scaleHeight: h,
@@ -1255,8 +1260,7 @@ export function buildFfmpegArgs(
     tonemap,
     tonemapPath,
     tonemapCurve,
-    dvNoBase,
-    dvHlgBase: dvHasHlgBase(sourceDvProfile, sourceDvBlSignalCompatId),
+    dvApplyRpu,
     hasBurnIn: !!burnIn?.filter,
     hasCrop: !!crop,
     hdrMetadata: sourceHdrMetadata,

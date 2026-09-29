@@ -32,6 +32,7 @@ export async function runVulkanTonemapProbe(log: Logger): Promise<void> {
         useVulkanTonemap: true,
         sourceBitDepth: 10,
         scaleWidth: 320,
+        dvApplyRpu: false,
       }).tonemapVulkan;
       await execFileAsync(
         'ffmpeg',

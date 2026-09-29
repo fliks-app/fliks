@@ -28,7 +28,7 @@ function qsvCropOpts(input: EncoderInput): string {
  *  because libva exposes more scaling-quality knobs (`extra_hw_frames`,
  *  native nv12 output) on every gen we care about. */
 export function qsvScaleFilter8bit(input: EncoderInput): string {
-  const { target, filters, tonemap, tonemapPath, dvNoBase } = input;
+  const { target, filters, tonemap, tonemapPath } = input;
   const w = target.width;
   const curve = input.tonemapCurve ?? DEFAULT_TONEMAP_CURVE;
   if (input.qsvNative) {
@@ -36,7 +36,7 @@ export function qsvScaleFilter8bit(input: EncoderInput): string {
     // frame always needs the hwmap before `vpp_qsv` runs.
     const cropOpts = qsvCropOpts(input);
     if (tonemap && tonemapPath === 'opencl') {
-      const opts = tonemapOpenclOpts({ curve, dvNoBase });
+      const opts = tonemapOpenclOpts({ curve, applyRpu: input.dvApplyRpu });
       if (input.inputSurface === 'd3d11') {
         // Windows zero-copy: vpp_qsv scale (p010, HDR kept) can't ingest a
         // reverse-mapped OpenCL surface, so the scale precedes the OpenCL step.
@@ -94,14 +94,14 @@ export function qsvScaleFilter8bit(input: EncoderInput): string {
  *  source reshaped into HDR10 (see dvNoBaseHdr10Eligible): tonemap
  *  is on and `tonemapPath === 'opencl'` runs the RPU-aware bounce. */
 export function qsvScaleFilter10bit(input: EncoderInput): string {
-  const { target, filters, tonemap, tonemapPath, dvNoBase } = input;
+  const { target, filters, tonemap, tonemapPath } = input;
   const w = target.width;
   const curve = input.tonemapCurve ?? DEFAULT_TONEMAP_CURVE;
   if (input.qsvNative) {
     // See qsvScaleFilter8bit: both surfaces need the hwmap onto QSV first.
     const cropOpts = qsvCropOpts(input);
     if (tonemap && tonemapPath === 'opencl') {
-      const opts = tonemapOpenclOpts({ hdr10Target: true, curve, dvNoBase });
+      const opts = tonemapOpenclOpts({ hdr10Target: true, curve, applyRpu: input.dvApplyRpu });
       if (input.inputSurface === 'd3d11') {
         return (
           `${QSV_HWMAP}vpp_qsv=${cropOpts}w=${w}:h=${target.height}:format=p010le,` +

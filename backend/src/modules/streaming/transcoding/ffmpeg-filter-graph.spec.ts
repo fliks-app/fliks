@@ -8,6 +8,7 @@ const base = {
   sourceBitDepth: 8,
   scaleWidth: 1920,
   scaleHeight: 1080,
+  dvApplyRpu: false,
 };
 
 describe('buildVideoFilters', () => {
@@ -66,7 +67,7 @@ describe('buildVideoFilters', () => {
   });
 
   it('does not append the sidedata strip to tonemapx (verified clean on real HDR10 media)', () => {
-    const f = buildVideoFilters({ ...base, tonemap: true, dvNoBase: true });
+    const f = buildVideoFilters({ ...base, tonemap: true, dvNoBase: true, dvApplyRpu: true });
     expect(f.tonemapCpu).not.toContain('sidedata');
   });
 
@@ -84,13 +85,13 @@ describe('buildVideoFilters', () => {
       ...base,
       tonemap: true,
       openclTonemap: true,
-      dvNoBase: true,
+      dvNoBase: true, dvApplyRpu: true,
     });
     expect(f.tonemapCpu).toContain(':desat=0:apply_dovi=1:format=nv12,');
   });
 
   it('routes a no-base DV source through tonemapx on the CPU fallback', () => {
-    const f = buildVideoFilters({ ...base, tonemap: true, dvNoBase: true });
+    const f = buildVideoFilters({ ...base, tonemap: true, dvNoBase: true, dvApplyRpu: true });
     expect(f.tonemapCpu).toBe(
       'scale=1920:-2,tonemapx=t=bt709:m=bt709:p=bt709:tonemap=mobius:desat=0:format=yuv420p,',
     );
@@ -100,7 +101,7 @@ describe('buildVideoFilters', () => {
     const f = buildVideoFilters({
       ...base,
       tonemap: true,
-      dvNoBase: true,
+      dvNoBase: true, dvApplyRpu: true,
       hdr10Target: true,
     });
     expect(f.tonemapOpencl).toBe(
@@ -113,7 +114,7 @@ describe('buildVideoFilters', () => {
     const f = buildVideoFilters({
       ...base,
       tonemap: true,
-      dvNoBase: true,
+      dvNoBase: true, dvApplyRpu: true,
       hdr10Target: true,
       cudaTonemap: true,
     });
@@ -126,7 +127,7 @@ describe('buildVideoFilters', () => {
     const f = buildVideoFilters({
       ...base,
       tonemap: true,
-      dvNoBase: true,
+      dvNoBase: true, dvApplyRpu: true,
       hdr10Target: true,
     });
     expect(f.tonemapCpu).toBe(
@@ -138,7 +139,7 @@ describe('buildVideoFilters', () => {
     const f = buildVideoFilters({
       ...base,
       tonemap: true,
-      dvNoBase: true,
+      dvNoBase: true, dvApplyRpu: true,
       hdr10Target: true,
       openclTonemap: true,
     });
@@ -165,11 +166,17 @@ describe('buildVideoFilters', () => {
       ...base,
       tonemap: true,
       useVulkanTonemap: true,
-      dvNoBase: true,
+      dvNoBase: true, dvApplyRpu: true,
     });
     expect(f.tonemapVulkan).toContain('libplacebo=');
     expect(f.tonemapVulkan).toContain('apply_dolbyvision=1');
     expect(f.tonemapVulkan).toContain('format=vulkan,hwmap=derive_device=vaapi');
+  });
+
+  it('applies the RPU on the GPU tone-maps for an HLG base, but keeps CPU zscale', () => {
+    const f = buildVideoFilters({ ...base, tonemap: true, dvApplyRpu: true });
+    expect(f.tonemapOpencl).toContain('apply_dovi=1');
+    expect(f.tonemapCpu).not.toContain('tonemapx');
   });
 
   it('burn-in keeps the opencl/vaapi GPU tone-maps (text burn-in stays on the GPU)', () => {
@@ -188,7 +195,7 @@ describe('buildVideoFilters', () => {
       ...base,
       tonemap: true,
       useVulkanTonemap: true,
-      dvNoBase: true,
+      dvNoBase: true, dvApplyRpu: true,
       burnIn: { filter: 'subtitles=/tmp/x.ass' } as never,
     });
     expect(f.tonemapVulkan).toBe('');

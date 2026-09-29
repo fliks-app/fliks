@@ -75,7 +75,7 @@ describe('qsvScaleFilter8bit', () => {
           inputSurface: 'd3d11',
           tonemap: true,
           tonemapPath: 'opencl',
-          dvNoBase: true,
+          dvApplyRpu: true,
         }),
       ),
     ).toContain(':desat=0:apply_dovi=1,');
@@ -103,7 +103,7 @@ describe('qsvScaleFilter8bit', () => {
           inputSurface: 'vaapi',
           tonemap: true,
           tonemapPath: 'opencl',
-          dvNoBase: true,
+          dvApplyRpu: true,
         }),
       ),
     ).toContain(':desat=0:apply_dovi=1,');
@@ -336,7 +336,7 @@ describe('qsvScaleFilter10bit', () => {
           inputSurface: 'vaapi',
           tonemap: true,
           tonemapPath: 'opencl',
-          dvNoBase: true,
+          dvApplyRpu: true,
         }),
       ),
     ).toBe(
@@ -356,7 +356,7 @@ describe('qsvScaleFilter10bit', () => {
           inputSurface: 'd3d11',
           tonemap: true,
           tonemapPath: 'opencl',
-          dvNoBase: true,
+          dvApplyRpu: true,
         }),
       ),
     ).toBe(
