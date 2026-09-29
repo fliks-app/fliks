@@ -12,7 +12,8 @@ import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.Window;
-import android.view.WindowManager;
+import androidx.activity.EdgeToEdge;
+import androidx.activity.SystemBarStyle;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.view.ViewCompat;
@@ -147,24 +148,10 @@ public class MainActivity extends BridgeActivity {
         // between routes when content briefly has transparent body bg)
         // doesn't flash the AppCompat.Light default white through the gap.
         window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.BLACK));
-        // Draw content edge-to-edge: required for `env(safe-area-inset-*)`
-        // to report real values on Android ≤ 14. Android 15 (targetSdk 35)
-        // applies the same opt-in automatically; calling it explicitly here
-        // keeps the behaviour uniform across OS versions.
-        WindowCompat.setDecorFitsSystemWindows(window, false);
-        window.setStatusBarColor(Color.TRANSPARENT);
-        window.setNavigationBarColor(Color.TRANSPARENT);
-        // Draw into the display cutout on the short edges. In landscape the
-        // punch-hole sits on a short (left/right) edge; the default mode
-        // letterboxes it with a black bar. SHORT_EDGES lets the app background
-        // reach the edge while body.native's env(safe-area-inset-left/right)
-        // padding keeps content clear of the camera.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            WindowManager.LayoutParams lp = window.getAttributes();
-            lp.layoutInDisplayCutoutMode =
-                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
-            window.setAttributes(lp);
-        }
+        // Transparent bars + ALWAYS cutout mode (SHORT_EDGES below R): content reaches the
+        // punch-hole, body.native's env(safe-area-inset-*) padding keeps it clear.
+        EdgeToEdge.enable(this,
+            SystemBarStyle.dark(Color.TRANSPARENT), SystemBarStyle.dark(Color.TRANSPARENT));
         // Force a fresh window-insets dispatch down to the WebView. On a cold
         // start the bars are reset to opaque while the splash is up and the
         // insets that drive CSS env(safe-area-inset-*) arrive as zero, so the

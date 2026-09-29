@@ -5,7 +5,6 @@ import android.view.View;
 import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
-import android.view.WindowManager;
 
 import androidx.core.view.WindowCompat;
 
@@ -16,7 +15,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 /**
  * Capacitor plugin to toggle Android immersive mode.
- * Hides status bar, navigation bar, and optionally draws behind the notch/cutout.
+ * Hides status bar and navigation bar; the cutout mode stays the app-wide baseline.
  *
  * Usage from JS:
  *   Immersive.enter({ displayBehindNotch: true })
@@ -27,7 +26,6 @@ public class ImmersivePlugin extends Plugin {
 
     @PluginMethod()
     public void enter(PluginCall call) {
-        boolean behindNotch = call.getBoolean("displayBehindNotch", false);
 
         getActivity().runOnUiThread(() -> {
             Window window = getActivity().getWindow();
@@ -38,13 +36,6 @@ public class ImmersivePlugin extends Plugin {
                 ((MainActivity) getActivity()).setImmersiveMode(true);
             }
 
-            // Cutout / notch
-            if (behindNotch && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                WindowManager.LayoutParams lp = window.getAttributes();
-                lp.layoutInDisplayCutoutMode =
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
-                window.setAttributes(lp);
-            }
 
             // Hide system bars
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -103,15 +94,6 @@ public class ImmersivePlugin extends Plugin {
                 ((MainActivity) getActivity()).setImmersiveMode(false);
             }
 
-            // Keep drawing into the short-edge cutout (the app-wide baseline),
-            // not DEFAULT — DEFAULT re-letterboxes the landscape punch-hole
-            // with a black bar once the player closes.
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                WindowManager.LayoutParams lp = window.getAttributes();
-                lp.layoutInDisplayCutoutMode =
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
-                window.setAttributes(lp);
-            }
 
             // Show system bars
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
