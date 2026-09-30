@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.IO.Pipes;
 using Fliks.Tray.Utilities;
 
 namespace Fliks.Tray.Services;
@@ -146,14 +148,40 @@ internal sealed class PostgresManager(ushort port = 5433)
         return r.Succeeded && r.Stdout.Trim() == "1";
     }
 
+    /// <summary>Fast shutdown sent straight to the postmaster's signal pipe, as pg_ctl does:
+    /// Windows refuses to start pg_ctl.exe once the session is logging off.</summary>
     public async Task StopAsync()
     {
-        await ProcessRunner.RunAsync(
-            Tool("pg_ctl"),
-            new[] { "-D", _dataDir, "-m", "fast", "-w", "stop" },
-            PgEnv,
-            timeout: TimeSpan.FromSeconds(20));
+        var pidFile = Path.Combine(_dataDir, "postmaster.pid");
+        if (!File.Exists(pidFile) ||
+            !int.TryParse(File.ReadLines(pidFile).FirstOrDefault(), out var pid)) return;
+
+        try
+        {
+            using var pipe = new NamedPipeClientStream(".", $"pgsignal_{pid}", PipeDirection.InOut);
+            pipe.Connect(1000);
+            pipe.Write([SigInt]);
+            pipe.ReadByte();
+        }
+        catch (Exception ex) when (ex is IOException or TimeoutException)
+        {
+            Log.Info($"pg stop: no signal pipe for pid {pid} ({ex.Message})");
+            return;
+        }
+
+        try
+        {
+            using var postmaster = Process.GetProcessById(pid);
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            await postmaster.WaitForExitAsync(timeout.Token);
+            Log.Info("pg stop: postmaster exited");
+        }
+        catch (ArgumentException) { /* already gone */ }
+        catch (OperationCanceledException) { Log.Info("pg stop: postmaster still running after 20s"); }
     }
+
+    // PostgreSQL's Windows signal emulation uses the CRT numbers; SIGINT = fast shutdown.
+    private const byte SigInt = 2;
 
     private async Task WaitForReadyAsync(TimeSpan timeout, CancellationToken ct)
     {
