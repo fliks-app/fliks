@@ -73,7 +73,12 @@ function velopackUpdater(broadcast: (s: DesktopUpdateStatus) => void): Updater |
   const velopack = require('velopack') as typeof import('velopack');
   let manager: InstanceType<typeof velopack.UpdateManager>;
   try {
-    manager = new velopack.UpdateManager(new velopack.GithubSource(`https://github.com/${GITHUB_REPO}`));
+    // FLIKS_UPDATE_SOURCE (a folder or URL holding a Velopack release) stands in for GitHub to
+    // test an update from a CI build's feed artifact.
+    const source = process.env.FLIKS_UPDATE_SOURCE;
+    manager = new velopack.UpdateManager(
+      source ? source : new velopack.GithubSource(`https://github.com/${GITHUB_REPO}`),
+    );
   } catch {
     return null;
   }

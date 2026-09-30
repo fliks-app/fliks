@@ -411,6 +411,18 @@ jobs:
             "-p:AssemblyName=Fliks-Client-$env:VERSION-Setup"
           if ($LASTEXITCODE -ne 0) { throw "installer build failed ($LASTEXITCODE)" }
 
+      # The update feed alone, to test an update against a local folder (FLIKS_UPDATE_SOURCE).
+      - name: Upload update feed artifact
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fliks-desktop-feed-${{ steps.version.outputs.version }}
+          path: |
+            desktop/release/velopack/*-${{ steps.version.outputs.version }}-full.nupkg
+            desktop/release/velopack/releases.win.json
+          if-no-files-found: error
+          compression-level: 0
+
       # `gh release upload` only POSTs the assets (editing the release is refused with the
       # job token); the previous release's packages pulled for the delta stay out, and
       # Velopack's bare Setup.exe is replaced by the installer that wraps it.
