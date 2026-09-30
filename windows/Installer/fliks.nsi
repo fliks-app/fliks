@@ -71,6 +71,8 @@ SectionEnd
 Section "Uninstall"
     ; Stop a running tray so its files aren't locked.
     ExecWait 'taskkill /IM Fliks.exe /F'
+    ; Children die with the tray (Job Object); give the OS a moment to unlock files.
+    Sleep 2000
 
     Delete "$SMPROGRAMS\${APPNAME}.lnk"
     RMDir /r "$INSTDIR"

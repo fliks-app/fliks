@@ -58,6 +58,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _icon.DoubleClick += (_, _) => _app.OpenInBrowser();
 
         _app.StateChanged += OnStateChanged;
+        // Logoff / OS shutdown: stop postgres cleanly instead of letting it be killed.
+        Microsoft.Win32.SystemEvents.SessionEnded += (_, _) => Quit();
         Render(_app.State);
 
         _ = _app.StartAllAsync();

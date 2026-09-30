@@ -11,6 +11,9 @@ internal sealed class PostgresManager(ushort port = 5433)
     private readonly string _binDir = AppPaths.PgBinDir;
     private readonly string _dataDir = AppPaths.PgDataDir;
     private readonly string _logFile = AppPaths.PgLogFile;
+    // Held for the tray's lifetime so postgres dies with it. pg_ctl joins it before
+    // spawning postgres, which then inherits it instead of pg_ctl's own UI-limited job.
+    private readonly JobObject _job = new();
 
     private string Tool(string name) => Path.Combine(_binDir, name + ".exe");
 
@@ -55,7 +58,7 @@ internal sealed class PostgresManager(ushort port = 5433)
     }
 
     /// <summary>Start the server and wait until it accepts connections.</summary>
-    public async Task StartAsync()
+    public async Task StartAsync(CancellationToken ct)
     {
         // No -w and no output capture: pg_ctl spawns postgres and returns at
         // once, leaving it detached. Readiness is confirmed by WaitForReadyAsync
@@ -72,13 +75,14 @@ internal sealed class PostgresManager(ushort port = 5433)
             },
             PgEnv,
             timeout: TimeSpan.FromSeconds(15),
-            captureOutput: false);
+            captureOutput: false,
+            job: _job);
 
         LogResult("pg_ctl start", result);
         if (!result.Succeeded)
             throw new InvalidOperationException($"pg_ctl start failed: {result.Stderr}");
 
-        await WaitForReadyAsync(TimeSpan.FromSeconds(30));
+        await WaitForReadyAsync(TimeSpan.FromSeconds(30), ct);
     }
 
     /// <summary>Create the <c>fliks</c> database and pg_trgm extension if absent.</summary>
@@ -149,13 +153,13 @@ internal sealed class PostgresManager(ushort port = 5433)
             timeout: TimeSpan.FromSeconds(20));
     }
 
-    private async Task WaitForReadyAsync(TimeSpan timeout)
+    private async Task WaitForReadyAsync(TimeSpan timeout, CancellationToken ct)
     {
         var deadline = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadline)
         {
             if (await IsReadyAsync()) return;
-            await Task.Delay(500);
+            await Task.Delay(500, ct);
         }
         throw new TimeoutException("PostgreSQL did not become ready in time");
     }

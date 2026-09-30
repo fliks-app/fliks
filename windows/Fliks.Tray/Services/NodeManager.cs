@@ -43,6 +43,7 @@ internal sealed record BackendEnvironment(ushort Port, ushort DbPort)
 internal sealed class NodeManager
 {
     private Process? _process;
+    private JobObject? _job;
     private FileStream? _logStream;
     private readonly object _logGate = new();
     private bool _intentionalStop;
@@ -53,7 +54,7 @@ internal sealed class NodeManager
 
     public bool IsRunning => _process is { HasExited: false };
 
-    public async Task StartAsync(BackendEnvironment config)
+    public async Task StartAsync(BackendEnvironment config, CancellationToken ct)
     {
         _intentionalStop = false;
         Directory.CreateDirectory(AppPaths.DataDir);
@@ -75,15 +76,22 @@ internal sealed class NodeManager
         proc.StartInfo.RedirectStandardError = true;
         foreach (var (k, v) in config.AsEnvironment()) proc.StartInfo.Environment[k] = v;
 
+        // Windows doesn't kill children with their parent: node and its ffmpeg
+        // runs share a job, closed as soon as node exits, crash or not.
+        var job = new JobObject();
         proc.EnableRaisingEvents = true;
         proc.Exited += (_, _) =>
         {
+            job.Dispose();
             var code = proc.ExitCode;
             Log.Info($"backend exited: code={code} intentional={_intentionalStop}");
             if (code != 0 && !_intentionalStop) OnCrash?.Invoke(code);
         };
 
         proc.Start();
+        try { job.Assign(proc); }
+        catch (System.ComponentModel.Win32Exception) when (proc.HasExited) { /* Exited already closed it */ }
+        _job = job;
         _logStream = OpenDailyLog();
         // Copy the child's raw bytes to the log — Node emits UTF-8, so passing
         // the bytes through untouched avoids any code-page transcode.
@@ -91,7 +99,7 @@ internal sealed class NodeManager
         PumpToLog(proc.StandardError.BaseStream);
         _process = proc;
 
-        await WaitForHttpReadyAsync(config.Port, TimeSpan.FromSeconds(120));
+        await WaitForHttpReadyAsync(config.Port, TimeSpan.FromSeconds(120), ct);
     }
 
     public async Task StopAsync()
@@ -105,6 +113,7 @@ internal sealed class NodeManager
 
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
         while (!proc.HasExited && DateTime.UtcNow < deadline) await Task.Delay(200);
+        _job?.Dispose();
         Cleanup();
     }
 
@@ -116,6 +125,7 @@ internal sealed class NodeManager
             _logStream = null;
         }
         _process = null;
+        _job = null;
     }
 
     private static FileStream OpenDailyLog()
@@ -151,7 +161,7 @@ internal sealed class NodeManager
         }
     });
 
-    private static async Task WaitForHttpReadyAsync(ushort port, TimeSpan timeout)
+    private static async Task WaitForHttpReadyAsync(ushort port, TimeSpan timeout, CancellationToken ct)
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
         var url = $"http://127.0.0.1:{port}/api";
@@ -160,14 +170,14 @@ internal sealed class NodeManager
         {
             try
             {
-                var response = await http.GetAsync(url);
+                var response = await http.GetAsync(url, ct);
                 if ((int)response.StatusCode < 500) return;
             }
-            catch
+            catch when (!ct.IsCancellationRequested)
             {
                 // Connection refused — not up yet.
             }
-            await Task.Delay(1000);
+            await Task.Delay(1000, ct);
         }
         throw new TimeoutException("Backend did not become ready in time");
     }
