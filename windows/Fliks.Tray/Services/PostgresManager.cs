@@ -11,6 +11,9 @@ internal sealed class PostgresManager(ushort port = 5433)
     private readonly string _binDir = AppPaths.PgBinDir;
     private readonly string _dataDir = AppPaths.PgDataDir;
     private readonly string _logFile = AppPaths.PgLogFile;
+    // Held for the tray's lifetime: if the tray dies, the OS kills the postmaster,
+    // and its backends exit on postmaster death.
+    private readonly JobObject _job = new();
 
     private string Tool(string name) => Path.Combine(_binDir, name + ".exe");
 
@@ -79,6 +82,24 @@ internal sealed class PostgresManager(ushort port = 5433)
             throw new InvalidOperationException($"pg_ctl start failed: {result.Stderr}");
 
         await WaitForReadyAsync(TimeSpan.FromSeconds(30));
+        AssignPostmasterToJob();
+    }
+
+    private void AssignPostmasterToJob()
+    {
+        try
+        {
+            // postmaster.pid's first line is the postmaster PID; pg_ctl already exited.
+            using var file = new FileStream(Path.Combine(_dataDir, "postmaster.pid"),
+                FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            var pid = int.Parse(new StreamReader(file).ReadLine()!);
+            using var postmaster = System.Diagnostics.Process.GetProcessById(pid);
+            _job.Assign(postmaster);
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"pg job assignment failed: {ex.Message}");
+        }
     }
 
     /// <summary>Create the <c>fliks</c> database and pg_trgm extension if absent.</summary>
