@@ -1,3 +1,5 @@
+using System.Drawing.Drawing2D;
+using System.Runtime.InteropServices;
 using Fliks.Tray.State;
 
 namespace Fliks.Tray.Tray;
@@ -6,53 +8,86 @@ namespace Fliks.Tray.Tray;
 /// click, which Windows needs before it lets the browser take the foreground.</summary>
 internal sealed class SetupWindow : Form
 {
+    // The web client's dark theme (daisyUI base-100 / primary).
+    private static readonly Color Background = Color.FromArgb(0x1d, 0x23, 0x2a);
+    private static readonly Color Track = Color.FromArgb(0x2a, 0x32, 0x3c);
+    private static readonly Color Accent = Color.FromArgb(0x7a, 0x3f, 0xf2);
+    private static readonly Color Foreground = Color.FromArgb(0xf3, 0xf4, 0xf6);
+    private static readonly Color Muted = Color.FromArgb(0x9c, 0xa3, 0xaf);
+    private static readonly Color Danger = Color.FromArgb(0xf8, 0x71, 0x71);
+
     private readonly AppState _app;
-    private readonly Label _title = new()
-    {
-        AutoSize = true,
-        Font = new Font(SystemFonts.MessageBoxFont!.FontFamily, 12f, FontStyle.Bold),
-    };
-    private readonly Label _status = new() { AutoSize = true, MaximumSize = new Size(360, 0) };
-    private readonly ProgressBar _progress = new()
-    {
-        Style = ProgressBarStyle.Marquee,
-        Width = 360,
-        Margin = new Padding(3, 12, 3, 12),
-    };
-    private readonly Button _action = new() { AutoSize = true, Visible = false };
+    private readonly Label _title = CenteredLabel(new Font("Segoe UI Semibold", 15f), Foreground);
+    private readonly Label _step = CenteredLabel(new Font("Segoe UI", 10f), Muted);
+    private readonly Label _hint = CenteredLabel(new Font("Segoe UI", 9f), Muted);
+    private readonly SweepBar _bar = new() { Height = 4, Width = 280, Anchor = AnchorStyles.None };
+    private readonly AccentButton _action = new() { Anchor = AnchorStyles.None, Visible = false };
+    // The browser opens on its own; the ready screen stays a moment for the Open Fliks fallback.
+    private readonly System.Windows.Forms.Timer _autoClose = new() { Interval = 5000 };
 
     public SetupWindow(AppState app)
     {
         _app = app;
         Text = "Fliks Server";
         Icon = TrayApplicationContext.LoadIcon(SystemInformation.IconSize);
-        FormBorderStyle = FormBorderStyle.FixedDialog;
+        AutoScaleDimensions = new SizeF(96f, 96f);
+        AutoScaleMode = AutoScaleMode.Dpi;
+        ClientSize = new Size(460, 340);
+        FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        AutoSize = true;
-        AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        Padding = new Padding(24);
+        BackColor = Background;
 
+        var logoSize = LogicalToDeviceUnits(80);
         var logo = new PictureBox
         {
-            Image = TrayApplicationContext.LoadIcon(new Size(64, 64)).ToBitmap(),
-            SizeMode = PictureBoxSizeMode.AutoSize,
-            Margin = new Padding(3, 3, 3, 12),
+            Image = TrayApplicationContext.LoadIcon(new Size(256, 256)).ToBitmap(),
+            SizeMode = PictureBoxSizeMode.Zoom,
+            Size = new Size(logoSize, logoSize),
+            Anchor = AnchorStyles.None,
+            Margin = new Padding(0, 0, 0, 16),
         };
-        var layout = new FlowLayoutPanel
+        _title.Margin = new Padding(0, 0, 0, 6);
+        _hint.Margin = new Padding(0, 4, 0, 0);
+        _bar.Margin = new Padding(0, 22, 0, 0);
+        _action.Margin = new Padding(0, 18, 0, 0);
+
+        var layout = new TableLayoutPanel
         {
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false,
-            AutoSize = true,
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            Padding = new Padding(32, 28, 32, 28),
         };
-        layout.Controls.AddRange(new Control[] { logo, _title, _status, _progress, _action });
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        // Spacer rows above and below keep the content vertically centred.
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
+        foreach (var c in new Control[] { logo, _title, _step, _hint, _bar, _action })
+        {
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.Controls.Add(c, 0, layout.RowStyles.Count - 1);
+        }
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
+        layout.RowCount = layout.RowStyles.Count;
         Controls.Add(layout);
 
         _action.Click += OnAction;
+        _autoClose.Tick += (_, _) => Close();
         _app.StateChanged += OnStateChanged;
-        FormClosed += (_, _) => _app.StateChanged -= OnStateChanged;
+        FormClosed += (_, _) =>
+        {
+            _app.StateChanged -= OnStateChanged;
+            _autoClose.Dispose();
+        };
         Shown += (_, _) => Render(_app.State);
         Render(_app.State);
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        // Dark title bar on Windows 10 20H1+ / 11; ignored on older builds.
+        var on = 1;
+        _ = DwmSetWindowAttribute(Handle, 20, ref on, sizeof(int));
     }
 
     private void OnStateChanged(ServerState state)
@@ -68,22 +103,31 @@ internal sealed class SetupWindow : Form
         {
             case ServerPhase.Running:
                 _title.Text = "Fliks Server is ready";
-                _status.Text = "Your server is set up and running.";
+                _title.ForeColor = Foreground;
+                _step.Text = "Your server is set up and running.";
+                _hint.Text = "This window closes on its own.";
                 _action.Text = "Open Fliks";
                 break;
             case ServerPhase.Error:
                 _title.Text = "Fliks Server failed to start";
-                _status.Text = state.Message ?? "See the logs for details.";
+                _title.ForeColor = Danger;
+                _step.Text = state.Message ?? "The logs have the details.";
+                _hint.Text = "";
                 _action.Text = "Open Logs";
                 break;
             default:
                 _title.Text = "Setting up Fliks Server";
-                _status.Text = $"{state.DisplayText}\nThe first launch can take a few minutes.";
+                _title.ForeColor = Foreground;
+                _step.Text = state.DisplayText;
+                _hint.Text = "The first launch can take a few minutes.";
                 break;
         }
         var done = state.Phase is ServerPhase.Running or ServerPhase.Error;
-        _progress.Visible = !done;
+        _hint.Visible = state.Phase != ServerPhase.Error;
+        _autoClose.Enabled = state.Phase == ServerPhase.Running;
+        _bar.Visible = !done;
         _action.Visible = done;
+        if (done) _action.Focus();
     }
 
     private void OnAction(object? sender, EventArgs e)
@@ -96,6 +140,119 @@ internal sealed class SetupWindow : Form
         else
         {
             _app.OpenLogsFolder();
+        }
+    }
+
+    private static Label CenteredLabel(Font font, Color color) => new()
+    {
+        AutoSize = true,
+        MaximumSize = new Size(396, 0),
+        Anchor = AnchorStyles.None,
+        TextAlign = ContentAlignment.MiddleCenter,
+        Font = font,
+        ForeColor = color,
+    };
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+    /// <summary>Indeterminate bar: an accent segment sweeping across a rounded track.</summary>
+    private sealed class SweepBar : Control
+    {
+        private readonly System.Windows.Forms.Timer _timer = new() { Interval = 16 };
+        private float _phase;
+
+        public SweepBar()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
+                     | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+            _timer.Tick += (_, _) => { _phase = (_phase + 0.012f) % 1f; Invalidate(); };
+        }
+
+        protected override void OnVisibleChanged(EventArgs e)
+        {
+            base.OnVisibleChanged(e);
+            _timer.Enabled = Visible;
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.Clear(Background);
+            using (var track = new SolidBrush(Track)) FillPill(g, track, 0, Width);
+
+            var segment = Width * 0.35f;
+            // Ease in-out so the segment accelerates off one edge and settles into the other.
+            var t = _phase < 0.5f ? 2 * _phase * _phase : 1 - MathF.Pow(-2 * _phase + 2, 2) / 2;
+            var x = -segment + t * (Width + segment);
+            g.SetClip(new Rectangle(0, 0, Width, Height));
+            using var accent = new SolidBrush(Accent);
+            FillPill(g, accent, x, segment);
+        }
+
+        private void FillPill(Graphics g, Brush brush, float x, float width)
+        {
+            using var path = new GraphicsPath();
+            float d = Height;
+            path.AddArc(x, 0, d, d, 90, 180);
+            path.AddArc(x + width - d, 0, d, d, 270, 180);
+            path.CloseFigure();
+            g.FillPath(brush, path);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) _timer.Dispose();
+            base.Dispose(disposing);
+        }
+    }
+
+    /// <summary>Flat accent button with rounded corners.</summary>
+    private sealed class AccentButton : Button
+    {
+        private bool _hover;
+
+        public AccentButton()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
+                     | ControlStyles.UserPaint, true);
+            FlatStyle = FlatStyle.Flat;
+            FlatAppearance.BorderSize = 0;
+            Font = new Font("Segoe UI Semibold", 10f);
+            ForeColor = Color.White;
+            Cursor = Cursors.Hand;
+            Size = new Size(180, 40);
+        }
+
+        protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { _hover = false; Invalidate(); base.OnMouseLeave(e); }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.Clear(Background);
+            var fill = _hover ? ControlPaint.Light(Accent, 0.2f) : Accent;
+            using (var brush = new SolidBrush(fill))
+            using (var path = new GraphicsPath())
+            {
+                var r = new RectangleF(0.5f, 0.5f, Width - 1f, Height - 1f);
+                float d = LogicalToDeviceUnits(16);
+                path.AddArc(r.X, r.Y, d, d, 180, 90);
+                path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+                path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+                path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+                path.CloseFigure();
+                g.FillPath(brush, path);
+            }
+            TextRenderer.DrawText(g, Text, Font, ClientRectangle, ForeColor,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            if (Focused && ShowFocusCues)
+            {
+                using var pen = new Pen(Color.FromArgb(160, Color.White), 1f) { DashStyle = DashStyle.Dot };
+                g.DrawRectangle(pen, 4, 4, Width - 9, Height - 9);
+            }
         }
     }
 }
