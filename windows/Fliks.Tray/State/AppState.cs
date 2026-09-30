@@ -32,12 +32,16 @@ internal sealed class AppState
     /// <summary>No cluster yet: initdb, every migration and Defender's first scan
     /// of the bundle make this launch take minutes.</summary>
     public bool IsFirstRun { get; }
+    /// <summary>A new bundle over an existing cluster: pending migrations and Defender's
+    /// scan of the new files make this launch slow too.</summary>
+    public bool IsUpdate { get; }
     private bool _openWhenReady;
 
     public AppState(bool openBrowserWhenReady)
     {
         _postgres = new PostgresManager(Config.PgPort);
         IsFirstRun = !_postgres.IsInitialized;
+        IsUpdate = !IsFirstRun && AppPaths.BundleVersion is { } v && v != Config.LastRunVersion;
         _openWhenReady = openBrowserWhenReady;
         _node.OnCrash = HandleNodeCrash;
     }
@@ -74,6 +78,8 @@ internal sealed class AppState
             State = ServerState.Running;
             Log.Info("running");
             StartHealthChecks();
+            if (AppPaths.BundleVersion is { } version && version != Config.LastRunVersion)
+                Config.LastRunVersion = version;
 
             if (_openWhenReady)
             {

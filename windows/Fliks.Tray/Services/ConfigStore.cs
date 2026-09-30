@@ -11,6 +11,7 @@ internal sealed class ConfigStore
     {
         public ushort Port { get; set; } = 4848;
         public ushort PgPort { get; set; } = 5433;
+        public string? LastRunVersion { get; set; }
     }
 
     private static readonly string FilePath =
@@ -34,6 +35,13 @@ internal sealed class ConfigStore
 
     public ushort Port => _model.Port;
     public ushort PgPort => _model.PgPort;
+
+    /// <summary>Bundle version of the last launch that reached Running.</summary>
+    public string? LastRunVersion
+    {
+        get => _model.LastRunVersion;
+        set { _model.LastRunVersion = value; Save(); }
+    }
 
     private void Save()
     {
