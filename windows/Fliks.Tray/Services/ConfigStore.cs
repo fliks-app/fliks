@@ -11,7 +11,6 @@ internal sealed class ConfigStore
     {
         public ushort Port { get; set; } = 4848;
         public ushort PgPort { get; set; } = 5433;
-        public bool HasCompletedFirstLaunch { get; set; }
     }
 
     private static readonly string FilePath =
@@ -35,12 +34,6 @@ internal sealed class ConfigStore
 
     public ushort Port => _model.Port;
     public ushort PgPort => _model.PgPort;
-
-    public bool HasCompletedFirstLaunch
-    {
-        get => _model.HasCompletedFirstLaunch;
-        set { _model.HasCompletedFirstLaunch = value; Save(); }
-    }
 
     private void Save()
     {
