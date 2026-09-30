@@ -55,10 +55,11 @@ VIAddVersionKey "CompanyName" "${COMPANY}"
 
 Section "Install"
     ExecWait 'taskkill /IM "${EXE}" /F'
-    ExecWait 'taskkill /IM Fliks.exe /F'
+    ; The desktop client also ships Fliks.exe and Fliks.lnk: only touch the pre-rename server's.
+    nsExec::Exec `powershell -NoProfile -NonInteractive -Command "$$old='$INSTDIR\Fliks.exe'; Get-Process Fliks -EA 0 | ? Path -eq $$old | Stop-Process -Force; $$lnk='$SMPROGRAMS\Fliks.lnk'; if ((Test-Path $$lnk) -and (New-Object -ComObject WScript.Shell).CreateShortcut($$lnk).TargetPath -eq $$old) { Remove-Item $$lnk }"`
+    Pop $0
     Sleep 2000
     Delete "$INSTDIR\Fliks.exe"
-    Delete "$SMPROGRAMS\Fliks.lnk"
 
     SetOutPath "$INSTDIR"
     File /r "${BUNDLE_DIR}\*"
