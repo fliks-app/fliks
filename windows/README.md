@@ -72,19 +72,19 @@ vendored binaries and the repo's `backend/dist` + `client/dist` directly.
 
 | Path | Contents |
 |------|----------|
-| `%LOCALAPPDATA%\Fliks\postgresql\` | Database cluster |
-| `%LOCALAPPDATA%\Fliks\conf\` | JWT secret + tray settings |
-| `%LOCALAPPDATA%\Fliks\data\` | Backend cwd (images, thumbnails, backups) |
-| `%LOCALAPPDATA%\Fliks\logs\` | Backend + PostgreSQL logs |
-| `%LOCALAPPDATA%\Fliks\transcode\` | HLS transcode cache (ephemeral) |
+| `%LOCALAPPDATA%\Fliks Server\postgresql\` | Database cluster |
+| `%LOCALAPPDATA%\Fliks Server\conf\` | JWT secret + tray settings |
+| `%LOCALAPPDATA%\Fliks Server\data\` | Backend cwd (images, thumbnails, backups) |
+| `%LOCALAPPDATA%\Fliks Server\logs\` | Backend + PostgreSQL logs |
+| `%LOCALAPPDATA%\Fliks Server\transcode\` | HLS transcode cache (ephemeral) |
 
-The installer places the app under `%LOCALAPPDATA%\Programs\Fliks` (per-user,
-no admin). Uninstalling leaves `%LOCALAPPDATA%\Fliks` data intact.
+The installer places the app under `%LOCALAPPDATA%\Programs\Fliks Server` (per-user,
+no admin). Uninstalling leaves `%LOCALAPPDATA%\Fliks Server` data intact.
 
 ## Clean reset
 
 ```powershell
-Remove-Item -Recurse -Force "$env:LOCALAPPDATA\Fliks"
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\Fliks Server"
 ```
 
 ## CI

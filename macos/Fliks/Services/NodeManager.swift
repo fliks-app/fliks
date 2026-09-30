@@ -6,7 +6,7 @@ import os
 ///
 /// The backend's `process.cwd()` must point to a writable directory
 /// (images/, backups/, thumbnails/ are created relative to cwd).
-/// We set `currentDirectoryURL` to `~/Library/Application Support/Fliks/data/`
+/// We set `currentDirectoryURL` to `~/Library/Application Support/Fliks Server/data/`
 /// and symlink bundle assets (dist, node_modules, package.json) into it.
 actor NodeManager {
 

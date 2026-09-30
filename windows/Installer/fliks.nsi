@@ -97,6 +97,6 @@ Section "Uninstall"
     ; The Run key (Start at Login) is owned by the app; drop it too.
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${REGNAME}"
 
-    ; User data under %LOCALAPPDATA%\Fliks (database, config, images) is left
+    ; User data under %LOCALAPPDATA%\Fliks Server (database, config, images) is left
     ; intact so a reinstall keeps the library.
 SectionEnd
