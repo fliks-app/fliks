@@ -13,11 +13,7 @@ enum Paths {
 
     static let appSupport: URL = {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        // The desktop client owns "Fliks"; an install made before the split keeps its cluster there.
-        let previous = base.appendingPathComponent("Fliks")
-        if FileManager.default.fileExists(atPath: previous.appendingPathComponent("postgresql").path) {
-            return previous
-        }
+        // "Fliks" is the desktop client's userData.
         return base.appendingPathComponent("Fliks Server")
     }()
 
