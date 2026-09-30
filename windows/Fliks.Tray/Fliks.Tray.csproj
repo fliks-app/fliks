@@ -7,7 +7,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Fliks.Tray</RootNamespace>
-    <AssemblyName>Fliks</AssemblyName>
+    <AssemblyName>Fliks Server</AssemblyName>
     <ApplicationIcon Condition="Exists('Resources\fliks.ico')">Resources\fliks.ico</ApplicationIcon>
   </PropertyGroup>
 
