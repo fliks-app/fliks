@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
@@ -29,6 +30,10 @@ internal sealed class SetupForm : Form
     private readonly float _scale;
 
     private Process? _setup;
+    private long _payloadBytes;
+    private bool _hadInstall;
+    private bool _wasRunning;
+    private List<string> _backupsBefore = new();
     private bool _installing;
     private bool _cancelled;
     private Action? _primaryAction;
@@ -155,34 +160,42 @@ internal sealed class SetupForm : Form
             var setupExe = await Task.Run(() => ExtractPayload(p => BeginInvoke(new Action(() => _bar.Value = p * 0.1f))));
             if (_cancelled) return;
 
-            Enter(new Stage($"Installing {_config.Title}", "Installing…", "", Bar: true));
+            Enter(new Stage($"Installing {_config.Title}", "Installing…", "This can take a few minutes.", Bar: true));
+            // What a cancel must undo depends on what was already here.
+            _hadInstall = Directory.Exists(_config.InstallDir) && Directory.EnumerateFileSystemEntries(_config.InstallDir).Any();
+            _wasRunning = Process.GetProcessesByName(Path.GetFileNameWithoutExtension(_config.MainExe)).Length > 0;
+            _backupsBefore = Backups().Select(d => d.FullName).ToList();
             _setup = Process.Start(new ProcessStartInfo(setupExe, $"--silent --log \"{log}\"")
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
             })!;
-            var current = Path.Combine(_config.InstallDir, "current");
-            long lastSize = -1;
-            var lastGrowth = DateTime.UtcNow;
+
+            // Velopack logs each install step: copy the package into packages\, extract it into
+            // current\, then shortcuts and the app's install hook, which report no progress.
+            var total = _config.InstalledBytes + _payloadBytes;
             var finishing = false;
             while (!_setup.HasExited)
             {
                 await Task.Delay(500);
-                if (_config.InstalledBytes <= 0 || _cancelled || finishing) continue;
-                // Tens of thousands of files: walking them on the UI thread hangs the window.
-                var size = await Task.Run(() => DirectorySize(current));
-                if (_cancelled) continue;
-                var ratio = Math.Min(1f, size / (float)_config.InstalledBytes);
-                _bar.Value = Math.Max(_bar.Value, 0.1f + 0.88f * ratio);
-                if (size != lastSize) { lastSize = size; lastGrowth = DateTime.UtcNow; }
-                // Copy done: shortcuts, the app's install hook and the antivirus scan of the new
-                // files follow, with nothing to measure.
-                if (ratio >= 0.97f || (ratio > 0.5f && DateTime.UtcNow - lastGrowth > TimeSpan.FromSeconds(3)))
+                if (_cancelled || finishing) continue;
+                var phase = ReadShared(log);
+                if (phase.Contains("Creating shortcuts") || phase.Contains("install hook"))
                 {
                     finishing = true;
+                    _bar.Value = 1f;
                     Enter(new Stage($"Installing {_config.Title}", "Finishing the installation…",
-                        "This step can take 1 to 2 minutes.", Bar: true, Indeterminate: true));
+                        "This step can take a minute.", Bar: true, Indeterminate: true));
+                    continue;
                 }
+                // Before this line a reinstall's folder still holds the previous install; without a
+                // log, a fresh install's folder is safe to measure from the start.
+                var measuring = phase.Contains("Extracting Update.exe") || (phase.Length == 0 && !_hadInstall);
+                if (!measuring || _config.InstalledBytes <= 0) continue;
+                // Tens of thousands of files: walking them on the UI thread hangs the window.
+                var size = await Task.Run(() => DirectorySize(_config.InstallDir));
+                if (!_cancelled)
+                    _bar.Value = Math.Max(_bar.Value, 0.1f + 0.88f * Math.Min(1f, size / (float)total));
             }
             _installing = false;
             if (_cancelled) return;
@@ -238,6 +251,7 @@ internal sealed class SetupForm : Form
         var target = Path.Combine(_temp, "Setup.exe");
         using var source = Assembly.GetExecutingAssembly().GetManifestResourceStream("payload.exe")
                            ?? throw new InvalidOperationException("This setup carries no payload.");
+        _payloadBytes = source.Length;
         using var file = File.Create(target);
         var buffer = new byte[1 << 20];
         long copied = 0;
@@ -320,38 +334,73 @@ internal sealed class SetupForm : Form
         }
         _cancelled = true;
         Render(new Stage("Cancelling…", "Removing the installed files.", "", Bar: true, Indeterminate: true));
-        await Task.Run(() =>
-        {
-            try { if (_setup is { HasExited: false }) { _setup.Kill(); _setup.WaitForExit(10_000); } }
-            catch (Exception ex) when (ex is InvalidOperationException or Win32Exception) { /* already gone */ }
-            // Velopack writes shortcuts and the uninstall entry last, so the folder is all there is.
-            for (var i = 0; i < 5 && Directory.Exists(_config.InstallDir); i++)
-            {
-                try { Directory.Delete(_config.InstallDir, recursive: true); }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { System.Threading.Thread.Sleep(500); }
-            }
-            RestorePreviousInstall();
-        });
+        await Task.Run(UndoInstall);
         Close();
     }
 
-    // A reinstall first renames the existing install to "<packId>.<16 random chars>" for rollback,
-    // which Velopack itself undoes on failure but not when killed.
-    private void RestorePreviousInstall()
+    // Velopack writes shortcuts and the uninstall entry last, so the install folder is all a
+    // killed run leaves. A reinstall first stops the running app and renames the existing
+    // install to "<packId>.<16 random chars>" for rollback, which Velopack undoes on failure
+    // but not when killed.
+    private void UndoInstall()
     {
-        if (Directory.Exists(_config.InstallDir)) return;
+        try { if (_setup is { HasExited: false }) { _setup.Kill(); _setup.WaitForExit(10_000); } }
+        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception) { /* already gone */ }
+        if (_setup is null) return;
+
+        var backup = Backups().FirstOrDefault(d => !_backupsBefore.Contains(d.FullName));
+        // Killed before the rename: the folder is still the previous install.
+        if (_hadInstall && backup is null) return;
+
+        for (var i = 0; i < 5 && Directory.Exists(_config.InstallDir); i++)
+        {
+            try { Directory.Delete(_config.InstallDir, recursive: true); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { System.Threading.Thread.Sleep(500); }
+        }
+        if (backup is null) return;
         try
         {
-            var backup = new DirectoryInfo(Path.GetDirectoryName(_config.InstallDir)!)
+            backup.MoveTo(_config.InstallDir);
+            if (_wasRunning)
+                Process.Start(new ProcessStartInfo(Path.Combine(_config.InstallDir, _config.MainExe))
+                {
+                    UseShellExecute = true,
+                    WorkingDirectory = _config.InstallDir,
+                    Arguments = "--autostart",
+                });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or Win32Exception)
+        {
+            // Left in place for the next install to overwrite.
+        }
+    }
+
+    private IEnumerable<DirectoryInfo> Backups()
+    {
+        try
+        {
+            return new DirectoryInfo(Path.GetDirectoryName(_config.InstallDir)!)
                 .GetDirectories(_config.PackId + ".*")
                 .Where(d => d.Name.Length == _config.PackId.Length + 17)
-                .OrderByDescending(d => d.LastWriteTimeUtc)
-                .FirstOrDefault();
-            backup?.MoveTo(_config.InstallDir);
+                .ToList();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Left for the next install, which starts clean.
+            return Enumerable.Empty<DirectoryInfo>();
+        }
+    }
+
+    private static string ReadShared(string path)
+    {
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+            return reader.ReadToEnd();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return "";
         }
     }
 
