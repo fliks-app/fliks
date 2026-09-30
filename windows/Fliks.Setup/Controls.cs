@@ -150,7 +150,8 @@ internal sealed class RoundButton : Button
             }
         }
         TextRenderer.DrawText(g, Text, Font, ClientRectangle, ForeColor,
-            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            // VerticalCenter only applies with SingleLine.
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
         if (Focused && ShowFocusCues)
         {
             using var pen = new Pen(Color.FromArgb(160, Color.White), 1f) { DashStyle = DashStyle.Dot };
