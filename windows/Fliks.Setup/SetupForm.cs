@@ -45,7 +45,7 @@ internal sealed class SetupForm : Form
         BackColor = Theme.Background;
         AutoScaleMode = AutoScaleMode.None;
         _scale = DeviceDpi / 96f;
-        ClientSize = new Size(S(540), S(460));
+        ClientSize = new Size(S(660), S(460));
 
         _title = Label(new Font("Segoe UI Semibold", 17f), Theme.Foreground);
         _step = Label(new Font("Segoe UI", 11f), Theme.Muted);
@@ -59,7 +59,7 @@ internal sealed class SetupForm : Form
             Anchor = AnchorStyles.None,
             Margin = Pad(0, 16),
         };
-        _title.Margin = Pad(0, 8);
+        _title.Margin = Pad(0, 14);
         _step.Margin = Pad(0, 0);
         _hint.Margin = Pad(6, 0);
         _bar.Size = new Size(S(360), S(10));
@@ -116,7 +116,7 @@ internal sealed class SetupForm : Form
     private Label Label(Font font, Color color) => new()
     {
         AutoSize = true,
-        MaximumSize = new Size(S(460), 0),
+        MaximumSize = new Size(S(580), 0),
         Anchor = AnchorStyles.None,
         TextAlign = ContentAlignment.MiddleCenter,
         Font = font,
