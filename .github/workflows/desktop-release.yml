@@ -1,7 +1,7 @@
 # Builds the Fliks ELECTRON DESKTOP client installers for all three desktop OSes:
 #   - Linux   → .deb     (ubuntu-latest)
 #   - macOS   → .dmg      (macos-latest)
-#   - Windows → .exe/nsis (windows-latest)
+#   - Windows → Velopack Setup.exe (windows-latest): electron-builder --dir, then vpk
 #
 # This is the thin Electron client under desktop/ — NOT the SwiftUI menu-bar
 # server host under macos/, which has its own workflow (macos-server-dmg.yml).
@@ -85,8 +85,7 @@ jobs:
             label: exe
             dist_script: dist:win
             artifact_glob: |
-              desktop/release/*.exe
-              desktop/release/latest.yml
+              desktop/release/velopack/*-Setup.exe
 
     steps:
       - uses: actions/checkout@v6
@@ -108,7 +107,8 @@ jobs:
             v="${{ inputs.version }}"
           else
             base=$(node -p "require('./desktop/package.json').version")
-            v="${base}-dev.$(git rev-parse --short HEAD)"
+            # A short sha can start with 0, which SemVer (and so Velopack) rejects.
+            v="${base}-dev.${GITHUB_RUN_NUMBER}"
           fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "Resolved desktop version: $v"
@@ -356,12 +356,50 @@ jobs:
           APPLE_API_ISSUER: ${{ runner.os == 'macOS' && secrets.APPSTORE_API_ISSUER_ID || '' }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* || "$GITHUB_REF" == refs/tags/desktop-v* ]]; then
+          # Windows publishes through Velopack below.
+          if [[ "$RUNNER_OS" != Windows && ( "$GITHUB_REF" == refs/tags/v* || "$GITHUB_REF" == refs/tags/desktop-v* ) ]]; then
             publish=always
           else
             publish=never
           fi
           npm run ${{ matrix.dist_script }} -- --publish "$publish" -c.extraMetadata.version=${{ steps.version.outputs.version }}
+
+      # ── Windows: pack win-unpacked into the Velopack Setup.exe + update feed ──
+      # Default `win` channel; the Windows server uses `win-server` in the same release.
+      - name: Install vpk
+        if: runner.os == 'Windows'
+        run: dotnet tool install -g vpk --version 1.2.161
+
+      # A delta needs the previous full package next to the new one; the first
+      # Velopack release has none, which is not an error.
+      - name: Download previous Velopack release
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/')
+        continue-on-error: true
+        working-directory: desktop
+        run: vpk download github --repoUrl https://github.com/${{ github.repository }} --outputDir release/velopack
+
+      - name: Pack Velopack release
+        if: runner.os == 'Windows'
+        working-directory: desktop
+        run: >
+          vpk pack --packId FliksDesktop --packVersion ${{ steps.version.outputs.version }}
+          --packDir release/win-unpacked --mainExe Fliks.exe --packTitle Fliks --packAuthors Fliks
+          --icon build/icon.ico --splashImage build/splash.png --aumid media.fliks.desktop
+          --noPortable --outputDir release/velopack
+
+      # `gh release upload` only POSTs the assets (editing the release is refused with the
+      # job token); the previous release's packages pulled for the delta stay out.
+      - name: Attach Velopack release
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $files = Get-ChildItem desktop/release/velopack -File |
+            Where-Object { $_.Extension -ne '.nupkg' -or $_.Name -like "*-$env:VERSION-*" } |
+            ForEach-Object FullName
+          gh release upload "${{ github.ref_name }}" @files --clobber
 
       # ── Upload the installers + update metadata as a workflow artifact ──
       # On tag builds electron-builder already attached these to the Release; the

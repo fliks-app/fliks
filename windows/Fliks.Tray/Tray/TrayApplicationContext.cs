@@ -18,6 +18,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _open;
     private readonly ToolStripMenuItem _startAtLogin;
     private readonly ToolStripMenuItem _restart;
+    private readonly ToolStripMenuItem _update;
+    private readonly UpdateService _updates = new();
+    private readonly System.Windows.Forms.Timer _updateTimer = new() { Interval = 30_000 };
 
     public TrayApplicationContext(bool openBrowserWhenReady)
     {
@@ -32,6 +35,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         };
         _restart = new ToolStripMenuItem("Restart Server", null,
             async (_, _) => await _app.RestartAsync());
+        _update = new ToolStripMenuItem("", null, async (_, _) => await UpdateAsync()) { Visible = false };
         var viewLogs = new ToolStripMenuItem("View Logs…", null, (_, _) => _app.OpenLogsFolder());
         var quit = new ToolStripMenuItem("Quit Fliks", null, (_, _) => Quit());
 
@@ -41,6 +45,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _status,
             new ToolStripSeparator(),
             _open,
+            _update,
             _startAtLogin,
             new ToolStripSeparator(),
             _restart,
@@ -63,6 +68,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
         Microsoft.Win32.SystemEvents.SessionEnded += (_, _) => Quit();
         Render(_app.State);
 
+        _updateTimer.Tick += async (_, _) =>
+        {
+            _updateTimer.Interval = (int)TimeSpan.FromHours(6).TotalMilliseconds;
+            await CheckForUpdateAsync();
+        };
+        _updateTimer.Start();
+
         if (_app.IsFirstRun || _app.IsUpdate) new SetupWindow(_app).Show();
         _ = _app.StartAllAsync();
     }
@@ -84,6 +96,37 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _icon.ShowBalloonTip(10000, "Fliks failed to start",
                 state.Message ?? "Unknown error — see the tray-*.log in the logs folder.",
                 ToolTipIcon.Error);
+        }
+    }
+
+    private async Task CheckForUpdateAsync()
+    {
+        if (_update.Visible || !await _updates.CheckAsync()) return;
+        _update.Text = $"Update to {_updates.AvailableVersion}";
+        _update.Visible = true;
+        _icon.ShowBalloonTip(10000, "Fliks Server update",
+            $"Version {_updates.AvailableVersion} is available from the tray menu.", ToolTipIcon.Info);
+    }
+
+    private async Task UpdateAsync()
+    {
+        _update.Enabled = false;
+        try
+        {
+            await _updates.DownloadAsync(p => _ui.Post(_ => _update.Text = $"Downloading update… {p}%", null));
+            _update.Text = "Installing update…";
+            _updateTimer.Stop();
+            await Task.Run(_app.ShutdownAsync);
+            _icon.Visible = false;
+            _updates.ApplyAndRestart();
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"update failed: {ex}");
+            _update.Text = $"Update to {_updates.AvailableVersion}";
+            _update.Enabled = true;
+            _icon.ShowBalloonTip(10000, "Fliks Server update failed", ex.Message, ToolTipIcon.Error);
+            if (_app.State.Phase == ServerPhase.Stopped) _ = _app.StartAllAsync();
         }
     }
 
