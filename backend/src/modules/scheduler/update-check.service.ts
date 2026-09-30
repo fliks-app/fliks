@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import * as fs from 'fs';
-import * as path from 'path';
+import { CURRENT_FLIKS_VERSION } from '../plugins/plugin-version';
 
 // Public repo (no token needed); overridable for forks / test repos.
 const GITHUB_REPO = process.env.FLIKS_GITHUB_REPO ?? 'fliks-app/fliks';
@@ -15,16 +14,7 @@ const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 // Generous ceiling for a cold TLS handshake; the call is async + cached.
 const FETCH_TIMEOUT_MS = 15000;
 
-const CURRENT_VERSION: string = (() => {
-  try {
-    const pkg = JSON.parse(
-      fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8'),
-    ) as { version?: string };
-    return pkg.version ?? '0.0.0';
-  } catch {
-    return '0.0.0';
-  }
-})();
+const CURRENT_VERSION = CURRENT_FLIKS_VERSION;
 
 export interface UpdateStatus {
   currentVersion: string;
