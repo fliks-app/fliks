@@ -156,14 +156,29 @@ internal sealed class SetupForm : Form
                 CreateNoWindow = true,
             })!;
             var current = Path.Combine(_config.InstallDir, "current");
+            long lastSize = -1;
+            var lastGrowth = DateTime.UtcNow;
+            var finishing = false;
             while (!_setup.HasExited)
             {
                 await Task.Delay(500);
-                if (_config.InstalledBytes <= 0 || _cancelled) continue;
+                if (_config.InstalledBytes <= 0 || _cancelled || finishing) continue;
                 // Tens of thousands of files: walking them on the UI thread hangs the window.
                 var size = await Task.Run(() => DirectorySize(current));
-                if (!_cancelled)
-                    _bar.Value = Math.Max(_bar.Value, 0.1f + 0.88f * Math.Min(1f, size / (float)_config.InstalledBytes));
+                if (_cancelled) continue;
+                var ratio = Math.Min(1f, size / (float)_config.InstalledBytes);
+                _bar.Value = Math.Max(_bar.Value, 0.1f + 0.88f * ratio);
+                if (size != lastSize) { lastSize = size; lastGrowth = DateTime.UtcNow; }
+                // Copy done: shortcuts, the app's install hook and the antivirus scan of the new
+                // files follow, with nothing to measure.
+                if (ratio >= 0.97f || (ratio > 0.5f && DateTime.UtcNow - lastGrowth > TimeSpan.FromSeconds(3)))
+                {
+                    finishing = true;
+                    if (_beforeConfirm is null)
+                        SetView($"Installing {_config.Title}", "Finishing the installation…",
+                            "This step can take 1 to 2 minutes.", bar: true);
+                    _bar.Indeterminate = true;
+                }
             }
             _installing = false;
             if (_cancelled) return;
@@ -189,9 +204,11 @@ internal sealed class SetupForm : Form
                 return;
             }
 
-            SetView($"Setting up {_config.Title}", "Starting the server…", "The first launch can take a few minutes.", bar: true);
+            SetView($"Setting up {_config.Title}", "Starting the server…", "This step can take 1 to 2 minutes.", bar: true);
             _bar.Indeterminate = true;
-            if (await WaitForServerAsync(port, TimeSpan.FromMinutes(10)))
+            // .NET Framework's HttpClient does proxy discovery and the connect synchronously on the
+            // calling thread, which froze the window while the server wasn't listening yet.
+            if (await Task.Run(() => WaitForServerAsync(port, TimeSpan.FromMinutes(10))))
             {
                 // The tray opens the browser itself; the button covers it landing behind other windows.
                 SetView($"{_config.Title} is ready", "Your server is set up and running.", "This window closes on its own.", bar: false);
@@ -244,7 +261,7 @@ internal sealed class SetupForm : Form
 
     private static async Task<bool> WaitForServerAsync(int port, TimeSpan timeout)
     {
-        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        using var http = new HttpClient(new HttpClientHandler { UseProxy = false }) { Timeout = TimeSpan.FromSeconds(2) };
         var deadline = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadline)
         {
