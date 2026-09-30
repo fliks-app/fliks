@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- One bootstrapper for both Windows apps: the product is picked at build time, e.g.
+       dotnet build -p:PackId=FliksServer -p:MainExe="Fliks Server.exe" -p:ProductTitle="Fliks Server"
+         -p:ServerPort=4848 -p:InstalledBytes=... -p:PayloadPath=...\FliksServer-win-server-Setup.exe
+         -p:SetupIcon=...\fliks.ico -p:AssemblyName="Fliks Server Setup"
+       .NET Framework 4.8 ships with Windows 10/11, so the exe carries no runtime. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName Condition="'$(AssemblyName)' == ''">Fliks Setup</AssemblyName>
+    <ApplicationIcon Condition="'$(SetupIcon)' != ''">$(SetupIcon)</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="PackId" Value="$(PackId)" />
+    <AssemblyMetadata Include="MainExe" Value="$(MainExe)" />
+    <AssemblyMetadata Include="ProductTitle" Value="$(ProductTitle)" />
+    <AssemblyMetadata Include="InstalledBytes" Value="$(InstalledBytes)" />
+    <AssemblyMetadata Include="ServerPort" Value="$(ServerPort)" />
+    <EmbeddedResource Include="$(PayloadPath)" LogicalName="payload.exe" Condition="'$(PayloadPath)' != ''" />
+    <EmbeddedResource Include="$(SetupIcon)" LogicalName="app.ico" Condition="'$(SetupIcon)' != ''" />
+    <Reference Include="System.Net.Http" />
+    <!-- Builds net48 without a machine-installed targeting pack. -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

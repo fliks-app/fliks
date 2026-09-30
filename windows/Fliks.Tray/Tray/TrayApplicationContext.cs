@@ -75,7 +75,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
         };
         _updateTimer.Start();
 
-        if (_app.IsFirstRun || _app.IsUpdate) new SetupWindow(_app).Show();
         _ = _app.StartAllAsync();
     }
 

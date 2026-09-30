@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-    Package the assembled bundle into a Velopack release (Setup.exe + update feed).
+    Package the assembled bundle into a Velopack release (update feed), then wrap its
+    Setup.exe in the Fliks installer window (build\Setup\Fliks-Server-<version>-Setup.exe).
 
 .PARAMETER Version
     SemVer2 version (release "4.3.0", dev "4.3.0-dev.42"). Velopack rejects anything else.
@@ -49,20 +50,41 @@ $vpkArgs = @(
 )
 
 $pfx = $null
+$signParams = $null
 if ($CertBase64) {
     $pfx = Join-Path ([IO.Path]::GetTempPath()) 'fliks-sign.pfx'
     [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($CertBase64))
-    $vpkArgs += @('--signParams', "/f `"$pfx`" /p `"$CertPassword`" /fd SHA256 /tr http://timestamp.digicert.com /td SHA256")
+    $signParams = "/f `"$pfx`" /p `"$CertPassword`" /fd SHA256 /tr http://timestamp.digicert.com /td SHA256"
+    $vpkArgs += @('--signParams', $signParams)
 }
 
 try {
     Write-Host "==> Packing FliksServer $Version"
     & vpk @vpkArgs
     if ($LASTEXITCODE -ne 0) { throw "vpk pack failed ($LASTEXITCODE)" }
+
+    Write-Host '==> Building the installer'
+    $setupOut = Join-Path $build 'Setup'
+    $installed = (Get-ChildItem $bundle -Recurse -File | Measure-Object Length -Sum).Sum
+    dotnet build (Join-Path $winDir 'Fliks.Setup\Fliks.Setup.csproj') -c Release -o $setupOut `
+        -p:PackId=FliksServer "-p:MainExe=Fliks Server.exe" "-p:ProductTitle=Fliks Server" `
+        -p:ServerPort=4848 -p:InstalledBytes=$installed `
+        "-p:PayloadPath=$(Join-Path $out 'FliksServer-win-server-Setup.exe')" `
+        "-p:SetupIcon=$(Join-Path $winDir 'Fliks.Tray\Resources\fliks.ico')" `
+        "-p:AssemblyName=Fliks-Server-$Version-Setup"
+    if ($LASTEXITCODE -ne 0) { throw "installer build failed ($LASTEXITCODE)" }
+
+    if ($signParams) {
+        $signtool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe' |
+            Select-Object -Last 1
+        & $signtool.FullName sign /f $pfx /p $CertPassword /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 `
+            (Join-Path $setupOut "Fliks-Server-$Version-Setup.exe")
+        if ($LASTEXITCODE -ne 0) { throw "signtool failed ($LASTEXITCODE)" }
+    }
 }
 finally {
     if ($pfx) { Remove-Item -Force $pfx -ErrorAction SilentlyContinue }
 }
 
 Write-Host ''
-Write-Host "==> Release ready: $out"
+Write-Host "==> Installer ready: $(Join-Path $build "Setup\Fliks-Server-$Version-Setup.exe")"

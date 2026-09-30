@@ -18,7 +18,7 @@ mechanisms.
 | PostgreSQL | Homebrew bottle + dylib relocation | EDB binaries zip (self-contained, no relocation) |
 | FFmpeg | Homebrew + dylib relocation | jellyfin-ffmpeg gpl build (QSV + AMF + NVENC + OpenCL, incl. zero-copy D3D11↔OpenCL P010 for HDR tone-map) |
 | Autostart | `SMAppService` | `HKCU\…\Run` registry value |
-| Package | DMG | Velopack per-user Setup.exe, updates from the tray |
+| Package | DMG | Fliks installer window around Velopack's silent Setup.exe; updates from the tray |
 
 ## Prerequisites (build machine)
 
@@ -41,7 +41,8 @@ $env:TMDB_API_KEY = "..."   # optional; baked into the tray
 $env:TVDB_API_KEY = "..."
 .\Scripts\build-app.ps1
 
-# 3. Package the Velopack release → .\build\Releases\FliksServer-win-server-Setup.exe
+# 3. Package the Velopack release (.\build\Releases) and the installer that wraps it
+#    → .\build\Setup\Fliks-Server-1.0.0-Setup.exe
 .\Scripts\make-setup.ps1 -Version 1.0.0
 ```
 

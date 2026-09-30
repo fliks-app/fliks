@@ -134,12 +134,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: FliksServer-${{ steps.version.outputs.version }}-Setup
-          path: windows/build/Releases/*-Setup.exe
+          path: windows/build/Setup/*-Setup.exe
           if-no-files-found: error
 
       # `gh release upload` only POSTs the assets; editing the release itself (as
       # `vpk upload github` or the action we used before do) is refused with the job token.
-      # The previous release's packages pulled for the delta stay out.
+      # The previous release's packages pulled for the delta stay out, and Velopack's bare
+      # Setup.exe is replaced by the installer that wraps it.
       - name: Attach to GitHub Release
         if: env.IS_TAG == 'true'
         shell: pwsh
@@ -148,6 +149,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           $files = Get-ChildItem windows/build/Releases -File |
-            Where-Object { $_.Extension -ne '.nupkg' -or $_.Name -like "*-$env:VERSION-*" } |
+            Where-Object { ($_.Extension -ne '.nupkg' -or $_.Name -like "*-$env:VERSION-*") -and $_.Name -notlike '*-Setup.exe' } |
             ForEach-Object FullName
+          $files += "windows/build/Setup/Fliks-Server-$env:VERSION-Setup.exe"
           gh release upload "${{ github.ref_name }}" @files --clobber

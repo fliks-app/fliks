@@ -85,7 +85,7 @@ jobs:
             label: exe
             dist_script: dist:win
             artifact_glob: |
-              desktop/release/velopack/*-Setup.exe
+              desktop/release/setup/*-Setup.exe
 
     steps:
       - uses: actions/checkout@v6
@@ -387,8 +387,25 @@ jobs:
           --icon build/icon.ico --splashImage build/splash.png --aumid media.fliks.desktop
           --noPortable --outputDir release/velopack
 
+      # The Fliks installer window around Velopack's silent Setup.exe (windows/Fliks.Setup).
+      - name: Build installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $installed = (Get-ChildItem desktop/release/win-unpacked -Recurse -File | Measure-Object Length -Sum).Sum
+          dotnet build windows/Fliks.Setup/Fliks.Setup.csproj -c Release -o desktop/release/setup `
+            -p:PackId=FliksDesktop -p:MainExe=Fliks.exe -p:ProductTitle=Fliks `
+            -p:InstalledBytes=$installed `
+            "-p:PayloadPath=$PWD/desktop/release/velopack/FliksDesktop-win-Setup.exe" `
+            "-p:SetupIcon=$PWD/desktop/build/icon.ico" `
+            "-p:AssemblyName=Fliks-Client-$env:VERSION-Setup"
+          if ($LASTEXITCODE -ne 0) { throw "installer build failed ($LASTEXITCODE)" }
+
       # `gh release upload` only POSTs the assets (editing the release is refused with the
-      # job token); the previous release's packages pulled for the delta stay out.
+      # job token); the previous release's packages pulled for the delta stay out, and
+      # Velopack's bare Setup.exe is replaced by the installer that wraps it.
       - name: Attach Velopack release
         if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/')
         shell: pwsh
@@ -397,8 +414,9 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           $files = Get-ChildItem desktop/release/velopack -File |
-            Where-Object { $_.Extension -ne '.nupkg' -or $_.Name -like "*-$env:VERSION-*" } |
+            Where-Object { ($_.Extension -ne '.nupkg' -or $_.Name -like "*-$env:VERSION-*") -and $_.Name -notlike '*-Setup.exe' } |
             ForEach-Object FullName
+          $files += "desktop/release/setup/Fliks-Client-$env:VERSION-Setup.exe"
           gh release upload "${{ github.ref_name }}" @files --clobber
 
       # ── Upload the installers + update metadata as a workflow artifact ──
