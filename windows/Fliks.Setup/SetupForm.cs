@@ -25,7 +25,7 @@ internal sealed class SetupForm : Form
     private readonly RoundButton _primary = new(ButtonKind.Primary) { Anchor = AnchorStyles.None, Visible = false };
     private readonly RoundButton _secondary = new(ButtonKind.Secondary) { Anchor = AnchorStyles.None, Visible = false };
     private readonly CloseButton _close = new();
-    private readonly Timer _autoClose = new() { Interval = 5000 };
+    private readonly Timer _autoClose = new() { Interval = 1500 };
     private readonly float _scale;
 
     private Process? _setup;
@@ -33,7 +33,13 @@ internal sealed class SetupForm : Form
     private bool _cancelled;
     private Action? _primaryAction;
     private Action? _secondaryAction;
-    private (string title, string step, string hint, bool bar)? _beforeConfirm;
+    // The install keeps moving while the quit prompt is up: stages are recorded and shown on "No".
+    private Stage _stage = new("", "", "", Bar: false);
+    private bool _confirming;
+
+    private sealed record Stage(string Title, string Step, string Hint, bool Bar, bool Indeterminate = false,
+        bool Danger = false, string? Primary = null, Action? OnPrimary = null,
+        string? Secondary = null, Action? OnSecondary = null);
 
     public SetupForm(SetupConfig config)
     {
@@ -145,11 +151,11 @@ internal sealed class SetupForm : Form
         try
         {
             _installing = true;
-            SetView($"Installing {_config.Title}", "Preparing…", "", bar: true);
+            Enter(new Stage($"Installing {_config.Title}", "Preparing…", "", Bar: true));
             var setupExe = await Task.Run(() => ExtractPayload(p => BeginInvoke(new Action(() => _bar.Value = p * 0.1f))));
             if (_cancelled) return;
 
-            _step.Text = "Installing…";
+            Enter(new Stage($"Installing {_config.Title}", "Installing…", "", Bar: true));
             _setup = Process.Start(new ProcessStartInfo(setupExe, $"--silent --log \"{log}\"")
             {
                 UseShellExecute = false,
@@ -174,14 +180,14 @@ internal sealed class SetupForm : Form
                 if (ratio >= 0.97f || (ratio > 0.5f && DateTime.UtcNow - lastGrowth > TimeSpan.FromSeconds(3)))
                 {
                     finishing = true;
-                    if (_beforeConfirm is null)
-                        SetView($"Installing {_config.Title}", "Finishing the installation…",
-                            "This step can take 1 to 2 minutes.", bar: true);
-                    _bar.Indeterminate = true;
+                    Enter(new Stage($"Installing {_config.Title}", "Finishing the installation…",
+                        "This step can take 1 to 2 minutes.", Bar: true, Indeterminate: true));
                 }
             }
             _installing = false;
             if (_cancelled) return;
+            // Nothing left to cancel: drop an open quit prompt.
+            _confirming = false;
             if (_setup.ExitCode != 0)
             {
                 Fail("The installation did not complete.", log);
@@ -198,32 +204,30 @@ internal sealed class SetupForm : Form
 
             if (_config.ServerPort is not int port)
             {
-                SetView($"{_config.Title} is installed", "Starting…", "", bar: false);
-                _autoClose.Interval = 1500;
+                Enter(new Stage($"{_config.Title} is installed", "Starting…", "", Bar: false));
                 _autoClose.Start();
                 return;
             }
 
-            SetView($"Setting up {_config.Title}", "Starting the server…", "This step can take 1 to 2 minutes.", bar: true);
-            _bar.Indeterminate = true;
+            Enter(new Stage($"Setting up {_config.Title}", "Starting the server…",
+                "This step can take 1 to 2 minutes.", Bar: true, Indeterminate: true));
             // .NET Framework's HttpClient does proxy discovery and the connect synchronously on the
             // calling thread, which froze the window while the server wasn't listening yet.
             if (await Task.Run(() => WaitForServerAsync(port, TimeSpan.FromMinutes(10))))
             {
-                // The tray opens the browser itself; the button covers it landing behind other windows.
-                SetView($"{_config.Title} is ready", "Your server is set up and running.", "This window closes on its own.", bar: false);
-                Buttons("Open Fliks", () => { OpenUrl($"http://localhost:{port}"); Close(); });
-                _autoClose.Start();
+                // The tray opens the browser once the server answers.
+                Close();
             }
             else
             {
-                SetView($"{_config.Title} is installed", "The server is still starting. Its status is in the tray.", "", bar: false);
-                Buttons("Close", Close);
+                Enter(new Stage($"{_config.Title} is installed", "The server is still starting. Its status is in the tray.",
+                    "", Bar: false, Primary: "Close", OnPrimary: Close));
             }
         }
         catch (Exception ex)
         {
             _installing = false;
+            _confirming = false;
             if (!_cancelled) Fail(ex.Message, log);
         }
     }
@@ -292,8 +296,8 @@ internal sealed class SetupForm : Form
 
     private void ConfirmCancel()
     {
-        if (_beforeConfirm is not null) return;
-        _beforeConfirm = (_title.Text, _step.Text, _hint.Text, _bar.Visible);
+        if (_confirming) return;
+        _confirming = true;
         SetView("Do you really want to quit?", $"{_config.Title} will not be installed.", "", bar: false);
         Buttons("Yes", async () => await CancelInstallAsync(), "No", ResumeInstall, danger: true);
         _secondary.Focus();
@@ -301,16 +305,21 @@ internal sealed class SetupForm : Form
 
     private void ResumeInstall()
     {
-        if (_beforeConfirm is not { } state) return;
-        _beforeConfirm = null;
-        SetView(state.title, state.step, state.hint, state.bar);
+        _confirming = false;
+        Render(_stage);
     }
 
     private async Task CancelInstallAsync()
     {
+        _confirming = false;
+        if (!_installing)
+        {
+            // It finished while the prompt was up; keep it.
+            Render(_stage);
+            return;
+        }
         _cancelled = true;
-        SetView("Cancelling…", "Removing the installed files.", "", bar: true);
-        _bar.Indeterminate = true;
+        Render(new Stage("Cancelling…", "Removing the installed files.", "", Bar: true, Indeterminate: true));
         await Task.Run(() =>
         {
             try { if (_setup is { HasExited: false }) { _setup.Kill(); _setup.WaitForExit(10_000); } }
@@ -346,10 +355,22 @@ internal sealed class SetupForm : Form
         }
     }
 
-    private void Fail(string message, string log)
+    private void Fail(string message, string log) =>
+        Enter(new Stage($"{_config.Title} could not be installed", message, "", Bar: false, Danger: true,
+            Primary: "Open Log", OnPrimary: () => { if (File.Exists(log)) OpenUrl(log); },
+            Secondary: "Close", OnSecondary: Close));
+
+    private void Enter(Stage stage)
     {
-        SetView($"{_config.Title} could not be installed", message, "", bar: false, danger: true);
-        Buttons("Open Log", () => { if (File.Exists(log)) OpenUrl(log); }, "Close", Close);
+        _stage = stage;
+        if (!_confirming) Render(stage);
+    }
+
+    private void Render(Stage stage)
+    {
+        SetView(stage.Title, stage.Step, stage.Hint, stage.Bar, stage.Danger);
+        _bar.Indeterminate = stage.Indeterminate;
+        if (stage.Primary is not null) Buttons(stage.Primary, stage.OnPrimary!, stage.Secondary, stage.OnSecondary);
     }
 
     private void SetView(string title, string step, string hint, bool bar, bool danger = false)
