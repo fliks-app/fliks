@@ -28,7 +28,7 @@
 #   - ANDROID_UPLOAD_KEY_PASSWORD
 #   - PLAY_STORE_SERVICE_ACCOUNT_JSON
 #   - AMAZON_APPSTORE_CLIENT_ID, AMAZON_APPSTORE_CLIENT_SECRET, AMAZON_APPSTORE_APP_ID
-name: Publish Android to Play Store
+name: Publish Android to Stores
 
 on:
   push:
