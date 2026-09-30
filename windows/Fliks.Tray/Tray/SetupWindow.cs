@@ -20,7 +20,7 @@ internal sealed class SetupWindow : Form
     private readonly Label _title = CenteredLabel(new Font("Segoe UI Semibold", 15f), Foreground);
     private readonly Label _step = CenteredLabel(new Font("Segoe UI", 10f), Muted);
     private readonly Label _hint = CenteredLabel(new Font("Segoe UI", 9f), Muted);
-    private readonly SweepBar _bar = new() { Height = 4, Width = 280, Anchor = AnchorStyles.None };
+    private readonly SweepBar _bar = new() { Anchor = AnchorStyles.None };
     private readonly AccentButton _action = new() { Anchor = AnchorStyles.None, Visible = false };
     // The browser opens on its own; the ready screen stays a moment for the Open Fliks fallback.
     private readonly System.Windows.Forms.Timer _autoClose = new() { Interval = 5000 };
@@ -30,43 +30,52 @@ internal sealed class SetupWindow : Form
         _app = app;
         Text = "Fliks Server";
         Icon = TrayApplicationContext.LoadIcon(SystemInformation.IconSize);
-        AutoScaleDimensions = new SizeF(96f, 96f);
-        AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(460, 340);
+        // Point-sized fonts already follow the DPI; pixel sizes are scaled by hand, and the
+        // window sizes itself to its content so a larger font can never clip it.
+        AutoScaleMode = AutoScaleMode.None;
+        AutoSize = true;
+        AutoSizeMode = AutoSizeMode.GrowAndShrink;
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Background;
 
-        var logoSize = LogicalToDeviceUnits(80);
+        var scale = DeviceDpi / 96f;
+        int S(int px) => (int)Math.Round(px * scale);
+        Padding Pad(int top, int bottom) => new(0, S(top), 0, S(bottom));
+
         var logo = new PictureBox
         {
             Image = TrayApplicationContext.LoadIcon(new Size(256, 256)).ToBitmap(),
             SizeMode = PictureBoxSizeMode.Zoom,
-            Size = new Size(logoSize, logoSize),
+            Size = new Size(S(80), S(80)),
             Anchor = AnchorStyles.None,
-            Margin = new Padding(0, 0, 0, 16),
+            Margin = Pad(0, 16),
         };
-        _title.Margin = new Padding(0, 0, 0, 6);
-        _hint.Margin = new Padding(0, 4, 0, 0);
-        _bar.Margin = new Padding(0, 22, 0, 0);
-        _action.Margin = new Padding(0, 18, 0, 0);
+        foreach (var label in new[] { _title, _step, _hint }) label.MaximumSize = new Size(S(396), 0);
+        _title.Margin = Pad(0, 6);
+        _step.Margin = Pad(0, 0);
+        _hint.Margin = Pad(4, 0);
+        _bar.Size = new Size(S(280), S(4));
+        _bar.Margin = Pad(22, 0);
+        _action.Size = new Size(S(180), S(40));
+        _action.Margin = Pad(18, 0);
 
         var layout = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             ColumnCount = 1,
-            Padding = new Padding(32, 28, 32, 28),
+            Padding = new Padding(S(32), S(28), S(32), S(28)),
+            MinimumSize = new Size(S(460), 0),
+            Margin = Padding.Empty,
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-        // Spacer rows above and below keep the content vertically centred.
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
         foreach (var c in new Control[] { logo, _title, _step, _hint, _bar, _action })
         {
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layout.Controls.Add(c, 0, layout.RowStyles.Count - 1);
         }
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
         layout.RowCount = layout.RowStyles.Count;
         Controls.Add(layout);
 
@@ -146,7 +155,6 @@ internal sealed class SetupWindow : Form
     private static Label CenteredLabel(Font font, Color color) => new()
     {
         AutoSize = true,
-        MaximumSize = new Size(396, 0),
         Anchor = AnchorStyles.None,
         TextAlign = ContentAlignment.MiddleCenter,
         Font = font,
@@ -222,7 +230,6 @@ internal sealed class SetupWindow : Form
             Font = new Font("Segoe UI Semibold", 10f);
             ForeColor = Color.White;
             Cursor = Cursors.Hand;
-            Size = new Size(180, 40);
         }
 
         protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
