@@ -43,6 +43,7 @@ $vpkArgs = @(
     '--icon', (Join-Path $winDir 'Fliks.Tray\Resources\fliks.ico'),
     '--splashImage', (Join-Path $winDir 'Installer\splash.png'),
     '--channel', 'win-server',
+    '--runtime', 'win-x64',
     '--noPortable',
     '--outputDir', $out
 )

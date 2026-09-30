@@ -383,7 +383,7 @@ jobs:
         working-directory: desktop
         run: >
           vpk pack --packId FliksDesktop --packVersion ${{ steps.version.outputs.version }}
-          --packDir release/win-unpacked --mainExe Fliks.exe --packTitle Fliks --packAuthors Fliks
+          --packDir release/win-unpacked --runtime win-x64 --mainExe Fliks.exe --packTitle Fliks --packAuthors Fliks
           --icon build/icon.ico --splashImage build/splash.png --aumid media.fliks.desktop
           --noPortable --outputDir release/velopack
 
