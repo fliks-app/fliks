@@ -117,10 +117,10 @@ Use `--skip-web` to skip rebuilding client/backend if unchanged:
 
 | Path | Contents |
 |------|----------|
-| `~/Library/Application Support/Fliks/postgresql/` | Database cluster |
-| `~/Library/Application Support/Fliks/conf/` | JWT secret (auto-generated) |
-| `~/Library/Application Support/Fliks/data/images/` | Cached posters & fanart |
-| `~/Library/Application Support/Fliks/logs/` | PostgreSQL logs |
+| `~/Library/Application Support/Fliks Server/postgresql/` | Database cluster |
+| `~/Library/Application Support/Fliks Server/conf/` | JWT secret (auto-generated) |
+| `~/Library/Application Support/Fliks Server/data/images/` | Cached posters & fanart |
+| `~/Library/Application Support/Fliks Server/logs/` | PostgreSQL logs |
 | `/tmp/transcode/` | HLS transcode cache (ephemeral) |
 
 ## Clean reset
@@ -128,7 +128,7 @@ Use `--skip-web` to skip rebuilding client/backend if unchanged:
 To wipe all data and start fresh:
 
 ```bash
-rm -rf ~/Library/Application\ Support/Fliks
+rm -rf ~/Library/Application\ Support/Fliks\ Server
 ```
 
 ## Project structure

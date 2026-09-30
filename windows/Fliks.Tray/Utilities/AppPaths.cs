@@ -9,10 +9,9 @@ internal static class AppPaths
 {
     private static readonly string BaseDir = AppContext.BaseDirectory;
 
-    // %LOCALAPPDATA%\Fliks
-    public static readonly string AppData = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Fliks");
+    // %LOCALAPPDATA%\Fliks Server; an install made before the rename keeps its cluster in %LOCALAPPDATA%\Fliks.
+    public static readonly string AppData = ResolveAppData(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
 
     public static readonly string PgDataDir = Path.Combine(AppData, "postgresql", "data");
     public static readonly string PgLogFile = Path.Combine(AppData, "postgresql", "pg.log");
@@ -62,6 +61,14 @@ internal static class AppPaths
         {
             Directory.CreateDirectory(dir);
         }
+    }
+
+    private static string ResolveAppData(string root)
+    {
+        var previous = Path.Combine(root, "Fliks");
+        return Directory.Exists(Path.Combine(previous, "postgresql"))
+            ? previous
+            : Path.Combine(root, "Fliks Server");
     }
 
     private static string? FindRepoRoot()
