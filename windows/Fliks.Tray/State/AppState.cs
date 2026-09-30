@@ -29,9 +29,15 @@ internal sealed class AppState
     /// tray marshals it onto the UI thread.</summary>
     public event Action<ServerState>? StateChanged;
 
+    /// <summary>No cluster yet: initdb, every migration and Defender's first scan
+    /// of the bundle make this launch take minutes.</summary>
+    public bool IsFirstRun { get; }
+    private bool _openWhenReady;
+
     public AppState()
     {
         _postgres = new PostgresManager(Config.PgPort);
+        IsFirstRun = _openWhenReady = !_postgres.IsInitialized;
         _node.OnCrash = HandleNodeCrash;
     }
 
@@ -68,10 +74,10 @@ internal sealed class AppState
             Log.Info("running");
             StartHealthChecks();
 
-            if (!Config.HasCompletedFirstLaunch)
+            if (_openWhenReady)
             {
+                _openWhenReady = false;
                 OpenInBrowser();
-                Config.HasCompletedFirstLaunch = true;
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -106,10 +112,17 @@ internal sealed class AppState
 
     public void OpenInBrowser()
     {
-        Process.Start(new ProcessStartInfo($"http://localhost:{Config.Port}")
+        try
         {
-            UseShellExecute = true,
-        });
+            Process.Start(new ProcessStartInfo($"http://localhost:{Config.Port}")
+            {
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"open browser failed: {ex.Message}");
+        }
     }
 
     public void OpenLogsFolder()

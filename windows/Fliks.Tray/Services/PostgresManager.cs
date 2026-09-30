@@ -31,10 +31,12 @@ internal sealed class PostgresManager(ushort port = 5433)
         ["LC_ALL"] = "C",
     };
 
+    public bool IsInitialized => File.Exists(Path.Combine(_dataDir, "PG_VERSION"));
+
     /// <summary>Run initdb on first launch (no PG_VERSION file yet).</summary>
     public async Task InitializeAsync()
     {
-        if (File.Exists(Path.Combine(_dataDir, "PG_VERSION"))) return;
+        if (IsInitialized) return;
 
         Directory.CreateDirectory(_dataDir);
         var result = await ProcessRunner.RunAsync(

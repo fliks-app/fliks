@@ -50,7 +50,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         _icon = new NotifyIcon
         {
-            Icon = LoadIcon(),
+            Icon = LoadIcon(SystemInformation.SmallIconSize),
             Text = "Fliks",
             Visible = true,
             ContextMenuStrip = menu,
@@ -62,6 +62,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         Microsoft.Win32.SystemEvents.SessionEnded += (_, _) => Quit();
         Render(_app.State);
 
+        if (_app.IsFirstRun) new SetupWindow(_app).Show();
         _ = _app.StartAllAsync();
     }
 
@@ -101,7 +102,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         ExitThread();
     }
 
-    private static Icon LoadIcon()
+    internal static Icon LoadIcon(Size size)
     {
         try
         {
@@ -112,7 +113,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             if (name is not null)
             {
                 using var stream = asm.GetManifestResourceStream(name);
-                if (stream is not null) return new Icon(stream, SystemInformation.SmallIconSize);
+                if (stream is not null) return new Icon(stream, size);
             }
             // Fallback: the exe's own embedded ApplicationIcon.
             if (Environment.ProcessPath is { } exe)
