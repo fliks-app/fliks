@@ -34,10 +34,11 @@ internal sealed class AppState
     public bool IsFirstRun { get; }
     private bool _openWhenReady;
 
-    public AppState()
+    public AppState(bool openBrowserWhenReady)
     {
         _postgres = new PostgresManager(Config.PgPort);
-        IsFirstRun = _openWhenReady = !_postgres.IsInitialized;
+        IsFirstRun = !_postgres.IsInitialized;
+        _openWhenReady = openBrowserWhenReady;
         _node.OnCrash = HandleNodeCrash;
     }
 
@@ -110,11 +111,13 @@ internal sealed class AppState
         await StartAllAsync();
     }
 
-    public void OpenInBrowser()
+    public void OpenInBrowser() => OpenInBrowser(Config.Port);
+
+    public static void OpenInBrowser(ushort port)
     {
         try
         {
-            Process.Start(new ProcessStartInfo($"http://localhost:{Config.Port}")
+            Process.Start(new ProcessStartInfo($"http://localhost:{port}")
             {
                 UseShellExecute = true,
             });

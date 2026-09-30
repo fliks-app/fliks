@@ -78,7 +78,7 @@ Section "Install"
     ; Repoint an existing Start at Login entry at the renamed exe.
     ReadRegStr $0 HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${REGNAME}"
     StrCmp $0 "" +2
-    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${REGNAME}" '"$INSTDIR\${EXE}"'
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${REGNAME}" '"$INSTDIR\${EXE}" --autostart'
 
     WriteUninstaller "$INSTDIR\Uninstall.exe"
 SectionEnd

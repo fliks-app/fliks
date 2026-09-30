@@ -10,7 +10,7 @@ namespace Fliks.Tray.Tray;
 /// background thread and are marshalled onto the UI thread.</summary>
 internal sealed class TrayApplicationContext : ApplicationContext
 {
-    private readonly AppState _app = new();
+    private readonly AppState _app;
     private readonly NotifyIcon _icon;
     private readonly SynchronizationContext _ui;
 
@@ -19,8 +19,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _startAtLogin;
     private readonly ToolStripMenuItem _restart;
 
-    public TrayApplicationContext()
+    public TrayApplicationContext(bool openBrowserWhenReady)
     {
+        _app = new AppState(openBrowserWhenReady);
         _ui = SynchronizationContext.Current ?? new SynchronizationContext();
 
         _status = new ToolStripMenuItem { Enabled = false };
