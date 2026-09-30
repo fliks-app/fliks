@@ -1,11 +1,12 @@
 # Builds a self-contained Fliks Windows server (tray app + embedded
 # PostgreSQL + Node + tri-vendor FFmpeg).
 #
-# PR / workflow_dispatch → builds and uploads the runnable bundle (fast: the
-#   vendored binaries and the client/backend build are cached, and the NSIS
-#   installer is skipped — the bundle is what you run to test).
-# Release tag `v*`       → also packages the NSIS installer and attaches it to
-#   the release.
+# Packaged with Velopack (per-user Setup.exe + update feed on the `win-server`
+# channel; the desktop client owns `win` in the same release).
+# PR / workflow_dispatch → builds the Setup.exe as a workflow artifact (fast: the
+#   vendored binaries and the client/backend build are cached).
+# Release tag `v*`       → also pulls the previous release for a delta package
+#   and uploads the release files, which the tray's updater reads.
 #
 # Sibling of macos-dmg.yml (SwiftUI server host). Keep the two in sync.
 name: Build Windows server
@@ -33,6 +34,11 @@ jobs:
     env:
       IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
     steps:
+      # Real-time scanning of every file written (npm ci, the bundle copy, vpk's zip) is a
+      # large share of the Windows build time; the runner is throwaway.
+      - name: Disable Defender real-time scanning
+        run: Set-MpPreference -DisableRealtimeMonitoring $true
+
       - uses: actions/checkout@v6
 
       - name: Resolve version
@@ -42,7 +48,9 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
           else
-            echo "version=dev-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+            # Velopack only takes SemVer2.
+            base=$(node -p "require('./backend/package.json').version")
+            echo "version=${base}-dev.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
           fi
 
       - uses: actions/setup-node@v6
@@ -79,9 +87,8 @@ jobs:
             backend/node_modules
           key: win-web-${{ hashFiles('client/package-lock.json', 'client/src/**', 'client/angular.json', 'client/tsconfig*.json', 'backend/package-lock.json', 'backend/src/**', 'backend/tsconfig*.json', 'backend/nest-cli.json') }}
 
-      - name: Install NSIS
-        if: env.IS_TAG == 'true'
-        run: choco install nsis --no-progress -y
+      - name: Install vpk
+        run: dotnet tool install -g vpk --version 1.2.161
 
       - name: Fetch vendored binaries
         working-directory: windows
@@ -109,42 +116,47 @@ jobs:
           TVDB_API_KEY: ${{ secrets.TVDB_API_KEY }}
         run: .\Scripts\build-app.ps1 -SkipWeb -Version "${{ steps.version.outputs.version }}"
 
-      - name: Upload bundle artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Fliks-Server-${{ steps.version.outputs.version }}-win-x64-bundle
-          path: windows/build/Bundle
-          if-no-files-found: error
-
-      # NSIS packaging only on release tags — PR/dispatch builds stop at the
-      # bundle above.
-      - name: Make installer
+      # A delta needs the previous full package next to the new one. The first Velopack
+      # release has none, which is not an error.
+      - name: Download previous release
         if: env.IS_TAG == 'true'
+        continue-on-error: true
+        working-directory: windows
+        run: vpk download github --repoUrl https://github.com/${{ github.repository }} --channel win-server --outputDir build\Releases
+
+      - name: Make setup
         working-directory: windows
         env:
           CERT_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
           CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
         run: >
-          .\Scripts\make-installer.ps1
+          .\Scripts\make-setup.ps1
           -Version "${{ steps.version.outputs.version }}"
           -CertBase64 "$env:CERT_BASE64"
           -CertPassword "$env:CERT_PASSWORD"
 
-      - name: Upload installer artifact
-        if: env.IS_TAG == 'true'
+      - name: Upload setup artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Fliks-Server-${{ steps.version.outputs.version }}-win-x64
-          path: windows/build/Fliks-Server-*-x64.exe
+          name: FliksServer-${{ steps.version.outputs.version }}-Setup
+          path: windows/build/Setup/*-Setup.exe
           if-no-files-found: error
+          # Already compressed: zipping it again only costs time.
+          compression-level: 0
 
+      # `gh release upload` only POSTs the assets; editing the release itself (as
+      # `vpk upload github` or the action we used before do) is refused with the job token.
+      # The previous release's packages pulled for the delta stay out, and Velopack's bare
+      # Setup.exe is replaced by the installer that wraps it.
       - name: Attach to GitHub Release
         if: env.IS_TAG == 'true'
-        # `gh release upload` only POSTs the asset. The action we used before
-        # PATCHes the release first to sync its fields, and that call is
-        # refused ("Resource not accessible by integration") even with
-        # contents: write — attaching a file never needed it.
+        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ github.ref_name }}" windows/build/Fliks-Server-*-x64.exe --clobber
-        working-directory: ${{ github.workspace }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $files = Get-ChildItem windows/build/Releases -File |
+            Where-Object { ($_.Extension -ne '.nupkg' -or $_.Name -like "*-$env:VERSION-*") -and $_.Name -notlike '*-Setup.exe' } |
+            ForEach-Object FullName
+          $files += "windows/build/Setup/Fliks-Server-$env:VERSION-Setup.exe"
+          gh release upload "${{ github.ref_name }}" @files --clobber

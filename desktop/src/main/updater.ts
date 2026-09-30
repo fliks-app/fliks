@@ -64,11 +64,64 @@ function packageType(): string {
   }
 }
 
+type Updater = { check: () => Promise<unknown>; install: () => Promise<unknown> };
+
+/** Windows installs come from Velopack; null when this build wasn't installed by it
+ *  (win-unpacked run), which the UpdateManager constructor reports by throwing. */
+function velopackUpdater(broadcast: (s: DesktopUpdateStatus) => void): Updater | null {
+  if (process.platform !== 'win32' || !app.isPackaged) return null;
+  const velopack = require('velopack') as typeof import('velopack');
+  let manager: InstanceType<typeof velopack.UpdateManager>;
+  try {
+    manager = new velopack.UpdateManager(new velopack.GithubSource(`https://github.com/${GITHUB_REPO}`));
+  } catch {
+    return null;
+  }
+
+  let available: import('velopack').UpdateInfo | null = null;
+  const fail = (e: unknown): void =>
+    broadcast({ state: 'error', message: (e as Error)?.message ?? String(e) });
+  const toInfo = (u: import('velopack').UpdateInfo): DesktopUpdateInfo => ({
+    version: u.TargetFullRelease.Version,
+    releaseName: null,
+    releaseNotes: u.TargetFullRelease.NotesMarkdown || null,
+    releaseDate: null,
+    releaseUrl: `${RELEASES_URL}/tag/v${u.TargetFullRelease.Version}`,
+  });
+
+  const check = async (): Promise<void> => {
+    broadcast({ state: 'checking' });
+    try {
+      available = await manager.checkForUpdatesAsync();
+      broadcast(available ? { state: 'available', info: toInfo(available) } : { state: 'not-available' });
+    } catch (e) {
+      fail(e);
+    }
+  };
+  const install = async (): Promise<void> => {
+    try {
+      if (!available) await check();
+      if (!available) return;
+      await manager.downloadUpdateAsync(available, (percent) =>
+        broadcast({ state: 'downloading', percent: Math.round(percent) }),
+      );
+      broadcast({ state: 'downloaded', info: toInfo(available) });
+      // Velopack swaps the files once this process has exited, then relaunches.
+      manager.waitExitThenApplyUpdate(available, false, true);
+      app.quit();
+    } catch (e) {
+      fail(e);
+    }
+  };
+  return { check, install };
+}
+
 /** An AppImage self-replaces; a distro package is reinstalled through the
  *  package manager under pkexec. electron-updater keys its Linux updater on
  *  the marker above, and only these three have one. */
 function canSelfInstall(): boolean {
   if (!app.isPackaged) return false;
+  if (process.platform === 'win32') return velopack !== null;
   if (process.platform !== 'linux') return true;
   return !!process.env.APPIMAGE || ['deb', 'rpm', 'pacman'].includes(packageType());
 }
@@ -94,17 +147,20 @@ function normalizeNotes(notes: unknown): string | null {
   return null;
 }
 
-/** Wires the in-app updater: renderer-invokable channels + status broadcasts.
- *  Installable builds use electron-updater (autoDownload off); dev runs do a
- *  GitHub release lookup to surface availability + a download link. */
-export function setupUpdater(): void {
-  const installable = canSelfInstall();
+let velopack: Updater | null = null;
 
+/** Wires the in-app updater: renderer-invokable channels + status broadcasts.
+ *  Windows installs use Velopack, other installable builds electron-updater
+ *  (autoDownload off); dev runs do a GitHub release lookup to surface
+ *  availability + a download link. */
+export function setupUpdater(): void {
   const broadcast = (status: DesktopUpdateStatus): void => {
     for (const win of BrowserWindow.getAllWindows()) {
       if (!win.isDestroyed()) win.webContents.send(UPDATE_IPC.status, status);
     }
   };
+  velopack = velopackUpdater(broadcast);
+  const installable = canSelfInstall();
 
   ipcMain.handle(UPDATE_IPC.getCapability, () => capability());
   ipcMain.handle(UPDATE_IPC.openReleases, () => shell.openExternal(RELEASES_URL));
@@ -117,7 +173,10 @@ export function setupUpdater(): void {
     return;
   }
 
-  if (installable) {
+  if (velopack) {
+    ipcMain.handle(UPDATE_IPC.check, velopack.check);
+    ipcMain.handle(UPDATE_IPC.install, velopack.install);
+  } else if (installable) {
     autoUpdater.logger = fileUpdaterLogger();
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
@@ -165,7 +224,11 @@ export function setupUpdater(): void {
 
   // Kick an initial check shortly after launch, then on a long interval.
   const check = (): void => {
-    const fn = installable ? () => autoUpdater.checkForUpdates() : () => githubFallbackCheck(broadcast);
+    const fn = velopack
+      ? velopack.check
+      : installable
+        ? () => autoUpdater.checkForUpdates()
+        : () => githubFallbackCheck(broadcast);
     Promise.resolve(fn()).catch((e) =>
       console.warn('[updater] check failed', (e as Error)?.message ?? e),
     );

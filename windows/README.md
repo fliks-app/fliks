@@ -18,14 +18,14 @@ mechanisms.
 | PostgreSQL | Homebrew bottle + dylib relocation | EDB binaries zip (self-contained, no relocation) |
 | FFmpeg | Homebrew + dylib relocation | jellyfin-ffmpeg gpl build (QSV + AMF + NVENC + OpenCL, incl. zero-copy D3D11↔OpenCL P010 for HDR tone-map) |
 | Autostart | `SMAppService` | `HKCU\…\Run` registry value |
-| Package | DMG | NSIS per-user installer |
+| Package | DMG | Fliks installer window around Velopack's silent Setup.exe; updates from the tray |
 
 ## Prerequisites (build machine)
 
 - **Windows 10/11 x64**
 - **.NET 8 SDK**
 - **Node.js** (for building client + backend)
-- **NSIS** (`choco install nsis`) — for the installer
+- **vpk** (`dotnet tool install -g vpk`) — for the Setup.exe
 - **Windows SDK** (`signtool`) — only for signing
 
 ## Build & run
@@ -41,8 +41,9 @@ $env:TMDB_API_KEY = "..."   # optional; baked into the tray
 $env:TVDB_API_KEY = "..."
 .\Scripts\build-app.ps1
 
-# 3. Package the installer → .\build\Fliks-Server-<version>-x64.exe
-.\Scripts\make-installer.ps1 -Version 1.0.0
+# 3. Package the Velopack release (.\build\Releases) and the installer that wraps it
+#    → .\build\Setup\Fliks-Server-1.0.0-Setup.exe
+.\Scripts\make-setup.ps1 -Version 1.0.0
 ```
 
 For a dev run without packaging, `dotnet run --project Fliks.Tray` uses the
@@ -78,8 +79,9 @@ vendored binaries and the repo's `backend/dist` + `client/dist` directly.
 | `%LOCALAPPDATA%\Fliks Server\logs\` | Backend + PostgreSQL logs |
 | `%LOCALAPPDATA%\Fliks Server\transcode\` | HLS transcode cache (ephemeral) |
 
-The installer places the app under `%LOCALAPPDATA%\Programs\Fliks Server` (per-user,
-no admin). Uninstalling leaves `%LOCALAPPDATA%\Fliks Server` data intact.
+Setup installs the app under `%LOCALAPPDATA%\FliksServer` (per-user, no admin);
+the tray offers new releases and applies them after stopping PostgreSQL and node.
+Uninstalling removes that folder only and leaves `%LOCALAPPDATA%\Fliks Server` data intact.
 
 ## Clean reset
 
@@ -90,9 +92,10 @@ Remove-Item -Recurse -Force "$env:LOCALAPPDATA\Fliks Server"
 ## CI
 
 [`.github/workflows/windows-installer.yml`](../.github/workflows/windows-installer.yml)
-builds on `windows-latest` on `v*` tags (and manual dispatch). Provide
-`WINDOWS_CERT_PFX_BASE64` + `WINDOWS_CERT_PASSWORD` secrets to Authenticode-sign
-the installer; without them it ships unsigned (SmartScreen warns on download).
+builds on `windows-latest` for PRs, manual dispatch and `v*` tags; tags attach the
+Velopack files (`win-server` channel) to the release. Provide `WINDOWS_CERT_PFX_BASE64`
++ `WINDOWS_CERT_PASSWORD` secrets to Authenticode-sign; without them it ships unsigned
+(SmartScreen warns on download).
 
 ## Status / not yet validated on hardware
 
@@ -101,6 +104,5 @@ validate on real Windows hardware:
 
 - QSV / AMF / NVENC transcode + HDR→SDR paths per GPU vendor.
 - EDB PostgreSQL binaries URL/version (`fetch-vendored.ps1` `$PgVersion`).
-- NSIS `File /r` over the full `node_modules` tree (path length).
 - OpenCL tonemap device selection (`FLIKS_OPENCL_DEVICE` — see backend).
 - Drop a real `fliks.ico` into `Fliks.Tray/Resources/`.

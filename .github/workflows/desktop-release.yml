@@ -1,7 +1,7 @@
 # Builds the Fliks ELECTRON DESKTOP client installers for all three desktop OSes:
 #   - Linux   → .deb     (ubuntu-latest)
 #   - macOS   → .dmg      (macos-latest)
-#   - Windows → .exe/nsis (windows-latest)
+#   - Windows → Velopack Setup.exe (windows-latest): electron-builder --dir, then vpk
 #
 # This is the thin Electron client under desktop/ — NOT the SwiftUI menu-bar
 # server host under macos/, which has its own workflow (macos-server-dmg.yml).
@@ -85,10 +85,16 @@ jobs:
             label: exe
             dist_script: dist:win
             artifact_glob: |
-              desktop/release/*.exe
-              desktop/release/latest.yml
+              desktop/release/setup/*-Setup.exe
 
     steps:
+      # Real-time scanning of every file written (npm ci, electron-builder, vpk's zip) is a
+      # large share of the Windows build time; the runner is throwaway.
+      - name: Disable Defender real-time scanning
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Set-MpPreference -DisableRealtimeMonitoring $true
+
       - uses: actions/checkout@v6
 
       # ── Resolve the build version → baked into the installer filenames ──
@@ -108,7 +114,8 @@ jobs:
             v="${{ inputs.version }}"
           else
             base=$(node -p "require('./desktop/package.json').version")
-            v="${base}-dev.$(git rev-parse --short HEAD)"
+            # A short sha can start with 0, which SemVer (and so Velopack) rejects.
+            v="${base}-dev.${GITHUB_RUN_NUMBER}"
           fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "Resolved desktop version: $v"
@@ -356,12 +363,69 @@ jobs:
           APPLE_API_ISSUER: ${{ runner.os == 'macOS' && secrets.APPSTORE_API_ISSUER_ID || '' }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* || "$GITHUB_REF" == refs/tags/desktop-v* ]]; then
+          # Windows publishes through Velopack below.
+          if [[ "$RUNNER_OS" != Windows && ( "$GITHUB_REF" == refs/tags/v* || "$GITHUB_REF" == refs/tags/desktop-v* ) ]]; then
             publish=always
           else
             publish=never
           fi
           npm run ${{ matrix.dist_script }} -- --publish "$publish" -c.extraMetadata.version=${{ steps.version.outputs.version }}
+
+      # ── Windows: pack win-unpacked into the Velopack Setup.exe + update feed ──
+      # Default `win` channel; the Windows server uses `win-server` in the same release.
+      - name: Install vpk
+        if: runner.os == 'Windows'
+        run: dotnet tool install -g vpk --version 1.2.161
+
+      # A delta needs the previous full package next to the new one; the first
+      # Velopack release has none, which is not an error.
+      - name: Download previous Velopack release
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/')
+        continue-on-error: true
+        working-directory: desktop
+        run: vpk download github --repoUrl https://github.com/${{ github.repository }} --outputDir release/velopack
+
+      - name: Pack Velopack release
+        if: runner.os == 'Windows'
+        working-directory: desktop
+        run: >
+          vpk pack --packId FliksDesktop --packVersion ${{ steps.version.outputs.version }}
+          --packDir release/win-unpacked --runtime win-x64 --mainExe Fliks.exe --packTitle Fliks --packAuthors Fliks
+          --icon build/icon.ico --splashImage build/splash.png --aumid media.fliks.desktop
+          --noPortable --outputDir release/velopack
+
+      # The Fliks installer window around Velopack's silent Setup.exe (windows/Fliks.Setup).
+      - name: Build installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $installed = 0L
+          foreach ($f in [IO.Directory]::EnumerateFiles("$PWD/desktop/release/win-unpacked", '*', 'AllDirectories')) { $installed += ([IO.FileInfo]$f).Length }
+          dotnet build windows/Fliks.Setup/Fliks.Setup.csproj -c Release -o desktop/release/setup `
+            -p:PackId=FliksDesktop -p:MainExe=Fliks.exe -p:ProductTitle=Fliks `
+            -p:InstalledBytes=$installed `
+            "-p:PayloadPath=$PWD/desktop/release/velopack/FliksDesktop-win-Setup.exe" `
+            "-p:SetupIcon=$PWD/desktop/build/icon.ico" `
+            "-p:AssemblyName=Fliks-Client-$env:VERSION-Setup"
+          if ($LASTEXITCODE -ne 0) { throw "installer build failed ($LASTEXITCODE)" }
+
+      # `gh release upload` only POSTs the assets (editing the release is refused with the
+      # job token); the previous release's packages pulled for the delta stay out, and
+      # Velopack's bare Setup.exe is replaced by the installer that wraps it.
+      - name: Attach Velopack release
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $files = Get-ChildItem desktop/release/velopack -File |
+            Where-Object { ($_.Extension -ne '.nupkg' -or $_.Name -like "*-$env:VERSION-*") -and $_.Name -notlike '*-Setup.exe' } |
+            ForEach-Object FullName
+          $files += "desktop/release/setup/Fliks-Client-$env:VERSION-Setup.exe"
+          gh release upload "${{ github.ref_name }}" @files --clobber
 
       # ── Upload the installers + update metadata as a workflow artifact ──
       # On tag builds electron-builder already attached these to the Release; the
@@ -372,3 +436,5 @@ jobs:
           name: fliks-desktop-${{ matrix.label }}-${{ steps.version.outputs.version }}
           path: ${{ matrix.artifact_glob }}
           if-no-files-found: warn
+          # Installers and packages are already compressed.
+          compression-level: 0

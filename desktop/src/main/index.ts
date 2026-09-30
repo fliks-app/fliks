@@ -16,6 +16,13 @@ import { mpvSubtitleProps } from './mpv/subtitle-style';
 import { parseTracks } from './mpv/tracks';
 import { MPV_STREAM_OPTIONS } from '../shared/mpv-stream-options';
 
+// Velopack's install/update/uninstall hooks run and exit here, before any Electron startup.
+if (process.platform === 'win32') {
+  (require('velopack') as typeof import('velopack')).VelopackApp.build().run();
+  // Matches the --aumid the Velopack shortcuts carry (desktop-release.yml).
+  app.setAppUserModelId('media.fliks.desktop');
+}
+
 // Name the app before `ready` so Linux derives the WM class (and thus the
 // GNOME/Ubuntu top-bar + dock identity) from "Fliks" rather than "Electron".
 app.setName('Fliks');
