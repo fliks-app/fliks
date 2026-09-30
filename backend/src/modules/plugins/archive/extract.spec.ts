@@ -1,10 +1,16 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'fs';
+import * as os from 'os';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { extractToStaging, writeGuardedFile } from './extract';
 import { buildZip } from './zip-builder';
 import { minimalDataManifest, minimalProcessManifest } from './test-manifests';
 import { pngLogo, sha256Hex, svgLogo } from './test-fixtures';
+
+jest.mock('os', () => {
+  const actual = jest.requireActual<typeof os>('os');
+  return { ...actual, tmpdir: jest.fn(actual.tmpdir) };
+});
 
 describe('extractToStaging() — happy path', () => {
   it('extracts a process archive and hashes match manifest.files', async () => {
@@ -101,10 +107,16 @@ describe('extractToStaging() — guards', () => {
       { name: 'plugin.js', content: pluginJs },
     ]);
 
-    const before = stagingDirCount();
-    const result = await extractToStaging(buffer, manifest);
-    expect(result.ok).toBe(false);
-    expect(stagingDirCount()).toBe(before);
+    // A private temp root: the shared OS temp dir is written by parallel workers.
+    const root = mkdtempSync(join(tmpdir(), 'extract-spec-'));
+    jest.mocked(os.tmpdir).mockReturnValueOnce(root);
+    try {
+      const result = await extractToStaging(buffer, manifest);
+      expect(result.ok).toBe(false);
+      expect(readdirSync(root)).toEqual([]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 
@@ -130,8 +142,3 @@ describe('writeGuardedFile() — symlink escape at the write target', () => {
     }
   });
 });
-
-/** Counts `fliks-plugin-*` mkdtemp directories left behind in the OS temp dir, as a leak check. */
-function stagingDirCount(): number {
-  return readdirSync(tmpdir()).filter((n) => n.startsWith('fliks-plugin-')).length;
-}
