@@ -59,17 +59,9 @@ import { Episode } from '../media/entities/episode.entity';
 import { FliksRequest } from '../requests/entities/request.entity';
 import { RequestStatus } from '../../common/enums';
 import { bucketResolutionLabel } from '../../common/utils/resolution.util';
+import { CURRENT_FLIKS_VERSION } from '../plugins/plugin-version';
 
-const APP_VERSION: string = (() => {
-  try {
-    const pkg = JSON.parse(
-      fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8'),
-    ) as { version?: string };
-    return pkg.version ?? '0.0.0';
-  } catch {
-    return '0.0.0';
-  }
-})();
+const APP_VERSION = CURRENT_FLIKS_VERSION;
 
 export interface ActiveStreamDto {
   sessionId: string;
