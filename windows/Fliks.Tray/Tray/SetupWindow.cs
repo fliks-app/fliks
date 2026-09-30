@@ -4,7 +4,7 @@ using Fliks.Tray.State;
 
 namespace Fliks.Tray.Tray;
 
-/// <summary>First-launch progress window. Its button hands the browser launch a user
+/// <summary>Progress window for a first launch or the first launch after an update. Its button hands the browser launch a user
 /// click, which Windows needs before it lets the browser take the foreground.</summary>
 internal sealed class SetupWindow : Form
 {
@@ -113,7 +113,9 @@ internal sealed class SetupWindow : Form
             case ServerPhase.Running:
                 _title.Text = "Fliks Server is ready";
                 _title.ForeColor = Foreground;
-                _step.Text = "Your server is set up and running.";
+                _step.Text = _app.IsUpdate
+                    ? "Your server is up to date and running."
+                    : "Your server is set up and running.";
                 _hint.Text = "This window closes on its own.";
                 _action.Text = "Open Fliks";
                 break;
@@ -125,10 +127,12 @@ internal sealed class SetupWindow : Form
                 _action.Text = "Open Logs";
                 break;
             default:
-                _title.Text = "Setting up Fliks Server";
+                _title.Text = _app.IsUpdate ? "Updating Fliks Server" : "Setting up Fliks Server";
                 _title.ForeColor = Foreground;
                 _step.Text = state.DisplayText;
-                _hint.Text = "The first launch can take a few minutes.";
+                _hint.Text = _app.IsUpdate
+                    ? "The first launch after an update can take a moment."
+                    : "The first launch can take a few minutes.";
                 break;
         }
         var done = state.Phase is ServerPhase.Running or ServerPhase.Error;

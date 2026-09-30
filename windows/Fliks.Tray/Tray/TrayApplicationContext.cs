@@ -63,7 +63,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         Microsoft.Win32.SystemEvents.SessionEnded += (_, _) => Quit();
         Render(_app.State);
 
-        if (_app.IsFirstRun) new SetupWindow(_app).Show();
+        if (_app.IsFirstRun || _app.IsUpdate) new SetupWindow(_app).Show();
         _ = _app.StartAllAsync();
     }
 

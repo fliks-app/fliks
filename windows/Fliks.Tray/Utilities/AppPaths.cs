@@ -48,6 +48,11 @@ internal static class AppPaths
         Path.Combine(BaseDir, "client"),
         RepoRoot is null ? null : Path.Combine(RepoRoot, "client", "dist", "client", "browser"));
 
+    /// <summary>Stamped by build-app.ps1 (release or dev-&lt;sha&gt;); null in a dev run.</summary>
+    public static readonly string? BundleVersion = File.Exists(Path.Combine(BaseDir, "VERSION"))
+        ? File.ReadAllText(Path.Combine(BaseDir, "VERSION")).Trim()
+        : null;
+
     /// <summary>Repo root when running from a dev checkout (climb until a
     /// backend/package.json is found); null in an installed build.</summary>
     public static readonly string? RepoRoot = FindRepoRoot();
