@@ -144,17 +144,6 @@ jobs:
           # Already compressed: zipping it again only costs time.
           compression-level: 0
 
-      # The update feed alone, to test an update against a local folder (FLIKS_UPDATE_SOURCE).
-      - name: Upload update feed artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: FliksServer-${{ steps.version.outputs.version }}-feed
-          path: |
-            windows/build/Releases/*-${{ steps.version.outputs.version }}-full.nupkg
-            windows/build/Releases/releases.win-server.json
-          if-no-files-found: error
-          compression-level: 0
-
       # `gh release upload` only POSTs the assets; editing the release itself (as
       # `vpk upload github` or the action we used before do) is refused with the job token.
       # The previous release's packages pulled for the delta stay out, and Velopack's bare

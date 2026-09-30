@@ -8,12 +8,8 @@ namespace Fliks.Tray.Services;
 /// (dev run from the repo).</summary>
 internal sealed class UpdateService
 {
-    // FLIKS_UPDATE_SOURCE (a folder or URL holding a Velopack release) stands in for GitHub to
-    // test an update from a CI build's feed artifact.
     private readonly UpdateManager _manager =
-        Environment.GetEnvironmentVariable("FLIKS_UPDATE_SOURCE") is { Length: > 0 } source
-            ? new UpdateManager(source)
-            : new UpdateManager(new GithubSource("https://github.com/fliks-app/fliks", null, false));
+        new(new GithubSource("https://github.com/fliks-app/fliks", null, false));
     private UpdateInfo? _available;
 
     public string? AvailableVersion => _available?.TargetFullRelease.Version.ToString();
