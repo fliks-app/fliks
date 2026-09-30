@@ -55,6 +55,14 @@ dotnet publish (Join-Path $winDir 'Fliks.Tray\Fliks.Tray.csproj') `
     -p:TvdbApiKey="$env:TVDB_API_KEY" `
     -o (Join-Path $build 'tray-publish')
 
+# Multi-threaded: node_modules alone is tens of thousands of files.
+function Copy-Tree([string]$From, [string]$To) {
+    robocopy $From $To /E /MT:16 /NFL /NDL /NJH /NJS /NP | Out-Null
+    # robocopy exit codes below 8 all mean success.
+    if ($LASTEXITCODE -ge 8) { throw "robocopy $From -> $To failed ($LASTEXITCODE)" }
+    $global:LASTEXITCODE = 0
+}
+
 # ── Assemble the bundle (layout mirrors AppPaths resolution) ──
 Write-Host '==> Assembling bundle'
 Copy-Item (Join-Path $build 'tray-publish\*') $bundle -Recurse -Force
@@ -62,19 +70,19 @@ Copy-Item (Join-Path $build 'tray-publish\*') $bundle -Recurse -Force
 New-Item -ItemType Directory -Force -Path (Join-Path $bundle 'node') | Out-Null
 Copy-Item (Join-Path $vendored 'node\node.exe') (Join-Path $bundle 'node\node.exe')
 
-Copy-Item (Join-Path $vendored 'pgsql')  (Join-Path $bundle 'pgsql')  -Recurse -Force
-Copy-Item (Join-Path $vendored 'ffmpeg') (Join-Path $bundle 'ffmpeg') -Recurse -Force
+Copy-Tree (Join-Path $vendored 'pgsql')  (Join-Path $bundle 'pgsql')
+Copy-Tree (Join-Path $vendored 'ffmpeg') (Join-Path $bundle 'ffmpeg')
 
 New-Item -ItemType Directory -Force -Path (Join-Path $bundle 'backend') | Out-Null
-Copy-Item (Join-Path $repo 'backend\dist')         (Join-Path $bundle 'backend\dist')         -Recurse -Force
-Copy-Item (Join-Path $repo 'backend\node_modules') (Join-Path $bundle 'backend\node_modules') -Recurse -Force
+Copy-Tree (Join-Path $repo 'backend\dist')         (Join-Path $bundle 'backend\dist')
+Copy-Tree (Join-Path $repo 'backend\node_modules') (Join-Path $bundle 'backend\node_modules')
 Copy-Item (Join-Path $repo 'backend\package.json') (Join-Path $bundle 'backend\package.json')
 if (Test-Path (Join-Path $repo 'backend\public')) {
-    Copy-Item (Join-Path $repo 'backend\public') (Join-Path $bundle 'backend\public') -Recurse -Force
+    Copy-Tree (Join-Path $repo 'backend\public') (Join-Path $bundle 'backend\public')
 }
 
 New-Item -ItemType Directory -Force -Path (Join-Path $bundle 'client') | Out-Null
-Copy-Item (Join-Path $repo 'client\dist\client\browser\*') (Join-Path $bundle 'client') -Recurse -Force
+Copy-Tree (Join-Path $repo 'client\dist\client\browser') (Join-Path $bundle 'client')
 
 if ($Version) { Set-Content -Path (Join-Path $bundle 'VERSION') -Value $Version }
 

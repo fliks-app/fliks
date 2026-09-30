@@ -34,6 +34,11 @@ jobs:
     env:
       IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
     steps:
+      # Real-time scanning of every file written (npm ci, the bundle copy, vpk's zip) is a
+      # large share of the Windows build time; the runner is throwaway.
+      - name: Disable Defender real-time scanning
+        run: Set-MpPreference -DisableRealtimeMonitoring $true
+
       - uses: actions/checkout@v6
 
       - name: Resolve version
@@ -136,6 +141,8 @@ jobs:
           name: FliksServer-${{ steps.version.outputs.version }}-Setup
           path: windows/build/Setup/*-Setup.exe
           if-no-files-found: error
+          # Already compressed: zipping it again only costs time.
+          compression-level: 0
 
       # `gh release upload` only POSTs the assets; editing the release itself (as
       # `vpk upload github` or the action we used before do) is refused with the job token.

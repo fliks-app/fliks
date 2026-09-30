@@ -88,6 +88,13 @@ jobs:
               desktop/release/setup/*-Setup.exe
 
     steps:
+      # Real-time scanning of every file written (npm ci, electron-builder, vpk's zip) is a
+      # large share of the Windows build time; the runner is throwaway.
+      - name: Disable Defender real-time scanning
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Set-MpPreference -DisableRealtimeMonitoring $true
+
       - uses: actions/checkout@v6
 
       # ── Resolve the build version → baked into the installer filenames ──
@@ -394,7 +401,8 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          $installed = (Get-ChildItem desktop/release/win-unpacked -Recurse -File | Measure-Object Length -Sum).Sum
+          $installed = 0L
+          foreach ($f in [IO.Directory]::EnumerateFiles("$PWD/desktop/release/win-unpacked", '*', 'AllDirectories')) { $installed += ([IO.FileInfo]$f).Length }
           dotnet build windows/Fliks.Setup/Fliks.Setup.csproj -c Release -o desktop/release/setup `
             -p:PackId=FliksDesktop -p:MainExe=Fliks.exe -p:ProductTitle=Fliks `
             -p:InstalledBytes=$installed `
@@ -428,3 +436,5 @@ jobs:
           name: fliks-desktop-${{ matrix.label }}-${{ steps.version.outputs.version }}
           path: ${{ matrix.artifact_glob }}
           if-no-files-found: warn
+          # Installers and packages are already compressed.
+          compression-level: 0
