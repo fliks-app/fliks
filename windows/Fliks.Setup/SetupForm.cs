@@ -22,8 +22,8 @@ internal sealed class SetupForm : Form
     private readonly Label _step;
     private readonly Label _hint;
     private readonly PillBar _bar = new() { Anchor = AnchorStyles.None };
-    private readonly RoundButton _primary = new(primary: true) { Anchor = AnchorStyles.None, Visible = false };
-    private readonly RoundButton _secondary = new(primary: false) { Anchor = AnchorStyles.None, Visible = false };
+    private readonly RoundButton _primary = new(ButtonKind.Primary) { Anchor = AnchorStyles.None, Visible = false };
+    private readonly RoundButton _secondary = new(ButtonKind.Secondary) { Anchor = AnchorStyles.None, Visible = false };
     private readonly CloseButton _close = new();
     private readonly Timer _autoClose = new() { Interval = 5000 };
     private readonly float _scale;
@@ -45,35 +45,35 @@ internal sealed class SetupForm : Form
         BackColor = Theme.Background;
         AutoScaleMode = AutoScaleMode.None;
         _scale = DeviceDpi / 96f;
-        ClientSize = new Size(S(460), S(380));
+        ClientSize = new Size(S(540), S(460));
 
-        _title = Label(new Font("Segoe UI Semibold", 15f), Theme.Foreground);
-        _step = Label(new Font("Segoe UI", 10f), Theme.Muted);
-        _hint = Label(new Font("Segoe UI", 9f), Theme.Muted);
+        _title = Label(new Font("Segoe UI Semibold", 17f), Theme.Foreground);
+        _step = Label(new Font("Segoe UI", 11f), Theme.Muted);
+        _hint = Label(new Font("Segoe UI", 9.5f), Theme.Muted);
 
         var logo = new PictureBox
         {
             Image = new Icon(Icon, new Size(256, 256)).ToBitmap(),
             SizeMode = PictureBoxSizeMode.Zoom,
-            Size = new Size(S(80), S(80)),
+            Size = new Size(S(104), S(104)),
             Anchor = AnchorStyles.None,
             Margin = Pad(0, 16),
         };
-        _title.Margin = Pad(0, 6);
+        _title.Margin = Pad(0, 8);
         _step.Margin = Pad(0, 0);
-        _hint.Margin = Pad(4, 0);
-        _bar.Size = new Size(S(300), S(8));
-        _bar.Margin = Pad(24, 0);
-        foreach (var b in new[] { _primary, _secondary }) b.Size = new Size(S(180), S(40));
+        _hint.Margin = Pad(6, 0);
+        _bar.Size = new Size(S(360), S(10));
+        _bar.Margin = Pad(28, 0);
+        foreach (var b in new[] { _primary, _secondary }) b.Size = new Size(S(180), S(44));
 
         var buttons = new FlowLayoutPanel
         {
             AutoSize = true,
             WrapContents = false,
             Anchor = AnchorStyles.None,
-            Margin = Pad(20, 0),
+            Margin = Pad(24, 0),
         };
-        _secondary.Margin = new Padding(0, 0, S(10), 0);
+        _secondary.Margin = new Padding(0, 0, S(12), 0);
         _primary.Margin = Padding.Empty;
         buttons.Controls.AddRange(new Control[] { _secondary, _primary });
 
@@ -94,7 +94,7 @@ internal sealed class SetupForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
         layout.RowCount = layout.RowStyles.Count;
 
-        _close.Size = new Size(S(32), S(32));
+        _close.Size = new Size(S(44), S(44));
         _close.Click += (_, _) => Close();
         Controls.Add(_close);
         Controls.Add(layout);
@@ -116,7 +116,7 @@ internal sealed class SetupForm : Form
     private Label Label(Font font, Color color) => new()
     {
         AutoSize = true,
-        MaximumSize = new Size(S(396), 0),
+        MaximumSize = new Size(S(460), 0),
         Anchor = AnchorStyles.None,
         TextAlign = ContentAlignment.MiddleCenter,
         Font = font,
@@ -126,7 +126,7 @@ internal sealed class SetupForm : Form
     protected override void OnLayout(LayoutEventArgs e)
     {
         base.OnLayout(e);
-        _close.Location = new Point(ClientSize.Width - _close.Width - S(10), S(10));
+        _close.Location = new Point(ClientSize.Width - _close.Width - S(12), S(12));
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -158,9 +158,12 @@ internal sealed class SetupForm : Form
             var current = Path.Combine(_config.InstallDir, "current");
             while (!_setup.HasExited)
             {
-                await Task.Delay(250);
-                if (_config.InstalledBytes > 0)
-                    _bar.Value = Math.Max(_bar.Value, 0.1f + 0.88f * Math.Min(1f, DirectorySize(current) / (float)_config.InstalledBytes));
+                await Task.Delay(500);
+                if (_config.InstalledBytes <= 0 || _cancelled) continue;
+                // Tens of thousands of files: walking them on the UI thread hangs the window.
+                var size = await Task.Run(() => DirectorySize(current));
+                if (!_cancelled)
+                    _bar.Value = Math.Max(_bar.Value, 0.1f + 0.88f * Math.Min(1f, size / (float)_config.InstalledBytes));
             }
             _installing = false;
             if (_cancelled) return;
@@ -274,8 +277,9 @@ internal sealed class SetupForm : Form
     {
         if (_beforeConfirm is not null) return;
         _beforeConfirm = (_title.Text, _step.Text, _hint.Text, _bar.Visible);
-        SetView("Cancel the installation?", $"{_config.Title} will not be installed.", "", bar: false);
-        Buttons("Keep installing", ResumeInstall, "Cancel", async () => await CancelInstallAsync());
+        SetView("Do you really want to quit?", $"{_config.Title} will not be installed.", "", bar: false);
+        Buttons("Yes", async () => await CancelInstallAsync(), "No", ResumeInstall, danger: true);
+        _secondary.Focus();
     }
 
     private void ResumeInstall()
@@ -288,7 +292,8 @@ internal sealed class SetupForm : Form
     private async Task CancelInstallAsync()
     {
         _cancelled = true;
-        SetView("Cancelling…", "", "", bar: false);
+        SetView("Cancelling…", "Removing the installed files.", "", bar: true);
+        _bar.Indeterminate = true;
         await Task.Run(() =>
         {
             try { if (_setup is { HasExited: false }) { _setup.Kill(); _setup.WaitForExit(10_000); } }
@@ -299,8 +304,29 @@ internal sealed class SetupForm : Form
                 try { Directory.Delete(_config.InstallDir, recursive: true); }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { System.Threading.Thread.Sleep(500); }
             }
+            RestorePreviousInstall();
         });
         Close();
+    }
+
+    // A reinstall first renames the existing install to "<packId>.<16 random chars>" for rollback,
+    // which Velopack itself undoes on failure but not when killed.
+    private void RestorePreviousInstall()
+    {
+        if (Directory.Exists(_config.InstallDir)) return;
+        try
+        {
+            var backup = new DirectoryInfo(Path.GetDirectoryName(_config.InstallDir)!)
+                .GetDirectories(_config.PackId + ".*")
+                .Where(d => d.Name.Length == _config.PackId.Length + 17)
+                .OrderByDescending(d => d.LastWriteTimeUtc)
+                .FirstOrDefault();
+            backup?.MoveTo(_config.InstallDir);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Left for the next install, which starts clean.
+        }
     }
 
     private void Fail(string message, string log)
@@ -322,8 +348,10 @@ internal sealed class SetupForm : Form
         _primary.Visible = _secondary.Visible = false;
     }
 
-    private void Buttons(string primary, Action onPrimary, string? secondary = null, Action? onSecondary = null)
+    private void Buttons(string primary, Action onPrimary, string? secondary = null, Action? onSecondary = null,
+        bool danger = false)
     {
+        _primary.Kind = danger ? ButtonKind.Danger : ButtonKind.Primary;
         _primary.Text = primary;
         _primaryAction = onPrimary;
         _primary.Visible = true;

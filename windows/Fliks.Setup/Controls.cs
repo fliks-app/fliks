@@ -14,6 +14,7 @@ internal static class Theme
     public static readonly Color Foreground = Color.FromArgb(0xf3, 0xf4, 0xf6);
     public static readonly Color Muted = Color.FromArgb(0x9c, 0xa3, 0xaf);
     public static readonly Color Danger = Color.FromArgb(0xf8, 0x71, 0x71);
+    public static readonly Color DangerFill = Color.FromArgb(0xdc, 0x26, 0x26);
 
     public static GraphicsPath RoundedRect(RectangleF r, float radius)
     {
@@ -98,24 +99,30 @@ internal sealed class PillBar : Control
     }
 }
 
-/// <summary>Rounded button: accent fill for the primary action, an outline otherwise.</summary>
+internal enum ButtonKind { Primary, Secondary, Danger }
+
+/// <summary>Rounded button: a filled accent or danger action, or an outline.</summary>
 internal sealed class RoundButton : Button
 {
     private bool _hover;
+    private ButtonKind _kind;
 
-    public RoundButton(bool primary)
+    public RoundButton(ButtonKind kind)
     {
-        Primary = primary;
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
                  | ControlStyles.UserPaint, true);
         FlatStyle = FlatStyle.Flat;
         FlatAppearance.BorderSize = 0;
-        Font = new Font("Segoe UI Semibold", 10f);
-        ForeColor = primary ? Color.White : Theme.Foreground;
+        Font = new Font("Segoe UI Semibold", 10.5f);
         Cursor = Cursors.Hand;
+        Kind = kind;
     }
 
-    public bool Primary { get; }
+    public ButtonKind Kind
+    {
+        get => _kind;
+        set { _kind = value; ForeColor = value == ButtonKind.Secondary ? Theme.Foreground : Color.White; Invalidate(); }
+    }
 
     protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
     protected override void OnMouseLeave(EventArgs e) { _hover = false; Invalidate(); base.OnMouseLeave(e); }
@@ -128,9 +135,10 @@ internal sealed class RoundButton : Button
         var r = new RectangleF(0.5f, 0.5f, Width - 1f, Height - 1f);
         using (var path = Theme.RoundedRect(r, Height / 4f))
         {
-            if (Primary)
+            if (_kind != ButtonKind.Secondary)
             {
-                using var brush = new SolidBrush(_hover ? ControlPaint.Light(Theme.Accent, 0.2f) : Theme.Accent);
+                var fill = _kind == ButtonKind.Danger ? Theme.DangerFill : Theme.Accent;
+                using var brush = new SolidBrush(_hover ? ControlPaint.Light(fill, 0.2f) : fill);
                 g.FillPath(brush, path);
             }
             else
