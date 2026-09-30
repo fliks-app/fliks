@@ -522,7 +522,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
     const connected = this.sse.connected();
     untracked(() => {
       if (connected) this.retrying.set(false);
-      if (this.wasUnreachable && !unreachable) this.appResume.refresh();
+      if (connected && this.wasUnreachable && !unreachable) this.appResume.refresh();
       this.wasUnreachable = unreachable;
     });
   });

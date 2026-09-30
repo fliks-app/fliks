@@ -102,7 +102,7 @@ export class App implements OnInit, OnDestroy {
     // Un-gated on purpose: the Capacitor resume hook below covers mobile, but a
     // TV app is frozen while backgrounded and has no equivalent.
     this.visibilityListener = () => {
-      if (document.visibilityState === 'visible') this.sse.reconnect();
+      if (document.visibilityState === 'visible') this.sse.resume();
     };
     document.addEventListener('visibilitychange', this.visibilityListener);
 
@@ -158,7 +158,7 @@ export class App implements OnInit, OnDestroy {
       // On return from background: reconnect SSE, and let data pages refresh
       // themselves if we were away long enough for the backend to have moved on.
       CapApp.addListener('resume', () => {
-        this.sse.reconnect();
+        this.sse.resume();
         this.appResume.markResumed();
       }).then((handle) => {
         this.resumeListener = handle;

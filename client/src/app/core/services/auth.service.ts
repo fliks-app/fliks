@@ -160,6 +160,19 @@ export class AuthService {
     return this._accessToken;
   }
 
+  /** Within a minute of its `exp`, to absorb clock skew. False when there is
+   *  no readable JWT: the server then decides. */
+  accessTokenExpired(): boolean {
+    const payload = this._accessToken?.split('.')[1];
+    if (!payload) return false;
+    try {
+      const { exp } = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+      return typeof exp === 'number' && exp * 1000 < Date.now() + 60_000;
+    } catch {
+      return false;
+    }
+  }
+
   get refreshToken(): string | null {
     return this._refreshToken;
   }
