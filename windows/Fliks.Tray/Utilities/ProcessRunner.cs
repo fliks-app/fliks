@@ -25,7 +25,8 @@ internal static class ProcessRunner
         IReadOnlyDictionary<string, string>? environment = null,
         string? workingDirectory = null,
         TimeSpan? timeout = null,
-        bool captureOutput = true)
+        bool captureOutput = true,
+        JobObject? job = null)
     {
         using var process = new Process();
         process.StartInfo.FileName = executable;
@@ -53,6 +54,8 @@ internal static class ProcessRunner
         }
 
         process.Start();
+        try { job?.Assign(process); }
+        catch (System.ComponentModel.Win32Exception ex) { Log.Error($"job assignment failed for {executable}: {ex.Message}"); }
         if (captureOutput)
         {
             process.BeginOutputReadLine();

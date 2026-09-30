@@ -89,7 +89,8 @@ internal sealed class NodeManager
         };
 
         proc.Start();
-        job.Assign(proc);
+        try { job.Assign(proc); }
+        catch (System.ComponentModel.Win32Exception) when (proc.HasExited) { /* Exited already closed it */ }
         _job = job;
         _logStream = OpenDailyLog();
         // Copy the child's raw bytes to the log — Node emits UTF-8, so passing

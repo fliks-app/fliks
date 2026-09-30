@@ -54,7 +54,7 @@ internal sealed class AppState
             Log.Info("postgres: initialize");
             await _postgres.InitializeAsync();
             Log.Info("postgres: start");
-            await _postgres.StartAsync();
+            await _postgres.StartAsync(ct);
             ct.ThrowIfCancellationRequested();
             Log.Info("postgres: create database");
             await _postgres.CreateDatabaseIfNeededAsync();
