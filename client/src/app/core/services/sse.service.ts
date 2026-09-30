@@ -191,25 +191,41 @@ export class SseService implements OnDestroy {
     });
 
     // Debounced so a Wi-Fi wake-up or the resume-reconnect race doesn't flash the banner.
-    // Logged-out is never "unreachable": nothing is trying to connect.
     effect(() => {
-      const reachable = this.network.isOnline() && this.connected();
-      const authenticated = this.auth.isAuthenticated();
-      untracked(() => {
-        if (reachable || !authenticated) {
-          if (this.unreachableTimer) {
-            clearTimeout(this.unreachableTimer);
-            this.unreachableTimer = null;
-          }
-          this.serverUnreachable.set(false);
-          return;
-        }
-        this.unreachableTimer ??= setTimeout(
-          () => this.serverUnreachable.set(true),
-          UNREACHABLE_DEBOUNCE_MS,
-        );
-      });
+      this.network.isOnline();
+      this.connected();
+      this.auth.isAuthenticated();
+      untracked(() => this.syncUnreachable());
     });
+  }
+
+  /** Logged-out is never "unreachable": nothing is trying to connect. */
+  private syncUnreachable() {
+    const reachable = this.network.isOnline() && this.connected();
+    if (reachable || !this.auth.isAuthenticated()) {
+      this.clearUnreachable();
+      return;
+    }
+    this.unreachableTimer ??= setTimeout(
+      () => this.serverUnreachable.set(true),
+      UNREACHABLE_DEBOUNCE_MS,
+    );
+  }
+
+  private clearUnreachable() {
+    if (this.unreachableTimer) {
+      clearTimeout(this.unreachableTimer);
+      this.unreachableTimer = null;
+    }
+    this.serverUnreachable.set(false);
+  }
+
+  /** Back from background: the stream died while the app was away, which says
+   *  nothing about the server, so the fresh dial gets the full grace period. */
+  resume() {
+    this.clearUnreachable();
+    this.reconnect();
+    this.syncUnreachable();
   }
 
   /** A stalled stream sends no error: re-dial so a dead link surfaces in seconds. */
@@ -274,6 +290,12 @@ export class SseService implements OnDestroy {
 
     let base = '/api/system/events';
     if (this.serverConfig.isNative) {
+      // The token rides in the URL, so an expired one fails the dial with no
+      // 401 to trigger the interceptor's refresh: typical after a long background.
+      if (this.auth.refreshToken && this.auth.accessTokenExpired()) {
+        await this.auth.refreshAccessToken();
+        if (generation !== this.generation || this.eventSource) return;
+      }
       base = this.serverConfig.resolveUrl(base);
       const token = this.auth.accessToken;
       if (token) params.set('token', token);
@@ -354,16 +376,8 @@ export class SseService implements OnDestroy {
         window.addEventListener('online', this.onOnline, { once: true });
         return;
       }
-      // Exponential backoff: 5s → 10s → 20s → 30s max. On native the token is
-      // baked into the URL, so rotate it first or a long background leaves every
-      // retry replaying the same expired one.
-      this.retryHandle = setTimeout(() => {
-        if (this.serverConfig.isNative && this.auth.refreshToken) {
-          void this.auth.refreshAccessToken().finally(() => void this.connect());
-        } else {
-          void this.connect();
-        }
-      }, this.retryDelay);
+      // Exponential backoff: 5s → 10s → 20s → 30s max.
+      this.retryHandle = setTimeout(() => void this.connect(), this.retryDelay);
       this.retryDelay = Math.min(this.retryDelay * 2, 30_000);
     };
   }
