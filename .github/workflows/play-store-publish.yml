@@ -270,5 +270,17 @@ jobs:
             -H 'Content-Type: application/octet-stream' -H 'fileName: fliks.apk' \
             --data-binary @fliks.apk "$APP/edits/$edit/apks/$apk/replace" > /dev/null
 
+          # Validation refuses an edit without release notes for en-US. fr-FR is
+          # optional: only a listing the app already has is updated.
+          notes() {
+            local url="$APP/edits/$edit/listings/$1" listing
+            listing=$(curl -sf -H "$auth" "$url") || { [ "$1" != en-US ] && return 0; api "$url"; return 1; }
+            jq --arg n "$2" '.recentChanges = $n' <<<"$listing" \
+              | api -X PUT -H "If-Match: $(etag "$url")" -H 'Content-Type: application/json' \
+                  --data-binary @- "$url" > /dev/null
+          }
+          notes en-US 'Bug fixes and improvements.'
+          notes fr-FR 'Corrections de bugs et améliorations.'
+
           api -X POST "$APP/edits/$edit/validate" > /dev/null
           api -X POST -H "If-Match: $(etag "$APP/edits/$edit")" "$APP/edits/$edit/commit" > /dev/null
