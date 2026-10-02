@@ -252,17 +252,23 @@ jobs:
           token=$(jq -r '.access_token // empty' <<<"$resp")
           [ -n "$token" ] || { echo "::error::Amazon token response has no access_token"; exit 1; }
           auth="Authorization: Bearer $token"
-          etag() { curl -sf -D - -o /dev/null -H "$auth" "$1" | awk 'tolower($1)=="etag:" {print $2}' | tr -d '\r'; }
+          # Amazon explains a refusal only in the body, so a failed call prints it.
+          api() {
+            local out
+            out=$(curl -sS --fail-with-body -H "$auth" "$@") \
+              || { echo "::error::Amazon ${*: -1} failed: $out" >&2; return 1; }
+            printf '%s' "$out"
+          }
+          etag() { api -D - "$1" | awk 'tolower($1)=="etag:" {print $2}' | tr -d '\r'; }
 
           # Only one edit can be open per app: reuse the one a failed run left behind.
           edit=$(curl -s -H "$auth" "$APP/edits" | jq -r '.id // empty' 2>/dev/null || true)
-          [ -n "$edit" ] || edit=$(curl -sf -X POST -H "$auth" "$APP/edits" | jq -r .id)
+          [ -n "$edit" ] || edit=$(api -X POST "$APP/edits" | jq -r .id)
 
-          apk=$(curl -sf -H "$auth" "$APP/edits/$edit/apks" | jq -r '.[0].id')
-          curl -sS --fail-with-body -X PUT -H "$auth" -H "If-Match: $(etag "$APP/edits/$edit/apks/$apk")" \
+          apk=$(api "$APP/edits/$edit/apks" | jq -r '.[0].id')
+          api -X PUT -H "If-Match: $(etag "$APP/edits/$edit/apks/$apk")" \
             -H 'Content-Type: application/octet-stream' -H 'fileName: fliks.apk' \
             --data-binary @fliks.apk "$APP/edits/$edit/apks/$apk/replace" > /dev/null
 
-          curl -sS --fail-with-body -X POST -H "$auth" "$APP/edits/$edit/validate" > /dev/null
-          curl -sS --fail-with-body -X POST -H "$auth" -H "If-Match: $(etag "$APP/edits/$edit")" \
-            "$APP/edits/$edit/commit" > /dev/null
+          api -X POST "$APP/edits/$edit/validate" > /dev/null
+          api -X POST -H "If-Match: $(etag "$APP/edits/$edit")" "$APP/edits/$edit/commit" > /dev/null
