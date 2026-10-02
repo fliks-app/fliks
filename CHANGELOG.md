@@ -1,5 +1,14 @@
 # Changelog
 
+## [4.3.1](https://github.com/fliks-app/fliks/compare/v4.3.0...v4.3.1) (2026-10-02)
+
+
+### Bug Fixes
+
+* **server:** report the real version outside the docker image ([#1567](https://github.com/fliks-app/fliks/issues/1567)) ([cc26cf4](https://github.com/fliks-app/fliks/commit/cc26cf4b5687ab16d7ef2b2bc5713b4c6918f0ca))
+* **sse:** stop the unreachable banner on resume after a long background ([#1571](https://github.com/fliks-app/fliks/issues/1571)) ([43f111b](https://github.com/fliks-app/fliks/commit/43f111b0e9838714a268f12db532e1dfb0e0a314))
+* **streaming:** resolve a master pin above the source to the nearest rung ([#1572](https://github.com/fliks-app/fliks/issues/1572)) ([8dc78ab](https://github.com/fliks-app/fliks/commit/8dc78ab6a3cbe928e34ba85efed080eee945ccc1))
+
 ## [4.3.0](https://github.com/fliks-app/fliks/compare/v4.2.1...v4.3.0) (2026-09-30)
 
 
