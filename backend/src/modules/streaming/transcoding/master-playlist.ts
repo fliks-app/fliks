@@ -5,6 +5,7 @@ import {
   parseBitrateToBps,
   profileFitsSource,
   profileResolution,
+  resolveLadderRung,
 } from './profiles';
 import {
   audioOutputBitrateBps,
@@ -166,8 +167,8 @@ function topFittingProfile(
  *    `1080p-hdr` (HDR ladder rungs carry the suffix); already
  *    `*-hdr` inputs pass through unchanged.
  *  - An explicit `onlyQuality` always wins over `supportsAbr`.
- *  - Falls back to the full ladder when the pin doesn't match any
- *    rung (a stale saved link, a typo). */
+ *  - A rung above the source (`eco-2160p` on 1080p) resolves to the nearest
+ *    one below in its class; only an unparseable pin keeps the full ladder. */
 function applyQualityPin(
   ladder: TranscodeProfile[],
   onlyQuality: string | undefined,
@@ -184,8 +185,7 @@ function applyQualityPin(
   if (onlyQuality === 'remux' || onlyQuality === 'original') {
     return [topFittingProfile(ladder, sourceWidth, sourceHeight)];
   }
-  const wanted = hdrRungName(onlyQuality, hdrSuffix);
-  const picked = ladder.find((p) => p.name === wanted);
+  const picked = resolveLadderRung(hdrRungName(onlyQuality, hdrSuffix), ladder);
   return picked ? [picked] : ladder;
 }
 

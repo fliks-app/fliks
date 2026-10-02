@@ -211,6 +211,12 @@ describe('generateMasterPlaylist — supportsAbr collapses the ladder', () => {
     expect(streamInfLines(m)).toHaveLength(1);
     expect(m).toContain('/720p/');
   });
+
+  it('a pin above the source resolves to the nearest rung of its class', () => {
+    const m = generateMasterPlaylist({ ...base, supportsAbr: false, onlyQuality: 'eco-2160p' });
+    expect(streamInfLines(m)).toHaveLength(1);
+    expect(m).toContain('/eco-1080p/');
+  });
 });
 
 describe('generateMasterPlaylist — audio bitrate in BANDWIDTH', () => {
