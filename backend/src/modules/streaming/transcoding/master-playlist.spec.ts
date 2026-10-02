@@ -1,4 +1,4 @@
-import { generateMasterPlaylist } from './master-playlist';
+import { generateMasterPlaylist, pinnedRungName } from './master-playlist';
 import type { CodecVariant } from './codec/types';
 import type { AudioPlan } from './audio-encode';
 
@@ -216,6 +216,11 @@ describe('generateMasterPlaylist — supportsAbr collapses the ladder', () => {
     const m = generateMasterPlaylist({ ...base, supportsAbr: false, onlyQuality: 'eco-2160p' });
     expect(streamInfLines(m)).toHaveLength(1);
     expect(m).toContain('/eco-1080p/');
+  });
+
+  it('pinnedRungName matches the rung the master publishes', () => {
+    expect(pinnedRungName('eco-2160p', 1920, 1080, false, 'desktop')).toBe('eco-1080p');
+    expect(pinnedRungName('1080p', 3840, 2160, true, 'desktop')).toBe('1080p-hdr');
   });
 });
 

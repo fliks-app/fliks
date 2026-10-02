@@ -37,6 +37,7 @@ import {
   profileFitsSource,
   sourceBitrates,
   hdrRungName,
+  pinnedRungName,
   cappedRungVideoBitrateBps,
   parseBitrateToBps,
   type BurnInSubtitle,
@@ -616,12 +617,16 @@ export class StreamingController {
       // (e.g. a 1080p pin on a 1080p source): the client plays the 'remux'
       // session, so warming a transcode one here would run unwatched to EOF.
       if (session?.kind === 'remux') return;
-      // When the HDR ladder is in effect, the master only publishes
-      // `*-hdr` rungs. The frontend's saved quality is height-based
-      // (`1080p`), so translate to the HDR equivalent so prewarm
-      // doesn't spawn a doomed SDR session that the player will
-      // immediately kill and replace with the matching HDR rung.
-      const targetQuality = hdrRungName(startQuality, session?.hdrLadder ?? false);
+      // The master resolves the saved pin against this source's ladder (HDR
+      // suffix, a rung above the source); warm that rung, not the raw pin.
+      const v = resolved.mediaFile.streamInfo?.video?.[0];
+      const targetQuality = pinnedRungName(
+        startQuality,
+        v?.crop?.width ?? v?.width ?? 1920,
+        v?.crop?.height ?? v?.height ?? 1080,
+        session?.hdrLadder ?? false,
+        deviceType,
+      );
       const startSegment = Math.max(
         0,
         secondsToSegmentIndex(

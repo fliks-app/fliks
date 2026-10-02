@@ -202,6 +202,24 @@ export function getAvailableProfiles(
   );
 }
 
+/** Rung a `startQuality` pin lands on in this source's master, so a prewarm
+ *  spawns the rung the player will actually request. */
+export function pinnedRungName(
+  onlyQuality: string,
+  sourceWidth: number,
+  sourceHeight: number,
+  hdrLadder: boolean,
+  deviceType: DeviceType,
+): string {
+  const name = hdrRungName(onlyQuality, hdrLadder);
+  const ladder = hdrLadder
+    ? getHdrLadderForDevice(deviceType).filter((p) =>
+        profileFitsSource(p, sourceWidth, sourceHeight),
+      )
+    : getAvailableProfiles(sourceWidth, sourceHeight, deviceType);
+  return resolveLadderRung(name, ladder)?.name ?? name;
+}
+
 export interface MasterPlaylistOptions {
   mediaFileId: number;
   sourceWidth: number;
