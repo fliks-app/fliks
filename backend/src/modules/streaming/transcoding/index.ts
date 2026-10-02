@@ -35,6 +35,7 @@ export type { SessionVariant } from './variant';
 export {
   generateMasterPlaylist,
   getAvailableProfiles,
+  pinnedRungName,
   type MasterPlaylistOptions,
 } from './master-playlist';
 export { TranscodingService } from './transcoding.service';
