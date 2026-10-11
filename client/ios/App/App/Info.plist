@@ -36,6 +36,8 @@
 		<string>_googlecast._tcp</string>
 		<string>_66BF4DAE._googlecast._tcp</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Fliks uses the camera to take your profile picture.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Fliks uses the local network to discover and connect to Cast-enabled devices, and access your local server.</string>
 	<key>UIBackgroundModes</key>
