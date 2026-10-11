@@ -156,6 +156,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   /** Resolved library (null while loading or if not found). */
   readonly library = signal<LibrarySummary | null>(null);
+  readonly mixedLibrary = computed(() => (this.library()?.mediaTypes.length ?? 0) > 1);
   readonly libraryName = signal('');
 
   readonly list = new InfiniteScrollList<Media>();

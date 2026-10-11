@@ -121,7 +121,7 @@ export class MediaCardComponent {
   readonly topLeftBadge = input<string | undefined>(undefined);
   /** Marks a card as a movie or a series, for the mixed provider results where
    *  the poster alone does not say which. */
-  readonly mediaTypeBadge = input<MediaType | null>(null);
+  readonly mediaTypeBadge = input<MediaType | string | null>(null);
   readonly badge = input<CardBadge>(null);
   readonly status = input<CardStatus>(null);
 

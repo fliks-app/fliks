@@ -300,6 +300,10 @@ export class HomeComponent implements OnInit, OnDestroy {
    *  over — a pan across the row, or a swipe back, ends in no pointerup here. */
   protected readonly armSlide = armPageSlide;
 
+  isMixedLibrary(id: number): boolean {
+    return (this.libraries().find((l) => l.id === id)?.mediaTypes.length ?? 0) > 1;
+  }
+
   libraryUrl(lib: LibrarySummary): string {
     return `/libraries/${encodeURIComponent(lib.name)}`;
   }

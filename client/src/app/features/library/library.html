@@ -363,6 +363,7 @@
                 />
                 <app-media-card
                   [media]="item"
+                  [mediaTypeBadge]="mixedLibrary() ? item.type : null"
                   [status]="watchedIds().has(item.id) ? 'watched' : null"
                   [progressPercent]="item.progressPercent ?? 0"
                   [interactiveWatched]="canMarkMediaWatched(item)"
@@ -375,6 +376,7 @@
               <div [id]="'media-' + item.id" [attr.data-library-focus]="'media:' + item.id">
                 <app-media-card
                   [media]="item"
+                  [mediaTypeBadge]="mixedLibrary() ? item.type : null"
                   [status]="watchedIds().has(item.id) ? 'watched' : null"
                   [progressPercent]="item.progressPercent ?? 0"
                   [interactiveWatched]="canMarkMediaWatched(item)"
@@ -499,6 +501,7 @@
               [fanartUrl]="item.fanartUrl"
               [title]="item.title"
               [subtitle]="item.label ?? ('recommend.received_by' | translate: { username: item.sender.username })"
+              [mediaTypeBadge]="item.mediaType"
               [link]="contentLink(item.mediaType, item.mediaId, item.episodeId)"
             />
           }
@@ -539,6 +542,7 @@
               [fanartUrl]="rec.media.fanartUrl"
               [title]="rec.media.title"
               [subtitle]="rec.media.year ? '' + rec.media.year : undefined"
+              [mediaTypeBadge]="mixedLibrary() ? rec.media.type : null"
               [link]="['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id]"
             />
           }
@@ -557,6 +561,7 @@
               [fanartUrl]="rec.media.fanartUrl"
               [title]="rec.media.title"
               [subtitle]="rec.media.year ? '' + rec.media.year : undefined"
+              [mediaTypeBadge]="mixedLibrary() ? rec.media.type : null"
               [link]="['/' + (rec.media.type === 'series' ? 'series' : 'movies'), '' + rec.media.id]"
             />
           }
@@ -647,6 +652,7 @@
             [fanartUrl]="item.fanartUrl"
             [title]="item.title"
             [subtitle]="item.label ?? undefined"
+            [mediaTypeBadge]="mixedLibrary() ? item.mediaType : null"
             [link]="contentLink(item.mediaType, item.mediaId, item.episodeId)"
           />
         }
