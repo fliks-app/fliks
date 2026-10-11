@@ -31,6 +31,19 @@ function order(rows: ReturnType<typeof row>[]): string[] {
 }
 
 describe('sortReleasesByRelevance', () => {
+  it('prefers the exact season pack over a multi-season pack with more seeders', () => {
+    const span = (from: number, to: number) => ({
+      seasons: { from, to },
+      episodes: null,
+      completeSeries: false,
+    });
+    const multi = row({ id: 'S01-S04', isFullSeason: true, seeders: 500, coverage: span(1, 4) });
+    const exact = row({ id: 'S02', isFullSeason: true, seeders: 10, coverage: span(2, 2) });
+    expect(
+      sortReleasesByRelevance([multi, exact], { preferFullSeason: true }).map((r) => r.id),
+    ).toEqual(['S02', 'S01-S04']);
+  });
+
   it('sinks a dead release below a lower-quality live one', () => {
     const deadHd = row({ id: 'dead-1080p', rank: 200, seeders: 0 });
     const liveSd = row({ id: 'live-720p', rank: 100, seeders: 5 });
@@ -391,6 +404,65 @@ describe('computeRejections — episode targeting', () => {
       'EPISODE_MISMATCH',
       'FULL_SEASON_FOR_EPISODE',
     ]);
+  });
+
+  it('accepts a multi-season pack for a season inside its range', () => {
+    expect(reject('Some.Show.S01-S04.1080p.WEB-DL', 2, undefined)).toEqual([]);
+  });
+
+  it('rejects a multi-season pack for a season outside its range', () => {
+    expect(reject('Some.Show.S01-S04.1080p.WEB-DL', 5, undefined)).toEqual([
+      'EPISODE_MISMATCH',
+    ]);
+  });
+
+  it('rejects a multi-season pack when one episode was asked for', () => {
+    expect(reject('Some.Show.S01-S04.1080p.WEB-DL', 2, 3)).toEqual([
+      'FULL_SEASON_FOR_EPISODE',
+    ]);
+  });
+
+  it('accepts a multi-episode release for an episode inside its range', () => {
+    expect(reject('Some.Show.S04E02E03.1080p.WEB-DL', 4, 3)).toEqual([]);
+    expect(reject('Some.Show.S04E02-E03.1080p.WEB-DL', 4, 2)).toEqual([]);
+  });
+
+  it('rejects a multi-episode release for an episode outside its range', () => {
+    expect(reject('Some.Show.S04E02E03.1080p.WEB-DL', 4, 4)).toEqual([
+      'EPISODE_MISMATCH',
+    ]);
+  });
+
+  it('does not call a complete-series release a mismatch on a season search', () => {
+    expect(reject('Some.Show.Complete.Series.1080p', 2, undefined)).toEqual([]);
+  });
+
+  it('rejects a complete-series release when one episode was asked for', () => {
+    expect(reject('Some.Show.Complete.Series.1080p', 2, 3)).toEqual([
+      'FULL_SEASON_FOR_EPISODE',
+    ]);
+  });
+
+  it('names the whole coverage in the rejection params', () => {
+    const actual = (title: string) =>
+      computeRejections({
+        qualityId: 1,
+        allowed: new Set([1]),
+        languageId: 1,
+        allowedLangs: new Set<number>(),
+        isBlocklisted: false,
+        sizeBytes: 0,
+        runtimeMinutes: 30,
+        sizeByQuality: new Map(),
+        seeders: 10,
+        sourceId: 0,
+        sourceMinSeeders: new Map(),
+        releaseTitle: title,
+        expectedSeason: 9,
+        expectedEpisode: 9,
+      }).find((r) => r.code === 'EPISODE_MISMATCH')?.params?.actual;
+    expect(actual('Some.Show.S01-S04.1080p')).toBe('S01-S04');
+    expect(actual('Some.Show.S01E04-E05.1080p')).toBe('S01E04-E05');
   });
 
   it('names both sides in the rejection params', () => {
