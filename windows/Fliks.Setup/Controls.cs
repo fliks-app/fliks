@@ -35,6 +35,7 @@ internal sealed class PillBar : Control
 {
     private readonly Timer _timer = new() { Interval = 16 };
     private float _value;
+    private float _shown;
     private float _phase;
     private bool _indeterminate;
 
@@ -42,13 +43,27 @@ internal sealed class PillBar : Control
     {
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
                  | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
-        _timer.Tick += (_, _) => { _phase = (_phase + 0.012f) % 1f; Invalidate(); };
+        _timer.Tick += (_, _) =>
+        {
+            _phase = (_phase + 0.012f) % 1f;
+            // Glide toward the target; the install reports progress in steps a few seconds apart.
+            _shown += (_value - _shown) * 0.08f;
+            if (Math.Abs(_value - _shown) < 0.001f) _shown = _value;
+            _timer.Enabled = _indeterminate || _shown != _value;
+            Invalidate();
+        };
     }
 
     public float Value
     {
         get => _value;
-        set { _value = Math.Max(0f, Math.Min(1f, value)); Invalidate(); }
+        set
+        {
+            _value = Math.Max(0f, Math.Min(1f, value));
+            if (_value < _shown) _shown = _value;
+            _timer.Enabled = Visible;
+            Invalidate();
+        }
     }
 
     public bool Indeterminate
@@ -60,7 +75,7 @@ internal sealed class PillBar : Control
     protected override void OnVisibleChanged(EventArgs e)
     {
         base.OnVisibleChanged(e);
-        _timer.Enabled = _indeterminate && Visible;
+        _timer.Enabled = Visible && (_indeterminate || _shown != _value);
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -84,8 +99,8 @@ internal sealed class PillBar : Control
         }
         else
         {
-            if (_value <= 0) return;
-            fill = new RectangleF(0, 0, Math.Max(Height, Width * _value), Height);
+            if (_shown <= 0) return;
+            fill = new RectangleF(0, 0, Math.Max(Height, Width * _shown), Height);
         }
         using var accent = new SolidBrush(Theme.Accent);
         using var fillPath = Theme.RoundedRect(fill, radius);
@@ -114,7 +129,6 @@ internal sealed class RoundButton : Button
         FlatStyle = FlatStyle.Flat;
         FlatAppearance.BorderSize = 0;
         Font = new Font("Segoe UI Semibold", 10.5f);
-        Cursor = Cursors.Hand;
         Kind = kind;
     }
 
@@ -169,7 +183,6 @@ internal sealed class CloseButton : Control
     {
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
                  | ControlStyles.UserPaint, true);
-        Cursor = Cursors.Hand;
         AccessibleName = "Close";
         AccessibleRole = AccessibleRole.PushButton;
     }
@@ -188,8 +201,8 @@ internal sealed class CloseButton : Control
             using var path = Theme.RoundedRect(new RectangleF(0, 0, Width - 1, Height - 1), Height / 4f);
             g.FillPath(hover, path);
         }
-        var inset = Width * 0.34f;
-        using var pen = new Pen(_hover ? Theme.Foreground : Theme.Muted, Math.Max(1.5f, Width / 20f));
+        var inset = Width * 0.38f;
+        using var pen = new Pen(_hover ? Theme.Foreground : Theme.Muted, Math.Max(1.5f, Width / 24f));
         g.DrawLine(pen, inset, inset, Width - inset, Height - inset);
         g.DrawLine(pen, Width - inset, inset, inset, Height - inset);
     }

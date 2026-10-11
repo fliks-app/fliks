@@ -65,11 +65,9 @@ try {
 
     Write-Host '==> Building the installer'
     $setupOut = Join-Path $build 'Setup'
-    $installed = 0L
-    foreach ($f in [IO.Directory]::EnumerateFiles($bundle, '*', 'AllDirectories')) { $installed += ([IO.FileInfo]$f).Length }
     dotnet build (Join-Path $winDir 'Fliks.Setup\Fliks.Setup.csproj') -c Release -o $setupOut `
         -p:PackId=FliksServer "-p:MainExe=Fliks Server.exe" "-p:ProductTitle=Fliks Server" `
-        -p:ServerPort=4848 -p:InstalledBytes=$installed `
+        -p:ServerPort=4848 `
         "-p:PayloadPath=$(Join-Path $out 'FliksServer-win-server-Setup.exe')" `
         "-p:SetupIcon=$(Join-Path $winDir 'Fliks.Tray\Resources\fliks.ico')" `
         "-p:AssemblyName=Fliks-Server-$Version-Setup"

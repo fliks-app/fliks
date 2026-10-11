@@ -12,7 +12,6 @@ internal sealed class SetupConfig
     public string PackId { get; private set; } = "";
     public string MainExe { get; private set; } = "";
     public string Title { get; private set; } = "";
-    public long InstalledBytes { get; private set; }
     /// <summary>Set for the server: the installer waits for it to answer before finishing.</summary>
     public int? ServerPort { get; private set; }
 
@@ -31,7 +30,6 @@ internal sealed class SetupConfig
             PackId = Get("PackId"),
             MainExe = Get("MainExe"),
             Title = Get("ProductTitle"),
-            InstalledBytes = long.TryParse(Get("InstalledBytes"), out var bytes) ? bytes : 0,
         };
         if (int.TryParse(Get("ServerPort"), out var port)) config.ServerPort = ConfiguredPort() ?? port;
         return config;

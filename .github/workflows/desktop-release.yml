@@ -401,11 +401,8 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          $installed = 0L
-          foreach ($f in [IO.Directory]::EnumerateFiles("$PWD/desktop/release/win-unpacked", '*', 'AllDirectories')) { $installed += ([IO.FileInfo]$f).Length }
           dotnet build windows/Fliks.Setup/Fliks.Setup.csproj -c Release -o desktop/release/setup `
             -p:PackId=FliksDesktop -p:MainExe=Fliks.exe -p:ProductTitle=Fliks `
-            -p:InstalledBytes=$installed `
             "-p:PayloadPath=$PWD/desktop/release/velopack/FliksDesktop-win-Setup.exe" `
             "-p:SetupIcon=$PWD/desktop/build/icon.ico" `
             "-p:AssemblyName=Fliks-Client-$env:VERSION-Setup"

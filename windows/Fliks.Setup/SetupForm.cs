@@ -8,6 +8,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -30,7 +31,6 @@ internal sealed class SetupForm : Form
     private readonly float _scale;
 
     private Process? _setup;
-    private long _payloadBytes;
     private bool _hadInstall;
     private bool _wasRunning;
     private List<string> _backupsBefore = new();
@@ -39,10 +39,10 @@ internal sealed class SetupForm : Form
     private Action? _primaryAction;
     private Action? _secondaryAction;
     // The install keeps moving while the quit prompt is up: stages are recorded and shown on "No".
-    private Stage _stage = new("", "", "", Bar: false);
+    private Stage _stage = new("", "", Bar: false);
     private bool _confirming;
 
-    private sealed record Stage(string Title, string Step, string Hint, bool Bar, bool Indeterminate = false,
+    private sealed record Stage(string Step, string Hint, bool Bar, bool Indeterminate = false,
         bool Danger = false, string? Primary = null, Action? OnPrimary = null,
         string? Secondary = null, Action? OnSecondary = null);
 
@@ -55,27 +55,29 @@ internal sealed class SetupForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Theme.Background;
         AutoScaleMode = AutoScaleMode.None;
-        _scale = DeviceDpi / 96f;
-        ClientSize = new Size(S(660), S(460));
+        // DeviceDpi stays 96 outside per-monitor mode on .NET Framework; fonts still scale.
+        using (var g = Graphics.FromHwnd(IntPtr.Zero)) _scale = g.DpiX / 96f;
+        ClientSize = new Size(S(560), S(380));
 
         _title = Label(new Font("Segoe UI Semibold", 17f), Theme.Foreground);
-        _step = Label(new Font("Segoe UI", 11f), Theme.Muted);
+        _title.Text = Text;
+        _step = Label(new Font("Segoe UI", 10f), Theme.Foreground);
         _hint = Label(new Font("Segoe UI", 9.5f), Theme.Muted);
 
         var logo = new PictureBox
         {
             Image = new Icon(Icon, new Size(256, 256)).ToBitmap(),
             SizeMode = PictureBoxSizeMode.Zoom,
-            Size = new Size(S(104), S(104)),
+            Size = new Size(S(88), S(88)),
             Anchor = AnchorStyles.None,
             Margin = Pad(0, 16),
         };
         _title.Margin = Pad(0, 14);
-        _step.Margin = Pad(0, 0);
+        _step.Margin = Pad(36, 0);
         _hint.Margin = Pad(6, 0);
-        _bar.Size = new Size(S(360), S(10));
-        _bar.Margin = Pad(28, 0);
-        foreach (var b in new[] { _primary, _secondary }) b.Size = new Size(S(180), S(44));
+        _bar.Size = new Size(S(320), S(8));
+        _bar.Margin = Pad(12, 0);
+        foreach (var b in new[] { _primary, _secondary }) b.Size = new Size(S(150), S(38));
 
         var buttons = new FlowLayoutPanel
         {
@@ -118,7 +120,8 @@ internal sealed class SetupForm : Form
         _primary.Click += (_, _) => _primaryAction?.Invoke();
         _secondary.Click += (_, _) => _secondaryAction?.Invoke();
         _autoClose.Tick += (_, _) => Close();
-        Shown += async (_, _) => await RunAsync();
+        Shown += (_, _) => Enter(new Stage("Ready to install", $"{_config.Title} will be installed on this computer.",
+            Bar: false, Primary: "Install", OnPrimary: async () => await RunAsync()));
     }
 
     private int S(int px) => (int)Math.Round(px * _scale);
@@ -127,7 +130,7 @@ internal sealed class SetupForm : Form
     private Label Label(Font font, Color color) => new()
     {
         AutoSize = true,
-        MaximumSize = new Size(S(580), 0),
+        MaximumSize = new Size(S(480), 0),
         Anchor = AnchorStyles.None,
         TextAlign = ContentAlignment.MiddleCenter,
         Font = font,
@@ -156,11 +159,10 @@ internal sealed class SetupForm : Form
         try
         {
             _installing = true;
-            Enter(new Stage($"Installing {_config.Title}", "Preparing…", "", Bar: true));
+            Enter(new Stage("Installing…", "This can take a few minutes.", Bar: true));
             var setupExe = await Task.Run(() => ExtractPayload(p => BeginInvoke(new Action(() => _bar.Value = p * 0.1f))));
             if (_cancelled) return;
 
-            Enter(new Stage($"Installing {_config.Title}", "Installing…", "This can take a few minutes.", Bar: true));
             // What a cancel must undo depends on what was already here.
             _hadInstall = Directory.Exists(_config.InstallDir) && Directory.EnumerateFileSystemEntries(_config.InstallDir).Any();
             _wasRunning = Process.GetProcessesByName(Path.GetFileNameWithoutExtension(_config.MainExe)).Length > 0;
@@ -173,35 +175,47 @@ internal sealed class SetupForm : Form
 
             // Velopack logs each install step: copy the package into packages\, extract it into
             // current\, then shortcuts and the app's install hook, which report no progress.
-            var total = _config.InstalledBytes + _payloadBytes;
             var finishing = false;
+            DateTime? extractStart = null;
             while (!_setup.HasExited)
             {
                 await Task.Delay(500);
-                if (_cancelled || finishing) continue;
+                if (_cancelled) continue;
                 var phase = ReadShared(log);
+                // Setup then deletes the previous install's backup, minutes for tens of thousands of
+                // files; it carries on in the background.
+                if (phase.Contains("Installation completed successfully")) break;
+                if (finishing) continue;
                 if (phase.Contains("Creating shortcuts") || phase.Contains("install hook"))
                 {
                     finishing = true;
                     _bar.Value = 1f;
-                    Enter(new Stage($"Installing {_config.Title}", "Finishing the installation…",
-                        "This step can take a minute.", Bar: true, Indeterminate: true));
+                    Enter(new Stage("Finishing…", "This step can take a minute.", Bar: true, Indeterminate: true));
                     continue;
                 }
-                // Before this line a reinstall's folder still holds the previous install; without a
-                // log, a fresh install's folder is safe to measure from the start.
-                var measuring = phase.Contains("Extracting Update.exe") || (phase.Length == 0 && !_hadInstall);
-                if (!measuring || _config.InstalledBytes <= 0) continue;
+                // Files, not bytes: the few large binaries land in seconds, the thousands of small
+                // ones take the rest.
+                var extracting = Regex.Match(phase, @"Extracting (\d+) app files");
+                if (!extracting.Success) continue;
+                var total = int.Parse(extracting.Groups[1].Value);
                 // Tens of thousands of files: walking them on the UI thread hangs the window.
-                var size = await Task.Run(() => DirectorySize(_config.InstallDir));
-                if (!_cancelled)
-                    _bar.Value = Math.Max(_bar.Value, 0.1f + 0.88f * Math.Min(1f, size / (float)total));
+                var done = await Task.Run(() => FileCount(Path.Combine(_config.InstallDir, "current")));
+                if (_cancelled || total <= 0) continue;
+                _bar.Value = Math.Max(_bar.Value, 0.1f + 0.88f * Math.Min(1f, done / (float)total));
+
+                extractStart ??= DateTime.UtcNow;
+                var elapsed = (DateTime.UtcNow - extractStart.Value).TotalSeconds;
+                // The first seconds' rate says little: the large files go first.
+                if (done == 0 || elapsed < 15) continue;
+                var left = elapsed * (total - done) / done;
+                var hint = left < 60 ? "Less than a minute left." : $"About {Math.Ceiling(left / 60)} minutes left.";
+                if (hint != _stage.Hint) Enter(new Stage("Installing…", hint, Bar: true));
             }
             _installing = false;
             if (_cancelled) return;
             // Nothing left to cancel: drop an open quit prompt.
             _confirming = false;
-            if (_setup.ExitCode != 0)
+            if (_setup.HasExited && _setup.ExitCode != 0)
             {
                 Fail("The installation did not complete.", log);
                 return;
@@ -217,13 +231,12 @@ internal sealed class SetupForm : Form
 
             if (_config.ServerPort is not int port)
             {
-                Enter(new Stage($"{_config.Title} is installed", "Starting…", "", Bar: false));
+                Enter(new Stage("Installed", "Starting…", Bar: false));
                 _autoClose.Start();
                 return;
             }
 
-            Enter(new Stage($"Setting up {_config.Title}", "Starting the server…",
-                "This step can take 1 to 2 minutes.", Bar: true, Indeterminate: true));
+            Enter(new Stage("Starting the server…", "This step can take 1 to 2 minutes.", Bar: true, Indeterminate: true));
             // .NET Framework's HttpClient does proxy discovery and the connect synchronously on the
             // calling thread, which froze the window while the server wasn't listening yet.
             if (await Task.Run(() => WaitForServerAsync(port, TimeSpan.FromMinutes(10))))
@@ -233,8 +246,7 @@ internal sealed class SetupForm : Form
             }
             else
             {
-                Enter(new Stage($"{_config.Title} is installed", "The server is still starting. Its status is in the tray.",
-                    "", Bar: false, Primary: "Close", OnPrimary: Close));
+                Enter(new Stage("The server is still starting.", "Its status is in the tray.", Bar: false, Primary: "Close", OnPrimary: Close));
             }
         }
         catch (Exception ex)
@@ -251,25 +263,28 @@ internal sealed class SetupForm : Form
         var target = Path.Combine(_temp, "Setup.exe");
         using var source = Assembly.GetExecutingAssembly().GetManifestResourceStream("payload.exe")
                            ?? throw new InvalidOperationException("This setup carries no payload.");
-        _payloadBytes = source.Length;
         using var file = File.Create(target);
         var buffer = new byte[1 << 20];
         long copied = 0;
-        int read;
+        int read, percent = 0;
         while (!_cancelled && (read = source.Read(buffer, 0, buffer.Length)) > 0)
         {
             file.Write(buffer, 0, read);
             copied += read;
-            progress(copied / (float)source.Length);
+            // One UI update per MB queues hundreds of invokes ahead of the first paint.
+            var now = (int)(copied * 100 / source.Length);
+            if (now == percent) continue;
+            percent = now;
+            progress(now / 100f);
         }
         return target;
     }
 
-    private static long DirectorySize(string dir)
+    private static int FileCount(string dir)
     {
         try
         {
-            return new DirectoryInfo(dir).EnumerateFiles("*", SearchOption.AllDirectories).Sum(f => f.Length);
+            return Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories).Count();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -312,7 +327,7 @@ internal sealed class SetupForm : Form
     {
         if (_confirming) return;
         _confirming = true;
-        SetView("Do you really want to quit?", $"{_config.Title} will not be installed.", "", bar: false);
+        SetView("Do you really want to quit?", $"{_config.Title} will not be installed.", bar: false);
         Buttons("Yes", async () => await CancelInstallAsync(), "No", ResumeInstall, danger: true);
         _secondary.Focus();
     }
@@ -333,7 +348,7 @@ internal sealed class SetupForm : Form
             return;
         }
         _cancelled = true;
-        Render(new Stage("Cancelling…", "Removing the installed files.", "", Bar: true, Indeterminate: true));
+        Render(new Stage("Cancelling…", "Removing the installed files.", Bar: true, Indeterminate: true));
         await Task.Run(UndoInstall);
         Close();
     }
@@ -405,7 +420,7 @@ internal sealed class SetupForm : Form
     }
 
     private void Fail(string message, string log) =>
-        Enter(new Stage($"{_config.Title} could not be installed", message, "", Bar: false, Danger: true,
+        Enter(new Stage("The installation failed.", message, Bar: false, Danger: true,
             Primary: "Open Log", OnPrimary: () => { if (File.Exists(log)) OpenUrl(log); },
             Secondary: "Close", OnSecondary: Close));
 
@@ -417,15 +432,14 @@ internal sealed class SetupForm : Form
 
     private void Render(Stage stage)
     {
-        SetView(stage.Title, stage.Step, stage.Hint, stage.Bar, stage.Danger);
+        SetView(stage.Step, stage.Hint, stage.Bar, stage.Danger);
         _bar.Indeterminate = stage.Indeterminate;
         if (stage.Primary is not null) Buttons(stage.Primary, stage.OnPrimary!, stage.Secondary, stage.OnSecondary);
     }
 
-    private void SetView(string title, string step, string hint, bool bar, bool danger = false)
+    private void SetView(string step, string hint, bool bar, bool danger = false)
     {
-        _title.ForeColor = danger ? Theme.Danger : Theme.Foreground;
-        _title.Text = title;
+        _step.ForeColor = danger ? Theme.Danger : Theme.Foreground;
         _step.Text = step;
         _step.Visible = step.Length > 0;
         _hint.Text = hint;
@@ -451,8 +465,15 @@ internal sealed class SetupForm : Form
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
         base.OnFormClosed(e);
-        try { Directory.Delete(_temp, recursive: true); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* Setup.exe still locked */ }
+        if (!Directory.Exists(_temp)) return;
+        // Deleting the fresh 270 MB Setup.exe waits minutes on the antivirus scan, and Setup may
+        // still be running: a detached shell retries for up to five minutes.
+        Process.Start(new ProcessStartInfo("cmd.exe",
+            $"/d /c for /l %i in (1,1,60) do @if exist \"{_temp}\" (rmdir /s /q \"{_temp}\" 2>nul & ping -n 6 127.0.0.1 >nul)")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        });
     }
 
     private static void OpenUrl(string target)
