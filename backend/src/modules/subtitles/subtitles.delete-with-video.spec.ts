@@ -38,3 +38,33 @@ describe('SubtitlesService.deleteSubtitleFilesOnDisk', () => {
     expect(existsSync(join(dir, 'shared.srt'))).toBe(true);
   });
 });
+
+describe('SubtitlesService.carryOver', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'fliks-subtitle-carry-'));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it('renames sidecars after the new video, unless the new release ships that name', async () => {
+    for (const f of ['Old.fr.forced.srt', 'Old.en.srt', 'New.en.srt']) writeFileSync(join(dir, f), f);
+    const subs = [
+      { id: 1, relativePath: 'Old.fr.forced.srt', providerType: SubtitleProviderType.OPENSUBTITLES, hashMatched: true },
+      { id: 2, relativePath: 'Old.en.srt', providerType: SubtitleProviderType.DISK },
+      { id: 3, relativePath: null, providerType: SubtitleProviderType.EMBEDDED },
+    ];
+    const service = Object.create(SubtitlesService.prototype) as SubtitlesService;
+    const wired = service as unknown as Record<string, unknown>;
+    wired.repo = { find: jest.fn().mockResolvedValue(subs), save: jest.fn() };
+    wired.mediaRepo = { findOne: jest.fn().mockResolvedValue({ id: 1, path: dir }) };
+    wired.mediaFileRepo = { findOne: jest.fn().mockResolvedValue({ id: 10, relativePath: 'Old.mkv' }) };
+    wired.logger = { log: jest.fn(), warn: jest.fn() };
+
+    const moved = await service.carryOver(1, 10, { id: 20, relativePath: 'New.mkv' } as never);
+
+    expect(moved).toEqual([1]);
+    expect(existsSync(join(dir, 'New.fr.forced.srt'))).toBe(true);
+    expect(subs[0]).toMatchObject({ relativePath: 'New.fr.forced.srt', mediaFile: { id: 20 }, hashMatched: false });
+    expect(existsSync(join(dir, 'Old.en.srt'))).toBe(true);
+  });
+});
