@@ -10,6 +10,7 @@ import {
   DeviceProfile,
 } from '../browser-device-profile.service';
 import { SseService } from '../sse.service';
+import type { MediaType } from '../../enums/media-type.enum';
 import type { EdlRange } from '../../utils/edl-policy';
 import type { PreRollItem } from '@fliks/plugin-contract/ui';
 
@@ -198,8 +199,8 @@ export interface RecommendationItem {
   media: {
     id: number;
     title: string;
-    type: string;
-    year: number;
+    type: MediaType;
+    year: number | null;
     posterUrl: string | null;
     /** Primary fanart, exposed so the home page can include
      *  recommended titles in its background-image pool. */

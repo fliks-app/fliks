@@ -52,7 +52,7 @@
             [imageUrl]="rec.media.posterUrl"
             [fanartUrl]="rec.media.fanartUrl"
             [title]="rec.media.title"
-            [subtitle]="'' + rec.media.year"
+            [subtitle]="'' + (rec.media.year ?? '')"
             [link]="mediaLink(rec.media.type, rec.media.id)"
           />
         }
