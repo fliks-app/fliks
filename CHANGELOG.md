@@ -1,5 +1,28 @@
 # Changelog
 
+## [4.4.0](https://github.com/fliks-app/fliks/compare/v4.3.1...v4.4.0) (2026-10-11)
+
+
+### Features
+
+* **media-card:** show the movie/series badge on mixed rows only ([#1588](https://github.com/fliks-app/fliks/issues/1588)) ([f42809c](https://github.com/fliks-app/fliks/commit/f42809c056b0d270af777b617edfa8d929336d2d))
+* **media-detail:** list, import, download and delete companion files ([#1584](https://github.com/fliks-app/fliks/issues/1584)) ([89855db](https://github.com/fliks-app/fliks/commit/89855db9d3b6a572c6a49f54f1ed48c85be3830c))
+* **media:** schedule the source scans on a manual rescan ([#1578](https://github.com/fliks-app/fliks/issues/1578)) ([b8597c6](https://github.com/fliks-app/fliks/commit/b8597c6689d7e601d1670a3dce9d0ecedaaac93f))
+* **playback:** apply .edl sidecars to skip and mute during playback ([#1583](https://github.com/fliks-app/fliks/issues/1583)) ([0c53e03](https://github.com/fliks-app/fliks/commit/0c53e0306799ac06124fbc49908516863fa3bb1a)), closes [#1575](https://github.com/fliks-app/fliks/issues/1575)
+* **player:** open the player in landscape on phones ([#1586](https://github.com/fliks-app/fliks/issues/1586)) ([cce704c](https://github.com/fliks-app/fliks/commit/cce704c6b21f3dcd2009278b7e0ed38dcb850462))
+* **windows:** ship the server and the desktop client through Velopack ([#1570](https://github.com/fliks-app/fliks/issues/1570)) ([b748d5b](https://github.com/fliks-app/fliks/commit/b748d5b922ab0ea5e131128120a31b762b0e596a))
+
+
+### Bug Fixes
+
+* **home:** space the loading skeleton from the customize card ([#1589](https://github.com/fliks-app/fliks/issues/1589)) ([233ea13](https://github.com/fliks-app/fliks/commit/233ea1387cb7fa03d4192423708675c54c9bf18d))
+* **ios-player:** enter picture-in-picture when the app is backgrounded ([#1585](https://github.com/fliks-app/fliks/issues/1585)) ([8e6d829](https://github.com/fliks-app/fliks/commit/8e6d829d799778ffc35bd70c92c503a3ac638a40))
+* **ios:** declare the camera usage description ([#1587](https://github.com/fliks-app/fliks/issues/1587)) ([702ba26](https://github.com/fliks-app/fliks/commit/702ba26ff1e4602321112a52f172070a6fe92235))
+* **library-ingest:** replace the superseded file on a download upgrade ([#1581](https://github.com/fliks-app/fliks/issues/1581)) ([a23ab48](https://github.com/fliks-app/fliks/commit/a23ab48a1aa85b62fbfc2385d6324d65b6e97400))
+* **release-parsing:** read season, episode and series ranges in release titles ([#1582](https://github.com/fliks-app/fliks/issues/1582)) ([a0d0e0d](https://github.com/fliks-app/fliks/commit/a0d0e0d3242ff93416a480212b4362d8d5fd5ce7))
+* **release-scoring:** search a readable title and reject unreadable mismatches ([#1580](https://github.com/fliks-app/fliks/issues/1580)) ([af8c339](https://github.com/fliks-app/fliks/commit/af8c3397564a80c067c041bcf539cb693f6d0fa9))
+* **streaming:** keep the multi-audio hls_time under one encoder GOP ([#1576](https://github.com/fliks-app/fliks/issues/1576)) ([b269687](https://github.com/fliks-app/fliks/commit/b269687711572cb8f8fcd81dc9998cabe6c21631))
+
 ## [4.3.1](https://github.com/fliks-app/fliks/compare/v4.3.0...v4.3.1) (2026-10-02)
 
 
