@@ -9,6 +9,13 @@ import { buildSubtitleTracks } from '../utils/subtitle-tracks';
 import { normalizeLangCode } from '../utils/language.utils';
 import { AuthService } from './auth.service';
 import { DeviceProfile } from './browser-device-profile.service';
+import {
+  CAST_CUSTOM_DATA_BUDGET,
+  encodeEdlWire,
+  jsonBytes,
+  muteRangesOf,
+  type EdlRange,
+} from '../utils/edl-policy';
 import { ENGINE_TRAITS, EngineKind } from './engine-traits';
 import { ServerConfigService } from './server-config.service';
 import { formatAudioParts, formatAudioLabel, formatSubtitleLabel, formatSubtitleParts, parseAudioIndex, playbackModeOf, SpriteMetadata, type PlaybackMode } from '../utils/player.utils';
@@ -566,10 +573,9 @@ export class CastPlayerService {
     const transcodeQuality = this.activeQualityId();
 
     // Parallel: playback-info (triggers backend prewarm) + cast token fetch.
-    const castProfile = this.getCastDeviceProfile();
     const [pi, castInfo] = await Promise.all([
-      this.streamingApi.getPlaybackInfo(
-        mfId, castProfile, this.activeBurnInId ?? undefined, audioIdx,
+      this.getCastPlaybackInfo(
+        mfId, this.activeBurnInId ?? undefined, audioIdx,
         transcodeQuality, Math.floor(currentPos),
       ),
       this.authService.getCastInfo(),
@@ -584,7 +590,7 @@ export class CastPlayerService {
    */
   private async dispatchLoad(
     mfId: number,
-    pi: { playMethod: PlayMethod; playUrl: string; sessionId?: string },
+    pi: { playMethod: PlayMethod; playUrl: string; sessionId?: string; edl?: EdlRange[] },
     currentPos: number,
     transcodeQuality: string | undefined,
     castInfo: { token: string; streamBaseUrl: string },
@@ -653,7 +659,70 @@ export class CastPlayerService {
       mediaId: this.mediaId(),
       episodeId: this.episodeId(),
       autoplay,
+      mediaFileId: mfId,
+      autoSkipCommercials: this.authService.user()?.edlAutoSkipCommercials !== false,
+      ...this.edlPayload(pi.edl, {
+        title: this.mediaTitle(),
+        subtitle: this.episodeTitle(),
+        posterUrl: this.fanartUrl(),
+        mediaId: this.mediaId(),
+        episodeId: this.episodeId(),
+        mediaFileId: mfId,
+      }),
     });
+  }
+
+  /** The receiver's EDL input in compact wire form, with the notice texts in the sender's
+   *  language. Dropped (cast plays without EDL) when the LOAD customData would near the 64 KB limit. */
+  private edlPayload(edl: EdlRange[] | undefined, base: Record<string, unknown>) {
+    if (!edl?.length) return {};
+    const payload = {
+      edl: encodeEdlWire(edl),
+      edlLabels: {
+        cut: this.translate.instant('player.edl.skipped_cut'),
+        commercial: this.translate.instant('player.edl.skipped_commercial'),
+      },
+    };
+    if (jsonBytes({ ...base, ...payload }) > CAST_CUSTOM_DATA_BUDGET) {
+      console.warn('[cast] EDL too large for the LOAD message, casting without it', edl.length);
+      return {};
+    }
+    return payload;
+  }
+
+  /** Files whose mutes ride on PCM audio: gating a Dolby passthrough stream on the receiver is
+   *  unverified, so these get a profile without AC-3 / E-AC-3. */
+  private readonly pcmForMutes = new Set<number>();
+
+  /** Playback-info for the cast profile. When the answer carries mute ranges and the profile
+   *  would let Dolby audio through, asks once more with a profile that forces a transcode to AAC. */
+  private async getCastPlaybackInfo(
+    mfId: number,
+    burnInId: number | undefined,
+    audioIdx: number | undefined,
+    quality: string | undefined,
+    startAt: number,
+  ) {
+    const request = (profile: DeviceProfile) =>
+      this.streamingApi.getPlaybackInfo(mfId, profile, burnInId, audioIdx, quality, startAt);
+    const profile = this.getCastDeviceProfile();
+    const withoutDolby = (): DeviceProfile => ({
+      ...profile,
+      directPlayProfiles: profile.directPlayProfiles.map((p) => ({
+        ...p,
+        audioCodecs: p.audioCodecs.filter((c) => c !== 'ac3' && c !== 'eac3'),
+      })),
+    });
+    const dolby = profile.directPlayProfiles.some((p) =>
+      p.audioCodecs.some((c) => c === 'ac3' || c === 'eac3'),
+    );
+    if (this.pcmForMutes.has(mfId) && dolby) return request(withoutDolby());
+    const pi = await request(profile);
+    const dolbyOut = pi.outputAudioCodec === 'ac3' || pi.outputAudioCodec === 'eac3';
+    if (!dolby || !dolbyOut || !pi.edl || !muteRangesOf(pi.edl).length) return pi;
+    this.pcmForMutes.add(mfId);
+    if (pi.sessionId) await this.streamingApi.stopSession(pi.sessionId).catch(() => {});
+    return request(withoutDolby());
   }
 
   async changeQuality(qualityId: string) {
@@ -868,9 +937,8 @@ export class CastPlayerService {
     // backend snaps it to whatever the source can actually serve.
     const cs = this.castSettings.get();
     const startQuality = cs.maxQuality === 'original' ? '1080p' : cs.maxQuality;
-    const pi = await this.streamingApi.getPlaybackInfo(
-      opts.mediaFileId, this.getCastDeviceProfile(),
-      undefined, audioIndex, startQuality, Math.floor(startTime),
+    const pi = await this.getCastPlaybackInfo(
+      opts.mediaFileId, undefined, audioIndex, startQuality, Math.floor(startTime),
     );
 
     // Build the dropdown list from the backend-authoritative qualities,

@@ -3,6 +3,7 @@ import { IPC } from '../shared/contract';
 import type { PlayerSession } from './window/player-session';
 import type {
   DesktopLoadOptions,
+  DesktopMuteRange,
   DesktopRect,
   DesktopSubtitleStyle,
 } from '../shared/contract';
@@ -26,6 +27,9 @@ export function registerPlayerIpc(session: PlayerSession): void {
   ipcMain.handle(IPC.setPlaybackRate, (_e, rate: number) => session.player.setPlaybackRate(rate));
   ipcMain.handle(IPC.setVolume, (_e, volume: number) => session.player.setVolume(volume));
   ipcMain.handle(IPC.setMuted, (_e, muted: boolean) => session.player.setMuted(muted));
+  ipcMain.handle(IPC.setMuteRanges, (_e, ranges: DesktopMuteRange[]) =>
+    session.player.setMuteRanges(ranges),
+  );
   ipcMain.handle(IPC.getPosition, () => session.player.getPosition());
   ipcMain.handle(IPC.getAudioTracks, () => session.player.getAudioTracks());
   ipcMain.handle(IPC.selectAudioTrack, (_e, id: string) => session.player.selectAudioTrack(id));

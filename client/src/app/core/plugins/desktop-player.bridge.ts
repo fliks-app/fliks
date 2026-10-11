@@ -104,6 +104,8 @@ export interface FliksDesktopApi {
   /** Show or hide the pointer over the native window; on Linux the visible
    *  surface is the compositor's, so the page's CSS cursor never reaches it. */
   setCursorVisible(visible: boolean): Promise<void>;
+  /** Silences audio inside the ranges (content seconds); [] clears. Absent on older shells. */
+  setMuteRanges?(ranges: { start: number; end: number }[]): Promise<void>;
   resize(rect: DesktopRect): Promise<void>;
   setFullscreen(enabled: boolean): Promise<void>;
   destroy(): Promise<void>;

@@ -7,6 +7,8 @@ import {
 } from './playback-engine';
 import { SubtitleOverlay } from './subtitle-overlay.util';
 import { WEBOS_CUE_SIZE_BOOST } from '../../utils/subtitle-presets';
+import type { TimeRange } from '../../utils/edl-policy';
+import { MuteGate } from './mute-gate';
 
 /** Open HLS a few rungs up so the picture isn't a soft 256×144 while the
  *  native ABR ramps. ~8 Mbps suits a TV display. */
@@ -72,11 +74,30 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
   private reloadInFlight = false;
   private seekDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+  /** The user's own mute; `video.muted` is this OR the EDL gate. */
+  private userMuted = false;
+  private gated = false;
+  private lastVolumeEvent: { volume: number; muted: boolean } | null = null;
+  private muteGate: MuteGate | null = null;
+  private muteRanges: readonly TimeRange[] = [];
+
   // ── Lifecycle ───────────────────────────────────────────────────────
 
   async init(video: HTMLElement): Promise<void> {
     this.video = video as HTMLVideoElement;
     this.video.style.display = '';
+    const el = this.video;
+    this.userMuted = el.muted;
+    this.muteGate = new MuteGate({
+      position: () => this.currentTime,
+      rate: () => el.playbackRate,
+      paused: () => el.paused,
+      apply: (gated) => {
+        this.gated = gated;
+        el.muted = this.userMuted || gated;
+      },
+    });
+    this.muteGate.setRanges(this.muteRanges);
     this.wireListeners();
   }
 
@@ -100,6 +121,9 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
         v.load();
       } catch { /* element may already be detached */ }
     }
+    this.muteGate?.dispose();
+    this.muteGate = null;
+    if (v) v.muted = this.userMuted;
     this.boundListeners = [];
     this.audioTrackListeners = [];
     this.frameCbHandle = null;
@@ -153,9 +177,15 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
       this.emit('stateChanged', { state: 'ended' });
       this.emit('ended', undefined);
     });
+    // A gate-only flip of `video.muted` is not a user change: skip an unchanged payload.
     add('volumechange', () => {
-      this.emit('volumechange', { volume: v.volume, muted: v.muted });
+      const last = this.lastVolumeEvent;
+      if (last && last.volume === v.volume && last.muted === this.userMuted) return;
+      this.emitVolume();
     });
+    for (const event of ['seeking', 'seeked', 'play', 'pause', 'ratechange', 'timeupdate', 'loadedmetadata'] as const) {
+      add(event, () => this.muteGate?.sync());
+    }
     add('error', () => {
       if (this.loadingPhase) return; // recovered via the load() fallback
       const err = v.error;
@@ -323,6 +353,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
     // Report the target immediately so the bar pins and a follow-up relative
     // step (±10s) is computed from here, not the stale clock.
     this.seekIntent = target;
+    this.muteGate?.sync();
 
     // Forward in-buffer: native seek is instant and the UA coalesces rapid
     // ones. Backward seeks are NOT done natively even when "in buffer" — on
@@ -413,8 +444,24 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
   readonly supportsVolume = true;
 
   set volume(v: number) { if (this.video) this.video.volume = v; }
-  get muted(): boolean { return this.video?.muted ?? false; }
-  set muted(m: boolean) { if (this.video) this.video.muted = m; }
+  get muted(): boolean { return this.userMuted; }
+  set muted(m: boolean) {
+    this.userMuted = m;
+    if (!this.video) return;
+    const before = this.video.muted;
+    this.video.muted = m || this.gated;
+    if (this.video.muted === before) this.emitVolume();
+  }
+
+  setMuteRanges(ranges: readonly TimeRange[]): void {
+    this.muteRanges = ranges;
+    this.muteGate?.setRanges(ranges);
+  }
+
+  private emitVolume(): void {
+    this.lastVolumeEvent = { volume: this.video?.volume ?? 1, muted: this.userMuted };
+    this.emit('volumechange', this.lastVolumeEvent);
+  }
 
   private bufferedEnd(): number {
     const v = this.video;

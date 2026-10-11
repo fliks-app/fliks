@@ -10,6 +10,8 @@ import { BrowserDeviceProfileService } from '../../../core/services/browser-devi
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { DeviceService } from '../../../core/services/device.service';
+import { UsersApiService } from '../../../core/services/api/users-api.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { persistOnChange } from '../../../core/utils/persist-on-change';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { SelectFieldComponent } from '../../../shared/components/forms/select-field/select-field';
@@ -35,6 +37,8 @@ export class PlayerSettingsPageComponent {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   private readonly device = inject(DeviceService);
+  private readonly usersApi = inject(UsersApiService);
+  private readonly auth = inject(AuthService);
 
   readonly languageOptions = LANGUAGE_CODE_OPTIONS;
   readonly audioModeOptions = AUDIO_SELECTION_MODE_OPTIONS;
@@ -50,6 +54,8 @@ export class PlayerSettingsPageComponent {
   readonly autoSkipIntro = signal(this.initial.autoSkipIntro);
   readonly autoPlayNext = signal(this.initial.autoPlayNext);
   readonly backgroundAudio = signal(this.initial.backgroundAudio);
+  readonly edlEnabled = signal(this.auth.user()?.edlEnabled ?? true);
+  readonly edlAutoSkip = signal(this.auth.user()?.edlAutoSkipCommercials !== false);
   readonly showBackgroundAudio =
     (this.device.isAndroidNative() || this.device.isIosNative()) && !this.device.isTv();
   readonly showHdrToggle = signal(this.deviceProfile.hardwareSupportsHdr);
@@ -69,6 +75,32 @@ export class PlayerSettingsPageComponent {
       // Spread first: other pages own fields of this store.
       (values) => this.ps.save({ ...this.ps.get(), ...values }),
     );
+  }
+
+  async onEdlEnabledChange(value: boolean): Promise<void> {
+    this.edlEnabled.set(value);
+    const user = this.auth.user();
+    if (!user) return;
+    try {
+      await this.usersApi.update(user.id, { edlEnabled: value });
+      this.auth.patchUser({ edlEnabled: value });
+      this.toast.success(this.translate.instant('playback_settings.player_edl_saved'));
+    } catch {
+      this.edlEnabled.set(user.edlEnabled ?? true);
+    }
+  }
+
+  async onEdlAutoSkipChange(value: boolean): Promise<void> {
+    this.edlAutoSkip.set(value);
+    const user = this.auth.user();
+    if (!user) return;
+    try {
+      await this.usersApi.update(user.id, { edlAutoSkipCommercials: value });
+      this.auth.patchUser({ edlAutoSkipCommercials: value });
+      this.toast.success(this.translate.instant('playback_settings.player_edl_saved'));
+    } catch {
+      this.edlAutoSkip.set(user.edlAutoSkipCommercials !== false);
+    }
   }
 
   async clearAudioSelections() {

@@ -35,6 +35,12 @@ export interface DesktopLoadOptions {
   videoCrop?: string;
 }
 
+/** Content-time span (seconds) the player silences without touching user mute/volume. */
+export interface DesktopMuteRange {
+  start: number;
+  end: number;
+}
+
 export interface DesktopSubtitleStyle {
   fontScale: number;
   foregroundColor: string;
@@ -105,6 +111,7 @@ export const IPC = {
   setPlaybackRate: 'player:setPlaybackRate',
   setVolume: 'player:setVolume',
   setMuted: 'player:setMuted',
+  setMuteRanges: 'player:setMuteRanges',
   setFullscreen: 'player:setFullscreen',
   getPosition: 'player:getPosition',
   getAudioTracks: 'player:getAudioTracks',
@@ -242,6 +249,8 @@ export interface FliksDesktopApi {
   /** 0..100 (mpv volume scale). */
   setVolume(volume: number): Promise<void>;
   setMuted(muted: boolean): Promise<void>;
+  /** Replace the silenced content-time ranges ([] clears). Survives reloads. */
+  setMuteRanges(ranges: DesktopMuteRange[]): Promise<void>;
   setFullscreen(enabled: boolean): Promise<void>;
   getPosition(): Promise<DesktopPositionInfo>;
   getAudioTracks(): Promise<DesktopAudioTrack[]>;

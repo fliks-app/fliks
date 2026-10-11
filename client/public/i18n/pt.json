@@ -152,7 +152,13 @@
     "error_airplay_unsupported": "Este dispositivo AirPlay não consegue reproduzir este vídeo.",
     "stats_delivery_mismatch": "Decisão do servidor: {{decision}} / Entregue: {{delivered}}",
     "stats_dolby_vision_base": "Dolby Vision {{profile}}, base {{base}}",
-    "stats_dolby_vision": "Dolby Vision {{profile}}"
+    "stats_dolby_vision": "Dolby Vision {{profile}}",
+    "edl": {
+      "skipped_commercial": "Anúncio ignorado",
+      "skipped_cut": "Cena ignorada",
+      "muted": "Áudio silenciado",
+      "skip_commercial": "Saltar anúncio"
+    }
   },
   "sse": {
     "subtitle_synced": "Legenda sincronizada com sucesso.",
@@ -527,7 +533,12 @@
     "sub_bottom_margin_hint": "Define a posição vertical das legendas em relação à parte inferior do ecrã.",
     "sub_top_margin": "Posição da margem superior",
     "sub_top_margin_hint": "Define a posição vertical máxima permitida em relação ao topo do ecrã. Esta função é usada quando as legendas contêm instruções de posicionamento no topo do ecrã.",
-    "lang_any": "Sem preferência"
+    "lang_any": "Sem preferência",
+    "player_edl": "Aplicar cortes e silêncios",
+    "player_edl_hint": "Aplica o ficheiro .edl junto ao vídeo: ignora cortes e anúncios e silencia as passagens marcadas. Vale para o streaming e para novas transferências.",
+    "player_edl_autoskip": "Saltar automaticamente os intervalos comerciais",
+    "player_edl_autoskip_hint": "Quando desativado, um botão Saltar anúncio aparece durante os intervalos comerciais.",
+    "player_edl_saved": "Preferência guardada"
   },
   "import_disk": {
     "title": "Importação manual a partir do disco",

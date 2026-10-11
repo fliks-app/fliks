@@ -2,6 +2,7 @@ import type {
   DesktopAudioTrack,
   DesktopLoadOptions,
   DesktopPlayerState,
+  DesktopMuteRange,
   DesktopPositionInfo,
   DesktopSubtitleStyle,
   DesktopSubtitleTrack,
@@ -44,6 +45,8 @@ export interface PlayerBackend extends TypedEmitter<PlayerBackendEvents> {
   setPlaybackRate(rate: number): Promise<void>;
   setVolume(volume: number): Promise<void>;
   setMuted(muted: boolean): Promise<void>;
+  /** Silence these content-time ranges via a labelled mpv `af` entry; re-applied on every load. */
+  setMuteRanges(ranges: DesktopMuteRange[]): Promise<void>;
   getPosition(): Promise<DesktopPositionInfo>;
   getAudioTracks(): Promise<DesktopAudioTrack[]>;
   selectAudioTrack(id: string): Promise<void>;

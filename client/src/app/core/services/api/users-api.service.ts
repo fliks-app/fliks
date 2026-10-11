@@ -51,6 +51,9 @@ export interface UpdateUserBody {
   shareStats?: boolean;
   /** Self-editable: opt out of the whole social/sharing layer. */
   shareDisabled?: boolean;
+  /** Self-editable: apply the `.edl` sidecar during playback. */
+  edlEnabled?: boolean;
+  edlAutoSkipCommercials?: boolean;
   /** Self-editable: mask what would spoil an unwatched episode. */
   hideSpoilers?: boolean;
   /** Self-editable: blur unwatched episode stills and the episode backdrop. */

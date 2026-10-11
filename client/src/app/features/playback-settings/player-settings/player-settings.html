@@ -68,6 +68,22 @@
       [hint]="'playback_settings.player_auto_play_next_hint' | translate"
     />
 
+    <app-toggle-field
+      [value]="edlEnabled()"
+      (valueChange)="onEdlEnabledChange($event)"
+      [label]="'playback_settings.player_edl' | translate"
+      [hint]="'playback_settings.player_edl_hint' | translate"
+    />
+
+    @if (edlEnabled()) {
+      <app-toggle-field
+        [value]="edlAutoSkip()"
+        (valueChange)="onEdlAutoSkipChange($event)"
+        [label]="'playback_settings.player_edl_autoskip' | translate"
+        [hint]="'playback_settings.player_edl_autoskip_hint' | translate"
+      />
+    }
+
     @if (showBackgroundAudio) {
       <app-toggle-field
         [(value)]="backgroundAudio"

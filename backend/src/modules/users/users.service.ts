@@ -302,6 +302,9 @@ export class UsersService implements OnModuleInit {
     if (dto.shareLikes !== undefined) target.shareLikes = dto.shareLikes;
     if (dto.shareStats !== undefined) target.shareStats = dto.shareStats;
     if (dto.hideSpoilers !== undefined) target.hideSpoilers = dto.hideSpoilers;
+    if (dto.edlEnabled !== undefined) target.edlEnabled = dto.edlEnabled;
+    if (dto.edlAutoSkipCommercials !== undefined)
+      target.edlAutoSkipCommercials = dto.edlAutoSkipCommercials;
     if (dto.spoilerHideStills !== undefined)
       target.spoilerHideStills = dto.spoilerHideStills;
     if (dto.spoilerHideOverviews !== undefined)

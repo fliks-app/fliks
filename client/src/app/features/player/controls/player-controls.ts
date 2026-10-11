@@ -15,6 +15,7 @@ import {
 } from '@angular/core';
 import { DeviceService } from '../../../core/services/device.service';
 import { TvService } from '../../../core/services/tv.service';
+import type { EdlRange } from '../../../core/utils/edl-policy';
 import { DismissableStackService } from '../../../core/services/dismissable-stack.service';
 import {
   PlayerSettings,
@@ -188,6 +189,7 @@ export class PlayerControlsComponent {
     // (re)appears.
     effect(() => {
       if (this.showSkipIntro() || this.showNextCue()) {
+        this.skipCueKey();
         this.cueCountdown.set(Math.ceil(this.cueDurationMs() / 1000));
       }
     });
@@ -336,10 +338,15 @@ export class PlayerControlsComponent {
   readonly chapters = input<{ startSeconds: number; endSeconds: number; title?: string }[]>([]);
   readonly introMarker = input<{ startSeconds: number; endSeconds: number } | null>(null);
   readonly outroMarker = input<{ startSeconds: number; endSeconds: number } | null>(null);
+  readonly edlRanges = input<readonly EdlRange[]>([]);
   readonly fillScreen = input(false);
   readonly statsVisible = input(false);
   readonly showSkipIntro = input(false);
   readonly showNextCue = input(false);
+  /** Translation key of the skip button: the intro by default, or the commercial skip. */
+  readonly skipCueLabel = input('player.skip_intro');
+  /** Identity of the skip cue: a change while it stays up restarts its sweep and countdown. */
+  readonly skipCueKey = input('intro');
   /** Gating these on `!visible()` was tried twice and reverted twice: unmounting
    *  a cue while its `showSkipIntro` is still true strands the `cueFocused`
    *  flag (its blur never fires), and the retract/countdown state then no

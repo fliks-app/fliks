@@ -18,6 +18,7 @@
 
 const context = cast.framework.CastReceiverContext.getInstance();
 const playerManager = context.getPlayerManager();
+const { EdlSkipPolicy, MuteGate, decodeWire } = self.FliksEdl;
 
 // Receiver → sender bus. A fatal player error is forwarded here so web
 // senders can recover (refresh the live-session sid) or toast. Keep in
@@ -42,6 +43,7 @@ playerManager.addEventListener(
     console.log('[fliks-cast] PLAYER_LOAD_COMPLETE');
     document.body.classList.add('playing');
     publishAudioTracks();
+    startEdl();
   },
 );
 
@@ -50,9 +52,10 @@ playerManager.addEventListener(
   cast.framework.events.EventType.ABORT,
   cast.framework.events.EventType.ENDED,
 ].forEach((evt) => {
-  playerManager.addEventListener(evt, () =>
-    document.body.classList.remove('playing'),
-  );
+  playerManager.addEventListener(evt, () => {
+    document.body.classList.remove('playing');
+    stopEdl();
+  });
 });
 
 // Surface any player error on the device's DevTools console with the full
@@ -62,6 +65,7 @@ playerManager.addEventListener(
   (event) => {
     console.error('[fliks-cast] ERROR', JSON.stringify(event));
     document.body.classList.remove('playing');
+    stopEdl();
     // Forward to web senders so they can refresh the sid and resume; the
     // sender classifies recoverable (network / 410) vs dead-end errors.
     try {
@@ -120,6 +124,133 @@ function publishAudioTracks() {
   playerManager.broadcastStatus(true);
 }
 
+// --- EDL (cut / commercial skip, mute ranges) ----------------------------
+// Ranges arrive in LOAD customData.edl on the playback clock.
+
+const edl = { key: null, ranges: [], labels: {}, policy: null, ended: false };
+let edlMedia = null;
+let edlGate = null;
+let edlTimer = null;
+let edlNoticeTimer = null;
+const EDL_EVENTS = ['seeked', 'play', 'pause', 'ratechange', 'timeupdate'];
+
+function edlSessionKey(media, cd) {
+  if (cd && cd.mediaFileId != null) return `file:${cd.mediaFileId}`;
+  if (cd && cd.mediaId != null) return `${cd.mediaId}:${cd.episodeId ?? ''}`;
+  return String(media.contentId || '').split('?')[0];
+}
+
+// CAF has no getMediaElement(); the <video> sits in the DOM, possibly inside the player's shadow root.
+function findMediaElement() {
+  const player = document.querySelector('cast-media-player');
+  return (
+    document.querySelector('video.castMediaElement') ||
+    (player && player.shadowRoot && player.shadowRoot.querySelector('video')) ||
+    document.querySelector('cast-media-player video') ||
+    document.querySelector('video')
+  );
+}
+
+function showEdlNotice(action) {
+  const text = edl.labels && edl.labels[action];
+  const el = document.getElementById('edl-notice');
+  if (!text || !el) return;
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(edlNoticeTimer);
+  edlNoticeTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+function edlTick() {
+  clearTimeout(edlTimer);
+  const media = edlMedia;
+  if (!edl.policy || !media || media.paused) return;
+  const duration = playerManager.getDurationSec();
+  const res = edl.policy.resolve(media.currentTime, duration);
+  if (res.kind === 'end') {
+    if (edl.ended) return;
+    edl.ended = true;
+    playerManager.seek(duration);
+    return;
+  }
+  if (res.kind === 'seek') {
+    showEdlNotice(res.action);
+    playerManager.seek(res.to);
+    return;
+  }
+  const boundary = edl.policy.nextBoundary(media.currentTime);
+  if (!Number.isFinite(boundary)) return;
+  const delay = ((boundary - media.currentTime) / (media.playbackRate || 1)) * 1000;
+  edlTimer = setTimeout(() => {
+    // Timer fired a hair early: nudge past the boundary so resolve() sees it reached.
+    if (edlMedia && edlMedia.currentTime >= boundary - 0.03) {
+      const r = edl.policy.resolve(boundary, playerManager.getDurationSec());
+      if (r.kind === 'seek') {
+        showEdlNotice(r.action);
+        playerManager.seek(r.to);
+        return;
+      }
+      if (r.kind === 'end') {
+        edl.ended = true;
+        playerManager.seek(playerManager.getDurationSec());
+        return;
+      }
+    }
+    edlTick();
+  }, Math.max(0, delay));
+}
+
+function stopEdl() {
+  clearTimeout(edlTimer);
+  if (edlGate) edlGate.destroy();
+  edlGate = null;
+  if (edlMedia) EDL_EVENTS.forEach((e) => edlMedia.removeEventListener(e, edlTick));
+  edlMedia = null;
+}
+
+function startEdl() {
+  stopEdl();
+  if (!edl.policy) return;
+  const media = findMediaElement();
+  if (!media) {
+    console.warn('[fliks-cast] EDL: no media element found');
+    return;
+  }
+  edlMedia = media;
+  EDL_EVENTS.forEach((e) => media.addEventListener(e, edlTick));
+  if (edl.ranges.some((r) => r.action === 'mute')) {
+    edlGate = new MuteGate(media, edl.ranges);
+  }
+  edlTick();
+}
+
+function prepareEdl(media, loadRequest) {
+  const cd = media.customData || {};
+  const ranges = decodeWire(cd.edl);
+  const key = edlSessionKey(media, cd);
+  const auto = cd.autoSkipCommercials !== false;
+  edl.ended = false;
+  if (!ranges.length) {
+    edl.key = key;
+    edl.policy = null;
+  } else if (key === edl.key && edl.policy) {
+    // Same file keeps its skipped commercials across reloads (the timeline may have shifted).
+    edl.policy.replaceRanges(ranges);
+    edl.policy.setAutoSkipCommercials(auto);
+  } else {
+    edl.key = key;
+    edl.policy = new EdlSkipPolicy(ranges, { autoSkipCommercials: auto });
+  }
+  edl.ranges = ranges;
+  edl.labels = cd.edlLabels || {};
+  if (!edl.policy) return;
+  const res = edl.policy.resolve(loadRequest.currentTime || 0, media.duration);
+  if (res.kind === 'seek') {
+    loadRequest.currentTime = res.to;
+    showEdlNotice(res.action);
+  }
+}
+
 // --- Subtitle styling baked into every load -----------------------------
 //
 // Senders may still override per-load via MediaInformation.textTrackStyle;
@@ -137,6 +268,7 @@ playerManager.setMessageInterceptor(
     );
     const media = loadRequest.media;
     if (media) {
+      prepareEdl(media, loadRequest);
       // Tell CAF the segments are fMP4 so Shaka picks the right HLS
       // demuxer up-front instead of probing seg-0 with the TS parser
       // (which fails silently on init.mp4 + .m4s output).

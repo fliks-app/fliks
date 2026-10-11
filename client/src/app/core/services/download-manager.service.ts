@@ -270,6 +270,7 @@ export class DownloadManagerService {
     if (this.isDesktop && quality === 'original') {
       const url = this.streamingApi.getOriginalDownloadUrl(mediaFileId);
       task.hlsUrl = url;
+      task.offlineEdl = await this.streamingApi.getEdl(mediaFileId).catch(() => []);
       this.titles.set(taskId, { title, episode });
       this.persistTask(task);
       void this.downloader!.start({
@@ -297,6 +298,7 @@ export class DownloadManagerService {
     const hlsUrl = this.streamingApi.resolveDownloadUrl(mediaFileId, quality, playbackInfo);
     task.hlsUrl = hlsUrl;
     task.offlineCrop = offlineCropOf(playbackInfo);
+    task.offlineEdl = playbackInfo.edl;
 
     this.titles.set(taskId, { title, episode });
     this.persistTask(task);

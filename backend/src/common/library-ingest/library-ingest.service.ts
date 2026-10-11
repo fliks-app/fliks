@@ -17,6 +17,7 @@ import { EventsService } from '../../modules/scheduler/events.service';
 import { qualityFromResolution } from '../release-parsing';
 import { MediaService } from '../../modules/media/media.service';
 import { PlaybackState } from '../../modules/streaming/entities/playback-state.entity';
+import { resolveEdlPath } from '../../modules/streaming/edl/edl-sidecar';
 import { SubtitlesService } from '../../modules/subtitles/subtitles.service';
 import { SubtitleSyncService } from '../../modules/subtitles/subtitle-sync.service';
 
@@ -333,6 +334,15 @@ export class LibraryIngestService {
         `Ingest[${req.sourceLabel}]: ${req.transfer} "${path.basename(file.path)}" → "${destPath}"`,
       );
       await this.fileTransfer.transferFile(file.path, destPath, req.transfer);
+      // An EDL belongs to one encode: a replaced file must not keep the old one.
+      if (overwrite || req.replaceExisting) {
+        try {
+          const stale = await resolveEdlPath(destPath);
+          if (stale) await fs.promises.rm(stale, { force: true });
+        } catch (err) {
+          this.logger.warn(`Ingest[${req.sourceLabel}]: could not remove stale EDL: ${(err as Error).message}`);
+        }
+      }
       await this.fileTransfer.transferCompanions({
         srcDir: path.dirname(file.path),
         destDir,

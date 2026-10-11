@@ -58,7 +58,7 @@ export class GeneralSettingsComponent implements OnInit {
       this.autoGenerateSpritesOnImport.set(map['sprites_auto_generate_on_import'] ?? 'true');
       this.companionFileExtensions.set(
         map['companion_file_extensions'] ??
-        '.nfo,.srt,.ass,.ssa,.sub,.idx,.vtt,.sup,.txt,.jpg,.jpeg,.png,.tbn,.nfo-orig',
+        '.nfo,.srt,.ass,.ssa,.sub,.idx,.vtt,.sup,.txt,.jpg,.jpeg,.png,.tbn,.nfo-orig,.edl',
       );
     } catch {
       this.error.set(this.translate.instant('settings.general.load_error'));

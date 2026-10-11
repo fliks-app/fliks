@@ -98,13 +98,15 @@ interface OrientationPlugin {
 }
 const Orientation = registerPlugin<OrientationPlugin>('Orientation');
 
-import { LucideAirplay, LucideInfo, LucideX } from '@lucide/angular';
+import { LucideAirplay, LucideInfo, LucideVolumeX, LucideX } from '@lucide/angular';
 import { AirPlayService } from '../../core/services/airplay.service';
 import { PlayerControlsComponent } from './controls/player-controls';
 import { PlayerErrorOverlayComponent } from './overlay/player-error-overlay';
 import { ControlsVisibilityService } from './controls/controls-visibility';
 import { CopyFallbackController } from './copy-fallback-controller';
 import { WebVideoCropController } from './web-video-crop-controller';
+import { EdlController } from './edl-controller';
+import { isMutedAt } from '../../core/utils/edl-policy';
 import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats-overlay';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 
@@ -160,7 +162,7 @@ class PausableTimeout {
 }
 
 @Component({
-  imports: [TranslatePipe, LucideAirplay, LucideInfo, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, PlayerErrorOverlayComponent, DefaultFocusDirective],
+  imports: [TranslatePipe, LucideAirplay, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, PlayerErrorOverlayComponent, DefaultFocusDirective],
   templateUrl: './player.html',
   providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController],
   encapsulation: ViewEncapsulation.None,
@@ -362,6 +364,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private firstLoadSetupDone = false;
   private readonly skipIntroCue = new PausableTimeout(() => this.skipIntroVisible.set(false));
   private readonly nextEpisodeCue = new PausableTimeout(() => this.nextEpisodeVisible.set(false));
+  private readonly commercialCue = new PausableTimeout(() => this.commercialCueVisible.set(false));
   /** True while the user is actively dragging / scrubbing the seekbar. */
   private readonly seekDragging = signal(false);
   private statsInterval: ReturnType<typeof setInterval> | null = null;
@@ -460,6 +463,34 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly copyFallback = inject(CopyFallbackController);
   private readonly _copyFallbackAttach = (this.copyFallback.attach(this), null);
   readonly webCrop = inject(WebVideoCropController);
+
+  /** Not casting, and not on a pre-roll item: only then is the local playhead the one being watched. */
+  private edlActive(): boolean {
+    if (this.castService.isConnected()) return false;
+    return !this.preRollActive() || this.mediaFileId === this.preRollMainFileId;
+  }
+
+  private readonly edl = new EdlController({
+    engine: () => this.engine,
+    active: () => this.edlActive(),
+    duration: () => this.duration(),
+    seek: (to) => this.seekInternal(to),
+    end: () => {
+      this.edlEnded = true;
+      void this.pausePlayback();
+      this.state.ended.set(true);
+      if (!this.autoplayEnabled() || !this.upNext()) void this.markCurrentComplete();
+    },
+  });
+  private edlEnded = false;
+  readonly edlRanges = this.edl.ranges;
+  readonly edlNotice = this.edl.notice;
+  private readonly edlAutoSkipEffect = effect(() => {
+    const on = this.authService.user()?.edlAutoSkipCommercials !== false;
+    untracked(() => this.edl.setAutoSkipCommercials(on));
+  });
+  /** Display only: the engines do the muting. */
+  readonly edlMuted = computed(() => isMutedAt(this.edl.muteRanges(), this.currentTime()));
   private readonly _webCropAttach = (this.webCrop.attach(this), null);
   readonly inPipMode = signal(false);
   readonly pipAvailable = signal(true);
@@ -1013,6 +1044,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       }
 
       if (this.isOfflinePlayback) {
+        const offlineTask = this.dlCache
+          .load()
+          .find((t) => t.mediaFileId === this.mediaFileId && t.status === 'ready');
+        const offlineEdl = this.authService.user()?.edlEnabled === false ? undefined : offlineTask?.offlineEdl;
+        this.edl.load(this.mediaFileId, offlineEdl);
+        startTime = this.edlStartTime(startTime);
         this.state.playbackMode.set('direct');
         this.qualityManager.availableQualities.set([]);
         this.lastStreamUrl = offlineCheck ?? '';
@@ -1053,6 +1090,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
         // Mode, options + the rung the backend locked in, BEFORE load
         this.adoptPlaybackInfo(pi);
+        startTime = this.edlStartTime(startTime);
 
         const mode = this.playbackMode();
 
@@ -1340,6 +1378,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy() {
     this.destroyed = true;
+    this.edl.clear();
     this.webCrop.destroy();
     this.detachAirPlay();
     if (this.forcedSaveTrailing) clearTimeout(this.forcedSaveTrailing);
@@ -1368,6 +1407,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.saveInterval) clearInterval(this.saveInterval);
     this.skipIntroCue.cancel();
     this.nextEpisodeCue.cancel();
+    this.commercialCue.cancel();
     if (this.statsInterval) clearInterval(this.statsInterval);
     if (this.recoverRetryTimer) clearTimeout(this.recoverRetryTimer);
     if (this.adminMessageTimer) clearTimeout(this.adminMessageTimer);
@@ -1387,6 +1427,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   // ── Pre-roll ──
+
+  /** The start position moved past any cut or commercial that covers it. */
+  private edlStartTime(startTime: number | undefined): number | undefined {
+    const t = startTime ?? 0;
+    const resolved = this.edl.resolveStart(t);
+    if (resolved === t) return startTime;
+    this.pendingStartTime = resolved;
+    return resolved;
+  }
 
   /** Take over the launch with the plugin's pre-roll list when the response
    *  carries one. No-op on resume, offline, Cast, or when nothing negotiates. */
@@ -1571,12 +1620,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Engine plus the surface contract that goes with it; the wiring below is
    *  this player's own. */
-  private createSurface(kind: EngineSurfaceKind) {
-    return createEngineSurface({
+  private async createSurface(kind: EngineSurfaceKind) {
+    const surface = await createEngineSurface({
       kind,
       video: this.videoEl()!.nativeElement,
       container: this.containerEl()?.nativeElement,
     });
+    this.edl.attach(surface.engine);
+    return surface;
   }
 
   /** Shared wiring for the transparent-overlay native engines (Capacitor
@@ -1702,6 +1753,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const now = Date.now();
     if (now - this.lastTogglePlayAt < this.togglePlayCoalesceMs) return;
     this.lastTogglePlayAt = now;
+    // Like a natural end, play after an EDL end replays from the start.
+    if (this.edlEnded && this.state.ended()) {
+      this.edlEnded = false;
+      this.state.ended.set(false);
+      const t = this.edl.resolveSeek(0);
+      if (t !== null) this.seekInternal(t);
+    }
     // Decide off what the control shows, so a tap during launch pauses.
     // Reflect the target in the UI immediately instead of waiting for the
     // engine's `stateChanged` round-trip (on the desktop mpv backend that loop
@@ -1751,7 +1809,22 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       console.warn('[player] onSeek: rejecting seek before duration is known', time);
       return;
     }
-    const t = Math.max(0, Math.min(time, dur));
+    const requested = Math.max(0, Math.min(time, dur));
+    if (this.edlEnded) {
+      this.edlEnded = false;
+      this.state.ended.set(false);
+    }
+    const t = this.edl.resolveSeek(requested);
+    if (t === null) return;
+    this.seekInternal(t);
+    // Suppress auto-skip for 2s after a manual seek so the user can step back
+    // into the intro on purpose without being kicked forward again.
+    this.autoSkipSuppressedUntil = Date.now() + 2000;
+    this.chrome.resetHideTimer();
+  }
+
+  /** Seek with the lock and the desktop far-seek reload; not a user seek for the intro auto-skip. */
+  private seekInternal(t: number) {
     if (this.engine) {
       // Lock the mirror BEFORE issuing the seek so transient
       // `timeUpdate` events fired while the engine still reports the
@@ -1770,11 +1843,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // only exists where there is a <video>: without this a desktop or native
     // seek reached a controller only on the next heartbeat.
     void this.savePosition(true);
-
-    // Suppress auto-skip for 2s after a manual seek so the user can step back
-    // into the intro on purpose without being kicked forward again.
-    this.autoSkipSuppressedUntil = Date.now() + 2000;
-    this.chrome.resetHideTimer();
   }
 
   /** Step one frame, pausing first. Falls back to 24 fps when the source rate
@@ -1918,6 +1986,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly cueRevealMs = 10000;
   readonly skipIntroVisible = signal(false);
   readonly nextEpisodeVisible = signal(false);
+  /** Skip ad cue, shown on the skip-intro button while a commercial is not auto-skipped. */
+  readonly commercialCueVisible = signal(false);
+  private commercialCueKey: string | null = null;
+  /** Identity of the cue on the button, so its sweep and countdown restart when it changes. */
+  readonly skipCueKey = computed(() => {
+    const c = this.commercialCueVisible() ? this.edl.commercialCue() : null;
+    return c ? `ad:${c.fileId}:${c.index}` : 'intro';
+  });
   private skipIntroCueArmed = false;
   private nextEpisodeCueArmed = false;
 
@@ -1947,9 +2023,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (engaged) {
       this.skipIntroCue.pause();
       this.nextEpisodeCue.pause();
+      this.commercialCue.pause();
     } else {
       this.skipIntroCue.resume();
       this.nextEpisodeCue.resume();
+      this.commercialCue.resume();
     }
   });
 
@@ -1965,15 +2043,31 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   });
 
+  /** Reveal the Skip ad cue once each time the playhead enters an unskipped commercial. */
+  private readonly commercialCueEffect = effect(() => {
+    const c = this.edl.commercialCue();
+    const key = c ? `${c.fileId}:${c.index}` : null;
+    if (key === this.commercialCueKey) return;
+    this.commercialCueKey = key;
+    if (key === null) this.hideCue(this.commercialCueVisible, this.commercialCue);
+    else this.revealCue(this.commercialCueVisible, this.commercialCue);
+  });
+
+  /** Skip button click: the commercial when its cue is up, else the intro. */
+  onSkipCue(): void {
+    if (!this.commercialCueVisible()) return this.skipIntro();
+    const t = this.edl.skipCommercial();
+    if (t !== null) this.seekInternal(t);
+    this.chrome.resetHideTimer();
+  }
+
   /** Player-controls click handler — seek to the end of the intro. */
   skipIntro(): void {
     const m = this.introMarker();
     if (!m || !this.engine) return;
-    this.engine
-      .seek(m.endSeconds)
-      .then(() => this.restorePlaybackRate())
-      .catch(() => {});
-    this.state.currentTime.set(m.endSeconds);
+    const t = this.edl.resolveSeek(m.endSeconds);
+    if (t === null) return;
+    this.seekInternal(t);
     this.chrome.resetHideTimer();
   }
 
@@ -2179,6 +2273,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Surface the loading backdrop (set to the new episode's still below)
       // over the outgoing frame and rewind the playhead UI to the start.
       this.state.reset();
+      this.edlEnded = false;
       // Drop the outgoing episode's negotiated info so a failure before the
       // new getPlaybackInfo resolves reports no playMethod/hwAccel rather
       // than the previous episode's stale values.
@@ -2245,10 +2340,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       );
       const pi = this.playbackInfo;
       this.adoptPlaybackInfo(pi);
+      startTime = this.edlStartTime(startTime);
 
       const { url, mimeType } = this.buildPlayUrl({ startTime });
       await this.engine.load(url, startTime, mimeType);
       this.reloadLoadPending = false;
+      this.edl.settle();
       this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, this.playbackMode());
       this.restorePlaybackRate();
       await this.completeEpisodeSwitchSetup();
@@ -2382,6 +2479,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Committing to the item — clear the end-of-stream latch so a reload that
     // no-ops can't leave it set and re-trigger the auto-advance effect.
     this.state.ended.set(false);
+    this.edlEnded = false;
 
     const qp: Record<string, number> = { mediaId: item.mediaId };
     if (item.episodeId) qp['episodeId'] = item.episodeId;
@@ -2888,6 +2986,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.introMarker.set(pi.markers?.intro ?? null);
     this.outroMarker.set(pi.markers?.outro ?? null);
     this.chapters.set(pi.chapters ?? []);
+    this.edl.load(this.mediaFileId, pi.edl);
   }
 
   /** Mint a fresh LiveSession via `playback-info` and reload the engine at
@@ -3543,6 +3642,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // the previous rate (e.g. Tizen AVPlay outside READY/PLAYING/PAUSED), and
     // the UI must not claim a speed that isn't actually playing.
     this.playbackRate.set(this.engine.playbackRate);
+    this.edl.rearm();
   }
 
   /** Whether the episode reached the completion threshold — mirrors the

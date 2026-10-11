@@ -143,6 +143,10 @@ export interface NativePlayerPlugin {
    *  in the VideoCapabilities plugin implement it. */
   setCrop(options: NativePlayerCrop | Record<string, never>): Promise<void>;
 
+  /** Silences audio inside the ranges (content seconds) without touching the user's volume.
+   *  Awaited before every load(); an empty list clears. Older builds lack it. */
+  setMuteRanges(options: { ranges: { start: number; end: number }[] }): Promise<void>;
+
   // ── Brightness ──
 
   /** Set screen brightness. -1 = restore system default, 1.0 = max. */

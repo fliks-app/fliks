@@ -294,3 +294,76 @@ describe('MediaMutationService deleteMediaFile cache cleanup', () => {
     expect(subtitleStream.clearMediaFileSubtitleCache).toHaveBeenCalledWith(77);
   });
 });
+
+describe('MediaMutationService deleteMediaFile EDL sidecar', () => {
+  const build = (dir: string, relativePath: string) => {
+    const mediaFileRepo = {
+      findOne: jest.fn().mockResolvedValue({ id: 5, episodeId: null, relativePath }),
+      remove: jest.fn(),
+      count: jest.fn(),
+    };
+    const service = new MediaMutationService(
+      { findOne: jest.fn().mockResolvedValue({ id: 1, title: 'placeholder', path: dir }) } as never,
+      {} as never,
+      {} as never,
+      mediaFileRepo as never,
+      {} as never,
+      {} as never,
+      { dispatch: jest.fn() } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { emitDomain: jest.fn() } as never,
+      { deleteForFile: jest.fn() } as never,
+      { clearMediaFileSubtitleCache: jest.fn() } as never,
+      {} as never,
+    );
+    (service as unknown as { subtitles: unknown }).subtitles = { deleteSubtitleFilesOnDisk: jest.fn() };
+    return { service, mediaFileRepo };
+  };
+  const withDir = async (files: string[], fn: (dir: string) => Promise<void>) => {
+    const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'mm-edl-'));
+    try {
+      files.forEach((f) => fs.writeFileSync(path.join(dir, f), 'x'));
+      await fn(dir);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  it('removes the .edl next to the video, and tolerates its absence', async () => {
+    await withDir(['a.b.mkv', 'a.b.edl', 'other.edl'], async (dir) => {
+      const { service, mediaFileRepo } = build(dir, 'a.b.mkv');
+      await service.deleteMediaFile(1, 5, true);
+      expect(fs.readdirSync(dir)).toEqual(['other.edl']);
+      mediaFileRepo.findOne.mockResolvedValue({ id: 6, episodeId: null, relativePath: 'a.b.mkv' });
+      await expect(service.deleteMediaFile(1, 6, true)).resolves.toBeUndefined();
+    });
+  });
+
+  it('keeps the .edl while another video shares the stem', async () => {
+    await withDir(['Movie.mkv', 'Movie.MP4', 'Movie.edl'], async (dir) => {
+      const { service } = build(dir, 'Movie.mkv');
+      await service.deleteMediaFile(1, 5, true);
+      expect(fs.readdirSync(dir).sort()).toEqual(['Movie.MP4', 'Movie.edl']);
+    });
+  });
+
+  it('removes a differently-cased .edl', async () => {
+    await withDir(['Movie.mkv', 'MOVIE.EDL'], async (dir) => {
+      const { service } = build(dir, 'Movie.mkv');
+      await service.deleteMediaFile(1, 5, true);
+      expect(fs.readdirSync(dir)).toEqual([]);
+    });
+  });
+
+  it('does not abort when the .edl cannot be removed', async () => {
+    await withDir(['a.mkv'], async (dir) => {
+      fs.mkdirSync(path.join(dir, 'a.edl'));
+      fs.writeFileSync(path.join(dir, 'a.edl', 'f'), 'x');
+      const { service, mediaFileRepo } = build(dir, 'a.mkv');
+      await expect(service.deleteMediaFile(1, 5, true)).resolves.toBeUndefined();
+      expect(mediaFileRepo.remove).toHaveBeenCalled();
+    });
+  });
+});

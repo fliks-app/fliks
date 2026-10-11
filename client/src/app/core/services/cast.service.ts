@@ -34,6 +34,7 @@ interface ReceiverPlayerError {
   episodeId?: number;
 }
 
+import type { EdlWire } from '../utils/edl-policy';
 declare const cast: any;
 declare const chrome: any;
 
@@ -59,6 +60,14 @@ export interface CastMediaInfo {
    */
   mediaId?: number;
   episodeId?: number;
+  /** `.edl` ranges on the cast stream's timeline; the receiver applies them. */
+  edl?: EdlWire;
+  /** Receiver session key: skipped commercials survive reloads of the same file. */
+  mediaFileId?: number;
+  /** Translated notice texts the receiver shows when it skips. */
+  edlLabels?: { cut: string; commercial: string };
+  /** False: the receiver never skips commercials. Absent means true. */
+  autoSkipCommercials?: boolean;
 }
 
 interface NativeCastLoadOpts {
@@ -552,6 +561,10 @@ export class CastService implements OnDestroy {
       posterUrl: info.posterUrl,
       mediaId: info.mediaId,
       episodeId: info.episodeId,
+      mediaFileId: info.mediaFileId,
+      edl: info.edl,
+      edlLabels: info.edl ? info.edlLabels : undefined,
+      autoSkipCommercials: info.edl ? info.autoSkipCommercials : undefined,
     };
 
     const subtitleStyle = this.castSettings.get().subtitleStyle;

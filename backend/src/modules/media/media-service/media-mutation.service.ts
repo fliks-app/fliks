@@ -26,6 +26,8 @@ import { EventsService } from '../../scheduler/events.service';
 import { RequestLifecycleService } from '../../requests/request-lifecycle.service';
 import { MediaQueryService } from './media-query.service';
 import { MediaMetadataService } from './media-metadata.service';
+import { VIDEO_EXTS } from '../../../common/constants/video-extensions';
+import { resolveEdlPath } from '../../streaming/edl/edl-sidecar';
 import { ThumbnailService } from '../../streaming/thumbnail.service';
 import { SubtitleStreamService } from '../../streaming/subtitle-stream.service';
 import { SubtitlesService } from '../../subtitles/subtitles.service';
@@ -332,6 +334,23 @@ export class MediaMutationService {
     return this.episodeRepo.save(episode);
   }
 
+  /** Removes the sidecar unless another video in the directory still shares its stem. */
+  private async removeOrphanEdl(videoPath: string): Promise<void> {
+    try {
+      const { dir, name } = nodePath.parse(videoPath);
+      const stem = name.toLowerCase();
+      const shared = (await fsp.readdir(dir)).some((n) => {
+        const p = nodePath.parse(n);
+        return p.name.toLowerCase() === stem && VIDEO_EXTS.has(p.ext.toLowerCase());
+      });
+      if (shared) return;
+      const edl = await resolveEdlPath(videoPath);
+      if (edl) await fsp.rm(edl, { force: true });
+    } catch (err) {
+      this.log.warn(`Could not remove the EDL sidecar of ${videoPath}: ${(err as Error).message}`);
+    }
+  }
+
   async deleteMediaFile(
     mediaId: number,
     fileId: number,
@@ -346,17 +365,16 @@ export class MediaMutationService {
     if (!file) throw new NotFoundException(`File #${fileId} not found`);
 
     if (deleteOnDisk && media.path) {
-      const fs = await import('fs');
-      const path = await import('path');
-      const fullPath = path.join(media.path, file.relativePath);
+      const fullPath = nodePath.join(media.path, file.relativePath);
       try {
-        fs.unlinkSync(fullPath);
+        await fsp.unlink(fullPath);
         this.log.log(`Deleted file on disk: ${fullPath}`);
       } catch (err: unknown) {
         const code = (err as NodeJS.ErrnoException).code;
         if (code !== 'ENOENT') throw err;
         this.log.warn(`File not found on disk (already deleted?): ${fullPath}`);
       }
+      await this.removeOrphanEdl(fullPath);
       await this.subtitles.deleteSubtitleFilesOnDisk(mediaId, file.id);
     }
 

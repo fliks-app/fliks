@@ -12,6 +12,7 @@ import {
   SUBTITLE_EDGE_KEY,
 } from '../../utils/subtitle-presets';
 import { normalizeLangCode } from '../../utils/language.utils';
+import type { TimeRange } from '../../utils/edl-policy';
 import {
   desktopBridge,
   type DesktopEvent,
@@ -306,6 +307,29 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     };
     if (this._initialized) {
       this.bridge.setSubtitleStyle(this._subtitleStyle).catch(() => {});
+    }
+  }
+
+  private _muteRanges: TimeRange[] = [];
+  private _sentMuteRanges = '[]';
+  private _muteWarned = false;
+
+  setMuteRanges(ranges: readonly TimeRange[]): void {
+    this._muteRanges = ranges.map((r) => ({ start: r.start, end: r.end }));
+    void this.pushMuteRanges();
+  }
+
+  /** The main process re-applies the ranges on every load. Older builds lack the method: logged once. */
+  private async pushMuteRanges(): Promise<void> {
+    const key = JSON.stringify(this._muteRanges);
+    if (key === this._sentMuteRanges) return;
+    this._sentMuteRanges = key;
+    try {
+      if (!this.bridge.setMuteRanges) throw new Error('bridge.setMuteRanges missing');
+      await this.bridge.setMuteRanges(this._muteRanges);
+    } catch (e) {
+      if (!this._muteWarned) console.warn('[desktop-engine] setMuteRanges unavailable', e);
+      this._muteWarned = true;
     }
   }
 

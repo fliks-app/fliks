@@ -152,7 +152,13 @@
     "error_airplay_unsupported": "This AirPlay device can't play this video.",
     "stats_delivery_mismatch": "Server decision: {{decision}} / Delivered: {{delivered}}",
     "stats_dolby_vision_base": "Dolby Vision {{profile}}, {{base}} base",
-    "stats_dolby_vision": "Dolby Vision {{profile}}"
+    "stats_dolby_vision": "Dolby Vision {{profile}}",
+    "edl": {
+      "skipped_commercial": "Commercial skipped",
+      "skipped_cut": "Scene skipped",
+      "muted": "Audio muted",
+      "skip_commercial": "Skip ad"
+    }
   },
   "sse": {
     "subtitle_synced": "Subtitle synced successfully.",
@@ -527,7 +533,12 @@
     "sub_bottom_margin_hint": "Sets the vertical position of subtitles relative to the bottom of the screen.",
     "sub_top_margin": "Top edge position",
     "sub_top_margin_hint": "Sets the maximum vertical position allowed relative to the top of the screen. This is used when subtitles contain positioning instructions at the top of the screen.",
-    "lang_any": "No preference"
+    "lang_any": "No preference",
+    "player_edl": "Skip cuts and mutes",
+    "player_edl_hint": "Applies the .edl file next to the video: skips cuts and commercials and silences marked passages. Applies to streaming and to new downloads.",
+    "player_edl_autoskip": "Skip commercial breaks automatically",
+    "player_edl_autoskip_hint": "When off, a Skip ad button appears during commercial breaks.",
+    "player_edl_saved": "Preference saved"
   },
   "import_disk": {
     "title": "Manual import from disk",

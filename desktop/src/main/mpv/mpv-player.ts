@@ -12,11 +12,13 @@ import fs from 'node:fs';
 import type {
   DesktopAudioTrack,
   DesktopLoadOptions,
+  DesktopMuteRange,
   DesktopPositionInfo,
   DesktopSubtitleStyle,
   DesktopSubtitleTrack,
 } from '../../shared/contract';
 import { MPV_STREAM_OPTIONS } from '../../shared/mpv-stream-options';
+import { muteFilterCommands } from './edl-filter';
 import { mpvSubtitleProps } from './subtitle-style';
 import { mapTrackList, type MpvTrack } from './tracks';
 import { TypedEmitter } from './typed-emitter';
@@ -102,6 +104,8 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
   /** Last `time-pos` seen; compared against `duration` when `eof-reached` fires
    *  to tell a genuine end from a mid-stream failure. */
   private lastPosition = 0;
+  private muteRanges: DesktopMuteRange[] = [];
+  private muteFilterCount = 0;
   /** Set before an intentional shutdown (destroy / failed start) so the process
    *  `exit` handler can tell a clean quit from an unexpected crash. */
   private shuttingDown = false;
@@ -491,6 +495,7 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
     // Always written, so a cropped file's rectangle can't survive into the next
     // one (the property is global, not per-file).
     await this.set('video-crop', opts.videoCrop ?? '').catch(() => {});
+    await this.applyMuteRanges();
     if (gen !== this.loadGen) return;
     // mpv >= 0.38 loadfile signature is <url> <flags> <index> <options>; the
     // bundled mpv is recent, so pass index 0 then the options. Omit the options
@@ -577,6 +582,9 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
     this.lastPosition = 0;
     this.errorLog = [];
     this.sawTransportError = false;
+    const { commands } = muteFilterCommands([], this.muteFilterCount);
+    this.muteFilterCount = 0;
+    for (const cmd of commands) void this.command(cmd).catch(() => {});
     return this.command(['stop']).then(() => undefined);
   }
 
@@ -590,6 +598,17 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
 
   setMuted(muted: boolean): Promise<void> {
     return this.set('mute', muted);
+  }
+
+  async setMuteRanges(ranges: DesktopMuteRange[]): Promise<void> {
+    this.muteRanges = ranges;
+    await this.applyMuteRanges();
+  }
+
+  private async applyMuteRanges(): Promise<void> {
+    const { commands, count } = muteFilterCommands(this.muteRanges, this.muteFilterCount);
+    this.muteFilterCount = count;
+    for (const cmd of commands) await this.command(cmd).catch(() => {});
   }
 
   async getPosition(): Promise<DesktopPositionInfo> {
@@ -646,6 +665,7 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
   }
 
   async destroy(): Promise<void> {
+    this.muteRanges = [];
     this.loadGen++;
     this.shuttingDown = true;
     try {

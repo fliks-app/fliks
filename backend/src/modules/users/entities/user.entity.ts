@@ -130,6 +130,14 @@ export class User extends BaseEntity {
   @Column({ default: false })
   hideSpoilers: boolean;
 
+  /** Apply the `.edl` sidecar (cuts, commercial skips, mutes) during playback. */
+  @Column({ default: true })
+  edlEnabled: boolean;
+
+  /** Skip `.edl` commercials automatically; off shows a Skip ad button instead. */
+  @Column({ default: true })
+  edlAutoSkipCommercials: boolean;
+
   /** Blur unwatched episode stills and the episode backdrop. */
   @Column({ default: true })
   spoilerHideStills: boolean;

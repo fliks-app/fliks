@@ -528,6 +528,15 @@ describe('PlayerComponent startup pause', () => {
     expect(h.state.uiPaused()).toBe(false);
   });
 
+  it('a stale EDL end flag does not rewind a later episode on play', () => {
+    const h = createHarness();
+    h.component.edlEnded = true;
+    h.state.ended.set(false);
+    const seek = vi.spyOn(h.component, 'seekInternal');
+    h.component.onTogglePlay();
+    expect(seek).not.toHaveBeenCalled();
+  });
+
   it('a remote pause during launch shows play', async () => {
     const h = createHarness();
     h.state.reset();

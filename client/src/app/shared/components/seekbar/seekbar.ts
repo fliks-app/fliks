@@ -9,6 +9,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { formatTime, calcDragTime, calcHoverPercent, SpriteMetadata } from '../../../core/utils/player.utils';
+import { muteRangesOf, type EdlRange } from '../../../core/utils/edl-policy';
 import { TvService } from '../../../core/services/tv.service';
 
 /** How long the bar waits for a seek to land before following the
@@ -43,6 +44,8 @@ export class SeekbarComponent {
    *  are scrubbing into, ahead of the skip cue that covers the same range. */
   readonly introMarker = input<{ startSeconds: number; endSeconds: number } | null>(null);
   readonly outroMarker = input<{ startSeconds: number; endSeconds: number } | null>(null);
+  /** EDL ranges drawn over the track: cuts and commercials as bands, mutes as one thin strip. */
+  readonly edlRanges = input<readonly EdlRange[]>([]);
   /** Chapter start times as % of duration for seekbar tick rendering. */
   readonly chapterTicks = computed(() => {
     const dur = this.duration() || 0;
@@ -123,6 +126,35 @@ export class SeekbarComponent {
         },
       ];
     });
+  });
+
+  /** Cut and commercial ranges as track percentages. */
+  readonly edlBands = computed(() => {
+    const dur = this.duration() || 0;
+    if (dur <= 0) return [];
+    return this.edlRanges()
+      .filter((r) => r.action !== 'mute' && r.end > r.start && r.start < dur && r.end > 0)
+      .map((r) => {
+        const left = (Math.max(0, r.start) / dur) * 100;
+        const right = (Math.min(r.end, dur) / dur) * 100;
+        return { kind: r.action, left, width: Math.min(100 - left, Math.max(0.1, right - left)) };
+      });
+  });
+
+  /** Every mute range in a single gradient: one element however many ranges there are. */
+  readonly muteStrip = computed(() => {
+    const dur = this.duration() || 0;
+    if (dur <= 0) return null;
+    const stops: string[] = [];
+    let pos = 0;
+    for (const r of muteRangesOf(this.edlRanges())) {
+      const a = Math.max(pos, (r.start / dur) * 100);
+      const b = Math.min(100, Math.max(a + 0.1, (r.end / dur) * 100));
+      if (a >= 100) break;
+      stops.push(`transparent ${pos}% ${a}%`, `var(--color-accent) ${a}% ${b}%`);
+      pos = b;
+    }
+    return stops.length ? `linear-gradient(to right, ${stops.join(', ')}, transparent ${pos}%)` : null;
   });
 
   // Hover state

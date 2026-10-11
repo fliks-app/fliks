@@ -152,7 +152,13 @@
     "error_airplay_unsupported": "Cet appareil AirPlay ne peut pas lire cette vidéo.",
     "stats_delivery_mismatch": "Décision serveur : {{decision}} / Diffusé : {{delivered}}",
     "stats_dolby_vision_base": "Dolby Vision {{profile}}, base {{base}}",
-    "stats_dolby_vision": "Dolby Vision {{profile}}"
+    "stats_dolby_vision": "Dolby Vision {{profile}}",
+    "edl": {
+      "skipped_commercial": "Publicité passée",
+      "skipped_cut": "Scène passée",
+      "muted": "Son coupé",
+      "skip_commercial": "Passer la pub"
+    }
   },
   "sse": {
     "subtitle_synced": "Sous-titre synchronisé avec succès.",
@@ -527,7 +533,12 @@
     "sub_bottom_margin_hint": "Définit la position verticale des sous-titres par rapport au bas de l'écran.",
     "sub_top_margin": "Position du bord supérieur",
     "sub_top_margin_hint": "Définit la position verticale maximale autorisée par rapport au haut de l'écran. Cette fonction est utilisée lorsque les sous-titres contiennent des instructions de positionnement en haut de l'écran.",
-    "lang_any": "Aucune préférence"
+    "lang_any": "Aucune préférence",
+    "player_edl": "Appliquer les coupes et les silences",
+    "player_edl_hint": "Applique le fichier .edl placé à côté de la vidéo : saute les coupes et les publicités et coupe le son des passages signalés. Valable en streaming et pour les nouveaux téléchargements.",
+    "player_edl_autoskip": "Passer automatiquement les publicités",
+    "player_edl_autoskip_hint": "Désactivé, un bouton Passer la pub apparaît pendant les coupures publicitaires.",
+    "player_edl_saved": "Préférence enregistrée"
   },
   "import_disk": {
     "title": "Import manuel depuis le disque",

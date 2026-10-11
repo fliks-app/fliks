@@ -315,3 +315,58 @@ describe('SeekbarComponent preview size', () => {
     expect(wide.h).toBe(93);
   });
 });
+
+describe('SeekbarComponent EDL bands', () => {
+  function build(ranges: { start: number; end: number; action: 'cut' | 'mute' | 'commercial' }[]) {
+    TestBed.configureTestingModule({
+      providers: [provideZonelessChangeDetection(), { provide: TvService, useValue: { isTv: () => false } }],
+    });
+    const fixture = TestBed.createComponent(SeekbarComponent);
+    fixture.componentRef.setInput('duration', 1000);
+    fixture.componentRef.setInput('edlRanges', ranges);
+    return fixture.componentInstance;
+  }
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('draws cuts and commercials as bands and leaves mutes out of them', () => {
+    const bar = build([
+      { start: 100, end: 150, action: 'cut' },
+      { start: 500, end: 600, action: 'commercial' },
+      { start: 700, end: 701, action: 'mute' },
+    ]);
+    expect(bar.edlBands()).toEqual([
+      { kind: 'cut', left: 10, width: 5 },
+      { kind: 'commercial', left: 50, width: 10 },
+    ]);
+  });
+
+  it('folds hundreds of mute ranges into one gradient', () => {
+    const mutes = Array.from({ length: 400 }, (_, i) => ({
+      start: i * 2,
+      end: i * 2 + 0.5,
+      action: 'mute' as const,
+    }));
+    const bar = build(mutes);
+    const strip = bar.muteStrip()!;
+    expect(strip.startsWith('linear-gradient(to right,')).toBe(true);
+    expect(strip.split('var(--color-accent)').length - 1).toBe(400);
+    expect(bar.edlBands()).toEqual([]);
+  });
+
+  it('clamps bands to the track', () => {
+    const bar = build([
+      { start: -5, end: 20, action: 'cut' },
+      { start: 990, end: 1500, action: 'commercial' },
+      { start: 1200, end: 1300, action: 'cut' },
+    ]);
+    expect(bar.edlBands()).toEqual([
+      { kind: 'cut', left: 0, width: 2 },
+      { kind: 'commercial', left: 99, width: 1 },
+    ]);
+  });
+
+  it('has no strip without mutes', () => {
+    expect(build([{ start: 1, end: 2, action: 'cut' }]).muteStrip()).toBeNull();
+  });
+});

@@ -11,7 +11,8 @@ import { setupUpdater } from './updater';
 import { registerDownloadIpc } from './download';
 import { registerCastIpc } from './cast';
 import { setPlaybackKeepAwake, keepAwakeForState } from './power';
-import { IPC, type DesktopEvent, type DesktopSubtitleStyle } from '../shared/contract';
+import { IPC, type DesktopEvent, type DesktopMuteRange, type DesktopSubtitleStyle } from '../shared/contract';
+import { muteFilterCommands } from './mpv/edl-filter';
 import { mpvSubtitleProps } from './mpv/subtitle-style';
 import { parseTracks } from './mpv/tracks';
 import { MPV_STREAM_OPTIONS } from '../shared/mpv-stream-options';
@@ -507,12 +508,21 @@ app.whenReady().then(async () => {
     }
   });
 
+  let muteRanges: DesktopMuteRange[] = [];
+  let muteFilterCount = 0;
+  const applyMuteRanges = () => {
+    const { commands, count } = muteFilterCommands(muteRanges, muteFilterCount);
+    muteFilterCount = count;
+    for (const cmd of commands) addon.command(cmd);
+  };
+
   // Route the renderer's player IPC to the addon (control via mpv properties).
   ipcMain.handle(IPC.load, (_e, opts) => {
     console.log('[ipc] load', opts?.url, 'start=', opts?.startTime, 'headers=', Object.keys(opts?.headers ?? {}).join(','));
     // Global property, so it is always written — otherwise the previous file's
     // rectangle would crop the next one.
     addon.setProperty('video-crop', opts?.videoCrop ?? '');
+    applyMuteRanges();
     return addon.load(opts);
   });
   ipcMain.handle(IPC.play, () => addon.setProperty('pause', 'no'));
@@ -525,6 +535,10 @@ app.whenReady().then(async () => {
   ipcMain.handle(IPC.setPlaybackRate, (_e, r: number) => addon.setProperty('speed', String(r)));
   ipcMain.handle(IPC.setVolume, (_e, v: number) => addon.setProperty('volume', String(v)));
   ipcMain.handle(IPC.setMuted, (_e, m: boolean) => addon.setProperty('mute', m ? 'yes' : 'no'));
+  ipcMain.handle(IPC.setMuteRanges, (_e, ranges: DesktopMuteRange[]) => {
+    muteRanges = ranges;
+    applyMuteRanges();
+  });
   ipcMain.handle(IPC.getPosition, () => ({
     position: num(addon.getProperty('time-pos')),
     duration: num(addon.getProperty('duration')),
@@ -561,6 +575,8 @@ app.whenReady().then(async () => {
   ipcMain.handle(IPC.resize, () => {});
   ipcMain.handle(IPC.destroy, () => {
     stopPositionTimer();
+    muteRanges = [];
+    applyMuteRanges();
     return addon.command(['stop']);
   });
 

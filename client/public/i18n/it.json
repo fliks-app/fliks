@@ -152,7 +152,13 @@
     "error_airplay_unsupported": "Questo dispositivo AirPlay non può riprodurre questo video.",
     "stats_delivery_mismatch": "Decisione server: {{decision}} / Consegnato: {{delivered}}",
     "stats_dolby_vision_base": "Dolby Vision {{profile}}, base {{base}}",
-    "stats_dolby_vision": "Dolby Vision {{profile}}"
+    "stats_dolby_vision": "Dolby Vision {{profile}}",
+    "edl": {
+      "skipped_commercial": "Pubblicità saltata",
+      "skipped_cut": "Scena saltata",
+      "muted": "Audio disattivato",
+      "skip_commercial": "Salta pubblicità"
+    }
   },
   "sse": {
     "subtitle_synced": "Sottotitolo sincronizzato con successo.",
@@ -527,7 +533,12 @@
     "sub_bottom_margin_hint": "Definisce la posizione verticale dei sottotitoli rispetto al basso dello schermo.",
     "sub_top_margin": "Posizione del bordo superiore",
     "sub_top_margin_hint": "Definisce la posizione verticale massima consentita rispetto all'alto dello schermo. Questa funzione viene usata quando i sottotitoli contengono istruzioni di posizionamento in alto sullo schermo.",
-    "lang_any": "Nessuna preferenza"
+    "lang_any": "Nessuna preferenza",
+    "player_edl": "Applica tagli e silenzi",
+    "player_edl_hint": "Applica il file .edl accanto al video: salta tagli e pubblicità e silenzia i passaggi indicati. Vale per lo streaming e per i nuovi download.",
+    "player_edl_autoskip": "Salta automaticamente le pause pubblicitarie",
+    "player_edl_autoskip_hint": "Se disattivato, durante le pause pubblicitarie compare un pulsante Salta pubblicità.",
+    "player_edl_saved": "Preferenza salvata"
   },
   "import_disk": {
     "title": "Import manuale dal disco",
