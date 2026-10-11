@@ -38,11 +38,28 @@ struct PlayerView: View {
                     .frame(maxHeight: .infinity, alignment: .top)
             }
 
-            if coordinator.showSkipIntro {
+            if coordinator.showSkipCommercial {
+                SkipIntroButton(progress: coordinator.skipCommercialProgress,
+                                secondsLeft: coordinator.skipCommercialSecondsLeft,
+                                label: "player.edl.skip_commercial") { coordinator.skipCommercial() }
+                    .id(coordinator.skipCommercialOrdinal)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .padding(60)
+            } else if coordinator.showSkipIntro {
                 SkipIntroButton(progress: coordinator.skipIntroProgress,
                                 secondsLeft: coordinator.skipIntroSecondsLeft) { coordinator.skipIntro() }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                     .padding(60)
+            }
+
+            if let notice = coordinator.edlNotice {
+                Text(notice)
+                    .font(.callout)
+                    .padding(12)
+                    .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+                    .padding(.top, 60)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(.trailing, 60)
             }
 
             if let text = loadErrorText ?? (coordinator.fatalError ? tr("player.playback_error") : nil) {
@@ -95,6 +112,7 @@ private struct PlayerContainer: UIViewControllerRepresentable {
 private struct SkipIntroButton: View {
     let progress: Double      // 0..1 elapsed
     let secondsLeft: Int
+    var label = "player.skip_intro"
     var action: () -> Void
     @FocusState private var focused: Bool
 
@@ -102,7 +120,7 @@ private struct SkipIntroButton: View {
         Button(action: action) {
             HStack(spacing: 10) {
                 Image(systemName: "forward.end.fill")
-                Text("\(tr("player.skip_intro")) (\(secondsLeft))")
+                Text("\(tr(label)) (\(secondsLeft))")
             }
             .font(.callout.weight(.semibold))
             .foregroundStyle(.white)
@@ -173,6 +191,25 @@ private struct SkipCueStyle: ButtonStyle {
     private var lastTickTime: Double = -1
     private let skipIntroRevealSeconds: Double = 10
 
+    private var edlPolicy = EdlPolicy(nil)
+    /// Commercial ordinals skipped so far; kept across reloads while the commercial count holds.
+    private var skippedCommercials = Set<Int>()
+    /// Set by an EDL end; the next play restarts from the start, like a natural end.
+    private var edlEnded = false
+    /// Kept apart from `player.isMuted`, which the EDL gate drives.
+    private var userMuted = false
+    private var edlBoundaryObserver: Any?
+    private var timeJumpObserver: NSObjectProtocol?
+    private var edlNoticeTask: Task<Void, Never>?
+    var edlNotice: String?
+    /// The skip-ad cue follows the skip-intro cue: revealed on entering an unskipped
+    /// commercial (or a seek inside it), filled over `skipIntroRevealSeconds`, then retracted.
+    var showSkipCommercial = false
+    var skipCommercialProgress: Double = 0
+    var skipCommercialSecondsLeft = 0
+    var skipCommercialOrdinal: Int?
+    private var skipCommercialShownAt: Double = 0
+
     /// Custom skip-intro cue (a focusable badge with an in-badge progress fill)
     /// — the native `contextualActions` can't show progress and the system
     /// retracts them with the transport bar after a few seconds.
@@ -207,7 +244,9 @@ private struct SkipCueStyle: ButtonStyle {
         let item = AVPlayerItem(url: url)
         let p = AVPlayer(playerItem: item)
         player = p
-        attachObservers(to: p, item: item, initialSeek: startAt)
+        let initialSeek = edlStart(startAt, duration: edlDuration(item))
+        attachObservers(to: p, item: item, initialSeek: initialSeek, exact: initialSeek != startAt)
+        armEdl()
         applyPreferredSubtitle(to: item, player: p)
         p.play()
         RemoteControlService.shared.activeCoordinator = self
@@ -218,8 +257,14 @@ private struct SkipCueStyle: ButtonStyle {
         let wasPaused = player.timeControlStatus == .paused
         let item = AVPlayerItem(url: url)
         player.replaceCurrentItem(with: item)
-        player.seek(to: CMTime(seconds: position, preferredTimescale: 600))
+        let target = edlStart(position, duration: edlDuration(item))
+        if target != position {
+            player.seek(to: Self.seekTime(target), toleranceBefore: .zero, toleranceAfter: .zero)
+        } else {
+            player.seek(to: Self.seekTime(position))
+        }
         attachItemObservers(item)
+        armEdl()
         applyPreferredSubtitle(to: item, player: player)
         if !wasPaused { player.play() }
     }
@@ -228,6 +273,11 @@ private struct SkipCueStyle: ButtonStyle {
         playback.stop()
         if let timeObserver, let player { player.removeTimeObserver(timeObserver) }
         timeObserver = nil
+        if let edlBoundaryObserver, let player { player.removeTimeObserver(edlBoundaryObserver) }
+        edlBoundaryObserver = nil
+        if let timeJumpObserver { NotificationCenter.default.removeObserver(timeJumpObserver) }
+        timeJumpObserver = nil
+        edlNoticeTask?.cancel()
         if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
         endObserver = nil
         statusObservation = nil
@@ -275,8 +325,11 @@ private struct SkipCueStyle: ButtonStyle {
         skipIntroArmed = false
         skipIntroDismissed = false
         showSkipIntro = false
+        showSkipCommercial = false
+        skipCommercialOrdinal = nil
         contextualKey = ""
         lastTickTime = -1
+        skippedCommercials = []
         resolveNextEpisode()
         let sourceAudio = media?.files?.first { $0.id == next.mediaFileId }?.streamInfo?.audio
         guard let url = try? await playback.start(
@@ -288,9 +341,13 @@ private struct SkipCueStyle: ButtonStyle {
 
     // MARK: - Observers
 
-    private func attachObservers(to player: AVPlayer, item: AVPlayerItem, initialSeek: Double) {
+    private func attachObservers(to player: AVPlayer, item: AVPlayerItem, initialSeek: Double, exact: Bool) {
         if initialSeek > 0 {
-            player.seek(to: CMTime(seconds: initialSeek, preferredTimescale: 600))
+            if exact {
+                player.seek(to: Self.seekTime(initialSeek), toleranceBefore: .zero, toleranceAfter: .zero)
+            } else {
+                player.seek(to: Self.seekTime(initialSeek))
+            }
         }
         let interval = CMTime(seconds: 1, preferredTimescale: 1)
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
@@ -302,6 +359,7 @@ private struct SkipCueStyle: ButtonStyle {
             let duration = player.currentItem?.duration.seconds ?? 0
             Task { @MainActor in
                 guard let self else { return }
+                if self.edlEnded, self.player?.timeControlStatus != .paused { self.restartAfterEdlEnd() }
                 self.playback.notifyStateChange(
                     position: position.isFinite ? position : 0,
                     duration: duration.isFinite ? duration : 0,
@@ -318,6 +376,15 @@ private struct SkipCueStyle: ButtonStyle {
         audibleGroup = nil
         legibleGroup = nil
         Task { audibleGroup = try? await item.asset.loadMediaSelectionGroup(for: .audible) }
+        if let timeJumpObserver { NotificationCenter.default.removeObserver(timeJumpObserver) }
+        timeJumpObserver = NotificationCenter.default.addObserver(
+            forName: AVPlayerItem.timeJumpedNotification, object: item, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, let t = self.player?.currentTime().seconds, t.isFinite else { return }
+                self.enforceEdl(at: t)
+            }
+        }
         if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
         endObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main
@@ -353,6 +420,7 @@ private struct SkipCueStyle: ButtonStyle {
             player?.seek(to: CMTime(seconds: intro.endSeconds, preferredTimescale: 600))
         }
         updateSkipIntro(time: time, seeked: seeked)
+        updateSkipCommercial(at: time, seeked: seeked)
         updateContextualActions(time: time, duration: duration)
     }
 
@@ -386,6 +454,154 @@ private struct SkipCueStyle: ButtonStyle {
         player?.seek(to: CMTime(seconds: skipIntroTarget, preferredTimescale: 600))
         showSkipIntro = false
         skipIntroArmed = false
+    }
+
+    // MARK: - EDL
+
+    private func edlDuration(_ item: AVPlayerItem? = nil) -> Double {
+        let d = (item ?? player?.currentItem)?.duration.seconds ?? 0
+        if d.isFinite, d > 0 { return d }
+        return playback.info?.durationSeconds ?? .infinity
+    }
+
+    /// One boundary observer on every skip start and mute edge; replaces any previous one.
+    private func armEdl() {
+        guard let player else { return }
+        if let edlBoundaryObserver { player.removeTimeObserver(edlBoundaryObserver) }
+        edlBoundaryObserver = nil
+        applyMuteGate()
+        let times = Set(edlPolicy.skips.map(\.start) + edlPolicy.muteEdges + edlPolicy.cueEdges).sorted()
+        guard !times.isEmpty else { return }
+        edlBoundaryObserver = player.addBoundaryTimeObserver(
+            forTimes: times.map { NSValue(time: CMTime(seconds: $0, preferredTimescale: 600)) }, queue: .main
+        ) { [weak self] in
+            Task { @MainActor in
+                guard let self, let t = self.player?.currentTime().seconds, t.isFinite else { return }
+                self.enforceEdl(at: t + 0.02)
+            }
+        }
+    }
+
+    /// 90 kHz keeps a seek within a frame of the target, so it never lands short of a range end.
+    private static func seekTime(_ seconds: Double) -> CMTime {
+        CMTime(seconds: seconds, preferredTimescale: 90000)
+    }
+
+    /// Rebuilds the policy from the current playback info and returns the position to start
+    /// at; a start inside a range moves to its end and shows the notice.
+    private func edlStart(_ position: Double, duration: Double) -> Double {
+        let before = edlPolicy.commercialCount
+        edlPolicy = EdlPolicy(
+            playback.info?.edl,
+            autoSkipCommercials: AuthService.shared.currentUser?.edlAutoSkipCommercials ?? true)
+        if edlPolicy.commercialCount != before { skippedCommercials.removeAll() }
+        edlEnded = false
+        switch edlPolicy.resolve(position, duration: duration, skipped: &skippedCommercials) {
+        case .seek(let to, let action):
+            showEdlNotice(action)
+            updateSkipCommercial(at: to)
+            return to
+        case .end:
+            showSkipCommercial = false
+            Task { @MainActor [weak self] in
+                self?.player?.pause()
+                self?.edlEnded = true
+                self?.onEnded()
+            }
+            return position
+        case .none:
+            updateSkipCommercial(at: position)
+            return position
+        }
+    }
+
+    /// Skips or ends at `position` when a range covers it, then re-gates the mute.
+    private func enforceEdl(at position: Double) {
+        guard let player else { return }
+        switch edlPolicy.resolve(position, duration: edlDuration(), skipped: &skippedCommercials) {
+        case .seek(let to, let action):
+            showEdlNotice(action)
+            showSkipCommercial = false
+            player.seek(to: Self.seekTime(to),
+                        toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+                Task { @MainActor in
+                    self?.applyMuteGate()
+                    self?.updateSkipCommercial(at: to)
+                }
+            }
+            return
+        case .end:
+            showSkipCommercial = false
+            player.pause()
+            edlEnded = true
+            onEnded()
+        case .none:
+            updateSkipCommercial(at: position)
+        }
+        applyMuteGate()
+    }
+
+    private func updateSkipCommercial(at t: Double, seeked: Bool = false) {
+        guard !edlPolicy.autoSkipCommercials,
+              let o = edlPolicy.commercialOrdinal(at: t, skipped: skippedCommercials) else {
+            skipCommercialOrdinal = nil
+            if showSkipCommercial { showSkipCommercial = false }
+            return
+        }
+        if o != skipCommercialOrdinal || seeked {
+            skipCommercialOrdinal = o
+            skipCommercialShownAt = t
+        }
+        let elapsed = t - skipCommercialShownAt
+        let show = elapsed < skipIntroRevealSeconds
+        if show != showSkipCommercial { showSkipCommercial = show }
+        skipCommercialProgress = min(1, max(0, elapsed / skipIntroRevealSeconds))
+        skipCommercialSecondsLeft = max(0, Int(ceil(skipIntroRevealSeconds - elapsed)))
+    }
+
+    func skipCommercial() {
+        guard let player, case let t = player.currentTime().seconds, t.isFinite else { return }
+        showSkipCommercial = false
+        switch edlPolicy.skipCommercial(at: t, duration: edlDuration(), skipped: &skippedCommercials) {
+        case .seek(let to, _):
+            player.seek(to: Self.seekTime(to), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+                Task { @MainActor in
+                    self?.applyMuteGate()
+                    self?.updateSkipCommercial(at: to)
+                }
+            }
+        case .end:
+            player.pause()
+            edlEnded = true
+            onEnded()
+        case .none:
+            break
+        }
+    }
+
+    private func restartAfterEdlEnd() {
+        edlEnded = false
+        var to = 0.0
+        if case .seek(let t, let action) = edlPolicy.resolve(0, duration: edlDuration(), skipped: &skippedCommercials) {
+            showEdlNotice(action)
+            to = t
+        }
+        player?.seek(to: Self.seekTime(to), toleranceBefore: .zero, toleranceAfter: .zero)
+    }
+
+    private func applyMuteGate() {
+        guard let player else { return }
+        let t = player.currentTime().seconds
+        player.isMuted = userMuted || (t.isFinite && edlPolicy.isMuted(at: t))
+    }
+
+    private func showEdlNotice(_ action: String) {
+        edlNotice = tr(action == "commercial" ? "player.edl.skipped_commercial" : "player.edl.skipped_cut")
+        edlNoticeTask?.cancel()
+        edlNoticeTask = Task {
+            try? await Task.sleep(for: .seconds(3))
+            if !Task.isCancelled { edlNotice = nil }
+        }
     }
 
     private func onEnded() {
@@ -514,7 +730,8 @@ private struct SkipCueStyle: ButtonStyle {
                 print("remote: mute without a muted flag (\(cmd.cmdId)), ignoring")
                 return
             }
-            player.isMuted = muted
+            userMuted = muted
+            applyMuteGate()
         case "stop":
             onStopRequested?()
         case "next":

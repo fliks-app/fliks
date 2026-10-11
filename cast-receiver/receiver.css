@@ -75,3 +75,22 @@ body.playing .splash {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 4px rgba(0, 0, 0, 0.7);
 }
 
+
+/* Skip notice for EDL cuts / commercials; text comes from the sender. */
+.edl-notice {
+  position: fixed;
+  top: 4%;
+  right: 4%;
+  z-index: 200;
+  padding: 0.6rem 1.2rem;
+  border-radius: 0.5rem;
+  background: rgba(0, 0, 0, 0.7);
+  font-size: 1.5rem;
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+  pointer-events: none;
+}
+
+.edl-notice.show {
+  opacity: 1;
+}

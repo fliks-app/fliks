@@ -6,6 +6,8 @@ import {
   PlaybackState,
 } from './playback-engine';
 import { SubtitleOverlay } from './subtitle-overlay.util';
+import type { TimeRange } from '../../utils/edl-policy';
+import { MuteGate } from './mute-gate';
 
 /**
  * Samsung Tizen AVPlay backend.
@@ -57,6 +59,25 @@ declare const webapis: {
 };
 
 const AVPLAY_OBJECT_ID = 'fliks-avplay';
+const TIZEN_MUTE_LEAD_S = 0.1;
+const TV_MUTE_FLAG = 'fliks.edlTvMute';
+
+interface TvAudioControl {
+  setMute(mute: boolean): void;
+  isMute(): boolean;
+}
+
+const tvAudio = (): TvAudioControl | null => {
+  const a = (globalThis as { tizen?: { tvaudiocontrol?: TvAudioControl } }).tizen?.tvaudiocontrol;
+  return a && typeof a.setMute === 'function' && typeof a.isMute === 'function' ? a : null;
+};
+
+const storeFlag = (on: boolean): void => {
+  try {
+    if (on) localStorage.setItem(TV_MUTE_FLAG, '1');
+    else localStorage.removeItem(TV_MUTE_FLAG);
+  } catch { /* storage unavailable */ }
+};
 
 export const isTizenAvplayAvailable = (): boolean => {
   return (
@@ -96,6 +117,25 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
   private _seekInFlight = false;
   private _pendingSeek: number | null = null;
 
+  private muteRanges: readonly TimeRange[] = [];
+  /** True while the TV mute was engaged by the gate, never when the user already muted. */
+  private ownsTvMute = false;
+  private readonly muteGate = new MuteGate({
+    position: () => {
+      this.dropTvMuteIfUserUnmuted();
+      try { return webapis.avplay.getCurrentTime() / 1000; } catch { return this._currentTime; }
+    },
+    rate: () => this._playbackRate,
+    paused: () => this._paused,
+    apply: (muted) => this.applyTvMute(muted),
+    leadS: TIZEN_MUTE_LEAD_S,
+  });
+  private readonly releaseOnHide = () => {
+    if (document.visibilityState === 'hidden') this.muteGate.setRanges([]);
+    else this.muteGate.setRanges(this.muteRanges);
+  };
+  private readonly releaseOnUnload = () => this.applyTvMute(false);
+
   /** Timestamp of the last resume issued from PAUSED. AVPlay can throw a
    *  transient network-shaped error while re-priming the decoder on resume;
    *  treating that as a lost session and reloading the whole stream is what made
@@ -123,12 +163,19 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     obj.style.display = 'block';
     this.avObject = obj;
     TizenEngine.activeEngine = this;
+    this.recoverTvMute();
+    document.addEventListener('visibilitychange', this.releaseOnHide);
+    window.addEventListener('beforeunload', this.releaseOnUnload);
     this.applyDisplayRect();
     this.orientationHandler = () => this.applyDisplayRect();
     window.addEventListener('resize', this.orientationHandler);
   }
 
   async destroy(): Promise<void> {
+    this.muteGate.dispose();
+    this.applyTvMute(false);
+    document.removeEventListener('visibilitychange', this.releaseOnHide);
+    window.removeEventListener('beforeunload', this.releaseOnUnload);
     if (this.orientationHandler) {
       window.removeEventListener('resize', this.orientationHandler);
       this.orientationHandler = null;
@@ -224,6 +271,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     // open() restarts AVPlay at 1x; keeping the old value here would make the
     // getter report a speed nothing is playing.
     this._playbackRate = 1;
+    this.muteGate.sync(startTime ?? 0);
 
     const safeUrl = resolveAvtestUrl(url);
 
@@ -289,6 +337,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
               this.emit('stateChanged', { state: 'paused' });
             }
             if (startTime && startTime > 0) this._currentTime = startTime;
+            this.muteGate.sync();
             resolve();
           }),
           (err) => done(() => {
@@ -347,6 +396,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
       buffered: this._buffered,
     });
     this.subtitles.updateAt(this._currentTime);
+    this.muteGate.sync();
     if (ms > 0) this.emitFirstFrameOnce();
   }
   private handleError(err: unknown): void {
@@ -411,6 +461,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
       this.emit('error', { code: -1, message: 'AVPlay play failed: ' + String(e), errorKey: 'player.playback_error' });
     }
     this.emit('stateChanged', { state: 'playing' });
+    this.muteGate.sync();
   }
 
   async pause(): Promise<void> {
@@ -421,6 +472,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
       this.emit('error', { code: -1, message: 'AVPlay pause failed: ' + String(e), errorKey: 'player.playback_error' });
     }
     this.emit('stateChanged', { state: 'paused' });
+    this.muteGate.sync();
   }
 
   async seek(position: number): Promise<void> {
@@ -454,6 +506,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
             Math.round(position * 1000),
             () => done(() => {
               this._currentTime = position;
+              this.muteGate.sync(position);
               resolve();
             }),
             async (err) => {
@@ -521,6 +574,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     try {
       webapis.avplay.setSpeed(rate);
       this._playbackRate = rate;
+      this.muteGate.sync();
     } catch (e) {
       console.warn('[tizen-engine] AVPlay setSpeed rejected', rate, 'x:', e);
     }
@@ -538,6 +592,54 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     this._muted = m;
     /* No web-level mute API on AVPlay; rely on TV remote / system. */
     this.emit('volumechange', { volume: this._volume, muted: this._muted });
+  }
+
+  setMuteRanges(ranges: readonly TimeRange[]): void {
+    this.muteRanges = ranges;
+    if (document.visibilityState !== 'hidden') this.muteGate.setRanges(ranges);
+  }
+
+  /** Mutes the TV only when the user had not; releases only what this gate muted. */
+  private applyTvMute(muted: boolean): void {
+    const audio = tvAudio();
+    if (!audio) return;
+    try {
+      if (muted) {
+        if (this.ownsTvMute || audio.isMute()) return;
+        audio.setMute(true);
+        this.ownsTvMute = true;
+        storeFlag(true);
+      } else if (this.ownsTvMute) {
+        this.ownsTvMute = false;
+        storeFlag(false);
+        if (audio.isMute()) audio.setMute(false);
+      }
+    } catch (e) {
+      console.warn('[tizen-engine] tvaudiocontrol failed', e);
+    }
+  }
+
+  /** The user pressed the remote mute during a gated range: that state is theirs, not ours to release. */
+  private dropTvMuteIfUserUnmuted(): void {
+    if (!this.ownsTvMute) return;
+    try {
+      if (tvAudio()?.isMute() === false) {
+        this.ownsTvMute = false;
+        storeFlag(false);
+      }
+    } catch { /* ok */ }
+  }
+
+  /** A previous session that died while gated left the TV muted. */
+  private recoverTvMute(): void {
+    let flagged = false;
+    try { flagged = localStorage.getItem(TV_MUTE_FLAG) === '1'; } catch { /* storage unavailable */ }
+    if (!flagged) return;
+    storeFlag(false);
+    try {
+      const audio = tvAudio();
+      if (audio?.isMute()) audio.setMute(false);
+    } catch { /* ok */ }
   }
 
   // ── Audio tracks ────────────────────────────────────────────────────

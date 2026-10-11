@@ -33,10 +33,15 @@ import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.LoadControl;
+import androidx.media3.exoplayer.PlayerMessage;
+import androidx.media3.exoplayer.audio.AudioCapabilities;
+import androidx.media3.exoplayer.audio.AudioSink;
+import androidx.media3.exoplayer.audio.DefaultAudioSink;
 import androidx.media3.exoplayer.analytics.AnalyticsListener;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.session.MediaSession;
 import java.util.ArrayList;
+import android.content.Context;
 import java.util.List;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.CaptionStyleCompat;
@@ -198,6 +203,8 @@ public class NativePlayerPlugin extends Plugin {
             android.webkit.WebView webView = getBridge().getWebView();
             if (webView != null) webView.setBackgroundColor(Color.BLACK);
             stopPositionUpdates();
+            muteMessages.clear();
+            muteRanges = new double[0][];
             releaseMediaSession();
             if (player != null) {
                 player.release();
@@ -261,6 +268,7 @@ public class NativePlayerPlugin extends Plugin {
 
         mainHandler.post(() -> {
             if (!backgroundAudio) releaseMediaSession();
+            cancelMuteMessages();
             if (player != null) player.release();
 
             // SubtitleView holds whatever cues the previous player last emitted —
@@ -337,8 +345,12 @@ public class NativePlayerPlugin extends Plugin {
             // - setEnableDecoderFallback(true) lets the renderer fall back to
             //   another decoder when the preferred one rejects the format
             //   (e.g. some Android TV SoCs ship a buggy AC-3 decoder).
+            // Player volume is ignored on passthrough output, so a mute gate needs PCM.
+            muteSinkPlayer = muteRanges.length > 0;
             DefaultRenderersFactory renderersFactory =
-                    new DefaultRenderersFactory(getContext())
+                    (muteSinkPlayer
+                            ? new PcmOnlyRenderersFactory(getContext())
+                            : new DefaultRenderersFactory(getContext()))
                             .setEnableAudioFloatOutput(false)
                             .setEnableDecoderFallback(true);
             // DefaultMediaSourceFactory handles both URL autodetection
@@ -376,12 +388,20 @@ public class NativePlayerPlugin extends Plugin {
                 @Override
                 public void onPlaybackStateChanged(int state) {
                     syncKeepScreenOn();
+                    if (state == Player.STATE_READY) applyGate();
                     switch (state) {
                         case Player.STATE_BUFFERING: emitStateChanged("buffering"); break;
                         case Player.STATE_READY: emitStateChanged(player.getPlayWhenReady() ? "playing" : "paused"); break;
                         case Player.STATE_ENDED: emitStateChanged("ended"); break;
                         default: emitStateChanged("idle");
                     }
+                }
+
+                @Override public void onPositionDiscontinuity(
+                        @NonNull Player.PositionInfo oldPosition,
+                        @NonNull Player.PositionInfo newPosition, int reason) {
+                    applyGate();
+                    emitPosition();
                 }
 
                 @Override public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
@@ -545,8 +565,94 @@ public class NativePlayerPlugin extends Plugin {
             player.prepare();
             player.setPlayWhenReady(true);
             startPositionUpdates();
+            scheduleMuteMessages();
+            applyGate();
             call.resolve();
         });
+    }
+
+    // ── Mute ranges ──
+
+    private static final double MUTE_LEAD_S = 0.02;
+    private static final double MUTE_MERGE_GAP_S = 0.2;
+
+    /** Sorted, disjoint, gap-merged [start, end] pairs in seconds. */
+    private double[][] muteRanges = new double[0][];
+    private final List<PlayerMessage> muteMessages = new ArrayList<>();
+    private boolean muteSinkPlayer = false;
+
+    @OptIn(markerClass = UnstableApi.class)
+    private static final class PcmOnlyRenderersFactory extends DefaultRenderersFactory {
+        PcmOnlyRenderersFactory(Context context) { super(context); }
+
+        @Override
+        protected AudioSink buildAudioSink(Context context, boolean enableFloatOutput,
+                boolean enableAudioTrackPlaybackParams) {
+            // A context-less builder is required: with a context, media3 discards these capabilities.
+            return new DefaultAudioSink.Builder()
+                    .setAudioCapabilities(AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES)
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    .build();
+        }
+    }
+
+    @PluginMethod()
+    public void setMuteRanges(PluginCall call) {
+        JSArray raw = call.getArray("ranges", new JSArray());
+        List<double[]> merged = new ArrayList<>();
+        for (int i = 0; i < raw.length(); i++) {
+            org.json.JSONObject r = raw.optJSONObject(i);
+            if (r == null) continue;
+            double s = r.optDouble("start", Double.NaN);
+            double e = r.optDouble("end", Double.NaN);
+            if (Double.isNaN(s) || Double.isNaN(e) || e <= s) continue;
+            double[] last = merged.isEmpty() ? null : merged.get(merged.size() - 1);
+            if (last != null && s - last[1] <= MUTE_MERGE_GAP_S) last[1] = Math.max(last[1], e);
+            else merged.add(new double[] {s, e});
+        }
+        double[][] next = merged.toArray(new double[0][]);
+        mainHandler.post(() -> {
+            muteRanges = next;
+            scheduleMuteMessages();
+            applyGate();
+            call.resolve();
+        });
+    }
+
+    private boolean inMute(double t) {
+        for (double[] r : muteRanges) {
+            if (t < r[0] - MUTE_LEAD_S) return false;
+            if (t < r[1]) return true;
+        }
+        return false;
+    }
+
+    private void applyGate() {
+        if (player == null) return;
+        player.setVolume(inMute(player.getCurrentPosition() / 1000.0) ? 0f : 1f);
+    }
+
+    private void cancelMuteMessages() {
+        for (PlayerMessage m : muteMessages) m.cancel();
+        muteMessages.clear();
+    }
+
+    /** Lead only on the start edge: the mute window is [start - lead, end). */
+    @OptIn(markerClass = UnstableApi.class)
+    private void scheduleMuteMessages() {
+        cancelMuteMessages();
+        if (player == null) return;
+        for (double[] r : muteRanges) {
+            for (int k = 0; k < 2; k++) {
+                double at = k == 0 ? r[0] - MUTE_LEAD_S : r[1];
+                muteMessages.add(player.createMessage((type, payload) -> applyGate())
+                        .setLooper(Looper.getMainLooper())
+                        .setPosition(Math.max(0L, Math.round(at * 1000)))
+                        .setDeleteAfterDelivery(false)
+                        .send());
+            }
+        }
     }
 
     /** Screen lock or a leave without PiP: unless background audio keeps a media
@@ -622,7 +728,7 @@ public class NativePlayerPlugin extends Plugin {
                 // seekTo — leaving the previous line visible and reading as
                 // "subtitles shifted" until the next cue lands.
                 if (subtitles != null) subtitles.clear();
-                player.seekTo((long) (position * 1000));
+                player.seekTo(Math.round(position * 1000));
             }
             call.resolve();
         });
@@ -1124,6 +1230,15 @@ public class NativePlayerPlugin extends Plugin {
                 "window.dispatchEvent(new CustomEvent('nativePlayerTracksChanged',{detail:{audioTracks:" + audio + ",subtitleTracks:[]}}));", null);
     }
 
+    private void emitPosition() {
+        if (player == null) return;
+        double pos = player.getCurrentPosition() / 1000.0;
+        double dur = player.getDuration() != C.TIME_UNSET ? player.getDuration() / 1000.0 : 0;
+        double buf = player.getBufferedPosition() / 1000.0;
+        getBridge().getWebView().evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent('nativePlayerTimeUpdate',{detail:{position:" + pos + ",duration:" + dur + ",buffered:" + buf + "}}));", null);
+    }
+
     private void startPositionUpdates() {
         stopPositionUpdates();
         positionHandler = new Handler(Looper.getMainLooper());
@@ -1140,13 +1255,7 @@ public class NativePlayerPlugin extends Plugin {
                 // getPosition() every second; that JS polling was
                 // dropped in commit 9e2269dc as redundant, which made
                 // this push the sole signal.
-                if (player != null) {
-                    double pos = player.getCurrentPosition() / 1000.0;
-                    double dur = player.getDuration() != C.TIME_UNSET ? player.getDuration() / 1000.0 : 0;
-                    double buf = player.getBufferedPosition() / 1000.0;
-                    getBridge().getWebView().evaluateJavascript(
-                            "window.dispatchEvent(new CustomEvent('nativePlayerTimeUpdate',{detail:{position:" + pos + ",duration:" + dur + ",buffered:" + buf + "}}));", null);
-                }
+                emitPosition();
                 positionHandler.postDelayed(this, 1000);
             }
         };

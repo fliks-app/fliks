@@ -86,12 +86,19 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "getPosition", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setPlaybackRate", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setQueueNav", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setMuteRanges", returnType: CAPPluginReturnPromise),
     ]
 
     private var player: AVPlayer?
     private var playerLayer: AVPlayerLayer?
     private var playerView: UIView?
     private var timeObserver: Any?
+    /// Content-second ranges to silence. Nothing else in this plugin touches
+    /// `isMuted`, so the gate owns it outright.
+    private var muteRanges: [(start: Double, end: Double)] = []
+    private var muteBoundaryObserver: Any?
+    /// `allowsExternalPlayback` before the gate disabled it (nil = not engaged).
+    private var externalPlaybackBeforeMute: Bool?
     private var statusObserver: NSKeyValueObservation?
     private var timeControlObserver: NSKeyValueObservation?
     private var firstFrameObserver: NSKeyValueObservation?
@@ -405,6 +412,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         let player = AVPlayer(playerItem: item)
         player.automaticallyWaitsToMinimizeStalling = true
+        defer { syncExternalPlaybackForMute() }
         // A mirrored screen hands the video to the receiver full screen
         // instead of mirroring the app UI around it.
         player.usesExternalPlaybackWhileExternalScreenIsActive = true
@@ -439,6 +447,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// race.
     private func startPlayback(player: AVPlayer, startTime: Double) {
         if startTime > 0 {
+            applyMuteGate(at: startTime)
             let cmTime = CMTime(seconds: startTime, preferredTimescale: 1000)
             player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
         }
@@ -467,6 +476,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
                 return
             }
             let cmTime = CMTime(seconds: position, preferredTimescale: 1000)
+            self?.applyMuteGate(at: position)
             // Resolve only AFTER AVPlayer finishes the seek. Resolving
             // synchronously (the old behaviour) made the JS layer think
             // the engine was at `position` immediately, the seek-lock
@@ -483,7 +493,11 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
                 toleranceBefore: .zero,
                 toleranceAfter: .zero
             ) { _ in
-                DispatchQueue.main.async { self?.nowPlaying.refresh() }
+                DispatchQueue.main.async {
+                    self?.nowPlaying.refresh()
+                    self?.applyMuteGate(at: player.currentTime().seconds)
+                    self?.emitTimeUpdate()
+                }
                 call.resolve()
             }
         }
@@ -721,6 +735,76 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         bridge?.webView?.evaluateJavaScript(js)
     }
 
+    // MARK: - Mute ranges
+
+    @objc func setMuteRanges(_ call: CAPPluginCall) {
+        let raw = call.getArray("ranges", JSObject.self) ?? []
+        let ranges = raw.compactMap { r -> (start: Double, end: Double)? in
+            guard let s = r["start"] as? Double ?? (r["start"] as? Int).map(Double.init),
+                  let e = r["end"] as? Double ?? (r["end"] as? Int).map(Double.init),
+                  s.isFinite, e.isFinite, e > s else { return nil }
+            return (s, e)
+        }
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.muteRanges = ranges
+            self.installMuteBoundaries()
+            self.syncExternalPlaybackForMute()
+            call.resolve()
+        }
+    }
+
+    /// Muted on [start - lead, end): the observer fires at or after its boundary, so the
+    /// lead keeps the start from being late and the end can only be late, never early.
+    private static let muteLead = 0.05
+
+    private func inMuteRange(_ t: Double) -> Bool {
+        muteRanges.contains { t >= $0.start - Self.muteLead && t < $0.end }
+    }
+
+    private func applyMuteGate(at position: Double) {
+        guard let player = player else { return }
+        player.isMuted = position.isFinite && inMuteRange(position)
+    }
+
+    private func installMuteBoundaries() {
+        removeMuteBoundaries()
+        guard let player = player else { return }
+        if muteRanges.isEmpty {
+            player.isMuted = false
+            return
+        }
+        let times = muteRanges.flatMap { [max(0, $0.start - Self.muteLead), $0.end] }
+            .map { NSValue(time: CMTime(seconds: $0, preferredTimescale: 1000)) }
+        muteBoundaryObserver = player.addBoundaryTimeObserver(forTimes: times, queue: .main) { [weak self] in
+            guard let self = self, let p = self.player else { return }
+            self.applyMuteGate(at: p.currentTime().seconds)
+        }
+        applyMuteGate(at: player.currentTime().seconds)
+    }
+
+    private func removeMuteBoundaries() {
+        if let obs = muteBoundaryObserver {
+            player?.removeTimeObserver(obs)
+            muteBoundaryObserver = nil
+        }
+    }
+
+    /// `isMuted` may not reach an AirPlay video receiver, so the video stays on
+    /// the phone while ranges exist; the previous setting returns once cleared.
+    private func syncExternalPlaybackForMute() {
+        guard let player = player else { return }
+        if muteRanges.isEmpty {
+            if let prev = externalPlaybackBeforeMute {
+                player.allowsExternalPlayback = prev
+                externalPlaybackBeforeMute = nil
+            }
+        } else if externalPlaybackBeforeMute == nil {
+            externalPlaybackBeforeMute = player.allowsExternalPlayback
+            player.allowsExternalPlayback = false
+        }
+    }
+
     // MARK: - Brightness
 
     // MARK: - Display
@@ -895,6 +979,14 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             self?.emitTimeUpdate()
         }
 
+        installMuteBoundaries()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleTimeJumped(_:)),
+            name: AVPlayerItem.timeJumpedNotification,
+            object: player.currentItem
+        )
+
         // Anamorphic sources report their display size only once loaded.
         presentationSizeObserver = player.currentItem?.observe(
             \.presentationSize, options: [.new]
@@ -1048,6 +1140,14 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         )
     }
 
+    @objc private func handleTimeJumped(_ notification: Notification) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let p = self.player else { return }
+            self.applyMuteGate(at: p.currentTime().seconds)
+            self.emitTimeUpdate()
+        }
+    }
+
     @objc private func handleAppDidForeground() {
         reassertVideoPresentation()
     }
@@ -1099,6 +1199,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private func removeObservers() {
+        removeMuteBoundaries()
         if let obs = timeObserver {
             player?.removeTimeObserver(obs)
             timeObserver = nil
@@ -1121,6 +1222,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         setExternalPlayback(false)
         player?.pause()
         player = nil
+        externalPlaybackBeforeMute = nil
+        muteRanges = []
         nowPlaying.deactivate(releaseSession: true)
         playerLayer?.removeFromSuperlayer()
         playerLayer = nil

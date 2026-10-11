@@ -210,6 +210,8 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
             builder.streamType = .buffered
             builder.contentType = contentType
             builder.metadata = metadata
+            // Side-channel the Fliks receiver reads (media ids, EDL ranges).
+            builder.customData = call.getObject("customData")
 
             // Subtitles
             var tracks: [GCKMediaTrack] = []

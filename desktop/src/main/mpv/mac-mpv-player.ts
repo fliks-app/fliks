@@ -13,12 +13,14 @@ import type { PlayerBackend, PlayerBackendEvents } from './player-backend';
 import type {
   DesktopAudioTrack,
   DesktopLoadOptions,
+  DesktopMuteRange,
   DesktopPlayerState,
   DesktopPositionInfo,
   DesktopSubtitleStyle,
   DesktopSubtitleTrack,
 } from '../../shared/contract';
 import { MPV_STREAM_OPTIONS } from '../../shared/mpv-stream-options';
+import { muteFilterCommands } from './edl-filter';
 import { mpvSubtitleProps } from './subtitle-style';
 import { mapTrackList, parseTracks, type MpvTrack } from './tracks';
 import { TypedEmitter } from './typed-emitter';
@@ -73,6 +75,8 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
   // getPosition() returns these cached values instead of a blocking main-thread
   // property read (which would take the mpv core lock and stall the next command).
   private lastPosition = 0;
+  private muteRanges: DesktopMuteRange[] = [];
+  private muteFilterCount = 0;
   private lastDuration = 0;
   private lastBuffered = 0;
   /** Resolver for the in-flight load()'s first-frame wait; see load(). */
@@ -169,6 +173,7 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
     // Global property, so it is always written — otherwise the previous file's
     // rectangle would crop the next one.
     this.addon.setProperty('video-crop', opts.videoCrop ?? '');
+    this.applyMuteRanges();
     this.addon.load(opts);
     await this.waitFirstFrame();
   }
@@ -208,6 +213,9 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
     this.lastPosition = 0;
     this.lastDuration = 0;
     this.lastBuffered = 0;
+    const { commands } = muteFilterCommands([], this.muteFilterCount);
+    this.muteFilterCount = 0;
+    for (const cmd of commands) this.addon.command(cmd);
     this.addon.command(['stop']);
   }
 
@@ -221,6 +229,17 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
 
   async setMuted(muted: boolean): Promise<void> {
     this.addon.setProperty('mute', muted ? 'yes' : 'no');
+  }
+
+  async setMuteRanges(ranges: DesktopMuteRange[]): Promise<void> {
+    this.muteRanges = ranges;
+    this.applyMuteRanges();
+  }
+
+  private applyMuteRanges(): void {
+    const { commands, count } = muteFilterCommands(this.muteRanges, this.muteFilterCount);
+    this.muteFilterCount = count;
+    for (const cmd of commands) this.addon.command(cmd);
   }
 
   async getPosition(): Promise<DesktopPositionInfo> {
@@ -270,6 +289,7 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
   }
 
   async destroy(): Promise<void> {
+    this.muteRanges = [];
     this.firstFrameResolve?.(); // don't leave a pending load() hanging on teardown
     this.addon.stop();
   }

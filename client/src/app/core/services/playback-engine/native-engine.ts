@@ -13,6 +13,7 @@ import {
   SUBTITLE_EDGE_KEY,
 } from '../../utils/subtitle-presets';
 import { normalizeLangCode } from '../../utils/language.utils';
+import type { TimeRange } from '../../utils/edl-policy';
 
 /**
  * PlaybackEngine implementation backed by the NativePlayer Capacitor plugin
@@ -110,6 +111,8 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   ): Promise<void> {
     this.resetFirstFrame();
     this.lastTimeUpdatePos = -1;
+    // Android picks its audio sink at load time from the ranges, so they go first.
+    await this.pushMuteRanges(true);
     const info = this.mediaInfo?.();
     // Direct play / offline inject external sidecars via setPreloadedSubtitles
     // (empty for transcode/remux, which carry subs as HLS renditions).
@@ -142,6 +145,27 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     // list once `nativePlayerTracksChanged` fires.
     this._activeTrackId = null;
     this._nativeSubtitleTracks = [];
+  }
+
+  private _muteRanges: TimeRange[] = [];
+  private _sentMuteRanges = '[]';
+  private _muteWarned = false;
+
+  setMuteRanges(ranges: readonly TimeRange[]): void {
+    this._muteRanges = ranges.map((r) => ({ start: r.start, end: r.end }));
+    void this.pushMuteRanges(false);
+  }
+
+  private async pushMuteRanges(atLoad: boolean): Promise<void> {
+    const key = JSON.stringify(this._muteRanges);
+    if (atLoad ? this._muteRanges.length === 0 : key === this._sentMuteRanges) return;
+    this._sentMuteRanges = key;
+    try {
+      await NativePlayer.setMuteRanges({ ranges: this._muteRanges });
+    } catch (e) {
+      if (!this._muteWarned) console.warn('[native-engine] setMuteRanges unavailable', e);
+      this._muteWarned = true;
+    }
   }
 
   private _subtitleStyle: {

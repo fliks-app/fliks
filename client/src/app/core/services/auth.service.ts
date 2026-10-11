@@ -43,6 +43,9 @@ export interface User {
   shareStats: boolean;
   /** Opt out of the whole social layer (undiscoverable + can't use sharing). */
   shareDisabled: boolean;
+  /** Apply the `.edl` sidecar (cuts, commercial skips, mutes) during playback. */
+  edlEnabled: boolean;
+  edlAutoSkipCommercials?: boolean;
   /** Mask what would spoil an episode not yet watched. */
   hideSpoilers: boolean;
   /** Blur unwatched episode stills and the episode backdrop. */

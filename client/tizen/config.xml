@@ -31,6 +31,7 @@
        hardware video plane is allowed to render behind the WebView. -->
   <tizen:privilege name="http://developer.samsung.com/privilege/avplay"/>
   <tizen:privilege name="http://tizen.org/privilege/tv.window"/>
+  <tizen:privilege name="http://tizen.org/privilege/tv.audio"/>
   <tizen:setting screen-orientation="landscape" background-support="disable" hwkey-event="enable" pointing-device-support="enable"/>
   <!-- CSP policy. Permissive on connect-src because the user's NAS URL
        is only known at runtime. The receiver, like the web bundle,

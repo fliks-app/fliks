@@ -10,6 +10,7 @@ import {
   DeviceProfile,
 } from '../browser-device-profile.service';
 import { SseService } from '../sse.service';
+import type { EdlRange } from '../../utils/edl-policy';
 import type { PreRollItem } from '@fliks/plugin-contract/ui';
 
 const SSE_CONNECTION_HEADER = 'X-Fliks-Sse-Connection';
@@ -124,6 +125,8 @@ export interface PlaybackInfoResponse {
   };
   /** Embedded chapters from the container (MKV/MP4). */
   chapters?: { startSeconds: number; endSeconds: number; title?: string }[];
+  /** `.edl` sidecar ranges on this response's timeline; absent when none or switched off. */
+  edl?: EdlRange[];
   /** Plugin-named items to play before the main video. Read at launch only. */
   preRoll?: PreRollItem[];
   /** Server-issued live-session identifier. The client embeds it in every
@@ -502,6 +505,14 @@ export class StreamingApiService {
         { headers: this.sseConnectionHeaders() },
       ),
     );
+  }
+
+  /** `.edl` ranges on the container timeline (original-file downloads). */
+  async getEdl(mediaFileId: number): Promise<EdlRange[]> {
+    const res = await firstValueFrom(
+      this.http.get<{ ranges: EdlRange[] }>(`/api/stream/${mediaFileId}/edl`),
+    );
+    return res.ranges ?? [];
   }
 
   /** URL for stopping one session (used with fetch(keepalive) on unload). */

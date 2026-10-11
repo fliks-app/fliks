@@ -99,6 +99,23 @@ describe('FileTransferService atomic transfer', () => {
     expect(landed).toEqual(['New.en.hi.forced.srt', 'New.fr.srt']);
   });
 
+  it('carries an exact-stem .edl only, even when the base name ends in a language-like suffix', async () => {
+    for (const name of ['Show.en.edl', 'Show.en.srt', 'Show.en 2.edl', 'Show.enx.edl']) {
+      await fsp.writeFile(path.join(srcDir, name), 'x');
+    }
+
+    await service.transferCompanions({
+      srcDir,
+      destDir,
+      sourceBaseName: 'Show.en',
+      newBaseName: 'New',
+      method: 'copy',
+      allowedExts: new Set(['.srt', '.edl']),
+    });
+
+    expect((await fsp.readdir(destDir)).sort()).toEqual(['New.edl', 'New.srt']);
+  });
+
   it('move (cross-device fallback): lands complete content, no temp file, source removed', async () => {
     const src = path.join(srcDir, 'movie.mp4');
     const dest = path.join(destDir, 'movie.mp4');

@@ -64,6 +64,8 @@ import {
   inputSeekSeconds,
   sourceTimeline,
 } from './transcoding/source-timeline';
+import type { EdlRange } from './edl/edl-parser';
+import { readEdlSidecar, toPlaybackTimeline } from './edl/edl-sidecar';
 import { copySourceCodecString } from './transcoding/codec/codec-strings';
 import { dvSupplementalCodecs, dvStandaloneCodecs } from './transcoding/codec/dolby-vision';
 import { LiveSessionRegistry, type LiveSession, type SessionKind } from './live-session.service';
@@ -1177,9 +1179,16 @@ export class StreamingController {
       response.playUrl,
     );
 
+    const edlRanges =
+      user.edlEnabled === false ? null : await readEdlSidecar(resolved.absolutePath, sourceFps);
+    const edl = edlRanges?.length
+      ? toPlaybackTimeline(edlRanges, timeline, response.playMethod)
+      : undefined;
+
     return {
       ...response,
       playUrl: playUrlWithSid,
+      edl,
       tonemapAlgo,
       tonemapCurve,
       durationSeconds: duration,
@@ -1189,6 +1198,19 @@ export class StreamingController {
       sessionId: liveSession.sessionId,
       profileHash,
     };
+  }
+
+  /** `.edl` sidecar ranges on the container timeline (DirectPlay clock), for original-file downloads. */
+  @Get(':mediaFileId/edl')
+  async edl(
+    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
+    @Req() req: Request,
+  ): Promise<{ ranges: EdlRange[] }> {
+    const user = req.user as User;
+    const resolved = await this.streamingService.resolveFile(mediaFileId, user);
+    if (user.edlEnabled === false) return { ranges: [] };
+    const fps = parseSourceFps(resolved.mediaFile.streamInfo?.video?.[0]?.frameRate);
+    return { ranges: (await readEdlSidecar(resolved.absolutePath, fps)) ?? [] };
   }
 
   /**

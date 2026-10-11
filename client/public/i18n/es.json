@@ -152,7 +152,13 @@
     "error_airplay_unsupported": "Este dispositivo AirPlay no puede reproducir este vídeo.",
     "stats_delivery_mismatch": "Decisión del servidor: {{decision}} / Entregado: {{delivered}}",
     "stats_dolby_vision_base": "Dolby Vision {{profile}}, base {{base}}",
-    "stats_dolby_vision": "Dolby Vision {{profile}}"
+    "stats_dolby_vision": "Dolby Vision {{profile}}",
+    "edl": {
+      "skipped_commercial": "Anuncio omitido",
+      "skipped_cut": "Escena omitida",
+      "muted": "Audio silenciado",
+      "skip_commercial": "Saltar anuncio"
+    }
   },
   "sse": {
     "subtitle_synced": "Subtítulo sincronizado correctamente.",
@@ -527,7 +533,12 @@
     "sub_bottom_margin_hint": "Define la posición vertical de los subtítulos respecto a la parte inferior de la pantalla.",
     "sub_top_margin": "Posición del borde superior",
     "sub_top_margin_hint": "Define la posición vertical máxima permitida respecto a la parte superior de la pantalla. Esta función se usa cuando los subtítulos contienen instrucciones de posicionamiento en la parte superior de la pantalla.",
-    "lang_any": "Sin preferencia"
+    "lang_any": "Sin preferencia",
+    "player_edl": "Aplicar cortes y silencios",
+    "player_edl_hint": "Aplica el archivo .edl junto al vídeo: omite cortes y anuncios y silencia los pasajes marcados. Vale para la reproducción en streaming y las nuevas descargas.",
+    "player_edl_autoskip": "Saltar las pausas publicitarias automáticamente",
+    "player_edl_autoskip_hint": "Si está desactivado, aparece un botón Saltar anuncio durante las pausas publicitarias.",
+    "player_edl_saved": "Preferencia guardada"
   },
   "import_disk": {
     "title": "Importación manual desde el disco",

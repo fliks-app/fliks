@@ -152,7 +152,13 @@
     "error_airplay_unsupported": "Dieses AirPlay-Gerät kann dieses Video nicht abspielen.",
     "stats_delivery_mismatch": "Serverentscheidung: {{decision}} / Geliefert: {{delivered}}",
     "stats_dolby_vision_base": "Dolby Vision {{profile}}, {{base}}-Basis",
-    "stats_dolby_vision": "Dolby Vision {{profile}}"
+    "stats_dolby_vision": "Dolby Vision {{profile}}",
+    "edl": {
+      "skipped_commercial": "Werbung übersprungen",
+      "skipped_cut": "Szene übersprungen",
+      "muted": "Ton stummgeschaltet",
+      "skip_commercial": "Werbung überspringen"
+    }
   },
   "sse": {
     "subtitle_synced": "Untertitel erfolgreich synchronisiert.",
@@ -527,7 +533,12 @@
     "sub_bottom_margin_hint": "Legt die vertikale Position der Untertitel relativ zum unteren Bildschirmrand fest.",
     "sub_top_margin": "Position des oberen Rands",
     "sub_top_margin_hint": "Legt die maximal erlaubte vertikale Position relativ zum oberen Bildschirmrand fest. Diese Funktion wird verwendet, wenn die Untertitel Positionierungsanweisungen für den oberen Bildschirmrand enthalten.",
-    "lang_any": "Keine Präferenz"
+    "lang_any": "Keine Präferenz",
+    "player_edl": "Schnitte und Stummschaltungen anwenden",
+    "player_edl_hint": "Wendet die .edl-Datei neben dem Video an: überspringt Schnitte und Werbung und schaltet markierte Passagen stumm. Gilt für Streaming und neue Downloads.",
+    "player_edl_autoskip": "Werbepausen automatisch überspringen",
+    "player_edl_autoskip_hint": "Wenn deaktiviert, erscheint während Werbepausen eine Schaltfläche Werbung überspringen.",
+    "player_edl_saved": "Einstellung gespeichert"
   },
   "import_disk": {
     "title": "Manueller Import vom Datenträger",

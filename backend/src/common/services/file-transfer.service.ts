@@ -8,7 +8,7 @@ import { ATOMIC_TEMP_PREFIX, writeAtomically } from '../utils/atomic-file';
 export type TransferMethod = 'copy' | 'move';
 
 const DEFAULT_COMPANION_EXTS =
-  '.srt,.ass,.ssa,.vtt,.idx,.sub,.nfo,.jpg,.jpeg,.png,.webp';
+  '.srt,.ass,.ssa,.vtt,.idx,.sub,.nfo,.jpg,.jpeg,.png,.webp,.edl';
 
 const STALE_TEMP_AGE_MS = 24 * 60 * 60 * 1000;
 
@@ -132,10 +132,11 @@ export class FileTransferService {
       const stem = path.basename(entry.name, path.extname(entry.name));
       if (!stem.toLowerCase().startsWith(srcBase)) continue;
 
-      // Preserve the whole trailing hint: "name.en.hi.forced.srt" → keep
-      // ".en.hi.forced". Dropping a flag makes the rescan re-read the name
-      // wrong ("hi" then parses as Hindi, not hearing-impaired).
-      const langMatch = stem.match(/\.([a-z]{2,3}(?:\.[a-z]+){0,2})$/i);
+      // An EDL is tied to one video, so only an exact stem carries over.
+      const exact = stem.toLowerCase() === srcBase;
+      if (ext === '.edl' && !exact) continue;
+      // Keep the whole hint ("name.en.hi.forced.srt"): dropping a flag makes "hi" parse as Hindi.
+      const langMatch = exact ? null : stem.match(/\.([a-z]{2,3}(?:\.[a-z]+){0,2})$/i);
       const destName = langMatch
         ? `${opts.newBaseName}.${langMatch[1]}${ext}`
         : `${opts.newBaseName}${ext}`;

@@ -357,6 +357,41 @@ describe('LibraryIngestService.ingest', () => {
       expect(h.subtitles.carryOver).toHaveBeenCalledWith(7, 501, expect.objectContaining({ id: 900 }));
     });
 
+    it('drops the replaced file EDL (any case) and still transfers the source EDL', async () => {
+      const h = buildHarness();
+      const src = path.join(srcDir, 'Lonely.Harbor.2021.2160p.mkv');
+      fs.writeFileSync(src, 'x');
+      fs.writeFileSync(path.join(srcDir, 'Lonely.Harbor.2021.2160p.edl'), '3 4 0\n');
+      h.mediaRepo.findOne.mockResolvedValue(buildMovie({ id: 7, path: libDir }));
+      h.fileRepo.save.mockImplementation(async (x: Record<string, unknown>) => ({ id: 900, ...x }));
+      h.fileRepo.find.mockResolvedValue([{ id: 501, relativePath: 'old.mp4', episode: null }]);
+      h.fileTransfer.transferFile.mockImplementation(async (from: string, to: string) =>
+        fs.copyFileSync(from, to));
+      h.fileTransfer.transferCompanions.mockImplementation(
+        async (o: { srcDir: string; destDir: string; sourceBaseName: string; newBaseName: string }) =>
+          fs.copyFileSync(
+            path.join(o.srcDir, `${o.sourceBaseName}.edl`),
+            path.join(o.destDir, `${o.newBaseName}.edl`),
+          ),
+      );
+      const all = () => (fs.readdirSync(libDir, { recursive: true }) as string[]).map((n) => path.join(libDir, n));
+      const run = () =>
+        h.service.ingest({
+          mediaId: 7, files: [{ path: src }], transfer: 'copy',
+          fallbackQuality: 'WEBDL-2160p', sourceLabel: 'x', replaceExisting: true,
+        });
+      await run();
+      const mkv = all().find((n) => n.endsWith('.mkv'))!;
+      const edl = mkv.replace(/\.mkv$/, '.EDL');
+      for (const f of all().filter((n) => /\.edl$/i.test(n))) fs.rmSync(f);
+      fs.writeFileSync(edl, 'stale');
+      fs.rmSync(mkv);
+      await run();
+      const left = all().filter((n) => /\.edl$/i.test(n));
+      expect(left).toHaveLength(1);
+      expect(fs.readFileSync(left[0], 'utf8')).toBe('3 4 0\n');
+    });
+
     it('replaces the single-episode files a season pack covers, keeps a partly covered range', async () => {
       const h = buildHarness();
       seriesHarness(h);

@@ -52,6 +52,8 @@ struct User: Codable, Identifiable, Hashable {
     let shareLikes: Bool
     let shareStats: Bool
     let shareDisabled: Bool
+    /// Absent on older servers; treat nil as true.
+    let edlAutoSkipCommercials: Bool?
     // TODO: verify — safeUser() does not hydrate libraryIds (auth payloads
     // carry no ACL per its own comment); included here for parity with the
     // Angular User/PublicUser shape but likely always `[]` from /auth/me.
@@ -492,8 +494,17 @@ struct PlaybackInfoResponse: Codable {
     let durationSeconds: Double?
     let markers: PlaybackMarkers?
     let chapters: [Chapter]?
+    let edl: [EdlRange]?
     let sessionId: String
     let profileHash: String?
+}
+
+/// Skip/mute range from a sidecar EDL. `action` is "cut" | "mute" | "commercial";
+/// `EdlPolicy` ignores anything else.
+struct EdlRange: Codable {
+    let start: Double
+    let end: Double
+    let action: String
 }
 
 // MARK: - Remote control

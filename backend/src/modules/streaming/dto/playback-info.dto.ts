@@ -1,5 +1,6 @@
 import type { PreRollItem } from '../../../common/plugin-contract';
 import type { AudioPlan } from '../transcoding/audio-encode';
+import type { EdlRange } from '../edl/edl-parser';
 
 /**
  * Playback info response — the backend's decision on how to play a media file.
@@ -203,6 +204,10 @@ export interface PlaybackInfoResponse {
      *  overlay can flag the active crop without re-running detect. */
     crop?: { width: number; height: number; x: number; y: number };
   };
+
+  /** `.edl` sidecar ranges on this response's timeline, sorted and disjoint. Omitted when
+   *  there is no sidecar or the user turned the feature off. */
+  edl?: EdlRange[];
 
   /** ACL-filtered pre-roll candidates (ids/labels only, no URL). Omitted, not `[]`, when unused. */
   preRoll?: PreRollItem[];

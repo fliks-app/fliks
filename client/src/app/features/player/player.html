@@ -115,6 +115,28 @@
     </div>
   }
 
+  @if (edlNotice(); as notice) {
+    <div
+      class="absolute left-1/2 -translate-x-1/2 z-[55] pointer-events-none"
+      style="top: max(4.5rem, env(safe-area-inset-top))"
+      role="status"
+    >
+      <div class="rounded-full bg-black/70 px-4 py-1.5 text-sm text-white">
+        {{ (notice === 'commercial' ? 'player.edl.skipped_commercial' : 'player.edl.skipped_cut') | translate }}
+      </div>
+    </div>
+  }
+
+  @if (edlMuted()) {
+    <div
+      class="absolute right-4 z-[55] pointer-events-none flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-xs text-white/80"
+      style="top: max(4.5rem, env(safe-area-inset-top))"
+    >
+      <svg lucideVolumeX class="h-3.5 w-3.5"></svg>
+      {{ 'player.edl.muted' | translate }}
+    </div>
+  }
+
   @if (!inPipMode()) {
   <app-player-controls
     (interacted)="chrome.onInteraction()"
@@ -179,10 +201,13 @@
     [chapters]="chapters()"
     [introMarker]="introMarker()"
     [outroMarker]="outroMarker()"
-    [showSkipIntro]="skipIntroVisible()"
+    [edlRanges]="edlRanges()"
+    [showSkipIntro]="skipIntroVisible() || commercialCueVisible()"
+    [skipCueKey]="skipCueKey()"
+    [skipCueLabel]="commercialCueVisible() ? 'player.edl.skip_commercial' : 'player.skip_intro'"
     [showNextCue]="nextEpisodeVisible()"
     [cueDurationMs]="cueRevealMs"
-    (skipIntro)="skipIntro()"
+    (skipIntro)="onSkipCue()"
     (next)="advance()"
     [showPreRollSkip]="preRollSkippable()"
     (skipPreRoll)="skipPreRoll()"

@@ -7,6 +7,7 @@
  */
 
 import { isUndecodableError } from './playback-error';
+import type { TimeRange } from '../../utils/edl-policy';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -254,6 +255,9 @@ export interface PlaybackEngine {
    *  (AVPlay, and the Capacitor players until they expose one). A UI must hide
    *  its slider instead of offering a control that silently does nothing. */
   readonly supportsVolume: boolean;
+  /** Silences `ranges` (content seconds, sorted, disjoint) without touching the user's mute/volume.
+   *  Persists across loads until replaced; [] clears. */
+  setMuteRanges(ranges: readonly TimeRange[]): void;
 
   // ── Audio tracks ──
   getAudioTracks(): AudioTrack[];

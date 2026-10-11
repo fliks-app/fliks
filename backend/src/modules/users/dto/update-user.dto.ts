@@ -119,6 +119,16 @@ export class UpdateUserDto {
   @IsOptional()
   hideSpoilers?: boolean;
 
+  /** Self-editable: apply the `.edl` sidecar during playback. */
+  @IsBoolean()
+  @IsOptional()
+  edlEnabled?: boolean;
+
+  /** Self-editable: skip commercials automatically instead of offering a Skip ad button. */
+  @IsBoolean()
+  @IsOptional()
+  edlAutoSkipCommercials?: boolean;
+
   /** Self-editable: blur unwatched episode stills and the episode backdrop. */
   @IsBoolean()
   @IsOptional()

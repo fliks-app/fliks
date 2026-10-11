@@ -8,6 +8,8 @@ import {
   SeekRange,
 } from './playback-engine';
 import { normalizeLangCode } from '../../utils/language.utils';
+import type { TimeRange } from '../../utils/edl-policy';
+import { MuteGate } from './mute-gate';
 
 /**
  * Shaka Player implementation of the PlaybackEngine interface.
@@ -33,6 +35,13 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
    *  on top of the in-flight recovery. */
   private sessionExpiredInFlight = false;
 
+  /** The user's own mute; `video.muted` is this OR the EDL gate. */
+  private userMuted = false;
+  private gated = false;
+  private lastVolumeEvent: { volume: number; muted: boolean } | null = null;
+  private muteGate: MuteGate | null = null;
+  private muteRanges: readonly TimeRange[] = [];
+
   // ─── Lifecycle ──────────────────────────────────────────────────────
 
   async init(container: HTMLElement): Promise<void> {
@@ -44,6 +53,17 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
     const video = container as HTMLVideoElement;
     this.video = video;
+    this.userMuted = video.muted;
+    this.muteGate = new MuteGate({
+      position: () => video.currentTime,
+      rate: () => video.playbackRate,
+      paused: () => video.paused,
+      apply: (gated) => {
+        this.gated = gated;
+        video.muted = this.userMuted || gated;
+      },
+    });
+    this.muteGate.setRanges(this.muteRanges);
 
     this.player = new shaka.Player();
 
@@ -139,6 +159,9 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
       }
     }
     this.videoListeners = [];
+    this.muteGate?.dispose();
+    this.muteGate = null;
+    if (this.video) this.video.muted = this.userMuted;
 
     // Remove Shaka event listeners
     if (this.player) {
@@ -231,10 +254,25 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
   }
 
   get muted(): boolean {
-    return this.video?.muted ?? false;
+    return this.userMuted;
   }
   set muted(m: boolean) {
-    if (this.video) this.video.muted = m;
+    this.userMuted = m;
+    if (!this.video) return;
+    const before = this.video.muted;
+    this.video.muted = m || this.gated;
+    if (this.video.muted === before) this.emitVolume();
+  }
+
+  setMuteRanges(ranges: readonly TimeRange[]): void {
+    this.muteRanges = ranges;
+    this.muteGate?.setRanges(ranges);
+  }
+
+  private emitVolume(): void {
+    const volume = this.video?.volume ?? 1;
+    this.lastVolumeEvent = { volume, muted: this.userMuted };
+    this.emit('volumechange', this.lastVolumeEvent);
   }
 
   // ─── Audio tracks ──────────────────────────────────────────────────
@@ -461,9 +499,16 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     });
 
     // Output level / mute — the single mirror back to the UI slider.
+    // A gate-only flip of `video.muted` is not a user change: skip an unchanged payload.
     this.addVideoListener('volumechange', () => {
-      this.emit('volumechange', { volume: video.volume, muted: video.muted });
+      const last = this.lastVolumeEvent;
+      if (last && last.volume === video.volume && last.muted === this.userMuted) return;
+      this.emitVolume();
     });
+
+    for (const event of ['seeking', 'seeked', 'play', 'pause', 'ratechange', 'timeupdate', 'loadedmetadata']) {
+      this.addVideoListener(event, () => this.muteGate?.sync());
+    }
 
     // Video element errors
     this.addVideoListener('error', () => {

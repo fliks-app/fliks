@@ -3,6 +3,7 @@ import { AuthService } from './auth.service';
 import { ServerConfigService } from './server-config.service';
 import { StorageScopeService } from './storage-scope.service';
 import type { OfflineCrop } from '../utils/player.utils';
+import type { EdlRange } from '../utils/edl-policy';
 
 /** Client-side download task tracked in localStorage. */
 export interface DownloadTask {
@@ -29,6 +30,8 @@ export interface DownloadTask {
   offlineSubtitles?: { key: string; language: string; label: string; forced?: boolean }[];
   /** Letterbox rectangle the player removes at playback; absent when the copy was cropped server-side. */
   offlineCrop?: OfflineCrop;
+  /** `.edl` ranges captured at download time, on the playback clock of the stored copy. */
+  offlineEdl?: EdlRange[];
   /** Audio stream info for offline audio track picker. */
   audioStreams?: { language?: string; title?: string; codec?: string; channels?: number }[];
   media?: {
