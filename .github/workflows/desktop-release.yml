@@ -158,9 +158,11 @@ jobs:
       # natively), so they need no extra build deps here.
       - name: Install Linux build deps
         if: runner.os == 'Linux'
+        # libmpv-dev's recommends and man-db's index rebuild after each package took ~7 minutes.
         run: |
+          sudo rm -f /var/lib/man-db/auto-update
           sudo apt-get update
-          sudo apt-get install -y \
+          sudo apt-get install -y --no-install-recommends \
             build-essential python3 pkg-config patchelf \
             libsdl2-dev libgl1-mesa-dev libegl1-mesa-dev libmpv-dev
 
