@@ -424,6 +424,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             view.layer.insertSublayer(layer, at: 0)
             playerLayer = layer
             layoutVideoLayer()
+            (bridge?.plugin(withName: "Pip") as? PipPlugin)?.playerLayerDidChange()
         } else {
             playerLayer?.player = player
         }

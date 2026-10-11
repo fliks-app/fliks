@@ -24,6 +24,8 @@ public class PipPlugin: CAPPlugin, CAPBridgedPlugin, AVPictureInPictureControlle
     ]
 
     private var pipController: AVPictureInPictureController?
+    // Remembered so a layer created after the JS call still gets auto-PiP.
+    private var autoEnter = false
 
     @objc func isAvailable(_ call: CAPPluginCall) {
         call.resolve(["available": AVPictureInPictureController.isPictureInPictureSupported()])
@@ -61,10 +63,8 @@ public class PipPlugin: CAPPlugin, CAPBridgedPlugin, AVPictureInPictureControlle
                 return
             }
 
-            let controller = self.getOrCreateController()
-            if #available(iOS 14.2, *) {
-                controller?.canStartPictureInPictureAutomaticallyFromInline = enabled
-            }
+            self.autoEnter = enabled
+            self.applyAutoEnter(to: self.getOrCreateController())
             call.resolve()
         }
     }
@@ -82,21 +82,32 @@ public class PipPlugin: CAPPlugin, CAPBridgedPlugin, AVPictureInPictureControlle
         bridge?.plugin(withName: "NativePlayer") as? NativePlayerPlugin
     }
 
+    /// Called by NativePlayerPlugin once its AVPlayerLayer exists.
+    func playerLayerDidChange() {
+        applyAutoEnter(to: getOrCreateController())
+    }
+
+    private func applyAutoEnter(to controller: AVPictureInPictureController?) {
+        if #available(iOS 14.2, *) {
+            controller?.canStartPictureInPictureAutomaticallyFromInline = autoEnter
+        }
+    }
+
     private func getOrCreateController() -> AVPictureInPictureController? {
-        if let existing = pipController { return existing }
+        let layer = nativePlayer?.activePlayerLayer
+        if let existing = pipController, existing.playerLayer === layer { return existing }
+        pipController = nil
 
         guard AVPictureInPictureController.isPictureInPictureSupported() else { return nil }
 
-        // Get the player layer from NativePlayerPlugin
-        guard let playerLayer = nativePlayer?.activePlayerLayer else {
-            return nil
-        }
+        guard let playerLayer = layer else { return nil }
 
         guard let controller = AVPictureInPictureController(playerLayer: playerLayer) else {
             return nil
         }
         controller.delegate = self
         pipController = controller
+        applyAutoEnter(to: controller)
         return controller
     }
 
@@ -125,7 +136,6 @@ public class PipPlugin: CAPPlugin, CAPBridgedPlugin, AVPictureInPictureControlle
         // layer can come back not-presenting (black) once PiP releases it.
         nativePlayer?.reassertVideoPresentation()
         emitPipModeChanged(false)
-        pipController = nil
     }
 
     public func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void) {
