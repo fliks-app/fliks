@@ -1,6 +1,7 @@
 using Fliks.Tray.Services;
 using Fliks.Tray.State;
 using Fliks.Tray.Tray;
+using Velopack;
 
 namespace Fliks.Tray;
 
@@ -9,6 +10,11 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        // Install/update/uninstall hooks run and exit here, before any single-instance check.
+        VelopackApp.Build()
+            .OnBeforeUninstallFastCallback(_ => StartupRegistry.SetEnabled(false))
+            .Run();
+
         var autostart = args.Contains(StartupRegistry.LaunchArg);
         // Single instance: a second launch only opens the browser on the running server.
         using var mutex = new Mutex(initiallyOwned: true, "Fliks.Tray.SingleInstance", out var isNew);

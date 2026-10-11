@@ -17,6 +17,10 @@
     <EmbeddedResource Include="Resources\fliks.ico" Condition="Exists('Resources\fliks.ico')" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Velopack" Version="1.2.161" />
+  </ItemGroup>
+
   <!-- Baked at publish time: `dotnet publish -p:TmdbApiKey=... -p:TvdbApiKey=...` -->
   <ItemGroup>
     <AssemblyMetadata Include="TmdbApiKey" Value="$(TmdbApiKey)" />

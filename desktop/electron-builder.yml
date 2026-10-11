@@ -53,6 +53,7 @@ files:
 asarUnpack:
   - native/build/Release/**
   - native/vendor/**
+  - node_modules/velopack/**
 # The built Angular client is read from process.resourcesPath/web in a packaged
 # app. CI builds it into client/dist/client/browser and copies it to
 # desktop/web before packaging (see the workflow's "stage web" step).
@@ -84,8 +85,11 @@ mac:
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   notarize: true
+# Windows ships through Velopack (see desktop-release.yml): electron-builder only
+# produces win-unpacked, which vpk packs into Setup.exe + the update feed.
 win:
-  target: [nsis]
+  target: [dir]
+  icon: build/icon.ico
   # TODO(signing): Authenticode signing omitted for now (WIN_CSC_LINK/…).
 linux:
   # Binary + generated .desktop basename = "fliks", matching the compositor
