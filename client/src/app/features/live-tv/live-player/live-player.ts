@@ -51,6 +51,8 @@ import {
   type PlayerStats,
 } from '../../player/overlay/player-stats-overlay';
 import { programmeProgressPercent } from '../programme-progress';
+import { Orientation, releasePlayerOrientation } from '../../../core/plugins/orientation.plugin';
+import { PlayerSettingsService } from '../../../core/services/player-settings.service';
 
 /** Same native plugins as the VOD player (player.ts), duplicated rather than shared. */
 interface ImmersivePlugin {
@@ -59,12 +61,6 @@ interface ImmersivePlugin {
   setLightStatusBar(options: { light: boolean }): Promise<void>;
 }
 const Immersive = registerPlugin<ImmersivePlugin>('Immersive');
-
-interface OrientationPlugin {
-  lock(): Promise<void>;
-  unlock(): Promise<void>;
-}
-const Orientation = registerPlugin<OrientationPlugin>('Orientation');
 
 /** How far back a rewind press steps, inside the DVR window. */
 const REWIND_STEP_SECONDS = 10;
@@ -119,6 +115,8 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   /** Orientation.lock() (native iOS) has no Android counterpart — same gate as player.ts. */
   readonly canLockOrientation = this.isIosNative;
   readonly orientationLocked = signal(false);
+  private readonly landscapeOnOpen =
+    this.serverConfig.isNative && !this.device.isTv() && inject(PlayerSettingsService).get().landscapeOnOpen;
   private readonly isLandscape = signal(screen.orientation?.type?.startsWith('landscape') ?? false);
   private readonly surfaceKind = engineSurfaceKind({
     tvPlatform: this.device.tvPlatform(),
@@ -289,6 +287,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     this.refreshTimer = setInterval(() => void this.refreshChannels(), CHANNEL_REFRESH_MS);
     if (this.isNative) {
       screen.orientation?.addEventListener('change', this.onOrientationChange);
+      if (this.landscapeOnOpen) releasePlayerOrientation(true);
     }
   }
 
@@ -299,7 +298,8 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   onToggleOrientationLock(): void {
     const locked = !this.orientationLocked();
     this.orientationLocked.set(locked);
-    (locked ? Orientation.lock() : Orientation.unlock()).catch(() => {});
+    if (locked) Orientation.lock().catch(() => {});
+    else releasePlayerOrientation(this.landscapeOnOpen);
   }
 
   /** Hardware back and desktop Escape reach every player through app.ts, which
@@ -341,7 +341,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     releaseEngineSurface();
     if (this.isNative) {
       screen.orientation?.removeEventListener('change', this.onOrientationChange);
-      if (this.isIosNative) Orientation.unlock().catch(() => {});
+      Orientation.unlock().catch(() => {});
       Immersive.exit().catch(() => {});
       document.body.classList.remove('immersive');
     }

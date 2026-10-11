@@ -65,6 +65,7 @@ import { NativeEngine } from '../../core/services/playback-engine/native-engine'
 import { DesktopEngine } from '../../core/services/playback-engine/desktop-engine';
 import { TizenEngine, isTizenAvplayAvailable } from '../../core/services/playback-engine/tizen-engine';
 import { NativePlayer } from '../../core/plugins/native-player.plugin';
+import { Orientation, releasePlayerOrientation } from '../../core/plugins/orientation.plugin';
 import { imageUrlWithSize } from '../../core/pipes/resolve-url.pipe';
 import { NotificationLike } from '../../core/services/notification-like';
 import { LikesApiService } from '../../core/services/api/likes-api.service';
@@ -91,12 +92,6 @@ interface PipPlugin {
   updatePlaybackState(options: { playing: boolean }): Promise<void>;
 }
 const Pip = registerPlugin<PipPlugin>('Pip');
-
-interface OrientationPlugin {
-  lock(): Promise<void>;
-  unlock(): Promise<void>;
-}
-const Orientation = registerPlugin<OrientationPlugin>('Orientation');
 
 import { LucideAirplay, LucideInfo, LucideVolumeX, LucideX } from '@lucide/angular';
 import { AirPlayService } from '../../core/services/airplay.service';
@@ -496,6 +491,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly pipAvailable = signal(true);
   readonly canLockOrientation = Capacitor.getPlatform() === 'ios';
   readonly orientationLocked = signal(false);
+  private readonly landscapeOnOpen =
+    this.serverConfig.isNative && !this.device.isTv() && this.playerSettings.get().landscapeOnOpen;
   private readonly isLandscape = signal(screen.orientation?.type?.startsWith('landscape') ?? false);
   readonly statsVisible = signal(false);
   readonly fillScreen = signal(false);
@@ -885,6 +882,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // On native: listen to orientation changes (immersive handled by effect)
     if (this.isNative) {
       screen.orientation?.addEventListener('change', this.onOrientationChange);
+      if (this.landscapeOnOpen) releasePlayerOrientation(true);
     }
 
     this.webCrop.init();
@@ -1417,7 +1415,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     window.removeEventListener('app:playerBack', this.onPlayerBackEvent);
     if (this.isNative) {
       screen.orientation?.removeEventListener('change', this.onOrientationChange);
-      if (Capacitor.getPlatform() === 'ios') Orientation.unlock().catch(() => {});
+      Orientation.unlock().catch(() => {});
       Immersive.exit().catch(() => {});
       document.body.classList.remove('immersive');
       Pip.setAutoEnter({ enabled: false }).catch(() => {});
@@ -2788,7 +2786,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   onToggleOrientationLock() {
     const locked = !this.orientationLocked();
     this.orientationLocked.set(locked);
-    (locked ? Orientation.lock() : Orientation.unlock()).catch(() => {});
+    if (locked) Orientation.lock().catch(() => {});
+    else releasePlayerOrientation(this.landscapeOnOpen);
   }
 
   /** A destination picked from the player's own list takes over the running

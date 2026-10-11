@@ -54,10 +54,14 @@ export class PlayerSettingsPageComponent {
   readonly autoSkipIntro = signal(this.initial.autoSkipIntro);
   readonly autoPlayNext = signal(this.initial.autoPlayNext);
   readonly backgroundAudio = signal(this.initial.backgroundAudio);
+  readonly landscapeOnOpen = signal(this.initial.landscapeOnOpen);
   readonly edlEnabled = signal(this.auth.user()?.edlEnabled ?? true);
   readonly edlAutoSkip = signal(this.auth.user()?.edlAutoSkipCommercials !== false);
   readonly showBackgroundAudio =
     (this.device.isAndroidNative() || this.device.isIosNative()) && !this.device.isTv();
+  // Shortest screen side, not the viewport: stays a phone when held in landscape.
+  readonly showLandscapeOnOpen =
+    this.showBackgroundAudio && Math.min(screen.width, screen.height) < 600;
   readonly showHdrToggle = signal(this.deviceProfile.hardwareSupportsHdr);
 
   constructor() {
@@ -71,6 +75,7 @@ export class PlayerSettingsPageComponent {
         autoSkipIntro: this.autoSkipIntro(),
         autoPlayNext: this.autoPlayNext(),
         backgroundAudio: this.backgroundAudio(),
+        landscapeOnOpen: this.landscapeOnOpen(),
       }),
       // Spread first: other pages own fields of this store.
       (values) => this.ps.save({ ...this.ps.get(), ...values }),

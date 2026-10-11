@@ -92,6 +92,13 @@
       />
     }
 
+    @if (showLandscapeOnOpen) {
+      <app-toggle-field
+        [(value)]="landscapeOnOpen"
+        [label]="'playback_settings.player_landscape_on_open' | translate"
+      />
+    }
+
     <button class="btn btn-ghost btn-sm text-error gap-2 self-start" (click)="clearAudioSelections()">
       <svg lucideTrash2 class="h-4 w-4"></svg>
       {{ 'playback_settings.player_clear_saved' | translate }}

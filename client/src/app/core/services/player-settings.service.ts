@@ -54,6 +54,8 @@ export interface PlayerSettings {
   autoPlayNext: boolean;
   /** Android and iOS: keep the sound going with the screen off or the app left. */
   backgroundAudio: boolean;
+  /** Phones: open the player in landscape. */
+  landscapeOnOpen: boolean;
 }
 
 /** Empty stays empty: it is the "no preference" value, not a language. */
@@ -86,6 +88,7 @@ const DEFAULTS: PlayerSettings = {
   autoSkipIntro: false,
   autoPlayNext: true,
   backgroundAudio: false,
+  landscapeOnOpen: true,
 };
 
 /** The audio-stream fields the track selection reads. */
