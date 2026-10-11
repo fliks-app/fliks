@@ -29,13 +29,17 @@ $PgVersion = '18.0-1'
 # driver >= 570 (8.x NVENC API). Pin the exact tag (their `latest` moves).
 $FfmpegUrl = 'https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v8.1.2-1/jellyfin-ffmpeg_8.1.2-1_portable_win64-clang-gpl.zip'
 
-function Get-Archive([string]$url, [string]$dest) {
+$ProgressPreference = 'SilentlyContinue'
+
+# tar.exe (bsdtar, in Windows 10+) extracts zips far faster than Expand-Archive.
+function Get-Archive([string]$url, [string]$dest, [string[]]$Exclude = @()) {
     $tmp = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid())
-    New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+    New-Item -ItemType Directory -Force -Path $tmp, $dest | Out-Null
     $zip = Join-Path $tmp 'archive.zip'
     Write-Host "    [fetch] $url"
     Invoke-WebRequest -Uri $url -OutFile $zip
-    Expand-Archive -Path $zip -DestinationPath $dest -Force
+    tar -xf $zip -C $dest ($Exclude | ForEach-Object { "--exclude=$_" })
+    if ($LASTEXITCODE -ne 0) { throw "tar failed on $url ($LASTEXITCODE)" }
     Remove-Item -Recurse -Force $tmp
 }
 
@@ -59,8 +63,9 @@ if (Test-Path (Join-Path $vendored 'pgsql\bin\postgres.exe')) {
     Write-Host '    [skip] PostgreSQL already present'
 } else {
     $tmp = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid())
-    Get-Archive "https://get.enterprisedb.com/postgresql/postgresql-$PgVersion-windows-x64-binaries.zip" $tmp
-    # Archive root is `pgsql/`.
+    # Archive root is `pgsql/`. pgAdmin alone is ~19k files / 700 MB the server never runs.
+    Get-Archive "https://get.enterprisedb.com/postgresql/postgresql-$PgVersion-windows-x64-binaries.zip" $tmp `
+        -Exclude 'pgsql/pgAdmin*', 'pgsql/doc', 'pgsql/include', 'pgsql/StackBuilder'
     Copy-Item (Join-Path $tmp 'pgsql') (Join-Path $vendored 'pgsql') -Recurse -Force
     Remove-Item -Recurse -Force $tmp
     Write-Host "    [done] PostgreSQL $PgVersion"

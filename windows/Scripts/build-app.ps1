@@ -56,8 +56,8 @@ dotnet publish (Join-Path $winDir 'Fliks.Tray\Fliks.Tray.csproj') `
     -o (Join-Path $build 'tray-publish')
 
 # Multi-threaded: node_modules alone is tens of thousands of files.
-function Copy-Tree([string]$From, [string]$To) {
-    robocopy $From $To /E /MT:16 /NFL /NDL /NJH /NJS /NP | Out-Null
+function Copy-Tree([string]$From, [string]$To, [string[]]$Skip = @()) {
+    robocopy $From $To /E /MT:16 /NFL /NDL /NJH /NJS /NP @Skip | Out-Null
     # robocopy exit codes below 8 all mean success.
     if ($LASTEXITCODE -ge 8) { throw "robocopy $From -> $To failed ($LASTEXITCODE)" }
     $global:LASTEXITCODE = 0
@@ -70,12 +70,16 @@ Copy-Item (Join-Path $build 'tray-publish\*') $bundle -Recurse -Force
 New-Item -ItemType Directory -Force -Path (Join-Path $bundle 'node') | Out-Null
 Copy-Item (Join-Path $vendored 'node\node.exe') (Join-Path $bundle 'node\node.exe')
 
-Copy-Tree (Join-Path $vendored 'pgsql')  (Join-Path $bundle 'pgsql')
+# Setup's extraction time follows the file count (each one is scanned by the antivirus), so
+# what the server never loads stays out: message translations, sourcemaps, typings, docs.
+Copy-Tree (Join-Path $vendored 'pgsql')  (Join-Path $bundle 'pgsql') @('/XD', (Join-Path $vendored 'pgsql\share\locale'))
 Copy-Tree (Join-Path $vendored 'ffmpeg') (Join-Path $bundle 'ffmpeg')
 
 New-Item -ItemType Directory -Force -Path (Join-Path $bundle 'backend') | Out-Null
 Copy-Tree (Join-Path $repo 'backend\dist')         (Join-Path $bundle 'backend\dist')
-Copy-Tree (Join-Path $repo 'backend\node_modules') (Join-Path $bundle 'backend\node_modules')
+Copy-Tree (Join-Path $repo 'backend\node_modules') (Join-Path $bundle 'backend\node_modules') @(
+    '/XF', '*.map', '*.ts', '*.md', 'CHANGELOG*', 'HISTORY*', 'README*',
+    '/XD', (Join-Path $repo 'backend\node_modules\typeorm\browser'))
 Copy-Item (Join-Path $repo 'backend\package.json') (Join-Path $bundle 'backend\package.json')
 if (Test-Path (Join-Path $repo 'backend\public')) {
     Copy-Tree (Join-Path $repo 'backend\public') (Join-Path $bundle 'backend\public')
