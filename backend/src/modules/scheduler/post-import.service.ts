@@ -70,9 +70,10 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
     );
     this.subs.add(
       this.events.subscribe((event) => {
-        if (event.type === 'rescan.completed' && event.added > 0) {
-          this.schedule(event.mediaId);
-        }
+        if (event.type !== 'rescan.completed') return;
+        if (event.added > 0) this.schedule(event.mediaId);
+        // A no-op for files whose current version is already scanned.
+        else void this.scanSources(event.mediaId);
       }),
     );
   }
