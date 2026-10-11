@@ -28,6 +28,7 @@ Enforced by `wagoid/commitlint-github-action` on every PR and push to `main` (se
 - **Subject ending**: no trailing period.
 - **Header length**: keep ≤ 72 characters when possible; the limit is 100.
 - **Body**: separate from the header with one blank line. Explain *why*, not *what*. Wrap each line at ≤ 100 characters. Reference incidents, constraints, or prior bugs that motivated the change.
+- **Squash-merge messages are linted too, after the fact**: the `commit_message` passed to a squash merge (`gh api .../merge -f commit_message=...`) becomes a commit on `main`, linted on push, with no way to fix it once merged (#1570 shipped a 139-character body line). Hard-wrap every line of it at ≤ 100 characters, like any commit body, and check `awk '{print length}'` before merging.
 - **Footer**: blank line before, used for issue refs (`Refs: #123`) or `BREAKING CHANGE:` notes.
 - **No `Co-Authored-By` lines** (overrides the default Claude Code template — see the user's global instructions).
 - **Don't skip hooks** (`--no-verify`, `--no-gpg-sign`) unless explicitly asked.
