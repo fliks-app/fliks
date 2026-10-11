@@ -1,6 +1,6 @@
 # Compiles the Android and iOS shells on pull requests.
 #
-# The release workflows (`play-store-publish.yml`, `appstore-publish.yml`) only
+# The release workflows (`android-publish.yml`, `appstore-publish.yml`) only
 # run on a `v*` tag, so until this existed nothing built the native code before
 # it shipped: a Java or Swift compile error sailed through review and surfaced
 # at release time, on the tag, with no obvious owner.

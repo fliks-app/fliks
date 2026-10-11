@@ -9,7 +9,7 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         // versionCode is monotonic. CI overrides it via the Gradle
         // property `FLIKS_VERSION_CODE` (set from `git rev-list --count
-        // HEAD` in the play-store-publish workflow) so each merge to
+        // HEAD` in the android-publish workflow) so each merge to
         // main produces a strictly-increasing value Play Store will
         // accept. The committed default of 1 keeps local debug builds
         // working without any env setup.
