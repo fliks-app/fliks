@@ -139,12 +139,16 @@ export function resolveSearchTitles(
   if (custom) {
     return { searchTitle: custom, expectedTitles: [custom] };
   }
-  const searchTitle = media.originalTitle || media.title;
   const expectedTitles = [
     media.originalTitle,
     media.title,
     ...(media.alternativeTitles ?? []),
   ].filter((t): t is string => !!t && t.length > 0);
+  // A non-Latin original title matches nothing on most indexers, which then answer with
+  // their generic listing for the season tag.
+  const searchTitle =
+    expectedTitles.find((t) => indexTitleExpectations(t).readings.length > 0) ??
+    (media.originalTitle || media.title);
   return { searchTitle, expectedTitles };
 }
 
@@ -352,6 +356,13 @@ export interface TitleExpectationIndex {
   numbers: Set<string>;
   /** True when the expectation list was empty, which matches anything. */
   vacuous: boolean;
+  /** Expected titles folded by `foldTitle`, for the expectations the tokenizer cannot read. */
+  folded: string[];
+}
+
+/** Script-agnostic comparison form: width-folded, lowercase, letters and digits only. */
+function foldTitle(s: string): string {
+  return s.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 }
 
 /** Tokenises one media's expected titles once, so a scan over many release titles does not redo it. */
@@ -359,7 +370,9 @@ export function indexTitleExpectations(expected: string | string[]): TitleExpect
   const candidates = (Array.isArray(expected) ? expected : [expected]).filter(
     (s): s is string => !!s && s.trim().length > 0,
   );
-  if (!candidates.length) return { readings: [], numbers: new Set(), vacuous: true };
+  if (!candidates.length) {
+    return { readings: [], numbers: new Set(), vacuous: true, folded: [] };
+  }
   const readings: string[][] = [];
   const numbers = new Set<string>();
   for (const cand of candidates) {
@@ -371,7 +384,12 @@ export function indexTitleExpectations(expected: string | string[]): TitleExpect
       if (tokens.length) readings.push(tokens);
     }
   }
-  return { readings, numbers, vacuous: false };
+  return {
+    readings,
+    numbers,
+    vacuous: false,
+    folded: candidates.map(foldTitle).filter((f) => f.length > 0),
+  };
 }
 
 /** The release side of the same comparison, hoisted so it is computed once per release title. */
@@ -551,7 +569,11 @@ export function computeRejections(opts: {
 
   if (opts.expectedTitle && opts.releaseTitle) {
     const index = indexTitleExpectations(opts.expectedTitle);
-    if (!matchesIndexedExpectation(releaseTitleTokens(opts.releaseTitle), index)) {
+    // A title the tokenizer cannot read must still be named by the release, else every series passes.
+    const matches = index.readings.length
+      ? matchesIndexedExpectation(releaseTitleTokens(opts.releaseTitle), index)
+      : index.folded.some((f) => foldTitle(opts.releaseTitle!).includes(f));
+    if (!matches) {
       out.push({ code: 'TITLE_MISMATCH' });
     } else {
       // Everything below only applies to a release that already passed as this title: they name

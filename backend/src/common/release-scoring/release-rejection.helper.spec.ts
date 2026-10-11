@@ -597,3 +597,34 @@ describe('computeRejections — upgrade window', () => {
     expect(codes(1)).toEqual([]);
   });
 });
+
+describe('non-Latin titles', () => {
+  const show = { originalTitle: 'ノヴァ・スカイライン', title: 'ノヴァ・スカイライン', alternativeTitles: ['Nova Skyline'] };
+  const titleOnly = (releaseTitle: string, expectedTitle: string[]) =>
+    computeRejections({
+      qualityId: 1,
+      allowed: new Set([1]),
+      languageId: 1,
+      allowedLangs: new Set<number>(),
+      isBlocklisted: false,
+      sizeBytes: 0,
+      runtimeMinutes: 24,
+      sizeByQuality: new Map(),
+      seeders: 10,
+      sourceId: 0,
+      sourceMinSeeders: new Map(),
+      releaseTitle,
+      expectedTitle,
+    }).map((r) => r.code);
+
+  it('queries the first title an indexer can read', () => {
+    expect(resolveSearchTitles(show).searchTitle).toBe('Nova Skyline');
+    expect(resolveSearchTitles({ ...show, alternativeTitles: [] }).searchTitle).toBe('ノヴァ・スカイライン');
+  });
+
+  it('rejects another series when no expected title is readable', () => {
+    const only = ['ノヴァ・スカイライン'];
+    expect(titleOnly('Other.Show.S01E01.1080p.WEB', only)).toEqual(['TITLE_MISMATCH']);
+    expect(titleOnly('[Grp] Nova Skyline | ノヴァ・スカイライン - 01 [1080p]', only)).toEqual([]);
+  });
+});
