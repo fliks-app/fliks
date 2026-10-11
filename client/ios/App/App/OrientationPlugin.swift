@@ -13,7 +13,16 @@ public class OrientationPlugin: CAPPlugin, CAPBridgedPlugin {
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "lock", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "unlock", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "landscape", returnType: CAPPluginReturnPromise),
     ]
+
+    /// Holds the player in landscape on iPhone; iPad keeps free rotation.
+    @objc func landscape(_ call: CAPPluginCall) {
+        DispatchQueue.main.async { [weak self] in
+            self?.apply(UIDevice.current.userInterfaceIdiom == .pad ? .allButUpsideDown : .landscape)
+            call.resolve()
+        }
+    }
 
     @objc func lock(_ call: CAPPluginCall) {
         DispatchQueue.main.async { [weak self] in
