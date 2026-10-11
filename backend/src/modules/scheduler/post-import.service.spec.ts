@@ -19,6 +19,7 @@ function harness() {
   const domain = new Subject<DomainEvent>();
   const sse = new Subject<SseEvent>();
   const files = [{ id: 1 }, { id: 2 }];
+  const sourceScans = { scheduleIfNeeded: jest.fn().mockResolvedValue(undefined) };
   const mediaFileRepo = {
     find: jest.fn().mockResolvedValue(files),
     findOne: jest.fn().mockImplementation(({ where }: { where: { id: number } }) =>
@@ -57,7 +58,7 @@ function harness() {
     settings as never,
     postImportQueue as never,
     activityRegistry as never,
-    { scheduleIfNeeded: jest.fn().mockResolvedValue(undefined) } as never,
+    sourceScans as never,
   );
   service.onModuleInit();
   return {
@@ -71,6 +72,7 @@ function harness() {
     settings,
     postImportQueue,
     activityRegistry,
+    sourceScans,
   };
 }
 
@@ -154,13 +156,19 @@ describe('PostImportService', () => {
     h.service.onModuleDestroy();
   });
 
-  it('does not fire a pass for a rescan that added nothing', () => {
+  it('only schedules the source scans for a rescan that added nothing', async () => {
     const h = harness();
+    h.mediaFileRepo.find.mockResolvedValue([
+      { id: 1, relativePath: 'f1.mkv', streamInfo: null, media: { path: '/lib/show' } },
+    ]);
 
     h.sse.next({ type: 'rescan.completed', mediaId: 7, title: 't', added: 0, removed: 2, updated: 0 });
     jest.advanceTimersByTime(PostImportService.SETTLE_MS);
+    await settle();
 
-    expect(h.mediaFileRepo.find).not.toHaveBeenCalled();
+    expect(h.sourceScans.scheduleIfNeeded).toHaveBeenCalledWith(1, '/lib/show/f1.mkv', null);
+    expect(h.thumbnails.generateForFile).not.toHaveBeenCalled();
+    expect(h.markers.autoDetectMissing).not.toHaveBeenCalled();
     h.service.onModuleDestroy();
   });
 });
