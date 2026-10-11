@@ -25,6 +25,8 @@ import { MediaQueryService } from './media-service/media-query.service';
 import { MediaRelatedService } from './media-service/media-related.service';
 import { MediaMutationService } from './media-service/media-mutation.service';
 import { MediaRescanService } from './media-service/media-rescan.service';
+import { MediaCompanionsService } from './media-service/media-companions.service';
+import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { Library } from '../libraries/entities/library.entity';
 import { LibrariesModule } from '../libraries/libraries.module';
 import { MEDIA_SERVICE } from './media-service.token';
@@ -45,6 +47,7 @@ import { LibraryIngestModule } from '../../common/library-ingest/library-ingest.
       MediaCast,
       MediaCrew,
       Library,
+      SubtitleFile,
     ]),
     AuthModule,
     MetadataProvidersModule,
@@ -68,6 +71,7 @@ import { LibraryIngestModule } from '../../common/library-ingest/library-ingest.
     MediaRelatedService,
     MediaMutationService,
     MediaRescanService,
+    MediaCompanionsService,
     AutoGrabPipelineService,
     AcquisitionCandidatesService,
     NamingService,

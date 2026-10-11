@@ -65,12 +65,6 @@ export class FileTransferService {
   private async atomicCopy(src: string, dest: string): Promise<void> {
     await writeAtomically(dest, async (tmp) => {
       await fsp.copyFile(src, tmp);
-      // An overwrite would otherwise silently reset the destination's mode to the temp file's.
-      const existingMode = await fsp
-        .stat(dest)
-        .then((s) => s.mode)
-        .catch(() => null);
-      if (existingMode !== null) await fsp.chmod(tmp, existingMode);
       const fh = await fsp.open(tmp, 'r+');
       try {
         await fh.sync();

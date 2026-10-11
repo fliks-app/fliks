@@ -104,17 +104,30 @@
       </div>
     }
 
-    @if (canDelete() && fileId() != null) {
-      <div class="pt-2">
-        <button
-          type="button"
-          class="btn btn-sm btn-outline btn-error"
-          (click)="onDeleteFileClick()"
-        >
-          <svg lucideTrash2 class="h-4 w-4"></svg>
-          {{ 'media_detail.delete_file' | translate }}
-        </button>
+    @if (fileId() != null) {
+      <div class="pt-2 flex flex-wrap gap-2">
+        @if (mediaId() != null && !tv.isTv()) {
+          <button type="button" class="btn btn-sm btn-outline" (click)="openCompanions()">
+            <svg lucideFiles class="h-4 w-4"></svg>
+            {{ 'file_info.companions_button' | translate }}
+          </button>
+        }
+        @if (canDelete()) {
+          <button
+            type="button"
+            class="btn btn-sm btn-outline btn-error"
+            (click)="onDeleteFileClick()"
+          >
+            <svg lucideTrash2 class="h-4 w-4"></svg>
+            {{ 'media_detail.delete_file' | translate }}
+          </button>
+        }
       </div>
+      <app-companion-files-modal
+        [canDelete]="canDelete()"
+        [canManageSubtitles]="canManageSubtitles()"
+        [canEditMedia]="canEditMedia()"
+        (subtitlesChanged)="subtitlesChanged.emit()" />
     }
   </div>
   </app-collapsible-section>

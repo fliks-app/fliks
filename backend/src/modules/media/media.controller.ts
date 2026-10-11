@@ -10,16 +10,22 @@ import {
   Param,
   Query,
   UseGuards,
+  UseFilters,
   UseInterceptors,
   UploadedFile,
   ParseIntPipe,
   NotFoundException,
   BadRequestException,
   Logger,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { MediaService } from './media.service';
+import { FileTooLargeFilter } from '../../common/filters/file-too-large.filter';
+import { MediaCompanionsService } from './media-service/media-companions.service';
 import { CreateMediaDto } from './dto/create-media.dto';
 import { UpdateMediaDto } from './dto/update-media.dto';
 import { SearchMediaDto } from './dto/search-media.dto';
@@ -39,7 +45,8 @@ import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
 import { Action } from '../auth/casl/actions.enum';
 import { Media } from './entities/media.entity';
-import { SubtitlesService } from '../subtitles/subtitles.service';
+import { SubtitlesService, SUBTITLE_UPLOAD_MAX_BYTES } from '../subtitles/subtitles.service';
+import { MAX_EDL_BYTES } from '../streaming/edl/edl-sidecar';
 import { SubtitleOcrService } from '../subtitles/subtitle-ocr.service';
 import { SubtitleTranslationService } from '../subtitles/subtitle-translation.service';
 import { SubtitleSyncService } from '../subtitles/subtitle-sync.service';
@@ -59,6 +66,7 @@ export class MediaController {
 
   constructor(
     private readonly mediaService: MediaService,
+    private readonly companions: MediaCompanionsService,
     private readonly subtitlesService: SubtitlesService,
     private readonly subtitleOcr: SubtitleOcrService,
     private readonly subtitleTranslation: SubtitleTranslationService,
@@ -230,6 +238,63 @@ export class MediaController {
       fileId,
       deleteOnDisk === 'true',
     );
+  }
+
+  @Get(':id/files/:fileId/companions')
+  @CheckPolicies((ability) => ability.can(Action.Read, Media))
+  async listCompanions(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('fileId', ParseIntPipe) fileId: number,
+    @CurrentUser() user: User,
+  ) {
+    await this.assertMediaAccessible(id, user);
+    return this.companions.list(id, fileId);
+  }
+
+  @Get(':id/files/:fileId/companions/download')
+  @CheckPolicies((ability) => ability.can(Action.Read, Media))
+  async downloadCompanion(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('fileId', ParseIntPipe) fileId: number,
+    @Query('path') relativePath: string,
+    @CurrentUser() user: User,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    if (!relativePath) throw new BadRequestException('path is required');
+    await this.assertMediaAccessible(id, user);
+    const { name, size, stream } = await this.companions.openForDownload(id, fileId, relativePath);
+    res.attachment(name);
+    res.setHeader('Content-Length', size);
+    return new StreamableFile(stream);
+  }
+
+  @Post(':id/files/:fileId/companions/edl')
+  @CheckPolicies((ability) => ability.can(Action.Update, Media))
+  @UseFilters(FileTooLargeFilter)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_EDL_BYTES } }))
+  async importEdl(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('fileId', ParseIntPipe) fileId: number,
+    @Query('replace') replace: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: User,
+  ) {
+    await this.assertMediaAccessible(id, user);
+    if (!file) throw new BadRequestException('No file uploaded');
+    return this.companions.importEdl(id, fileId, file.buffer, replace === 'true', user?.id);
+  }
+
+  @Delete(':id/files/:fileId/companions')
+  @CheckPolicies((ability) => ability.can(Action.Delete, Media))
+  async deleteCompanion(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('fileId', ParseIntPipe) fileId: number,
+    @Query('path') relativePath: string,
+    @CurrentUser() user: User,
+  ) {
+    if (!relativePath) throw new BadRequestException('path is required');
+    await this.assertMediaAccessible(id, user);
+    await this.companions.remove(id, fileId, relativePath, user?.id);
   }
 
   @Patch(':id/library')
@@ -705,18 +770,26 @@ export class MediaController {
   /** Store a subtitle the user picked on their device, as a sidecar file. */
   @Post(':id/subtitles/upload')
   @CheckPolicies((ability) => ability.can(Action.Create, SubtitleFile))
+  @UseFilters(FileTooLargeFilter)
   @UseInterceptors(
-    FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }),
+    FileInterceptor('file', { limits: { fileSize: SUBTITLE_UPLOAD_MAX_BYTES } }),
   )
   async uploadSubtitle(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: User,
     @UploadedFile() file: Express.Multer.File,
     @Body()
-    body: { mediaFileId: string; episodeId?: string; language: string },
+    body: {
+      mediaFileId: string;
+      episodeId?: string;
+      language: string;
+      forced?: string;
+      hearingImpaired?: string;
+    },
   ) {
     await this.assertMediaAccessible(id, user);
     if (!file) throw new BadRequestException('No file uploaded');
+    const flag = (v?: string) => (v === 'true' ? true : v === 'false' ? false : undefined);
     const mediaFileId = Number(body.mediaFileId);
     if (!Number.isInteger(mediaFileId)) {
       throw new BadRequestException('mediaFileId is required');
@@ -728,6 +801,7 @@ export class MediaController {
       episodeId,
       file,
       body.language,
+      { forced: flag(body.forced), hearingImpaired: flag(body.hearingImpaired) },
     );
   }
 

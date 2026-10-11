@@ -47,7 +47,12 @@ const providers = (getForMedia: () => Promise<SubtitleFileRow[]>) => [
     { provide: StreamingApiService, useValue: {} },
     {
       provide: DeviceService,
-      useValue: { canSaveFiles: () => false, isTv: () => false, isAndroidNative: () => false },
+      useValue: {
+        canSaveFiles: () => false,
+        isTv: () => false,
+        canPickFiles: () => true,
+        filePickerAccept: (a: string) => a,
+      },
     },
     { provide: CardActionsService, useValue: { register: () => {}, show: () => {} } },
 ];

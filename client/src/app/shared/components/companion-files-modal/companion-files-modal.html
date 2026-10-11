@@ -1,0 +1,113 @@
+<ng-template #group let-title="title" let-rows="rows">
+  @if (rows.length) {
+    @if (title) {
+      <h3 class="text-sm font-semibold mt-3 mb-1">{{ title }}</h3>
+    }
+    <ul class="flex flex-col gap-1">
+      @for (c of rows; track c.relativePath) {
+        <li class="flex items-center gap-3 rounded-lg bg-base-200 px-3 py-2">
+          @switch (c.kind) {
+            @case ('subtitle') { <svg lucideCaptions class="h-4 w-4 shrink-0 opacity-70"></svg> }
+            @case ('edl') { <svg lucideScissors class="h-4 w-4 shrink-0 opacity-70"></svg> }
+            @case ('nfo') { <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70"></svg> }
+            @case ('image') { <svg lucideImage class="h-4 w-4 shrink-0 opacity-70"></svg> }
+            @default { <svg lucideFile class="h-4 w-4 shrink-0 opacity-70"></svg> }
+          }
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-medium break-all">{{ c.name }}</p>
+            <p class="text-xs text-base-content/50">{{ formatSize(c.size) }} · {{ formatDate(c.mtime) }}</p>
+            @if (c.sharedWith.length) {
+              <p class="text-xs text-warning">{{ 'file_info.companions_shared' | translate: { name: sharedNames(c) } }}</p>
+            }
+          </div>
+          @if (c.subtitle; as sub) {
+            <span class="badge badge-sm badge-ghost uppercase">{{ sub.language }}</span>
+            @if (sub.forced) {
+              <span class="badge badge-sm badge-ghost">{{ 'player.subtitle_forced' | translate }}</span>
+            }
+            @if (sub.hearingImpaired) {
+              <span class="badge badge-sm badge-ghost">{{ 'player.subtitle_hearing_impaired' | translate }}</span>
+            }
+          }
+          @if (canDownload()) {
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs btn-square"
+              [disabled]="busy()"
+              [attr.aria-label]="'file_info.companions_download' | translate"
+              (click)="download(c)"
+            >
+              <svg lucideDownload class="h-4 w-4"></svg>
+            </button>
+          }
+          @if (canDelete()) {
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs btn-square text-error"
+              [disabled]="busy()"
+              [attr.aria-label]="'file_info.companions_delete' | translate"
+              (click)="remove(c)"
+            >
+              <svg lucideTrash2 class="h-4 w-4"></svg>
+            </button>
+          }
+        </li>
+      }
+    </ul>
+  }
+</ng-template>
+
+<dialog #dialog class="modal">
+  <div class="modal-box max-w-2xl">
+    <app-modal-header [title]="'file_info.companions_title' | translate" />
+
+    @if (kinds().length || importTypes().length) {
+      <div class="mt-3 mb-3 flex items-center gap-3">
+        @if (kinds().length) {
+          <app-select-field
+            class="w-40"
+            size="sm"
+            [hideLabel]="true"
+            [(value)]="kindFilter"
+            [label]="'file_info.import_type' | translate"
+          >
+            <option value="">{{ 'file_info.companions_filter_all' | translate }}</option>
+            @for (k of kinds(); track k) {
+              <option [value]="k">{{ 'file_info.companions_kind_' + k | translate }}</option>
+            }
+          </app-select-field>
+        }
+        @if (importTypes().length) {
+          <button type="button" class="btn btn-primary btn-sm ml-auto" (click)="openImport()">
+            <svg lucideUpload class="h-4 w-4"></svg>
+            {{ 'file_info.import_button' | translate }}
+          </button>
+        }
+      </div>
+    }
+
+    @if (loading()) {
+      <div class="py-10 text-center"><span class="loading loading-spinner"></span></div>
+    } @else if (!thisVideo().length && !folder().length) {
+      <p class="py-10 text-center text-sm text-base-content/50">
+        {{ 'file_info.companions_empty' | translate }}
+      </p>
+    } @else {
+      <div class="max-h-[60vh] overflow-y-auto pr-1">
+        <ng-container
+          *ngTemplateOutlet="group; context: { rows: thisVideo() }"
+        />
+        <ng-container
+          *ngTemplateOutlet="group; context: { title: ('file_info.companions_folder' | translate), rows: folder() }"
+        />
+      </div>
+    }
+
+    <app-modal-footer>
+      <button type="button" class="btn" (click)="close()">{{ 'common.close' | translate }}</button>
+    </app-modal-footer>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+</dialog>
+
+<app-companion-import-modal (imported)="onImported($event)" />

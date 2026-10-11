@@ -143,13 +143,15 @@ export class SubtitlesApiService {
   upload(
     mediaId: number,
     file: File,
-    body: { mediaFileId: number; episodeId?: number; language: string },
+    body: { mediaFileId: number; episodeId?: number; language: string; forced?: boolean; hearingImpaired?: boolean },
   ) {
     const form = new FormData();
     form.append('file', file, file.name);
     form.append('mediaFileId', String(body.mediaFileId));
     form.append('language', body.language);
     if (body.episodeId != null) form.append('episodeId', String(body.episodeId));
+    if (body.forced !== undefined) form.append('forced', String(body.forced));
+    if (body.hearingImpaired !== undefined) form.append('hearingImpaired', String(body.hearingImpaired));
     return firstValueFrom(
       this.http.post<SubtitleFileRow>(`/api/media/${mediaId}/subtitles/upload`, form),
     );

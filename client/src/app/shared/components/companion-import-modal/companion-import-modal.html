@@ -1,0 +1,42 @@
+<dialog #dialog class="modal">
+  <div class="modal-box max-w-md">
+    <app-modal-header [title]="'file_info.import_title' | translate" />
+
+    <div class="mt-3 flex flex-col gap-3">
+      @if (types().length > 1) {
+        <app-select-field [value]="type()" (valueChange)="setType($event)" [label]="'file_info.import_type' | translate">
+          @for (t of types(); track t) {
+            <option [value]="t">{{ 'file_info.import_type_' + t | translate }}</option>
+          }
+        </app-select-field>
+      }
+
+      @if (type() === 'subtitle') {
+        <app-select-field [(value)]="language" [label]="'file_info.import_language' | translate">
+          @for (code of languages; track code) {
+            <option [value]="code">{{ code | localizeLanguage }}</option>
+          }
+        </app-select-field>
+        <app-toggle-field [(value)]="forced" [label]="'player.subtitle_forced' | translate" />
+        <app-toggle-field [(value)]="hearingImpaired" [label]="'player.subtitle_hearing_impaired' | translate" />
+      }
+
+      <label class="form-control w-full">
+        <span class="label-text mb-1">{{ 'file_info.import_file' | translate }}</span>
+        <input #fileInput type="file" class="file-input file-input-bordered w-full" [accept]="accept()" (change)="onPicked($event)" />
+      </label>
+      @if (error(); as msg) {
+        <p class="text-sm text-error" role="alert">{{ msg }}</p>
+      }
+    </div>
+
+    <app-modal-footer>
+      <button type="button" class="btn" (click)="close()">{{ 'common.cancel' | translate }}</button>
+      <button type="button" class="btn btn-primary" [disabled]="!file() || !!error() || busy()" (click)="submit()">
+        @if (busy()) { <span class="loading loading-spinner loading-xs"></span> }
+        {{ 'file_info.import_submit' | translate }}
+      </button>
+    </app-modal-footer>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+</dialog>

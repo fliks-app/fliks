@@ -34,6 +34,9 @@ export async function writeAtomically(
   const tmp = path.join(path.dirname(dest), `${ATOMIC_TEMP_PREFIX}${randomUUID()}`);
   try {
     await write(tmp);
+    // A replace would otherwise reset the destination's mode to the temp file's.
+    const mode = await fsp.stat(dest).then((s) => s.mode & 0o7777, () => null);
+    if (mode !== null) await fsp.chmod(tmp, mode);
     await renameRetrying(tmp, dest);
   } catch (err) {
     await fsp.rm(tmp, { force: true }).catch(() => {});

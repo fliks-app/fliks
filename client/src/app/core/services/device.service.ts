@@ -161,6 +161,17 @@ export class DeviceService {
     () => !this.isTv() && (this.isDesktopNative() || !Capacitor.isNativePlatform()),
   );
 
+  /** A file picker reaches the OS on every platform but a TV, which has no
+   *  local storage to browse. Both Capacitor WebViews handle <input type=file>
+   *  natively, unlike downloads. */
+  readonly canPickFiles = computed(() => !this.isTv());
+
+  /** Android's picker filters by MIME and its table maps none of the sidecar
+   *  extensions, so anything narrower than a wildcard greys out every file. */
+  filePickerAccept(accept: string): string {
+    return this.isAndroidNative() ? '*/*' : accept;
+  }
+
   /** Running inside the Capacitor Android WebView. */
   readonly isAndroidNative = computed(
     () => Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android',

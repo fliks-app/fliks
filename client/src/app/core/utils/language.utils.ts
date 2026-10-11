@@ -1,4 +1,5 @@
 import { TranslateService } from '@ngx-translate/core';
+import { SUBTITLE_LANGUAGE_CODES } from '../constants/subtitle-languages';
 
 /**
  * ISO 639-2 (3-letter B/T) → ISO 639-1 (2-letter) lookup. Mirrors the
@@ -56,21 +57,47 @@ export function normalizeLangCode(
   return ISO_639_2_TO_1[lower] ?? lower;
 }
 
+export interface SubtitleTags {
+  language: string | null;
+  forced: boolean;
+  hearingImpaired: boolean;
+}
+
+const FORCED_TOKENS = new Set(['forced', 'foreign']);
+const HI_TOKENS = new Set(['hi', 'cc', 'sdh']);
+
 /**
- * Best-effort language of a subtitle filename: `Movie.2020.fre.forced.srt` → `fr`.
- * Read right to left so a trailing language token wins over anything in the
- * title, and skip the extension and the leading video name.
+ * Language and flags of a subtitle filename (`Movie.en.hi.srt` → en, hearing-impaired).
+ * Same right-to-left rules as the backend `parseSubtitleFilename`: the leftmost part is the
+ * video name, a lone `hi` is Hindi, and the walk stops at the first unrecognised token.
  */
-export function guessLanguageFromFilename(
-  name: string,
-  known: readonly string[],
-): string | null {
-  const tokens = name.split('.').slice(1, -1).reverse();
-  for (const token of tokens) {
-    const code = normalizeLangCode(token);
-    if (known.includes(code)) return code;
+export function guessSubtitleTags(name: string, known: readonly string[] = SUBTITLE_LANGUAGE_CODES): SubtitleTags {
+  const tags: SubtitleTags = { language: null, forced: false, hearingImpaired: false };
+  let hiCandidate = false;
+  for (const raw of name.split('.').slice(1, -1).reverse()) {
+    const token = raw.toLowerCase();
+    if (FORCED_TOKENS.has(token)) {
+      tags.forced = true;
+    } else if (HI_TOKENS.has(token)) {
+      if (token === 'hi' && tags.language === null) {
+        tags.language = 'hi';
+        hiCandidate = true;
+      } else {
+        tags.hearingImpaired = true;
+      }
+    } else if (token === 'default' || token === 'ocr') {
+      continue;
+    } else {
+      const code = normalizeLangCode(token.replace(/^([a-z]{2})-[a-z]{2,}$/, '$1'));
+      if (!known.includes(code)) break;
+      tags.language = code;
+      if (hiCandidate) {
+        tags.hearingImpaired = true;
+        hiCandidate = false;
+      }
+    }
   }
-  return null;
+  return tags;
 }
 
 /**
