@@ -404,3 +404,17 @@ describe('MPEG-TS clock break', () => {
     }
   });
 });
+
+describe('var_stream_map cut threshold', () => {
+  it('keeps -hls_time under one GOP so the muxer cuts on every forced IDR', () => {
+    const args = tx({
+      sourceFps: 23.976,
+      segmentDuration: 6,
+      videoOnly: true,
+      audioStreams: [{ streamIndex: 1 }, { streamIndex: 2 }],
+    } as Partial<BuildFfmpegArgsOptions>);
+    expect(args).toContain('-var_stream_map');
+    // An encoder retimed on a 23017/960 avg rate makes a 144-frame GOP 6.005996 s.
+    expect(Number(after(args, '-hls_time'))).toBeLessThan((144 * 960) / 23017);
+  });
+});

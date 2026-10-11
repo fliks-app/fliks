@@ -102,6 +102,10 @@ export function tsHeadroom(originSeconds = 0): number {
 
 const TS_MIN_START_SECONDS = 1;
 
+/** Kept under `-hls_time` so the muxer cuts on every forced IDR. Audio-only
+ *  renditions drift by it per segment; their tfdt snap absorbs it. */
+const HLS_TIME_MARGIN = 0.0001;
+
 /** Seconds as an ffmpeg duration / expression literal, microsecond precision. */
 export function formatSeconds(seconds: number): string {
   return String(Number(seconds.toFixed(6)));
@@ -595,7 +599,9 @@ function buildAudioAndMuxerArgs(opts: {
     args.push(
       ...hlsMuxerArgs({
         useTs,
-        hlsTime: String(realSeg),
+        // The encoder's CFR GOP can sit µs under the ms-snapped grid (avg rate
+        // 23017/960); a threshold above it skips an IDR and shifts every file.
+        hlsTime: formatSeconds(realSeg - HLS_TIME_MARGIN),
         startSegment,
         outputSeekSeconds,
         segType,
