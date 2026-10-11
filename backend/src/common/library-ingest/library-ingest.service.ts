@@ -1,6 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Not, Repository } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Media } from '../../modules/media/entities/media.entity';
@@ -15,6 +15,10 @@ import { FileTransferService, TransferMethod } from '../services/file-transfer.s
 import { FfprobeService } from '../../modules/subtitles/ffprobe.service';
 import { EventsService } from '../../modules/scheduler/events.service';
 import { qualityFromResolution } from '../release-parsing';
+import { MediaService } from '../../modules/media/media.service';
+import { PlaybackState } from '../../modules/streaming/entities/playback-state.entity';
+import { SubtitlesService } from '../../modules/subtitles/subtitles.service';
+import { SubtitleSyncService } from '../../modules/subtitles/subtitle-sync.service';
 
 export interface IngestRequest {
   /** Media the file(s) belong to. Must already be anchored to a library
@@ -34,6 +38,9 @@ export interface IngestRequest {
   force?: boolean;
   /** Append " (n)" instead of silently skipping when the computed name collides. */
   uniquifyOnCollision?: boolean;
+  /** A download supersedes what it covers: the previous file(s) of the movie, or of every
+   *  episode the new files fully cover, are deleted. Disk import keeps versions side by side. */
+  replaceExisting?: boolean;
 }
 
 export interface IngestResult {
@@ -73,6 +80,10 @@ export class LibraryIngestService {
     private readonly postImportQueue: PostImportQueueService,
     private readonly ffprobe: FfprobeService,
     private readonly events: EventsService,
+    @Inject(forwardRef(() => MediaService))
+    private readonly mediaService: MediaService,
+    private readonly subtitles: SubtitlesService,
+    private readonly subtitleSync: SubtitleSyncService,
   ) {}
 
   async ingest(req: IngestRequest): Promise<IngestResult> {
@@ -124,6 +135,7 @@ export class LibraryIngestService {
       destPath: string;
       seasonNumber?: number;
       episodeNumber?: number;
+      episodeEnd?: number;
     })[] = [];
 
     for (const file of files) {
@@ -136,6 +148,7 @@ export class LibraryIngestService {
       let episodeNumber: number | undefined;
       let episodeTitle: string | undefined;
       let airDate: string | undefined;
+      let episodeEnd: number | undefined;
 
       if (media.type !== MediaType.MOVIE) {
         const epNums =
@@ -143,6 +156,7 @@ export class LibraryIngestService {
           (req.releaseName ? this.naming.parseEpisodeNumbers(req.releaseName) : null);
         seasonNumber = epNums?.season;
         episodeNumber = epNums?.episode;
+        episodeEnd = epNums?.episodeEnd;
 
         // The caller's episode is authoritative only if it belongs to this media.
         const ep =
@@ -280,7 +294,19 @@ export class LibraryIngestService {
           where: { media: { id: media.id }, relativePath: rel },
         }));
 
-      if ((await collides(relativePath, destPath)) && !req.force) {
+      let sourceSize = 0;
+      try {
+        sourceSize = fs.statSync(file.path).size;
+      } catch {
+        // Caller already verified the source exists; best-effort fallback only.
+      }
+
+      // A replacing import overwrites a same-named file (repack, proper) unless it is the very
+      // same bytes, which is a retried call and must stay a no-op.
+      const overwrite =
+        req.force ||
+        (req.replaceExisting && !this.sameSize(destPath, sourceSize));
+      if (!overwrite && (await collides(relativePath, destPath))) {
         if (!req.uniquifyOnCollision) {
           // Re-running the same import is a safe no-op — reported, not silent.
           alreadyPresent.push(file.path);
@@ -301,13 +327,6 @@ export class LibraryIngestService {
         if (!rel) continue;
         newBaseName = base;
         relativePath = rel;
-      }
-
-      let sourceSize = 0;
-      try {
-        sourceSize = fs.statSync(file.path).size;
-      } catch {
-        // Caller already verified the source exists; best-effort fallback only.
       }
 
       this.logger.log(
@@ -339,7 +358,7 @@ export class LibraryIngestService {
         ...(streamInfo ? { streamInfo } : {}),
       };
 
-      // `force` skips the collision check above, so a re-import over an
+      // An overwrite skips the collision check above, so a re-import over an
       // already-tracked path must update that row instead of inserting a dupe.
       const existingFile = await this.fileRepo.findOne({
         where: { media: { id: media.id }, relativePath },
@@ -362,7 +381,12 @@ export class LibraryIngestService {
         destPath,
         seasonNumber,
         episodeNumber,
+        episodeEnd,
       });
+    }
+
+    if (req.replaceExisting && imported.length > 0) {
+      await this.removeSuperseded(media, imported, req.sourceLabel);
     }
 
     if (imported.length > 0) {
@@ -395,5 +419,124 @@ export class LibraryIngestService {
       })),
       alreadyPresent,
     };
+  }
+
+  private sameSize(destPath: string, size: number): boolean {
+    try {
+      return fs.statSync(destPath).size === size;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Deletes the files the new ones supersede, keeping every user's progress by moving
+   *  their playback rows onto the replacement first (the FK cascades otherwise). */
+  private async removeSuperseded(
+    media: Media,
+    imported: {
+      file: MediaFile;
+      episodeId?: number;
+      seasonNumber?: number;
+      episodeNumber?: number;
+      episodeEnd?: number;
+    }[],
+    label: string,
+  ): Promise<void> {
+    const newIds = imported.map((i) => i.file.id);
+    const others = await this.fileRepo.find({
+      where: { media: { id: media.id }, id: Not(In(newIds)) },
+      relations: ['episode', 'episode.season'],
+    });
+    if (!others.length) return;
+
+    const key = (s: number, e: number) => `${s}:${e}`;
+    const range = (s: number, from: number, to?: number | null) =>
+      Array.from({ length: Math.max(to ?? from, from) - from + 1 }, (_, i) =>
+        key(s, from + i),
+      );
+    const covered = new Set(
+      imported.flatMap((i) =>
+        i.seasonNumber != null && i.episodeNumber != null
+          ? range(i.seasonNumber, i.episodeNumber, i.episodeEnd)
+          : [],
+      ),
+    );
+
+    const playback = this.fileRepo.manager.getRepository(PlaybackState);
+    const carried: number[] = [];
+    for (const old of others) {
+      // A subtitle follows its video only onto a file covering exactly the same episode.
+      let heir: MediaFile | undefined = imported[0].file;
+      if (media.type !== MediaType.MOVIE) {
+        const ep = old.episode;
+        const season = ep?.season?.seasonNumber;
+        if (!ep || season == null) continue;
+        const span = range(season, ep.episodeNumber, ep.endEpisodeNumber);
+        if (!span.every((k) => covered.has(k))) continue;
+        heir =
+          span.length === 1
+            ? imported.find((i) => i.episodeId === ep.id && i.episodeEnd == null)?.file
+            : undefined;
+      }
+
+      try {
+        if (heir) {
+          carried.push(...(await this.subtitles.carryOver(media.id, old.id, heir)));
+        }
+        if (media.type === MediaType.MOVIE) {
+          await playback
+            .createQueryBuilder()
+            .update()
+            .set({ mediaFile: { id: newIds[0] } })
+            .where('"mediaFileId" = :old', { old: old.id })
+            .execute();
+        } else {
+          for (const i of imported) {
+            if (i.episodeId == null) continue;
+            await playback
+              .createQueryBuilder()
+              .update()
+              .set({ mediaFile: { id: i.file.id } })
+              .where('"mediaFileId" = :old AND "episodeId" = :ep', {
+                old: old.id,
+                ep: i.episodeId,
+              })
+              .execute();
+          }
+        }
+        await this.mediaService.deleteMediaFile(media.id, old.id, true);
+        this.logger.log(
+          `Ingest[${label}]: replaced "${old.relativePath}" (superseded by this import)`,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `Ingest[${label}]: could not remove superseded "${old.relativePath}": ${(err as Error).message}`,
+        );
+        continue;
+      }
+
+      // The owner keeps a multi-episode range only while a file still spans it.
+      const owner = old.episode;
+      if (owner?.endEpisodeNumber != null) {
+        const spans = imported.some(
+          (i) => i.episodeId === owner.id && i.episodeEnd != null,
+        );
+        if (!spans) {
+          await this.episodeRepo.update(owner.id, { endEpisodeNumber: null });
+        }
+      }
+    }
+
+    // Another release of the same content is usually offset or at another frame rate.
+    // Sequential and detached: each sync runs ffmpeg + ffsubsync over the whole file.
+    void (async () => {
+      for (const id of carried) {
+        await this.subtitleSync
+          .syncSubtitle(id, { automatic: true })
+          .catch((err: Error) =>
+            this.logger.warn(`Ingest[${label}]: resync of subtitle #${id} failed, kept as is: ${err.message}`),
+          );
+      }
+    })();
   }
 }

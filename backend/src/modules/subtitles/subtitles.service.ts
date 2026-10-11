@@ -869,6 +869,45 @@ export class SubtitlesService {
     await this.repo.remove(subtitle);
   }
 
+  /**
+   * Moves the external subtitles of a superseded video onto its replacement, renamed after the
+   * new video. A name the new release already ships a sidecar for is left behind to be deleted.
+   */
+  async carryOver(mediaId: number, fromFileId: number, to: MediaFile): Promise<number[]> {
+    const media = await this.mediaRepo.findOne({
+      where: { id: mediaId },
+      relations: ['library'],
+    });
+    const from = await this.mediaFileRepo.findOne({ where: { id: fromFileId } });
+    if (!media?.path || !from) return [];
+    const oldBase = path.parse(from.relativePath).name;
+    const newVideo = path.parse(to.relativePath);
+    const subs = await this.repo.find({ where: { mediaFile: { id: fromFileId } } });
+    const moved: number[] = [];
+    for (const sub of subs) {
+      if (sub.providerType === SubtitleProviderType.EMBEDDED || !sub.relativePath) continue;
+      const name = path.basename(sub.relativePath);
+      if (!name.startsWith(`${oldBase}.`)) continue;
+      const rel = path.join(newVideo.dir, newVideo.name + name.slice(oldBase.length));
+      const src = resolveSubtitleAbsolutePath(media.path, sub.relativePath);
+      const dest = resolveSubtitleAbsolutePath(media.path, rel);
+      if (!src || !dest || existsSync(dest)) continue;
+      try {
+        await fs.rename(src, dest);
+      } catch (err) {
+        this.logger.warn(`Could not carry subtitle ${src} over: ${(err as Error).message}`);
+        continue;
+      }
+      sub.relativePath = rel;
+      sub.mediaFile = { id: to.id } as MediaFile;
+      // The hash named the old file; leaving it set would shield this sub from upgrades.
+      sub.hashMatched = false;
+      await this.repo.save(sub);
+      moved.push(sub.id);
+    }
+    return moved;
+  }
+
   /** Unlink the on-disk subtitles of a video file about to be deleted; its rows go with the FK cascade. */
   async deleteSubtitleFilesOnDisk(mediaId: number, mediaFileId: number): Promise<void> {
     const media = await this.mediaRepo.findOne({ where: { id: mediaId } });

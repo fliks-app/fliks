@@ -19,10 +19,29 @@ function buildHarness() {
   ) as LibraryIngestService;
 
   const mediaRepo = { findOne: jest.fn() };
+  const playbackUpdates: Record<string, unknown>[] = [];
+  const playbackRepo = {
+    createQueryBuilder: () => {
+      const qb = {
+        update: () => qb,
+        set: (v: unknown) => (playbackUpdates.push({ set: v }), qb),
+        where: (_: string, p: Record<string, unknown>) => (
+          Object.assign(playbackUpdates[playbackUpdates.length - 1], p), qb
+        ),
+        execute: jest.fn().mockResolvedValue(undefined),
+      };
+      return qb;
+    },
+  };
+  const mediaService = { deleteMediaFile: jest.fn().mockResolvedValue(undefined) };
+  const subtitles = { carryOver: jest.fn().mockResolvedValue([]) };
+  const subtitleSync = { syncSubtitle: jest.fn().mockResolvedValue(undefined) };
   const fileRepo = {
     findOne: jest.fn().mockResolvedValue(null),
     create: jest.fn((x: unknown) => x),
     save: jest.fn(async (x: unknown) => x),
+    find: jest.fn().mockResolvedValue([]),
+    manager: { getRepository: () => playbackRepo },
   };
   const episodeRepo = {
     findOne: jest.fn().mockResolvedValue(null),
@@ -56,6 +75,9 @@ function buildHarness() {
   wired.ffprobe = ffprobe;
   wired.logger = logger;
   wired.events = { emitDomain: jest.fn() };
+  wired.mediaService = mediaService;
+  wired.subtitles = subtitles;
+  wired.subtitleSync = subtitleSync;
 
   return {
     service,
@@ -67,6 +89,10 @@ function buildHarness() {
     postImportQueue,
     ffprobe,
     logger,
+    mediaService,
+    playbackUpdates,
+    subtitles,
+    subtitleSync,
   };
 }
 
@@ -283,5 +309,114 @@ describe('LibraryIngestService.ingest', () => {
         sourceLabel: 'Sample Movie',
       }),
     ).rejects.toThrow('has no folder of its own');
+  });
+
+  describe('replaceExisting', () => {
+    let libDir: string;
+    beforeEach(() => {
+      libDir = fs.mkdtempSync(path.join(os.tmpdir(), 'library-ingest-lib-'));
+    });
+    afterEach(() => fs.rmSync(libDir, { recursive: true, force: true }));
+
+    const seriesHarness = (h: ReturnType<typeof buildHarness>) => {
+      h.seasonRepo.findOne.mockResolvedValue({ id: 300, seasonNumber: 1 });
+      h.episodeRepo.findOne.mockImplementation(
+        async ({ where }: { where: { episodeNumber: number } }) => ({
+          id: 400 + where.episodeNumber,
+          episodeNumber: where.episodeNumber,
+        }),
+      );
+      let nextId = 900;
+      h.fileRepo.save.mockImplementation(async (x: Record<string, unknown>) => ({
+        id: nextId++,
+        ...x,
+      }));
+    };
+    const oldEpisodeFile = (id: number, ep: number, end: number | null = null) =>
+      ({
+        id,
+        relativePath: `Season 01/old-E${ep}.mkv`,
+        episode: { id: 400 + ep, episodeNumber: ep, endEpisodeNumber: end, season: { seasonNumber: 1 } },
+      }) as unknown as MediaFile;
+
+    it('deletes the previous movie file and moves playback onto the new one', async () => {
+      const h = buildHarness();
+      const src = path.join(srcDir, 'Lonely.Harbor.2021.2160p.mkv');
+      fs.writeFileSync(src, 'x');
+      h.mediaRepo.findOne.mockResolvedValue(buildMovie({ id: 7, path: libDir }));
+      h.fileRepo.save.mockImplementation(async (x: Record<string, unknown>) => ({ id: 900, ...x }));
+      h.fileRepo.find.mockResolvedValue([{ id: 501, relativePath: 'old.mkv', episode: null }]);
+
+      await h.service.ingest({
+        mediaId: 7, files: [{ path: src }], transfer: 'copy',
+        fallbackQuality: 'WEBDL-2160p', sourceLabel: 'x', replaceExisting: true,
+      });
+
+      expect(h.playbackUpdates).toEqual([{ set: { mediaFile: { id: 900 } }, old: 501 }]);
+      expect(h.mediaService.deleteMediaFile).toHaveBeenCalledWith(7, 501, true);
+      expect(h.subtitles.carryOver).toHaveBeenCalledWith(7, 501, expect.objectContaining({ id: 900 }));
+    });
+
+    it('replaces the single-episode files a season pack covers, keeps a partly covered range', async () => {
+      const h = buildHarness();
+      seriesHarness(h);
+      const files = [1, 2, 3].map((e) => {
+        const p = path.join(srcDir, `Nova.Skyline.S01E0${e}.1080p.mkv`);
+        fs.writeFileSync(p, 'x');
+        return { path: p };
+      });
+      h.mediaRepo.findOne.mockResolvedValue(buildSeries({ id: 20, path: libDir }));
+      h.fileRepo.find.mockResolvedValue([
+        oldEpisodeFile(601, 1),
+        oldEpisodeFile(602, 2),
+        oldEpisodeFile(603, 3, 4), // E03-E04: E04 not in the pack
+      ]);
+
+      await h.service.ingest({
+        mediaId: 20, files, transfer: 'copy',
+        fallbackQuality: 'WEBDL-1080p', sourceLabel: 'x', replaceExisting: true,
+      });
+
+      expect(h.mediaService.deleteMediaFile.mock.calls.map((c) => c[1])).toEqual([601, 602]);
+      expect(h.subtitles.carryOver.mock.calls.map((c) => [c[1], c[2].id])).toEqual([[601, 900], [602, 901]]);
+      expect(h.playbackUpdates).toContainEqual({ set: { mediaFile: { id: 900 } }, old: 601, ep: 401 });
+    });
+
+    it('overwrites a same-named file of a different size instead of skipping it', async () => {
+      const h = buildHarness();
+      const src = path.join(srcDir, 'Lonely.Harbor.2021.mkv');
+      fs.writeFileSync(src, 'new-bytes');
+      const media = buildMovie({ id: 7, path: libDir });
+      h.mediaRepo.findOne.mockResolvedValue(media);
+      const dest = path.join(libDir, 'Lonely Harbor (2021) WEBDL-1080p.mkv');
+      fs.writeFileSync(dest, 'old');
+
+      const res = await h.service.ingest({
+        mediaId: 7, files: [{ path: src }], transfer: 'copy',
+        fallbackQuality: 'WEBDL-1080p', sourceLabel: 'x', replaceExisting: true,
+      });
+      expect(res.imported).toHaveLength(1);
+
+      fs.writeFileSync(dest, 'new-bytes');
+      const retry = await h.service.ingest({
+        mediaId: 7, files: [{ path: src }], transfer: 'copy',
+        fallbackQuality: 'WEBDL-1080p', sourceLabel: 'x', replaceExisting: true,
+      });
+      expect(retry.alreadyPresent).toEqual([src]);
+    });
+
+    it('keeps every other file without replaceExisting', async () => {
+      const h = buildHarness();
+      const src = path.join(srcDir, 'Lonely.Harbor.2021.mkv');
+      fs.writeFileSync(src, 'x');
+      h.mediaRepo.findOne.mockResolvedValue(buildMovie({ id: 7, path: libDir }));
+      h.fileRepo.find.mockResolvedValue([{ id: 501, relativePath: 'old.mkv', episode: null }]);
+
+      await h.service.ingest({
+        mediaId: 7, files: [{ path: src }], transfer: 'copy',
+        fallbackQuality: 'WEBDL-1080p', sourceLabel: 'x',
+      });
+      expect(h.mediaService.deleteMediaFile).not.toHaveBeenCalled();
+    });
   });
 });

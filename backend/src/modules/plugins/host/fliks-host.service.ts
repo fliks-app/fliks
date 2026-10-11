@@ -826,9 +826,8 @@ export class FliksHostImpl implements PluginHostApi {
   }> {
     const files = await this.resolveAgainstGrantedRoots(p.paths);
 
-    // `force`/`uniquifyOnCollision` are left false: a retried call resolves
-    // the same destination and is a safe no-op, which is the idempotency
-    // guarantee `idempotencyKey` asks for — no separate dedupe table needed.
+    // A retried call resolves the same destination with the same bytes and is a
+    // no-op, which is the idempotency guarantee `idempotencyKey` asks for.
     const result = await this.libraryIngestService.ingest({
       mediaId: p.mediaId,
       files,
@@ -836,6 +835,7 @@ export class FliksHostImpl implements PluginHostApi {
       fallbackQuality: p.fallbackQuality,
       releaseName: p.sourceLabel,
       sourceLabel: p.sourceLabel,
+      replaceExisting: true,
     });
 
     const imported = result.imported.map((x) => ({
