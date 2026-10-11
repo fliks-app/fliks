@@ -52,7 +52,7 @@ import {
   type TitleExpectationIndex,
   type ReleaseCandidate,
 } from '../../../common/release-scoring';
-import { parseSeasonEpisode } from '../../../common/release-parsing';
+import { coverageOf, parseSeasonEpisode } from '../../../common/release-parsing';
 import { PluginCountsCacheService } from './plugin-counts-cache.service';
 import { DownloadProgressCacheService } from '../../scheduler/download-progress-cache.service';
 import { PLUGIN_HOST_PLUGIN_ID } from './plugin-host.constants';
@@ -423,6 +423,7 @@ export class FliksHostImpl implements PluginHostApi {
     minAgeMinutes: number | undefined,
   ): Promise<ReleaseMatchResult> {
     const se = parseSeasonEpisode(entry.title);
+    const coverage = coverageOf(se);
     const skip = (
       skipReason: SkipReason,
       mediaId: number | null = null,
@@ -431,6 +432,7 @@ export class FliksHostImpl implements PluginHostApi {
       id: entry.id,
       mediaId,
       isFullSeason: se.isFullSeason,
+      coverage,
       decision: 'skip',
       skipReason,
       ...extra,
@@ -510,6 +512,7 @@ export class FliksHostImpl implements PluginHostApi {
       seasonNumber,
       episodeNumber,
       isFullSeason: se.isFullSeason,
+      coverage,
       decision: 'grab',
     };
   }
@@ -618,6 +621,7 @@ export class FliksHostImpl implements PluginHostApi {
       languageName: row.languageName,
       languageAllowed: row.languageAllowed,
       isFullSeason: row.isFullSeason,
+      coverage: row.coverage,
       // Kept null rather than flattened to 0: without a runtime the deviation is unknown, and 0
       // reads as a perfect size match — which promoted an unmeasurable release at the last tiebreak.
       sizeDeviation: row.sizeDeviation ?? null,

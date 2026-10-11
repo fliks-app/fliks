@@ -1,12 +1,14 @@
 import { QualityProfileItem } from '../../modules/profiles/entities/quality-profile.entity';
 import { AudioLanguageItem } from '../../modules/profiles/entities/language-profile.entity';
+import type { ReleaseCoverage } from '../release-parsing/season-episode.parser';
 import { APP_LANGUAGES } from '../constants/app-languages';
 import { getAppQualityById } from '../constants/app-qualities';
 import {
   parseReleaseLanguage,
   parseReleaseQuality,
-  parseSeasonEpisode,
+  releaseCoverage,
   resolveUnknownLanguage,
+  within,
 } from '../release-parsing';
 
 /** A search hit as parsed off the wire by whoever fetched it —
@@ -515,11 +517,25 @@ export function titleMatchesExpectation(
 function formatSeasonEpisode(
   season: number | null | undefined,
   episode: number | null | undefined,
+  seasonEnd?: number,
+  episodeEnd?: number,
 ): string {
   const n = (v: number) => String(v).padStart(2, '0');
   if (season == null) return episode == null ? '?' : `E${n(episode)}`;
-  return episode == null ? `S${n(season)}` : `S${n(season)}E${n(episode)}`;
+  const s = seasonEnd != null ? `S${n(season)}-S${n(seasonEnd)}` : `S${n(season)}`;
+  if (episode == null) return s;
+  return episodeEnd != null ? `${s}E${n(episode)}-E${n(episodeEnd)}` : `${s}E${n(episode)}`;
 }
+
+const formatCoverage = (c: ReleaseCoverage): string => {
+  const { seasons, episodes } = c;
+  return formatSeasonEpisode(
+    seasons?.from,
+    episodes?.from,
+    seasons && seasons.to > seasons.from ? seasons.to : undefined,
+    episodes && episodes.to > episodes.from ? episodes.to : undefined,
+  );
+};
 
 export function computeRejections(opts: {
   qualityId: number;
@@ -537,6 +553,8 @@ export function computeRejections(opts: {
   /** Release title — used to detect video codec for size-limit scaling AND
    *  for the title-mismatch check below. */
   releaseTitle?: string;
+  /** The title's coverage when the caller already parsed it. */
+  coverage?: ReleaseCoverage;
   /** Expected show / movie title(s). Pass the canonical title together
    *  with TMDB / TVDB alternative titles so that releases indexed under a
    *  localised name still pass; otherwise they get `TITLE_MISMATCH`. */
@@ -608,21 +626,21 @@ export function computeRejections(opts: {
     opts.releaseTitle &&
     (opts.expectedSeason != null || opts.expectedEpisode != null)
   ) {
-    const se = parseSeasonEpisode(opts.releaseTitle);
+    const cov = opts.coverage ?? releaseCoverage(opts.releaseTitle);
     const wrongSeason =
       opts.expectedSeason != null &&
-      se.season != null &&
-      se.season !== opts.expectedSeason;
+      cov.seasons != null &&
+      !within(cov.seasons, opts.expectedSeason);
     const wrongEpisode =
       opts.expectedEpisode != null &&
-      se.episode != null &&
-      se.episode !== opts.expectedEpisode;
+      cov.episodes != null &&
+      !within(cov.episodes, opts.expectedEpisode);
     if (wrongSeason || wrongEpisode) {
       out.push({
         code: 'EPISODE_MISMATCH',
         params: {
           expected: formatSeasonEpisode(opts.expectedSeason, opts.expectedEpisode),
-          actual: formatSeasonEpisode(se.season, se.episode),
+          actual: formatCoverage(cov),
         },
       });
     }
@@ -630,7 +648,10 @@ export function computeRejections(opts: {
     // rule rather than left to the size limits: those need a runtime, and a series whose provider
     // gives none has no size ceiling at all — which is how a 19 GB season pack was taken to fill
     // a single missing episode.
-    if (opts.expectedEpisode != null && se.isFullSeason) {
+    if (
+      opts.expectedEpisode != null &&
+      ((cov.seasons != null && cov.episodes == null) || cov.completeSeries)
+    ) {
       out.push({
         code: 'FULL_SEASON_FOR_EPISODE',
         params: {
@@ -789,6 +810,7 @@ export function sortReleasesByRelevance<
     flags: readonly string[];
     sizeDeviation?: number | null;
     isFullSeason?: boolean;
+    coverage?: ReleaseCoverage;
   },
 >(rows: T[], opts?: { preferFullSeason?: boolean }): T[] {
   // log2 gap that counts as a real difference (~19%); smaller gaps are noise
@@ -816,10 +838,19 @@ export function sortReleasesByRelevance<
 
     // 5. One pack over loose episodes at the same resolution — a weaker
     //    source is worth less than eight files to stitch together.
-    if (opts?.preferFullSeason && !!a.isFullSeason !== !!b.isFullSeason) {
+    if (opts?.preferFullSeason) {
       const aRes = getAppQualityById(a.qualityId)?.resolution ?? 0;
       const bRes = getAppQualityById(b.qualityId)?.resolution ?? 0;
-      if (aRes === bRes) return a.isFullSeason ? -1 : 1;
+      if (aRes === bRes) {
+        if (!!a.isFullSeason !== !!b.isFullSeason) return a.isFullSeason ? -1 : 1;
+        // The exact season pack beats a multi-season one that merely contains it.
+        const aSeasons = a.coverage?.seasons;
+        const bSeasons = b.coverage?.seasons;
+        if (a.isFullSeason && aSeasons && bSeasons) {
+          const gap = aSeasons.to - aSeasons.from - (bSeasons.to - bSeasons.from);
+          if (gap !== 0) return gap;
+        }
+      }
     }
 
     // 6. Quality rank desc
@@ -874,6 +905,7 @@ export interface ScoredRelease extends ReleaseCandidate {
   languageAllowed: boolean;
   rejections: ReleaseRejection[];
   isFullSeason: boolean;
+  coverage: ReleaseCoverage;
   sizeDeviation: number | null;
   videoCodec: 'AV1' | 'HEVC' | 'VP9' | 'x264' | null;
 }
@@ -935,6 +967,7 @@ export async function scoreAndSortReleases(
         deps.scoreCustomFormats(r.title, r.flags),
         deps.isBlocked(r.title, r.sourceId),
       ]);
+      const coverage = releaseCoverage(r.title);
       const rejections = computeRejections({
         qualityId: parsed.quality.id,
         allowed: opts.allowed,
@@ -948,6 +981,7 @@ export async function scoreAndSortReleases(
         sourceId: r.sourceId,
         sourceMinSeeders: opts.sourceMinSeeders,
         releaseTitle: r.title,
+        coverage,
         expectedTitle: opts.expectedTitle,
         expectedSeason: opts.expectedSeason,
         expectedEpisode: opts.expectedEpisode,
@@ -972,7 +1006,8 @@ export async function scoreAndSortReleases(
         languageAllowed:
           opts.allowedLangs.size === 0 || opts.allowedLangs.has(lang.id),
         rejections,
-        isFullSeason: parseSeasonEpisode(r.title).isFullSeason,
+        isFullSeason: coverage.seasons !== null && coverage.episodes === null,
+        coverage,
         sizeDeviation: computeSizeDeviation(
           r.title,
           r.size,
