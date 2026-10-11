@@ -33,6 +33,7 @@ import { SettingsService } from '../settings/settings.service';
 import { resolveSubtitleAbsolutePath } from './subtitle-path.util';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 import { assertSafeLangSuffix } from './subtitle-path.util';
+import { matchSubtitleVideo } from './subtitle-matching';
 import {
   APP_LANGUAGES,
   ISO_639_2_TO_1,
@@ -50,6 +51,14 @@ const LIST_ORDER = {
   score: 'DESC',
   id: 'ASC',
 } as const;
+
+/** Largest subtitle file an upload accepts. */
+export const SUBTITLE_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+
+/** `en`, `en.forced` or `en.hi`: forced wins when both flags are set. */
+export function sidecarLangSuffix(lang: string, forced: boolean, hearingImpaired: boolean): string {
+  return forced ? `${lang}.forced` : hearingImpaired ? `${lang}.hi` : lang;
+}
 
 @Injectable()
 export class SubtitlesService {
@@ -319,7 +328,7 @@ export class SubtitlesService {
     if (!provider) throw new NotFoundException('No matching provider found');
 
     // Resolve the absolute path of the media file
-    const absolutePath = await this.resolveMediaFilePath(mediaId, mediaFileId);
+    const absolutePath = await this.resolveMediaFilePath(mediaId, mediaFileId, episodeId);
 
     this.logger.log(
       `Downloading subtitle "${searchResult.title}" via ${provider.name} (${provider.type})`,
@@ -364,11 +373,7 @@ export class SubtitlesService {
     const lang = normalizeLanguageCode(searchResult.language);
     // The HI cues are stripped below, so the file no longer warrants the tag
     const hearingImpaired = searchResult.hearingImpaired && !removeHiTags;
-    const langSuffix = searchResult.forced
-      ? `${lang}.forced`
-      : hearingImpaired
-        ? `${lang}.hi`
-        : lang;
+    const langSuffix = sidecarLangSuffix(lang, searchResult.forced, hearingImpaired);
 
     // Clean subtitle content (remove ads, optionally HI tags)
     buffer = cleanSubtitle(buffer, {
@@ -406,8 +411,8 @@ export class SubtitlesService {
 
   /**
    * Store a subtitle the user picked on their device as a sidecar.
-   * Forced/HI flags come from the uploaded filename; the language is explicit
-   * because a filename often carries none.
+   * Forced/HI flags default to the uploaded filename's; `opts` overrides them.
+   * The language is explicit because a filename often carries none.
    */
   async uploadSubtitle(
     mediaId: number,
@@ -415,6 +420,7 @@ export class SubtitlesService {
     episodeId: number | undefined,
     file: { originalname: string; buffer: Buffer },
     language: string,
+    opts?: { forced?: boolean; hearingImpaired?: boolean },
   ): Promise<SubtitleFile> {
     const ext = path.extname(file.originalname).toLowerCase();
     if (!SubtitlesService.SUBTITLE_EXTS.has(ext)) {
@@ -426,20 +432,18 @@ export class SubtitlesService {
       throw new BadRequestException('File holds no subtitle cues');
     }
 
-    const absolutePath = await this.resolveMediaFilePath(mediaId, mediaFileId);
+    const absolutePath = await this.resolveMediaFilePath(mediaId, mediaFileId, episodeId);
     const lang = normalizeLanguageCode(language);
-    const flags = this.parseSubtitleFilename(file.originalname);
+    const parsed = this.parseSubtitleFilename(file.originalname);
+    const forced = opts?.forced ?? !!parsed?.forced;
 
     const removeHiTags =
       (await this.settingsService.get('subtitle_remove_hi_tags')) === 'true';
     // The cleaner speaks SRT only; other formats are stored as uploaded
     const isSrt = ext === '.srt';
-    const hearingImpaired = !!flags?.hearingImpaired && !(isSrt && removeHiTags);
-    const langSuffix = flags?.forced
-      ? `${lang}.forced`
-      : hearingImpaired
-        ? `${lang}.hi`
-        : lang;
+    const hearingImpaired =
+      (opts?.hearingImpaired ?? !!parsed?.hearingImpaired) && !(isSrt && removeHiTags);
+    const langSuffix = sidecarLangSuffix(lang, forced, hearingImpaired);
 
     const buffer = isSrt
       ? cleanSubtitle(file.buffer, {
@@ -466,7 +470,7 @@ export class SubtitlesService {
       mediaFile: { id: mediaFileId },
       episode: episodeId ? { id: episodeId } : null,
       language: lang,
-      forced: !!flags?.forced,
+      forced,
       hearingImpaired,
       providerType: SubtitleProviderType.DISK,
       relativePath,
@@ -483,6 +487,7 @@ export class SubtitlesService {
   private async resolveMediaFilePath(
     mediaId: number,
     mediaFileId: number,
+    episodeId?: number,
   ): Promise<string> {
     const media = await this.mediaRepo.findOne({ where: { id: mediaId } });
     if (!media) {
@@ -496,7 +501,11 @@ export class SubtitlesService {
     const mediaFile = await this.mediaFileRepo.findOne({
       where: { id: mediaFileId },
     });
-    if (!mediaFile) {
+    if (
+      !mediaFile ||
+      mediaFile.mediaId !== mediaId ||
+      (episodeId != null && mediaFile.episodeId !== episodeId)
+    ) {
       throw new NotFoundException(`MediaFile #${mediaFileId} not found`);
     }
     return path.join(media.path, mediaFile.relativePath);
@@ -748,15 +757,6 @@ export class SubtitlesService {
     });
     if (!media?.path || !media.files?.length) return 0;
 
-    // Build a map: video basename (without ext, lowercase) → MediaFile
-    const fileByBasename = new Map<string, MediaFile>();
-    for (const f of media.files) {
-      const base = path
-        .basename(f.relativePath, path.extname(f.relativePath))
-        .toLowerCase();
-      fileByBasename.set(base, f);
-    }
-
     // Load existing external subtitle relative paths to skip duplicates
     const existingSubs = await this.repo.find({
       where: { media: { id: mediaId } },
@@ -795,35 +795,13 @@ export class SubtitlesService {
         // Already in DB?
         if (existingPaths.has(relPath)) continue;
 
-        // Match to a video file by basename prefix
-        const subBaseParts = path.basename(entry, ext).toLowerCase().split('.');
-        let matchedFile: MediaFile | null = null;
-
-        // Try progressively shorter prefixes to find the video name
-        for (let len = subBaseParts.length - 1; len >= 1; len--) {
-          const candidate = subBaseParts.slice(0, len).join('.');
-          if (fileByBasename.has(candidate)) {
-            matchedFile = fileByBasename.get(candidate)!;
-            break;
-          }
-        }
-
-        // Fallback: a sidecar whose name matches no video file (different
-        // quality/title, or no language token) still belongs to this media as
-        // long as it sits in a folder with exactly one video — attach it there
-        // (or the media's only file). Folders with several videos (a season
-        // folder) are left to the precise name match so episodes aren't crossed.
-        // A media with no folder of its own shares its root with every sibling
-        // root-level movie, so a lone-video-in-dir guess is not safe there.
-        if (!matchedFile && media.folderName) {
-          const videosInDir = media.files.filter(
-            (f) => path.dirname(path.join(media.path!, f.relativePath)) === dir,
-          );
-          if (videosInDir.length === 1) matchedFile = videosInDir[0];
-          else if (!videosInDir.length && media.files.length === 1)
-            matchedFile = media.files[0];
-        }
-
+        const matchedFile = matchSubtitleVideo(
+          entry,
+          dir,
+          media.files,
+          media.path,
+          !!media.folderName,
+        );
         if (!matchedFile) continue;
 
         // Parse language + flags from filename (unknown → 'und', relabel later)

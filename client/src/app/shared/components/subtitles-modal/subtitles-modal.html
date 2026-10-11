@@ -28,13 +28,6 @@
               </button>
             }
             @if (canPickFiles()) {
-              <input
-                #uploadInput
-                type="file"
-                class="hidden"
-                [accept]="uploadAccept()"
-                (change)="onSubtitleFilePicked($event)"
-              />
               <button
                 type="button"
                 class="btn btn-ghost btn-sm shrink-0"
@@ -42,7 +35,7 @@
                 [attr.title]="
                   searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null
                 "
-                (click)="pickSubtitleFile()"
+                (click)="openImport()"
               >
                 <svg lucideUpload class="h-4 w-4 shrink-0" aria-hidden="true"></svg>
                 {{ 'media_detail.subtitles_import' | translate }}
@@ -499,12 +492,6 @@
           <p class="py-2 text-sm text-base-content/70">
             {{ 'media_detail.translate_hint' | translate }}
           </p>
-        } @else if (langDialogMode() === 'upload') {
-          <h3 class="text-lg font-bold">{{ 'media_detail.upload_subtitle' | translate }}</h3>
-          <p class="py-2 text-sm text-base-content/70 break-all">{{ pendingUploadName() }}</p>
-          <p class="text-sm text-base-content/70">
-            {{ 'media_detail.upload_subtitle_hint' | translate }}
-          </p>
         } @else {
           <h3 class="text-lg font-bold">{{ 'media_detail.ocr_language_title' | translate }}</h3>
           <p class="py-2 text-sm text-base-content/70">
@@ -550,9 +537,7 @@
             ? 'common.save'
             : langDialogMode() === 'translate'
               ? 'media_detail.translate'
-              : langDialogMode() === 'upload'
-                ? 'media_detail.upload_subtitle'
-                : 'media_detail.action_ocr_extract'
+              : 'media_detail.action_ocr_extract'
           ) | translate
         }}
       </button>
@@ -566,3 +551,5 @@
 <!-- Cue list for the "view" action. Sibling of the modals above so it opens on
      the top layer rather than inside another <dialog>. -->
 <app-subtitle-viewer-modal #subtitleViewer />
+
+<app-companion-import-modal (imported)="loadSubtitles(mediaId())" />

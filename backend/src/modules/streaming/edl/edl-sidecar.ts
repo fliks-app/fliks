@@ -6,7 +6,7 @@ import type { SourceTimeline } from '../transcoding/source-timeline';
 import { EdlRange, parseEdl } from './edl-parser';
 
 const log = new Logger('EdlSidecar');
-const MAX_BYTES = 1024 * 1024;
+export const MAX_EDL_BYTES = 1024 * 1024;
 const MAX_CACHED = 1000;
 const MAX_LOGGED_REJECTS = 5;
 
@@ -47,8 +47,8 @@ export async function readEdlSidecar(
     fh = await fsp.open(edlPath, 'r');
     const st = await fh.stat();
     if (!st.isFile()) return null;
-    if (st.size > MAX_BYTES) {
-      warnOnce(`${edlPath}:${st.mtimeMs}:size`, `Ignoring ${edlPath}: ${st.size} bytes exceeds ${MAX_BYTES}`);
+    if (st.size > MAX_EDL_BYTES) {
+      warnOnce(`${edlPath}:${st.mtimeMs}:size`, `Ignoring ${edlPath}: ${st.size} bytes exceeds ${MAX_EDL_BYTES}`);
       return null;
     }
     // Frame-based lines resolve against the fps, so it is part of the key.
@@ -56,7 +56,7 @@ export async function readEdlSidecar(
     const hit = cache.get(key);
     if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.ranges;
 
-    const buf = Buffer.alloc(Math.min(st.size, MAX_BYTES));
+    const buf = Buffer.alloc(Math.min(st.size, MAX_EDL_BYTES));
     const { bytesRead } = await fh.read(buf, 0, buf.length, 0);
     const parsed = parseEdl(buf.toString('utf8', 0, bytesRead), fps);
     if (parsed.rejected.length) {

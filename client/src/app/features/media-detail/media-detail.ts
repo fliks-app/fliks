@@ -1954,6 +1954,11 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     }
   }
 
+  reloadSubtitles() {
+    const m = this.media();
+    if (m) void this.subtitleSection()?.loadSubtitles(m.id);
+  }
+
   async deleteFile(fileId: number, deleteOnDisk: boolean) {
     const m = this.media();
     if (!m) return;

@@ -4,15 +4,18 @@ import {
   inject,
   input,
   output,
+  viewChild,
 } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideVideo, LucideVolume2, LucideTrash2 } from '@lucide/angular';
+import { LucideVideo, LucideVolume2, LucideTrash2, LucideFiles } from '@lucide/angular';
 import {
   MediaFileInfo,
   VideoStreamInfo,
   AudioStreamInfo,
 } from '../../core/services/api/media.service';
+import { TvService } from '../../core/services/tv.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
+import { CompanionFilesModalComponent } from './companion-files-modal/companion-files-modal';
 import { CollapsibleSectionComponent } from './collapsible-section/collapsible-section';
 
 type FileInput = {
@@ -25,7 +28,15 @@ type FileInput = {
 
 @Component({
   selector: 'app-media-file-info',
-  imports: [TranslatePipe, CollapsibleSectionComponent, LucideVideo, LucideVolume2, LucideTrash2],
+  imports: [
+    TranslatePipe,
+    CollapsibleSectionComponent,
+    CompanionFilesModalComponent,
+    LucideVideo,
+    LucideVolume2,
+    LucideTrash2,
+    LucideFiles,
+  ],
   templateUrl: './media-file-info.html',
 })
 export class MediaFileInfoComponent {
@@ -40,9 +51,26 @@ export class MediaFileInfoComponent {
   /** Viewer holds the delete permission: exposes the delete-file action at the
    *  bottom of the panel. */
   readonly canDelete = input(false);
+  readonly canManageSubtitles = input(false);
+  readonly canEditMedia = input(false);
   /** Id of the file this panel describes, required to delete it. */
   readonly fileId = input<number | null>(null);
   readonly deleteFile = output<{ fileId: number; deleteOnDisk: boolean }>();
+  /** Id of the parent media, required to list the file's companions. */
+  readonly mediaId = input<number | null>(null);
+  /** Episode the file belongs to, so an imported subtitle is linked to it. */
+  readonly episodeId = input<number | undefined>(undefined);
+  /** A tracked subtitle was deleted or imported from the companion list. */
+  readonly subtitlesChanged = output<void>();
+  protected readonly tv = inject(TvService);
+  private readonly companions = viewChild(CompanionFilesModalComponent);
+
+  openCompanions() {
+    const mid = this.mediaId();
+    const id = this.fileId();
+    if (mid == null || id == null) return;
+    void this.companions()?.open(mid, id, this.episodeId());
+  }
 
   async onDeleteFileClick() {
     const id = this.fileId();

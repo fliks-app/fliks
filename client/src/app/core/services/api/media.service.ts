@@ -1,8 +1,9 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { MediaType } from '../../enums/media-type.enum';
 import { CACHE_BYPASS_HEADER } from '../../interceptors/cache.interceptor';
+import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 
 export interface QualityProfileBrief {
   id: number;
@@ -22,6 +23,23 @@ export interface AppQualityDef {
   resolution: number;
   source: string;
   rank: number;
+}
+
+export interface EdlImportResult {
+  ranges: number;
+  rejected: { line: number; reason: string }[];
+}
+
+export interface CompanionFile {
+  name: string;
+  relativePath: string;
+  size: number;
+  mtime: string;
+  kind: 'subtitle' | 'edl' | 'nfo' | 'image' | 'other';
+  scope: 'file' | 'folder';
+  subtitle: { id: number | null; language: string; forced: boolean; hearingImpaired: boolean } | null;
+  sharedWith: { fileId: number; name: string }[];
+  hasPair: boolean;
 }
 
 export interface Episode {
@@ -428,6 +446,46 @@ export class MediaService {
     return firstValueFrom(
       this.http.delete<void>(`/api/media/${mediaId}/files/${fileId}`, {
         params: { deleteOnDisk: String(deleteOnDisk) },
+      }),
+    );
+  }
+
+  listCompanions(mediaId: number, fileId: number) {
+    return firstValueFrom(
+      this.http.get<CompanionFile[]>(`/api/media/${mediaId}/files/${fileId}/companions`),
+    );
+  }
+
+  importEdl(mediaId: number, fileId: number, file: File, replace: boolean) {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return firstValueFrom(
+      this.http.post<EdlImportResult>(`/api/media/${mediaId}/files/${fileId}/companions/edl`, form, {
+        params: replace ? { replace: 'true' } : {},
+        context: new HttpContext().set(SKIP_ERROR_TOAST, true),
+      }),
+    );
+  }
+
+  /** Fetched through HttpClient so cookie and Bearer auth both apply, then saved by an anchor. */
+  async downloadCompanion(mediaId: number, fileId: number, c: Pick<CompanionFile, 'name' | 'relativePath'>) {
+    const blob = await firstValueFrom(
+      this.http.get(`/api/media/${mediaId}/files/${fileId}/companions/download`, {
+        params: { path: c.relativePath },
+        responseType: 'blob',
+      }),
+    );
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = c.name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  deleteCompanion(mediaId: number, fileId: number, relativePath: string) {
+    return firstValueFrom(
+      this.http.delete<void>(`/api/media/${mediaId}/files/${fileId}/companions`, {
+        params: { path: relativePath },
       }),
     );
   }

@@ -163,7 +163,12 @@
             [file]="sf"
             [mediaPath]="m.path ?? null"
             [canDelete]="canDelete()"
+            [canManageSubtitles]="canManageSubtitles()"
+            [canEditMedia]="canEditProfiles()"
             [fileId]="episodeActiveFileId()"
+            [mediaId]="m.id"
+            [episodeId]="ep.id"
+            (subtitlesChanged)="reloadSubtitles()"
             (deleteFile)="deleteFile($event.fileId, $event.deleteOnDisk)"
           />
         }
@@ -280,7 +285,11 @@
             [file]="af"
             [mediaPath]="m.path ?? null"
             [canDelete]="canDelete()"
+            [canManageSubtitles]="canManageSubtitles()"
+            [canEditMedia]="canEditProfiles()"
             [fileId]="activeFileId()"
+            [mediaId]="m.id"
+            (subtitlesChanged)="reloadSubtitles()"
             (deleteFile)="deleteFile($event.fileId, $event.deleteOnDisk)"
           />
         }

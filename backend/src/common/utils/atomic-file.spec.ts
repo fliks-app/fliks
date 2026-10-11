@@ -62,4 +62,13 @@ describe('atomic file writes', () => {
       rename.mockRestore();
     }
   });
+
+  it('keeps the mode of the file it replaces', async () => {
+    const dest = path.join(dir, 'a.txt');
+    fs.writeFileSync(dest, 'old');
+    fs.chmodSync(dest, 0o640);
+    await writeFileAtomic(dest, 'new');
+    expect(fs.statSync(dest).mode & 0o777).toBe(0o640);
+    expect(fs.readFileSync(dest, 'utf8')).toBe('new');
+  });
 });
