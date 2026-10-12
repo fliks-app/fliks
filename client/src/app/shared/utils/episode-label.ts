@@ -10,5 +10,5 @@ export function episodeLabel(row: {
   const season = String(row.seasonNumber ?? 0).padStart(2, '0');
   const episode = String(row.episodeNumber).padStart(2, '0');
   const code = `S${season}E${episode}`;
-  return row.episodeTitle ? `${code} — ${row.episodeTitle}` : code;
+  return row.episodeTitle ? `${code} - ${row.episodeTitle}` : code;
 }

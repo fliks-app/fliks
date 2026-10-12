@@ -149,7 +149,7 @@ export class CalendarComponent implements OnInit {
   entryLabel(e: CalendarEntry): string {
     if (e.type === 'movie') return e.title;
     const ep = `S${String(e.seasonNumber ?? 0).padStart(2, '0')}E${String(e.episodeNumber ?? 0).padStart(2, '0')}`;
-    const epTitle = e.episodeTitle ? ` — ${e.episodeTitle}` : '';
+    const epTitle = e.episodeTitle ? ` - ${e.episodeTitle}` : '';
     return `${e.title} ${ep}${epTitle}`;
   }
 

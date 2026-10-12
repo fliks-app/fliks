@@ -91,6 +91,6 @@ export class TrackingStatusModalComponent {
     if (ep.endEpisodeNumber != null && ep.endEpisodeNumber > ep.episodeNumber) {
       code += `-E${String(ep.endEpisodeNumber).padStart(2, '0')}`;
     }
-    return ep.title ? `${code} — ${ep.title}` : code;
+    return ep.title ? `${code} - ${ep.title}` : code;
   }
 }
