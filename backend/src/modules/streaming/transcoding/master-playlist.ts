@@ -33,6 +33,7 @@ import {
   buildUniqueAudioNames,
   emitAudioRenditions,
   emitVariantLadder,
+  renditionLanguage,
   SDR_H264_VARIANT,
 } from './hls-variant-ladder';
 
@@ -363,7 +364,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
       subtitleRenditions.map((s) => ({ title: s.name, language: s.language })),
     );
     subtitleRenditions.forEach((s, i) => {
-      const lang = s.language || 'und';
+      const lang = renditionLanguage(s);
       const path =
         s.kind === 'embedded'
           ? `subtitles/embedded/${s.key}`

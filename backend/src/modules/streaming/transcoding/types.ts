@@ -24,6 +24,8 @@ export type DeviceType = 'mobile' | 'desktop';
  */
 export interface AudioStreamMeta {
   language?: string;
+  /** BCP-47 tag (`es-419`) carried by the container, written as the rendition's LANGUAGE. */
+  languageTag?: string;
   title?: string;
   streamIndex?: number;
   /** Source channel count (from ffprobe streamInfo): the EXT-X-MEDIA
@@ -44,6 +46,8 @@ export interface SubtitleRenditionMeta {
   kind: 'embedded' | 'external';
   key: number;
   language?: string;
+  /** Embedded tracks only: see {@link AudioStreamMeta.languageTag}. */
+  languageTag?: string;
   name: string;
   forced?: boolean;
 }
