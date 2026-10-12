@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, ElementRef, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
@@ -18,6 +18,8 @@ import { ToastService } from '../../../core/services/toast.service';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { SelectFieldComponent } from '../../../shared/components/forms/select-field/select-field';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
+import { ModalFooterComponent } from '../../../shared/components/modal-footer';
+import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 import { parseDeviceLabel } from '../../../core/utils/format-device-label';
 import { QOE_CAUSE_DOT_CLASS, codecLabel, durationParts, eventStartMs, hintParams, loadLine, pipelineChain, pipelineParts, qualityLabel, stallBreakdown, stallExplanation, type Fmt } from '../qoe-stall';
@@ -27,7 +29,7 @@ const PAGE_SIZE = 25;
 
 @Component({
   selector: 'app-system-playback-quality',
-  imports: [FormsModule, TranslatePipe, LocaleDatePipe, PaginationComponent, SelectFieldComponent, ToggleFieldComponent],
+  imports: [FormsModule, TranslatePipe, LocaleDatePipe, ModalFooterComponent, ModalHeaderComponent, PaginationComponent, SelectFieldComponent, ToggleFieldComponent],
   templateUrl: './playback-quality.html',
 })
 export class SystemPlaybackQualityComponent implements OnInit {
@@ -61,6 +63,7 @@ export class SystemPlaybackQualityComponent implements OnInit {
     ...new Set((this.summary()?.byDevice ?? []).map((d) => d.device).filter((d): d is string => !!d)),
   ]);
   readonly detail = signal<QoeSessionDetail | null>(null);
+  private readonly detailDialog = viewChild<ElementRef<HTMLDialogElement>>('detailDialog');
 
   readonly stallCauses = computed(() => stallBreakdown(this.detail()?.events ?? []));
 
@@ -152,13 +155,14 @@ export class SystemPlaybackQualityComponent implements OnInit {
   async openDetail(row: QoeSessionRow) {
     try {
       this.detail.set(await this.api.session(row.sessionId));
+      this.detailDialog()?.nativeElement.showModal();
     } catch {
       /* interceptor */
     }
   }
 
   closeDetail() {
-    this.detail.set(null);
+    this.detailDialog()?.nativeElement.close();
   }
 
   exportJson(d: QoeSessionDetail) {

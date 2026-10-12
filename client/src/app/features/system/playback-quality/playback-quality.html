@@ -209,26 +209,16 @@
   }
 </div>
 
-@if (detail(); as d) {
-  <div class="modal modal-open">
-    <div class="modal-box w-11/12 max-w-6xl">
-      <div class="flex items-start justify-between gap-3">
+<dialog #detailDialog class="modal" (close)="detail.set(null)">
+  <div class="modal-box w-11/12 max-w-6xl p-0 gap-0 overflow-hidden flex flex-col max-h-[90vh]">
+    @if (detail(); as d) {
+      <app-modal-header flush>
         <div class="min-w-0">
           <h3 class="text-lg font-bold">{{ d.mediaTitle ?? d.sessionId }}</h3>
-          <p class="text-sm text-base-content/60">
-            {{ userName(d.userId) }} · {{ deviceText(d) }}
-          </p>
+          <p class="text-sm text-base-content/60">{{ userName(d.userId) }} · {{ deviceText(d) }}</p>
         </div>
-        <div class="flex gap-2 shrink-0">
-          <button type="button" class="btn btn-sm" (click)="exportJson(d)">
-            {{ 'qoe.export_json' | translate }}
-          </button>
-          <button type="button" class="btn btn-sm btn-ghost" (click)="closeDetail()">
-            {{ 'common.close' | translate }}
-          </button>
-        </div>
-      </div>
-
+      </app-modal-header>
+      <div class="px-5 sm:px-6 py-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
       <div class="mt-3 rounded-lg border border-base-200 p-3 text-sm">
         <div class="flex flex-wrap items-center gap-2" [title]="'qoe.hint.verdict' | translate">
           <span class="inline-block h-2.5 w-2.5 rounded-full shrink-0" [class]="dotClass(d)"></span>
@@ -354,7 +344,13 @@
           }
         </ul>
       }
-    </div>
-    <div class="modal-backdrop" (click)="closeDetail()"></div>
+      </div>
+      <app-modal-footer flush>
+        <button type="button" class="btn btn-ghost" (click)="exportJson(d)">{{ 'qoe.export_json' | translate }}</button>
+      </app-modal-footer>
+    }
   </div>
-}
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeDetail()" [attr.aria-label]="'common.close' | translate">{{ 'common.close' | translate }}</button>
+  </form>
+</dialog>
