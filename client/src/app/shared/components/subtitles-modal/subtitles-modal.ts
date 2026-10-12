@@ -19,6 +19,7 @@ import {
 import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe';
 import { SubtitleStatusPipe } from '../../../core/pipes/subtitle-status.pipe';
 import { formatSubtitleLabel, formatSubtitleParts } from '../../../core/utils/player.utils';
+import { embeddedSubtitleTitle, type SubtitleStreams } from '../../../core/utils/subtitle-tracks';
 import { localizeLanguage } from '../../../core/utils/language.utils';
 import {
   isImageBasedSubtitleCodec,
@@ -113,6 +114,8 @@ export class SubtitlesModalComponent {
   /** Language profile ID from the media — used to compute required subtitle languages */
   readonly languageProfileId = input<number | null>(null);
   readonly streams = input<MediaStream[]>([]);
+  /** The selected file's `streamInfo.subtitles`, for the embedded track titles. */
+  readonly streamSubtitles = input<SubtitleStreams>(null);
 
   // ── Internal state ──
   readonly subtitles = signal<SubtitleFileRow[]>([]);
@@ -148,7 +151,7 @@ export class SubtitlesModalComponent {
     const url = sub.relativePath
       ? this.streamingApi.getSubtitleUrl(sub.mediaFileId, sub.id)
       : this.streamingApi.getEmbeddedSubtitleUrl(sub.mediaFileId, sub.streamIndex!);
-    void this.viewer()?.open(formatSubtitleLabel(sub, this.translate), url);
+    void this.viewer()?.open(formatSubtitleLabel(this.withTitle(sub), this.translate), url);
   }
 
   /** Every present subtitle row has at least one action or an informational
@@ -317,7 +320,7 @@ export class SubtitlesModalComponent {
     this.cardActions.register({
       actions: this.buildSubActions(sub),
       anchor,
-      title: formatSubtitleLabel(sub, this.translate),
+      title: formatSubtitleLabel(this.withTitle(sub), this.translate),
       placement: 'button',
     });
     this.cardActions.show();
@@ -407,6 +410,10 @@ export class SubtitlesModalComponent {
   readonly pageSize = 10;
   readonly page = signal(0);
 
+  private withTitle(sub: SubtitleFileRow) {
+    return { ...sub, title: embeddedSubtitleTitle(sub, this.streamSubtitles()) };
+  }
+
   /** Only the active file's subtitles: a media's other files carry their own. */
   readonly filteredSubtitles = computed(() => {
     const fileId = this.selectedFileId();
@@ -489,7 +496,7 @@ export class SubtitlesModalComponent {
     const labelOpts = { showFormat: this.appSettings.showSubtitleFormat() };
     return subs.map((s, i) => {
       const id = s.streamIndex != null ? `emb-${s.streamIndex}` : `ext-${s.id}`;
-      const parts = formatSubtitleParts(s, this.translate, i + 1, labelOpts);
+      const parts = formatSubtitleParts(this.withTitle(s), this.translate, i + 1, labelOpts);
       return {
         id,
         label: parts.sub ? `${parts.head} — ${parts.sub}` : parts.head,

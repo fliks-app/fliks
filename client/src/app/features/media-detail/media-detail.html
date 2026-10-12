@@ -152,6 +152,7 @@
           [mediaId]="m.id"
           [episodeId]="ep.id"
           [selectedFileId]="episodeActiveFileId()"
+          [streamSubtitles]="episodeActiveFile()?.streamInfo?.subtitles"
           [canManage]="canManageSubtitles()"
           [searchDisabled]="!ep.hasFile"
           [languageProfileId]="m.languageProfile?.id ?? null"
@@ -274,6 +275,7 @@
           <app-subtitles-modal
             [mediaId]="m.id"
             [selectedFileId]="activeFileId()"
+            [streamSubtitles]="activeFile()?.streamInfo?.subtitles"
             [canManage]="canManageSubtitles()"
             [languageProfileId]="m.languageProfile?.id ?? null"
           />

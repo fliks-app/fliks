@@ -965,7 +965,7 @@ export class CastPlayerService {
     const subtitleInfos: SubtitleOption[] = buildSubtitleTracks(
       subsResult,
       opts.mediaFileId,
-      { hideBurnIn: this.appSettings.hideBurnInSubtitles() },
+      { hideBurnIn: this.appSettings.hideBurnInSubtitles(), streams: streamInfo?.subtitles },
     ).map((t, i) => ({
       id: t.key,
       ...this.trackManager.describeSubtitle(t, i + 1),

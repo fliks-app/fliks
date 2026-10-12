@@ -65,3 +65,40 @@ describe('subtitle label file format', () => {
     expect(formatSubtitleLabel(byPath, translate)).not.toContain('VTT');
   });
 });
+
+describe('subtitle label stream title', () => {
+  const spa = { language: 'spa', codec: 'subrip' };
+  const showFormat = { showFormat: true };
+
+  it('puts the title ahead of the format in the subline and the label', () => {
+    const sub = { ...spa, title: 'Latin American' };
+    expect(formatSubtitleParts(sub, translate, 1, showFormat).sub).toBe('Latin American • SRT');
+    expect(formatSubtitleLabel(sub, translate, 1, showFormat)).toContain('(Latin American) (SRT)');
+  });
+
+  it('tells two tracks of one language apart', () => {
+    const labels = [{ ...spa, title: 'Latin American' }, spa].map(
+      (s) => formatSubtitleParts(s, translate, 1).sub,
+    );
+    expect(labels).toEqual(['Latin American', '']);
+  });
+
+  it('drops a title that is empty, or the language name or code', () => {
+    for (const title of [undefined, null, '  ', 'spa', 'SPA', 'es', 'Spanish']) {
+      expect(formatSubtitleParts({ ...spa, title }, translate, 1).sub).toBe('');
+    }
+  });
+
+  it('drops a title that only restates a flag already shown', () => {
+    expect(formatSubtitleParts({ ...spa, forced: true, title: 'Forced' }, translate).sub).toBe(
+      'player.subtitle_forced',
+    );
+    expect(
+      formatSubtitleParts({ ...spa, hearingImpaired: true, title: 'SDH' }, translate).sub,
+    ).toBe('player.subtitle_hearing_impaired');
+  });
+
+  it('keeps such a title when the flag is not set', () => {
+    expect(formatSubtitleParts({ ...spa, title: 'Forced' }, translate).sub).toBe('Forced');
+  });
+});
