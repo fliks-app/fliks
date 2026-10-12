@@ -397,12 +397,12 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
 
   qualityProfileDisplay(id: number | null): string {
-    if (id == null) return '—';
+    if (id == null) return '-';
     return this.qualityProfiles().find((p) => p.id === id)?.name ?? `#${id}`;
   }
 
   languageProfileDisplay(id: number | null): string {
-    if (id == null) return '—';
+    if (id == null) return '-';
     return this.languageProfiles().find((p) => p.id === id)?.name ?? `#${id}`;
   }
 

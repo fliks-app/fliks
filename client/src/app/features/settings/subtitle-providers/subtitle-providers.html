@@ -150,7 +150,7 @@
             class="badge badge-warning badge-sm gap-1"
             [title]="'settings.subtitle_providers.rate_limited_hint' | translate"
           >
-            {{ 'settings.subtitle_providers.rate_limited' | translate }} —
+            {{ 'settings.subtitle_providers.rate_limited' | translate }} -
             {{ formatDelay(rl.delaySec) }}
           </span>
         }
@@ -169,7 +169,7 @@
   <div class="modal-box max-w-2xl">
     <app-modal-header>
       <h3 class="text-lg font-bold">
-        {{ statsProviderName() }} — {{ 'settings.subtitle_providers.stats_title' | translate }}
+        {{ statsProviderName() }} - {{ 'settings.subtitle_providers.stats_title' | translate }}
       </h3>
     </app-modal-header>
     @if (statsLoading()) {

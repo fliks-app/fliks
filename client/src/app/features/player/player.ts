@@ -3366,7 +3366,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private diagnosticsTitle(): string {
     const title = this.mediaTitle();
     const episode = this.episodeTitle();
-    return episode ? `${title} — ${episode}` : title;
+    return episode ? `${title} - ${episode}` : title;
   }
 
   /** Form factor + shell/platform + user agent, so a pasted report says which

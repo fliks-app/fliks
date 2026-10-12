@@ -234,11 +234,11 @@ export class HomeComponent implements OnInit, OnDestroy {
   );
 
   qualityProfileDisplay(id: number | null): string {
-    if (id == null) return '—';
+    if (id == null) return '-';
     return this.qualityProfileNames().get(id) ?? `#${id}`;
   }
   languageProfileDisplay(id: number | null): string {
-    if (id == null) return '—';
+    if (id == null) return '-';
     return this.languageProfileNames().get(id) ?? `#${id}`;
   }
 

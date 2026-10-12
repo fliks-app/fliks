@@ -531,7 +531,7 @@ export class SseService implements OnDestroy {
         let msg = base;
         if (sm || sd) {
           msg +=
-            ' — ' +
+            ', ' +
             this.translate.instant('sse.rescan_subtitles_cleaned', {
               missing: sm,
               duplicates: sd,

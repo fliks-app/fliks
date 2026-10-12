@@ -466,7 +466,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
         // mpv's generic message ("loading failed") plus the concrete cause it
         // logged (TLS verify, HTTP status, unsupported codec) so the error card
         // shows why, not just that.
-        const composed = detail ? `${message} — ${detail}` : message;
+        const composed = detail ? `${message} - ${detail}` : message;
         // code 2 (MEDIA_ERR_NETWORK) is mpv's own TLS/libcurl transport
         // classification; source:'media' routes it through the shared
         // network/abort classifier instead of a decode-path label such as

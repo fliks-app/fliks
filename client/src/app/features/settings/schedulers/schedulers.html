@@ -39,7 +39,7 @@
                     {{ 'settings.schedulers.status.' + s.lastStatus | translate }}
                   </span>
                 } @else {
-                  <span class="text-sm text-base-content/30">—</span>
+                  <span class="text-sm text-base-content/30">-</span>
                 }
               </td>
               <td class="text-sm text-base-content/60">{{ s.nextRun | localeDate:{ dateStyle: 'short', timeStyle: 'short' } }}</td>

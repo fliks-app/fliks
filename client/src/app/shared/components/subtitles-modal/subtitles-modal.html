@@ -84,9 +84,9 @@
                 @if (row.missing) {
                   <tr class="opacity-40">
                     <td class="font-medium">{{ row.language | localizeLanguage }}</td>
-                    <td class="text-sm">—</td>
-                    <td class="text-sm">—</td>
-                    <td class="text-center">—</td>
+                    <td class="text-sm">-</td>
+                    <td class="text-sm">-</td>
+                    <td class="text-center">-</td>
                     <td></td>
                     <td></td>
                   </tr>
@@ -105,7 +105,7 @@
                           'media_detail.embedded' | translate
                         }}</span>
                       } @else {
-                        —
+                        -
                       }
                     </td>
                     <td class="text-sm">
@@ -121,7 +121,7 @@
                     </td>
                     <td class="text-center tabular-nums">
                       @if (sub.providerType === 'embedded') {
-                        <span class="text-base-content/30">—</span>
+                        <span class="text-base-content/30">-</span>
                       } @else {
                         {{ sub.score }}
                       }
@@ -265,7 +265,7 @@
             <optgroup [label]="'media_detail.sync_audio_tracks' | translate">
               @for (s of audioStreams(); track s.streamIndex) {
                 <option [value]="'audio:' + s.streamIndex">
-                  {{ s.language | localizeLanguage }} — {{ s.codec }}
+                  {{ s.language | localizeLanguage }} - {{ s.codec }}
                   @if (s.title) {
                     ({{ s.title }})
                   }
@@ -277,7 +277,7 @@
             <optgroup [label]="'media_detail.sync_subtitle_tracks' | translate">
               @for (s of subtitleStreams(); track s.streamIndex) {
                 <option [value]="'subtitle:' + s.streamIndex">
-                  {{ s.language | localizeLanguage }} — {{ s.codec }}
+                  {{ s.language | localizeLanguage }} - {{ s.codec }}
                   @if (s.title) {
                     ({{ s.title }})
                   }
@@ -289,7 +289,7 @@
             <optgroup [label]="'media_detail.sync_external_subtitles' | translate">
               @for (s of externalSubtitleRefs(); track s.id) {
                 <option [value]="'file:' + s.relativePath">
-                  {{ s.language | localizeLanguage }} — {{ s.providerType }} ({{
+                  {{ s.language | localizeLanguage }} - {{ s.providerType }} ({{
                     s.status | subtitleStatus
                   }})
                 </option>

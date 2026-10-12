@@ -303,7 +303,7 @@ export class PluginViewComponent implements OnDestroy {
   private resolvePluginMessage(messageKey: string, detail?: string): string {
     const resolved = this.translate.instant(messageKey);
     const base = resolved === messageKey ? this.translate.instant('provider_list.test_unknown_result') : resolved;
-    return detail ? `${base} — ${detail}` : base;
+    return detail ? `${base} - ${detail}` : base;
   }
 
   /** `actions[].scope: 'row'` — every entry renders its own button. `route` is only

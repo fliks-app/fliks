@@ -525,7 +525,7 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
         ok ? 'settings.subtitle_providers.test_success' : 'settings.subtitle_providers.test_failed',
       );
       // `detail` is the provider's own reason (HTTP status, missing credential) — kept verbatim.
-      return { ok, message: detail ? `${verdict} — ${detail}` : verdict };
+      return { ok, message: detail ? `${verdict} - ${detail}` : verdict };
     } catch {
       return {
         ok: false,

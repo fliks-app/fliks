@@ -40,7 +40,7 @@
                 }
               </td>
               <td>
-                <span class="badge badge-sm badge-ghost">{{ user.role ?? '—' }}</span>
+                <span class="badge badge-sm badge-ghost">{{ user.role ?? '-' }}</span>
               </td>
               <td class="text-center">
                 <app-enabled-switch
@@ -54,7 +54,7 @@
                 @if (user.lastLogin) {
                   {{ formatLastLogin(user.lastLogin) }}
                 } @else {
-                  <span class="text-base-content/40">—</span>
+                  <span class="text-base-content/40">-</span>
                 }
               </td>
             </tr>

@@ -42,7 +42,7 @@
                   <a [routerLink]="['/profile', item.sender.id]" class="hover:underline">{{ item.sender.username }}</a>
                 </td>
                 <td class="hidden sm:table-cell max-w-xs text-base-content/70 italic truncate">
-                  {{ item.message || '—' }}
+                  {{ item.message || '-' }}
                 </td>
               </tr>
             }
@@ -87,7 +87,7 @@
                   <a [routerLink]="['/profile', item.recipient.id]" class="hover:underline">{{ item.recipient.username }}</a>
                 </td>
                 <td class="hidden sm:table-cell max-w-xs text-base-content/70 italic truncate">
-                  {{ item.message || '—' }}
+                  {{ item.message || '-' }}
                 </td>
               </tr>
             }

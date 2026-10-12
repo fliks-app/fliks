@@ -20,7 +20,7 @@
               [ngModel]="libraryId()"
               (ngModelChange)="libraryIdChange.emit($event ? +$event : null)"
             >
-              <option [ngValue]="null">—</option>
+              <option [ngValue]="null">-</option>
               @for (l of libraries(); track l.id) {
                 <option [ngValue]="l.id">{{ l.name }}</option>
               }
@@ -36,7 +36,7 @@
               [ngModel]="qualityProfileId()"
               (ngModelChange)="qualityProfileIdChange.emit($event)"
             >
-              <option [ngValue]="null">—</option>
+              <option [ngValue]="null">-</option>
               @for (p of qualityProfiles(); track p.id) {
                 <option [ngValue]="p.id">{{ p.name }}</option>
               }
@@ -52,7 +52,7 @@
               [ngModel]="languageProfileId()"
               (ngModelChange)="languageProfileIdChange.emit($event)"
             >
-              <option [ngValue]="null">—</option>
+              <option [ngValue]="null">-</option>
               @for (p of languageProfiles(); track p.id) {
                 <option [ngValue]="p.id">{{ p.name }}</option>
               }

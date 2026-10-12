@@ -500,7 +500,7 @@ export class SubtitlesModalComponent {
       const parts = formatSubtitleParts(this.withStreamInfo(s), this.translate, i + 1, labelOpts);
       return {
         id,
-        label: parts.sub ? `${parts.head} — ${parts.sub}` : parts.head,
+        label: parts.sub ? `${parts.head} - ${parts.sub}` : parts.head,
         head: parts.head,
         sub: parts.sub,
         language: s.language,

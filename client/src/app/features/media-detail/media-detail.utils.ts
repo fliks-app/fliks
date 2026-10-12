@@ -9,7 +9,7 @@ export function displayMediaFilePath(
   mediaPath: string | null | undefined,
   relativePath: string,
 ): string {
-  if (relativePath == null || relativePath === '') return '—';
+  if (relativePath == null || relativePath === '') return '-';
   const root = mediaPath?.trim();
   if (!root) return normalizeDisplayPath(relativePath.replace(/\\/g, '/'));
   const a = root.replace(/[/\\]+$/, '').replace(/\\/g, '/');
@@ -29,7 +29,7 @@ function normalizeDisplayPath(p: string): string {
     }
     stack.push(part);
   }
-  return stack.join('/') || '—';
+  return stack.join('/') || '-';
 }
 
 export function formatMediaDetailBytes(bytes: number): string {

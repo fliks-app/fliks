@@ -124,7 +124,7 @@
   <select
     appTvSelect class="select select-bordered w-full"
     [ngModel]="state.formQualityProfileId()" (ngModelChange)="state.formQualityProfileId.set($event)">
-    <option [ngValue]="null">—</option>
+    <option [ngValue]="null">-</option>
     @for (qp of state.qualityProfiles(); track qp.id) {
       <option [ngValue]="qp.id">{{ qp.name }}</option>
     }
@@ -138,7 +138,7 @@
   <select
     appTvSelect class="select select-bordered w-full"
     [ngModel]="state.formLanguageProfileId()" (ngModelChange)="state.formLanguageProfileId.set($event)">
-    <option [ngValue]="null">—</option>
+    <option [ngValue]="null">-</option>
     @for (lp of state.languageProfiles(); track lp.id) {
       <option [ngValue]="lp.id">{{ lp.name }}</option>
     }

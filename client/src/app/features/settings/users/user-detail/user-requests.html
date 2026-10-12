@@ -56,7 +56,7 @@
                 {{ req.status }}
               </span>
               @if (req.declinedReason) {
-                <span class="text-sm text-base-content/50 ml-1" [title]="req.declinedReason">— {{ req.declinedReason }}</span>
+                <span class="text-sm text-base-content/50 ml-1" [title]="req.declinedReason">- {{ req.declinedReason }}</span>
               }
             </td>
             <td class="text-sm text-base-content/60">{{ req.createdAt | localeDate }}</td>
