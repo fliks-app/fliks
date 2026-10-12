@@ -1616,11 +1616,11 @@
       "sessions": "Sessions"
     },
     "transition": {
-      "quality_switch": "Changement de qualité : {{from}} → {{to}}",
+      "quality_switch": "Changement de qualité",
       "recovery": "Reprise après erreur",
       "handoff": "Passage sur Chromecast",
       "next": "Nouvelle session",
-      "reload_audio": "Changement de langue audio : {{from}} → {{to}}",
+      "reload_audio": "Changement de langue audio",
       "reload_subtitles_on": "Sous-titres incrustés activés ({{lang}})",
       "reload_subtitles_off": "Sous-titres incrustés désactivés",
       "reload_subtitles_hls": "Sous-titres chargés via HLS ({{lang}})",
@@ -1637,7 +1637,6 @@
       "title_play": "Lecture en {{rung}}",
       "title_play_auto": "Lecture en qualité auto",
       "title_cast": "Lecture sur Chromecast",
-      "title_recovery": "Reprise après erreur",
       "stalls_one": "1 coupure de {{total}}",
       "stalls_many": "{{count}} coupures, {{total}} au total",
       "rung_original": "qualité d'origine",

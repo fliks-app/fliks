@@ -5,9 +5,8 @@ import { rungOf, type Timeline, type TimelineBlock, type TimelineTransition } fr
 const SHORT_MS = 5000;
 
 /** Plain-words title of a session block, from how it started and what it served. */
-export function blockTitle(s: QoeSessionRow, first: boolean, incoming: TimelineTransition | null, f: Fmt): string {
+export function blockTitle(s: QoeSessionRow, first: boolean, f: Fmt): string {
   if (s.engine === 'cast') return f.t('qoe.block.title_cast');
-  if (incoming?.kind === 'recovery') return f.t('qoe.block.title_recovery');
   const r = rungOf(s);
   const rung = r.rung ? rungDisplay(r.rung, f) : '';
   if (first) return rung ? f.t('qoe.block.title_start', { rung }) : f.t('qoe.block.title_start_auto');
@@ -48,23 +47,21 @@ export function clockLabel(ms: number, startMs: number, lang: string): string {
 
 /** One line of the rail: every kind shares the marker, time and content columns. */
 export type TimelineStep =
-  | { kind: 'session'; at: number; block: TimelineBlock; index: number }
+  | { kind: 'session'; at: number; block: TimelineBlock; index: number; incoming: TimelineTransition | null }
   | { kind: 'event'; at: number; event: QoeEventRow }
-  | { kind: 'transition'; at: number; transition: TimelineTransition }
   | { kind: 'end'; at: number | null };
 
-/** The rail in time order: each session, then its events by start, then what led to the next session. */
+/**
+ * The rail in time order: each session, then its events by start. What opened a session (a quality change, a
+ * recovery…) happens at its start, so it is part of the session's step rather than a step of its own.
+ */
 export function timelineSteps(tl: Timeline, endMs: number | null): TimelineStep[] {
   const steps: TimelineStep[] = [];
   tl.blocks.forEach((block, index) => {
-    steps.push({ kind: 'session', at: Date.parse(block.session.startedAt), block, index });
+    const incoming = index > 0 ? tl.transitions[index - 1] : null;
+    steps.push({ kind: 'session', at: Date.parse(block.session.startedAt), block, index, incoming });
     const events = [...block.events].sort((a, b) => eventStartMs(a) - eventStartMs(b));
     for (const event of events) steps.push({ kind: 'event', at: eventStartMs(event), event });
-    const transition = tl.transitions[index];
-    if (transition) {
-      const at = transition.event ? eventStartMs(transition.event) : Date.parse(tl.blocks[index + 1].session.startedAt);
-      steps.push({ kind: 'transition', at, transition });
-    }
   });
   steps.push({ kind: 'end', at: endMs });
   return steps;

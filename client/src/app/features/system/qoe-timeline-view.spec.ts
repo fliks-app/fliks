@@ -13,17 +13,18 @@ const tr = (kind: TimelineTransition['kind']) => ({ kind }) as TimelineTransitio
 
 describe('blockTitle', () => {
   it('names the start, the rung, cast and recovery in plain words', () => {
-    expect(blockTitle(s(), true, null, f)).toBe('qoe.block.title_start_auto');
-    expect(blockTitle(s({ quality: '720p', served: '720p' }), true, null, f)).toBe('qoe.block.title_start{"rung":"720p"}');
-    expect(blockTitle(s({ served: '2160p' }), false, tr('quality_switch'), f)).toBe('qoe.block.title_play{"rung":"2160p"}');
-    expect(blockTitle(s(), false, tr('next'), f)).toBe('qoe.block.title_play_auto');
-    expect(blockTitle(s({ engine: 'cast' }), false, tr('handoff'), f)).toBe('qoe.block.title_cast');
-    expect(blockTitle(s(), false, tr('recovery'), f)).toBe('qoe.block.title_recovery');
+    expect(blockTitle(s(), true, f)).toBe('qoe.block.title_start_auto');
+    expect(blockTitle(s({ quality: '720p', served: '720p' }), true, f)).toBe('qoe.block.title_start{"rung":"720p"}');
+    expect(blockTitle(s({ served: '2160p' }), false, f)).toBe('qoe.block.title_play{"rung":"2160p"}');
+    expect(blockTitle(s(), false, f)).toBe('qoe.block.title_play_auto');
+    expect(blockTitle(s({ engine: 'cast' }), false, f)).toBe('qoe.block.title_cast');
+    // The recovery is already the transition above the block.
+    expect(blockTitle(s({ served: '720p' }), false, f)).toBe('qoe.block.title_play{"rung":"720p"}');
   });
 
   it('never shows a rung id', () => {
-    expect(blockTitle(s({ quality: 'original', served: 'original' }), true, null, f)).toBe('qoe.block.title_start{"rung":"qoe.block.rung_original"}');
-    expect(blockTitle(s({ quality: 'eco-1080p', served: 'eco-1080p' }), true, null, f)).toBe('qoe.block.title_start{"rung":"qoe.block.rung_eco{\\"rung\\":\\"1080p\\"}"}');
+    expect(blockTitle(s({ quality: 'original', served: 'original' }), true, f)).toBe('qoe.block.title_start{"rung":"qoe.block.rung_original"}');
+    expect(blockTitle(s({ quality: 'eco-1080p', served: 'eco-1080p' }), true, f)).toBe('qoe.block.title_start{"rung":"qoe.block.rung_eco{\\"rung\\":\\"1080p\\"}"}');
   });
 });
 
@@ -64,7 +65,7 @@ const row = (id: string, startedAt: string, o: Partial<QoeSessionRow> = {}) =>
 const ev = (sessionId: string, type: string, at: string, data: object = {}) => ({ id: 0, sessionId, type, at, data }) as never;
 
 describe('timelineSteps', () => {
-  it('orders each session, its events by start, the transition, then the end', () => {
+  it('orders each session, its events by start, then the end, the change that opened a session on it', () => {
     const tl = buildTimeline(
       [row('a', '2026-10-13T10:00:00Z'), row('b', '2026-10-13T10:05:00Z')],
       [
@@ -74,7 +75,9 @@ describe('timelineSteps', () => {
       ],
     );
     const steps = timelineSteps(tl, Date.parse('2026-10-13T10:09:00Z'));
-    expect(steps.map((x) => x.kind)).toEqual(['session', 'event', 'event', 'transition', 'session', 'end']);
+    expect(steps.map((x) => x.kind)).toEqual(['session', 'event', 'event', 'session', 'end']);
+    expect(steps[3]).toMatchObject({ kind: 'session', incoming: { kind: 'reload' } });
+    expect(steps[0]).toMatchObject({ incoming: null });
     // The stall is placed at its start, after the error that began earlier.
     expect(steps[2]).toMatchObject({ kind: 'event', at: Date.parse('2026-10-13T10:02:00Z') });
   });

@@ -43,6 +43,12 @@ import { mergeDevices } from '../qoe-devices';
 
 const PAGE_SIZE = 25;
 
+/** A change as a title line and an optional "from → to" line. */
+interface ChangeLines {
+  title: string;
+  detail?: string;
+}
+
 const TABS = ['sessions', 'devices', 'settings'] as const;
 type Tab = (typeof TABS)[number];
 
@@ -357,16 +363,13 @@ export class SystemPlaybackQualityComponent implements OnInit {
   }
 
   /** An event that did not open a new session: an adaptive quality change, a reload, a recovery. */
-  otherEventText(e: QoeEventRow): string {
+  otherEventLines(e: QoeEventRow): ChangeLines {
     const d = e.data ?? {};
     if (e.type === 'quality_switch') {
-      return this.translate.instant('qoe.transition.quality_switch', {
-        from: formatMbps(d.fromBitrate, this.fmt) || '-',
-        to: formatMbps(d.toBitrate, this.fmt) || '-',
-      });
+      return this.change('qoe.transition.quality_switch', formatMbps(d.fromBitrate, this.fmt), formatMbps(d.toBitrate, this.fmt));
     }
-    if (e.type === 'reload') return this.reloadText(d);
-    return this.translate.instant('qoe.transition.recovery');
+    if (e.type === 'reload') return this.reloadLines(d);
+    return { title: this.translate.instant('qoe.transition.recovery') };
   }
 
   unreportedText(b: TimelineBlock): string {
@@ -431,9 +434,8 @@ export class SystemPlaybackQualityComponent implements OnInit {
     return isOngoing(d) ? null : new Date(d.endedAt ?? d.lastSeenAt).getTime();
   }
 
-  blockTitle(tl: Timeline, i: number): string {
-    const b = tl.blocks[i];
-    return blockTitle(b.session, b.first, tl.transitions[i - 1] ?? null, this.fmt);
+  blockTitle(b: TimelineBlock): string {
+    return blockTitle(b.session, b.first, this.fmt);
   }
 
   blockSummary(b: TimelineBlock): string {
@@ -478,19 +480,20 @@ export class SystemPlaybackQualityComponent implements OnInit {
     return this.changeIcon(t.event?.type ?? t.kind, t.event?.data?.reason, t.kind === 'handoff');
   }
 
-  /** The sentence between two session blocks. */
-  transitionText(t: TimelineTransition): string {
+  /** What happened between two session blocks: a title, then what it changed from and to. */
+  transitionLines(t: TimelineTransition): ChangeLines {
     if (t.kind === 'quality_switch') {
-      return this.translate.instant('qoe.transition.quality_switch', {
-        from: this.rungLabel(t.from, t.fromBitrate, true) || '-',
-        to: this.rungLabel(t.to, t.toBitrate, false) || '-',
-      });
+      return this.change('qoe.transition.quality_switch', this.rungLabel(t.from, t.fromBitrate, true), this.rungLabel(t.to, t.toBitrate, false));
     }
-    if (t.kind === 'reload') return this.reloadText(t.event?.data ?? null);
-    return this.translate.instant(`qoe.transition.${t.kind}`);
+    if (t.kind === 'reload') return this.reloadLines(t.event?.data ?? null);
+    return { title: this.translate.instant(`qoe.transition.${t.kind}`) };
   }
 
-  private reloadText(d: QoeEventRow['data']): string {
+  private change(titleKey: string, from: string, to: string): ChangeLines {
+    return { title: this.translate.instant(titleKey), detail: `${from || '-'} → ${to || '-'}` };
+  }
+
+  private reloadLines(d: QoeEventRow['data']): ChangeLines {
     const lang = (code?: string) => {
       try {
         return (code && new Intl.DisplayNames(this.lang, { type: 'language' }).of(code)) || code || '-';
@@ -498,18 +501,17 @@ export class SystemPlaybackQualityComponent implements OnInit {
         return code || '-';
       }
     };
+    const title = (key: string, params?: Record<string, string>) => ({ title: this.translate.instant(key, params) });
     switch (d?.reason) {
       case 'audio':
-        return this.translate.instant('qoe.transition.reload_audio', { from: d.from ?? '-', to: d.to ?? '-' });
+        return this.change('qoe.transition.reload_audio', d.from ?? '', d.to ?? '');
       case 'subtitles':
-        if (d.from === 'hls') return this.translate.instant('qoe.transition.reload_subtitles_hls', { lang: lang(d.to) });
-        return d.to
-          ? this.translate.instant('qoe.transition.reload_subtitles_on', { lang: lang(d.to) })
-          : this.translate.instant('qoe.transition.reload_subtitles_off');
+        if (d.from === 'hls') return title('qoe.transition.reload_subtitles_hls', { lang: lang(d.to) });
+        return d.to ? title('qoe.transition.reload_subtitles_on', { lang: lang(d.to) }) : title('qoe.transition.reload_subtitles_off');
       case 'remux_fallback':
-        return this.translate.instant('qoe.transition.reload_remux_fallback');
+        return title('qoe.transition.reload_remux_fallback');
       default:
-        return this.translate.instant('qoe.transition.reload_other');
+        return title('qoe.transition.reload_other');
     }
   }
 

@@ -311,19 +311,6 @@
                       }
                     </span>
                   }
-                  @case ('transition') {
-                    <span class="flex h-5 w-5 items-center justify-center rounded-full bg-base-100">
-                      @switch (transitionIcon(step.transition)) {
-                        @case ('quality') { <svg lucideArrowUpDown class="h-4 w-4 text-base-content/50"></svg> }
-                        @case ('recovery') { <svg lucideRotateCcw class="h-4 w-4 text-base-content/50"></svg> }
-                        @case ('audio') { <svg lucideAudioLines class="h-4 w-4 text-base-content/50"></svg> }
-                        @case ('subtitles') { <svg lucideCaptions class="h-4 w-4 text-base-content/50"></svg> }
-                        @case ('reload') { <svg lucideRefreshCw class="h-4 w-4 text-base-content/50"></svg> }
-                        @case ('cast') { <svg lucideCast class="h-4 w-4 text-base-content/50"></svg> }
-                        @default { <svg lucideArrowRightLeft class="h-4 w-4 text-base-content/50"></svg> }
-                      }
-                    </span>
-                  }
                   @case ('end') {
                     <span class="flex h-5 w-5 items-center justify-center rounded-full bg-base-100">
                       <svg lucideCircleStop class="h-4 w-4 text-base-content/50"></svg>
@@ -336,12 +323,32 @@
                 @switch (step.kind) {
                   @case ('session') {
                     <div class="flex flex-wrap items-center gap-x-3" [title]="step.block.session.sessionId">
-                      <span class="font-semibold">{{ blockTitle(timeline()!, step.index) }}</span>
+                      <span class="font-semibold">{{ blockTitle(step.block) }}</span>
                       <span class="ml-auto inline-flex items-center gap-1.5 text-base-content/70" [title]="'qoe.hint.verdict' | translate">
                         <span class="h-2 w-2 rounded-full" [class]="dotClass(step.block.session)"></span>
                         {{ 'qoe.verdict.' + step.block.session.verdict | translate }}
                       </span>
                     </div>
+                    @if (step.incoming; as incoming) {
+                      @let change = transitionLines(incoming);
+                      <p class="flex items-center gap-1.5 text-base-content/70">
+                        <span class="inline-flex shrink-0" aria-hidden="true">
+                          @switch (transitionIcon(incoming)) {
+                            @case ('quality') { <svg lucideArrowUpDown class="h-4 w-4"></svg> }
+                            @case ('recovery') { <svg lucideRotateCcw class="h-4 w-4"></svg> }
+                            @case ('audio') { <svg lucideAudioLines class="h-4 w-4"></svg> }
+                            @case ('subtitles') { <svg lucideCaptions class="h-4 w-4"></svg> }
+                            @case ('reload') { <svg lucideRefreshCw class="h-4 w-4"></svg> }
+                            @case ('cast') { <svg lucideCast class="h-4 w-4"></svg> }
+                            @default { <svg lucideArrowRightLeft class="h-4 w-4"></svg> }
+                          }
+                        </span>
+                        {{ change.title }}
+                      </p>
+                      @if (change.detail) {
+                        <p class="pl-[1.375rem] text-base-content/70">{{ change.detail }}</p>
+                      }
+                    }
                     <p class="text-base-content/60">{{ blockSummary(step.block) }}</p>
                     @if (unreportedText(step.block); as unreported) {
                       <p class="text-base-content/60">{{ unreported }}</p>
@@ -381,11 +388,12 @@
                         <p class="text-base-content/60">{{ detail }}</p>
                       }
                     } @else {
-                      <p class="font-medium">{{ otherEventText(step.event) }}</p>
+                      @let other = otherEventLines(step.event);
+                      <p class="font-medium">{{ other.title }}</p>
+                      @if (other.detail) {
+                        <p class="text-base-content/70">{{ other.detail }}</p>
+                      }
                     }
-                  }
-                  @case ('transition') {
-                    <p class="font-medium">{{ transitionText(step.transition) }}</p>
                   }
                   @case ('end') {
                     <p class="font-medium">{{ (step.at == null ? 'qoe.summary.ongoing' : 'qoe.block.end') | translate }}</p>

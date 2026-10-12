@@ -1616,11 +1616,11 @@
       "sessions": "Sessions"
     },
     "transition": {
-      "quality_switch": "Quality change: {{from}} → {{to}}",
+      "quality_switch": "Quality change",
       "recovery": "Resumed after an error",
       "handoff": "Switched to Chromecast",
       "next": "New session",
-      "reload_audio": "Audio language change: {{from}} → {{to}}",
+      "reload_audio": "Audio language change",
       "reload_subtitles_on": "Burned-in subtitles enabled ({{lang}})",
       "reload_subtitles_off": "Burned-in subtitles disabled",
       "reload_subtitles_hls": "Subtitles loaded through HLS ({{lang}})",
@@ -1637,7 +1637,6 @@
       "title_play": "Playing at {{rung}}",
       "title_play_auto": "Playing at auto quality",
       "title_cast": "Playing on Chromecast",
-      "title_recovery": "Resumed after an error",
       "stalls_one": "1 stall of {{total}}",
       "stalls_many": "{{count}} stalls, {{total}} in total",
       "rung_original": "original quality",
