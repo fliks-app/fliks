@@ -234,10 +234,15 @@ export const cacheInterceptor: HttpInterceptorFn = (req, next) => {
   const url = req.urlWithParams;
   const generation = cacheGeneration;
 
-  // Mutations → invalidate cache.
+  // Only a mutation the server accepted invalidates: a failed one offline would
+  // otherwise wipe the very entries the app falls back on.
   if (req.method !== 'GET') {
-    if (req.url.startsWith('/api/')) void invalidatePrefix(resourcePrefix(req.url));
-    return next(req);
+    if (!req.url.startsWith('/api/')) return next(req);
+    return next(req).pipe(
+      tap((event) => {
+        if (event instanceof HttpResponse) void invalidatePrefix(resourcePrefix(req.url));
+      }),
+    );
   }
 
   if (!isCacheable(url)) return next(req);
