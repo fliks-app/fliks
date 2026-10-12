@@ -34,7 +34,7 @@ export class QoeAdminController {
     @Query('days') daysRaw?: string,
     @Query('verdict') verdict?: string,
     @Query('userId') userId?: string,
-    @Query('device') device?: string,
+    @Query('device') device?: string | string[],
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
@@ -42,7 +42,10 @@ export class QoeAdminController {
       days: days(daysRaw),
       verdict: verdict && VERDICTS.has(verdict) ? (verdict as QoeVerdict) : undefined,
       userId: int(userId),
-      device: device || undefined,
+      // Repeated, not comma-joined: a user agent contains commas.
+      devices: (Array.isArray(device) ? device : device ? [device] : [])
+        .filter((d) => typeof d === 'string' && d.length <= 512)
+        .slice(0, 50),
       limit: int(limit),
       offset: int(offset),
     });

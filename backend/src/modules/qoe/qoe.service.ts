@@ -100,13 +100,15 @@ export interface QoeSessionQuery {
   days?: number;
   verdict?: QoeVerdict;
   userId?: number;
-  device?: string;
+  /** Raw device labels; one admin-facing device can span several (each browser version). */
+  devices?: string[];
   limit?: number;
   offset?: number;
 }
 
 export interface QoeDeviceSummary {
   device: string | null;
+  systemName: string | null;
   engine: string | null;
   sessions: number;
   stallSessions: number;
@@ -615,7 +617,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
       .offset(Math.max(q.offset ?? 0, 0));
     if (q.verdict) qb.andWhere('s."playbackVerdict" = :v', { v: q.verdict });
     if (q.userId != null) qb.andWhere('s."userId" = :u', { u: q.userId });
-    if (q.device) qb.andWhere('s."deviceLabel" = :d', { d: q.device });
+    if (q.devices?.length) qb.andWhere('s."deviceLabel" IN (:...d)', { d: q.devices });
     const page = await qb.getRawMany<{
       key: string;
       uid: number | null;
@@ -684,6 +686,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
       .select(KEY_SQL, 'key')
       .addSelect('MAX(s."lastSeenAt")', 'last')
       .addSelect(latest('deviceLabel'), 'device')
+      .addSelect(latest('systemName'), 'systemName')
       .addSelect(latest('engine'), 'engine')
       .addSelect(latest('hwDecoder'), 'hw')
       .addSelect('MAX(s."playbackVerdict")', 'verdict')
@@ -695,6 +698,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
       .orderBy('last', 'DESC')
       .getRawMany<{
         device: string | null;
+        systemName: string | null;
         engine: string | null;
         hw: boolean | null;
         verdict: QoeVerdict;
@@ -726,9 +730,12 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
         const hw = g.filter((r) => r.hw != null);
         const counts = new Map<QoeVerdict, number>();
         for (const r of g) counts.set(r.verdict, (counts.get(r.verdict) ?? 0) + 1);
-        const top = [...counts].sort((a, b) => b[1] - a[1])[0][0];
+        // "Not enough data" only wins when the device never got a real verdict.
+        const ranked = [...counts].sort((a, b) => b[1] - a[1]);
+        const top = (ranked.find(([v]) => v !== 'unknown') ?? ranked[0])[0];
         return {
           device: g[0].device,
+          systemName: g[0].systemName,
           engine: g[0].engine,
           sessions: g.length,
           stallSessions: g.filter((r) => Number(r.stalls) > 0).length,

@@ -1476,13 +1476,10 @@
     "title": "Wiedergabequalität",
     "subtitle": "Warum ein Client ruckelt: Netzwerk, Gerät, Server oder Fehler.",
     "last_days": "Letzte {{count}} Tage",
-    "settings": "Erfassung",
     "setting_enabled": "Wiedergabequalität der Clients erfassen",
     "setting_retention": "Aufbewahrung (Tage)",
     "settings_saved": "Einstellungen gespeichert",
     "verdict_breakdown": "Befunde",
-    "devices": "Nach Gerät",
-    "sessions": "Sitzungen",
     "empty": "Noch keine Daten.",
     "filter_verdict": "Befund",
     "filter_all_verdicts": "Alle Befunde",
@@ -1661,7 +1658,14 @@
       "server": "Server",
       "network": "Netzwerk",
       "device": "Gerät"
-    }
+    },
+    "tab": {
+      "sessions": "Sitzungen",
+      "devices": "Geräte",
+      "settings": "Einstellungen"
+    },
+    "setting_enabled_hint": "Clients melden, wie jede Wiedergabe läuft: Aussetzer, Durchsatz, verlorene Bilder. Die Daten bleiben auf diesem Server.",
+    "setting_retention_hint": "Ältere Wiedergaben werden jede Nacht gelöscht."
   },
   "markers": {
     "detect_intros": "Intros erkennen",

@@ -1476,13 +1476,10 @@
     "title": "Playback quality",
     "subtitle": "Why a client stutters: network, device, server or error.",
     "last_days": "Last {{count}} days",
-    "settings": "Collection",
     "setting_enabled": "Collect playback quality from clients",
     "setting_retention": "Retention (days)",
     "settings_saved": "Settings saved",
     "verdict_breakdown": "Verdicts",
-    "devices": "By device",
-    "sessions": "Sessions",
     "empty": "No data yet.",
     "filter_verdict": "Verdict",
     "filter_all_verdicts": "All verdicts",
@@ -1661,7 +1658,14 @@
       "server": "server",
       "network": "network",
       "device": "device"
-    }
+    },
+    "tab": {
+      "sessions": "Sessions",
+      "devices": "Devices",
+      "settings": "Settings"
+    },
+    "setting_enabled_hint": "Clients report how each playback goes: stalls, throughput, dropped frames. The data stays on this server.",
+    "setting_retention_hint": "Older playbacks are deleted every night."
   },
   "markers": {
     "detect_intros": "Detect intros",

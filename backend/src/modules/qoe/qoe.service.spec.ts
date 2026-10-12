@@ -382,6 +382,15 @@ describe('QoeService playbacks', () => {
     ]);
   });
 
+  it('lets a real verdict win over "not enough data" for a device', async () => {
+    const row = (verdict: string) => ({ device: 'TV', systemName: 'tvOS 26', engine: 'avplayer', hw: null, verdict, stalls: '0', dropped: null, decoded: null });
+    const qb: Record<string, unknown> = { getRawMany: jest.fn().mockResolvedValue([row('unknown'), row('unknown'), row('network')]) };
+    for (const m of ['select', 'addSelect', 'groupBy', 'having', 'orderBy']) qb[m] = () => qb;
+    const { svc } = build({ createQueryBuilder: () => qb });
+    const s = await svc.summary();
+    expect(s.byDevice[0]).toMatchObject({ topVerdict: 'network', systemName: 'tvOS 26' });
+  });
+
   it('stores the playbackId and restates the playback verdict on the siblings', async () => {
     const { svc, upsert } = build({ find: jest.fn().mockResolvedValue([a, b]) });
     const update = jest.fn();

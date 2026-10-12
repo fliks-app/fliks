@@ -1,4 +1,5 @@
 import { Component, ElementRef, OnInit, computed, inject, signal, viewChild } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
@@ -27,8 +28,12 @@ import { QOE_CAUSE_DOT_CLASS, QOE_CAUSE_TEXT_CLASS, codecLabel, durationParts, h
 import { buildTimeline, isOngoing, type RungName, type Timeline, type TimelineBlock, type TimelineTransition } from '../qoe-timeline';
 import { blockSummary, blockTitle, clockLabel, detailsOpen, formatPosition, timelineSteps, unreportedStalls } from '../qoe-timeline-view';
 import { QOE_VERDICTS, QOE_VERDICT_BAR_CLASS, formatMbps, qoeDotClass } from '../qoe-health';
+import { mergeDevices } from '../qoe-devices';
 
 const PAGE_SIZE = 25;
+
+const TABS = ['sessions', 'devices', 'settings'] as const;
+type Tab = (typeof TABS)[number];
 
 @Component({
   selector: 'app-system-playback-quality',
@@ -54,6 +59,12 @@ export class SystemPlaybackQualityComponent implements OnInit {
   private readonly users = inject(UsersApiService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
+  private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+
+  readonly tabs = TABS;
+  /** Kept in `?tab=` so a link opens the right tab. */
+  readonly tab = signal<Tab>(this.tabFromUrl());
 
   readonly verdicts = QOE_VERDICTS;
   readonly barClass = QOE_VERDICT_BAR_CLASS;
@@ -75,10 +86,14 @@ export class SystemPlaybackQualityComponent implements OnInit {
   readonly userOptions = signal<UserRow[]>([]);
 
   readonly userNames = computed(() => new Map(this.userOptions().map((u) => [u.id, u.username])));
-  // byDevice has one row per (device, engine), so the same device can repeat.
-  readonly deviceOptions = computed(() => [
-    ...new Set((this.summary()?.byDevice ?? []).map((d) => d.device).filter((d): d is string => !!d)),
-  ]);
+  /** Devices as the admin names them: every browser version of "Chrome on Linux" is one device. */
+  readonly devices = computed(() => mergeDevices(this.summary()?.byDevice ?? [], (d) => this.formatDevice(d.device, d.systemName)));
+  /** Label → the raw device labels it covers, for the session filter. */
+  readonly deviceOptions = computed(() => {
+    const map = new Map<string, string[]>();
+    for (const d of this.devices()) map.set(d.label, [...(map.get(d.label) ?? []), ...d.raw]);
+    return [...map].map(([label, raw]) => ({ label, raw }));
+  });
   readonly detail = signal<QoeSessionDetail | null>(null);
   private readonly detailDialog = viewChild<ElementRef<HTMLDialogElement>>('detailDialog');
 
@@ -101,6 +116,16 @@ export class SystemPlaybackQualityComponent implements OnInit {
     const by = this.summary()?.byVerdict;
     return by ? this.verdicts.reduce((n, v) => n + (by[v] ?? 0), 0) : 0;
   });
+
+  private tabFromUrl(): Tab {
+    const t = this.route.snapshot.queryParamMap.get('tab');
+    return TABS.includes(t as Tab) ? (t as Tab) : 'sessions';
+  }
+
+  setTab(t: Tab) {
+    this.tab.set(t);
+    void this.router.navigate([], { relativeTo: this.route, queryParams: { tab: t }, queryParamsHandling: 'merge', replaceUrl: true });
+  }
 
   async ngOnInit() {
     void this.loadSettings();
@@ -157,7 +182,7 @@ export class SystemPlaybackQualityComponent implements OnInit {
         days: this.days(),
         verdict: this.verdictFilter(),
         userId: this.userFilter(),
-        device: this.deviceFilter().trim() || undefined,
+        devices: this.deviceOptions().find((o) => o.label === this.deviceFilter())?.raw,
         limit: PAGE_SIZE,
         offset: (page - 1) * PAGE_SIZE,
       });

@@ -1476,13 +1476,10 @@
     "title": "Calidad de reproducción",
     "subtitle": "Por qué un cliente se entrecorta: red, dispositivo, servidor o error.",
     "last_days": "Últimos {{count}} días",
-    "settings": "Recopilación",
     "setting_enabled": "Recopilar la calidad de reproducción de los clientes",
     "setting_retention": "Retención (días)",
     "settings_saved": "Ajustes guardados",
     "verdict_breakdown": "Diagnósticos",
-    "devices": "Por dispositivo",
-    "sessions": "Sesiones",
     "empty": "Aún no hay datos.",
     "filter_verdict": "Diagnóstico",
     "filter_all_verdicts": "Todos los diagnósticos",
@@ -1661,7 +1658,14 @@
       "server": "servidor",
       "network": "red",
       "device": "dispositivo"
-    }
+    },
+    "tab": {
+      "sessions": "Sesiones",
+      "devices": "Dispositivos",
+      "settings": "Ajustes"
+    },
+    "setting_enabled_hint": "Los clientes informan de cómo va cada reproducción: cortes, caudal, imágenes perdidas. Los datos se quedan en este servidor.",
+    "setting_retention_hint": "Las reproducciones más antiguas se eliminan cada noche."
   },
   "markers": {
     "detect_intros": "Detectar las intros",

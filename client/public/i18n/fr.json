@@ -1476,13 +1476,10 @@
     "title": "Qualité de lecture",
     "subtitle": "Pourquoi un client saccade : réseau, appareil, serveur ou erreur.",
     "last_days": "{{count}} derniers jours",
-    "settings": "Collecte",
     "setting_enabled": "Collecter la qualité de lecture des clients",
     "setting_retention": "Rétention (jours)",
     "settings_saved": "Réglages enregistrés",
     "verdict_breakdown": "Verdicts",
-    "devices": "Par appareil",
-    "sessions": "Sessions",
     "empty": "Aucune donnée pour le moment.",
     "filter_verdict": "Verdict",
     "filter_all_verdicts": "Tous les verdicts",
@@ -1661,7 +1658,14 @@
       "server": "serveur",
       "network": "réseau",
       "device": "appareil"
-    }
+    },
+    "tab": {
+      "sessions": "Sessions",
+      "devices": "Appareils",
+      "settings": "Paramètres"
+    },
+    "setting_enabled_hint": "Les clients envoient la qualité de chaque lecture : coupures, débit, images perdues. Les données restent sur ce serveur.",
+    "setting_retention_hint": "Les lectures plus anciennes sont supprimées chaque nuit."
   },
   "markers": {
     "detect_intros": "Détecter les intros",

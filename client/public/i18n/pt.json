@@ -1476,13 +1476,10 @@
     "title": "Qualidade de reprodução",
     "subtitle": "Porque um cliente engasga: rede, dispositivo, servidor ou erro.",
     "last_days": "Últimos {{count}} dias",
-    "settings": "Recolha",
     "setting_enabled": "Recolher a qualidade de reprodução dos clientes",
     "setting_retention": "Retenção (dias)",
     "settings_saved": "Definições guardadas",
     "verdict_breakdown": "Diagnósticos",
-    "devices": "Por dispositivo",
-    "sessions": "Sessões",
     "empty": "Ainda sem dados.",
     "filter_verdict": "Diagnóstico",
     "filter_all_verdicts": "Todos os diagnósticos",
@@ -1661,7 +1658,14 @@
       "server": "servidor",
       "network": "rede",
       "device": "dispositivo"
-    }
+    },
+    "tab": {
+      "sessions": "Sessões",
+      "devices": "Dispositivos",
+      "settings": "Definições"
+    },
+    "setting_enabled_hint": "Os clientes informam como corre cada reprodução: paragens, débito, imagens perdidas. Os dados ficam neste servidor.",
+    "setting_retention_hint": "As reproduções mais antigas são eliminadas todas as noites."
   },
   "markers": {
     "detect_intros": "Detetar as intros",

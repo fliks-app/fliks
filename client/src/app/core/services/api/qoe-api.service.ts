@@ -163,6 +163,7 @@ export interface QoeSessionPage {
 
 export interface QoeDeviceSummary {
   device: string | null;
+  systemName: string | null;
   engine: string | null;
   sessions: number;
   stallSessions: number;
@@ -180,7 +181,8 @@ export interface QoeSessionFilter {
   days: number;
   verdict?: QoeVerdict | '';
   userId?: number | null;
-  device?: string;
+  /** Raw device labels; one admin-facing device can span several. */
+  devices?: string[];
   limit: number;
   offset: number;
 }
@@ -223,7 +225,7 @@ export class QoeApiService {
       .set('offset', filter.offset);
     if (filter.verdict) params = params.set('verdict', filter.verdict);
     if (filter.userId) params = params.set('userId', filter.userId);
-    if (filter.device) params = params.set('device', filter.device);
+    for (const d of filter.devices ?? []) params = params.append('device', d);
     const res = await firstValueFrom(
       this.http.get<{ items: RawRow[]; total: number }>('/api/system/qoe/sessions', { params }),
     );

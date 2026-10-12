@@ -1476,13 +1476,10 @@
     "title": "Qualità di riproduzione",
     "subtitle": "Perché un client si blocca: rete, dispositivo, server o errore.",
     "last_days": "Ultimi {{count}} giorni",
-    "settings": "Raccolta",
     "setting_enabled": "Raccogli la qualità di riproduzione dei client",
     "setting_retention": "Conservazione (giorni)",
     "settings_saved": "Impostazioni salvate",
     "verdict_breakdown": "Diagnosi",
-    "devices": "Per dispositivo",
-    "sessions": "Sessioni",
     "empty": "Ancora nessun dato.",
     "filter_verdict": "Diagnosi",
     "filter_all_verdicts": "Tutte le diagnosi",
@@ -1661,7 +1658,14 @@
       "server": "server",
       "network": "rete",
       "device": "dispositivo"
-    }
+    },
+    "tab": {
+      "sessions": "Sessioni",
+      "devices": "Dispositivi",
+      "settings": "Impostazioni"
+    },
+    "setting_enabled_hint": "I client riportano come va ogni riproduzione: blocchi, throughput, immagini perse. I dati restano su questo server.",
+    "setting_retention_hint": "Le riproduzioni più vecchie vengono eliminate ogni notte."
   },
   "markers": {
     "detect_intros": "Rileva le intro",
