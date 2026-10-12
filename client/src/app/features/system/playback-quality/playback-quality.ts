@@ -52,9 +52,10 @@ export class SystemPlaybackQualityComponent implements OnInit {
   readonly userOptions = signal<UserRow[]>([]);
 
   readonly userNames = computed(() => new Map(this.userOptions().map((u) => [u.id, u.username])));
-  readonly deviceOptions = computed(() =>
-    (this.summary()?.byDevice ?? []).map((d) => d.device).filter((d): d is string => !!d),
-  );
+  // byDevice has one row per (device, engine), so the same device can repeat.
+  readonly deviceOptions = computed(() => [
+    ...new Set((this.summary()?.byDevice ?? []).map((d) => d.device).filter((d): d is string => !!d)),
+  ]);
   readonly detail = signal<QoeSessionDetail | null>(null);
 
   readonly qoeEnabled = signal(true);
