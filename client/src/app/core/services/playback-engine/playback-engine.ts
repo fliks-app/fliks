@@ -87,6 +87,25 @@ export interface QoeSample extends EngineQoeSample {
   recoveryReloads: number;
   /** One viewing, stable across sid changes; set by the player. */
   playbackId?: string;
+  /** Receiver only: recent closed stall episodes, resent until the sender has seen them. */
+  stalls?: QoeStallEpisode[];
+}
+
+export interface QoeStallEpisode {
+  at: number;
+  position: number | null;
+  durationMs: number;
+  bufferAheadS: number | null;
+  bandwidthBps: number | null;
+}
+
+/** Seconds buffered ahead of the playhead, null when it sits outside every range. */
+export function bufferAheadOf(video: Pick<HTMLVideoElement, 'buffered' | 'currentTime'>): number | null {
+  const { buffered, currentTime } = video;
+  for (let i = 0; i < buffered.length; i++) {
+    if (currentTime >= buffered.start(i) && currentTime <= buffered.end(i)) return buffered.end(i) - currentTime;
+  }
+  return null;
 }
 
 /** False when the engine measured nothing yet: such a sample is not worth a `qoe` block. */
@@ -298,6 +317,8 @@ export interface PlaybackEngine {
    *  (AVPlay, and the Capacitor players until they expose one). A UI must hide
    *  its slider instead of offering a control that silently does nothing. */
   readonly supportsVolume: boolean;
+  /** False when `timeUpdate.buffered` is not a real read-ahead (it then just echoes the playhead). */
+  readonly measuresBuffer?: boolean;
   /** Silences `ranges` (content seconds, sorted, disjoint) without touching the user's mute/volume.
    *  Persists across loads until replaced; [] clears. */
   setMuteRanges(ranges: readonly TimeRange[]): void;

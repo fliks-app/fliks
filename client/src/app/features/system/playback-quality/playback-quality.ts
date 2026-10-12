@@ -140,7 +140,7 @@ export class SystemPlaybackQualityComponent implements OnInit {
 
   async openDetail(row: QoeSessionRow) {
     try {
-      this.detail.set(await this.api.session(row.playbackId ?? row.sessionId));
+      this.detail.set(await this.api.session(row.sessionId));
     } catch {
       /* interceptor */
     }

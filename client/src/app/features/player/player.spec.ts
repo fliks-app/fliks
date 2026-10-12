@@ -2891,6 +2891,15 @@ describe('PlayerComponent stall counting', () => {
     expect(spy).toHaveBeenLastCalledWith(true, expect.objectContaining({ ignored: true }));
   });
 
+  it('reports an unknown buffer when the engine only echoes the playhead', () => {
+    const { c, spy } = stalling();
+    c.engine.measuresBuffer = false;
+    c.engine.currentTime = 200;
+    c.state.bufferedEnd.set(200);
+    c.trackStall(true);
+    expect(spy).toHaveBeenLastCalledWith(true, expect.objectContaining({ bufferAheadS: null }));
+  });
+
   it('flags a frozen playhead without any buffering event', () => {
     const h = createHarness();
     const c = h.component as any;

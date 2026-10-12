@@ -1,6 +1,7 @@
 import {
   AbstractPlaybackEngine,
   AudioTrack,
+  bufferAheadOf,
   EngineQoeSample,
   EngineStats,
   PlaybackEngine,
@@ -562,20 +563,13 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
     let counts: { dropped: number; decoded: number } | null = null;
     try { counts = this.frameCounts(); } catch { /* unsupported */ }
     if (counts && counts.decoded < this.frameBaseline.decoded) this.frameBaseline = { dropped: 0, decoded: 0 };
-    let ahead: number | null = null;
-    for (let i = 0; i < v.buffered.length; i++) {
-      if (v.currentTime >= v.buffered.start(i) && v.currentTime <= v.buffered.end(i)) {
-        ahead = v.buffered.end(i) - v.currentTime;
-        break;
-      }
-    }
     return {
       engine: 'webos',
       cmcd: false,
       droppedFrames: counts && Math.max(0, counts.dropped - this.frameBaseline.dropped),
       decodedFrames: counts && Math.max(0, counts.decoded - this.frameBaseline.decoded),
       bandwidthBps: null,
-      bufferAheadS: ahead,
+      bufferAheadS: bufferAheadOf(v),
       variantBitrate: null,
       width: v.videoWidth || null,
       height: v.videoHeight || null,

@@ -130,9 +130,9 @@ export class PlayerQoe {
     );
   }
 
-  onQualitySwitch(sessionId: string | undefined, position: number, to?: number): void {
+  onQualitySwitch(sessionId: string | undefined, position: number, to?: number, activeRung?: number): void {
     if (!sessionId) return;
-    const from = this.last?.variantBitrate ?? undefined;
+    const from = activeRung ?? this.last?.variantBitrate ?? undefined;
     this.record(sessionId, { type: 'quality_switch', position, fromBitrate: from, toBitrate: to }, true);
   }
 

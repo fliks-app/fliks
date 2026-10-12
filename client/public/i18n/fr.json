@@ -1535,7 +1535,7 @@
       "stalls_starved_bandwidth_ok": "Coupures : le tampon s'est vidé alors que le débit semblait suffisant.",
       "stalls_buffer_ahead": "Coupures avec des données en tampon : l'appareil n'a pas suivi.",
       "dropped_frames": "Le décodeur a perdu une part élevée des images.",
-      "software_decoder": "Décodage logiciel en HD ou plus.",
+      "software_decoder": "Décodage logiciel.",
       "too_little_data": "Temps de lecture insuffisant pour juger.",
       "healthy": "Aucun problème détecté.",
       "cmcd_missing": "Le client déclare CMCD mais le serveur n'en a reçu aucun."

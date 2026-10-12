@@ -224,13 +224,10 @@ export class CastService implements OnDestroy {
   private wantedTextTrackId = 0;
   private textReapplyTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /** Fires when the receiver hits a fatal playback error that a fresh
-   *  stream (new sid) can recover — a live session GC'd mid-cast 410s the
-   *  next segment. `position` is the last known playhead to resume from.
-   *  Fed by the receiver's `player_error` message (web SDK, or forwarded by a
-   *  native sender) and by the native IDLE/ERROR poll (`castError`); one failure
-   *  can fire both, so CastPlayerService ignores triggers while a reload runs. */
+  /** A receiver failure a fresh stream may fix; `position` is the playhead to resume from. */
   readonly playbackError$ = new Subject<{ position?: number }>();
+  /** Every `player_error` the receiver reports, for QoE. */
+  readonly receiverError$ = new Subject<{ code?: number; category: string; message?: string }>();
 
   /** Whether a native-process Cast sender backs this client — the Capacitor
    *  plugin on mobile, the Electron main process on desktop. Without one we are
@@ -247,7 +244,7 @@ export class CastService implements OnDestroy {
   /** Tracks which session id we already attached the error listener to
    *  so a reconnect to the same session doesn't double-listen. */
   private errorListenerSessionId: string | null = null;
-  /** Latest receiver QoE push (web senders only: native senders have no custom-message bus). */
+  /** Latest receiver QoE push. */
   readonly receiverQoe = signal<{ sample: QoeSample; receivedAt: number } | null>(null);
 
   // Web-only
@@ -476,6 +473,12 @@ export class CastService implements OnDestroy {
         return;
       }
       if (payload?.kind !== 'player_error') return;
+      const shaka = payload.shakaErrorCode;
+      this.receiverError$.next({
+        code: shaka ?? payload.detailedErrorCode,
+        category: shaka != null ? 'shaka' : 'cast',
+        message: payload.reason,
+      });
       // A session-expiry / network failure is recoverable: re-establish
       // a fresh stream rather than just toasting a dead-end error.
       if (this.isRecoverableReceiverError(payload)) {

@@ -1535,7 +1535,7 @@
       "stalls_starved_bandwidth_ok": "Cortes: el búfer se vació aunque el caudal parecía suficiente.",
       "stalls_buffer_ahead": "Cortes con datos en búfer: el dispositivo no pudo seguir el ritmo.",
       "dropped_frames": "El decodificador descartó una parte alta de los fotogramas.",
-      "software_decoder": "Decodificación por software en HD o superior.",
+      "software_decoder": "Decodificación por software.",
       "too_little_data": "Tiempo de reproducción insuficiente para valorar.",
       "healthy": "No se detectó ningún problema.",
       "cmcd_missing": "El cliente declara CMCD pero el servidor no recibió ninguno."

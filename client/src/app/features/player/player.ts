@@ -1737,10 +1737,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const now = Date.now();
     if (now - this.lastTogglePlayAt < this.togglePlayCoalesceMs) return;
     this.lastTogglePlayAt = now;
-    if (this.state.ended()) {
-      this.qoe.flush(this.activeSessionId());
-      this.qoe.reset();
-    }
     // Like a natural end, play after an EDL end replays from the start.
     if (this.edlEnded && this.state.ended()) {
       this.edlEnded = false;
@@ -2779,7 +2775,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const position = this.engine?.currentTime ?? 0;
     const end = this.state.bufferedEnd();
     this.qoe.setStalled(stalled, {
-      bufferAheadS: end > 0 ? Math.max(0, end - position) : null,
+      bufferAheadS: end > 0 && this.engine?.measuresBuffer !== false ? Math.max(0, end - position) : null,
       sessionId: this.activeSessionId(),
       position,
       ignored,
@@ -4544,7 +4540,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
     const mode = this.playbackMode();
     this.lastQualitySwitchAt = Date.now();
-    this.qoe.onQualitySwitch(this.activeSessionId(), this.engine?.currentTime ?? 0, option.totalBitrateBps);
+    const from = this.availableQualities().find(q => q.id === this.activeQualityId())?.totalBitrateBps;
+    this.qoe.onQualitySwitch(this.activeSessionId(), this.engine?.currentTime ?? 0, option.totalBitrateBps, from);
     // Picking a rung below source — or any rung while already on the HLS
     // ladder — re-negotiates playback: reloadStream() re-requests playback-info
     // with the chosen quality, the backend re-decides DirectPlay vs the
@@ -4832,10 +4829,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       payload.subtitleId = onReceiver ? onReceiver.subtitleId : this.activeSubtitleId();
       payload.autoplayBlocked = this.autoplayBlocked();
       payload.hasNext = this.upNext() !== null;
-      // While casting the local engine is idle: the receiver's sample stands in for it.
-      if (this.castService.isConnected()) {
-        payload.qoe = this.castPlayerService.qoeSample() ?? undefined;
-      } else if (this.engine) {
+      // While casting, CastPlayerService's own heartbeat carries the receiver's sample.
+      if (!this.castService.isConnected() && this.engine) {
         payload.qoe = this.qoe.current(sessionId) ?? undefined;
         void this.qoe.refresh(this.engine, sessionId);
       }

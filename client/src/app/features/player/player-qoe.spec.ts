@@ -182,6 +182,11 @@ describe('PlayerQoe', () => {
     );
   });
 
+  it('takes the from-bitrate off the rung left, falling back to the sample', async () => {
+    qoe.onQualitySwitch('a', 1, 2_000_000, 8_000_000);
+    expect(reporter.record).toHaveBeenLastCalledWith('a', expect.objectContaining({ fromBitrate: 8_000_000 }), true, expect.any(String));
+  });
+
   it('flushes the old sid when a new one takes over', async () => {
     await qoe.refresh(engine(async () => raw));
     qoe.current('a');

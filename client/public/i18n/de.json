@@ -1535,7 +1535,7 @@
       "stalls_starved_bandwidth_ok": "Aussetzer: Der Puffer lief leer, obwohl der Durchsatz ausreichend schien.",
       "stalls_buffer_ahead": "Aussetzer trotz Puffer: Das Gerät kam nicht mit.",
       "dropped_frames": "Der Decoder hat viele Frames verworfen.",
-      "software_decoder": "Software-Decodierung in HD oder höher.",
+      "software_decoder": "Software-Decodierung.",
       "too_little_data": "Zu wenig Wiedergabezeit für eine Beurteilung.",
       "healthy": "Kein Problem erkannt.",
       "cmcd_missing": "Der Client meldet CMCD, aber der Server hat keine Daten erhalten."

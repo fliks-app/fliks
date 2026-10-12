@@ -2,6 +2,7 @@ import shaka from 'shaka-player';
 import {
   AbstractPlaybackEngine,
   AudioTrack,
+  bufferAheadOf,
   EngineQoeSample,
   EngineStats,
   PlaybackEngine,
@@ -433,13 +434,6 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     if (!this.player || !this.video) return null;
     const stats = this.player.getStats();
     const track = this.player.getVariantTracks().find((t) => t.active);
-    const { currentTime, buffered } = this.video;
-    let bufferAheadS: number | null = null;
-    for (let i = 0; i < buffered.length; i++) {
-      if (currentTime >= buffered.start(i) && currentTime <= buffered.end(i)) {
-        bufferAheadS = buffered.end(i) - currentTime;
-      }
-    }
     const num = (n: number | undefined | null) => (Number.isFinite(n) ? (n as number) : null);
     return {
       engine: 'shaka',
@@ -447,7 +441,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
       droppedFrames: num(stats.droppedFrames),
       decodedFrames: num(stats.decodedFrames),
       bandwidthBps: num(stats.estimatedBandwidth),
-      bufferAheadS,
+      bufferAheadS: bufferAheadOf(this.video),
       variantBitrate: num(track?.bandwidth) || null,
       width: num(track?.width),
       height: num(track?.height),
@@ -456,7 +450,6 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
       hwDecoder: null,
     };
   }
-
 
   // ─── Internal: bridge native events ────────────────────────────────
 

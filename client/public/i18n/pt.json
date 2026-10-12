@@ -1535,7 +1535,7 @@
       "stalls_starved_bandwidth_ok": "Paragens: o buffer esvaziou embora o débito parecesse suficiente.",
       "stalls_buffer_ahead": "Paragens com dados em buffer: o dispositivo não acompanhou.",
       "dropped_frames": "O descodificador descartou uma parte elevada dos fotogramas.",
-      "software_decoder": "Descodificação por software em HD ou superior.",
+      "software_decoder": "Descodificação por software.",
       "too_little_data": "Tempo de reprodução insuficiente para avaliar.",
       "healthy": "Nenhum problema detetado.",
       "cmcd_missing": "O cliente declara CMCD mas o servidor não recebeu nenhum."

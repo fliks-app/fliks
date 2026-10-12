@@ -131,11 +131,9 @@ function publishAudioTracks() {
 
 // --- Playback QoE ----------------------------------------------------------
 //
-// The sender owns the backend heartbeat (the receiver has no API auth), so we
-// push a sample over FLIKS_NAMESPACE and the sender merges it into its heartbeat.
-// Counters are cumulative since the last LOAD, stalls only count after first play.
+// The receiver has no API auth: it pushes samples over FLIKS_NAMESPACE and the sender reports them.
 
-const qoe = { playbackId: null, played: false, seeking: false, stallStart: null, stallCount: 0, stallMs: 0, base: { dropped: 0, decoded: 0 }, statsBase: { dropped: 0, decoded: 0 } };
+const qoe = { playbackId: null, played: false, seeking: false, stallStart: null, stallCount: 0, stallMs: 0, stalls: [], lastSeekAt: 0, base: { dropped: 0, decoded: 0 }, statsBase: { dropped: 0, decoded: 0 } };
 const EventType = cast.framework.events.EventType;
 
 function qoeVideoQuality() {
@@ -145,7 +143,7 @@ function qoeVideoQuality() {
 }
 
 function qoeReset() {
-  Object.assign(qoe, { played: false, seeking: false, stallStart: null, stallCount: 0, stallMs: 0 });
+  Object.assign(qoe, { played: false, seeking: false, stallStart: null, stallCount: 0, stallMs: 0, stalls: [] });
 }
 
 function qoeStats() {
@@ -160,13 +158,21 @@ function qoeLoaded() {
 
 playerManager.addEventListener(EventType.LOAD_START, qoeReset);
 playerManager.addEventListener(EventType.PLAYING, () => { qoe.played = true; qoe.seeking = false; });
-playerManager.addEventListener(EventType.SEEKING, () => { qoe.seeking = true; });
+const SEEK_GRACE_MS = 2000;
+playerManager.addEventListener(EventType.SEEKING, () => { qoe.seeking = true; qoe.lastSeekAt = Date.now(); });
+playerManager.addEventListener(EventType.SEEKED, () => { qoe.lastSeekAt = Date.now(); });
 playerManager.addEventListener(EventType.BUFFERING, (event) => {
   if (event.isBuffering) {
-    if (qoe.stallStart == null && qoe.played && !qoe.seeking) qoe.stallStart = Date.now();
+    if (qoe.stallStart == null && qoe.played && !qoe.seeking && Date.now() - qoe.lastSeekAt > SEEK_GRACE_MS) {
+      const s = buildQoeSample();
+      qoe.stallStart = Date.now();
+      qoe.stallAt = { position: playerManager.getCurrentTimeSec(), bufferAheadS: s.bufferAheadS, bandwidthBps: s.bandwidthBps };
+    }
   } else if (qoe.stallStart != null) {
+    const durationMs = Date.now() - qoe.stallStart;
     qoe.stallCount += 1;
-    qoe.stallMs += Date.now() - qoe.stallStart;
+    qoe.stallMs += durationMs;
+    qoe.stalls = [...qoe.stalls, { at: qoe.stallStart, durationMs, ...qoe.stallAt }].slice(-20);
     qoe.stallStart = null;
   }
 });
@@ -212,6 +218,7 @@ function buildQoeSample() {
     stallCount: qoe.stallCount + (open ? 1 : 0),
     stallMs: qoe.stallMs + open,
     recoveryReloads: 0,
+    stalls: qoe.stalls,
     ...(qoe.playbackId ? { playbackId: qoe.playbackId } : {}),
   };
 }

@@ -3,7 +3,7 @@ import { TranslateService } from '@ngx-translate/core';
 import { CastService } from './cast.service';
 import type { QoeSample } from './playback-engine';
 import { hasQoeData } from './playback-engine/playback-engine';
-import { newPlaybackId } from './qoe-reporter.service';
+import { QoeReporter, newPlaybackId } from './qoe-reporter.service';
 import { CastSettingsService } from './cast-settings.service';
 import { StreamingApiService, type PlayMethod } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
@@ -170,6 +170,7 @@ export class CastPlayerService {
   private readonly cast = inject(CastService);
   private readonly castSettings = inject(CastSettingsService);
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly qoeReporter = inject(QoeReporter);
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly appSettings = inject(AppSettingsService);
   private readonly authService = inject(AuthService);
@@ -559,6 +560,10 @@ export class CastPlayerService {
     this.cast.playbackError$.subscribe(({ position }) => {
       void this.recoverFromCastError(position);
     });
+    this.cast.receiverError$.subscribe((e) => {
+      const sid = this.liveSessionId();
+      if (sid) this.qoeReporter.record(sid, { type: 'error', at: Date.now(), position: this.cast.currentTime(), ...e }, true, this.playbackId ?? undefined);
+    });
   }
 
   /** Recover from a fatal receiver error by reloading with a fresh sid at
@@ -584,6 +589,9 @@ export class CastPlayerService {
     this.recovering = true;
     try {
       await this.reloadCastStream(pos);
+      this.recoveries = 1;
+      const sid = this.liveSessionId();
+      if (sid) this.qoeReporter.record(sid, { type: 'recovery', at: Date.now(), position: pos }, false, this.playbackId ?? undefined);
     } catch {
       /* a still-broken stream re-fires the error, subject to the throttle */
     } finally {
@@ -806,13 +814,41 @@ export class CastPlayerService {
   private setLiveSession(id: string | null) {
     this.liveSessionId.set(id);
     this.cast.receiverQoe?.set(null);
+    this.recoveries = 0;
+    this.seenStalls = new Set();
+  }
+
+  /** Recovery reloads of the current sid: the receiver never reloads on its own. */
+  private recoveries = 0;
+  private seenStalls = new Set<number>();
+
+  private readonly receiverStallEffect = effect(() => {
+    const q = this.cast.receiverQoe();
+    untracked(() => this.recordReceiverStalls(q?.sample));
+  });
+
+  /** Receiver stall episodes become `stall` events once each, deduped by start time. */
+  private recordReceiverStalls(sample: QoeSample | undefined): void {
+    const sid = this.liveSessionId();
+    if (!sample || !sid) return;
+    for (const s of sample.stalls ?? []) {
+      if (this.seenStalls.has(s.at)) continue;
+      this.seenStalls.add(s.at);
+      const { at, ...rest } = s;
+      this.qoeReporter.record(sid, { type: 'stall', at: at + s.durationMs, ...rest }, false, this.playbackId ?? undefined);
+    }
   }
 
   /** Receiver's latest QoE sample for the heartbeat; null when stale or the sender can't receive it. */
   qoeSample(): QoeSample | null {
     const q = this.cast.receiverQoe();
     if (!q || Date.now() - q.receivedAt >= QOE_STALE_MS || !hasQoeData(q.sample)) return null;
-    return q.sample.playbackId || !this.playbackId ? q.sample : { ...q.sample, playbackId: this.playbackId };
+    const { stalls: _stalls, ...sample } = q.sample;
+    return {
+      ...sample,
+      recoveryReloads: sample.recoveryReloads + this.recoveries,
+      playbackId: sample.playbackId || this.playbackId || undefined,
+    };
   }
 
   private startPositionSaving() {

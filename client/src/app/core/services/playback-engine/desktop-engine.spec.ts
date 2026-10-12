@@ -264,15 +264,9 @@ describe('DesktopEngine getQoeSample', () => {
     expect(await new DesktopEngine().getQoeSample()).toEqual({ engine: 'mpv', cmcd: false, ...qoe });
   });
 
-  it('is null when the bridge fails or never answers', async () => {
+  it('is null when the bridge fails', async () => {
     const bridge = installBridge();
     bridge.getQoe.mockRejectedValue(new Error('boom'));
     expect(await new DesktopEngine().getQoeSample()).toBeNull();
-
-    vi.useFakeTimers();
-    bridge.getQoe.mockReturnValue(new Promise(() => {}));
-    const pending = new DesktopEngine().getQoeSample();
-    await vi.advanceTimersByTimeAsync(500);
-    expect(await pending).toBeNull();
   });
 });

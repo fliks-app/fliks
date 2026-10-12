@@ -131,7 +131,7 @@ describe('TizenEngine.getQoeSample', () => {
     delete (globalThis as unknown as { webapis?: unknown }).webapis;
   });
 
-  it('reads bandwidth and the video stream info', async () => {
+  it('reads the video stream info and leaves bandwidth and the decoder unmeasured', async () => {
     stubAvplay({
       getStreamingProperty: () => '8000000',
       getCurrentStreamInfo: () => [
@@ -143,13 +143,18 @@ describe('TizenEngine.getQoeSample', () => {
       engine: 'avplay',
       cmcd: false,
       droppedFrames: null,
-      bandwidthBps: 8000000,
+      bandwidthBps: null,
       variantBitrate: 15000000,
       width: 3840,
       height: 2160,
       videoCodec: 'hvc1',
-      hwDecoder: true,
+      hwDecoder: null,
+      bufferAheadS: null,
     });
+  });
+
+  it('does not claim a read-ahead', () => {
+    expect(new TizenEngine().measuresBuffer).toBe(false);
   });
 
   it('nulls what AVPlay refuses or garbles', async () => {

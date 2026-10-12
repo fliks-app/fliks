@@ -43,6 +43,7 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
     isConnected: signal(true),
     resumedState: signal(null),
     playbackError$: new Subject<{ position?: number }>(),
+    receiverError$: new Subject<object>(),
     saveResumeState: vi.fn(),
     setActiveSubtitle: vi.fn(async () => {}),
     setActiveAudioLanguage: vi.fn(async () => false),

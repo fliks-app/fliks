@@ -1535,7 +1535,7 @@
       "stalls_starved_bandwidth_ok": "Stalls: the buffer ran dry although throughput looked sufficient.",
       "stalls_buffer_ahead": "Stalls with data buffered: the device could not keep up.",
       "dropped_frames": "The decoder dropped a high share of frames.",
-      "software_decoder": "Software decoding at HD resolution or above.",
+      "software_decoder": "Software decoding.",
       "too_little_data": "Not enough playback time to judge.",
       "healthy": "No issue detected.",
       "cmcd_missing": "The client declares CMCD but the server received none."

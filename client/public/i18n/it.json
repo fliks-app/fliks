@@ -1535,7 +1535,7 @@
       "stalls_starved_bandwidth_ok": "Blocchi: il buffer si è svuotato anche se il throughput sembrava sufficiente.",
       "stalls_buffer_ahead": "Blocchi con dati in buffer: il dispositivo non è riuscito a stare al passo.",
       "dropped_frames": "Il decoder ha scartato una quota elevata di fotogrammi.",
-      "software_decoder": "Decodifica software in HD o superiore.",
+      "software_decoder": "Decodifica software.",
       "too_little_data": "Tempo di riproduzione insufficiente per giudicare.",
       "healthy": "Nessun problema rilevato.",
       "cmcd_missing": "Il client dichiara CMCD ma il server non ne ha ricevuto."
