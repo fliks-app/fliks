@@ -5,7 +5,7 @@ import {
   PlaybackEngine,
   PlaybackState,
 } from './playback-engine';
-import { SubtitleOverlay } from './subtitle-overlay.util';
+import { SubtitleOverlay, type SubtitleHandle } from './subtitle-overlay.util';
 import type { TimeRange } from '../../utils/edl-policy';
 import { MuteGate } from './mute-gate';
 
@@ -50,6 +50,7 @@ declare const webapis: {
       ondrmevent?: (drmEvent: string, drmData: unknown) => void;
     }): void;
     getTotalTrackInfo(): Array<{ type: 'AUDIO' | 'TEXT' | 'VIDEO'; index: number; extra_info: string }>;
+    getCurrentStreamInfo(): Array<{ type: 'AUDIO' | 'TEXT' | 'VIDEO'; index: number; extra_info: string }>;
     setSelectTrack(type: 'AUDIO' | 'TEXT' | 'VIDEO', index: number): void;
     setSpeed(rate: number): void;
     setStreamingProperty(name: string, value: string): void;
@@ -506,6 +507,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
             Math.round(position * 1000),
             () => done(() => {
               this._currentTime = position;
+              this.subtitles.updateAt(position);
               this.muteGate.sync(position);
               resolve();
             }),
@@ -648,7 +650,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     try {
       const all = webapis.avplay.getTotalTrackInfo() ?? [];
       const audioTracks = all.filter((t) => t.type === 'AUDIO');
-      this._currentAudioIndex = audioTracks[0]?.index ?? 0;
+      this._currentAudioIndex = this.playingAudioIndex() ?? audioTracks[0]?.index ?? 0;
       this._audioTracks = audioTracks.map((t) => {
         const meta = parseAvplayExtraInfo(t.extra_info);
         return {
@@ -659,6 +661,15 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
       });
       if (this._audioTracks.length > 0) this.emitAudioTracks();
     } catch { /* getTotalTrackInfo throws pre-READY — retried via audioTracksChanged later */ }
+  }
+
+  /** The audio stream AVPlay is actually decoding (manifest default or container default). */
+  private playingAudioIndex(): number | undefined {
+    try {
+      return webapis.avplay.getCurrentStreamInfo()?.find((t) => t.type === 'AUDIO')?.index;
+    } catch {
+      return undefined;
+    }
   }
 
   /** Emit with `selected` flag so the picker highlights the active language. */
@@ -691,7 +702,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
       if (wasPaused) webapis.avplay.play();
       webapis.avplay.setSelectTrack('AUDIO', index);
       if (wasPaused) webapis.avplay.pause();
-      this._currentAudioIndex = index;
+      this._currentAudioIndex = this.playingAudioIndex() ?? index;
       this.emitAudioTracks();
     } catch (e) {
       this.emit('error', { code: -1, message: 'AVPlay setSelectTrack audio failed: ' + String(e), errorKey: 'player.playback_error' });
@@ -700,8 +711,8 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
   // ── Subtitles (DOM-rendered overlay) ────────────────────────────────
 
-  async addTextTrack(url: string, language: string, label: string): Promise<unknown> {
-    return { url, language, label };
+  addTextTrack(url: string): Promise<SubtitleHandle> {
+    return this.subtitles.load(url);
   }
 
   selectTextTrack(track: unknown): void {
@@ -709,8 +720,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
       this.subtitles.clear();
       return;
     }
-    const url = (track as { url?: string }).url;
-    if (url) void this.subtitles.show(url);
+    this.subtitles.select(track as SubtitleHandle);
   }
 
   setTextVisibility(visible: boolean): void {
