@@ -37,6 +37,9 @@
     "@nestjs/schedule": "^6.1.1",
     "@nestjs/serve-static": "^5.0.4",
     "@nestjs/typeorm": "^11.0.0",
+    "@svta/cml-cmcd": "2.8.2",
+    "@svta/cml-structured-field-values": "1.1.6",
+    "@svta/cml-utils": "1.6.1",
     "axios": "^1.14.0",
     "bcrypt": "^6.0.0",
     "cheerio": "^1.2.0",
@@ -97,8 +100,21 @@
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+\\.ts$": "ts-jest",
+      "node_modules/@svta/.+\\.js$": [
+        "ts-jest",
+        {
+          "tsconfig": {
+            "allowJs": true,
+            "module": "commonjs",
+            "target": "ES2022"
+          }
+        }
+      ]
     },
+    "transformIgnorePatterns": [
+      "/node_modules/(?!@svta/)"
+    ],
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],

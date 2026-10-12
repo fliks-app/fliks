@@ -1,0 +1,35 @@
+import {
+  Column,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
+import type { QoeEventType } from '../core/types';
+import { PlaybackQoeSession } from './playback-qoe-session.entity';
+
+@Entity('playback_qoe_events')
+@Index('IDX_playback_qoe_events_session', ['sessionId'])
+export class PlaybackQoeEvent {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column({ type: 'varchar', length: 64 })
+  sessionId: string;
+
+  @ManyToOne(() => PlaybackQoeSession, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'sessionId' })
+  session?: PlaybackQoeSession;
+
+  /** Client clock. */
+  @Column({ type: 'timestamptz' })
+  at: Date;
+
+  @Column({ type: 'varchar' })
+  type: QoeEventType;
+
+  /** The event minus `type` and `at`. */
+  @Column({ type: 'jsonb', default: () => `'{}'` })
+  data: Record<string, unknown>;
+}
