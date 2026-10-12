@@ -177,15 +177,23 @@
       [class.overflow-x-clip]="!navbar.isHeroPage()"
     >
       @if (!device.isTv() && sse.serverUnreachable()) {
-        <div class="alert alert-warning mb-4 flex items-center justify-between gap-2 py-2">
-          <span class="text-sm">{{ 'connectivity.server_unreachable' | translate }}</span>
-          <div class="flex items-center gap-1">
-            <a routerLink="/downloads" [state]="{ rootEntry: true }" class="btn btn-sm btn-ghost">{{ 'downloads.title' | translate }}</a>
-            <button class="btn btn-sm btn-ghost" [disabled]="retrying()" (click)="retryConnection()">
+        <div role="status"
+             class="fixed inset-x-0 z-30 flex justify-center px-4 pointer-events-none"
+             style="top: var(--chrome-top, 1rem)">
+          <div class="pointer-events-auto flex items-center gap-1 rounded-full bg-warning text-warning-content shadow-lg pl-4 pr-1 py-1">
+            <svg lucideCloudOff class="h-4 w-4 shrink-0"></svg>
+            <span class="text-sm font-medium px-1 whitespace-nowrap">{{ 'connectivity.server_unreachable' | translate }}</span>
+            <a routerLink="/downloads" [state]="{ rootEntry: true }" class="btn btn-ghost btn-sm btn-circle"
+               [attr.aria-label]="'downloads.title' | translate">
+              <svg lucideDownload class="h-4 w-4"></svg>
+            </a>
+            <button class="btn btn-ghost btn-sm btn-circle" [disabled]="retrying()" (click)="retryConnection()"
+                    [attr.aria-label]="'common.retry' | translate">
               @if (retrying()) {
-                <span class="loading loading-spinner loading-xs"></span>
+                <span class="loading loading-spinner loading-xs text-warning-content"></span>
+              } @else {
+                <svg lucideRotateCw class="h-4 w-4"></svg>
               }
-              {{ 'common.retry' | translate }}
             </button>
           </div>
         </div>

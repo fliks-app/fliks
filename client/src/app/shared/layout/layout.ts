@@ -65,6 +65,9 @@ import {
   LucideEllipsisVertical,
   LucidePin,
   LucideRocket,
+  LucideCloudOff,
+  LucideDownload,
+  LucideRotateCw,
 } from '@lucide/angular';
 
 
@@ -77,6 +80,7 @@ const SIDEBAR_COUNTS_DEBOUNCE_MS = 400;
     CachedSrcDirective,
     RouterOutlet, RouterLink, RouterLinkActive, TranslatePipe,
     LucideMenu, LucideChevronLeft, LucideSearch, LucideCast, LucideEllipsisVertical, LucidePin, LucideRocket,
+    LucideCloudOff, LucideDownload, LucideRotateCw,
     RemotePickerComponent,
     CardActionsPanelComponent,
     AddToPlaylistModalComponent,
