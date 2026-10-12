@@ -323,6 +323,13 @@ export class CastService implements OnDestroy {
         this.playbackError$.next({ position: e.detail?.position });
       }) as EventListener);
 
+      // Native senders (Android, iOS, desktop) forward the Fliks-namespace messages here.
+      window.addEventListener('castReceiverMessage', ((e: CustomEvent) => {
+        if (e.detail?.namespace === FLIKS_CAST_NAMESPACE && typeof e.detail.message === 'string') {
+          this.handleReceiverMessage(e.detail.message);
+        }
+      }) as EventListener);
+
       // Device discovery updates
       window.addEventListener('castAvailabilityChanged', ((e: CustomEvent) => {
         this.isAvailable.set(e.detail?.available ?? false);
@@ -446,28 +453,33 @@ export class CastService implements OnDestroy {
     const sessionId = session?.getSessionId?.();
     if (sessionId && sessionId === this.errorListenerSessionId) return;
     try {
-      session.addMessageListener(FLIKS_CAST_NAMESPACE, (_ns: string, raw: string) => {
-        try {
-          const payload = JSON.parse(raw) as ReceiverPlayerError | ReceiverQoe;
-          if (payload?.kind === 'qoe') {
-            if (payload.sample) this.receiverQoe.set({ sample: payload.sample, receivedAt: Date.now() });
-            return;
-          }
-          if (payload?.kind !== 'player_error') return;
-          // A session-expiry / network failure is recoverable: re-establish
-          // a fresh stream rather than just toasting a dead-end error.
-          if (this.isRecoverableReceiverError(payload)) {
-            this.playbackError$.next({});
-          } else {
-            this.handleReceiverError(payload);
-          }
-        } catch {
-          /* malformed messages are ignored — receiver is forward-compatible */
-        }
-      });
+      session.addMessageListener(FLIKS_CAST_NAMESPACE, (_ns: string, raw: string) =>
+        this.handleReceiverMessage(raw),
+      );
       this.errorListenerSessionId = sessionId ?? null;
     } catch (err) {
       console.warn('Cast addMessageListener failed', err);
+    }
+  }
+
+  /** One receiver message on the Fliks namespace, from the web SDK or a native sender. */
+  private handleReceiverMessage(raw: string) {
+    try {
+      const payload = JSON.parse(raw) as ReceiverPlayerError | ReceiverQoe;
+      if (payload?.kind === 'qoe') {
+        if (payload.sample) this.receiverQoe.set({ sample: payload.sample, receivedAt: Date.now() });
+        return;
+      }
+      if (payload?.kind !== 'player_error') return;
+      // A session-expiry / network failure is recoverable: re-establish
+      // a fresh stream rather than just toasting a dead-end error.
+      if (this.isRecoverableReceiverError(payload)) {
+        this.playbackError$.next({});
+      } else {
+        this.handleReceiverError(payload);
+      }
+    } catch {
+      /* malformed messages are ignored — receiver is forward-compatible */
     }
   }
 

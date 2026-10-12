@@ -148,8 +148,8 @@ class CastSender {
       this.onMediaStatus((data['status'] ?? []) as Record<string, unknown>[]);
       return;
     }
-    if (ns === NS_FLIKS && data['kind'] === 'player_error') {
-      broadcast({ name: 'castError', detail: { position: Number(data['at']) || undefined } });
+    if (ns === NS_FLIKS) {
+      broadcast({ name: 'castReceiverMessage', detail: { namespace: ns, message: JSON.stringify(data) } });
     }
   }
 

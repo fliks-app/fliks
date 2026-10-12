@@ -135,7 +135,7 @@ function publishAudioTracks() {
 // push a sample over FLIKS_NAMESPACE and the sender merges it into its heartbeat.
 // Counters are cumulative since the last LOAD, stalls only count after first play.
 
-const qoe = { played: false, seeking: false, stallStart: null, stallCount: 0, stallMs: 0, base: { dropped: 0, decoded: 0 }, statsBase: { dropped: 0, decoded: 0 } };
+const qoe = { playbackId: null, played: false, seeking: false, stallStart: null, stallCount: 0, stallMs: 0, base: { dropped: 0, decoded: 0 }, statsBase: { dropped: 0, decoded: 0 } };
 const EventType = cast.framework.events.EventType;
 
 function qoeVideoQuality() {
@@ -212,6 +212,7 @@ function buildQoeSample() {
     stallCount: qoe.stallCount + (open ? 1 : 0),
     stallMs: qoe.stallMs + open,
     recoveryReloads: 0,
+    ...(qoe.playbackId ? { playbackId: qoe.playbackId } : {}),
   };
 }
 
@@ -326,6 +327,7 @@ function startEdl() {
 
 function prepareEdl(media, loadRequest) {
   const cd = media.customData || {};
+  qoe.playbackId = typeof cd.playbackId === 'string' ? cd.playbackId : null;
   const ranges = decodeWire(cd.edl);
   const key = edlSessionKey(media, cd);
   const auto = cd.autoSkipCommercials !== false;

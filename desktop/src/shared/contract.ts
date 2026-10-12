@@ -358,8 +358,11 @@ export interface DesktopCastEvent {
     | 'castStateChanged'
     | 'castPickerDismissed'
     | 'castMediaUpdate'
-    | 'castError';
+    | 'castError'
+    | 'castReceiverMessage';
   detail: DesktopCastMediaUpdate & {
+    namespace?: string;
+    message?: string;
     available?: boolean;
     connected?: boolean;
     position?: number;

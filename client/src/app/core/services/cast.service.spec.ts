@@ -203,3 +203,19 @@ describe('CastService LOAD failure', () => {
     await expect(svc.loadMedia(load())).rejects.toThrow('No Cast session');
   });
 });
+
+describe('CastService receiver messages', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('stores a qoe sample and signals a recoverable player_error', () => {
+    const svc = make(null);
+    const handle = (m: unknown) =>
+      (svc as unknown as { handleReceiverMessage(raw: string): void }).handleReceiverMessage(JSON.stringify(m));
+    const errors: unknown[] = [];
+    svc.playbackError$.subscribe((e) => errors.push(e));
+    handle({ kind: 'qoe', at: 1, sample: { engine: 'cast', playbackId: 'p' } });
+    expect(svc.receiverQoe()?.sample).toMatchObject({ engine: 'cast', playbackId: 'p' });
+    handle({ kind: 'player_error', httpStatus: 410 });
+    expect(errors).toEqual([{}]);
+  });
+});
