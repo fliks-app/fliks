@@ -265,110 +265,106 @@
       }
 
       <h4 class="font-semibold mt-4">{{ 'qoe.timeline' | translate }}</h4>
-      @if (timeline(); as tl) {
-        <p class="text-sm text-base-content/60 mb-3">{{ timelineHeader(d) }}</p>
-        <ol>
-          @for (block of tl.blocks; track block.session.sessionId; let i = $index) {
-            <li class="flex gap-3">
-              <div class="flex w-4 shrink-0 flex-col items-center" aria-hidden="true">
-                <span class="mt-1.5 inline-block h-3 w-3 shrink-0 rounded-full" [class]="dotClass(block.session)"></span>
-                <span class="w-px flex-1 bg-base-300"></span>
-              </div>
-              <div class="min-w-0 flex-1 pb-4" [title]="block.session.sessionId">
-                <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                  <span class="tabular-nums text-sm text-base-content/60">{{ clock(block.session.startedAt, d) }}</span>
-                  <span class="font-semibold">{{ blockTitle(tl, i) }}</span>
-                  <span class="ml-auto badge badge-sm badge-ghost gap-1.5" [title]="'qoe.hint.verdict' | translate">
-                    <span class="inline-block h-2 w-2 rounded-full" [class]="dotClass(block.session)"></span>
-                    {{ 'qoe.verdict.' + block.session.verdict | translate }}
-                  </span>
-                </div>
-                <p class="text-sm text-base-content/60">{{ blockSummary(block) }}</p>
-                @if (block.events.length > 0) {
-                  <ul class="mt-2 space-y-2">
-                    @for (e of block.events; track $index) {
-                      <li class="flex gap-2 text-sm">
-                        <span class="shrink-0" [class]="e.type === 'stall' ? 'text-warning' : 'text-error'" aria-hidden="true">{{ e.type === 'stall' ? '⚠' : '✕' }}</span>
-                        <div class="min-w-0">
-                          <div class="break-words">
-                            <span class="tabular-nums text-base-content/60">{{ clock(eventStart(e), d) }}</span>
-                            <span class="ml-2">{{ eventLine(e) }}</span>
-                            @if (e.data?.cause; as cause) {
-                              <span class="ml-2 inline-flex items-center gap-1.5 font-medium">
-                                <span class="inline-block h-2 w-2 rounded-full" [class]="causeDot[cause]"></span>{{ 'qoe.cause.' + cause | translate }}
-                              </span>
-                              @if (e.data?.causeConfidence === 'low') {
-                                <span class="ml-1 text-base-content/40">({{ 'qoe.confidence_low' | translate }})</span>
-                              }
-                            }
-                          </div>
-                          @if (stallLine(e); as line) {
-                            <p class="text-base-content/70">{{ line }}</p>
-                          }
-                          @if (e.data?.cause === 'server') {
-                            <div class="text-base-content/50 space-y-0.5">
-                              @if (stallHints(e); as hints) {
-                                <p class="text-warning/80">{{ hints }}</p>
-                              }
-                              @if (stallPipeline(d, e); as pipe) {
-                                <p>{{ pipe }}</p>
-                              }
-                              @if (stallLoad(e); as load) {
-                                <p>{{ load }}</p>
-                              }
-                            </div>
-                          }
-                        </div>
-                      </li>
-                    }
-                  </ul>
+      <p class="text-sm text-base-content/60 mb-3">{{ timelineHeader(d) }}</p>
+      <!-- One grid for every step (marker, time, content) so the rail, the times and the text line up. -->
+      <div class="relative text-sm">
+        <span class="absolute left-2.5 top-2.5 bottom-2.5 w-px -translate-x-1/2 bg-base-300" aria-hidden="true"></span>
+        <ol class="relative space-y-4">
+          @for (step of steps(); track $index) {
+            <li class="grid grid-cols-[1.25rem_4.75rem_minmax(0,1fr)] gap-x-3 leading-5">
+              <span class="flex h-5 items-center justify-center" aria-hidden="true">
+                @switch (step.kind) {
+                  @case ('session') {
+                    <span class="h-3 w-3 rounded-full ring-4 ring-base-100" [class]="dotClass(step.block.session)"></span>
+                  }
+                  @case ('event') {
+                    <span class="flex h-5 w-5 items-center justify-center rounded-full bg-base-100">
+                      @if (step.event.type === 'stall') {
+                        <svg lucideTriangleAlert class="h-4 w-4" [class]="causeTextClass(step.event)"></svg>
+                      } @else if (step.event.type === 'error') {
+                        <svg lucideCircleX class="h-4 w-4 text-error"></svg>
+                      } @else {
+                        <svg lucideArrowRightLeft class="h-4 w-4 text-base-content/50"></svg>
+                      }
+                    </span>
+                  }
+                  @case ('transition') {
+                    <span class="flex h-5 w-5 items-center justify-center rounded-full bg-base-100">
+                      <svg lucideArrowRightLeft class="h-4 w-4 text-base-content/50"></svg>
+                    </span>
+                  }
+                  @case ('end') {
+                    <span class="flex h-5 w-5 items-center justify-center rounded-full bg-base-100">
+                      <svg lucideCircleStop class="h-4 w-4 text-base-content/50"></svg>
+                    </span>
+                  }
                 }
-                @if (detailRows(block.session); as rows) {
-                  @if (rows.length > 0) {
-                    <details class="mt-2 text-sm" [attr.open]="detailsOpen(block.session.verdict) ? '' : null">
-                      <summary class="cursor-pointer text-base-content/60">{{ 'qoe.block.details' | translate }}</summary>
-                      <dl class="mt-2 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
-                        @for (row of rows; track row.label) {
-                          <dt class="text-base-content/50">{{ row.label }}</dt>
-                          <dd class="min-w-0 break-words">{{ row.value }}</dd>
+              </span>
+              <span class="tabular-nums text-base-content/60">{{ step.at == null ? '' : clock(step.at, d) }}</span>
+              <div class="min-w-0">
+                @switch (step.kind) {
+                  @case ('session') {
+                    <div class="flex flex-wrap items-center gap-x-3" [title]="step.block.session.sessionId">
+                      <span class="font-semibold">{{ blockTitle(timeline()!, step.index) }}</span>
+                      <span class="ml-auto inline-flex items-center gap-1.5 text-base-content/70" [title]="'qoe.hint.verdict' | translate">
+                        <span class="h-2 w-2 rounded-full" [class]="dotClass(step.block.session)"></span>
+                        {{ 'qoe.verdict.' + step.block.session.verdict | translate }}
+                      </span>
+                    </div>
+                    <p class="text-base-content/60">{{ blockSummary(step.block) }}</p>
+                    @if (unreportedText(step.block); as unreported) {
+                      <p class="text-base-content/60">{{ unreported }}</p>
+                    }
+                    @if (detailRows(step.block.session); as rows) {
+                      @if (rows.length > 0) {
+                        <details class="mt-1" [attr.open]="detailsOpen(step.block.session.verdict) ? '' : null">
+                          <summary class="cursor-pointer text-base-content/60">{{ 'qoe.block.details' | translate }}</summary>
+                          <dl class="mt-1 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
+                            @for (row of rows; track row.label) {
+                              <dt class="text-base-content/50">{{ row.label }}</dt>
+                              <dd class="min-w-0 break-words">{{ row.value }}</dd>
+                            }
+                          </dl>
+                        </details>
+                      }
+                    }
+                  }
+                  @case ('event') {
+                    @if (step.event.type === 'stall') {
+                      <p class="font-medium">{{ frozenTitle(step.event) }}</p>
+                      <p class="text-base-content/70">{{ causeSentence(step.event) }}</p>
+                      @if (step.event.data?.cause === 'server') {
+                        @if (stallHints(step.event); as hints) {
+                          <p class="text-base-content/60">{{ hints }}</p>
                         }
-                      </dl>
-                    </details>
+                        @if (stallPipeline(d, step.event); as pipe) {
+                          <p class="text-base-content/60">{{ pipe }}</p>
+                        }
+                        @if (stallLoad(step.event); as load) {
+                          <p class="text-base-content/60">{{ load }}</p>
+                        }
+                      }
+                    } @else if (step.event.type === 'error') {
+                      <p class="font-medium">{{ errorTitle(step.event) }}</p>
+                      @if (errorDetail(step.event); as detail) {
+                        <p class="text-base-content/60">{{ detail }}</p>
+                      }
+                    } @else {
+                      <p class="font-medium">{{ otherEventText(step.event) }}</p>
+                    }
+                  }
+                  @case ('transition') {
+                    <p class="font-medium">{{ transitionText(step.transition) }}</p>
+                  }
+                  @case ('end') {
+                    <p class="font-medium">{{ (step.at == null ? 'qoe.summary.ongoing' : 'qoe.block.end') | translate }}</p>
                   }
                 }
               </div>
             </li>
-            @if (tl.transitions[i]; as tr) {
-              <li class="flex gap-3">
-                <div class="flex w-4 shrink-0 flex-col items-center" aria-hidden="true">
-                  <span class="mt-2 inline-block h-2.5 w-2.5 shrink-0 rotate-45 bg-base-content/40"></span>
-                  <span class="w-px flex-1 bg-base-300"></span>
-                </div>
-                <div class="min-w-0 flex-1 pb-4 text-sm">
-                  <span class="tabular-nums text-base-content/60">{{ clock(tr.event?.at ?? tl.blocks[i + 1].session.startedAt, d) }}</span>
-                  <span class="ml-3 font-medium">{{ transitionText(tr) }}</span>
-                </div>
-              </li>
-            }
           }
-          <li class="flex gap-3">
-            <div class="flex w-4 shrink-0 flex-col items-center" aria-hidden="true">
-              <span class="mt-1.5 inline-block h-3 w-3 shrink-0 bg-base-content/40"></span>
-            </div>
-            <div class="min-w-0 flex-1 text-sm">
-              @if (endMs(d); as end) {
-                <span class="tabular-nums text-base-content/60">{{ clock(end, d) }}</span>
-                <span class="ml-3 font-medium">{{ 'qoe.block.end' | translate }}</span>
-              } @else {
-                <span class="font-medium">{{ 'qoe.summary.ongoing' | translate }}</span>
-              }
-            </div>
-          </li>
         </ol>
-      }
-      @if (d.events.length === 0) {
-        <p class="mt-2 text-sm text-base-content/50">{{ 'qoe.no_events' | translate }}</p>
-      }
+      </div>
       </div>
       <app-modal-footer flush>
         <button type="button" class="btn btn-ghost" (click)="exportJson(d)">{{ 'qoe.export_json' | translate }}</button>

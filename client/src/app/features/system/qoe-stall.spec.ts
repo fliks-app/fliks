@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { durationParts, eventStartMs, stallBreakdown, stallExplanation } from './qoe-stall';
+import { codecLabel, durationParts, eventStartMs, stallBreakdown, stallExplanation } from './qoe-stall';
 import { qoeDotClass } from './qoe-health';
 
 const stall = (data: object) => ({ type: 'stall' as const, data });
@@ -54,7 +54,7 @@ describe('durations and times', () => {
 
 describe('one palette', () => {
   it('colours a verdict like the cause of the same name', () => {
-    const v = (verdict: any) => qoeDotClass({ verdict, confidence: 'high', reasons: [] });
+    const v = (verdict: any) => qoeDotClass({ verdict });
     expect(v('network')).toBe('bg-warning');
     expect(v('server')).toBe('bg-error');
     expect(v('device')).toBe('bg-info');
@@ -75,5 +75,14 @@ describe('stallBreakdown', () => {
       { cause: 'server', count: 1, ms: 3000 },
       { cause: 'network', count: 2, ms: 2500 },
     ]);
+  });
+});
+
+describe('codecLabel', () => {
+  it('names the codec family from a ffmpeg name or a player codec string', () => {
+    expect(codecLabel('hevc')).toBe('HEVC');
+    expect(codecLabel('avc1.640028')).toBe('H.264');
+    expect(codecLabel('dvh1.08.06')).toBe('Dolby Vision');
+    expect(codecLabel(null)).toBe('');
   });
 });

@@ -1,3 +1,4 @@
+import type { TranslateService } from '@ngx-translate/core';
 import type { QoeEventRow, QoePipeline, QoeServerLoad, QoeSessionRow, QoeStallCause } from '../../core/services/api/qoe-api.service';
 import { QOE_VERDICT_BAR_CLASS } from './qoe-health';
 import { rungOf } from './qoe-timeline';
@@ -12,10 +13,31 @@ export const QOE_CAUSE_DOT_CLASS: Record<QoeStallCause, string> = {
   unknown: QOE_VERDICT_BAR_CLASS.unknown,
 };
 
+/** Icon colour per cause, matching the dot palette above. */
+export const QOE_CAUSE_TEXT_CLASS: Record<QoeStallCause, string> = {
+  server: 'text-error',
+  network: 'text-warning',
+  device: 'text-info',
+  unknown: 'text-base-content/40',
+};
+
 /** Translation and number formatting in the admin's language. */
 export interface Fmt {
   t(key: string, params?: Record<string, string>): string;
   n(v: number, digits?: number): string;
+}
+
+export function translateFmt(translate: TranslateService): Fmt {
+  const lang = () => translate.currentLang() || translate.fallbackLang() || 'en';
+  return {
+    t: (key, params) => translate.instant(key, params),
+    n: (v, digits = 1) => v.toLocaleString(lang(), { minimumFractionDigits: digits, maximumFractionDigits: digits }),
+  };
+}
+
+/** A rung as the admin reads it: the source rungs are "original quality", never their ids. */
+export function rungDisplay(rung: string, f: Fmt): string {
+  return rung === 'original' || rung === 'remux' ? f.t('qoe.block.rung_original') : rung;
 }
 
 const plain = (v: number, digits = 1) => v.toFixed(digits);
@@ -88,7 +110,23 @@ const CODEC_LABEL: Record<string, string> = {
   vp9: 'VP9',
 };
 
-export const codecLabel = (c: string | null | undefined) => (c ? (CODEC_LABEL[c.toLowerCase()] ?? c.toUpperCase()) : '');
+/** RFC 6381 sample-entry prefixes the players report ("avc1.640028"), by family. */
+const FOURCC_LABEL: Record<string, string> = {
+  avc1: 'H.264',
+  avc3: 'H.264',
+  hvc1: 'HEVC',
+  hev1: 'HEVC',
+  dvh1: 'Dolby Vision',
+  dvhe: 'Dolby Vision',
+  av01: 'AV1',
+  vp09: 'VP9',
+};
+
+export function codecLabel(c: string | null | undefined): string {
+  if (!c) return '';
+  const lower = c.toLowerCase();
+  return CODEC_LABEL[lower] ?? FOURCC_LABEL[lower.split('.')[0]] ?? c.toUpperCase();
+}
 
 function resolutionLabel(height: number | null, f: Fmt): string {
   if (height == null) return '';
@@ -128,8 +166,8 @@ export function qualityLabel(
 ): string {
   const r = rungOf(row as QoeSessionRow);
   const auto = f.t('qoe.pipeline.auto');
-  if (r.auto) return r.rung ? `${auto} · ${r.rung}` : `${auto} (${f.t('qoe.pipeline.tier_unknown')})`;
-  return r.rung ?? '-';
+  if (r.auto) return r.rung ? `${auto} · ${rungDisplay(r.rung, f)}` : `${auto} (${f.t('qoe.pipeline.tier_unknown')})`;
+  return r.rung ? rungDisplay(r.rung, f) : '-';
 }
 
 export interface PipelinePart {

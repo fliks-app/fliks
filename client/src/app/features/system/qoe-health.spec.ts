@@ -1,15 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { qoeHealth } from './qoe-health';
+import { formatMbps, qoeDotClass } from './qoe-health';
 
-const q = (verdict: any, confidence: any = 'high', stallCount = 0) => ({ verdict, confidence, reasons: [], stallCount });
+const f = { t: (k: string, p?: Record<string, string>) => `${k}:${p?.['value']}`, n: (v: number, d = 1) => v.toFixed(d).replace('.', ',') };
 
-describe('qoeHealth', () => {
-  it('maps verdict and confidence to a dot colour', () => {
-    expect(qoeHealth(q('unknown'))).toBe('unknown');
-    expect(qoeHealth(q('ok'))).toBe('ok');
-    expect(qoeHealth(q('ok', 'low'))).toBe('warn');
-    expect(qoeHealth(q('ok', 'high', 2))).toBe('warn');
-    expect(qoeHealth(q('network'))).toBe('bad');
-    expect(qoeHealth(q('device', 'low'))).toBe('warn');
+describe('qoeDotClass', () => {
+  it('follows the verdict alone, stalls or confidence never tint it', () => {
+    const v = (verdict: any) => qoeDotClass({ verdict });
+    expect(v('ok')).toBe('bg-success');
+    expect(v('network')).toBe('bg-warning');
+    expect(v('server')).toBe('bg-error');
+  });
+});
+
+describe('formatMbps', () => {
+  it('formats in the admin locale and is empty when unknown', () => {
+    expect(formatMbps(5_500_000, f)).toBe('qoe.mbps:5,5');
+    expect(formatMbps(null, f)).toBe('');
   });
 });

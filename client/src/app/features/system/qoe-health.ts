@@ -1,25 +1,5 @@
 import type { QoeDiagnosis, QoeVerdict } from '../../core/services/api/qoe-api.service';
-
-export type QoeHealth = 'ok' | 'warn' | 'bad' | 'unknown';
-
-/** Dot colour: unknown grey, ok green (orange once stalls or low confidence), a fault red (orange when unsure). */
-export function qoeHealth(q: QoeDiagnosis & { stallCount?: number }): QoeHealth {
-  if (q.verdict === 'unknown') return 'unknown';
-  if (q.verdict === 'ok') return q.confidence === 'low' || (q.stallCount ?? 0) > 0 ? 'warn' : 'ok';
-  return q.confidence === 'low' ? 'warn' : 'bad';
-}
-
-export const QOE_DOT_CLASS: Record<QoeHealth, string> = {
-  ok: 'bg-success',
-  warn: 'bg-warning',
-  bad: 'bg-error',
-  unknown: 'bg-base-content/30',
-};
-
-/** Dot colour from the verdict, in the palette shared with the stall causes; an ok verdict keeps the health tint. */
-export function qoeDotClass(q: QoeDiagnosis & { stallCount?: number }): string {
-  return q.verdict === 'ok' ? QOE_DOT_CLASS[qoeHealth(q)] : QOE_VERDICT_BAR_CLASS[q.verdict];
-}
+import type { Fmt } from './qoe-stall';
 
 export const QOE_VERDICTS: readonly QoeVerdict[] = ['ok', 'network', 'device', 'server', 'error', 'unknown'];
 
@@ -32,6 +12,12 @@ export const QOE_VERDICT_BAR_CLASS: Record<QoeVerdict, string> = {
   unknown: 'bg-base-content/30',
 };
 
-export function formatMbps(bps: number | null | undefined): string {
-  return bps == null ? '-' : `${(bps / 1_000_000).toFixed(1)} Mbps`;
+/** The dot follows the verdict alone, so it never disagrees with the verdict label next to it. */
+export function qoeDotClass(q: Pick<QoeDiagnosis, 'verdict'>): string {
+  return QOE_VERDICT_BAR_CLASS[q.verdict];
+}
+
+/** "5,5 Mbps" in the admin's language; empty when unknown, so callers can drop the value. */
+export function formatMbps(bps: number | null | undefined, f: Fmt): string {
+  return bps == null ? '' : f.t('qoe.mbps', { value: f.n(bps / 1_000_000, 1) });
 }

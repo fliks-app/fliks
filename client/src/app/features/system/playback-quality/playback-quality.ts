@@ -22,16 +22,30 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 import { parseDeviceLabel } from '../../../core/utils/format-device-label';
-import { QOE_CAUSE_DOT_CLASS, codecLabel, durationParts, eventStartMs, hintParams, loadLine, pipelineChain, pipelineParts, qualityLabel, stallBreakdown, stallExplanation, type Fmt } from '../qoe-stall';
+import { LucideArrowRightLeft, LucideCircleStop, LucideCircleX, LucideTriangleAlert } from '@lucide/angular';
+import { QOE_CAUSE_DOT_CLASS, QOE_CAUSE_TEXT_CLASS, codecLabel, durationParts, hintParams, loadLine, pipelineChain, pipelineParts, qualityLabel, rungDisplay, stallBreakdown, stallExplanation, translateFmt, type Fmt } from '../qoe-stall';
 import { buildTimeline, isOngoing, type RungName, type Timeline, type TimelineBlock, type TimelineTransition } from '../qoe-timeline';
-import { blockSummary, blockTitle, clockLabel, detailsOpen, formatPosition } from '../qoe-timeline-view';
+import { blockSummary, blockTitle, clockLabel, detailsOpen, formatPosition, timelineSteps, unreportedStalls } from '../qoe-timeline-view';
 import { QOE_VERDICTS, QOE_VERDICT_BAR_CLASS, formatMbps, qoeDotClass } from '../qoe-health';
 
 const PAGE_SIZE = 25;
 
 @Component({
   selector: 'app-system-playback-quality',
-  imports: [FormsModule, TranslatePipe, LocaleDatePipe, ModalFooterComponent, ModalHeaderComponent, PaginationComponent, SelectFieldComponent, ToggleFieldComponent],
+  imports: [
+    FormsModule,
+    TranslatePipe,
+    LocaleDatePipe,
+    LucideArrowRightLeft,
+    LucideCircleStop,
+    LucideCircleX,
+    LucideTriangleAlert,
+    ModalFooterComponent,
+    ModalHeaderComponent,
+    PaginationComponent,
+    SelectFieldComponent,
+    ToggleFieldComponent,
+  ],
   templateUrl: './playback-quality.html',
 })
 export class SystemPlaybackQualityComponent implements OnInit {
@@ -43,9 +57,8 @@ export class SystemPlaybackQualityComponent implements OnInit {
 
   readonly verdicts = QOE_VERDICTS;
   readonly barClass = QOE_VERDICT_BAR_CLASS;
-  readonly mbps = formatMbps;
   readonly causeDot = QOE_CAUSE_DOT_CLASS;
-  readonly formatPosition = formatPosition;
+  readonly causeText = QOE_CAUSE_TEXT_CLASS;
   readonly detailsOpen = detailsOpen;
 
   readonly days = signal(7);
@@ -72,6 +85,11 @@ export class SystemPlaybackQualityComponent implements OnInit {
   readonly timeline = computed(() => {
     const d = this.detail();
     return d ? buildTimeline(d.sessions, d.events) : null;
+  });
+  readonly steps = computed(() => {
+    const tl = this.timeline();
+    const d = this.detail();
+    return tl && d ? timelineSteps(tl, this.endMs(d)) : [];
   });
   readonly stallCauses = computed(() => stallBreakdown(this.detail()?.events ?? []));
 
@@ -219,11 +237,7 @@ export class SystemPlaybackQualityComponent implements OnInit {
     return this.translate.currentLang() || this.translate.fallbackLang() || 'en';
   }
 
-  /** Translation and locale number formatting for the helpers in qoe-stall.ts. */
-  readonly fmt: Fmt = {
-    t: (key, params) => this.translate.instant(key, params),
-    n: (v, digits = 1) => v.toLocaleString(this.lang, { minimumFractionDigits: digits, maximumFractionDigits: digits }),
-  };
+  readonly fmt: Fmt = translateFmt(this.translate);
 
   duration(ms: number | null | undefined): string {
     if (ms == null) return '-';
@@ -233,10 +247,6 @@ export class SystemPlaybackQualityComponent implements OnInit {
 
   seconds(ms: number): string {
     return this.translate.instant('qoe.seconds', { value: this.fmt.n(ms / 1000, 1) });
-  }
-
-  eventStart(e: QoeEventRow): number {
-    return eventStartMs(e);
   }
 
   /** "4K HEVC HDR10 → 1080p H.264 8.0 Mbps · tonemap OpenCL · decode QSV ...". */
@@ -268,33 +278,62 @@ export class SystemPlaybackQualityComponent implements OnInit {
     return this.translate.instant('qoe.pipeline.hints', { list });
   }
 
-  stallLine(e: QoeEventRow): string | null {
-    const x = stallExplanation(e, this.fmt.n);
-    return x ? this.translate.instant(x.key, x.params) : null;
+  /** "Image figée pendant 9,6 s, à 3:17 de la vidéo". */
+  frozenTitle(e: QoeEventRow): string {
+    const duration = this.seconds(e.data?.durationMs ?? 0);
+    const pos = e.data?.position;
+    return pos == null
+      ? this.translate.instant('qoe.block.frozen', { duration })
+      : this.translate.instant('qoe.block.frozen_pos', { duration, pos: formatPosition(pos) });
   }
 
-  /** One sentence per event, so a line reads without its column headers. */
-  eventLine(e: QoeEventRow): string {
+  /** "Cause : réseau. Le débit (2,0 Mbps) ne suivait pas…", "probable" when the evidence is thin. */
+  causeSentence(e: QoeEventRow): string {
+    const d = e.data;
+    if (!d?.cause || d.cause === 'unknown') return this.translate.instant('qoe.block.cause_unknown');
+    const x = stallExplanation(e, this.fmt.n);
+    const explanation = x ? this.translate.instant(x.key, x.params) : '';
+    return this.translate
+      .instant(d.causeConfidence === 'low' ? 'qoe.block.cause_probable' : 'qoe.block.cause_sure', {
+        cause: this.translate.instant(`qoe.cause_word.${d.cause}`),
+        explanation,
+      })
+      .trim();
+  }
+
+  causeTextClass(e: QoeEventRow): string {
+    return QOE_CAUSE_TEXT_CLASS[e.data?.cause ?? 'unknown'];
+  }
+
+  errorTitle(e: QoeEventRow): string {
+    const message = e.data?.message;
+    return message ? this.translate.instant('qoe.block.error', { message }) : this.translate.instant('qoe.block.error_plain');
+  }
+
+  errorDetail(e: QoeEventRow): string {
+    return [e.data?.category, e.data?.code].filter((x) => x != null && x !== '').join(' · ');
+  }
+
+  /** An event that did not open a new session: an adaptive quality change, a reload, a recovery. */
+  otherEventText(e: QoeEventRow): string {
     const d = e.data ?? {};
-    switch (e.type) {
-      case 'stall':
-        return d.position == null
-          ? this.translate.instant('qoe.block.stall_nopos', { duration: this.seconds(d.durationMs ?? 0) })
-          : this.translate.instant('qoe.block.stall_pos', { pos: formatPosition(d.position), duration: this.seconds(d.durationMs ?? 0) });
-      case 'error': {
-        const detail = [d.category, d.code, d.message].filter((x) => x != null && x !== '').join(' · ');
-        return this.translate.instant(detail ? 'qoe.line.error' : 'qoe.line.error_plain', { detail });
-      }
-      case 'quality_switch':
-        return this.translate.instant('qoe.line.quality_switch', {
-          from: d.fromBitrate == null ? '-' : this.fmt.n(d.fromBitrate / 1_000_000, 1),
-          to: d.toBitrate == null ? '-' : this.fmt.n(d.toBitrate / 1_000_000, 1),
-        });
-      case 'reload':
-        return this.reloadText(d);
-      default:
-        return this.translate.instant('qoe.line.recovery');
+    if (e.type === 'quality_switch') {
+      return this.translate.instant('qoe.transition.quality_switch', {
+        from: formatMbps(d.fromBitrate, this.fmt) || '-',
+        to: formatMbps(d.toBitrate, this.fmt) || '-',
+      });
     }
+    if (e.type === 'reload') return this.reloadText(d);
+    return this.translate.instant('qoe.transition.recovery');
+  }
+
+  unreportedText(b: TimelineBlock): string {
+    const u = unreportedStalls(b);
+    if (!u) return '';
+    const duration = this.seconds(u.ms);
+    return u.count === 1
+      ? this.translate.instant('qoe.block.unreported_one', { duration })
+      : this.translate.instant('qoe.block.unreported_many', { count: String(u.count), duration });
   }
 
   /** Rows of the always-visible summary; a value unknown by design for this engine is left out. */
@@ -309,9 +348,8 @@ export class SystemPlaybackQualityComponent implements OnInit {
     const res = d.width && d.height ? `${d.width}×${d.height}` : '';
     add('qoe.summary.quality', [this.qualityText(d) === '-' ? '' : this.qualityText(d), res].filter(Boolean).join(' · '), 'qoe.hint.quality');
     add('qoe.summary.codec', codecLabel(d.videoCodec));
-    if (d.avgBandwidthBps != null || d.avgVariantBitrate != null) {
-      add('qoe.throughput', `${formatMbps(d.avgBandwidthBps)} / ${formatMbps(d.avgVariantBitrate)}`, 'qoe.hint.throughput');
-    }
+    add('qoe.throughput_measured', formatMbps(d.avgBandwidthBps, this.fmt), 'qoe.hint.throughput_measured');
+    add('qoe.bitrate_video', formatMbps(d.avgVariantBitrate, this.fmt), 'qoe.hint.bitrate_video');
     add('qoe.dropped', d.droppedPct == null ? null : `${this.fmt.n(d.droppedPct, 1)} %`, 'qoe.hint.dropped');
     if (d.decoderName != null || d.hwDecoder != null) {
       const kind = d.hwDecoder == null ? '' : this.translate.instant(d.hwDecoder ? 'qoe.hardware' : 'qoe.software');
@@ -372,16 +410,15 @@ export class SystemPlaybackQualityComponent implements OnInit {
       const kind = s.hwDecoder == null ? '' : this.translate.instant(s.hwDecoder ? 'qoe.hardware' : 'qoe.software');
       add('qoe.decoder', [s.decoderName, kind && `(${kind})`].filter(Boolean).join(' '));
     }
-    if (s.avgBandwidthBps != null || s.avgVariantBitrate != null) {
-      add('qoe.throughput', `${formatMbps(s.avgBandwidthBps)} / ${formatMbps(s.avgVariantBitrate)}`);
-    }
+    add('qoe.throughput_measured', formatMbps(s.avgBandwidthBps, this.fmt));
+    add('qoe.bitrate_video', formatMbps(s.avgVariantBitrate, this.fmt));
     add('qoe.dropped', s.droppedPct == null ? null : `${this.fmt.n(s.droppedPct, 1)} %`);
     return rows;
   }
 
   private rungLabel(r: RungName | null, bitrate: number | null, from: boolean): string {
     const auto = this.translate.instant('qoe.pipeline.auto');
-    const name = !r ? '' : from && r.auto ? auto : (r.rung ?? (r.auto ? auto : ''));
+    const name = !r ? '' : from && r.auto ? auto : r.rung ? rungDisplay(r.rung, this.fmt) : r.auto ? auto : '';
     const rate = bitrate == null ? '' : this.translate.instant('qoe.mbps', { value: this.fmt.n(bitrate / 1_000_000, 1) });
     return rate ? (name ? `${name} (${rate})` : rate) : name;
   }
