@@ -35,6 +35,14 @@ describe('QoeAggregator', () => {
     });
   });
 
+  it('does not count a reload as a stall, an error or a recovery', () => {
+    const a = new QoeAggregator();
+    a.addSample(sample(), 0);
+    const before = JSON.stringify(a.summary());
+    expect(a.addEvent({ type: 'reload', at: 1, position: 5, reason: 'audio' }, 1)).toBeNull();
+    expect(JSON.stringify(a.summary())).toBe(before);
+  });
+
   it('keeps a counter null when the engine never reports it', () => {
     const a = new QoeAggregator();
     a.addSample(sample({ droppedFrames: null, decodedFrames: null }), 0);

@@ -28,7 +28,8 @@ export interface QoeSample {
   playbackId?: string | null;
 }
 
-export type QoeEventType = 'stall' | 'error' | 'recovery' | 'quality_switch';
+export type QoeEventType = 'stall' | 'error' | 'recovery' | 'quality_switch' | 'reload';
+export type QoeReloadReason = 'audio' | 'subtitles' | 'quality' | 'remux_fallback' | 'other';
 
 export interface QoeEvent {
   type: QoeEventType;
@@ -45,6 +46,10 @@ export interface QoeEvent {
   toBitrate?: number;
   /** Stall: the active variant bitrate (bps) when it began. */
   variantBitrate?: number;
+  /** Reload: why the stream minted a new session, and what changed. */
+  reason?: QoeReloadReason;
+  from?: string;
+  to?: string;
 }
 
 export type StallCause = 'server' | 'network' | 'device' | 'unknown';

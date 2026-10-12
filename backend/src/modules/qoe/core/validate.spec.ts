@@ -109,6 +109,19 @@ describe('parseEvents', () => {
     expect(e.at).toBe(now - 5);
   });
 
+  it('keeps a reload reason with capped from/to, and drops them on other events', () => {
+    const at = Date.now();
+    const [a, b, c] = parseEvents([
+      { type: 'reload', at, reason: 'audio', from: 'Français 5.1', to: 'x'.repeat(200) },
+      { type: 'reload', at, reason: 'bogus', from: 3 },
+      { type: 'stall', at, reason: 'audio', from: 'x' },
+    ]);
+    expect(a).toMatchObject({ reason: 'audio', from: 'Français 5.1', to: 'x'.repeat(80) });
+    expect(b.reason).toBe('other');
+    expect(b).not.toHaveProperty('from');
+    expect(c).not.toHaveProperty('reason');
+  });
+
   it('keeps a stall variantBitrate and ignores a client-sent cause', () => {
     const [e] = parseEvents([
       { type: 'stall', at: Date.now(), position: 1, variantBitrate: 5e6, cause: 'server' },

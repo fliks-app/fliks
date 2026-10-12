@@ -1,4 +1,4 @@
-import type { QoeEngine, QoeEvent, QoeEventType, QoeSample } from './types';
+import type { QoeEngine, QoeEvent, QoeEventType, QoeReloadReason, QoeSample } from './types';
 
 export const MAX_EVENTS_PER_REQUEST = 50;
 
@@ -16,6 +16,14 @@ const EVENT_TYPES: readonly QoeEventType[] = [
   'error',
   'recovery',
   'quality_switch',
+  'reload',
+];
+const RELOAD_REASONS: readonly QoeReloadReason[] = [
+  'audio',
+  'subtitles',
+  'quality',
+  'remux_fallback',
+  'other',
 ];
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
@@ -107,6 +115,15 @@ export function parseEvents(
     if (to != null) ev.toBitrate = to;
     const variant = num(e.variantBitrate);
     if (variant != null) ev.variantBitrate = variant;
+    if (ev.type === 'reload') {
+      ev.reason = RELOAD_REASONS.includes(e.reason as QoeReloadReason)
+        ? (e.reason as QoeReloadReason)
+        : 'other';
+      const rFrom = str(e.from, 80);
+      if (rFrom) ev.from = rFrom;
+      const rTo = str(e.to, 80);
+      if (rTo) ev.to = rTo;
+    }
     out.push(ev);
   }
   return out;
