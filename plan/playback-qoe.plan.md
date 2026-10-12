@@ -96,6 +96,15 @@ window is [at - durationMs, at] on the client clock, widened by 5 s each side fo
 4. Starved with fine or unknown throughput: `network`, low (data did not arrive in time).
    Unknown buffer with throughput below the bitrate: `network`, low. Otherwise `unknown`.
 
+A server cause also carries hints (`qoe.stall.hint_*`: software encode, burn-in subtitles, tonemap on
+the CPU, 2 or more transcodes at once); they never change the decision. Live TV segment timing is
+production pacing, so a live stall is `server` only when the speed is under 0.9, never on the wait.
+Each stall stores a `serverLoad` snapshot (active transcodes and sessions, 1 min load average, cpus).
+
+Each session row keeps a `pipeline` (jsonb): source and output, decoder and encoder (hardware or
+software and which), tonemap path, burn-in, crop, audio transcode. It is built from the resolvers the
+spawn uses at playback-info and follows a rung change on the running sid.
+
 The session verdict's stall rule follows the cause holding most of the stalled time (the stored
 `stallCauseMs`); `unknown` winning or no classified stall falls back to the aggregate rules above.
 
