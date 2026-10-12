@@ -10,7 +10,7 @@ import { NATIVE_SUBTITLE_SIZE_SCALE } from '../../utils/subtitle-presets';
  * DOM-rendered subtitle overlay shared by the TV engines (Tizen AVPlay,
  * webOS native `<video>`). Those pipelines either reject HTTPS external
  * subtitle paths (AVPlay) or give no styleable cue API, so we fetch the
- * WebVTT ourselves, parse the cues, and paint the active one into our own
+ * WebVTT ourselves, parse the cues, and paint the active ones into our own
  * div inside the player container.
  */
 
@@ -22,73 +22,81 @@ export interface VttCue {
   top?: boolean;
 }
 
+/** Opaque result of {@link SubtitleOverlay.load}, applied by {@link SubtitleOverlay.select}. */
+export interface SubtitleHandle {
+  id: number;
+  cues: VttCue[];
+}
+
 export class SubtitleOverlay {
   private el: HTMLDivElement | null = null;
   private cues: VttCue[] = [];
-  /** Index into `cues` near the last queried time, advanced incrementally so
-   *  `updateAt` stays O(1) per tick instead of scanning every cue. */
+  /** `prefixMaxEnd[i]` = latest end among `cues[0..i]`, bounding the backward scan for overlaps. */
+  private prefixMaxEnd: number[] = [];
+  /** First cue starting after the last queried time, advanced incrementally per tick. */
   private cursor = 0;
   private visible = false;
   private lastText = '';
   private lastTop = false;
+  private lastTime = 0;
   private bottom = '10vh';
   private top = '5vh';
-  private disposed = false;
+  /** Request counter; a handle older than the last applied selection is ignored. */
+  private seq = 0;
+  private applied = 0;
 
   /** Multiplies every preset on the ladder, so a platform can shift the whole
    *  scale without redefining the presets. */
   constructor(private readonly sizeScale = 1) {}
 
-  /** Parse a remote WebVTT file and arm it as the active track. */
-  async show(url: string): Promise<void> {
-    this.visible = true;
-    this.disposed = false;
-    let cues: VttCue[] = [];
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('VTT fetch ' + res.status);
-      cues = parseVtt(await res.text());
-    } catch {
-      cues = [];
-    }
-    // destroy() may have run while the fetch was in flight — don't repopulate
-    // cues after teardown.
-    if (this.disposed) return;
-    this.cues = cues;
+  /** Fetch and parse a remote WebVTT file; rejects when it cannot be loaded. */
+  async load(url: string): Promise<SubtitleHandle> {
+    const id = ++this.seq;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('VTT fetch ' + res.status);
+    return { id, cues: parseVtt(await res.text()) };
+  }
+
+  /** Swap in a loaded track at once; a handle superseded by a newer selection is dropped. */
+  select(handle: SubtitleHandle): void {
+    if (handle.id < this.applied) return;
+    this.applied = handle.id;
+    this.cues = handle.cues;
+    let max = -Infinity;
+    this.prefixMaxEnd = this.cues.map((c) => (max = Math.max(max, c.end)));
     this.cursor = 0;
+    this.updateAt(this.lastTime);
   }
 
   setVisible(visible: boolean): void {
     this.visible = visible;
-    if (!visible) this.render('');
+    this.updateAt(this.lastTime);
   }
 
   clear(): void {
+    this.applied = ++this.seq;
     this.visible = false;
     this.cues = [];
+    this.prefixMaxEnd = [];
     this.cursor = 0;
     this.render('');
   }
 
-  /** Render the cue active at `timeSec` (called on every time update). */
+  /** Render every cue active at `timeSec` (called on every time update). */
   updateAt(timeSec: number): void {
-    if (!this.visible) {
+    this.lastTime = timeSec;
+    if (!this.visible || !this.cues.length) {
       if (this.lastText) this.render('');
       return;
     }
-    if (!this.cues.length) return;
-    // Advance the cursor past cues that have ended, and rewind it on a
-    // backward jump (seek/loop), so each tick costs O(1) amortised instead of
-    // a full linear scan. Cues are start-sorted by the VTT parser.
-    while (this.cursor < this.cues.length - 1 && timeSec > this.cues[this.cursor].end) {
-      this.cursor++;
+    const { cues } = this;
+    while (this.cursor < cues.length && cues[this.cursor].start <= timeSec) this.cursor++;
+    while (this.cursor > 0 && cues[this.cursor - 1].start > timeSec) this.cursor--;
+    const active: VttCue[] = [];
+    for (let i = this.cursor - 1; i >= 0 && this.prefixMaxEnd[i] >= timeSec; i--) {
+      if (cues[i].end >= timeSec) active.unshift(cues[i]);
     }
-    while (this.cursor > 0 && timeSec < this.cues[this.cursor].start) {
-      this.cursor--;
-    }
-    const cue = this.cues[this.cursor];
-    const active = cue && timeSec >= cue.start && timeSec <= cue.end;
-    this.render(active ? cue.text : '', active && !!cue.top);
+    this.render(active.map((c) => c.text).join('<br>'), active.length > 0 && active.every((c) => c.top));
   }
 
   /** Same preset enums Shaka consumes from `player-settings.service`. */
@@ -125,10 +133,11 @@ export class SubtitleOverlay {
   }
 
   destroy(): void {
-    this.disposed = true;
+    this.applied = ++this.seq;
     if (this.el?.parentElement) this.el.parentElement.removeChild(this.el);
     this.el = null;
     this.cues = [];
+    this.prefixMaxEnd = [];
     this.cursor = 0;
     this.visible = false;
     this.lastText = '';
@@ -218,7 +227,7 @@ export function parseVtt(raw: string): VttCue[] {
     const top = !!line && (line[2] ? +line[1] < 40 : +line[1] >= 0);
     if (text) cues.push({ start, end, text, top });
   }
-  return cues;
+  return cues.sort((a, b) => a.start - b.start);
 }
 
 function vttTimeToSec(ts: string): number {

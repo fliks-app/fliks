@@ -61,3 +61,66 @@ describe('TizenEngine.setCrop', () => {
     expect(engineWithSurface().setCrop(rect, 1920, 1080)).toBe(false);
   });
 });
+
+describe('TizenEngine seek and audio state', () => {
+  afterEach(() => {
+    delete (window as unknown as { webapis?: unknown }).webapis;
+    delete (globalThis as unknown as { webapis?: unknown }).webapis;
+  });
+
+  function populate(engine: TizenEngine) {
+    const handler = vi.fn();
+    engine.on('audioTracksChanged', handler);
+    (engine as unknown as { populateAudioTracks(): void }).populateAudioTracks();
+    return handler.mock.calls[0][0].tracks as { id: string; selected: boolean }[];
+  }
+
+  it('refreshes the subtitle overlay after a seek completes', async () => {
+    stubAvplay({ seekTo: (_ms: number, ok: () => void) => ok(), getState: () => 'PAUSED' });
+    const engine = new TizenEngine();
+    const overlay = (engine as unknown as { subtitles: { updateAt(t: number): void } }).subtitles;
+    const updateAt = vi.spyOn(overlay, 'updateAt');
+    await engine.seek(42);
+    expect(updateAt).toHaveBeenCalledWith(42);
+  });
+
+  it('marks the stream AVPlay plays as selected, not the first audio entry', () => {
+    const tracks = [
+      { type: 'AUDIO', index: 1, extra_info: '{"language":"eng"}' },
+      { type: 'AUDIO', index: 2, extra_info: '{"language":"fra"}' },
+    ];
+    stubAvplay({
+      getTotalTrackInfo: () => tracks,
+      getCurrentStreamInfo: () => [{ type: 'VIDEO', index: 0, extra_info: '' }, tracks[1]],
+    });
+    expect(populate(new TizenEngine()).map((t) => [t.id, t.selected])).toEqual([
+      ['avplay-audio-1', false],
+      ['avplay-audio-2', true],
+    ]);
+  });
+
+  it('reports the requested track as selected right after a switch', async () => {
+    const tracks = [
+      { type: 'AUDIO', index: 1, extra_info: '{}' },
+      { type: 'AUDIO', index: 2, extra_info: '{}' },
+    ];
+    stubAvplay({
+      getTotalTrackInfo: () => tracks,
+      getCurrentStreamInfo: () => [tracks[0]],
+      getState: () => 'PLAYING',
+      setSelectTrack: () => undefined,
+    });
+    const engine = new TizenEngine();
+    populate(engine);
+    const handler = vi.fn();
+    engine.on('audioTracksChanged', handler);
+    await engine.selectAudioTrack('avplay-audio-2');
+    const emitted = handler.mock.calls[0][0].tracks as { id: string; selected: boolean }[];
+    expect(emitted.find((t) => t.selected)?.id).toBe('avplay-audio-2');
+  });
+
+  it('falls back to the first audio entry when stream info is unavailable', () => {
+    stubAvplay({ getTotalTrackInfo: () => [{ type: 'AUDIO', index: 3, extra_info: '{}' }] });
+    expect(populate(new TizenEngine())[0].selected).toBe(true);
+  });
+});

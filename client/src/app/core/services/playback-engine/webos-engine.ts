@@ -5,7 +5,7 @@ import {
   PlaybackEngine,
   SeekRange,
 } from './playback-engine';
-import { SubtitleOverlay } from './subtitle-overlay.util';
+import { SubtitleOverlay, type SubtitleHandle } from './subtitle-overlay.util';
 import { WEBOS_CUE_SIZE_BOOST } from '../../utils/subtitle-presets';
 import type { TimeRange } from '../../utils/edl-policy';
 import { MuteGate } from './mute-gate';
@@ -507,16 +507,15 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
   // ── Subtitles (shared DOM overlay) ──────────────────────────────────
 
-  async addTextTrack(url: string, language: string, label: string): Promise<unknown> {
-    return { url, language, label };
+  addTextTrack(url: string): Promise<SubtitleHandle> {
+    return this.subtitles.load(url);
   }
   selectTextTrack(track: unknown): void {
     if (!track || typeof track !== 'object') {
       this.subtitles.clear();
       return;
     }
-    const url = (track as { url?: string }).url;
-    if (url) void this.subtitles.show(url);
+    this.subtitles.select(track as SubtitleHandle);
   }
   setTextVisibility(visible: boolean): void {
     this.subtitles.setVisible(visible);
