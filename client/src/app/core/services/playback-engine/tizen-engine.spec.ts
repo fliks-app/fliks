@@ -99,6 +99,26 @@ describe('TizenEngine seek and audio state', () => {
     ]);
   });
 
+  it('reports the requested track as selected right after a switch', async () => {
+    const tracks = [
+      { type: 'AUDIO', index: 1, extra_info: '{}' },
+      { type: 'AUDIO', index: 2, extra_info: '{}' },
+    ];
+    stubAvplay({
+      getTotalTrackInfo: () => tracks,
+      getCurrentStreamInfo: () => [tracks[0]],
+      getState: () => 'PLAYING',
+      setSelectTrack: () => undefined,
+    });
+    const engine = new TizenEngine();
+    populate(engine);
+    const handler = vi.fn();
+    engine.on('audioTracksChanged', handler);
+    await engine.selectAudioTrack('avplay-audio-2');
+    const emitted = handler.mock.calls[0][0].tracks as { id: string; selected: boolean }[];
+    expect(emitted.find((t) => t.selected)?.id).toBe('avplay-audio-2');
+  });
+
   it('falls back to the first audio entry when stream info is unavailable', () => {
     stubAvplay({ getTotalTrackInfo: () => [{ type: 'AUDIO', index: 3, extra_info: '{}' }] });
     expect(populate(new TizenEngine())[0].selected).toBe(true);

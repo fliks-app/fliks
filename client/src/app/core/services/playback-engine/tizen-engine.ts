@@ -702,7 +702,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
       if (wasPaused) webapis.avplay.play();
       webapis.avplay.setSelectTrack('AUDIO', index);
       if (wasPaused) webapis.avplay.pause();
-      this._currentAudioIndex = this.playingAudioIndex() ?? index;
+      this._currentAudioIndex = index;
       this.emitAudioTracks();
     } catch (e) {
       this.emit('error', { code: -1, message: 'AVPlay setSelectTrack audio failed: ' + String(e), errorKey: 'player.playback_error' });
