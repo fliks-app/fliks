@@ -110,7 +110,7 @@ public class NativePlayerPlugin extends Plugin {
     // latter warrants the unstick seek. Reset on each load().
     private boolean videoRendererEnabled = false;
     // QoE counters, cumulative since the last load().
-    private long qoeDroppedFrames = 0;
+    private boolean qoeCmcd = false;
     private long qoeBandwidthBps = -1;
     private String qoeDecoderName = null;
     private Boolean qoeHwDecoder = null;
@@ -378,6 +378,7 @@ public class NativePlayerPlugin extends Plugin {
                     new DefaultMediaSourceFactory(dataSourceFactory)
                             .setLoadErrorHandlingPolicy(new RetryHttp404LoadErrorPolicy());
             // Offline cache keys are the bare URL, so CMCD stays off there.
+            qoeCmcd = !offline && androidx.media3.common.util.Util.inferContentType(Uri.parse(url)) == C.CONTENT_TYPE_HLS;
             if (!offline) {
                 final String cmcdSid = java.util.UUID.randomUUID().toString();
                 mediaSourceFactory.setCmcdConfigurationFactory(item ->
@@ -550,10 +551,6 @@ public class NativePlayerPlugin extends Plugin {
                         @NonNull DecoderCounters counters) {
                     videoRendererEnabled = true;
                 }
-                @Override public void onDroppedVideoFrames(
-                        @NonNull AnalyticsListener.EventTime eventTime, int droppedFrames, long elapsedMs) {
-                    qoeDroppedFrames += droppedFrames;
-                }
                 @Override public void onBandwidthEstimate(
                         @NonNull AnalyticsListener.EventTime eventTime, int totalLoadTimeMs,
                         long totalBytesLoaded, long bitrateEstimate) {
@@ -566,7 +563,6 @@ public class NativePlayerPlugin extends Plugin {
                     qoeHwDecoder = isHardwareDecoder(decoderName);
                 }
             });
-            qoeDroppedFrames = 0;
             qoeBandwidthBps = -1;
             qoeDecoderName = null;
             qoeHwDecoder = null;
@@ -1120,14 +1116,23 @@ public class NativePlayerPlugin extends Plugin {
 
     // ── State ──
 
-    private static boolean isHardwareDecoder(String name) {
+    private static final Map<String, Boolean> HW_DECODER_CACHE = new HashMap<>();
+
+    private static synchronized boolean isHardwareDecoder(String name) {
+        Boolean cached = HW_DECODER_CACHE.get(name);
+        if (cached != null) return cached;
+        Boolean hw = null;
         if (Build.VERSION.SDK_INT >= 29) {
             for (MediaCodecInfo info : new MediaCodecList(MediaCodecList.ALL_CODECS).getCodecInfos()) {
-                if (info.getName().equals(name)) return info.isHardwareAccelerated();
+                if (info.getName().equals(name)) { hw = info.isHardwareAccelerated(); break; }
             }
         }
-        String n = name.toLowerCase(Locale.ROOT);
-        return !(n.startsWith("omx.google.") || n.startsWith("c2.android."));
+        if (hw == null) {
+            String n = name.toLowerCase(Locale.ROOT);
+            hw = !(n.startsWith("omx.google.") || n.startsWith("c2.android.") || n.contains(".sw."));
+        }
+        HW_DECODER_CACHE.put(name, hw);
+        return hw;
     }
 
     private static Object orNull(Object v) {
@@ -1139,8 +1144,8 @@ public class NativePlayerPlugin extends Plugin {
         mainHandler.post(() -> {
             JSObject r = new JSObject();
             r.put("engine", "exoplayer");
-            r.put("cmcd", true);
-            Long decoded = null, bandwidth = null, bitrate = null;
+            r.put("cmcd", qoeCmcd);
+            Long decoded = null, dropped = null, bandwidth = null, bitrate = null;
             Double ahead = null;
             Integer w = null, h = null;
             String codec = null;
@@ -1148,6 +1153,7 @@ public class NativePlayerPlugin extends Plugin {
                 DecoderCounters c = player.getVideoDecoderCounters();
                 if (c != null) {
                     c.ensureUpdated();
+                    dropped = (long) c.droppedBufferCount;
                     decoded = (long) c.renderedOutputBufferCount + c.skippedOutputBufferCount + c.droppedBufferCount;
                 }
                 androidx.media3.common.Format f = player.getVideoFormat();
@@ -1163,7 +1169,7 @@ public class NativePlayerPlugin extends Plugin {
                 if (qoeBandwidthBps >= 0) bandwidth = qoeBandwidthBps;
                 ahead = Math.max(0, player.getBufferedPosition() - player.getCurrentPosition()) / 1000.0;
             }
-            r.put("droppedFrames", player != null ? (Object) qoeDroppedFrames : org.json.JSONObject.NULL);
+            r.put("droppedFrames", orNull(dropped));
             r.put("decodedFrames", orNull(decoded));
             r.put("bandwidthBps", orNull(bandwidth));
             r.put("bufferAheadS", orNull(ahead));
