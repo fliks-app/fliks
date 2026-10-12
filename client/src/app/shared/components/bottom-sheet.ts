@@ -60,8 +60,9 @@ import {
         (touchend)="onTouchEnd()"
       >
         <!-- Drag handle + optional title. Sticky so the title survives
-             scrolling a long option list. -->
-        <div class="sticky top-0 z-10 bg-neutral pt-3 pb-1 cursor-grab">
+             scrolling a long option list; the 4px gap below keeps it off the
+             first item's focus ring. -->
+        <div class="sticky top-0 z-10 bg-neutral pt-3 pb-1 mb-1 cursor-grab">
           <div class="flex justify-center">
             <div class="w-10 h-1 rounded-full bg-white/20"></div>
           </div>
