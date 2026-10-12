@@ -28,16 +28,18 @@ export interface SubtitleHandle {
   cues: VttCue[];
 }
 
+type Band = 'top' | 'bottom';
+const BANDS: Band[] = ['top', 'bottom'];
+
 export class SubtitleOverlay {
-  private el: HTMLDivElement | null = null;
+  private els: Record<Band, HTMLDivElement> | null = null;
   private cues: VttCue[] = [];
   /** `prefixMaxEnd[i]` = latest end among `cues[0..i]`, bounding the backward scan for overlaps. */
   private prefixMaxEnd: number[] = [];
   /** First cue starting after the last queried time, advanced incrementally per tick. */
   private cursor = 0;
   private visible = false;
-  private lastText = '';
-  private lastTop = false;
+  private last: Record<Band, string> = { top: '', bottom: '' };
   private lastTime = 0;
   private bottom = '10vh';
   private top = '5vh';
@@ -79,14 +81,14 @@ export class SubtitleOverlay {
     this.cues = [];
     this.prefixMaxEnd = [];
     this.cursor = 0;
-    this.render('');
+    this.renderAll('', '');
   }
 
   /** Render every cue active at `timeSec` (called on every time update). */
   updateAt(timeSec: number): void {
     this.lastTime = timeSec;
     if (!this.visible || !this.cues.length) {
-      if (this.lastText) this.render('');
+      this.renderAll('', '');
       return;
     }
     const { cues } = this;
@@ -96,7 +98,12 @@ export class SubtitleOverlay {
     for (let i = this.cursor - 1; i >= 0 && this.prefixMaxEnd[i] >= timeSec; i--) {
       if (cues[i].end >= timeSec) active.unshift(cues[i]);
     }
-    this.render(active.map((c) => c.text).join('<br>'), active.length > 0 && active.every((c) => c.top));
+    const join = (top: boolean) =>
+      active
+        .filter((c) => !!c.top === top)
+        .map((c) => c.text)
+        .join('<br>');
+    this.renderAll(join(true), join(false));
   }
 
   /** Same preset enums Shaka consumes from `player-settings.service`. */
@@ -108,20 +115,21 @@ export class SubtitleOverlay {
     bottomMargin?: number;
     topMargin?: number;
   }): void {
-    const el = this.ensureEl();
-    if (!el) return;
+    const els = this.ensureEls();
+    if (!els) return;
+    const all = BANDS.map((b) => els[b]);
     if (style.size) {
       const scale = NATIVE_SUBTITLE_SIZE_SCALE[style.size] ?? NATIVE_SUBTITLE_SIZE_SCALE['normal'];
-      el.style.fontSize = domCueFontSize(scale * this.sizeScale);
+      all.forEach((el) => (el.style.fontSize = domCueFontSize(scale * this.sizeScale)));
     }
     if (style.color) {
-      el.style.color = SUBTITLE_COLOR_MAP[style.color] ?? SUBTITLE_COLOR_MAP['white'];
+      all.forEach((el) => (el.style.color = SUBTITLE_COLOR_MAP[style.color!] ?? SUBTITLE_COLOR_MAP['white']));
     }
     if (style.shadow) {
-      el.style.textShadow = SUBTITLE_SHADOW_MAP[style.shadow] ?? SUBTITLE_SHADOW_MAP['drop'];
+      all.forEach((el) => (el.style.textShadow = SUBTITLE_SHADOW_MAP[style.shadow!] ?? SUBTITLE_SHADOW_MAP['drop']));
     }
     if (style.background) {
-      el.style.background = SUBTITLE_BG_MAP[style.background] ?? SUBTITLE_BG_MAP['transparent'];
+      all.forEach((el) => (el.style.background = SUBTITLE_BG_MAP[style.background!] ?? SUBTITLE_BG_MAP['transparent']));
     }
     if (typeof style.bottomMargin === 'number') {
       this.bottom = `${Math.max(0, style.bottomMargin)}vh`;
@@ -129,76 +137,75 @@ export class SubtitleOverlay {
     if (typeof style.topMargin === 'number') {
       this.top = `${Math.max(0, style.topMargin)}vh`;
     }
-    this.place(el, this.lastTop);
+    BANDS.forEach((b) => this.place(els[b], b));
   }
 
   destroy(): void {
     this.applied = ++this.seq;
-    if (this.el?.parentElement) this.el.parentElement.removeChild(this.el);
-    this.el = null;
+    BANDS.forEach((b) => this.els?.[b].remove());
+    this.els = null;
     this.cues = [];
     this.prefixMaxEnd = [];
     this.cursor = 0;
     this.visible = false;
-    this.lastText = '';
-    this.lastTop = false;
+    this.last = { top: '', bottom: '' };
   }
 
-  private place(el: HTMLDivElement, top: boolean): void {
+  private place(el: HTMLDivElement, band: Band): void {
+    const top = band === 'top';
     el.style.top = top ? this.top : '';
     el.style.bottom = top ? 'auto' : this.bottom;
   }
 
-  private ensureEl(): HTMLDivElement | null {
+  private ensureEls(): Record<Band, HTMLDivElement> | null {
     if (typeof document === 'undefined') return null;
     // Must live inside `.player-container` (like Shaka's own text container):
     // it is a z-index 100 stacking context, and on webOS the hardware video
     // surface erases anything painted below it.
     const host = document.querySelector('.player-container') ?? document.body;
-    if (this.el?.isConnected) {
-      if (this.el.parentElement !== host) host.appendChild(this.el);
-      return this.el;
+    if (this.els?.bottom.isConnected) {
+      for (const b of BANDS) if (this.els[b].parentElement !== host) host.appendChild(this.els[b]);
+      return this.els;
     }
-    const el = document.createElement('div');
-    el.id = 'fliks-tv-subtitle';
-    el.style.cssText = [
-      'position: absolute',
-      'left: 50%',
-      'bottom: 10vh',
-      'transform: translateX(-50%)',
-      'max-width: 80vw',
-      'padding: 6px 14px',
-      'background: transparent',
-      'color: #fff',
-      `font-size: ${domCueFontSize(this.sizeScale)}`,
-      'font-weight: 500',
-      'line-height: 1.3',
-      'text-align: center',
-      'text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9)',
-      'pointer-events: none',
-      // Below the controls row (z-40, raised to z-55 while the sprite preview is
-      // up) and above the video: at 1000 a cue covered the seek thumbnail.
-      'z-index: 30',
-      'white-space: pre-wrap',
-      'display: none',
-    ].join(';');
-    host.appendChild(el);
-    this.el = el;
-    return el;
+    const make = (band: Band) => {
+      const el = document.createElement('div');
+      el.id = band === 'top' ? 'fliks-tv-subtitle-top' : 'fliks-tv-subtitle';
+      el.style.cssText = [
+        'position: absolute',
+        'left: 50%',
+        'transform: translateX(-50%)',
+        'max-width: 80vw',
+        'padding: 6px 14px',
+        'background: transparent',
+        'color: #fff',
+        `font-size: ${domCueFontSize(this.sizeScale)}`,
+        'font-weight: 500',
+        'line-height: 1.3',
+        'text-align: center',
+        'text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9)',
+        'pointer-events: none',
+        // Below the controls row (z-40, raised to z-55 while the sprite preview is
+        // up) and above the video: at 1000 a cue covered the seek thumbnail.
+        'z-index: 30',
+        'white-space: pre-wrap',
+        'display: none',
+      ].join(';');
+      this.place(el, band);
+      host.appendChild(el);
+      return el;
+    };
+    this.els = { top: make('top'), bottom: make('bottom') };
+    return this.els;
   }
 
-  private render(text: string, top = false): void {
-    const el = this.ensureEl();
-    if (!el) return;
-    if (text === this.lastText && top === this.lastTop) return;
-    this.lastText = text;
-    if (top !== this.lastTop) this.place(el, top);
-    this.lastTop = top;
-    if (text) {
-      el.innerHTML = text;
-      el.style.display = 'block';
-    } else {
-      el.style.display = 'none';
+  private renderAll(top: string, bottom: string): void {
+    if (top === this.last.top && bottom === this.last.bottom) return;
+    const els = this.ensureEls();
+    if (!els) return;
+    for (const [band, text] of [['top', top], ['bottom', bottom]] as const) {
+      this.last[band] = text;
+      els[band].innerHTML = text;
+      els[band].style.display = text ? 'block' : 'none';
     }
   }
 }

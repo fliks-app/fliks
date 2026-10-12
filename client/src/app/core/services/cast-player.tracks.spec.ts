@@ -164,6 +164,16 @@ describe('cast session start', () => {
     svc.startCast({ ...base, subtitles: [forced], activeSubtitleId: null });
     expect(svc.availableSubtitles()[0]).toMatchObject({ forced: true, hearingImpaired: true });
   });
+
+  it('carries the two-line menu labels to the cast picker', () => {
+    const { svc } = setup();
+    svc.startCast({
+      ...base,
+      subtitles: [sub({ id: 'emb-2', menuHead: 'French', menuSub: 'SRT' })],
+      activeSubtitleId: null,
+    });
+    expect(svc.availableSubtitles()[0]).toMatchObject({ head: 'French', sub: 'SRT' });
+  });
 });
 
 describe('cast subtitle tracks sent with the LOAD', () => {
