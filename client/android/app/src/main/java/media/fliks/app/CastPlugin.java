@@ -84,6 +84,7 @@ public class CastPlugin extends Plugin {
             runOnMainThread(() -> {
                 sessionPending = false;
                 castSession = session;
+                listenReceiver(session);
                 acquireWifiLock();
                 notifyJS("connected", true);
             });
@@ -93,6 +94,7 @@ public class CastPlugin extends Plugin {
             runOnMainThread(() -> {
                 sessionPending = false;
                 castSession = null;
+                unlistenReceiver(session);
                 resumeState = null;
                 releaseWifiLock();
                 notifyJS("connected", false);
@@ -103,6 +105,7 @@ public class CastPlugin extends Plugin {
             runOnMainThread(() -> {
                 sessionPending = false;
                 castSession = session;
+                listenReceiver(session);
                 acquireWifiLock();
                 notifyJS("connected", true);
             });
@@ -182,6 +185,33 @@ public class CastPlugin extends Plugin {
         );
     }
 
+    /** Receiver messages on the Fliks namespace (qoe samples, player errors) go to JS verbatim. */
+    private static final String FLIKS_NAMESPACE = "urn:x-cast:media.fliks.app";
+
+    private void listenReceiver(CastSession session) {
+        try {
+            session.setMessageReceivedCallbacks(FLIKS_NAMESPACE, (device, ns, message) -> notifyReceiverMessage(ns, message));
+        } catch (Exception e) {
+            Log.w(TAG, "receiver message channel failed", e);
+        }
+    }
+
+    private void unlistenReceiver(CastSession session) {
+        try {
+            session.removeMessageReceivedCallbacks(FLIKS_NAMESPACE);
+        } catch (Exception ignored) {
+            // channel already gone with the session
+        }
+    }
+
+    private void notifyReceiverMessage(String namespace, String message) {
+        String js = "window.dispatchEvent(new CustomEvent('castReceiverMessage', { detail: { namespace: "
+            + JSONObject.quote(namespace) + ", message: " + JSONObject.quote(message) + " } }));";
+        getBridge().getWebView().post(() ->
+            getBridge().getWebView().evaluateJavascript(js, null)
+        );
+    }
+
     private void notifyPickerDismissed() {
         String js = "window.dispatchEvent(new CustomEvent('castPickerDismissed'));";
         getBridge().getWebView().post(() ->
@@ -242,6 +272,7 @@ public class CastPlugin extends Plugin {
                 // A session outlives the WebView (Back, reopening from the Cast
                 // notification): hand it and the sender's saved state back.
                 castSession = sessionManager.getCurrentCastSession();
+                if (castSession != null) listenReceiver(castSession);
                 // Discovery has only just started, so this is usually false; the
                 // route callback raises it as soon as a receiver answers.
                 JSObject result = new JSObject().put("available", hasCastRoute());
