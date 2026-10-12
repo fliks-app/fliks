@@ -7,7 +7,7 @@ describe('StallTracker', () => {
   it('counts a completed stall and its duration', () => {
     const t = new StallTracker();
     t.begin(1000, 5, false);
-    expect(t.end(3000)).toEqual({ durationMs: 2000, position: 5, bufferAheadS: null });
+    expect(t.end(3000)).toEqual({ durationMs: 2000, position: 5, bufferAheadS: null, variantBitrate: null });
     expect(t.snapshot(4000)).toEqual({ stallCount: 1, stallMs: 2000 });
   });
 
@@ -15,7 +15,7 @@ describe('StallTracker', () => {
     const t = new StallTracker();
     t.begin(1000, 5, false);
     t.begin(2000, 9, true);
-    expect(t.end(3000)).toEqual({ durationMs: 2000, position: 5, bufferAheadS: null });
+    expect(t.end(3000)).toEqual({ durationMs: 2000, position: 5, bufferAheadS: null, variantBitrate: null });
   });
 
   it('ignores seek/reload episodes and sub-threshold blips', () => {
@@ -76,7 +76,22 @@ describe('PlayerQoe', () => {
     qoe.setStalled(false, { sessionId: 's', position: 12 });
     expect(reporter.record).toHaveBeenCalledWith(
       's',
-      { type: 'stall', at: 3500, position: 12, durationMs: 2500, bufferAheadS: 0.4, bandwidthBps: 9 },
+      { type: 'stall', at: 3500, position: 12, durationMs: 2500, bufferAheadS: 0.4, bandwidthBps: 9, variantBitrate: 5 },
+      false,
+      expect.any(String),
+    );
+  });
+
+  it('reports the variant bitrate active when the stall began', async () => {
+    await qoe.refresh(engine(async () => raw));
+    now = 1000;
+    qoe.setStalled(true, { sessionId: 's', position: 1 });
+    await qoe.refresh(engine(async () => ({ ...raw, variantBitrate: 2 })));
+    now = 3000;
+    qoe.setStalled(false, { sessionId: 's', position: 1 });
+    expect(reporter.record).toHaveBeenCalledWith(
+      's',
+      expect.objectContaining({ type: 'stall', variantBitrate: 5 }),
       false,
       expect.any(String),
     );

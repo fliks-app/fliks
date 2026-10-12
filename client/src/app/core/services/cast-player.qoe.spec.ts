@@ -41,7 +41,7 @@ describe('CastPlayerService.qoeSample', () => {
 });
 
 describe('CastPlayerService.recordReceiverStalls', () => {
-  const ep = { at: 1000, position: 12, durationMs: 2000, bufferAheadS: 0.2, bandwidthBps: 5 };
+  const ep = { at: 1000, position: 12, durationMs: 2000, bufferAheadS: 0.2, bandwidthBps: 5, variantBitrate: 4e6 };
 
   it('turns each episode into one stall event, even when the message repeats', () => {
     const record = vi.fn();
@@ -52,7 +52,7 @@ describe('CastPlayerService.recordReceiverStalls', () => {
     expect(record).toHaveBeenCalledTimes(2);
     expect(record).toHaveBeenCalledWith(
       's',
-      { type: 'stall', at: 3000, position: 12, durationMs: 2000, bufferAheadS: 0.2, bandwidthBps: 5 },
+      { type: 'stall', at: 3000, position: 12, durationMs: 2000, bufferAheadS: 0.2, bandwidthBps: 5, variantBitrate: 4e6 },
       false,
       'pb',
     );

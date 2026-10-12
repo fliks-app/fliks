@@ -21,6 +21,8 @@ export interface QoeEvent {
   category?: string;
   fromBitrate?: number;
   toBitrate?: number;
+  /** Stall: the active rung bitrate (bps) when it began. */
+  variantBitrate?: number | null;
 }
 
 export interface QoeDiagnosis {

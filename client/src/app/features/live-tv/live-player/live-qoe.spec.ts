@@ -67,7 +67,7 @@ describe('LiveQoe', () => {
     live.end();
     expect(reporter.record).toHaveBeenCalledWith(
       's1',
-      expect.objectContaining({ type: 'stall' }),
+      expect.objectContaining({ type: 'stall', variantBitrate: 2e6 }),
       false,
       expect.any(String),
     );

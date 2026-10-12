@@ -97,6 +97,7 @@ export interface QoeStallEpisode {
   durationMs: number;
   bufferAheadS: number | null;
   bandwidthBps: number | null;
+  variantBitrate: number | null;
 }
 
 /** Seconds buffered ahead of the playhead, null when it sits outside every range. */

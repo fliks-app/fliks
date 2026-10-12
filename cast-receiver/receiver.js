@@ -166,7 +166,7 @@ playerManager.addEventListener(EventType.BUFFERING, (event) => {
     if (qoe.stallStart == null && qoe.played && !qoe.seeking && Date.now() - qoe.lastSeekAt > SEEK_GRACE_MS) {
       const s = buildQoeSample();
       qoe.stallStart = Date.now();
-      qoe.stallAt = { position: playerManager.getCurrentTimeSec(), bufferAheadS: s.bufferAheadS, bandwidthBps: s.bandwidthBps };
+      qoe.stallAt = { position: playerManager.getCurrentTimeSec(), bufferAheadS: s.bufferAheadS, bandwidthBps: s.bandwidthBps, variantBitrate: s.variantBitrate };
     }
   } else if (qoe.stallStart != null) {
     const durationMs = Date.now() - qoe.stallStart;

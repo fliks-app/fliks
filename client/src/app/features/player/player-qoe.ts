@@ -11,14 +11,31 @@ export class StallTracker {
   count = 0;
   totalMs = 0;
   private lastEndAt = 0;
-  private open: { at: number; position: number; bufferAheadS: number | null; ignored: boolean } | null = null;
+  private open: {
+    at: number;
+    position: number;
+    bufferAheadS: number | null;
+    variantBitrate: number | null;
+    ignored: boolean;
+  } | null = null;
 
-  begin(now: number, position: number, ignored: boolean, bufferAheadS: number | null = null): void {
-    this.open ??= { at: Math.max(now, this.lastEndAt), position, bufferAheadS, ignored };
+  begin(
+    now: number,
+    position: number,
+    ignored: boolean,
+    bufferAheadS: number | null = null,
+    variantBitrate: number | null = null,
+  ): void {
+    this.open ??= { at: Math.max(now, this.lastEndAt), position, bufferAheadS, variantBitrate, ignored };
   }
 
   /** Closes the open episode; returns it when it counted. */
-  end(now: number): { durationMs: number; position: number; bufferAheadS: number | null } | null {
+  end(now: number): {
+    durationMs: number;
+    position: number;
+    bufferAheadS: number | null;
+    variantBitrate: number | null;
+  } | null {
     const o = this.open;
     this.open = null;
     if (o) this.lastEndAt = now;
@@ -27,7 +44,7 @@ export class StallTracker {
     if (durationMs < MIN_STALL_MS) return null;
     this.count++;
     this.totalMs += durationMs;
-    return { durationMs, position: o.position, bufferAheadS: o.bufferAheadS };
+    return { durationMs, position: o.position, bufferAheadS: o.bufferAheadS, variantBitrate: o.variantBitrate };
   }
 
   /** Counters including an episode still open, so a stall in progress shows up. */
@@ -92,7 +109,13 @@ export class PlayerQoe {
     ctx: { sessionId?: string; position: number; ignored?: boolean; bufferAheadS?: number | null; since?: number },
   ): void {
     if (stalled) {
-      this.stalls.begin(ctx.since ?? this.now(), ctx.position, !!ctx.ignored, ctx.bufferAheadS ?? null);
+      this.stalls.begin(
+        ctx.since ?? this.now(),
+        ctx.position,
+        !!ctx.ignored,
+        ctx.bufferAheadS ?? null,
+        this.last?.variantBitrate ?? null,
+      );
       return;
     }
     this.closeStall(ctx.sessionId);
@@ -107,6 +130,7 @@ export class PlayerQoe {
         durationMs: done.durationMs,
         bufferAheadS: done.bufferAheadS,
         bandwidthBps: this.last?.bandwidthBps ?? null,
+        variantBitrate: done.variantBitrate,
       });
     }
   }
