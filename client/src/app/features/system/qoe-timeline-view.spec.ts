@@ -30,16 +30,12 @@ describe('blockTitle', () => {
 
 describe('blockSummary', () => {
   it('says nothing happened plainly, without zeros', () => {
-    expect(blockSummary({ watchedMs: 60_000, stallCount: 0, stallMs: 0 }, f)).toBe('qoe.block.played{"duration":"qoe.duration_min{\\"min\\":\\"1\\",\\"sec\\":\\"00\\"}"} · qoe.block.none');
-  });
-
-  it('gives a short session its exact length', () => {
-    expect(blockSummary({ watchedMs: 2000, stallCount: 0, stallMs: 0 }, f)).toBe('qoe.block.played{"duration":"qoe.duration_s{\\"sec\\":\\"2\\"}"} · qoe.block.none');
+    expect(blockSummary({ stallCount: 0, stallMs: 0 }, f)).toBe('qoe.block.none');
   });
 
   it('counts stalls with their total, singular apart', () => {
-    expect(blockSummary({ watchedMs: null, stallCount: 1, stallMs: 9600 }, f)).toContain('qoe.block.stalls_one');
-    expect(blockSummary({ watchedMs: 129_000, stallCount: 2, stallMs: 11_500 }, f)).toContain('"count":"2"');
+    expect(blockSummary({ stallCount: 1, stallMs: 9600 }, f)).toContain('qoe.block.stalls_one');
+    expect(blockSummary({ stallCount: 2, stallMs: 11_500 }, f)).toContain('"count":"2"');
   });
 });
 

@@ -1,5 +1,5 @@
 import type { QoeEventRow, QoeSessionRow } from '../../core/services/api/qoe-api.service';
-import { durationParts, eventStartMs, rungDisplay, type Fmt } from './qoe-stall';
+import { eventStartMs, rungDisplay, type Fmt } from './qoe-stall';
 import { rungOf, type Timeline, type TimelineBlock, type TimelineTransition } from './qoe-timeline';
 
 /** Plain-words title of a session block, from how it started and what it served. */
@@ -11,20 +11,12 @@ export function blockTitle(s: QoeSessionRow, first: boolean, f: Fmt): string {
   return rung ? f.t('qoe.block.title_play', { rung }) : f.t('qoe.block.title_play_auto');
 }
 
-/** "1 min 00 s de lecture · aucune coupure". */
-export function blockSummary(s: Pick<QoeSessionRow, 'watchedMs' | 'stallCount' | 'stallMs'>, f: Fmt): string {
-  const parts: string[] = [];
-  if (s.watchedMs != null) {
-    const d = durationParts(s.watchedMs);
-    parts.push(f.t('qoe.block.played', { duration: f.t(d.key, d.params) }));
-  }
+/** "aucune coupure", "2 coupures, 11,5 s au total". */
+export function blockSummary(s: Pick<QoeSessionRow, 'stallCount' | 'stallMs'>, f: Fmt): string {
   const total = f.t('qoe.seconds', { value: f.n(s.stallMs / 1000, 1) });
-  parts.push(
-    s.stallCount === 0
-      ? f.t('qoe.block.none')
-      : f.t(s.stallCount === 1 ? 'qoe.block.stalls_one' : 'qoe.block.stalls_many', { count: String(s.stallCount), total }),
-  );
-  return parts.join(' · ');
+  return s.stallCount === 0
+    ? f.t('qoe.block.none')
+    : f.t(s.stallCount === 1 ? 'qoe.block.stalls_one' : 'qoe.block.stalls_many', { count: String(s.stallCount), total });
 }
 
 /** The technical details are opened for a block whose cause lies on the server or the device. */

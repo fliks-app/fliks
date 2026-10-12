@@ -1651,8 +1651,7 @@
       "error_plain": "Error de reproducción",
       "unreported_one": "1 corte de {{duration}} sin detalles recibidos",
       "unreported_many": "{{count}} cortes, {{duration}} en total, sin detalles recibidos",
-      "rung_eco": "{{rung}} bajo consumo",
-      "played": "{{duration}} de reproducción"
+      "rung_eco": "{{rung}} bajo consumo"
     },
     "throughput_measured": "Caudal medido",
     "bitrate_video": "Bitrate del vídeo",

@@ -439,21 +439,23 @@ export class SystemPlaybackQualityComponent implements OnInit {
   }
 
   /** "2 min 09 s · aucune coupure", led by the quality when a change opened the session (the change is the title). */
-  blockSummary(b: TimelineBlock, incoming: TimelineTransition | null = null, spanMs: number | null = null): string {
-    // A session shorter than a heartbeat never measured its playback time: its span on the timeline says it.
-    const watchedMs = b.session.watchedMs || spanMs;
-    const summary = blockSummary({ watchedMs, ...ownStalls(b, incoming) }, this.fmt);
-    if (!incoming || incoming.kind === 'handoff') return summary;
+  /** The stalls, led by the quality when a change opened the session and does not already name it. */
+  blockSummary(b: TimelineBlock, incoming: TimelineTransition | null = null): string {
+    const summary = blockSummary(ownStalls(b, incoming), this.fmt);
+    if (!incoming || incoming.kind === 'handoff' || incoming.kind === 'quality_switch') return summary;
     const quality = this.qualityText(b.session);
     return quality && quality !== '-' ? `${quality} · ${summary}` : summary;
   }
 
   /** The technical figures of one session, folded under "Technical details". */
-  detailRows(s: QoeSessionRow): { label: string; value: string }[] {
+  detailRows(s: QoeSessionRow, spanMs: number | null = null): { label: string; value: string }[] {
     const rows: { label: string; value: string }[] = [];
     const add = (label: string, value: string | null | undefined) => {
       if (value) rows.push({ label: this.translate.instant(label), value });
     };
+    // A session shorter than a heartbeat never measured its playback time: its span on the timeline says it.
+    const watchedMs = s.watchedMs || spanMs;
+    add('qoe.watched', watchedMs == null ? null : this.duration(watchedMs));
     add('qoe.pipeline.title', this.pipelineText(s.pipeline, s));
     add('qoe.summary.codec', codecLabel(s.videoCodec));
     if (s.decoderName != null || s.hwDecoder != null) {

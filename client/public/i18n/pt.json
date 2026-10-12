@@ -1651,8 +1651,7 @@
       "error_plain": "Erro de reprodução",
       "unreported_one": "1 paragem de {{duration}} sem detalhes recebidos",
       "unreported_many": "{{count}} paragens, {{duration}} no total, sem detalhes recebidos",
-      "rung_eco": "{{rung}} baixo consumo",
-      "played": "{{duration}} de reprodução"
+      "rung_eco": "{{rung}} baixo consumo"
     },
     "throughput_measured": "Débito medido",
     "bitrate_video": "Bitrate do vídeo",

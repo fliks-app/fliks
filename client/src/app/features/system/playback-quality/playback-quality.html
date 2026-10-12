@@ -348,11 +348,11 @@
                     @if (change?.detail; as detail) {
                       <p class="text-base-content/70">{{ detail }}</p>
                     }
-                    <p class="text-base-content/60">{{ blockSummary(step.block, step.incoming, step.spanMs) }}</p>
+                    <p class="text-base-content/60">{{ blockSummary(step.block, step.incoming) }}</p>
                     @if (unreportedText(step.block, step.incoming); as unreported) {
                       <p class="text-base-content/60">{{ unreported }}</p>
                     }
-                    @if (detailRows(step.block.session); as rows) {
+                    @if (detailRows(step.block.session, step.spanMs); as rows) {
                       @if (rows.length > 0) {
                         <details class="mt-1" [attr.open]="detailsOpen(step.block.session.verdict) ? '' : null">
                           <summary class="cursor-pointer text-base-content/60">{{ 'qoe.block.details' | translate }}</summary>
