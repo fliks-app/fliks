@@ -6,7 +6,7 @@ import Foundation
 /// stall-watchdog recovery. Mirrors client/src/app/features/player/player.ts.
 /// Doesn't hold an AVPlayer — PlayerView's coordinator feeds live playhead
 /// state via `tick`/`notifyStateChange` and reacts to `onReload`.
-@Observable final class PlaybackService {
+@MainActor @Observable final class PlaybackService {
     private let api = APIClient.shared
 
     private(set) var info: PlaybackInfoResponse?
@@ -53,6 +53,26 @@ import Foundation
         var bufferAheadS: Double?
         var bandwidthBps: Double?
         var message: String?
+
+        /// Nil fields go out as explicit null, like the iOS plugin.
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: QoeKey.self)
+            try c.encode(type, forKey: QoeKey("type"))
+            try c.encode(at, forKey: QoeKey("at"))
+            try c.encode(position, forKey: QoeKey("position"))
+            try c.encode(durationMs, forKey: QoeKey("durationMs"))
+            try c.encode(bufferAheadS, forKey: QoeKey("bufferAheadS"))
+            try c.encode(bandwidthBps, forKey: QoeKey("bandwidthBps"))
+            try c.encode(message, forKey: QoeKey("message"))
+        }
+    }
+
+    struct QoeKey: CodingKey {
+        let stringValue: String
+        var intValue: Int? { nil }
+        init(_ s: String) { stringValue = s }
+        init?(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { nil }
     }
 
     /// Fired with a fresh play URL after a lost-session / stall recovery mints
@@ -102,7 +122,11 @@ import Foundation
         destroyed = true
         guard let sid = sessionId else { return }
         sessionId = nil
-        Task { try? await api.delete("/api/stream/sessions/\(sid)") }
+        let events = takeEvents()
+        Task {
+            await postEvents(events, sid: sid)
+            try? await api.delete("/api/stream/sessions/\(sid)")
+        }
     }
 
     // MARK: - Quality
@@ -277,7 +301,6 @@ import Foundation
     // MARK: - QoE
 
     struct Qoe: Encodable {
-        let engine = "avplayer"
         let cmcd: Bool
         let droppedFrames: Int?
         let decodedFrames: Int?
@@ -288,10 +311,28 @@ import Foundation
         let height: Int?
         let videoCodec: String?
         let decoderName: String?
-        let hwDecoder = true
         let stallCount: Int
         let stallMs: Int
         let recoveryReloads: Int
+
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: QoeKey.self)
+            try c.encode("avplayer", forKey: QoeKey("engine"))
+            try c.encode(cmcd, forKey: QoeKey("cmcd"))
+            try c.encode(droppedFrames, forKey: QoeKey("droppedFrames"))
+            try c.encode(decodedFrames, forKey: QoeKey("decodedFrames"))
+            try c.encode(bandwidthBps, forKey: QoeKey("bandwidthBps"))
+            try c.encode(bufferAheadS, forKey: QoeKey("bufferAheadS"))
+            try c.encode(variantBitrate, forKey: QoeKey("variantBitrate"))
+            try c.encode(width, forKey: QoeKey("width"))
+            try c.encode(height, forKey: QoeKey("height"))
+            try c.encode(videoCodec, forKey: QoeKey("videoCodec"))
+            try c.encode(decoderName, forKey: QoeKey("decoderName"))
+            try c.encode(Bool?.none, forKey: QoeKey("hwDecoder"))
+            try c.encode(stallCount, forKey: QoeKey("stallCount"))
+            try c.encode(stallMs, forKey: QoeKey("stallMs"))
+            try c.encode(recoveryReloads, forKey: QoeKey("recoveryReloads"))
+        }
     }
 
     private var bandwidth: Double? {
@@ -390,6 +431,7 @@ import Foundation
         recovering = true
         recoverAttempts += 1
         if let sid = sessionId {
+            await postEvents(takeEvents(), sid: sid)
             try? await api.delete("/api/stream/sessions/\(sid)")
         }
         do {
@@ -399,8 +441,10 @@ import Foundation
             lastProgressAt = Date()
             recovering = false
             recoveringGuard = false
+            // Counters are per session id: the new sid starts from zero.
+            stallCount = 0; stallMs = 0; recoveryReloads = 0
             if countAsRecovery {
-                recoveryReloads += 1
+                recoveryReloads = 1
                 recordEvent("recovery", position: position)
             }
             onReload?(url, position)
@@ -408,6 +452,8 @@ import Foundation
             recoveringGuard = false
             if recoverAttempts >= maxRecoverAttempts {
                 recovering = false
+                recordEvent("error", position: position, message: "recovery exhausted")
+                flushNow()
                 onFatalError?()
             } else {
                 let backoffSeconds = 2 * recoverAttempts // 2s, 4s

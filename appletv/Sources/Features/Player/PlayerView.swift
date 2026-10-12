@@ -272,7 +272,7 @@ private struct SkipCueStyle: ButtonStyle {
         let item = Self.makeItem(url: url)
         playback.qoeItem = item
         playedOnce = false
-        stallStart = nil
+        closeStall()
         applyMetadata(to: item)
         player.replaceCurrentItem(with: item)
         let target = edlStart(position, duration: edlDuration(item))
@@ -296,20 +296,24 @@ private struct SkipCueStyle: ButtonStyle {
     /// Rebuffer in flight: set on `.waitingToPlayAtSpecifiedRate` after the first frame, settled on `.playing`.
     private var stallStart: (at: Date, position: Double)?
     private var playedOnce = false
+    /// A seek also waits to buffer: no stall is armed right after a time jump.
+    private var lastJumpAt = Date.distantPast
+
+    private func closeStall() {
+        guard let start = stallStart else { return }
+        stallStart = nil
+        playback.recordStall(position: start.position, durationMs: Int(Date().timeIntervalSince(start.at) * 1000))
+    }
 
     private func trackStall(_ player: AVPlayer) {
         let position = player.currentTime().seconds
         switch player.timeControlStatus {
         case .playing:
             playedOnce = true
-            guard let start = stallStart else { return }
-            stallStart = nil
-            // A seek also waits to buffer, but moves the playhead.
-            if abs(position - start.position) < 2 {
-                playback.recordStall(position: start.position, durationMs: Int(Date().timeIntervalSince(start.at) * 1000))
-            }
+            closeStall()
         case .waitingToPlayAtSpecifiedRate:
-            if playedOnce, stallStart == nil, player.reasonForWaitingToPlay == .toMinimizeStalls {
+            if playedOnce, stallStart == nil, Date().timeIntervalSince(lastJumpAt) > 1,
+               player.reasonForWaitingToPlay == .toMinimizeStalls {
                 stallStart = (Date(), position)
             }
         default:
@@ -318,6 +322,7 @@ private struct SkipCueStyle: ButtonStyle {
     }
 
     func teardown() {
+        closeStall()
         playback.stop()
         if let timeObserver, let player { player.removeTimeObserver(timeObserver) }
         timeObserver = nil
@@ -487,7 +492,10 @@ private struct SkipCueStyle: ButtonStyle {
             forName: AVPlayerItem.timeJumpedNotification, object: item, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                guard let self, let t = self.player?.currentTime().seconds, t.isFinite else { return }
+                guard let self else { return }
+                self.stallStart = nil
+                self.lastJumpAt = Date()
+                guard let t = self.player?.currentTime().seconds, t.isFinite else { return }
                 self.enforceEdl(at: t)
             }
         }
