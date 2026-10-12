@@ -7,7 +7,7 @@ import type { QoeEvent } from './api/qoe-api.service';
 const ev = (at: number): QoeEvent => ({ type: 'stall', at, position: 1 });
 
 describe('QoeReporter', () => {
-  const api = { postQoeEvents: vi.fn(), getQoeEventsUrl: vi.fn((s: string) => `/e/${s}?token=t`) };
+  const api = { postQoeEvents: vi.fn(), qoeEventsRequest: vi.fn((s: string) => ({ url: `/e/${s}`, init: { method: 'POST', keepalive: true } })) };
   let reporter: QoeReporter;
 
   beforeEach(() => {
@@ -54,7 +54,7 @@ describe('QoeReporter', () => {
     reporter.record('a', ev(1));
     reporter.flushKeepalive('a');
     expect(fetchMock).toHaveBeenCalledWith(
-      '/e/a?token=t',
+      '/e/a',
       expect.objectContaining({ method: 'POST', keepalive: true, body: JSON.stringify({ events: [ev(1)] }) }),
     );
   });

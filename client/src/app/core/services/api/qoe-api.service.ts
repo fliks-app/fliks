@@ -101,7 +101,7 @@ export interface QoeSessionPage {
 }
 
 export interface QoeDeviceSummary {
-  device: string;
+  device: string | null;
   engine: string | null;
   sessions: number;
   stallSessions: number;

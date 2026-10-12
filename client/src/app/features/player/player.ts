@@ -393,6 +393,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // ceiling) with a frozen-but-healthy playhead; widen the window right after.
   private lastSeekAt = 0;
   private lastQualitySwitchAt = 0;
+  /** Buffering right after a reload or track switch finishes is that switch settling, not a stall. */
+  private qoeGraceUntil = 0;
   private readonly seekStallGraceMs = 32_000;
   // Desktop mpv far-seek → reload thresholds: forward slack above mpv's cache
   // end, and the backward window still served from its back-cache. A seek
@@ -1946,6 +1948,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.state.loading.set(false);
     } finally {
       this.reloadingStream = false;
+      this.qoeGraceUntil = Date.now() + 3_000;
     }
   }
 
@@ -2327,6 +2330,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.state.failWith(e, { dolbyVision: this.isDolbyVisionPassthrough() });
     } finally {
       this.reloadingStream = false;
+      this.qoeGraceUntil = Date.now() + 3_000;
       this.reloadLoadPending = false;
       this.state.loading.set(false);
     }
@@ -2695,20 +2699,26 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Buffering after the first frame that no seek, load or quality switch explains. */
   private readonly qoeStallEffect = effect(() => {
     const stalled = this.state.buffering() && this.state.videoStarted();
-    untracked(() => {
-      const ignored =
-        this.state.seekLocked() ||
-        this.reloadingStream ||
-        this.reloadLoadPending ||
-        this.recoveringFromLostSession ||
-        Date.now() - Math.max(this.lastSeekAt, this.lastQualitySwitchAt) < 2_000;
-      this.qoe.setStalled(stalled, {
-        sessionId: this.activeSessionId(),
-        position: this.engine?.currentTime ?? 0,
-        ignored,
-      });
-    });
+    untracked(() => this.trackStall(stalled));
   });
+
+  private trackStall(stalled: boolean): void {
+    const ignored =
+      this.state.seekLocked() ||
+      this.reloadingStream ||
+      this.reloadLoadPending ||
+      this.recoveringFromLostSession ||
+      Date.now() < this.qoeGraceUntil ||
+      Date.now() - Math.max(this.lastSeekAt, this.lastQualitySwitchAt) < 2_000;
+    const position = this.engine?.currentTime ?? 0;
+    const end = this.state.bufferedEnd();
+    this.qoe.setStalled(stalled, {
+      bufferAheadS: end > 0 ? Math.max(0, end - position) : null,
+      sessionId: this.activeSessionId(),
+      position,
+      ignored,
+    });
+  }
 
   private readonly qoeErrorEffect = effect(() => {
     const err = this.state.error();
@@ -3672,6 +3682,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       }
     } finally {
       this.recoveringFromLostSession = false;
+      this.qoeGraceUntil = Date.now() + 3_000;
     }
   }
 
@@ -4007,9 +4018,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // switching language must not resume a player the user paused.
     const wasPaused = this.pauseIntent();
     if (this.isNativeEngine()) this.state.buffering.set(true);
+    this.qoeGraceUntil = Number.MAX_SAFE_INTEGER;
     try {
       await this.engine?.selectAudioTrack(trackId);
     } finally {
+      this.qoeGraceUntil = Date.now() + 3_000;
       // A newer switch owns the buffering veil and the play state now.
       if (request === this.audioRequest) {
         if (this.isNativeEngine()) this.state.buffering.set(false);
@@ -4345,6 +4358,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // ── Event handlers ──
 
   private onBeforeUnload = () => {
+    this.qoe.setStalled(false, { sessionId: this.activeSessionId(), position: this.engine?.currentTime ?? 0 });
     this.qoe.flushKeepalive(this.activeSessionId());
     this.fireAndForgetStopSessions();
   };
@@ -4543,6 +4557,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       throw e;
     } finally {
       this.reloadingStream = false;
+      this.qoeGraceUntil = Date.now() + 3_000;
       this.reloadLoadPending = false;
     }
   }

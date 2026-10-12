@@ -177,3 +177,16 @@ describe('ShakaEngine.getQoeSample', () => {
     );
   });
 });
+
+describe('ShakaEngine.getQoeSample unknowns', () => {
+  it('reports null rather than 0 for nothing buffered and an unknown bitrate', async () => {
+    const container = document.createElement('div');
+    const video = document.createElement('video');
+    container.appendChild(video);
+    const engine = new ShakaEngine();
+    await engine.init(video);
+    player.getStats.mockReturnValue({});
+    player.getVariantTracks.mockReturnValue([{ active: true, bandwidth: 0 }]);
+    expect(await engine.getQoeSample()).toMatchObject({ bufferAheadS: null, variantBitrate: null });
+  });
+});

@@ -1488,7 +1488,7 @@
     "filter_all_verdicts": "Tutte le diagnosi",
     "filter_user": "Utente",
     "filter_all_users": "Tutti gli utenti",
-    "filter_device": "Filtra per dispositivo",
+    "filter_device": "Dispositivo",
     "col_device": "Dispositivo",
     "col_sessions": "Sessioni",
     "col_stall_sessions": "Con blocchi",
@@ -1539,7 +1539,8 @@
       "software_decoder": "Decodifica software in HD o superiore.",
       "too_little_data": "Tempo di riproduzione insufficiente per giudicare.",
       "healthy": "Nessun problema rilevato."
-    }
+    },
+    "filter_all_devices": "Tutti i dispositivi"
   },
   "markers": {
     "detect_intros": "Rileva le intro",

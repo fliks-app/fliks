@@ -2885,3 +2885,28 @@ describe('PlayerComponent negotiation entry points', () => {
     expect(call.slice(2, 5)).toEqual([9, 1, undefined]);
   });
 });
+
+describe('PlayerComponent stall counting', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  function stalling() {
+    const h = createHarness();
+    const c = h.component as any;
+    return { c, spy: vi.spyOn(c.qoe, 'setStalled') };
+  }
+
+  it('counts buffering that nothing explains', () => {
+    const { c, spy } = stalling();
+    c.trackStall(true);
+    expect(spy).toHaveBeenLastCalledWith(true, expect.objectContaining({ ignored: false }));
+  });
+
+  it('ignores buffering inside the grace window a finished reload leaves', () => {
+    const { c, spy } = stalling();
+    c.qoeGraceUntil = Date.now() + 3_000;
+    c.trackStall(true);
+    expect(spy).toHaveBeenLastCalledWith(true, expect.objectContaining({ ignored: true }));
+  });
+});

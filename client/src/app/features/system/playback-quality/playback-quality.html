@@ -106,9 +106,9 @@
                 </tr>
               </thead>
               <tbody>
-                @for (d of summary()?.byDevice; track d.device + d.engine) {
+                @for (d of summary()?.byDevice; track $index) {
                   <tr>
-                    <td>{{ d.device }}</td>
+                    <td>{{ d.device ?? '-' }}</td>
                     <td>{{ d.engine ?? '-' }}</td>
                     <td class="text-right tabular-nums">{{ d.sessions }}</td>
                     <td class="text-right tabular-nums">{{ pct(d.stallSessions, d.sessions) }}</td>
@@ -151,15 +151,17 @@
               <option [ngValue]="u.id">{{ u.username }}</option>
             }
           </select>
-          <input
-            type="search"
-            class="input input-bordered input-sm"
-            [placeholder]="'qoe.filter_device' | translate"
+          <select
+            class="select select-bordered select-sm"
             [ngModel]="deviceFilter()"
-            (ngModelChange)="deviceFilter.set($event)"
-            (keyup.enter)="applyFilters()"
-            (blur)="applyFilters()"
-          />
+            (ngModelChange)="deviceFilter.set($event); applyFilters()"
+            [attr.aria-label]="'qoe.filter_device' | translate"
+          >
+            <option value="">{{ 'qoe.filter_all_devices' | translate }}</option>
+            @for (d of deviceOptions(); track d) {
+              <option [value]="d">{{ d }}</option>
+            }
+          </select>
         </div>
 
         @if (sessions().length === 0) {

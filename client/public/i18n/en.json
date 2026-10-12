@@ -1488,7 +1488,7 @@
     "filter_all_verdicts": "All verdicts",
     "filter_user": "User",
     "filter_all_users": "All users",
-    "filter_device": "Filter by device",
+    "filter_device": "Device",
     "col_device": "Device",
     "col_sessions": "Sessions",
     "col_stall_sessions": "With stalls",
@@ -1539,7 +1539,8 @@
       "software_decoder": "Software decoding at HD resolution or above.",
       "too_little_data": "Not enough playback time to judge.",
       "healthy": "No issue detected."
-    }
+    },
+    "filter_all_devices": "All devices"
   },
   "markers": {
     "detect_intros": "Detect intros",

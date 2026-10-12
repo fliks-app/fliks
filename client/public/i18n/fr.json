@@ -1488,7 +1488,7 @@
     "filter_all_verdicts": "Tous les verdicts",
     "filter_user": "Utilisateur",
     "filter_all_users": "Tous les utilisateurs",
-    "filter_device": "Filtrer par appareil",
+    "filter_device": "Appareil",
     "col_device": "Appareil",
     "col_sessions": "Sessions",
     "col_stall_sessions": "Avec coupures",
@@ -1539,7 +1539,8 @@
       "software_decoder": "Décodage logiciel en HD ou plus.",
       "too_little_data": "Temps de lecture insuffisant pour juger.",
       "healthy": "Aucun problème détecté."
-    }
+    },
+    "filter_all_devices": "Tous les appareils"
   },
   "markers": {
     "detect_intros": "Détecter les intros",

@@ -10,14 +10,14 @@ export const SAMPLE_TIMEOUT_MS = 500;
 export class StallTracker {
   count = 0;
   totalMs = 0;
-  private open: { at: number; position: number; ignored: boolean } | null = null;
+  private open: { at: number; position: number; bufferAheadS: number | null; ignored: boolean } | null = null;
 
-  begin(now: number, position: number, ignored: boolean): void {
-    this.open ??= { at: now, position, ignored };
+  begin(now: number, position: number, ignored: boolean, bufferAheadS: number | null = null): void {
+    this.open ??= { at: now, position, bufferAheadS, ignored };
   }
 
   /** Closes the open episode; returns it when it counted. */
-  end(now: number): { durationMs: number; position: number } | null {
+  end(now: number): { durationMs: number; position: number; bufferAheadS: number | null } | null {
     const o = this.open;
     this.open = null;
     if (!o || o.ignored) return null;
@@ -25,12 +25,12 @@ export class StallTracker {
     if (durationMs < MIN_STALL_MS) return null;
     this.count++;
     this.totalMs += durationMs;
-    return { durationMs, position: o.position };
+    return { durationMs, position: o.position, bufferAheadS: o.bufferAheadS };
   }
 
   /** Counters including an episode still open, so a stall in progress shows up. */
   snapshot(now: number): { stallCount: number; stallMs: number } {
-    const o = this.open && !this.open.ignored ? this.open : null;
+    const o = this.open && !this.open.ignored && now - this.open.at >= MIN_STALL_MS ? this.open : null;
     return {
       stallCount: this.count + (o ? 1 : 0),
       stallMs: this.totalMs + (o ? now - o.at : 0),
@@ -50,6 +50,7 @@ export class PlayerQoe {
   private recoveryReloads = 0;
   private last: EngineQoeSample | null = null;
   private refreshing = false;
+  private generation = 0;
   private sid: string | undefined;
 
   constructor(
@@ -63,33 +64,41 @@ export class PlayerQoe {
     this.recoveryReloads = 0;
     this.last = null;
     this.sid = undefined;
+    this.generation++;
   }
 
   /** Counters are per session id: a reload that mints a new one starts them over. */
   private bind(sessionId: string | undefined): void {
     if (!sessionId || sessionId === this.sid) return;
     if (this.sid) {
+      this.closeStall(this.sid);
       this.stalls.reset();
       this.recoveryReloads = 0;
+      this.last = null;
+      this.generation++;
     }
     this.sid = sessionId;
   }
 
   setStalled(
     stalled: boolean,
-    ctx: { sessionId?: string; position: number; ignored?: boolean },
+    ctx: { sessionId?: string; position: number; ignored?: boolean; bufferAheadS?: number | null },
   ): void {
     if (stalled) {
-      this.stalls.begin(this.now(), ctx.position, !!ctx.ignored);
+      this.stalls.begin(this.now(), ctx.position, !!ctx.ignored, ctx.bufferAheadS ?? null);
       return;
     }
+    this.closeStall(ctx.sessionId);
+  }
+
+  private closeStall(sessionId: string | undefined): void {
     const done = this.stalls.end(this.now());
-    if (done && ctx.sessionId) {
-      this.record(ctx.sessionId, {
+    if (done && sessionId) {
+      this.record(sessionId, {
         type: 'stall',
         position: done.position,
         durationMs: done.durationMs,
-        bufferAheadS: this.last?.bufferAheadS ?? null,
+        bufferAheadS: done.bufferAheadS,
         bandwidthBps: this.last?.bandwidthBps ?? null,
       });
     }
@@ -124,13 +133,14 @@ export class PlayerQoe {
   async refresh(engine: PlaybackEngine): Promise<void> {
     if (this.refreshing) return;
     this.refreshing = true;
+    const gen = this.generation;
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const raw = await Promise.race([
         Promise.resolve().then(() => engine.getQoeSample()),
         new Promise<null>((r) => (timer = setTimeout(() => r(null), SAMPLE_TIMEOUT_MS))),
       ]);
-      if (raw) this.last = raw;
+      if (raw && gen === this.generation) this.last = raw;
     } catch {
       // keep the previous sample
     } finally {

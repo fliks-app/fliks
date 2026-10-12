@@ -534,12 +534,19 @@ export class StreamingApiService {
     );
   }
 
-  /** Same token-in-query auth as {@link getStopSessionUrl}, for `fetch(keepalive)` on exit. */
-  getQoeEventsUrl(sessionId: string): string {
+  /** `fetch` init for the events POST on exit: bearer on standalone bundles, the cookie on web. */
+  qoeEventsRequest(sessionId: string): { url: string; init: RequestInit } {
     const path = `/api/playback/sessions/${encodeURIComponent(sessionId)}/events`;
-    const base = this.serverConfig.isNative ? this.serverConfig.resolveUrl(path) : path;
-    const token = this.playbackToken;
-    return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (!this.serverConfig.isNative) {
+      return { url: path, init: { headers, credentials: 'include', keepalive: true, method: 'POST' } };
+    }
+    const token = this.auth.accessToken;
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return {
+      url: this.serverConfig.resolveUrl(path),
+      init: { headers, keepalive: true, method: 'POST' },
+    };
   }
 
   stopSession(sessionId: string) {

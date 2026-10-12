@@ -133,7 +133,7 @@ export class RemotePlaybackTarget implements PlaybackTarget {
       console.warn('[remote-playback-target] togglePlayPause with no target/state');
       return;
     }
-    void this.remote.send(targetId, { action: s.state === 'playing' ? 'pause' : 'play' });
+    void this.remote.send(targetId, { action: s.state === 'paused' ? 'play' : 'pause' });
   }
 
   toggleMute(): void {

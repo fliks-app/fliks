@@ -36,7 +36,7 @@
         </span>
         @if (qoe().transcodeSpeed != null) {
           <span class="text-base-content/40">{{ 'qoe.transcode_speed' | translate }}</span>
-          <span>{{ qoe().transcodeSpeed }}x</span>
+          <span>{{ qoe().transcodeSpeed?.toFixed(1) }}x</span>
         }
         <span class="text-base-content/40">{{ 'qoe.engine' | translate }}</span>
         <span>{{ qoe().engine ?? '-' }}</span>

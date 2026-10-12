@@ -38,12 +38,8 @@ export class QoeReporter {
     if (!events.length) return;
     try {
       for (let i = 0; i < events.length; i += MAX_PER_REQUEST) {
-        fetch(this.api.getQoeEventsUrl(sessionId), {
-          method: 'POST',
-          keepalive: true,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ events: events.slice(i, i + MAX_PER_REQUEST) }),
-        }).catch(() => {});
+        const { url, init } = this.api.qoeEventsRequest(sessionId);
+        fetch(url, { ...init, body: JSON.stringify({ events: events.slice(i, i + MAX_PER_REQUEST) }) }).catch(() => {});
       }
     } catch {
       // best effort

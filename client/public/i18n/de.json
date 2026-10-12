@@ -1488,7 +1488,7 @@
     "filter_all_verdicts": "Alle Befunde",
     "filter_user": "Benutzer",
     "filter_all_users": "Alle Benutzer",
-    "filter_device": "Nach Gerät filtern",
+    "filter_device": "Gerät",
     "col_device": "Gerät",
     "col_sessions": "Sitzungen",
     "col_stall_sessions": "Mit Aussetzern",
@@ -1539,7 +1539,8 @@
       "software_decoder": "Software-Decodierung in HD oder höher.",
       "too_little_data": "Zu wenig Wiedergabezeit für eine Beurteilung.",
       "healthy": "Kein Problem erkannt."
-    }
+    },
+    "filter_all_devices": "Alle Geräte"
   },
   "markers": {
     "detect_intros": "Intros erkennen",
