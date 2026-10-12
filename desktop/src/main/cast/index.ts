@@ -10,6 +10,7 @@ import {
   mediaStatusEvent,
   mergeActiveTracks,
   pickAudioTrack,
+  receiverMessageEvent,
   type CastTrack,
 } from './status';
 import {
@@ -21,7 +22,6 @@ import {
 
 /** Receiver → sender bus the Fliks CAF receiver pushes player errors on.
  *  Kept in sync with `cast-receiver/receiver.js` and the web sender. */
-const NS_FLIKS = 'urn:x-cast:media.fliks.app';
 
 /** MEDIA_STATUS only arrives on receiver-side transitions, so the playhead is
  *  polled to keep the renderer's seekbar moving — the same job the web SDK's
@@ -148,9 +148,8 @@ class CastSender {
       this.onMediaStatus((data['status'] ?? []) as Record<string, unknown>[]);
       return;
     }
-    if (ns === NS_FLIKS) {
-      broadcast({ name: 'castReceiverMessage', detail: { namespace: ns, message: JSON.stringify(data) } });
-    }
+    const forwarded = receiverMessageEvent(ns, data);
+    if (forwarded) broadcast(forwarded);
   }
 
   private onMediaStatus(statuses: Record<string, unknown>[]): void {

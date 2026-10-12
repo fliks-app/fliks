@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { absorb, buildQuery, collect, parseRecords, parseTxt } from './mdns.ts';
 import { decodeMessage, encodeFrame, splitFrames } from './protocol.ts';
-import { mediaStatusEvent, mergeActiveTracks, pickAudioTrack } from './status.ts';
+import { mediaStatusEvent, mergeActiveTracks, pickAudioTrack, receiverMessageEvent } from './status.ts';
 
 test('CastMessage survives an encode/decode round trip', () => {
   const msg = {
@@ -221,4 +221,13 @@ test('a regional tag still stands in for its language', () => {
 
 test('an ambiguous language never stands in for a missing name', () => {
   assert.equal(pickAudioTrack(TWINS, 'en', 'Nonexistent'), undefined);
+});
+
+test('a Fliks namespace message is forwarded verbatim, others are not', () => {
+  const data = { kind: 'qoe', at: 1, sample: { engine: 'cast' } };
+  assert.deepEqual(receiverMessageEvent('urn:x-cast:media.fliks.app', data), {
+    name: 'castReceiverMessage',
+    detail: { namespace: 'urn:x-cast:media.fliks.app', message: JSON.stringify(data) },
+  });
+  assert.equal(receiverMessageEvent('urn:x-cast:com.google.cast.media', data), null);
 });

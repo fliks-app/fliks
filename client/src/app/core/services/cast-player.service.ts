@@ -563,9 +563,11 @@ export class CastPlayerService {
    *  errors recover freely, but three inside 30 s give up with a toast. */
   private recoverAttempts = 0;
   private lastRecoverAt = 0;
+  /** The receiver error and the native IDLE/ERROR poll fire for one failure; the second must not restart the reload. */
+  private recovering = false;
 
   private async recoverFromCastError(position?: number): Promise<void> {
-    if (!this.hasMedia()) return;
+    if (!this.hasMedia() || this.recovering) return;
     const now = Date.now();
     if (now - this.lastRecoverAt > 30_000) this.recoverAttempts = 0;
     if (this.recoverAttempts >= 3) {
@@ -575,10 +577,13 @@ export class CastPlayerService {
     this.recoverAttempts++;
     this.lastRecoverAt = now;
     const pos = position && position > 0 ? position : this.cast.currentTime();
+    this.recovering = true;
     try {
       await this.reloadCastStream(pos);
     } catch {
       /* a still-broken stream re-fires the error, subject to the throttle */
+    } finally {
+      this.recovering = false;
     }
   }
 

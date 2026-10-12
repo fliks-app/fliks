@@ -227,8 +227,9 @@ export class CastService implements OnDestroy {
   /** Fires when the receiver hits a fatal playback error that a fresh
    *  stream (new sid) can recover — a live session GC'd mid-cast 410s the
    *  next segment. `position` is the last known playhead to resume from.
-   *  Fed by the native plugin's IDLE/ERROR signal and the web receiver's
-   *  custom error message; consumed by CastPlayerService to reload. */
+   *  Fed by the receiver's `player_error` message (web SDK, or forwarded by a
+   *  native sender) and by the native IDLE/ERROR poll (`castError`); one failure
+   *  can fire both, so CastPlayerService ignores triggers while a reload runs. */
   readonly playbackError$ = new Subject<{ position?: number }>();
 
   /** Whether a native-process Cast sender backs this client — the Capacitor
@@ -297,7 +298,10 @@ export class CastService implements OnDestroy {
         const connected = e.detail?.connected ?? false;
         this.isConnected.set(connected);
         if (connected) this.endConnecting();
-        else this.buffering.set(false);
+        else {
+          this.buffering.set(false);
+          this.receiverQoe.set(null);
+        }
         // `connected` rides the device listing, so the picker's rows are stale
         // the moment a session starts or ends.
         void this.getCastDevices();
@@ -319,8 +323,7 @@ export class CastService implements OnDestroy {
         if (e.detail?.muted != null) this.muted.set(e.detail.muted);
       }) as EventListener);
 
-      // The plugin maps the receiver's IDLE/ERROR state to this event —
-      // the native equivalent of the web receiver's custom error message.
+      // Native IDLE/ERROR poll; overlaps with the forwarded `player_error`, deduped downstream.
       window.addEventListener('castError', ((e: CustomEvent) => {
         this.playbackError$.next({ position: e.detail?.position });
       }) as EventListener);

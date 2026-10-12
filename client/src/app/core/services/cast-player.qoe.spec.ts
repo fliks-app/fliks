@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { CastPlayerService } from './cast-player.service';
 
 const sample = { engine: 'cast', stallCount: 1, bandwidthBps: 9 };
@@ -29,5 +29,28 @@ describe('CastPlayerService.qoeSample', () => {
   it('drops a stale sample and an absent one', () => {
     expect(qoeSample(Date.now() - 60_000)).toBeNull();
     expect(qoeSample(null)).toBeNull();
+  });
+});
+
+describe('CastPlayerService.recoverFromCastError', () => {
+  it('reloads once when two triggers arrive while the reload is pending', async () => {
+    let release!: () => void;
+    const reloadCastStream = vi.fn(() => new Promise<void>((r) => (release = r)));
+    const self = {
+      hasMedia: () => true,
+      recoverAttempts: 0,
+      lastRecoverAt: 0,
+      recovering: false,
+      cast: { currentTime: () => 5 },
+      reloadCastStream,
+    };
+    const recover = (CastPlayerService.prototype as never as { recoverFromCastError(p?: number): Promise<void> })
+      .recoverFromCastError;
+    const first = recover.call(self, 10);
+    await recover.call(self, 10);
+    release();
+    await first;
+    expect(reloadCastStream).toHaveBeenCalledTimes(1);
+    expect(self.recoverAttempts).toBe(1);
   });
 });
