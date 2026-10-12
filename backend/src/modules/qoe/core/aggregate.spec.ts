@@ -193,6 +193,14 @@ describe('mergeSummaries', () => {
     expect(a.addEvent({ type: 'error', at: 1, position: 1 }, 1)).toBeNull();
   });
 
+  it('counts a low-confidence cause at half weight and tracks the reason', () => {
+    const a = new QoeAggregator();
+    a.addEvent({ type: 'stall', at: 1, position: 1, durationMs: 2_000, bufferAheadS: 0.2 }, 1);
+    const s = a.summary();
+    expect(s.stallCauseMs?.network).toBe(1_000);
+    expect(s.stallReasonMs).toEqual({ 'qoe.stall.network_unconfirmed': 1_000 });
+  });
+
   it('keeps stallCauseMs null without a classified stall and sums it on merge', () => {
     expect(new QoeAggregator().summary().stallCauseMs).toBeNull();
     const c = (ms: number) => ({ server: 0, network: ms, device: 0, unknown: 0 });

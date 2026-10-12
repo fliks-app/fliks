@@ -96,7 +96,8 @@ export function classifyStall(
     ? null
     : serverHit(ctx.segments, start - SKEW_MARGIN_MS, stall.at + SKEW_MARGIN_MS, !!ctx.live);
   const server = strict ?? wide;
-  if (server) {
+  // A wait with data buffered is ffmpeg paused ahead of the client, not a starved one.
+  if (server && (buffer == null || buffer < STARVED_S)) {
     Object.assign(evidence, server);
     const r = out('server', strict ? 'high' : 'low', 'server_wait');
     r.hints = serverHints(ctx, evidence);

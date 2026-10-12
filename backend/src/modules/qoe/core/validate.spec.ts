@@ -95,6 +95,20 @@ describe('parseEvents', () => {
     ]);
   });
 
+  it('shifts event times by the offset between the batch send time and receipt', () => {
+    const now = 1_000_000_000_000;
+    const [e] = parseEvents([{ type: 'stall', at: now - 60_000, position: 1 }], now, now - 30_000);
+    expect(e.at).toBe(now - 30_000);
+    const [same] = parseEvents([{ type: 'stall', at: now - 5, position: 1 }], now, null);
+    expect(same.at).toBe(now - 5);
+  });
+
+  it('ignores an implausible send time', () => {
+    const now = 1_000_000_000_000;
+    const [e] = parseEvents([{ type: 'stall', at: now - 5, position: 1 }], now, now - 3 * 86_400_000);
+    expect(e.at).toBe(now - 5);
+  });
+
   it('keeps a stall variantBitrate and ignores a client-sent cause', () => {
     const [e] = parseEvents([
       { type: 'stall', at: Date.now(), position: 1, variantBitrate: 5e6, cause: 'server' },

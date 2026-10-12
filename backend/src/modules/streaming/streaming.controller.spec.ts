@@ -70,7 +70,7 @@ function makeController(deps: ControllerDeps = {}): StreamingController {
     (deps.pluginPreRoll ?? {}) as never,
     (deps.events ?? {}) as never,
     (deps.caslAbilityFactory ?? {}) as never,
-    (deps.qoe ?? { observeSegment: jest.fn() }) as never,
+    (deps.qoe ?? { observeSegment: jest.fn(), noteHwAccel: jest.fn() }) as never,
   );
 }
 

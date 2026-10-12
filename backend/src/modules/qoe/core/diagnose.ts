@@ -52,11 +52,28 @@ function device(
     : result('device', confidence, reason);
 }
 
+/** Session reason for each per-stall reason, so the two never tell different stories. */
+const STALL_REASON: Record<string, string> = {
+  'qoe.stall.server_wait': 'stalls_server_slow',
+  'qoe.stall.network_starved': 'stalls_starved_low_throughput',
+  'qoe.stall.network_low_throughput': 'stalls_starved_low_throughput',
+  'qoe.stall.network_unconfirmed': 'stalls_starved_bandwidth_ok',
+  'qoe.stall.device_buffer_ahead': 'stalls_buffer_ahead',
+  'qoe.stall.device_dropped_frames': 'dropped_frames',
+};
 const CAUSE_REASON = {
   server: 'stalls_server_slow',
   network: 'stalls_starved_low_throughput',
   device: 'stalls_buffer_ahead',
 } as const;
+
+/** The reason of the cause's heaviest stalls. */
+function dominantReason(s: QoeSessionSummary, cause: 'server' | 'network' | 'device'): string {
+  const best = Object.entries(s.stallReasonMs ?? {})
+    .filter(([k]) => k.startsWith(`qoe.stall.${cause}_`))
+    .sort((a, b) => b[1] - a[1])[0];
+  return (best && STALL_REASON[best[0]]) || CAUSE_REASON[cause];
+}
 
 /** The cause holding most of the stalled time; null when stalls were not classified or unknown wins. */
 function fromCauses(s: QoeSessionSummary): QoeDiagnosis | null {
@@ -68,9 +85,8 @@ function fromCauses(s: QoeSessionSummary): QoeDiagnosis | null {
     .reduce((a, b) => (b[1] > a[1] ? b : a));
   if (cause === 'unknown') return null;
   const confidence = top / total > 0.5 ? 'high' : 'low';
-  return cause === 'device'
-    ? device(s, confidence, CAUSE_REASON.device)
-    : result(cause, confidence, CAUSE_REASON[cause]);
+  const reason = dominantReason(s, cause);
+  return cause === 'device' ? device(s, confidence, reason) : result(cause, confidence, reason);
 }
 
 /** First matching rule wins; see plan/playback-qoe.plan.md section 1.3. */
@@ -112,7 +128,7 @@ function decide(s: QoeSessionSummary, live: boolean): QoeDiagnosis {
       if (tp.bps < BANDWIDTH_HEADROOM * bitrate) {
         return result('network', confidence, 'stalls_starved_low_throughput');
       }
-      return device(s, 'low', 'stalls_starved_bandwidth_ok');
+      return result('network', 'low', 'stalls_starved_bandwidth_ok');
     }
     return device(s, 'high', 'stalls_buffer_ahead');
   }

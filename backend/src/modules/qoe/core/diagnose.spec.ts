@@ -29,6 +29,7 @@ const base: QoeSessionSummary = {
   cmcdThroughputBps: null,
   medianTranscodeSpeed: null,
   stallCauseMs: null,
+  stallReasonMs: null,
   sampleCount: 10,
 };
 
@@ -95,7 +96,7 @@ describe('diagnose', () => {
     });
   });
 
-  it('device low: starved although bandwidth is ample', () => {
+  it('network low: starved although bandwidth is ample, like the per-stall rule', () => {
     expect(
       d({
         ...stalls,
@@ -103,7 +104,7 @@ describe('diagnose', () => {
         avgBandwidthBps: 50_000_000,
         avgVariantBitrate: 8_000_000,
       }),
-    ).toMatchObject({ verdict: 'device', confidence: 'low' });
+    ).toMatchObject({ verdict: 'network', confidence: 'low' });
   });
 
   it('a single stall in a long session is below both thresholds', () => {
@@ -163,6 +164,14 @@ describe('diagnose', () => {
       expect(
         d({ ...stalls, medianTranscodeSpeed: 0.5, stallCauseMs: ms({ network: 6_000, device: 3_000 }) }),
       ).toMatchObject({ verdict: 'network', confidence: 'high' });
+    });
+
+    it('take the session reason from the dominant per-stall reason', () => {
+      const r = (reasonMs: Record<string, number>, causeMs: Record<string, number>) =>
+        d({ ...stalls, stallCauseMs: ms(causeMs), stallReasonMs: reasonMs }).reasons;
+      expect(r({ 'qoe.stall.network_unconfirmed': 5_000 }, { network: 5_000 })).toEqual(['qoe.reason.stalls_starved_bandwidth_ok']);
+      expect(r({ 'qoe.stall.device_dropped_frames': 5_000 }, { device: 5_000 })).toEqual(['qoe.reason.dropped_frames']);
+      expect(r({ 'qoe.stall.network_starved': 5_000 }, { network: 5_000 })).toEqual(['qoe.reason.stalls_starved_low_throughput']);
     });
 
     it('weigh by duration, not by count', () => {

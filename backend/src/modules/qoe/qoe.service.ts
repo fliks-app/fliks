@@ -89,7 +89,7 @@ export interface QoeLiveSummary extends QoeDiagnosis {
 /** One viewing: the sessions sharing a playbackId (or a lone session), merged and re-diagnosed. */
 export type QoePlayback = Omit<
   PlaybackQoeSession,
-  'sessionId' | 'stallBufferAheadS' | 'stallBandwidthBps' | 'cmcdThroughputBps' | 'unrecoveredError' | 'sampleCount' | 'stallCauseMs'
+  'sessionId' | 'stallBufferAheadS' | 'stallBandwidthBps' | 'cmcdThroughputBps' | 'unrecoveredError' | 'sampleCount' | 'stallCauseMs' | 'stallReasonMs'
 > & {
   /** The latest session of the playback. */
   sessionId: string;
@@ -152,6 +152,7 @@ const rowSummary = (r: PlaybackQoeSession): QoeSessionSummary => ({
   cmcdThroughputBps: r.cmcdThroughputBps,
   medianTranscodeSpeed: r.medianTranscodeSpeed,
   stallCauseMs: r.stallCauseMs,
+  stallReasonMs: r.stallReasonMs,
   sampleCount: r.sampleCount,
 });
 
@@ -184,6 +185,7 @@ function mergePlaybacks(rows: PlaybackQoeSession[]): QoePlayback[] {
         unrecoveredError: _d,
         sampleCount: _e,
         stallCauseMs: _f,
+        stallReasonMs: _g,
         ...rest
       } = last;
       return {
@@ -230,6 +232,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
   private readonly trackers = new Map<string, Tracker>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private enabledFlag = true;
+  private readonly transcodeProbes: (() => number)[] = [];
   private loadProbe: (() => Pick<ServerLoad, 'activeTranscodes' | 'activeSessions'>) | null = null;
 
   constructor(
@@ -288,6 +291,27 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     this.loadProbe = probe;
   }
 
+  /** Another source of running transcodes (live TV), added to the count. */
+  addTranscodeProbe(probe: () => number): void {
+    this.transcodeProbes.push(probe);
+  }
+
+  /** The run fell back from the GPU to the CPU: the pipeline follows it. */
+  noteHwAccel(session: SessionRef, hw: string | undefined): void {
+    if (hw !== 'none') return;
+    const t = this.trackers.get(session.sessionId);
+    const p = t?.agg.pipeline;
+    if (!t || !p || (!p.encode?.hw && !p.decode?.hw)) return;
+    const cpu = { hw: false, kind: 'cpu', name: null };
+    t.agg.setPipeline({
+      ...p,
+      decode: p.decode && cpu,
+      encode: p.encode && cpu,
+      tonemap: p.tonemap && 'cpu',
+    });
+    t.dirty = true;
+  }
+
   /** What the server does to this session's stream; replaces a previous value. */
   setPipeline(session: SessionRef, pipeline: QoePipeline): void {
     const t = this.track(session, false);
@@ -307,7 +331,13 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
   private serverLoad(): ServerLoad | null {
     try {
       const counts = this.loadProbe?.() ?? { activeTranscodes: 0, activeSessions: 0 };
-      return { ...counts, loadAvg1: loadavg()[0], cpuCount: cpus().length };
+      const extra = this.transcodeProbes.reduce((n, p) => n + p(), 0);
+      return {
+        activeTranscodes: counts.activeTranscodes + extra,
+        activeSessions: counts.activeSessions,
+        loadAvg1: process.platform === 'win32' ? null : loadavg()[0],
+        cpuCount: cpus().length,
+      };
     } catch {
       return null;
     }
@@ -529,6 +559,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
       stallBandwidthBps: s.stallBandwidthBps,
       cmcdThroughputBps: s.cmcdThroughputBps,
       stallCauseMs: s.stallCauseMs,
+      stallReasonMs: s.stallReasonMs,
       pipeline: t.agg.pipeline,
       unrecoveredError: s.unrecoveredError,
       sampleCount: s.sampleCount,

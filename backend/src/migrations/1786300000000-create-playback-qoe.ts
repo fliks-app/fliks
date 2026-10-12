@@ -46,6 +46,7 @@ export class CreatePlaybackQoe1786300000000 implements MigrationInterface {
         "unrecoveredError" boolean NOT NULL DEFAULT false,
         "sampleCount" integer NOT NULL DEFAULT 0,
         "stallCauseMs" jsonb,
+        "stallReasonMs" jsonb,
         "pipeline" jsonb,
         "verdict" character varying NOT NULL DEFAULT 'unknown',
         "confidence" character varying NOT NULL DEFAULT 'low',

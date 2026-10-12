@@ -265,6 +265,11 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
       StreamLifetime.liveSessionGcIntervalMs(),
     );
     this.sweepTimer.unref?.();
+    this.qoe?.addTranscodeProbe(
+      () =>
+        [...this.sessions.values()].filter((s) => s.mode === 'transcode' && s.proc && s.proc.exitCode === null)
+          .length,
+    );
   }
 
   /**

@@ -16,7 +16,7 @@ export class QoeLoadProvider implements OnModuleInit {
     this.qoe.setLoadProbe(() => ({
       activeTranscodes: this.transcoding
         .getActiveSessions()
-        .filter((s) => this.transcoding.isProducing(s)).length,
+        .filter((s) => !s.remux && !s.throttlePaused && this.transcoding.isProducing(s)).length,
       activeSessions: this.sessions.list().length,
     }));
   }

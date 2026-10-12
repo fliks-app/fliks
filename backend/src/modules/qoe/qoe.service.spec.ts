@@ -240,6 +240,28 @@ describe('QoeService', () => {
     });
   });
 
+  it('patches the pipeline to the cpu when the run fell back from the gpu, and adds live transcodes to the load', async () => {
+    const { svc, upsert, insert } = build();
+    svc.setLoadProbe(() => ({ activeTranscodes: 1, activeSessions: 2 }));
+    svc.addTranscodeProbe(() => 2);
+    const gpu = { hw: true, kind: 'qsv', name: 'h264_qsv' };
+    svc.setPipeline(session, {
+      source: null, output: null, decode: gpu, encode: gpu, tonemap: 'opencl', burnIn: null, crop: null, audioTranscode: null,
+    });
+    svc.recordSample(session, sample);
+    svc.noteHwAccel(session, 'qsv');
+    svc.noteHwAccel(session, 'none');
+    svc.recordEvents(session, [{ type: 'stall', at: Date.now(), position: 1, durationMs: 2_000 }]);
+    svc.sessionEnded(session);
+    await new Promise((r) => setImmediate(r));
+    expect(upsert.mock.calls[0][0].pipeline).toMatchObject({
+      decode: { hw: false, kind: 'cpu' },
+      encode: { hw: false, kind: 'cpu' },
+      tonemap: 'cpu',
+    });
+    expect(insert.mock.calls[0][0][0].data.serverLoad).toMatchObject({ activeTranscodes: 3, activeSessions: 2 });
+  });
+
   it('requeues events when a flush fails and retries them', async () => {
     const { svc, upsert, insert } = build();
     upsert.mockRejectedValueOnce(new Error('db down'));

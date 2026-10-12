@@ -98,6 +98,7 @@ export class QoeAggregator {
   private readonly samples: StallSample[] = [];
   private cmcdBandwidth: number | null = null;
   private causeMs: Record<StallCause, number> | null = null;
+  private reasonMs: Record<string, number> | null = null;
   private last: StallLast | null = null;
   private pipelineInfo: QoePipeline | null = null;
   private errorCount = 0;
@@ -175,7 +176,11 @@ export class QoeAggregator {
         variantBitrate: this.variantBitrate,
       });
       this.causeMs ??= { server: 0, network: 0, device: 0, unknown: 0 };
-      this.causeMs[classified.cause] += Math.max(e.durationMs ?? 0, 1);
+      // A low-confidence cause counts half, so a sure one outweighs a guess.
+      const w = Math.max(e.durationMs ?? 0, 1) * (classified.confidence === 'low' ? 0.5 : 1);
+      this.causeMs[classified.cause] += w;
+      this.reasonMs ??= {};
+      this.reasonMs[classified.reason] = (this.reasonMs[classified.reason] ?? 0) + w;
       this.last = {
         at: e.at,
         durationMs: e.durationMs ?? 0,
@@ -263,6 +268,7 @@ export class QoeAggregator {
         this.speeds.length >= MIN_SPEED_SAMPLES ? median(this.speeds) : null,
       sampleCount: this.sampleCount,
       stallCauseMs: this.causeMs && { ...this.causeMs },
+      stallReasonMs: this.reasonMs && { ...this.reasonMs },
     };
   }
 }
@@ -294,6 +300,18 @@ function frames(
     droppedFrames: both.reduce((a, p) => a + (p.droppedFrames ?? 0), 0),
     decodedFrames: both.reduce((a, p) => a + (p.decodedFrames ?? 0), 0),
   };
+}
+
+function mergeReasons(parts: QoeSessionSummary[]): QoeSessionSummary['stallReasonMs'] {
+  const out: Record<string, number> = {};
+  let any = false;
+  for (const p of parts) {
+    for (const [k, v] of Object.entries(p.stallReasonMs ?? {})) {
+      out[k] = (out[k] ?? 0) + v;
+      any = true;
+    }
+  }
+  return any ? out : null;
 }
 
 function mergeCauses(parts: QoeSessionSummary[]): QoeSessionSummary['stallCauseMs'] {
@@ -357,5 +375,6 @@ export function mergeSummaries(parts: QoeSessionSummary[]): QoeSessionSummary {
     medianTranscodeSpeed: weighted(parts, (p) => p.medianTranscodeSpeed, byWatch),
     sampleCount: total((p) => p.sampleCount),
     stallCauseMs: mergeCauses(parts),
+    stallReasonMs: mergeReasons(parts),
   };
 }

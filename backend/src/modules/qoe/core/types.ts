@@ -95,7 +95,8 @@ export interface QoePipeline {
 export interface ServerLoad {
   activeTranscodes: number;
   activeSessions: number;
-  loadAvg1: number;
+  /** Null where the OS has no load average (Windows). */
+  loadAvg1: number | null;
   cpuCount: number;
 }
 
@@ -211,6 +212,8 @@ export interface QoeSessionSummary {
   medianTranscodeSpeed: number | null;
   /** Stalled ms per classified cause; null when no stall was classified. */
   stallCauseMs: Record<StallCause, number> | null;
+  /** The same weight per `qoe.stall.*` reason. */
+  stallReasonMs: Record<string, number> | null;
   /** Samples received, i.e. the engine reports anything at all. */
   sampleCount: number;
 }

@@ -64,6 +64,12 @@ describe('classifyStall', () => {
     expect(r.cause).toBe('server');
   });
 
+  it('a server wait while the buffer was ahead falls through to the device rules', () => {
+    const segments = [seg(AT - 2_000, 3_200)];
+    const r = classifyStall({ ...stall, bufferAheadS: 2.5 }, ctx({ segments }));
+    expect(r).toMatchObject({ cause: 'device', reason: 'qoe.stall.device_buffer_ahead' });
+  });
+
   it('server: speed below 1 on short segments even when the wait is under 1 s', () => {
     const r = classifyStall(
       stall,
@@ -90,8 +96,8 @@ describe('classifyStall', () => {
 
   it('live: judged by production speed against the 0.9 floor, not by the wait', () => {
     const live = (segments: ReturnType<typeof seg>[]) =>
-      classifyStall(stall, ctx({ segments, live: true, bufferAheadS: 3 })).cause;
-    expect(live([seg(AT - 1_000, 6_200)])).toBe('device');
+      classifyStall(stall, ctx({ segments, live: true, bufferAheadS: 0.5 })).cause;
+    expect(live([seg(AT - 1_000, 6_200)])).not.toBe('server');
     expect(live([seg(AT - 1_000, 7_500)])).toBe('server');
   });
 

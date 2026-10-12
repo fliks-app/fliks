@@ -44,6 +44,9 @@ export function parsePlaybackId(v: unknown): string | null {
   return typeof v === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(v) ? v : null;
 }
 
+/** The client epoch ms an events batch was sent at; anything else is ignored. */
+export const parseSentAt = num;
+
 /** A heartbeat `qoe` block with unknown fields dropped; null when unusable. */
 export function parseSample(raw: unknown): QoeSample | null {
   if (!isObj(raw) || !ENGINES.includes(raw.engine as QoeEngine)) return null;
@@ -68,12 +71,19 @@ export function parseSample(raw: unknown): QoeSample | null {
 }
 
 /** Valid events from a request body, at most {@link MAX_EVENTS_PER_REQUEST}. */
-export function parseEvents(raw: unknown, now = Date.now()): QoeEvent[] {
+export function parseEvents(
+  raw: unknown,
+  now = Date.now(),
+  sentAt: number | null = null,
+): QoeEvent[] {
   if (!Array.isArray(raw)) return [];
+  // The client's clock offset, taken from the batch send time.
+  const skew = sentAt != null && Math.abs(now - sentAt) <= DAY_MS ? now - sentAt : 0;
   const out: QoeEvent[] = [];
   for (const e of raw.slice(0, MAX_EVENTS_PER_REQUEST)) {
     if (!isObj(e) || !EVENT_TYPES.includes(e.type as QoeEventType)) continue;
-    const clientAt = num(e.at);
+    const raw = num(e.at);
+    const clientAt = raw == null ? null : raw + skew;
     const ev: QoeEvent = {
       type: e.type as QoeEventType,
       at:

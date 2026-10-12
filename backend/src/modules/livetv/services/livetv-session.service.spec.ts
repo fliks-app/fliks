@@ -105,7 +105,7 @@ describe('LiveTvSessionService', () => {
   let settings: { get: jest.Mock };
   let activity: { upsertRunning: jest.Mock; remove: jest.Mock };
   let transcoding: { getDetectedHwAccel: jest.Mock };
-  let qoe: { register: jest.Mock; sessionEnded: jest.Mock; observeSegment: jest.Mock; recordProduction: jest.Mock; setPipeline: jest.Mock };
+  let qoe: { register: jest.Mock; sessionEnded: jest.Mock; observeSegment: jest.Mock; recordProduction: jest.Mock; setPipeline: jest.Mock; addTranscodeProbe: jest.Mock };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -124,7 +124,7 @@ describe('LiveTvSessionService', () => {
     settings = { get: jest.fn().mockResolvedValue(null) };
     activity = { upsertRunning: jest.fn(), remove: jest.fn() };
     transcoding = { getDetectedHwAccel: jest.fn().mockReturnValue('none') };
-    qoe = { register: jest.fn(), sessionEnded: jest.fn(), observeSegment: jest.fn(), recordProduction: jest.fn(), setPipeline: jest.fn() };
+    qoe = { register: jest.fn(), sessionEnded: jest.fn(), observeSegment: jest.fn(), recordProduction: jest.fn(), setPipeline: jest.fn(), addTranscodeProbe: jest.fn() };
     service = new LiveTvSessionService(
       channelRepo as never,
       streamRepo as never,

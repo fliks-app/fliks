@@ -136,7 +136,6 @@ export class PlaybackQoeSession {
   @Column({ type: 'jsonb', default: () => `'[]'` })
   reasons: string[];
 
-  /** Verdict of the whole playback (all rows of this user and playbackId), rewritten at flush. */
   /** What the server did to the stream of this session. */
   @Column({ type: 'jsonb', nullable: true })
   pipeline: QoePipeline | null;
@@ -145,6 +144,11 @@ export class PlaybackQoeSession {
   @Column({ type: 'jsonb', nullable: true })
   stallCauseMs: Record<StallCause, number> | null;
 
+  /** Weighted stalled ms per `qoe.stall.*` reason. */
+  @Column({ type: 'jsonb', nullable: true })
+  stallReasonMs: Record<string, number> | null;
+
+  /** Verdict of the whole playback (all rows of this user and playbackId), rewritten at flush. */
   @Column({ type: 'varchar', default: 'unknown' })
   playbackVerdict: QoeVerdict;
 

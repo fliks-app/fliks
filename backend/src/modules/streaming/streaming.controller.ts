@@ -528,11 +528,12 @@ export class StreamingController {
   private observeSegment(
     req: Request,
     live: LiveSession | null | undefined,
-    session: { segmentDuration?: number; sourceFps?: number },
+    session: { segmentDuration?: number; sourceFps?: number; actualHwAccel?: string },
     segment: string,
     waitedMs: number | null,
   ): void {
     if (!live || segment.startsWith('init')) return;
+    this.qoe.noteHwAccel(live, session.actualHwAccel);
     this.qoe.observeSegment(
       live,
       req,

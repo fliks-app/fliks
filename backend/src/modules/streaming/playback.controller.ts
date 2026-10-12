@@ -36,7 +36,7 @@ import {
   parseBitrateToBps,
   resolveLadderRung,
 } from './transcoding/profiles';
-import { parseEvents, parsePlaybackId, parseSample } from '../qoe/core/validate';
+import { parseEvents, parsePlaybackId, parseSample, parseSentAt } from '../qoe/core/validate';
 
 /** Debounce window for DB writes — heartbeat fires every 10 s but we
  *  flush playback state on a coarser cadence to avoid hammering
@@ -279,7 +279,10 @@ export class PlaybackController {
         if (sample) {
           sample.variantBitrate ??= servedRungBitrate(updated);
           this.qoe.recordSample(updated, sample);
-          this.qoe.updatePipelineOutput(updated, updated.quality, servedRungBitrate(updated));
+          const rung = servedRungBitrate(updated);
+          if (rung != null && typeof updated.quality === 'string' && updated.quality.length <= 32) {
+            this.qoe.updatePipelineOutput(updated, updated.quality, rung);
+          }
         }
       }
 
@@ -373,7 +376,7 @@ export class PlaybackController {
   postQoeEvents(
     @Req() req: Request,
     @Param('sessionId') sessionId: string,
-    @Body() body: { events?: unknown; playbackId?: unknown },
+    @Body() body: { events?: unknown; playbackId?: unknown; sentAt?: unknown },
   ): void {
     const user = req.user as User;
     if (!this.qoe.enabled) return;
@@ -386,7 +389,7 @@ export class PlaybackController {
     }
     this.qoe.recordEvents(
       live,
-      parseEvents(body?.events),
+      parseEvents(body?.events, Date.now(), parseSentAt(body?.sentAt)),
       parsePlaybackId(body?.playbackId),
     );
   }
