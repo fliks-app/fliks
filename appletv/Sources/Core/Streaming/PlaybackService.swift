@@ -61,14 +61,15 @@ import Foundation
         let audio = streamInfo?.audio ?? []
         audioStreamIndex = TrackSelection.audioIndex(
             in: audio, preferredLanguage: settings.preferredAudioLanguage,
-            useDefault: settings.useDefaultAudioStream
+            useDefault: settings.useDefaultAudioStream, remembered: settings.rememberedAudio(for: mediaId)
         )
         let rows = subtitleRows.filter { $0.mediaFileId == mediaFileId }
         subtitlePick = TrackSelection.autoSubtitle(
             mode: settings.subtitleMode, preferredLanguage: settings.preferredSubtitleLanguage,
             audioLanguage: audioStreamIndex.flatMap { TrackSelection.canonicalLanguage(audio[$0].language) },
             text: TrackSelection.subtitleTracks(embedded: streamInfo?.subtitles ?? [], external: rows),
-            bitmap: TrackSelection.bitmapSubtitleTracks(rows)
+            bitmap: TrackSelection.bitmapSubtitleTracks(rows),
+            remembered: settings.rememberedSubtitle(for: mediaId)
         )
         let url = try await requestPlaybackInfo(startAt: startAt)
         lastProgressPos = startAt

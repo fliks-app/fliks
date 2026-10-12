@@ -32,6 +32,12 @@ struct PlayerSettingsView: View {
                 }
 
                 Section {
+                    Toggle(tr("playback_settings.player_remember_audio"), isOn: $settings.rememberAudioSelections)
+                } footer: {
+                    Text(tr("playback_settings.player_remember_audio_hint"))
+                }
+
+                Section {
                     Toggle(tr("playback_settings.player_disable_hdr"), isOn: $settings.forceDisableHdr)
                 } footer: {
                     Text(tr("playback_settings.player_disable_hdr_hint"))

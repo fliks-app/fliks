@@ -123,6 +123,8 @@ struct AudioStreamInfo: Codable, Hashable {
     let streamIndex: Int
     let codec: String
     let language: String
+    /// BCP-47 tag (`pt-PT`) when the container carries a region/script: the variant a remembered pick pins down.
+    let languageTag: String?
     let title: String?
     let channels: Int?
     let channelLayout: String?
@@ -137,6 +139,7 @@ struct SubtitleStreamInfo: Codable, Hashable {
     let streamIndex: Int
     let codec: String
     let language: String
+    let languageTag: String?
     let title: String?
     let forced: Bool
     let hearingImpaired: Bool
