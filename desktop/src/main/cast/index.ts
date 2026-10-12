@@ -20,9 +20,6 @@ import {
   PLATFORM_RECEIVER,
 } from './protocol';
 
-/** Receiver → sender bus the Fliks CAF receiver pushes player errors on.
- *  Kept in sync with `cast-receiver/receiver.js` and the web sender. */
-
 /** MEDIA_STATUS only arrives on receiver-side transitions, so the playhead is
  *  polled to keep the renderer's seekbar moving — the same job the web SDK's
  *  RemotePlayer does for itself. 1Hz is what a cast progress bar needs. */
