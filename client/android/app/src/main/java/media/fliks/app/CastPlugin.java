@@ -256,7 +256,8 @@ public class CastPlugin extends Plugin {
                 }
                 call.resolve(result);
             } catch (Exception e) {
-                Log.e(TAG, "Cast init failed", e);
+                // Expected where the Cast module is absent (Android TV): one line, no stack.
+                Log.w(TAG, "Cast unavailable: " + e.getMessage());
                 call.resolve(new JSObject().put("available", false));
             }
         });
@@ -384,8 +385,6 @@ public class CastPlugin extends Plugin {
                 device.put("connected", route.getId().equals(connectedId));
                 devices.put(device);
             }
-            Log.d(TAG, "getCastDevices: " + devices.length() + " cast route(s) of "
-                    + router.getRoutes().size() + " total, discovery=" + routeDiscoveryActive);
             call.resolve(new JSObject().put("devices", devices));
         });
     }
