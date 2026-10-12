@@ -140,6 +140,18 @@ describe('PlayerQoe', () => {
     expect(qoe.current('s')).toMatchObject({ stallCount: 0, stallMs: 0, recoveryReloads: 0 });
   });
 
+  it('counts the wait before a recovery as a stall and reports why it happened', async () => {
+    await qoe.refresh(engine(async () => raw));
+    qoe.onRecovery('b', 873, { reason: 'session_lost', durationMs: 9000 });
+    expect(qoe.current('b')).toMatchObject({ stallCount: 1, stallMs: 9000, recoveryReloads: 1 });
+    expect(reporter.record).toHaveBeenCalledWith(
+      'b',
+      expect.objectContaining({ type: 'recovery', position: 873, reason: 'session_lost', durationMs: 9000 }),
+      expect.anything(),
+      expect.any(String),
+    );
+  });
+
   it('restarts the counters when a recovery mints a new session id', async () => {
     await qoe.refresh(engine(async () => raw));
     expect(qoe.current('a')).not.toBeNull();

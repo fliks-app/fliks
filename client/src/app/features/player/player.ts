@@ -58,6 +58,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 
 import type { AudioTrack, PlaybackEngine, QoeSample } from '../../core/services/playback-engine/playback-engine';
 import { QoeReporter } from '../../core/services/qoe-reporter.service';
+import type { QoeRecoveryReason } from '../../core/services/api/qoe-api.service';
 import { PlayerQoe, PlayheadWatch, type ReloadWhy } from './player-qoe';
 import {
   createEngineSurface,
@@ -3249,6 +3250,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    * surface `sessionLost: true` in the interval.
    */
   private recoveringFromLostSession = false;
+  /** The recovery in progress: what triggered it and when the picture froze, kept across retries. */
+  private recoveryEpisode: { reason: QoeRecoveryReason; since: number } | null = null;
   /** Recovery attempts in the current loss episode. Cleared only once a
    *  reload sustains playback (see {@link recoverConfirmPending}), NOT on the
    *  instant a reload resolves — a reload that succeeds then re-fails within
@@ -3380,7 +3383,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  410) recovers immediately; `error` routes to {@link CopyFallbackController.maybeFallback}. */
   private wireErrorRecovery(engine: PlaybackEngine): void {
     engine.on('sessionExpired', () => {
-      void this.recoverFromLostSession();
+      void this.recoverFromLostSession('session_expired');
     });
     engine.on('externalPlaybackFailed', ({ reason }) => {
       void this.onExternalPlaybackFailed(reason);
@@ -3649,8 +3652,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         ? this.seekStallGraceMs
         : this.stallTimeoutMs;
     if (Date.now() - this.lastProgressAt >= timeout) {
+      const frozenSince = this.lastProgressAt;
       this.resetStallWatchdog();
-      void this.recoverFromLostSession();
+      void this.recoverFromLostSession('stall', frozenSince);
     }
   }
 
@@ -3663,7 +3667,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    * failures rather than reloading forever. Cast playbacks are skipped —
    * the cast receiver owns its own session lifecycle.
    */
-  private async recoverFromLostSession(): Promise<void> {
+  private async recoverFromLostSession(reason: QoeRecoveryReason = 'other', frozenSince?: number): Promise<void> {
     if (this.destroyed) return;
     if (this.recoveringFromLostSession) return;
     // A user reload (quality / audio switch, episode swap) re-mints the session
@@ -3683,10 +3687,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // still veiled) or a stale overlay with no way out.
       this.state.setRecovering(false);
       if (!this.state.error()) this.state.failWith(undefined, { source: 'session' });
+      this.recoveryEpisode = null;
       return;
     }
     if (this.castService.isConnected()) return;
     if (!this.engine || !this.mediaFileId) return;
+    // The first trigger names the episode; the picture froze at the last progress, not at the trigger.
+    this.recoveryEpisode ??= { reason, since: Math.min(Date.now(), frozenSince ?? (this.lastProgressAt || Date.now())) };
     this.recoveringFromLostSession = true;
     // Suppress the fatal-error overlay the engine tears off as the stream
     // reloads — recovery is about to resume playback, so the reload window
@@ -3709,7 +3716,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         preservePause: true,
         unmute: false,
       });
-      this.qoe.onRecovery(this.activeSessionId(), pos);
+      const episode = this.recoveryEpisode;
+      this.recoveryEpisode = null;
+      this.qoe.onRecovery(
+        this.activeSessionId(),
+        pos,
+        episode ? { reason: episode.reason, durationMs: Date.now() - episode.since } : undefined,
+      );
       this.resetStallWatchdog();
       this.state.setRecovering(false);
       // Don't clear the episode counter yet — only once the reload proves it
@@ -3719,6 +3732,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.recoverConfirmAt = Date.now();
     } catch (e) {
       if (this.recoverAttempts >= this.maxRecoverAttempts) {
+        this.recoveryEpisode = null;
         this.state.setRecovering(false);
         this.state.failWith(e);
       } else {
@@ -3727,7 +3741,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         const backoff = 2_000 * 2 ** (this.recoverAttempts - 1); // 2s, 4s
         this.recoverRetryTimer = setTimeout(() => {
           this.recoverRetryTimer = null;
-          void this.recoverFromLostSession();
+          void this.recoverFromLostSession(reason);
         }, backoff);
       }
     } finally {
@@ -4855,7 +4869,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         // with the fresh sid at the current position before the
         // player's buffer drains.
         if (response?.sessionLost) {
-          void this.recoverFromLostSession();
+          void this.recoverFromLostSession('session_lost');
         }
         // Auto-delete-after-watched: the moment the server marks this item
         // completed, drop its auto-managed download (no-op otherwise).

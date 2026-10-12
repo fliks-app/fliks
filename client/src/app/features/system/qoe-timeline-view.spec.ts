@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { QoeSessionRow } from '../../core/services/api/qoe-api.service';
-import { blockSummary, blockTitle, clockLabel, detailsOpen, formatPosition, timelineSteps, unreportedStalls } from './qoe-timeline-view';
+import { blockSummary, blockTitle, clockLabel, detailsOpen, formatPosition, ownStalls, timelineSteps, unreportedStalls } from './qoe-timeline-view';
 import { buildTimeline, type TimelineTransition } from './qoe-timeline';
 
 const f = {
@@ -103,5 +103,17 @@ describe('unreportedStalls', () => {
       [ev('a', 'stall', '2026-10-13T10:01:00Z', { durationMs: 2000 })],
     );
     expect(unreportedStalls(tl.blocks[0])).toBeNull();
+  });
+});
+
+describe('a session opened by a recovery', () => {
+  it('leaves the recovery wait to the opening, not to the session stalls', () => {
+    const tl = buildTimeline(
+      [row('a', '2026-10-13T10:00:00Z'), row('b', '2026-10-13T10:00:30Z', { stallCount: 1, stallMs: 9000 })],
+      [ev('b', 'recovery', '2026-10-13T10:00:30Z', { reason: 'session_lost', durationMs: 9000 })],
+    );
+    const incoming = tl.transitions[0];
+    expect(ownStalls(tl.blocks[1], incoming)).toEqual({ stallCount: 0, stallMs: 0 });
+    expect(unreportedStalls(tl.blocks[1], incoming)).toBeNull();
   });
 });

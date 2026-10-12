@@ -1,4 +1,4 @@
-import type { QoeEngine, QoeEvent, QoeEventType, QoeReloadReason, QoeSample } from './types';
+import type { QoeEngine, QoeEvent, QoeEventType, QoeRecoveryReason, QoeReloadReason, QoeSample } from './types';
 
 export const MAX_EVENTS_PER_REQUEST = 50;
 
@@ -18,6 +18,7 @@ const EVENT_TYPES: readonly QoeEventType[] = [
   'quality_switch',
   'reload',
 ];
+const RECOVERY_REASONS: readonly QoeRecoveryReason[] = ['session_lost', 'session_expired', 'stall', 'other'];
 const RELOAD_REASONS: readonly QoeReloadReason[] = [
   'audio',
   'subtitles',
@@ -115,6 +116,9 @@ export function parseEvents(
     if (to != null) ev.toBitrate = to;
     const variant = num(e.variantBitrate);
     if (variant != null) ev.variantBitrate = variant;
+    if (ev.type === 'recovery') {
+      ev.reason = RECOVERY_REASONS.includes(e.reason as QoeRecoveryReason) ? (e.reason as QoeRecoveryReason) : 'other';
+    }
     if (ev.type === 'reload') {
       ev.reason = RELOAD_REASONS.includes(e.reason as QoeReloadReason)
         ? (e.reason as QoeReloadReason)

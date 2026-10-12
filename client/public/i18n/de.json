@@ -1561,7 +1561,9 @@
       "hint_software_encode": "Software-Kodierung",
       "hint_burn_in": "eingebrannte Untertitel",
       "hint_cpu_tonemap": "Tonemapping auf der CPU",
-      "hint_busy": "{{count}} gleichzeitige Transkodierungen"
+      "hint_busy": "{{count}} gleichzeitige Transkodierungen",
+      "server_session_lost": "Der Server kannte die Sitzung nicht mehr (Neustart oder Inaktivität).",
+      "server_session_expired": "Der Server hat den weiteren Stream abgelehnt (abgelaufene Sitzung oder Segmentfehler)."
     },
     "pipeline": {
       "title": "Pipeline",
@@ -1625,7 +1627,8 @@
       "reload_subtitles_off": "Eingebrannte Untertitel deaktiviert",
       "reload_subtitles_hls": "Untertitel über HLS geladen ({{lang}})",
       "reload_remux_fallback": "Remux auf Transkodierung zurückgefallen",
-      "reload_other": "Stream neu geladen"
+      "reload_other": "Stream neu geladen",
+      "recovery_after": "Fortgesetzt nach {{duration}}"
     },
     "block": {
       "end": "Ende der Wiedergabe",

@@ -155,7 +155,9 @@ export class QoeAggregator {
     opts: { live?: boolean; load?: ServerLoad | null } = {},
   ): StallClassification | null {
     let classified: StallClassification | null = null;
-    if (e.type === 'stall') {
+    // The wait before a recovery froze the picture as surely as a stall did.
+    const recoveryWait = e.type === 'recovery' && (e.durationMs ?? 0) > 0;
+    if (e.type === 'stall' || recoveryWait) {
       this.stallEvents++;
       const fresh = (at: number | null) =>
         at != null && now - at <= MAX_SAMPLE_AGE_MS;
@@ -165,7 +167,8 @@ export class QoeAggregator {
         (fresh(this.cmcdBufferAt) ? this.cmcdBuffer : null);
       if (buffer != null) push(this.stallBuffers, buffer);
       if (e.bandwidthBps != null) push(this.stallBandwidths, e.bandwidthBps);
-      classified = classifyStall(e, {
+      classified = recoveryWait ? recoveryCause(e) : null;
+      classified ??= classifyStall(e, {
         live: opts.live,
         load: opts.load,
         pipeline: this.pipelineInfo,
@@ -187,7 +190,8 @@ export class QoeAggregator {
         cause: classified.cause,
         reason: classified.reason,
       };
-    } else if (e.type === 'error') {
+    }
+    if (e.type === 'error') {
       this.errorCount++;
       this.lastErrorAt = now;
     } else if (e.type === 'recovery') {
@@ -377,4 +381,19 @@ export function mergeSummaries(parts: QoeSessionSummary[]): QoeSessionSummary {
     stallCauseMs: mergeCauses(parts),
     stallReasonMs: mergeReasons(parts),
   };
+}
+
+/**
+ * A recovery the server can explain on its own: it no longer knew the session (restart, idle GC), or refused the
+ * stream (a 410, or any segment error on the native players, hence the lower confidence). A frozen picture goes
+ * through the usual stall classification.
+ */
+function recoveryCause(e: QoeEvent): StallClassification | null {
+  if (e.reason === 'session_lost') {
+    return { cause: 'server', confidence: 'high', reason: 'qoe.stall.server_session_lost', evidence: {}, hints: [] };
+  }
+  if (e.reason === 'session_expired') {
+    return { cause: 'server', confidence: 'low', reason: 'qoe.stall.server_session_expired', evidence: {}, hints: [] };
+  }
+  return null;
 }

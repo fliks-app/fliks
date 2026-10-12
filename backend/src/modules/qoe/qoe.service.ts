@@ -367,7 +367,8 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     t.reported = true;
     t.playbackId = playbackId ?? t.playbackId;
     const now = Date.now();
-    const load = events.some((e) => e.type === 'stall') ? this.serverLoad() : null;
+    const freezes = events.some((e) => e.type === 'stall' || (e.type === 'recovery' && (e.durationMs ?? 0) > 0));
+    const load = freezes ? this.serverLoad() : null;
     for (const e of events) {
       if (t.eventCount >= MAX_EVENTS_PER_SESSION) break;
       t.eventCount++;

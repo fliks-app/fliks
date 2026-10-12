@@ -1,5 +1,5 @@
 import { hasQoeData, type EngineQoeSample, type PlaybackEngine, type QoeSample } from '../../core/services/playback-engine/playback-engine';
-import type { QoeEvent, QoeReloadReason } from '../../core/services/api/qoe-api.service';
+import type { QoeEvent, QoeRecoveryReason, QoeReloadReason } from '../../core/services/api/qoe-api.service';
 import { newPlaybackId, type QoeReporter } from '../../core/services/qoe-reporter.service';
 
 /** Why a reload re-negotiates playback; `from`/`to` name what changed. */
@@ -52,6 +52,13 @@ export class StallTracker {
     this.count++;
     this.totalMs += durationMs;
     return { durationMs, position: o.position, bufferAheadS: o.bufferAheadS, variantBitrate: o.variantBitrate };
+  }
+
+  /** A freeze measured elsewhere (the wait before a recovery) counts like any stall. */
+  add(durationMs: number): void {
+    if (durationMs < MIN_STALL_MS) return;
+    this.count++;
+    this.totalMs += durationMs;
   }
 
   /** Counters including an episode still open, so a stall in progress shows up. */
@@ -188,10 +195,16 @@ export class PlayerQoe {
     }
   }
 
-  onRecovery(sessionId: string | undefined, position: number): void {
+  /** `wait`: what forced the recovery and how long the picture stayed frozen before playback came back. */
+  onRecovery(
+    sessionId: string | undefined,
+    position: number,
+    wait?: { reason: QoeRecoveryReason; durationMs: number },
+  ): void {
     this.bind(sessionId);
     this.recoveryReloads++;
-    if (sessionId) this.record(sessionId, { type: 'recovery', position });
+    if (wait) this.stalls.add(wait.durationMs);
+    if (sessionId) this.record(sessionId, { type: 'recovery', position, ...wait });
   }
 
   onError(

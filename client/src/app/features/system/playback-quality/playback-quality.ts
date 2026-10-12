@@ -37,7 +37,7 @@ import {
 } from '@lucide/angular';
 import { QOE_CAUSE_DOT_CLASS, QOE_CAUSE_TEXT_CLASS, codecLabel, durationParts, hintParams, loadLine, pipelineChain, pipelineParts, qualityLabel, rungDisplay, stallBreakdown, stallExplanation, translateFmt, type Fmt } from '../qoe-stall';
 import { buildTimeline, isOngoing, type RungName, type Timeline, type TimelineBlock, type TimelineTransition } from '../qoe-timeline';
-import { blockSummary, blockTitle, clockLabel, detailsOpen, formatPosition, timelineSteps, unreportedStalls } from '../qoe-timeline-view';
+import { blockSummary, blockTitle, clockLabel, detailsOpen, formatPosition, ownStalls, timelineSteps, unreportedStalls } from '../qoe-timeline-view';
 import { QOE_VERDICTS, QOE_VERDICT_BAR_CLASS, formatMbps, qoeDotClass } from '../qoe-health';
 import { mergeDevices } from '../qoe-devices';
 
@@ -372,8 +372,8 @@ export class SystemPlaybackQualityComponent implements OnInit {
     return { title: this.translate.instant('qoe.transition.recovery') };
   }
 
-  unreportedText(b: TimelineBlock): string {
-    const u = unreportedStalls(b);
+  unreportedText(b: TimelineBlock, incoming: TimelineTransition | null = null): string {
+    const u = unreportedStalls(b, incoming);
     if (!u) return '';
     const duration = this.seconds(u.ms);
     return u.count === 1
@@ -438,8 +438,12 @@ export class SystemPlaybackQualityComponent implements OnInit {
     return blockTitle(b.session, b.first, this.fmt);
   }
 
-  blockSummary(b: TimelineBlock): string {
-    return blockSummary(b.session, this.fmt);
+  /** "2 min 09 s · aucune coupure", led by the quality when a change opened the session (the change is the title). */
+  blockSummary(b: TimelineBlock, incoming: TimelineTransition | null = null): string {
+    const summary = blockSummary({ watchedMs: b.session.watchedMs, ...ownStalls(b, incoming) }, this.fmt);
+    if (!incoming || incoming.kind === 'handoff') return summary;
+    const quality = this.qualityText(b.session);
+    return quality && quality !== '-' ? `${quality} · ${summary}` : summary;
   }
 
   /** The technical figures of one session, folded under "Technical details". */
@@ -486,7 +490,18 @@ export class SystemPlaybackQualityComponent implements OnInit {
       return this.change('qoe.transition.quality_switch', this.rungLabel(t.from, t.fromBitrate, true), this.rungLabel(t.to, t.toBitrate, false));
     }
     if (t.kind === 'reload') return this.reloadLines(t.event?.data ?? null);
+    if (t.kind === 'recovery' && t.event) return this.recoveryLines(t.event);
     return { title: this.translate.instant(`qoe.transition.${t.kind}`) };
+  }
+
+  /** "Reprise après 9 s", then why the player had to re-mint its session. */
+  private recoveryLines(e: QoeEventRow): ChangeLines {
+    const ms = e.data?.durationMs ?? 0;
+    const title =
+      ms > 0
+        ? this.translate.instant('qoe.transition.recovery_after', { duration: this.seconds(ms) })
+        : this.translate.instant('qoe.transition.recovery');
+    return { title, detail: e.data?.cause ? this.causeSentence(e) : undefined };
   }
 
   private change(titleKey: string, from: string, to: string): ChangeLines {

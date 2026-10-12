@@ -69,6 +69,13 @@ describe('parseEvents', () => {
     expect(at(undefined)).toBe(now);
   });
 
+  it('keeps a known recovery reason, other otherwise', () => {
+    const reason = (r: unknown) => parseEvents([{ type: 'recovery', at: 1, reason: r }], 1)[0].reason;
+    expect(reason('session_lost')).toBe('session_lost');
+    expect(reason('stall')).toBe('stall');
+    expect(reason('bogus')).toBe('other');
+  });
+
   it('keeps typed fields only', () => {
     expect(
       parseEvents([

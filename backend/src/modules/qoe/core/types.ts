@@ -30,6 +30,8 @@ export interface QoeSample {
 
 export type QoeEventType = 'stall' | 'error' | 'recovery' | 'quality_switch' | 'reload';
 export type QoeReloadReason = 'audio' | 'subtitles' | 'quality' | 'remux_fallback' | 'other';
+/** Why the player re-minted its session: the server forgot it, refused the stream, or the picture froze. */
+export type QoeRecoveryReason = 'session_lost' | 'session_expired' | 'stall' | 'other';
 
 export interface QoeEvent {
   type: QoeEventType;
@@ -46,8 +48,8 @@ export interface QoeEvent {
   toBitrate?: number;
   /** Stall: the active variant bitrate (bps) when it began. */
   variantBitrate?: number;
-  /** Reload: why the stream minted a new session, and what changed. */
-  reason?: QoeReloadReason;
+  /** Reload: why the stream minted a new session, and what changed. Recovery: what forced it. */
+  reason?: QoeReloadReason | QoeRecoveryReason;
   from?: string;
   to?: string;
 }

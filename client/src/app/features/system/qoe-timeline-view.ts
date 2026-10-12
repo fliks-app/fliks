@@ -67,11 +67,24 @@ export function timelineSteps(tl: Timeline, endMs: number | null): TimelineStep[
   return steps;
 }
 
+/** The freeze before the recovery that opened this session; the session counts it among its stalls. */
+export function incomingWaitMs(incoming: TimelineTransition | null): number {
+  return incoming?.kind === 'recovery' ? (incoming.event?.data?.durationMs ?? 0) : 0;
+}
+
+/** The session's stall counters minus the recovery wait its opening already shows. */
+export function ownStalls(b: TimelineBlock, incoming: TimelineTransition | null): { stallCount: number; stallMs: number } {
+  const wait = incomingWaitMs(incoming);
+  if (wait <= 0) return { stallCount: b.session.stallCount, stallMs: b.session.stallMs };
+  return { stallCount: Math.max(0, b.session.stallCount - 1), stallMs: Math.max(0, b.session.stallMs - wait) };
+}
+
 /** Stalls the session counted but never described with an event (an older client, or events lost). */
-export function unreportedStalls(b: TimelineBlock): { count: number; ms: number } | null {
-  const reported = b.events.filter((e) => e.type === 'stall');
-  const count = b.session.stallCount - reported.length;
+export function unreportedStalls(b: TimelineBlock, incoming: TimelineTransition | null = null): { count: number; ms: number } | null {
+  const own = ownStalls(b, incoming);
+  const reported = b.events.filter((e) => e.type === 'stall' || (e.type === 'recovery' && (e.data?.durationMs ?? 0) > 0));
+  const count = own.stallCount - reported.length;
   if (count <= 0) return null;
   const reportedMs = reported.reduce((n, e) => n + (e.data?.durationMs ?? 0), 0);
-  return { count, ms: Math.max(0, b.session.stallMs - reportedMs) };
+  return { count, ms: Math.max(0, own.stallMs - reportedMs) };
 }

@@ -8,6 +8,8 @@ import { firstValueFrom } from 'rxjs';
 export type QoeVerdict = 'ok' | 'network' | 'device' | 'server' | 'error' | 'unknown';
 export type QoeEventType = 'stall' | 'error' | 'recovery' | 'quality_switch' | 'reload';
 export type QoeReloadReason = 'audio' | 'subtitles' | 'quality' | 'remux_fallback' | 'other';
+/** What forced a recovery: the server forgot the session, refused the stream, or the picture froze. */
+export type QoeRecoveryReason = 'session_lost' | 'session_expired' | 'stall' | 'other';
 
 export interface QoeEvent {
   type: QoeEventType;
@@ -24,8 +26,8 @@ export interface QoeEvent {
   toBitrate?: number;
   /** Stall: the active rung bitrate (bps) when it began. */
   variantBitrate?: number | null;
-  /** Reload: why the stream was re-negotiated, with what changed (capped at 80 chars server-side). */
-  reason?: QoeReloadReason;
+  /** Reload: why the stream was re-negotiated, with what changed (capped at 80 chars server-side). Recovery: what forced it. */
+  reason?: QoeReloadReason | QoeRecoveryReason;
   from?: string;
   to?: string;
 }

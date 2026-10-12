@@ -1561,7 +1561,9 @@
       "hint_software_encode": "codificación por software",
       "hint_burn_in": "subtítulos incrustados",
       "hint_cpu_tonemap": "tonemap en la CPU",
-      "hint_busy": "{{count}} transcodificaciones a la vez"
+      "hint_busy": "{{count}} transcodificaciones a la vez",
+      "server_session_lost": "El servidor ya no conocía la sesión (reinicio o inactividad).",
+      "server_session_expired": "El servidor rechazó el resto del flujo (sesión caducada o error de segmento)."
     },
     "pipeline": {
       "title": "Pipeline",
@@ -1625,7 +1627,8 @@
       "reload_subtitles_off": "Subtítulos incrustados desactivados",
       "reload_subtitles_hls": "Subtítulos cargados por HLS ({{lang}})",
       "reload_remux_fallback": "El remux pasó a transcodificación",
-      "reload_other": "Recarga del flujo"
+      "reload_other": "Recarga del flujo",
+      "recovery_after": "Reanudado tras {{duration}}"
     },
     "block": {
       "end": "Fin de la reproducción",

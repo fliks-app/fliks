@@ -1561,7 +1561,9 @@
       "hint_software_encode": "codificação por software",
       "hint_burn_in": "legendas incorporadas",
       "hint_cpu_tonemap": "tonemap na CPU",
-      "hint_busy": "{{count}} transcodificações em simultâneo"
+      "hint_busy": "{{count}} transcodificações em simultâneo",
+      "server_session_lost": "O servidor já não conhecia a sessão (reinício ou inatividade).",
+      "server_session_expired": "O servidor recusou o resto do fluxo (sessão expirada ou erro de segmento)."
     },
     "pipeline": {
       "title": "Pipeline",
@@ -1625,7 +1627,8 @@
       "reload_subtitles_off": "Legendas incorporadas desativadas",
       "reload_subtitles_hls": "Legendas carregadas via HLS ({{lang}})",
       "reload_remux_fallback": "O remux passou para a transcodificação",
-      "reload_other": "Recarga do fluxo"
+      "reload_other": "Recarga do fluxo",
+      "recovery_after": "Retomado após {{duration}}"
     },
     "block": {
       "end": "Fim da reprodução",

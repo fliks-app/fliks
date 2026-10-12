@@ -35,6 +35,20 @@ describe('QoeAggregator', () => {
     });
   });
 
+  it('classifies the wait before a recovery, the server owning a lost session', () => {
+    const a = new QoeAggregator();
+    a.addSample(sample(), 0);
+    const lost = a.addEvent({ type: 'recovery', at: 1, position: 873, reason: 'session_lost', durationMs: 9000 }, 1);
+    expect(lost).toMatchObject({ cause: 'server', confidence: 'high', reason: 'qoe.stall.server_session_lost' });
+    expect(a.addEvent({ type: 'recovery', at: 2, position: 900, reason: 'session_expired', durationMs: 4000 }, 2)).toMatchObject({
+      cause: 'server',
+      confidence: 'low',
+    });
+    // An instant recovery froze nothing.
+    expect(a.addEvent({ type: 'recovery', at: 3, position: 950, reason: 'session_lost' }, 3)).toBeNull();
+    expect(a.summary().stallCauseMs).toMatchObject({ server: 9000 + 2000 });
+  });
+
   it('does not count a reload as a stall, an error or a recovery', () => {
     const a = new QoeAggregator();
     a.addSample(sample(), 0);
