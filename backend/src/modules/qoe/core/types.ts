@@ -81,6 +81,8 @@ export interface StallSample {
 
 /** What the server knew when the stall was reported. */
 export interface StallContext {
+  /** Live TV: segment timing is production pacing, judged by speed only. */
+  live?: boolean;
   segments: StallSegment[];
   samples: StallSample[];
   /** Fresh sample or CMCD buffer. */

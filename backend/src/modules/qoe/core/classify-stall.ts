@@ -1,3 +1,4 @@
+import { LIVE_SERVER_SPEED_FLOOR, SERVER_SPEED_FLOOR } from './diagnose';
 import type {
   QoeEvent,
   StallClassification,
@@ -23,7 +24,8 @@ const speedOf = (s: StallSegment) =>
   (s.segmentDurationS * 1000) / Math.max(s.waitedMs ?? 1, 1);
 
 /** The longest ffmpeg wait among the segments that overlap [lo, hi], if it explains a stall. */
-function serverHit(segments: StallSegment[], lo: number, hi: number) {
+/** Live segments are paced by the source, so only the production speed counts there, not the wait. */
+function serverHit(segments: StallSegment[], lo: number, hi: number, live: boolean) {
   const hits = segments.filter(
     (s) => s.waitedMs != null && s.at >= lo && s.at - s.waitedMs <= hi,
   );
@@ -31,7 +33,8 @@ function serverHit(segments: StallSegment[], lo: number, hi: number) {
   const worst = hits.reduce((a, b) => (b.waitedMs! > a.waitedMs! ? b : a));
   const speeds = hits.map(speedOf).sort((a, b) => a - b);
   const median = speeds[speeds.length >> 1];
-  return worst.waitedMs! > SERVER_WAIT_MS || median < 1
+  const slow = median < (live ? LIVE_SERVER_SPEED_FLOOR : SERVER_SPEED_FLOOR);
+  return (!live && worst.waitedMs! > SERVER_WAIT_MS) || slow
     ? { waitedMs: worst.waitedMs!, transcodeSpeed: speedOf(worst) }
     : null;
 }
@@ -72,10 +75,10 @@ export function classifyStall(
     evidence,
   });
 
-  const strict = serverHit(ctx.segments, start, stall.at);
+  const strict = serverHit(ctx.segments, start, stall.at, !!ctx.live);
   const wide = strict
     ? null
-    : serverHit(ctx.segments, start - SKEW_MARGIN_MS, stall.at + SKEW_MARGIN_MS);
+    : serverHit(ctx.segments, start - SKEW_MARGIN_MS, stall.at + SKEW_MARGIN_MS, !!ctx.live);
   const server = strict ?? wide;
   if (server) {
     Object.assign(evidence, server);

@@ -145,7 +145,7 @@ export class QoeAggregator {
   }
 
   /** A stall comes back classified from what the server knows right now. */
-  addEvent(e: QoeEvent, now: number): StallClassification | null {
+  addEvent(e: QoeEvent, now: number, live = false): StallClassification | null {
     let classified: StallClassification | null = null;
     if (e.type === 'stall') {
       this.stallEvents++;
@@ -158,6 +158,7 @@ export class QoeAggregator {
       if (buffer != null) push(this.stallBuffers, buffer);
       if (e.bandwidthBps != null) push(this.stallBandwidths, e.bandwidthBps);
       classified = classifyStall(e, {
+        live,
         segments: this.segments,
         samples: this.samples,
         bufferAheadS: buffer,

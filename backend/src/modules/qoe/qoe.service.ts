@@ -292,7 +292,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     for (const e of events) {
       if (t.eventCount >= MAX_EVENTS_PER_SESSION) break;
       t.eventCount++;
-      const c = t.agg.addEvent(e, now);
+      const c = t.agg.addEvent(e, now, session.kind === 'live');
       const { type, at, ...data } = e;
       t.pendingEvents.push({
         sessionId: session.sessionId,

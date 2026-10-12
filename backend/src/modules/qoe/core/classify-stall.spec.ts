@@ -61,6 +61,13 @@ describe('classifyStall', () => {
     ).toBe('device');
   });
 
+  it('live: judged by production speed against the 0.9 floor, not by the wait', () => {
+    const live = (segments: ReturnType<typeof seg>[]) =>
+      classifyStall(stall, ctx({ segments, live: true, bufferAheadS: 3 })).cause;
+    expect(live([seg(AT - 1_000, 6_200)])).toBe('device');
+    expect(live([seg(AT - 1_000, 7_500)])).toBe('server');
+  });
+
   it('network: starved buffer and throughput below 1.2x the bitrate', () => {
     const r = classifyStall(
       { ...stall, bufferAheadS: 0.4, bandwidthBps: 1.9e6, variantBitrate: 5.5e6 },
