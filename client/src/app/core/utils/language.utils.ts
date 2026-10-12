@@ -128,12 +128,23 @@ function nativeLanguageName(code: string, locale: string): string | null {
   return name && name.charAt(0).toLocaleUpperCase(locale) + name.slice(1);
 }
 
-/** Script and region subtags of a BCP-47 tag, null when its language isn't `code`'s. */
+/** The language's country of origin where its ISO 639-1 code isn't also the region's
+ *  (`pt-PT`, `fr-FR` need no entry). That variant is shown as the bare language. */
+const HOME_REGION: Record<string, string> = {
+  en: 'GB', sv: 'SE', da: 'DK', el: 'GR', cs: 'CZ', ja: 'JP', ko: 'KR', uk: 'UA', he: 'IL',
+  hi: 'IN', nb: 'NO', nn: 'NO', sl: 'SI', et: 'EE', vi: 'VN', ca: 'ES', eu: 'ES', gl: 'ES',
+};
+
+/** Script and region subtags of a BCP-47 tag, with the language's home region dropped,
+ *  and the tag rebuilt from what is left. Null when its language isn't `code`'s. */
 function tagSubtags(code: string | undefined | null, tag: string | undefined | null) {
   const m = /^[a-z]{2,3}(?:[-_]([a-z]{4}))?(?:[-_]([a-z]{2}|\d{3}))?(?:[-_]|$)/i.exec((tag ?? '').trim());
-  if (!m || normalizeLangCode(tag) !== normalizeLangCode(code)) return null;
+  const lang = normalizeLangCode(code);
+  if (!m || normalizeLangCode(tag) !== lang) return null;
   const script = m[1] && m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase();
-  return { script, region: m[2]?.toUpperCase() };
+  let region: string | undefined = m[2]?.toUpperCase();
+  if (region === (HOME_REGION[lang] ?? lang.toUpperCase())) region = undefined;
+  return { script, region, tag: [lang, script, region].filter(Boolean).join('-') };
 }
 
 /** Script then region names of the tag in `locale`; empty when it has none or the runtime can't name them. */
@@ -161,7 +172,7 @@ export function localizeLanguageTag(
   const locale = uiLocale(translate);
   const qualifiers = tagQualifiers(code, tag, locale);
   if (!qualifiers.length) return base;
-  const dialect = displayName('language', tag!.trim(), locale);
+  const dialect = displayName('language', tagSubtags(code, tag)!.tag, locale);
   if (dialect && dialect.toLocaleLowerCase(locale) !== base.toLocaleLowerCase(locale)) {
     return dialect.charAt(0).toLocaleUpperCase(locale) + dialect.slice(1);
   }
@@ -182,7 +193,7 @@ export function languageTagWords(
   const ui = uiLocale(translate);
   if (!tagQualifiers(code, tag, ui).length) return words;
   for (const locale of new Set([ui, 'en'])) {
-    const names = [...tagQualifiers(code, tag, locale), displayName('language', tag!.trim(), locale)];
+    const names = [...tagQualifiers(code, tag, locale), displayName('language', tagSubtags(code, tag)!.tag, locale)];
     for (const n of names) n?.toLowerCase().split(/[^\p{L}\p{N}]+/u).forEach((w) => w && words.add(w));
   }
   return words;
