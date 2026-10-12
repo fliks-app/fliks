@@ -95,6 +95,7 @@
                 [playlistMediaId]="item.mediaId"
                 [playlistEpisodeId]="item.episodeId"
                 [titleLink]="item.episodeId ? ['/' + (item.mediaType === 'series' ? 'series' : 'movies'), '' + item.mediaId] : null"
+                [titlePosterUrl]="item.posterUrl"
                 [dismissable]="true"
                 [interactiveWatched]="true"
                 [liked]="isLiked(item.mediaId, item.episodeId)"

@@ -136,6 +136,8 @@ export class MediaCardComponent {
   /** Destination for the title line when it differs from the card's own: an
    *  episode card titled with its series sends the title to the series page. */
   readonly titleLink = input<string[] | null>(null);
+  /** Poster of the title's destination, so its hero is there for the morph. */
+  readonly titlePosterUrl = input<string | null>(null);
   /** When true, navigation triggered by the card replaces the
    *  current history entry instead of pushing a new one. Useful for
    *  "cards within the same media context" (sibling seasons, sibling
@@ -274,6 +276,26 @@ export class MediaCardComponent {
     } as unknown as Media;
     return { media: stub };
   });
+  /** The title's destination seeded like the card's own, so its hero renders
+   *  in time to pair with the card's picture. */
+  readonly titleNavState = computed(() => {
+    const id = this.titleMediaId();
+    if (id == null) return undefined;
+    const stub = {
+      id,
+      type: this.titleLink()![0] === '/series' ? 'series' : 'movie',
+      title: this._title(),
+      posterUrl: this.titlePosterUrl(),
+      fanartUrl: this.fanartUrl() ?? null,
+    } as unknown as Media;
+    return { media: stub };
+  });
+
+  private titleMediaId(): number | null {
+    const id = Number(this.titleLink()?.at(-1));
+    return Number.isFinite(id) && id > 0 ? id : null;
+  }
+
   /**
    * `<img>` ref so we can stamp the view-transition-name imperatively just
    * before navigating. We DON'T set it declaratively — when the same media
@@ -362,10 +384,17 @@ export class MediaCardComponent {
    *  when `replaceUrl` is on, so NavbarService doesn't push the
    *  replaced URL onto its history stack. Pointerdown fires before
    *  click → before RouterLink kicks off `navigateByUrl`. */
-  /** The title's own destination has no poster to pair with, so a stamp left
-   *  by an earlier click would morph this card into the wrong image. */
+  /** The title opens another page (the series behind an episode): the card's
+   *  picture morphs into that page's hero, dissolving into its artwork. */
   protected onTitleAnchorPointerdown() {
-    clearPosterStamps();
+    const img = this.imgRef()?.nativeElement;
+    const id = this.titleMediaId();
+    if ('startViewTransition' in document && this.posterMorph() && img && id != null) {
+      stampPoster(img, id, null, this.overlayRef()?.nativeElement);
+      this.prefetch(this.fanartUrl());
+    } else {
+      clearPosterStamps();
+    }
     this.markNavigationIntent();
   }
 
@@ -404,6 +433,10 @@ export class MediaCardComponent {
       this.episodeIdFromLink() != null
         ? this._img()
         : (this.media()?.fanartUrl ?? this.fanartUrl());
+    this.prefetch(url);
+  }
+
+  private prefetch(url: string | null | undefined) {
     if (!url) return;
     const img = new Image();
     img.decoding = 'async';
