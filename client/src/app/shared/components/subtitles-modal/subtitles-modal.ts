@@ -504,6 +504,7 @@ export class SubtitlesModalComponent {
         head: parts.head,
         sub: parts.sub,
         language: s.language,
+        languageTag: this.withStreamInfo(s).languageTag,
         forced: s.forced,
         hearingImpaired: s.hearingImpaired,
         image: isImageBasedSubtitleCodec(s.codec),

@@ -3,8 +3,10 @@ import { TranslateService } from '@ngx-translate/core';
 import {
   PlayerSettingsService,
   matchRememberedAudio,
+  parseRememberedSubtitle,
   pickAudioStreamForLanguage,
   rememberedAudioKey,
+  rememberedSubtitleValue,
   type AudioStreamChoice,
   type HearingImpairedPreference,
 } from './player-settings.service';
@@ -14,7 +16,7 @@ import { AppSettingsService } from './app-settings.service';
 import { formatSubtitleLabel, formatSubtitleParts, type SubtitleLabelSource } from '../utils/player.utils';
 import { isImageBasedSubtitleCodec } from '../utils/subtitle-codecs';
 import { buildSubtitleTracks } from '../utils/subtitle-tracks';
-import { normalizeLangCode } from '../utils/language.utils';
+import { normalizeLangCode, normalizeLangTag } from '../utils/language.utils';
 import type { PlaybackEngine, AudioTrack } from './playback-engine/playback-engine';
 
 export interface SubtitleOption {
@@ -22,6 +24,8 @@ export interface SubtitleOption {
   label: string;
   url: string;
   language: string;
+  /** BCP-47 tag of an embedded track (`pt-PT`): the variant a remembered pick pins down. */
+  languageTag?: string | null;
   /** True for bitmap subs (PGS/VOBSUB), regardless of how they're shown. */
   isImage?: boolean;
   /** True for a bitmap sub, embedded or external: it is burned in server-side
@@ -135,11 +139,18 @@ export class TrackManagerService {
   }
 
   /** Save subtitle selection for this media. Pass null = user explicitly disabled.
-   *  Stores "language[:forced][:embedded][:image][:hi]", or "off" when disabled. */
-  saveSubtitleSelection(mediaId: number, language: string | null, forced = false, embedded = false, image = false, hearingImpaired = false): void {
+   *  Stores "language[:forced][:embedded][:image][:hi][:variant]", or "off" when disabled. */
+  saveSubtitleSelection(
+    mediaId: number,
+    language: string | null,
+    forced = false,
+    embedded = false,
+    image = false,
+    hearingImpaired = false,
+    languageTag?: string | null,
+  ): void {
     if (!this.playerSettings.get().rememberSubtitleSelections || !mediaId) return;
-    const flags = [forced ? 'forced' : '', embedded ? 'embedded' : '', image ? 'image' : '', hearingImpaired ? 'hi' : ''].filter(Boolean).join(':');
-    const value = language ? `${language}${flags ? ':' + flags : ''}` : 'off';
+    const value = language ? rememberedSubtitleValue(language, { forced, embedded, image, hearingImpaired }, languageTag) : 'off';
     this.playerSettings.saveRememberedSubtitleTrack(mediaId, value);
   }
 
@@ -188,6 +199,7 @@ export class TrackManagerService {
               ? ''
               : streamingApi.getEmbeddedSubtitleUrl(mediaFileId, t.streamIndex!),
         language: t.language,
+        languageTag: t.languageTag,
         isImage: t.isImage,
         burnIn: t.isImage,
         subtitleDbId: t.subtitleId,
@@ -211,6 +223,7 @@ export class TrackManagerService {
             ...this.describeSubtitle(emb, options.length + 1),
             url: streamingApi.getEmbeddedSubtitleUrl(mediaFileId, emb.streamIndex),
             language: normalizeLangCode(emb.language),
+            languageTag: emb.languageTag,
             burnIn: false,
             forced: emb.forced ?? false,
             hearingImpaired: emb.hearingImpaired ?? false,
@@ -271,12 +284,10 @@ export class TrackManagerService {
       const saved = this.playerSettings.getRememberedSubtitleTrack(mediaId);
       if (saved === 'off') return; // User explicitly disabled subtitles
       if (saved) {
-        const parts = saved.split(':');
-        const savedLang = normalizeLangCode(parts[0]);
-        const wantForced = parts.includes('forced');
-        const wantEmbedded = parts.includes('embedded');
-        const wantImage = parts.includes('image');
-        const wantHi = parts.includes('hi');
+        const {
+          language: savedLang, forced: wantForced, embedded: wantEmbedded, image: wantImage,
+          hearingImpaired: wantHi, variant,
+        } = parseRememberedSubtitle(saved);
         const isEmbedded = (s: SubtitleOption) => s.id.startsWith('emb-');
         const sameImage = (s: SubtitleOption) => !!s.isImage === wantImage;
         const sameHi = (s: SubtitleOption) => !!s.hearingImpaired === wantHi;
@@ -287,11 +298,13 @@ export class TrackManagerService {
         // (direct play) or burns them in (web / transcode).
         const pool = wantImage ? subtitles : subs;
         // Best match: language + forced + image-ness + hearing-impaired + type (embedded/external).
-        const match =
-          pool.find((s) => sameKind(s) && sameImage(s) && sameHi(s) && isEmbedded(s) === wantEmbedded)
-          ?? pool.find((s) => sameKind(s) && sameImage(s) && sameHi(s))
-          ?? pool.find((s) => sameKind(s) && sameImage(s))
-          ?? subs.find(sameKind);
+        const find = (ok: (s: SubtitleOption) => boolean) =>
+          pool.find((s) => ok(s) && sameKind(s) && sameImage(s) && sameHi(s) && isEmbedded(s) === wantEmbedded)
+          ?? pool.find((s) => ok(s) && sameKind(s) && sameImage(s) && sameHi(s))
+          ?? pool.find((s) => ok(s) && sameKind(s) && sameImage(s))
+          ?? subs.find((s) => ok(s) && sameKind(s));
+        // The remembered variant wins; another track of the language stands in when it is gone.
+        const match = (variant ? find((s) => normalizeLangTag(s.languageTag) === variant) : undefined) ?? find(() => true);
         if (match) { await onSelect(match); return; }
       }
     }

@@ -83,6 +83,8 @@ interface MediaFixture {
    *  header's `getPlaybackState` stub. Absent key → no row, like the API. */
   files?: { id: number; streamInfo?: unknown }[];
   play?: (ctx: unknown, fromStart: boolean) => Promise<void>;
+  remembered?: string;
+  subtitles?: { id: string; label: string; language: string; languageTag?: string }[];
   playbackStates?: Record<number, { positionSeconds: number; durationSeconds: number; completed: boolean; mediaFileId: number } | undefined>;
 }
 
@@ -145,7 +147,7 @@ async function createFixture(
       },
       {
         provide: PlayerSettingsService,
-        useValue: { resolveAudioStreamIndex: () => null, getRememberedSubtitleTrack: () => null },
+        useValue: { resolveAudioStreamIndex: () => null, getRememberedSubtitleTrack: () => media.remembered ?? null },
       },
       { provide: OfflinePlaybackSyncService, useValue: { queuedPositionFor: () => null } },
       { provide: TrackManagerService, useValue: { saveAudioSelection: () => {}, saveSubtitleSelection: () => {} } },
@@ -174,6 +176,7 @@ async function createFixture(
   fixture.componentRef.setInput('episodeId', media.episodeId);
   fixture.componentRef.setInput('selectedFileId', media.selectedFileId);
   if (media.files) fixture.componentRef.setInput('files', media.files);
+  if (media.subtitles) fixture.componentRef.setInput('subtitles', media.subtitles);
   fixture.componentRef.setInput('monitored', media.monitored);
   fixture.componentRef.setInput('qualityProfileName', media.qualityProfileName);
   // Series-root watched state comes from `seriesFullyWatched`, not the playback-state
@@ -839,5 +842,29 @@ describe('MediaInfoHeaderComponent — launch picks', () => {
   it('sends nothing when the viewer picked nothing: the defaults are not choices', async () => {
     const ctx = await launch(() => {});
     expect(ctx.tracks).toBeUndefined();
+  });
+});
+
+describe('MediaInfoHeaderComponent — remembered subtitle variant', () => {
+  const subtitles = [
+    { id: 'emb-1', label: 'pt-BR', language: 'pt', languageTag: 'pt-BR' },
+    { id: 'emb-2', label: 'pt-PT', language: 'pt', languageTag: 'pt-PT' },
+  ];
+
+  async function resolved(remembered: string, subs = subtitles) {
+    const f = await createFixture(READER, {
+      mediaType: 'movie', selectedFileId: 7, monitored: true, qualityProfileName: null,
+      files: [{ id: 7, streamInfo: {} }], subtitles: subs, remembered,
+    });
+    return f.componentInstance.selectedSubtitleId();
+  }
+
+  it('preselects the remembered variant over the first track of the language', async () => {
+    expect(await resolved('pt:embedded:pt-PT')).toBe('emb-2');
+  });
+
+  it('falls back to the language when the variant is gone, or the value has none', async () => {
+    expect(await resolved('pt:embedded:pt-PT', subtitles.slice(0, 1))).toBe('emb-1');
+    expect(await resolved('pt:embedded')).toBe('emb-1');
   });
 });

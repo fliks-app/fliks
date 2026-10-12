@@ -250,11 +250,19 @@ describe('cast subtitle pick', () => {
     h.svc.startCast({ ...base, subtitles: [hi, SUP_EN], activeSubtitleId: null });
     vi.spyOn(priv(h.svc), 'reloadCastStream').mockResolvedValue();
     await h.svc.selectSubtitle('emb-5');
-    expect(h.trackManager.saveSubtitleSelection).toHaveBeenLastCalledWith(MEDIA_ID, 'en', true, true, false, true);
+    expect(h.trackManager.saveSubtitleSelection).toHaveBeenLastCalledWith(MEDIA_ID, 'en', true, true, false, true, undefined);
     await h.svc.selectSubtitle('ext-13');
-    expect(h.trackManager.saveSubtitleSelection).toHaveBeenLastCalledWith(MEDIA_ID, 'en', undefined, false, true, undefined);
+    expect(h.trackManager.saveSubtitleSelection).toHaveBeenLastCalledWith(MEDIA_ID, 'en', undefined, false, true, undefined, undefined);
     await h.svc.selectSubtitle(null);
-    expect(h.trackManager.saveSubtitleSelection).toHaveBeenLastCalledWith(MEDIA_ID, null, undefined, false, false, undefined);
+    expect(h.trackManager.saveSubtitleSelection).toHaveBeenLastCalledWith(MEDIA_ID, null, undefined, false, false, undefined, undefined);
+  });
+
+  it('remembers the variant of an embedded pick', async () => {
+    const h = setup();
+    h.svc.startCast({ ...base, subtitles: [sub({ id: 'emb-6', language: 'pt', languageTag: 'pt-PT' }), SUP_EN], activeSubtitleId: null });
+    vi.spyOn(priv(h.svc), 'reloadCastStream').mockResolvedValue();
+    await h.svc.selectSubtitle('emb-6');
+    expect(h.trackManager.saveSubtitleSelection).toHaveBeenLastCalledWith(MEDIA_ID, 'pt', undefined, true, false, undefined, 'pt-PT');
   });
 });
 

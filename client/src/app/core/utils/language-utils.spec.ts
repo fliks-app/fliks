@@ -1,4 +1,4 @@
-import { guessSubtitleTags, localizeLanguage, normalizeLangCode, sortByLanguageName } from './language.utils';
+import { guessSubtitleTags, localizeLanguage, normalizeLangCode, normalizeLangTag, sortByLanguageName } from './language.utils';
 import { signal } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { buildSubtitleTracks } from './subtitle-tracks';
@@ -139,6 +139,20 @@ describe('normalizeLangCode', () => {
     expect(same('ms-ind', 'ind')).toBe(true);
     expect(same('no-nob', 'nor')).toBe(true);
     expect(same('et', 'fr')).toBe(false);
+  });
+});
+
+describe('normalizeLangTag', () => {
+  it('canonicalises case and separators', () => {
+    expect(normalizeLangTag('pt_pt')).toBe('pt-PT');
+    expect(normalizeLangTag('ES-419')).toBe('es-419');
+    expect(normalizeLangTag('zh-hant-tw')).toBe('zh-Hant-TW');
+  });
+
+  it('is empty when the tag names no variant', () => {
+    expect(normalizeLangTag('pt')).toBe('');
+    expect(normalizeLangTag(null)).toBe('');
+    expect(normalizeLangTag(' ')).toBe('');
   });
 });
 
