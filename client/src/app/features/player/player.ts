@@ -30,7 +30,7 @@ import { OfflineStorageService } from '../../core/services/offline-storage.servi
 import { OfflinePlaybackSyncService } from '../../core/services/offline-playback-sync.service';
 import { AutoDownloadService } from '../../core/services/auto-download.service';
 import { NetworkService } from '../../core/services/network.service';
-import { DownloadCacheService } from '../../core/services/download-cache.service';
+import { DownloadCacheService, type OfflineSubtitle } from '../../core/services/download-cache.service';
 import {
   CastPlayerService,
   CastAudioOption,
@@ -3802,24 +3802,29 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** The downloaded subtitles of the file, in manifest order like the online list. */
   private async offlineSubtitleOptions(): Promise<SubtitleOption[]> {
     const task = this.dlCache.load().find((t) => t.mediaFileId === this.mediaFileId && t.status === 'ready');
-    const subs: SubtitleOption[] = [];
+    const stored: { sub: OfflineSubtitle; url: string }[] = [];
     for (const sub of task?.offlineSubtitles ?? []) {
       // Native: file:// URI (must match preloaded URLs for track matching).
       // Web: blob URL (Shaka handles both).
-      const localUrl = await this.offlineStorage.getSmallFileNativeUri(sub.key);
-      if (localUrl) {
-        subs.push({
-          id: `offline-${sub.key}`,
-          trackKey: sub.trackKey,
-          label: sub.label,
-          url: localUrl,
-          language: sub.language,
-          burnIn: false,
-          forced: sub.forced ?? false,
-        });
-      }
+      const url = await this.offlineStorage.getSmallFileNativeUri(sub.key);
+      if (url) stored.push({ sub, url });
     }
-    return subs.sort((a, b) => this.manifestRank(a) - this.manifestRank(b));
+    const rank = ({ sub }: { sub: OfflineSubtitle }) => subtitleManifestRank(sub.trackKey ?? `offline-${sub.key}`);
+    return stored.sort((a, b) => rank(a) - rank(b)).map(({ sub, url }, i) => ({
+      id: `offline-${sub.key}`,
+      trackKey: sub.trackKey,
+      // Built at playback so labels follow the current locale and settings; older
+      // downloads only kept their one-line label.
+      ...(sub.hearingImpaired != null
+        ? this.trackManager.describeSubtitle(sub, i + 1)
+        : { label: sub.label, menuHead: sub.label, menuSub: '' }),
+      url,
+      language: sub.language,
+      burnIn: false,
+      forced: sub.forced ?? false,
+      hearingImpaired: sub.hearingImpaired,
+      providerType: sub.providerType,
+    }));
   }
 
   /** Subtitle configs from the pre-downloaded local VTT files (for native ExoPlayer preload). */

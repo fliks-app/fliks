@@ -291,6 +291,9 @@ function createHarness(opts: {
           saveSubtitleSelection: vi.fn(),
           saveAudioSelection: vi.fn(),
           autoSelectAudioTrack: vi.fn(),
+          describeSubtitle: vi.fn((s: { language: string; forced?: boolean }) => ({
+            label: s.language, menuHead: s.language, menuSub: s.forced ? 'forced' : '',
+          })),
         },
       },
       {
@@ -2775,10 +2778,10 @@ describe('PlayerComponent offline subtitle order', () => {
     TestBed.resetTestingModule();
   });
 
-  function offlineHarness(trackKeys: (string | undefined)[]) {
+  function offlineHarness(trackKeys: (string | undefined)[], extra: Record<string, unknown> = {}) {
     const h = createHarness();
     const subtitles = trackKeys.map((trackKey, i) => ({
-      key: `sub-${i}`, language: 'en', label: `s${i}`, forced: false, trackKey,
+      key: `sub-${i}`, language: 'en', label: `s${i}`, forced: false, trackKey, ...extra,
     }));
     (TestBed.inject(DownloadCacheService) as any).load = () => [
       { mediaFileId: MAIN_FILE_ID, status: 'ready', offlineSubtitles: subtitles },
@@ -2803,6 +2806,22 @@ describe('PlayerComponent offline subtitle order', () => {
     expect([first.id, second.id]).toEqual(['offline-sub-1', 'offline-sub-0']);
     expect(h.component.subtitleOrdinal(first)).toBe(0);
     expect(h.component.subtitleOrdinal(second)).toBe(1);
+  });
+
+  it('labels downloads on two lines like the online menu, the flags on the subline', async () => {
+    const h = offlineHarness(['emb-3'], { forced: true, hearingImpaired: false, codec: 'subrip' });
+    await h.component.loadOfflineSubtitles();
+    const [sub] = h.component.availableSubtitles();
+
+    expect([sub.menuHead, sub.menuSub]).toEqual(['en', 'forced']);
+  });
+
+  it('shows the stored one-line label for a download saved before its descriptors', async () => {
+    const h = offlineHarness(['emb-3']);
+    await h.component.loadOfflineSubtitles();
+    const [sub] = h.component.availableSubtitles();
+
+    expect([sub.menuHead, sub.menuSub]).toEqual(['s0', '']);
   });
 
   it('keeps the stored order for a download saved before the source was recorded', async () => {

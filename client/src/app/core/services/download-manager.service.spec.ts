@@ -68,11 +68,11 @@ describe('DownloadManagerService, offline crop metadata', () => {
 describe('DownloadManagerService, offline subtitle identity', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('records each subtitle\'s online id, so offline playback ranks it like the manifest does', async () => {
+  it('records each subtitle\'s online id and descriptors, so offline playback ranks and labels it like online', async () => {
     let saved = [{ id: 5, mediaId: 1, mediaFileId: 9 }] as unknown as DownloadTask[];
     const rows = [
       { id: 40, mediaFileId: 9, language: 'en', relativePath: 'a.srt', streamIndex: null, codec: 'subrip' },
-      { id: 41, mediaFileId: 9, language: 'en', relativePath: null, streamIndex: 3, codec: 'subrip' },
+      { id: 41, mediaFileId: 9, language: 'en', relativePath: null, streamIndex: 3, codec: 'subrip', forced: true },
     ];
     TestBed.configureTestingModule({
       providers: [
@@ -100,5 +100,6 @@ describe('DownloadManagerService, offline subtitle identity', () => {
     await (TestBed.inject(DownloadManagerService) as any).preDownloadSubtitles(5);
 
     expect(saved[0].offlineSubtitles?.map((s) => s.trackKey)).toEqual(['ext-40', 'emb-3']);
+    expect(saved[0].offlineSubtitles?.[1]).toMatchObject({ forced: true, hearingImpaired: false, codec: 'subrip' });
   });
 });

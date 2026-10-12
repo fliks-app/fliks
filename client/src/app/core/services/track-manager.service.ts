@@ -140,6 +140,16 @@ export class TrackManagerService {
 
   // ── Subtitle methods ──
 
+  /** Menu labels for a subtitle: the one-line label and the two-line head/sub. */
+  describeSubtitle(
+    sub: Parameters<typeof formatSubtitleParts>[0],
+    trackNumber: number,
+  ): Pick<SubtitleOption, 'label' | 'menuHead' | 'menuSub'> {
+    const opts = { showFormat: this.appSettings.showSubtitleFormat() };
+    const parts = formatSubtitleParts(sub, this.translate, trackNumber, opts);
+    return { label: formatSubtitleLabel(sub, this.translate, trackNumber, opts), menuHead: parts.head, menuSub: parts.sub };
+  }
+
   /**
    * Load subtitle options from the API and embedded stream info.
    *
@@ -159,16 +169,11 @@ export class TrackManagerService {
 
     try {
       const hideBurnIn = this.appSettings.hideBurnInSubtitles();
-      const labelOpts = { showFormat: this.appSettings.showSubtitleFormat() };
       const subs = await this.subtitlesApi.getForMedia(mediaId);
       const tracks = buildSubtitleTracks(subs, mediaFileId, { hideBurnIn });
-      const options: SubtitleOption[] = tracks.map((t, i) => {
-        const parts = formatSubtitleParts(t, this.translate, i + 1, labelOpts);
-        return {
+      const options: SubtitleOption[] = tracks.map((t, i) => ({
         id: t.key,
-        label: formatSubtitleLabel(t, this.translate, i + 1, labelOpts),
-        menuHead: parts.head,
-        menuSub: parts.sub,
+        ...this.describeSubtitle(t, i + 1),
         url:
           t.kind === 'external'
             ? streamingApi.getSubtitleUrl(mediaFileId, t.subtitleId)
@@ -182,8 +187,7 @@ export class TrackManagerService {
         forced: t.forced,
         hearingImpaired: t.hearingImpaired,
         providerType: t.providerType,
-        };
-      });
+      }));
       const seen = new Set(tracks.map((t) => t.key));
 
       // Also check streamInfo for embedded subs not yet in DB
@@ -197,13 +201,9 @@ export class TrackManagerService {
           if (isImageBasedSubtitleCodec(emb.codec)) continue; // Bitmap from streamInfo only (no DB ID for burn-in)
           // Numbering continues the list, so a track keeps the position the
           // menu shows it at.
-          const trackNumber = options.length + 1;
-          const embParts = formatSubtitleParts(emb, this.translate, trackNumber, labelOpts);
           options.push({
             id: key,
-            label: formatSubtitleLabel(emb, this.translate, trackNumber, labelOpts),
-            menuHead: embParts.head,
-            menuSub: embParts.sub,
+            ...this.describeSubtitle(emb, options.length + 1),
             url: streamingApi.getEmbeddedSubtitleUrl(mediaFileId, emb.streamIndex),
             language: normalizeLangCode(emb.language),
             burnIn: false,
