@@ -1986,6 +1986,46 @@ describe('PlayerComponent audio target', () => {
     expect(h.component.activeAudioTrackId()).toBe('audio-1');
   });
 
+  it('lists an undecodable track as unsupported without moving the others', () => {
+    const h = audioHarness();
+    h.component.wireAudioTracks(h.engine);
+
+    h.engine.emit('audioTracksChanged', {
+      tracks: [engineTrack('audio-0', 'eng', true), { ...engineTrack('audio-1', 'fra'), supported: false }],
+    });
+
+    expect(h.component.availableAudioTracks().map((t: any) => [t.id, t.supported])).toEqual([
+      ['audio-0', undefined],
+      ['audio-1', false],
+    ]);
+  });
+
+  it('never switches the engine to an unsupported target', () => {
+    const h = audioHarness();
+    h.component.activeAudioStreamIndex = 1;
+    h.component.wireAudioTracks(h.engine);
+
+    h.engine.emit('audioTracksChanged', {
+      tracks: [engineTrack('audio-0', 'eng', true), { ...engineTrack('audio-1', 'fra'), supported: false }],
+    });
+
+    expect(h.engine.selectAudioTrack).not.toHaveBeenCalled();
+    expect(h.component.activeAudioTrackId()).toBe('audio-0');
+  });
+
+  it('ignores a pick of an unsupported track', async () => {
+    const h = audioHarness();
+    h.component.availableAudioTracks.set([
+      { id: 'audio-0', label: '', language: 'en' },
+      { id: 'audio-1', label: '', language: 'fr', supported: false },
+    ]);
+
+    await h.component.onSelectAudioTrack('audio-1');
+
+    expect(h.engine.selectAudioTrack).not.toHaveBeenCalled();
+    expect(h.component.activeAudioStreamIndex).toBe(0);
+  });
+
   it('asks once for a switch even when the engine keeps reporting the old track for a moment', () => {
     const h = audioHarness();
     h.component.activeAudioStreamIndex = 1;

@@ -144,6 +144,7 @@
     "open_media": "Medium öffnen",
     "burned": "Bild",
     "audio_track": "Audiospur",
+    "audio_unsupported": "Auf diesem Gerät nicht unterstützt",
     "volume": "Lautstärke",
     "close": "Schließen",
     "seek_back": "10 Sekunden zurück",

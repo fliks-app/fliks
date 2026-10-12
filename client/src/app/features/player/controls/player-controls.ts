@@ -315,7 +315,7 @@ export class PlayerControlsComponent {
   readonly availableQualities = input<{ id: string; label: string; lowBandwidth?: boolean }[]>([]);
   readonly activeSubtitleId = input<string | null>(null);
   readonly activeQualityId = input('auto');
-  readonly availableAudioTracks = input<{ id: string; label: string; language?: string; menuHead?: string; menuSub?: string }[]>([]);
+  readonly availableAudioTracks = input<{ id: string; label: string; language?: string; menuHead?: string; menuSub?: string; supported?: boolean }[]>([]);
   readonly sortedSubtitles = computed(() =>
     this.appSettings.sortTracks(this.availableSubtitles()),
   );

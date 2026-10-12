@@ -10,6 +10,8 @@ export interface NativeAudioTrack {
   label: string;
   /** True for the currently active audio track, so the menu highlights it. */
   selected?: boolean;
+  /** False when no decoder on the device handles the track; absent means playable. */
+  supported?: boolean;
 }
 
 /** An external subtitle file handed to `load()`, added to the MediaItem next to the

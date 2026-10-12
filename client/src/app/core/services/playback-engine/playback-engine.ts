@@ -18,6 +18,8 @@ export interface AudioTrack {
   language: string;
   label: string;
   selected?: boolean;
+  /** False when the device cannot decode the track; absent means playable. */
+  supported?: boolean;
 }
 
 export interface SubtitleTrack {

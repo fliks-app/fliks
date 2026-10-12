@@ -144,6 +144,7 @@
     "open_media": "Open media",
     "burned": "image",
     "audio_track": "Audio track",
+    "audio_unsupported": "Not supported on this device",
     "volume": "Volume",
     "close": "Close",
     "seek_back": "Rewind 10 seconds",
