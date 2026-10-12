@@ -132,3 +132,40 @@ describe('PlaybackController.updateState: remote.state fan-out', () => {
     expect(emitToUser).not.toHaveBeenCalled();
   });
 });
+
+describe('PlaybackController.postQoeEvents', () => {
+  function build(live: unknown, enabled = true) {
+    const controller = Object.create(PlaybackController.prototype) as PlaybackController;
+    const recordEvents = jest.fn();
+    Object.assign(controller, {
+      liveSessions: { get: () => live },
+      qoe: { enabled, recordEvents },
+    });
+    return { controller, recordEvents };
+  }
+  const body = { events: [{ type: 'stall', at: 1 }, { type: 'nope', at: 1 }] };
+
+  it('records validated events for the owner', () => {
+    const { controller, recordEvents } = build({ userId: 7, attributedUserId: null });
+    controller.postQoeEvents(req, 's', body);
+    expect(recordEvents).toHaveBeenCalledWith(expect.anything(), [
+      { type: 'stall', at: 1, position: null },
+    ]);
+  });
+
+  it('accepts the attributed user, rejects anyone else', () => {
+    expect(() =>
+      build({ userId: 9, attributedUserId: 7 }).controller.postQoeEvents(req, 's', body),
+    ).not.toThrow();
+    expect(() =>
+      build({ userId: 9, attributedUserId: 8 }).controller.postQoeEvents(req, 's', body),
+    ).toThrow('Not your session');
+  });
+
+  it('ignores an unknown session and a disabled feature', () => {
+    expect(build(null).recordEvents).not.toHaveBeenCalled();
+    const off = build({ userId: 7 }, false);
+    off.controller.postQoeEvents(req, 's', body);
+    expect(off.recordEvents).not.toHaveBeenCalled();
+  });
+});

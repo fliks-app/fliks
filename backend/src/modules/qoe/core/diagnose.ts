@@ -12,7 +12,6 @@ export const STARVED_BUFFER_S = 1;
 /** Throughput must exceed the variant bitrate by this factor to be called sufficient. */
 export const BANDWIDTH_HEADROOM = 1.2;
 export const DROPPED_RATIO = 0.05;
-export const HW_DECODER_MIN_HEIGHT = 1080;
 /** Below this many decoded frames a dropped ratio is noise. */
 export const MIN_DECODED_FRAMES = 300;
 
@@ -41,6 +40,17 @@ const result = (
   confidence,
   reasons: reasons.map((r) => `qoe.reason.${r}`),
 });
+
+/** A software decoder is a hint on a device verdict, never a verdict by itself. */
+function device(
+  s: QoeSessionSummary,
+  confidence: QoeDiagnosis['confidence'],
+  reason: string,
+): QoeDiagnosis {
+  return s.hwDecoder === false
+    ? result('device', confidence, reason, 'software_decoder')
+    : result('device', confidence, reason);
+}
 
 /** First matching rule wins; see plan/playback-qoe.plan.md section 1.3. */
 export function diagnose(s: QoeSessionSummary): QoeDiagnosis {
@@ -73,9 +83,9 @@ export function diagnose(s: QoeSessionSummary): QoeDiagnosis {
       if (tp.bps < BANDWIDTH_HEADROOM * bitrate) {
         return result('network', confidence, 'stalls_starved_low_throughput');
       }
-      return result('device', 'low', 'stalls_starved_bandwidth_ok');
+      return device(s, 'low', 'stalls_starved_bandwidth_ok');
     }
-    return result('device', 'high', 'stalls_buffer_ahead');
+    return device(s, 'high', 'stalls_buffer_ahead');
   }
 
   const dropped =
@@ -83,14 +93,7 @@ export function diagnose(s: QoeSessionSummary): QoeDiagnosis {
     s.decodedFrames != null &&
     s.decodedFrames >= MIN_DECODED_FRAMES &&
     s.droppedFrames / s.decodedFrames >= DROPPED_RATIO;
-  if (dropped) return result('device', 'high', 'dropped_frames');
-  if (
-    s.hwDecoder === false &&
-    s.height != null &&
-    s.height >= HW_DECODER_MIN_HEIGHT
-  ) {
-    return result('device', 'high', 'software_decoder_hd');
-  }
+  if (dropped) return device(s, 'high', 'dropped_frames');
 
   const confidence = s.sampleCount > 0 || s.cmcd ? 'high' : 'low';
   if (s.watchedMs < MIN_WATCHED_MS) {

@@ -54,6 +54,7 @@ import {
 } from '../streaming/live-session.service';
 import { StreamLifetime } from '../streaming/lifetime-constants';
 import { PlaybackService } from '../streaming/playback.service';
+import { QoeService, type QoeLiveSummary } from '../qoe/qoe.service';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { FliksRequest } from '../requests/entities/request.entity';
@@ -117,6 +118,8 @@ export interface ActiveStreamDto {
   videoReasons: string[];
   audioReasons: string[];
   containerReasons: string[];
+  /** Playback quality so far; null for live TV or when the client reported nothing. */
+  qoe: QoeLiveSummary | null;
 }
 
 export interface ServiceStatus {
@@ -225,6 +228,7 @@ export class SystemController {
     @InjectRepository(FliksRequest)
     private readonly requestRepo: Repository<FliksRequest>,
     private readonly updateCheck: UpdateCheckService,
+    private readonly qoe: QoeService,
   ) {}
 
   // Authentication is the whole gate: the stream only ever emits what this user id is
@@ -610,6 +614,7 @@ export class SystemController {
         videoReasons: [] as string[],
         audioReasons: [] as string[],
         containerReasons: [] as string[],
+        qoe: this.qoe.liveSummary(s.sessionId),
       });
     }
 
@@ -707,6 +712,7 @@ export class SystemController {
         videoReasons: [],
         audioReasons: [],
         containerReasons: [],
+        qoe: null,
       });
     }
 

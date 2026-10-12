@@ -67,8 +67,10 @@ export function parseEvents(raw: unknown): QoeEvent[] {
     };
     const durationMs = num(e.durationMs);
     if (durationMs != null) ev.durationMs = durationMs;
-    if ('bufferAheadS' in e) ev.bufferAheadS = num(e.bufferAheadS);
-    if ('bandwidthBps' in e) ev.bandwidthBps = num(e.bandwidthBps);
+    const buffer = num(e.bufferAheadS);
+    if (buffer != null) ev.bufferAheadS = buffer;
+    const bandwidth = num(e.bandwidthBps);
+    if (bandwidth != null) ev.bandwidthBps = bandwidth;
     if (typeof e.code === 'number' && Number.isFinite(e.code)) ev.code = e.code;
     const message = str(e.message, 300);
     if (message) ev.message = message;

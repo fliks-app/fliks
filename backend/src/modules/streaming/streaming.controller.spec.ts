@@ -43,6 +43,7 @@ interface ControllerDeps {
   pluginPreRoll?: unknown;
   events?: unknown;
   caslAbilityFactory?: unknown;
+  qoe?: unknown;
 }
 
 function makeController(deps: ControllerDeps = {}): StreamingController {
@@ -68,6 +69,7 @@ function makeController(deps: ControllerDeps = {}): StreamingController {
     (deps.pluginPreRoll ?? {}) as never,
     (deps.events ?? {}) as never,
     (deps.caslAbilityFactory ?? {}) as never,
+    (deps.qoe ?? { observeSegment: jest.fn() }) as never,
   );
 }
 

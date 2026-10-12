@@ -3,8 +3,10 @@ import {
   Logger,
   OnModuleDestroy,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import { QoeService } from '../qoe/qoe.service';
 import type { RemoteQualityRung } from '../scheduler/events.service';
 import { StreamLifetime } from './lifetime-constants';
 import type { TranscodeReason } from './dto/playback-info.dto';
@@ -376,6 +378,8 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
   private readonly tombstones = new Map<string, LiveSession>();
   private gcTimer: ReturnType<typeof setInterval> | null = null;
 
+  constructor(@Optional() private readonly qoe?: QoeService) {}
+
   private readonly ttlMs = StreamLifetime.liveSessionTtlMs();
   private readonly gcIntervalMs = StreamLifetime.liveSessionGcIntervalMs();
   private readonly maxSessionsPerUser = StreamLifetime.maxSessionsPerUser();
@@ -439,6 +443,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       if (own.length >= this.maxSessionsPerUser) {
         const oldest = own.reduce((a, b) => (a.lastBeat <= b.lastBeat ? a : b));
         this.sessions.delete(oldest.sessionId);
+        this.qoe?.sessionEnded(oldest, false);
         this.log.log(
           `evicted oldest session ${oldest.sessionId} for user ${input.userId} (cap ${this.maxSessionsPerUser})`,
         );
@@ -546,6 +551,8 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
   /** Drop a session explicitly — an intentional stop is not revivable, so the
    *  tombstone goes too. Returns whether the id was known. */
   stop(sessionId: string): boolean {
+    const session = this.sessions.get(sessionId) ?? this.tombstones.get(sessionId);
+    if (session) this.qoe?.sessionEnded(session, true);
     this.tombstones.delete(sessionId);
     return this.sessions.delete(sessionId);
   }
@@ -640,6 +647,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       // Insertion order is beat order, which is what the size trim below
       // walks — oldest first.
       this.tombstones.set(id, session);
+      this.qoe?.sessionEnded(session, false);
     }
     for (const [id, session] of this.tombstones) {
       if (session.lastBeat < now - this.reviveTtlMs) this.tombstones.delete(id);

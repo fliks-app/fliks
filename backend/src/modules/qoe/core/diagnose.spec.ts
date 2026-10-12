@@ -132,9 +132,12 @@ describe('diagnose', () => {
     expect(d({ droppedFrames: 5, decodedFrames: 50 }).verdict).toBe('ok');
   });
 
-  it('device: software decoder on 1080p, not on 720p', () => {
-    expect(d({ hwDecoder: false }).verdict).toBe('device');
-    expect(d({ hwDecoder: false, height: 720 }).verdict).toBe('ok');
+  it('a software decoder alone is not a verdict, only a hint on a device verdict', () => {
+    expect(d({ hwDecoder: false }).verdict).toBe('ok');
+    expect(d({ hwDecoder: false, droppedFrames: 600 }).reasons).toEqual([
+      'qoe.reason.dropped_frames',
+      'qoe.reason.software_decoder',
+    ]);
   });
 
   it('unknown: under 60 s watched', () => {

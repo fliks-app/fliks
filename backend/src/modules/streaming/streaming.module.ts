@@ -37,6 +37,7 @@ import { MarkersModule } from '../markers/markers.module';
 import { PlaylistsModule } from '../playlists/playlists.module';
 import { PluginsModule } from '../plugins/plugins.module';
 import { SubtitlesModule } from '../subtitles/subtitles.module';
+import { QoeModule } from '../qoe/qoe.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { SubtitlesModule } from '../subtitles/subtitles.module';
     PlaylistsModule,
     PluginsModule,
     SubtitlesModule,
+    QoeModule,
   ],
   controllers: [StreamingController, PlaybackController],
   providers: [
