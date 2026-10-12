@@ -4,7 +4,7 @@ import Capacitor
 import GoogleCast
 
 @objc(CastPlugin)
-public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener, GCKRemoteMediaClientListener, GCKDiscoveryManagerListener {
+public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener, GCKRemoteMediaClientListener, GCKDiscoveryManagerListener, GCKRequestDelegate {
     public let identifier = "CastPlugin"
     public let jsName = "NativeCast"
     public let pluginMethods: [CAPPluginMethod] = [
@@ -26,6 +26,8 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
 
     private var sessionManager: GCKSessionManager?
     private var pollTimer: Timer?
+    /** LOAD calls awaiting the receiver's verdict, by request id: popping one settles it exactly once. */
+    private var pendingLoads: [Int: CAPPluginCall] = [:]
     /** Tracks whether the 1Hz media-status poll was running when the app
      *  backgrounded; restart it on foreground so we don't keep firing
      *  `evaluateJavaScript` against a paused WebView (fliks declares
@@ -258,12 +260,27 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
                 loadOptions.activeTrackIDs = [NSNumber(value: activeId)]
             }
 
-            client.loadMedia(mediaInfo, with: loadOptions)
-            client.add(self!)
-            self?.startPolling()
-
-            call.resolve()
+            let request = client.loadMedia(mediaInfo, with: loadOptions)
+            self?.pendingLoads[Int(request.requestID)] = call
+            request.delegate = self
         }
+    }
+
+    public func requestDidComplete(_ request: GCKRequest) {
+        guard let call = pendingLoads.removeValue(forKey: Int(request.requestID)) else { return }
+        currentSession?.remoteMediaClient?.add(self)
+        startPolling()
+        call.resolve()
+    }
+
+    public func request(_ request: GCKRequest, didFailWithError error: GCKError) {
+        pendingLoads.removeValue(forKey: Int(request.requestID))?
+            .reject("Load failed: \(error.code) \(error.localizedDescription)", "LOAD_FAILED")
+    }
+
+    public func request(_ request: GCKRequest, didAbortWith abortReason: GCKRequestAbortReason) {
+        pendingLoads.removeValue(forKey: Int(request.requestID))?
+            .reject("Load aborted: \(abortReason.rawValue)", "LOAD_FAILED")
     }
 
     @objc func play(_ call: CAPPluginCall) {

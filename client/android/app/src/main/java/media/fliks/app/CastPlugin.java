@@ -29,6 +29,7 @@ import com.google.android.gms.cast.framework.CastSession;
 import com.google.android.gms.cast.framework.SessionManager;
 import com.google.android.gms.cast.framework.SessionManagerListener;
 import com.google.android.gms.cast.framework.media.RemoteMediaClient;
+import com.google.android.gms.common.api.Status;
 import com.google.android.gms.common.images.WebImage;
 
 import android.net.Uri;
@@ -515,27 +516,33 @@ public class CastPlugin extends Plugin {
             return;
         }
 
-        client.load(requestBuilder.build());
-
-        // Apply text track style after load (Default Media Receiver ignores it in MediaInfo)
-        pollHandler = mainHandler;
-        pollHandler.postDelayed(() -> {
-            try {
-                client.setTextTrackStyle(buildTextTrackStyle(styleSpec));
-            } catch (Exception e) {
-                Log.w(TAG, "Failed to set track style", e);
+        client.load(requestBuilder.build()).setResultCallback(result -> {
+            Status status = result.getStatus();
+            if (!status.isSuccess()) {
+                call.reject("Load failed: " + status.getStatusCode() + " " + status.getStatusMessage(), "LOAD_FAILED");
+                return;
             }
-        }, 2000);
 
-        // Re-arm error detection for this stream and seed the resume anchor
-        // with the load offset (polling overwrites it once playback ticks).
-        errorReported = false;
-        lastGoodPosition = currentTime;
+            // Apply text track style after load (Default Media Receiver ignores it in MediaInfo)
+            pollHandler = mainHandler;
+            pollHandler.postDelayed(() -> {
+                try {
+                    client.setTextTrackStyle(buildTextTrackStyle(styleSpec));
+                } catch (Exception e) {
+                    Log.w(TAG, "Failed to set track style", e);
+                }
+            }, 2000);
 
-        // Start position/state polling
-        startMediaPolling(client);
+            // Re-arm error detection for this stream and seed the resume anchor
+            // with the load offset (polling overwrites it once playback ticks).
+            errorReported = false;
+            lastGoodPosition = currentTime;
 
-        call.resolve();
+            // Start position/state polling
+            startMediaPolling(client);
+
+            call.resolve();
+        });
     }
 
     /**

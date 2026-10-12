@@ -2604,6 +2604,7 @@
   "cast": {
     "error": {
       "generic": "Error de reproducción en el Chromecast (código {{code}}).",
+      "load_failed": "No se puede iniciar la reproducción en el Chromecast. Inténtalo de nuevo.",
       "recovery_failed": "No se puede reanudar la reproducción en el Chromecast. Reinicia el cast.",
       "shaka_1001": "El Chromecast no pudo contactar con el servidor (código 1001).",
       "shaka_1002": "Se agotó el tiempo al recuperar un segmento desde el Chromecast (código 1002).",

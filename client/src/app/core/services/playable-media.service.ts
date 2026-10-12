@@ -95,8 +95,8 @@ export class PlayableMediaService {
         streamInfo: ctx.streamInfo,
         startTime: fromStart ? 0 : undefined,
         tracks: ctx.tracks,
+        expand: true,
       });
-      this.castPlayer.expanded.set(true);
     } else {
       const qp: any = { mediaId: ctx.mediaId };
       if (ctx.episodeId) qp.episodeId = ctx.episodeId;
@@ -184,8 +184,8 @@ export class PlayableMediaService {
         episodeTitle: start.episodeTitle,
         fanartUrl: start.fanartUrl ?? null,
         streamInfo: file.streamInfo,
+        expand: true,
       });
-      this.castPlayer.expanded.set(true);
       return true;
     }
 
