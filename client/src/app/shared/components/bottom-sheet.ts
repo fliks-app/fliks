@@ -224,7 +224,7 @@ export class BottomSheetComponent {
     this.startY = e.touches[0].clientY;
     this.prevY = this.startY;
     this.movingDown = true;
-    this.startedAtTop = el.scrollTop <= 0;
+    this.startedAtTop = !scrolledBetween(e.target, el);
   }
 
   onTouchMove(e: TouchEvent) {
@@ -236,7 +236,7 @@ export class BottomSheetComponent {
     // Only turn a downward pull into a dismiss-drag when the gesture began at
     // the top. Scrolling a long list up to the top does NOT chain into the
     // close in the same gesture — the user lifts and swipes again.
-    if (this.startedAtTop && el.scrollTop <= 0 && deltaY > 0) {
+    if (this.startedAtTop && !scrolledBetween(e.target, el) && deltaY > 0) {
       e.preventDefault();
       this.dragging.set(true);
       this.dragOffset.set(deltaY);
@@ -308,4 +308,14 @@ export class BottomSheetComponent {
       this.prevFocused = null;
     }
   }
+}
+
+/** Whether anything from the touched element up to the sheet is scrolled away
+ *  from its top: content may scroll in an inner box (a list under a sticky title). */
+export function scrolledBetween(target: EventTarget | null, sheet: HTMLElement): boolean {
+  for (let n = target instanceof Element ? target : null; n; n = n.parentElement) {
+    if (n.scrollTop > 0) return true;
+    if (n === sheet) return false;
+  }
+  return false;
 }
