@@ -249,6 +249,8 @@ function createHarness(opts: {
           reloadCastStream: vi.fn(),
           startCast: vi.fn(),
           clear: vi.fn(),
+          selectionFor: vi.fn(() => null),
+          resolveStartSubtitle: vi.fn(async () => null),
         },
       },
       { provide: CastSettingsService, useValue: { get: () => ({ maxQuality: 'auto' }) } },
@@ -2338,5 +2340,118 @@ describe('PlayerComponent subtitle selection', () => {
     const call = tracks.autoSelectSubtitle.mock.calls.at(-1) as unknown[];
     expect(call[2]).toBeNull();
     expect(call[6]).toBe('fra');
+  });
+});
+
+describe('PlayerComponent cast session picks', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  const castSub = (id: string, over: Record<string, unknown> = {}) => ({
+    id, label: id, url: '', language: 'en', burnIn: false, subtitleDbId: Number(id.replace(/\D/g, '')), ...over,
+  });
+
+  function casting() {
+    const h = createHarness();
+    const cast = TestBed.inject(CastService) as unknown as Record<string, unknown>;
+    Object.assign(cast, {
+      isConnected: () => true, currentTime: () => 42, duration: () => 100, volume: () => 1, muted: () => false,
+    });
+    const cp = TestBed.inject(CastPlayerService) as unknown as Record<string, ReturnType<typeof vi.fn>>;
+    return { h, cp };
+  }
+
+  it('reports the receiver\'s picks, not the local ones, while casting', async () => {
+    const { h, cp } = casting();
+    cp['selectionFor'].mockReturnValue({ subtitleId: 'ext-5', audioStreamIndex: 2 });
+    h.component.activeAudioStreamIndex = 0;
+    h.component.activeSubtitleId.set('emb-1');
+
+    await h.component.savePosition(true);
+
+    expect(cp['selectionFor']).toHaveBeenCalledWith(MAIN_FILE_ID);
+    expect(h.streamingApi.updatePlaybackState).toHaveBeenLastCalledWith(
+      MEDIA_ID,
+      expect.objectContaining({ audioTrackIndex: 2, subtitleId: 'ext-5' }),
+    );
+  });
+
+  describe('when the session ends and the player stays', () => {
+    function resumeWith(
+      picked: { subtitleId: string | null; audioStreamIndex: number | undefined } | null,
+      subs: unknown[],
+    ) {
+      const { h, cp } = casting();
+      cp['selectionFor'].mockReturnValue(picked);
+      h.component.availableSubtitles.set(subs);
+      h.component.activeAudioStreamIndex = 0;
+      h.component.activeBurnInId = 99;
+      h.component.activeSubtitleId.set('ext-1');
+      let seen: unknown;
+      h.component.refreshSidAndReload = vi.fn(async () => {
+        seen = {
+          audio: h.component.activeAudioStreamIndex,
+          burnIn: h.component.activeBurnInId,
+          subtitle: h.component.activeSubtitleId(),
+        };
+        return true;
+      });
+      return { run: () => h.component.resumeLocalAfterCast(30), seen: () => seen };
+    }
+
+    it('reloads on the audio and the burn-in picked on the receiver', async () => {
+      const r = resumeWith(
+        { subtitleId: 'emb-4', audioStreamIndex: 2 },
+        [castSub('ext-1'), castSub('emb-4', { burnIn: true, isImage: true })],
+      );
+      await r.run();
+      expect(r.seen()).toEqual({ audio: 2, burnIn: 4, subtitle: 'emb-4' });
+    });
+
+    it('shows a bitmap pick the local engine renders itself without burning it in', async () => {
+      const r = resumeWith(
+        { subtitleId: 'emb-4', audioStreamIndex: 0 },
+        [castSub('emb-4', { burnIn: false, isImage: true })],
+      );
+      await r.run();
+      expect(r.seen()).toEqual({ audio: 0, burnIn: null, subtitle: 'emb-4' });
+    });
+
+    it('clears the subtitle and burn-in turned off on the receiver', async () => {
+      const r = resumeWith({ subtitleId: null, audioStreamIndex: 0 }, [castSub('ext-1')]);
+      await r.run();
+      expect(r.seen()).toEqual({ audio: 0, burnIn: null, subtitle: null });
+    });
+
+    it('keeps the local picks when the receiver was playing another file', async () => {
+      const r = resumeWith(null, [castSub('ext-1')]);
+      await r.run();
+      expect(r.seen()).toEqual({ audio: 0, burnIn: 99, subtitle: 'ext-1' });
+    });
+  });
+
+  it('starts a cast opened on an already-connected receiver on the subtitle the local rules pick', async () => {
+    const { h, cp } = casting();
+    h.component.availableSubtitles.set([castSub('ext-5'), castSub('ext-6')]);
+    cp['resolveStartSubtitle'].mockResolvedValue(castSub('ext-6'));
+    h.component.engine.unload = vi.fn(async () => {});
+
+    await h.component.completePostLoadSetup(0);
+
+    expect(cp['startCast']).toHaveBeenCalledTimes(1);
+    expect(cp['startCast'].mock.calls[0][0]).toMatchObject({ activeSubtitleId: 'ext-6' });
+    h.fixture.destroy();
+  });
+
+  it('hands a local Off over to the cast as Off', async () => {
+    const { h, cp } = casting();
+    h.component.availableSubtitles.set([castSub('ext-5')]);
+    h.component.activeSubtitleId.set(null);
+
+    await h.component.startCastFromPlayer(10);
+
+    expect(cp['startCast'].mock.calls[0][0]).toMatchObject({ activeSubtitleId: null });
+    expect(cp['startCast'].mock.calls[0][0].subtitles).toEqual(h.component.availableSubtitles());
   });
 });

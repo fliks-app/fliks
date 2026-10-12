@@ -36,6 +36,7 @@ import {
   CastAudioOption,
   buildCastAudioOptions,
   buildCastQualityOptions,
+  castBurnInId,
 } from '../../core/services/cast-player.service';
 import { CastSettingsService } from '../../core/services/cast-settings.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
@@ -2583,7 +2584,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         }
         break;
       case 'subtitle':
-        if (casting) this.applyCastSubtitle(cmd.subtitleId ?? null);
+        if (casting) await this.castPlayerService.selectSubtitle(cmd.subtitleId ?? null);
         else await this.onSelectSubtitleById(cmd.subtitleId ?? null);
         break;
       case 'quality':
@@ -2643,7 +2644,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  by a click, so report the value rather than the gesture. */
   private lastReportedTracks = '';
   private readonly trackReportEffect = effect(() => {
-    const key = `${this.mediaFileId}|${this.activeAudioTrackId()}|${this.activeSubtitleId()}`;
+    const picks = this.castService.isConnected() ? this.castPlayerService : this;
+    const key = `${this.mediaFileId}|${picks.activeAudioTrackId()}|${picks.activeSubtitleId()}`;
     untracked(() => {
       if (!this.state.videoStarted()) return;
       if (this.lastReportedTracks === key) return;
@@ -2658,24 +2660,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (!this.state.videoStarted()) return;
     untracked(() => void this.savePosition(true));
   });
-
-  /** Cast has no id scheme of its own for subtitles: resolve the app-level id
-   *  against the receiver's track list, or warn when Cast can't honour it
-   *  (e.g. a burn-in rendition, which needs a stream reload we don't wire here). */
-  private applyCastSubtitle(id: string | null): void {
-    if (id === null) {
-      this.castService.setActiveSubtitle(0);
-      this.castPlayerService.activeSubtitleId.set(null);
-      return;
-    }
-    const opt = this.castPlayerService.availableSubtitles().find((s) => s.id === id);
-    if (!opt || opt.burnIn) {
-      console.warn('[remote] cast cannot honour subtitle switch', id);
-      return;
-    }
-    this.castService.setActiveSubtitle(opt.castTrackId ?? 0);
-    this.castPlayerService.activeSubtitleId.set(opt.id);
-  }
 
   onToggleFullscreen() {
     // Desktop compositor: the visible surface is the native (SDL) window owned
@@ -2812,8 +2796,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.castPlayerService.clear();
   }
 
-  /** Push current player state to the CastPlayerService and start streaming. */
-  private async startCastFromPlayer(position?: number) {
+  /** Push current player state to the CastPlayerService and start streaming.
+   *  `subtitleId` is the subtitle the cast starts on: the local pick unless the caller has none. */
+  private async startCastFromPlayer(
+    position?: number,
+    subtitleId: string | null = this.activeSubtitleId(),
+  ) {
     // Re-derive the quality ladder from a fresh playback-info call made
     // with the Cast device profile, not the local player's pi. The
     // local pi was computed with the browser profile that accepts HEVC,
@@ -2827,7 +2815,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const castPi = await this.streamingApi.getPlaybackInfo(
       this.mediaFileId,
       castProfile,
-      this.activeBurnInId ?? undefined,
+      castBurnInId(this.availableSubtitles(), subtitleId) ?? undefined,
       this.activeAudioStreamIndex ?? undefined,
       undefined,
       this.reloadStartAt(position),
@@ -2853,20 +2841,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       episodeTitle: this.episodeTitle(),
       fanartUrl: this.fanartUrl(),
       playbackMode: this.playbackMode(),
-      subtitles: this.availableSubtitles().map(s => ({
-        id: s.id,
-        label: s.label,
-        language: s.language,
-        burnIn: s.burnIn,
-        subtitleDbId: s.subtitleDbId,
-        url: s.url,
-      })),
+      subtitles: this.availableSubtitles(),
       qualities: castQualities,
       audioTracks: this.castAudioOptions(),
       activeQualityId: activeCastQualityId,
-      activeSubtitleId: this.activeSubtitleId(),
-      activeAudioTrackId: this.activeAudioTrackId(),
-      activeBurnInId: this.activeBurnInId,
+      activeSubtitleId: subtitleId,
       activeAudioStreamIndex: this.activeAudioStreamIndex,
     });
     await this.castPlayerService.reloadCastStream(position);
@@ -3147,7 +3126,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.engine!.muted = true;
       await this.engine!.unload();
       const startPos = resumeTime ?? this.engine!.currentTime;
-      await this.startCastFromPlayer(startPos);
+      // The local auto-select was refused while casting: the cast starts on what it would have picked.
+      const startSubtitle = await this.castPlayerService.resolveStartSubtitle(
+        this.availableSubtitles(), this.mediaFileId, this.mediaId, this.targetAudioLanguage(),
+      );
+      await this.startCastFromPlayer(startPos, startSubtitle?.id ?? null);
     } else if (!this.isNativeEngine() || this.isDesktopNative) {
       this.engine!.play().catch(() => {
         // No user gesture on a device started remotely: the browser refuses
@@ -3593,6 +3576,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  against the heartbeat fallback path and flash a reload. */
   private async resumeLocalAfterCast(castPos: number) {
     if (this.destroyed) return;
+    this.adoptCastSelection();
     try {
       await this.refreshSidAndReload(castPos, {
         preservePause: false,
@@ -3603,6 +3587,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // instead of leaving the local player silently dead.
       this.state.failWith(e);
     }
+  }
+
+  /** The reload that follows a cast negotiates from the player's own picks, so the ones
+   *  made on the receiver are moved over first, mapped to what this device can do with them. */
+  private adoptCastSelection(): void {
+    const picked = this.castPlayerService.selectionFor(this.mediaFileId);
+    if (!picked) return;
+    if (picked.audioStreamIndex != null) this.activeAudioStreamIndex = picked.audioStreamIndex;
+    const sub = this.availableSubtitles().find((s) => s.id === picked.subtitleId);
+    this.activeSubtitleId.set(sub?.id ?? null);
+    this.activeBurnInId = sub?.burnIn ? (sub.subtitleDbId ?? null) : null;
   }
 
   /** A reload rebuilds the engine's pipeline at the default rate, so the UI
@@ -4596,6 +4591,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const lastCmdId = this.remoteService.lastAppliedCmdId();
       if (lastCmdId) payload.lastCmdId = lastCmdId;
       payload.quality = this.activeQualityId() ?? null;
+      // While casting, the receiver's picks are the ones in effect.
+      const onReceiver = this.castService.isConnected()
+        ? this.castPlayerService.selectionFor(this.mediaFileId)
+        : null;
       // A controller cannot rebuild these: the rungs follow this session's
       // transcode decision.
       payload.qualities = this.availableQualities().map((q) => ({
@@ -4603,10 +4602,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         label: q.label,
         lowBandwidth: q.lowBandwidth,
       }));
-      payload.audioTrackIndex = this.activeAudioIndex();
+      payload.audioTrackIndex = onReceiver ? (onReceiver.audioStreamIndex ?? null) : this.activeAudioIndex();
       payload.episodeLabel = this.episodeTitle() || null;
       payload.supportsVolume = this.engine?.supportsVolume ?? true;
-      payload.subtitleId = this.activeSubtitleId();
+      payload.subtitleId = onReceiver ? onReceiver.subtitleId : this.activeSubtitleId();
       payload.autoplayBlocked = this.autoplayBlocked();
       payload.hasNext = this.upNext() !== null;
     }
