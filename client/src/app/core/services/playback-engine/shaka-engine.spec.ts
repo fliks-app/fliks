@@ -1,19 +1,34 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShakaEngine } from './shaka-engine';
 
-const player = vi.hoisted(() => ({
-  attach: vi.fn(() => Promise.resolve()),
-  configure: vi.fn(),
-  setVideoContainer: vi.fn(),
-  getNetworkingEngine: () => ({ registerResponseFilter: vi.fn() }),
-  addEventListener: vi.fn(),
-  removeEventListener: vi.fn(),
-  getVariantTracks: vi.fn(() => [] as unknown[]),
-  getTextTracks: vi.fn(() => [] as unknown[]),
-  addTextTrackAsync: vi.fn(),
-  load: vi.fn(() => Promise.resolve()),
-  destroy: vi.fn(() => Promise.resolve()),
-}));
+const player = vi.hoisted(() => {
+  const defaults = {
+    attach: () => Promise.resolve(),
+    getVariantTracks: () => [] as unknown[],
+    getTextTracks: () => [] as unknown[],
+    load: () => Promise.resolve(),
+    destroy: () => Promise.resolve(),
+  };
+  const p = {
+    attach: vi.fn(),
+    configure: vi.fn(),
+    setVideoContainer: vi.fn(),
+    getNetworkingEngine: () => ({ registerResponseFilter: vi.fn() }),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    getVariantTracks: vi.fn(),
+    getTextTracks: vi.fn(),
+    addTextTrackAsync: vi.fn(),
+    load: vi.fn(),
+    destroy: vi.fn(),
+  };
+  /** Drops calls, queued `Once` values and per-test overrides, then reinstalls the defaults. */
+  const reset = () => {
+    for (const fn of Object.values(p)) if (vi.isMockFunction(fn)) fn.mockReset();
+    for (const [k, impl] of Object.entries(defaults)) (p as any)[k].mockImplementation(impl);
+  };
+  return Object.assign(p, { reset });
+});
 
 vi.mock('shaka-player', () => ({
   default: {
@@ -39,9 +54,9 @@ async function initEngine(): Promise<ShakaEngine> {
   return engine;
 }
 
-describe('ShakaEngine audio tracks', () => {
-  beforeEach(() => vi.clearAllMocks());
+beforeEach(() => player.reset());
 
+describe('ShakaEngine audio tracks', () => {
   it('lists one track per audio rendition and flags the one the active variant plays', async () => {
     const engine = await initEngine();
     player.getVariantTracks.mockReturnValue([
@@ -59,8 +74,6 @@ describe('ShakaEngine audio tracks', () => {
 });
 
 describe('ShakaEngine subtitle authority', () => {
-  beforeEach(() => vi.clearAllMocks());
-
   it('leaves forced subtitles to the app, so an explicit Off survives every load', async () => {
     await initEngine();
     expect(player.configure).toHaveBeenCalledWith(
@@ -70,11 +83,6 @@ describe('ShakaEngine subtitle authority', () => {
 });
 
 describe('ShakaEngine.addTextTrack', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    player.getTextTracks.mockReturnValue([]);
-  });
-
   const rendition = (id: number, language: string, forced = false) => ({ id, language, forced });
 
   it('matches the HLS rendition of the picked language, forced-ness and ordinal', async () => {
