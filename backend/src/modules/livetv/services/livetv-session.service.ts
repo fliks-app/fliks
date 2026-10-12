@@ -104,8 +104,8 @@ export interface LiveTvSessionEntry {
   watcher: fs.FSWatcher | null;
   stallTimer: NodeJS.Timeout | null;
   lastSegmentAt: number;
-  /** Newest `seg-*` file seen and when: successive new files time the production speed. */
-  lastNewSegment: { name: string; at: number } | null;
+  /** Highest `seg-*` number seen and when: successive new files time the production speed. */
+  lastNewSegment: { num: number; at: number } | null;
   failoverIndex: number;
   streamFailures: Map<number, number>;
   restarts: number;
@@ -134,7 +134,7 @@ export interface LiveTvSessionEntry {
   lastConnectError: string | null;
 }
 
-const SEGMENT_FILE_RE = /^seg-\d+\.(m4s|ts)$/;
+const SEGMENT_FILE_RE = /^seg-(\d+)\.(m4s|ts)$/;
 const FIRST_SEGMENT_TIMEOUT_MS = 20_000;
 /** No new segment (or, for direct, no new upstream data) this long while viewers are attached: treat as stalled. */
 const STALL_TIMEOUT_MS = 15_000;
@@ -1067,10 +1067,11 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
     if (!name.startsWith('seg-')) return;
     const now = Date.now();
     session.lastSegmentAt = now;
-    // fs.watch fires several times per file: only a new name is a new segment.
-    if (!SEGMENT_FILE_RE.test(name) || session.lastNewSegment?.name === name) return;
+    // fs.watch repeats events and reports deletions of old segments: only a higher number is new.
+    const num = Number(SEGMENT_FILE_RE.exec(name)?.[1]);
+    if (!Number.isFinite(num) || (session.lastNewSegment && num <= session.lastNewSegment.num)) return;
     if (session.lastNewSegment) this.recordProduction(session, now - session.lastNewSegment.at);
-    session.lastNewSegment = { name, at: now };
+    session.lastNewSegment = { num, at: now };
   }
 
   private clearWatchers(session: LiveTvSessionEntry): void {

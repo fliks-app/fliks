@@ -223,7 +223,7 @@ describe('LiveTvSessionService', () => {
     expect(service.listForActivity()).toEqual([]);
   });
 
-  it('times segment production from each new seg file, once per name', async () => {
+  it('times segment production from each new seg file, ignoring repeats and deletions of older ones', async () => {
     mockSpawnAlwaysSucceeds();
     const { sessionId } = await service.open(makeChannel([makeStream()]), makeUser(1), {});
     const entry = [...(service as never as { sessions: Map<string, unknown> }).sessions.values()][0];
@@ -236,6 +236,7 @@ describe('LiveTvSessionService', () => {
       now.mockReturnValue(12_000);
       onFile('seg-00001.m4s');
       onFile('seg-00002.m4s');
+      onFile('seg-00001.m4s');
       onFile('index.m3u8');
     } finally {
       now.mockRestore();
