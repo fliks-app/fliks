@@ -1469,7 +1469,8 @@
     "col_log_context": "Contexto",
     "col_log_message": "Mensaje",
     "device_mobile_app_named": "{{name}} (Aplicación móvil)",
-    "device_named": "{{name}}"
+    "device_named": "{{name}}",
+    "device_apple_tv": "Apple TV ({{os}})"
   },
   "qoe": {
     "title": "Calidad de reproducción",
@@ -1500,7 +1501,7 @@
     "col_started": "Inicio",
     "export_json": "Exportar JSON",
     "timeline": "Cronología",
-    "no_events": "No hay eventos registrados.",
+    "no_events": "Ningún corte, error ni cambio de calidad durante esta reproducción.",
     "show_details": "Detalles",
     "hide_details": "Ocultar",
     "confidence_low": "confianza baja",
@@ -1545,7 +1546,7 @@
     "breakdown": "Sesiones de esta reproducción",
     "col_session": "Sesión",
     "col_quality": "Calidad",
-    "watched": "Visto",
+    "watched": "Tiempo de reproducción",
     "stalls_by_cause": "Cortes por causa",
     "col_cause": "Causa",
     "col_count": "Cantidad",
@@ -1559,9 +1560,9 @@
     },
     "stall": {
       "server_wait": "Esperó {{wait}} s por la transcodificación (velocidad {{speed}}×)",
-      "network_starved": "Búfer {{buffer}} s, caudal {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
-      "network_unconfirmed": "Búfer {{buffer}} s, sin falta de ancho de banda confirmada",
-      "network_low_throughput": "Búfer desconocido, caudal {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
+      "network_starved": "Búfer {{buffer}} s · caudal {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
+      "network_unconfirmed": "Búfer {{buffer}} s · sin falta de caudal confirmada",
+      "network_low_throughput": "Búfer desconocido · caudal {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
       "device_buffer_ahead": "Aún {{buffer}} s en búfer",
       "device_dropped_frames": "{{dropped}} % de fotogramas perdidos en torno al corte",
       "unknown": "Datos insuficientes para decidir",
@@ -1580,7 +1581,53 @@
       "crop": "recorte",
       "audio_transcode": "transcodificación de audio",
       "load": "Servidor: {{transcodes}} transcodificaciones, {{sessions}} sesiones, carga {{load}} en {{cpus}} núcleos",
-      "hints": "Factores posibles: {{list}}"
+      "hints": "Factores posibles: {{list}}",
+      "res_4k": "4K",
+      "res_p": "{{height}}p",
+      "load_no_avg": "Servidor: {{transcodes}} transcodificaciones, {{sessions}} sesiones, {{cpus}} núcleos"
+    },
+    "watched_hint": "Tiempo en el reproductor sin contar las pausas, con las cargas incluidas",
+    "timeline_time": "Hora",
+    "timeline_position": "Posición en el vídeo",
+    "timeline_event": "Evento",
+    "hint": {
+      "engine": "Motor de reproducción que usa el reproductor, por ejemplo Shaka en la web o ExoPlayer en Android.",
+      "pipeline": "Lo que el servidor hizo con el flujo: origen, salida y el hardware o software usado para decodificarlo y codificarlo.",
+      "dropped": "Parte de los fotogramas que el dispositivo decodificó pero no mostró a tiempo.",
+      "buffer_ahead": "Segundos de vídeo ya descargados por delante de la posición de reproducción.",
+      "throughput": "Velocidad de red medida, comparada con el bitrate del vídeo que se reproduce.",
+      "decoder": "Decodificador que usó el dispositivo para el vídeo. El hardware suele ser más ligero que el software.",
+      "stalls": "Veces que la reproducción se detuvo por falta de datos.",
+      "verdict": "Origen más probable de los problemas de esta reproducción.",
+      "cause": "Origen más probable de este corte.",
+      "stall_sessions": "Parte de las reproducciones con al menos un corte.",
+      "hw_decoder": "Parte de las reproducciones decodificadas por el hardware del dispositivo.",
+      "top_verdict": "Veredicto más frecuente de este dispositivo.",
+      "sessions": "Número de reproducciones. Un cambio de calidad o una recarga dentro de una reproducción no cuenta dos veces.",
+      "session": "Una sesión de reproducción: un cambio de calidad o una recarga inicia una nueva.",
+      "quality": "Nivel de calidad (resolución y bitrate) que el servidor codificaba.",
+      "cmcd": "Métricas estándar del reproductor (CMCD): indica si el servidor las recibió.",
+      "transcode_speed": "Velocidad a la que el servidor produjo vídeo respecto al tiempo real. Por debajo de 1x no daba abasto."
+    },
+    "line": {
+      "stall": "Corte de {{duration}}",
+      "error": "Error: {{detail}}",
+      "error_plain": "Error",
+      "recovery": "Flujo de reproducción recargado",
+      "quality_switch": "Calidad: {{from}} → {{to}} Mbps"
+    },
+    "seconds": "{{value}} s",
+    "mbps": "{{value}} Mbps",
+    "duration_h": "{{h}} h {{min}} min",
+    "duration_min": "{{min}} min {{sec}} s",
+    "duration_s": "{{sec}} s",
+    "summary": {
+      "period": "Periodo",
+      "ongoing": "en curso",
+      "device": "Dispositivo",
+      "quality": "Calidad / resolución",
+      "codec": "Códec de vídeo",
+      "sessions": "Sesiones"
     }
   },
   "markers": {

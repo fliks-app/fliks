@@ -120,7 +120,8 @@ export interface QoePipeline {
 export interface QoeServerLoad {
   activeTranscodes: number;
   activeSessions: number;
-  loadAvg1: number;
+  /** Null where the server OS has no load average. */
+  loadAvg1: number | null;
   cpuCount: number;
 }
 

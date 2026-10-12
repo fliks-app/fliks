@@ -1469,7 +1469,8 @@
     "col_log_context": "Contexte",
     "col_log_message": "Message",
     "device_mobile_app_named": "{{name}} (Application mobile)",
-    "device_named": "{{name}}"
+    "device_named": "{{name}}",
+    "device_apple_tv": "Apple TV ({{os}})"
   },
   "qoe": {
     "title": "Qualité de lecture",
@@ -1500,7 +1501,7 @@
     "col_started": "Début",
     "export_json": "Exporter en JSON",
     "timeline": "Chronologie",
-    "no_events": "Aucun évènement enregistré.",
+    "no_events": "Aucune coupure, erreur ni changement de qualité pendant cette lecture.",
     "show_details": "Détails",
     "hide_details": "Masquer",
     "confidence_low": "confiance faible",
@@ -1545,7 +1546,7 @@
     "breakdown": "Sessions de cette lecture",
     "col_session": "Session",
     "col_quality": "Qualité",
-    "watched": "Regardé",
+    "watched": "Temps de lecture",
     "stalls_by_cause": "Coupures par cause",
     "col_cause": "Cause",
     "col_count": "Nombre",
@@ -1559,9 +1560,9 @@
     },
     "stall": {
       "server_wait": "Attente de {{wait}} s sur le transcodage (vitesse {{speed}}×)",
-      "network_starved": "Tampon {{buffer}} s, débit {{throughput}} Mbps < débit vidéo {{bitrate}} Mbps",
-      "network_unconfirmed": "Tampon {{buffer}} s, aucun manque de débit confirmé",
-      "network_low_throughput": "Tampon inconnu, débit {{throughput}} Mbps < débit vidéo {{bitrate}} Mbps",
+      "network_starved": "Tampon {{buffer}} s · débit {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
+      "network_unconfirmed": "Tampon {{buffer}} s · aucun manque de débit confirmé",
+      "network_low_throughput": "Tampon inconnu · débit {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
       "device_buffer_ahead": "{{buffer}} s encore en tampon",
       "device_dropped_frames": "{{dropped}} % d'images perdues autour de la coupure",
       "unknown": "Pas assez de données pour trancher",
@@ -1580,7 +1581,53 @@
       "crop": "recadrage",
       "audio_transcode": "transcodage audio",
       "load": "Serveur : {{transcodes}} transcodages, {{sessions}} sessions, charge {{load}} sur {{cpus}} cœurs",
-      "hints": "Facteurs possibles : {{list}}"
+      "hints": "Facteurs possibles : {{list}}",
+      "res_4k": "4K",
+      "res_p": "{{height}}p",
+      "load_no_avg": "Serveur : {{transcodes}} transcodages, {{sessions}} sessions, {{cpus}} cœurs"
+    },
+    "watched_hint": "Temps passé dans le lecteur hors pause, chargements compris",
+    "timeline_time": "Heure",
+    "timeline_position": "Position vidéo",
+    "timeline_event": "Événement",
+    "hint": {
+      "engine": "Moteur de lecture utilisé par le lecteur, par exemple Shaka sur le web ou ExoPlayer sur Android.",
+      "pipeline": "Ce que le serveur a fait du flux : source, sortie, et matériel ou logiciel utilisé pour le décoder et l’encoder.",
+      "dropped": "Part des images vidéo décodées par l’appareil mais non affichées à temps.",
+      "buffer_ahead": "Secondes de vidéo déjà téléchargées en avance sur la position de lecture.",
+      "throughput": "Vitesse réseau mesurée, comparée au bitrate de la vidéo lue.",
+      "decoder": "Décodeur utilisé par l’appareil pour la vidéo. Le matériel est en général plus léger que le logiciel.",
+      "stalls": "Nombre de fois où la lecture s’est figée faute de données.",
+      "verdict": "Origine la plus probable des problèmes vus pendant ce visionnage.",
+      "cause": "Origine la plus probable de cette coupure.",
+      "stall_sessions": "Part des visionnages avec au moins une coupure.",
+      "hw_decoder": "Part des visionnages décodés par le matériel de l’appareil.",
+      "top_verdict": "Verdict le plus fréquent pour cet appareil.",
+      "sessions": "Nombre de visionnages. Un changement de qualité ou un rechargement dans un visionnage n’est pas compté deux fois.",
+      "session": "Une session de lecture : un changement de qualité ou un rechargement en démarre une nouvelle.",
+      "quality": "Niveau de qualité (résolution et bitrate) que le serveur encodait.",
+      "cmcd": "Métriques standard envoyées par le lecteur (CMCD) : indique si le serveur les a reçues.",
+      "transcode_speed": "Vitesse de production de la vidéo par le serveur par rapport au temps réel. Sous 1x, il ne suit pas."
+    },
+    "line": {
+      "stall": "Coupure de {{duration}}",
+      "error": "Erreur : {{detail}}",
+      "error_plain": "Erreur",
+      "recovery": "Flux de lecture rechargé",
+      "quality_switch": "Qualité : {{from}} → {{to}} Mbps"
+    },
+    "seconds": "{{value}} s",
+    "mbps": "{{value}} Mbps",
+    "duration_h": "{{h}} h {{min}} min",
+    "duration_min": "{{min}} min {{sec}} s",
+    "duration_s": "{{sec}} s",
+    "summary": {
+      "period": "Période",
+      "ongoing": "en cours",
+      "device": "Appareil",
+      "quality": "Qualité / résolution",
+      "codec": "Codec vidéo",
+      "sessions": "Sessions"
     }
   },
   "markers": {

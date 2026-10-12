@@ -1469,7 +1469,8 @@
     "col_log_context": "Kontext",
     "col_log_message": "Meldung",
     "device_mobile_app_named": "{{name}} (Mobile App)",
-    "device_named": "{{name}}"
+    "device_named": "{{name}}",
+    "device_apple_tv": "Apple TV ({{os}})"
   },
   "qoe": {
     "title": "Wiedergabequalität",
@@ -1500,7 +1501,7 @@
     "col_started": "Beginn",
     "export_json": "Als JSON exportieren",
     "timeline": "Verlauf",
-    "no_events": "Keine Ereignisse aufgezeichnet.",
+    "no_events": "Keine Aussetzer, Fehler oder Qualitätswechsel während dieser Wiedergabe.",
     "show_details": "Details",
     "hide_details": "Ausblenden",
     "confidence_low": "geringe Sicherheit",
@@ -1545,7 +1546,7 @@
     "breakdown": "Sitzungen dieser Wiedergabe",
     "col_session": "Sitzung",
     "col_quality": "Qualität",
-    "watched": "Angesehen",
+    "watched": "Wiedergabezeit",
     "stalls_by_cause": "Aussetzer nach Ursache",
     "col_cause": "Ursache",
     "col_count": "Anzahl",
@@ -1559,9 +1560,9 @@
     },
     "stall": {
       "server_wait": "{{wait}} s auf die Transkodierung gewartet (Geschwindigkeit {{speed}}×)",
-      "network_starved": "Puffer {{buffer}} s, Durchsatz {{throughput}} Mbps < Bitrate {{bitrate}} Mbps",
-      "network_unconfirmed": "Puffer {{buffer}} s, kein bestätigter Bandbreitenmangel",
-      "network_low_throughput": "Puffer unbekannt, Durchsatz {{throughput}} Mbps < Bitrate {{bitrate}} Mbps",
+      "network_starved": "Puffer {{buffer}} s · Durchsatz {{throughput}} Mbps < Bitrate {{bitrate}} Mbps",
+      "network_unconfirmed": "Puffer {{buffer}} s · kein bestätigter Durchsatzmangel",
+      "network_low_throughput": "Puffer unbekannt · Durchsatz {{throughput}} Mbps < Bitrate {{bitrate}} Mbps",
       "device_buffer_ahead": "Noch {{buffer}} s gepuffert",
       "device_dropped_frames": "{{dropped}} % der Frames rund um den Aussetzer verworfen",
       "unknown": "Zu wenig Daten für eine Aussage",
@@ -1580,7 +1581,53 @@
       "crop": "Zuschnitt",
       "audio_transcode": "Audio-Transkodierung",
       "load": "Server: {{transcodes}} Transkodierungen, {{sessions}} Sitzungen, Last {{load}} auf {{cpus}} Kernen",
-      "hints": "Mögliche Faktoren: {{list}}"
+      "hints": "Mögliche Faktoren: {{list}}",
+      "res_4k": "4K",
+      "res_p": "{{height}}p",
+      "load_no_avg": "Server: {{transcodes}} Transkodierungen, {{sessions}} Sitzungen, {{cpus}} Kerne"
+    },
+    "watched_hint": "Zeit im Player außerhalb der Pause, Ladezeiten eingeschlossen",
+    "timeline_time": "Uhrzeit",
+    "timeline_position": "Position im Video",
+    "timeline_event": "Ereignis",
+    "hint": {
+      "engine": "Vom Player verwendete Wiedergabe-Engine, zum Beispiel Shaka im Web oder ExoPlayer auf Android.",
+      "pipeline": "Was der Server mit dem Stream gemacht hat: Quelle, Ausgabe und die Hard- oder Software zum Decodieren und Kodieren.",
+      "dropped": "Anteil der Videobilder, die das Gerät decodiert, aber nicht rechtzeitig angezeigt hat.",
+      "buffer_ahead": "Sekunden Video, die vor der Wiedergabeposition schon heruntergeladen sind.",
+      "throughput": "Gemessene Netzwerkgeschwindigkeit im Vergleich zur Bitrate des abgespielten Videos.",
+      "decoder": "Decoder des Geräts für das Video. Hardware ist meist sparsamer als Software.",
+      "stalls": "Wie oft die Wiedergabe mangels Daten stehen blieb.",
+      "verdict": "Wahrscheinlichste Ursache der Probleme in dieser Wiedergabe.",
+      "cause": "Wahrscheinlichste Ursache dieses Aussetzers.",
+      "stall_sessions": "Anteil der Wiedergaben mit mindestens einem Aussetzer.",
+      "hw_decoder": "Anteil der Wiedergaben, die per Gerätehardware decodiert wurden.",
+      "top_verdict": "Häufigstes Urteil für dieses Gerät.",
+      "sessions": "Anzahl der Wiedergaben. Ein Qualitätswechsel oder Neuladen innerhalb einer Wiedergabe zählt nicht doppelt.",
+      "session": "Eine Wiedergabesitzung: Ein Qualitätswechsel oder Neuladen startet eine neue.",
+      "quality": "Qualitätsstufe (Auflösung und Bitrate), die der Server kodierte.",
+      "cmcd": "Standardmetriken des Players (CMCD): ob der Server sie erhalten hat.",
+      "transcode_speed": "Wie schnell der Server Video im Vergleich zur Echtzeit erzeugte. Unter 1x kam er nicht hinterher."
+    },
+    "line": {
+      "stall": "Aussetzer von {{duration}}",
+      "error": "Fehler: {{detail}}",
+      "error_plain": "Fehler",
+      "recovery": "Wiedergabe-Stream neu geladen",
+      "quality_switch": "Qualität: {{from}} → {{to}} Mbps"
+    },
+    "seconds": "{{value}} s",
+    "mbps": "{{value}} Mbps",
+    "duration_h": "{{h}} h {{min}} min",
+    "duration_min": "{{min}} min {{sec}} s",
+    "duration_s": "{{sec}} s",
+    "summary": {
+      "period": "Zeitraum",
+      "ongoing": "läuft",
+      "device": "Gerät",
+      "quality": "Qualität / Auflösung",
+      "codec": "Video-Codec",
+      "sessions": "Sitzungen"
     }
   },
   "markers": {

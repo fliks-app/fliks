@@ -1469,7 +1469,8 @@
     "col_log_context": "Context",
     "col_log_message": "Message",
     "device_mobile_app_named": "{{name}} (Mobile app)",
-    "device_named": "{{name}}"
+    "device_named": "{{name}}",
+    "device_apple_tv": "Apple TV ({{os}})"
   },
   "qoe": {
     "title": "Playback quality",
@@ -1500,7 +1501,7 @@
     "col_started": "Started",
     "export_json": "Export JSON",
     "timeline": "Timeline",
-    "no_events": "No events recorded.",
+    "no_events": "No stall, error or quality change during this playback.",
     "show_details": "Details",
     "hide_details": "Hide",
     "confidence_low": "low confidence",
@@ -1545,7 +1546,7 @@
     "breakdown": "Sessions of this playback",
     "col_session": "Session",
     "col_quality": "Quality",
-    "watched": "Watched",
+    "watched": "Playback time",
     "stalls_by_cause": "Stalls by cause",
     "col_cause": "Cause",
     "col_count": "Count",
@@ -1559,9 +1560,9 @@
     },
     "stall": {
       "server_wait": "Waited {{wait}} s for the transcode (speed {{speed}}×)",
-      "network_starved": "Buffer {{buffer}} s, throughput {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
-      "network_unconfirmed": "Buffer {{buffer}} s, no confirmed bandwidth shortfall",
-      "network_low_throughput": "Buffer unknown, throughput {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
+      "network_starved": "Buffer {{buffer}} s · throughput {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
+      "network_unconfirmed": "Buffer {{buffer}} s · no confirmed throughput shortfall",
+      "network_low_throughput": "Buffer unknown · throughput {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
       "device_buffer_ahead": "{{buffer}} s still buffered",
       "device_dropped_frames": "{{dropped}} % of frames dropped around the stall",
       "unknown": "Not enough data to tell",
@@ -1580,7 +1581,53 @@
       "crop": "crop",
       "audio_transcode": "audio transcode",
       "load": "Server: {{transcodes}} transcodes, {{sessions}} sessions, load {{load}} on {{cpus}} cores",
-      "hints": "Possible factors: {{list}}"
+      "hints": "Possible factors: {{list}}",
+      "res_4k": "4K",
+      "res_p": "{{height}}p",
+      "load_no_avg": "Server: {{transcodes}} transcodes, {{sessions}} sessions, {{cpus}} cores"
+    },
+    "watched_hint": "Time spent in the player outside of pause, loading included",
+    "timeline_time": "Time",
+    "timeline_position": "Video position",
+    "timeline_event": "Event",
+    "hint": {
+      "engine": "Playback engine used by the player, for example Shaka on the web or ExoPlayer on Android.",
+      "pipeline": "What the server did to the stream: source, output, and the hardware or software used to decode and encode it.",
+      "dropped": "Share of video frames the device decoded but did not display in time.",
+      "buffer_ahead": "Seconds of video already downloaded ahead of the playback position.",
+      "throughput": "Measured network speed, compared with the bitrate of the video being played.",
+      "decoder": "Decoder the device used for the video. Hardware is normally lighter than software.",
+      "stalls": "Times playback froze because it ran out of data.",
+      "verdict": "Most likely origin of the problems seen during this viewing.",
+      "cause": "Most likely origin of this interruption.",
+      "stall_sessions": "Share of viewings with at least one interruption.",
+      "hw_decoder": "Share of viewings decoded by the device hardware.",
+      "top_verdict": "Most frequent verdict for this device.",
+      "sessions": "Number of viewings. A quality switch or a reload inside one viewing is not counted twice.",
+      "session": "One playback session: a quality switch or a reload starts a new one.",
+      "quality": "Quality level (resolution and bitrate) the server was encoding.",
+      "cmcd": "Standard player-to-server metrics (CMCD): whether the server received them.",
+      "transcode_speed": "How fast the server produced video compared with real time. Under 1x means it could not keep up."
+    },
+    "line": {
+      "stall": "Stall of {{duration}}",
+      "error": "Error: {{detail}}",
+      "error_plain": "Error",
+      "recovery": "Playback stream reloaded",
+      "quality_switch": "Quality: {{from}} → {{to}} Mbps"
+    },
+    "seconds": "{{value}} s",
+    "mbps": "{{value}} Mbps",
+    "duration_h": "{{h}} h {{min}} min",
+    "duration_min": "{{min}} min {{sec}} s",
+    "duration_s": "{{sec}} s",
+    "summary": {
+      "period": "Period",
+      "ongoing": "ongoing",
+      "device": "Device",
+      "quality": "Quality / resolution",
+      "codec": "Video codec",
+      "sessions": "Sessions"
     }
   },
   "markers": {

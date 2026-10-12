@@ -27,6 +27,10 @@ export function parseDeviceLabel(
   // A name its owner chose outranks anything derivable, and needs no
   // translating: it goes through as a param like the browser and OS names do.
   if (deviceName) return { key: 'system.device_named', params: { name: deviceName } };
+  // The Apple TV app has no browser UA, only a native system name.
+  if (/^tvOS/i.test(systemName ?? '') || /AppleTV|tvOS/i.test(ua ?? '')) {
+    return { key: 'system.device_apple_tv', params: { os: systemName ?? 'tvOS' } };
+  }
   if (!ua) {
     // No UA (e.g. a pairing request with only a native systemName): still show
     // the system if we have one.

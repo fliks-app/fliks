@@ -16,6 +16,11 @@ export const QOE_DOT_CLASS: Record<QoeHealth, string> = {
   unknown: 'bg-base-content/30',
 };
 
+/** Dot colour from the verdict, in the palette shared with the stall causes; an ok verdict keeps the health tint. */
+export function qoeDotClass(q: QoeDiagnosis & { stallCount?: number }): string {
+  return q.verdict === 'ok' ? QOE_DOT_CLASS[qoeHealth(q)] : QOE_VERDICT_BAR_CLASS[q.verdict];
+}
+
 export const QOE_VERDICTS: readonly QoeVerdict[] = ['ok', 'network', 'device', 'server', 'error', 'unknown'];
 
 export const QOE_VERDICT_BAR_CLASS: Record<QoeVerdict, string> = {

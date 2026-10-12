@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { QoePipeline } from '../../core/services/api/qoe-api.service';
-import { hintParams, loadLine, pipelineChain, pipelineParts } from './qoe-stall';
+import { hintParams, loadLine, pipelineChain, pipelineParts, type Fmt } from './qoe-stall';
+
+const f: Fmt = {
+  n: (v, d = 1) => v.toFixed(d),
+  t: (key, p = {}) =>
+    key === 'qoe.mbps' ? `${p['value']} Mbps` : key === 'qoe.pipeline.res_4k' ? '4K' : key === 'qoe.pipeline.res_p' ? `${p['height']}p` : key,
+};
 
 const full: QoePipeline = {
   source: { codec: 'hevc', width: 3840, height: 2160, hdr: 'HDR10' },
@@ -15,21 +21,24 @@ const full: QoePipeline = {
 
 describe('pipelineChain', () => {
   it('writes source to output with resolution, codec, hdr and bitrate', () => {
-    expect(pipelineChain(full)).toBe('4K HEVC HDR10 → 1080p H.264 8.0 Mb/s');
+    expect(pipelineChain(full, f)).toBe('4K HEVC HDR10 → 1080p H.264 8.0 Mbps');
   });
 
   it('is only the source when the stream is not re-encoded', () => {
-    expect(pipelineChain({ ...full, output: null })).toBe('4K HEVC HDR10');
+    expect(pipelineChain({ ...full, output: null }, f)).toBe('4K HEVC HDR10');
   });
 
   it('skips the unknown parts of a live transcode', () => {
     expect(
-      pipelineChain({
-        ...full,
-        source: { codec: 'mpeg2video', width: null, height: null, hdr: null },
-        output: { codec: 'h264', hdr: null, quality: null, bitrate: 4_000_000 },
-      }),
-    ).toBe('MPEG-2 → H.264 4.0 Mb/s');
+      pipelineChain(
+        {
+          ...full,
+          source: { codec: 'mpeg2video', width: null, height: null, hdr: null },
+          output: { codec: 'h264', hdr: null, quality: 'auto', bitrate: 4_000_000 },
+        },
+        f,
+      ),
+    ).toBe('MPEG-2 → H.264 4.0 Mbps');
   });
 });
 
@@ -62,6 +71,10 @@ describe('server load and hints', () => {
       load: '7.8',
       cpus: '8',
     });
+  });
+
+  it('leaves the load average out when the server has none', () => {
+    expect(loadLine({ activeTranscodes: 1, activeSessions: 2, loadAvg1: null, cpuCount: 4 }).key).toBe('qoe.pipeline.load_no_avg');
   });
 
   it('passes the busy count to the hint', () => {

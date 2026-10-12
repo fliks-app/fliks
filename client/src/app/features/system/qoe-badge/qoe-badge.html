@@ -21,13 +21,13 @@
         <div class="italic" [class.text-warning/80]="r !== 'qoe.reason.healthy'">{{ reasonText(r) }}</div>
       }
       <div class="grid grid-cols-2 gap-x-3 gap-y-0.5 tabular-nums">
-        <span class="text-base-content/40">{{ 'qoe.throughput' | translate }}</span>
+        <span class="text-base-content/40" [title]="'qoe.hint.throughput' | translate">{{ 'qoe.throughput' | translate }}</span>
         <span>{{ mbps(qoe().bandwidthBps) }} / {{ mbps(qoe().variantBitrate) }}</span>
-        <span class="text-base-content/40">{{ 'qoe.buffer_ahead' | translate }}</span>
+        <span class="text-base-content/40" [title]="'qoe.hint.buffer_ahead' | translate">{{ 'qoe.buffer_ahead' | translate }}</span>
         <span>{{ bufferLabel(qoe().bufferAheadS) }}</span>
-        <span class="text-base-content/40">{{ 'qoe.dropped' | translate }}</span>
+        <span class="text-base-content/40" [title]="'qoe.hint.dropped' | translate">{{ 'qoe.dropped' | translate }}</span>
         <span>{{ droppedLabel() }}</span>
-        <span class="text-base-content/40">{{ 'qoe.decoder' | translate }}</span>
+        <span class="text-base-content/40" [title]="'qoe.hint.decoder' | translate">{{ 'qoe.decoder' | translate }}</span>
         <span>
           {{ qoe().decoderName ?? '-' }}
           @if (qoe().hwDecoder != null) {
@@ -35,14 +35,14 @@
           }
         </span>
         @if (qoe().transcodeSpeed != null) {
-          <span class="text-base-content/40">{{ 'qoe.transcode_speed' | translate }}</span>
+          <span class="text-base-content/40" [title]="'qoe.hint.transcode_speed' | translate">{{ 'qoe.transcode_speed' | translate }}</span>
           <span>{{ qoe().transcodeSpeed?.toFixed(1) }}x</span>
         }
-        <span class="text-base-content/40">{{ 'qoe.engine' | translate }}</span>
+        <span class="text-base-content/40" [title]="'qoe.hint.engine' | translate">{{ 'qoe.engine' | translate }}</span>
         <span>{{ qoe().engine ?? '-' }}</span>
-        <span class="text-base-content/40">CMCD</span>
+        <span class="text-base-content/40" [title]="'qoe.hint.cmcd' | translate">CMCD</span>
         <span>{{ qoe().cmcd == null ? '-' : ((qoe().cmcd ? 'common.yes' : 'common.no') | translate) }}</span>
-        <span class="text-base-content/40">{{ 'qoe.stalls' | translate }}</span>
+        <span class="text-base-content/40" [title]="'qoe.hint.stalls' | translate">{{ 'qoe.stalls' | translate }}</span>
         <span>{{ qoe().stallCount ?? 0 }} ({{ ((qoe().stallMs ?? 0) / 1000).toFixed(1) }} s)</span>
         @if (qoe().lastStall; as last) {
           <span class="text-base-content/40">{{ 'qoe.last_stall' | translate }}</span>

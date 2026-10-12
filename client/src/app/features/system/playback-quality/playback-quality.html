@@ -89,12 +89,12 @@
               <thead>
                 <tr>
                   <th>{{ 'qoe.col_device' | translate }}</th>
-                  <th>{{ 'qoe.engine' | translate }}</th>
-                  <th class="text-right">{{ 'qoe.col_sessions' | translate }}</th>
-                  <th class="text-right">{{ 'qoe.col_stall_sessions' | translate }}</th>
-                  <th class="text-right">{{ 'qoe.col_avg_dropped' | translate }}</th>
-                  <th class="text-right">{{ 'qoe.col_hw_decoder' | translate }}</th>
-                  <th>{{ 'qoe.col_top_verdict' | translate }}</th>
+                  <th [title]="'qoe.hint.engine' | translate">{{ 'qoe.engine' | translate }}</th>
+                  <th [title]="'qoe.hint.sessions' | translate" class="text-right">{{ 'qoe.col_sessions' | translate }}</th>
+                  <th [title]="'qoe.hint.stall_sessions' | translate" class="text-right">{{ 'qoe.col_stall_sessions' | translate }}</th>
+                  <th [title]="'qoe.hint.dropped' | translate" class="text-right">{{ 'qoe.col_avg_dropped' | translate }}</th>
+                  <th [title]="'qoe.hint.hw_decoder' | translate" class="text-right">{{ 'qoe.col_hw_decoder' | translate }}</th>
+                  <th [title]="'qoe.hint.top_verdict' | translate">{{ 'qoe.col_top_verdict' | translate }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -170,12 +170,12 @@
               <thead>
                 <tr>
                   <th></th>
-                  <th>{{ 'qoe.col_verdict' | translate }}</th>
+                  <th [title]="'qoe.hint.verdict' | translate">{{ 'qoe.col_verdict' | translate }}</th>
                   <th>{{ 'qoe.col_user' | translate }}</th>
                   <th>{{ 'qoe.col_device' | translate }}</th>
                   <th>{{ 'qoe.col_media' | translate }}</th>
                   <th>{{ 'qoe.col_started' | translate }}</th>
-                  <th class="text-right">{{ 'qoe.stalls' | translate }}</th>
+                  <th [title]="'qoe.hint.stalls' | translate" class="text-right">{{ 'qoe.stalls' | translate }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -229,23 +229,38 @@
         </div>
       </div>
 
-      <div class="mt-3">
-        <app-qoe-badge [qoe]="d" />
+      <div class="mt-3 rounded-lg border border-base-200 p-3 text-sm">
+        <div class="flex flex-wrap items-center gap-2" [title]="'qoe.hint.verdict' | translate">
+          <span class="inline-block h-2.5 w-2.5 rounded-full shrink-0" [class]="dotClass(d)"></span>
+          <span class="font-semibold">{{ 'qoe.verdict.' + d.verdict | translate }}</span>
+          @if (d.confidence === 'low') {
+            <span class="text-base-content/40">({{ 'qoe.confidence_low' | translate }})</span>
+          }
+        </div>
+        @for (r of d.reasons; track r) {
+          <div class="mt-1 italic text-base-content/70">{{ reasonText(r) }}</div>
+        }
+        <dl class="mt-3 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
+          @for (row of summaryRows(d); track row.label) {
+            <dt class="text-base-content/50" [title]="row.hint ?? ''">{{ row.label }}</dt>
+            <dd class="min-w-0 break-words">{{ row.value }}</dd>
+          }
+        </dl>
       </div>
 
-      @if (d.sessions.length > 1 || d.sessions[0]?.pipeline) {
+      @if (d.sessions.length > 0) {
         <h4 class="font-semibold mt-4 mb-2">{{ 'qoe.breakdown' | translate }}</h4>
         <div class="overflow-x-auto">
           <table class="table">
             <thead>
               <tr>
-                <th>{{ 'qoe.col_session' | translate }}</th>
-                <th>{{ 'qoe.col_quality' | translate }}</th>
-                <th>{{ 'qoe.engine' | translate }}</th>
-                <th class="text-right">{{ 'qoe.watched' | translate }}</th>
-                <th class="text-right">{{ 'qoe.stalls' | translate }}</th>
-                <th>{{ 'qoe.col_verdict' | translate }}</th>
-                <th>{{ 'qoe.pipeline.title' | translate }}</th>
+                <th [title]="'qoe.hint.session' | translate">{{ 'qoe.col_session' | translate }}</th>
+                <th [title]="'qoe.hint.quality' | translate">{{ 'qoe.col_quality' | translate }}</th>
+                <th [title]="'qoe.hint.engine' | translate">{{ 'qoe.engine' | translate }}</th>
+                <th class="text-right" [title]="'qoe.watched_hint' | translate">{{ 'qoe.watched' | translate }}</th>
+                <th class="text-right" [title]="'qoe.hint.stalls' | translate">{{ 'qoe.stalls' | translate }}</th>
+                <th [title]="'qoe.hint.verdict' | translate">{{ 'qoe.col_verdict' | translate }}</th>
+                <th [title]="'qoe.hint.pipeline' | translate">{{ 'qoe.pipeline.title' | translate }}</th>
               </tr>
             </thead>
             <tbody>
@@ -254,7 +269,7 @@
                   <td class="font-mono">{{ s.sessionId.slice(0, 8) }}</td>
                   <td>{{ s.quality ?? '-' }}</td>
                   <td>{{ s.engine ?? '-' }}</td>
-                  <td class="text-right tabular-nums">{{ watchedText(s.watchedMs) }}</td>
+                  <td class="text-right tabular-nums">{{ duration(s.watchedMs) }}</td>
                   <td class="text-right tabular-nums">{{ s.stallCount }}</td>
                   <td>{{ 'qoe.verdict.' + s.verdict | translate }}</td>
                   <td class="text-xs text-base-content/70 min-w-48">{{ pipelineText(s.pipeline) || '-' }}</td>
@@ -271,7 +286,7 @@
           <table class="table">
             <thead>
               <tr>
-                <th>{{ 'qoe.col_cause' | translate }}</th>
+                <th [title]="'qoe.hint.cause' | translate">{{ 'qoe.col_cause' | translate }}</th>
                 <th class="text-right">{{ 'qoe.col_count' | translate }}</th>
                 <th class="text-right">{{ 'qoe.col_duration' | translate }}</th>
               </tr>
@@ -283,7 +298,7 @@
                     <span class="inline-block h-2.5 w-2.5 rounded-full mr-2" [class]="causeDot[c.cause]"></span>{{ 'qoe.cause.' + c.cause | translate }}
                   </td>
                   <td class="text-right tabular-nums">{{ c.count }}</td>
-                  <td class="text-right tabular-nums">{{ (c.ms / 1000).toFixed(1) }} s</td>
+                  <td class="text-right tabular-nums">{{ seconds(c.ms) }}</td>
                 </tr>
               }
             </tbody>
@@ -295,19 +310,23 @@
       @if (d.events.length === 0) {
         <p class="text-sm text-base-content/50">{{ 'qoe.no_events' | translate }}</p>
       } @else {
+        <div class="flex gap-3 pb-1 text-xs text-base-content/40">
+          <span class="w-36 shrink-0">{{ 'qoe.timeline_time' | translate }}</span>
+          <span class="w-24 shrink-0 truncate" [title]="'qoe.timeline_position' | translate">{{ 'qoe.timeline_position' | translate }}</span>
+          <span>{{ 'qoe.timeline_event' | translate }}</span>
+        </div>
         <ul class="text-sm">
           @for (e of d.events; track $index) {
             <li class="py-1 border-b border-base-200 last:border-0">
               <div class="flex gap-3">
-              <span class="w-36 shrink-0 tabular-nums text-base-content/50">
-                {{ e.at | localeDate: { dateStyle: 'short', timeStyle: 'medium' } }}
-              </span>
-              <span class="w-14 shrink-0 tabular-nums text-base-content/50">{{ formatPosition(e.data?.position ?? null) }}</span>
-              <span class="w-44 shrink-0 whitespace-nowrap font-medium">{{ eventLabel(e) }}</span>
-              <span class="min-w-0 break-words text-base-content/70">{{ eventDetail(e) }}</span>
+                <span class="w-36 shrink-0 tabular-nums text-base-content/50">
+                  {{ eventStart(e) | localeDate: { dateStyle: 'short', timeStyle: 'medium' } }}
+                </span>
+                <span class="w-24 shrink-0 tabular-nums text-base-content/50">{{ formatPosition(e.data?.position ?? null) }}</span>
+                <span class="min-w-0 break-words font-medium">{{ eventLine(e) }}</span>
               </div>
               @if (e.data?.cause; as cause) {
-                <div class="flex items-center gap-2 pl-[calc(9rem+3.5rem+1.5rem)] text-xs text-base-content/70">
+                <div class="flex items-center gap-2 pl-[calc(9rem+6rem+1.5rem)] text-xs text-base-content/70">
                   <span class="inline-block h-2.5 w-2.5 rounded-full shrink-0" [class]="causeDot[cause]"></span>
                   <span class="font-medium">{{ 'qoe.cause.' + cause | translate }}</span>
                   @if (e.data.causeConfidence === 'low') {
@@ -318,7 +337,7 @@
                   }
                 </div>
                 @if (cause === 'server') {
-                  <div class="pl-[calc(9rem+3.5rem+1.5rem)] text-xs text-base-content/50 space-y-0.5">
+                  <div class="pl-[calc(9rem+6rem+1.5rem)] text-xs text-base-content/50 space-y-0.5">
                     @if (stallHints(e); as hints) {
                       <div class="text-warning/80">{{ hints }}</div>
                     }

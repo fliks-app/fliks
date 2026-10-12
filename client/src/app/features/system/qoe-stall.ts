@@ -1,30 +1,42 @@
 import type { QoeEventRow, QoePipeline, QoeServerLoad, QoeStallCause } from '../../core/services/api/qoe-api.service';
+import { QOE_VERDICT_BAR_CLASS } from './qoe-health';
 
 export const QOE_CAUSES: readonly QoeStallCause[] = ['server', 'network', 'device', 'unknown'];
 
+/** The verdict palette, so a cause and the verdict of the same name never differ in colour. */
 export const QOE_CAUSE_DOT_CLASS: Record<QoeStallCause, string> = {
-  server: 'bg-error',
-  network: 'bg-warning',
-  device: 'bg-info',
-  unknown: 'bg-base-content/30',
+  server: QOE_VERDICT_BAR_CLASS.server,
+  network: QOE_VERDICT_BAR_CLASS.network,
+  device: QOE_VERDICT_BAR_CLASS.device,
+  unknown: QOE_VERDICT_BAR_CLASS.unknown,
 };
 
-const mbps = (bps: number | undefined) => (bps == null ? '-' : (bps / 1_000_000).toFixed(1));
+/** Translation and number formatting in the admin's language. */
+export interface Fmt {
+  t(key: string, params?: Record<string, string>): string;
+  n(v: number, digits?: number): string;
+}
+
+const plain = (v: number, digits = 1) => v.toFixed(digits);
 
 /** The translated line of a stall: the reason key and the evidence numbers it interpolates. */
-export function stallExplanation(e: Pick<QoeEventRow, 'data'>): { key: string; params: Record<string, string> } | null {
+export function stallExplanation(
+  e: Pick<QoeEventRow, 'data'>,
+  n: Fmt['n'] = plain,
+): { key: string; params: Record<string, string> } | null {
   const d = e.data;
   if (!d?.cause || !d.causeReason) return null;
   const ev = d.causeEvidence ?? {};
+  const mbps = (bps: number | undefined) => (bps == null ? '-' : n(bps / 1_000_000, 1));
   return {
     key: d.causeReason,
     params: {
-      buffer: ev['bufferAheadS'] == null ? '-' : ev['bufferAheadS'].toFixed(1),
+      buffer: ev['bufferAheadS'] == null ? '-' : n(ev['bufferAheadS'], 1),
       throughput: mbps(ev['bandwidthBps']),
       bitrate: mbps(ev['variantBitrate']),
-      wait: ev['waitedMs'] == null ? '-' : (ev['waitedMs'] / 1000).toFixed(1),
-      speed: ev['transcodeSpeed'] == null ? '-' : ev['transcodeSpeed'].toFixed(1),
-      dropped: ev['droppedPct'] == null ? '-' : ev['droppedPct'].toFixed(0),
+      wait: ev['waitedMs'] == null ? '-' : n(ev['waitedMs'] / 1000, 1),
+      speed: ev['transcodeSpeed'] == null ? '-' : n(ev['transcodeSpeed'], 1),
+      dropped: ev['droppedPct'] == null ? '-' : n(ev['droppedPct'], 0),
     },
   };
 }
@@ -49,6 +61,23 @@ export function stallBreakdown(events: Pick<QoeEventRow, 'type' | 'data'>[]): St
   return QOE_CAUSES.flatMap((c) => totals.get(c) ?? []);
 }
 
+/** A duration as a translation key and its numbers: "2 min 09 s", never "2:09", which reads as a position. */
+export function durationParts(ms: number): { key: string; params: Record<string, string> } {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const min = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+  if (h > 0) return { key: 'qoe.duration_h', params: { h: String(h), min: String(min) } };
+  if (min > 0) return { key: 'qoe.duration_min', params: { min: String(min), sec: String(sec).padStart(2, '0') } };
+  return { key: 'qoe.duration_s', params: { sec: String(sec) } };
+}
+
+/** When the event began: a stall is reported at its end, so its start is `at - durationMs`. */
+export function eventStartMs(e: Pick<QoeEventRow, 'at' | 'type' | 'data'>): number {
+  const at = typeof e.at === 'number' ? e.at : Date.parse(e.at);
+  return e.type === 'stall' ? at - (e.data?.durationMs ?? 0) : at;
+}
+
 const CODEC_LABEL: Record<string, string> = {
   h264: 'H.264',
   hevc: 'HEVC',
@@ -58,24 +87,23 @@ const CODEC_LABEL: Record<string, string> = {
   vp9: 'VP9',
 };
 
-const codecLabel = (c: string | null | undefined) => (c ? (CODEC_LABEL[c.toLowerCase()] ?? c.toUpperCase()) : '');
+export const codecLabel = (c: string | null | undefined) => (c ? (CODEC_LABEL[c.toLowerCase()] ?? c.toUpperCase()) : '');
 
-function resolutionLabel(height: number | null): string {
+function resolutionLabel(height: number | null, f: Fmt): string {
   if (height == null) return '';
-  return height >= 2000 ? '4K' : `${height}p`;
+  return height >= 2000 ? f.t('qoe.pipeline.res_4k') : f.t('qoe.pipeline.res_p', { height: String(height) });
 }
-
-const mbps1 = (bps: number) => `${(bps / 1_000_000).toFixed(bps >= 10_000_000 ? 0 : 1)} Mb/s`;
 
 const join = (xs: (string | null | undefined | false)[]) => xs.filter((x): x is string => !!x).join(' ');
 
-/** "4K HEVC HDR10 → 1080p H.264 8 Mb/s", or just the source when the stream is not re-encoded. */
-export function pipelineChain(p: QoePipeline): string {
+/** "4K HEVC HDR10 → 1080p H.264 8.0 Mbps", or just the source when the stream is not re-encoded. */
+export function pipelineChain(p: QoePipeline, f: Fmt): string {
   const s = p.source;
-  const src = s ? join([resolutionLabel(s.height), codecLabel(s.codec), s.hdr]) : '';
+  const src = s ? join([resolutionLabel(s.height, f), codecLabel(s.codec), s.hdr]) : '';
   const o = p.output;
-  const quality = o?.quality && o.quality !== 'original' && o.quality !== 'remux' ? o.quality.replace(/-hdr$/, '') : '';
-  const out = o ? join([quality, codecLabel(o.codec), o.hdr, o.bitrate ? mbps1(o.bitrate) : '']) : '';
+  const quality = o?.quality && !['auto', 'original', 'remux'].includes(o.quality) ? o.quality.replace(/-hdr$/, '') : '';
+  const rate = o?.bitrate ? f.t('qoe.mbps', { value: f.n(o.bitrate / 1_000_000, 1) }) : '';
+  const out = o ? join([quality, codecLabel(o.codec), o.hdr, rate]) : '';
   return src && out ? `${src} → ${out}` : src || out;
 }
 
@@ -98,17 +126,12 @@ export function pipelineParts(p: QoePipeline): PipelinePart[] {
   return parts;
 }
 
-/** The server load snapshot of a stall as a translation key and its numbers. */
-export function loadLine(l: QoeServerLoad): PipelinePart {
-  return {
-    key: 'qoe.pipeline.load',
-    params: {
-      transcodes: String(l.activeTranscodes),
-      sessions: String(l.activeSessions),
-      load: l.loadAvg1.toFixed(1),
-      cpus: String(l.cpuCount),
-    },
-  };
+/** The server load snapshot of a stall as a translation key and its numbers; the load average is absent on Windows. */
+export function loadLine(l: QoeServerLoad, n: Fmt['n'] = plain): PipelinePart {
+  const base = { transcodes: String(l.activeTranscodes), sessions: String(l.activeSessions), cpus: String(l.cpuCount) };
+  return l.loadAvg1 == null
+    ? { key: 'qoe.pipeline.load_no_avg', params: base }
+    : { key: 'qoe.pipeline.load', params: { ...base, load: n(l.loadAvg1, 1) } };
 }
 
 /** A stall hint key with the evidence it interpolates. */
