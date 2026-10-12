@@ -75,7 +75,7 @@ Reasons are `qoe.reason.*` i18n keys without params. First match wins:
    - median transcode speed < 1 over the session → `server`;
    - buffer starved at stall (< 1 s) and throughput < 1.2 × bitrate → `network`;
    - starved, no throughput data → `network`, low confidence;
-   - starved, throughput fine → `device`, low confidence;
+   - starved, throughput fine → `network`, low confidence (`stalls_starved_bandwidth_ok`; per stall `network_unconfirmed`);
    - stalls with buffer ahead → `device`.
 3. Dropped frames ≥ 5 % of decoded → `device`.
 4. Less than 60 s watched → `unknown` (low); otherwise `ok`.
@@ -110,6 +110,13 @@ spawn uses at playback-info and follows a rung change on the running sid.
 The session verdict's stall rule follows the cause holding most of the stalled time (the stored
 `stallCauseMs`, a low-confidence stall counting half) and takes its reason from the dominant
 per-stall reason (`stallReasonMs`); `unknown` winning or no classified stall falls back to the aggregate rules above.
+
+A recovery wait (`recovery` with `durationMs` > 0) is an interruption like a stall: it is counted
+and weighted in the same maps. Its `reason` (`session_lost`, `session_expired`, `stall`, `other`)
+decides the cause: `session_lost` is `server` (high) and `session_expired` `server` (low), reported as
+`qoe.stall.server_session_lost` / `qoe.stall.server_session_expired` and, at session level,
+`qoe.reason.session_lost` / `qoe.reason.session_expired`. A `stall` or `other` recovery goes through
+the usual stall classification.
 
 Hints added to `reasons`, never a verdict: `software_decoder` (≥ 720p, on a
 `device` verdict), `cmcd_missing` (client claims CMCD, none arrived).
