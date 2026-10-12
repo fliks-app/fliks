@@ -187,7 +187,6 @@
       "VideoBitrateNotSupported": "Bitrate too high",
       "VideoDolbyVisionP7NotSupported": "Dolby Vision profile 7 not supported"
     },
-    "preparing": "Preparing the stream…",
     "airplay_playing_on": "Playing on {{name}}",
     "airplay_playing": "Playing via AirPlay",
     "error_airplay_unsupported": "This AirPlay device can't play this video.",

@@ -660,25 +660,6 @@ describe('PlayerComponent wake / resume', () => {
     expect(h.streamingApi.updatePlaybackState).toHaveBeenCalledTimes(2);
   });
 
-  it('a long buffer explains itself, a short one stays mute', async () => {
-    const h = createHarness();
-    h.state.loading.set(false);
-    h.state.buffering.set(true);
-
-    h.component.lastTickAt = Date.now();
-    h.component.tickClockWatch();
-    expect(h.component.preparing()).toBe(false);
-
-    h.component.stalledSince = Date.now() - 6_000;
-    h.component.lastTickAt = Date.now();
-    h.component.tickClockWatch();
-    expect(h.component.preparing()).toBe(true);
-
-    h.state.buffering.set(false);
-    h.component.lastTickAt = Date.now();
-    h.component.tickClockWatch();
-    expect(h.component.preparing()).toBe(false);
-  });
 });
 
 describe('PlayerComponent seek OSD', () => {

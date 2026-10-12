@@ -187,7 +187,6 @@
       "VideoBitrateNotSupported": "Tasa de bits demasiado alta",
       "VideoDolbyVisionP7NotSupported": "Dolby Vision perfil 7 no compatible"
     },
-    "preparing": "Preparando la transmisión…",
     "airplay_playing_on": "Reproduciendo en {{name}}",
     "airplay_playing": "Reproduciendo con AirPlay",
     "error_airplay_unsupported": "Este dispositivo AirPlay no puede reproducir este vídeo.",

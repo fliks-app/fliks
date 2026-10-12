@@ -415,19 +415,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private resumeDue = false;
   private lastResumeAt = 0;
   private readonly resumeRetryMs = 5_000;
-  /** How long buffering has to hold before the overlay explains itself: a
-   *  cold ffmpeg respawn (after a sleep, or a far seek) takes seconds, and a
-   *  bare spinner over a black frame reads as a broken player. */
-  private static readonly preparingAfterMs = 5_000;
-  private stalledSince = 0;
 
   // ── Template-facing signal aliases (delegate to services) ──
   readonly loading = this.state.loading;
   readonly videoStarted = this.state.videoStarted;
   readonly error = this.state.error;
   /** Transient "copied ✓" feedback for the error card's copy button. */
-  /** Buffering has lasted long enough to be worth a word on screen. */
-  readonly preparing = signal(false);
   readonly paused = this.state.paused;
   readonly uiPaused = this.state.uiPaused;
   readonly autoplayBlocked = this.state.autoplayBlocked;
@@ -445,6 +438,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       !this.autoplayBlocked() &&
       (this.loading() ||
         this.buffering() ||
+        // Shaka can hold a starved playhead without ever reporting `buffering`.
+        this.frozenSince() > 0 ||
         (!this.videoStarted() && !this.error())),
   );
   readonly playbackMode = this.state.playbackMode;
@@ -3526,15 +3521,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     ) {
       void this.resumeAfterGap(0);
     }
-    if (!this.loading() && !this.buffering()) {
-      this.stalledSince = 0;
-      this.preparing.set(false);
-      return;
-    }
-    if (!this.stalledSince) this.stalledSince = now;
-    this.preparing.set(
-      now - this.stalledSince >= PlayerComponent.preparingAfterMs,
-    );
   }
 
   /**
