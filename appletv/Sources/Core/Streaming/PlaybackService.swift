@@ -26,6 +26,8 @@ import Foundation
     private var episodeId: Int?
     private var sessionId: String?
     private var destroyed = false
+    /// One per viewing: survives the sid changes of recover() and quality switches.
+    private let playbackId = UUID().uuidString
 
     private var lastHeartbeatAt = Date.distantPast
     private var lastProgressPos: Double = 0
@@ -301,6 +303,7 @@ import Foundation
     // MARK: - QoE
 
     struct Qoe: Encodable {
+        let playbackId: String
         let cmcd: Bool
         let droppedFrames: Int?
         let decodedFrames: Int?
@@ -318,6 +321,7 @@ import Foundation
         func encode(to encoder: Encoder) throws {
             var c = encoder.container(keyedBy: QoeKey.self)
             try c.encode("avplayer", forKey: QoeKey("engine"))
+            try c.encode(playbackId, forKey: QoeKey("playbackId"))
             try c.encode(cmcd, forKey: QoeKey("cmcd"))
             try c.encode(droppedFrames, forKey: QoeKey("droppedFrames"))
             try c.encode(decodedFrames, forKey: QoeKey("decodedFrames"))
@@ -346,18 +350,38 @@ import Foundation
             .map { max(CMTimeGetSeconds($0.end) - now.seconds, 0) }
     }
 
+    /// Frame rate and codec of the enabled video track; HLS exposes the live rate only on the item track.
+    private func videoTrackInfo() -> (fps: Double?, codec: String?) {
+        guard let track = qoeItem?.tracks.first(where: { $0.isEnabled && $0.assetTrack?.mediaType == .video }) else {
+            return (nil, nil)
+        }
+        let live = Double(track.currentVideoFrameRate)
+        let nominal = Double(track.assetTrack?.nominalFrameRate ?? 0)
+        let fps = live > 0 ? live : (nominal > 0 ? nominal : nil)
+        var codec: String?
+        if let fd = track.assetTrack?.formatDescriptions.first {
+            let code = CMFormatDescriptionGetMediaSubType(fd as! CMFormatDescription)
+            let chars = (0..<4).map { UInt8((code >> UInt32(24 - 8 * $0)) & 0xff) }
+            codec = String(bytes: chars, encoding: .ascii)
+        }
+        return (fps, codec)
+    }
+
     private func qoeSample() -> Qoe {
         let events = qoeItem?.accessLog()?.events ?? []
         let size = qoeItem?.presentationSize ?? .zero
         var cmcd = false
         if #available(tvOS 18.0, *) { cmcd = true }
+        let video = videoTrackInfo()
+        // AVPlayer has no decoded-frame counter: estimated as watched seconds x frame rate.
+        let watched = events.map(\.durationWatched).filter { $0 > 0 }.reduce(0, +)
         return Qoe(
-            cmcd: cmcd,
+            playbackId: playbackId, cmcd: cmcd,
             droppedFrames: events.isEmpty ? nil : events.map(\.numberOfDroppedVideoFrames).filter { $0 >= 0 }.reduce(0, +),
-            decodedFrames: nil, bandwidthBps: bandwidth, bufferAheadS: bufferAhead,
+            decodedFrames: video.fps.map { Int((watched * $0).rounded()) }, bandwidthBps: bandwidth, bufferAheadS: bufferAhead,
             variantBitrate: events.last.flatMap { $0.indicatedBitrate > 0 ? $0.indicatedBitrate : nil },
             width: size.width > 0 ? Int(size.width) : nil, height: size.height > 0 ? Int(size.height) : nil,
-            videoCodec: nil, decoderName: nil,
+            videoCodec: video.codec, decoderName: nil,
             stallCount: stallCount, stallMs: stallMs, recoveryReloads: recoveryReloads
         )
     }
@@ -381,9 +405,9 @@ import Foundation
     }
 
     private func postEvents(_ events: [QoeEvent], sid: String) async {
-        struct Body: Encodable { let events: [QoeEvent] }
+        struct Body: Encodable { let playbackId: String; let events: [QoeEvent] }
         guard !events.isEmpty else { return }
-        try? await api.post("/api/playback/sessions/\(sid)/events", body: Body(events: events))
+        try? await api.post("/api/playback/sessions/\(sid)/events", body: Body(playbackId: playbackId, events: events))
     }
 
     private func flushNow() {
