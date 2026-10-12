@@ -39,6 +39,11 @@ const str = (v: unknown, max: number): string | null =>
 const bool = (v: unknown): boolean | null =>
   typeof v === 'boolean' ? v : null;
 
+/** Client-generated id of one viewing; anything else is ignored. */
+export function parsePlaybackId(v: unknown): string | null {
+  return typeof v === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(v) ? v : null;
+}
+
 /** A heartbeat `qoe` block with unknown fields dropped; null when unusable. */
 export function parseSample(raw: unknown): QoeSample | null {
   if (!isObj(raw) || !ENGINES.includes(raw.engine as QoeEngine)) return null;
@@ -58,6 +63,7 @@ export function parseSample(raw: unknown): QoeSample | null {
     stallCount: int(raw.stallCount) ?? 0,
     stallMs: int(raw.stallMs) ?? 0,
     recoveryReloads: int(raw.recoveryReloads) ?? 0,
+    playbackId: parsePlaybackId(raw.playbackId),
   };
 }
 

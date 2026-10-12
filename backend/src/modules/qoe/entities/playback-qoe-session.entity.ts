@@ -7,9 +7,14 @@ import type { QoeEngine, QoeVerdict } from '../core/types';
 @Index('IDX_playback_qoe_sessions_last_seen', ['lastSeenAt'])
 @Index('IDX_playback_qoe_sessions_verdict', ['verdict'])
 @Index('IDX_playback_qoe_sessions_device', ['deviceLabel'])
+@Index('IDX_playback_qoe_sessions_playback', ['playbackId'])
 export class PlaybackQoeSession {
   @PrimaryColumn({ type: 'varchar', length: 64 })
   sessionId: string;
+
+  /** Client id of one viewing; several sids (quality switch, recovery) share it. */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  playbackId: string | null;
 
   @Column({ type: 'int', nullable: true })
   userId: number | null;
@@ -43,6 +48,10 @@ export class PlaybackQoeSession {
 
   @Column({ type: 'boolean', default: false })
   cmcd: boolean;
+
+  /** The client says it sends CMCD; `cmcd` is what the server actually parsed. */
+  @Column({ type: 'boolean', default: false })
+  cmcdClaimed: boolean;
 
   /** `transcode` | `remux` | `directplay`. */
   @Column({ type: 'varchar', nullable: true })
@@ -101,6 +110,22 @@ export class PlaybackQoeSession {
 
   @Column({ type: 'double precision', nullable: true })
   medianTranscodeSpeed: number | null;
+
+  /** Inputs `diagnose()` needs to re-run on several rows merged into one playback. */
+  @Column({ type: 'double precision', nullable: true })
+  stallBufferAheadS: number | null;
+
+  @Column({ type: 'double precision', nullable: true })
+  stallBandwidthBps: number | null;
+
+  @Column({ type: 'double precision', nullable: true })
+  cmcdThroughputBps: number | null;
+
+  @Column({ type: 'boolean', default: false })
+  unrecoveredError: boolean;
+
+  @Column({ type: 'int', default: 0 })
+  sampleCount: number;
 
   @Column({ type: 'varchar', default: 'unknown' })
   verdict: QoeVerdict;

@@ -1,11 +1,11 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { MoreThanOrEqual, Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import type { Request } from 'express';
 import { SettingsService } from '../settings/settings.service';
 import type { LiveSession } from '../streaming/live-session.service';
-import { QoeAggregator } from './core/aggregate';
+import { QoeAggregator, mergeSummaries } from './core/aggregate';
 import { readCmcd } from './core/cmcd';
 import { diagnose } from './core/diagnose';
 import type {
@@ -52,6 +52,7 @@ type QoeEventRow = Pick<PlaybackQoeEvent, 'sessionId' | 'at' | 'type' | 'data'>;
 
 interface Tracker {
   session: SessionRef;
+  playbackId: string | null;
   agg: QoeAggregator;
   pendingEvents: QoeEventRow[];
   eventCount: number;
@@ -76,8 +77,21 @@ export interface QoeLiveSummary extends QoeDiagnosis {
   decoderName: string | null;
   transcodeSpeed: number | null;
   engine: QoeSessionSummary['engine'];
+  /** The server parsed CMCD on this session's requests. */
   cmcd: boolean;
+  cmcdClaimed: boolean;
+  playbackId: string | null;
 }
+
+/** One viewing: the sessions sharing a playbackId (or a lone session), merged and re-diagnosed. */
+export type QoePlayback = Omit<
+  PlaybackQoeSession,
+  'sessionId' | 'stallBufferAheadS' | 'stallBandwidthBps' | 'cmcdThroughputBps' | 'unrecoveredError' | 'sampleCount'
+> & {
+  /** The latest session of the playback. */
+  sessionId: string;
+  sessionIds: string[];
+};
 
 export interface QoeSessionQuery {
   days?: number;
@@ -106,6 +120,93 @@ const VERDICTS: QoeVerdict[] = [
   'error',
   'unknown',
 ];
+
+const rowSummary = (r: PlaybackQoeSession): QoeSessionSummary => ({
+  engine: r.engine,
+  cmcd: r.cmcd,
+  cmcdClaimed: r.cmcdClaimed,
+  videoCodec: r.videoCodec,
+  width: r.width,
+  height: r.height,
+  decoderName: r.decoderName,
+  hwDecoder: r.hwDecoder,
+  watchedMs: r.watchedMs,
+  stallCount: r.stallCount,
+  stallMs: r.stallMs,
+  droppedFrames: r.droppedFrames,
+  decodedFrames: r.decodedFrames,
+  recoveryReloads: r.recoveryReloads,
+  errorCount: r.errorCount,
+  unrecoveredError: r.unrecoveredError,
+  bandwidthBps: null,
+  variantBitrate: null,
+  bufferAheadS: null,
+  avgBandwidthBps: r.avgBandwidthBps,
+  minBandwidthBps: r.minBandwidthBps,
+  avgVariantBitrate: r.avgVariantBitrate,
+  stallBufferAheadS: r.stallBufferAheadS,
+  stallBandwidthBps: r.stallBandwidthBps,
+  cmcdThroughputBps: r.cmcdThroughputBps,
+  medianTranscodeSpeed: r.medianTranscodeSpeed,
+  sampleCount: r.sampleCount,
+});
+
+const playbackKey = (r: PlaybackQoeSession) => r.playbackId ?? r.sessionId;
+
+/** Rows grouped by playback, each merged; newest playback first. */
+function mergePlaybacks(rows: PlaybackQoeSession[]): QoePlayback[] {
+  const groups = new Map<string, PlaybackQoeSession[]>();
+  for (const r of rows) {
+    const g = groups.get(playbackKey(r));
+    if (g) g.push(r);
+    else groups.set(playbackKey(r), [r]);
+  }
+  return [...groups.values()]
+    .map((g) => {
+      g.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
+      const last = g[g.length - 1];
+      const m = mergeSummaries(g.map(rowSummary));
+      const d = diagnose(m);
+      const {
+        stallBufferAheadS: _a,
+        stallBandwidthBps: _b,
+        cmcdThroughputBps: _c,
+        unrecoveredError: _d,
+        sampleCount: _e,
+        ...rest
+      } = last;
+      return {
+        ...rest,
+        sessionId: last.sessionId,
+        sessionIds: g.map((r) => r.sessionId),
+        startedAt: g[0].startedAt,
+        lastSeenAt: new Date(Math.max(...g.map((r) => r.lastSeenAt.getTime()))),
+        engine: m.engine,
+        cmcd: m.cmcd,
+        cmcdClaimed: m.cmcdClaimed,
+        videoCodec: m.videoCodec,
+        width: m.width,
+        height: m.height,
+        decoderName: m.decoderName,
+        hwDecoder: m.hwDecoder,
+        watchedMs: m.watchedMs,
+        stallCount: m.stallCount,
+        stallMs: m.stallMs,
+        droppedFrames: m.droppedFrames,
+        decodedFrames: m.decodedFrames,
+        avgBandwidthBps: m.avgBandwidthBps,
+        minBandwidthBps: m.minBandwidthBps,
+        avgVariantBitrate: m.avgVariantBitrate,
+        recoveryReloads: m.recoveryReloads,
+        errorCount: m.errorCount,
+        medianTranscodeSpeed: m.medianTranscodeSpeed,
+        verdict: d.verdict,
+        confidence: d.confidence,
+        reasons: d.reasons,
+      };
+    })
+    .sort((a, b) => b.lastSeenAt.getTime() - a.lastSeenAt.getTime());
+}
 
 const clampInt = (n: number) => Math.min(Math.max(Math.round(n), 0), 2 ** 31 - 1);
 
@@ -156,13 +257,19 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     const t = this.track(session);
     if (!t) return;
     t.reported = true;
+    t.playbackId = sample.playbackId ?? t.playbackId;
     t.agg.addSample(sample, Date.now(), session.state !== 'paused');
   }
 
-  recordEvents(session: SessionRef, events: QoeEvent[]): void {
+  recordEvents(
+    session: SessionRef,
+    events: QoeEvent[],
+    playbackId: string | null = null,
+  ): void {
     const t = this.track(session, false);
     if (!t) return;
     t.reported = true;
+    t.playbackId = playbackId ?? t.playbackId;
     const now = Date.now();
     for (const e of events) {
       if (t.eventCount >= MAX_EVENTS_PER_SESSION) break;
@@ -215,6 +322,8 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
       transcodeSpeed: s.medianTranscodeSpeed,
       engine: s.engine,
       cmcd: s.cmcd,
+      cmcdClaimed: s.cmcdClaimed,
+      playbackId: t.playbackId,
     };
   }
 
@@ -238,6 +347,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     if (!t) {
       t = {
         session,
+        playbackId: null,
         agg: new QoeAggregator(),
         pendingEvents: [],
         eventCount: 0,
@@ -305,6 +415,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     const ses = t.session;
     return this.sessions.create({
       sessionId: ses.sessionId,
+      playbackId: t.playbackId,
       userId: ses.userId,
       mediaFileId: ses.mediaFileId,
       mediaTitle: ses.mediaTitle?.slice(0, 255) ?? null,
@@ -316,6 +427,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
       appVersion: ses.appVersion,
       engine: s.engine,
       cmcd: s.cmcd,
+      cmcdClaimed: s.cmcdClaimed,
       playMethod: ses.kind,
       quality: ses.quality,
       transcodeReasons: ses.transcodeReasons ?? [],
@@ -335,6 +447,11 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
       recoveryReloads: clampInt(s.recoveryReloads),
       errorCount: clampInt(s.errorCount),
       medianTranscodeSpeed: s.medianTranscodeSpeed,
+      stallBufferAheadS: s.stallBufferAheadS,
+      stallBandwidthBps: s.stallBandwidthBps,
+      cmcdThroughputBps: s.cmcdThroughputBps,
+      unrecoveredError: s.unrecoveredError,
+      sampleCount: s.sampleCount,
       verdict: d.verdict,
       confidence: d.confidence,
       reasons: d.reasons,
@@ -356,32 +473,61 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
 
   // ── Admin reads ──
 
+  /** Playbacks (sessions sharing a playbackId merged), newest first. */
   async listSessions(q: QoeSessionQuery) {
     const limit = Math.min(Math.max(q.limit ?? 50, 1), 200);
+    const offset = Math.max(q.offset ?? 0, 0);
     const qb = this.sessions
       .createQueryBuilder('s')
+      .select('COALESCE(s."playbackId", s."sessionId")', 'key')
+      .addSelect('MAX(s."lastSeenAt")', 'last')
       .where('s."lastSeenAt" >= :since', { since: this.since(q.days ?? 7) })
-      .orderBy('s."lastSeenAt"', 'DESC')
-      .take(limit)
-      .skip(Math.max(q.offset ?? 0, 0));
-    if (q.verdict) qb.andWhere('s.verdict = :v', { v: q.verdict });
+      .groupBy('COALESCE(s."playbackId", s."sessionId")')
+      .orderBy('last', 'DESC')
+      .limit(MAX_SUMMARY_ROWS);
     if (q.userId != null) qb.andWhere('s."userId" = :u', { u: q.userId });
     if (q.device) qb.andWhere('s."deviceLabel" = :d', { d: q.device });
-    const [items, total] = await qb.getManyAndCount();
-    return { items, total };
+    const keys = (await qb.getRawMany<{ key: string }>()).map((r) => r.key);
+
+    // The verdict is computed on the merged playback, so it can only filter after merging.
+    if (q.verdict) {
+      const all = (await this.rowsOf(keys)).filter((p) => p.verdict === q.verdict);
+      return { items: all.slice(offset, offset + limit), total: all.length };
+    }
+    const page = keys.slice(offset, offset + limit);
+    return { items: await this.rowsOf(page), total: keys.length };
   }
 
-  async getSession(sessionId: string) {
-    const row = await this.sessions.findOne({ where: { sessionId } });
-    if (!row) return null;
+  private async rowsOf(keys: string[]): Promise<QoePlayback[]> {
+    if (!keys.length) return [];
+    const rows = await this.sessions
+      .createQueryBuilder('s')
+      .where('s."playbackId" = ANY(:keys)', { keys })
+      .orWhere('s."playbackId" IS NULL AND s."sessionId" = ANY(:keys)', { keys })
+      .getMany();
+    return mergePlaybacks(rows);
+  }
+
+  /** `id` is a sessionId or a playbackId. */
+  async getSession(id: string) {
+    const bySession = await this.sessions.findOne({ where: { sessionId: id } });
+    const rows = bySession?.playbackId
+      ? await this.sessions.find({ where: { playbackId: bySession.playbackId } })
+      : bySession
+        ? [bySession]
+        : await this.sessions.find({ where: { playbackId: id } });
+    if (!rows.length) return null;
+    rows.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
     const events = await this.events.find({
-      where: { sessionId },
+      where: { sessionId: In(rows.map((r) => r.sessionId)) },
       order: { at: 'ASC', id: 'ASC' },
     });
     return {
-      ...row,
+      ...mergePlaybacks(rows)[0],
+      sessions: rows,
       events: events.map((e) => ({
         id: e.id,
+        sessionId: e.sessionId,
         at: e.at,
         type: e.type,
         data: e.data,
@@ -390,24 +536,17 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
   }
 
   async summary(days = 7) {
-    const rows = await this.sessions.find({
-      select: [
-        'deviceLabel',
-        'engine',
-        'verdict',
-        'stallCount',
-        'droppedFrames',
-        'decodedFrames',
-        'hwDecoder',
-      ],
-      where: { lastSeenAt: MoreThanOrEqual(this.since(days)) },
-      take: MAX_SUMMARY_ROWS,
-    });
+    const rows = await this.sessions
+      .createQueryBuilder('s')
+      .where('s."lastSeenAt" >= :since', { since: this.since(days) })
+      .take(MAX_SUMMARY_ROWS)
+      .getMany();
+    const playbacks = mergePlaybacks(rows);
     const byVerdict = Object.fromEntries(
       VERDICTS.map((v) => [v, 0]),
     ) as Record<QoeVerdict, number>;
-    const groups = new Map<string, PlaybackQoeSession[]>();
-    for (const r of rows) {
+    const groups = new Map<string, QoePlayback[]>();
+    for (const r of playbacks) {
       byVerdict[r.verdict]++;
       const key = `${r.deviceLabel ?? ''}\u0000${r.engine ?? ''}`;
       const g = groups.get(key);

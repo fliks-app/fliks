@@ -50,6 +50,12 @@ function push(xs: number[], v: number): void {
 export class QoeAggregator {
   private engine: QoeEngine | null = null;
   private cmcdSeen = false;
+  private cmcdClaimed = false;
+  private bsCount = 0;
+  private readonly bsBuffers: number[] = [];
+  private cmcdBuffer: number | null = null;
+  private cmcdBufferAt: number | null = null;
+  private stallEvents = 0;
   private videoCodec: string | null = null;
   private width: number | null = null;
   private height: number | null = null;
@@ -86,7 +92,7 @@ export class QoeAggregator {
     this.lastSampleAt = now;
     this.sampleCount++;
     this.engine = s.engine;
-    if (s.cmcd) this.cmcdSeen = true;
+    if (s.cmcd) this.cmcdClaimed = true;
     this.dropped.add(s.droppedFrames);
     this.decoded.add(s.decodedFrames);
     this.stalls.add(s.stallCount);
@@ -117,11 +123,13 @@ export class QoeAggregator {
 
   addEvent(e: QoeEvent, now: number): void {
     if (e.type === 'stall') {
+      this.stallEvents++;
+      const fresh = (at: number | null) =>
+        at != null && now - at <= MAX_SAMPLE_AGE_MS;
       const buffer =
         e.bufferAheadS ??
-        (this.bufferAheadAt != null && now - this.bufferAheadAt <= MAX_SAMPLE_AGE_MS
-          ? this.bufferAhead
-          : null);
+        (fresh(this.bufferAheadAt) ? this.bufferAhead : null) ??
+        (fresh(this.cmcdBufferAt) ? this.cmcdBuffer : null);
       if (buffer != null) push(this.stallBuffers, buffer);
       if (e.bandwidthBps != null) push(this.stallBandwidths, e.bandwidthBps);
     } else if (e.type === 'error') {
@@ -138,8 +146,16 @@ export class QoeAggregator {
     }
   }
 
-  addCmcd(c: CmcdSnapshot): void {
+  addCmcd(c: CmcdSnapshot, now = Date.now()): void {
     this.cmcdSeen = true;
+    if (c.bl != null) {
+      this.cmcdBuffer = c.bl / 1000;
+      this.cmcdBufferAt = now;
+    }
+    if (c.bs) {
+      this.bsCount++;
+      if (c.bl != null) push(this.bsBuffers, c.bl / 1000);
+    }
     if (c.mtp != null) push(this.cmcdMtp, c.mtp * 1000);
     if (c.br != null && this.variantBitrates.length === 0) {
       this.variantBitrate = c.br * 1000;
@@ -148,16 +164,20 @@ export class QoeAggregator {
 
   summary(): QoeSessionSummary {
     const lastErrorAt = this.lastErrorAt;
+    const clientStalls = Math.max(this.stalls.total ?? 0, this.stallEvents);
+    // Without client stall reports, CMCD buffer starvation stands in for them.
+    const fromCmcd = clientStalls === 0 && this.bsCount > 0;
     return {
       engine: this.engine,
       cmcd: this.cmcdSeen,
+      cmcdClaimed: this.cmcdClaimed,
       videoCodec: this.videoCodec,
       width: this.width,
       height: this.height,
       decoderName: this.decoderName,
       hwDecoder: this.hwDecoder,
       watchedMs: this.watchedMs,
-      stallCount: this.stalls.total ?? 0,
+      stallCount: fromCmcd ? this.bsCount : (this.stalls.total ?? 0),
       stallMs: this.stallMs.total ?? 0,
       droppedFrames: this.dropped.total,
       decodedFrames: this.decoded.total,
@@ -173,7 +193,7 @@ export class QoeAggregator {
       avgBandwidthBps: avg(this.bandwidths),
       minBandwidthBps: this.minBandwidth,
       avgVariantBitrate: avg(this.variantBitrates) ?? this.variantBitrate,
-      stallBufferAheadS: median(this.stallBuffers),
+      stallBufferAheadS: median(fromCmcd ? this.bsBuffers : this.stallBuffers),
       stallBandwidthBps: median(this.stallBandwidths),
       cmcdThroughputBps: avg(this.cmcdMtp),
       medianTranscodeSpeed:
@@ -181,4 +201,77 @@ export class QoeAggregator {
       sampleCount: this.sampleCount,
     };
   }
+}
+
+function weighted(
+  parts: QoeSessionSummary[],
+  pick: (s: QoeSessionSummary) => number | null,
+  weight: (s: QoeSessionSummary) => number,
+): number | null {
+  let sum = 0;
+  let w = 0;
+  for (const p of parts) {
+    const v = pick(p);
+    if (v == null) continue;
+    const k = Math.max(weight(p), 1);
+    sum += v * k;
+    w += k;
+  }
+  return w ? sum / w : null;
+}
+
+const sumOrNull = (xs: (number | null)[]): number | null => {
+  const k = xs.filter((x): x is number => x != null);
+  return k.length ? k.reduce((a, b) => a + b, 0) : null;
+};
+
+/**
+ * One viewing split over several sids: counters add up, rates are weighted by
+ * watch time (stall count for stall-time medians), the rest follows the latest part.
+ * `parts` is ordered oldest first.
+ */
+export function mergeSummaries(parts: QoeSessionSummary[]): QoeSessionSummary {
+  const last = parts[parts.length - 1];
+  if (parts.length === 1) return last;
+  const latest = <K extends keyof QoeSessionSummary>(
+    k: K,
+  ): QoeSessionSummary[K] | null =>
+    [...parts].reverse().find((p) => p[k] != null)?.[k] ?? null;
+  const byWatch = (s: QoeSessionSummary) => s.watchedMs;
+  const byStalls = (s: QoeSessionSummary) => s.stallCount;
+  const mins = parts
+    .map((p) => p.minBandwidthBps)
+    .filter((x): x is number => x != null);
+  const total = (f: (p: QoeSessionSummary) => number) =>
+    parts.reduce((a, p) => a + f(p), 0);
+  return {
+    engine: latest('engine'),
+    cmcd: parts.some((p) => p.cmcd),
+    cmcdClaimed: parts.some((p) => p.cmcdClaimed),
+    videoCodec: latest('videoCodec'),
+    width: latest('width'),
+    height: latest('height'),
+    decoderName: latest('decoderName'),
+    hwDecoder: latest('hwDecoder'),
+    watchedMs: total((p) => p.watchedMs),
+    stallCount: total((p) => p.stallCount),
+    stallMs: total((p) => p.stallMs),
+    droppedFrames: sumOrNull(parts.map((p) => p.droppedFrames)),
+    decodedFrames: sumOrNull(parts.map((p) => p.decodedFrames)),
+    recoveryReloads: total((p) => p.recoveryReloads),
+    errorCount: total((p) => p.errorCount),
+    // A later sid means the viewing carried on after the error.
+    unrecoveredError: last.unrecoveredError,
+    bandwidthBps: last.bandwidthBps,
+    variantBitrate: last.variantBitrate,
+    bufferAheadS: last.bufferAheadS,
+    avgBandwidthBps: weighted(parts, (p) => p.avgBandwidthBps, byWatch),
+    minBandwidthBps: mins.length ? Math.min(...mins) : null,
+    avgVariantBitrate: weighted(parts, (p) => p.avgVariantBitrate, byWatch),
+    stallBufferAheadS: weighted(parts, (p) => p.stallBufferAheadS, byStalls),
+    stallBandwidthBps: weighted(parts, (p) => p.stallBandwidthBps, byStalls),
+    cmcdThroughputBps: weighted(parts, (p) => p.cmcdThroughputBps, byWatch),
+    medianTranscodeSpeed: weighted(parts, (p) => p.medianTranscodeSpeed, byWatch),
+    sampleCount: total((p) => p.sampleCount),
+  };
 }

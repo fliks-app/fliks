@@ -12,6 +12,7 @@ import {
   gridSegmentIndex,
 } from './transcoding/segment-boundaries';
 import { buildLiveSession, type LiveSession } from './live-session.service';
+import { QoeService } from '../qoe/qoe.service';
 import { normalizeVtt } from './subtitle-vtt.util';
 import { realSegmentSeconds } from './transcoding/constants';
 import type { PreRollItem } from '../../common/plugin-contract';
@@ -1125,5 +1126,105 @@ describe('StreamingController.downloadQualities', () => {
     const aac = { codec: 'aac', channels: 2, bitRate: 48_000 };
     const [one, none] = [await estimates([aac]), await estimates([])];
     expect(one['144p'] - none['144p']).toBe((48_000 * FORTY_MIN) / 8);
+  });
+});
+
+describe('StreamingController.hlsSegment - CMCD reaches the QoE tracker', () => {
+  const cacheRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fliks-cmcd-'));
+  afterAll(() => fs.rmSync(cacheRoot, { recursive: true, force: true }));
+
+  const claim = {
+    engine: 'avplayer' as const,
+    cmcd: true,
+    droppedFrames: null,
+    decodedFrames: null,
+    bandwidthBps: null,
+    bufferAheadS: null,
+    variantBitrate: null,
+    width: null,
+    height: null,
+    videoCodec: null,
+    decoderName: null,
+    hwDecoder: null,
+    stallCount: 0,
+    stallMs: 0,
+    recoveryReloads: 0,
+  };
+
+  /** Real QoeService + the real segment route; only the heartbeat claim and the request differ. */
+  async function serve(reqParts: { query?: object; headers?: object }) {
+    const upsert = jest.fn().mockResolvedValue(undefined);
+    const qoe = new QoeService(
+      { get: jest.fn(), addChangeListener: jest.fn() } as never,
+      { upsert, create: (x: unknown) => x } as never,
+      { insert: jest.fn() } as never,
+    );
+    const live = buildLiveSession(
+      { userId: 7, username: null, mediaFileId: 42, kind: 'transcode' },
+      'sid-1',
+      0,
+    );
+    qoe.recordSample(live, claim);
+    fs.writeFileSync(path.join(cacheRoot, 'seg-0001.m4s'), 'x');
+    const controller = makeController({
+      streamingService: { resolveFile: jest.fn().mockResolvedValue({}) },
+      activeStreamTracker: { getSegmentDuration: () => 3 },
+      liveSessions: { update: jest.fn(), trackSegment: jest.fn() },
+      segmentPackaging: { serve: jest.fn().mockResolvedValue(undefined) },
+      sessionRouter: {
+        assertFresh: jest.fn(),
+        findRequestSession: jest.fn().mockReturnValue(live),
+        resolveSession: jest.fn().mockReturnValue({
+          quality: '1080p',
+          cachePath: cacheRoot,
+          segmentDuration: 3,
+        }),
+      },
+      qoe,
+    });
+    await controller.hlsSegment(
+      42,
+      '1080p',
+      'seg-0001.m4s',
+      { query: {}, headers: {}, user: { id: 7 }, ...reqParts } as never,
+      { id: 7 } as User,
+      { setHeader: jest.fn() } as never,
+    );
+    qoe.sessionEnded(live);
+    await new Promise((r) => setImmediate(r));
+    return { summary: qoe.liveSummary(live.sessionId), row: upsert.mock.calls[0]?.[0] };
+  }
+
+  it('parses a CMCD query string', async () => {
+    const { summary, row } = await serve({
+      query: { CMCD: 'bl=2100,br=3000,mtp=25400,sid="x"' },
+    });
+    expect(summary).toMatchObject({
+      cmcd: true,
+      cmcdClaimed: true,
+      bandwidthBps: 25_400_000,
+      variantBitrate: 3_000_000,
+    });
+    expect(row).toMatchObject({ cmcd: true, cmcdClaimed: true, cmcdThroughputBps: 25_400_000 });
+  });
+
+  it('parses the CMCD-* headers AVPlayer sends', async () => {
+    const { summary, row } = await serve({
+      headers: {
+        'cmcd-request': 'mtp=25400,bl=2100',
+        'cmcd-object': 'br=3000',
+        'cmcd-session': 'sid="x"',
+        'cmcd-status': 'bs',
+      },
+    });
+    expect(summary).toMatchObject({ cmcd: true, bandwidthBps: 25_400_000, variantBitrate: 3_000_000 });
+    expect(row).toMatchObject({ cmcd: true, stallCount: 1 });
+  });
+
+  it('stays false when the client claims CMCD but none arrives', async () => {
+    const { summary, row } = await serve({});
+    expect(summary).toMatchObject({ cmcd: false, cmcdClaimed: true });
+    expect(row).toMatchObject({ cmcd: false, cmcdClaimed: true });
+    expect(row.reasons).toContain('qoe.reason.cmcd_missing');
   });
 });

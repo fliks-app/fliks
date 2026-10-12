@@ -37,16 +37,50 @@ const sample: QoeSample = {
   recoveryReloads: 0,
 };
 
-function build() {
+function build(repo: object = {}, eventsRepo: object = {}) {
   const upsert = jest.fn().mockResolvedValue(undefined);
   const insert = jest.fn().mockResolvedValue(undefined);
   const svc = new QoeService(
     { get: jest.fn(), addChangeListener: jest.fn() } as never,
-    { upsert, create: (x: unknown) => x } as never,
-    { insert } as never,
+    { upsert, create: (x: unknown) => x, ...repo } as never,
+    { insert, ...eventsRepo } as never,
   );
   return { svc, upsert, insert };
 }
+
+const row = (o: Record<string, unknown>) => ({
+  sessionId: 'a',
+  playbackId: 'pb',
+  userId: 7,
+  mediaFileId: 3,
+  mediaTitle: 'Film',
+  startedAt: new Date(0),
+  lastSeenAt: new Date(60_000),
+  endedAt: null,
+  deviceLabel: 'TV',
+  engine: 'shaka',
+  cmcd: false,
+  cmcdClaimed: false,
+  hwDecoder: null,
+  watchedMs: 30_000,
+  stallCount: 0,
+  stallMs: 0,
+  droppedFrames: null,
+  decodedFrames: null,
+  recoveryReloads: 0,
+  errorCount: 0,
+  avgBandwidthBps: null,
+  minBandwidthBps: null,
+  avgVariantBitrate: null,
+  medianTranscodeSpeed: null,
+  stallBufferAheadS: null,
+  stallBandwidthBps: null,
+  cmcdThroughputBps: null,
+  unrecoveredError: false,
+  sampleCount: 3,
+  verdict: 'unknown',
+  ...o,
+});
 
 describe('QoeService', () => {
   it('stores nothing while disabled', () => {
@@ -136,6 +170,71 @@ describe('QoeService', () => {
     await new Promise((r) => setImmediate(r));
     expect(upsert).toHaveBeenCalledTimes(2);
     expect(upsert.mock.calls[1][0].endedAt).toEqual(expect.any(Date));
+  });
+});
+
+describe('QoeService playbacks', () => {
+  const a = row({ sessionId: 'a', watchedMs: 30_000, unrecoveredError: true, errorCount: 1 });
+  const b = row({
+    sessionId: 'b',
+    startedAt: new Date(31_000),
+    lastSeenAt: new Date(200_000),
+    watchedMs: 90_000,
+    cmcd: true,
+    deviceLabel: 'TV 2',
+  });
+
+  it('merges the sessions of one playback and re-diagnoses the whole', async () => {
+    const { svc } = build(
+      {
+        findOne: jest.fn().mockResolvedValue(b),
+        find: jest.fn().mockResolvedValue([b, a]),
+      },
+      { find: jest.fn().mockResolvedValue([{ id: 1, sessionId: 'a', at: new Date(1), type: 'error', data: {} }]) },
+    );
+    const p = await svc.getSession('b');
+    expect(p).toMatchObject({
+      sessionId: 'b',
+      sessionIds: ['a', 'b'],
+      watchedMs: 120_000,
+      deviceLabel: 'TV 2',
+      cmcd: true,
+      errorCount: 1,
+      verdict: 'ok',
+      lastSeenAt: new Date(200_000),
+      startedAt: new Date(0),
+    });
+    expect(p?.sessions.map((r) => r.sessionId)).toEqual(['a', 'b']);
+    expect(p?.events[0]).toMatchObject({ sessionId: 'a', type: 'error' });
+  });
+
+  it('resolves a playbackId and returns null for nothing', async () => {
+    const find = jest.fn().mockResolvedValueOnce([a, b]).mockResolvedValueOnce([]);
+    const { svc } = build(
+      { findOne: jest.fn().mockResolvedValue(null), find },
+      { find: jest.fn().mockResolvedValue([]) },
+    );
+    expect(await svc.getSession('pb')).toMatchObject({ sessionIds: ['a', 'b'] });
+    expect(await svc.getSession('nope')).toBeNull();
+  });
+
+  it('counts playbacks, not sessions, in the summary', async () => {
+    const getMany = jest.fn().mockResolvedValue([a, b, row({ sessionId: 'c', playbackId: null, watchedMs: 5_000 })]);
+    const qb = { where: () => qb, take: () => qb, getMany };
+    const { svc } = build({ createQueryBuilder: () => qb });
+    const s = await svc.summary();
+    expect(s.byVerdict).toMatchObject({ ok: 1, unknown: 1 });
+    expect(s.byDevice.reduce((n, d) => n + d.sessions, 0)).toBe(2);
+  });
+
+  it('stores the playbackId from a sample or the events body', async () => {
+    const { svc, upsert } = build();
+    svc.recordSample(session, { ...sample, playbackId: 'pb1' });
+    svc.recordEvents(session, [], 'pb2');
+    svc.sessionEnded(session);
+    await new Promise((r) => setImmediate(r));
+    expect(upsert.mock.calls[0][0].playbackId).toBe('pb2');
+    expect(svc.liveSummary('s1')?.playbackId).toBe('pb2');
   });
 });
 

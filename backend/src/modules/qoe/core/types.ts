@@ -24,6 +24,8 @@ export interface QoeSample {
   stallCount: number;
   stallMs: number;
   recoveryReloads: number;
+  /** Client-generated id, stable across the sids of one viewing. */
+  playbackId?: string | null;
 }
 
 export type QoeEventType = 'stall' | 'error' | 'recovery' | 'quality_switch';
@@ -79,7 +81,10 @@ export type ThroughputSource = 'engine' | 'cmcd';
 
 export interface QoeSessionSummary {
   engine: QoeEngine | null;
+  /** The server parsed CMCD on a request of this session. */
   cmcd: boolean;
+  /** The client says it sends CMCD; a hint only. */
+  cmcdClaimed: boolean;
   videoCodec: string | null;
   width: number | null;
   height: number | null;

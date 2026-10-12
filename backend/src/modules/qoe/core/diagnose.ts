@@ -51,6 +51,13 @@ function device(
 
 /** First matching rule wins; see plan/playback-qoe.plan.md section 1.3. */
 export function diagnose(s: QoeSessionSummary): QoeDiagnosis {
+  const d = decide(s);
+  // A claim with no CMCD on the wire is a hint, never a verdict.
+  if (s.cmcdClaimed && !s.cmcd) d.reasons.push('qoe.reason.cmcd_missing');
+  return d;
+}
+
+function decide(s: QoeSessionSummary): QoeDiagnosis {
   if (s.unrecoveredError) return result('error', 'high', 'fatal_error');
 
   const stalling =

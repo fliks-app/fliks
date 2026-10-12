@@ -150,7 +150,15 @@ describe('PlaybackController.postQoeEvents', () => {
     controller.postQoeEvents(req, 's', body);
     expect(recordEvents).toHaveBeenCalledWith(expect.anything(), [
       { type: 'stall', at: expect.any(Number), position: null },
-    ]);
+    ], null);
+  });
+
+  it('passes a valid playbackId and drops a malformed one', () => {
+    const { controller, recordEvents } = build({ userId: 7, attributedUserId: null });
+    controller.postQoeEvents(req, 's', { ...body, playbackId: 'abc-123' });
+    expect(recordEvents.mock.calls[0][2]).toBe('abc-123');
+    controller.postQoeEvents(req, 's', { ...body, playbackId: 'x'.repeat(65) });
+    expect(recordEvents.mock.calls[1][2]).toBeNull();
   });
 
   it('accepts the attributed user, rejects anyone else', () => {
@@ -166,7 +174,7 @@ describe('PlaybackController.postQoeEvents', () => {
     const ended = { userId: 7, attributedUserId: null };
     const ok = build(null, true, ended);
     ok.controller.postQoeEvents(req, 's', body);
-    expect(ok.recordEvents).toHaveBeenCalledWith(ended, expect.any(Array));
+    expect(ok.recordEvents).toHaveBeenCalledWith(ended, expect.any(Array), null);
     expect(() =>
       build(null, true, { userId: 9, attributedUserId: null }).controller.postQoeEvents(req, 's', body),
     ).toThrow('Not your session');

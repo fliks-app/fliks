@@ -1,4 +1,5 @@
-import { QoeAggregator } from './aggregate';
+import { diagnose } from './diagnose';
+import { QoeAggregator, mergeSummaries } from './aggregate';
 import type { QoeSample } from './types';
 
 const sample = (o: Partial<QoeSample> = {}): QoeSample => ({
@@ -115,5 +116,70 @@ describe('QoeAggregator', () => {
     b.addSample(sample({ bufferAheadS: 0.3 }), 0);
     b.addEvent({ type: 'stall', at: 1, position: 1 }, 60_000);
     expect(b.summary().stallBufferAheadS).toBeNull();
+  });
+
+  it('keeps the client claim apart from what the server parsed', () => {
+    const a = new QoeAggregator();
+    a.addSample(sample({ cmcd: true }), 0);
+    expect(a.summary()).toMatchObject({ cmcd: false, cmcdClaimed: true });
+    expect(diagnose(a.summary()).reasons).toContain('qoe.reason.cmcd_missing');
+    a.addCmcd({ bl: 4000 });
+    expect(a.summary()).toMatchObject({ cmcd: true, cmcdClaimed: true });
+    expect(diagnose(a.summary()).reasons).not.toContain('qoe.reason.cmcd_missing');
+  });
+
+  it('turns CMCD buffer starvation into a starved stall when the client reports none', () => {
+    const a = new QoeAggregator();
+    a.addSample(sample({ bandwidthBps: 1e6, variantBitrate: 8e6 }), 0);
+    a.addSample(sample({ bandwidthBps: 1e6, variantBitrate: 8e6 }), 30_000);
+    a.addCmcd({ bl: 200, bs: true });
+    const s = a.summary();
+    expect(s).toMatchObject({ stallCount: 1, stallBufferAheadS: 0.2 });
+    expect(diagnose({ ...s, watchedMs: 5 * 60_000 })).toMatchObject({
+      verdict: 'network',
+      confidence: 'high',
+    });
+  });
+
+  it('ignores CMCD starvation once the client reports its own stalls', () => {
+    const a = new QoeAggregator();
+    a.addEvent({ type: 'stall', at: 1, position: 1, bufferAheadS: 5 }, 0);
+    a.addCmcd({ bl: 100, bs: true });
+    expect(a.summary()).toMatchObject({ stallCount: 0, stallBufferAheadS: 5 });
+  });
+
+  it('takes a stall buffer from a fresh CMCD bl', () => {
+    const a = new QoeAggregator();
+    a.addCmcd({ bl: 400 }, 1_000);
+    a.addEvent({ type: 'stall', at: 1, position: 1 }, 5_000);
+    expect(a.summary().stallBufferAheadS).toBe(0.4);
+  });
+});
+
+describe('mergeSummaries', () => {
+  const part = (o: Partial<ReturnType<QoeAggregator['summary']>>) => ({
+    ...new QoeAggregator().summary(),
+    ...o,
+  });
+
+  it('sums counters, weights rates by watch time and keeps the latest identity', () => {
+    const m = mergeSummaries([
+      part({ watchedMs: 30_000, stallCount: 1, stallMs: 500, droppedFrames: 5, decodedFrames: 100, avgBandwidthBps: 2e6, minBandwidthBps: 1e6, engine: 'shaka', unrecoveredError: true, errorCount: 1, cmcdClaimed: true }),
+      part({ watchedMs: 90_000, stallCount: 2, stallMs: 700, droppedFrames: null, decodedFrames: null, avgBandwidthBps: 6e6, minBandwidthBps: 3e6, engine: 'exoplayer', cmcd: true }),
+    ]);
+    expect(m).toMatchObject({
+      watchedMs: 120_000,
+      stallCount: 3,
+      stallMs: 1200,
+      droppedFrames: 5,
+      decodedFrames: 100,
+      avgBandwidthBps: 5e6,
+      minBandwidthBps: 1e6,
+      engine: 'exoplayer',
+      cmcd: true,
+      cmcdClaimed: true,
+      errorCount: 1,
+      unrecoveredError: false,
+    });
   });
 });

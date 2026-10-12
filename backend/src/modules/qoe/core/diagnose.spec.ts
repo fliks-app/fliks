@@ -4,6 +4,7 @@ import type { QoeSessionSummary } from './types';
 const base: QoeSessionSummary = {
   engine: 'shaka',
   cmcd: false,
+  cmcdClaimed: false,
   videoCodec: 'hevc',
   width: 1920,
   height: 1080,
