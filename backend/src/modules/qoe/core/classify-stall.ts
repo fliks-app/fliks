@@ -23,8 +23,7 @@ type StallInput = Pick<
 const speedOf = (s: StallSegment) =>
   (s.segmentDurationS * 1000) / Math.max(s.waitedMs ?? 1, 1);
 
-/** The longest ffmpeg wait among the segments that overlap [lo, hi], if it explains a stall. */
-/** Live segments are paced by the source, so only the production speed counts there, not the wait. */
+/** The slowest segment overlapping [lo, hi] if it explains a stall; live is judged by production speed only. */
 function serverHit(segments: StallSegment[], lo: number, hi: number, live: boolean) {
   const hits = segments.filter(
     (s) => s.waitedMs != null && s.at >= lo && s.at - s.waitedMs <= hi,

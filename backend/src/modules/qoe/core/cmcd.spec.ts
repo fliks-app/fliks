@@ -4,7 +4,7 @@ describe('readCmcd', () => {
   it('reads the CMCD query param', () => {
     expect(
       readCmcd({ query: { CMCD: 'bl=2100,br=3000,mtp=25400,su,sid="x",ot=v' } }),
-    ).toEqual({ bl: 2100, br: 3000, mtp: 25400, su: true, ot: 'v' });
+    ).toEqual({ bl: 2100, br: 3000, mtp: 25400, ot: 'v' });
   });
 
   it('reads the CMCD-* headers', () => {
@@ -17,7 +17,7 @@ describe('readCmcd', () => {
           'cmcd-session': 'sid="abc"',
         },
       }),
-    ).toEqual({ mtp: 25400, bl: 2100, br: 3000, tb: 8000, bs: true });
+    ).toEqual({ mtp: 25400, bl: 2100, br: 3000 });
   });
 
   it('prefers the query over headers', () => {

@@ -1,8 +1,4 @@
-import type {
-  QoeDiagnosis,
-  QoeSessionSummary,
-  ThroughputSource,
-} from './types';
+import type { QoeDiagnosis, QoeSessionSummary } from './types';
 
 export const MIN_WATCHED_MS = 60_000;
 export const STALLS_PER_10_MIN = 1;
@@ -19,16 +15,8 @@ export const MIN_DECODED_FRAMES = 300;
 
 const TEN_MIN_MS = 600_000;
 
-function throughput(
-  s: QoeSessionSummary,
-): { bps: number; source: ThroughputSource } | null {
-  const engine = s.stallBandwidthBps ?? s.avgBandwidthBps;
-  if (engine != null) return { bps: engine, source: 'engine' };
-  if (s.cmcdThroughputBps != null) {
-    return { bps: s.cmcdThroughputBps, source: 'cmcd' };
-  }
-  return null;
-}
+const throughput = (s: QoeSessionSummary): number | null =>
+  s.stallBandwidthBps ?? s.avgBandwidthBps ?? s.cmcdThroughputBps;
 
 const result = (
   verdict: QoeDiagnosis['verdict'],
@@ -127,7 +115,7 @@ function decide(s: QoeSessionSummary, live: boolean): QoeDiagnosis {
         return result('network', 'low', 'stalls_starved_no_throughput');
       }
       const confidence = buffer != null ? 'high' : 'low';
-      if (tp.bps < BANDWIDTH_HEADROOM * bitrate) {
+      if (tp < BANDWIDTH_HEADROOM * bitrate) {
         return result('network', confidence, 'stalls_starved_low_throughput');
       }
       return result('network', 'low', 'stalls_starved_bandwidth_ok');

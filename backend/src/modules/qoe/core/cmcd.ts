@@ -8,12 +8,9 @@ type Req = {
 
 function pick(raw: Record<string, unknown>): CmcdSnapshot | null {
   const out: CmcdSnapshot = {};
-  for (const k of ['bl', 'mtp', 'br', 'tb'] as const) {
+  for (const k of ['bl', 'mtp', 'br'] as const) {
     const v = raw[k];
     if (typeof v === 'number' && Number.isFinite(v) && v >= 0) out[k] = v;
-  }
-  for (const k of ['bs', 'su'] as const) {
-    if (raw[k] === true) out[k] = true;
   }
   if (raw.ot === 'v' || raw.ot === 'a' || raw.ot === 'av') out.ot = raw.ot;
   return Object.keys(out).length ? out : null;

@@ -69,7 +69,6 @@ export class QoeAggregator {
   private cmcdClaimed = false;
   private cmcdBuffer: number | null = null;
   private cmcdBufferAt: number | null = null;
-  private stallEvents = 0;
   private videoCodec: string | null = null;
   private width: number | null = null;
   private height: number | null = null;
@@ -159,7 +158,6 @@ export class QoeAggregator {
     // The wait before a recovery froze the picture as surely as a stall did.
     const recoveryWait = e.type === 'recovery' && (e.durationMs ?? 0) > 0;
     if (e.type === 'stall' || recoveryWait) {
-      this.stallEvents++;
       const fresh = (at: number | null) =>
         at != null && now - at <= MAX_SAMPLE_AGE_MS;
       const buffer =
@@ -328,11 +326,7 @@ function mergeCauses(parts: QoeSessionSummary[]): QoeSessionSummary['stallCauseM
   };
 }
 
-/**
- * One viewing split over several sids: counters add up, rates are weighted by
- * watch time (stall count for stall-time medians), the rest follows the latest part.
- * `parts` is ordered oldest first.
- */
+/** One viewing split over several sids, `parts` oldest first: counters add, rates weigh by watch time. */
 export function mergeSummaries(parts: QoeSessionSummary[]): QoeSessionSummary {
   const last = parts[parts.length - 1];
   if (parts.length === 1) return last;
@@ -380,11 +374,7 @@ export function mergeSummaries(parts: QoeSessionSummary[]): QoeSessionSummary {
   };
 }
 
-/**
- * A recovery the server can explain on its own: it no longer knew the session (restart, idle GC), or refused the
- * stream (a 410, or any segment error on the native players, hence the lower confidence). A frozen picture goes
- * through the usual stall classification.
- */
+/** Recoveries the server explains itself (session forgotten or refused); a frozen picture is classified as a stall. */
 function recoveryCause(e: QoeEvent): StallClassification | null {
   if (e.reason === 'session_lost') {
     return { cause: 'server', confidence: 'high', reason: 'qoe.stall.server_session_lost', evidence: {}, hints: [] };

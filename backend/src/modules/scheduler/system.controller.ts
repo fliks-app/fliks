@@ -118,7 +118,7 @@ export interface ActiveStreamDto {
   videoReasons: string[];
   audioReasons: string[];
   containerReasons: string[];
-  /** Playback quality so far; null for live TV or when the client reported nothing. */
+  /** Playback quality so far; null when QoE is off or the session is not tracked. */
   qoe: QoeLiveSummary | null;
 }
 

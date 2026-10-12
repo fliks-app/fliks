@@ -675,8 +675,7 @@ export function pickDecoder(opts: {
   } = opts;
   const normalisedSourceCodec = normaliseSourceCodec(sourceVideoCodec);
   const amfOpenclDecode = amfOpenclAvailable && effectiveHwAccel === 'amf';
-  // Opt into the qsv-native decode routing when the qsv crop path is in use
-  // (pre-flighted above so requestedHwAccelFor could keep us on QSV).
+  // qsvNative: the qsv crop path is in use, so decode natively on QSV.
   return (
     qsvNative && normalisedSourceCodec
       ? (findQsvNativeDecoder(normalisedSourceCodec) ??

@@ -165,16 +165,13 @@ export interface QoeDiagnosis {
   reasons: string[];
 }
 
-/** CMCD keys the server uses, in the units the spec defines (bl ms, mtp/br/tb kbps). */
+/** CMCD keys the server uses, in the units the spec defines (bl ms, mtp/br kbps). */
 export interface CmcdSnapshot {
   bl?: number;
   mtp?: number;
   br?: number;
-  tb?: number;
-  bs?: boolean;
   /** Object type: video, audio or muxed. */
   ot?: 'v' | 'a' | 'av';
-  su?: boolean;
 }
 
 /** One served segment: how long the request waited for ffmpeg to produce it. */
@@ -183,8 +180,6 @@ export interface SegmentMetric {
   /** Null when the segment was already on disk (no wait to measure). */
   waitedMs: number | null;
 }
-
-export type ThroughputSource = 'engine' | 'cmcd';
 
 export interface QoeSessionSummary {
   engine: QoeEngine | null;
