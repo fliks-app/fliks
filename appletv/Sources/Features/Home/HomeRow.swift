@@ -62,6 +62,7 @@ struct HomeRow: View {
     let librariesState: ZoneState<Library>
     var onRetryLibraries: () -> Void
     var onSelectMedia: (Int) -> Void
+    var onSelectEpisode: (_ mediaId: Int, _ episodeId: Int) -> Void
     var onSelectLibrary: (Int) -> Void
     var onSelectPlaylist: (Int) -> Void
 
@@ -74,7 +75,7 @@ struct HomeRow: View {
         case .libraries:
             LibrariesRow(state: librariesState, onRetry: onRetryLibraries, onSelect: onSelectLibrary)
         case .continueWatching:
-            ContinueWatchingRow(onSelect: onSelectMedia)
+            ContinueWatchingRow(onSelect: onSelectMedia, onSelectEpisode: onSelectEpisode)
         case .recommendations:
             RecommendationsRow(onSelect: onSelectMedia)
         case .likes:
@@ -146,6 +147,7 @@ private struct LibraryTile: View {
 
 private struct ContinueWatchingRow: View {
     var onSelect: (Int) -> Void
+    var onSelectEpisode: (_ mediaId: Int, _ episodeId: Int) -> Void
     @Environment(Backdrop.self) private var backdrop
     @Environment(HomeRefresh.self) private var refresh
     @State private var state: ZoneState<ContinueWatchingItem> = .loading
@@ -156,7 +158,8 @@ private struct ContinueWatchingRow: View {
                       title: item.mediaTitle, subtitle: item.episodeLabel, portrait: false,
                       progressPercent: item.progressPercent, backdropPath: item.fanartUrl,
                       mediaId: item.mediaId, episodeId: item.episodeId) {
-                onSelect(item.mediaId)
+                // An episode in progress opens on its own page, ready to resume.
+                if let episodeId = item.episodeId { onSelectEpisode(item.mediaId, episodeId) } else { onSelect(item.mediaId) }
             }
         }
         .task(id: refresh.tick) { await load() }

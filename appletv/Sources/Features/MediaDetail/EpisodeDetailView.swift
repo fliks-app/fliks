@@ -16,6 +16,7 @@ struct EpisodeDetailView: View {
 
     @State private var state: LoadState = .loading
     @State private var resumeInfo: MediaResumeInfo?
+    @FocusState private var playFocused: Bool
     @Environment(Backdrop.self) private var backdrop
     @Environment(WatchedStore.self) private var watched
     @Environment(PlaylistPicker.self) private var playlistPicker
@@ -114,6 +115,8 @@ struct EpisodeDetailView: View {
                                   systemImage: "play.fill")
                         }
                         .buttonStyle(.borderedProminent)
+                        .focused($playFocused)
+                        .onAppear { playFocused = true }
                     }
                     Button {
                         Task { await watched.toggle(mediaId: mediaId, episodeId: episode.id) }

@@ -92,6 +92,7 @@ struct RootView: View {
                         .focusSection()
                     HomeView(
                         onSelectMedia: { path.append(Route.mediaDetail(id: $0)) },
+                        onSelectEpisode: { path.append(Route.episodeDetail(mediaId: $0, episodeId: $1)) },
                         onSelectLibrary: { path.append(Route.library(id: $0)) },
                         onSelectPlaylist: { path.append(Route.playlistDetail(id: $0)) }
                     )
@@ -108,6 +109,7 @@ struct RootView: View {
                     case .home:
                         HomeView(
                             onSelectMedia: { path.append(Route.mediaDetail(id: $0)) },
+                            onSelectEpisode: { path.append(Route.episodeDetail(mediaId: $0, episodeId: $1)) },
                             onSelectLibrary: { path.append(Route.library(id: $0)) },
                             onSelectPlaylist: { path.append(Route.playlistDetail(id: $0)) }
                         )
