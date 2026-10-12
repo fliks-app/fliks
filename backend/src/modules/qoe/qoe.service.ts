@@ -62,8 +62,6 @@ interface Tracker {
   /** A sample or event arrived: only then is the session worth a row. */
   reported: boolean;
   endedAt: number | null;
-  /** The rung the transcode actually serves; the session's own quality may be `auto`. */
-  servedQuality: string | null;
   touchedAt: number;
   flushing: Promise<void> | null;
   /** A flush was requested while one was in flight. */
@@ -298,17 +296,13 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     this.transcodeProbes.push(probe);
   }
 
-  /** The rung the session is actually encoding, once segments are served: fills the row and the output. */
+  /** The rung the session is actually encoding, once segments are served. */
   noteServedRung(session: SessionRef, quality: string, bitrate: number | null): void {
     const t = this.trackers.get(session.sessionId);
     if (!t) return;
     const p = t.agg.pipeline;
     if (p?.output && (p.output.quality !== quality || (bitrate != null && p.output.bitrate !== bitrate))) {
       t.agg.setPipeline({ ...p, output: { ...p.output, quality, bitrate: bitrate ?? p.output.bitrate } });
-      t.dirty = true;
-    }
-    if (t.servedQuality !== quality) {
-      t.servedQuality = quality;
       t.dirty = true;
     }
   }
@@ -465,7 +459,6 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
         dirty: false,
         reported: false,
         endedAt: null,
-        servedQuality: null,
         touchedAt: 0,
         flushing: null,
         flushAgain: false,
@@ -555,7 +548,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
       cmcd: s.cmcd,
       cmcdClaimed: s.cmcdClaimed,
       playMethod: ses.kind,
-      quality: t.servedQuality ?? (ses.quality && ses.quality !== 'auto' ? ses.quality : null),
+      quality: ses.quality ?? t.agg.pipeline?.output?.requested ?? null,
       transcodeReasons: ses.transcodeReasons ?? [],
       videoCodec: s.videoCodec,
       width: s.width,

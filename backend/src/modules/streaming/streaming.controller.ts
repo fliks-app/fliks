@@ -1208,6 +1208,7 @@ export class StreamingController {
         },
         variant: kind === 'transcode' ? (videoVariant ?? null) : null,
         quality: response.quality && response.quality !== 'auto' ? response.quality : null,
+        requested: typeof startQuality === 'string' && startQuality ? startQuality : 'auto',
         videoBitrateBps: response.transcodeBitrateByQuality?.[response.quality]?.videoBitrateBps ?? null,
         inputs: pipelineInputs,
         tonemapPath: tonemapReport?.path ?? null,

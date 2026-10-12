@@ -639,6 +639,7 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
             codec: 'h264',
             hdr: null,
             quality: null,
+            requested: null,
             bitrate: session.videoBitrateBps ?? DEFAULT_TRANSCODE_BITRATE_BPS,
           }
         : null,

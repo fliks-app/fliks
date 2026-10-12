@@ -214,7 +214,7 @@ describe('QoeService', () => {
     svc.setLoadProbe(() => ({ activeTranscodes: 2, activeSessions: 5 }));
     const pipeline = {
       source: null,
-      output: { codec: 'h264', hdr: null, quality: '1080p', bitrate: 8e6 },
+      output: { codec: 'h264', hdr: null, quality: '1080p', bitrate: 8e6, requested: '1080p' },
       decode: null,
       encode: { hw: false, kind: 'cpu' },
       tonemap: null,
@@ -262,11 +262,11 @@ describe('QoeService', () => {
     expect(insert.mock.calls[0][0][0].data.serverLoad).toMatchObject({ activeTranscodes: 3, activeSessions: 2 });
   });
 
-  it('fills the row quality and the pipeline output from the rung actually served', async () => {
+  it('keeps the requested mode on the row and the rung actually served in the pipeline output', async () => {
     const { svc, upsert } = build();
     const auto = { ...session, quality: 'auto' };
     svc.setPipeline(auto, {
-      source: null, output: { codec: 'h264', hdr: null, quality: null, bitrate: null },
+      source: null, output: { codec: 'h264', hdr: null, quality: null, bitrate: null, requested: 'auto' },
       decode: null, encode: null, tonemap: null, burnIn: null, crop: null, audioTranscode: null,
     });
     svc.recordSample(auto, sample);
@@ -274,8 +274,8 @@ describe('QoeService', () => {
     svc.sessionEnded(auto);
     await new Promise((r) => setImmediate(r));
     const row = upsert.mock.calls[0][0];
-    expect(row.quality).toBe('1080p');
-    expect(row.pipeline.output).toMatchObject({ quality: '1080p', bitrate: 8e6 });
+    expect(row.quality).toBe('auto');
+    expect(row.pipeline.output).toMatchObject({ quality: '1080p', bitrate: 8e6, requested: 'auto' });
   });
 
   it('requeues events when a flush fails and retries them', async () => {

@@ -15,6 +15,7 @@ export interface QoePipelineFacts {
   /** The output variant of a transcode; null otherwise. */
   variant: CodecVariant | null;
   quality: string | null;
+  requested: string | null;
   videoBitrateBps: number | null;
   inputs: EncodePipelineContext;
   tonemapPath: TonemapReportPath | null;
@@ -58,6 +59,7 @@ export function describeQoePipeline(f: QoePipelineFacts): QoePipeline {
       codec: f.variant.codec,
       hdr: f.variant.hdr,
       quality: f.quality,
+      requested: f.requested,
       bitrate: f.videoBitrateBps,
     },
     decode: stage(decoder.hwAccel, decoder.id),

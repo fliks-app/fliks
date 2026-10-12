@@ -79,8 +79,11 @@ export interface QoePipeline {
   output: {
     codec: string | null;
     hdr: 'HDR10' | 'HLG' | null;
+    /** The rung actually encoded, once known. */
     quality: string | null;
     bitrate: number | null;
+    /** What the client asked for: `auto` or a rung name. */
+    requested: string | null;
   } | null;
   decode: PipelineStage | null;
   encode: PipelineStage | null;

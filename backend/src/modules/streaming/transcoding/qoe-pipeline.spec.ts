@@ -7,6 +7,7 @@ const facts = (o: Partial<QoePipelineFacts> = {}): QoePipelineFacts => ({
   source,
   variant: { codec: 'h264', bitDepth: 8, hdr: null },
   quality: '1080p',
+  requested: 'auto',
   videoBitrateBps: 8_000_000,
   inputs: encodePipelineInputs({
     hwAccel: 'none',
@@ -31,7 +32,7 @@ describe('describeQoePipeline', () => {
     const p = describeQoePipeline(facts());
     expect(p).toMatchObject({
       source,
-      output: { codec: 'h264', hdr: null, quality: '1080p', bitrate: 8_000_000 },
+      output: { codec: 'h264', hdr: null, quality: '1080p', bitrate: 8_000_000, requested: 'auto' },
       decode: { hw: false, kind: 'cpu' },
       encode: { hw: false, kind: 'cpu' },
       tonemap: 'cpu',
