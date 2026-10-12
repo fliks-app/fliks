@@ -84,6 +84,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setBrightness", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setMaxResolution", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getPosition", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getQoe", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setPlaybackRate", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setQueueNav", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setMuteRanges", returnType: CAPPluginReturnPromise),
@@ -376,6 +377,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             ? nil
             : ["AVURLAssetHTTPHeaderFieldsKey": assetHeaders]
         let asset = AVURLAsset(url: url, options: assetOptions)
+        if #available(iOS 18.0, *) { asset.resourceLoader.sendsCommonMediaClientDataAsHTTPHeaders = true }
         // Preload `playable`/`tracks`/`duration` so `.readyToPlay` fires
         // without a second round-trip after the asset header arrives.
         let item = AVPlayerItem(
@@ -957,6 +959,42 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
                 "buffered": buffered,
             ])
         }
+    }
+
+    /// Playback-quality counters for the current item (its access log restarts with each item).
+    @objc func getQoe(_ call: CAPPluginCall) {
+        DispatchQueue.main.async { [weak self] in
+            guard let item = self?.player?.currentItem else { return call.resolve(Self.qoe(nil, ahead: nil)) }
+            let t = item.currentTime().seconds
+            let ahead = item.loadedTimeRanges.map(\.timeRangeValue)
+                .first { $0.containsTime(item.currentTime()) }
+                .map { CMTimeGetSeconds($0.end) - t }
+            call.resolve(Self.qoe(item, ahead: ahead))
+        }
+    }
+
+    private static func qoe(_ item: AVPlayerItem?, ahead: Double?) -> [String: Any] {
+        let events = item?.accessLog()?.events ?? []
+        let last = events.last
+        let dropped = events.map(\.numberOfDroppedVideoFrames).filter { $0 >= 0 }.reduce(0, +)
+        let size = item?.presentationSize ?? .zero
+        func pos(_ v: Double?) -> Any { v.flatMap { $0 > 0 ? $0 : nil } ?? NSNull() }
+        var cmcd = false
+        if #available(iOS 18.0, *) { cmcd = true }
+        return [
+            "engine": "avplayer",
+            "cmcd": cmcd,
+            "droppedFrames": events.isEmpty ? NSNull() : dropped,
+            "decodedFrames": NSNull(),
+            "bandwidthBps": pos(last?.observedBitrate),
+            "bufferAheadS": ahead.map { max($0, 0) } ?? NSNull(),
+            "variantBitrate": pos(last?.indicatedBitrate),
+            "width": size.width > 0 ? Int(size.width) : NSNull(),
+            "height": size.height > 0 ? Int(size.height) : NSNull(),
+            "videoCodec": NSNull(),
+            "decoderName": NSNull(),
+            "hwDecoder": true,
+        ]
     }
 
     @objc func setPlaybackRate(_ call: CAPPluginCall) {
