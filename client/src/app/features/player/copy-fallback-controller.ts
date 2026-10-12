@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { classifyPlaybackError, isUndecodableError, type PlaybackError } from '../../core/services/playback-engine/playback-error';
+import type { ReloadWhy } from './player-qoe';
 import type { PlaybackMode } from '../../core/utils/player.utils';
 
 /** What the controller needs from the player, so it never reaches into the
@@ -12,7 +13,7 @@ export interface CopyFallbackHost {
   hasServerFeature(feature: string): boolean;
   /** Sync snapshot of "no reload/recovery holds the engine right now". */
   isReloadIdle(): boolean;
-  reloadStream(position: number): Promise<void>;
+  reloadStream(position: number, why: ReloadWhy): Promise<void>;
   hasError(): boolean;
   failWith(e: unknown, opts?: { source?: PlaybackError['source'] }): void;
   setRecovering(recovering: boolean): void;
@@ -110,7 +111,7 @@ export class CopyFallbackController {
       }
       // A recovery that settled meanwhile lowered the veil.
       this.host.setRecovering(true);
-      await this.host.reloadStream(position);
+      await this.host.reloadStream(position, { reason: 'remux_fallback' });
       await this.remuxFallbackOnRecovered?.();
     } catch (e) {
       if (!this.host.hasError()) this.host.failWith(e);

@@ -96,7 +96,7 @@ describe('CopyFallbackController: one-shot-per-sid reload', () => {
     expect(controller.shouldForceRejectCopy(1)).toBe(true);
 
     await flush();
-    expect(host.reloadStream).toHaveBeenCalledExactlyOnceWith(42);
+    expect(host.reloadStream).toHaveBeenCalledExactlyOnceWith(42, { reason: 'remux_fallback' });
     expect(onRecovered).toHaveBeenCalledTimes(1);
     expect(host.setRecovering).toHaveBeenLastCalledWith(false);
   });
@@ -194,7 +194,7 @@ describe('CopyFallbackController: waitForReloadIdle', () => {
       vi.useRealTimers();
     }
 
-    expect(host.reloadStream).toHaveBeenCalledExactlyOnceWith(7);
+    expect(host.reloadStream).toHaveBeenCalledExactlyOnceWith(7, { reason: 'remux_fallback' });
   });
 });
 

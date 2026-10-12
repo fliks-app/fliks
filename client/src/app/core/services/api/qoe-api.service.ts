@@ -6,7 +6,8 @@ import { firstValueFrom } from 'rxjs';
 // reads is mapped here, so a backend adjustment touches this file only.
 
 export type QoeVerdict = 'ok' | 'network' | 'device' | 'server' | 'error' | 'unknown';
-export type QoeEventType = 'stall' | 'error' | 'recovery' | 'quality_switch';
+export type QoeEventType = 'stall' | 'error' | 'recovery' | 'quality_switch' | 'reload';
+export type QoeReloadReason = 'audio' | 'subtitles' | 'quality' | 'remux_fallback' | 'other';
 
 export interface QoeEvent {
   type: QoeEventType;
@@ -23,6 +24,10 @@ export interface QoeEvent {
   toBitrate?: number;
   /** Stall: the active rung bitrate (bps) when it began. */
   variantBitrate?: number | null;
+  /** Reload: why the stream was re-negotiated, with what changed (capped at 80 chars server-side). */
+  reason?: QoeReloadReason;
+  from?: string;
+  to?: string;
 }
 
 export type QoeStallCause = 'server' | 'network' | 'device' | 'unknown';

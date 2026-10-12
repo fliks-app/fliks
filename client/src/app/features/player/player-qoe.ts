@@ -1,6 +1,13 @@
 import { hasQoeData, type EngineQoeSample, type PlaybackEngine, type QoeSample } from '../../core/services/playback-engine/playback-engine';
-import type { QoeEvent } from '../../core/services/api/qoe-api.service';
+import type { QoeEvent, QoeReloadReason } from '../../core/services/api/qoe-api.service';
 import { newPlaybackId, type QoeReporter } from '../../core/services/qoe-reporter.service';
+
+/** Why a reload re-negotiates playback; `from`/`to` name what changed. */
+export interface ReloadWhy {
+  reason: QoeReloadReason;
+  from?: string;
+  to?: string;
+}
 
 /** Buffering blips shorter than this are decoder hiccups, not a stall the viewer saw. */
 export const MIN_STALL_MS = 250;
@@ -204,6 +211,12 @@ export class PlayerQoe {
     if (!sessionId) return;
     const from = activeRung ?? this.last?.variantBitrate ?? undefined;
     this.record(sessionId, { type: 'quality_switch', position, fromBitrate: from, toBitrate: to }, true);
+  }
+
+  /** A rung change already records its own quality_switch, so it adds nothing here. */
+  onReload(sessionId: string | undefined, position: number, why: ReloadWhy): void {
+    if (!sessionId || why.reason === 'quality') return;
+    this.record(sessionId, { type: 'reload', position, reason: why.reason, from: why.from, to: why.to }, true);
   }
 
   /** Re-reads the engine for the next heartbeat; never awaited by it, so a slow engine delays nothing. */

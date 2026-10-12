@@ -228,6 +228,23 @@ describe('PlayerQoe', () => {
     );
   });
 
+  it('records a reload with its reason on the old sid, flushed at once', () => {
+    qoe.onReload('a', 12, { reason: 'audio', from: 'Français 5.1', to: 'English' });
+    expect(reporter.record).toHaveBeenCalledWith(
+      'a',
+      expect.objectContaining({ type: 'reload', position: 12, reason: 'audio', from: 'Français 5.1', to: 'English' }),
+      true,
+      expect.any(String),
+    );
+  });
+
+  it('adds no reload event for a quality change, which has its own', () => {
+    reporter.record.mockClear();
+    qoe.onReload('a', 12, { reason: 'quality' });
+    qoe.onReload(undefined, 12, { reason: 'other' });
+    expect(reporter.record).not.toHaveBeenCalled();
+  });
+
   it('takes the from-bitrate off the rung left, falling back to the sample', async () => {
     qoe.onQualitySwitch('a', 1, 2_000_000, 8_000_000);
     expect(reporter.record).toHaveBeenLastCalledWith('a', expect.objectContaining({ fromBitrate: 8_000_000 }), true, expect.any(String));

@@ -1549,6 +1549,73 @@ describe('PlayerComponent reloadStream: startAt', () => {
   });
 });
 
+describe('PlayerComponent reload QoE event', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  function spied() {
+    const h = createHarness();
+    h.state.videoStarted.set(true);
+    h.component.media = AUDIO_MEDIA;
+    h.component.playbackInfo = buildPi(MAIN_FILE_ID, { sessionId: 'sid-old' });
+    return { h, spy: vi.spyOn((h.component as any).qoe, 'onReload') };
+  }
+
+  it('names the audio tracks of a streamInfo audio switch, on the old sid', async () => {
+    const { h, spy } = spied();
+    h.component.availableAudioTracks.set([
+      { id: 'si-0', label: 'Français 5.1', language: 'fr' },
+      { id: 'si-1', label: 'English', language: 'en' },
+    ]);
+    h.component.activeAudioTrackId.set('si-0');
+
+    await h.component.onSelectAudioTrack('si-1');
+
+    expect(spy).toHaveBeenCalledExactlyOnceWith('sid-old', expect.any(Number), {
+      reason: 'audio',
+      from: 'Français 5.1',
+      to: 'English',
+    });
+  });
+
+  it('flags a burn-in switch with its language, and its removal without one', async () => {
+    const { h, spy } = spied();
+    h.component.availableSubtitles.set([
+      subOption('emb-9', 'fr', { burnIn: true, subtitleDbId: 9, isImage: true }),
+    ]);
+
+    await h.component.selectSubtitle(h.component.availableSubtitles()[0]);
+    await h.component.selectSubtitle(null);
+
+    expect(spy.mock.calls.map((c) => c[2])).toEqual([
+      { reason: 'subtitles', to: 'fr' },
+      { reason: 'subtitles' },
+    ]);
+  });
+
+  it('reports a quality reload as quality, so no event is added for it', async () => {
+    const { h, spy } = spied();
+    TestBed.inject(QualityManagerService).availableQualities.set([
+      { id: 'original', label: 'Original', height: 1080 },
+      { id: '720p', label: '720p', height: 720 },
+    ] as any);
+    TestBed.inject(QualityManagerService).activeQualityId.set('original');
+    h.state.playbackMode.set('transcode');
+
+    await h.component.onSelectQualityById('720p');
+
+    expect(spy.mock.calls.map((c) => c[2])).toEqual([{ reason: 'quality' }]);
+  });
+
+  it('defaults to other, and the remux fallback reports its own reason', async () => {
+    const { h, spy } = spied();
+    await h.component.reloadStream();
+    await h.component.reloadStream(5, { reason: 'remux_fallback' });
+    expect(spy.mock.calls.map((c) => c[2])).toEqual([{ reason: 'other' }, { reason: 'remux_fallback' }]);
+  });
+});
+
 describe('PlayerComponent playback-info request', () => {
   afterEach(() => {
     TestBed.resetTestingModule();

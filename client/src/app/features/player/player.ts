@@ -58,7 +58,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 
 import type { AudioTrack, PlaybackEngine, QoeSample } from '../../core/services/playback-engine/playback-engine';
 import { QoeReporter } from '../../core/services/qoe-reporter.service';
-import { PlayerQoe, PlayheadWatch } from './player-qoe';
+import { PlayerQoe, PlayheadWatch, type ReloadWhy } from './player-qoe';
 import {
   createEngineSurface,
   releaseEngineSurface,
@@ -3421,7 +3421,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         return;
       }
       this.state.setRecovering(true);
-      await this.reloadStream(this.engine.currentTime);
+      await this.reloadStream(this.engine.currentTime, { reason: 'other' });
     } catch (e) {
       if (!this.state.error()) this.state.failWith(e);
     } finally {
@@ -4041,6 +4041,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  DEFAULT=YES and the language reverts on the item swap. */
   private async applyAudioTrack(trackId: string): Promise<void> {
     const request = ++this.audioRequest;
+    const tracks = this.availableAudioTracks();
+    const fromLabel = tracks.find((t) => t.id === this.activeAudioTrackId())?.label;
     this.activeAudioTrackId.set(trackId);
     const index = streamIndexForTrack(
       trackId, this.availableAudioTracks(), this.audioStreamInfo(), this.activeAudioStreamIndex,
@@ -4059,7 +4061,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         console.warn('[player] applyAudioTrack: no backend to reload for offline playback', trackId);
         return;
       }
-      await this.reloadStream();
+      const toLabel = tracks.find((t) => t.id === trackId)?.label;
+      await this.reloadStream(undefined, { reason: 'audio', from: fromLabel, to: toLabel });
       return;
     }
 
@@ -4134,7 +4137,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.activeSubtitleId.set(null);
       if (!this.isOfflinePlayback && this.activeBurnInId) {
         this.activeBurnInId = null;
-        await this.reloadStream();
+        await this.reloadStream(undefined, { reason: 'subtitles' });
       }
       return request === this.subtitleRequest;
     }
@@ -4148,7 +4151,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.needsHlsSubtitles = false;
       this.activeBurnInId = sub.subtitleDbId;
       this.activeSubtitleId.set(sub.id);
-      await this.reloadStream();
+      await this.reloadStream(undefined, { reason: 'subtitles', to: sub.language });
       return request === this.subtitleRequest;
     }
 
@@ -4163,7 +4166,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.activeBurnInId = null;
       // The burned-in pick is replaced: the restore after the reload must not bring it back.
       if (burnedIn) this.activeSubtitleId.set(null);
-      if ((burnedIn || leavesDirectPlay) && !this.isOfflinePlayback) await this.reloadStream();
+      if ((burnedIn || leavesDirectPlay) && !this.isOfflinePlayback) {
+        await this.reloadStream(undefined, {
+          reason: 'subtitles',
+          ...(leavesDirectPlay && { from: 'hls', to: sub.language }),
+        });
+      }
       if (!(await this.showSoftSubtitle(sub, request))) return false;
     } catch (e) {
       // Surface the failure instead of silently moving the checkmark to a track
@@ -4540,7 +4548,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const willReload = mode !== 'direct' || id !== 'original';
     this.qualityManager.selectQuality(option, willReload ? null : this.engine, mode, false, true);
     if (willReload) {
-      await this.reloadStream();
+      await this.reloadStream(undefined, { reason: 'quality' });
     }
 
     this.chrome.resetHideTimer();
@@ -4581,7 +4589,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Reload the stream (e.g. when toggling burn-in subtitles or switching
    *  audio). User-initiated, so re-arm the native recovery guard and serialise
    *  against any concurrent reload/recovery. `at` overrides the resume anchor. */
-  async reloadStream(at?: number) {
+  async reloadStream(at?: number, why: ReloadWhy = { reason: 'other' }) {
     if (!this.engine || this.reloadingStream) return;
     this.reloadingStream = true;
     this.reloadReachedPlayback = false;
@@ -4589,6 +4597,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // A locked seekbar holds a target the engine hasn't reached: anchor there,
     // or a mid-seek switch restarts where the user just left.
     const anchor = at ?? (this.state.seekLocked() ? this.currentTime() : this.engine.currentTime);
+    this.qoe.onReload(this.activeSessionId(), anchor, why);
     try {
       await this.doReloadStream(anchor);
     } catch (e) {
