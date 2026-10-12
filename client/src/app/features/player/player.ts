@@ -4747,7 +4747,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       payload.subtitleId = onReceiver ? onReceiver.subtitleId : this.activeSubtitleId();
       payload.autoplayBlocked = this.autoplayBlocked();
       payload.hasNext = this.upNext() !== null;
-      if (this.engine && !this.castService.isConnected()) {
+      // While casting the local engine is idle: the receiver's sample stands in for it.
+      if (this.castService.isConnected()) {
+        payload.qoe = this.castPlayerService.qoeSample() ?? undefined;
+      } else if (this.engine) {
         void this.qoe.refresh(this.engine);
         payload.qoe = this.qoe.current(sessionId) ?? undefined;
       }

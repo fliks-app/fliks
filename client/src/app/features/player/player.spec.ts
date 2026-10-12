@@ -252,6 +252,7 @@ function createHarness(opts: {
         provide: CastPlayerService,
         useValue: {
           liveSessionId: () => undefined,
+          qoeSample: () => null,
           expanded: { set: vi.fn() },
           getCastDeviceProfile: () => DEVICE_PROFILE,
           reloadCastStream: vi.fn(),
