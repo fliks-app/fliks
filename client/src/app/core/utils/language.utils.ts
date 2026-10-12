@@ -147,10 +147,10 @@ function tagQualifiers(code: string | undefined | null, tag: string | undefined 
 }
 
 /**
- * The language name with the region or script of a track's BCP-47 tag in the UI
- * language (`es-419` → `Espagnol (Amérique latine)`). Plain {@link localizeLanguage}
- * when there is no tag, nothing past the language in it, or the runtime can't name it.
- * Labels only: the canonical `language` stays what preferences and selection match on.
+ * The language name with the variant of a track's BCP-47 tag in the UI language, in its
+ * dialect form when the platform has one (`pt-BR` → `Portugais brésilien`), else as
+ * `Base (Region)`. Plain {@link localizeLanguage} when there is no tag, nothing past the
+ * language in it, or the runtime can't name it. Labels only: selection matches `language`.
  */
 export function localizeLanguageTag(
   code: string | undefined | null,
@@ -158,8 +158,14 @@ export function localizeLanguageTag(
   translate: TranslateService,
 ): string {
   const base = localizeLanguage(code, translate);
-  const qualifiers = tagQualifiers(code, tag, uiLocale(translate));
-  return qualifiers.length ? `${base} (${qualifiers.join(', ')})` : base;
+  const locale = uiLocale(translate);
+  const qualifiers = tagQualifiers(code, tag, locale);
+  if (!qualifiers.length) return base;
+  const dialect = displayName('language', tag!.trim(), locale);
+  if (dialect && dialect.toLocaleLowerCase(locale) !== base.toLocaleLowerCase(locale)) {
+    return dialect.charAt(0).toLocaleUpperCase(locale) + dialect.slice(1);
+  }
+  return `${base} (${qualifiers.join(', ')})`;
 }
 
 /**
