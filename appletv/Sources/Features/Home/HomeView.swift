@@ -15,6 +15,7 @@ import SwiftUI
 /// never blanks the rest of the page.
 struct HomeView: View {
     var onSelectMedia: (Int) -> Void
+    var onSelectEpisode: (_ mediaId: Int, _ episodeId: Int) -> Void
     var onSelectLibrary: (Int) -> Void
     var onSelectPlaylist: (Int) -> Void
 
@@ -40,6 +41,7 @@ struct HomeView: View {
                         librariesState: librariesState,
                         onRetryLibraries: { Task { await loadLibraries() } },
                         onSelectMedia: onSelectMedia,
+                        onSelectEpisode: onSelectEpisode,
                         onSelectLibrary: onSelectLibrary,
                         onSelectPlaylist: onSelectPlaylist
                     )
