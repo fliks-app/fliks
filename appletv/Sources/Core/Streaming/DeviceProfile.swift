@@ -34,6 +34,7 @@ struct DeviceProfile: Encodable {
     let supportsHdr: Bool
     let supportsDolbyVision: Bool
     let supportsDirectPlay: Bool
+    let switchesDirectPlayAudio: Bool
     let supportsHlsSubtitles: Bool
     let supportsImageSubtitles: Bool
     let probesSegZero: Bool
@@ -67,6 +68,8 @@ enum DeviceProfileBuilder {
             supportsHdr: !hdrModes.isEmpty,
             supportsDolbyVision: hdrModes.contains(.dolbyVision),
             supportsDirectPlay: true,
+            // AVPlayer can't switch tracks inside a progressive file: a non-first pick must go through HLS.
+            switchesDirectPlayAudio: false,
             supportsHlsSubtitles: true,
             // AVFoundation doesn't decode PGS/VOBSUB bitmap tracks natively —
             // those need a server burn-in (burnInSubtitleId), not wired yet.
@@ -114,16 +117,5 @@ enum DeviceProfileBuilder {
         guard AudioFormatGetProperty(kAudioFormatProperty_DecodeFormatIDs, 0, nil, &size, &ids) == noErr
         else { return [] }
         return Set(ids)
-    }
-
-    /// Which source audio stream should be the master playlist's DEFAULT
-    /// rendition. Mirrors `PlayerSettingsService.resolveAudioStreamIndex` minus
-    /// the per-media remembered-track map (not ported) — language preference
-    /// only. Nil lets the backend default to the source's own default track.
-    static func preferredAudioIndex(_ streams: [AudioStreamInfo]?) -> Int? {
-        let settings = AppSettingsStore.shared
-        guard !settings.useDefaultAudioStream, !settings.preferredAudioLanguage.isEmpty,
-              let streams, !streams.isEmpty else { return nil }
-        return streams.firstIndex { $0.language.lowercased() == settings.preferredAudioLanguage.lowercased() }
     }
 }

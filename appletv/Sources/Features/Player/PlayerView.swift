@@ -180,6 +180,8 @@ private struct SkipCueStyle: ButtonStyle {
     /// synchronously instead of re-awaiting AVFoundation's group load.
     private var audibleGroup: AVMediaSelectionGroup?
     private var legibleGroup: AVMediaSelectionGroup?
+    /// Sidecar subtitle rows of `media`; their ids aren't in the playback info.
+    private var externalSubtitles: [SubtitleFileRow] = []
 
     private var autoSkippedIntro = false
     private var autoAdvancedNext = false
@@ -219,7 +221,7 @@ private struct SkipCueStyle: ButtonStyle {
 
     init() {
         playback.onReload = { [weak self] url, position in
-            Task { @MainActor in self?.reload(url: url, position: position) }
+            Task { @MainActor in self?.reload(url: url, position: position, keepingSubtitle: true) }
         }
         playback.onFatalError = { [weak self] in
             Task { @MainActor in self?.fatalError = true }
@@ -234,12 +236,13 @@ private struct SkipCueStyle: ButtonStyle {
         self.episodeId = episodeId
         let fetchedMedia: Media? = try? await APIClient.shared.get("/api/media/\(mediaId)")
         media = fetchedMedia
+        let subtitleRows: [SubtitleFileRow]? = try? await APIClient.shared.get("/api/media/\(mediaId)/subtitles")
+        externalSubtitles = subtitleRows ?? []
         resolveNextEpisode()
 
-        let sourceAudio = media?.files?.first { $0.id == mediaFileId }?.streamInfo?.audio
         let url = try await playback.start(
             mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId,
-            startAt: startAt, audioStreams: sourceAudio
+            startAt: startAt, audioStreams: currentFileInfo?.audio
         )
         let item = AVPlayerItem(url: url)
         let p = AVPlayer(playerItem: item)
@@ -252,8 +255,10 @@ private struct SkipCueStyle: ButtonStyle {
         RemoteControlService.shared.activeCoordinator = self
     }
 
-    private func reload(url: URL, position: Double) {
+    /// `keepingSubtitle` carries the viewer's pick over a recovery reload of the same file.
+    private func reload(url: URL, position: Double, keepingSubtitle: Bool = false) {
         guard let player else { return }
+        let subtitleChoice = keepingSubtitle ? currentLegibleChoice() : nil
         let wasPaused = player.timeControlStatus == .paused
         let item = AVPlayerItem(url: url)
         player.replaceCurrentItem(with: item)
@@ -265,7 +270,7 @@ private struct SkipCueStyle: ButtonStyle {
         }
         attachItemObservers(item)
         armEdl()
-        applyPreferredSubtitle(to: item, player: player)
+        applyPreferredSubtitle(to: item, player: player, restoring: subtitleChoice)
         if !wasPaused { player.play() }
     }
 
@@ -330,11 +335,12 @@ private struct SkipCueStyle: ButtonStyle {
         contextualKey = ""
         lastTickTime = -1
         skippedCommercials = []
+        audibleGroup = nil
+        legibleGroup = nil
         resolveNextEpisode()
-        let sourceAudio = media?.files?.first { $0.id == next.mediaFileId }?.streamInfo?.audio
         guard let url = try? await playback.start(
             mediaFileId: next.mediaFileId, mediaId: mediaId, episodeId: next.episodeId,
-            startAt: 0, audioStreams: sourceAudio
+            startAt: 0, audioStreams: currentFileInfo?.audio
         ) else { return }
         reload(url: url, position: 0)
     }
@@ -365,7 +371,8 @@ private struct SkipCueStyle: ButtonStyle {
                     duration: duration.isFinite ? duration : 0,
                     paused: paused,
                     audioTrackIndex: self.currentAudioTrackIndex(),
-                    subtitleTrackIndex: self.currentSubtitleTrackIndex()
+                    subtitleTrackIndex: self.currentSubtitleTrackIndex(),
+                    subtitleId: self.currentSubtitleId()
                 )
             }
         }
@@ -375,7 +382,10 @@ private struct SkipCueStyle: ButtonStyle {
     private func attachItemObservers(_ item: AVPlayerItem) {
         audibleGroup = nil
         legibleGroup = nil
-        Task { audibleGroup = try? await item.asset.loadMediaSelectionGroup(for: .audible) }
+        Task {
+            let group = try? await item.asset.loadMediaSelectionGroup(for: .audible)
+            if player?.currentItem === item { audibleGroup = group }
+        }
         if let timeJumpObserver { NotificationCenter.default.removeObserver(timeJumpObserver) }
         timeJumpObserver = NotificationCenter.default.addObserver(
             forName: AVPlayerItem.timeJumpedNotification, object: item, queue: .main
@@ -405,8 +415,8 @@ private struct SkipCueStyle: ButtonStyle {
         let durationRaw = player?.currentItem?.duration.seconds ?? 0
         let duration = durationRaw.isFinite ? durationRaw : 0
         let paused = player?.timeControlStatus != .playing
-        playback.tick(position: time, duration: duration, paused: paused,
-                      audioTrackIndex: currentAudioTrackIndex(), subtitleTrackIndex: currentSubtitleTrackIndex())
+        playback.tick(position: time, duration: duration, paused: paused, audioTrackIndex: currentAudioTrackIndex(),
+                      subtitleTrackIndex: currentSubtitleTrackIndex(), subtitleId: currentSubtitleId())
         recoveringHint = playback.recovering
 
         // A jump larger than normal playback advance is a seek — re-arm cues.
@@ -631,57 +641,83 @@ private struct SkipCueStyle: ButtonStyle {
 
     // MARK: - Subtitle preference
 
+    /// The viewer's legible pick, kept over a recovery reload.
+    private enum LegibleChoice {
+        case off
+        case option(Int)
+    }
+
+    /// Nil until the item's legible group has loaded.
+    private func currentLegibleChoice() -> LegibleChoice? {
+        guard legibleGroup != nil else { return nil }
+        guard let index = currentSubtitleTrackIndex() else { return .off }
+        return .option(index)
+    }
+
     /// Native HLS `SUBTITLES` renditions surface as an `AVMediaSelectionGroup`
     /// — pick from it, no extra network call:
     ///   - off: nothing selected, and AVFoundation's own heuristic disabled;
     ///   - always: the preferred language, else the first track;
-    ///   - intelligent: the preferred language only when the audio is in
-    ///     another one (same rule as the web `track-manager`).
-    private func applyPreferredSubtitle(to item: AVPlayerItem, player: AVPlayer) {
+    ///   - intelligent: the preferred language, forced lines only when the audio
+    ///     already is in it (untagged audio counts as foreign; web `track-manager`).
+    /// `restoring` replays an earlier pick instead of applying the preference.
+    private func applyPreferredSubtitle(to item: AVPlayerItem, player: AVPlayer, restoring: LegibleChoice? = nil) {
         let settings = AppSettingsStore.shared
         let mode = settings.subtitleMode
-        let preferred = settings.preferredSubtitleLanguage
-        player.appliesMediaSelectionCriteriaAutomatically = mode != "off"
+        player.appliesMediaSelectionCriteriaAutomatically = mode != "off" && restoring == nil
 
         Task {
-            guard let group = try? await item.asset.loadMediaSelectionGroup(for: .legible) else { return }
+            guard let group = try? await item.asset.loadMediaSelectionGroup(for: .legible),
+                  player.currentItem === item else { return }
             legibleGroup = group
+            switch restoring {
+            case .off?:
+                item.select(nil, in: group)
+                return
+            case .option(let index)?:
+                if group.options.indices.contains(index) { item.select(group.options[index], in: group) }
+                return
+            case nil:
+                break
+            }
             if mode == "off" {
                 item.select(nil, in: group)
                 return
             }
 
-            let match = preferred.isEmpty ? nil : AVMediaSelectionGroup.mediaSelectionOptions(
-                from: group.options, with: Locale(identifier: preferred)
-            ).first
-
+            let wanted = TrackSelection.canonicalLanguage(settings.preferredSubtitleLanguage)
+            let forcedOnly = mode == "intelligent" && wanted != nil && wanted == playingAudioLanguage
+            let option = wanted
+                .flatMap { TrackSelection.pickSubtitle(subtitleTracks(in: group), language: $0, forcedOnly: forcedOnly) }
+                .map { group.options[$0] }
             if mode == "always" {
-                item.select(match ?? group.options.first, in: group)
-                return
+                item.select(option ?? group.options.first, in: group)
+            } else if let option {
+                item.select(option, in: group)
             }
-            guard let match, let audio = await audioLanguage(of: item),
-                  audio != Self.languageCode(preferred) else { return }
-            item.select(match, in: group)
         }
     }
 
-    /// Language of the audio actually playing — the selected option when the
-    /// stream carries several, else the only track's own tag.
-    private func audioLanguage(of item: AVPlayerItem) async -> String? {
-        if let group = try? await item.asset.loadMediaSelectionGroup(for: .audible),
-           let selected = item.currentMediaSelection.selectedMediaOption(in: group),
-           let tag = selected.extendedLanguageTag {
-            return Self.languageCode(tag)
-        }
-        let track = try? await item.asset.loadTracks(withMediaType: .audio).first
-        guard let tag = try? await track?.load(.languageCode) else { return nil }
-        return Self.languageCode(tag)
+    /// Language of the audio the session plays, from the source's stream list;
+    /// nil when untagged or unknown.
+    private var playingAudioLanguage: String? {
+        guard let index = playback.audioStreamIndex, let audio = currentFileInfo?.audio,
+              audio.indices.contains(index) else { return nil }
+        return TrackSelection.canonicalLanguage(audio[index].language)
     }
 
-    /// `fra` and `fr` are the same language; `und` is no language at all.
-    private static func languageCode(_ tag: String?) -> String? {
-        guard let tag, !tag.isEmpty, tag != "und" else { return nil }
-        return Locale.LanguageCode(tag).identifier(.alpha2) ?? tag
+    private var currentFileInfo: MediaFileInfo? {
+        media?.files?.first { $0.id == mediaFileId }?.streamInfo
+    }
+
+    /// Metadata of the group's renditions by position. Embedded tracks lead, so a
+    /// missing or extra sidecar row only trims the tail.
+    private func subtitleTracks(in group: AVMediaSelectionGroup) -> [SubtitleTrack] {
+        let tracks = TrackSelection.subtitleTracks(
+            embedded: currentFileInfo?.subtitles ?? [],
+            external: externalSubtitles.filter { $0.mediaFileId == mediaFileId }
+        )
+        return Array(tracks.prefix(group.options.count))
     }
 
     // MARK: - Remote control
@@ -698,6 +734,13 @@ private struct SkipCueStyle: ButtonStyle {
               let selected = item.currentMediaSelection.selectedMediaOption(in: group)
         else { return nil }
         return group.options.firstIndex(of: selected)
+    }
+
+    /// Selected subtitle in the controllers' id scheme; nil when off.
+    private func currentSubtitleId() -> String? {
+        guard let group = legibleGroup, let index = currentSubtitleTrackIndex() else { return nil }
+        let tracks = subtitleTracks(in: group)
+        return tracks.indices.contains(index) ? tracks[index].id : nil
     }
 
     /// Applies one polled `remote.command`. Absolute semantics only: no
@@ -772,6 +815,7 @@ private struct SkipCueStyle: ButtonStyle {
             paused: player.timeControlStatus != .playing,
             audioTrackIndex: currentAudioTrackIndex(),
             subtitleTrackIndex: currentSubtitleTrackIndex(),
+            subtitleId: currentSubtitleId(),
             lastCmdId: cmd.cmdId
         )
     }
@@ -780,7 +824,7 @@ private struct SkipCueStyle: ButtonStyle {
     /// back to a language tag, then a bare numeric option index.
     private func matchOption(_ id: String?, in group: AVMediaSelectionGroup) -> AVMediaSelectionOption? {
         guard let id else { return nil }
-        if let index = houseIndex(for: id), group.options.indices.contains(index) {
+        if let index = houseIndex(for: id, in: group), group.options.indices.contains(index) {
             return group.options[index]
         }
         if let byTag = group.options.first(where: { $0.extendedLanguageTag == id }) { return byTag }
@@ -788,22 +832,10 @@ private struct SkipCueStyle: ButtonStyle {
         return nil
     }
 
-    /// `audio-<i>` is the index into `streamInfo.audio`, the backend's AUDIO
-    /// rendition order; `emb-<i>` positions the same way among non-image subtitles.
-    private func houseIndex(for id: String) -> Int? {
+    /// `audio-<i>` is the index into `streamInfo.audio`, the backend's AUDIO rendition
+    /// order; a subtitle id is its position in the `subs` group (see `subtitleTracks`).
+    private func houseIndex(for id: String, in group: AVMediaSelectionGroup) -> Int? {
         if id.hasPrefix("audio-") { return Int(id.dropFirst("audio-".count)) }
-        guard id.hasPrefix("emb-"), let streamIndex = Int(id.dropFirst("emb-".count)) else { return nil }
-        let sourceSubtitles = media?.files?.first { $0.id == mediaFileId }?.streamInfo?.subtitles ?? []
-        let textSubtitles = sourceSubtitles.filter { !Self.isImageBasedSubtitleCodec($0.codec) }
-        return textSubtitles.firstIndex { $0.streamIndex == streamIndex }
-    }
-
-    /// Bitmap codecs the backend never puts in the HLS `subs` group, only
-    /// burns in: mirrors the backend/web `IMAGE_BASED_SUBTITLE_CODECS` set.
-    private static let imageBasedSubtitleCodecs: Set<String> = [
-        "hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle", "xsub",
-    ]
-    private static func isImageBasedSubtitleCodec(_ codec: String) -> Bool {
-        imageBasedSubtitleCodecs.contains(codec)
+        return subtitleTracks(in: group).firstIndex { $0.id == id }
     }
 }

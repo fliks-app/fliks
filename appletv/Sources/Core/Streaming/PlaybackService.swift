@@ -11,6 +11,9 @@ import Foundation
     private(set) var info: PlaybackInfoResponse?
     /// True while a lost-session / stall reload is in flight.
     private(set) var recovering = false
+    /// Position in the source's audio list of the track the session plays: the one
+    /// requested at start, then whatever the viewer switched to. Nil when unknown.
+    private(set) var audioStreamIndex: Int?
 
     private var mediaFileId = 0
     private var mediaId = 0
@@ -37,9 +40,8 @@ import Foundation
 
     // MARK: - Start / stop
 
-    /// `audioStreams` is the source file's own audio track list, used only to
-    /// pick the master playlist's DEFAULT rendition from the user's language
-    /// preference — nil/empty just lets the backend default.
+    /// `audioStreams` is the source file's own audio track list, used to pick the
+    /// master playlist's DEFAULT rendition from the viewer's audio preferences.
     func start(
         mediaFileId: Int, mediaId: Int, episodeId: Int?, startAt: Double,
         audioStreams: [AudioStreamInfo]? = nil
@@ -49,7 +51,12 @@ import Foundation
         self.episodeId = episodeId
         destroyed = false
         recoverAttempts = 0
-        let url = try await requestPlaybackInfo(startAt: startAt, audioStreams: audioStreams)
+        let settings = AppSettingsStore.shared
+        audioStreamIndex = TrackSelection.audioIndex(
+            in: audioStreams ?? [], preferredLanguage: settings.preferredAudioLanguage,
+            useDefault: settings.useDefaultAudioStream
+        )
+        let url = try await requestPlaybackInfo(startAt: startAt)
         lastProgressPos = startAt
         lastProgressAt = Date()
         return url
@@ -66,15 +73,13 @@ import Foundation
 
     // MARK: - Playback-info + play URL
 
-    private func requestPlaybackInfo(startAt: Double, audioStreams: [AudioStreamInfo]? = nil) async throws -> URL {
+    private func requestPlaybackInfo(startAt: Double) async throws -> URL {
         guard let token = await AuthService.shared.ensureStreamToken() else {
             throw APIError.badStatus(401)
         }
         var query: [(String, String)] = [("token", token)]
         if startAt > 0 { query.append(("startAt", String(Int(startAt)))) }
-        if let idx = DeviceProfileBuilder.preferredAudioIndex(audioStreams) {
-            query.append(("audioStreamIndex", String(idx)))
-        }
+        if let audioStreamIndex { query.append(("audioStreamIndex", String(audioStreamIndex))) }
         let path = withQuery("/api/stream/\(mediaFileId)/playback-info", query)
         let response: PlaybackInfoResponse = try await api.post(path, body: DeviceProfileBuilder.build())
         info = response
@@ -116,24 +121,26 @@ import Foundation
     /// Called ~1x/sec with the live AVPlayer state. Drives the 10s heartbeat
     /// cadence and the stall watchdog off a single tick.
     func tick(position: Double, duration: Double, paused: Bool,
-              audioTrackIndex: Int? = nil, subtitleTrackIndex: Int? = nil) {
+              audioTrackIndex: Int? = nil, subtitleTrackIndex: Int? = nil, subtitleId: String? = nil) {
         guard !destroyed, !recoveringGuard else { return }
+        if let audioTrackIndex { audioStreamIndex = audioTrackIndex }
         checkStall(position: position, paused: paused)
         guard Date().timeIntervalSince(lastHeartbeatAt) >= 10 else { return }
-        sendHeartbeat(position: position, duration: duration, paused: paused,
-                      audioTrackIndex: audioTrackIndex, subtitleTrackIndex: subtitleTrackIndex)
+        sendHeartbeat(position: position, duration: duration, paused: paused, audioTrackIndex: audioTrackIndex,
+                      subtitleTrackIndex: subtitleTrackIndex, subtitleId: subtitleId)
     }
 
     /// Force an immediate heartbeat on a play/pause transition (or an applied
     /// remote command, via `lastCmdId`) so the backend's LiveSession state
     /// doesn't wait for the next 10s tick.
     func notifyStateChange(position: Double, duration: Double, paused: Bool,
-                           audioTrackIndex: Int? = nil, subtitleTrackIndex: Int? = nil,
+                           audioTrackIndex: Int? = nil, subtitleTrackIndex: Int? = nil, subtitleId: String? = nil,
                            lastCmdId: String? = nil) {
         guard !destroyed else { return }
         if let lastCmdId { self.lastCmdId = lastCmdId }
-        sendHeartbeat(position: position, duration: duration, paused: paused,
-                      audioTrackIndex: audioTrackIndex, subtitleTrackIndex: subtitleTrackIndex)
+        if let audioTrackIndex { audioStreamIndex = audioTrackIndex }
+        sendHeartbeat(position: position, duration: duration, paused: paused, audioTrackIndex: audioTrackIndex,
+                      subtitleTrackIndex: subtitleTrackIndex, subtitleId: subtitleId)
     }
 
     /// Explicit completion heartbeat before a manual "next episode" skip — the
@@ -145,9 +152,17 @@ import Foundation
     }
 
     private func sendHeartbeat(position: Double, duration: Double, paused: Bool,
-                               audioTrackIndex: Int? = nil, subtitleTrackIndex: Int? = nil) {
+                               audioTrackIndex: Int? = nil, subtitleTrackIndex: Int? = nil, subtitleId: String? = nil) {
         guard let sid = sessionId else { return }
         lastHeartbeatAt = Date()
+        /// Encodes nil as JSON null: synthesized Encodable omits it, which the backend reads as "unchanged".
+        struct Nullable: Encodable {
+            let value: String?
+            func encode(to encoder: Encoder) throws {
+                var container = encoder.singleValueContainer()
+                try container.encode(value)
+            }
+        }
         struct Body: Encodable {
             let positionSeconds: Double
             let durationSeconds: Double
@@ -157,6 +172,7 @@ import Foundation
             let state: String
             let audioTrackIndex: Int?
             let subtitleTrackIndex: Int?
+            let subtitleId: Nullable
             let lastCmdId: String?
             // Links a polled remote target to this live session; nil until registered.
             let targetId: String?
@@ -165,7 +181,8 @@ import Foundation
         let body = Body(
             positionSeconds: position, durationSeconds: duration, mediaFileId: mediaFileId,
             episodeId: episodeId, sessionId: sid, state: paused ? "paused" : "playing",
-            audioTrackIndex: audioTrackIndex, subtitleTrackIndex: subtitleTrackIndex, lastCmdId: lastCmdId,
+            audioTrackIndex: audioTrackIndex, subtitleTrackIndex: subtitleTrackIndex,
+            subtitleId: Nullable(value: subtitleId), lastCmdId: lastCmdId,
             targetId: RemoteControlService.shared.targetId
         )
         Task {
