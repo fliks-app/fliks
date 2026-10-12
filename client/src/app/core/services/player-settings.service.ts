@@ -129,7 +129,21 @@ export function matchRememberedAudio(
   return pool.find((i) => String(streams[i].channels ?? '') === channels) ?? pool[0];
 }
 
-/** Normalize any language code to 3-letter ISO 639-2/B. */
+/** Stream the language targets: a main track over a commentary or described
+ *  one (unless nothing else carries the language), the default-flagged one first. */
+export function pickAudioStreamForLanguage(
+  streams: AudioStreamChoice[],
+  language: string,
+): number | undefined {
+  const want = normalizeLangCode(language);
+  const same = streams
+    .map((s, i) => (normalizeLangCode(s.language) === want ? i : -1))
+    .filter((i) => i >= 0);
+  const main = same.filter((i) => !streams[i].commentary && !streams[i].audioDescription);
+  const pool = main.length ? main : same;
+  return pool.find((i) => streams[i].isDefault) ?? pool[0];
+}
+
 // ── Subtitle appearance maps ──
 
 /** The DOM cue sizes are the native ladder in `vmin` — the viewport's short
@@ -226,23 +240,6 @@ export class PlayerSettingsService {
   }
 
   /**
-   * The single language to configure an engine with before load, so it picks
-   * the right rendition during manifest parse instead of switching after.
-   */
-  resolveAudioLanguage(
-    mediaId?: number,
-    originalLanguage?: string | null,
-  ): string | undefined {
-    const s = this.get();
-    if (s.rememberAudioSelections && mediaId) {
-      // Engines pre-pick by language alone; the rest of the key disambiguates.
-      const saved = this.getRememberedAudioTrack(mediaId)?.split(':')[0];
-      if (saved) return saved;
-    }
-    return this.audioLanguage(originalLanguage);
-  }
-
-  /**
    * Resolve the preferred audio stream index for a media file.
    * Used by both the local player and Cast to ensure consistent audio selection.
    */
@@ -254,10 +251,6 @@ export class PlayerSettingsService {
   ): number | undefined {
     if (!audioStreams.length) return undefined;
     const s = this.get();
-    const indicesOfLang = (lang: string) =>
-      audioStreams
-        .map((a, i) => (normalizeLangCode(a.language) === normalizeLangCode(lang) ? i : -1))
-        .filter((i) => i >= 0);
 
     // Priority 1: remembered selection always wins, whatever the mode.
     // Uses mediaId (series/movie) so the choice carries across episodes.
@@ -267,16 +260,10 @@ export class PlayerSettingsService {
       if (idx != null) return idx;
     }
 
-    // Priority 2: the mode's target language. A commentary or described track
-    // only when the language has nothing else; the default-flagged one first.
+    // Priority 2: the mode's target language.
     const lang = this.audioLanguage(originalLanguage);
     if (lang) {
-      const same = indicesOfLang(lang);
-      const main = same.filter(
-        (i) => !audioStreams[i].commentary && !audioStreams[i].audioDescription,
-      );
-      const pool = main.length ? main : same;
-      const idx = pool.find((i) => audioStreams[i].isDefault) ?? pool[0];
+      const idx = pickAudioStreamForLanguage(audioStreams, lang);
       if (idx != null) return idx;
     }
 

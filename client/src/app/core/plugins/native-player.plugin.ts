@@ -12,6 +12,16 @@ export interface NativeAudioTrack {
   selected?: boolean;
 }
 
+/** An external subtitle file handed to `load()`, added to the MediaItem next to the
+ *  container's own text tracks. */
+export interface NativeSidecarSubtitle {
+  url: string;
+  language: string;
+  label: string;
+  /** Flags the track as forced (foreign dialogue only), so it matches a forced pick. */
+  forced?: boolean;
+}
+
 export interface NativeSubtitleTrack {
   id: string;
   language: string;
@@ -81,7 +91,7 @@ export interface NativePlayerPlugin {
     url: string;
     startTime?: number;
     headers?: Record<string, string>;
-    subtitles?: { url: string; language: string; label: string }[];
+    subtitles?: NativeSidecarSubtitle[];
     /** Use CacheDataSource for offline playback (Android). */
     offline?: boolean;
     /** Keep playing off-screen behind lock-screen media controls (Android, iOS). */

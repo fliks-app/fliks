@@ -82,7 +82,6 @@ describe('PlayerSettingsService audio selection', () => {
     const svc = make({ audioSelectionMode: 'default', rememberAudioSelections: true });
     svc.saveRememberedAudioTrack(1, 'eng');
     expect(svc.resolveAudioStreamIndex(1, STREAMS, 1, 'ja')).toBe(2);
-    expect(svc.resolveAudioLanguage(1, 'ja')).toBe('eng');
   });
 
   it('honours the remembered ordinal among same-language tracks', () => {

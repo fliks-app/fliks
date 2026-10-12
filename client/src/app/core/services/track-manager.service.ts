@@ -3,6 +3,7 @@ import { TranslateService } from '@ngx-translate/core';
 import {
   PlayerSettingsService,
   matchRememberedAudio,
+  pickAudioStreamForLanguage,
   rememberedAudioKey,
   type AudioStreamChoice,
   type HearingImpairedPreference,
@@ -49,18 +50,6 @@ export class TrackManagerService {
 
   // ── Audio track methods ──
 
-  /** Maps a `streams`-order index to its engine track: by position when the lists align,
-   *  else by language (webOS folds same-language streams into one track). */
-  private trackForStreamIndex<T extends { id: string; language: string }>(
-    idx: number,
-    streams: AudioStreamChoice[],
-    tracks: T[],
-  ): T | undefined {
-    if (streams.length === tracks.length) return tracks[idx];
-    const lang = normalizeLangCode(streams[idx]?.language);
-    return tracks.find((t) => normalizeLangCode(t.language) === lang);
-  }
-
   /**
    * Auto-select audio track based on user preferences.
    *
@@ -89,18 +78,19 @@ export class TrackManagerService {
       const saved = this.playerSettings.getRememberedAudioTrack(key);
       const source = streams?.length ? streams : tracks;
       const idx = saved ? matchRememberedAudio(saved, source) : undefined;
-      const match = idx != null ? this.trackForStreamIndex(idx, source, tracks) : undefined;
+      const match = idx != null ? trackForStreamIndex(idx, source, tracks) : undefined;
       if (match) {
         if (match.id !== activeAudioTrackId) onSelect(match.id);
         return;
       }
     }
 
-    // Priority 2: the mode's target language.
+    // Priority 2: the mode's target language, picked by the rule
+    // resolveAudioStreamIndex applies before load.
     const lang = this.playerSettings.audioLanguage(originalLanguage);
-    const match = lang
-      ? tracks.find((t) => normalizeLangCode(t.language) === normalizeLangCode(lang))
-      : undefined;
+    const source = streams?.length ? streams : tracks;
+    const idx = lang ? pickAudioStreamForLanguage(source, lang) : undefined;
+    const match = idx != null ? trackForStreamIndex(idx, source, tracks) : undefined;
     if (match && match.id !== activeAudioTrackId) onSelect(match.id);
   }
 
@@ -233,14 +223,18 @@ export class TrackManagerService {
    * @param activeAudioTrackId Currently active audio track ID
    * @param mediaFileId        Media file ID (for remembered selections)
    * @param onSelect           Callback to apply the selected subtitle (or null for none)
+   * @param mediaId            Media ID the remembered selection is keyed by
+   * @param audioLanguage      Language of the audio stream that will play, when known
+   *                           before any engine lists a track: it wins over `audioTracks`
    */
   async autoSelectSubtitle(
     subtitles: SubtitleOption[],
     audioTracks: { id: string; language: string }[],
     activeAudioTrackId: string | null,
     mediaFileId: number,
-    onSelect: (sub: SubtitleOption | null) => Promise<void>,
+    onSelect: (sub: SubtitleOption | null) => Promise<unknown>,
     mediaId = 0,
+    audioLanguage?: string,
   ): Promise<void> {
     const settings = this.playerSettings.get();
 
@@ -266,16 +260,18 @@ export class TrackManagerService {
         const isEmbedded = (s: SubtitleOption) => s.id.startsWith('emb-');
         const sameImage = (s: SubtitleOption) => !!s.isImage === wantImage;
         const sameHi = (s: SubtitleOption) => !!s.hearingImpaired === wantHi;
+        // Forced-ness is never relaxed: a full track doesn't stand in for a forced
+        // one (it translates dialogue the viewer follows), nor the reverse.
+        const sameKind = (s: SubtitleOption) => s.language === savedLang && !!s.forced === wantForced;
         // Restore image picks too — selectSubtitle renders them natively
         // (direct play) or burns them in (web / transcode).
         const pool = wantImage ? subtitles : subs;
-        // Best match: language + image-ness + forced + hearing-impaired + type (embedded/external).
+        // Best match: language + forced + image-ness + hearing-impaired + type (embedded/external).
         const match =
-          pool.find((s) => s.language === savedLang && sameImage(s) && !!s.forced === wantForced && sameHi(s) && isEmbedded(s) === wantEmbedded)
-          ?? pool.find((s) => s.language === savedLang && sameImage(s) && !!s.forced === wantForced && sameHi(s))
-          ?? pool.find((s) => s.language === savedLang && sameImage(s) && !!s.forced === wantForced)
-          ?? pool.find((s) => s.language === savedLang && sameImage(s))
-          ?? subs.find((s) => s.language === savedLang && !s.forced);
+          pool.find((s) => sameKind(s) && sameImage(s) && sameHi(s) && isEmbedded(s) === wantEmbedded)
+          ?? pool.find((s) => sameKind(s) && sameImage(s) && sameHi(s))
+          ?? pool.find((s) => sameKind(s) && sameImage(s))
+          ?? subs.find(sameKind);
         if (match) { await onSelect(match); return; }
       }
     }
@@ -283,7 +279,9 @@ export class TrackManagerService {
     if (settings.subtitleMode === 'off') return;
 
     const activeAudio = audioTracks.find((t) => t.id === activeAudioTrackId);
-    const audioLang = activeAudio?.language ?? 'und';
+    const audioLang = audioLanguage
+      ? normalizeLangCode(audioLanguage)
+      : (activeAudio?.language ?? 'und');
     const prefLang = settings.preferredSubtitleLanguage;
     const hi = settings.subtitleHearingImpaired;
 
@@ -321,6 +319,39 @@ export class TrackManagerService {
       if (match) await onSelect(match);
     }
   }
+}
+
+/** Maps a `streams`-order index to its engine track: by position when the lists align,
+ *  else by language (webOS folds same-language streams into one track). */
+export function trackForStreamIndex<T extends { id: string; language: string }>(
+  idx: number,
+  streams: AudioStreamChoice[],
+  tracks: T[],
+): T | undefined {
+  if (!streams[idx]) return undefined;
+  if (streams.length === tracks.length) return tracks[idx];
+  const lang = normalizeLangCode(streams[idx].language);
+  return tracks.find((t) => normalizeLangCode(t.language) === lang);
+}
+
+/** The reverse of {@link trackForStreamIndex}: the `streams` index an engine track plays.
+ *  A folded track stands for several streams of its language; `hint` (the index already
+ *  targeted) wins when it is one of them, so a report of the folded track keeps a pick of
+ *  its commentary rendition. Undefined when the track or the streams are unknown. */
+export function streamIndexForTrack(
+  trackId: string,
+  tracks: { id: string; language: string }[],
+  streams: AudioStreamChoice[],
+  hint?: number,
+): number | undefined {
+  const pos = tracks.findIndex((t) => t.id === trackId);
+  if (pos < 0 || !streams.length) return undefined;
+  if (streams.length === tracks.length) return pos;
+  const lang = normalizeLangCode(tracks[pos].language);
+  const same = streams
+    .map((s, i) => (normalizeLangCode(s.language) === lang ? i : -1))
+    .filter((i) => i >= 0);
+  return hint != null && same.includes(hint) ? hint : same[0];
 }
 
 /** Machine-made subs (translated / OCR) read worse than a real track, so they

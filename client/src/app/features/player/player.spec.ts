@@ -91,6 +91,8 @@ function fakeEngine() {
     play: vi.fn(async () => {}),
     pause: vi.fn(async () => {}),
     destroy: vi.fn(async () => {}),
+    selectAudioTrack: vi.fn(async (_id: string) => {}),
+    getAudioTracks: vi.fn(() => [] as any[]),
     configure: vi.fn(),
     getVariantTracks: vi.fn(() => [] as any[]),
     getStats: vi.fn(() => ({ droppedFrames: 0 }) as any),
@@ -276,6 +278,7 @@ function createHarness(opts: {
         useValue: {
           loadSubtitles: vi.fn(async () => []),
           autoSelectSubtitle: vi.fn(async () => {}),
+          saveSubtitleSelection: vi.fn(),
           saveAudioSelection: vi.fn(),
           autoSelectAudioTrack: vi.fn(),
         },
@@ -1068,8 +1071,8 @@ describe('PlayerComponent remux fallback (rejectCopy)', () => {
     await flush();
 
     expect(h.component.webCrop.videoCropStyle()).toBeNull();
-    expect(h.engine.addTextTrack).toHaveBeenCalledWith('/subs/1.vtt', 'en', 'English', undefined);
-    expect(h.engine.selectTextTrack).toHaveBeenCalledWith({ id: 'sub-1' });
+    expect(h.engine.addTextTrack).toHaveBeenCalledWith('/subs/1.vtt', 'en', 'English', undefined, 0);
+    expect(h.engine.selectTextTrack).toHaveBeenCalledWith(expect.objectContaining({ id: 'sub-1' }));
     expect(h.engine.setTextVisibility).toHaveBeenCalledWith(true);
   });
 
@@ -1551,6 +1554,31 @@ describe('PlayerComponent reloadStream: startAt', () => {
   });
 });
 
+describe('PlayerComponent playback-info request', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  /** The burn-in pick and the audio index the backend marks DEFAULT: what every negotiation must carry. */
+  function trackArgs(call: unknown[]) {
+    return { burnIn: call[2], audio: call[3], quality: call[4] };
+  }
+
+  it('reloadStream, the recovery reload and the far-seek reload all negotiate the same track state', async () => {
+    const h = createHarness();
+    h.component.activeBurnInId = 7;
+    h.component.activeAudioStreamIndex = 2;
+    h.engine.currentTime = 30;
+
+    await h.component.reloadStream();
+    await h.component.refreshSidAndReload(30, { preservePause: false, unmute: false });
+
+    const [viaReload, viaRecovery] = h.streamingApi.getPlaybackInfo.mock.calls as unknown[][];
+    expect(trackArgs(viaReload)).toEqual({ burnIn: 7, audio: 2, quality: undefined });
+    expect(trackArgs(viaRecovery)).toEqual(trackArgs(viaReload));
+  });
+});
+
 describe('PlayerComponent remux fallback on a rejected load', () => {
   afterEach(() => {
     TestBed.resetTestingModule();
@@ -1863,5 +1891,452 @@ describe('PlayerComponent startup', () => {
 
     expect(engine.setCrop).toHaveBeenCalledWith(crop, 1920, 1080);
     expect(calls.indexOf('setCrop')).toBeLessThan(calls.indexOf('load'));
+  });
+});
+
+/** Two-language file: the target audio is an index into this list. */
+const AUDIO_STREAMS = [{ language: 'eng' }, { language: 'fra' }];
+const AUDIO_MEDIA: Media = {
+  ...MOVIE,
+  files: [{ ...MOVIE.files![0], streamInfo: { durationSeconds: 100, audio: AUDIO_STREAMS } as any }],
+};
+
+function audioHarness() {
+  const h = createHarness();
+  h.component.media = AUDIO_MEDIA;
+  h.component.activeAudioStreamIndex = 0;
+  return h;
+}
+
+const engineTrack = (id: string, language: string, selected = false) => ({ id, language, label: id, selected });
+
+describe('PlayerComponent audio target', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  it.each([
+    ['shaka-4', 'shaka-7'],
+    ['avplay-audio-1', 'avplay-audio-2'],
+  ])('a pick of %s / %s reaches the next negotiation as a streamInfo index', async (first, second) => {
+    const h = audioHarness();
+    h.component.availableAudioTracks.set([
+      { id: first, label: '', language: 'en' },
+      { id: second, label: '', language: 'fr' },
+    ]);
+
+    await h.component.onSelectAudioTrack(second);
+    await h.component.reloadStream();
+
+    expect(h.engine.selectAudioTrack).toHaveBeenCalledWith(second);
+    expect((h.streamingApi.getPlaybackInfo.mock.calls[0] as any[])[3]).toBe(1);
+  });
+
+  it('configures the engine with the target language before every load, not the session-start one', async () => {
+    const h = audioHarness();
+    h.component.activeAudioStreamIndex = 1;
+    h.engine.currentTime = 10;
+
+    await h.component.reloadStream();
+    await h.component.refreshSidAndReload(10, { preservePause: false, unmute: false });
+
+    const configures = h.engine.configure.mock.calls
+      .map((c: any[], i: number) => (c[0]?.preferredAudioLanguage != null ? h.engine.configure.mock.invocationCallOrder[i] : 0))
+      .filter(Boolean);
+    const loads = h.engine.load.mock.invocationCallOrder;
+    expect(configures).toHaveLength(2);
+    expect(h.engine.configure).toHaveBeenCalledWith({ preferredAudioLanguage: 'fr' });
+    configures.forEach((order: number, i: number) => expect(order).toBeLessThan(loads[i]));
+  });
+
+  it('puts an engine that fell back to its default track back on the target, keeping the target', () => {
+    const h = audioHarness();
+    h.component.activeAudioStreamIndex = 1;
+    h.component.wireAudioTracks(h.engine);
+
+    h.engine.emit('audioTracksChanged', {
+      tracks: [engineTrack('audio-0', 'eng', true), engineTrack('audio-1', 'fra')],
+    });
+
+    expect(h.engine.selectAudioTrack).toHaveBeenCalledWith('audio-1');
+    expect(h.component.activeAudioTrackId()).toBe('audio-1');
+    expect(h.component.activeAudioStreamIndex).toBe(1);
+  });
+
+  it('does nothing when the engine already plays the target', () => {
+    const h = audioHarness();
+    h.component.activeAudioStreamIndex = 1;
+    h.component.wireAudioTracks(h.engine);
+
+    h.engine.emit('audioTracksChanged', {
+      tracks: [engineTrack('audio-0', 'eng'), engineTrack('audio-1', 'fra', true)],
+    });
+
+    expect(h.engine.selectAudioTrack).not.toHaveBeenCalled();
+    expect(h.component.activeAudioTrackId()).toBe('audio-1');
+  });
+
+  it('asks once for a switch even when the engine keeps reporting the old track for a moment', () => {
+    const h = audioHarness();
+    h.component.activeAudioStreamIndex = 1;
+    h.component.wireAudioTracks(h.engine);
+    const stale = { tracks: [engineTrack('audio-0', 'eng', true), engineTrack('audio-1', 'fra')] };
+    const landed = { tracks: [engineTrack('audio-0', 'eng'), engineTrack('audio-1', 'fra', true)] };
+
+    h.engine.emit('audioTracksChanged', stale);
+    h.engine.emit('audioTracksChanged', stale);
+    h.engine.emit('audioTracksChanged', landed);
+    expect(h.engine.selectAudioTrack).toHaveBeenCalledTimes(1);
+
+    // Once the switch has landed, a later revert (webOS reloads on a seek) is corrected again.
+    h.engine.emit('audioTracksChanged', stale);
+    expect(h.engine.selectAudioTrack).toHaveBeenCalledTimes(2);
+  });
+
+  it('lets the latest of two quick picks keep the target and the check mark', async () => {
+    const h = audioHarness();
+    h.component.availableAudioTracks.set([
+      { id: 'shaka-4', label: '', language: 'en' },
+      { id: 'shaka-7', label: '', language: 'fr' },
+    ]);
+    const releases: (() => void)[] = [];
+    h.engine.selectAudioTrack.mockImplementation(() => new Promise<void>((r) => releases.push(r)));
+
+    const first = h.component.onSelectAudioTrack('shaka-7');
+    const second = h.component.onSelectAudioTrack('shaka-4');
+    releases[1]();
+    await second;
+    releases[0]();
+    await first;
+
+    expect(h.component.activeAudioTrackId()).toBe('shaka-4');
+    expect(h.component.activeAudioStreamIndex).toBe(0);
+    expect(h.engine.play).toHaveBeenCalledTimes(1);
+  });
+
+  it('wires the Tizen engine to the same track reports as the others', async () => {
+    const h = audioHarness();
+    h.component.activeAudioStreamIndex = 1;
+    h.component.createSurface = async () => ({ engine: h.engine });
+
+    await h.component.createTizenEngine();
+    h.engine.emit('audioTracksChanged', {
+      tracks: [engineTrack('avplay-audio-1', 'eng', true), engineTrack('avplay-audio-2', 'fra')],
+    });
+
+    expect(h.component.availableAudioTracks().map((t: { id: string }) => t.id)).toEqual([
+      'avplay-audio-1',
+      'avplay-audio-2',
+    ]);
+    expect(h.engine.selectAudioTrack).toHaveBeenCalledWith('avplay-audio-2');
+    expect(h.component.activeAudioTrackId()).toBe('avplay-audio-2');
+  });
+});
+
+const EP1_FILE_ID = MAIN_FILE_ID;
+const EP2_FILE_ID = 2;
+/** Episode 1 lists [en, fr]; episode 2 lists the same languages the other way round. */
+const TWO_EPISODES: Media = {
+  ...MOVIE,
+  files: [
+    { ...MOVIE.files![0], id: EP1_FILE_ID, streamInfo: { durationSeconds: 100, audio: [{ language: 'eng' }, { language: 'fra' }] } as any },
+    { ...MOVIE.files![0], id: EP2_FILE_ID, streamInfo: { durationSeconds: 100, audio: [{ language: 'fra' }, { language: 'eng', isDefault: true }] } as any },
+  ],
+};
+
+const subOption = (id: string, language: string, extra: Record<string, unknown> = {}) =>
+  ({ id, label: id, url: `/${id}`, language, burnIn: false, ...extra }) as any;
+
+/** An engine the player sees as a NativeEngine (Android/iOS), without the Capacitor plugin. */
+function nativeStub() {
+  return Object.assign(Object.create(NativeEngine.prototype), {
+    configure: vi.fn(),
+    setPreloadedSubtitles: vi.fn(),
+    setTextVisibility: vi.fn(),
+    resetRecoveryGuard: vi.fn(),
+    load: vi.fn(async () => {}),
+    play: vi.fn(async () => {}),
+    pause: vi.fn(async () => {}),
+    getVariantTracks: () => [],
+    getStats: () => ({ droppedFrames: 0 }),
+    on: () => {},
+  });
+}
+
+describe('PlayerComponent item change', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  function episodeHarness() {
+    const h = createHarness();
+    h.component.media = TWO_EPISODES;
+    h.component.activeAudioStreamIndex = 1;
+    h.component.availableAudioTracks.set([
+      { id: 'audio-0', label: 'English', language: 'en' },
+      { id: 'audio-1', label: 'French', language: 'fr' },
+    ]);
+    h.component.activeAudioTrackId.set('audio-1');
+    h.component.availableSubtitles.set([subOption('ext-1', 'en')]);
+    h.component.activeSubtitleId.set('ext-1');
+    h.component.activeBurnInId = 5;
+    return h;
+  }
+
+  it('starts the next episode from a clean track state, subtitle off on the engine before it loads', async () => {
+    const h = episodeHarness();
+
+    await h.component.reloadForEpisode(EP2_FILE_ID, MEDIA_ID, undefined);
+
+    expect(h.engine.setTextVisibility).toHaveBeenCalledWith(false);
+    expect(h.engine.setTextVisibility.mock.invocationCallOrder[0]).toBeLessThan(h.engine.load.mock.invocationCallOrder[0]);
+    expect(h.component.activeSubtitleId()).toBeNull();
+    expect(h.component.activeAudioTrackId()).toBeNull();
+    expect(h.component.availableAudioTracks()).toEqual([]);
+    // The new file's own pick is negotiated: no burn-in, and its default-flagged English track (index 1).
+    const [, , burnIn, audio] = h.streamingApi.getPlaybackInfo.mock.calls[0] as any[];
+    expect(burnIn).toBeUndefined();
+    expect(audio).toBe(1);
+    expect(h.engine.configure).toHaveBeenCalledWith({ preferredAudioLanguage: 'en' });
+  });
+
+  it('menus the new episode\'s tracks, not the previous episode\'s same-count list', async () => {
+    const h = episodeHarness();
+    h.component.wireAudioTracks(h.engine);
+
+    await h.component.reloadForEpisode(EP2_FILE_ID, MEDIA_ID, undefined);
+    h.engine.emit('audioTracksChanged', {
+      tracks: [engineTrack('audio-0', 'fra'), engineTrack('audio-1', 'eng', true)],
+    });
+
+    expect(h.component.availableAudioTracks().map((t: { language: string }) => t.language)).toEqual(['fr', 'en']);
+    expect(h.component.activeAudioTrackId()).toBe('audio-1');
+  });
+});
+
+describe('PlayerComponent native sidecar subtitles', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  function sidecarHarness(lists: Record<number, unknown[]>) {
+    const h = createHarness();
+    h.component.media = TWO_EPISODES;
+    const engine = nativeStub();
+    h.component.engine = engine;
+    TestBed.inject(TrackManagerService).loadSubtitles = vi.fn(async (_m: number, fileId: number) => lists[fileId] ?? []) as any;
+    h.state.playbackMode.set('direct');
+    return { h, engine };
+  }
+
+  it('lists the direct-play externals in the order subtitleOrdinal ranks them, forced flag included', async () => {
+    const { h, engine } = sidecarHarness({
+      [EP1_FILE_ID]: [
+        subOption('ext-9', 'en', { subtitleDbId: 9 }),
+        subOption('emb-2', 'en', { subtitleDbId: undefined }),
+        subOption('ext-3', 'en', { subtitleDbId: 3, forced: true }),
+        subOption('ext-1', 'en', { subtitleDbId: 1 }),
+      ],
+    });
+
+    await h.component.prepareLoad();
+
+    expect(engine.setPreloadedSubtitles).toHaveBeenCalledWith([
+      { url: '/ext-1', language: 'en', label: 'ext-1', forced: false },
+      { url: '/ext-3', language: 'en', label: 'ext-3', forced: true },
+      { url: '/ext-9', language: 'en', label: 'ext-9', forced: false },
+    ]);
+  });
+
+  it('hands each load the sidecars of the file and mode it is about to play', async () => {
+    const { h, engine } = sidecarHarness({
+      [EP1_FILE_ID]: [subOption('ext-1', 'en', { subtitleDbId: 1 })],
+      [EP2_FILE_ID]: [subOption('ext-7', 'fr', { subtitleDbId: 7 })],
+    });
+
+    await h.component.prepareLoad();
+    // Next episode, still direct play: never the previous episode's files.
+    h.component.mediaFileId = EP2_FILE_ID;
+    await h.component.prepareLoad();
+    // HLS carries its subtitles as renditions: a list here would show each twice.
+    h.state.playbackMode.set('transcode');
+    await h.component.prepareLoad();
+    // Back to direct play (the "original" rung): the externals return.
+    h.state.playbackMode.set('direct');
+    await h.component.prepareLoad();
+
+    expect(engine.setPreloadedSubtitles.mock.calls.map((c: any[][]) => c[0].map((s: { url: string }) => s.url))).toEqual([
+      ['/ext-1'],
+      ['/ext-7'],
+      [],
+      ['/ext-7'],
+    ]);
+  });
+
+  it('passes an episode its sidecars before its load', async () => {
+    const { h, engine } = sidecarHarness({ [EP2_FILE_ID]: [subOption('ext-7', 'fr', { subtitleDbId: 7 })] });
+
+    await h.component.reloadForEpisode(EP2_FILE_ID, MEDIA_ID, undefined);
+
+    expect(engine.setPreloadedSubtitles).toHaveBeenCalledWith([
+      { url: '/ext-7', language: 'fr', label: 'ext-7', forced: false },
+    ]);
+    expect(engine.setPreloadedSubtitles.mock.invocationCallOrder[0]).toBeLessThan(engine.load.mock.invocationCallOrder[0]);
+  });
+});
+
+describe('PlayerComponent subtitle selection', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  const ext = (n: number, language: string, extra: Record<string, unknown> = {}) =>
+    subOption(`ext-${n}`, language, { subtitleDbId: n, ...extra });
+
+  function subtitleHarness() {
+    const h = createHarness();
+    h.state.videoStarted.set(true);
+    return { h, tracks: TestBed.inject(TrackManagerService) as any };
+  }
+
+  /** The descriptor the picker builds on a click, so a restore must build the same one. */
+  const lastSelected = (h: ReturnType<typeof createHarness>) =>
+    h.engine.selectTextTrack.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+
+  it.each([
+    ['reloadStream', (c: any) => c.reloadStream()],
+    ['refreshSidAndReload', (c: any) => c.refreshSidAndReload(10, { preservePause: false, unmute: false })],
+  ])('%s restores the active subtitle with its ordinal, embedded index and image flag', async (_name, reload) => {
+    const { h } = subtitleHarness();
+    h.engine.currentTime = 10;
+    h.component.availableSubtitles.set([
+      ext(1, 'en'),
+      ext(2, 'en'),
+      subOption('emb-4', 'en', { url: '/emb4' }),
+      subOption('emb-5', 'en', { url: '', isImage: true }),
+    ]);
+
+    for (const [id, ordinal, embIndex, image] of [
+      ['ext-2', 2, null, undefined],
+      ['emb-4', 0, 4, undefined],
+      ['emb-5', 0, 5, true],
+    ] as const) {
+      h.component.activeSubtitleId.set(id);
+      h.engine.addTextTrack.mockClear();
+      await reload(h.component);
+      expect(h.engine.addTextTrack.mock.calls.at(-1)?.[4], id).toBe(ordinal);
+      expect(lastSelected(h), id).toMatchObject({ embIndex, image });
+    }
+  });
+
+  it('restores on a native engine too, which the recovery reload used to skip', async () => {
+    const { h } = subtitleHarness();
+    h.component.isNativeEngine.set(true);
+    h.component.availableSubtitles.set([ext(1, 'en')]);
+    h.component.activeSubtitleId.set('ext-1');
+
+    await h.component.refreshSidAndReload(10, { preservePause: false, unmute: false });
+
+    expect(h.engine.selectTextTrack).toHaveBeenCalled();
+  });
+
+  it('restores nothing while Off, and leaves a burn-in to the server', async () => {
+    const { h } = subtitleHarness();
+    h.component.availableSubtitles.set([ext(1, 'en', { burnIn: true })]);
+    await h.component.reloadStream();
+    h.component.activeSubtitleId.set('ext-1');
+    await h.component.reloadStream();
+
+    expect(h.engine.addTextTrack).not.toHaveBeenCalled();
+  });
+
+  it('turns the soft subtitle off before a burn-in reload, and does not bring it back', async () => {
+    const { h } = subtitleHarness();
+    h.component.availableSubtitles.set([ext(1, 'en'), subOption('emb-9', 'en', { burnIn: true, subtitleDbId: 9, isImage: true })]);
+    await h.component.selectSubtitle(h.component.availableSubtitles()[0]);
+    h.engine.setTextVisibility.mockClear();
+    h.engine.addTextTrack.mockClear();
+
+    await h.component.selectSubtitle(h.component.availableSubtitles()[1]);
+
+    expect(h.engine.setTextVisibility).toHaveBeenCalledWith(false);
+    expect(h.engine.setTextVisibility.mock.invocationCallOrder[0]).toBeLessThan(
+      h.engine.load.mock.invocationCallOrder.at(-1)!,
+    );
+    expect((h.streamingApi.getPlaybackInfo.mock.calls.at(-1) as unknown[])[2]).toBe(9);
+    expect(h.engine.addTextTrack).not.toHaveBeenCalled();
+    expect(h.component.activeSubtitleId()).toBe('emb-9');
+  });
+
+  it('keeps the latest pick when an older one finishes loading last', async () => {
+    const { h, tracks } = subtitleHarness();
+    const a = ext(1, 'en');
+    const b = ext(2, 'fr');
+    h.component.availableSubtitles.set([a, b]);
+    const loads: Record<string, (t: unknown) => void> = {};
+    h.engine.addTextTrack.mockImplementation(
+      (_url: string, language: string) => new Promise((resolve) => (loads[language] = resolve)),
+    );
+
+    const first = h.component.selectSubtitle(a);
+    const second = h.component.selectSubtitle(b);
+    loads['fr']({ id: 'fr' });
+    await second;
+    loads['en']({ id: 'en' });
+    await first;
+
+    expect(h.component.activeSubtitleId()).toBe('ext-2');
+    expect(h.engine.selectTextTrack).toHaveBeenCalledTimes(1);
+    expect(lastSelected(h)).toMatchObject({ id: 'fr' });
+    expect(tracks.saveSubtitleSelection).toHaveBeenCalledTimes(1);
+    expect(tracks.saveSubtitleSelection.mock.calls[0][1]).toBe('fr');
+  });
+
+  it('does not let a pick of the previous episode land on the next one', async () => {
+    const { h } = subtitleHarness();
+    h.component.media = TWO_EPISODES;
+    const a = ext(1, 'en');
+    h.component.availableSubtitles.set([a]);
+    let finish: (t: unknown) => void = () => {};
+    h.engine.addTextTrack.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+
+    const pick = h.component.selectSubtitle(a);
+    await h.component.reloadForEpisode(EP2_FILE_ID, MEDIA_ID, undefined);
+    finish({ id: 'late' });
+    await pick;
+
+    expect(h.component.activeSubtitleId()).toBeNull();
+    expect(h.engine.selectTextTrack).not.toHaveBeenCalled();
+  });
+
+  it('remembers a viewer\'s pick and not the automatic one', async () => {
+    const { h, tracks } = subtitleHarness();
+    const a = ext(1, 'en', { forced: true });
+    tracks.loadSubtitles = vi.fn(async () => [a]);
+    tracks.autoSelectSubtitle = vi.fn(async (_s: unknown, _a: unknown, _i: unknown, _f: unknown, onSelect: (s: unknown) => Promise<unknown>) => {
+      await onSelect(a);
+    });
+
+    await h.component.completeEpisodeSwitchSetup();
+    expect(h.component.activeSubtitleId()).toBe('ext-1');
+    expect(tracks.saveSubtitleSelection).not.toHaveBeenCalled();
+
+    await h.component.onSelectSubtitleById('ext-1');
+    expect(tracks.saveSubtitleSelection).toHaveBeenCalledWith(MEDIA_ID, 'en', true, false, false, undefined);
+
+    await h.component.onSelectSubtitleById(null);
+    expect(tracks.saveSubtitleSelection).toHaveBeenLastCalledWith(MEDIA_ID, null, undefined, false, false, undefined);
+  });
+
+  it('decides the automatic pick from the audio that will play, before any engine lists a track', async () => {
+    const { h, tracks } = subtitleHarness();
+    h.component.media = AUDIO_MEDIA;
+    h.component.activeAudioStreamIndex = 1;
+
+    await h.component.completeEpisodeSwitchSetup();
+
+    const call = tracks.autoSelectSubtitle.mock.calls.at(-1) as unknown[];
+    expect(call[2]).toBeNull();
+    expect(call[6]).toBe('fra');
   });
 });

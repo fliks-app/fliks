@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { TrackManagerService } from './track-manager.service';
+import { TrackManagerService, streamIndexForTrack, trackForStreamIndex } from './track-manager.service';
 import { PlayerSettingsService } from './player-settings.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { AppSettingsService } from './app-settings.service';
@@ -135,5 +135,69 @@ describe('TrackManagerService audio track mapping — engine folds by language',
     const onSelect = vi.fn();
     service.autoSelectAudioTrack(alignedTracks, 1, 1, 'audio-1', onSelect, 'eng', streams);
     expect(onSelect).not.toHaveBeenCalled();
+  });
+});
+
+describe('TrackManagerService audio target language', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const tracks = [
+    { id: 'audio-0', language: 'eng' },
+    { id: 'audio-1', language: 'fra' },
+    { id: 'audio-2', language: 'fra' },
+  ];
+
+  function pick(withStreams: typeof streams, active: string | null) {
+    const service = setup();
+    vi.spyOn(service['playerSettings'], 'get').mockReturnValue({ rememberAudioSelections: false } as any);
+    vi.spyOn(service['playerSettings'], 'audioLanguage').mockReturnValue('fra');
+    const onSelect = vi.fn();
+    service.autoSelectAudioTrack(tracks, 1, 1, active, onSelect, undefined, withStreams);
+    return onSelect;
+  }
+
+  it('skips a commentary track of the target language, as resolveAudioStreamIndex does', () => {
+    const onSelect = pick(
+      [{ language: 'eng' }, { language: 'fra', commentary: true }, { language: 'fra' }] as typeof streams,
+      'audio-0',
+    );
+    expect(onSelect).toHaveBeenCalledWith('audio-2');
+  });
+
+  it('prefers the default-flagged track of the target language', () => {
+    const onSelect = pick(
+      [{ language: 'eng' }, { language: 'fra' }, { language: 'fra', isDefault: true }] as typeof streams,
+      'audio-0',
+    );
+    expect(onSelect).toHaveBeenCalledWith('audio-2');
+  });
+
+  it('leaves the backend pick alone when it is already the one the rule names', () => {
+    const onSelect = pick(
+      [{ language: 'eng' }, { language: 'fra', commentary: true }, { language: 'fra' }] as typeof streams,
+      'audio-2',
+    );
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+});
+
+describe('audio track <-> stream index mapping', () => {
+  it('maps by position when the lists align, both ways', () => {
+    const tracks = [{ id: 'avplay-audio-1', language: 'eng' }, { id: 'avplay-audio-2', language: 'fra' }];
+    expect(trackForStreamIndex(1, streams.slice(0, 2), tracks)?.id).toBe('avplay-audio-2');
+    expect(streamIndexForTrack('avplay-audio-2', tracks, streams.slice(0, 2))).toBe(1);
+  });
+
+  it('maps a folded track to a stream of its language, keeping the stream already targeted', () => {
+    expect(streamIndexForTrack('audio-1', foldedTracks, streams)).toBe(1);
+    expect(streamIndexForTrack('audio-1', foldedTracks, streams, 2)).toBe(2);
+    // A hint from another language never wins.
+    expect(streamIndexForTrack('audio-1', foldedTracks, streams, 0)).toBe(1);
+  });
+
+  it('knows nothing of an unknown track or a file without streamInfo', () => {
+    expect(streamIndexForTrack('nope', foldedTracks, streams)).toBeUndefined();
+    expect(streamIndexForTrack('audio-1', foldedTracks, [])).toBeUndefined();
+    expect(trackForStreamIndex(0, [], foldedTracks)).toBeUndefined();
   });
 });

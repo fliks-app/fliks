@@ -1,4 +1,4 @@
-import { NativePlayer, type NativePlayerCrop } from '../../plugins/native-player.plugin';
+import { NativePlayer, type NativePlayerCrop, type NativeSidecarSubtitle } from '../../plugins/native-player.plugin';
 import {
   AbstractPlaybackEngine,
   type PlaybackEngine,
@@ -111,11 +111,13 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   ): Promise<void> {
     this.resetFirstFrame();
     this.lastTimeUpdatePos = -1;
+    // Fresh media → fresh tracks: the previous item's list must not outlive it.
+    this._audioTracks = [];
     // Android picks its audio sink at load time from the ranges, so they go first.
     await this.pushMuteRanges(true);
     const info = this.mediaInfo?.();
-    // Direct play / offline inject external sidecars via setPreloadedSubtitles
-    // (empty for transcode/remux, which carry subs as HLS renditions).
+    // The sidecars of this load, set by the player beforehand (empty for
+    // transcode/remux, which carry subs as HLS renditions).
     await NativePlayer.load({
       url,
       startTime,
@@ -239,10 +241,11 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     return crop !== null;
   }
 
-  private _preloadedSubtitles: { url: string; language: string; label: string }[] = [];
+  private _preloadedSubtitles: NativeSidecarSubtitle[] = [];
 
-  /** Set subtitles to include in the native MediaItem at load time. */
-  setPreloadedSubtitles(subs: { url: string; language: string; label: string }[]): void {
+  /** Sidecar subtitles for the native MediaItem: read by every load(), so the
+   *  caller sets them before each one. */
+  setPreloadedSubtitles(subs: NativeSidecarSubtitle[]): void {
     this._preloadedSubtitles = subs;
     this._subtitleUrls = subs.map((s) => s.url);
   }

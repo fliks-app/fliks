@@ -304,6 +304,7 @@ public class NativePlayerPlugin extends Plugin {
 
             currentHlsUrl = url;
             subtitleConfigs.clear();
+            pendingSubtitleTrackId = null;
 
             // Pre-load all subtitle configs from the load call
             if (subtitles != null) {
@@ -315,6 +316,8 @@ public class NativePlayerPlugin extends Plugin {
                                         .setMimeType(MimeTypes.TEXT_VTT)
                                         .setLanguage(sub.optString("language", "und"))
                                         .setLabel(sub.optString("label", "Subtitle"))
+                                        .setSelectionFlags(sub.optBoolean("forced", false)
+                                                ? C.SELECTION_FLAG_FORCED : 0)
                                         .build());
                     } catch (Exception ignored) {}
                 }
@@ -1108,20 +1111,22 @@ public class NativePlayerPlugin extends Plugin {
         try { targetIndex = Integer.parseInt(id.replace("text-", "")); }
         catch (NumberFormatException e) { return false; }
 
-        // "text-N" is the Nth text group, matching getSubtitleTracks' order.
+        // "text-N" is the Nth text track across all groups, as getSubtitleTracks numbers them.
         int idx = 0;
         for (Tracks.Group group : player.getCurrentTracks().getGroups()) {
             if (group.getType() == C.TRACK_TYPE_TEXT) {
-                if (idx == targetIndex) {
-                    player.setTrackSelectionParameters(
-                            player.getTrackSelectionParameters().buildUpon()
-                                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                                    .setOverrideForType(
-                                            new TrackSelectionOverride(group.getMediaTrackGroup(), 0))
-                                    .build());
-                    return true;
+                for (int i = 0; i < group.length; i++) {
+                    if (idx == targetIndex) {
+                        player.setTrackSelectionParameters(
+                                player.getTrackSelectionParameters().buildUpon()
+                                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                                        .setOverrideForType(
+                                                new TrackSelectionOverride(group.getMediaTrackGroup(), i))
+                                        .build());
+                        return true;
+                    }
+                    idx++;
                 }
-                idx++;
             }
         }
         return false;

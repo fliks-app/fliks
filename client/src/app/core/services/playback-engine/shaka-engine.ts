@@ -94,6 +94,9 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
         // dropped instead of aborting video and audio playback.
         ignoreTextStreamFailures: true,
       },
+      // The app's selection is the only authority on subtitles: Shaka would
+      // otherwise show a forced track in the audio language on every load.
+      accessibility: { handleForcedSubtitlesAutomatically: false },
     } as any);
 
     this.installSessionExpiredFilter();
@@ -291,10 +294,12 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
       }
     }
 
+    const activeAudioId = variants.find((v: any) => v.active)?.audioId;
     return Array.from(seen.entries()).map(([audioId, v]) => ({
       id: `shaka-${audioId}`,
       label: `${v.language ?? 'und'} (${v.audioCodec ?? '?'}${v.channelsCount ? ' ' + v.channelsCount + 'ch' : ''})`,
       language: v.language ?? 'und',
+      selected: audioId === activeAudioId,
     }));
   }
 
@@ -570,16 +575,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     // to the real shaka-* tracks as soon as Shaka has them.
     const emitAudioTracks = () => {
       const tracks = this.getAudioTracks();
-      if (tracks.length === 0) return;
-      const activeAudioId = this.player
-        ?.getVariantTracks()
-        ?.find((v: any) => v.active)?.audioId;
-      this.emit('audioTracksChanged', {
-        tracks: tracks.map((t) => ({
-          ...t,
-          selected: t.id === `shaka-${activeAudioId}`,
-        })) as any,
-      });
+      if (tracks.length > 0) this.emit('audioTracksChanged', { tracks });
     };
     this.addShakaListener('manifestparsed', emitAudioTracks);
     this.addShakaListener('trackschanged', emitAudioTracks);

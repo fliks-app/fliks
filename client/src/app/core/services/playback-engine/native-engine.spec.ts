@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NativeEngine } from './native-engine';
 
 const plugin = vi.hoisted(() => ({
-  load: vi.fn(() => Promise.resolve()),
+  create: vi.fn(() => Promise.resolve()),
+  getSubtitleTracks: vi.fn(() => Promise.resolve({ tracks: [] })),
+  load: vi.fn((_options: unknown) => Promise.resolve()),
   setCrop: vi.fn(() => Promise.resolve()),
   setFillScreen: vi.fn(() => Promise.resolve()),
   setSubtitleStyle: vi.fn(() => Promise.resolve()),
@@ -56,5 +58,49 @@ describe('NativeEngine.setCrop', () => {
     plugin.setCrop.mockClear();
     await engine.load('https://x/master.m3u8');
     expect(plugin.setCrop).not.toHaveBeenCalled();
+  });
+});
+
+describe('NativeEngine sidecar subtitles', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('sends the sidecars set for the load, forced flag included', async () => {
+    const engine = new NativeEngine();
+    const sidecars = [
+      { url: 'https://x/subtitles/1', language: 'en', label: 'English', forced: false },
+      { url: 'https://x/subtitles/2', language: 'en', label: 'English forced', forced: true },
+    ];
+    engine.setPreloadedSubtitles(sidecars);
+    await engine.load('https://x/video.mkv');
+    expect(plugin.load).toHaveBeenCalledWith(expect.objectContaining({ subtitles: sidecars }));
+  });
+
+  it('sends the list the player set last, so a later load can drop them', async () => {
+    const engine = new NativeEngine();
+    engine.setPreloadedSubtitles([{ url: 'https://x/subtitles/1', language: 'en', label: 'English' }]);
+    await engine.load('https://x/video.mkv');
+    engine.setPreloadedSubtitles([]);
+    await engine.load('https://x/master.m3u8');
+    expect(plugin.load).toHaveBeenLastCalledWith(expect.objectContaining({ subtitles: [] }));
+  });
+});
+
+describe('NativeEngine audio tracks across loads', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('forgets the previous item\'s tracks when the next one loads', async () => {
+    const engine = new NativeEngine();
+    await engine.init(document.createElement('div'));
+    window.dispatchEvent(
+      new CustomEvent('nativePlayerTracksChanged', {
+        detail: { audioTracks: [{ id: 'audio-0', language: 'en', label: 'English' }], subtitleTracks: [] },
+      }),
+    );
+    expect(engine.getAudioTracks()).toHaveLength(1);
+
+    await engine.load('https://x/master.m3u8');
+
+    expect(engine.getAudioTracks()).toEqual([]);
+    await engine.destroy();
   });
 });
