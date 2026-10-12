@@ -27,6 +27,7 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
     private var sessionManager: GCKSessionManager?
     /** Receiver → sender channel for qoe samples and player errors, forwarded to JS verbatim. */
     private var fliksChannel: GCKGenericChannel?
+    private var fliksChannelSession: GCKCastSession?
     private static let fliksNamespace = "urn:x-cast:media.fliks.app"
     private var pollTimer: Timer?
     /** LOAD calls awaiting the receiver's verdict, by request id: popping one settles it exactly once. */
@@ -372,7 +373,7 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
     }
 
     public func sessionManager(_ sessionManager: GCKSessionManager, didEnd session: GCKSession, withError error: (any Error)?) {
-        fliksChannel = nil
+        detachFliksChannel()
         stopPolling()
         emitCastState(connected: false)
     }
@@ -383,11 +384,20 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
         emitPickerDismissed()
     }
 
+    private func detachFliksChannel() {
+        if let channel = fliksChannel { fliksChannelSession?.remove(channel) }
+        fliksChannel = nil
+        fliksChannelSession = nil
+    }
+
     private func attachFliksChannel(_ session: GCKCastSession) {
+        if fliksChannelSession === session { return }
+        detachFliksChannel()
         let channel = GCKGenericChannel(namespace: Self.fliksNamespace)
         channel.delegate = self
         session.add(channel)
         fliksChannel = channel
+        fliksChannelSession = session
     }
 
     public func cast(_ channel: GCKGenericChannel, didReceiveTextMessage message: String, withNamespace protocolNamespace: String) {

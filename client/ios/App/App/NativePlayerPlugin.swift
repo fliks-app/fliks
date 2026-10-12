@@ -964,12 +964,12 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// Playback-quality counters for the current item (its access log restarts with each item).
     @objc func getQoe(_ call: CAPPluginCall) {
         DispatchQueue.main.async { [weak self] in
-            guard let item = self?.player?.currentItem else { return call.resolve(Self.qoe(nil, ahead: nil)) }
+            guard let self, let item = self.player?.currentItem else { return call.resolve(self?.qoe(nil, ahead: nil) ?? [:]) }
             let t = item.currentTime().seconds
             let ahead = item.loadedTimeRanges.map(\.timeRangeValue)
                 .first { $0.containsTime(item.currentTime()) }
                 .map { CMTimeGetSeconds($0.end) - t }
-            call.resolve(Self.qoe(item, ahead: ahead))
+            call.resolve(self.qoe(item, ahead: ahead))
         }
     }
 
@@ -990,15 +990,17 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         return (fps, codec)
     }
 
-    private static func qoe(_ item: AVPlayerItem?, ahead: Double?) -> [String: Any] {
+    private var decodedEstimate = DecodedEstimate()
+
+    private func qoe(_ item: AVPlayerItem?, ahead: Double?) -> [String: Any] {
         let events = item?.accessLog()?.events ?? []
         let last = events.last
         let dropped = events.map(\.numberOfDroppedVideoFrames).filter { $0 >= 0 }.reduce(0, +)
         let size = item?.presentationSize ?? .zero
-        let video = videoTrackInfo(item)
-        // AVPlayer has no decoded-frame counter: estimated as watched seconds x frame rate.
+        let video = Self.videoTrackInfo(item)
+        // AVPlayer has no decoded-frame counter: estimated from watched time and frame rate.
         let watched = events.map(\.durationWatched).filter { $0 > 0 }.reduce(0, +)
-        let decoded = video.fps.map { Int((watched * $0).rounded()) }
+        let decoded = decodedEstimate.update(item: item, watched: watched, fps: video.fps)
         func pos(_ v: Double?) -> Any { v.flatMap { $0 > 0 ? $0 : nil } ?? NSNull() }
         var cmcd = false
         if #available(iOS 18.0, *) { cmcd = true }
@@ -1442,5 +1444,21 @@ extension NativePlayerPlugin: AVPlayerItemLegibleOutputPushDelegate {
         DispatchQueue.main.async { [weak self] in
             self?.subtitleOverlay?.render(cues, top: top)
         }
+    }
+}
+
+/// Running decoded-frame estimate: each sample adds the newly watched seconds at the current rate,
+/// so a frame-rate change never rescales the history. Restarts with a new AVPlayerItem.
+struct DecodedEstimate {
+    private var item: ObjectIdentifier?
+    private var watched = 0.0
+    private var decoded = 0.0
+
+    mutating func update(item new: AVPlayerItem?, watched total: Double, fps: Double?) -> Int? {
+        let id = new.map(ObjectIdentifier.init)
+        if id != item { self = DecodedEstimate(item: id) }
+        decoded += max(total - watched, 0) * (fps ?? 0)
+        watched = total
+        return decoded > 0 ? Int(decoded.rounded()) : nil
     }
 }
