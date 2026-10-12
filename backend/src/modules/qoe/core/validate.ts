@@ -95,6 +95,8 @@ export function parseEvents(raw: unknown, now = Date.now()): QoeEvent[] {
     if (from != null) ev.fromBitrate = from;
     const to = num(e.toBitrate);
     if (to != null) ev.toBitrate = to;
+    const variant = num(e.variantBitrate);
+    if (variant != null) ev.variantBitrate = variant;
     out.push(ev);
   }
   return out;

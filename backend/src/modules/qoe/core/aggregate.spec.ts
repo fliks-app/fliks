@@ -180,4 +180,23 @@ describe('mergeSummaries', () => {
     ]);
     expect(m).toMatchObject({ droppedFrames: 5, decodedFrames: 100 });
   });
+
+  it('classifies a stall from the segment waits and samples it holds', () => {
+    const a = new QoeAggregator();
+    a.addSample(sample({ bandwidthBps: 2e6, variantBitrate: 5e6 }), 1_000);
+    a.addSegment({ segmentDurationS: 6, waitedMs: 2_500 }, 9_000);
+    expect(a.addEvent({ type: 'stall', at: 10_000, position: 1, durationMs: 3_000 }, 10_000)?.cause).toBe('server');
+    const fine = a.addEvent({ type: 'stall', at: 60_000, position: 2, durationMs: 1_000, bufferAheadS: 0.2 }, 60_000);
+    expect(fine).toMatchObject({ cause: 'network', confidence: 'high' });
+    expect(a.lastStall).toMatchObject({ at: 60_000, cause: 'network' });
+    expect(a.summary().stallCauseMs).toEqual({ server: 3_000, network: 1_000, device: 0, unknown: 0 });
+    expect(a.addEvent({ type: 'error', at: 1, position: 1 }, 1)).toBeNull();
+  });
+
+  it('keeps stallCauseMs null without a classified stall and sums it on merge', () => {
+    expect(new QoeAggregator().summary().stallCauseMs).toBeNull();
+    const c = (ms: number) => ({ server: 0, network: ms, device: 0, unknown: 0 });
+    const m = mergeSummaries([part({ stallCauseMs: c(10) }), part({ stallCauseMs: null }), part({ stallCauseMs: c(5) })]);
+    expect(m.stallCauseMs).toEqual(c(15));
+  });
 });

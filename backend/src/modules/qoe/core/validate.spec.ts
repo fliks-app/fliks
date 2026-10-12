@@ -94,4 +94,12 @@ describe('parseEvents', () => {
       },
     ]);
   });
+
+  it('keeps a stall variantBitrate and ignores a client-sent cause', () => {
+    const [e] = parseEvents([
+      { type: 'stall', at: Date.now(), position: 1, variantBitrate: 5e6, cause: 'server' },
+    ]);
+    expect(e.variantBitrate).toBe(5e6);
+    expect(e).not.toHaveProperty('cause');
+  });
 });

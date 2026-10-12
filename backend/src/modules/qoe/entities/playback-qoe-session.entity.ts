@@ -1,6 +1,6 @@
 import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
 import type { TranscodeReason } from '../../streaming/dto/playback-info.dto';
-import type { QoeEngine, QoeVerdict } from '../core/types';
+import type { QoeEngine, QoeVerdict, StallCause } from '../core/types';
 
 /** One row per playback session, upserted while it runs and on its end. */
 @Entity('playback_qoe_sessions')
@@ -137,6 +137,10 @@ export class PlaybackQoeSession {
   reasons: string[];
 
   /** Verdict of the whole playback (all rows of this user and playbackId), rewritten at flush. */
+  /** Stalled ms per classified cause; null when no stall was classified. */
+  @Column({ type: 'jsonb', nullable: true })
+  stallCauseMs: Record<StallCause, number> | null;
+
   @Column({ type: 'varchar', default: 'unknown' })
   playbackVerdict: QoeVerdict;
 

@@ -181,6 +181,34 @@ describe('QoeService', () => {
     });
   });
 
+  it('stores the cause of a recorded stall in the event data and exposes the last stall', async () => {
+    const { svc, insert } = build();
+    svc.recordSample(session, sample);
+    const at = Date.now();
+    svc.observeSegment(session, { query: {}, headers: {} } as never, 6, 3_000);
+    svc.recordEvents(session, [
+      { type: 'stall', at, position: 5, durationMs: 4_000, bufferAheadS: 0.3 },
+      { type: 'error', at, position: 5 },
+    ]);
+    svc.sessionEnded(session);
+    await new Promise((r) => setImmediate(r));
+    const [stall, error] = insert.mock.calls[0][0];
+    expect(stall.data).toMatchObject({
+      durationMs: 4_000,
+      cause: 'server',
+      causeConfidence: 'high',
+      causeReason: 'qoe.stall.server_wait',
+      causeEvidence: { waitedMs: 3_000 },
+    });
+    expect(error.data.cause).toBeUndefined();
+    expect(svc.liveSummary('s1')?.lastStall).toEqual({
+      at,
+      durationMs: 4_000,
+      cause: 'server',
+      reason: 'qoe.stall.server_wait',
+    });
+  });
+
   it('requeues events when a flush fails and retries them', async () => {
     const { svc, upsert, insert } = build();
     upsert.mockRejectedValueOnce(new Error('db down'));

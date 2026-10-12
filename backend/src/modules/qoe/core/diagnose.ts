@@ -52,6 +52,27 @@ function device(
     : result('device', confidence, reason);
 }
 
+const CAUSE_REASON = {
+  server: 'stalls_server_slow',
+  network: 'stalls_starved_low_throughput',
+  device: 'stalls_buffer_ahead',
+} as const;
+
+/** The cause holding most of the stalled time; null when stalls were not classified or unknown wins. */
+function fromCauses(s: QoeSessionSummary): QoeDiagnosis | null {
+  const ms = s.stallCauseMs;
+  if (!ms) return null;
+  const total = ms.server + ms.network + ms.device + ms.unknown;
+  const [cause, top] = (['server', 'network', 'device', 'unknown'] as const)
+    .map((c) => [c, ms[c]] as const)
+    .reduce((a, b) => (b[1] > a[1] ? b : a));
+  if (cause === 'unknown') return null;
+  const confidence = top / total > 0.5 ? 'high' : 'low';
+  return cause === 'device'
+    ? device(s, confidence, CAUSE_REASON.device)
+    : result(cause, confidence, CAUSE_REASON[cause]);
+}
+
 /** First matching rule wins; see plan/playback-qoe.plan.md section 1.3. */
 export function diagnose(s: QoeSessionSummary, live = false): QoeDiagnosis {
   const d = decide(s, live);
@@ -70,6 +91,8 @@ function decide(s: QoeSessionSummary, live: boolean): QoeDiagnosis {
       s.stallMs / Math.max(s.watchedMs, 1) >= STALL_RATIO);
 
   if (stalling) {
+    const byCause = fromCauses(s);
+    if (byCause) return byCause;
     if (
       s.medianTranscodeSpeed != null &&
       s.medianTranscodeSpeed < (live ? LIVE_SERVER_SPEED_FLOOR : SERVER_SPEED_FLOOR)

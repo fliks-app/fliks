@@ -1,3 +1,4 @@
+import { classifyStall } from './classify-stall';
 import type {
   CmcdSnapshot,
   QoeEngine,
@@ -5,6 +6,10 @@ import type {
   QoeSample,
   QoeSessionSummary,
   SegmentMetric,
+  StallCause,
+  StallClassification,
+  StallSample,
+  StallSegment,
 } from './types';
 
 /** Longest gap between two samples still counted as watched time (3 missed beats). */
@@ -14,6 +19,15 @@ const MIN_SPEED_SAMPLES = 3;
 const MAX_SAMPLE_AGE_MS = 15_000;
 /** Bounds memory on a multi-hour session. */
 const MAX_KEPT = 200;
+const MAX_SEGMENTS = 300;
+const MAX_SAMPLES = 20;
+
+export interface StallLast {
+  at: number;
+  durationMs: number;
+  cause: StallCause;
+  reason: string;
+}
 
 /** A cumulative counter that restarts from zero when the engine reloads. */
 class ResettingCounter {
@@ -78,6 +92,11 @@ export class QoeAggregator {
   private readonly stallBandwidths: number[] = [];
   private readonly cmcdMtp: number[] = [];
   private readonly speeds: number[] = [];
+  private readonly segments: StallSegment[] = [];
+  private readonly samples: StallSample[] = [];
+  private cmcdBandwidth: number | null = null;
+  private causeMs: Record<StallCause, number> | null = null;
+  private last: StallLast | null = null;
   private errorCount = 0;
   private lastErrorAt: number | null = null;
   private lastRecoveryAt: number | null = null;
@@ -91,6 +110,12 @@ export class QoeAggregator {
     this.sampleCount++;
     this.engine = s.engine;
     if (s.cmcd) this.cmcdClaimed = true;
+    this.samples.push({
+      at: now,
+      droppedFrames: s.droppedFrames,
+      decodedFrames: s.decodedFrames,
+    });
+    if (this.samples.length > MAX_SAMPLES) this.samples.shift();
     this.dropped.add(s.droppedFrames);
     this.decoded.add(s.decodedFrames);
     this.stalls.add(s.stallCount);
@@ -119,7 +144,9 @@ export class QoeAggregator {
     }
   }
 
-  addEvent(e: QoeEvent, now: number): void {
+  /** A stall comes back classified from what the server knows right now. */
+  addEvent(e: QoeEvent, now: number): StallClassification | null {
+    let classified: StallClassification | null = null;
     if (e.type === 'stall') {
       this.stallEvents++;
       const fresh = (at: number | null) =>
@@ -130,15 +157,37 @@ export class QoeAggregator {
         (fresh(this.cmcdBufferAt) ? this.cmcdBuffer : null);
       if (buffer != null) push(this.stallBuffers, buffer);
       if (e.bandwidthBps != null) push(this.stallBandwidths, e.bandwidthBps);
+      classified = classifyStall(e, {
+        segments: this.segments,
+        samples: this.samples,
+        bufferAheadS: buffer,
+        bandwidthBps: this.bandwidth ?? this.cmcdBandwidth,
+        variantBitrate: this.variantBitrate,
+      });
+      this.causeMs ??= { server: 0, network: 0, device: 0, unknown: 0 };
+      this.causeMs[classified.cause] += Math.max(e.durationMs ?? 0, 1);
+      this.last = {
+        at: e.at,
+        durationMs: e.durationMs ?? 0,
+        cause: classified.cause,
+        reason: classified.reason,
+      };
     } else if (e.type === 'error') {
       this.errorCount++;
       this.lastErrorAt = now;
     } else if (e.type === 'recovery') {
       this.lastRecoveryAt = now;
     }
+    return classified;
   }
 
-  addSegment(m: SegmentMetric): void {
+  get lastStall(): StallLast | null {
+    return this.last;
+  }
+
+  addSegment(m: SegmentMetric, now = Date.now()): void {
+    this.segments.push({ at: now, ...m });
+    if (this.segments.length > MAX_SEGMENTS) this.segments.shift();
     if (m.waitedMs != null && m.segmentDurationS > 0) {
       push(this.speeds, (m.segmentDurationS * 1000) / Math.max(m.waitedMs, 1));
     }
@@ -152,7 +201,10 @@ export class QoeAggregator {
       this.cmcdBuffer = buffer;
       this.cmcdBufferAt = now;
     }
-    if (c.mtp != null) push(this.cmcdMtp, c.mtp * 1000);
+    if (c.mtp != null) {
+      push(this.cmcdMtp, c.mtp * 1000);
+      this.cmcdBandwidth = c.mtp * 1000;
+    }
     if (c.br != null && this.variantBitrates.length === 0) {
       this.variantBitrate = c.br * 1000;
     }
@@ -192,6 +244,7 @@ export class QoeAggregator {
       medianTranscodeSpeed:
         this.speeds.length >= MIN_SPEED_SAMPLES ? median(this.speeds) : null,
       sampleCount: this.sampleCount,
+      stallCauseMs: this.causeMs && { ...this.causeMs },
     };
   }
 }
@@ -222,6 +275,19 @@ function frames(
   return {
     droppedFrames: both.reduce((a, p) => a + (p.droppedFrames ?? 0), 0),
     decodedFrames: both.reduce((a, p) => a + (p.decodedFrames ?? 0), 0),
+  };
+}
+
+function mergeCauses(parts: QoeSessionSummary[]): QoeSessionSummary['stallCauseMs'] {
+  const known = parts.filter((p) => p.stallCauseMs);
+  if (!known.length) return null;
+  const sum = (c: StallCause) =>
+    known.reduce((a, p) => a + (p.stallCauseMs?.[c] ?? 0), 0);
+  return {
+    server: sum('server'),
+    network: sum('network'),
+    device: sum('device'),
+    unknown: sum('unknown'),
   };
 }
 
@@ -272,5 +338,6 @@ export function mergeSummaries(parts: QoeSessionSummary[]): QoeSessionSummary {
     cmcdThroughputBps: weighted(parts, (p) => p.cmcdThroughputBps, byWatch),
     medianTranscodeSpeed: weighted(parts, (p) => p.medianTranscodeSpeed, byWatch),
     sampleCount: total((p) => p.sampleCount),
+    stallCauseMs: mergeCauses(parts),
   };
 }

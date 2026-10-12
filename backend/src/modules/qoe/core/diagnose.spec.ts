@@ -28,6 +28,7 @@ const base: QoeSessionSummary = {
   stallBandwidthBps: null,
   cmcdThroughputBps: null,
   medianTranscodeSpeed: null,
+  stallCauseMs: null,
   sampleCount: 10,
 };
 
@@ -146,6 +147,46 @@ describe('diagnose', () => {
     expect(d({ hwDecoder: false, droppedFrames: 600, height: 480 }).reasons).toEqual([
       'qoe.reason.dropped_frames',
     ]);
+  });
+
+  describe('stall causes', () => {
+    const ms = (o: Partial<Record<'server' | 'network' | 'device' | 'unknown', number>>) => ({
+      server: 0,
+      network: 0,
+      device: 0,
+      unknown: 0,
+      ...o,
+    });
+
+    it('follow the cause holding most of the stalled time, over the aggregates', () => {
+      // aggregates alone would say server; the causes say network
+      expect(
+        d({ ...stalls, medianTranscodeSpeed: 0.5, stallCauseMs: ms({ network: 6_000, device: 3_000 }) }),
+      ).toMatchObject({ verdict: 'network', confidence: 'high' });
+    });
+
+    it('weigh by duration, not by count', () => {
+      expect(
+        d({ ...stalls, stallCauseMs: ms({ device: 1_000, server: 8_000 }) }).verdict,
+      ).toBe('server');
+    });
+
+    it('are low confidence without a majority', () => {
+      expect(
+        d({ ...stalls, stallCauseMs: ms({ network: 4_000, device: 3_500, server: 1_500 }) }),
+      ).toMatchObject({ verdict: 'network', confidence: 'low' });
+    });
+
+    it('fall back to the aggregates when unknown holds most of the time', () => {
+      expect(
+        d({ ...stalls, medianTranscodeSpeed: 0.5, stallCauseMs: ms({ unknown: 9_000 }) })
+          .verdict,
+      ).toBe('server');
+    });
+
+    it('never override a session that is not stalling', () => {
+      expect(d({ stallCauseMs: ms({ network: 500 }) }).verdict).toBe('ok');
+    });
   });
 
   it('unknown: under 60 s watched', () => {

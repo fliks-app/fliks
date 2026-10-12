@@ -5,7 +5,7 @@ import { In, Repository } from 'typeorm';
 import type { Request } from 'express';
 import { SettingsService } from '../settings/settings.service';
 import type { LiveSession, SessionKind } from '../streaming/live-session.service';
-import { QoeAggregator, mergeSummaries } from './core/aggregate';
+import { QoeAggregator, mergeSummaries, type StallLast } from './core/aggregate';
 import { readCmcd } from './core/cmcd';
 import { diagnose } from './core/diagnose';
 import type {
@@ -80,12 +80,13 @@ export interface QoeLiveSummary extends QoeDiagnosis {
   cmcd: boolean;
   cmcdClaimed: boolean;
   playbackId: string | null;
+  lastStall: StallLast | null;
 }
 
 /** One viewing: the sessions sharing a playbackId (or a lone session), merged and re-diagnosed. */
 export type QoePlayback = Omit<
   PlaybackQoeSession,
-  'sessionId' | 'stallBufferAheadS' | 'stallBandwidthBps' | 'cmcdThroughputBps' | 'unrecoveredError' | 'sampleCount'
+  'sessionId' | 'stallBufferAheadS' | 'stallBandwidthBps' | 'cmcdThroughputBps' | 'unrecoveredError' | 'sampleCount' | 'stallCauseMs'
 > & {
   /** The latest session of the playback. */
   sessionId: string;
@@ -147,6 +148,7 @@ const rowSummary = (r: PlaybackQoeSession): QoeSessionSummary => ({
   stallBandwidthBps: r.stallBandwidthBps,
   cmcdThroughputBps: r.cmcdThroughputBps,
   medianTranscodeSpeed: r.medianTranscodeSpeed,
+  stallCauseMs: r.stallCauseMs,
   sampleCount: r.sampleCount,
 });
 
@@ -178,6 +180,7 @@ function mergePlaybacks(rows: PlaybackQoeSession[]): QoePlayback[] {
         cmcdThroughputBps: _c,
         unrecoveredError: _d,
         sampleCount: _e,
+        stallCauseMs: _f,
         ...rest
       } = last;
       return {
@@ -289,13 +292,21 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     for (const e of events) {
       if (t.eventCount >= MAX_EVENTS_PER_SESSION) break;
       t.eventCount++;
-      t.agg.addEvent(e, now);
+      const c = t.agg.addEvent(e, now);
       const { type, at, ...data } = e;
       t.pendingEvents.push({
         sessionId: session.sessionId,
         at: new Date(at),
         type,
-        data,
+        data: c
+          ? {
+              ...data,
+              cause: c.cause,
+              causeConfidence: c.confidence,
+              causeReason: c.reason,
+              causeEvidence: c.evidence,
+            }
+          : data,
       });
     }
   }
@@ -339,6 +350,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
       cmcd: s.cmcd,
       cmcdClaimed: s.cmcdClaimed,
       playbackId: t.playbackId,
+      lastStall: t.agg.lastStall,
     };
   }
 
@@ -479,6 +491,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
       stallBufferAheadS: s.stallBufferAheadS,
       stallBandwidthBps: s.stallBandwidthBps,
       cmcdThroughputBps: s.cmcdThroughputBps,
+      stallCauseMs: s.stallCauseMs,
       unrecoveredError: s.unrecoveredError,
       sampleCount: s.sampleCount,
       verdict: d.verdict,

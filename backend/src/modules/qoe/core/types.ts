@@ -43,6 +43,52 @@ export interface QoeEvent {
   category?: string;
   fromBitrate?: number;
   toBitrate?: number;
+  /** Stall: the active variant bitrate (bps) when it began. */
+  variantBitrate?: number;
+}
+
+export type StallCause = 'server' | 'network' | 'device' | 'unknown';
+
+export interface StallClassification {
+  cause: StallCause;
+  confidence: 'high' | 'low';
+  /** i18n key, `qoe.stall.*`. */
+  reason: string;
+  evidence: Record<string, number>;
+}
+
+/** What the server adds to a stall event's data once it has classified it. */
+export interface StallCauseData {
+  cause: StallCause;
+  causeConfidence: 'high' | 'low';
+  causeReason: string;
+  causeEvidence: Record<string, number>;
+}
+
+/** A served segment with the server time it finished waiting. */
+export interface StallSegment {
+  at: number;
+  segmentDurationS: number;
+  waitedMs: number | null;
+}
+
+export interface StallSample {
+  /** Server receive time. */
+  at: number;
+  droppedFrames: number | null;
+  decodedFrames: number | null;
+}
+
+/** What the server knew when the stall was reported. */
+export interface StallContext {
+  segments: StallSegment[];
+  samples: StallSample[];
+  /** Fresh sample or CMCD buffer. */
+  bufferAheadS: number | null;
+  /** Latest sample bandwidth, else CMCD throughput. */
+  bandwidthBps: number | null;
+  /** Latest sample variant bitrate (a transcode's nominal rung when the client has none). */
+  variantBitrate: number | null;
 }
 
 export type QoeVerdict =
@@ -115,6 +161,8 @@ export interface QoeSessionSummary {
   cmcdThroughputBps: number | null;
   /** Median of segment duration / wait; null below the sample floor. */
   medianTranscodeSpeed: number | null;
+  /** Stalled ms per classified cause; null when no stall was classified. */
+  stallCauseMs: Record<StallCause, number> | null;
   /** Samples received, i.e. the engine reports anything at all. */
   sampleCount: number;
 }

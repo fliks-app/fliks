@@ -57,6 +57,7 @@ interface QoeEvent {
   durationMs?: number; bufferAheadS?: number | null; bandwidthBps?: number | null;
   code?: number; message?: string; category?: string;
   fromBitrate?: number; toBitrate?: number;
+  variantBitrate?: number;       // stall: active rung bitrate (bps) at its start
 }
 // POST /api/playback/sessions/:sid/events  { events: QoeEvent[] (≤ 50), playbackId? } → 204
 ```
@@ -78,6 +79,25 @@ Reasons are `qoe.reason.*` i18n keys without params. First match wins:
    - stalls with buffer ahead → `device`.
 3. Dropped frames ≥ 5 % of decoded → `device`.
 4. Less than 60 s watched → `unknown` (low); otherwise `ok`.
+
+### 1.4 Stall cause
+
+The server classifies each stall when it is recorded and stores `cause`, `causeConfidence`,
+`causeReason` (`qoe.stall.*`) and `causeEvidence` in the event `data`. First match wins; the stall
+window is [at - durationMs, at] on the client clock, widened by 5 s each side for clock skew
+(a match that needs the slack is low confidence):
+
+1. `server`: a segment of the session waited for ffmpeg > 1 s in the window, or the median transcode
+   speed of the segments there is < 1.
+2. `network`: buffer < 1 s (event, else a fresh sample or CMCD `bl`) and throughput (event, else
+   latest sample, else CMCD `mtp`) < 1.2 x the variant bitrate (event, else latest sample).
+3. `device`: dropped / decoded delta >= 10 % between the samples around the stall (low confidence
+   if the buffer was starved); or the buffer was >= 1 s ahead.
+4. Starved with fine or unknown throughput: `network`, low (data did not arrive in time).
+   Unknown buffer with throughput below the bitrate: `network`, low. Otherwise `unknown`.
+
+The session verdict's stall rule follows the cause holding most of the stalled time (the stored
+`stallCauseMs`); `unknown` winning or no classified stall falls back to the aggregate rules above.
 
 Hints added to `reasons`, never a verdict: `software_decoder` (≥ 720p, on a
 `device` verdict), `cmcd_missing` (client claims CMCD, none arrived).
