@@ -168,7 +168,7 @@ struct EpisodeDetailView: View {
             end > episode.episodeNumber ? String(format: "-E%02d", end) : nil
         } ?? ""
         guard let title = episode.title, !title.isEmpty else { return number + range }
-        return "\(number)\(range) — \(title)"
+        return "\(number)\(range) - \(title)"
     }
 
     private func load() async {
