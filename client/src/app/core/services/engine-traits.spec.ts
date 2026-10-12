@@ -8,14 +8,25 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: true,
     supportsImageSubtitles: false,
+    sideloadsDirectPlaySubtitles: true,
     probesSegZero: true,
     supportsDirectPlay: true,
     supportsAbr: true,
   },
-  [EngineKind.NATIVE]: {
+  [EngineKind.ANDROID]: {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: true,
     supportsImageSubtitles: true,
+    sideloadsDirectPlaySubtitles: true,
+    probesSegZero: false,
+    supportsDirectPlay: true,
+    supportsAbr: true,
+  },
+  [EngineKind.IOS]: {
+    useTsOnSingleAudio: false,
+    supportsHlsSubtitles: true,
+    supportsImageSubtitles: false,
+    sideloadsDirectPlaySubtitles: false,
     probesSegZero: false,
     supportsDirectPlay: true,
     supportsAbr: true,
@@ -24,6 +35,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: false,
     supportsImageSubtitles: true,
+    sideloadsDirectPlaySubtitles: true,
     probesSegZero: true,
     supportsDirectPlay: true,
     supportsAbr: false,
@@ -32,6 +44,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: true,
     supportsImageSubtitles: true,
+    sideloadsDirectPlaySubtitles: true,
     probesSegZero: false,
     supportsDirectPlay: true,
     supportsAbr: true,
@@ -41,6 +54,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     supportsHlsSubtitles: false,
     supportsIFrameTrickPlay: true,
     supportsImageSubtitles: false,
+    sideloadsDirectPlaySubtitles: true,
     probesSegZero: false,
     supportsDirectPlay: true,
     supportsAbr: true,
@@ -50,6 +64,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     supportsHlsSubtitles: false,
     dedupesAudioByLanguage: true,
     supportsImageSubtitles: false,
+    sideloadsDirectPlaySubtitles: true,
     probesSegZero: false,
     supportsDirectPlay: true,
     supportsAbr: true,
@@ -65,8 +80,16 @@ describe('engineKindFor', () => {
     expect(engineKindFor(null, false)).toBe(EngineKind.WEB);
   });
 
-  it('maps null + isNative=true to NATIVE', () => {
-    expect(engineKindFor(null, true)).toBe(EngineKind.NATIVE);
+  it('maps null + isNative=true to ANDROID', () => {
+    expect(engineKindFor(null, true)).toBe(EngineKind.ANDROID);
+  });
+
+  it('maps null + isNative=true + isIos to IOS', () => {
+    expect(engineKindFor(null, true, false, true)).toBe(EngineKind.IOS);
+  });
+
+  it('keeps the TV platforms ahead of the iOS split', () => {
+    expect(engineKindFor('tizen', true, false, true)).toBe(EngineKind.TIZEN);
   });
 
   it('maps androidtv to ANDROID_TV', () => {
@@ -94,12 +117,20 @@ describe('ENGINE_TRAITS', () => {
     });
   }
 
+  it('only iOS lacks bitmap rendering and DirectPlay sideloading among the mobile engines', () => {
+    expect(ENGINE_TRAITS[EngineKind.IOS].supportsImageSubtitles).toBe(false);
+    expect(ENGINE_TRAITS[EngineKind.IOS].sideloadsDirectPlaySubtitles).toBe(false);
+    expect(ENGINE_TRAITS[EngineKind.ANDROID].supportsImageSubtitles).toBe(true);
+    expect(ENGINE_TRAITS[EngineKind.ANDROID].sideloadsDirectPlaySubtitles).toBe(true);
+  });
+
   it('CAST omits the three non-seg-zero traits (undefined on the wire)', () => {
     const cast = ENGINE_TRAITS[EngineKind.CAST];
     expect(cast.probesSegZero).toBe(true);
     expect(cast.useTsOnSingleAudio).toBeUndefined();
     expect(cast.supportsHlsSubtitles).toBeUndefined();
     expect(cast.supportsDirectPlay).toBeUndefined();
+    expect(cast.sideloadsDirectPlaySubtitles).toBeUndefined();
   });
 });
 

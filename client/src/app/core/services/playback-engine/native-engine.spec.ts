@@ -3,7 +3,8 @@ import { NativeEngine } from './native-engine';
 
 const plugin = vi.hoisted(() => ({
   create: vi.fn(() => Promise.resolve()),
-  getSubtitleTracks: vi.fn(() => Promise.resolve({ tracks: [] })),
+  getSubtitleTracks: vi.fn(() => Promise.resolve({ tracks: [] as unknown[] })),
+  selectSubtitleTrack: vi.fn((_options: unknown) => Promise.resolve()),
   load: vi.fn((_options: unknown) => Promise.resolve()),
   setCrop: vi.fn(() => Promise.resolve()),
   setFillScreen: vi.fn(() => Promise.resolve()),
@@ -82,6 +83,45 @@ describe('NativeEngine sidecar subtitles', () => {
     engine.setPreloadedSubtitles([]);
     await engine.load('https://x/master.m3u8');
     expect(plugin.load).toHaveBeenLastCalledWith(expect.objectContaining({ subtitles: [] }));
+  });
+});
+
+describe('NativeEngine subtitle resolution', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    plugin.getSubtitleTracks.mockResolvedValue({ tracks: [] });
+  });
+
+  const track = (id: string, language: string, extra: Record<string, unknown> = {}) => ({
+    id, language, label: id, ...extra,
+  });
+  const pick = async (engine: NativeEngine, language: string, extra: Record<string, unknown> = {}) => {
+    engine.selectTextTrack({ language, ...extra });
+    await vi.waitFor(() => expect(plugin.getSubtitleTracks).toHaveBeenCalled());
+    await Promise.resolve();
+  };
+
+  it('selects the track of the picked language', async () => {
+    plugin.getSubtitleTracks.mockResolvedValue({ tracks: [track('text-0', 'en'), track('text-1', 'fr')] });
+    const engine = new NativeEngine();
+    await pick(engine, 'fra');
+    expect(plugin.selectSubtitleTrack).toHaveBeenCalledWith({ id: 'text-1' });
+  });
+
+  it('never lands on a lone track of another language', async () => {
+    plugin.getSubtitleTracks.mockResolvedValue({ tracks: [track('text-0', 'en')] });
+    const engine = new NativeEngine();
+    await pick(engine, 'fra');
+    expect(plugin.selectSubtitleTrack).not.toHaveBeenCalled();
+  });
+
+  it('turns the previous track off when the new pick has no track in its language', async () => {
+    plugin.getSubtitleTracks.mockResolvedValue({ tracks: [track('text-0', 'en')] });
+    const engine = new NativeEngine();
+    await pick(engine, 'eng');
+    expect(plugin.selectSubtitleTrack).toHaveBeenLastCalledWith({ id: 'text-0' });
+    engine.selectTextTrack({ language: 'fra' });
+    expect(plugin.selectSubtitleTrack).toHaveBeenLastCalledWith({ id: null });
   });
 });
 

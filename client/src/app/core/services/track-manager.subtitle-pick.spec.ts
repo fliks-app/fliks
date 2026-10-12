@@ -6,7 +6,6 @@ import type { SubtitleOption } from './track-manager.service';
 import { PlayerSettingsService } from './player-settings.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { AppSettingsService } from './app-settings.service';
-import { BrowserDeviceProfileService } from './browser-device-profile.service';
 import { TranslateService } from '@ngx-translate/core';
 
 function sub(id: string, language: string, extra: Partial<SubtitleOption> = {}): SubtitleOption {
@@ -88,7 +87,6 @@ describe('TrackManagerService.autoSelectSubtitle — mode routing', () => {
         },
         { provide: SubtitlesApiService, useValue: {} },
         { provide: AppSettingsService, useValue: {} },
-        { provide: BrowserDeviceProfileService, useValue: {} },
         { provide: TranslateService, useValue: { instant: (k: string) => k } },
       ],
     });
@@ -160,5 +158,48 @@ describe('TrackManagerService.autoSelectSubtitle — mode routing', () => {
   it('leaves `off` and `always` as they were', async () => {
     expect(await pick({ subtitleMode: 'off' }, [full], 'eng')).toBeUndefined();
     expect(await pick({ subtitleMode: 'always' }, [forced, full], 'fra')).toBe('full');
+  });
+});
+
+describe('TrackManagerService.loadSubtitles: bitmap delivery', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const row = (id: number, codec: string, extra: Record<string, unknown> = {}) => ({
+    id, mediaFileId: 1, language: 'eng', codec, ...extra,
+  });
+
+  async function load(rows: unknown[]) {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: PlayerSettingsService, useValue: {} },
+        { provide: SubtitlesApiService, useValue: { getForMedia: async () => rows } },
+        { provide: AppSettingsService, useValue: { hideBurnInSubtitles: () => false, showSubtitleFormat: () => false } },
+        { provide: TranslateService, useValue: { instant: (k: string) => k, currentLang: () => 'en' } },
+      ],
+    });
+    const streamingApi = {
+      getSubtitleUrl: (_f: number, id: number) => `/ext/${id}`,
+      getEmbeddedSubtitleUrl: (_f: number, i: number) => `/emb/${i}`,
+    };
+    return TestBed.inject(TrackManagerService).loadSubtitles(1, 1, streamingApi as never, null);
+  }
+
+  it('flags every bitmap subtitle, embedded or sidecar, as a burn-in candidate, and no text one', async () => {
+    const options = await load([
+      row(1, 'hdmv_pgs_subtitle', { streamIndex: 3 }),
+      row(2, 'hdmv_pgs_subtitle', { relativePath: 'a.sup' }),
+      row(3, 'dvd_subtitle', { relativePath: 'a.sub' }),
+      row(4, 'subrip', { relativePath: 'a.srt' }),
+      row(5, 'subrip', { streamIndex: 4 }),
+    ]);
+
+    expect(options.map((o) => [o.id, o.burnIn])).toEqual([
+      ['emb-3', true],
+      ['ext-2', true],
+      ['ext-3', true],
+      ['ext-4', false],
+      ['emb-4', false],
+    ]);
   });
 });

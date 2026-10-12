@@ -277,4 +277,11 @@ export class DeviceProfileDto {
   @IsBoolean()
   @IsOptional()
   rejectCopy?: boolean;
+
+  /** Client is showing a text subtitle but can't sideload it into a raw file:
+   *  it needs the master's SUBTITLES renditions, so DirectPlay is ruled out and
+   *  the copy path kept (remux): flagged `ClientNeedsHlsSubtitles`. */
+  @IsBoolean()
+  @IsOptional()
+  needsHlsSubtitles?: boolean;
 }

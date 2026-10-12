@@ -6,7 +6,8 @@ import { TvPlatform } from './device.service';
  * (see `EngineTraits`). Every supported client maps to exactly one kind:
  *
  *  - WEB        — browser web build (Shaka / MSE).
- *  - NATIVE     — Capacitor mobile (ExoPlayer on Android, AVPlayer on iOS).
+ *  - ANDROID    — Capacitor Android phone / tablet (ExoPlayer).
+ *  - IOS        — Capacitor iOS (AVPlayer).
  *  - DESKTOP    — Electron desktop client (embedded mpv).
  *  - ANDROID_TV — Android TV box / 10-foot ExoPlayer build.
  *  - TIZEN      — Samsung Smart TV (AVPlay, HLS-only).
@@ -18,7 +19,8 @@ import { TvPlatform } from './device.service';
  */
 export enum EngineKind {
   WEB = 'web',
-  NATIVE = 'native',
+  ANDROID = 'android',
+  IOS = 'ios',
   DESKTOP = 'desktop',
   ANDROID_TV = 'androidtv',
   TIZEN = 'tizen',
@@ -44,9 +46,14 @@ export interface EngineTraits {
   /** Engine accelerates HLS from an `EXT-X-I-FRAME-STREAM-INF` rendition
    *  (Tizen AVPlay `setSpeed`). */
   supportsIFrameTrickPlay?: boolean;
-  /** Engine renders bitmap (PGS/VOBSUB) subtitle tracks itself, so they're
-   *  shown natively instead of burned into the video server-side. */
+  /** Engine renders bitmap (PGS/VOBSUB) subtitle tracks itself, from the
+   *  container: only a DirectPlay file carries them, any other delivery burns
+   *  them into the video server-side. */
   supportsImageSubtitles?: boolean;
+  /** Engine can attach a text subtitle to a raw DirectPlay file (sidecar track,
+   *  DOM overlay). Without it the subtitle needs an HLS `SUBTITLES` rendition.
+   *  Client-only, never sent to the backend: absent on the CAST row. */
+  sideloadsDirectPlaySubtitles?: boolean;
   /** Engine fetches seg-0 on a load-then-seek (web/Shaka + Cast receiver). */
   probesSegZero?: boolean;
   /** Engine can play a raw progressive file as DirectPlay. */
@@ -73,19 +80,32 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: true,
     supportsImageSubtitles: false,
+    sideloadsDirectPlaySubtitles: true,
     probesSegZero: true,
     supportsDirectPlay: true,
     supportsAbr: true,
   },
-  [EngineKind.NATIVE]: {
+  [EngineKind.ANDROID]: {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: true,
     supportsImageSubtitles: true,
+    sideloadsDirectPlaySubtitles: true,
     probesSegZero: false,
     supportsDirectPlay: true,
     supportsAbr: true,
   },
-  // Embedded mpv: renders behind the UI like NATIVE, but its ffmpeg HLS
+  // AVPlayer has no bitmap subtitle output and takes no sideloaded subtitle for
+  // a progressive item: both need the HLS master (burn-in, SUBTITLES renditions).
+  [EngineKind.IOS]: {
+    useTsOnSingleAudio: false,
+    supportsHlsSubtitles: true,
+    supportsImageSubtitles: false,
+    sideloadsDirectPlaySubtitles: false,
+    probesSegZero: false,
+    supportsDirectPlay: true,
+    supportsAbr: true,
+  },
+  // Embedded mpv: renders behind the UI like ANDROID, but its ffmpeg HLS
   // demuxer fetches seg-0 on load then seeks (like Shaka), so it needs the
   // seg-0 early-start companion — otherwise resuming HLS content (e.g. an HDR
   // transcode) 404s on seg-0 and mpv aborts with an end-file error.
@@ -104,6 +124,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: false,
     supportsImageSubtitles: true,
+    sideloadsDirectPlaySubtitles: true,
     probesSegZero: true,
     supportsDirectPlay: true,
     supportsAbr: false,
@@ -112,6 +133,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: true,
     supportsImageSubtitles: true,
+    sideloadsDirectPlaySubtitles: true,
     probesSegZero: false,
     supportsDirectPlay: true,
     supportsAbr: true,
@@ -123,6 +145,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     supportsHlsSubtitles: false,
     supportsIFrameTrickPlay: true,
     supportsImageSubtitles: false,
+    sideloadsDirectPlaySubtitles: true,
     probesSegZero: false,
     supportsDirectPlay: true,
     supportsAbr: true,
@@ -135,6 +158,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     supportsHlsSubtitles: false,
     dedupesAudioByLanguage: true,
     supportsImageSubtitles: false,
+    sideloadsDirectPlaySubtitles: true,
     probesSegZero: false,
     supportsDirectPlay: true,
     supportsAbr: true,
@@ -148,8 +172,8 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
 /**
  * Resolve the playback-engine kind from the detected platform and the
  * `isNative` flag (`ServerConfigService.isNative`). A null `tvPlatform`
- * splits into DESKTOP (Electron + embedded mpv), NATIVE (Capacitor mobile),
- * or WEB (browser); that split is what `probesSegZero` keys on. CAST is
+ * splits into DESKTOP (Electron + embedded mpv), IOS / ANDROID (Capacitor
+ * mobile), or WEB (browser); that split is what `probesSegZero` keys on. CAST is
  * selected explicitly by the Cast player and never resolved through this
  * function.
  */
@@ -157,6 +181,7 @@ export function engineKindFor(
   tvPlatform: TvPlatform,
   isNative: boolean,
   isDesktop = false,
+  isIos = false,
 ): EngineKind {
   switch (tvPlatform) {
     case 'tizen':
@@ -169,6 +194,7 @@ export function engineKindFor(
       // Desktop is also `isNative` (the Electron UA matches), so it must be
       // checked first.
       if (isDesktop) return EngineKind.DESKTOP;
-      return isNative ? EngineKind.NATIVE : EngineKind.WEB;
+      if (!isNative) return EngineKind.WEB;
+      return isIos ? EngineKind.IOS : EngineKind.ANDROID;
   }
 }

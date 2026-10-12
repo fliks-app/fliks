@@ -5,7 +5,7 @@ import { PlayerSettingsService } from './player-settings.service';
 import { DeviceService } from './device.service';
 import { ServerConfigService } from './server-config.service';
 import { AuthService } from './auth.service';
-import { ENGINE_TRAITS, engineKindFor } from './engine-traits';
+import { ENGINE_TRAITS, engineKindFor, type EngineTraits } from './engine-traits';
 import { SystemInfoService } from './system-info.service';
 import { applyTizenAudioCodecs, tizenSupportsHevc } from './tizen-capabilities';
 import { isTizenCropSupported } from './playback-engine/tizen-engine';
@@ -159,9 +159,9 @@ export interface DeviceProfile {
   /** Engine accelerates HLS from an `EXT-X-I-FRAME-STREAM-INF` rendition. */
   supportsIFrameTrickPlay?: boolean;
 
-  /** Engine renders bitmap (PGS/VOBSUB) subtitles itself (ExoPlayer, mpv), so
-   *  they're shown natively rather than burned into the video. False engines
-   *  (web/Shaka, Tizen, webOS) burn them in. */
+  /** Engine renders bitmap (PGS/VOBSUB) subtitles itself (ExoPlayer, mpv), but
+   *  only from a DirectPlay container; any other delivery burns them in. False
+   *  engines (iOS AVPlayer, web/Shaka, Tizen, webOS) always burn them in. */
   supportsImageSubtitles?: boolean;
 
   /** Engine fetches seg-0 when it loads the playlist and then seeks to the
@@ -190,6 +190,11 @@ export interface DeviceProfile {
   /** One-shot per-request override (never part of the cached profile): asks
    *  the backend to transcode instead of a DirectStream copy it can't decode. */
   rejectCopy?: boolean;
+
+  /** One-shot per-request override (never part of the cached profile): a text
+   *  subtitle is on screen on an engine that can't sideload it into a raw file,
+   *  so the backend keeps the copy but leaves DirectPlay for the HLS master. */
+  needsHlsSubtitles?: boolean;
 }
 
 /** Containers AVPlay demuxes, from Samsung's published media specification
@@ -228,6 +233,18 @@ export class BrowserDeviceProfileService {
   /** Pessimistic until the desktop probe resolves: P7 only, never 5/8 a bridge can't reshape. */
   private desktopCanReshapeDolbyVision = false;
   private desktopProbe: Promise<void> | null = null;
+
+  /** Behavioural traits of the engine this device plays with. */
+  engineTraits(): EngineTraits {
+    return ENGINE_TRAITS[
+      engineKindFor(
+        this.device.tvPlatform(),
+        this.serverConfig.isNative,
+        this.device.isDesktopNative(),
+        this.device.isIosNative(),
+      )
+    ];
+  }
 
   /** Native (Capacitor) player whose plugin build implements `setCrop`. */
   nativeCropsBlackBars(): boolean {
@@ -367,10 +384,7 @@ export class BrowserDeviceProfileService {
     // The engine-behavioural flags below come from one declarative row
     // keyed on the engine kind (platform + native split). Adding a
     // platform is a single row in `engine-traits.ts`.
-    const traits =
-      ENGINE_TRAITS[
-        engineKindFor(tvPlatform, this.serverConfig.isNative, this.device.isDesktopNative())
-      ];
+    const traits = this.engineTraits();
     if (
       this.testCodec(video, hasMSE, 'video/mp4', 'hvc1.1.6.L120.B0') ||
       this.testCodec(video, hasMSE, 'video/mp4', 'hev1.1.6.L120.B0')

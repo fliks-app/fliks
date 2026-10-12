@@ -105,13 +105,14 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
 
   private engine: PlaybackEngine | null = null;
   readonly isDesktopNative = this.device.desktopPlatform() === 'electron';
+  private readonly isIosNative = Capacitor.getPlatform() === 'ios';
   /** Drives the `directPlay` flag on `POST .../play`, see {@link supportsLiveDirectPlay}. */
   private readonly engineKind = engineKindFor(
     this.device.tvPlatform(),
     this.serverConfig.isNative,
     this.isDesktopNative,
+    this.isIosNative,
   );
-  private readonly isIosNative = Capacitor.getPlatform() === 'ios';
   /** Orientation.lock() (native iOS) has no Android counterpart — same gate as player.ts. */
   readonly canLockOrientation = this.isIosNative;
   readonly orientationLocked = signal(false);
@@ -397,7 +398,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     }
     try {
       const session = await this.api.play(channelId, {
-        directPlay: supportsLiveDirectPlay(this.engineKind, this.isIosNative),
+        directPlay: supportsLiveDirectPlay(this.engineKind),
         useTs: liveNeedsTs(this.engineKind),
       });
       if (seq !== this.tuneSeq) {

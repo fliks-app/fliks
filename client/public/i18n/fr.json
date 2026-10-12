@@ -182,6 +182,7 @@
       "ContainerNotSupported": "Format de conteneur non pris en charge",
       "ClientRequiresHls": "Nécessite un empaquetage HLS",
       "ClientCannotSwitchAudio": "Le lecteur ne peut pas changer de piste audio dans un fichier brut",
+      "ClientNeedsHlsSubtitles": "Le lecteur ne peut pas afficher de sous-titres dans un fichier brut",
       "VideoBitrateNotSupported": "Bitrate trop élevé",
       "VideoDolbyVisionP7NotSupported": "Dolby Vision profil 7 non pris en charge"
     },

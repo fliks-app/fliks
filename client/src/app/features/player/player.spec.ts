@@ -33,6 +33,7 @@ import { QualityManagerService } from '../../core/services/quality-manager.servi
 import { PlayerSettingsService } from '../../core/services/player-settings.service';
 import { DeviceService } from '../../core/services/device.service';
 import { DesktopEngine } from '../../core/services/playback-engine/desktop-engine';
+import { ENGINE_TRAITS, EngineKind } from '../../core/services/engine-traits';
 
 /*
  * Angular's vitest builder refuses `vi.mock` on relative specifiers, so the
@@ -206,7 +207,14 @@ function createHarness(opts: {
       },
       { provide: StreamingApiService, useValue: streamingApi },
       { provide: MediaService, useValue: { getOne: vi.fn(async () => MOVIE) } },
-      { provide: BrowserDeviceProfileService, useValue: { getProfile: () => DEVICE_PROFILE, whenDesktopProbed: () => Promise.resolve() } },
+      {
+        provide: BrowserDeviceProfileService,
+        useValue: {
+          getProfile: () => DEVICE_PROFILE,
+          whenDesktopProbed: () => Promise.resolve(),
+          engineTraits: () => ENGINE_TRAITS[EngineKind.WEB],
+        },
+      },
       { provide: SseService, useValue: { connectionId: () => null, lastEvent: () => null } },
       {
         provide: RemoteService,
@@ -2453,5 +2461,222 @@ describe('PlayerComponent cast session picks', () => {
 
     expect(cp['startCast'].mock.calls[0][0]).toMatchObject({ activeSubtitleId: null });
     expect(cp['startCast'].mock.calls[0][0].subtitles).toEqual(h.component.availableSubtitles());
+  });
+});
+
+describe('PlayerComponent subtitle delivery', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  const dbSub = (id: string, language: string, extra: Record<string, unknown> = {}) =>
+    subOption(id, language, { subtitleDbId: Number(id.slice(4)), ...extra });
+  const pgs = (id: string) => dbSub(id, 'en', { burnIn: true, isImage: true, url: '' });
+
+  function deliveryHarness(kind: EngineKind, opts: { serverFeature?: boolean } = {}) {
+    const h = createHarness();
+    h.state.videoStarted.set(true);
+    const profiles = TestBed.inject(BrowserDeviceProfileService) as any;
+    profiles.engineTraits = () => ENGINE_TRAITS[kind];
+    (TestBed.inject(AuthService) as any).hasServerFeature = () => opts.serverFeature ?? true;
+    return h;
+  }
+
+  /** The server's answer: an HLS remux whenever the request rules DirectPlay out, a transcode for a burn-in. */
+  function answerLikeServer(h: ReturnType<typeof createHarness>) {
+    (h.streamingApi.getPlaybackInfo as any).mockImplementation(async (id: number, profile: any, burnIn?: number) =>
+      buildPi(id, {
+        playMethod: burnIn ? 'Transcode' : profile.needsHlsSubtitles ? 'DirectStream' : 'DirectPlay',
+      }),
+    );
+  }
+
+  const negotiations = (h: ReturnType<typeof createHarness>) => h.streamingApi.getPlaybackInfo.mock.calls as any[][];
+
+  describe('bitmap subtitles', () => {
+    it('are rendered by an engine that can, from the DirectPlay container', async () => {
+      const h = deliveryHarness(EngineKind.ANDROID);
+      h.component.availableSubtitles.set([pgs('emb-9')]);
+
+      await h.component.selectSubtitle(h.component.availableSubtitles()[0]);
+
+      expect(negotiations(h)).toHaveLength(0);
+      expect(h.engine.addTextTrack).toHaveBeenCalled();
+      expect(h.component.activeSubtitleId()).toBe('emb-9');
+    });
+
+    it.each([
+      ['an HLS session carries no bitmap track', EngineKind.ANDROID, 'remux', 'emb-9'],
+      ['an external bitmap file is never in the container', EngineKind.ANDROID, 'direct', 'ext-9'],
+      ['AVPlayer renders no bitmap at all', EngineKind.IOS, 'direct', 'emb-9'],
+      ['the browser renders no bitmap at all', EngineKind.WEB, 'direct', 'emb-9'],
+    ])('are burned in when %s', async (_why, kind, mode, id) => {
+      const h = deliveryHarness(kind);
+      answerLikeServer(h);
+      h.state.playbackMode.set(mode as 'direct' | 'remux');
+      h.component.availableSubtitles.set([pgs(id)]);
+
+      await h.component.selectSubtitle(h.component.availableSubtitles()[0]);
+
+      expect(negotiations(h).at(-1)![2]).toBe(9);
+      expect(h.engine.addTextTrack).not.toHaveBeenCalled();
+    });
+
+    it('follow the play mode a reload lands on: rendered in DirectPlay, burned in once it is HLS', async () => {
+      const h = deliveryHarness(EngineKind.ANDROID);
+      answerLikeServer(h);
+      h.component.availableSubtitles.set([pgs('emb-9')]);
+      await h.component.selectSubtitle(h.component.availableSubtitles()[0]);
+      h.engine.addTextTrack.mockClear();
+      // A quality below the source: the reload is no longer DirectPlay.
+      (h.streamingApi.getPlaybackInfo as any).mockImplementation(async (id: number, _p: any, burnIn?: number) =>
+        buildPi(id, { playMethod: burnIn ? 'Transcode' : 'DirectStream' }),
+      );
+
+      await h.component.reloadStream();
+
+      expect(negotiations(h).map((c) => c[2])).toEqual([undefined, 9]);
+      expect(h.component.activeBurnInId).toBe(9);
+      expect(h.component.playbackMode()).toBe('transcode');
+      expect(h.engine.addTextTrack).not.toHaveBeenCalled();
+    });
+
+    it('stay burned in across further reloads without renegotiating again', async () => {
+      const h = deliveryHarness(EngineKind.IOS);
+      answerLikeServer(h);
+      h.component.availableSubtitles.set([pgs('emb-9')]);
+      await h.component.selectSubtitle(h.component.availableSubtitles()[0]);
+      const before = negotiations(h).length;
+
+      await h.component.reloadStream();
+
+      expect(negotiations(h)).toHaveLength(before + 1);
+    });
+
+    it('are not brought back when a text subtitle replaces the burned-in one', async () => {
+      const h = deliveryHarness(EngineKind.WEB);
+      answerLikeServer(h);
+      h.component.availableSubtitles.set([pgs('emb-9'), dbSub('ext-1', 'en')]);
+      await h.component.selectSubtitle(h.component.availableSubtitles()[0]);
+      const before = negotiations(h).length;
+
+      await h.component.selectSubtitle(h.component.availableSubtitles()[1]);
+
+      expect(negotiations(h)).toHaveLength(before + 1);
+      expect(negotiations(h).at(-1)![2]).toBeUndefined();
+      expect(h.component.activeBurnInId).toBeNull();
+      expect(h.component.activeSubtitleId()).toBe('ext-1');
+    });
+  });
+
+  describe('text subtitles on an engine that cannot sideload them in DirectPlay', () => {
+    const text = () => dbSub('ext-1', 'en');
+
+    it('renegotiates once for HLS on an explicit pick in DirectPlay, before selecting the track', async () => {
+      const h = deliveryHarness(EngineKind.IOS);
+      answerLikeServer(h);
+      h.component.availableSubtitles.set([text(), dbSub('ext-2', 'fr')]);
+
+      await h.component.selectSubtitle(h.component.availableSubtitles()[0]);
+
+      expect(negotiations(h)).toHaveLength(1);
+      expect(negotiations(h)[0][1]).toMatchObject({ needsHlsSubtitles: true });
+      expect(h.component.playbackMode()).toBe('remux');
+      expect(h.engine.load.mock.invocationCallOrder[0]).toBeLessThan(h.engine.addTextTrack.mock.invocationCallOrder[0]);
+
+      // The rendition exists now: the next pick needs no reload.
+      await h.component.selectSubtitle(h.component.availableSubtitles()[1]);
+      expect(negotiations(h)).toHaveLength(1);
+    });
+
+    it('stops asking for HLS once the subtitle is turned off', async () => {
+      const h = deliveryHarness(EngineKind.IOS);
+      answerLikeServer(h);
+      h.component.availableSubtitles.set([text()]);
+      await h.component.selectSubtitle(h.component.availableSubtitles()[0]);
+
+      await h.component.selectSubtitle(null);
+      await h.component.reloadStream();
+
+      expect(negotiations(h).at(-1)![1].needsHlsSubtitles).toBeUndefined();
+    });
+
+    it.each([
+      ['an engine that sideloads', EngineKind.WEB, true],
+      ['a server that does not know the field', EngineKind.IOS, false],
+    ])('keeps DirectPlay for %s', async (_why, kind, serverFeature) => {
+      const h = deliveryHarness(kind, { serverFeature });
+      h.component.availableSubtitles.set([text()]);
+
+      await h.component.selectSubtitle(h.component.availableSubtitles()[0]);
+
+      expect(negotiations(h)).toHaveLength(0);
+      expect(h.engine.addTextTrack).toHaveBeenCalled();
+    });
+
+    it('does not leave a bitmap pick the engine renders itself', async () => {
+      const h = deliveryHarness(EngineKind.IOS);
+      h.component.availableSubtitles.set([pgs('emb-9')]);
+
+      await h.component.selectSubtitle(h.component.availableSubtitles()[0]);
+
+      expect(negotiations(h).at(-1)![1].needsHlsSubtitles).toBeUndefined();
+    });
+
+    describe('before the first negotiation', () => {
+      const withAutoPick = (h: ReturnType<typeof createHarness>, pick: unknown) => {
+        const tracks = TestBed.inject(TrackManagerService) as any;
+        tracks.loadSubtitles = vi.fn(async () => [text(), pgs('emb-9')]);
+        tracks.autoSelectSubtitle = vi.fn(async (_s: unknown, _a: unknown, _i: unknown, _f: unknown, onSelect: (s: unknown) => Promise<unknown>) => {
+          await onSelect(pick);
+        });
+        return tracks;
+      };
+
+      it('asks for HLS when the automatic selection will pick a text subtitle', async () => {
+        const h = deliveryHarness(EngineKind.IOS);
+        const tracks = withAutoPick(h, text());
+
+        await h.component.planSubtitleDelivery();
+        await h.component.negotiatePlayback();
+
+        expect(negotiations(h)[0][1]).toMatchObject({ needsHlsSubtitles: true });
+        // The selection rules are the track manager's own, fed the audio that will play.
+        expect(tracks.autoSelectSubtitle).toHaveBeenCalledTimes(1);
+      });
+
+      it.each([
+        ['picks nothing', null, EngineKind.IOS],
+        ['picks a bitmap subtitle', pgs('emb-9'), EngineKind.IOS],
+        ['picks text on an engine that sideloads', text(), EngineKind.WEB],
+      ])('does not when the selection %s', async (_why, pick, kind) => {
+        const h = deliveryHarness(kind);
+        withAutoPick(h, pick);
+
+        await h.component.planSubtitleDelivery();
+        await h.component.negotiatePlayback();
+
+        expect(negotiations(h)[0][1].needsHlsSubtitles).toBeUndefined();
+      });
+
+      it('does not even fetch the list for an engine that sideloads', async () => {
+        const h = deliveryHarness(EngineKind.WEB);
+        const tracks = withAutoPick(h, text());
+
+        await h.component.planSubtitleDelivery();
+
+        expect(tracks.loadSubtitles).not.toHaveBeenCalled();
+      });
+
+      it('applies to the next episode\'s first negotiation too', async () => {
+        const h = deliveryHarness(EngineKind.IOS);
+        h.component.media = TWO_EPISODES;
+        withAutoPick(h, text());
+
+        await h.component.reloadForEpisode(EP2_FILE_ID, MEDIA_ID, undefined);
+
+        expect(negotiations(h)[0][1]).toMatchObject({ needsHlsSubtitles: true });
+      });
+    });
   });
 });

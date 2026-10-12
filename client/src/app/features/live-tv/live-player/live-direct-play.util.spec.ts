@@ -4,14 +4,14 @@ import { liveNeedsTs, supportsLiveDirectPlay } from './live-direct-play.util';
 
 describe('supportsLiveDirectPlay', () => {
   it('opens the raw upstream on every engine that demuxes an endless transport stream', () => {
-    expect(supportsLiveDirectPlay(EngineKind.TIZEN, false)).toBe(true);
-    expect(supportsLiveDirectPlay(EngineKind.DESKTOP, false)).toBe(true);
-    expect(supportsLiveDirectPlay(EngineKind.NATIVE, false)).toBe(true);
+    expect(supportsLiveDirectPlay(EngineKind.TIZEN)).toBe(true);
+    expect(supportsLiveDirectPlay(EngineKind.DESKTOP)).toBe(true);
+    expect(supportsLiveDirectPlay(EngineKind.ANDROID)).toBe(true);
   });
 
   it('refuses it in a browser and on iOS, which cannot open one', () => {
-    expect(supportsLiveDirectPlay(EngineKind.WEB, false)).toBe(false);
-    expect(supportsLiveDirectPlay(EngineKind.NATIVE, true)).toBe(false);
+    expect(supportsLiveDirectPlay(EngineKind.WEB)).toBe(false);
+    expect(supportsLiveDirectPlay(EngineKind.IOS)).toBe(false);
   });
 });
 
@@ -21,7 +21,7 @@ describe('liveNeedsTs', () => {
   });
 
   it('leaves every other engine on fMP4', () => {
-    for (const kind of [EngineKind.WEB, EngineKind.NATIVE, EngineKind.DESKTOP, EngineKind.ANDROID_TV, EngineKind.WEBOS]) {
+    for (const kind of [EngineKind.WEB, EngineKind.ANDROID, EngineKind.IOS, EngineKind.DESKTOP, EngineKind.ANDROID_TV, EngineKind.WEBOS]) {
       expect(liveNeedsTs(kind)).toBe(false);
     }
   });

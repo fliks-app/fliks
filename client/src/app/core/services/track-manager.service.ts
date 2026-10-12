@@ -11,7 +11,6 @@ import {
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { StreamingApiService } from './api/streaming-api.service';
 import { AppSettingsService } from './app-settings.service';
-import { BrowserDeviceProfileService } from './browser-device-profile.service';
 import { formatSubtitleLabel, formatSubtitleParts } from '../utils/player.utils';
 import { isImageBasedSubtitleCodec } from '../utils/subtitle-codecs';
 import { buildSubtitleTracks } from '../utils/subtitle-tracks';
@@ -25,8 +24,9 @@ export interface SubtitleOption {
   language: string;
   /** True for bitmap subs (PGS/VOBSUB), regardless of how they're shown. */
   isImage?: boolean;
-  /** True when this bitmap sub must be burned in server-side (the device can't
-   *  render image subtitles natively). */
+  /** True for a bitmap sub, embedded or external: it is burned in server-side
+   *  unless the engine renders it from the playback in hand (the player decides
+   *  per playback, see `PlayerComponent.burnsIn`). */
   burnIn: boolean;
   /** Database subtitle ID (for burn-in request) */
   subtitleDbId?: number;
@@ -45,7 +45,6 @@ export class TrackManagerService {
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly appSettings = inject(AppSettingsService);
-  private readonly deviceProfile = inject(BrowserDeviceProfileService);
   private readonly translate = inject(TranslateService);
 
   // ── Audio track methods ──
@@ -149,10 +148,6 @@ export class TrackManagerService {
 
     try {
       const hideBurnIn = this.appSettings.hideBurnInSubtitles();
-      // Devices whose player renders bitmap subs itself (ExoPlayer, mpv) show
-      // them natively; others burn them into the video server-side.
-      const rendersImageNatively =
-        !!this.deviceProfile.getProfile().supportsImageSubtitles;
       const labelOpts = { showFormat: this.appSettings.showSubtitleFormat() };
       const subs = await this.subtitlesApi.getForMedia(mediaId);
       const tracks = buildSubtitleTracks(subs, mediaFileId, { hideBurnIn });
@@ -171,7 +166,7 @@ export class TrackManagerService {
               : streamingApi.getEmbeddedSubtitleUrl(mediaFileId, t.streamIndex!),
         language: t.language,
         isImage: t.isImage,
-        burnIn: t.kind === 'embedded' && t.isImage && !rendersImageNatively,
+        burnIn: t.isImage,
         subtitleDbId: t.subtitleId,
         forced: t.forced,
         hearingImpaired: t.hearingImpaired,

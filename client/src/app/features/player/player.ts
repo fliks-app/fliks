@@ -92,6 +92,8 @@ interface ImmersivePlugin {
 /** Long enough to fold a start-up burst into one report, short enough that a
  *  controller still sees the change in about a frame's time. */
 const FORCED_SAVE_COALESCE_MS = 300;
+/** Server feature: `needsHlsSubtitles` is a known field of the device profile. */
+const HLS_SUBTITLE_REQUEST_FEATURE = 'hlsSubtitleRequest';
 
 const Immersive = registerPlugin<ImmersivePlugin>('Immersive');
 
@@ -760,6 +762,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Bumped by every subtitle request (and by a new item): an older one whose
    *  addTextTrack settles late may neither move the check mark nor be remembered. */
   private subtitleRequest = 0;
+  /** A text subtitle is on screen, or about to be, on an engine that can only show
+   *  it as an HLS rendition: every negotiation then leaves DirectPlay. */
+  private needsHlsSubtitles = false;
   private audioTracksTimer: ReturnType<typeof setTimeout> | null = null;
   /** The playing file's subtitle list, fetched once: the native engine needs the
    *  sidecars before load(), the picker after it. */
@@ -1002,6 +1007,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         const media = await mediaPromise;
         this.media = media;
         this.resolveAudioTarget();
+        await this.planSubtitleDelivery();
         requestPlaybackInfo();
         const playbackState = await statePromise;
 
@@ -2275,6 +2281,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       // The new file opens on its own audio pick; the backend marks it DEFAULT.
       this.resolveAudioTarget();
+      await this.planSubtitleDelivery();
 
       // Re-negotiate the stream for the new file (DirectPlay vs the ladder).
       await this.authService.ensureStreamToken();
@@ -2872,9 +2879,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  index and rung. Every load path negotiates through here. The rung lets the
    *  backend re-decide DirectPlay vs the ladder and prewarm ffmpeg at `startAt`. */
   private negotiatePlayback(startAt?: number): Promise<PlaybackInfoResponse> {
+    const profile = this.deviceProfileFor(this.mediaFileId);
     return this.streamingApi.getPlaybackInfo(
       this.mediaFileId,
-      this.deviceProfileFor(this.mediaFileId),
+      this.needsHlsSubtitles ? { ...profile, needsHlsSubtitles: true } : profile,
       this.activeBurnInId ?? undefined,
       this.activeAudioStreamIndex,
       this.resolveStartQuality(),
@@ -2901,6 +2909,29 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       };
     }
     return this.subtitleFetch.list;
+  }
+
+  /** Whether a text subtitle reaches this engine in DirectPlay only as an HLS rendition,
+   *  and the server can be asked for one. */
+  private textNeedsHls(): boolean {
+    return (
+      !this.deviceProfileService.engineTraits().sideloadsDirectPlaySubtitles &&
+      this.authService.hasServerFeature(HLS_SUBTITLE_REQUEST_FEATURE)
+    );
+  }
+
+  /** Settles before the negotiation whether the automatic selection will pick a text
+   *  subtitle this engine can't sideload, so the first load is already HLS. */
+  private async planSubtitleDelivery(): Promise<void> {
+    this.needsHlsSubtitles = false;
+    if (!this.textNeedsHls()) return;
+    const auto: { sub: SubtitleOption | null } = { sub: null };
+    await this.trackManager.autoSelectSubtitle(
+      await this.itemSubtitles(), [], null, this.mediaFileId,
+      async (sub) => { auto.sub = sub; },
+      this.mediaId, this.targetAudioLanguage(),
+    );
+    this.needsHlsSubtitles = !!auto.sub && !auto.sub.burnIn;
   }
 
   /** Sidecar subtitles for the native MediaItem. Direct play carries the external
@@ -2930,6 +2961,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.availableSubtitles.set([]);
     this.activeSubtitleId.set(null);
     this.activeBurnInId = null;
+    this.needsHlsSubtitles = false;
     this.subtitleRequest++;
   }
 
@@ -3026,7 +3058,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       );
       this.restorePlaybackRate();
       this.restorePlayState(wasPaused);
-      await this.restoreSubtitle();
+      await this.restoreSubtitle(pos);
       return true;
     } catch (e) {
       if (!this.fallBackFromRemuxOnLoadError(e, pos)) throw e;
@@ -3952,7 +3984,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  not take effect: no engine, casting, a load failure, or a newer request. */
   private async applySubtitle(sub: SubtitleOption | null): Promise<boolean> {
     if (!this.engine) return false;
-    // Cast owns subtitle selection once connected (via applyCastSubtitle):
+    // Cast owns subtitle selection once connected (via CastPlayerService.selectSubtitle):
     // an auto-select racing in from the local engine must not reload it instead.
     if (this.castService.isConnected()) return false;
     const request = ++this.subtitleRequest;
@@ -3960,6 +3992,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     if (!sub) {
       this.hideSoftSubtitle();
+      this.needsHlsSubtitles = false;
       this.activeSubtitleId.set(null);
       if (!this.isOfflinePlayback && this.activeBurnInId) {
         this.activeBurnInId = null;
@@ -3968,36 +4001,55 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       return request === this.subtitleRequest;
     }
 
-    // `burnIn` is already device-gated by the track manager: it's only true
-    // when the engine can't render bitmap subs itself. Engines that can
-    // (ExoPlayer, mpv) get burnIn=false and render the image track natively via
-    // the soft path below; the rest burn it into the video (transcode reload).
-    if (sub.burnIn && sub.subtitleDbId) {
+    // A bitmap sub the engine can't render from this playback is burned in: the
+    // reload re-negotiates with it, and the server answers with a transcode.
+    if (this.burnsIn(sub) && sub.subtitleDbId) {
       // The reload doesn't touch the engine's own selection: without this the
       // soft track would show under the burned-in one.
       this.hideSoftSubtitle();
+      this.needsHlsSubtitles = false;
       this.activeBurnInId = sub.subtitleDbId;
       this.activeSubtitleId.set(sub.id);
       await this.reloadStream();
       return request === this.subtitleRequest;
     }
 
+    const previousNeedsHls = this.needsHlsSubtitles;
     try {
-      if (this.activeBurnInId) {
-        this.activeBurnInId = null;
-        if (!this.isOfflinePlayback) await this.reloadStream();
-      }
+      this.needsHlsSubtitles = !sub.burnIn && this.textNeedsHls();
+      // A text sub on an engine that can't sideload it into a raw file needs the
+      // HLS master's renditions: renegotiate once, before the track is selected.
+      const leavesDirectPlay =
+        this.needsHlsSubtitles && this.playbackMode() === 'direct' && !this.isOfflinePlayback;
+      const burnedIn = this.activeBurnInId != null;
+      this.activeBurnInId = null;
+      // The burned-in pick is replaced: the restore after the reload must not bring it back.
+      if (burnedIn) this.activeSubtitleId.set(null);
+      if ((burnedIn || leavesDirectPlay) && !this.isOfflinePlayback) await this.reloadStream();
       if (!(await this.showSoftSubtitle(sub, request))) return false;
     } catch (e) {
       // Surface the failure instead of silently moving the checkmark to a track
       // that never loaded — leave the prior selection and the picker in place so
       // the user can pick another.
       console.error('[Player] Failed to load subtitle:', e);
+      this.needsHlsSubtitles = previousNeedsHls;
       this.toast.error(this.translate.instant('player.subtitle_load_failed'));
       return false;
     }
     this.activeSubtitleId.set(sub.id);
     return true;
+  }
+
+  /** Whether `sub` reaches the screen burned into the video: a bitmap subtitle is
+   *  rendered by the engine only when it can AND this playback carries the track,
+   *  which only a DirectPlay container does. */
+  private burnsIn(sub: SubtitleOption): boolean {
+    if (!sub.burnIn) return false;
+    const rendersFromContainer =
+      this.deviceProfileService.engineTraits().supportsImageSubtitles === true &&
+      this.playbackMode() === 'direct' &&
+      sub.id.startsWith('emb-');
+    return !rendersFromContainer;
   }
 
   private hideSoftSubtitle(): void {
@@ -4024,12 +4076,20 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return true;
   }
 
-  /** Re-selects the active soft subtitle after a reload, which engines drop across
-   *  load(). A burn-in comes back through the burn-in id sent with the negotiation. */
-  private async restoreSubtitle(): Promise<void> {
+  /** Re-selects the active subtitle after a reload, which engines drop across load().
+   *  A reload that changed the play mode can change how a bitmap sub must be shown:
+   *  one the engine rendered in DirectPlay is burned in once the stream is HLS. */
+  private async restoreSubtitle(position: number): Promise<void> {
     const id = this.activeSubtitleId();
     const sub = id ? this.availableSubtitles().find((s) => s.id === id) : undefined;
-    if (!sub || sub.burnIn) return;
+    if (!sub) return;
+    if (this.burnsIn(sub)) {
+      if (!sub.subtitleDbId || this.activeBurnInId === sub.subtitleDbId) return;
+      this.hideSoftSubtitle();
+      this.activeBurnInId = sub.subtitleDbId;
+      await this.doReloadStream(position);
+      return;
+    }
     try {
       await this.showSoftSubtitle(sub, this.subtitleRequest);
     } catch (e) {
@@ -4449,7 +4509,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.restorePlaybackRate();
       this.restorePlayState(wasPaused);
 
-      await this.restoreSubtitle();
+      await this.restoreSubtitle(currentPos);
     } finally {
       this.state.buffering.set(false);
     }

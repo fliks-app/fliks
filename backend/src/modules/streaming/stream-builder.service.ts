@@ -654,6 +654,15 @@ export class StreamBuilderService {
         message: 'Client requires an HLS container (no raw direct play)',
       });
     }
+    // The renditions live in the HLS master; unlike a burn-in, the copy stays.
+    if (profile.needsHlsSubtitles === true && directPlayResult.canDirectPlay) {
+      directPlayResult.canDirectPlay = false;
+      reasons.push({
+        flag: 'ClientNeedsHlsSubtitles',
+        message:
+          'Client needs HLS subtitle renditions (no sideload into a raw file)',
+      });
+    }
     // A raw file plays its first audio track; HLS lets the picked one lead. An
     // engine folding tracks by language reaches only the first of each language.
     const pickedLanguage = audioStreams[pickedAudio]?.language;
