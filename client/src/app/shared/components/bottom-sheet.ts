@@ -65,7 +65,7 @@ import {
         <!-- Drag handle + optional title. Sticky so the title survives
              scrolling a long option list; the 4px gap below keeps it off the
              first item's focus ring. -->
-        <div class="sticky top-0 z-10 bg-neutral pt-3 pb-1 mb-1 cursor-grab">
+        <div data-sheet-handle class="sticky top-0 z-10 bg-neutral pt-3 pb-1 mb-1 cursor-grab">
           <div class="flex justify-center">
             <div class="w-10 h-1 rounded-full bg-white/20"></div>
           </div>
@@ -107,6 +107,9 @@ export class BottomSheetComponent {
    *  would chain straight into the close. Reaching the top mid-scroll stops;
    *  a fresh swipe (new touchstart at the top) is needed to dismiss. */
   private startedAtTop = false;
+  /** A drag from the handle/title always dismisses: it sits above the list, so
+   *  it never scrolls it, however far the list is scrolled. */
+  private fromHandle = false;
   /** Y of the previous touchmove, and whether the last meaningful move went
    *  downward — the release only dismisses when the finger was still heading
    *  down, so easing back up after over-pulling keeps the sheet open. */
@@ -234,6 +237,7 @@ export class BottomSheetComponent {
     this.prevY = this.startY;
     this.movingDown = true;
     this.startedAtTop = !scrolledBetween(e.target, el);
+    this.fromHandle = e.target instanceof Element && !!e.target.closest('[data-sheet-handle]');
   }
 
   onTouchMove(e: TouchEvent) {
@@ -245,7 +249,8 @@ export class BottomSheetComponent {
     // Only turn a downward pull into a dismiss-drag when the gesture began at
     // the top. Scrolling a long list up to the top does NOT chain into the
     // close in the same gesture — the user lifts and swipes again.
-    if (this.startedAtTop && !scrolledBetween(e.target, el) && deltaY > 0) {
+    const canDrag = this.fromHandle || (this.startedAtTop && !scrolledBetween(e.target, el));
+    if (canDrag && deltaY > 0) {
       e.preventDefault();
       this.dragging.set(true);
       this.dragOffset.set(deltaY);

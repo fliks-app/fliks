@@ -49,6 +49,7 @@ class SheetHost {
   readonly open = signal(false);
   readonly list = viewChild.required<ElementRef<HTMLElement>>('list');
   readonly row = viewChild.required<ElementRef<HTMLElement>>('row');
+  readonly sheet = viewChild.required(BottomSheetComponent);
 }
 
 describe('BottomSheetComponent: scroll to the current choice', () => {
@@ -77,5 +78,31 @@ describe('BottomSheetComponent: scroll to the current choice', () => {
 
     expect(scrollTo).toHaveBeenCalledWith({ top: 470, behavior: 'instant' });
     expect(document.activeElement).not.toBe(row);
+  });
+});
+
+describe('BottomSheetComponent: drag from the handle', () => {
+  it('drags the sheet down from the title even when its list is scrolled', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: TvService, useValue: { isTv: () => false } },
+        { provide: DismissableStackService, useValue: { push: () => {}, remove: () => {} } },
+      ],
+    });
+    const fixture = TestBed.createComponent(SheetHost);
+    fixture.componentInstance.open.set(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const sheet = fixture.componentInstance.sheet();
+    const el = sheet.sheet()!.nativeElement;
+    Object.defineProperty(el, 'scrollTop', { value: 200 });
+    const handle = el.querySelector('[data-sheet-handle]')!;
+    const touch = (y: number) => ({ target: handle, touches: [{ clientY: y }], preventDefault: () => {} }) as unknown as TouchEvent;
+
+    sheet.onTouchStart(touch(100));
+    sheet.onTouchMove(touch(160));
+
+    expect(sheet.dragOffset()).toBe(60);
   });
 });
