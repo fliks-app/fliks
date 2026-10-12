@@ -78,6 +78,7 @@ import { SessionContextBuilder } from './services/session-context-builder.servic
 import { sessionProfileHash } from './transcoding/session-profile';
 import type { SourceScan } from './transcoding/source-scan';
 import { audioLayout } from './transcoding/audio-layout';
+import { estimateAudioTrackBitrateBps } from './transcoding/audio-encode';
 import {
   buildIFrameSegmentArgs,
   iframeResolution,
@@ -726,10 +727,9 @@ export class StreamingController {
     const sourceBitrate = info?.formatBitRate ?? 0;
     const duration = info?.durationSeconds ?? 0;
 
-    // Offline playback keeps every audio rendition, so the download carries
-    // one audio stream per source track, not one.
+    // Offline playback keeps every audio rendition; a copy or surround track
+    // streams at its own bitrate, not the rung's stereo budget.
     const audioStreams = info?.audio ?? [];
-    const audioTrackCount = Math.max(1, audioStreams.length);
     const sourceVideoBitrateBps = sourceBitrates(info).videoBitRate;
 
     const qualities: { key: string; label: string; estimatedSize: number }[] =
@@ -751,13 +751,17 @@ export class StreamingController {
         sourceVideoBitrateBps,
         sourceVideoCodec: video?.codec,
       });
-      const audioBps = parseBitrateToBps(p.audioBitrate) * audioTrackCount;
+      const stereoBps = parseBitrateToBps(p.audioBitrate);
+      const totalBps =
+        videoBps +
+        audioStreams.reduce(
+          (sum, t) => sum + estimateAudioTrackBitrateBps(t, stereoBps),
+          0,
+        );
       let estimated =
         duration > 0
-          ? Math.floor(((videoBps + audioBps) * duration) / 8)
-          : Math.floor(
-              fileSize * (videoBps / Math.max(sourceBitrate, videoBps)),
-            );
+          ? Math.floor((totalBps * duration) / 8)
+          : Math.floor(fileSize * (totalBps / Math.max(sourceBitrate, totalBps)));
       // A re-encode that came out larger than its source would be a bug, not a
       // download to warn the user about.
       if (fileSize > 0) estimated = Math.min(estimated, fileSize);

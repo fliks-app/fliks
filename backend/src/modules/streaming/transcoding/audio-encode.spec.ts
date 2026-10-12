@@ -6,6 +6,7 @@ import {
   audioEncoderName,
   encodedPacketGrid,
   encoderMaxChannels,
+  estimateAudioTrackBitrateBps,
 } from './audio-encode';
 import { isLibfdkAacEnabled } from './audio-encoder-probe';
 
@@ -64,5 +65,42 @@ describe('encodedPacketGrid', () => {
     const native = encodedPacketGrid('aac', 8);
     libfdkEnabled.mockReturnValue(true);
     expect(encodedPacketGrid('aac', 8)).toEqual(native);
+  });
+});
+
+describe('estimateAudioTrackBitrateBps', () => {
+  const STEREO_48K = 48_000;
+
+  it('keeps a copyable track at its source bitrate, not the rung budget', () => {
+    expect(
+      estimateAudioTrackBitrateBps(
+        { codec: 'eac3', channels: 6, bitRate: 640_000 },
+        STEREO_48K,
+      ),
+    ).toBe(640_000);
+  });
+
+  it('prices a copyable track of unknown bitrate as an encode of its layout', () => {
+    expect(
+      estimateAudioTrackBitrateBps({ codec: 'eac3', channels: 6 }, STEREO_48K),
+    ).toBe(256_000);
+    expect(
+      estimateAudioTrackBitrateBps({ codec: 'aac', channels: 2 }, STEREO_48K),
+    ).toBe(STEREO_48K);
+  });
+
+  it('re-encodes a codec fMP4 cannot carry: surround to E-AC-3, the rest to AAC', () => {
+    expect(
+      estimateAudioTrackBitrateBps(
+        { codec: 'dts', channels: 6, bitRate: 1_509_000 },
+        STEREO_48K,
+      ),
+    ).toBe(256_000);
+    expect(
+      estimateAudioTrackBitrateBps(
+        { codec: 'mp3', channels: 2, bitRate: 320_000 },
+        STEREO_48K,
+      ),
+    ).toBe(STEREO_48K);
   });
 });

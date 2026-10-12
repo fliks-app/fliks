@@ -1055,3 +1055,34 @@ describe('withTimestampMap on a served external .vtt', () => {
     expect(withTimestampMap(vtt, 2)).toMatch(/^WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:180000,/);
   });
 });
+
+describe('StreamingController.downloadQualities', () => {
+  const FORTY_MIN = 2400;
+  const streamInfo = (audio: object[]) => ({
+    durationSeconds: FORTY_MIN,
+    formatBitRate: 20_000_000,
+    video: [{ codec: 'hevc', width: 3840, height: 2160, frameRate: '24', bitRate: 19_000_000 }],
+    audio,
+  });
+  async function estimates(audio: object[]): Promise<Record<string, number>> {
+    const resolved = { mediaFile: { streamInfo: streamInfo(audio) }, size: 5_000_000_000 };
+    const controller = makeController({
+      streamingService: { resolveFile: jest.fn().mockResolvedValue(resolved) },
+    });
+    const list = await controller.downloadQualities({ user: { id: 7 } } as never, 42);
+    return Object.fromEntries(list.map((q) => [q.key, q.estimatedSize]));
+  }
+
+  it('counts each copied audio track at its source bitrate', async () => {
+    const eac3 = { codec: 'eac3', channels: 6, bitRate: 640_000 };
+    const [withAudio, noAudio] = [await estimates([eac3, eac3]), await estimates([])];
+    // Two 640 kbps tracks over 40 min add 384 MB to the 144p video-only size.
+    expect(withAudio['144p'] - noAudio['144p']).toBe((2 * 640_000 * FORTY_MIN) / 8);
+  });
+
+  it('counts no audio for a source without a track', async () => {
+    const aac = { codec: 'aac', channels: 2, bitRate: 48_000 };
+    const [one, none] = [await estimates([aac]), await estimates([])];
+    expect(one['144p'] - none['144p']).toBe((48_000 * FORTY_MIN) / 8);
+  });
+});
