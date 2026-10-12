@@ -144,6 +144,7 @@
     "open_media": "Abrir o media",
     "burned": "imagem",
     "audio_track": "Faixa de áudio",
+    "audio_unsupported": "Não suportado neste dispositivo",
     "volume": "Volume",
     "close": "Fechar",
     "seek_back": "Recuar 10 segundos",

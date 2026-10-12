@@ -144,6 +144,7 @@
     "open_media": "Ouvrir le média",
     "burned": "image",
     "audio_track": "Piste audio",
+    "audio_unsupported": "Non pris en charge sur cet appareil",
     "volume": "Volume",
     "close": "Fermer",
     "seek_back": "Reculer de 10 secondes",

@@ -81,7 +81,7 @@ public class NativePlayerPlugin extends Plugin {
     private float displayHeight = 0f;
     private DefaultHttpDataSource.Factory httpFactory;
     private String currentHlsUrl;
-    private int lastAudioTrackCount = -1;
+    private String lastAudioTracksJson = null;
     // Cold-prepare bug bootstrap state. Media3 1.10.1's HLS source has
     // a race on initial track surfacing when the variant carries EAC3
     // (and especially EAC3-JOC Atmos) audio next to an fMP4 video
@@ -548,7 +548,7 @@ public class NativePlayerPlugin extends Plugin {
             // Swapping the player keeps the notification in place across episodes.
             if (mediaSession != null) mediaSession.setPlayer(player);
             else if (backgroundAudio) startMediaSession();
-            lastAudioTrackCount = -1; // Reset so emitTracksChanged fires for new media
+            lastAudioTracksJson = null; // Reset so emitTracksChanged fires for new media
             videoBootstrapDone = false; // Arm cold-prepare bug bootstrap
             firstFrameSignaled = false; // Re-arm the first-frame veil signal
             if (shutter != null) shutter.setVisibility(View.VISIBLE);
@@ -777,6 +777,11 @@ public class NativePlayerPlugin extends Plugin {
                 if (group.getType() == C.TRACK_TYPE_AUDIO) {
                     for (int i = 0; i < group.length; i++) {
                         if (flatIdx == targetFlatIdx) {
+                            // An override bypasses the support check: forcing it fails decoder init.
+                            if (!group.isTrackSupported(i)) {
+                                call.reject("Audio track not supported: " + id);
+                                return;
+                            }
                             player.setTrackSelectionParameters(
                                     player.getTrackSelectionParameters().buildUpon()
                                             .setOverrideForType(
@@ -1171,6 +1176,7 @@ public class NativePlayerPlugin extends Plugin {
                     String detail = (codec + " " + channels).trim();
                     t.put("label", displayLang + (detail.isEmpty() ? "" : " (" + detail + ")"));
                     t.put("selected", group.isTrackSelected(i));
+                    t.put("supported", group.isTrackSupported(i));
                     list.put(t);
                     flatIdx++;
                 }
@@ -1227,10 +1233,10 @@ public class NativePlayerPlugin extends Plugin {
 
     private void emitTracksChanged() {
         JSArray audio = buildAudioTrackList();
-        // Only emit when audio track count actually changes — ExoPlayer fires
-        // onTracksChanged on every HLS segment transition which would clear the UI.
-        if (audio.length() == lastAudioTrackCount) return;
-        lastAudioTrackCount = audio.length();
+        // ExoPlayer fires onTracksChanged on every HLS segment transition: emit only a changed list.
+        String json = audio.toString();
+        if (json.equals(lastAudioTracksJson)) return;
+        lastAudioTracksJson = json;
         getBridge().getWebView().evaluateJavascript(
                 "window.dispatchEvent(new CustomEvent('nativePlayerTracksChanged',{detail:{audioTracks:" + audio + ",subtitleTracks:[]}}));", null);
     }

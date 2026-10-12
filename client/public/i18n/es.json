@@ -144,6 +144,7 @@
     "open_media": "Abrir el medio",
     "burned": "imagen",
     "audio_track": "Pista de audio",
+    "audio_unsupported": "No compatible con este dispositivo",
     "volume": "Volumen",
     "close": "Cerrar",
     "seek_back": "Retroceder 10 segundos",

@@ -82,6 +82,8 @@ interface AudioOption {
   language: string;
   menuHead?: string;
   menuSub?: string;
+  /** False when the device cannot decode the track: listed, but never picked. */
+  supported?: boolean;
 }
 
 interface ImmersivePlugin {
@@ -1656,8 +1658,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         menuSub: parts?.sub ?? '',
         language: normalizeLangCode(t.language),
         selected: !!t.selected,
+        supported: t.supported,
       };
     });
+  }
+
+  private isAudioPlayable(trackId: string): boolean {
+    return this.availableAudioTracks().find((t) => t.id === trackId)?.supported !== false;
   }
 
   /** Takes a report of the audio tracks the engine (or the streamInfo fallback)
@@ -1667,7 +1674,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const tracks = this.describeAudioTracks(raw);
     if (!tracks.length) return;
     const existing = this.availableAudioTracks();
-    const sameList = tracks.length === existing.length && tracks.every((t, i) => t.id === existing[i].id);
+    const sameList = tracks.length === existing.length && tracks.every((t, i) => t.id === existing[i].id && t.supported === existing[i].supported);
     if (tracks.length >= existing.length && !sameList) this.availableAudioTracks.set(tracks);
     const list = this.availableAudioTracks();
     const active = tracks.find((t) => t.selected)?.id ?? null;
@@ -1681,7 +1688,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private reconcileAudio(tracks: AudioOption[], engineActive: string | null): void {
     const idx = this.activeAudioStreamIndex;
     const target = idx == null ? undefined : trackForStreamIndex(idx, this.audioStreamInfo(), tracks);
-    if (!target) {
+    if (!target || target.supported === false) {
       this.reconcileActiveAudioTrack(tracks, engineActive);
       return;
     }
@@ -3891,6 +3898,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** A viewer's audio pick: remembered for the title, then applied. */
   async onSelectAudioTrack(trackId: string) {
     this.chrome.resetHideTimer();
+    if (!this.isAudioPlayable(trackId)) return;
     this.trackManager.saveAudioSelection(
       trackId, this.availableAudioTracks(), this.mediaId, this.audioStreamInfo(),
     );
