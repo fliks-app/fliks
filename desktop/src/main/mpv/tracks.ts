@@ -11,12 +11,17 @@ export interface MpvTrack {
   title?: string;
   selected?: boolean;
   forced?: boolean;
+  /** Container stream index (the ffprobe index), absent on non-lavf tracks. */
+  'ff-index'?: number;
+  external?: boolean;
+  /** Source a sidecar was loaded from, verbatim as passed to `sub-add`. */
+  'external-filename'?: string;
 }
 
 /** Bitmap subtitle codecs (PGS / VOBSUB / DVB / XSUB) carry rendered images,
- *  not text. mpv would render them as burned-in overlays; they're handled by
- *  server-side burn-in/OCR, never as selectable tracks. Mirrors
- *  isImageBasedSubtitleCodec on the web/android clients. */
+ *  not text. mpv renders them natively, so they stay selectable tracks, flagged
+ *  so the client can tell them apart. Mirrors isImageBasedSubtitleCodec on the
+ *  web/android clients. */
 const IMAGE_BASED_SUBTITLE_CODECS = new Set([
   'hdmv_pgs_subtitle',
   'dvd_subtitle',
@@ -29,8 +34,7 @@ export function isImageBasedSubtitleCodec(codec: string | undefined): boolean {
 }
 
 /** Map an mpv `track-list` array into the desktop contract's audio/subtitle
- *  shapes. Image-based subtitle codecs are dropped (never selectable tracks).
- *  The single source of truth for track mapping across all three backends. */
+ *  shapes. The single source of truth for track mapping across all three backends. */
 export function mapTrackList(list: MpvTrack[]): {
   audioTracks: DesktopAudioTrack[];
   subtitleTracks: DesktopSubtitleTrack[];
@@ -45,13 +49,17 @@ export function mapTrackList(list: MpvTrack[]): {
         label: t.title ?? '',
         selected: !!t.selected,
       });
-    else if (t.type === 'sub' && !isImageBasedSubtitleCodec(t.codec))
+    else if (t.type === 'sub')
       subtitleTracks.push({
         id: String(t.id),
         language: t.lang ?? '',
         label: t.title ?? '',
         forced: !!t.forced,
         selected: !!t.selected,
+        image: isImageBasedSubtitleCodec(t.codec),
+        external: !!t.external,
+        source: t.external ? (t['external-filename'] ?? null) : null,
+        ffIndex: t.external ? null : (t['ff-index'] ?? null),
       });
   }
   return { audioTracks, subtitleTracks };

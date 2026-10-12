@@ -20,6 +20,21 @@ import {
   type FliksDesktopApi,
 } from '../../plugins/desktop-player.bridge';
 
+/** What the player picked: the handle from addTextTrack plus `image` and, for an
+ *  embedded sub, `embIndex` (the container stream index). */
+interface DesiredSubtitle {
+  language: string;
+  forced: boolean;
+  image: boolean;
+  /** Ordinal among tracks sharing (language, forced); last-resort identity. */
+  index: number;
+  /** URL the sidecar was added from; null when nothing was loaded (bitmap subs). */
+  source: string | null;
+  embIndex: number | null;
+}
+
+type SubtitleHandle = Pick<DesiredSubtitle, 'language' | 'forced' | 'index' | 'source'>;
+
 /**
  * PlaybackEngine backed by the Electron desktop shell's embedded mpv player
  * (window.fliksDesktop). mpv renders into a window behind the transparent UI —
@@ -47,11 +62,10 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   private _initialized = false;
 
   // ── Subtitles ──
-  // mpv renders subtitles in its own pipeline. Tracks are loaded sidecar via
-  // `sub-add` (addTextTrack), and selection is by (language, forced) against the
-  // track list mpv reports, mirroring NativeEngine.
-  private _activeTrackId: string | null = null;
-  private _desiredSubtitle: { language: string; forced: boolean; embIndex: number | null } | null = null;
+  // mpv renders subtitles in its own pipeline. Text tracks are loaded sidecar via
+  // `sub-add` (addTextTrack); a pick is resolved against the track list mpv
+  // reports by identity (see findSubtitle), never by language alone.
+  private _desiredSubtitle: DesiredSubtitle | null = null;
   private _nativeSubtitleTracks: DesktopSubtitleTrack[] = [];
   /** mpv's own audio track ids, indexed parallel to the `audio-<i>` ids the
    *  player expects (mpv ids are bare ints; the player keys off the prefix). */
@@ -92,7 +106,6 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     if (this._fullscreen) await this.setFullscreen(false);
     this.unsubscribe?.();
     this.unsubscribe = null;
-    this._activeTrackId = null;
     this.clearHandlers();
     await this.bridge.stop().catch(() => {});
   }
@@ -109,6 +122,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     // track emission for the new stream isn't swallowed as a no-op downstream.
     this._audioTracks = [];
     this._mpvAudioIds = [];
+    this._nativeSubtitleTracks = [];
     await this.bridge.load({
       url,
       startTime,
@@ -122,10 +136,6 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     if (this._fillScreen) {
       await this.bridge.setFillScreen(true).catch(() => {});
     }
-    // Fresh media → fresh track ids; let the desired selection re-apply once
-    // mpv reports the new track list (tracksChanged).
-    this._activeTrackId = null;
-    this._nativeSubtitleTracks = [];
   }
 
   async unload(): Promise<void> {
@@ -231,25 +241,38 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     language: string,
     label: string,
     forced = false,
-  ): Promise<{ language: string; forced: boolean }> {
+    index = 0,
+  ): Promise<SubtitleHandle> {
     // Sidecar load (mpv `sub-add`): mpv parses the VTT once and seeks within it
     // natively. The alternative — an HLS SUBTITLES rendition — is a single
     // segment over the whole VTT that mpv's ffmpeg HLS demuxer re-reads on each
     // seek, re-injecting every cue without clearing the prior set, so cues stack.
     // `sub-add` is idempotent per URL (main passes `cached`), so re-selecting the
-    // same subtitle doesn't duplicate the track. mpv then surfaces it in the
-    // track list; selection resolves against that list (see resolveSubtitle).
+    // same subtitle doesn't duplicate the track.
     // Sidecars load as the stored file: mpv's VTT reader drops cue placement,
     // its SRT/ASS readers keep `{\an8}` and every other positioning tag.
-    const source = url?.replace(/(\/subtitles\/\d+)(?=[?#]|$)/, '$1/download');
-    if (source) await this.bridge.subAdd(source, label, language).catch(() => {});
-    return { language, forced };
+    const source = url?.replace(/(\/subtitles\/\d+)(?=[?#]|$)/, '$1/download') || null;
+    if (source) {
+      await this.bridge.subAdd(source, label, language).catch(() => {});
+      // The new track is in mpv's list now; read it rather than wait for the event.
+      this._nativeSubtitleTracks = await this.bridge
+        .getSubtitleTracks()
+        .catch(() => this._nativeSubtitleTracks);
+    }
+    return { language, forced, index, source };
   }
 
   selectTextTrack(track: any): void {
     this._desiredSubtitle =
       track && typeof track === 'object' && track.language
-        ? { language: track.language, forced: !!track.forced, embIndex: track.embIndex ?? null }
+        ? {
+            language: track.language,
+            forced: !!track.forced,
+            image: !!track.image,
+            index: Number(track.index) || 0,
+            source: track.source ?? null,
+            embIndex: track.embIndex ?? null,
+          }
         : null;
     this.resolveSubtitle();
   }
@@ -257,34 +280,38 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   setTextVisibility(visible: boolean): void {
     if (!visible) {
       this._desiredSubtitle = null;
-      this._activeTrackId = null;
       this.bridge.selectSubtitleTrack(null).catch(() => {});
     }
   }
 
+  /** Apply the desired subtitle to mpv. Nothing desired, or a pick that can't be
+   *  resolved, asserts off: mpv auto-selects on its own and the app is the sole
+   *  source of truth, so a track the user didn't pick must never show. */
   private resolveSubtitle(): void {
-    if (!this._desiredSubtitle) {
-      // No subtitle wanted → assert off. mpv auto-selects one otherwise; the
-      // app is the sole source of truth for subtitle selection.
-      this._activeTrackId = null;
-      this.bridge.selectSubtitleTrack(null).catch(() => {});
-      return;
-    }
-    const { language, forced, embIndex } = this._desiredSubtitle;
-    const want = normalizeLangCode(language);
+    const match = this._desiredSubtitle ? this.findSubtitle(this._desiredSubtitle) : undefined;
+    this.bridge.selectSubtitleTrack(match?.id ?? null).catch(() => {});
+  }
+
+  /** Strongest identity first: the URL a sidecar was added from, then the
+   *  container stream index of an embedded track. The ordinal among same
+   *  (language, forced, image) tracks is only for a pick that carries neither
+   *  (an external bitmap sub); a pick with an identity that is gone must not
+   *  land on a sibling. */
+  private findSubtitle(want: DesiredSubtitle): DesktopSubtitleTrack | undefined {
     const tracks = this._nativeSubtitleTracks;
-    // (lang+forced) → lang → the picked ordinal (embedded subs often report
-    // lang "und") → first track, so a deliberate pick is never silently dropped.
-    const match =
-      tracks.find((t) => normalizeLangCode(t.language) === want && !!t.forced === !!forced) ??
-      tracks.find((t) => normalizeLangCode(t.language) === want) ??
-      (embIndex != null ? tracks[embIndex] : undefined) ??
-      (tracks.length ? tracks[0] : undefined);
-    const selectedId = match?.id ?? null;
-    if (selectedId) {
-      this._activeTrackId = selectedId;
-      this.bridge.selectSubtitleTrack(selectedId).catch(() => {});
+    if (want.source || want.embIndex != null) {
+      return (
+        tracks.find((t) => want.source != null && t.external && t.source === want.source) ??
+        tracks.find((t) => want.embIndex != null && t.ffIndex === want.embIndex)
+      );
     }
+    const lang = normalizeLangCode(want.language);
+    return tracks.filter(
+      (t) =>
+        normalizeLangCode(t.language) === lang &&
+        !!t.forced === want.forced &&
+        t.image === want.image,
+    )[want.index];
   }
 
   /** Match NativeEngine.setSubtitleStyle: maps the player's preset keys to the

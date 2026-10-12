@@ -21,14 +21,10 @@ import type {
 } from '../../shared/contract';
 import { MPV_STREAM_OPTIONS } from '../../shared/mpv-stream-options';
 import { muteFilterCommands } from './edl-filter';
+import { FirstFrameGate } from './first-frame-gate';
 import { mpvSubtitleProps } from './subtitle-style';
 import { mapTrackList, parseTracks, type MpvTrack } from './tracks';
 import { TypedEmitter } from './typed-emitter';
-
-// Cap on load()'s first-frame wait. A file that never opens (dead stream, bad
-// URL) must not hang the load promise; the timeout resolves it so the caller
-// proceeds. Matches the Windows backend's FIRST_FRAME_TIMEOUT_MS.
-const FIRST_FRAME_TIMEOUT_MS = 15_000;
 
 type MacAddon = {
   start(o: { wid: string; scale?: number }): void;
@@ -79,8 +75,7 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
   private muteFilterCount = 0;
   private lastDuration = 0;
   private lastBuffered = 0;
-  /** Resolver for the in-flight load()'s first-frame wait; see load(). */
-  private firstFrameResolve: (() => void) | null = null;
+  private readonly firstFrameGate = new FirstFrameGate();
 
   constructor(videoWin: BrowserWindow) {
     super();
@@ -147,14 +142,14 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
       case 'firstFrame':
         // Unblock a pending load() (the new file has opened) and guard the event
         // so a seek's playback-restart doesn't re-fire firstFrame into the renderer.
-        this.firstFrameResolve?.();
+        this.firstFrameGate.release();
         if (!this.sawFirstFrame) {
           this.sawFirstFrame = true;
           this.emit('firstFrame');
         }
         break;
       case 'error':
-        this.firstFrameResolve?.(); // don't hang a load() that failed to open
+        this.firstFrameGate.release(); // don't hang a load() that failed to open
         this.emit('error', { code: -1, message: raw.message ?? 'error' });
         break;
     }
@@ -162,32 +157,13 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
 
   // ── PlayerBackend surface (mirrors index.ts ipc handlers) ───────────────────
   async load(opts: DesktopLoadOptions): Promise<void> {
-    // Resolve any superseded in-flight load wait, then wait for the NEW file to
-    // actually open (first decoded frame) before resolving — mirroring the
-    // Windows backend. addon.load() only QUEUES loadfile, so returning early
-    // would let a caller's post-load sub-add / track-select run while no file is
-    // open (mpv rejects it → the sidecar subtitle is lost on a reload seek). The
-    // timeout + the error path keep an aborted load from hanging.
-    this.firstFrameResolve?.();
     this.sawFirstFrame = false;
     // Global property, so it is always written — otherwise the previous file's
     // rectangle would crop the next one.
     this.addon.setProperty('video-crop', opts.videoCrop ?? '');
     this.applyMuteRanges();
     this.addon.load(opts);
-    await this.waitFirstFrame();
-  }
-
-  private waitFirstFrame(): Promise<void> {
-    return new Promise<void>((resolve) => {
-      const done = () => {
-        clearTimeout(timer);
-        if (this.firstFrameResolve === done) this.firstFrameResolve = null;
-        resolve();
-      };
-      const timer = setTimeout(done, FIRST_FRAME_TIMEOUT_MS);
-      this.firstFrameResolve = done;
-    });
+    await this.firstFrameGate.wait();
   }
 
   async play(): Promise<void> {
@@ -208,7 +184,7 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
   }
 
   async stop(): Promise<void> {
-    this.firstFrameResolve?.(); // a stop cancels any pending load's first-frame wait
+    this.firstFrameGate.release(); // a stop cancels any pending load's first-frame wait
     this.sawFirstFrame = false;
     this.lastPosition = 0;
     this.lastDuration = 0;
@@ -290,7 +266,7 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
 
   async destroy(): Promise<void> {
     this.muteRanges = [];
-    this.firstFrameResolve?.(); // don't leave a pending load() hanging on teardown
+    this.firstFrameGate.release(); // don't leave a pending load() hanging on teardown
     this.addon.stop();
   }
 }

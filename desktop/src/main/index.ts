@@ -13,6 +13,7 @@ import { registerCastIpc } from './cast';
 import { setPlaybackKeepAwake, keepAwakeForState } from './power';
 import { IPC, type DesktopEvent, type DesktopMuteRange, type DesktopSubtitleStyle } from '../shared/contract';
 import { muteFilterCommands } from './mpv/edl-filter';
+import { FirstFrameGate } from './mpv/first-frame-gate';
 import { mpvSubtitleProps } from './mpv/subtitle-style';
 import { parseTracks } from './mpv/tracks';
 import { MPV_STREAM_OPTIONS } from '../shared/mpv-stream-options';
@@ -410,6 +411,8 @@ app.whenReady().then(async () => {
     positionTimer = null;
   };
 
+  const firstFrameGate = new FirstFrameGate();
+
   // mpv events → reshape to the DesktopEvent contract → renderer.
   addon.onEvent((json) => {
     let raw: any;
@@ -450,9 +453,11 @@ app.whenReady().then(async () => {
         // a fresh load — arm the timer on the first frame as well.
         startPositionTimer();
         setPlaybackKeepAwake(true);
+        firstFrameGate.release();
         send({ type: 'firstFrame' });
         break;
       case 'error':
+        firstFrameGate.release();
         stopPositionTimer();
         setPlaybackKeepAwake(false);
         send({ type: 'error', payload: { code: -1, message: raw.message ?? 'error' } });
@@ -524,18 +529,20 @@ app.whenReady().then(async () => {
   };
 
   // Route the renderer's player IPC to the addon (control via mpv properties).
-  ipcMain.handle(IPC.load, (_e, opts) => {
+  ipcMain.handle(IPC.load, async (_e, opts) => {
     console.log('[ipc] load', opts?.url, 'start=', opts?.startTime, 'headers=', Object.keys(opts?.headers ?? {}).join(','));
     // Global property, so it is always written — otherwise the previous file's
     // rectangle would crop the next one.
     addon.setProperty('video-crop', opts?.videoCrop ?? '');
     applyMuteRanges();
-    return addon.load(opts);
+    addon.load(opts);
+    await firstFrameGate.wait();
   });
   ipcMain.handle(IPC.play, () => addon.setProperty('pause', 'no'));
   ipcMain.handle(IPC.pause, () => addon.setProperty('pause', 'yes'));
   ipcMain.handle(IPC.seek, (_e, position: number) => addon.command(['seek', String(position), 'absolute']));
   ipcMain.handle(IPC.stop, () => {
+    firstFrameGate.release();
     stopPositionTimer();
     return addon.command(['stop']);
   });
@@ -581,6 +588,7 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle(IPC.resize, () => {});
   ipcMain.handle(IPC.destroy, () => {
+    firstFrameGate.release();
     stopPositionTimer();
     muteRanges = [];
     applyMuteRanges();

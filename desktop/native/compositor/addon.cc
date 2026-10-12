@@ -585,6 +585,10 @@ Napi::Value Load(const Napi::CallbackInfo& info) {
       opts.emplace_back(b);
     }
   }
+  if (o.Has("audioLanguage") && o.Get("audioLanguage").IsString()) {
+    std::string alang = o.Get("audioLanguage").As<Napi::String>().Utf8Value();
+    if (!alang.empty()) opts.push_back("alang=" + alang);
+  }
   if (o.Has("headers") && o.Get("headers").IsObject()) {
     Napi::Object h = o.Get("headers").As<Napi::Object>();
     Napi::Array keys = h.GetPropertyNames();

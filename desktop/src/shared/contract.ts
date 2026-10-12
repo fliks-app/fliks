@@ -16,6 +16,14 @@ export interface DesktopSubtitleTrack {
   label: string;
   forced: boolean;
   selected: boolean;
+  /** Bitmap codec (PGS / VobSub / DVB): mpv renders it itself, there is no text. */
+  image: boolean;
+  /** True for a sidecar added with `sub-add`, false for a track of the media. */
+  external: boolean;
+  /** What a sidecar was loaded from (the `sub-add` URL); null otherwise. */
+  source: string | null;
+  /** Container stream index of an embedded track (`ff-index`); null when mpv reports none. */
+  ffIndex: number | null;
 }
 
 export interface DesktopLoadOptions {
@@ -25,9 +33,7 @@ export interface DesktopLoadOptions {
   /** Preferred audio language (mpv `alang`). Applied as a file-local loadfile
    *  option so mpv auto-selects the matching audio rendition on the initial load
    *  AND on every mid-file reconfig — without a client round-trip. Neutralises
-   *  the "mpv reverts to the manifest default language on reconfig" churn. Both
-   *  the macOS in-process backend and the Windows subprocess consume it; the
-   *  Linux compositor backend does not. */
+   *  the "mpv reverts to the manifest default language on reconfig" churn. */
   audioLanguage?: string;
   /** Black-bar rectangle in mpv `video-crop` syntax (`WxH+x+y`). The VO crops
    *  after decode — free, and unlike a lavfi crop it keeps hwdec. Empty/absent
@@ -240,6 +246,7 @@ export interface FliksUpdaterApi {
 /** The surface exposed on `window.fliksDesktop` by the preload bridge. */
 export interface FliksDesktopApi {
   runtime: 'electron';
+  /** Resolves once the file has opened, so a following `subAdd` finds it. */
   load(opts: DesktopLoadOptions): Promise<void>;
   play(): Promise<void>;
   pause(): Promise<void>;
