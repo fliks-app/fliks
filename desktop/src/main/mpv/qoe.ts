@@ -12,7 +12,13 @@ const toStr = (v: Raw): string | null => (v == null || v === '' ? null : String(
 /** Cumulative sum of a raw mpv counter: the first value is a baseline, a drop is a reset. */
 class Counter {
   total = 0;
-  private last: number | null = null;
+  private last: number | null;
+
+  /** `from`: a baseline known up front (0 counts the first reading, capped). */
+  constructor(from: number | null = null) {
+    this.last = from;
+  }
+
   /** `cap` bounds a position-derived delta (a seek is not decoding); then a drop is a backward
    *  seek and adds nothing, otherwise it is a counter reset and the new value counts. */
   add(raw: number | null, cap = Infinity): void {
@@ -29,21 +35,21 @@ class Counter {
 export class QoeReader {
   private dropVo = new Counter();
   private dropDec = new Counter();
-  private decoded = new Counter();
-  private lastAt = 0;
-  private seen = false;
+  private decoded = new Counter(0);
+  private lastAt: number;
 
   private readonly now: () => number;
 
   constructor(now: () => number = Date.now) {
     this.now = now;
+    this.lastAt = now();
   }
 
   reset(): void {
     this.dropVo = new Counter();
     this.dropDec = new Counter();
-    this.decoded = new Counter();
-    this.seen = false;
+    this.decoded = new Counter(0);
+    this.lastAt = this.now();
   }
 
   /** Null when mpv reports nothing at all (not started or gone). */
@@ -55,14 +61,14 @@ export class QoeReader {
         return null;
       }
     };
-    const [vo, dec, est, fps, hwdec, codec, fmt, speed, ahead, hls, bitrate, w, h] =
+    const [vo, dec, est, cfps, vfps, hwdec, fmt, speed, ahead, hls, bitrate, w, h] =
       await Promise.all([
         raw('frame-drop-count'),
         raw('decoder-frame-drop-count'),
         raw('estimated-frame-number'),
+        raw('container-fps'),
         raw('estimated-vf-fps'),
         raw('hwdec-current'),
-        raw('video-codec'),
         raw('video-format'),
         raw('cache-speed'),
         raw('demuxer-cache-duration'),
@@ -72,15 +78,16 @@ export class QoeReader {
         raw('video-params/h'),
       ]);
     const t = this.now();
-    const elapsedS = this.seen ? (t - this.lastAt) / 1000 : 0;
+    const elapsedS = (t - this.lastAt) / 1000;
     this.lastAt = t;
-    this.seen = true;
     const voN = toNum(vo);
     const decN = toNum(dec);
     const estN = toNum(est);
+    const cfpsN = toNum(cfps);
+    const maxFps = cfpsN ? cfpsN * 1.1 : (toNum(vfps) || 60) * 1.5;
     this.dropVo.add(voN);
     this.dropDec.add(decN);
-    this.decoded.add(estN, elapsedS * (toNum(fps) || 60) * 1.5);
+    this.decoded.add(estN, elapsedS * maxFps);
     const hw = toStr(hwdec);
     const speedBytes = toNum(speed);
     const out: DesktopQoe = {
@@ -92,7 +99,7 @@ export class QoeReader {
       width: toNum(w),
       height: toNum(h),
       videoCodec: toStr(fmt),
-      decoderName: hw && hw !== 'no' ? hw : toStr(codec),
+      decoderName: hw && hw !== 'no' ? hw : toStr(fmt),
       hwDecoder: hw == null ? null : hw !== 'no',
     };
     return Object.values(out).every((v) => v == null) ? null : out;

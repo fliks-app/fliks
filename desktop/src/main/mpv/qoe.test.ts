@@ -53,16 +53,19 @@ test('falls back to video-bitrate, maps a full cache (speed 0) to null', async (
 
 test('decoded frames count decoding only: resume, forward seek and backward seek', async () => {
   const { read } = harness();
-  const base = { 'estimated-vf-fps': 24 };
-  // resume at 3000 s: ~72k frames in, but nothing decoded yet
-  assert.equal((await read({ ...base, 'estimated-frame-number': 72000 }))?.decodedFrames, 0);
+  // estimated-vf-fps spikes after a seek; only container-fps (x1.1) bounds a step
+  const base = { 'container-fps': 24, 'estimated-vf-fps': 500 };
+  const decoded = async (n: number) =>
+    Math.round((await read({ ...base, 'estimated-frame-number': n }))?.decodedFrames ?? -1);
+  // resume at 3000 s: the first read counts at most the 5 s since load, not the 72k position
+  assert.equal(await decoded(72000), 132);
   // 5 s of playback = 120 frames
-  assert.equal((await read({ ...base, 'estimated-frame-number': 72120 }))?.decodedFrames, 120);
-  // forward seek of +10 min: delta exceeds 5 s * 24 fps * 1.5 and is capped
-  assert.equal((await read({ ...base, 'estimated-frame-number': 86520 }))?.decodedFrames, 300);
+  assert.equal(await decoded(72120), 252);
+  // forward seek of +10 min: the step is capped at 5 s * 24 fps * 1.1
+  assert.equal(await decoded(86520), 384);
   // backward seek never goes down; playback resumes from the new position
-  assert.equal((await read({ ...base, 'estimated-frame-number': 1000 }))?.decodedFrames, 300);
-  assert.equal((await read({ ...base, 'estimated-frame-number': 1120 }))?.decodedFrames, 420);
+  assert.equal(await decoded(1000), 384);
+  assert.equal(await decoded(1120), 504);
 });
 
 test('drop counters survive the resets mpv does on seek, and reset() starts over', async () => {
@@ -77,7 +80,7 @@ test('drop counters survive the resets mpv does on seek, and reset() starts over
 
 test('software decode names the codec; nothing readable gives null', async () => {
   const { read } = harness();
-  const q = await read({ 'hwdec-current': 'no', 'video-codec': 'h264' });
+  const q = await read({ 'hwdec-current': 'no', 'video-format': 'h264' });
   assert.equal(q?.hwDecoder, false);
   assert.equal(q?.decoderName, 'h264');
   assert.equal(q?.droppedFrames, null);
