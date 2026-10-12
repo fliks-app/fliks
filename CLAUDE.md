@@ -14,20 +14,26 @@
 
 - **`main` is protected**: direct pushes are rejected (`protected branch hook declined`). Every change has to land via a pull request — branch off `main`, push the branch, open the PR, then merge through GitHub (`gh pr merge`).
 - **Don't run `git push` against `main` directly**; it always fails. If you mistakenly committed straight to local `main`, move the commit onto a branch (`git checkout -b <branch>` while on the commit, then `git reset --hard origin/main` on `main`) before pushing.
-- **Squash-merge to escape a bad-message branch**: when an existing branch's history has commits that fail commitlint (the lint runs on every commit in the PR), prefer `gh pr merge --squash` with a clean conventional title over rewriting + force-pushing. Force-push to a published branch is destructive and needs explicit user approval.
+- **Squash-merge to escape a bad-message branch**: when an existing branch's history has commits that fail `commitlint` or `release-parser` (both check every commit in the PR, see Commit conventions), prefer `gh pr merge --squash` with a clean conventional title over rewriting + force-pushing. Force-push to a published branch is destructive and needs explicit user approval.
+- **Never merge `main` into a PR branch**: the merge commit (`Merge remote-tracking branch 'origin/main' into …`) is not a conventional commit and fails `release-parser`. Bring a branch up to date by rebasing onto `origin/main` before its first push; once it is published, catching up means a rebase and a force-push, which needs explicit user approval.
 - **Local hooks**: see `.husky/` if present. Don't bypass them.
 - **Write pull requests in English** — title and body — like commit messages and code comments, whatever language the conversation uses.
 
 ## Commit conventions
 
-Enforced by `wagoid/commitlint-github-action` on every PR and push to `main` (see `.github/workflows/commit-lint.yml`) using `@commitlint/config-conventional` defaults. A failing lint blocks the merge. **Always apply these rules**:
+Two jobs in `.github/workflows/commit-lint.yml` check every commit of a PR, then the squash commit once it lands on `main`:
+
+- `commitlint`: `wagoid/commitlint-github-action` with `@commitlint/config-conventional` defaults.
+- `release-parser`: release-please's own, stricter parser (`.github/scripts/check-commit-parse.mjs`). release-please silently drops a message it can't parse from the changelog and the version bump. It rejects merge commits and an unbalanced `(` in the body.
+
+Neither is a required status check (GitHub still lets a PR merge with them red), so treat a red job as blocking. **Always apply these rules**:
 
 - **Header format**: `type(scope): subject` — type and scope lowercase, scope optional but encouraged.
 - **Allowed types**: `feat`, `fix`, `chore`, `refactor`, `style`, `docs`, `test`, `perf`, `build`, `ci`, `revert`.
 - **Subject case**: lowercase first word. Not sentence-case (`Add foo`), start-case (`Add Foo`), pascal-case (`AddFoo`), or upper-case (`ADD FOO`). Proper nouns and acronyms inside the subject are fine (`fix(player): patch HEVC remux`). When the natural subject would start with a capitalised proper noun, rephrase to avoid it (e.g. write `add show-more toggle on the mobile synopsis` not `Voir plus toggle on mobile synopsis`).
 - **Subject ending**: no trailing period.
 - **Header length**: keep ≤ 72 characters when possible; the limit is 100.
-- **Body**: separate from the header with one blank line. Explain *why*, not *what*. Wrap each line at ≤ 100 characters. Reference incidents, constraints, or prior bugs that motivated the change.
+- **Body**: separate from the header with one blank line. Explain *why*, not *what*. Wrap each line at ≤ 100 characters. Keep every `(` closed: `release-parser` rejects an unbalanced one. Reference incidents, constraints, or prior bugs that motivated the change.
 - **Squash-merge messages are linted too, after the fact**: the `commit_message` passed to a squash merge (`gh api .../merge -f commit_message=...`) becomes a commit on `main`, linted on push, with no way to fix it once merged (#1570 shipped a 139-character body line). Hard-wrap every line of it at ≤ 100 characters, like any commit body, and check `awk '{print length}'` before merging.
 - **Footer**: blank line before, used for issue refs (`Refs: #123`) or `BREAKING CHANGE:` notes.
 - **No `Co-Authored-By` lines** (overrides the default Claude Code template — see the user's global instructions).
