@@ -135,6 +135,12 @@ describe('diagnose', () => {
     ]);
   });
 
+  it('does not hint a software decoder below 720p', () => {
+    expect(d({ hwDecoder: false, droppedFrames: 600, height: 480 }).reasons).toEqual([
+      'qoe.reason.dropped_frames',
+    ]);
+  });
+
   it('unknown: under 60 s watched', () => {
     expect(d({ watchedMs: 30_000 }).verdict).toBe('unknown');
   });

@@ -24,10 +24,18 @@ import { User } from '../users/entities/user.entity';
 import { LibrariesService } from '../libraries/libraries.service';
 import {
   LiveSessionRegistry,
+  type LiveSession,
   type PlaybackState as LivePlaybackState,
 } from './live-session.service';
 import { EventsService, type RemoteQualityRung } from '../scheduler/events.service';
 import { QoeService } from '../qoe/qoe.service';
+import {
+  getHdrLadderForDevice,
+  getLadderForDevice,
+  hdrRungName,
+  parseBitrateToBps,
+  resolveLadderRung,
+} from './transcoding/profiles';
 import { parseEvents, parsePlaybackId, parseSample } from '../qoe/core/validate';
 
 /** Debounce window for DB writes — heartbeat fires every 10 s but we
@@ -268,7 +276,10 @@ export class PlaybackController {
       sessionLost = !updated;
       if (updated && body.qoe != null) {
         const sample = parseSample(body.qoe);
-        if (sample) this.qoe.recordSample(updated, sample);
+        if (sample) {
+          sample.variantBitrate ??= servedRungBitrate(updated);
+          this.qoe.recordSample(updated, sample);
+        }
       }
 
       // Remote-control fan-out: must fire on every heartbeat, not just a DB
@@ -451,4 +462,14 @@ export class PlaybackController {
     const user = req.user as User;
     return this.playbackService.hideFromContinueWatching(user.id, mediaId);
   }
+}
+
+/** Nominal bitrate of the rung a transcode session serves; null for remux and direct play. */
+function servedRungBitrate(s: LiveSession): number | null {
+  if (s.kind !== 'transcode' || !s.quality) return null;
+  const ladder = s.hdrLadder
+    ? getHdrLadderForDevice(s.deviceType)
+    : getLadderForDevice(s.deviceType);
+  const rung = resolveLadderRung(hdrRungName(s.quality, s.hdrLadder), ladder);
+  return rung ? parseBitrateToBps(rung.videoBitrate) || null : null;
 }

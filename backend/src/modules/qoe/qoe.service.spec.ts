@@ -214,13 +214,11 @@ describe('QoeService playbacks', () => {
     expect(p?.events[0]).toMatchObject({ sessionId: 'a', type: 'error' });
   });
 
-  it('resolves a playbackId within its user and returns null for nothing', async () => {
-    const findOne = jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(b).mockResolvedValue(null);
-    const find = jest.fn().mockResolvedValue([a, b]);
-    const { svc } = build({ findOne, find }, { find: jest.fn().mockResolvedValue([]) });
-    expect(await svc.getSession('pb')).toMatchObject({ sessionIds: ['a', 'b'] });
-    expect(find).toHaveBeenCalledWith({ where: { userId: 7, playbackId: 'pb' } });
-    expect(await svc.getSession('nope')).toBeNull();
+  it('returns null for an unknown session, and never resolves a bare playbackId', async () => {
+    const find = jest.fn();
+    const { svc } = build({ findOne: jest.fn().mockResolvedValue(null), find });
+    expect(await svc.getSession('pb')).toBeNull();
+    expect(find).not.toHaveBeenCalled();
   });
 
   it('keeps two users sending the same playbackId as two playbacks', async () => {

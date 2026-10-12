@@ -44,7 +44,8 @@ function device(
   confidence: QoeDiagnosis['confidence'],
   reason: string,
 ): QoeDiagnosis {
-  return s.hwDecoder === false
+  // Below 720p a software decoder is normal, so it says nothing.
+  return s.hwDecoder === false && (s.height ?? 0) >= 720
     ? result('device', confidence, reason, 'software_decoder')
     : result('device', confidence, reason);
 }

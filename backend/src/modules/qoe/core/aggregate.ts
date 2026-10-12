@@ -14,8 +14,6 @@ const MIN_SPEED_SAMPLES = 3;
 const MAX_SAMPLE_AGE_MS = 15_000;
 /** Bounds memory on a multi-hour session. */
 const MAX_KEPT = 200;
-/** CMCD `bs` requests closer than this belong to the same starvation. */
-const BS_RUN_GAP_MS = 5_000;
 
 /** A cumulative counter that restarts from zero when the engine reloads. */
 class ResettingCounter {
@@ -53,9 +51,6 @@ export class QoeAggregator {
   private engine: QoeEngine | null = null;
   private cmcdSeen = false;
   private cmcdClaimed = false;
-  private bsRuns = 0;
-  private lastBsAt: number | null = null;
-  private readonly bsBuffers: number[] = [];
   private cmcdBuffer: number | null = null;
   private cmcdBufferAt: number | null = null;
   private stallEvents = 0;
@@ -157,14 +152,6 @@ export class QoeAggregator {
       this.cmcdBuffer = buffer;
       this.cmcdBufferAt = now;
     }
-    // Startup requests carry `bs` too; that is not a stall.
-    if (c.bs && !c.su) {
-      if (this.lastBsAt == null || now - this.lastBsAt > BS_RUN_GAP_MS) {
-        this.bsRuns++;
-        if (buffer != null) push(this.bsBuffers, buffer);
-      }
-      this.lastBsAt = now;
-    }
     if (c.mtp != null) push(this.cmcdMtp, c.mtp * 1000);
     if (c.br != null && this.variantBitrates.length === 0) {
       this.variantBitrate = c.br * 1000;
@@ -173,9 +160,6 @@ export class QoeAggregator {
 
   summary(): QoeSessionSummary {
     const lastErrorAt = this.lastErrorAt;
-    // A client that reports at all (even zero stalls) is believed; `bs` only covers silent ones.
-    const fromCmcd =
-      this.sampleCount === 0 && this.stallEvents === 0 && this.bsRuns > 0;
     return {
       engine: this.engine,
       cmcd: this.cmcdSeen,
@@ -186,7 +170,7 @@ export class QoeAggregator {
       decoderName: this.decoderName,
       hwDecoder: this.hwDecoder,
       watchedMs: this.watchedMs,
-      stallCount: fromCmcd ? this.bsRuns : (this.stalls.total ?? 0),
+      stallCount: this.stalls.total ?? 0,
       stallMs: this.stallMs.total ?? 0,
       droppedFrames: this.dropped.total,
       decodedFrames: this.decoded.total,
@@ -202,7 +186,7 @@ export class QoeAggregator {
       avgBandwidthBps: avg(this.bandwidths),
       minBandwidthBps: this.minBandwidth,
       avgVariantBitrate: avg(this.variantBitrates) ?? this.variantBitrate,
-      stallBufferAheadS: median(fromCmcd ? this.bsBuffers : this.stallBuffers),
+      stallBufferAheadS: median(this.stallBuffers),
       stallBandwidthBps: median(this.stallBandwidths),
       cmcdThroughputBps: avg(this.cmcdMtp),
       medianTranscodeSpeed:

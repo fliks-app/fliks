@@ -48,10 +48,10 @@ export class QoeAdminController {
     });
   }
 
-  @Get('sessions/:id')
+  @Get('sessions/:sessionId')
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
-  async session(@Param('id') id: string) {
-    const row = await this.qoe.getSession(id);
+  async session(@Param('sessionId') sessionId: string) {
+    const row = await this.qoe.getSession(sessionId);
     if (!row) throw new NotFoundException('qoe_session_not_found');
     return row;
   }

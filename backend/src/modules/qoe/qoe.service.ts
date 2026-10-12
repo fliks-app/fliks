@@ -543,14 +543,9 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     return mergePlaybacks(rows);
   }
 
-  /** `id` is a sessionId or a playbackId (the latest user's, when several share it). */
-  async getSession(id: string) {
-    const anchor =
-      (await this.sessions.findOne({ where: { sessionId: id } })) ??
-      (await this.sessions.findOne({
-        where: { playbackId: id },
-        order: { lastSeenAt: 'DESC' },
-      }));
+  /** The playback of a session: its user's rows sharing the session's playbackId. */
+  async getSession(sessionId: string) {
+    const anchor = await this.sessions.findOne({ where: { sessionId } });
     if (!anchor) return null;
     const rows =
       anchor.userId != null && anchor.playbackId != null
