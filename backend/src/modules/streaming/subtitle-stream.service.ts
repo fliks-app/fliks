@@ -23,7 +23,8 @@ import { Command } from '../scheduler/entities/command.entity';
 import { resolveSubtitleAbsolutePath } from '../subtitles/subtitle-path.util';
 import { normalizeLanguageCode } from '../../common/constants/app-languages';
 import type { SubtitleRenditionMeta } from './transcoding/types';
-import { assToVtt, srtToVtt } from './subtitle-vtt.util';
+import { assToVtt, normalizeVtt, srtToVtt } from './subtitle-vtt.util';
+import { isRenderableTextSidecar } from '../../common/constants/subtitle-codecs';
 import { withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
 import { spawnBackground } from '../../common/utils/spawn-priority';
 import {
@@ -203,7 +204,7 @@ export class SubtitleStreamService implements OnModuleInit {
     );
     const vtt =
       ext === '.vtt'
-        ? content
+        ? normalizeVtt(content)
         : ext === '.ass' || ext === '.ssa'
           ? assToVtt(content)
           : srtToVtt(content); // .srt + unknown fallback
@@ -213,8 +214,8 @@ export class SubtitleStreamService implements OnModuleInit {
   /**
    * Text subtitle tracks for the HLS master's `SUBTITLES` group: embedded
    * non-bitmap streams (from cached `streamInfo`) then external files. Bitmap
-   * subtitles (PGS/DVD/DVB) are excluded — they have no WebVTT form and stay on
-   * the burn-in path. `key` feeds the VTT endpoints (`subtitles/embedded/:idx`,
+   * subtitles (PGS/DVD/DVB) and sidecars that can't become WebVTT are
+   * excluded — they have no WebVTT form and stay on the burn-in path. `key` feeds the VTT endpoints (`subtitles/embedded/:idx`,
    * `subtitles/:id`); `name` is a human label (track title / language /
    * "Subtitle") shown by native players (AirPlay, lock-screen). It is NOT a
    * stable id — the master playlist uniquifies colliding names with an
@@ -247,7 +248,7 @@ export class SubtitleStreamService implements OnModuleInit {
         order: { id: 'ASC' },
       });
       for (const sf of external) {
-        if (!sf.relativePath) continue;
+        if (!isRenderableTextSidecar(sf)) continue;
         out.push({
           kind: 'external',
           key: sf.id,

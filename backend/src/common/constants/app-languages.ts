@@ -1,3 +1,5 @@
+import { ISO_639_2_TO_1_FULL } from './iso-639-2';
+
 export interface AppLanguageDefinition {
   id: number;
   name: string;
@@ -56,18 +58,43 @@ export const ISO_639_2_TO_1: Record<string, string> = Object.fromEntries(
 );
 
 /**
- * Normalize a stream/subtitle language tag to its canonical ISO 639-1 code.
- * Embedded streams carry the raw container tag — usually ISO 639-2 (`fre`,
- * `fra`) or a regional form (`fr-FR`) — which native players (AVPlayer /
- * ExoPlayer) fail to match against a 2-letter selection. Folds those to `fr`
- * (etc.) so an advertised rendition's LANGUAGE is the canonical code; returns
- * `und` for an empty tag and the lowercased input when it isn't recognised.
+ * Codes folded after the ISO 639-2 → 639-1 step: deprecated tags, the 3-letter forms
+ * players report for macro-languages, and Norwegian (APP_LANGUAGES only knows `no`, so
+ * `nb`/`nn` match it). Same table on the client (`language.utils.ts`).
+ */
+const FOLDED_CODES: Readonly<Record<string, string>> = {
+  iw: 'he',
+  in: 'id',
+  ji: 'yi',
+  mo: 'ro',
+  jw: 'jv',
+  tw: 'ak',
+  nb: 'no',
+  nn: 'no',
+  cmn: 'zh',
+  arb: 'ar',
+  twi: 'ak',
+  scc: 'sr',
+  scr: 'hr',
+  // Media3 macro-language tags (`hbs-hrv`, `ms-ind`) carry the language in the 2nd subtag.
+  'hbs-hrv': 'hr',
+  'hbs-srp': 'sr',
+  'hbs-bos': 'bs',
+  'ms-ind': 'id',
+};
+
+/**
+ * Canonical form of a language tag, whoever reported it (container, provider, player):
+ * lowercase ISO 639-1 when the language has one, else the 639-2/3 code; region/script
+ * subtags dropped; `und` if empty. Must stay identical to the client's `normalizeLangCode`.
  */
 export function normalizeLanguageCode(lang: string | null | undefined): string {
-  if (!lang) return 'und';
-  const base = lang.toLowerCase().split(/[-_]/)[0];
-  if (base.length === 2) return base;
-  return ISO_639_2_TO_1[base] ?? base;
+  const [primary, second] = (lang ?? '').trim().toLowerCase().split(/[-_]/);
+  if (!primary) return 'und';
+  const macro = FOLDED_CODES[`${primary}-${second}`];
+  if (macro) return macro;
+  const iso1 = ISO_639_2_TO_1_FULL[primary] ?? primary;
+  return FOLDED_CODES[iso1] ?? iso1;
 }
 
 const byId = new Map(APP_LANGUAGES.map((l) => [l.id, l]));

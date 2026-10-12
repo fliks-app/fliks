@@ -1,4 +1,4 @@
-import { localizeLanguage, sortByLanguageName } from './language.utils';
+import { guessSubtitleTags, localizeLanguage, normalizeLangCode, sortByLanguageName } from './language.utils';
 import { signal } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { buildSubtitleTracks } from './subtitle-tracks';
@@ -90,5 +90,61 @@ describe('buildSubtitleTracks language canonicalisation', () => {
 
   it('keeps the placeholder for an untagged track', () => {
     expect(buildSubtitleTracks([row(1, '')], 1, { hideBurnIn: false })[0].language).toBe('und');
+  });
+});
+
+describe('normalizeLangCode', () => {
+  it.each([
+    ['eng', 'en'], ['fre', 'fr'], ['fra', 'fr'], ['est', 'et'], ['isl', 'is'], ['ice', 'is'],
+    ['per', 'fa'], ['fas', 'fa'], ['tam', 'ta'], ['lav', 'lv'], ['lit', 'lt'], ['hrv', 'hr'],
+  ])('maps the ISO 639-2 code %s to %s', (input, expected) => {
+    expect(normalizeLangCode(input)).toBe(expected);
+  });
+
+  it.each([
+    ['fr-FR', 'fr'], ['pt-BR', 'pt'], ['zh_Hans_CN', 'zh'], ['EN', 'en'], [' Fre ', 'fr'],
+  ])('strips subtags and case from %s', (input, expected) => {
+    expect(normalizeLangCode(input)).toBe(expected);
+  });
+
+  it.each([
+    ['hbs-hrv', 'hr'], ['hbs-srp', 'sr'], ['hbs-bos', 'bs'], ['ms-ind', 'id'], ['no-nob', 'no'],
+    ['scc', 'sr'], ['cmn', 'zh'], ['arb', 'ar'], ['twi', 'ak'], ['tw', 'ak'], ['iw', 'he'], ['in', 'id'],
+    ['ji', 'yi'], ['mo', 'ro'],
+  ])('folds the player alias %s to %s', (input, expected) => {
+    expect(normalizeLangCode(input)).toBe(expected);
+  });
+
+  it('folds Norwegian variants to the single `no` the app lists know', () => {
+    for (const code of ['nor', 'nob', 'nno', 'nb', 'nn', 'nb-NO']) {
+      expect(normalizeLangCode(code)).toBe('no');
+    }
+  });
+
+  it('returns und for an empty tag and keeps codes without a 639-1 form', () => {
+    for (const empty of ['', '  ', null, undefined, '-']) {
+      expect(normalizeLangCode(empty)).toBe('und');
+    }
+    expect(normalizeLangCode('yue')).toBe('yue');
+  });
+
+  it('matches what each player reports against what the app stores', () => {
+    const same = (engine: string, stored: string) =>
+      normalizeLangCode(engine) === normalizeLangCode(stored);
+    expect(same('et', 'est')).toBe(true);
+    expect(same('hbs-hrv', 'hr')).toBe(true);
+    expect(same('hbs-hrv', 'hrv')).toBe(true);
+    expect(same('pt-BR', 'pt')).toBe(true);
+    expect(same('ms-ind', 'ind')).toBe(true);
+    expect(same('no-nob', 'nor')).toBe(true);
+    expect(same('et', 'fr')).toBe(false);
+  });
+});
+
+describe('guessSubtitleTags', () => {
+  it('reads 3-letter and regional language tokens', () => {
+    expect(guessSubtitleTags('Movie.fra.srt').language).toBe('fr');
+    expect(guessSubtitleTags('Movie.pt-BR.srt').language).toBe('pt');
+    expect(guessSubtitleTags('Movie.nob.srt').language).toBe('no');
   });
 });

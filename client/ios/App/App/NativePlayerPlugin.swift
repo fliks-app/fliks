@@ -105,6 +105,9 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private var presentationSizeObserver: NSKeyValueObservation?
     private var externalPlaybackObserver: NSKeyValueObservation?
     private var externalPlaybackActive = false
+    private enum PipPhase { case inactive, active, exiting }
+    private var pipPhase = PipPhase.inactive
+    private var subtitleSelectionGeneration = 0
     private var firstFrameEmitted = false
     private var fillScreen = false
     private var videoCrop: VideoCrop?
@@ -113,7 +116,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// player rendering suppressed, then drawn by `subtitleOverlay` so the app
     /// fully controls styling and no system caption box appears. Inside PiP
     /// (where the overlay isn't captured) suppression is lifted so the native
-    /// track draws into the mirrored layer instead.
+    /// track draws into the mirrored layer instead. `applySubtitleRendering`
+    /// is the single place that decides which of the two draws.
     private var subtitleOutput: AVPlayerItemLegibleOutput?
     private var subtitleOverlay: SubtitleOverlayView?
     private var currentSubtitleStyle = SubtitleStyle()
@@ -212,6 +216,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             overlay.apply(self.currentSubtitleStyle)
             view.addSubview(overlay)
             self.subtitleOverlay = overlay
+            self.applySubtitleRendering()
 
             call.resolve()
         }
@@ -402,6 +407,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         // on the new item would raise.
         audibleGroup = nil
         legibleGroup = nil
+        pipDeselectedSubtitle = nil
         // Pull cues off the legible track ourselves (player rendering
         // suppressed) so the custom overlay can draw them box-free.
         attachLegibleOutput(to: item)
@@ -508,6 +514,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         DispatchQueue.main.async { [weak self] in
             self?.player?.pause()
             self?.player?.replaceCurrentItem(with: nil)
+            self?.subtitleOverlay?.render([])
             self?.videoCrop = nil
             self?.layoutVideoLayer()
             self?.audibleGroup = nil
@@ -611,7 +618,11 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         let id = call.getString("id")
 
         Task { @MainActor [weak self] in
-            guard let group = await self?.loadedLegibleGroup(),
+            self?.subtitleSelectionGeneration += 1
+            let generation = self?.subtitleSelectionGeneration
+            let loaded = await self?.loadedLegibleGroup()
+            guard generation == self?.subtitleSelectionGeneration,
+                  let group = loaded,
                   let item = self?.player?.currentItem else {
                 call.resolve()
                 return
@@ -661,32 +672,33 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// system's user-preference styling (the box) out of the delivered cues.
     private func attachLegibleOutput(to item: AVPlayerItem) {
         let output = AVPlayerItemLegibleOutput()
-        output.suppressesPlayerRendering = !externalPlaybackActive
         output.textStylingResolution = .sourceAndRulesOnly
         output.setDelegate(self, queue: legibleQueue)
         item.add(output)
         subtitleOutput = output
+        applySubtitleRendering()
     }
 
-    /// PiP can only mirror the AVPlayerLayer, not the overlay subview. While
-    /// PiP is active, lift suppression so AVPlayer renders the (boxed) native
-    /// caption into the mirrored layer; restore the overlay on exit.
-    /// PiP enter / will-stop. Entering: let AVPlayer draw the (boxed) native
-    /// caption into the mirrored layer and hide the overlay. Will-stop:
-    /// re-suppress and clear the native caption, but keep the overlay hidden —
-    /// it is revealed only once PiP has fully exited (`finishSubtitlePiPExit`),
-    /// otherwise it overlaps the boxed caption during the restore animation.
+    /// AVPlayer draws the (boxed) native caption where the overlay can't be
+    /// seen: on an AirPlay receiver and in the PiP window. Otherwise the
+    /// overlay draws, hidden through the PiP exit animation so it doesn't
+    /// overlap the native caption still fading out.
+    private func applySubtitleRendering() {
+        let native = externalPlaybackActive || pipPhase == .active
+        subtitleOutput?.suppressesPlayerRendering = !native
+        subtitleOverlay?.isHidden = native || pipPhase == .exiting
+        if native { subtitleOverlay?.render([]) }
+    }
+
+    /// PiP enter / will-stop. PiP mirrors the AVPlayerLayer, not the overlay.
+    /// Will-stop also clears the native caption; the overlay is revealed only
+    /// once PiP has fully exited (`finishSubtitlePiPExit`).
     public func setSubtitleRenderingForPiP(_ inPiP: Bool) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            if inPiP {
-                self.subtitleOutput?.suppressesPlayerRendering = false
-                self.subtitleOverlay?.isHidden = true
-            } else {
-                self.subtitleOutput?.suppressesPlayerRendering = true
-                self.subtitleOverlay?.isHidden = true
-                self.clearNativeCaption()
-            }
+            self.pipPhase = inPiP ? .active : .exiting
+            self.applySubtitleRendering()
+            if !inPiP { self.clearNativeCaption() }
         }
     }
 
@@ -696,7 +708,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.restoreLegibleSelection()
-            self.subtitleOverlay?.isHidden = false
+            self.pipPhase = .inactive
+            self.applySubtitleRendering()
         }
     }
 
@@ -726,9 +739,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         defer { emitExternalPlayback(active) }
         guard active != externalPlaybackActive else { return }
         externalPlaybackActive = active
-        subtitleOutput?.suppressesPlayerRendering = !active
-        subtitleOverlay?.isHidden = active
-        if active { subtitleOverlay?.render([]) }
+        applySubtitleRendering()
     }
 
     private func emitExternalPlayback(_ active: Bool) {
