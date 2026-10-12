@@ -39,6 +39,16 @@ describe('QoeReporter', () => {
     expect(api.postQoeEvents).toHaveBeenCalledWith('a', [ev(1)], 'pb');
   });
 
+  it('keeps the playbackId each event was recorded under', async () => {
+    reporter.record('a', ev(1), false, 'old');
+    reporter.record('a', ev(2), false, 'new');
+    await reporter.flush('a');
+    expect(api.postQoeEvents.mock.calls).toEqual([
+      ['a', [ev(1)], 'old'],
+      ['a', [ev(2)], 'new'],
+    ]);
+  });
+
   it('caps the buffer at 100, dropping the oldest', async () => {
     for (let i = 0; i < QOE_BUFFER_CAP + 5; i++) reporter.record('a', ev(i));
     await reporter.flush('a');

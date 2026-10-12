@@ -40,6 +40,18 @@ describe('StallTracker', () => {
   });
 });
 
+describe('StallTracker overlap', () => {
+  it('clamps a backdated start to the end of the previous episode', () => {
+    const t = new StallTracker();
+    t.begin(1000, 5, false);
+    expect(t.end(2000)?.durationMs).toBe(1000);
+    t.begin(1500, 5, false);
+    expect(t.end(2600)?.durationMs).toBe(600);
+    expect(t.count).toBe(2);
+    expect(t.totalMs).toBe(1600);
+  });
+});
+
 describe('PlayerQoe', () => {
   let now = 0;
   const reporter = { record: vi.fn(), flush: vi.fn(), flushKeepalive: vi.fn() };
@@ -158,6 +170,24 @@ describe('PlayerQoe', () => {
       engine(async () => ({ engine: 'shaka', cmcd: true, bufferAheadS: null, bandwidthBps: null })),
     );
     expect(qoe.current('s')).toBeNull();
+  });
+
+  it('flushes a quality switch at once, before its session goes away', () => {
+    qoe.onQualitySwitch('a', 10, 2_000_000);
+    expect(reporter.record).toHaveBeenCalledWith(
+      'a',
+      expect.objectContaining({ type: 'quality_switch', toBitrate: 2_000_000 }),
+      true,
+      expect.any(String),
+    );
+  });
+
+  it('flushes the old sid when a new one takes over', async () => {
+    await qoe.refresh(engine(async () => raw));
+    qoe.current('a');
+    reporter.flush.mockClear();
+    qoe.current('b');
+    expect(reporter.flush).toHaveBeenCalledWith('a');
   });
 
   it('flushes errors immediately', () => {

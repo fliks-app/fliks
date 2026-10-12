@@ -10,16 +10,18 @@ export const SAMPLE_TIMEOUT_MS = 500;
 export class StallTracker {
   count = 0;
   totalMs = 0;
+  private lastEndAt = 0;
   private open: { at: number; position: number; bufferAheadS: number | null; ignored: boolean } | null = null;
 
   begin(now: number, position: number, ignored: boolean, bufferAheadS: number | null = null): void {
-    this.open ??= { at: now, position, bufferAheadS, ignored };
+    this.open ??= { at: Math.max(now, this.lastEndAt), position, bufferAheadS, ignored };
   }
 
   /** Closes the open episode; returns it when it counted. */
   end(now: number): { durationMs: number; position: number; bufferAheadS: number | null } | null {
     const o = this.open;
     this.open = null;
+    if (o) this.lastEndAt = now;
     if (!o || o.ignored) return null;
     const durationMs = now - o.at;
     if (durationMs < MIN_STALL_MS) return null;
@@ -41,6 +43,7 @@ export class StallTracker {
     this.count = 0;
     this.totalMs = 0;
     this.open = null;
+    this.lastEndAt = 0;
   }
 }
 
@@ -75,6 +78,7 @@ export class PlayerQoe {
     if (!sessionId || sessionId === this.sid) return;
     if (this.sid) {
       this.closeStall(this.sid);
+      this.flush(this.sid);
       this.stalls.reset();
       this.recoveryReloads = 0;
       this.last = null;
@@ -129,7 +133,7 @@ export class PlayerQoe {
   onQualitySwitch(sessionId: string | undefined, position: number, to?: number): void {
     if (!sessionId) return;
     const from = this.last?.variantBitrate ?? undefined;
-    this.record(sessionId, { type: 'quality_switch', position, fromBitrate: from, toBitrate: to });
+    this.record(sessionId, { type: 'quality_switch', position, fromBitrate: from, toBitrate: to }, true);
   }
 
   /** Re-reads the engine for the next heartbeat; never awaited by it, so a slow engine delays nothing. */

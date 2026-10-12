@@ -234,4 +234,12 @@ describe('ShakaEngine buffering bridge', () => {
     video.dispatchEvent(new Event('waiting'));
     expect(states).toEqual(['buffering', 'playing', 'buffering']);
   });
+
+  it('a play after a pause inside an open shaka episode reports playing, then buffering', async () => {
+    const { video, states, fire } = await setup(false);
+    fire(true);
+    video.dispatchEvent(new Event('pause'));
+    video.dispatchEvent(new Event('play'));
+    expect(states).toEqual(['buffering', 'paused', 'playing', 'buffering']);
+  });
 });

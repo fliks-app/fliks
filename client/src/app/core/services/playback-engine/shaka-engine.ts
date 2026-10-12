@@ -496,7 +496,11 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     });
 
     // State transitions
-    this.addVideoListener('play', () => this.emitPlayingUnlessStarved());
+    this.addVideoListener('play', () => {
+      this.bufferingEmitted = false;
+      this.emit('stateChanged', { state: 'playing' });
+      if (this.shakaBuffering && !video.paused) this.emitBuffering();
+    });
 
     this.addVideoListener('pause', () => {
       this.bufferingEmitted = false;

@@ -58,7 +58,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 
 import type { AudioTrack, PlaybackEngine, QoeSample } from '../../core/services/playback-engine/playback-engine';
 import { QoeReporter } from '../../core/services/qoe-reporter.service';
-import { PlayerQoe } from './player-qoe';
+import { MIN_STALL_MS, PlayerQoe } from './player-qoe';
 import {
   createEngineSurface,
   releaseEngineSurface,
@@ -381,6 +381,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** True while the user is actively dragging / scrubbing the seekbar. */
   private readonly seekDragging = signal(false);
   private statsInterval: ReturnType<typeof setInterval> | null = null;
+  private playheadInterval: ReturnType<typeof setInterval> | null = null;
   private subtitleStyleEl: HTMLStyleElement | null = null;
   /** Stall watchdog: last position we saw the playhead at, and when. If the
    *  playhead doesn't advance for {@link stallTimeoutMs} while the player is
@@ -1383,6 +1384,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.removeSubtitleStyle();
     const video = this.videoEl()?.nativeElement;
     if (video) {
+      video.removeEventListener('seeking', this.onSeeking);
       video.removeEventListener('seeked', this.onSeeked);
     }
     this.spriteAbort?.abort();
@@ -1391,6 +1393,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.nextEpisodeCue.cancel();
     this.commercialCue.cancel();
     if (this.statsInterval) clearInterval(this.statsInterval);
+    if (this.playheadInterval) clearInterval(this.playheadInterval);
     if (this.recoverRetryTimer) clearTimeout(this.recoverRetryTimer);
     if (this.adminMessageTimer) clearTimeout(this.adminMessageTimer);
     document.removeEventListener('keydown', this.onKeyDown);
@@ -1734,7 +1737,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const now = Date.now();
     if (now - this.lastTogglePlayAt < this.togglePlayCoalesceMs) return;
     this.lastTogglePlayAt = now;
-    if (this.state.ended()) this.qoe.reset();
+    if (this.state.ended()) {
+      this.qoe.flush(this.activeSessionId());
+      this.qoe.reset();
+    }
     // Like a natural end, play after an EDL end replays from the start.
     if (this.edlEnded && this.state.ended()) {
       this.edlEnded = false;
@@ -2699,16 +2705,39 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   });
 
   /** Buffering after the first frame that no seek, load or quality switch explains. */
-  private readonly qoeStallEffect = effect(() => {
-    const frozenSince = this.frozenSince();
-    const stalled = (this.state.buffering() && this.state.videoStarted()) || frozenSince > 0;
-    untracked(() => this.trackStall(stalled, frozenSince || undefined));
-  });
+  private readonly qoeStallEffect = effect(() => this.syncStall());
+
+  private syncStall(): void {
+    let frozenSince = this.frozenSince();
+    const buffering = this.state.buffering();
+    const started = this.state.videoStarted();
+    untracked(() => {
+      const pos = this.engine?.currentTime ?? 0;
+      if (!this.wasBuffering && buffering) {
+        this.bufferStartAt = Date.now();
+        this.bufferStartPos = pos;
+      } else if (this.wasBuffering && !buffering) {
+        this.lastAdvanceAt = Date.now();
+        // Still frozen once the engine calls it over: keep one episode open until the playhead moves.
+        if (!frozenSince && Date.now() - this.bufferStartAt >= MIN_STALL_MS && Math.abs(pos - this.bufferStartPos) < 0.05) {
+          this.lastTickPos = pos;
+          this.frozenSince.set(this.bufferStartAt);
+          frozenSince = this.bufferStartAt;
+        }
+      }
+      this.wasBuffering = buffering;
+      const stalled = (buffering && started) || frozenSince > 0;
+      this.trackStall(stalled, frozenSince || undefined);
+    });
+  }
 
   /** Playhead frozen while it should advance, even when the engine never said `buffering`. */
   private readonly frozenSince = signal(0);
   private lastTickPos = -1;
   private lastAdvanceAt = 0;
+  private wasBuffering = false;
+  private bufferStartAt = 0;
+  private bufferStartPos = 0;
   private lastWatchAt = 0;
 
   private watchPlayhead(): void {
@@ -2732,20 +2761,21 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (!active || Math.abs(pos - this.lastTickPos) >= 0.05) {
       this.lastAdvanceAt = now;
       this.frozenSince.set(0);
-    } else if (now - this.lastAdvanceAt >= 1_500) {
+    } else if (!this.frozenSince() && now - this.lastAdvanceAt >= 1_000) {
       this.frozenSince.set(this.lastAdvanceAt);
     }
     this.lastTickPos = pos;
   }
 
   private trackStall(stalled: boolean, since?: number): void {
+    const at = since ?? Date.now();
     const ignored =
       this.state.seekLocked() ||
       this.reloadingStream ||
       this.reloadLoadPending ||
       this.recoveringFromLostSession ||
-      Date.now() < this.qoeGraceUntil ||
-      Date.now() - Math.max(this.lastSeekAt, this.lastQualitySwitchAt) < 2_000;
+      at < this.qoeGraceUntil ||
+      at - Math.max(this.lastSeekAt, this.lastQualitySwitchAt) < 2_000;
     const position = this.engine?.currentTime ?? 0;
     const end = this.state.bufferedEnd();
     this.qoe.setStalled(stalled, {
@@ -3311,7 +3341,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.saveInterval = setInterval(() => this.savePosition(), 10_000);
     this.resetStallWatchdog();
     const video = this.videoEl()?.nativeElement;
-    if (video) video.addEventListener('seeked', this.onSeeked);
+    if (video) {
+      video.addEventListener('seeking', this.onSeeking);
+      video.addEventListener('seeked', this.onSeeked);
+    }
 
     // Apply subtitle appearance + load thumbnail sprite metadata
     this.applySubtitleStyle();
@@ -3319,9 +3352,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     // Update stats every second
     this.lastTickAt = Date.now();
+    this.playheadInterval = setInterval(() => this.watchPlayhead(), 250);
     this.statsInterval = setInterval(() => {
       this.tickClockWatch();
-      this.watchPlayhead();
       this.checkStall();
       if (++this.qoeTick % 5 === 0 && this.engine && !this.castService.isConnected()) {
         void this.qoe.refresh(this.engine, this.activeSessionId());
@@ -4220,7 +4253,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   // Bound DOM handlers kept as stable references so ngOnDestroy can remove
   // them — inline closures would pin this route-scoped component per session.
+  private onSeeking = () => {
+    this.lastSeekAt = Date.now();
+  };
   private onSeeked = () => {
+    this.lastSeekAt = Date.now();
     this.resetStallWatchdog();
     // Forced: a jump is exactly what a controller cannot interpolate, so
     // leaving it to the ten-second cadence left every other remote showing a

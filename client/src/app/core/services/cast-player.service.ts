@@ -148,6 +148,7 @@ interface CastResumeState {
   fanartUrl: string | null;
   playbackMode: PlaybackMode;
   liveSessionId: string | null;
+  playbackId?: string | null;
   availableSubtitles: CastSubtitleOption[];
   availableQualities: CastQualityOption[];
   availableAudioTracks: CastAudioOption[];
@@ -451,6 +452,7 @@ export class CastPlayerService {
       fanartUrl: this.fanartUrl(),
       playbackMode: this.playbackMode(),
       liveSessionId: this.liveSessionId(),
+      playbackId: this.playbackId,
       availableSubtitles: this.availableSubtitles(),
       availableQualities: this.availableQualities(),
       availableAudioTracks: this.availableAudioTracks(),
@@ -470,6 +472,7 @@ export class CastPlayerService {
     this.fanartUrl.set(s.fanartUrl);
     this.playbackMode.set(s.playbackMode);
     this.setLiveSession(s.liveSessionId);
+    this.playbackId = s.playbackId ?? null;
     this.selectionFileId = s.mediaFileId;
     this.availableSubtitles.set(s.availableSubtitles);
     this.availableQualities.set(s.availableQualities);
@@ -503,6 +506,7 @@ export class CastPlayerService {
     // different profile isn't torn down by the cast stop.
     if (castSid) this.streamingApi.stopSession(castSid).catch(() => {});
     this.setLiveSession(null);
+    this.playbackId = null;
     this.hasMedia.set(false);
     this.expanded.set(false);
     this.mediaFileId.set(0);

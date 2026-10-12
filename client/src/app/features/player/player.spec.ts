@@ -2902,17 +2902,68 @@ describe('PlayerComponent stall counting', () => {
     const spy = vi.spyOn(Date, 'now');
     spy.mockReturnValue(10_000);
     c.watchPlayhead();
-    spy.mockReturnValue(11_000);
+    spy.mockReturnValue(10_500);
     c.watchPlayhead();
     expect(c.frozenSince()).toBe(0);
-    spy.mockReturnValue(12_000);
+    spy.mockReturnValue(11_000);
     c.watchPlayhead();
     expect(c.frozenSince()).toBe(10_000);
     h.engine.currentTime = 191.5;
-    spy.mockReturnValue(13_000);
+    spy.mockReturnValue(11_250);
     c.watchPlayhead();
     expect(c.frozenSince()).toBe(0);
     spy.mockRestore();
+  });
+
+  it('judges the ignore windows at the backdated start', () => {
+    const { c, spy } = stalling();
+    const now = Date.now();
+    c.lastSeekAt = now - 3_000;
+    c.trackStall(true, now - 2_500);
+    expect(spy).toHaveBeenLastCalledWith(true, expect.objectContaining({ ignored: true }));
+    c.lastSeekAt = now - 10_000;
+    c.trackStall(true, now - 2_500);
+    expect(spy).toHaveBeenLastCalledWith(true, expect.objectContaining({ ignored: false }));
+  });
+
+  it('keeps one episode when the engine ends a short buffering but the playhead stays frozen', () => {
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(100_000);
+    const h = createHarness();
+    const c = h.component as any;
+    h.state.loading.set(false);
+    h.state.paused.set(false);
+    h.state.videoStarted.set(true);
+    h.engine.currentTime = 191;
+    h.engine.duration = 3600;
+    spy.mockReturnValue(101_000);
+    c.watchPlayhead();
+    h.state.buffering.set(true);
+    c.syncStall();
+    spy.mockReturnValue(101_300);
+    h.state.buffering.set(false);
+    c.syncStall();
+    expect(c.frozenSince()).toBe(101_000);
+    for (let t = 101_500; t <= 106_000; t += 250) {
+      spy.mockReturnValue(t);
+      c.watchPlayhead();
+    }
+    expect(c.frozenSince()).toBe(101_000);
+    h.engine.currentTime = 192;
+    spy.mockReturnValue(106_250);
+    c.watchPlayhead();
+    c.syncStall();
+    expect(c.frozenSince()).toBe(0);
+    expect(c.qoe.stalls.count).toBe(1);
+    expect(c.qoe.stalls.totalMs).toBe(5_250);
+    spy.mockRestore();
+  });
+
+  it('stamps the seek grace from the video seeking event', () => {
+    const h = createHarness();
+    const c = h.component as any;
+    c.lastSeekAt = 0;
+    c.onSeeking();
+    expect(c.lastSeekAt).toBeGreaterThan(0);
   });
 
   it('does not flag a paused playhead', () => {

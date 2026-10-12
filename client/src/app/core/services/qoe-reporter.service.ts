@@ -19,26 +19,21 @@ const MAX_PER_REQUEST = 50;
 @Injectable({ providedIn: 'root' })
 export class QoeReporter {
   private readonly api = inject(StreamingApiService);
-  private readonly buffers = new Map<string, QoeEvent[]>();
-  private readonly playbackIds = new Map<string, string>();
+  private readonly buffers = new Map<string, { event: QoeEvent; playbackId?: string }[]>();
 
   /** `immediate` flushes right away (a fatal error ends the heartbeat). */
   record(sessionId: string, event: QoeEvent, immediate = false, playbackId?: string): void {
-    if (playbackId) this.playbackIds.set(sessionId, playbackId);
     const buf = this.buffers.get(sessionId) ?? [];
-    buf.push(event);
+    buf.push({ event, playbackId });
     if (buf.length > QOE_BUFFER_CAP) buf.shift();
     this.buffers.set(sessionId, buf);
     if (immediate) void this.flush(sessionId);
   }
 
   async flush(sessionId: string): Promise<void> {
-    const events = this.take(sessionId);
-    if (!events.length) return;
-    const playbackId = this.playbackIds.get(sessionId);
     try {
-      for (let i = 0; i < events.length; i += MAX_PER_REQUEST) {
-        await this.api.postQoeEvents(sessionId, events.slice(i, i + MAX_PER_REQUEST), playbackId);
+      for (const { events, playbackId } of this.take(sessionId)) {
+        await this.api.postQoeEvents(sessionId, events, playbackId);
       }
     } catch {
       // best effort
@@ -47,23 +42,26 @@ export class QoeReporter {
 
   /** For exit and pagehide, where an HttpClient request would be cancelled. */
   flushKeepalive(sessionId: string): void {
-    const events = this.take(sessionId);
-    if (!events.length) return;
-    const playbackId = this.playbackIds.get(sessionId);
     try {
-      for (let i = 0; i < events.length; i += MAX_PER_REQUEST) {
+      for (const { events, playbackId } of this.take(sessionId)) {
         const { url, init } = this.api.qoeEventsRequest(sessionId);
-        const body = { events: events.slice(i, i + MAX_PER_REQUEST), playbackId };
-        fetch(url, { ...init, body: JSON.stringify(body) }).catch(() => {});
+        fetch(url, { ...init, body: JSON.stringify({ events, playbackId }) }).catch(() => {});
       }
     } catch {
       // best effort
     }
   }
 
-  private take(sessionId: string): QoeEvent[] {
-    const events = this.buffers.get(sessionId) ?? [];
+  /** Requests of at most MAX_PER_REQUEST events, never mixing two playbacks. */
+  private take(sessionId: string): { events: QoeEvent[]; playbackId?: string }[] {
+    const buf = this.buffers.get(sessionId) ?? [];
     this.buffers.delete(sessionId);
-    return events;
+    const out: { events: QoeEvent[]; playbackId?: string }[] = [];
+    for (const { event, playbackId } of buf) {
+      const last = out[out.length - 1];
+      if (last && last.playbackId === playbackId && last.events.length < MAX_PER_REQUEST) last.events.push(event);
+      else out.push({ events: [event], playbackId });
+    }
+    return out;
   }
 }
