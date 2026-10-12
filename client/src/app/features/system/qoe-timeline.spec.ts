@@ -74,7 +74,7 @@ describe('buildTimeline', () => {
   });
 
   it('reads a recovery as the transition, and a hand-off when the next session is on a cast receiver', () => {
-    const r = buildTimeline([session('a'), session('b')], [ev('a', 'recovery', 4)]);
+    const r = buildTimeline([session('a'), session('b')], [ev('b', 'recovery', 4)]);
     expect(r.transitions[0].kind).toBe('recovery');
     const c = buildTimeline([session('a'), session('b', { engine: 'cast' })], []);
     expect(c.transitions[0]).toMatchObject({ kind: 'handoff', event: null });
@@ -85,6 +85,11 @@ describe('buildTimeline', () => {
     const t = buildTimeline([session('a'), session('b')], [ev('b', 'recovery', 4), ev('b', 'stall', 9)]);
     expect(t.transitions[0]).toMatchObject({ kind: 'recovery' });
     expect(t.blocks[1].events.map((e) => e.type)).toEqual(['stall']);
+  });
+
+  it('never reuses the recovery that opened a session as the link to the next one', () => {
+    const t = buildTimeline([session('a'), session('b'), session('c')], [ev('b', 'recovery', 4)]);
+    expect(t.transitions.map((x) => x.kind)).toEqual(['recovery', 'next']);
   });
 
   it('files an event of an unknown session under the last block', () => {

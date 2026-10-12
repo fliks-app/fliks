@@ -118,8 +118,8 @@
                     </tr>
                   </thead>
                   <tbody>
-                    @for (s of sessions(); track s.playbackId ?? s.sessionId) {
-                      <tr class="hover cursor-pointer" (click)="openDetail(s)">
+                    @for (s of sessions(); track s.sessionId) {
+                      <tr class="hover cursor-pointer" tabindex="0" (click)="openDetail(s)" (keydown.enter)="openDetail(s)">
                         <td><span class="inline-block h-2.5 w-2.5 rounded-full" [class]="dotClass(s)"></span></td>
                         <td>{{ 'qoe.verdict.' + s.verdict | translate }}</td>
                         <td>{{ userName(s.userId) }}</td>
@@ -127,7 +127,7 @@
                         <td class="truncate max-w-48">
                           {{ s.mediaTitle ?? '-' }}
                           @if (s.sessionIds.length > 1) {
-                            <span class="badge badge-sm badge-ghost ml-1">
+                            <span class="ml-1 text-base-content/50">
                               {{ 'qoe.sessions_count' | translate: { count: s.sessionIds.length } }}
                             </span>
                           }
@@ -177,7 +177,7 @@
                         <td>{{ d.engine ?? '-' }}</td>
                         <td class="text-right tabular-nums">{{ d.sessions }}</td>
                         <td class="text-right tabular-nums">{{ pct(d.stallSessions, d.sessions) }}</td>
-                        <td class="text-right tabular-nums">{{ d.avgDroppedPct == null ? '-' : fmt.n(d.avgDroppedPct, 1) + ' %' }}</td>
+                        <td class="text-right tabular-nums">{{ d.avgDroppedPct == null ? '-' : percent(d.avgDroppedPct) }}</td>
                         <td class="text-right tabular-nums">{{ pctValue(d.hwDecoderPct) }}</td>
                         <td>{{ 'qoe.verdict.' + d.topVerdict | translate }}</td>
                       </tr>
@@ -198,16 +198,14 @@
               [hint]="'qoe.setting_enabled_hint' | translate"
               toggleClass="toggle-sm toggle-primary" />
 
-            <label class="form-control w-full max-w-xs">
-              <div class="label">
-                <span class="label-text">{{ 'qoe.setting_retention' | translate }}</span>
-              </div>
-              <input type="number" class="input input-bordered input-sm w-full" min="1"
-                [ngModel]="retentionDays()" (ngModelChange)="retentionDays.set($event)" />
-              <div class="label">
-                <span class="label-text-alt text-base-content/50">{{ 'qoe.setting_retention_hint' | translate }}</span>
-              </div>
-            </label>
+            <app-input-field
+              class="max-w-xs"
+              type="number"
+              size="sm"
+              [value]="'' + retentionDays()"
+              (valueChange)="retentionDays.set(+$event)"
+              [label]="'qoe.setting_retention' | translate"
+              [hint]="'qoe.setting_retention_hint' | translate" />
 
             <div class="card-actions justify-end">
               <button type="button" class="btn btn-primary" (click)="saveSettings()" [disabled]="savingSettings()">

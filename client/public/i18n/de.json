@@ -1517,12 +1517,6 @@
       "error": "Fehler",
       "unknown": "Zu wenig Daten"
     },
-    "event": {
-      "stall": "Aussetzer",
-      "error": "Fehler",
-      "recovery": "Wiederherstellung",
-      "quality_switch": "Qualitätswechsel"
-    },
     "reason": {
       "fatal_error": "Die Wiedergabe ist mit einem Fehler fehlgeschlagen und wurde nicht wiederhergestellt.",
       "stalls_server_slow": "Aussetzer: Der Server lieferte Segmente langsamer als in Echtzeit.",
@@ -1586,7 +1580,6 @@
     "timeline_header": "Wiedergabe vom {{date}} · {{from}} → {{to}} · {{duration}}",
     "hint": {
       "engine": "Vom Player verwendete Wiedergabe-Engine, zum Beispiel Shaka im Web oder ExoPlayer auf Android.",
-      "pipeline": "Was der Server mit dem Stream gemacht hat: Quelle, Ausgabe und die Hard- oder Software zum Decodieren und Kodieren.",
       "dropped": "Anteil der Videobilder, die das Gerät decodiert, aber nicht rechtzeitig angezeigt hat.",
       "buffer_ahead": "Sekunden Video, die vor der Wiedergabeposition schon heruntergeladen sind.",
       "decoder": "Decoder des Geräts für das Video. Hardware ist meist sparsamer als Software.",
@@ -1610,7 +1603,6 @@
     "duration_min": "{{min}} min {{sec}} s",
     "duration_s": "{{sec}} s",
     "summary": {
-      "period": "Zeitraum",
       "ongoing": "läuft",
       "device": "Gerät",
       "quality": "Qualität / Auflösung",
@@ -1667,7 +1659,9 @@
       "settings": "Einstellungen"
     },
     "setting_enabled_hint": "Clients melden, wie jede Wiedergabe läuft: Aussetzer, Durchsatz, verlorene Bilder. Die Daten bleiben auf diesem Server.",
-    "setting_retention_hint": "Ältere Wiedergaben werden jede Nacht gelöscht."
+    "setting_retention_hint": "Ältere Wiedergaben werden jede Nacht gelöscht.",
+    "percent": "{{value}} %",
+    "cmcd": "CMCD"
   },
   "markers": {
     "detect_intros": "Intros erkennen",

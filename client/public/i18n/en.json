@@ -1517,12 +1517,6 @@
       "error": "Error",
       "unknown": "Not enough data"
     },
-    "event": {
-      "stall": "Stall",
-      "error": "Error",
-      "recovery": "Recovery reload",
-      "quality_switch": "Quality switch"
-    },
     "reason": {
       "fatal_error": "Playback failed with an error and did not recover.",
       "stalls_server_slow": "Stalls: the server produced segments slower than real time.",
@@ -1586,7 +1580,6 @@
     "timeline_header": "Playback on {{date}} · {{from}} → {{to}} · {{duration}}",
     "hint": {
       "engine": "Playback engine used by the player, for example Shaka on the web or ExoPlayer on Android.",
-      "pipeline": "What the server did to the stream: source, output, and the hardware or software used to decode and encode it.",
       "dropped": "Share of video frames the device decoded but did not display in time.",
       "buffer_ahead": "Seconds of video already downloaded ahead of the playback position.",
       "decoder": "Decoder the device used for the video. Hardware is normally lighter than software.",
@@ -1610,7 +1603,6 @@
     "duration_min": "{{min}} min {{sec}} s",
     "duration_s": "{{sec}} s",
     "summary": {
-      "period": "Period",
       "ongoing": "ongoing",
       "device": "Device",
       "quality": "Quality / resolution",
@@ -1667,7 +1659,9 @@
       "settings": "Settings"
     },
     "setting_enabled_hint": "Clients report how each playback goes: stalls, throughput, dropped frames. The data stays on this server.",
-    "setting_retention_hint": "Older playbacks are deleted every night."
+    "setting_retention_hint": "Older playbacks are deleted every night.",
+    "percent": "{{value}}%",
+    "cmcd": "CMCD"
   },
   "markers": {
     "detect_intros": "Detect intros",

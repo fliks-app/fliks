@@ -17,6 +17,7 @@ import { SettingsApiService } from '../../../core/services/api/settings-api.serv
 import { UserRow, UsersApiService } from '../../../core/services/api/users-api.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
+import { InputFieldComponent } from '../../../shared/components/forms/input-field/input-field';
 import { SelectFieldComponent } from '../../../shared/components/forms/select-field/select-field';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
@@ -36,7 +37,7 @@ import {
   LucideTriangleAlert,
 } from '@lucide/angular';
 import { QOE_CAUSE_DOT_CLASS, QOE_CAUSE_TEXT_CLASS, codecLabel, durationParts, hintParams, loadLine, pipelineChain, pipelineParts, qualityLabel, rungDisplay, stallBreakdown, stallExplanation, translateFmt, type Fmt } from '../qoe-stall';
-import { buildTimeline, isOngoing, type RungName, type Timeline, type TimelineBlock, type TimelineTransition } from '../qoe-timeline';
+import { buildTimeline, isOngoing, type RungName, type TimelineBlock, type TimelineTransition } from '../qoe-timeline';
 import { blockSummary, blockTitle, clockLabel, detailsOpen, formatPosition, ownStalls, timelineSteps, unreportedStalls } from '../qoe-timeline-view';
 import { QOE_VERDICTS, QOE_VERDICT_BAR_CLASS, formatMbps, qoeDotClass } from '../qoe-health';
 import { mergeDevices } from '../qoe-devices';
@@ -56,6 +57,7 @@ type Tab = (typeof TABS)[number];
   selector: 'app-system-playback-quality',
   imports: [
     FormsModule,
+    InputFieldComponent,
     TranslatePipe,
     LocaleDatePipe,
     LucideArrowRightLeft,
@@ -92,7 +94,6 @@ export class SystemPlaybackQualityComponent implements OnInit {
   readonly verdicts = QOE_VERDICTS;
   readonly barClass = QOE_VERDICT_BAR_CLASS;
   readonly causeDot = QOE_CAUSE_DOT_CLASS;
-  readonly causeText = QOE_CAUSE_TEXT_CLASS;
   readonly detailsOpen = detailsOpen;
 
   readonly days = signal(7);
@@ -115,7 +116,8 @@ export class SystemPlaybackQualityComponent implements OnInit {
   readonly deviceOptions = computed(() => {
     const map = new Map<string, string[]>();
     for (const d of this.devices()) map.set(d.label, [...(map.get(d.label) ?? []), ...d.raw]);
-    return [...map].map(([label, raw]) => ({ label, raw }));
+    // A device with no label cannot be filtered on: it would send no filter and list everything.
+    return [...map].filter(([, raw]) => raw.length > 0).map(([label, raw]) => ({ label, raw }));
   });
   readonly detail = signal<QoeSessionDetail | null>(null);
   private readonly detailDialog = viewChild<ElementRef<HTMLDialogElement>>('detailDialog');
@@ -183,10 +185,12 @@ export class SystemPlaybackQualityComponent implements OnInit {
     }
   }
 
-  setDays(days: number) {
+  async setDays(days: number) {
     this.days.set(days);
     this.page.set(1);
-    void this.loadSummary();
+    // The device filter resolves through the summary of the new window, so it loads first.
+    await this.loadSummary();
+    if (!this.deviceOptions().some((o) => o.label === this.deviceFilter())) this.deviceFilter.set('');
     void this.loadSessions();
   }
 
@@ -198,8 +202,12 @@ export class SystemPlaybackQualityComponent implements OnInit {
     }
   }
 
+  private sessionsRequest = 0;
+
   async loadSessions(page = this.page()) {
     this.page.set(page);
+    // A slower earlier request must not overwrite the answer to the latest filters.
+    const request = ++this.sessionsRequest;
     try {
       const res = await this.api.sessions({
         days: this.days(),
@@ -209,9 +217,11 @@ export class SystemPlaybackQualityComponent implements OnInit {
         limit: PAGE_SIZE,
         offset: (page - 1) * PAGE_SIZE,
       });
+      if (request !== this.sessionsRequest) return;
       this.sessions.set(res.items);
       this.total.set(res.total);
     } catch {
+      if (request !== this.sessionsRequest) return;
       this.sessions.set([]);
       this.total.set(0);
     }
@@ -270,11 +280,11 @@ export class SystemPlaybackQualityComponent implements OnInit {
   }
 
   pct(part: number, whole: number): string {
-    return whole ? `${Math.round((part / whole) * 100)} %` : '-';
+    return whole ? this.percent(Math.round((part / whole) * 100), 0) : '-';
   }
 
   pctValue(v: number | null | undefined): string {
-    return v == null ? '-' : `${Math.round(v)} %`;
+    return v == null ? '-' : this.percent(Math.round(v), 0);
   }
 
   dotClass(row: QoeSessionRow): string {
@@ -291,6 +301,11 @@ export class SystemPlaybackQualityComponent implements OnInit {
     if (ms == null) return '-';
     const d = durationParts(ms);
     return this.translate.instant(d.key, d.params);
+  }
+
+  /** "12 %" or "12%", as the admin's language writes it. */
+  percent(value: number, digits = 1): string {
+    return this.translate.instant('qoe.percent', { value: this.fmt.n(value, digits) });
   }
 
   seconds(ms: number): string {
@@ -395,12 +410,12 @@ export class SystemPlaybackQualityComponent implements OnInit {
     add('qoe.summary.codec', codecLabel(d.videoCodec));
     add('qoe.throughput_measured', formatMbps(d.avgBandwidthBps, this.fmt), 'qoe.hint.throughput_measured');
     add('qoe.bitrate_video', formatMbps(d.avgVariantBitrate, this.fmt), 'qoe.hint.bitrate_video');
-    add('qoe.dropped', d.droppedPct == null ? null : `${this.fmt.n(d.droppedPct, 1)} %`, 'qoe.hint.dropped');
+    add('qoe.dropped', d.droppedPct == null ? null : this.percent(d.droppedPct), 'qoe.hint.dropped');
     if (d.decoderName != null || d.hwDecoder != null) {
       const kind = d.hwDecoder == null ? '' : this.translate.instant(d.hwDecoder ? 'qoe.hardware' : 'qoe.software');
       add('qoe.decoder', [d.decoderName, kind && `(${kind})`].filter(Boolean).join(' '), 'qoe.hint.decoder');
     }
-    if (d.cmcd != null) add('CMCD', this.translate.instant(d.cmcd ? 'common.yes' : 'common.no'), 'qoe.hint.cmcd');
+    if (d.cmcd != null) add('qoe.cmcd', this.translate.instant(d.cmcd ? 'common.yes' : 'common.no'), 'qoe.hint.cmcd');
     add('qoe.summary.sessions', String(d.sessions.length), 'qoe.hint.session');
     return rows;
   }
@@ -438,7 +453,6 @@ export class SystemPlaybackQualityComponent implements OnInit {
     return blockTitle(b.session, b.first, this.fmt);
   }
 
-  /** "2 min 09 s · aucune coupure", led by the quality when a change opened the session (the change is the title). */
   /** The stalls, led by the quality when a change opened the session and does not already name it. */
   blockSummary(b: TimelineBlock, incoming: TimelineTransition | null = null): string {
     const summary = blockSummary(ownStalls(b, incoming), this.fmt);
@@ -464,7 +478,7 @@ export class SystemPlaybackQualityComponent implements OnInit {
     }
     add('qoe.throughput_measured', formatMbps(s.avgBandwidthBps, this.fmt));
     add('qoe.bitrate_video', formatMbps(s.avgVariantBitrate, this.fmt));
-    add('qoe.dropped', s.droppedPct == null ? null : `${this.fmt.n(s.droppedPct, 1)} %`);
+    add('qoe.dropped', s.droppedPct == null ? null : this.percent(s.droppedPct));
     return rows;
   }
 

@@ -77,7 +77,9 @@ export interface StallCauseTotal {
 export function stallBreakdown(events: Pick<QoeEventRow, 'type' | 'data'>[]): StallCauseTotal[] {
   const totals = new Map<QoeStallCause, StallCauseTotal>();
   for (const e of events) {
-    const cause = e.type === 'stall' ? e.data?.cause : undefined;
+    // A recovery wait froze the picture too, and the server classified it like a stall.
+    const freeze = e.type === 'stall' || (e.type === 'recovery' && (e.data?.durationMs ?? 0) > 0);
+    const cause = freeze ? e.data?.cause : undefined;
     if (!cause) continue;
     const t = totals.get(cause) ?? { cause, count: 0, ms: 0 };
     t.count++;

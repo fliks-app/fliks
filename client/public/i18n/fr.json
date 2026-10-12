@@ -1517,12 +1517,6 @@
       "error": "Erreur",
       "unknown": "Pas assez de données"
     },
-    "event": {
-      "stall": "Coupure",
-      "error": "Erreur",
-      "recovery": "Rechargement de secours",
-      "quality_switch": "Changement de qualité"
-    },
     "reason": {
       "fatal_error": "La lecture a échoué sur une erreur sans reprise.",
       "stalls_server_slow": "Coupures : le serveur a produit les segments plus lentement que le temps réel.",
@@ -1586,7 +1580,6 @@
     "timeline_header": "Lecture du {{date}} · {{from}} → {{to}} · {{duration}}",
     "hint": {
       "engine": "Moteur de lecture utilisé par le lecteur, par exemple Shaka sur le web ou ExoPlayer sur Android.",
-      "pipeline": "Ce que le serveur a fait du flux : source, sortie, et matériel ou logiciel utilisé pour le décoder et l’encoder.",
       "dropped": "Part des images vidéo décodées par l’appareil mais non affichées à temps.",
       "buffer_ahead": "Secondes de vidéo déjà téléchargées en avance sur la position de lecture.",
       "decoder": "Décodeur utilisé par l’appareil pour la vidéo. Le matériel est en général plus léger que le logiciel.",
@@ -1610,7 +1603,6 @@
     "duration_min": "{{min}} min {{sec}} s",
     "duration_s": "{{sec}} s",
     "summary": {
-      "period": "Période",
       "ongoing": "en cours",
       "device": "Appareil",
       "quality": "Qualité / résolution",
@@ -1667,7 +1659,9 @@
       "settings": "Paramètres"
     },
     "setting_enabled_hint": "Les clients envoient la qualité de chaque lecture : coupures, débit, images perdues. Les données restent sur ce serveur.",
-    "setting_retention_hint": "Les lectures plus anciennes sont supprimées chaque nuit."
+    "setting_retention_hint": "Les lectures plus anciennes sont supprimées chaque nuit.",
+    "percent": "{{value}} %",
+    "cmcd": "CMCD"
   },
   "markers": {
     "detect_intros": "Détecter les intros",

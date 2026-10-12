@@ -1517,12 +1517,6 @@
       "error": "Error",
       "unknown": "Datos insuficientes"
     },
-    "event": {
-      "stall": "Corte",
-      "error": "Error",
-      "recovery": "Recarga de recuperación",
-      "quality_switch": "Cambio de calidad"
-    },
     "reason": {
       "fatal_error": "La reproducción falló con un error y no se recuperó.",
       "stalls_server_slow": "Cortes: el servidor generó los segmentos más lento que el tiempo real.",
@@ -1586,7 +1580,6 @@
     "timeline_header": "Reproducción del {{date}} · {{from}} → {{to}} · {{duration}}",
     "hint": {
       "engine": "Motor de reproducción que usa el reproductor, por ejemplo Shaka en la web o ExoPlayer en Android.",
-      "pipeline": "Lo que el servidor hizo con el flujo: origen, salida y el hardware o software usado para decodificarlo y codificarlo.",
       "dropped": "Parte de los fotogramas que el dispositivo decodificó pero no mostró a tiempo.",
       "buffer_ahead": "Segundos de vídeo ya descargados por delante de la posición de reproducción.",
       "decoder": "Decodificador que usó el dispositivo para el vídeo. El hardware suele ser más ligero que el software.",
@@ -1610,7 +1603,6 @@
     "duration_min": "{{min}} min {{sec}} s",
     "duration_s": "{{sec}} s",
     "summary": {
-      "period": "Periodo",
       "ongoing": "en curso",
       "device": "Dispositivo",
       "quality": "Calidad / resolución",
@@ -1667,7 +1659,9 @@
       "settings": "Ajustes"
     },
     "setting_enabled_hint": "Los clientes informan de cómo va cada reproducción: cortes, caudal, imágenes perdidas. Los datos se quedan en este servidor.",
-    "setting_retention_hint": "Las reproducciones más antiguas se eliminan cada noche."
+    "setting_retention_hint": "Las reproducciones más antiguas se eliminan cada noche.",
+    "percent": "{{value}} %",
+    "cmcd": "CMCD"
   },
   "markers": {
     "detect_intros": "Detectar las intros",

@@ -28,7 +28,7 @@ export class QoeBadgeComponent {
   }
 
   pct(v: number | null | undefined): string {
-    return v == null ? '-' : `${this.fmt.n(v, 1)} %`;
+    return v == null ? '-' : this.fmt.t('qoe.percent', { value: this.fmt.n(v, 1) });
   }
 
   seconds(s: number | null | undefined): string {

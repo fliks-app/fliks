@@ -59,7 +59,7 @@ export function buildTimeline(sessions: QoeSessionRow[], events: QoeEventRow[]):
     const next = blocks[i + 1];
     // A recovery is recorded on the sid it minted, so its event opens the next session instead.
     const link =
-      [...cur.events].reverse().find((e) => LINKS.has(e.type)) ??
+      [...cur.events].reverse().find((e) => LINKS.has(e.type) && e.type !== 'recovery') ??
       next.events.find((e) => e.type === 'recovery') ??
       null;
     if (link) {
