@@ -391,6 +391,7 @@ import Foundation
 
     /// A rebuffer that ended where it began (the coordinator drops seeks).
     func recordStall(position: Double, durationMs: Int) {
+        guard !recovering else { return }
         stallCount += 1
         stallMs += durationMs
         pendingEvents.append(QoeEvent(type: "stall", at: Int(Date().timeIntervalSince1970 * 1000), position: position,

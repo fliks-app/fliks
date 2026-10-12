@@ -272,7 +272,7 @@ private struct SkipCueStyle: ButtonStyle {
         let item = Self.makeItem(url: url)
         playback.qoeItem = item
         playedOnce = false
-        closeStall()
+        stallStart = nil // the recovery event covers the stall that triggered it
         applyMetadata(to: item)
         player.replaceCurrentItem(with: item)
         let target = edlStart(position, duration: edlDuration(item))
