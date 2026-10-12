@@ -103,6 +103,7 @@ struct RootView: View {
                 // changing image can never resize the shell.
                 .background { BackdropView(backdrop: backdrop).ignoresSafeArea() }
                 .navigationDestination(for: Route.self) { route in
+                    Group {
                     switch route {
                     case .home:
                         HomeView(
@@ -150,6 +151,9 @@ struct RootView: View {
                     default:
                         EmptyView() // onboarding routes never belong in the signed-in stack
                     }
+                    }
+                    // Pushed pages get the system background otherwise, not the shell's.
+                    .background { BackdropView(backdrop: backdrop).ignoresSafeArea() }
                 }
             }
         } else {

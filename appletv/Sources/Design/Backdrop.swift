@@ -21,21 +21,16 @@ struct BackdropView: View {
     let backdrop: Backdrop
 
     var body: some View {
+        // Same stack as the web client's page background: the fanart unblurred
+        // under a 95% base-100 veil (`--bg-veil`), then the brand tint.
+        let base = Color(red: 29 / 255, green: 35 / 255, blue: 42 / 255)
         ZStack {
-            Color.black
-            // Clamp so a changing image never resizes the root layout. The blur
-            // lives inside, per layer: blurring the blended stack instead makes
-            // the mid-fade composite brighter than either image, so the end of
-            // the fade lands on a visible step.
-            CrossfadeImage(url: ImageURL.build(backdrop.url, size: .full), blurRadius: 60)
+            base
+            // Clamp so a changing image never resizes the root layout.
+            CrossfadeImage(url: ImageURL.build(backdrop.url, size: .full))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                // Flatten first: without it the 0.35 applies to each layer, so
-                // the outgoing image shows through the incoming one and the
-                // fade ends on a brightness step when the stack collapses.
-                .compositingGroup()
-                .opacity(0.35)
-            LinearGradient(colors: [.black.opacity(0.3), .black.opacity(0.85)],
-                           startPoint: .top, endPoint: .bottom)
+            base.opacity(0.95)
+            Color.fliks("primary").opacity(0.15)
         }
         .ignoresSafeArea()
     }
