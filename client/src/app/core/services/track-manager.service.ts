@@ -30,6 +30,8 @@ export interface SubtitleOption {
   burnIn: boolean;
   /** Database subtitle ID (for burn-in request) */
   subtitleDbId?: number;
+  /** The track's online id (`emb-<streamIndex>` / `ext-<id>`) when `id` is a local one (offline copies). */
+  trackKey?: string;
   /** True if this is a forced subtitle track */
   forced?: boolean;
   hearingImpaired?: boolean;
@@ -38,6 +40,15 @@ export interface SubtitleOption {
   /** Player-menu two-line label: language head + details subline ("SRT • …"). */
   menuHead?: string;
   menuSub?: string;
+}
+
+/** What a viewer picked before pressing play, for one file. A one-shot launch intent: it wins over
+ *  the remembered and automatic rules, and is never written to the remembered store by itself. */
+export interface LaunchTracks {
+  fileId: number;
+  audioStreamIndex?: number;
+  /** `null` is an explicit Off. */
+  subtitleId?: string | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -221,6 +232,8 @@ export class TrackManagerService {
    * @param mediaId            Media ID the remembered selection is keyed by
    * @param audioLanguage      Language of the audio stream that will play, when known
    *                           before any engine lists a track: it wins over `audioTracks`
+   * @param picked             The viewer's pick for this launch (`null`: Off), honoured before
+   *                           any rule; an id not in `subtitles` is ignored
    */
   async autoSelectSubtitle(
     subtitles: SubtitleOption[],
@@ -230,8 +243,15 @@ export class TrackManagerService {
     onSelect: (sub: SubtitleOption | null) => Promise<unknown>,
     mediaId = 0,
     audioLanguage?: string,
+    picked?: string | null,
   ): Promise<void> {
     const settings = this.playerSettings.get();
+
+    const pick = picked == null ? picked : subtitles.find((s) => s.id === picked);
+    if (pick !== undefined) {
+      if (pick) await onSelect(pick);
+      return;
+    }
 
     // Exclude burn-in subs (PGS, DVD, etc.) — selecting them calls reloadStream() to bake
     // the subtitle into the video server-side, which kills the active transcode session.

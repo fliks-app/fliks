@@ -4,6 +4,7 @@ import { StreamingApiService } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { MediaService } from './api/media.service';
 import { isImageBasedSubtitleCodec } from '../utils/subtitle-codecs';
+import { subtitleTrackKey } from '../utils/subtitle-tracks';
 import { OfflineStorageService } from './offline-storage.service';
 import { DownloadCacheService, DownloadTask } from './download-cache.service';
 import { DownloadNotificationService } from './download-notification.service';
@@ -461,7 +462,7 @@ export class DownloadManagerService {
       const subs = allSubs.filter(
         (s) => s.mediaFileId === task.mediaFileId && !isImageBasedSubtitleCodec(s.codec),
       );
-      const offlineSubs: { key: string; language: string; label: string; forced?: boolean }[] = [];
+      const offlineSubs: NonNullable<DownloadTask['offlineSubtitles']> = [];
       for (const sub of subs) {
         const url = sub.streamIndex != null
           ? this.streamingApi.getEmbeddedSubtitleUrl(task.mediaFileId, sub.streamIndex)
@@ -483,6 +484,7 @@ export class DownloadManagerService {
             showFormat: this.appSettings.showSubtitleFormat(),
           }),
           forced: sub.forced,
+          trackKey: subtitleTrackKey(sub)?.key,
         });
       }
       // Fetch audio stream info for offline audio track picker

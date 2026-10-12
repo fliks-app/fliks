@@ -71,7 +71,8 @@ import { imageUrlWithSize } from '../../core/pipes/resolve-url.pipe';
 import { NotificationLike } from '../../core/services/notification-like';
 import { LikesApiService } from '../../core/services/api/likes-api.service';
 import { PlayerStateService } from '../../core/services/player-state.service';
-import { TrackManagerService, SubtitleOption, streamIndexForTrack, trackForStreamIndex } from '../../core/services/track-manager.service';
+import { subtitleManifestRank } from '../../core/utils/subtitle-tracks';
+import { TrackManagerService, SubtitleOption, type LaunchTracks, streamIndexForTrack, trackForStreamIndex } from '../../core/services/track-manager.service';
 import { QualityManagerService } from '../../core/services/quality-manager.service';
 import { DeviceService, viewTransitionsEnabled } from '../../core/services/device.service';
 
@@ -757,6 +758,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  `streamInfo.audio`. The one source of truth every load path negotiates and
    *  configures from; the engine's own track is reconciled to it, never the reverse. */
   private activeAudioStreamIndex: number | undefined;
+  /** The picks made before pressing play; held until the file they were made on has opened. */
+  private launchTracks: LaunchTracks | null = null;
   /** Track id of a switch asked of the engine and not yet seen in its reports. */
   private audioSwitchPending: string | null = null;
   /** Bumped by every audio switch: an older one that settles late must not touch the UI. */
@@ -927,7 +930,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // `stillUrl` (episode thumbnail) wins over `fanartUrl` when both
     // are passed: a series viewer recognises the episode they just
     // selected, not the show's hero.
-    const navState = (this.router.getCurrentNavigation()?.extras?.state ?? history.state) as { fanartUrl?: string | null; stillUrl?: string | null } | null;
+    const navState = (this.router.getCurrentNavigation()?.extras?.state ?? history.state) as { fanartUrl?: string | null; stillUrl?: string | null; tracks?: LaunchTracks | null } | null;
+    this.launchTracks = navState?.tracks ?? null;
     const eagerBackdrop = navState?.stillUrl ?? navState?.fanartUrl;
     if (eagerBackdrop) {
       this.fanartUrl.set(this.serverConfig.resolveUrl(eagerBackdrop));
@@ -1425,9 +1429,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const rest = [...items];
     while (rest.length) {
       const item = rest.shift()!;
-      const info = await this.streamingApi
-        .getPlaybackInfo(item.mediaFileId, this.deviceProfileFor(item.mediaFileId), undefined, undefined, this.resolveStartQuality())
-        .catch(() => null);
+      const info = await this.negotiatePlayback(undefined, { fileId: item.mediaFileId }).catch(() => null);
       if (!info) continue; // this candidate failed to negotiate — try the next
       // Only stop the main session once a pre-roll item is committed: if every
       // candidate fails, the launch is byte-identical to a plugin-free one.
@@ -1637,11 +1639,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     engine.on('audioTracksChanged', (e) => this.adoptAudioTracks(e.tracks));
   }
 
+  /** The launch pick, for the file it was made on only: not an episode switch, nor a pre-roll item. */
+  private launchPick(): LaunchTracks | null {
+    return this.launchTracks?.fileId === this.mediaFileId ? this.launchTracks : null;
+  }
+
   /** The audio the item opens on, known before any engine reports a track: the
    *  remembered pick, else the mode's language, else the file's default. */
   private resolveAudioTarget(): void {
     this.activeAudioStreamIndex = this.playerSettings.resolveAudioStreamIndex(
       this.mediaFileId, this.audioStreamInfo(), this.mediaId, this.originalLanguage,
+      this.launchPick()?.audioStreamIndex,
     );
   }
 
@@ -2826,14 +2834,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // makes `buildCastQualityOptions` drop the `'original'` entry and
     // present the wrong bitrates in the cast dropdown.
     const castProfile = this.castPlayerService.getCastDeviceProfile();
-    const castPi = await this.streamingApi.getPlaybackInfo(
-      this.mediaFileId,
-      castProfile,
-      castBurnInId(this.availableSubtitles(), subtitleId) ?? undefined,
-      this.activeAudioStreamIndex ?? undefined,
-      undefined,
-      this.reloadStartAt(position),
-    );
+    const castPi = await this.negotiatePlayback(this.reloadStartAt(position), {
+      profile: castProfile,
+      burnInId: castBurnInId(this.availableSubtitles(), subtitleId),
+      quality: undefined,
+    });
     const castQualities = buildCastQualityOptions(
       castPi.qualities,
       this.castSettings.get().maxQuality,
@@ -2883,16 +2888,30 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   /** The playback-info call for the current track state: burn-in pick, audio
-   *  index and rung. Every load path negotiates through here. The rung lets the
-   *  backend re-decide DirectPlay vs the ladder and prewarm ffmpeg at `startAt`. */
-  private negotiatePlayback(startAt?: number): Promise<PlaybackInfoResponse> {
-    const profile = this.deviceProfileFor(this.mediaFileId);
+   *  index and rung. Every playback-info request goes through here. The rung lets the
+   *  backend re-decide DirectPlay vs the ladder and prewarm ffmpeg at `startAt`.
+   *  `over` swaps a field: another file (its own picks are unknown, so none are sent),
+   *  or the Cast profile with the burn-in and rung that session needs. */
+  private negotiatePlayback(
+    startAt?: number,
+    over: Partial<{ fileId: number; profile: DeviceProfile; burnInId: number | null; quality: string }> = {},
+  ): Promise<PlaybackInfoResponse> {
+    const fileId = over.fileId ?? this.mediaFileId;
+    const onScreen = fileId === this.mediaFileId;
+    const own = this.deviceProfileFor(fileId);
+    const request = {
+      profile: onScreen && this.needsHlsSubtitles ? { ...own, needsHlsSubtitles: true } : own,
+      burnInId: onScreen ? this.activeBurnInId : null,
+      audioStreamIndex: onScreen ? this.activeAudioStreamIndex : undefined,
+      quality: this.resolveStartQuality(),
+      ...over,
+    };
     return this.streamingApi.getPlaybackInfo(
-      this.mediaFileId,
-      this.needsHlsSubtitles ? { ...profile, needsHlsSubtitles: true } : profile,
-      this.activeBurnInId ?? undefined,
-      this.activeAudioStreamIndex,
-      this.resolveStartQuality(),
+      fileId,
+      request.profile,
+      request.burnInId ?? undefined,
+      request.audioStreamIndex,
+      request.quality,
       startAt,
     );
   }
@@ -2927,6 +2946,23 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     );
   }
 
+  /** The subtitle the item opens on, once its list and audio are known. This is the one use
+   *  of the launch pick, so the item's later reloads and episode switches never see it. */
+  private async autoSelectSubtitle(): Promise<void> {
+    const picked = this.launchPick()?.subtitleId;
+    if (this.launchPick()) this.launchTracks = null;
+    await this.trackManager.autoSelectSubtitle(
+      this.availableSubtitles(),
+      this.availableAudioTracks(),
+      this.activeAudioTrackId(),
+      this.mediaFileId,
+      (sub) => this.applySubtitle(sub),
+      this.mediaId,
+      this.targetAudioLanguage(),
+      picked,
+    );
+  }
+
   /** Settles before the negotiation whether the automatic selection will pick a text
    *  subtitle this engine can't sideload, so the first load is already HLS. */
   private async planSubtitleDelivery(): Promise<void> {
@@ -2936,7 +2972,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     await this.trackManager.autoSelectSubtitle(
       await this.itemSubtitles(), [], null, this.mediaFileId,
       async (sub) => { auto.sub = sub; },
-      this.mediaId, this.targetAudioLanguage(),
+      this.mediaId, this.targetAudioLanguage(), this.launchPick()?.subtitleId,
     );
     this.needsHlsSubtitles = !!auto.sub && !auto.sub.burnIn;
   }
@@ -2950,7 +2986,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.playbackMode() !== 'direct') return [];
     return (await this.itemSubtitles())
       .filter((s) => !s.burnIn && !!s.url && s.id.startsWith('ext-'))
-      .sort((a, b) => this.subtitleManifestRank(a) - this.subtitleManifestRank(b))
+      .sort((a, b) => this.manifestRank(a) - this.manifestRank(b))
       .map((s) => ({ url: s.url, language: s.language, label: s.label, forced: !!s.forced }));
   }
 
@@ -3144,15 +3180,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       } else {
         this.loadAudioTracks();
       }
-      await this.trackManager.autoSelectSubtitle(
-        this.availableSubtitles(),
-        this.availableAudioTracks(),
-        this.activeAudioTrackId(),
-        this.mediaFileId,
-        (sub) => this.applySubtitle(sub),
-        this.mediaId,
-        this.targetAudioLanguage(),
-      );
+      await this.autoSelectSubtitle();
     })();
     trackSetupPromise.catch((e) => console.warn('[player] track setup failed', e));
 
@@ -3221,15 +3249,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private async completeEpisodeSwitchSetup(): Promise<void> {
     this.availableSubtitles.set(await this.itemSubtitles());
     this.loadAudioTracks();
-    await this.trackManager.autoSelectSubtitle(
-      this.availableSubtitles(),
-      this.availableAudioTracks(),
-      this.activeAudioTrackId(),
-      this.mediaFileId,
-      (sub) => this.applySubtitle(sub),
-      this.mediaId,
-      this.targetAudioLanguage(),
-    );
+    await this.autoSelectSubtitle();
 
     // Refresh the seek-preview sprites for the new file.
     this.spriteAbort?.abort();
@@ -3779,33 +3799,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   // ── Offline subtitles ──
 
-  /** Get subtitle configs from pre-downloaded local VTT files (for native ExoPlayer preload). */
-  private async getOfflineSubtitleConfigs(): Promise<NativeSidecarSubtitle[]> {
+  /** The downloaded subtitles of the file, in manifest order like the online list. */
+  private async offlineSubtitleOptions(): Promise<SubtitleOption[]> {
     const task = this.dlCache.load().find((t) => t.mediaFileId === this.mediaFileId && t.status === 'ready');
-    if (!task?.offlineSubtitles?.length) return [];
-    const configs: NativeSidecarSubtitle[] = [];
-    for (const sub of task.offlineSubtitles) {
-      // Native: file:// URI (ExoPlayer can read). Web: blob URL (Shaka).
-      const localUrl = await this.offlineStorage.getSmallFileNativeUri(sub.key);
-      if (localUrl) {
-        configs.push({ url: localUrl, language: sub.language, label: sub.label, forced: sub.forced ?? false });
-      }
-    }
-    return configs;
-  }
-
-  /** Load offline subtitles into the subtitle picker (no API calls). */
-  private async loadOfflineSubtitles() {
-    const task = this.dlCache.load().find((t) => t.mediaFileId === this.mediaFileId && t.status === 'ready');
-    if (!task?.offlineSubtitles?.length) return;
-    const subs: { id: string; label: string; url: string; language: string; burnIn: false; forced: boolean }[] = [];
-    for (const sub of task.offlineSubtitles) {
+    const subs: SubtitleOption[] = [];
+    for (const sub of task?.offlineSubtitles ?? []) {
       // Native: file:// URI (must match preloaded URLs for track matching).
       // Web: blob URL (Shaka handles both).
       const localUrl = await this.offlineStorage.getSmallFileNativeUri(sub.key);
       if (localUrl) {
         subs.push({
           id: `offline-${sub.key}`,
+          trackKey: sub.trackKey,
           label: sub.label,
           url: localUrl,
           language: sub.language,
@@ -3814,7 +3819,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         });
       }
     }
-    this.availableSubtitles.set(subs);
+    return subs.sort((a, b) => this.manifestRank(a) - this.manifestRank(b));
+  }
+
+  /** Subtitle configs from the pre-downloaded local VTT files (for native ExoPlayer preload). */
+  private async getOfflineSubtitleConfigs(): Promise<NativeSidecarSubtitle[]> {
+    return (await this.offlineSubtitleOptions()).map((s) => ({
+      url: s.url, language: s.language, label: s.label, forced: !!s.forced,
+    }));
+  }
+
+  /** Load offline subtitles into the subtitle picker (no API calls). */
+  private async loadOfflineSubtitles() {
+    this.availableSubtitles.set(await this.offlineSubtitleOptions());
   }
 
   /** Apply the user's subtitle style to a native engine, plus the bar-clearance
@@ -3948,12 +3965,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (request === this.audioRequest) this.restorePlayState(wasPaused);
   }
 
-  /** Sort key mirroring the manifest's SUBTITLES order: embedded renditions
-   *  first (by stream index), then external files (by DB id). Lets the ordinal
-   *  below line up with the engine's own text-track order. */
-  private subtitleManifestRank(s: SubtitleOption): number {
-    if (s.id.startsWith('emb-')) return Number(s.id.slice(4)) || 0;
-    return 1_000_000 + (s.subtitleDbId ?? 0);
+  private manifestRank(s: SubtitleOption): number {
+    return subtitleManifestRank(s.trackKey ?? s.id);
   }
 
   /** 0-based ordinal of a soft subtitle among the tracks that share its
@@ -3968,7 +3981,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           s.language === sub.language &&
           !!s.forced === !!sub.forced,
       )
-      .sort((a, b) => this.subtitleManifestRank(a) - this.subtitleManifestRank(b));
+      .sort((a, b) => this.manifestRank(a) - this.manifestRank(b));
     const idx = peers.findIndex((s) => s.id === sub.id);
     return idx < 0 ? 0 : idx;
   }

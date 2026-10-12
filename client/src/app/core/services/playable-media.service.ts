@@ -8,6 +8,7 @@ import { PlaybackQueueService, QueueItem } from './playback-queue.service';
 import { RemoteService } from './remote.service';
 import { resolvePlayableFile } from '../../shared/utils/media-play.util';
 import { remoteOverlayOpen } from './remote-playback-target';
+import type { LaunchTracks } from './track-manager.service';
 
 export interface PlayContext {
   fileId: number;
@@ -23,6 +24,8 @@ export interface PlayContext {
   /** Where the caller knows playback stopped. Only a caller that read it from a
    *  list has it; a detail page leaves the player to resolve its own. */
   positionSeconds?: number;
+  /** Picks made on the detail header; the local player honours them once. */
+  tracks?: LaunchTracks;
 }
 
 /**
@@ -106,6 +109,7 @@ export class PlayableMediaService {
         state: {
           fanartUrl: ctx.fanartUrl ?? null,
           stillUrl: ctx.stillUrl ?? null,
+          tracks: ctx.tracks ?? null,
         },
       });
       // Warm the stale-while-revalidate cache for the media-detail page

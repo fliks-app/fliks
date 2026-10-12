@@ -248,9 +248,13 @@ export class PlayerSettingsService {
     audioStreams: AudioStreamChoice[],
     mediaId?: number,
     originalLanguage?: string | null,
+    picked?: number,
   ): number | undefined {
     if (!audioStreams.length) return undefined;
     const s = this.get();
+
+    // Priority 0: a track the viewer picked for this launch.
+    if (picked != null && audioStreams[picked]) return picked;
 
     // Priority 1: remembered selection always wins, whatever the mode.
     // Uses mediaId (series/movie) so the choice carries across episodes.

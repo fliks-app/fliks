@@ -31,7 +31,7 @@ import {
   PlayerSettingsService,
   type AudioStreamChoice,
 } from '../../../core/services/player-settings.service';
-import { TrackManagerService } from '../../../core/services/track-manager.service';
+import { TrackManagerService, type LaunchTracks } from '../../../core/services/track-manager.service';
 import { NavbarService } from '../../../core/services/navbar.service';
 import { TvService } from '../../../core/services/tv.service';
 import { DeviceService } from '../../../core/services/device.service';
@@ -450,6 +450,7 @@ export class MediaInfoHeaderComponent {
     const file = this.selectedFile();
     const mediaId = this.mediaId();
     if (!file || !mediaId) return;
+    this.picked = {};
 
     const audio = file.streamInfo?.audio as AudioStreamChoice[] | undefined;
     if (audio?.length) {
@@ -497,6 +498,7 @@ export class MediaInfoHeaderComponent {
       episodeTitle: this.resumeEpisodeLabel() ?? this.episodeLabel() ?? undefined,
       fanartUrl: this.fanartUrl() ?? this.posterUrl() ?? null,
       streamInfo: file?.streamInfo,
+      tracks: this.launchTracks(),
     }, fromStart);
   }
 
@@ -536,7 +538,17 @@ export class MediaInfoHeaderComponent {
     } catch { /* ignore */ }
   }
 
+  /** The pickers' explicit choices on the selected file, which the player honours with
+   *  or without the remembered store. Defaults the header resolves are not choices. */
+  private picked: Omit<LaunchTracks, 'fileId'> = {};
+
+  private launchTracks(): LaunchTracks | undefined {
+    const fileId = this.selectedFile()?.id;
+    return fileId != null && Object.keys(this.picked).length ? { fileId, ...this.picked } : undefined;
+  }
+
   onAudioChange(index: number) {
+    this.picked = { ...this.picked, audioStreamIndex: index };
     this.selectedAudioIndex.set(index);
     const streams = (this.selectedFile()?.streamInfo?.audio ?? []) as AudioStreamChoice[];
     this.trackManager.saveAudioSelection(
@@ -547,6 +559,7 @@ export class MediaInfoHeaderComponent {
   }
 
   onSubtitleChange(id: string | null) {
+    this.picked = { ...this.picked, subtitleId: id };
     this.selectedSubtitleId.set(id);
     const mediaId = this.mediaId();
     if (!id) {

@@ -67,6 +67,7 @@ describe('TrackManagerService.autoSelectSubtitle — mode routing', () => {
     audioLang: string,
     streamLang?: string,
     remembered: string | null = null,
+    picked?: string | null,
   ) {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
@@ -99,6 +100,7 @@ describe('TrackManagerService.autoSelectSubtitle — mode routing', () => {
       async (s) => void selected.push(s),
       1,
       streamLang,
+      picked,
     );
     return selected[0]?.id;
   }
@@ -118,6 +120,19 @@ describe('TrackManagerService.autoSelectSubtitle — mode routing', () => {
   it('reaches the forced track in onlyForced, whatever the audio', async () => {
     expect(await pick({ subtitleMode: 'onlyForced' }, [full, forced], 'eng')).toBe('forced');
     expect(await pick({ subtitleMode: 'onlyForced' }, [full], 'eng')).toBeUndefined();
+  });
+
+  it('honours the viewer\'s pick before the mode and the remembered selection', async () => {
+    const eng = sub('eng', 'eng');
+    const on = { rememberSubtitleSelections: true };
+    expect(await pick({ subtitleMode: 'off' }, [full, eng], 'eng', undefined, null, 'eng')).toBe('eng');
+    expect(await pick(on, [full, eng], 'eng', undefined, 'fra', 'eng')).toBe('eng');
+  });
+
+  it('takes an explicit Off over the automatic pick, and ignores a pick it cannot find', async () => {
+    expect(await pick({}, [full], 'eng')).toBe('full');
+    expect(await pick({}, [full], 'eng', undefined, null, null)).toBeUndefined();
+    expect(await pick({}, [full], 'eng', undefined, null, 'gone')).toBe('full');
   });
 
   it('falls back to the audio language when onlyForced has no preferred one', async () => {

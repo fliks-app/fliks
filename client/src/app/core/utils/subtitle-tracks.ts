@@ -32,6 +32,22 @@ export interface SubtitleTrack {
   isImage: boolean;
 }
 
+/** The stable id of a subtitle row, or null when it is neither a sidecar file nor in-container. */
+export function subtitleTrackKey(
+  sub: Pick<SubtitleRowLike, 'id' | 'relativePath' | 'streamIndex'>,
+): { key: string; kind: 'external' | 'embedded' } | null {
+  if (sub.relativePath) return { key: `ext-${sub.id}`, kind: 'external' };
+  if (sub.streamIndex != null) return { key: `emb-${sub.streamIndex}`, kind: 'embedded' };
+  return null;
+}
+
+/** Position of a track in the stream manifest: embedded renditions first (by stream
+ *  index), then sidecar files (by DB id). Engines list text tracks in this order. */
+export function subtitleManifestRank(key: string): number {
+  const n = Number(key.slice(4)) || 0;
+  return key.startsWith('emb-') ? n : 1_000_000 + n;
+}
+
 /**
  * Single source of truth for a media file's selectable subtitle list, shared by
  * the player and cast pickers so they can't drift. Languages come out canonical
@@ -52,17 +68,9 @@ export function buildSubtitleTracks(
     const isImage = isImageBasedSubtitleCodec(sub.codec);
     if (opts.hideBurnIn && isImage) continue;
 
-    let key: string;
-    let kind: 'external' | 'embedded';
-    if (sub.relativePath) {
-      key = `ext-${sub.id}`;
-      kind = 'external';
-    } else if (sub.streamIndex != null) {
-      key = `emb-${sub.streamIndex}`;
-      kind = 'embedded';
-    } else {
-      continue;
-    }
+    const identity = subtitleTrackKey(sub);
+    if (!identity) continue;
+    const { key, kind } = identity;
     if (seen.has(key)) continue;
     seen.add(key);
 

@@ -2720,3 +2720,137 @@ describe('PlayerComponent subtitle delivery', () => {
     });
   });
 });
+
+describe('PlayerComponent launch picks', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  it('opens on the audio picked before play, ahead of the automatic rules', () => {
+    const h = audioHarness();
+    h.component.launchTracks = { fileId: MAIN_FILE_ID, audioStreamIndex: 1 };
+
+    h.component.resolveAudioTarget();
+
+    expect(h.component.activeAudioStreamIndex).toBe(1);
+  });
+
+  it('ignores a pick made on another file or outside the file\'s tracks', () => {
+    const h = audioHarness();
+
+    h.component.launchTracks = { fileId: TRAILER_FILE_ID, audioStreamIndex: 1 };
+    h.component.resolveAudioTarget();
+    expect(h.component.activeAudioStreamIndex).toBe(0);
+
+    h.component.launchTracks = { fileId: MAIN_FILE_ID, audioStreamIndex: 7 };
+    h.component.resolveAudioTarget();
+    expect(h.component.activeAudioStreamIndex).toBe(0);
+  });
+
+  it('hands the picked subtitle to the first selection only', async () => {
+    const h = createHarness();
+    const tracks = TestBed.inject(TrackManagerService) as any;
+    h.component.launchTracks = { fileId: MAIN_FILE_ID, subtitleId: null };
+
+    await h.component.autoSelectSubtitle();
+    await h.component.autoSelectSubtitle();
+
+    expect(tracks.autoSelectSubtitle.mock.calls.map((c: unknown[]) => c[7])).toEqual([null, undefined]);
+  });
+
+  it('plans the HLS subtitle delivery for the picked subtitle', async () => {
+    const h = createHarness();
+    (TestBed.inject(BrowserDeviceProfileService) as any).engineTraits = () => ENGINE_TRAITS[EngineKind.IOS];
+    const tracks = TestBed.inject(TrackManagerService) as any;
+    h.component.launchTracks = { fileId: MAIN_FILE_ID, subtitleId: 'ext-3' };
+
+    await h.component.planSubtitleDelivery();
+
+    expect(tracks.autoSelectSubtitle.mock.calls[0][7]).toBe('ext-3');
+  });
+});
+
+describe('PlayerComponent offline subtitle order', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  function offlineHarness(trackKeys: (string | undefined)[]) {
+    const h = createHarness();
+    const subtitles = trackKeys.map((trackKey, i) => ({
+      key: `sub-${i}`, language: 'en', label: `s${i}`, forced: false, trackKey,
+    }));
+    (TestBed.inject(DownloadCacheService) as any).load = () => [
+      { mediaFileId: MAIN_FILE_ID, status: 'ready', offlineSubtitles: subtitles },
+    ];
+    (TestBed.inject(OfflineStorageService) as any).getSmallFileNativeUri = async (key: string) => `file://${key}`;
+    return h;
+  }
+
+  it('lists the sidecars embedded-first by stream index, then externals by DB id', async () => {
+    const h = offlineHarness(['ext-9', 'emb-4', 'ext-2']);
+
+    const urls = (await h.component.getOfflineSubtitleConfigs()).map((s: { url: string }) => s.url);
+
+    expect(urls).toEqual(['file://sub-1', 'file://sub-2', 'file://sub-0']);
+  });
+
+  it('ranks same-language downloads like the manifest, so the Nth pick is the Nth rendition', async () => {
+    const h = offlineHarness(['ext-9', 'emb-4']);
+    await h.component.loadOfflineSubtitles();
+    const [first, second] = h.component.availableSubtitles();
+
+    expect([first.id, second.id]).toEqual(['offline-sub-1', 'offline-sub-0']);
+    expect(h.component.subtitleOrdinal(first)).toBe(0);
+    expect(h.component.subtitleOrdinal(second)).toBe(1);
+  });
+
+  it('keeps the stored order for a download saved before the source was recorded', async () => {
+    const h = offlineHarness([undefined, undefined]);
+
+    const urls = (await h.component.getOfflineSubtitleConfigs()).map((s: { url: string }) => s.url);
+
+    expect(urls).toEqual(['file://sub-0', 'file://sub-1']);
+  });
+});
+
+describe('PlayerComponent negotiation entry points', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  it('negotiates a pre-roll item through the shared path, without the main file\'s picks', async () => {
+    const h = createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID }] });
+    h.component.activeBurnInId = 7;
+    h.component.activeAudioStreamIndex = 2;
+    h.component.needsHlsSubtitles = true;
+    const negotiate = vi.spyOn(h.component, 'negotiatePlayback');
+
+    await h.component.maybeStartPreRoll(undefined);
+
+    expect(negotiate).toHaveBeenCalledWith(undefined, { fileId: TRAILER_FILE_ID });
+    const call = h.streamingApi.getPlaybackInfo.mock.calls[0] as unknown[];
+    expect(call[0]).toBe(TRAILER_FILE_ID);
+    expect(call[1]).toEqual(DEVICE_PROFILE);
+    expect([call[2], call[3]]).toEqual([undefined, undefined]);
+  });
+
+  it('negotiates the cast start through the shared path with the cast profile and its own burn-in', async () => {
+    const h = createHarness();
+    const castProfile = { ...DEVICE_PROFILE, deviceType: 'mobile' } as DeviceProfile;
+    const cp = TestBed.inject(CastPlayerService) as any;
+    cp.getCastDeviceProfile = () => castProfile;
+    h.component.activeAudioStreamIndex = 1;
+    h.component.needsHlsSubtitles = true;
+    h.component.activeQualityId.set('720p');
+    h.component.availableSubtitles.set([subOption('emb-9', 'en', { isImage: true, burnIn: true, subtitleDbId: 9 })]);
+    const negotiate = vi.spyOn(h.component, 'negotiatePlayback');
+
+    await h.component.startCastFromPlayer(10, 'emb-9');
+
+    expect(negotiate).toHaveBeenCalledTimes(1);
+    const call = h.streamingApi.getPlaybackInfo.mock.calls[0] as unknown[];
+    expect(call[1]).toBe(castProfile);
+    expect(call.slice(2, 5)).toEqual([9, 1, undefined]);
+  });
+});
