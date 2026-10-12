@@ -317,14 +317,21 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
     @objc func setActiveSubtitle(_ call: CAPPluginCall) {
         DispatchQueue.main.async { [weak self] in
             let trackId = call.getInt("trackId") ?? 0
-            let client = self?.currentSession?.remoteMediaClient
-            if trackId > 0 {
-                client?.setActiveTrackIDs([NSNumber(value: trackId)])
-            } else {
-                client?.setActiveTrackIDs([])
+            if let client = self?.currentSession?.remoteMediaClient {
+                // The receiver replaces the whole active set, so the active audio goes along.
+                var ids = CastPlugin.activeAudioTrackIDs(of: client)
+                if trackId > 0 { ids.append(NSNumber(value: trackId)) }
+                client.setActiveTrackIDs(ids)
             }
             call.resolve()
         }
+    }
+
+    private static func activeAudioTrackIDs(of client: GCKRemoteMediaClient) -> [NSNumber] {
+        guard let status = client.mediaStatus,
+              let tracks = status.mediaInformation?.mediaTracks else { return [] }
+        let audio = Set(tracks.filter { $0.type == .audio }.map { $0.identifier })
+        return (status.activeTrackIDs ?? []).filter { audio.contains($0.intValue) }
     }
 
     // MARK: - Session Manager Listener

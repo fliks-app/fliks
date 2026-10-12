@@ -702,11 +702,9 @@ public class CastPlugin extends Plugin {
             RemoteMediaClient client = getClient();
             if (client != null) {
                 int trackId = call.getInt("trackId", 0);
-                if (trackId > 0) {
-                    client.setActiveMediaTracks(new long[] { trackId });
-                } else {
-                    client.setActiveMediaTracks(new long[] {});
-                }
+                List<MediaTrack> tracks = mediaTracks(client);
+                long audioId = tracks != null ? activeTrackId(client, tracks, MediaTrack.TYPE_AUDIO) : -1;
+                setActiveTracks(client, audioId, trackId > 0 ? trackId : -1);
             }
             call.resolve();
         });
@@ -732,66 +730,70 @@ public class CastPlugin extends Plugin {
                 call.resolve(new JSObject().put("success", false));
                 return;
             }
-            // Prefer MediaStatus' MediaInfo: it reflects receiver-side
-            // setMediaInformation() updates (where the audio renditions are
-            // published). Fall back to client.getMediaInfo() for safety.
-            MediaInfo mediaInfo = client.getMediaStatus() != null
-                ? client.getMediaStatus().getMediaInfo()
-                : null;
-            if (mediaInfo == null) mediaInfo = client.getMediaInfo();
-            List<MediaTrack> tracks = mediaInfo != null ? mediaInfo.getMediaTracks() : null;
+            List<MediaTrack> tracks = mediaTracks(client);
             if (tracks == null || tracks.isEmpty()) {
                 call.resolve(new JSObject().put("success", false));
                 return;
             }
-            // Match by NAME first: Shaka rewrites manifest LANGUAGE from
-            // ISO 639-2 (eng) to ISO 639-1 (en) before exposing renditions,
-            // so plain language equality fails on 3-letter sources. The
-            // NAME emitted in master.m3u8 (track title or language fallback)
-            // is preserved verbatim.
+            // Match by NAME: it is unique per rendition and preserved verbatim from
+            // master.m3u8. Shaka rewrites LANGUAGE from ISO 639-2 (eng) to 639-1 (en), so
+            // language only stands in for a missing name when it is unambiguous.
             MediaTrack target = null;
+            MediaTrack sameLanguage = null;
+            int sameLanguageCount = 0;
             for (MediaTrack t : tracks) {
-                if (t.getType() == MediaTrack.TYPE_AUDIO && name.equals(t.getName())) {
+                if (t.getType() != MediaTrack.TYPE_AUDIO) continue;
+                if (name.equals(t.getName())) {
                     target = t;
                     break;
                 }
-            }
-            if (target == null) {
-                for (MediaTrack t : tracks) {
-                    if (t.getType() == MediaTrack.TYPE_AUDIO && language.equals(t.getLanguage())) {
-                        target = t;
-                        break;
-                    }
+                if (language.equals(t.getLanguage())) {
+                    sameLanguage = t;
+                    sameLanguageCount++;
                 }
             }
+            if (target == null && sameLanguageCount == 1) target = sameLanguage;
             if (target == null) {
                 call.resolve(new JSObject().put("success", false));
                 return;
             }
-            // Preserve any active text track — setActiveMediaTracks replaces
-            // the whole active set in one shot, mirroring the web's
-            // applyActiveTracks union semantics.
-            long textId = -1;
-            if (client.getMediaStatus() != null) {
-                long[] active = client.getMediaStatus().getActiveTrackIds();
-                if (active != null) {
-                    for (long id : active) {
-                        for (MediaTrack t : tracks) {
-                            if (t.getId() == id && t.getType() == MediaTrack.TYPE_TEXT) {
-                                textId = id;
-                                break;
-                            }
-                        }
-                        if (textId >= 0) break;
-                    }
-                }
-            }
-            long[] newActive = textId >= 0
-                ? new long[] { target.getId(), textId }
-                : new long[] { target.getId() };
-            client.setActiveMediaTracks(newActive);
+            setActiveTracks(client, target.getId(), activeTrackId(client, tracks, MediaTrack.TYPE_TEXT));
             call.resolve(new JSObject().put("success", true));
         });
+    }
+
+    /**
+     * The receiver's media tracks. MediaStatus' MediaInfo is preferred: it reflects
+     * receiver-side setMediaInformation() updates, where the audio renditions are published.
+     */
+    private static List<MediaTrack> mediaTracks(RemoteMediaClient client) {
+        MediaStatus status = client.getMediaStatus();
+        MediaInfo mediaInfo = status != null ? status.getMediaInfo() : null;
+        if (mediaInfo == null) mediaInfo = client.getMediaInfo();
+        return mediaInfo != null ? mediaInfo.getMediaTracks() : null;
+    }
+
+    /** The active track of one type, -1 when there is none. */
+    private static long activeTrackId(RemoteMediaClient client, List<MediaTrack> tracks, int type) {
+        MediaStatus status = client.getMediaStatus();
+        long[] active = status != null ? status.getActiveTrackIds() : null;
+        if (active == null) return -1;
+        for (long id : active) {
+            for (MediaTrack t : tracks) {
+                if (t.getId() == id && t.getType() == type) return id;
+            }
+        }
+        return -1;
+    }
+
+    /** setActiveMediaTracks replaces the whole active set, so audio and text go together (-1: none). */
+    private static void setActiveTracks(RemoteMediaClient client, long audioId, long textId) {
+        List<Long> ids = new ArrayList<>();
+        if (audioId >= 0) ids.add(audioId);
+        if (textId >= 0) ids.add(textId);
+        long[] newActive = new long[ids.size()];
+        for (int i = 0; i < newActive.length; i++) newActive[i] = ids.get(i);
+        client.setActiveMediaTracks(newActive);
     }
 
     private RemoteMediaClient getClient() {

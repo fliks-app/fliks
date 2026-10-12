@@ -203,3 +203,17 @@ test('audio matches on name before language, for 3-letter sources', () => {
   assert.equal(pickAudioTrack(TRACKS, 'en', 'Nonexistent')?.trackId, 4);
   assert.equal(pickAudioTrack(TRACKS, 'de', 'German'), undefined);
 });
+
+const TWINS = [
+  { trackId: 5, type: 'AUDIO', name: 'en', language: 'en' },
+  { trackId: 6, type: 'AUDIO', name: 'en #2', language: 'en' },
+];
+
+test('same-language audio is told apart by its unique name', () => {
+  assert.equal(pickAudioTrack(TWINS, 'en', 'en #2')?.trackId, 6);
+  assert.equal(pickAudioTrack(TWINS, 'en', 'en')?.trackId, 5);
+});
+
+test('an ambiguous language never stands in for a missing name', () => {
+  assert.equal(pickAudioTrack(TWINS, 'en', 'Nonexistent'), undefined);
+});
