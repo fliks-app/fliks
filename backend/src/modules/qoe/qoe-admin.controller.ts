@@ -23,6 +23,9 @@ const int = (v?: string): number | undefined => {
   return v != null && v !== '' && Number.isFinite(n) ? Math.trunc(n) : undefined;
 };
 
+/** An id outside the int column range would make the query throw; clamped, it just matches nothing. */
+const clampInt = (n?: number) => (n == null ? n : Math.min(Math.max(n, -(2 ** 31)), 2 ** 31 - 1));
+
 @Controller('system/qoe')
 @UseGuards(JwtOrApiKeyGuard, PoliciesGuard)
 export class QoeAdminController {
@@ -41,7 +44,7 @@ export class QoeAdminController {
     return this.qoe.listSessions({
       days: days(daysRaw),
       verdict: verdict && VERDICTS.has(verdict) ? (verdict as QoeVerdict) : undefined,
-      userId: int(userId),
+      userId: clampInt(int(userId)),
       // Repeated, not comma-joined: a user agent contains commas.
       devices: (Array.isArray(device) ? device : device ? [device] : [])
         .filter((d) => typeof d === 'string' && d.length <= 512)

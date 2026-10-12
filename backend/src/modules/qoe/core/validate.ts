@@ -42,8 +42,17 @@ const int = (v: unknown): number | null => {
   return n == null ? null : Math.min(Math.round(n), INT_MAX);
 };
 
-const str = (v: unknown, max: number): string | null =>
-  typeof v === 'string' && v ? v.slice(0, max) : null;
+/** Postgres rejects NUL in varchar and jsonb. */
+const str = (v: unknown, max: number): string | null => {
+  const s = typeof v === 'string' ? v.replaceAll('\u0000', '').slice(0, max) : '';
+  return s || null;
+};
+
+/** A duration in ms, capped so a bogus client value cannot skew the sums. */
+const ms = (v: unknown): number | null => {
+  const n = num(v);
+  return n == null ? null : Math.min(n, DAY_MS);
+};
 
 const bool = (v: unknown): boolean | null =>
   typeof v === 'boolean' ? v : null;
@@ -73,7 +82,7 @@ export function parseSample(raw: unknown): QoeSample | null {
     decoderName: str(raw.decoderName, 128),
     hwDecoder: bool(raw.hwDecoder),
     stallCount: int(raw.stallCount) ?? 0,
-    stallMs: int(raw.stallMs) ?? 0,
+    stallMs: int(ms(raw.stallMs)) ?? 0,
     recoveryReloads: int(raw.recoveryReloads) ?? 0,
     playbackId: parsePlaybackId(raw.playbackId),
   };
@@ -99,7 +108,7 @@ export function parseEvents(
         clientAt != null && Math.abs(clientAt - now) <= DAY_MS ? clientAt : now,
       position: num(e.position),
     };
-    const durationMs = num(e.durationMs);
+    const durationMs = ms(e.durationMs);
     if (durationMs != null) ev.durationMs = durationMs;
     const buffer = num(e.bufferAheadS);
     if (buffer != null) ev.bufferAheadS = buffer;

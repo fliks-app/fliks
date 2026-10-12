@@ -52,6 +52,21 @@ describe('parseSample integers', () => {
   });
 });
 
+describe('parseEvents text and durations', () => {
+  it('strips NUL bytes, which Postgres rejects', () => {
+    const [e] = parseEvents([{ type: 'error', at: 1, message: 'a\u0000b', category: '\u0000' }]);
+    expect(e.message).toBe('ab');
+    expect(e).not.toHaveProperty('category');
+    expect(parseSample({ engine: 'mpv', decoderName: 'x\u0000y' })?.decoderName).toBe('xy');
+  });
+
+  it('caps a duration at one day', () => {
+    const [e] = parseEvents([{ type: 'stall', at: 1, durationMs: 1e15 }]);
+    expect(e.durationMs).toBe(86_400_000);
+    expect(parseSample({ engine: 'mpv', stallMs: 1e15 })?.stallMs).toBe(86_400_000);
+  });
+});
+
 describe('parseEvents', () => {
   it('filters invalid events and caps the batch', () => {
     const many = Array.from({ length: 80 }, () => ({ type: 'stall', at: 1 }));

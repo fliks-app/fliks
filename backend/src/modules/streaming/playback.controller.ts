@@ -268,7 +268,7 @@ export class PlaybackController {
       // The client believes the session is alive but the registry
       // doesn't know it — surface that so the client can recover.
       sessionLost = !updated;
-      if (updated && body.qoe != null) {
+      if (updated && body.qoe != null && (updated.userId === user.id || updated.attributedUserId === user.id)) {
         const sample = parseSample(body.qoe);
         if (sample) {
           sample.variantBitrate ??= servedRungBitrate(updated);

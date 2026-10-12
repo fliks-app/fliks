@@ -11,7 +11,7 @@ import {
 export function servedRungBitrate(
   s: Pick<LiveSession, 'kind' | 'quality' | 'hdrLadder' | 'deviceType'>,
 ): number | null {
-  if (s.kind !== 'transcode' || !s.quality) return null;
+  if (s.kind !== 'transcode' || typeof s.quality !== 'string' || !s.quality) return null;
   const ladder = s.hdrLadder
     ? getHdrLadderForDevice(s.deviceType)
     : getLadderForDevice(s.deviceType);

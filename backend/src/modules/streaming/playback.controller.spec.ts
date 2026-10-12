@@ -201,9 +201,9 @@ describe('PlaybackController.updateState: qoe bitrate fallback', () => {
       sessionId: 's',
       qoe,
     });
-    return recordSample.mock.calls[0][1].variantBitrate;
+    return recordSample.mock.calls[0]?.[1].variantBitrate;
   }
-  const live = { kind: 'transcode', quality: '1080p', hdrLadder: false, deviceType: 'desktop', sseConnectionId: null };
+  const live = { userId: 7, attributedUserId: null, kind: 'transcode', quality: '1080p', hdrLadder: false, deviceType: 'desktop', sseConnectionId: null };
 
   it('fills the bitrate from the served transcode rung', async () => {
     expect(await beat(live)).toBe(8_000_000);
@@ -212,5 +212,14 @@ describe('PlaybackController.updateState: qoe bitrate fallback', () => {
   it('keeps the client value, and stays null for remux', async () => {
     expect(await beat(live, { ...sample, variantBitrate: 3e6 })).toBe(3e6);
     expect(await beat({ ...live, kind: 'remux' })).toBeNull();
+  });
+
+  it('stays null for a non-string quality instead of throwing', async () => {
+    expect(await beat({ ...live, hdrLadder: true, quality: 1080 })).toBeNull();
+  });
+
+  it('records nothing for a session that is not the caller\'s', async () => {
+    expect(await beat({ ...live, userId: 8 })).toBeUndefined();
+    expect(await beat({ ...live, userId: 8, attributedUserId: 7 })).toBe(8_000_000);
   });
 });
