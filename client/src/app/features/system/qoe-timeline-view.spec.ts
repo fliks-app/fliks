@@ -21,8 +21,9 @@ describe('blockTitle', () => {
     expect(blockTitle(s(), false, tr('recovery'), f)).toBe('qoe.block.title_recovery');
   });
 
-  it('never shows a source rung id', () => {
+  it('never shows a rung id', () => {
     expect(blockTitle(s({ quality: 'original', served: 'original' }), true, null, f)).toBe('qoe.block.title_start{"rung":"qoe.block.rung_original"}');
+    expect(blockTitle(s({ quality: 'eco-1080p', served: 'eco-1080p' }), true, null, f)).toBe('qoe.block.title_start{"rung":"qoe.block.rung_eco{\\"rung\\":\\"1080p\\"}"}');
   });
 });
 

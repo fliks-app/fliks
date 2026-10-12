@@ -23,7 +23,18 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 import { parseDeviceLabel } from '../../../core/utils/format-device-label';
-import { LucideArrowRightLeft, LucideCircleStop, LucideCircleX, LucideTriangleAlert } from '@lucide/angular';
+import {
+  LucideArrowRightLeft,
+  LucideArrowUpDown,
+  LucideAudioLines,
+  LucideCaptions,
+  LucideCast,
+  LucideCircleStop,
+  LucideCircleX,
+  LucideRefreshCw,
+  LucideRotateCcw,
+  LucideTriangleAlert,
+} from '@lucide/angular';
 import { QOE_CAUSE_DOT_CLASS, QOE_CAUSE_TEXT_CLASS, codecLabel, durationParts, hintParams, loadLine, pipelineChain, pipelineParts, qualityLabel, rungDisplay, stallBreakdown, stallExplanation, translateFmt, type Fmt } from '../qoe-stall';
 import { buildTimeline, isOngoing, type RungName, type Timeline, type TimelineBlock, type TimelineTransition } from '../qoe-timeline';
 import { blockSummary, blockTitle, clockLabel, detailsOpen, formatPosition, timelineSteps, unreportedStalls } from '../qoe-timeline-view';
@@ -42,8 +53,14 @@ type Tab = (typeof TABS)[number];
     TranslatePipe,
     LocaleDatePipe,
     LucideArrowRightLeft,
+    LucideArrowUpDown,
+    LucideAudioLines,
+    LucideCaptions,
+    LucideCast,
     LucideCircleStop,
     LucideCircleX,
+    LucideRefreshCw,
+    LucideRotateCcw,
     LucideTriangleAlert,
     ModalFooterComponent,
     ModalHeaderComponent,
@@ -446,6 +463,19 @@ export class SystemPlaybackQualityComponent implements OnInit {
     const name = !r ? '' : from && r.auto ? auto : r.rung ? rungDisplay(r.rung, this.fmt) : r.auto ? auto : '';
     const rate = bitrate == null ? '' : this.translate.instant('qoe.mbps', { value: this.fmt.n(bitrate / 1_000_000, 1) });
     return rate ? (name ? `${name} (${rate})` : rate) : name;
+  }
+
+  /** The marker of a change: what changed, not just that something did. */
+  changeIcon(type: string, reason?: string, cast = false): 'quality' | 'recovery' | 'audio' | 'subtitles' | 'reload' | 'cast' | 'other' {
+    if (cast) return 'cast';
+    if (type === 'quality_switch') return 'quality';
+    if (type === 'recovery') return 'recovery';
+    if (type === 'reload') return reason === 'audio' ? 'audio' : reason === 'subtitles' ? 'subtitles' : 'reload';
+    return 'other';
+  }
+
+  transitionIcon(t: TimelineTransition) {
+    return this.changeIcon(t.event?.type ?? t.kind, t.event?.data?.reason, t.kind === 'handoff');
   }
 
   /** The sentence between two session blocks. */

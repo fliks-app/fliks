@@ -299,13 +299,29 @@
                       } @else if (step.event.type === 'error') {
                         <svg lucideCircleX class="h-4 w-4 text-error"></svg>
                       } @else {
-                        <svg lucideArrowRightLeft class="h-4 w-4 text-base-content/50"></svg>
+                        @switch (changeIcon(step.event.type, step.event.data?.reason)) {
+                        @case ('quality') { <svg lucideArrowUpDown class="h-4 w-4 text-base-content/50"></svg> }
+                        @case ('recovery') { <svg lucideRotateCcw class="h-4 w-4 text-base-content/50"></svg> }
+                        @case ('audio') { <svg lucideAudioLines class="h-4 w-4 text-base-content/50"></svg> }
+                        @case ('subtitles') { <svg lucideCaptions class="h-4 w-4 text-base-content/50"></svg> }
+                        @case ('reload') { <svg lucideRefreshCw class="h-4 w-4 text-base-content/50"></svg> }
+                        @case ('cast') { <svg lucideCast class="h-4 w-4 text-base-content/50"></svg> }
+                        @default { <svg lucideArrowRightLeft class="h-4 w-4 text-base-content/50"></svg> }
+                      }
                       }
                     </span>
                   }
                   @case ('transition') {
                     <span class="flex h-5 w-5 items-center justify-center rounded-full bg-base-100">
-                      <svg lucideArrowRightLeft class="h-4 w-4 text-base-content/50"></svg>
+                      @switch (transitionIcon(step.transition)) {
+                        @case ('quality') { <svg lucideArrowUpDown class="h-4 w-4 text-base-content/50"></svg> }
+                        @case ('recovery') { <svg lucideRotateCcw class="h-4 w-4 text-base-content/50"></svg> }
+                        @case ('audio') { <svg lucideAudioLines class="h-4 w-4 text-base-content/50"></svg> }
+                        @case ('subtitles') { <svg lucideCaptions class="h-4 w-4 text-base-content/50"></svg> }
+                        @case ('reload') { <svg lucideRefreshCw class="h-4 w-4 text-base-content/50"></svg> }
+                        @case ('cast') { <svg lucideCast class="h-4 w-4 text-base-content/50"></svg> }
+                        @default { <svg lucideArrowRightLeft class="h-4 w-4 text-base-content/50"></svg> }
+                      }
                     </span>
                   }
                   @case ('end') {

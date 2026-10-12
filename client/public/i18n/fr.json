@@ -1649,7 +1649,8 @@
       "error": "Erreur de lecture : {{message}}",
       "error_plain": "Erreur de lecture",
       "unreported_one": "1 coupure de {{duration}} sans détail reçu",
-      "unreported_many": "{{count}} coupures, {{duration}} au total, sans détail reçu"
+      "unreported_many": "{{count}} coupures, {{duration}} au total, sans détail reçu",
+      "rung_eco": "{{rung}} faible consommation"
     },
     "throughput_measured": "Débit mesuré",
     "bitrate_video": "Bitrate de la vidéo",

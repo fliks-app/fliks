@@ -1649,7 +1649,8 @@
       "error": "Wiedergabefehler: {{message}}",
       "error_plain": "Wiedergabefehler",
       "unreported_one": "1 Aussetzer von {{duration}} ohne übermittelte Details",
-      "unreported_many": "{{count}} Aussetzer, {{duration}} insgesamt, ohne übermittelte Details"
+      "unreported_many": "{{count}} Aussetzer, {{duration}} insgesamt, ohne übermittelte Details",
+      "rung_eco": "{{rung}} geringer Verbrauch"
     },
     "throughput_measured": "Gemessener Durchsatz",
     "bitrate_video": "Bitrate des Videos",

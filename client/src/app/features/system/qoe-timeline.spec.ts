@@ -81,6 +81,12 @@ describe('buildTimeline', () => {
     expect(buildTimeline([session('a'), session('b')], []).transitions[0].kind).toBe('next');
   });
 
+  it('takes the recovery recorded on the new sid as the transition that opened it', () => {
+    const t = buildTimeline([session('a'), session('b')], [ev('b', 'recovery', 4), ev('b', 'stall', 9)]);
+    expect(t.transitions[0]).toMatchObject({ kind: 'recovery' });
+    expect(t.blocks[1].events.map((e) => e.type)).toEqual(['stall']);
+  });
+
   it('files an event of an unknown session under the last block', () => {
     const t = buildTimeline([session('a'), session('b')], [ev('zzz', 'error', 1)]);
     expect(t.blocks[1].events).toHaveLength(1);

@@ -37,7 +37,10 @@ export function translateFmt(translate: TranslateService): Fmt {
 
 /** A rung as the admin reads it: the source rungs are "original quality", never their ids. */
 export function rungDisplay(rung: string, f: Fmt): string {
-  return rung === 'original' || rung === 'remux' ? f.t('qoe.block.rung_original') : rung;
+  if (rung === 'original' || rung === 'remux') return f.t('qoe.block.rung_original');
+  // Low-bandwidth rungs, as the player's quality menu names them.
+  if (rung.startsWith('eco-')) return f.t('qoe.block.rung_eco', { rung: rung.slice(4) });
+  return rung;
 }
 
 const plain = (v: number, digits = 1) => v.toFixed(digits);

@@ -1649,7 +1649,8 @@
       "error": "Playback error: {{message}}",
       "error_plain": "Playback error",
       "unreported_one": "1 stall of {{duration}} with no details received",
-      "unreported_many": "{{count}} stalls, {{duration}} in total, with no details received"
+      "unreported_many": "{{count}} stalls, {{duration}} in total, with no details received",
+      "rung_eco": "{{rung}} low bandwidth"
     },
     "throughput_measured": "Measured throughput",
     "bitrate_video": "Video bitrate",

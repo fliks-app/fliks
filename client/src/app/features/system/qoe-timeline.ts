@@ -45,8 +45,7 @@ const LINKS = new Set(['quality_switch', 'recovery', 'reload']);
 
 /**
  * One chronological timeline grouped by session. Sessions of a playback follow each other, never overlap, and every
- * event carries its sessionId; the event that caused the next session (a quality switch or a recovery recorded on the
- * old sid) becomes the transition between the two blocks instead of a line in the first.
+ * event carries its sessionId; the event that caused the next session becomes the transition between the two blocks.
  */
 export function buildTimeline(sessions: QoeSessionRow[], events: QoeEventRow[]): Timeline {
   const blocks: TimelineBlock[] = sessions.map((session, i) => ({ session, first: i === 0, events: [] }));
@@ -58,8 +57,15 @@ export function buildTimeline(sessions: QoeSessionRow[], events: QoeEventRow[]):
   for (let i = 0; i < blocks.length - 1; i++) {
     const cur = blocks[i];
     const next = blocks[i + 1];
-    const link = [...cur.events].reverse().find((e) => LINKS.has(e.type)) ?? null;
-    if (link) cur.events.splice(cur.events.indexOf(link), 1);
+    // A recovery is recorded on the sid it minted, so its event opens the next session instead.
+    const link =
+      [...cur.events].reverse().find((e) => LINKS.has(e.type)) ??
+      next.events.find((e) => e.type === 'recovery') ??
+      null;
+    if (link) {
+      const owner = cur.events.includes(link) ? cur : next;
+      owner.events.splice(owner.events.indexOf(link), 1);
+    }
     const kind: TransitionKind = link
       ? (link.type as TransitionKind)
       : next.session.engine === 'cast' && cur.session.engine !== 'cast'
