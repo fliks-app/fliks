@@ -246,6 +246,7 @@ private struct SkipCueStyle: ButtonStyle {
             startAt: startAt, streamInfo: currentFileInfo, subtitleRows: externalSubtitles
         )
         let item = AVPlayerItem(url: url)
+        applyMetadata(to: item)
         let p = AVPlayer(playerItem: item)
         player = p
         let initialSeek = edlStart(startAt, duration: edlDuration(item))
@@ -262,6 +263,7 @@ private struct SkipCueStyle: ButtonStyle {
         let subtitleChoice = keepingSubtitle ? currentLegibleChoice() : nil
         let wasPaused = player.timeControlStatus == .paused
         let item = AVPlayerItem(url: url)
+        applyMetadata(to: item)
         player.replaceCurrentItem(with: item)
         let target = edlStart(position, duration: edlDuration(item))
         if target != position {
@@ -291,6 +293,46 @@ private struct SkipCueStyle: ButtonStyle {
         player?.pause()
         player = nil
         if RemoteControlService.shared.activeCoordinator === self { RemoteControlService.shared.activeCoordinator = nil }
+    }
+
+    // MARK: - Now-playing metadata
+
+    /// Title/subtitle/overview for the transport bar's title view and info panel; artwork follows once fetched.
+    private func applyMetadata(to item: AVPlayerItem) {
+        guard let media else { return }
+        var found: (season: Season, episode: Episode)?
+        for season in media.seasons ?? [] {
+            if let episode = season.episodes.first(where: { $0.id == episodeId }) {
+                found = (season, episode)
+                break
+            }
+        }
+        let subtitle = found.map { EpisodeDetailView.episodeLabel(season: $0.season, episode: $0.episode) }
+            ?? media.year.map { String($0) }
+        var items = [Self.metadataItem(.commonIdentifierTitle, media.title as NSString)]
+        if let subtitle { items.append(Self.metadataItem(.iTunesMetadataTrackSubTitle, subtitle as NSString)) }
+        if let overview = found?.episode.overview ?? media.overview, !overview.isEmpty {
+            items.append(Self.metadataItem(.commonIdentifierDescription, overview as NSString))
+        }
+        let base = items
+        item.externalMetadata = base
+        guard let url = ImageURL.build(found?.episode.stillUrl ?? media.posterUrl).flatMap(URL.init(string:)) else { return }
+        Task {
+            guard let data = await ImageCache.load(url)?.jpegData(compressionQuality: 0.85),
+                  player?.currentItem === item else { return }
+            item.externalMetadata = base + [Self.metadataItem(.commonIdentifierArtwork, data as NSData, dataType: kCMMetadataBaseDataType_JPEG)]
+        }
+    }
+
+    private static func metadataItem(
+        _ id: AVMetadataIdentifier, _ value: NSCopying & NSObjectProtocol, dataType: CFString = kCMMetadataBaseDataType_UTF8
+    ) -> AVMetadataItem {
+        let item = AVMutableMetadataItem()
+        item.identifier = id
+        item.value = value
+        item.dataType = dataType as String
+        item.extendedLanguageTag = "und"
+        return item
     }
 
     // MARK: - Next-episode resolution
