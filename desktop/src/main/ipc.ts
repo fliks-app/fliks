@@ -31,6 +31,7 @@ export function registerPlayerIpc(session: PlayerSession): void {
     session.player.setMuteRanges(ranges),
   );
   ipcMain.handle(IPC.getPosition, () => session.player.getPosition());
+  ipcMain.handle(IPC.getQoe, () => session.player.getQoe());
   ipcMain.handle(IPC.getAudioTracks, () => session.player.getAudioTracks());
   ipcMain.handle(IPC.selectAudioTrack, (_e, id: string) => session.player.selectAudioTrack(id));
   ipcMain.handle(IPC.getSubtitleTracks, () => session.player.getSubtitleTracks());

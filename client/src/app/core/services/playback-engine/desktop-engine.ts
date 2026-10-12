@@ -3,6 +3,7 @@ import {
   type PlaybackEngine,
   type AudioTrack,
   type EngineStats,
+  type EngineQoeSample,
   pausedFlagForState,
 } from './playback-engine';
 import {
@@ -370,6 +371,23 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
 
   getStats(): EngineStats {
     return { droppedFrames: 0 };
+  }
+
+  /** Null on a stale desktop build, a failed read, or no answer within 500 ms. */
+  override async getQoeSample(): Promise<EngineQoeSample | null> {
+    if (this.dead || !this.bridge.getQoe) return null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const q = await Promise.race([
+        this.bridge.getQoe(),
+        new Promise<null>((resolve) => (timer = setTimeout(() => resolve(null), 500))),
+      ]);
+      return q && { engine: 'mpv', cmcd: false, ...q };
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   // ── Quality ──

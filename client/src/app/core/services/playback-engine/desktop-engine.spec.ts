@@ -29,6 +29,7 @@ interface Bridge {
   selectSubtitleTrack: ReturnType<typeof vi.fn>;
   selectAudioTrack: ReturnType<typeof vi.fn>;
   stop: ReturnType<typeof vi.fn>;
+  getQoe: ReturnType<typeof vi.fn>;
   emit: (event: DesktopEvent) => void;
 }
 
@@ -42,6 +43,7 @@ function installBridge(): Bridge {
     selectSubtitleTrack: ok(),
     selectAudioTrack: ok(),
     stop: ok(),
+    getQoe: vi.fn(),
     emit: (e) => handler(e),
   };
   (window as any).fliksDesktop = {
@@ -234,5 +236,43 @@ describe('DesktopEngine audio', () => {
     });
     await engine.selectAudioTrack('audio-1');
     expect(bridge.selectAudioTrack).toHaveBeenCalledWith('4');
+  });
+});
+
+describe('DesktopEngine getQoeSample', () => {
+  const qoe = {
+    droppedFrames: 4,
+    decodedFrames: 900,
+    bandwidthBps: 8_000_000,
+    bufferAheadS: 12,
+    variantBitrate: 5_000_000,
+    width: 1920,
+    height: 1080,
+    videoCodec: 'hevc',
+    decoderName: 'vaapi',
+    hwDecoder: true,
+  };
+
+  afterEach(() => {
+    vi.useRealTimers();
+    delete (window as any).fliksDesktop;
+  });
+
+  it('adds the engine name and cmcd flag to what main reports', async () => {
+    const bridge = installBridge();
+    bridge.getQoe.mockResolvedValue(qoe);
+    expect(await new DesktopEngine().getQoeSample()).toEqual({ engine: 'mpv', cmcd: false, ...qoe });
+  });
+
+  it('is null when the bridge fails or never answers', async () => {
+    const bridge = installBridge();
+    bridge.getQoe.mockRejectedValue(new Error('boom'));
+    expect(await new DesktopEngine().getQoeSample()).toBeNull();
+
+    vi.useFakeTimers();
+    bridge.getQoe.mockReturnValue(new Promise(() => {}));
+    const pending = new DesktopEngine().getQoeSample();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(await pending).toBeNull();
   });
 });

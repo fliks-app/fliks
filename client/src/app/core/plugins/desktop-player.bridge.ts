@@ -27,6 +27,20 @@ export interface DesktopSubtitleTrack {
   ffIndex: number | null;
 }
 
+/** Playback-quality properties read from mpv; null = not reportable right now. */
+export interface DesktopQoe {
+  droppedFrames: number | null;
+  decodedFrames: number | null;
+  bandwidthBps: number | null;
+  bufferAheadS: number | null;
+  variantBitrate: number | null;
+  width: number | null;
+  height: number | null;
+  videoCodec: string | null;
+  decoderName: string | null;
+  hwDecoder: boolean | null;
+}
+
 export interface DesktopLoadOptions {
   url: string;
   startTime?: number;
@@ -99,6 +113,8 @@ export interface FliksDesktopApi {
   setVolume(volume: number): Promise<void>;
   setMuted(muted: boolean): Promise<void>;
   getPosition(): Promise<DesktopPositionInfo>;
+  /** Absent on a desktop build that predates QoE telemetry. */
+  getQoe?(): Promise<DesktopQoe>;
   getAudioTracks(): Promise<DesktopAudioTrack[]>;
   selectAudioTrack(id: string): Promise<void>;
   getSubtitleTracks(): Promise<DesktopSubtitleTrack[]>;

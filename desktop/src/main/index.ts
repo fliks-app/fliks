@@ -17,6 +17,7 @@ import { FirstFrameGate } from './mpv/first-frame-gate';
 import { mpvLoadRequest, type MpvLoadRequest } from './mpv/load-options';
 import { mpvSubtitleProps } from './mpv/subtitle-style';
 import { parseTracks } from './mpv/tracks';
+import { readQoe } from './mpv/qoe';
 import { MPV_STREAM_OPTIONS } from '../shared/mpv-stream-options';
 
 // Velopack's install/update/uninstall hooks run and exit here, before any Electron startup.
@@ -559,6 +560,7 @@ app.whenReady().then(async () => {
     duration: num(addon.getProperty('duration')),
     buffered: num(addon.getProperty('demuxer-cache-time')),
   }));
+  ipcMain.handle(IPC.getQoe, () => readQoe((n) => addon.getProperty(n)));
   ipcMain.handle(IPC.getAudioTracks, () => parseTracks(addon.getProperty('track-list')).audioTracks);
   ipcMain.handle(IPC.selectAudioTrack, (_e, id: string) => addon.setProperty('aid', id));
   ipcMain.handle(IPC.getSubtitleTracks, () => parseTracks(addon.getProperty('track-list')).subtitleTracks);

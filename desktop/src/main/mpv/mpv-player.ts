@@ -14,6 +14,7 @@ import type {
   DesktopLoadOptions,
   DesktopMuteRange,
   DesktopPositionInfo,
+  DesktopQoe,
   DesktopSubtitleStyle,
   DesktopSubtitleTrack,
 } from '../../shared/contract';
@@ -23,6 +24,7 @@ import { FirstFrameGate } from './first-frame-gate';
 import { mpvLoadFileOptions } from './load-options';
 import { mpvSubtitleProps } from './subtitle-style';
 import { mapTrackList, type MpvTrack } from './tracks';
+import { readQoe } from './qoe';
 import { TypedEmitter } from './typed-emitter';
 import type { PlayerBackend, PlayerBackendEvents } from './player-backend';
 
@@ -586,6 +588,10 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
     const { commands, count } = muteFilterCommands(this.muteRanges, this.muteFilterCount);
     this.muteFilterCount = count;
     for (const cmd of commands) await this.command(cmd).catch(() => {});
+  }
+
+  getQoe(): Promise<DesktopQoe> {
+    return readQoe((n) => this.get<string | number>(n));
   }
 
   async getPosition(): Promise<DesktopPositionInfo> {

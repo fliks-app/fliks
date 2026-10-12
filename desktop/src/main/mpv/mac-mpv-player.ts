@@ -16,6 +16,7 @@ import type {
   DesktopMuteRange,
   DesktopPlayerState,
   DesktopPositionInfo,
+  DesktopQoe,
   DesktopSubtitleStyle,
   DesktopSubtitleTrack,
 } from '../../shared/contract';
@@ -25,6 +26,7 @@ import { FirstFrameGate } from './first-frame-gate';
 import { mpvLoadRequest, type MpvLoadRequest } from './load-options';
 import { mpvSubtitleProps } from './subtitle-style';
 import { mapTrackList, parseTracks, type MpvTrack } from './tracks';
+import { readQoe } from './qoe';
 import { TypedEmitter } from './typed-emitter';
 
 type MacAddon = {
@@ -217,6 +219,10 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
     const { commands, count } = muteFilterCommands(this.muteRanges, this.muteFilterCount);
     this.muteFilterCount = count;
     for (const cmd of commands) this.addon.command(cmd);
+  }
+
+  getQoe(): Promise<DesktopQoe> {
+    return readQoe((n) => this.addon.getProperty(n));
   }
 
   async getPosition(): Promise<DesktopPositionInfo> {
