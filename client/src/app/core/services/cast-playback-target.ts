@@ -1,6 +1,6 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { CastService } from './cast.service';
-import { CastPlayerService, CastSubtitleOption } from './cast-player.service';
+import { CastPlayerService } from './cast-player.service';
 import { parseAudioIndex } from '../utils/player.utils';
 import { TranslateService } from '@ngx-translate/core';
 import { PlaybackOption, PlaybackTarget } from './playback-target';
@@ -65,22 +65,7 @@ export class CastPlaybackTarget implements PlaybackTarget {
   }
 
   selectSubtitle(sub: PlaybackOption | null): void {
-    // Built by us via cp.availableSubtitles(), so the extra Cast fields are always present.
-    const s = sub as CastSubtitleOption | null;
-    if (!s) {
-      this.cp.activeSubtitleId.set(null);
-      this.cast.setActiveSubtitle(0);
-      this.cp.changeBurnIn(null);
-      this.cp.saveSubtitleSelection(null);
-      return;
-    }
-    this.cp.activeSubtitleId.set(s.id);
-    this.cp.saveSubtitleSelection(s.language, s.forced, s.hearingImpaired);
-    if (s.burnIn) {
-      this.cp.changeBurnIn(s.castTrackId ?? 0);
-    } else if (s.castTrackId) {
-      this.cast.setActiveSubtitle(s.castTrackId);
-    }
+    void this.cp.selectSubtitle(sub?.id ?? null);
   }
 
   selectAudio(track: PlaybackOption | null): void {

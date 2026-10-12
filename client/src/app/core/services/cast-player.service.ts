@@ -1,4 +1,4 @@
-import { Injectable, effect, inject, signal, untracked } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { CastService } from './cast.service';
 import { CastSettingsService } from './cast-settings.service';
@@ -23,7 +23,7 @@ import {
   PlayerSettingsService,
   type AudioStreamChoice,
 } from './player-settings.service';
-import { TrackManagerService } from './track-manager.service';
+import { TrackManagerService, type SubtitleOption } from './track-manager.service';
 import { MediaService } from './api/media.service';
 import { ToastService } from './toast.service';
 
@@ -37,6 +37,9 @@ export interface CastSubtitleOption {
   burnIn: boolean;
   forced?: boolean;
   hearingImpaired?: boolean;
+  /** Bitmap track (PGS/VOBSUB): the receiver can't draw it, so it is always burned in. */
+  isImage?: boolean;
+  /** Burn-in: the subtitle's DB id. Otherwise its 1-based position in the LOAD's track list. */
   castTrackId?: number;
   subtitleDbId?: number;
 }
@@ -48,14 +51,25 @@ export interface CastAudioOption {
   /** Language on the first line, codec and channels on the second. */
   head: string;
   sub: string;
-  /** Source-side title — must mirror the NAME attribute the backend writes
-   *  in master.m3u8 (transcoding/master-playlist.ts). The receiver-side
-   *  audio switch matches on this, so any divergence breaks switching. */
+  /** Must equal the unique NAME the backend writes in master.m3u8 (see
+   *  {@link uniqueAudioNames}): the receiver-side audio switch matches on it. */
   name: string;
   /** What the remembered selection matches on (`rememberedAudioKey`). */
   commentary?: boolean;
   audioDescription?: boolean;
   channels?: number;
+}
+
+/** The NAME each rendition gets in master.m3u8, mirroring `buildUniqueAudioNames`
+ *  (backend hls-variant-ladder.ts): `#2`, `#3`… keep same-named tracks distinct. */
+function uniqueAudioNames(streams: { language?: string; title?: string }[]): string[] {
+  const seen = new Map<string, number>();
+  return streams.map((s) => {
+    const base = s.title || s.language || 'und';
+    const count = (seen.get(base) ?? 0) + 1;
+    seen.set(base, count);
+    return count === 1 ? base : `${base} #${count}`;
+  });
 }
 
 /** Build CastAudioOption[] from streamInfo audio streams. Single source of
@@ -66,6 +80,7 @@ export function buildCastAudioOptions(
   translate: TranslateService,
 ): CastAudioOption[] {
   if (!audioStreams?.length) return [];
+  const names = uniqueAudioNames(audioStreams);
   return audioStreams.map((a, i) => {
     const lang = a.language ?? 'und';
     const parts = formatAudioParts(a, translate, i + 1);
@@ -75,9 +90,7 @@ export function buildCastAudioOptions(
       head: parts.head,
       sub: parts.sub,
       language: normalizeLangCode(lang),
-      // The name pairs with the manifest's own NAME, which is a display label
-      // rather than a code, so it keeps the raw fallback.
-      name: a.title || lang,
+      name: names[i],
       commentary: a.commentary,
       audioDescription: a.audioDescription,
       channels: a.channels,
@@ -112,6 +125,13 @@ export function buildCastQualityOptions(
     .map(q => ({ id: q.id, label: q.label, lowBandwidth: q.lowBandwidth }));
 }
 
+/** The burn-in a Cast LOAD needs for `activeId`. The receiver can't draw bitmap
+ *  subtitles, so every image track is burned in, whatever the local device renders itself. */
+export function castBurnInId(subtitles: SubtitleOption[], activeId: string | null): number | null {
+  const active = subtitles.find((s) => s.id === activeId);
+  return active?.isImage ? (active.subtitleDbId ?? null) : null;
+}
+
 /** Everything {@link CastPlayerService} needs to take a session over again. */
 interface CastResumeState {
   mediaFileId: number;
@@ -122,7 +142,6 @@ interface CastResumeState {
   fanartUrl: string | null;
   playbackMode: PlaybackMode;
   liveSessionId: string | null;
-  subtitleInfos: SubtitleInfo[];
   availableSubtitles: CastSubtitleOption[];
   availableQualities: CastQualityOption[];
   availableAudioTracks: CastAudioOption[];
@@ -130,18 +149,6 @@ interface CastResumeState {
   activeSubtitleId: string | null;
   activeAudioTrackId: string | null;
   activeBurnInId: number | null;
-  activeAudioStreamIndex: number | undefined;
-}
-
-interface SubtitleInfo {
-  id: string;
-  label: string;
-  language: string;
-  burnIn: boolean;
-  subtitleDbId?: number;
-  url: string;
-  forced?: boolean;
-  hearingImpaired?: boolean;
 }
 
 /**
@@ -335,11 +342,18 @@ export class CastPlayerService {
   readonly activeQualityId = signal('auto');
   readonly activeSubtitleId = signal<string | null>(null);
   readonly activeAudioTrackId = signal<string | null>(null);
+  /** The active audio as an index into the file's `streamInfo.audio`: the number in its id. */
+  readonly activeAudioStreamIndex = computed(() => {
+    const id = this.activeAudioTrackId();
+    const idx = id ? parseAudioIndex(id) : NaN;
+    return Number.isNaN(idx) ? undefined : idx;
+  });
 
   // Internal state
   private activeBurnInId: number | null = null;
-  private activeAudioStreamIndex: number | undefined;
-  private subtitleInfos: SubtitleInfo[] = [];
+  /** File the active picks were made on; survives {@link clear} so a player that
+   *  outlives the session can adopt them. */
+  private selectionFileId = 0;
   private saveInterval: ReturnType<typeof setInterval> | null = null;
 
   /** Whether a Cast session is actively playing media (not just connected). */
@@ -365,13 +379,11 @@ export class CastPlayerService {
     episodeTitle: string;
     fanartUrl: string | null;
     playbackMode: PlaybackMode;
-    subtitles: SubtitleInfo[];
+    subtitles: SubtitleOption[];
     qualities: CastQualityOption[];
     audioTracks: CastAudioOption[];
     activeQualityId: string;
     activeSubtitleId: string | null;
-    activeAudioTrackId: string | null;
-    activeBurnInId: number | null;
     activeAudioStreamIndex: number | undefined;
   }) {
     this.mediaFileId.set(opts.mediaFileId);
@@ -381,25 +393,31 @@ export class CastPlayerService {
     this.episodeTitle.set(opts.episodeTitle);
     this.fanartUrl.set(opts.fanartUrl ?? null);
     this.playbackMode.set(opts.playbackMode);
-    this.subtitleInfos = opts.subtitles;
+    this.selectionFileId = opts.mediaFileId;
     this.activeQualityId.set(opts.activeQualityId);
     this.activeSubtitleId.set(opts.activeSubtitleId);
-    this.activeAudioTrackId.set(opts.activeAudioTrackId);
-    this.activeBurnInId = opts.activeBurnInId;
-    this.activeAudioStreamIndex = opts.activeAudioStreamIndex;
+    this.activeAudioTrackId.set(
+      opts.activeAudioStreamIndex != null ? `audio-${opts.activeAudioStreamIndex}` : null,
+    );
+    this.activeBurnInId = castBurnInId(opts.subtitles, opts.activeSubtitleId);
 
-    // Build cast subtitle options (with trackId mapping)
+    // The track ids are the positions dispatchLoad gives the tracks it sends, i.e. every
+    // non-burn-in one in list order.
     let trackId = 1;
-    this.availableSubtitles.set(opts.subtitles.map(s => ({
-      id: s.id,
-      label: s.label,
-      language: s.language,
-      burnIn: s.burnIn,
-      forced: s.forced,
-      hearingImpaired: s.hearingImpaired,
-      subtitleDbId: s.subtitleDbId,
-      castTrackId: s.burnIn ? s.subtitleDbId : trackId++,
-    })));
+    this.availableSubtitles.set(opts.subtitles.map(s => {
+      const burnIn = !!s.isImage;
+      return {
+        id: s.id,
+        label: s.label,
+        language: s.language,
+        burnIn,
+        isImage: s.isImage,
+        forced: s.forced,
+        hearingImpaired: s.hearingImpaired,
+        subtitleDbId: s.subtitleDbId,
+        castTrackId: burnIn ? s.subtitleDbId : trackId++,
+      };
+    }));
     this.availableQualities.set(opts.qualities);
     this.availableAudioTracks.set(opts.audioTracks);
     this.hasMedia.set(true);
@@ -417,7 +435,6 @@ export class CastPlayerService {
       fanartUrl: this.fanartUrl(),
       playbackMode: this.playbackMode(),
       liveSessionId: this.liveSessionId(),
-      subtitleInfos: this.subtitleInfos,
       availableSubtitles: this.availableSubtitles(),
       availableQualities: this.availableQualities(),
       availableAudioTracks: this.availableAudioTracks(),
@@ -425,7 +442,6 @@ export class CastPlayerService {
       activeSubtitleId: this.activeSubtitleId(),
       activeAudioTrackId: this.activeAudioTrackId(),
       activeBurnInId: this.activeBurnInId,
-      activeAudioStreamIndex: this.activeAudioStreamIndex,
     };
   }
 
@@ -438,7 +454,7 @@ export class CastPlayerService {
     this.fanartUrl.set(s.fanartUrl);
     this.playbackMode.set(s.playbackMode);
     this.liveSessionId.set(s.liveSessionId);
-    this.subtitleInfos = s.subtitleInfos;
+    this.selectionFileId = s.mediaFileId;
     this.availableSubtitles.set(s.availableSubtitles);
     this.availableQualities.set(s.availableQualities);
     this.availableAudioTracks.set(s.availableAudioTracks);
@@ -446,7 +462,6 @@ export class CastPlayerService {
     this.activeSubtitleId.set(s.activeSubtitleId);
     this.activeAudioTrackId.set(s.activeAudioTrackId);
     this.activeBurnInId = s.activeBurnInId;
-    this.activeAudioStreamIndex = s.activeAudioStreamIndex;
     this.hasMedia.set(true);
     this.startPositionSaving();
     this.loadSpriteMetadata(s.mediaFileId);
@@ -566,8 +581,7 @@ export class CastPlayerService {
     if (castSid) await this.streamingApi.stopSession(castSid).catch(() => {});
 
     const currentPos = positionOverride ?? this.cast.currentTime();
-    const audioIdx = this.activeAudioStreamIndex
-      ?? parseAudioIndex(this.activeAudioTrackId() ?? 'audio-0');
+    const audioIdx = this.activeAudioStreamIndex();
     // The cast dropdown only contains concrete transcode rungs, so the
     // active id is the rung name to send to the backend.
     const transcodeQuality = this.activeQualityId();
@@ -624,23 +638,15 @@ export class CastPlayerService {
     // session warm instead of beating the now-paused browser session.
     this.liveSessionId.set(pi.sessionId ?? null);
 
-    const subtitles = this.subtitleInfos
-      .filter(s => !s.burnIn && s.subtitleDbId)
-      .map(s => ({
-        url: s.id.startsWith('ext-')
-          ? this.streamingApi.getAbsoluteSubtitleUrl(mfId, s.subtitleDbId!, castToken)
-          : this.streamingApi.getAbsoluteEmbeddedSubtitleUrl(mfId, parseInt(s.id.replace('emb-', ''), 10), castToken),
-        language: s.language,
-        label: s.label,
-      }));
-
-    const activeSubId = this.activeSubtitleId();
-    let activeSubtitleTrackId: number | undefined;
-    if (activeSubId) {
-      const allNonBurnIn = this.subtitleInfos.filter(s => !s.burnIn && s.subtitleDbId);
-      const idx = allNonBurnIn.findIndex(s => s.id === activeSubId);
-      if (idx >= 0) activeSubtitleTrackId = idx + 1;
-    }
+    const loaded = this.availableSubtitles().filter(s => !s.burnIn);
+    const subtitles = loaded.map(s => ({
+      url: s.id.startsWith('ext-')
+        ? this.streamingApi.getAbsoluteSubtitleUrl(mfId, s.subtitleDbId!, castToken)
+        : this.streamingApi.getAbsoluteEmbeddedSubtitleUrl(mfId, parseInt(s.id.replace('emb-', ''), 10), castToken),
+      language: s.language,
+      label: s.label,
+    }));
+    const activeSubtitleTrackId = loaded.find(s => s.id === this.activeSubtitleId())?.castTrackId;
 
     // Show the loading sweep immediately rather than waiting for the first
     // receiver state tick; the player-state feed reconciles it once playback
@@ -731,8 +737,6 @@ export class CastPlayerService {
   }
 
   async changeAudio(audioIndex: number) {
-    this.activeAudioStreamIndex = audioIndex;
-
     const trackId = `audio-${audioIndex}`;
     this.trackManager.saveAudioSelection(
       trackId, this.availableAudioTracks(), this.mediaId(),
@@ -803,29 +807,58 @@ export class CastPlayerService {
     } catch { /* ignore */ }
   }
 
-  /** Find the subtitle matching the user's remembered language+type for this media. */
-  private resolveRememberedSubtitleId(
-    mediaId: number,
-    subtitles: SubtitleInfo[],
-  ): string | null {
-    const settings = this.playerSettings.get();
-    if (!settings.rememberSubtitleSelections || !mediaId) return null;
-    const saved = this.playerSettings.getRememberedSubtitleTrack(mediaId);
-    if (!saved || saved === 'off') return null;
-    const parts = saved.split(':');
-    const savedLang = normalizeLangCode(parts[0]);
-    const wantForced = parts.includes('forced');
-    const wantHi = parts.includes('hi');
-    const match =
-      subtitles.find((s) => !s.burnIn && s.language === savedLang && !!s.forced === wantForced && !!s.hearingImpaired === wantHi)
-      ?? subtitles.find((s) => !s.burnIn && s.language === savedLang && !!s.forced === wantForced)
-      ?? subtitles.find((s) => !s.burnIn && s.language === savedLang && !s.forced);
-    return match?.id ?? null;
+  /** A viewer's subtitle pick (null: Off), applied and remembered for the title. Burn-in is
+   *  part of the pick: a text track clears it, as the local player does. False for an unknown id. */
+  async selectSubtitle(id: string | null): Promise<boolean> {
+    const opt = id ? this.availableSubtitles().find((s) => s.id === id) : undefined;
+    if (id && !opt) {
+      console.warn('[cast] unknown subtitle', id);
+      return false;
+    }
+    this.activeSubtitleId.set(id);
+    this.rememberSubtitle(opt);
+    const burnInId = opt?.isImage ? (opt.subtitleDbId ?? null) : null;
+    // A burn-in change reloads, and the new LOAD already carries the active text track.
+    if (burnInId !== this.activeBurnInId) {
+      this.activeBurnInId = burnInId;
+      await this.reloadCastStream();
+    } else await this.cast.setActiveSubtitle(opt && !opt.burnIn ? (opt.castTrackId ?? 0) : 0);
+    return true;
   }
 
-  saveSubtitleSelection(language: string | null, forced = false, hearingImpaired = false) {
-    const mId = this.mediaId();
-    if (mId) this.trackManager.saveSubtitleSelection(mId, language, forced, false, false, hearingImpaired);
+  private rememberSubtitle(opt: CastSubtitleOption | undefined): void {
+    const mediaId = this.mediaId();
+    if (!mediaId) return;
+    this.trackManager.saveSubtitleSelection(
+      mediaId,
+      opt?.language ?? null,
+      opt?.forced,
+      !!opt?.id.startsWith('emb-'),
+      !!opt?.isImage,
+      opt?.hearingImpaired,
+    );
+  }
+
+  /** What was picked on the receiver for `mediaFileId`, for a player that outlives the
+   *  session; null when the picks belong to another file. */
+  selectionFor(mediaFileId: number): { subtitleId: string | null; audioStreamIndex: number | undefined } | null {
+    if (!mediaFileId || mediaFileId !== this.selectionFileId) return null;
+    return { subtitleId: this.activeSubtitleId(), audioStreamIndex: this.activeAudioStreamIndex() };
+  }
+
+  /** The subtitle the player's own rules start `subtitles` on, automatic like its
+   *  first pick: never remembered as the viewer's choice. */
+  async resolveStartSubtitle(
+    subtitles: SubtitleOption[],
+    mediaFileId: number,
+    mediaId: number,
+    audioLanguage?: string,
+  ): Promise<SubtitleOption | null> {
+    let picked: SubtitleOption | null = null;
+    await this.trackManager.autoSelectSubtitle(
+      subtitles, [], null, mediaFileId, async (sub) => { picked = sub; }, mediaId, audioLanguage,
+    );
+    return picked;
   }
 
   private async loadSpriteMetadata(mediaFileId: number) {
@@ -839,12 +872,6 @@ export class CastPlayerService {
       this.spriteMetadata.set(meta);
       this.spriteUrl.set(this.streamingApi.getThumbnailSpriteUrl(mediaFileId));
     } catch { /* sprite not available */ }
-  }
-
-  async changeBurnIn(subtitleDbId: number | null) {
-    if (this.activeBurnInId === subtitleDbId) return;
-    this.activeBurnInId = subtitleDbId;
-    await this.reloadCastStream();
   }
 
   /**
@@ -905,7 +932,7 @@ export class CastPlayerService {
     );
 
     // Build subtitle list from the parallel fetch (shared with the player).
-    const subtitleInfos: SubtitleInfo[] = buildSubtitleTracks(
+    const subtitleInfos: SubtitleOption[] = buildSubtitleTracks(
       subsResult,
       opts.mediaFileId,
       { hideBurnIn: this.appSettings.hideBurnInSubtitles() },
@@ -918,7 +945,9 @@ export class CastPlayerService {
         showFormat: this.appSettings.showSubtitleFormat(),
       }),
       language: t.language,
-      burnIn: t.kind === 'embedded' && t.isImage,
+      isImage: t.isImage,
+      burnIn: t.isImage,
+      providerType: t.providerType,
       subtitleDbId: t.subtitleId,
       url:
         t.kind === 'external'
@@ -931,6 +960,10 @@ export class CastPlayerService {
     }));
 
     const audioTracks = buildCastAudioOptions(streamInfo?.audio, this.translate);
+    const startSubtitle = await this.resolveStartSubtitle(
+      subtitleInfos, opts.mediaFileId, opts.mediaId,
+      audioIndex != null ? audioStreams[audioIndex]?.language : undefined,
+    );
 
     // Phase 2 — single playback-info call. We pass the user's cast cap as
     // startQuality so the backend pre-spawns ffmpeg at the right rung; the
@@ -938,7 +971,8 @@ export class CastPlayerService {
     const cs = this.castSettings.get();
     const startQuality = cs.maxQuality === 'original' ? '1080p' : cs.maxQuality;
     const pi = await this.getCastPlaybackInfo(
-      opts.mediaFileId, undefined, audioIndex, startQuality, Math.floor(startTime),
+      opts.mediaFileId, castBurnInId(subtitleInfos, startSubtitle?.id ?? null) ?? undefined,
+      audioIndex, startQuality, Math.floor(startTime),
     );
 
     // Build the dropdown list from the backend-authoritative qualities,
@@ -959,9 +993,7 @@ export class CastPlayerService {
       qualities,
       audioTracks,
       activeQualityId,
-      activeSubtitleId: this.resolveRememberedSubtitleId(opts.mediaId, subtitleInfos),
-      activeAudioTrackId: audioIndex != null ? `audio-${audioIndex}` : (audioTracks[0]?.id ?? null),
-      activeBurnInId: null,
+      activeSubtitleId: startSubtitle?.id ?? null,
       activeAudioStreamIndex: audioIndex,
     });
 

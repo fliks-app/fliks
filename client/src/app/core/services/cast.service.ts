@@ -167,6 +167,8 @@ const CAST_SEEK_COALESCE_MS = 220;
 const CAST_SEEK_SETTLE_MS = 2500;
 /** How close a receiver time must be to the target to count as "arrived". */
 const CAST_SEEK_CONVERGE_TOL = 1.5;
+/** A receiver can ignore the LOAD's `activeTrackIds` while it is still publishing its tracks. */
+const CAST_TEXT_REAPPLY_MS = 1500;
 
 @Injectable({ providedIn: 'root' })
 export class CastService implements OnDestroy {
@@ -205,6 +207,12 @@ export class CastService implements OnDestroy {
   private pendingSeekTarget: number | null = null;
   private lastDispatchedSeekTarget: number | null = null;
   private seekSettleUntil = 0;
+
+  /** The LOAD in flight: a pick made meanwhile waits for the media session it belongs to. */
+  private pendingLoad: Promise<void> | null = null;
+  /** The text track the viewer last asked for (0: none); the latest ask wins over any LOAD. */
+  private wantedTextTrackId = 0;
+  private textReapplyTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Fires when the receiver hits a fatal playback error that a fresh
    *  stream (new sid) can recover — a live session GC'd mid-cast 410s the
@@ -552,6 +560,15 @@ export class CastService implements OnDestroy {
     // can't fire onto the freshly loaded session (quality change, recovery,
     // sessionLost reload) at a stale target.
     this.clearSeekCoalescing();
+    this.cancelTextReapply();
+    this.wantedTextTrackId = info.activeSubtitleTrackId ?? 0;
+    const load = this.sendLoad(info);
+    this.pendingLoad = load;
+    await load;
+    if (this.pendingLoad === load) this.pendingLoad = null;
+  }
+
+  private async sendLoad(info: CastMediaInfo): Promise<void> {
     // Forwarded to the receiver. Fields here MUST stay JSON-serialisable
     // and free of secrets — `customData` is logged in plain text by the
     // CAF debug overlay.
@@ -636,7 +653,10 @@ export class CastService implements OnDestroy {
       this.mediaTitle.set(info.title);
       this.isPaused.set(info.autoplay === false);
       if (info.activeSubtitleTrackId) {
-        setTimeout(() => this.setActiveSubtitle(info.activeSubtitleTrackId!), 1500);
+        this.textReapplyTimer = setTimeout(() => {
+          this.textReapplyTimer = null;
+          if (this.wantedTextTrackId > 0) this.applyTextTrack(this.wantedTextTrackId);
+        }, CAST_TEXT_REAPPLY_MS);
       }
     } catch (err) {
       console.error('Cast loadMedia failed:', err);
@@ -779,14 +799,31 @@ export class CastService implements OnDestroy {
     this.session = null;
     this.castStreamBaseUrl.set('');
     this.clearSeekCoalescing();
+    this.cancelTextReapply();
+    this.wantedTextTrackId = 0;
+    this.pendingLoad = null;
   }
 
-  setActiveSubtitle(trackId: number) {
+  /** Make `trackId` (0: none) the active text track. The latest ask wins: it supersedes
+   *  the LOAD's own track and any earlier ask still waiting on a LOAD in flight. */
+  async setActiveSubtitle(trackId: number): Promise<void> {
+    this.wantedTextTrackId = trackId;
+    this.cancelTextReapply();
+    await this.pendingLoad;
+    if (this.wantedTextTrackId === trackId) this.applyTextTrack(trackId);
+  }
+
+  private applyTextTrack(trackId: number) {
     if (this.hasCastBridge) {
-      CastBridge.setActiveSubtitle({ trackId });
+      void CastBridge.setActiveSubtitle({ trackId }).catch(() => {});
       return;
     }
     this.applyActiveTracks({ textId: trackId > 0 ? trackId : null });
+  }
+
+  private cancelTextReapply() {
+    if (this.textReapplyTimer != null) clearTimeout(this.textReapplyTimer);
+    this.textReapplyTimer = null;
   }
 
   /**
@@ -800,6 +837,7 @@ export class CastService implements OnDestroy {
    * to a full ffmpeg-restart reload in that case.
    */
   async setActiveAudioLanguage(language: string, name: string): Promise<boolean> {
+    await this.pendingLoad;
     if (this.hasCastBridge) {
       try {
         const { success } = await CastBridge.setActiveAudioLanguage({ language, name });
@@ -817,13 +855,13 @@ export class CastService implements OnDestroy {
     );
     if (!audioTracks.length) return false;
 
-    // Match by name first: the NAME we emit in master.m3u8 (track title or
-    // language fallback) is preserved verbatim, while the receiver may hand
-    // back either code form.
+    // The NAME in master.m3u8 is unique per rendition and preserved verbatim; the receiver may
+    // hand the language back in either code form, so it only stands in when it is unambiguous.
     const want = normalizeLangCode(language);
+    const sameLanguage = audioTracks.filter((t) => normalizeLangCode(t.language) === want);
     const target =
       audioTracks.find((t) => t.name === name)
-      ?? audioTracks.find((t) => normalizeLangCode(t.language) === want);
+      ?? (sameLanguage.length === 1 ? sameLanguage[0] : undefined);
     if (!target) return false;
 
     return this.applyActiveTracks({ audioId: target.trackId });

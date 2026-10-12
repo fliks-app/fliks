@@ -251,8 +251,6 @@ class CastSender {
     this.editTracks({ textId: trackId > 0 ? trackId : null });
   }
 
-  /** Match the audio rendition by name first: Shaka rewrites HLS LANGUAGE from
-   *  ISO 639-2 to 639-1, so language equality misses 3-letter sources. */
   setActiveAudioLanguage(language: string, name: string): boolean {
     const target = pickAudioTrack(this.tracks, language, name);
     if (!target) return false;
