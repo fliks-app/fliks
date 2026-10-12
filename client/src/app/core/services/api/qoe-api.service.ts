@@ -42,7 +42,10 @@ export interface StreamQoe extends QoeDiagnosis {
   decoderName: string | null;
   transcodeSpeed: number | null;
   engine: string | null;
+  /** Server-parsed: CMCD actually received. */
   cmcd: boolean | null;
+  /** The client declared CMCD. */
+  cmcdClaimed?: boolean;
   playbackId?: string | null;
 }
 
@@ -62,6 +65,7 @@ export interface QoeSessionRow extends QoeDiagnosis {
   appVersion: string | null;
   engine: string | null;
   cmcd: boolean | null;
+  cmcdClaimed?: boolean;
   playMethod: 'transcode' | 'remux' | 'directplay' | null;
   quality: string | null;
   transcodeReasons: string[] | null;
@@ -90,6 +94,7 @@ export interface QoeSessionRow extends QoeDiagnosis {
 
 export interface QoeEventRow {
   id: number;
+  sessionId?: string;
   at: string | number;
   type: QoeEventType;
   data: Partial<Omit<QoeEvent, 'type' | 'at'>> | null;

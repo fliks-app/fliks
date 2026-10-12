@@ -72,6 +72,8 @@ export interface CastMediaInfo {
   edl?: EdlWire;
   /** Receiver session key: skipped commercials survive reloads of the same file. */
   mediaFileId?: number;
+  /** The viewing being cast; the receiver echoes it in its qoe sample. */
+  playbackId?: string;
   /** Translated notice texts the receiver shows when it skips. */
   edlLabels?: { cut: string; commercial: string };
   /** False: the receiver never skips commercials. Absent means true. */
@@ -612,6 +614,7 @@ export class CastService implements OnDestroy {
       mediaId: info.mediaId,
       episodeId: info.episodeId,
       mediaFileId: info.mediaFileId,
+      playbackId: info.playbackId,
       edl: info.edl,
       edlLabels: info.edl ? info.edlLabels : undefined,
       autoSkipCommercials: info.edl ? info.autoSkipCommercials : undefined,

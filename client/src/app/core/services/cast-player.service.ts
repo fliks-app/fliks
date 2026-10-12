@@ -684,6 +684,7 @@ export class CastPlayerService {
       episodeId: this.episodeId(),
       autoplay,
       mediaFileId: mfId,
+      playbackId: this.playbackId ?? undefined,
       autoSkipCommercials: this.authService.user()?.edlAutoSkipCommercials !== false,
       ...this.edlPayload(pi.edl, {
         title: this.mediaTitle(),
@@ -802,7 +803,7 @@ export class CastPlayerService {
   qoeSample(): QoeSample | null {
     const q = this.cast.receiverQoe();
     if (!q || Date.now() - q.receivedAt >= QOE_STALE_MS || !hasQoeData(q.sample)) return null;
-    return this.playbackId ? { ...q.sample, playbackId: this.playbackId } : q.sample;
+    return q.sample.playbackId || !this.playbackId ? q.sample : { ...q.sample, playbackId: this.playbackId };
   }
 
   private startPositionSaving() {
