@@ -547,6 +547,8 @@ struct PlaybackInfoResponse: Codable {
     let outputAudioCodec: String
     let audioPlan: AudioPlan
     let outputContainer: String
+    /// Rung the session locked in ("original" on copy paths, "auto" when unpinned).
+    let quality: String?
     let hwAccel: String
     let tonemapping: Bool
     let qualities: [QualityOption]?
@@ -583,13 +585,14 @@ struct RemoteCommand: Codable {
     /// Unix epoch milliseconds: matches the rest of this codebase's JS-origin timestamps.
     let expiresAt: Double
     /// "load" | "play" | "pause" | "playpause" | "stop" | "seek" | "volume" |
-    /// "mute" | "next" | "audio" | "subtitle"
+    /// "mute" | "next" | "audio" | "subtitle" | "quality"
     let action: String
     let positionSeconds: Double?
     let level: Double?
     let muted: Bool?
     let trackId: String?
     let subtitleId: String?
+    let qualityId: String?
     let mediaFileId: Int?
     let mediaId: Int?
     let episodeId: Int?

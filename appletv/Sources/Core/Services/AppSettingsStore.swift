@@ -39,6 +39,10 @@ import Foundation
     var ecoByDefault: Bool {
         didSet { d.set(ecoByDefault, forKey: Keys.ecoByDefault) }
     }
+    /// Last quality picked in the player menu ("auto" or a rung id); sent with the next playback-info.
+    var playerQualityId: String {
+        didSet { d.set(playerQualityId, forKey: Keys.playerQualityId) }
+    }
     var autoSkipIntro: Bool {
         didSet { d.set(autoSkipIntro, forKey: Keys.autoSkipIntro) }
     }
@@ -64,6 +68,7 @@ import Foundation
         forceDisableHdr = d.bool(forKey: Keys.forceDisableHdr)
         showEcoQualities = d.object(forKey: Keys.showEcoQualities) as? Bool ?? true
         ecoByDefault = d.bool(forKey: Keys.ecoByDefault)
+        playerQualityId = d.string(forKey: Keys.playerQualityId) ?? "auto"
         autoSkipIntro = d.bool(forKey: Keys.autoSkipIntro)
         autoPlayNext = d.object(forKey: Keys.autoPlayNext) as? Bool ?? true
         preferredSubtitleLanguage = d.string(forKey: Keys.preferredSubtitleLanguage) ?? ""
@@ -79,6 +84,7 @@ import Foundation
         static let forceDisableHdr = "settings.forceDisableHdr"
         static let showEcoQualities = "settings.showEcoQualities"
         static let ecoByDefault = "settings.ecoByDefault"
+        static let playerQualityId = "settings.playerQualityId"
         static let autoSkipIntro = "settings.autoSkipIntro"
         static let autoPlayNext = "settings.autoPlayNext"
         static let preferredSubtitleLanguage = "settings.preferredSubtitleLanguage"
