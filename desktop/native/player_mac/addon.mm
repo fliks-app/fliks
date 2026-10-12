@@ -947,20 +947,17 @@ Napi::Value OnEvent(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
-// load({url, startTime?, headers?, subtitles?}) — lifted from addon.cc Load.
+// load({url, fileOptions?, headers?, subtitles?}) — lifted from addon.cc Load.
 Napi::Value Load(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   if (!g_state.mpv || info.Length() < 1 || !info[0].IsObject()) return env.Undefined();
   Napi::Object o = info[0].As<Napi::Object>();
   std::string url = o.Get("url").As<Napi::String>().Utf8Value();
   std::vector<std::string> opts;
-  if (o.Has("startTime") && o.Get("startTime").IsNumber()) {
-    double t = o.Get("startTime").As<Napi::Number>().DoubleValue();
-    if (t > 0) {
-      char b[48];
-      snprintf(b, sizeof(b), "start=+%.3f", t);
-      opts.emplace_back(b);
-    }
+  // Per-file mpv options built in TS (src/main/mpv/load-options.ts), the same for every backend.
+  if (o.Has("fileOptions") && o.Get("fileOptions").IsArray()) {
+    Napi::Array fo = o.Get("fileOptions").As<Napi::Array>();
+    for (uint32_t i = 0; i < fo.Length(); i++) opts.push_back(fo.Get(i).ToString().Utf8Value());
   }
   if (o.Has("headers") && o.Get("headers").IsObject()) {
     Napi::Object h = o.Get("headers").As<Napi::Object>();
@@ -973,13 +970,6 @@ Napi::Value Load(const Napi::CallbackInfo& info) {
       fields += k + ": " + v;
     }
     if (!fields.empty()) opts.push_back("http-header-fields=" + fields);
-  }
-  // Preferred audio language → mpv auto-selects the matching rendition on this
-  // load and re-applies it on every reconfig, so it never reverts to the
-  // manifest's default track (which may be a different language).
-  if (o.Has("audioLanguage") && o.Get("audioLanguage").IsString()) {
-    std::string lang = o.Get("audioLanguage").As<Napi::String>().Utf8Value();
-    if (!lang.empty()) opts.push_back("alang=" + lang);
   }
   std::string optstr;
   for (size_t i = 0; i < opts.size(); i++) {
