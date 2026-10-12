@@ -65,7 +65,9 @@ export class SubtitleBurnInService {
     const sub = await this.subtitleFileRepo.findOne({
       where: { id: subtitleId },
     });
-    if (!sub) throw new NotFoundException(`Subtitle #${subtitleId} not found`);
+    if (!sub || sub.mediaFileId !== mediaFileId) {
+      throw new NotFoundException(`Subtitle #${subtitleId} not found`);
+    }
 
     const resolved = await this.streamingService.resolveFile(mediaFileId);
     const videoPath = resolved.absolutePath;
