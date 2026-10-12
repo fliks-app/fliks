@@ -95,8 +95,6 @@ struct Library: Codable, Identifiable, Hashable {
     let color: String?
     /// Raw MediaType values: "movie" | "series".
     let mediaTypes: [String]
-    let isDefaultForMovies: Bool
-    let isDefaultForSeries: Bool
 }
 
 // MARK: - Media file / stream info
