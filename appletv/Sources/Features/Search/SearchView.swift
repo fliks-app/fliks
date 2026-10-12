@@ -70,7 +70,8 @@ struct SearchView: View {
                 .padding(.top, 100)
         } else {
             ContentGrid(title: nil, items: results, onReachEnd: loadMore) { media in
-                PosterCard(imagePath: media.posterUrl, title: media.title, mediaId: media.id) {
+                PosterCard(imagePath: media.posterUrl, title: media.title, mediaId: media.id,
+                           missing: media.isMissing) {
                     onSelectMedia(media.id)
                 }
             }

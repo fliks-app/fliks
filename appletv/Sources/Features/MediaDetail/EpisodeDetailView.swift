@@ -59,12 +59,12 @@ struct EpisodeDetailView: View {
                     .sorted { $0.episodeNumber < $1.episodeNumber }
                 if !others.isEmpty {
                     Rail(title: MediaDetailView.seasonLabel(season), items: others) { ep in
-                        MediaCard(imagePath: ep.stillUrl, title: "E\(ep.episodeNumber)",
-                                  subtitle: ep.title, portrait: false,
-                                  mediaId: mediaId, episodeId: ep.id) {
+                        MediaCard(imagePath: ep.stillUrl, title: ep.cardTitle,
+                                  subtitle: ep.cardSubtitle, portrait: false,
+                                  mediaId: mediaId, episodeId: ep.id,
+                                  missing: !ep.hasFile, cornerLabel: ep.numberLabel) {
                             onSelectEpisode(ep.id)
                         }
-                        .opacity(ep.hasFile ? 1 : 0.4)
                     }
                 }
             }

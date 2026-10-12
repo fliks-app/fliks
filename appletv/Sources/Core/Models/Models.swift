@@ -190,6 +190,18 @@ extension Media {
     }
 }
 
+extension Media {
+    /// Released but nothing on disk (monitored or not); mirrors the web `computeMediaBarStatus`.
+    var isMissing: Bool {
+        let hasFiles = type == "series" ? (episodeStats?.downloadedEpisodes ?? 0) > 0 : !(files ?? []).isEmpty
+        if hasFiles { return false }
+        if type == "series" { return status == "continuing" || status == "ended" }
+        let today = String(ISO8601DateFormatter().string(from: Date()).prefix(10))
+        return [releaseDate, inCinemas, digitalRelease, physicalRelease]
+            .contains { d in d.map { String($0.prefix(10)) <= today } ?? false }
+    }
+}
+
 // MARK: - Season / Episode
 
 struct Episode: Codable, Identifiable, Hashable {
@@ -206,6 +218,28 @@ struct Episode: Codable, Identifiable, Hashable {
     let stillUrl: String?
 }
 
+extension Episode {
+    /// "3" or "3-4" for a multi-episode file; the card's corner badge.
+    var numberLabel: String {
+        guard let end = endEpisodeNumber, end > episodeNumber else { return String(episodeNumber) }
+        return "\(episodeNumber)-\(end)"
+    }
+
+    /// Episode name, or "Episode 3" when the provider has none.
+    var cardTitle: String {
+        if let title, !title.isEmpty { return title }
+        return tr("media_detail.episode_title", numberLabel)
+    }
+
+    /// "air date · N min", as on the web episode card.
+    @MainActor var cardSubtitle: String? {
+        var parts: [String] = []
+        if let aired = AppDate.short(airDate) { parts.append(aired) }
+        if let runtime, runtime > 0 { parts.append(tr("media_detail.runtime_minutes", runtime)) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+}
+
 struct Season: Codable, Identifiable, Hashable {
     let id: Int
     let seasonNumber: Int
@@ -217,6 +251,11 @@ struct Season: Codable, Identifiable, Hashable {
 }
 
 // MARK: - Media
+
+struct EpisodeStats: Codable, Hashable {
+    let totalEpisodes: Int?
+    let downloadedEpisodes: Int?
+}
 
 struct Media: Codable, Identifiable, Hashable {
     let id: Int
@@ -240,6 +279,11 @@ struct Media: Codable, Identifiable, Hashable {
     let genres: [String]?
     let runtime: Int?
     let releaseDate: String?
+    let inCinemas: String?
+    let digitalRelease: String?
+    let physicalRelease: String?
+    /// Series only; absent on older servers or when the series has no episodes.
+    let episodeStats: EpisodeStats?
     let seasons: [Season]?
     let files: [MediaFile]?
     /// Fully watched (movie completed / series all episodes watched), per user.
