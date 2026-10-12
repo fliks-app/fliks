@@ -266,7 +266,7 @@
 
       <h4 class="font-semibold mt-4 mb-2">{{ 'qoe.timeline' | translate }}</h4>
       @if (timeline(); as tl) {
-        <div class="flex gap-3 pb-1 text-xs text-base-content/40">
+        <div class="flex gap-3 pb-1 text-sm text-base-content/40">
           <span class="w-36 shrink-0">{{ 'qoe.timeline_time' | translate }}</span>
           <span class="w-24 shrink-0 truncate" [title]="'qoe.timeline_position' | translate">{{ 'qoe.timeline_position' | translate }}</span>
           <span>{{ 'qoe.timeline_event' | translate }}</span>
@@ -288,7 +288,7 @@
                 {{ 'qoe.verdict.' + block.session.verdict | translate }}
               </span>
               @if (pipelineText(block.session.pipeline, block.session); as pipe) {
-                <span class="basis-full text-xs text-base-content/60" [title]="'qoe.hint.pipeline' | translate">{{ pipe }}</span>
+                <span class="basis-full text-sm text-base-content/60" [title]="'qoe.hint.pipeline' | translate">{{ pipe }}</span>
               }
             </header>
             @if (block.events.length === 0) {
@@ -305,7 +305,7 @@
                       <span class="min-w-0 break-words font-medium">{{ eventLine(e) }}</span>
                     </div>
                     @if (e.data?.cause; as cause) {
-                      <div class="flex items-center gap-2 pl-[calc(9rem+6rem+1.5rem)] text-xs text-base-content/70">
+                      <div class="flex items-center gap-2 pl-[calc(9rem+6rem+1.5rem)] text-sm text-base-content/70">
                         <span class="inline-block h-2.5 w-2.5 rounded-full shrink-0" [class]="causeDot[cause]"></span>
                         <span class="font-medium">{{ 'qoe.cause.' + cause | translate }}</span>
                         @if (e.data.causeConfidence === 'low') {
@@ -316,7 +316,7 @@
                         }
                       </div>
                       @if (cause === 'server') {
-                        <div class="pl-[calc(9rem+6rem+1.5rem)] text-xs text-base-content/50 space-y-0.5">
+                        <div class="pl-[calc(9rem+6rem+1.5rem)] text-sm text-base-content/50 space-y-0.5">
                           @if (stallHints(e); as hints) {
                             <div class="text-warning/80">{{ hints }}</div>
                           }
