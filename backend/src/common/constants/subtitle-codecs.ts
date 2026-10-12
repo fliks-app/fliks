@@ -1,3 +1,4 @@
+import * as path from 'path';
 import { SubtitleStatus } from '../enums';
 import {
   SubtitleFlagsProbe,
@@ -22,6 +23,39 @@ export const IMAGE_BASED_SUBTITLE_CODECS = new Set([
 /** True for bitmap subtitles (PGS, VOBSUB, DVB, XSUB) that need burn-in. */
 export function isImageBasedSubtitleCodec(codec: string | null | undefined): boolean {
   return IMAGE_BASED_SUBTITLE_CODECS.has(codec ?? '');
+}
+
+/** Sidecar extensions the backend converts to WebVTT. */
+export const TEXT_SUBTITLE_EXTENSIONS = new Set([
+  '.srt',
+  '.ass',
+  '.ssa',
+  '.vtt',
+]);
+
+/**
+ * Codec of a bitmap sidecar, null for anything else. A `.sub` is VobSub only
+ * next to its `.idx`; alone it is MicroDVD text, which nothing converts.
+ */
+export function externalImageSubtitleCodec(
+  ext: string,
+  hasIdx: boolean,
+): string | null {
+  if (ext === '.sup') return 'hdmv_pgs_subtitle';
+  return ext === '.sub' && hasIdx ? 'dvd_subtitle' : null;
+}
+
+/** True for a sidecar the player can render as WebVTT (text, convertible format). */
+export function isRenderableTextSidecar(sub: {
+  codec?: string | null;
+  relativePath?: string | null;
+}): boolean {
+  return (
+    !isImageBasedSubtitleCodec(sub.codec) &&
+    TEXT_SUBTITLE_EXTENSIONS.has(
+      path.extname(sub.relativePath ?? '').toLowerCase(),
+    )
+  );
 }
 
 /**

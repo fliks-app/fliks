@@ -35,6 +35,10 @@ import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 import { assertSafeLangSuffix } from './subtitle-path.util';
 import { matchSubtitleVideo } from './subtitle-matching';
 import {
+  TEXT_SUBTITLE_EXTENSIONS,
+  externalImageSubtitleCodec,
+} from '../../common/constants/subtitle-codecs';
+import {
   APP_LANGUAGES,
   ISO_639_2_TO_1,
   normalizeLanguageCode,
@@ -636,9 +640,6 @@ export class SubtitlesService {
     '.vtt',
     '.sub',
     '.sup',
-    '.mks',
-    '.smi',
-    '.sami',
   ]);
 
   private static readonly SKIP_FLAGS = new Set(['default', 'ocr']);
@@ -789,6 +790,13 @@ export class SubtitlesService {
         const ext = path.extname(entry).toLowerCase();
         if (!SubtitlesService.SUBTITLE_EXTS.has(ext)) continue;
 
+        // Only what can render: text we convert, or a bitmap burn-in can read.
+        const imageCodec = externalImageSubtitleCodec(
+          ext,
+          entries.includes(`${path.parse(entry).name}.idx`),
+        );
+        if (!TEXT_SUBTITLE_EXTENSIONS.has(ext) && !imageCodec) continue;
+
         const absPath = path.join(dir, entry);
         const relPath = path.relative(media.path, absPath).replace(/\\/g, '/');
 
@@ -813,7 +821,7 @@ export class SubtitlesService {
           mediaFile: { id: matchedFile.id },
           episode: matchedFile.episodeId ? { id: matchedFile.episodeId } : null,
           language: parsed.language,
-          codec: ext === '.sup' ? 'hdmv_pgs_subtitle' : null,
+          codec: imageCodec,
           forced: parsed.forced,
           hearingImpaired: parsed.hearingImpaired,
           providerType: SubtitleProviderType.DISK,

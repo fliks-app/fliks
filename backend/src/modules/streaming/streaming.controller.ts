@@ -125,6 +125,17 @@ export function withTimestampMap(
   return text.replace(/^(WEBVTT[^\n]*)\n/, `$1\n${map}\n`);
 }
 
+/** The requested audio track if the file has it, else undefined (first track). */
+export function resolveAudioStreamIndex(
+  raw: string | undefined,
+  audioCount: number,
+): number | undefined {
+  const index = raw != null ? Number(raw) : NaN;
+  return Number.isInteger(index) && index >= 0 && index < audioCount
+    ? index
+    : undefined;
+}
+
 /**
  * Asks the plugin, then ACL-gates every candidate through the same `resolveFile` the main item
  * uses, for the same user: a plugin only names an id, it never grants access to one. Answers
@@ -846,8 +857,10 @@ export class StreamingController {
       }
     }
     const audioStreamRaw = firstQueryString(req.query, 'audioStreamIndex');
-    const audioStreamIndex =
-      audioStreamRaw != null ? parseInt(audioStreamRaw, 10) : undefined;
+    const audioStreamIndex = resolveAudioStreamIndex(
+      audioStreamRaw,
+      resolved.mediaFile.streamInfo?.audio?.length ?? 0,
+    );
 
     const ss = await this.getStreamingSettings();
     const user = req.user as User;

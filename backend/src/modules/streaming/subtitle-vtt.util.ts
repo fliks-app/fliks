@@ -152,3 +152,8 @@ export function assToVtt(ass: string): string {
   }
   return `WEBVTT\n\n${cues.join('\n\n')}\n`;
 }
+
+/** A served .vtt as the parsers expect it: no BOM, LF line endings. */
+export function normalizeVtt(vtt: string): string {
+  return vtt.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+}

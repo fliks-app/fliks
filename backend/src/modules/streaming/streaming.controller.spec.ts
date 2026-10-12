@@ -1,6 +1,7 @@
 import {
   StreamingController,
   withTimestampMap,
+  resolveAudioStreamIndex,
   buildVodPlaylist,
   buildVariableVodPlaylist,
   buildIFramePlaylist,
@@ -11,6 +12,7 @@ import {
   gridSegmentIndex,
 } from './transcoding/segment-boundaries';
 import { buildLiveSession, type LiveSession } from './live-session.service';
+import { normalizeVtt } from './subtitle-vtt.util';
 import { realSegmentSeconds } from './transcoding/constants';
 import type { PreRollItem } from '../../common/plugin-contract';
 import type { User } from '../users/entities/user.entity';
@@ -1031,5 +1033,25 @@ describe('StreamingController.hlsSegment - kind refresh', () => {
     );
     const { liveSessions } = await serveSegment('1080p', live);
     expect(liveSessions.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('resolveAudioStreamIndex', () => {
+  it.each([
+    ['1', 2, 1],
+    ['2', 2, undefined],
+    ['-1', 2, undefined],
+    ['abc', 2, undefined],
+    ['0', 0, undefined],
+    [undefined, 2, undefined],
+  ])('%s of %i tracks -> %s', (raw, count, expected) => {
+    expect(resolveAudioStreamIndex(raw, count)).toBe(expected);
+  });
+});
+
+describe('withTimestampMap on a served external .vtt', () => {
+  it('still gets its map once normalized (BOM + CRLF)', () => {
+    const vtt = normalizeVtt('﻿WEBVTT\r\n\r\n00:00.000 --> 00:01.000\r\nhi\r\n');
+    expect(withTimestampMap(vtt, 2)).toMatch(/^WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:180000,/);
   });
 });
