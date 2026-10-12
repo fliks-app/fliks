@@ -10,6 +10,8 @@ import type {
 /** Longest gap between two samples still counted as watched time (3 missed beats). */
 const MAX_WATCH_GAP_MS = 30_000;
 const MIN_SPEED_SAMPLES = 3;
+/** A sample this fresh still describes the buffer at a stall reported without one. */
+const MAX_SAMPLE_AGE_MS = 15_000;
 /** Bounds memory on a multi-hour session. */
 const MAX_KEPT = 200;
 
@@ -67,12 +69,11 @@ export class QoeAggregator {
   private readonly bandwidths: number[] = [];
   private readonly variantBitrates: number[] = [];
   private minBandwidth: number | null = null;
-  private minBuffer: number | null = null;
+  private bufferAheadAt: number | null = null;
   private readonly stallBuffers: number[] = [];
   private readonly stallBandwidths: number[] = [];
   private readonly cmcdMtp: number[] = [];
   private readonly speeds: number[] = [];
-  private readonly sendBps: number[] = [];
   private errorCount = 0;
   private lastErrorAt: number | null = null;
   private lastRecoveryAt: number | null = null;
@@ -110,13 +111,18 @@ export class QoeAggregator {
     }
     if (s.bufferAheadS != null) {
       this.bufferAhead = s.bufferAheadS;
-      this.noteBuffer(s.bufferAheadS);
+      this.bufferAheadAt = now;
     }
   }
 
   addEvent(e: QoeEvent, now: number): void {
     if (e.type === 'stall') {
-      if (e.bufferAheadS != null) push(this.stallBuffers, e.bufferAheadS);
+      const buffer =
+        e.bufferAheadS ??
+        (this.bufferAheadAt != null && now - this.bufferAheadAt <= MAX_SAMPLE_AGE_MS
+          ? this.bufferAhead
+          : null);
+      if (buffer != null) push(this.stallBuffers, buffer);
       if (e.bandwidthBps != null) push(this.stallBandwidths, e.bandwidthBps);
     } else if (e.type === 'error') {
       this.errorCount++;
@@ -130,22 +136,14 @@ export class QoeAggregator {
     if (m.waitedMs != null && m.segmentDurationS > 0) {
       push(this.speeds, (m.segmentDurationS * 1000) / Math.max(m.waitedMs, 1));
     }
-    if (m.bytes != null && m.sendMs != null && m.bytes > 0 && m.sendMs > 0) {
-      push(this.sendBps, (m.bytes * 8000) / m.sendMs);
-    }
   }
 
   addCmcd(c: CmcdSnapshot): void {
     this.cmcdSeen = true;
     if (c.mtp != null) push(this.cmcdMtp, c.mtp * 1000);
-    if (c.bl != null) this.noteBuffer(c.bl / 1000);
     if (c.br != null && this.variantBitrates.length === 0) {
       this.variantBitrate = c.br * 1000;
     }
-  }
-
-  private noteBuffer(s: number): void {
-    this.minBuffer = Math.min(this.minBuffer ?? Infinity, s);
   }
 
   summary(): QoeSessionSummary {
@@ -177,9 +175,7 @@ export class QoeAggregator {
       avgVariantBitrate: avg(this.variantBitrates) ?? this.variantBitrate,
       stallBufferAheadS: median(this.stallBuffers),
       stallBandwidthBps: median(this.stallBandwidths),
-      minBufferAheadS: this.minBuffer,
       cmcdThroughputBps: avg(this.cmcdMtp),
-      serverThroughputBps: median(this.sendBps),
       medianTranscodeSpeed:
         this.speeds.length >= MIN_SPEED_SAMPLES ? median(this.speeds) : null,
       sampleCount: this.sampleCount,

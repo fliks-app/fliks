@@ -25,9 +25,7 @@ const base: QoeSessionSummary = {
   avgVariantBitrate: null,
   stallBufferAheadS: null,
   stallBandwidthBps: null,
-  minBufferAheadS: null,
   cmcdThroughputBps: null,
-  serverThroughputBps: null,
   medianTranscodeSpeed: null,
   sampleCount: 10,
 };
@@ -67,14 +65,9 @@ describe('diagnose', () => {
     ).toMatchObject({ verdict: 'network', confidence: 'low' });
   });
 
-  it('network: server-side throughput only is low confidence', () => {
+  it('network low: starved but the stall carried no buffer report', () => {
     expect(
-      d({
-        ...stalls,
-        stallBufferAheadS: 0,
-        serverThroughputBps: 2_000_000,
-        avgVariantBitrate: 8_000_000,
-      }),
+      d({ ...stalls, avgBandwidthBps: 2_000_000, avgVariantBitrate: 8_000_000 }),
     ).toMatchObject({ verdict: 'network', confidence: 'low' });
   });
 
@@ -82,6 +75,7 @@ describe('diagnose', () => {
     expect(d({ ...stalls, stallBufferAheadS: 0 })).toMatchObject({
       verdict: 'network',
       confidence: 'low',
+      reasons: ['qoe.reason.stalls_starved_no_throughput'],
     });
   });
 

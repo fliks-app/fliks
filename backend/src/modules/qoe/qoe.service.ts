@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MoreThanOrEqual, Repository } from 'typeorm';
-import type { Request, Response } from 'express';
+import type { Request } from 'express';
 import { SettingsService } from '../settings/settings.service';
 import type { LiveSession } from '../streaming/live-session.service';
 import { QoeAggregator } from './core/aggregate';
@@ -57,7 +57,9 @@ interface Tracker {
   dirty: boolean;
   endedAt: number | null;
   touchedAt: number;
-  flushing: boolean;
+  flushing: Promise<void> | null;
+  /** A flush was requested while one was in flight. */
+  flushAgain: boolean;
 }
 
 export interface QoeLiveSummary extends QoeDiagnosis {
@@ -101,6 +103,8 @@ const VERDICTS: QoeVerdict[] = [
   'error',
   'unknown',
 ];
+
+const clampInt = (n: number) => Math.min(Math.max(Math.round(n), 0), 2 ** 31 - 1);
 
 const droppedPct = (dropped: number | null, decoded: number | null) =>
   dropped != null && decoded ? (dropped / decoded) * 100 : null;
@@ -169,11 +173,10 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Reads CMCD off the request and times the send; the caller measured `waitedMs`. */
+  /** Reads CMCD off the request; the caller measured `waitedMs` for the segment to be produced. */
   observeSegment(
     session: SessionRef | null,
     req: Request,
-    res: Response,
     segmentDurationS: number,
     waitedMs: number | null,
   ): void {
@@ -182,17 +185,9 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     if (!t) return;
     const cmcd = readCmcd(req);
     if (cmcd) t.agg.addCmcd(cmcd);
-    const startedAt = Date.now();
-    const written0 = res.socket?.bytesWritten ?? 0;
-    res.once('finish', () => {
-      const bytes = (res.socket?.bytesWritten ?? written0) - written0;
-      t.agg.addSegment({
-        segmentDurationS,
-        waitedMs: waitedMs != null && waitedMs >= MIN_WAIT_MS ? waitedMs : null,
-        bytes: bytes > 0 ? bytes : null,
-        sendMs: Date.now() - startedAt,
-      });
-      t.dirty = true;
+    t.agg.addSegment({
+      segmentDurationS,
+      waitedMs: waitedMs != null && waitedMs >= MIN_WAIT_MS ? waitedMs : null,
     });
   }
 
@@ -207,7 +202,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
       stallMs: s.stallMs,
       droppedPct: droppedPct(s.droppedFrames, s.decodedFrames),
       bandwidthBps:
-        s.bandwidthBps ?? s.cmcdThroughputBps ?? s.serverThroughputBps,
+        s.bandwidthBps ?? s.cmcdThroughputBps,
       variantBitrate: s.variantBitrate,
       bufferAheadS: s.bufferAheadS,
       hwDecoder: s.hwDecoder,
@@ -241,7 +236,8 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
         dirty: false,
         endedAt: null,
         touchedAt: 0,
-        flushing: false,
+        flushing: null,
+        flushAgain: false,
       };
       this.trackers.set(session.sessionId, t);
     }
@@ -262,21 +258,36 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async flush(t: Tracker): Promise<void> {
-    if (!t.dirty || t.flushing) return;
-    t.flushing = true;
+  /** Resolves once everything dirty at call time is written; a call during a flush re-flushes after it. */
+  private flush(t: Tracker): Promise<void> {
+    if (t.flushing) {
+      t.flushAgain = true;
+      return t.flushing;
+    }
+    if (!t.dirty) return Promise.resolve();
     t.dirty = false;
     const events = t.pendingEvents.splice(0);
-    try {
-      await this.sessions.upsert(this.toRow(t), ['sessionId']);
-      if (events.length) await this.events.insert(events);
-    } catch (e) {
-      this.log.warn(
-        `qoe flush failed for ${t.session.sessionId}: ${(e as Error).message}`,
-      );
-    } finally {
-      t.flushing = false;
-    }
+    const run = async (): Promise<void> => {
+      try {
+        await this.sessions.upsert(this.toRow(t), ['sessionId']);
+        if (events.length) await this.events.insert(events);
+      } catch (e) {
+        // bounded by the per-session event cap
+        t.pendingEvents.unshift(...events);
+        t.dirty = true;
+        this.log.warn(
+          `qoe flush failed for ${t.session.sessionId}: ${(e as Error).message}`,
+        );
+      } finally {
+        t.flushing = null;
+      }
+      if (t.flushAgain) {
+        t.flushAgain = false;
+        await this.flush(t);
+      }
+    };
+    t.flushing = run();
+    return t.flushing;
   }
 
   private toRow(t: Tracker): PlaybackQoeSession {
@@ -304,16 +315,16 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
       height: s.height,
       decoderName: s.decoderName,
       hwDecoder: s.hwDecoder,
-      watchedMs: Math.round(s.watchedMs),
-      stallCount: s.stallCount,
-      stallMs: Math.round(s.stallMs),
-      droppedFrames: s.droppedFrames,
-      decodedFrames: s.decodedFrames,
+      watchedMs: clampInt(s.watchedMs),
+      stallCount: clampInt(s.stallCount),
+      stallMs: clampInt(s.stallMs),
+      droppedFrames: s.droppedFrames == null ? null : clampInt(s.droppedFrames),
+      decodedFrames: s.decodedFrames == null ? null : clampInt(s.decodedFrames),
       avgBandwidthBps: s.avgBandwidthBps,
       minBandwidthBps: s.minBandwidthBps,
       avgVariantBitrate: s.avgVariantBitrate,
-      recoveryReloads: s.recoveryReloads,
-      errorCount: s.errorCount,
+      recoveryReloads: clampInt(s.recoveryReloads),
+      errorCount: clampInt(s.errorCount),
       medianTranscodeSpeed: s.medianTranscodeSpeed,
       verdict: d.verdict,
       confidence: d.confidence,
@@ -422,6 +433,6 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
   }
 
   private since(days: number): Date {
-    return new Date(Date.now() - Math.max(days, 0) * 86_400_000);
+    return new Date(Date.now() - Math.min(Math.max(days, 1), 3650) * 86_400_000);
   }
 }

@@ -25,9 +25,6 @@ function throughput(
   if (s.cmcdThroughputBps != null) {
     return { bps: s.cmcdThroughputBps, source: 'cmcd' };
   }
-  if (s.serverThroughputBps != null) {
-    return { bps: s.serverThroughputBps, source: 'server' };
-  }
   return null;
 }
 
@@ -69,8 +66,8 @@ export function diagnose(s: QoeSessionSummary): QoeDiagnosis {
     ) {
       return result('server', 'high', 'stalls_server_slow');
     }
-    // A stall with no buffer report is a starved buffer by definition.
-    const buffer = s.stallBufferAheadS ?? s.minBufferAheadS;
+    // A stall with no buffer report counts as starved, but only at low confidence.
+    const buffer = s.stallBufferAheadS;
     const starved = buffer == null || buffer < STARVED_BUFFER_S;
     if (starved) {
       const tp = throughput(s);
@@ -78,8 +75,7 @@ export function diagnose(s: QoeSessionSummary): QoeDiagnosis {
       if (tp == null || bitrate == null) {
         return result('network', 'low', 'stalls_starved_no_throughput');
       }
-      const confidence =
-        tp.source !== 'server' && s.stallBufferAheadS != null ? 'high' : 'low';
+      const confidence = buffer != null ? 'high' : 'low';
       if (tp.bps < BANDWIDTH_HEADROOM * bitrate) {
         return result('network', confidence, 'stalls_starved_low_throughput');
       }

@@ -34,19 +34,39 @@ describe('parseSample', () => {
   });
 });
 
+describe('parseSample integers', () => {
+  it('rounds fractions and clamps values an int column cannot hold', () => {
+    const s = parseSample({
+      engine: 'mpv',
+      width: 1919.6,
+      height: 1e12,
+      droppedFrames: 3.4,
+      stallCount: 2 ** 40,
+    });
+    expect(s).toMatchObject({
+      width: 1920,
+      height: 2 ** 31 - 1,
+      droppedFrames: 3,
+      stallCount: 2 ** 31 - 1,
+    });
+  });
+});
+
 describe('parseEvents', () => {
   it('filters invalid events and caps the batch', () => {
     const many = Array.from({ length: 80 }, () => ({ type: 'stall', at: 1 }));
     expect(parseEvents(many)).toHaveLength(MAX_EVENTS_PER_REQUEST);
-    expect(
-      parseEvents([
-        { type: 'bogus', at: 1 },
-        { type: 'stall' },
-        { type: 'stall', at: -3 },
-        'x',
-      ]),
-    ).toEqual([]);
+    expect(parseEvents([{ type: 'bogus', at: 1 }, 'x'])).toEqual([]);
     expect(parseEvents({})).toEqual([]);
+  });
+
+  it('replaces an implausible client clock with the receive time', () => {
+    const now = 1_700_000_000_000;
+    const at = (v: unknown) => parseEvents([{ type: 'stall', at: v }], now)[0].at;
+    expect(at(now - 3_600_000)).toBe(now - 3_600_000);
+    expect(at(1)).toBe(now);
+    expect(at(now + 2 * 86_400_000)).toBe(now);
+    expect(at(undefined)).toBe(now);
   });
 
   it('keeps typed fields only', () => {
@@ -54,7 +74,7 @@ describe('parseEvents', () => {
       parseEvents([
         {
           type: 'error',
-          at: 5,
+          at: Date.now(),
           position: 'x',
           code: 3016,
           message: 'm'.repeat(1000),
@@ -66,7 +86,7 @@ describe('parseEvents', () => {
     ).toEqual([
       {
         type: 'error',
-        at: 5,
+        at: expect.any(Number),
         position: null,
         code: 3016,
         message: 'm'.repeat(300),

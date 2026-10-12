@@ -15,6 +15,9 @@ import { QoeService } from './qoe.service';
 
 const VERDICTS = new Set(['ok', 'network', 'device', 'server', 'error', 'unknown']);
 
+const days = (v?: string): number =>
+  Math.min(Math.max(int(v) ?? 7, 1), 3650);
+
 const int = (v?: string): number | undefined => {
   const n = Number(v);
   return v != null && v !== '' && Number.isFinite(n) ? Math.trunc(n) : undefined;
@@ -28,7 +31,7 @@ export class QoeAdminController {
   @Get('sessions')
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
   sessions(
-    @Query('days') days?: string,
+    @Query('days') daysRaw?: string,
     @Query('verdict') verdict?: string,
     @Query('userId') userId?: string,
     @Query('device') device?: string,
@@ -36,7 +39,7 @@ export class QoeAdminController {
     @Query('offset') offset?: string,
   ) {
     return this.qoe.listSessions({
-      days: int(days),
+      days: days(daysRaw),
       verdict: verdict && VERDICTS.has(verdict) ? (verdict as QoeVerdict) : undefined,
       userId: int(userId),
       device: device || undefined,
@@ -55,7 +58,7 @@ export class QoeAdminController {
 
   @Get('summary')
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
-  summary(@Query('days') days?: string) {
-    return this.qoe.summary(int(days) ?? 7);
+  summary(@Query('days') daysRaw?: string) {
+    return this.qoe.summary(days(daysRaw));
   }
 }

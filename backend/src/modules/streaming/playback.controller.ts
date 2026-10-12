@@ -364,7 +364,7 @@ export class PlaybackController {
     @Body() body: { events?: unknown },
   ): void {
     const user = req.user as User;
-    const live = this.liveSessions.get(sessionId);
+    const live = this.liveSessions.peek(sessionId);
     if (!live || !this.qoe.enabled) return;
     if (live.userId !== user.id && live.attributedUserId !== user.id) {
       throw new ForbiddenException('Not your session');

@@ -24,6 +24,15 @@ const isObj = (v: unknown): v is Record<string, unknown> =>
 const num = (v: unknown): number | null =>
   typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null;
 
+const INT_MAX = 2 ** 31 - 1;
+const DAY_MS = 86_400_000;
+
+/** For integer DB columns: a fraction or huge value would make every upsert throw. */
+const int = (v: unknown): number | null => {
+  const n = num(v);
+  return n == null ? null : Math.min(Math.round(n), INT_MAX);
+};
+
 const str = (v: unknown, max: number): string | null =>
   typeof v === 'string' && v ? v.slice(0, max) : null;
 
@@ -36,33 +45,33 @@ export function parseSample(raw: unknown): QoeSample | null {
   return {
     engine: raw.engine as QoeEngine,
     cmcd: raw.cmcd === true,
-    droppedFrames: num(raw.droppedFrames),
-    decodedFrames: num(raw.decodedFrames),
+    droppedFrames: int(raw.droppedFrames),
+    decodedFrames: int(raw.decodedFrames),
     bandwidthBps: num(raw.bandwidthBps),
     bufferAheadS: num(raw.bufferAheadS),
     variantBitrate: num(raw.variantBitrate),
-    width: num(raw.width),
-    height: num(raw.height),
+    width: int(raw.width),
+    height: int(raw.height),
     videoCodec: str(raw.videoCodec, 64),
     decoderName: str(raw.decoderName, 128),
     hwDecoder: bool(raw.hwDecoder),
-    stallCount: num(raw.stallCount) ?? 0,
-    stallMs: num(raw.stallMs) ?? 0,
-    recoveryReloads: num(raw.recoveryReloads) ?? 0,
+    stallCount: int(raw.stallCount) ?? 0,
+    stallMs: int(raw.stallMs) ?? 0,
+    recoveryReloads: int(raw.recoveryReloads) ?? 0,
   };
 }
 
 /** Valid events from a request body, at most {@link MAX_EVENTS_PER_REQUEST}. */
-export function parseEvents(raw: unknown): QoeEvent[] {
+export function parseEvents(raw: unknown, now = Date.now()): QoeEvent[] {
   if (!Array.isArray(raw)) return [];
   const out: QoeEvent[] = [];
   for (const e of raw.slice(0, MAX_EVENTS_PER_REQUEST)) {
     if (!isObj(e) || !EVENT_TYPES.includes(e.type as QoeEventType)) continue;
-    const at = num(e.at);
-    if (at == null) continue;
+    const clientAt = num(e.at);
     const ev: QoeEvent = {
       type: e.type as QoeEventType,
-      at,
+      at:
+        clientAt != null && Math.abs(clientAt - now) <= DAY_MS ? clientAt : now,
       position: num(e.position),
     };
     const durationMs = num(e.durationMs);

@@ -523,10 +523,9 @@ export class StreamingController {
     });
   }
 
-  /** QoE: CMCD off the request, send timing, and how long the segment took to be produced. */
+  /** QoE: CMCD off the request and how long the segment took to be produced. */
   private observeSegment(
     req: Request,
-    res: Response,
     live: LiveSession | null | undefined,
     session: { segmentDuration?: number; sourceFps?: number },
     segment: string,
@@ -536,7 +535,6 @@ export class StreamingController {
     this.qoe.observeSegment(
       live,
       req,
-      res,
       realSegmentSeconds(this.segDur(session), session.sourceFps),
       waitedMs,
     );
@@ -2088,7 +2086,7 @@ export class StreamingController {
       }
     }
 
-    this.observeSegment(req, res, live, videoSession, segment, Date.now() - waitStart);
+    this.observeSegment(req, live, videoSession, segment, Date.now() - waitStart);
     // A remux rendition is already assembled onto the served timeline
     // (`RemuxSegmentAssembler`); re-anchoring it here would shift it twice.
     await this.serveFrom(res, segPath, segment, videoSession, videoSession.quality === 'remux');
@@ -2342,7 +2340,7 @@ export class StreamingController {
           return;
         }
         existing.lastAccess = Date.now();
-        this.observeSegment(req, res, live, existing, segment, null);
+        this.observeSegment(req, live, existing, segment, null);
         // Remux is cut on source keyframes, off the grid.
         await this.serveFrom(res, segPath, segment, existing, quality === 'remux');
         return;
@@ -2422,7 +2420,7 @@ export class StreamingController {
             sendTransientUnavailable(res);
             return;
           }
-          this.observeSegment(req, res, live, earlySession, segment, Date.now() - waitStart);
+          this.observeSegment(req, live, earlySession, segment, Date.now() - waitStart);
           await this.serveFrom(res, segPath, segment, earlySession);
           return;
         }
@@ -2491,7 +2489,7 @@ export class StreamingController {
       sendTransientUnavailable(res);
       return;
     }
-    this.observeSegment(req, res, live, session, segment, waitedMs);
+    this.observeSegment(req, live, session, segment, waitedMs);
     // Remux is cut on source keyframes, off the grid; the early-probe
     // paths never run for remux (gated on quality !== 'remux').
     await this.serveFrom(res, segPath, segment, session, quality === 'remux');

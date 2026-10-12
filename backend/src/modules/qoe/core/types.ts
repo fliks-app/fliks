@@ -68,16 +68,14 @@ export interface CmcdSnapshot {
   su?: boolean;
 }
 
-/** One served segment: how long the request waited for ffmpeg, and the send. */
+/** One served segment: how long the request waited for ffmpeg to produce it. */
 export interface SegmentMetric {
   segmentDurationS: number;
   /** Null when the segment was already on disk (no wait to measure). */
   waitedMs: number | null;
-  bytes: number | null;
-  sendMs: number | null;
 }
 
-export type ThroughputSource = 'engine' | 'cmcd' | 'server';
+export type ThroughputSource = 'engine' | 'cmcd';
 
 export interface QoeSessionSummary {
   engine: QoeEngine | null;
@@ -106,12 +104,8 @@ export interface QoeSessionSummary {
   /** Medians over the stall events that reported them. */
   stallBufferAheadS: number | null;
   stallBandwidthBps: number | null;
-  /** Lowest buffer-ahead seen on any sample or CMCD report. */
-  minBufferAheadS: number | null;
   /** CMCD `mtp` average converted to bps. */
   cmcdThroughputBps: number | null;
-  /** Median bytes*8 / send time over served segments. */
-  serverThroughputBps: number | null;
   /** Median of segment duration / wait; null below the sample floor. */
   medianTranscodeSpeed: number | null;
   /** Samples received, i.e. the engine reports anything at all. */

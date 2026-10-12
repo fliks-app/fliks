@@ -58,7 +58,6 @@ describe('QoeAggregator', () => {
       minBandwidthBps: 2e6,
       avgVariantBitrate: 8e6,
       bufferAheadS: 0.5,
-      minBufferAheadS: 0.5,
     });
   });
 
@@ -88,19 +87,13 @@ describe('QoeAggregator', () => {
 
   it('derives transcode speed only from waited segments and past the sample floor', () => {
     const a = new QoeAggregator();
-    const seg = (waitedMs: number | null) => ({
-      segmentDurationS: 3,
-      waitedMs,
-      bytes: 1_000_000,
-      sendMs: 1000,
-    });
+    const seg = (waitedMs: number | null) => ({ segmentDurationS: 3, waitedMs });
     a.addSegment(seg(6000));
     a.addSegment(seg(null));
     a.addSegment(seg(6000));
     expect(a.summary().medianTranscodeSpeed).toBeNull();
     a.addSegment(seg(6000));
     expect(a.summary().medianTranscodeSpeed).toBeCloseTo(0.5);
-    expect(a.summary().serverThroughputBps).toBe(8_000_000);
   });
 
   it('folds cmcd in bps and seconds', () => {
@@ -109,8 +102,18 @@ describe('QoeAggregator', () => {
     expect(a.summary()).toMatchObject({
       cmcd: true,
       cmcdThroughputBps: 25_400_000,
-      minBufferAheadS: 2.1,
       variantBitrate: 3_000_000,
     });
+  });
+
+  it('fills a stall buffer from a fresh sample, not from a stale one', () => {
+    const a = new QoeAggregator();
+    a.addSample(sample({ bufferAheadS: 0.3 }), 100_000);
+    a.addEvent({ type: 'stall', at: 1, position: 1 }, 105_000);
+    expect(a.summary().stallBufferAheadS).toBe(0.3);
+    const b = new QoeAggregator();
+    b.addSample(sample({ bufferAheadS: 0.3 }), 0);
+    b.addEvent({ type: 'stall', at: 1, position: 1 }, 60_000);
+    expect(b.summary().stallBufferAheadS).toBeNull();
   });
 });

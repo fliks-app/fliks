@@ -138,7 +138,7 @@ describe('PlaybackController.postQoeEvents', () => {
     const controller = Object.create(PlaybackController.prototype) as PlaybackController;
     const recordEvents = jest.fn();
     Object.assign(controller, {
-      liveSessions: { get: () => live },
+      liveSessions: { peek: () => live },
       qoe: { enabled, recordEvents },
     });
     return { controller, recordEvents };
@@ -149,7 +149,7 @@ describe('PlaybackController.postQoeEvents', () => {
     const { controller, recordEvents } = build({ userId: 7, attributedUserId: null });
     controller.postQoeEvents(req, 's', body);
     expect(recordEvents).toHaveBeenCalledWith(expect.anything(), [
-      { type: 'stall', at: 1, position: null },
+      { type: 'stall', at: expect.any(Number), position: null },
     ]);
   });
 

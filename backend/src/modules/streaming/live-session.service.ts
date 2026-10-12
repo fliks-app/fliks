@@ -557,6 +557,11 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
     return this.sessions.delete(sessionId);
   }
 
+  /** Live session only: unlike {@link get}, never revives a tombstone. */
+  peek(sessionId: string): LiveSession | null {
+    return this.sessions.get(sessionId) ?? null;
+  }
+
   /** Lookup by id without mutating lastBeat. Revives a tombstoned sid. */
   get(sessionId: string): LiveSession | null {
     return this.resolve(sessionId);

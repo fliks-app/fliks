@@ -1,4 +1,3 @@
-import { EventEmitter } from 'events';
 import { QoeService } from './qoe.service';
 import { SessionRouter } from '../streaming/services/session-router.service';
 import type { QoeSample } from './core/types';
@@ -78,25 +77,44 @@ describe('QoeService', () => {
     expect(svc.liveSummary('s1')).toBeNull();
   });
 
-  it('times the send and reads CMCD off a segment request', () => {
+  it('reads CMCD off a segment request', () => {
     const { svc } = build();
-    const res = new EventEmitter() as unknown as import('express').Response;
-    (res as unknown as { socket: { bytesWritten: number } }).socket = {
-      bytesWritten: 0,
-    };
     svc.observeSegment(
       session,
       { query: { CMCD: 'mtp=20000,bl=3000' }, headers: {} } as never,
-      res,
       3,
       null,
     );
-    (res as unknown as { socket: { bytesWritten: number } }).socket.bytesWritten = 1_000_000;
-    res.emit('finish');
     expect(svc.liveSummary('s1')).toMatchObject({
       cmcd: true,
       bandwidthBps: 20_000_000,
     });
+  });
+
+  it('requeues events when a flush fails and retries them', async () => {
+    const { svc, upsert, insert } = build();
+    upsert.mockRejectedValueOnce(new Error('db down'));
+    svc.recordEvents(session, [{ type: 'stall', at: 1, position: 1 }]);
+    await (svc as unknown as { sweep(): Promise<void> }).sweep();
+    expect(insert).not.toHaveBeenCalled();
+    await (svc as unknown as { sweep(): Promise<void> }).sweep();
+    expect(insert.mock.calls[0][0]).toHaveLength(1);
+  });
+
+  it('never drops a final flush requested while one is in flight', async () => {
+    const { svc, upsert } = build();
+    let release!: () => void;
+    upsert.mockImplementationOnce(
+      () => new Promise<void>((r) => (release = r)),
+    );
+    svc.recordSample(session, sample);
+    const sweeping = (svc as unknown as { sweep(): Promise<void> }).sweep();
+    svc.sessionEnded(session, true);
+    release();
+    await sweeping;
+    await new Promise((r) => setImmediate(r));
+    expect(upsert).toHaveBeenCalledTimes(2);
+    expect(upsert.mock.calls[1][0].endedAt).toEqual(expect.any(Date));
   });
 });
 
