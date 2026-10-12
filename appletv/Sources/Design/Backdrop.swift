@@ -36,6 +36,8 @@ struct BackdropView: View {
                 .opacity(0.35)
             LinearGradient(colors: [.black.opacity(0.3), .black.opacity(0.85)],
                            startPoint: .top, endPoint: .bottom)
+            // Brand tint over the darkened art, so the shell reads Fliks-purple rather than grey.
+            Color.fliks("primary").opacity(0.15)
         }
         .ignoresSafeArea()
     }
