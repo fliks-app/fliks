@@ -124,3 +124,46 @@ describe('TizenEngine seek and audio state', () => {
     expect(populate(new TizenEngine())[0].selected).toBe(true);
   });
 });
+
+describe('TizenEngine.getQoeSample', () => {
+  afterEach(() => {
+    delete (window as unknown as { webapis?: unknown }).webapis;
+    delete (globalThis as unknown as { webapis?: unknown }).webapis;
+  });
+
+  it('reads bandwidth and the video stream info', async () => {
+    stubAvplay({
+      getStreamingProperty: () => '8000000',
+      getCurrentStreamInfo: () => [
+        { type: 'AUDIO', index: 1, extra_info: '{}' },
+        { type: 'VIDEO', index: 0, extra_info: '{"fourCC":"hvc1","Width":"3840","Height":"2160","Bit_rate":"15000000"}' },
+      ],
+    });
+    expect(await new TizenEngine().getQoeSample()).toMatchObject({
+      engine: 'avplay',
+      cmcd: false,
+      droppedFrames: null,
+      bandwidthBps: 8000000,
+      variantBitrate: 15000000,
+      width: 3840,
+      height: 2160,
+      videoCodec: 'hvc1',
+      hwDecoder: true,
+    });
+  });
+
+  it('nulls what AVPlay refuses or garbles', async () => {
+    stubAvplay({
+      getStreamingProperty: () => {
+        throw new Error('InvalidStateError');
+      },
+      getCurrentStreamInfo: () => [{ type: 'VIDEO', index: 0, extra_info: 'not json' }],
+    });
+    expect(await new TizenEngine().getQoeSample()).toMatchObject({
+      bandwidthBps: null,
+      variantBitrate: null,
+      width: null,
+      videoCodec: null,
+    });
+  });
+});
