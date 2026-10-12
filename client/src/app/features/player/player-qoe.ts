@@ -64,6 +64,52 @@ export class StallTracker {
   }
 }
 
+/** The playhead did not move for this long while it should have. */
+export const FROZEN_AFTER_MS = 1_000;
+/** A tick this late means the process was frozen (sleep), not the playhead. */
+const MAX_TICK_GAP_MS = 3_000;
+
+/** Detects a playhead frozen while it should advance, even when the engine never says `buffering`. */
+export class PlayheadWatch {
+  /** Start of the frozen episode, 0 when none. */
+  frozenSince = 0;
+  private lastPos = -1;
+  private lastAdvanceAt: number;
+  private lastTickAt: number;
+
+  constructor(now = Date.now()) {
+    this.lastAdvanceAt = this.lastTickAt = now;
+  }
+
+  reset(now = Date.now()): void {
+    this.frozenSince = 0;
+    this.lastPos = -1;
+    this.lastAdvanceAt = this.lastTickAt = now;
+  }
+
+  /** `active`: the viewer should be seeing the playhead move. */
+  tick(pos: number, active: boolean, now = Date.now()): void {
+    const gapOk = now - this.lastTickAt < MAX_TICK_GAP_MS;
+    this.lastTickAt = now;
+    if (!active || !gapOk || Math.abs(pos - this.lastPos) >= 0.05) {
+      this.lastAdvanceAt = now;
+      this.frozenSince = 0;
+    } else if (!this.frozenSince && now - this.lastAdvanceAt >= FROZEN_AFTER_MS) {
+      this.frozenSince = this.lastAdvanceAt;
+    }
+    this.lastPos = pos;
+  }
+
+  /** The engine stopped buffering but the playhead never moved: keep the episode open from its start. */
+  carryOver(now: number, startAt: number, startPos: number, pos: number): boolean {
+    this.lastAdvanceAt = now;
+    if (this.frozenSince || now - startAt < MIN_STALL_MS || Math.abs(pos - startPos) >= 0.05) return false;
+    this.lastPos = pos;
+    this.frozenSince = startAt;
+    return true;
+  }
+}
+
 /** Per-playback QoE state owned by the player: counters, events and the heartbeat sample. */
 export class PlayerQoe {
   private readonly stalls = new StallTracker();

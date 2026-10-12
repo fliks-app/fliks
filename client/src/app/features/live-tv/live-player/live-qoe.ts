@@ -1,10 +1,9 @@
 import type { PlaybackEngine, PlaybackState, QoeSample } from '../../../core/services/playback-engine/playback-engine';
 import type { QoeReporter } from '../../../core/services/qoe-reporter.service';
-import { PlayerQoe } from '../../player/player-qoe';
+import { PlayerQoe, PlayheadWatch } from '../../player/player-qoe';
 
 export const LIVE_HEARTBEAT_MS = 10_000;
 const TICK_MS = 1_000;
-const FROZEN_AFTER_MS = 1_000;
 const SEEK_GRACE_MS = 2_000;
 
 /** Stall accounting and the QoE heartbeat of one live channel tune-in. */
@@ -16,12 +15,9 @@ export class LiveQoe {
   private started = false;
   private buffering = false;
   private paused = false;
-  private frozenSince = 0;
-  private lastPos = -1;
-  private lastAdvanceAt = 0;
+  private readonly watch = new PlayheadWatch();
   private lastSeekAt = 0;
   private lastBeatAt = 0;
-  private lastWatchAt = 0;
 
   constructor(
     reporter: QoeReporter,
@@ -37,9 +33,8 @@ export class LiveQoe {
     this.sid = sessionId;
     this.engine = engine;
     this.started = this.buffering = this.paused = false;
-    this.frozenSince = 0;
-    this.lastPos = -1;
-    this.lastAdvanceAt = this.lastBeatAt = this.lastWatchAt = Date.now();
+    this.lastBeatAt = Date.now();
+    this.watch.reset(this.lastBeatAt);
     this.timer = setInterval(() => this.tick(), TICK_MS);
   }
 
@@ -96,17 +91,8 @@ export class LiveQoe {
   private tick(): void {
     const now = Date.now();
     const pos = this.engine?.()?.currentTime ?? 0;
-    // A tick that comes back late means the process was frozen (laptop sleep): not a frozen playhead.
-    const gapOk = now - this.lastWatchAt < 3_000;
-    this.lastWatchAt = now;
-    const active = gapOk && this.started && !this.paused && !(typeof document !== 'undefined' && document.hidden);
-    if (!active || Math.abs(pos - this.lastPos) >= 0.05) {
-      this.lastAdvanceAt = now;
-      this.frozenSince = 0;
-    } else if (!this.frozenSince && now - this.lastAdvanceAt >= FROZEN_AFTER_MS) {
-      this.frozenSince = this.lastAdvanceAt;
-    }
-    this.lastPos = pos;
+    const active = this.started && !this.paused && !(typeof document !== 'undefined' && document.hidden);
+    this.watch.tick(pos, active, now);
     this.syncStall();
     if (now - this.lastBeatAt < LIVE_HEARTBEAT_MS) return;
     this.lastBeatAt = now;
@@ -118,12 +104,12 @@ export class LiveQoe {
   }
 
   private syncStall(): void {
-    const stalled = !this.paused && ((this.buffering && this.started) || this.frozenSince > 0);
+    const stalled = !this.paused && ((this.buffering && this.started) || this.watch.frozenSince > 0);
     this.qoe.setStalled(stalled, {
       sessionId: this.sid,
       position: this.engine?.()?.currentTime ?? 0,
       ignored: Date.now() - this.lastSeekAt < SEEK_GRACE_MS,
-      since: this.frozenSince || undefined,
+      since: this.watch.frozenSince || undefined,
     });
   }
 }

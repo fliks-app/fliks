@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PlayerQoe, SAMPLE_TIMEOUT_MS, StallTracker } from './player-qoe';
+import { PlayerQoe, PlayheadWatch, SAMPLE_TIMEOUT_MS, StallTracker } from './player-qoe';
 import type { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
 import type { QoeReporter } from '../../core/services/qoe-reporter.service';
 
@@ -37,6 +37,37 @@ describe('StallTracker', () => {
     const t = new StallTracker();
     t.begin(1000, 0, false);
     expect(t.snapshot(1800)).toEqual({ stallCount: 1, stallMs: 800 });
+  });
+});
+
+describe('PlayheadWatch', () => {
+  it('flags a playhead that stayed put for a second, from the last advance', () => {
+    const w = new PlayheadWatch(0);
+    w.tick(5, true, 250);
+    w.tick(5, true, 500);
+    expect(w.frozenSince).toBe(0);
+    w.tick(5, true, 1_500);
+    expect(w.frozenSince).toBe(250);
+    w.tick(6, true, 1_750);
+    expect(w.frozenSince).toBe(0);
+  });
+
+  it('never flags an inactive playhead, nor a tick that came back late', () => {
+    const w = new PlayheadWatch(0);
+    w.tick(5, false, 250);
+    w.tick(5, false, 2_000);
+    expect(w.frozenSince).toBe(0);
+    w.tick(5, true, 2_250);
+    w.tick(5, true, 9_000);
+    expect(w.frozenSince).toBe(0);
+  });
+
+  it('keeps a buffering episode open when the playhead never moved', () => {
+    const w = new PlayheadWatch(0);
+    expect(w.carryOver(2_000, 1_000, 5, 5)).toBe(true);
+    expect(w.frozenSince).toBe(1_000);
+    expect(new PlayheadWatch(0).carryOver(2_000, 1_900, 5, 5)).toBe(false);
+    expect(new PlayheadWatch(0).carryOver(2_000, 1_000, 5, 6)).toBe(false);
   });
 });
 

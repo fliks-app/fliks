@@ -58,7 +58,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 
 import type { AudioTrack, PlaybackEngine, QoeSample } from '../../core/services/playback-engine/playback-engine';
 import { QoeReporter } from '../../core/services/qoe-reporter.service';
-import { MIN_STALL_MS, PlayerQoe } from './player-qoe';
+import { PlayerQoe, PlayheadWatch } from './player-qoe';
 import {
   createEngineSurface,
   releaseEngineSurface,
@@ -2713,10 +2713,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.bufferStartAt = Date.now();
         this.bufferStartPos = pos;
       } else if (this.wasBuffering && !buffering) {
-        this.lastAdvanceAt = Date.now();
         // Still frozen once the engine calls it over: keep one episode open until the playhead moves.
-        if (!frozenSince && Date.now() - this.bufferStartAt >= MIN_STALL_MS && Math.abs(pos - this.bufferStartPos) < 0.05) {
-          this.lastTickPos = pos;
+        if (this.playheadWatch.carryOver(Date.now(), this.bufferStartAt, this.bufferStartPos, pos)) {
           this.frozenSince.set(this.bufferStartAt);
           frozenSince = this.bufferStartAt;
         }
@@ -2729,13 +2727,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Playhead frozen while it should advance, even when the engine never said `buffering`. */
   private readonly frozenSince = signal(0);
-  private lastTickPos = -1;
-  private lastAdvanceAt = 0;
+  private readonly playheadWatch = new PlayheadWatch(0);
   private wasBuffering = false;
   private bufferStartAt = 0;
   private bufferStartPos = 0;
-  private lastWatchAt = 0;
-
   private watchPlayhead(): void {
     const now = Date.now();
     const pos = this.engine?.currentTime ?? 0;
@@ -2751,16 +2746,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       !this.state.error() &&
       !this.castService.isConnected() &&
       !(typeof document !== 'undefined' && document.hidden) &&
-      !(dur && pos >= dur - 0.5) &&
-      now - this.lastWatchAt < 3_000;
-    this.lastWatchAt = now;
-    if (!active || Math.abs(pos - this.lastTickPos) >= 0.05) {
-      this.lastAdvanceAt = now;
-      this.frozenSince.set(0);
-    } else if (!this.frozenSince() && now - this.lastAdvanceAt >= 1_000) {
-      this.frozenSince.set(this.lastAdvanceAt);
-    }
-    this.lastTickPos = pos;
+      !(dur && pos >= dur - 0.5);
+    this.playheadWatch.tick(pos, active, now);
+    this.frozenSince.set(this.playheadWatch.frozenSince);
   }
 
   private trackStall(stalled: boolean, since?: number): void {
