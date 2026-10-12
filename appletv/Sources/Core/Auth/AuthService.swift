@@ -86,6 +86,11 @@ import Foundation
         try await api.get("/api/auth/me")
     }
 
+    /// Whether the server advertises a capability flag; false until a live response confirms it.
+    func hasServerFeature(_ feature: String) -> Bool {
+        currentUser?.features?.contains(feature) ?? false
+    }
+
     // MARK: - Password login
 
     @MainActor

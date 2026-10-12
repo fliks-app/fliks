@@ -242,7 +242,7 @@ private struct SkipCueStyle: ButtonStyle {
 
         let url = try await playback.start(
             mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId,
-            startAt: startAt, audioStreams: currentFileInfo?.audio
+            startAt: startAt, streamInfo: currentFileInfo, subtitleRows: externalSubtitles
         )
         let item = AVPlayerItem(url: url)
         let p = AVPlayer(playerItem: item)
@@ -340,7 +340,7 @@ private struct SkipCueStyle: ButtonStyle {
         resolveNextEpisode()
         guard let url = try? await playback.start(
             mediaFileId: next.mediaFileId, mediaId: mediaId, episodeId: next.episodeId,
-            startAt: 0, audioStreams: currentFileInfo?.audio
+            startAt: 0, streamInfo: currentFileInfo, subtitleRows: externalSubtitles
         ) else { return }
         reload(url: url, position: 0)
     }
@@ -654,13 +654,9 @@ private struct SkipCueStyle: ButtonStyle {
         return .option(index)
     }
 
-    /// Native HLS `SUBTITLES` renditions surface as an `AVMediaSelectionGroup`
-    /// — pick from it, no extra network call:
-    ///   - off: nothing selected, and AVFoundation's own heuristic disabled;
-    ///   - always: the preferred language, else the first track;
-    ///   - intelligent: the preferred language, forced lines only when the audio
-    ///     already is in it (untagged audio counts as foreign; web `track-manager`).
-    /// `restoring` replays an earlier pick instead of applying the preference.
+    /// Native HLS `SUBTITLES` renditions surface as an `AVMediaSelectionGroup`: select the
+    /// session's planned text track in it, else none (a burn-in is already in the picture).
+    /// `restoring` replays an earlier pick instead of the plan.
     private func applyPreferredSubtitle(to item: AVPlayerItem, player: AVPlayer, restoring: LegibleChoice? = nil) {
         let settings = AppSettingsStore.shared
         let mode = settings.subtitleMode
@@ -680,30 +676,12 @@ private struct SkipCueStyle: ButtonStyle {
             case nil:
                 break
             }
-            if mode == "off" {
+            if case .text(let index)? = playback.subtitlePick, group.options.indices.contains(index) {
+                item.select(group.options[index], in: group)
+            } else {
                 item.select(nil, in: group)
-                return
-            }
-
-            let wanted = TrackSelection.canonicalLanguage(settings.preferredSubtitleLanguage)
-            let forcedOnly = mode == "intelligent" && wanted != nil && wanted == playingAudioLanguage
-            let option = wanted
-                .flatMap { TrackSelection.pickSubtitle(subtitleTracks(in: group), language: $0, forcedOnly: forcedOnly) }
-                .map { group.options[$0] }
-            if mode == "always" {
-                item.select(option ?? group.options.first, in: group)
-            } else if let option {
-                item.select(option, in: group)
             }
         }
-    }
-
-    /// Language of the audio the session plays, from the source's stream list;
-    /// nil when untagged or unknown.
-    private var playingAudioLanguage: String? {
-        guard let index = playback.audioStreamIndex, let audio = currentFileInfo?.audio,
-              audio.indices.contains(index) else { return nil }
-        return TrackSelection.canonicalLanguage(audio[index].language)
     }
 
     private var currentFileInfo: MediaFileInfo? {
