@@ -51,6 +51,7 @@ function build(repo: object = {}, eventsRepo: object = {}) {
     } as never,
     { insert, ...eventsRepo } as never,
   );
+  (svc as unknown as { enabledFlag: boolean }).enabledFlag = true;
   return { svc, upsert, insert };
 }
 
@@ -95,6 +96,30 @@ describe('QoeService', () => {
     (svc as unknown as { enabledFlag: boolean }).enabledFlag = false;
     svc.recordSample(session, sample);
     expect(svc.liveSummary('s1')).toBeNull();
+  });
+
+  it('records nothing until the setting is known, nor pipeline notes while disabled', () => {
+    const { svc } = build();
+    const flag = svc as unknown as { enabledFlag: boolean };
+    svc.recordSample(session, sample);
+    svc.setPipeline(session, { output: { quality: '720p', bitrate: 1, requested: null, codec: null, hdr: null } } as never);
+    flag.enabledFlag = false;
+    svc.noteServedRung(session, '1080p', 8e6);
+    svc.updatePipelineOutput(session, '1080p', 8e6);
+    svc.noteHwAccel(session, 'none');
+    const t = (svc as unknown as { trackers: Map<string, { agg: { pipeline: { output: { quality: string } } } }> }).trackers.get('s1')!;
+    expect(t.agg.pipeline.output.quality).toBe('720p');
+    expect(new (QoeService as never as new (...a: unknown[]) => { enabled: boolean })({}, {}, {}).enabled).toBe(false);
+  });
+
+  it('keeps aggregating events past the storage cap', () => {
+    const { svc } = build();
+    svc.recordSample(session, sample);
+    svc.recordEvents(session, Array.from({ length: 200 }, () => ({ type: 'stall' as const, at: 1, position: 1 })));
+    svc.recordEvents(session, [{ type: 'error' as const, at: 2, position: 1 }]);
+    expect(svc.liveSummary('s1')?.verdict).toBe('error');
+    const t = (svc as unknown as { trackers: Map<string, { pendingEvents: unknown[] }> }).trackers.get('s1')!;
+    expect(t.pendingEvents).toHaveLength(200);
   });
 
   it('caps events per session at 200 and flushes them with the row', async () => {
@@ -289,6 +314,16 @@ describe('QoeService', () => {
     expect(insert.mock.calls[0][0]).toHaveLength(1);
   });
 
+  it('drops a tracker whose flush keeps failing', async () => {
+    const { svc, upsert } = build();
+    upsert.mockRejectedValue(new Error('invalid byte sequence'));
+    svc.recordSample(session, sample);
+    const sweep = () => (svc as unknown as { sweep(): Promise<void> }).sweep();
+    for (let i = 0; i < 5; i++) await sweep();
+    expect(upsert).toHaveBeenCalledTimes(5);
+    expect(svc.trackedSession('s1')).toBeNull();
+  });
+
   it('never drops a final flush requested while one is in flight', async () => {
     const { svc, upsert } = build();
     let release!: () => void;
@@ -351,8 +386,8 @@ describe('QoeService playbacks', () => {
     const other = row({ sessionId: 'z', userId: 8, watchedMs: 90_000, lastSeenAt: new Date(300_000) });
     const getMany = jest.fn().mockResolvedValue([a, b, other]);
     const getRawMany = jest.fn().mockResolvedValue([
-      { key: 'x', uid: 8, pid: 'pb', total: '2' },
-      { key: 'y', uid: 7, pid: 'pb', total: '2' },
+      { key: '8:pb', uid: 8, pid: 'pb', total: '2' },
+      { key: '7:pb', uid: 7, pid: 'pb', total: '2' },
     ]);
     const qb: Record<string, unknown> = { getMany, getRawMany };
     for (const m of ['select', 'addSelect', 'groupBy', 'having', 'orderBy', 'limit', 'offset', 'andWhere', 'where', 'orWhere']) {
@@ -373,7 +408,7 @@ describe('QoeService playbacks', () => {
       { device: 'TV', engine: 'shaka', hw: null, verdict: 'unknown', stalls: '2', dropped: null, decoded: null },
     ];
     const qb: Record<string, unknown> = { getRawMany: jest.fn().mockResolvedValue(rows) };
-    for (const m of ['select', 'addSelect', 'groupBy', 'having', 'orderBy']) qb[m] = () => qb;
+    for (const m of ['select', 'addSelect', 'where', 'groupBy', 'having', 'orderBy']) qb[m] = () => qb;
     const { svc } = build({ createQueryBuilder: () => qb });
     const s = await svc.summary();
     expect(s.byVerdict).toMatchObject({ ok: 1, unknown: 1 });
@@ -385,26 +420,38 @@ describe('QoeService playbacks', () => {
   it('lets a real verdict win over "not enough data" for a device', async () => {
     const row = (verdict: string) => ({ device: 'TV', systemName: 'tvOS 26', engine: 'avplayer', hw: null, verdict, stalls: '0', dropped: null, decoded: null });
     const qb: Record<string, unknown> = { getRawMany: jest.fn().mockResolvedValue([row('unknown'), row('unknown'), row('network')]) };
-    for (const m of ['select', 'addSelect', 'groupBy', 'having', 'orderBy']) qb[m] = () => qb;
+    for (const m of ['select', 'addSelect', 'where', 'groupBy', 'having', 'orderBy']) qb[m] = () => qb;
     const { svc } = build({ createQueryBuilder: () => qb });
     const s = await svc.summary();
     expect(s.byDevice[0]).toMatchObject({ topVerdict: 'network', systemName: 'tvOS 26' });
   });
 
-  it('stores the playbackId and restates the playback verdict on the siblings', async () => {
-    const { svc, upsert } = build({ find: jest.fn().mockResolvedValue([a, b]) });
-    const update = jest.fn();
-    (svc as unknown as { sessions: { update: jest.Mock } }).sessions.update = update;
+  it('stores the merged playback verdict with the row and restates only the differing siblings', async () => {
+    const set = jest.fn();
+    const qb: Record<string, jest.Mock> = {};
+    for (const k of ['update', 'where', 'andWhere']) qb[k] = jest.fn(() => qb);
+    qb.set = set.mockReturnValue(qb);
+    qb.execute = jest.fn();
+    const { svc, upsert } = build({ find: jest.fn().mockResolvedValue([a, b]), createQueryBuilder: () => qb });
     svc.recordSample(session, { ...sample, playbackId: 'pb1' });
-    svc.recordEvents(session, [], 'pb2');
+    svc.recordEvents(session, [], 'pb');
     svc.sessionEnded(session);
     await new Promise((r) => setImmediate(r));
-    expect(upsert.mock.calls[0][0].playbackId).toBe('pb2');
-    expect(svc.liveSummary('s1')?.playbackId).toBe('pb2');
-    expect(update).toHaveBeenCalledWith(
-      { userId: 7, playbackId: 'pb2' },
-      { playbackVerdict: 'ok', playbackConfidence: 'high' },
-    );
+    const stored = upsert.mock.calls[0][0];
+    expect(stored.playbackId).toBe('pb');
+    expect(svc.liveSummary('s1')?.playbackId).toBe('pb');
+    expect(stored).toMatchObject({ playbackVerdict: 'ok', playbackConfidence: 'high' });
+    expect(set).toHaveBeenCalledWith({ playbackVerdict: stored.playbackVerdict, playbackConfidence: stored.playbackConfidence });
+    expect(qb.andWhere.mock.calls[0][0]).toContain('IS DISTINCT FROM');
+  });
+
+  it('skips the sibling update when there are none or they already agree', async () => {
+    const createQueryBuilder = jest.fn();
+    const { svc } = build({ createQueryBuilder });
+    svc.recordSample(session, { ...sample, playbackId: 'pb1' });
+    svc.sessionEnded(session);
+    await new Promise((r) => setImmediate(r));
+    expect(createQueryBuilder).not.toHaveBeenCalled();
   });
 });
 

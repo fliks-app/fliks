@@ -1,10 +1,11 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, Not, Repository } from 'typeorm';
 import { cpus, loadavg } from 'node:os';
 import type { Request } from 'express';
 import { SettingsService } from '../settings/settings.service';
+import { StreamLifetime } from '../streaming/lifetime-constants';
 import type { LiveSession, SessionKind } from '../streaming/live-session.service';
 import { QoeAggregator, mergeSummaries, type StallLast } from './core/aggregate';
 import { readCmcd } from './core/cmcd';
@@ -22,13 +23,15 @@ import { PlaybackQoeEvent } from './entities/playback-qoe-event.entity';
 import { PlaybackQoeSession } from './entities/playback-qoe-session.entity';
 
 const FLUSH_INTERVAL_MS = 30_000;
-/** Matches the LiveSession revive window: a GC'd session may still come back. */
-const TRACKER_IDLE_MS = 20 * 60_000;
+/** Outlives the LiveSession revive window (plus a sweep), so a revived sid keeps its aggregator. */
+const TRACKER_IDLE_MS = StreamLifetime.sessionReviveTtlMs() + 2 * FLUSH_INTERVAL_MS;
+/** A tracker whose flush keeps failing (e.g. a poisoned value) is dropped after this many tries. */
+const MAX_FLUSH_FAILURES = 5;
 const MAX_EVENTS_PER_SESSION = 200;
 /** A shorter wait means the segment was already there: no production-speed signal. */
 const MIN_WAIT_MS = 20;
 const DEFAULT_RETENTION_DAYS = 30;
-const MAX_SUMMARY_ROWS = 50_000;
+const DAY_MS = 86_400_000;
 
 export const QOE_ENABLED_KEY = 'qoe_enabled';
 export const QOE_RETENTION_DAYS_KEY = 'qoe_retention_days';
@@ -66,6 +69,7 @@ interface Tracker {
   flushing: Promise<void> | null;
   /** A flush was requested while one was in flight. */
   flushAgain: boolean;
+  failures: number;
 }
 
 export interface QoeLiveSummary extends QoeDiagnosis {
@@ -233,7 +237,8 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger(QoeService.name);
   private readonly trackers = new Map<string, Tracker>();
   private timer: ReturnType<typeof setInterval> | null = null;
-  private enabledFlag = true;
+  /** False until the setting is read: an unknown state records nothing. */
+  private enabledFlag = false;
   private readonly transcodeProbes: (() => number)[] = [];
   private loadProbe: (() => Pick<ServerLoad, 'activeTranscodes' | 'activeSessions'>) | null = null;
 
@@ -300,7 +305,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
 
   /** The rung the session is actually encoding, once segments are served. */
   noteServedRung(session: SessionRef, quality: string, bitrate: number | null): void {
-    if (quality === 'auto') return;
+    if (!this.enabledFlag || quality === 'auto') return;
     const t = this.trackers.get(session.sessionId);
     if (!t) return;
     const p = t.agg.pipeline;
@@ -312,7 +317,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
 
   /** The run fell back from the GPU to the CPU: the pipeline follows it. */
   noteHwAccel(session: SessionRef, hw: string | undefined): void {
-    if (hw !== 'none') return;
+    if (!this.enabledFlag || hw !== 'none') return;
     const t = this.trackers.get(session.sessionId);
     const p = t?.agg.pipeline;
     if (!t || !p || (!p.encode?.hw && !p.decode?.hw)) return;
@@ -336,7 +341,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
   updatePipelineOutput(session: SessionRef, quality: string | null, bitrate: number | null): void {
     const t = this.trackers.get(session.sessionId);
     const p = t?.agg.pipeline;
-    if (!t || !p?.output) return;
+    if (!this.enabledFlag || !t || !p?.output) return;
     if (p.output.quality === quality && p.output.bitrate === bitrate) return;
     t.agg.setPipeline({ ...p, output: { ...p.output, quality, bitrate } });
     t.dirty = true;
@@ -370,9 +375,10 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     const freezes = events.some((e) => e.type === 'stall' || (e.type === 'recovery' && (e.durationMs ?? 0) > 0));
     const load = freezes ? this.serverLoad() : null;
     for (const e of events) {
-      if (t.eventCount >= MAX_EVENTS_PER_SESSION) break;
-      t.eventCount++;
       const c = t.agg.addEvent(e, now, { live: session.kind === 'live', load });
+      // The cap bounds stored rows only; every event still counts in the summary.
+      if (t.eventCount >= MAX_EVENTS_PER_SESSION) continue;
+      t.eventCount++;
       const { type, at, ...data } = e;
       t.pendingEvents.push({
         sessionId: session.sessionId,
@@ -411,7 +417,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** Live view for the admin streams list; null when nothing was reported. */
+  /** Live view for the admin streams list; null when the session is not tracked (QoE off). */
   liveSummary(sessionId: string): QoeLiveSummary | null {
     const t = this.trackers.get(sessionId);
     if (!t) return null;
@@ -466,6 +472,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
         touchedAt: 0,
         flushing: null,
         flushAgain: false,
+        failures: 0,
       };
       this.trackers.set(session.sessionId, t);
     }
@@ -498,16 +505,26 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     const run = async (): Promise<void> => {
       try {
         const row = this.toRow(t);
+        const { userId, playbackId } = row;
+        const stale = userId != null && playbackId != null && (await this.mergeVerdict(row, userId, playbackId));
         await this.sessions.upsert(row, ['sessionId']);
-        await this.refreshPlaybackVerdict(row);
+        if (stale) await this.restateSiblings(row);
         if (events.length) await this.events.insert(events);
+        t.failures = 0;
       } catch (e) {
         // bounded by the per-session event cap
         t.pendingEvents.unshift(...events);
         t.dirty = true;
-        this.log.warn(
-          `qoe flush failed for ${t.session.sessionId}: ${(e as Error).message}`,
-        );
+        const msg = `qoe flush failed for ${t.session.sessionId}: ${(e as Error).message}`;
+        if (++t.failures >= MAX_FLUSH_FAILURES) {
+          this.trackers.delete(t.session.sessionId);
+          t.pendingEvents.length = 0;
+          t.dirty = false;
+          t.flushAgain = false;
+          this.log.warn(`${msg}; tracker dropped after ${t.failures} failures`);
+        } else {
+          this.log.warn(msg);
+        }
       } finally {
         t.flushing = null;
       }
@@ -520,16 +537,31 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     return t.flushing;
   }
 
-  /** The verdict covers every row of the playback, so a new row restates it on its siblings. */
-  private async refreshPlaybackVerdict(row: PlaybackQoeSession): Promise<void> {
-    const { userId, playbackId } = row;
-    if (userId == null || playbackId == null) return;
-    const rows = await this.sessions.find({ where: { userId, playbackId } });
-    const p = mergePlaybacks(rows)[0];
-    await this.sessions.update(
-      { userId, playbackId },
-      { playbackVerdict: p.verdict, playbackConfidence: p.confidence },
-    );
+  /** Gives the row the verdict of its whole playback; true when a sibling row holds a different one. */
+  private async mergeVerdict(row: PlaybackQoeSession, userId: number, playbackId: string): Promise<boolean> {
+    const siblings = await this.sessions.find({ where: { userId, playbackId, sessionId: Not(row.sessionId) } });
+    if (!siblings.length) return false;
+    const p = mergePlaybacks([...siblings, row])[0];
+    row.playbackVerdict = p.verdict;
+    row.playbackConfidence = p.confidence;
+    return siblings.some((o) => o.playbackVerdict !== p.verdict || o.playbackConfidence !== p.confidence);
+  }
+
+  private async restateSiblings(row: PlaybackQoeSession): Promise<void> {
+    await this.sessions
+      .createQueryBuilder()
+      .update()
+      .set({ playbackVerdict: row.playbackVerdict, playbackConfidence: row.playbackConfidence })
+      .where('"userId" = :u AND "playbackId" = :p AND "sessionId" <> :sid', {
+        u: row.userId,
+        p: row.playbackId,
+        sid: row.sessionId,
+      })
+      .andWhere('("playbackVerdict" IS DISTINCT FROM :v OR "playbackConfidence" IS DISTINCT FROM :c)', {
+        v: row.playbackVerdict,
+        c: row.playbackConfidence,
+      })
+      .execute();
   }
 
   private toRow(t: Tracker): PlaybackQoeSession {
@@ -541,7 +573,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
       playbackId: t.playbackId,
       userId: ses.userId,
       mediaFileId: ses.mediaFileId,
-      mediaTitle: ses.mediaTitle?.slice(0, 255) ?? null,
+      mediaTitle: ses.mediaTitle ?? null,
       startedAt: new Date(ses.startedAt),
       lastSeenAt: new Date(t.endedAt ?? Math.max(ses.lastBeat, t.touchedAt)),
       endedAt: t.endedAt ? new Date(t.endedAt) : null,
@@ -590,7 +622,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
   async purgeOld(): Promise<void> {
     const raw = Number(await this.settings.get(QOE_RETENTION_DAYS_KEY));
     const days = Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_RETENTION_DAYS;
-    const cutoff = new Date(Date.now() - days * 86_400_000);
+    const cutoff = new Date(Date.now() - days * DAY_MS);
     const res = await this.sessions
       .createQueryBuilder()
       .delete()
@@ -754,6 +786,6 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
   }
 
   private since(days: number): Date {
-    return new Date(Date.now() - Math.min(Math.max(days, 1), 3650) * 86_400_000);
+    return new Date(Date.now() - Math.min(Math.max(days, 1), 3650) * DAY_MS);
   }
 }
