@@ -8,6 +8,8 @@ import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { ToastService } from './toast.service';
 import { CastSettingsService } from './cast-settings.service';
 import { CastService } from './cast.service';
+import type { LaunchTracks } from './track-manager.service';
+import { parseAudioIndex } from '../utils/player.utils';
 
 export type RemoteAction = RemoteCommand['action'];
 
@@ -63,6 +65,24 @@ export type RemoteCommandInput = {
   subtitleId?: string | null;
   qualityId?: string;
 };
+
+/** A `load`'s track picks ride the `trackId` / `subtitleId` fields: absent means no pick, a
+ *  `null` subtitle is an explicit Off. An older target ignores them and picks automatically. */
+export function launchTracksToWire(tracks: LaunchTracks | null): Pick<RemoteCommandInput, 'trackId' | 'subtitleId'> {
+  return {
+    trackId: tracks?.audioStreamIndex != null ? `audio-${tracks.audioStreamIndex}` : undefined,
+    subtitleId: tracks?.subtitleId,
+  };
+}
+
+function launchTracksFromWire(cmd: RemoteCommand, fileId: number): LaunchTracks | null {
+  if (cmd.trackId === undefined && cmd.subtitleId === undefined) return null;
+  return {
+    fileId,
+    audioStreamIndex: cmd.trackId !== undefined ? parseAudioIndex(cmd.trackId) : undefined,
+    subtitleId: cmd.subtitleId,
+  };
+}
 
 /** Semantic-ack budget. A cold transcode start is the only slow case. */
 const ACK_TIMEOUT_MS = 3_000;
@@ -387,7 +407,8 @@ export class RemoteService {
     if (this.router.url.startsWith('/watch')) {
       await this.router.navigateByUrl('/', { skipLocationChange: true });
     }
-    await this.router.navigate(['/watch', cmd.mediaFileId], { queryParams });
+    const tracks = launchTracksFromWire(cmd, cmd.mediaFileId);
+    await this.router.navigate(['/watch', cmd.mediaFileId], { queryParams, ...(tracks && { state: { tracks } }) });
   }
 
   /** Never over a player: a controller browsing while the target plays must

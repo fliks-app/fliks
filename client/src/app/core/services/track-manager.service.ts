@@ -51,6 +51,11 @@ export interface LaunchTracks {
   subtitleId?: string | null;
 }
 
+/** The launch intent, for the file it was made on only: a pick never carries over to another file. */
+export function launchPickFor(tracks: LaunchTracks | null | undefined, fileId: number): LaunchTracks | null {
+  return tracks?.fileId === fileId ? tracks : null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class TrackManagerService {
   private readonly playerSettings = inject(PlayerSettingsService);

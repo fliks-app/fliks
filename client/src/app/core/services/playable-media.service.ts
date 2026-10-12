@@ -8,7 +8,8 @@ import { PlaybackQueueService, QueueItem } from './playback-queue.service';
 import { RemoteService } from './remote.service';
 import { resolvePlayableFile } from '../../shared/utils/media-play.util';
 import { remoteOverlayOpen } from './remote-playback-target';
-import type { LaunchTracks } from './track-manager.service';
+import { launchPickFor, type LaunchTracks } from './track-manager.service';
+import { launchTracksToWire } from './remote.service';
 
 export interface PlayContext {
   fileId: number;
@@ -24,7 +25,7 @@ export interface PlayContext {
   /** Where the caller knows playback stopped. Only a caller that read it from a
    *  list has it; a detail page leaves the player to resolve its own. */
   positionSeconds?: number;
-  /** Picks made on the detail header; the local player honours them once. */
+  /** Picks made on the detail header; the target honours them once, whichever it is. */
   tracks?: LaunchTracks;
 }
 
@@ -79,6 +80,7 @@ export class PlayableMediaService {
         // for whoever started it, so the target's account may have none at all
         // and would restart the title from the beginning.
         positionSeconds: fromStart ? 0 : ctx.positionSeconds,
+        ...launchTracksToWire(launchPickFor(ctx.tracks, ctx.fileId)),
       });
       return;
     }
@@ -92,6 +94,7 @@ export class PlayableMediaService {
         fanartUrl: ctx.fanartUrl ?? null,
         streamInfo: ctx.streamInfo,
         startTime: fromStart ? 0 : undefined,
+        tracks: ctx.tracks,
       });
       this.castPlayer.expanded.set(true);
     } else {
