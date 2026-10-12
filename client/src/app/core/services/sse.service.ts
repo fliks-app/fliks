@@ -176,12 +176,14 @@ export class SseService implements OnDestroy {
   private unreachableTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
-    // The stream is authenticated as one account: detach on a session change
-    // and let the layout re-open it for the next one.
+    // The stream is authenticated as one account: re-dial on a session change.
+    // Re-opened here, not left to the app's auth effect: that one may run first,
+    // and this close would abort its dial mid-flight.
     effect(() => {
       this.auth.sessionEpoch();
       untracked(() => {
         this.close();
+        if (this.auth.isAuthenticated()) void this.connect();
         // Progress is keyed by media, not by account. Dropping it with the
         // stream that fed it also stops the sweep timer of a session nobody
         // is watching any more.

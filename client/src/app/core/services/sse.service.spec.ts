@@ -1,4 +1,4 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
@@ -72,6 +72,8 @@ describe('SseService — download.progress', () => {
 });
 
 function setupUnreachable(authenticated: boolean): SseService {
+  // No EventSource here: the dial itself is not what these tests are about.
+  vi.spyOn(SseService.prototype, 'connect').mockResolvedValue();
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
     providers: [
@@ -121,5 +123,35 @@ describe('SseService: serverUnreachable', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('SseService: session change', () => {
+  it('re-dials for the next account instead of staying closed', () => {
+    const connect = vi.spyOn(SseService.prototype, 'connect').mockResolvedValue();
+    const epoch = signal(0);
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTranslateService({
+          lang: 'en',
+          loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
+        }),
+        { provide: ToastService, useValue: { info: () => {}, success: () => {}, error: () => {}, warning: () => {} } },
+        { provide: ServerConfigService, useValue: { apiUrl: () => '' } },
+        { provide: AuthService, useValue: { accessToken: () => null, isAuthenticated: () => true, sessionEpoch: epoch } },
+        { provide: NetworkService, useValue: { isOnline: () => true, connectivityDoubt: () => 0 } },
+      ],
+    });
+    TestBed.inject(SseService);
+    TestBed.tick();
+    connect.mockClear();
+
+    epoch.set(1);
+    TestBed.tick();
+
+    expect(connect).toHaveBeenCalledTimes(1);
+    connect.mockRestore();
   });
 });
