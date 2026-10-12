@@ -72,7 +72,7 @@ import { NotificationLike } from '../../core/services/notification-like';
 import { LikesApiService } from '../../core/services/api/likes-api.service';
 import { PlayerStateService } from '../../core/services/player-state.service';
 import { subtitleManifestRank } from '../../core/utils/subtitle-tracks';
-import { TrackManagerService, SubtitleOption, type LaunchTracks, streamIndexForTrack, trackForStreamIndex } from '../../core/services/track-manager.service';
+import { TrackManagerService, SubtitleOption, type LaunchTracks, launchPickFor, streamIndexForTrack, trackForStreamIndex } from '../../core/services/track-manager.service';
 import { QualityManagerService } from '../../core/services/quality-manager.service';
 import { DeviceService, viewTransitionsEnabled } from '../../core/services/device.service';
 
@@ -1641,7 +1641,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** The launch pick, for the file it was made on only: not an episode switch, nor a pre-roll item. */
   private launchPick(): LaunchTracks | null {
-    return this.launchTracks?.fileId === this.mediaFileId ? this.launchTracks : null;
+    return launchPickFor(this.launchTracks, this.mediaFileId);
   }
 
   /** The audio the item opens on, known before any engine reports a track: the

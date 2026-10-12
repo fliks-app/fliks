@@ -62,6 +62,9 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
     }),
     saveSubtitleSelection: vi.fn(),
     saveAudioSelection: vi.fn(),
+    describeSubtitle: vi.fn((t: { language: string; forced?: boolean }) => ({
+      label: t.language, menuHead: t.language, menuSub: t.forced ? 'forced' : '',
+    })),
   };
   const streamingApi = {
     getPlaybackInfo: vi.fn(async (..._args: unknown[]) => ({
@@ -83,7 +86,7 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
   };
   const playerSettings = {
     get: () => ({ audioSelectionMode: 'default' }),
-    resolveAudioStreamIndex: vi.fn(() => 1),
+    resolveAudioStreamIndex: vi.fn((..._args: unknown[]): number | undefined => 1),
   };
   const subtitlesApi = { getForMedia: vi.fn(async () => [] as unknown[]) };
 
@@ -297,6 +300,54 @@ describe('cast quick start', () => {
     expect(startCast.mock.calls[0][0]).toMatchObject({ activeSubtitleId: 'ext-21', activeAudioStreamIndex: 1 });
     expect(h.streamingApi.getPlaybackInfo.mock.calls[0][2]).toBe(21);
     expect(priv(h.svc).activeBurnInId).toBe(21);
+  });
+
+  describe('with the picks made on the detail page', () => {
+    const start = (h: ReturnType<typeof setup>, tracks: { fileId: number; audioStreamIndex?: number; subtitleId?: string | null }) =>
+      h.svc.quickStart({
+        mediaFileId: MEDIA_FILE_ID,
+        mediaId: MEDIA_ID,
+        title: 't',
+        streamInfo: { audio: [{ language: 'en' }, { language: 'fr' }] },
+        startTime: 0,
+        tracks,
+      });
+
+    it('hands them to the audio and subtitle resolvers, and starts on them', async () => {
+      const h = setup({ autoSelect: (subs) => subs[0] });
+      h.subtitlesApi.getForMedia.mockResolvedValue(rows(21));
+      h.playerSettings.resolveAudioStreamIndex.mockImplementation((...a) => (a[4] as number | undefined) ?? 1);
+      const startCast = vi.spyOn(h.svc, 'startCast');
+
+      await start(h, { fileId: MEDIA_FILE_ID, audioStreamIndex: 0, subtitleId: null });
+
+      expect(h.playerSettings.resolveAudioStreamIndex.mock.calls[0][4]).toBe(0);
+      expect(h.trackManager.autoSelectSubtitle.mock.calls[0][7]).toBeNull();
+      expect(startCast.mock.calls[0][0]).toMatchObject({ activeAudioStreamIndex: 0 });
+      expect(h.trackManager.saveSubtitleSelection).not.toHaveBeenCalled();
+      expect(h.trackManager.saveAudioSelection).not.toHaveBeenCalled();
+    });
+
+    it('ignores picks made on another file', async () => {
+      const h = setup();
+      await start(h, { fileId: MEDIA_FILE_ID + 1, audioStreamIndex: 0, subtitleId: 'ext-21' });
+      expect(h.playerSettings.resolveAudioStreamIndex.mock.calls[0][4]).toBeUndefined();
+      expect(h.trackManager.autoSelectSubtitle.mock.calls[0][7]).toBeUndefined();
+    });
+  });
+
+  it('gives the quick-start subtitle rows the two-line menu labels', async () => {
+    const h = setup();
+    h.subtitlesApi.getForMedia.mockResolvedValue(rows(21));
+    await h.svc.quickStart({
+      mediaFileId: MEDIA_FILE_ID,
+      mediaId: MEDIA_ID,
+      title: 't',
+      streamInfo: { audio: [{ language: 'en' }] },
+      startTime: 0,
+    });
+    const [row] = h.svc.availableSubtitles();
+    expect([row.head, row.sub]).toEqual([row.language, '']);
   });
 
   it('starts without subtitles when the rules pick none', async () => {

@@ -311,6 +311,30 @@ describe('RemoteService applyLoad', () => {
     await vi.waitFor(() => expect(navigateSpy).toHaveBeenCalled());
     expect(navigateSpy).toHaveBeenCalledWith(['/watch', 42], { queryParams: { t: 0 } });
   });
+
+  async function loadedWith(extra: Partial<RemoteCommand>) {
+    setup();
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    TestBed.inject(SseService).commands.next({ ...loadCmd(), ...extra });
+    await vi.waitFor(() => expect(navigateSpy).toHaveBeenCalled());
+    return navigateSpy.mock.calls[0][1];
+  }
+
+  it('hands the sender\'s picks to the player as a launch intent bound to the loaded file', async () => {
+    const extras = await loadedWith({ trackId: 'audio-2', subtitleId: 'ext-5' });
+    expect(extras?.state).toEqual({ tracks: { fileId: 42, audioStreamIndex: 2, subtitleId: 'ext-5' } });
+  });
+
+  it('keeps an explicit Off, and leaves the audio to the rules when only the subtitle was picked', async () => {
+    const extras = await loadedWith({ subtitleId: null });
+    expect(extras?.state).toEqual({ tracks: { fileId: 42, audioStreamIndex: undefined, subtitleId: null } });
+  });
+
+  it('opens with no launch intent when the sender picked nothing', async () => {
+    expect((await loadedWith({}))?.state).toBeUndefined();
+  });
 });
 
 describe('RemoteService browse', () => {

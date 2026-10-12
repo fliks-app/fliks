@@ -18,12 +18,12 @@ import {
 } from '../utils/edl-policy';
 import { ENGINE_TRAITS, EngineKind } from './engine-traits';
 import { ServerConfigService } from './server-config.service';
-import { formatAudioParts, formatAudioLabel, formatSubtitleLabel, formatSubtitleParts, parseAudioIndex, playbackModeOf, SpriteMetadata, type PlaybackMode } from '../utils/player.utils';
+import { formatAudioParts, formatAudioLabel, parseAudioIndex, playbackModeOf, SpriteMetadata, type PlaybackMode } from '../utils/player.utils';
 import {
   PlayerSettingsService,
   type AudioStreamChoice,
 } from './player-settings.service';
-import { TrackManagerService, type SubtitleOption } from './track-manager.service';
+import { TrackManagerService, launchPickFor, type LaunchTracks, type SubtitleOption } from './track-manager.service';
 import { MediaService } from './api/media.service';
 import { ToastService } from './toast.service';
 
@@ -855,10 +855,11 @@ export class CastPlayerService {
     mediaFileId: number,
     mediaId: number,
     audioLanguage?: string,
+    launchPick?: string | null,
   ): Promise<SubtitleOption | null> {
     let picked: SubtitleOption | null = null;
     await this.trackManager.autoSelectSubtitle(
-      subtitles, [], null, mediaFileId, async (sub) => { picked = sub; }, mediaId, audioLanguage,
+      subtitles, [], null, mediaFileId, async (sub) => { picked = sub; }, mediaId, audioLanguage, launchPick,
     );
     return picked;
   }
@@ -879,6 +880,7 @@ export class CastPlayerService {
   /**
    * Quick-start Cast from a detail page (no player needed).
    * Fetches playbackInfo, subtitles, builds options, and starts streaming.
+   * `tracks` are the viewer's picks for this start, honoured over the rules and never remembered.
    */
   async quickStart(opts: {
     mediaFileId: number;
@@ -889,6 +891,7 @@ export class CastPlayerService {
     fanartUrl?: string | null;
     streamInfo?: any;
     startTime?: number;
+    tracks?: LaunchTracks;
   }) {
     // Phase 1 — parallelize every fetch that doesn't depend on streamInfo
     // resolution. Saves ~3 sequential round-trips on cold cast.
@@ -927,10 +930,12 @@ export class CastPlayerService {
     }
     startTime ??= 0;
 
+    const launchPick = launchPickFor(opts.tracks, opts.mediaFileId);
     const audioStreams: AudioStreamChoice[] = streamInfo?.audio ?? [];
     const audioIndex = this.playerSettings.resolveAudioStreamIndex(
       opts.mediaFileId, audioStreams, opts.mediaId,
       mediaResult?.metadata?.originalLanguage ?? null,
+      launchPick?.audioStreamIndex,
     );
 
     // Build subtitle list from the parallel fetch (shared with the player).
@@ -940,12 +945,7 @@ export class CastPlayerService {
       { hideBurnIn: this.appSettings.hideBurnInSubtitles() },
     ).map((t, i) => ({
       id: t.key,
-      label: formatSubtitleLabel(t, this.translate, i + 1, {
-        showFormat: this.appSettings.showSubtitleFormat(),
-      }),
-      ...formatSubtitleParts(t, this.translate, i + 1, {
-        showFormat: this.appSettings.showSubtitleFormat(),
-      }),
+      ...this.trackManager.describeSubtitle(t, i + 1),
       language: t.language,
       isImage: t.isImage,
       burnIn: t.isImage,
@@ -965,6 +965,7 @@ export class CastPlayerService {
     const startSubtitle = await this.resolveStartSubtitle(
       subtitleInfos, opts.mediaFileId, opts.mediaId,
       audioIndex != null ? audioStreams[audioIndex]?.language : undefined,
+      launchPick?.subtitleId,
     );
 
     // Phase 2 — single playback-info call. We pass the user's cast cap as
