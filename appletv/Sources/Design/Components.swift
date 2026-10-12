@@ -244,8 +244,7 @@ struct PosterCard: View {
             if let title, !title.isEmpty {
                 Text(title).font(.callout).lineLimit(1)
                     .foregroundStyle(focused ? .primary : .secondary)
-                    .offset(y: focused ? 12 : 0)
-                    .animation(.easeOut(duration: 0.15), value: focused)
+                    .padding(.top, 12)
             }
         }
         .frame(width: size.width, alignment: .leading)
