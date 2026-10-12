@@ -57,7 +57,7 @@ enum TrackSelection {
             SubtitleTrack(id: "emb-\($0.streamIndex)", language: canonicalLanguage($0.language),
                           forced: $0.forced, hearingImpaired: $0.hearingImpaired, machineMade: false)
         }
-        let sidecars = external.filter { $0.relativePath?.isEmpty == false }.sorted { $0.id < $1.id }.map {
+        let sidecars = external.filter(isRenderableTextSidecar).sorted { $0.id < $1.id }.map {
             SubtitleTrack(id: "ext-\($0.id)", language: canonicalLanguage($0.language),
                           forced: $0.forced ?? false, hearingImpaired: $0.hearingImpaired ?? false,
                           machineMade: $0.providerType == "translated" || $0.providerType == "ocr")
@@ -75,6 +75,16 @@ enum TrackSelection {
         return tracks.indices
             .filter { tracks[$0].language == language && (!forcedOnly || tracks[$0].forced) }
             .min { rank(tracks[$0]) < rank(tracks[$1]) }
+    }
+
+    private static let textSidecarExtensions: Set<String> = ["srt", "ass", "ssa", "vtt"]
+
+    /// Mirrors the backend's `isRenderableTextSidecar`: a sidecar the `subs` group lists
+    /// is a text codec in a text file.
+    private static func isRenderableTextSidecar(_ row: SubtitleFileRow) -> Bool {
+        guard let path = row.relativePath, !path.isEmpty,
+              textSidecarExtensions.contains((path as NSString).pathExtension.lowercased()) else { return false }
+        return !isImageBasedSubtitleCodec(row.codec ?? "")
     }
 
     /// Bitmap codecs the backend never puts in the HLS `subs` group, only burns in:

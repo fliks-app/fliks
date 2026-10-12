@@ -150,6 +150,7 @@ struct SubtitleFileRow: Decodable {
     let forced: Bool?
     let hearingImpaired: Bool?
     let providerType: String?
+    let codec: String?
     /// Set for sidecar files; embedded rows carry none.
     let relativePath: String?
 }
