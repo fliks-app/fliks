@@ -558,3 +558,91 @@ describe('generateMasterPlaylist — LANGUAGE carries the BCP-47 tag', () => {
     expect(media(m, 'AUDIO')).toHaveLength(1);
   });
 });
+
+describe('generateMasterPlaylist — muxed single audio rendition', () => {
+  const base = {
+    mediaFileId: 7,
+    sourceWidth: 1920,
+    sourceHeight: 1080,
+    tokenParam: '?token=t',
+  };
+  const media = (m: string): string[] =>
+    m.split('\n').filter((l) => l.startsWith('#EXT-X-MEDIA:TYPE=AUDIO'));
+  const eac3 = { language: 'eng', channels: 6 };
+  const plan: AudioPlan = { mode: 'copy', codec: 'eac3', channels: 6 };
+
+  it('advertises the muxed track as a URI-less rendition every variant references', () => {
+    const m = generateMasterPlaylist({
+      ...base,
+      muxedAudio: eac3,
+      audioPlans: [plan],
+    });
+    expect(media(m)).toEqual([
+      '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="eng",LANGUAGE="eng",DEFAULT=YES,AUTOSELECT=YES,CHANNELS="6"',
+    ]);
+    const variants = streamInfLines(m);
+    expect(variants.length).toBeGreaterThan(0);
+    for (const l of variants) expect(l).toContain(',AUDIO="audio"');
+  });
+
+  it('leaves CODECS and BANDWIDTH as the muxed master has them', () => {
+    const opts = { ...base, audioPlans: [plan] };
+    const without = generateMasterPlaylist(opts);
+    const withRendition = generateMasterPlaylist({ ...opts, muxedAudio: eac3 });
+    const strip = (m: string) =>
+      streamInfLines(m).map((l) => l.replace(',AUDIO="audio"', ''));
+    expect(strip(withRendition)).toEqual(strip(without));
+  });
+
+  it('names it like the multi-track group does: title first, BCP-47 tag as LANGUAGE', () => {
+    const m = generateMasterPlaylist({
+      ...base,
+      muxedAudio: { language: 'spa', languageTag: 'es-419', title: 'Latino', channels: 2 },
+      audioPlans: [{ mode: 'transcode', codec: 'aac', channels: 2 }],
+    });
+    expect(media(m)[0]).toContain('NAME="Latino",LANGUAGE="es-419"');
+    expect(media(m)[0]).toContain('CHANNELS="2"');
+  });
+
+  it('carries the copy variant too', () => {
+    const m = generateMasterPlaylist({
+      ...base,
+      includeRemux: true,
+      remuxCodecs: 'avc1.640029',
+      formatBitRate: 10_000_000,
+      muxedAudio: eac3,
+      audioPlans: [plan],
+    });
+    expect(media(m)).toHaveLength(1);
+    expect(streamInfLines(m)).toHaveLength(1);
+    expect(streamInfLines(m)[0]).toContain(',AUDIO="audio"');
+  });
+
+  it('stays off when the track has no name nor language to advertise', () => {
+    for (const muxedAudio of [{ channels: 2 }, { language: 'und', channels: 2 }]) {
+      const m = generateMasterPlaylist({ ...base, muxedAudio });
+      expect(media(m)).toHaveLength(0);
+      expect(m).not.toContain('AUDIO="audio"');
+    }
+  });
+
+  it('stays off for an audio-less source', () => {
+    const m = generateMasterPlaylist({ ...base, audioStreams: [], muxedAudio: eac3 });
+    expect(m).not.toContain('EXT-X-MEDIA');
+    expect(m).not.toContain('AUDIO="audio"');
+  });
+
+  it('is unchanged when not asked for, and never mixes with the multi-track group', () => {
+    expect(generateMasterPlaylist(base)).not.toContain('EXT-X-MEDIA');
+    const m = generateMasterPlaylist({
+      ...base,
+      audioStreams: [
+        { language: 'eng', channels: 2 },
+        { language: 'fra', channels: 2 },
+      ],
+      muxedAudio: eac3,
+    });
+    expect(media(m)).toHaveLength(2);
+    for (const l of media(m)) expect(l).toContain('URI="/api/stream/7/audio/');
+  });
+});

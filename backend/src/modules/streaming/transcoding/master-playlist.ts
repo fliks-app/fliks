@@ -28,11 +28,14 @@ import {
 import {
   audioChannelsAttr,
   audioGroupCodecString,
+  audioRenditionChannels,
 } from './codec/codec-strings';
 import {
   buildUniqueAudioNames,
   emitAudioRenditions,
+  emitMuxedAudioRendition,
   emitVariantLadder,
+  hasAudioIdentity,
   renditionLanguage,
   SDR_H264_VARIANT,
 } from './hls-variant-ladder';
@@ -232,6 +235,9 @@ export interface MasterPlaylistOptions {
   tokenParam: string;
   includeRemux?: boolean;
   audioStreams?: AudioStreamMeta[];
+  /** The single track muxed into the segments (inline layout), advertised as a
+   *  URI-less rendition when it has a name or language. Absent leaves the master as is. */
+  muxedAudio?: AudioStreamMeta;
   /** One plan per rendition, aligned with `audioStreams`, or the muxed track's; AAC
    *  stereo when absent. CODECS follows it: a wrong one fails the MSE append. */
   audioPlans?: AudioPlan[];
@@ -298,6 +304,7 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
     tokenParam,
     includeRemux = false,
     audioStreams,
+    muxedAudio,
     audioPlans,
     onlyQuality,
     defaultAudioIndex = 0,
@@ -398,7 +405,17 @@ export function generateMasterPlaylist(opts: MasterPlaylistOptions): string {
       dedupesAudioByLanguage,
     );
   }
-  const audioAttr = multiAudio ? ',AUDIO="audio"' : '';
+  const muxedRendition =
+    !multiAudio && !noAudio && !!muxedAudio && hasAudioIdentity(muxedAudio);
+  if (muxedRendition) {
+    emitMuxedAudioRendition(
+      lines,
+      muxedAudio,
+      audioChannelsAttr(plans[0]) ??
+        audioRenditionChannels(outputAudioCodec, muxedAudio.channels),
+    );
+  }
+  const audioAttr = multiAudio || muxedRendition ? ',AUDIO="audio"' : '';
   pushSubtitleMedia(lines);
 
   // HDR pass-through path: the source is HDR and the client claims support.

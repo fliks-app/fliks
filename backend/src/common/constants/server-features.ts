@@ -3,4 +3,5 @@
 export const SERVER_FEATURES = [
   'deviceProfileExtensions',
   'hlsSubtitleRequest',
+  'muxedAudioRendition',
 ] as const;

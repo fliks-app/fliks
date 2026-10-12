@@ -116,6 +116,24 @@ export function emitAudioRenditions(
   }
 }
 
+/** Whether a track carries a name or language worth advertising. */
+export function hasAudioIdentity(a: AudioStreamMeta): boolean {
+  return !!(a.title || a.languageTag || (a.language && a.language !== 'und'));
+}
+
+/** Rendition for the single audio track muxed into the variants: RFC 8216 §4.3.4.1
+ *  reads an `EXT-X-MEDIA` without URI as in-variant, so AVKit names it. */
+export function emitMuxedAudioRendition(
+  lines: string[],
+  audio: AudioStreamMeta,
+  channels: number | string,
+): void {
+  const [name] = buildUniqueAudioNames([audio]);
+  lines.push(
+    `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="${name}",LANGUAGE="${renditionLanguage(audio)}",DEFAULT=YES,AUTOSELECT=YES,CHANNELS="${channels}"`,
+  );
+}
+
 export interface VariantLadderOptions {
   profiles: TranscodeProfile[];
   /** Resolved output variant — drives the codec string + the bitrate cap. */

@@ -1159,6 +1159,7 @@ export class StreamingController {
       hdrLadder: useHdrLadder,
       supportsHlsSubtitles: !!deviceProfile.supportsHlsSubtitles,
       dedupesAudioByLanguage: deviceProfile.dedupesAudioByLanguage,
+      supportsMuxedAudioRendition: !!deviceProfile.supportsMuxedAudioRendition,
       supportsIFrameTrickPlay: !!deviceProfile.supportsIFrameTrickPlay,
       probesSegZero: deviceProfile.probesSegZero,
       supportsAbr: deviceProfile.supportsAbr,
@@ -1482,6 +1483,12 @@ export class StreamingController {
       deviceType,
       supportsAbr,
       dedupesAudioByLanguage: live?.dedupesAudioByLanguage ?? false,
+      muxedAudio:
+        !useExtXMedia &&
+        audioStreams.length === 1 &&
+        live?.supportsMuxedAudioRendition
+          ? audioStreams[0]
+          : undefined,
       hdrPassThrough,
       // Only the SDR ladder branch consumes this — the HDR branch
       // already drives its codec strings from `hdrPassThrough`.

@@ -658,6 +658,45 @@ describe('StreamingController.hlsMaster - multi-audio remux publishes the group'
     expect(opts.audioStreams).toBeUndefined();
     expect(opts.audioPlans).toEqual([{ mode: 'copy', codec: 'aac', channels: 2 }]);
   });
+
+  describe('muxed single track rendition', () => {
+    async function optsFor(live: Partial<LiveSession>, audio: object[]) {
+      const resolved = {
+        mediaFile: {
+          streamInfo: { video: [{ width: 1920, height: 1080, frameRate: '24' }], audio },
+        },
+      };
+      const generateMasterPlaylist = jest.fn().mockReturnValue('#EXTM3U');
+      const controller = makeController({
+        streamingService: { resolveFile: jest.fn().mockResolvedValue(resolved) },
+        transcodingService: { generateMasterPlaylist },
+        activeStreamTracker: { getSegmentDuration: () => 6 },
+        liveSessions: { update: jest.fn() },
+        sessionRouter: { assertFresh: jest.fn(), findRequestSession: jest.fn().mockReturnValue(live) },
+      });
+      const res = { setHeader: jest.fn(), send: jest.fn(), status: jest.fn() };
+      await controller.hlsMaster(42, { query: {}, user: { id: 7 } } as never, res as never);
+      return generateMasterPlaylist.mock.calls[0][0];
+    }
+    const eng = { language: 'eng', codec: 'eac3', channels: 6 };
+
+    it('hands the track to a client that reads a URI-less rendition', async () => {
+      const opts = await optsFor({ supportsMuxedAudioRendition: true }, [eng]);
+      expect(opts.muxedAudio).toEqual(eng);
+      expect(opts.audioStreams).toBeUndefined();
+    });
+
+    it('keeps the master as is for a client that does not declare it, or with no session', async () => {
+      expect((await optsFor({ supportsMuxedAudioRendition: false }, [eng])).muxedAudio).toBeUndefined();
+      expect((await optsFor({}, [eng])).muxedAudio).toBeUndefined();
+    });
+
+    it('leaves a multi-track source on its EXT-X-MEDIA group', async () => {
+      const opts = await optsFor({ supportsMuxedAudioRendition: true }, [eng, { ...eng, language: 'fra' }]);
+      expect(opts.muxedAudio).toBeUndefined();
+      expect(opts.audioStreams).toHaveLength(2);
+    });
+  });
 });
 
 describe('StreamingController.hlsMaster - frame rate freeze', () => {
