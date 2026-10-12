@@ -409,6 +409,8 @@ export class CastPlayerService {
       return {
         id: s.id,
         label: s.label,
+        head: s.menuHead,
+        sub: s.menuSub,
         language: s.language,
         burnIn,
         isImage: s.isImage,

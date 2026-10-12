@@ -6,6 +6,7 @@ import { domCueFontSize } from '../player-settings.service';
 describe('SubtitleOverlay', () => {
   afterEach(() => {
     document.getElementById('fliks-tv-subtitle')?.remove();
+    document.getElementById('fliks-tv-subtitle-top')?.remove();
     document.querySelector('.player-container')?.remove();
   });
 
@@ -47,6 +48,7 @@ describe('SubtitleOverlay', () => {
   describe('playback', () => {
     const cue = (start: number, end: number, text: string, top = false): VttCue => ({ start, end, text, top });
     const el = () => document.getElementById('fliks-tv-subtitle');
+    const topEl = () => document.getElementById('fliks-tv-subtitle-top');
     const shown = (o: SubtitleOverlay, cues: VttCue[]) => {
       o.select({ id: 1e9, cues });
       o.setVisible(true);
@@ -64,15 +66,27 @@ describe('SubtitleOverlay', () => {
 
     afterEach(() => vi.unstubAllGlobals());
 
-    it('renders every cue active at the same time, in order', () => {
+    it('renders overlapping cues of one band together, in start order', () => {
       const o = new SubtitleOverlay();
-      shown(o, [cue(0, 10, 'Dialogue'), cue(2, 4, 'Sign', true), cue(3, 9, 'Other')]);
+      shown(o, [cue(0, 10, 'Dialogue'), cue(3, 9, 'Other')]);
       o.updateAt(3.5);
-      expect(el()?.innerHTML).toBe('Dialogue<br>Sign<br>Other');
-      o.updateAt(5);
       expect(el()?.innerHTML).toBe('Dialogue<br>Other');
+      expect(topEl()?.style.display).toBe('none');
       o.updateAt(20);
       expect(el()?.style.display).toBe('none');
+    });
+
+    it('splits a top cue from bottom cues into two bands', () => {
+      const o = new SubtitleOverlay();
+      shown(o, [cue(0, 10, 'Dialogue'), cue(2, 4, 'Sign', true), cue(3, 9, 'Other'), cue(3.2, 4.5, 'Sign 2', true)]);
+      o.updateAt(3.5);
+      expect(el()?.innerHTML).toBe('Dialogue<br>Other');
+      expect(topEl()?.innerHTML).toBe('Sign<br>Sign 2');
+      expect(topEl()?.style.top).toBe('5vh');
+      expect(el()?.style.bottom).toBe('10vh');
+      o.updateAt(5);
+      expect(topEl()?.style.display).toBe('none');
+      expect(el()?.style.display).toBe('block');
     });
 
     it('follows a backward seek', () => {
