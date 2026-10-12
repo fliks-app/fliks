@@ -1556,11 +1556,11 @@
       "unknown": "Unbekannt"
     },
     "stall": {
-      "server_wait": "{{wait}} s auf die Transkodierung gewartet (Geschwindigkeit {{speed}}×)",
-      "network_starved": "Puffer {{buffer}} s · Durchsatz {{throughput}} Mbps < Bitrate {{bitrate}} Mbps",
-      "network_unconfirmed": "Puffer {{buffer}} s · kein bestätigter Durchsatzmangel",
-      "network_low_throughput": "Puffer unbekannt · Durchsatz {{throughput}} Mbps < Bitrate {{bitrate}} Mbps",
-      "device_buffer_ahead": "Noch {{buffer}} s gepuffert",
+      "server_wait": "Der Server brauchte {{wait}} s für den nächsten Abschnitt (Transkodiergeschwindigkeit {{speed}}×)",
+      "network_starved": "Der Durchsatz ({{throughput}} Mbps) reichte für die Bitrate ({{bitrate}} Mbps) nicht, Puffer fast leer ({{buffer}} s)",
+      "network_unconfirmed": "Puffer fast leer ({{buffer}} s), aber kein bestätigter Durchsatzmangel",
+      "network_low_throughput": "Der Durchsatz ({{throughput}} Mbps) reichte für die Bitrate ({{bitrate}} Mbps) nicht",
+      "device_buffer_ahead": "Das Gerät kam nicht mit, obwohl noch {{buffer}} s gepuffert waren",
       "device_dropped_frames": "{{dropped}} % der Frames rund um den Aussetzer verworfen",
       "unknown": "Zu wenig Daten für eine Aussage",
       "hint_software_encode": "Software-Kodierung",
@@ -1586,9 +1586,7 @@
       "tier_unknown": "Stufe nicht bestimmt"
     },
     "watched_hint": "Zeit im Player außerhalb der Pause, Ladezeiten eingeschlossen",
-    "timeline_time": "Uhrzeit",
-    "timeline_position": "Position im Video",
-    "timeline_event": "Ereignis",
+    "timeline_header": "Wiedergabe vom {{date}} · {{from}} → {{to}} · {{duration}}",
     "hint": {
       "engine": "Vom Player verwendete Wiedergabe-Engine, zum Beispiel Shaka im Web oder ExoPlayer auf Android.",
       "pipeline": "Was der Server mit dem Stream gemacht hat: Quelle, Ausgabe und die Hard- oder Software zum Decodieren und Kodieren.",
@@ -1635,10 +1633,20 @@
       "next": "Neue Sitzung"
     },
     "block": {
-      "start": "Start",
-      "no_stall": "Keine Aussetzer",
       "end": "Ende der Wiedergabe",
-      "stalls": "Aussetzer: {{count}}"
+      "none": "keine Aussetzer",
+      "few_seconds": "ein paar Sekunden",
+      "details": "Technische Details",
+      "title_start_auto": "Start in automatischer Qualität",
+      "title_start": "Start in {{rung}}",
+      "title_play": "Wiedergabe in {{rung}}",
+      "title_play_auto": "Wiedergabe in automatischer Qualität",
+      "title_cast": "Wiedergabe auf Chromecast",
+      "title_recovery": "Fortsetzung nach einem Fehler",
+      "stalls_one": "1 Aussetzer ({{total}})",
+      "stalls_many": "{{count}} Aussetzer ({{total}} insgesamt)",
+      "stall_pos": "bei {{pos}} im Video, {{duration}} eingefroren",
+      "stall_nopos": "{{duration}} eingefroren"
     }
   },
   "markers": {

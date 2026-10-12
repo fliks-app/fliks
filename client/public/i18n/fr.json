@@ -1556,11 +1556,11 @@
       "unknown": "Inconnue"
     },
     "stall": {
-      "server_wait": "Attente de {{wait}} s sur le transcodage (vitesse {{speed}}×)",
-      "network_starved": "Tampon {{buffer}} s · débit {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
-      "network_unconfirmed": "Tampon {{buffer}} s · aucun manque de débit confirmé",
-      "network_low_throughput": "Tampon inconnu · débit {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
-      "device_buffer_ahead": "{{buffer}} s encore en tampon",
+      "server_wait": "Le serveur a mis {{wait}} s à produire la suite (vitesse de transcodage {{speed}}×)",
+      "network_starved": "Le débit ({{throughput}} Mbps) ne suivait pas le bitrate ({{bitrate}} Mbps), tampon presque vide ({{buffer}} s)",
+      "network_unconfirmed": "Tampon presque vide ({{buffer}} s), mais aucun manque de débit confirmé",
+      "network_low_throughput": "Le débit ({{throughput}} Mbps) ne suivait pas le bitrate ({{bitrate}} Mbps)",
+      "device_buffer_ahead": "L'appareil n'a pas suivi alors qu'il restait {{buffer}} s en tampon",
       "device_dropped_frames": "{{dropped}} % d'images perdues autour de la coupure",
       "unknown": "Pas assez de données pour trancher",
       "hint_software_encode": "encodage logiciel",
@@ -1586,9 +1586,7 @@
       "tier_unknown": "palier non déterminé"
     },
     "watched_hint": "Temps passé dans le lecteur hors pause, chargements compris",
-    "timeline_time": "Heure",
-    "timeline_position": "Position vidéo",
-    "timeline_event": "Événement",
+    "timeline_header": "Lecture du {{date}} · {{from}} → {{to}} · {{duration}}",
     "hint": {
       "engine": "Moteur de lecture utilisé par le lecteur, par exemple Shaka sur le web ou ExoPlayer sur Android.",
       "pipeline": "Ce que le serveur a fait du flux : source, sortie, et matériel ou logiciel utilisé pour le décoder et l’encoder.",
@@ -1635,10 +1633,20 @@
       "next": "Nouvelle session"
     },
     "block": {
-      "start": "Démarrage",
-      "no_stall": "Aucune coupure",
       "end": "Fin de lecture",
-      "stalls": "Coupures : {{count}}"
+      "none": "aucune coupure",
+      "few_seconds": "quelques secondes",
+      "details": "Détails techniques",
+      "title_start_auto": "Démarrage en qualité auto",
+      "title_start": "Démarrage en {{rung}}",
+      "title_play": "Lecture en {{rung}}",
+      "title_play_auto": "Lecture en qualité auto",
+      "title_cast": "Lecture sur Chromecast",
+      "title_recovery": "Reprise après erreur",
+      "stalls_one": "1 coupure ({{total}})",
+      "stalls_many": "{{count}} coupures ({{total}} au total)",
+      "stall_pos": "à {{pos}} dans la vidéo, figée {{duration}}",
+      "stall_nopos": "figée {{duration}}"
     }
   },
   "markers": {

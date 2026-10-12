@@ -264,87 +264,107 @@
         </div>
       }
 
-      <h4 class="font-semibold mt-4 mb-2">{{ 'qoe.timeline' | translate }}</h4>
+      <h4 class="font-semibold mt-4">{{ 'qoe.timeline' | translate }}</h4>
       @if (timeline(); as tl) {
-        <div class="flex gap-3 pb-1 text-sm text-base-content/40">
-          <span class="w-36 shrink-0">{{ 'qoe.timeline_time' | translate }}</span>
-          <span class="w-24 shrink-0 truncate" [title]="'qoe.timeline_position' | translate">{{ 'qoe.timeline_position' | translate }}</span>
-          <span>{{ 'qoe.timeline_event' | translate }}</span>
-        </div>
-        @for (block of tl.blocks; track block.session.sessionId; let i = $index) {
-          <section class="rounded-lg border border-base-200" [title]="block.session.sessionId">
-            <header class="flex flex-wrap items-center gap-x-4 gap-y-1 bg-base-200/50 px-3 py-2 text-sm">
-              <span class="font-semibold">
-                @if (block.first) {
-                  {{ 'qoe.block.start' | translate }} ·
-                }
-                {{ block.session.startedAt | localeDate: { dateStyle: 'short', timeStyle: 'medium' } }}
-              </span>
-              <span [title]="'qoe.hint.quality' | translate">{{ qualityText(block.session) }}</span>
-              <span class="text-base-content/70" [title]="'qoe.watched_hint' | translate">{{ duration(block.session.watchedMs) }}</span>
-              <span class="text-base-content/70">{{ 'qoe.block.stalls' | translate: { count: block.session.stallCount } }}</span>
-              <span class="ml-auto flex items-center gap-2" [title]="'qoe.hint.verdict' | translate">
-                <span class="inline-block h-2.5 w-2.5 rounded-full shrink-0" [class]="dotClass(block.session)"></span>
-                {{ 'qoe.verdict.' + block.session.verdict | translate }}
-              </span>
-              @if (pipelineText(block.session.pipeline, block.session); as pipe) {
-                <span class="basis-full text-sm text-base-content/60" [title]="'qoe.hint.pipeline' | translate">{{ pipe }}</span>
-              }
-            </header>
-            @if (block.events.length === 0) {
-              <p class="px-3 py-2 text-sm text-base-content/50">{{ 'qoe.block.no_stall' | translate }}</p>
-            } @else {
-              <ul class="px-3 text-sm">
-                @for (e of block.events; track $index) {
-                  <li class="py-1 border-b border-base-200 last:border-0">
-                    <div class="flex gap-3">
-                      <span class="w-36 shrink-0 tabular-nums text-base-content/50">
-                        {{ eventStart(e) | localeDate: { dateStyle: 'short', timeStyle: 'medium' } }}
-                      </span>
-                      <span class="w-24 shrink-0 tabular-nums text-base-content/50">{{ formatPosition(e.data?.position ?? null) }}</span>
-                      <span class="min-w-0 break-words font-medium">{{ eventLine(e) }}</span>
-                    </div>
-                    @if (e.data?.cause; as cause) {
-                      <div class="flex items-center gap-2 pl-[calc(9rem+6rem+1.5rem)] text-sm text-base-content/70">
-                        <span class="inline-block h-2.5 w-2.5 rounded-full shrink-0" [class]="causeDot[cause]"></span>
-                        <span class="font-medium">{{ 'qoe.cause.' + cause | translate }}</span>
-                        @if (e.data.causeConfidence === 'low') {
-                          <span class="text-base-content/40">({{ 'qoe.confidence_low' | translate }})</span>
-                        }
-                        @if (stallLine(e); as line) {
-                          <span class="min-w-0 break-words">{{ line }}</span>
-                        }
-                      </div>
-                      @if (cause === 'server') {
-                        <div class="pl-[calc(9rem+6rem+1.5rem)] text-sm text-base-content/50 space-y-0.5">
-                          @if (stallHints(e); as hints) {
-                            <div class="text-warning/80">{{ hints }}</div>
+        <p class="text-sm text-base-content/60 mb-3">{{ timelineHeader(d) }}</p>
+        <ol>
+          @for (block of tl.blocks; track block.session.sessionId; let i = $index) {
+            <li class="flex gap-3">
+              <div class="flex w-4 shrink-0 flex-col items-center" aria-hidden="true">
+                <span class="mt-1.5 inline-block h-3 w-3 shrink-0 rounded-full" [class]="dotClass(block.session)"></span>
+                <span class="w-px flex-1 bg-base-300"></span>
+              </div>
+              <div class="min-w-0 flex-1 pb-4" [title]="block.session.sessionId">
+                <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <span class="tabular-nums text-sm text-base-content/60">{{ clock(block.session.startedAt, d) }}</span>
+                  <span class="font-semibold">{{ blockTitle(tl, i) }}</span>
+                  <span class="ml-auto badge badge-sm badge-ghost gap-1.5" [title]="'qoe.hint.verdict' | translate">
+                    <span class="inline-block h-2 w-2 rounded-full" [class]="dotClass(block.session)"></span>
+                    {{ 'qoe.verdict.' + block.session.verdict | translate }}
+                  </span>
+                </div>
+                <p class="text-sm text-base-content/60">{{ blockSummary(block) }}</p>
+                @if (block.events.length > 0) {
+                  <ul class="mt-2 space-y-2">
+                    @for (e of block.events; track $index) {
+                      <li class="flex gap-2 text-sm">
+                        <span class="shrink-0" [class]="e.type === 'stall' ? 'text-warning' : 'text-error'" aria-hidden="true">{{ e.type === 'stall' ? '⚠' : '✕' }}</span>
+                        <div class="min-w-0">
+                          <div class="break-words">
+                            <span class="tabular-nums text-base-content/60">{{ clock(eventStart(e), d) }}</span>
+                            <span class="ml-2">{{ eventLine(e) }}</span>
+                            @if (e.data?.cause; as cause) {
+                              <span class="ml-2 inline-flex items-center gap-1.5 font-medium">
+                                <span class="inline-block h-2 w-2 rounded-full" [class]="causeDot[cause]"></span>{{ 'qoe.cause.' + cause | translate }}
+                              </span>
+                              @if (e.data?.causeConfidence === 'low') {
+                                <span class="ml-1 text-base-content/40">({{ 'qoe.confidence_low' | translate }})</span>
+                              }
+                            }
+                          </div>
+                          @if (stallLine(e); as line) {
+                            <p class="text-base-content/70">{{ line }}</p>
                           }
-                          @if (stallPipeline(d, e); as pipe) {
-                            <div>{{ pipe }}</div>
-                          }
-                          @if (stallLoad(e); as load) {
-                            <div>{{ load }}</div>
+                          @if (e.data?.cause === 'server') {
+                            <div class="text-base-content/50 space-y-0.5">
+                              @if (stallHints(e); as hints) {
+                                <p class="text-warning/80">{{ hints }}</p>
+                              }
+                              @if (stallPipeline(d, e); as pipe) {
+                                <p>{{ pipe }}</p>
+                              }
+                              @if (stallLoad(e); as load) {
+                                <p>{{ load }}</p>
+                              }
+                            </div>
                           }
                         </div>
-                      }
+                      </li>
                     }
-                  </li>
+                  </ul>
                 }
-              </ul>
+                @if (detailRows(block.session); as rows) {
+                  @if (rows.length > 0) {
+                    <details class="mt-2 text-sm" [attr.open]="detailsOpen(block.session.verdict) ? '' : null">
+                      <summary class="cursor-pointer text-base-content/60">{{ 'qoe.block.details' | translate }}</summary>
+                      <dl class="mt-2 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
+                        @for (row of rows; track row.label) {
+                          <dt class="text-base-content/50">{{ row.label }}</dt>
+                          <dd class="min-w-0 break-words">{{ row.value }}</dd>
+                        }
+                      </dl>
+                    </details>
+                  }
+                }
+              </div>
+            </li>
+            @if (tl.transitions[i]; as tr) {
+              <li class="flex gap-3">
+                <div class="flex w-4 shrink-0 flex-col items-center" aria-hidden="true">
+                  <span class="mt-2 inline-block h-2.5 w-2.5 shrink-0 rotate-45 bg-base-content/40"></span>
+                  <span class="w-px flex-1 bg-base-300"></span>
+                </div>
+                <div class="min-w-0 flex-1 pb-4 text-sm">
+                  <span class="tabular-nums text-base-content/60">{{ clock(tr.event?.at ?? tl.blocks[i + 1].session.startedAt, d) }}</span>
+                  <span class="ml-3 font-medium">{{ transitionText(tr) }}</span>
+                </div>
+              </li>
             }
-          </section>
-          @if (tl.transitions[i]; as tr) {
-            <div class="flex items-center gap-2 py-2 pl-3 text-sm text-base-content/60">
-              <span aria-hidden="true">↓</span>
-              @if (tr.event) {
-                <span class="tabular-nums">{{ tr.event.at | localeDate: { dateStyle: 'short', timeStyle: 'medium' } }}</span>
-              }
-              <span class="font-medium">{{ transitionText(tr) }}</span>
-            </div>
           }
-        }
-        <p class="mt-3 text-sm text-base-content/60">{{ 'qoe.block.end' | translate }} · {{ endText(d) }}</p>
+          <li class="flex gap-3">
+            <div class="flex w-4 shrink-0 flex-col items-center" aria-hidden="true">
+              <span class="mt-1.5 inline-block h-3 w-3 shrink-0 bg-base-content/40"></span>
+            </div>
+            <div class="min-w-0 flex-1 text-sm">
+              @if (endMs(d); as end) {
+                <span class="tabular-nums text-base-content/60">{{ clock(end, d) }}</span>
+                <span class="ml-3 font-medium">{{ 'qoe.block.end' | translate }}</span>
+              } @else {
+                <span class="font-medium">{{ 'qoe.summary.ongoing' | translate }}</span>
+              }
+            </div>
+          </li>
+        </ol>
       }
       @if (d.events.length === 0) {
         <p class="mt-2 text-sm text-base-content/50">{{ 'qoe.no_events' | translate }}</p>

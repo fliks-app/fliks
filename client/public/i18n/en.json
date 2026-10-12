@@ -1556,11 +1556,11 @@
       "unknown": "Unknown"
     },
     "stall": {
-      "server_wait": "Waited {{wait}} s for the transcode (speed {{speed}}×)",
-      "network_starved": "Buffer {{buffer}} s · throughput {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
-      "network_unconfirmed": "Buffer {{buffer}} s · no confirmed throughput shortfall",
-      "network_low_throughput": "Buffer unknown · throughput {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
-      "device_buffer_ahead": "{{buffer}} s still buffered",
+      "server_wait": "The server took {{wait}} s to produce the next part (transcode speed {{speed}}×)",
+      "network_starved": "Throughput ({{throughput}} Mbps) did not keep up with the bitrate ({{bitrate}} Mbps), buffer almost empty ({{buffer}} s)",
+      "network_unconfirmed": "Buffer almost empty ({{buffer}} s), but no confirmed throughput shortfall",
+      "network_low_throughput": "Throughput ({{throughput}} Mbps) did not keep up with the bitrate ({{bitrate}} Mbps)",
+      "device_buffer_ahead": "The device fell behind even though {{buffer}} s were still buffered",
       "device_dropped_frames": "{{dropped}} % of frames dropped around the stall",
       "unknown": "Not enough data to tell",
       "hint_software_encode": "software encode",
@@ -1586,9 +1586,7 @@
       "tier_unknown": "tier not determined"
     },
     "watched_hint": "Time spent in the player outside of pause, loading included",
-    "timeline_time": "Time",
-    "timeline_position": "Video position",
-    "timeline_event": "Event",
+    "timeline_header": "Playback on {{date}} · {{from}} → {{to}} · {{duration}}",
     "hint": {
       "engine": "Playback engine used by the player, for example Shaka on the web or ExoPlayer on Android.",
       "pipeline": "What the server did to the stream: source, output, and the hardware or software used to decode and encode it.",
@@ -1635,10 +1633,20 @@
       "next": "New session"
     },
     "block": {
-      "start": "Start",
-      "no_stall": "No stall",
       "end": "End of playback",
-      "stalls": "Stalls: {{count}}"
+      "none": "no stalls",
+      "few_seconds": "a few seconds",
+      "details": "Technical details",
+      "title_start_auto": "Started at auto quality",
+      "title_start": "Started at {{rung}}",
+      "title_play": "Playing at {{rung}}",
+      "title_play_auto": "Playing at auto quality",
+      "title_cast": "Playing on Chromecast",
+      "title_recovery": "Resumed after an error",
+      "stalls_one": "1 stall ({{total}})",
+      "stalls_many": "{{count}} stalls ({{total}} in total)",
+      "stall_pos": "at {{pos}} in the video, frozen for {{duration}}",
+      "stall_nopos": "frozen for {{duration}}"
     }
   },
   "markers": {

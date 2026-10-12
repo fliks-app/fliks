@@ -1556,11 +1556,11 @@
       "unknown": "Desconhecida"
     },
     "stall": {
-      "server_wait": "Esperou {{wait}} s pela transcodificação (velocidade {{speed}}×)",
-      "network_starved": "Buffer {{buffer}} s · débito {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
-      "network_unconfirmed": "Buffer {{buffer}} s · sem falta de débito confirmada",
-      "network_low_throughput": "Buffer desconhecido · débito {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
-      "device_buffer_ahead": "{{buffer}} s ainda em buffer",
+      "server_wait": "O servidor demorou {{wait}} s a produzir a seguir (velocidade de transcodificação {{speed}}×)",
+      "network_starved": "O débito ({{throughput}} Mbps) não acompanhava o bitrate ({{bitrate}} Mbps), buffer quase vazio ({{buffer}} s)",
+      "network_unconfirmed": "Buffer quase vazio ({{buffer}} s), mas sem falta de débito confirmada",
+      "network_low_throughput": "O débito ({{throughput}} Mbps) não acompanhava o bitrate ({{bitrate}} Mbps)",
+      "device_buffer_ahead": "O dispositivo não acompanhou, apesar de ainda haver {{buffer}} s em buffer",
       "device_dropped_frames": "{{dropped}} % de quadros descartados em torno da paragem",
       "unknown": "Dados insuficientes para decidir",
       "hint_software_encode": "codificação por software",
@@ -1586,9 +1586,7 @@
       "tier_unknown": "nível não determinado"
     },
     "watched_hint": "Tempo no leitor fora de pausa, incluindo carregamentos",
-    "timeline_time": "Hora",
-    "timeline_position": "Posição no vídeo",
-    "timeline_event": "Evento",
+    "timeline_header": "Reprodução de {{date}} · {{from}} → {{to}} · {{duration}}",
     "hint": {
       "engine": "Motor de reprodução usado pelo leitor, por exemplo Shaka na web ou ExoPlayer no Android.",
       "pipeline": "O que o servidor fez ao fluxo: origem, saída e o hardware ou software usado para o descodificar e codificar.",
@@ -1635,10 +1633,20 @@
       "next": "Nova sessão"
     },
     "block": {
-      "start": "Início",
-      "no_stall": "Nenhuma paragem",
       "end": "Fim da reprodução",
-      "stalls": "Paragens: {{count}}"
+      "none": "nenhuma paragem",
+      "few_seconds": "alguns segundos",
+      "details": "Detalhes técnicos",
+      "title_start_auto": "Início em qualidade auto",
+      "title_start": "Início em {{rung}}",
+      "title_play": "Reprodução em {{rung}}",
+      "title_play_auto": "Reprodução em qualidade auto",
+      "title_cast": "Reprodução no Chromecast",
+      "title_recovery": "Retoma após um erro",
+      "stalls_one": "1 paragem ({{total}})",
+      "stalls_many": "{{count}} paragens ({{total}} no total)",
+      "stall_pos": "a {{pos}} no vídeo, parada {{duration}}",
+      "stall_nopos": "parada {{duration}}"
     }
   },
   "markers": {
