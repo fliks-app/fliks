@@ -993,7 +993,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             "height": size.height > 0 ? Int(size.height) : NSNull(),
             "videoCodec": NSNull(),
             "decoderName": NSNull(),
-            "hwDecoder": true,
+            "hwDecoder": NSNull(),
         ]
     }
 
