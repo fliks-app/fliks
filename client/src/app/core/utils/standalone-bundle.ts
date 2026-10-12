@@ -14,9 +14,12 @@ export const IS_STANDALONE_BUNDLE = (() => {
   );
 })();
 
-/** URL of the entry document, captured at import time — before the router
- *  rewrites the path. */
-const APP_ENTRY_URL = typeof location !== 'undefined' ? location.href : '/';
+/** Entry document. Over http the page may have been loaded on a deep route
+ *  (e.g. /setup), so the restart goes to the root, not wherever that load landed. */
+const APP_ENTRY_URL =
+  typeof location === 'undefined' ? '/'
+  : location.protocol === 'file:' ? location.href
+  : `${location.origin}/`;
 
 /**
  * Restart the app from its entry document. `location.reload()` would not do: the
