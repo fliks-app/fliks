@@ -214,8 +214,8 @@ export class SubtitleStreamService implements OnModuleInit {
   /**
    * Text subtitle tracks for the HLS master's `SUBTITLES` group: embedded
    * non-bitmap streams (from cached `streamInfo`) then external files. Bitmap
-   * subtitles (PGS/DVD/DVB) and sidecars that can't become WebVTT are excluded — they have no WebVTT form and stay on
-   * the burn-in path. `key` feeds the VTT endpoints (`subtitles/embedded/:idx`,
+   * subtitles (PGS/DVD/DVB) and sidecars that can't become WebVTT are
+   * excluded — they have no WebVTT form and stay on the burn-in path. `key` feeds the VTT endpoints (`subtitles/embedded/:idx`,
    * `subtitles/:id`); `name` is a human label (track title / language /
    * "Subtitle") shown by native players (AirPlay, lock-screen). It is NOT a
    * stable id — the master playlist uniquifies colliding names with an
