@@ -19,8 +19,8 @@ export class PlaybackQoeSession {
   @Column({ type: 'int', nullable: true })
   userId: number | null;
 
-  @Column({ type: 'int' })
-  mediaFileId: number;
+  @Column({ type: 'int', nullable: true })
+  mediaFileId: number | null;
 
   @Column({ type: 'varchar', nullable: true })
   mediaTitle: string | null;

@@ -131,6 +131,23 @@ describe('QoeService', () => {
     expect(svc.trackedSession('nope')).toBeNull();
   });
 
+  it('stores a live TV session without a media file, found again by trackedSession', async () => {
+    const { svc, upsert } = build();
+    const live = { ...session, sessionId: 'tv', mediaFileId: null, mediaTitle: 'Channel', kind: 'live' as const };
+    svc.register(live);
+    expect(svc.trackedSession('tv')).toBe(live);
+    svc.recordSample(live, sample);
+    svc.sessionEnded(live);
+    await new Promise((r) => setImmediate(r));
+    expect(upsert.mock.calls[0][0]).toMatchObject({
+      mediaFileId: null,
+      mediaTitle: 'Channel',
+      playMethod: 'live',
+      engine: 'shaka',
+      endedAt: expect.any(Date),
+    });
+  });
+
   it('writes no row for a session that never reported a sample or event', async () => {
     const { svc, upsert } = build();
     svc.observeSegment(session, { query: { CMCD: 'bl=100' }, headers: {} } as never, 3, 50);

@@ -4,7 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import type { Request } from 'express';
 import { SettingsService } from '../settings/settings.service';
-import type { LiveSession } from '../streaming/live-session.service';
+import type { LiveSession, SessionKind } from '../streaming/live-session.service';
 import { QoeAggregator, mergeSummaries } from './core/aggregate';
 import { readCmcd } from './core/cmcd';
 import { diagnose } from './core/diagnose';
@@ -30,23 +30,22 @@ const MAX_SUMMARY_ROWS = 50_000;
 export const QOE_ENABLED_KEY = 'qoe_enabled';
 export const QOE_RETENTION_DAYS_KEY = 'qoe_retention_days';
 
-type SessionRef = Pick<
+/** A LiveSession, or any session shaped like one (live TV: no media file, kind 'live'). */
+export type SessionRef = Pick<
   LiveSession,
   | 'sessionId'
   | 'userId'
-  | 'mediaFileId'
   | 'mediaTitle'
   | 'startedAt'
   | 'lastBeat'
   | 'deviceLabel'
   | 'systemName'
   | 'appVersion'
-  | 'kind'
   | 'quality'
   | 'transcodeReasons'
   | 'state'
   | 'attributedUserId'
->;
+> & { mediaFileId: number | null; kind: SessionKind | 'live' };
 
 type QoeEventRow = Pick<PlaybackQoeEvent, 'sessionId' | 'at' | 'type' | 'data'>;
 
@@ -257,6 +256,11 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
 
   get enabled(): boolean {
     return this.enabledFlag;
+  }
+
+  /** Starts tracking a session; nothing is stored until a sample or event arrives. */
+  register(session: SessionRef): void {
+    this.track(session);
   }
 
   recordSample(session: SessionRef, sample: QoeSample): void {

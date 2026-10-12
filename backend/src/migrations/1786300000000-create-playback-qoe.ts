@@ -10,7 +10,7 @@ export class CreatePlaybackQoe1786300000000 implements MigrationInterface {
         "sessionId" character varying(64) NOT NULL,
         "playbackId" character varying(64),
         "userId" integer,
-        "mediaFileId" integer NOT NULL,
+        "mediaFileId" integer,
         "mediaTitle" character varying,
         "startedAt" TIMESTAMP WITH TIME ZONE NOT NULL,
         "lastSeenAt" TIMESTAMP WITH TIME ZONE NOT NULL,
