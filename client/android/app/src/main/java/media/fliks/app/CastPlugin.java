@@ -911,6 +911,7 @@ public class CastPlugin extends Plugin {
 
     @Override
     protected void handleOnDestroy() {
+        if (castSession != null) unlistenReceiver(castSession);
         MediaRouter.getInstance(getContext()).removeCallback(routeCallback);
     }
 }
