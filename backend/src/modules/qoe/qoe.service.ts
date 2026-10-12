@@ -643,6 +643,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
       .addSelect('MAX(s."userId")', 'uid')
       .addSelect('MAX(s."playbackId")', 'pid')
       .addSelect('COUNT(*) OVER()', 'total')
+      .where('s."lastSeenAt" >= :floor', { floor: this.since(q.days ?? 7, true) })
       .groupBy(KEY_SQL)
       .having('MAX(s."lastSeenAt") >= :since', { since: this.since(q.days ?? 7) })
       .orderBy('last', 'DESC')
@@ -668,16 +669,17 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
   ): Promise<QoePlayback[]> {
     if (!page.length) return [];
     const grouped = page.filter((p) => p.uid != null && p.pid != null);
-    const rows = await this.sessions
+    const found = await this.sessions
       .createQueryBuilder('s')
-      .where('s."sessionId" = ANY(:sids)', {
-        sids: page.filter((p) => !grouped.includes(p)).map((p) => p.key),
+      .where('s."sessionId" = ANY(:sids)', { sids: page.map((p) => p.key) })
+      .orWhere('(s."userId" = ANY(:uids) AND s."playbackId" = ANY(:pids))', {
+        uids: grouped.map((p) => p.uid),
+        pids: grouped.map((p) => p.pid),
       })
-      .orWhere(
-        '(s."userId", s."playbackId") IN (SELECT * FROM unnest(:uids::int[], :pids::text[]))',
-        { uids: grouped.map((p) => p.uid), pids: grouped.map((p) => p.pid) },
-      )
       .getMany();
+    // The two ANY lists also match cross pairs; keep only the pages' exact playbacks.
+    const keys = new Set(page.map((p) => p.key));
+    const rows = found.filter((r) => keys.has(playbackKey(r)));
     return mergePlaybacks(rows);
   }
 
@@ -726,6 +728,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
       .addSelect('SUM(s."stallCount")', 'stalls')
       .addSelect(both('droppedFrames'), 'dropped')
       .addSelect(both('decodedFrames'), 'decoded')
+      .where('s."lastSeenAt" >= :floor', { floor: this.since(days, true) })
       .groupBy(KEY_SQL)
       .having('MAX(s."lastSeenAt") >= :since', { since: this.since(days) })
       .orderBy('last', 'DESC')
@@ -785,7 +788,8 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     return { byVerdict, byDevice };
   }
 
-  private since(days: number): Date {
-    return new Date(Date.now() - Math.min(Math.max(days, 1), 3650) * DAY_MS);
+  /** `floor` leaves a day of slack so the lastSeenAt index bounds the scan without cutting a playback's early rows. */
+  private since(days: number, floor = false): Date {
+    return new Date(Date.now() - Math.min(Math.max(days, 1), 3650) * DAY_MS - (floor ? DAY_MS : 0));
   }
 }
