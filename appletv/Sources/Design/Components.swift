@@ -233,7 +233,9 @@ struct Rail<Item: Identifiable, Card: View>: View {
                 Text(title).font(.title2.bold())
             }
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 30) {
+                // Top-aligned: a card without a subtitle line (a movie next to an
+                // episode) would otherwise sit half a line lower than its neighbours.
+                LazyHStack(alignment: .top, spacing: 30) {
                     ForEach(items) { item in card(item) }
                 }
                 .padding(.vertical, 16)
@@ -263,7 +265,7 @@ struct ContentGrid<Item: Identifiable, Card: View>: View {
     }
 
     private var gridColumns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: 30), count: columns)
+        Array(repeating: GridItem(.flexible(), spacing: 30, alignment: .top), count: columns)
     }
 
     var body: some View {
