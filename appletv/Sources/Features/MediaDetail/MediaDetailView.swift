@@ -202,11 +202,11 @@ struct MediaDetailView: View {
     private func episodesRail(season: Season) -> some View {
         Rail(title: tr("media_detail.episodes"),
              items: season.episodes.sorted { $0.episodeNumber < $1.episodeNumber }) { ep in
-            MediaCard(imagePath: ep.stillUrl, title: "E\(ep.episodeNumber)", subtitle: ep.title,
-                      portrait: false, mediaId: mediaId, episodeId: ep.id) {
+            MediaCard(imagePath: ep.stillUrl, title: ep.cardTitle, subtitle: ep.cardSubtitle,
+                      portrait: false, mediaId: mediaId, episodeId: ep.id,
+                      missing: !ep.hasFile, cornerLabel: ep.numberLabel) {
                 onSelectEpisode(ep.id)
             }
-            .opacity(ep.hasFile ? 1 : 0.4)
         }
     }
 

@@ -31,6 +31,10 @@ struct MediaCard: View {
     /// Set to show the watched badge and offer the card actions.
     var mediaId: Int? = nil
     var episodeId: Int? = nil
+    /// Released but no file: red cross top-left, like the web card.
+    var missing: Bool = false
+    /// Short top-left tag (episode number), drawn after the missing mark.
+    var cornerLabel: String? = nil
     var onSelect: () -> Void
 
     @FocusState private var focused: Bool
@@ -62,6 +66,12 @@ struct MediaCard: View {
                     }
                 }
                 .overlay(alignment: .topTrailing) { if isWatched { WatchedBadge() } }
+                .overlay(alignment: .topLeading) {
+                    HStack(spacing: 0) {
+                        if missing { MissingBadge() }
+                        if let cornerLabel { CornerLabel(text: cornerLabel) }
+                    }
+                }
             }
             .buttonStyle(.card)
             .cardActions(mediaId: mediaId, episodeId: episodeId)
@@ -80,8 +90,7 @@ struct MediaCard: View {
                             .lineLimit(1)
                     }
                 }
-                .offset(y: focused ? 12 : 0)
-                .animation(.easeOut(duration: 0.15), value: focused)
+                .padding(.top, 12)
             }
         }
         .frame(width: size.width, alignment: .leading)
@@ -121,6 +130,33 @@ struct WatchedBadge: View {
             .font(.system(size: 34))
             .symbolRenderingMode(.palette)
             .foregroundStyle(.white, .green)
+            .padding(8)
+    }
+}
+
+/// Missing-files marker (released, no file) drawn over card artwork.
+struct MissingBadge: View {
+    var body: some View {
+        Image(systemName: "xmark.circle.fill")
+            .font(.system(size: 34))
+            .symbolRenderingMode(.palette)
+            .foregroundStyle(.white, .red)
+            .padding(8)
+            .accessibilityLabel(tr("media_card.missing_files"))
+    }
+}
+
+/// Small dark tag over card artwork (episode number).
+struct CornerLabel: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 22, weight: .semibold, design: .monospaced))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(.black.opacity(0.7)))
             .padding(8)
     }
 }
@@ -170,6 +206,7 @@ struct PosterCard: View {
     var progressPercent: Double? = nil
     var mediaId: Int? = nil
     var episodeId: Int? = nil
+    var missing: Bool = false
     var onSelect: () -> Void
     @FocusState private var focused: Bool
     @Environment(WatchedStore.self) private var watched
@@ -199,6 +236,7 @@ struct PosterCard: View {
                     }
                 }
                 .overlay(alignment: .topTrailing) { if isWatched { WatchedBadge() } }
+                .overlay(alignment: .topLeading) { if missing { MissingBadge() } }
             }
             .buttonStyle(.card)
             .cardActions(mediaId: mediaId, episodeId: episodeId)

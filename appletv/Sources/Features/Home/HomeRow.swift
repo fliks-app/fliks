@@ -184,7 +184,7 @@ private struct RecommendationsRow: View {
         ZoneRow(title: tr("home.recommendations"), state: state, onRetry: { Task { await load() } }) { rec in
             MediaCard(imagePath: rec.media.posterUrl, title: rec.media.title,
                       subtitle: rec.media.year.map(String.init), backdropPath: rec.media.fanartUrl,
-                      mediaId: rec.media.id) {
+                      mediaId: rec.media.id, missing: !rec.media.available) {
                 onSelect(rec.media.id)
             }
         }
@@ -244,7 +244,7 @@ private struct RecentlyAddedRow: View {
     var body: some View {
         ZoneRow(title: title, state: state, onRetry: { Task { await load() } }) { m in
             MediaCard(imagePath: m.posterUrl, title: m.title, subtitle: m.year.map(String.init),
-                      backdropPath: m.fanartUrl, mediaId: m.id) {
+                      backdropPath: m.fanartUrl, mediaId: m.id, missing: m.isMissing) {
                 onSelect(m.id)
             }
         }
