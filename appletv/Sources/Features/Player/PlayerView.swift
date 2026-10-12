@@ -251,7 +251,8 @@ private struct SkipCueStyle: ButtonStyle {
             mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId,
             startAt: startAt, streamInfo: currentFileInfo, subtitleRows: externalSubtitles
         )
-        let item = AVPlayerItem(url: url)
+        let item = Self.makeItem(url: url)
+        playback.qoeItem = item
         applyMetadata(to: item)
         let p = AVPlayer(playerItem: item)
         player = p
@@ -268,7 +269,10 @@ private struct SkipCueStyle: ButtonStyle {
         guard let player else { return }
         let subtitleChoice = keepingSubtitle ? currentLegibleChoice() : nil
         let wasPaused = player.timeControlStatus == .paused
-        let item = AVPlayerItem(url: url)
+        let item = Self.makeItem(url: url)
+        playback.qoeItem = item
+        playedOnce = false
+        stallStart = nil
         applyMetadata(to: item)
         player.replaceCurrentItem(with: item)
         let target = edlStart(position, duration: edlDuration(item))
@@ -281,6 +285,36 @@ private struct SkipCueStyle: ButtonStyle {
         armEdl()
         applyPreferredSubtitle(to: item, player: player, restoring: subtitleChoice)
         if !wasPaused { player.play() }
+    }
+
+    private static func makeItem(url: URL) -> AVPlayerItem {
+        let asset = AVURLAsset(url: url)
+        if #available(tvOS 18.0, *) { asset.resourceLoader.sendsCommonMediaClientDataAsHTTPHeaders = true }
+        return AVPlayerItem(asset: asset)
+    }
+
+    /// Rebuffer in flight: set on `.waitingToPlayAtSpecifiedRate` after the first frame, settled on `.playing`.
+    private var stallStart: (at: Date, position: Double)?
+    private var playedOnce = false
+
+    private func trackStall(_ player: AVPlayer) {
+        let position = player.currentTime().seconds
+        switch player.timeControlStatus {
+        case .playing:
+            playedOnce = true
+            guard let start = stallStart else { return }
+            stallStart = nil
+            // A seek also waits to buffer, but moves the playhead.
+            if abs(position - start.position) < 2 {
+                playback.recordStall(position: start.position, durationMs: Int(Date().timeIntervalSince(start.at) * 1000))
+            }
+        case .waitingToPlayAtSpecifiedRate:
+            if playedOnce, stallStart == nil, player.reasonForWaitingToPlay == .toMinimizeStalls {
+                stallStart = (Date(), position)
+            }
+        default:
+            stallStart = nil
+        }
     }
 
     func teardown() {
@@ -417,6 +451,7 @@ private struct SkipCueStyle: ButtonStyle {
             let duration = player.currentItem?.duration.seconds ?? 0
             Task { @MainActor in
                 guard let self else { return }
+                self.trackStall(player)
                 if self.edlEnded, self.player?.timeControlStatus != .paused { self.restartAfterEdlEnd() }
                 self.playback.notifyStateChange(
                     position: position.isFinite ? position : 0,

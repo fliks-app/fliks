@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 
 /// One playback session: playback-info -> play URL, ~10s heartbeat (+ instant
@@ -37,6 +38,23 @@ import Foundation
     private let maxRecoverAttempts = 3
     private var recoveringGuard = false
 
+    /// The item being played, read for the heartbeat's `qoe` block. Set by the coordinator on every (re)load.
+    weak var qoeItem: AVPlayerItem?
+    private var stallCount = 0
+    private var stallMs = 0
+    private var recoveryReloads = 0
+    private var pendingEvents: [QoeEvent] = []
+
+    struct QoeEvent: Encodable {
+        let type: String
+        let at: Int
+        let position: Double?
+        var durationMs: Int?
+        var bufferAheadS: Double?
+        var bandwidthBps: Double?
+        var message: String?
+    }
+
     /// Fired with a fresh play URL after a lost-session / stall recovery mints
     /// a new sid — the caller reloads the AVPlayerItem at `position`.
     var onReload: ((URL, Double) -> Void)?
@@ -56,6 +74,7 @@ import Foundation
         self.episodeId = episodeId
         destroyed = false
         recoverAttempts = 0
+        stallCount = 0; stallMs = 0; recoveryReloads = 0; pendingEvents = []
         let settings = AppSettingsStore.shared
         qualityId = settings.playerQualityId
         let audio = streamInfo?.audio ?? []
@@ -104,7 +123,7 @@ import Foundation
         qualityId = id
         AppSettingsStore.shared.playerQualityId = id
         recoverAttempts = 0
-        Task { await recover(position: position) }
+        Task { await recover(position: position, countAsRecovery: false) }
     }
 
     // MARK: - Playback-info + play URL
@@ -234,6 +253,7 @@ import Foundation
             let qualities: [Rung]
             // Links a polled remote target to this live session; nil until registered.
             let targetId: String?
+            let qoe: Qoe
         }
         struct Response: Decodable { let sessionLost: Bool? }
         let body = Body(
@@ -243,12 +263,92 @@ import Foundation
             subtitleId: Nullable(value: subtitleId), lastCmdId: lastCmdId,
             quality: qualityId,
             qualities: qualityOptions.map { Rung(id: $0.id, label: $0.label, lowBandwidth: $0.lowBandwidth) },
-            targetId: RemoteControlService.shared.targetId
+            targetId: RemoteControlService.shared.targetId,
+            qoe: qoeSample()
         )
+        let events = takeEvents()
         Task {
+            await postEvents(events, sid: sid)
             guard let res: Response = try? await api.put("/api/playback/media/\(mediaId)/state", body: body) else { return }
             if res.sessionLost == true { await recover(position: position) }
         }
+    }
+
+    // MARK: - QoE
+
+    struct Qoe: Encodable {
+        let engine = "avplayer"
+        let cmcd: Bool
+        let droppedFrames: Int?
+        let decodedFrames: Int?
+        let bandwidthBps: Double?
+        let bufferAheadS: Double?
+        let variantBitrate: Double?
+        let width: Int?
+        let height: Int?
+        let videoCodec: String?
+        let decoderName: String?
+        let hwDecoder = true
+        let stallCount: Int
+        let stallMs: Int
+        let recoveryReloads: Int
+    }
+
+    private var bandwidth: Double? {
+        qoeItem?.accessLog()?.events.last.flatMap { $0.observedBitrate > 0 ? $0.observedBitrate : nil }
+    }
+
+    private var bufferAhead: Double? {
+        guard let item = qoeItem else { return nil }
+        let now = item.currentTime()
+        return item.loadedTimeRanges.map(\.timeRangeValue).first { $0.containsTime(now) }
+            .map { max(CMTimeGetSeconds($0.end) - now.seconds, 0) }
+    }
+
+    private func qoeSample() -> Qoe {
+        let events = qoeItem?.accessLog()?.events ?? []
+        let size = qoeItem?.presentationSize ?? .zero
+        var cmcd = false
+        if #available(tvOS 18.0, *) { cmcd = true }
+        return Qoe(
+            cmcd: cmcd,
+            droppedFrames: events.isEmpty ? nil : events.map(\.numberOfDroppedVideoFrames).filter { $0 >= 0 }.reduce(0, +),
+            decodedFrames: nil, bandwidthBps: bandwidth, bufferAheadS: bufferAhead,
+            variantBitrate: events.last.flatMap { $0.indicatedBitrate > 0 ? $0.indicatedBitrate : nil },
+            width: size.width > 0 ? Int(size.width) : nil, height: size.height > 0 ? Int(size.height) : nil,
+            videoCodec: nil, decoderName: nil,
+            stallCount: stallCount, stallMs: stallMs, recoveryReloads: recoveryReloads
+        )
+    }
+
+    /// A rebuffer that ended where it began (the coordinator drops seeks).
+    func recordStall(position: Double, durationMs: Int) {
+        stallCount += 1
+        stallMs += durationMs
+        pendingEvents.append(QoeEvent(type: "stall", at: Int(Date().timeIntervalSince1970 * 1000), position: position,
+                                      durationMs: durationMs, bufferAheadS: bufferAhead, bandwidthBps: bandwidth))
+    }
+
+    private func recordEvent(_ type: String, position: Double, message: String? = nil) {
+        pendingEvents.append(QoeEvent(type: type, at: Int(Date().timeIntervalSince1970 * 1000), position: position,
+                                      bufferAheadS: bufferAhead, bandwidthBps: bandwidth, message: message))
+    }
+
+    private func takeEvents() -> [QoeEvent] {
+        defer { pendingEvents = [] }
+        return pendingEvents
+    }
+
+    private func postEvents(_ events: [QoeEvent], sid: String) async {
+        struct Body: Encodable { let events: [QoeEvent] }
+        guard !events.isEmpty else { return }
+        try? await api.post("/api/playback/sessions/\(sid)/events", body: Body(events: events))
+    }
+
+    private func flushNow() {
+        guard let sid = sessionId else { return }
+        let events = takeEvents()
+        Task { await postEvents(events, sid: sid) }
     }
 
     // MARK: - Stall watchdog + recovery
@@ -269,16 +369,20 @@ import Foundation
     /// through the same one-fresh-sid-then-give-up recovery as a stall.
     func handleItemFailed(position: Double) {
         guard !destroyed else { return }
+        recordEvent("error", position: position, message: qoeItem?.error?.localizedDescription)
+        flushNow()
         Task { await recover(position: position) }
     }
 
     /// The carried sid is unknown to the backend (restart/GC) or the playhead
     /// wedged. Mint a fresh LiveSession and hand the caller a URL to reload at
     /// `position`. Retries with backoff, gives up after `maxRecoverAttempts`.
-    private func recover(position: Double) async {
+    private func recover(position: Double, countAsRecovery: Bool = true) async {
         guard !destroyed, !recoveringGuard else { return }
         if recoverAttempts >= maxRecoverAttempts {
             recovering = false
+            recordEvent("error", position: position, message: "recovery exhausted")
+            flushNow()
             onFatalError?()
             return
         }
@@ -295,6 +399,10 @@ import Foundation
             lastProgressAt = Date()
             recovering = false
             recoveringGuard = false
+            if countAsRecovery {
+                recoveryReloads += 1
+                recordEvent("recovery", position: position)
+            }
             onReload?(url, position)
         } catch {
             recoveringGuard = false
@@ -304,7 +412,7 @@ import Foundation
             } else {
                 let backoffSeconds = 2 * recoverAttempts // 2s, 4s
                 try? await Task.sleep(for: .seconds(backoffSeconds))
-                await recover(position: position)
+                await recover(position: position, countAsRecovery: countAsRecovery)
             }
         }
     }
