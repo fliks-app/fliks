@@ -15,15 +15,30 @@ export interface SubtitleRowLike {
 }
 
 /** Embedded subtitle streams as `streamInfo.subtitles` lists them. */
-export type SubtitleStreams = { streamIndex: number; title?: string | null }[] | null | undefined;
+export type SubtitleStreams =
+  | { streamIndex: number; title?: string | null; languageTag?: string | null }[]
+  | null
+  | undefined;
+
+function embeddedStream(sub: Pick<SubtitleRowLike, 'relativePath' | 'streamIndex'>, streams: SubtitleStreams) {
+  if (sub.relativePath || sub.streamIndex == null) return undefined;
+  return streams?.find((s) => s.streamIndex === sub.streamIndex);
+}
 
 /** The stream title of an embedded row: `subtitle_files` doesn't store it, `streamInfo` does. */
 export function embeddedSubtitleTitle(
   sub: Pick<SubtitleRowLike, 'relativePath' | 'streamIndex'>,
   streams: SubtitleStreams,
 ): string | null {
-  if (sub.relativePath || sub.streamIndex == null) return null;
-  return streams?.find((s) => s.streamIndex === sub.streamIndex)?.title || null;
+  return embeddedStream(sub, streams)?.title || null;
+}
+
+/** The BCP-47 tag of an embedded row, from `streamInfo` like its title. */
+export function embeddedSubtitleTag(
+  sub: Pick<SubtitleRowLike, 'relativePath' | 'streamIndex'>,
+  streams: SubtitleStreams,
+): string | null {
+  return embeddedStream(sub, streams)?.languageTag || null;
 }
 
 export interface SubtitleTrack {
@@ -38,6 +53,8 @@ export interface SubtitleTrack {
   streamIndex: number | null;
   /** Stream title of an embedded track, when the file carries one. */
   title: string | null;
+  /** BCP-47 tag of an embedded track (`es-419`), for the label only. */
+  languageTag: string | null;
   kind: 'external' | 'embedded';
   /** Origin of the sub — `translated`, `ocr`, `embedded`, or a download
    *  provider name. Surfaced as an origin hint in the track label. */
@@ -69,7 +86,7 @@ export function subtitleManifestRank(key: string): number {
  * when `hideBurnIn`, classifies image vs text, and dedupes external subs by id
  * and embedded subs by stream index. Callers map the result to their own shape
  * (label, url, …). `streams` (the file's `streamInfo.subtitles`) supplies the
- * embedded titles.
+ * embedded titles and language tags.
  */
 export function buildSubtitleTracks(
   subs: SubtitleRowLike[],
@@ -99,6 +116,7 @@ export function buildSubtitleTracks(
       relativePath: sub.relativePath ?? null,
       streamIndex: sub.streamIndex ?? null,
       title: embeddedSubtitleTitle(sub, opts.streams),
+      languageTag: embeddedSubtitleTag(sub, opts.streams),
       kind,
       providerType: sub.providerType ?? null,
       isImage,

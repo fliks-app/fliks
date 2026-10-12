@@ -1,5 +1,5 @@
 import type { TranslateService } from '@ngx-translate/core';
-import { localizeLanguage, normalizeLangCode } from './language.utils';
+import { languageTagWords, localizeLanguage, localizeLanguageTag, normalizeLangCode } from './language.utils';
 import type { PlayMethod, PlaybackInfoResponse } from '../services/api/streaming-api.service';
 import type { EngineStats } from '../services/playback-engine/playback-engine';
 import type { AudioStreamInfo, VideoStreamInfo } from '../services/api/media.service';
@@ -171,7 +171,7 @@ export function audioChannelsLabel(channels: number | null | undefined): string 
  * (callers with no track-list position to number).
  */
 export function formatAudioLabel(
-  audio: { language?: string; title?: string; codec?: string; channels?: number },
+  audio: { language?: string; languageTag?: string; title?: string; codec?: string; channels?: number },
   translate: TranslateService,
   trackIndex?: number,
 ): string {
@@ -179,7 +179,7 @@ export function formatAudioLabel(
   const head =
     trackIndex != null && (norm === 'und' || norm === 'xx')
       ? translate.instant('player.audio_track_n', { index: trackIndex })
-      : localizeLanguage(audio.language, translate);
+      : localizeLanguageTag(audio.language, audio.languageTag, translate);
   const codec = (audio.codec ?? '').toUpperCase().replace('TRUEHD', 'TrueHD');
   const channels = audioChannelsLabel(audio.channels);
   const tail = [codec, channels].filter(Boolean).join(' - ');
@@ -188,7 +188,7 @@ export function formatAudioLabel(
 
 /** Two-part audio label for the menu: language head + details ("EAC3 • 5.1"). */
 export function formatAudioParts(
-  audio: { language?: string; title?: string; codec?: string; channels?: number },
+  audio: { language?: string; languageTag?: string; title?: string; codec?: string; channels?: number },
   translate: TranslateService,
   trackIndex?: number,
 ): { head: string; sub: string } {
@@ -196,7 +196,7 @@ export function formatAudioParts(
   const head =
     trackIndex != null && (norm === 'und' || norm === 'xx')
       ? translate.instant('player.audio_track_n', { index: trackIndex })
-      : localizeLanguage(audio.language, translate);
+      : localizeLanguageTag(audio.language, audio.languageTag, translate);
   const codec = (audio.codec ?? '').toUpperCase().replace('TRUEHD', 'TrueHD');
   const channels = audioChannelsLabel(audio.channels);
   return { head, sub: [codec, channels].filter(Boolean).join(' • ') };
@@ -218,12 +218,16 @@ export interface SubtitleLabelSource {
   /** Embedded stream title; the language is often all the probe keeps, so it
    *  is what tells two tracks of one language apart. */
   title?: string | null;
+  /** BCP-47 tag of an embedded track (`es-419`); label only, `language` stays canonical. */
+  languageTag?: string | null;
 }
 
 /**
  * The stream title worth showing next to the language, or ''. Dropped when
- * empty, equal (case-insensitive) to the language name or code, or when it
- * only restates a flag already shown ("Forced", "SDH"). Anything else is kept.
+ * empty, equal (case-insensitive) to the language name or code, when it only
+ * restates a flag already shown ("Forced", "SDH"), or when every word of it is
+ * part of the region/script the head already spells out ("Latin American" next
+ * to "Espagnol (Amérique latine)"). Anything else is kept.
  */
 function subtitleTitleHint(sub: SubtitleLabelSource, translate: TranslateService): string {
   const title = (sub.title ?? '').trim().replace(/\s+/g, ' ');
@@ -235,7 +239,10 @@ function subtitleTitleHint(sub: SubtitleLabelSource, translate: TranslateService
   if (sub.hearingImpaired) {
     redundant.push('sdh', 'cc', 'hi', 'hearing impaired', translate.instant('player.subtitle_hearing_impaired'));
   }
-  return redundant.some((r) => r && String(r).toLowerCase() === t) ? '' : title;
+  if (redundant.some((r) => r && String(r).toLowerCase() === t)) return '';
+  const known = languageTagWords(sub.language, sub.languageTag, translate);
+  const words = t.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  return known.size && words.every((w) => known.has(w)) ? '' : title;
 }
 
 /**
@@ -255,7 +262,7 @@ export function formatSubtitleLabel(
   const head =
     trackIndex != null && (norm === 'und' || norm === 'xx')
       ? translate.instant('player.subtitle_track_n', { index: trackIndex })
-      : localizeLanguage(sub.language, translate);
+      : localizeLanguageTag(sub.language, sub.languageTag, translate);
   const parts: string[] = [];
   const title = subtitleTitleHint(sub, translate);
   if (title) parts.push(title);
@@ -283,7 +290,7 @@ export function formatSubtitleParts(
   const head =
     trackIndex != null && (norm === 'und' || norm === 'xx')
       ? translate.instant('player.subtitle_track_n', { index: trackIndex })
-      : localizeLanguage(sub.language, translate);
+      : localizeLanguageTag(sub.language, sub.languageTag, translate);
   const parts: string[] = [];
   const title = subtitleTitleHint(sub, translate);
   if (title) parts.push(title);

@@ -88,36 +88,98 @@ export function localizeLanguage(
   const key = `language.${norm}`;
   const t = translate.instant(key);
   if (typeof t === 'string' && t !== key) return t;
-  const locale = translate.currentLang() || translate.fallbackLang() || 'en';
-  return nativeLanguageName(norm, locale) ?? norm;
+  return nativeLanguageName(norm, uiLocale(translate)) ?? norm;
 }
 
 const displayNames = new Map<string, Intl.DisplayNames | null>();
 
-/**
- * The platform's own name for a language code we carry no translation for
- * (`est`, `tam`, …), in the UI locale. Null when the runtime has no
- * `Intl.DisplayNames` (Chromium < 81, i.e. the TV builds) or the code is
- * unknown to it — the caller then shows the raw code.
- */
-function nativeLanguageName(code: string, locale: string): string | null {
-  if (typeof Intl.DisplayNames !== 'function') return null;
-  if (!displayNames.has(locale)) {
+/** The platform's name for a code of the given type, or null: no `Intl.DisplayNames`
+ *  (Chromium < 81, i.e. the TV builds), an invalid code, or no name known for it. */
+function displayName(type: 'language' | 'region' | 'script', code: string, locale: string): string | null {
+  if (typeof Intl === 'undefined' || typeof Intl.DisplayNames !== 'function') return null;
+  const key = `${type}:${locale}`;
+  if (!displayNames.has(key)) {
     try {
-      displayNames.set(locale, new Intl.DisplayNames([locale], { type: 'language' }));
+      displayNames.set(key, new Intl.DisplayNames([locale], { type }));
     } catch {
-      displayNames.set(locale, null);
+      displayNames.set(key, null);
     }
   }
-  let name: string | undefined;
   try {
-    name = displayNames.get(locale)?.of(code);
+    const name = displayNames.get(key)?.of(code);
+    return name && name !== code ? name : null;
   } catch {
     return null;
   }
-  if (!name || name === code) return null;
+}
+
+function uiLocale(translate: TranslateService): string {
+  return translate.currentLang() || translate.fallbackLang() || 'en';
+}
+
+/**
+ * The platform's own name for a language code we carry no translation for
+ * (`est`, `tam`, …), in the UI locale. Null when the runtime can't name it,
+ * the caller then shows the raw code.
+ */
+function nativeLanguageName(code: string, locale: string): string | null {
+  const name = displayName('language', code, locale);
   // Our own names are capitalised; several locales render theirs lowercase.
-  return name.charAt(0).toLocaleUpperCase(locale) + name.slice(1);
+  return name && name.charAt(0).toLocaleUpperCase(locale) + name.slice(1);
+}
+
+/** Script and region subtags of a BCP-47 tag, null when its language isn't `code`'s. */
+function tagSubtags(code: string | undefined | null, tag: string | undefined | null) {
+  const m = /^[a-z]{2,3}(?:[-_]([a-z]{4}))?(?:[-_]([a-z]{2}|\d{3}))?(?:[-_]|$)/i.exec((tag ?? '').trim());
+  if (!m || normalizeLangCode(tag) !== normalizeLangCode(code)) return null;
+  const script = m[1] && m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase();
+  return { script, region: m[2]?.toUpperCase() };
+}
+
+/** Script then region names of the tag in `locale`; empty when it has none or the runtime can't name them. */
+function tagQualifiers(code: string | undefined | null, tag: string | undefined | null, locale: string): string[] {
+  const sub = tagSubtags(code, tag);
+  if (!sub) return [];
+  return [
+    sub.script && displayName('script', sub.script, locale),
+    sub.region && displayName('region', sub.region, locale),
+  ].filter((n): n is string => !!n);
+}
+
+/**
+ * The language name with the region or script of a track's BCP-47 tag in the UI
+ * language (`es-419` → `Espagnol (Amérique latine)`). Plain {@link localizeLanguage}
+ * when there is no tag, nothing past the language in it, or the runtime can't name it.
+ * Labels only: the canonical `language` stays what preferences and selection match on.
+ */
+export function localizeLanguageTag(
+  code: string | undefined | null,
+  tag: string | undefined | null,
+  translate: TranslateService,
+): string {
+  const base = localizeLanguage(code, translate);
+  const qualifiers = tagQualifiers(code, tag, uiLocale(translate));
+  return qualifiers.length ? `${base} (${qualifiers.join(', ')})` : base;
+}
+
+/**
+ * Lowercased words naming the tag's variant, in English and the UI language: its region and
+ * script names and the dialect form (`Latin American Spanish`). Empty when
+ * {@link localizeLanguageTag} shows nothing extra, so it can only vouch for a displayed qualifier.
+ */
+export function languageTagWords(
+  code: string | undefined | null,
+  tag: string | undefined | null,
+  translate: TranslateService,
+): Set<string> {
+  const words = new Set<string>();
+  const ui = uiLocale(translate);
+  if (!tagQualifiers(code, tag, ui).length) return words;
+  for (const locale of new Set([ui, 'en'])) {
+    const names = [...tagQualifiers(code, tag, locale), displayName('language', tag!.trim(), locale)];
+    for (const n of names) n?.toLowerCase().split(/[^\p{L}\p{N}]+/u).forEach((w) => w && words.add(w));
+  }
+  return words;
 }
 
 /**
