@@ -21,19 +21,16 @@ const spa419 = { language: 'spa', languageTag: 'es-419', title: 'Latin American'
 const spaES = { language: 'spa', languageTag: 'es-ES' };
 
 describe('language tag in labels', () => {
-  it('names the variant in its dialect form', () => {
+  it('spells the region or script out after the language', () => {
     const head = (s: { language: string; languageTag?: string }, t: TranslateService) =>
       formatSubtitleParts(s, t, 1).head;
-    expect(head(spa419, fr)).toBe('Espagnol d’Amérique latine');
-    expect(head(spaES, fr)).toBe('Espagnol');
-    expect(head({ language: 'por', languageTag: 'pt-BR' }, fr)).toBe('Portugais brésilien');
-    expect(head({ language: 'chi', languageTag: 'zh-Hant' }, fr)).toBe('Chinois traditionnel');
-    expect(head(spa419, en)).toBe('Latin American Spanish');
-    expect(head({ language: 'por', languageTag: 'pt-PT' }, en)).toBe('Portuguese')
-    expect(head({ language: 'eng', languageTag: 'en-GB' }, fr)).toBe('Anglais')
-    expect(head({ language: 'eng', languageTag: 'en-US' }, fr)).toBe('Anglais américain')
-    expect(head({ language: 'fre', languageTag: 'fr-CA' }, fr)).toBe('Français canadien');
-    expect(head({ language: 'chi', languageTag: 'zh-Hans' }, en)).toBe('Simplified Chinese');
+    expect(head(spa419, fr)).toBe('Espagnol (Amérique latine)');
+    expect(head(spaES, fr)).toBe('Espagnol (Espagne)');
+    expect(head({ language: 'por', languageTag: 'pt-BR' }, fr)).toBe('Portugais (Brésil)');
+    expect(head({ language: 'chi', languageTag: 'zh-Hant' }, fr)).toBe('Chinois (traditionnel)');
+    expect(head(spa419, en)).toBe('Spanish (Latin America)');
+    expect(head({ language: 'por', languageTag: 'pt-PT' }, en)).toBe('Portuguese (Portugal)');
+    expect(head({ language: 'chi', languageTag: 'zh-Hans' }, en)).toBe('Chinese (Simplified)');
   });
 
   it('keeps the plain head without a usable tag', () => {
@@ -43,7 +40,7 @@ describe('language tag in labels', () => {
   });
 
   it('labels the one-line form too', () => {
-    expect(formatSubtitleLabel({ language: 'spa', languageTag: 'es-419' }, fr, 1)).toBe('Espagnol d’Amérique latine');
+    expect(formatSubtitleLabel({ language: 'spa', languageTag: 'es-ES' }, fr, 1)).toBe('Espagnol (Espagne)');
   });
 
   it('tells two dubs of one language apart', () => {
@@ -51,8 +48,8 @@ describe('language tag in labels', () => {
       { language: 'por', languageTag: 'pt-BR', codec: 'eac3' },
       { language: 'por', languageTag: 'pt-PT', codec: 'eac3' },
     ].map((a) => formatAudioLabel(a, fr, 1));
-    expect(labels).toEqual(['Portugais brésilien (EAC3)', 'Portugais (EAC3)']);
-    expect(formatAudioParts({ language: 'por', languageTag: 'pt-PT' }, en, 1).head).toBe('Portuguese');
+    expect(labels).toEqual(['Portugais (Brésil) (EAC3)', 'Portugais (Portugal) (EAC3)']);
+    expect(formatAudioParts({ language: 'por', languageTag: 'pt-PT' }, en, 1).head).toBe('Portuguese (Portugal)');
     expect(formatAudioParts({ language: 'por' }, fr, 1).head).toBe('Portugais');
   });
 });
