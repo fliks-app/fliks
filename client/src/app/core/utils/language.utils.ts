@@ -1,60 +1,33 @@
 import { TranslateService } from '@ngx-translate/core';
 import { SUBTITLE_LANGUAGE_CODES } from '../constants/subtitle-languages';
+import { ISO_639_2_TO_1_FULL } from './iso-639-2';
 
 /**
- * ISO 639-2 (3-letter B/T) → ISO 639-1 (2-letter) lookup. Mirrors the
- * server-side `ISO_639_2_TO_1` in `app-languages.ts` so the client can
- * normalise ffprobe-reported language codes (`eng`, `fra`, `chi`, …) into
- * the canonical 2-letter form used by our i18n keys (`language.en`,
- * `language.fr`, `language.zh`, …).
+ * Codes folded after the ISO 639-2 → 639-1 step: deprecated tags, the 3-letter forms
+ * players report for macro-languages, and Norwegian (the app's lists only know `no`,
+ * so `nb`/`nn` match it). Same table on the backend (`app-languages.ts`).
  */
-const ISO_639_2_TO_1: Record<string, string> = {
-  eng: 'en',
-  fre: 'fr', fra: 'fr',
-  ger: 'de', deu: 'de',
-  spa: 'es',
-  ita: 'it',
-  por: 'pt',
-  jpn: 'ja',
-  kor: 'ko',
-  zho: 'zh', chi: 'zh',
-  rus: 'ru',
-  ara: 'ar',
-  nld: 'nl', dut: 'nl',
-  pol: 'pl',
-  tur: 'tr',
-  swe: 'sv',
-  dan: 'da',
-  nor: 'no',
-  fin: 'fi',
-  hin: 'hi',
-  ces: 'cs', cze: 'cs',
-  ron: 'ro', rum: 'ro',
-  hun: 'hu',
-  tha: 'th',
-  vie: 'vi',
-  heb: 'he',
-  ell: 'el', gre: 'el',
-  ukr: 'uk',
-  bul: 'bg',
-  hrv: 'hr',
-  srp: 'sr',
-  slv: 'sl',
-  slk: 'sk', slo: 'sk',
-  cat: 'ca',
-  eus: 'eu', baq: 'eu',
-  glg: 'gl',
-  ind: 'id',
-  msa: 'ms', may: 'ms',
+const FOLDED_CODES: Readonly<Record<string, string>> = {
+  iw: 'he', in: 'id', ji: 'yi', mo: 'ro', jw: 'jv', tw: 'ak',
+  nb: 'no', nn: 'no',
+  cmn: 'zh', arb: 'ar', twi: 'ak', scc: 'sr', scr: 'hr',
+  // Media3 macro-language tags (`hbs-hrv`, `ms-ind`) carry the language in the 2nd subtag.
+  'hbs-hrv': 'hr', 'hbs-srp': 'sr', 'hbs-bos': 'bs', 'ms-ind': 'id',
 };
 
-/** Normalise a raw language code (any case, 2- or 3-letter) to ISO 639-1. */
+/**
+ * Canonical form of a language tag, whoever reported it: lowercase ISO 639-1 when the
+ * language has one, else the 639-2/3 code; region/script subtags dropped; `und` if empty.
+ */
 export function normalizeLangCode(
   code: string | undefined | null,
 ): string {
-  if (!code) return 'und';
-  const lower = code.toLowerCase();
-  return ISO_639_2_TO_1[lower] ?? lower;
+  const [primary, second] = (code ?? '').trim().toLowerCase().split(/[-_]/);
+  if (!primary) return 'und';
+  const macro = FOLDED_CODES[`${primary}-${second}`];
+  if (macro) return macro;
+  const iso1 = ISO_639_2_TO_1_FULL[primary] ?? primary;
+  return FOLDED_CODES[iso1] ?? iso1;
 }
 
 export interface SubtitleTags {
@@ -88,7 +61,7 @@ export function guessSubtitleTags(name: string, known: readonly string[] = SUBTI
     } else if (token === 'default' || token === 'ocr') {
       continue;
     } else {
-      const code = normalizeLangCode(token.replace(/^([a-z]{2})-[a-z]{2,}$/, '$1'));
+      const code = normalizeLangCode(token);
       if (!known.includes(code)) break;
       tags.language = code;
       if (hiCandidate) {
