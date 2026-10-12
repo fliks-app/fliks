@@ -303,7 +303,7 @@
                 {{ e.at | localeDate: { dateStyle: 'short', timeStyle: 'medium' } }}
               </span>
               <span class="w-14 shrink-0 tabular-nums text-base-content/50">{{ formatPosition(e.data?.position ?? null) }}</span>
-              <span class="w-28 shrink-0 font-medium">{{ eventLabel(e) }}</span>
+              <span class="w-44 shrink-0 whitespace-nowrap font-medium">{{ eventLabel(e) }}</span>
               <span class="min-w-0 break-words text-base-content/70">{{ eventDetail(e) }}</span>
               </div>
               @if (e.data?.cause; as cause) {
