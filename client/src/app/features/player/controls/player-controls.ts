@@ -35,7 +35,7 @@ import { BottomSheetComponent } from '../../../shared/components/bottom-sheet';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AppSettingsService } from '../../../core/services/app-settings.service';
 import { formatTime, SpriteMetadata } from '../../../core/utils/player.utils';
-import { focusOverlayEntry, initialOverlayFocus } from '../../../core/services/focusable.constants';
+import { focusOverlayEntry, initialOverlayFocus, scrollSelectedIntoView } from '../../../core/services/focusable.constants';
 import { SeekbarComponent } from '../../../shared/components/seekbar/seekbar';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../../shared/directives/cached-src.directive';
@@ -229,19 +229,6 @@ export class PlayerControlsComponent {
     // cue's @if is live and is undefined otherwise.
     effect(() => this.autoFocusCue(this.skipIntroBtn()));
     effect(() => this.autoFocusCue(this.nextEpisodeBtn()));
-    // Center the currently-playing item when the queue panel opens (in either
-    // the dropdown or the bottom sheet), so a long queue doesn't open scrolled
-    // to the top. Re-runs if the cursor moves while the panel is up.
-    effect(() => {
-      if (this.settingsPanel() !== 'queue') return;
-      this.queueIndex(); // re-center when the playing item changes
-      requestAnimationFrame(() => {
-        if (this.settingsPanel() !== 'queue') return;
-        this.hostEl.nativeElement
-          .querySelector('[data-queue-active="true"]')
-          ?.scrollIntoView({ block: 'center' });
-      });
-    });
   }
   private lastPanelOpen = false;
   private lastVisible = true;
@@ -477,14 +464,14 @@ export class PlayerControlsComponent {
   openSubtitlesPanel(panel: SubtitlePanel) {
     const from = this.subtitlesPanel();
     this.subtitlesPanel.set(panel);
-    if (this.openDropdown()) this.focusDropdownEntry(from);
+    this.enterPanel(from);
   }
 
   /** Same as {@link openSubtitlesPanel} for the settings menu. */
   openSettingsPanel(panel: 'main' | 'quality' | 'queue') {
     const from = this.settingsPanel();
     this.settingsPanel.set(panel);
-    if (this.openDropdown()) this.focusDropdownEntry(from);
+    this.enterPanel(from);
   }
 
   /**
@@ -650,6 +637,12 @@ export class PlayerControlsComponent {
     this.openDropdown.set(null);
     this.settingsPanel.set('main');
     this.subtitlesPanel.set('tracks');
+  }
+
+  /** Dropdown: focus the new panel. Sheet: only scroll it to the current choice. */
+  private enterPanel(from: string) {
+    if (this.openDropdown()) return this.focusDropdownEntry(from);
+    afterNextRender(() => scrollSelectedIntoView(this.hostEl.nativeElement), { injector: this.injector });
   }
 
   /** `fromPanel` is the panel being left: when the new panel holds the row that

@@ -50,17 +50,56 @@ export function restoreOpenerFocus(opener: HTMLElement | null | undefined): void
   if (document.activeElement === opener) opener.blur();
 }
 
+/** Markers of the current choice in a single-choice menu, strongest first.
+ *  `aria-disabled` is what `SelectedOptionDirective` puts on the picked row. */
+export const SELECTED_MARKERS = ['[aria-current="true"]', '[aria-disabled="true"]'];
+
+/** Nearest ancestor that actually scrolls. Stops below `<body>` so the page behind
+ *  an overlay is never moved. */
+function scrollerOf(el: HTMLElement): HTMLElement | null {
+  for (let n = el.parentElement; n && n !== document.body; n = n.parentElement) {
+    const { overflowY } = getComputedStyle(n);
+    if ((overflowY === 'auto' || overflowY === 'scroll') && n.scrollHeight > n.clientHeight) return n;
+  }
+  return null;
+}
+
+/** Scroll `el`'s own scroller so it sits centered below any sticky header, unless it
+ *  is already fully visible. Computed on `scrollTop`: `scrollIntoView` can also move
+ *  the locked page, and the sheet's smooth `scroll-behavior` must not animate it. */
+export function centerInScroller(el: HTMLElement | null | undefined): void {
+  const box = el && scrollerOf(el);
+  if (!el || !box || !box.clientHeight) return;
+  const b = box.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  const sticky = [...box.children].find((c) => getComputedStyle(c).position === 'sticky');
+  const top = b.top + box.clientTop + (sticky?.getBoundingClientRect().height ?? 0);
+  const bottom = b.top + box.clientTop + box.clientHeight;
+  if (r.top >= top && r.bottom <= bottom) return;
+  const scale = b.height / box.clientHeight || 1;
+  const delta = (r.top + r.bottom) / 2 - (top + bottom) / 2;
+  box.scrollTo({ top: box.scrollTop + delta / scale, behavior: 'instant' });
+}
+
+/** Reveal the current choice of a freshly opened menu, without moving focus. */
+export function scrollSelectedIntoView(root: ParentNode | null | undefined): void {
+  for (const marker of SELECTED_MARKERS) {
+    const el = root?.querySelector<HTMLElement>(marker);
+    if (el) return centerInScroller(el);
+  }
+}
+
 /** Focus an overlay entry and reveal it inside its own scroller: the entry is
  *  usually the current selection, which in a long list sits below the fold. */
 export function focusOverlayEntry(el: HTMLElement | null | undefined): void {
   if (!el) return;
   el.focus({ preventScroll: true });
-  el.scrollIntoView({ block: 'nearest', behavior: 'instant' as ScrollBehavior });
+  centerInScroller(el);
 }
 
 export function initialOverlayFocus(root: ParentNode | null | undefined): HTMLElement | null {
   if (!root) return null;
-  for (const marker of ['[autofocus]', '[aria-current="true"]', '[aria-disabled="true"]']) {
+  for (const marker of ['[autofocus]', ...SELECTED_MARKERS]) {
     const el = root.querySelector<HTMLElement>(marker);
     // Only the opt-out half of isFocusCandidate: this can run before layout, so
     // a rendered-size check would always reject and fall through to the first

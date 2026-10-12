@@ -424,7 +424,7 @@
       </button>
       <div class="divider my-0 before:bg-white/10 after:bg-white/10"></div>
       @for (q of availableQualities(); track q.id) {
-        <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="selectQuality.emit(q.id); closeSheet()">
+        <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" [attr.aria-current]="activeQualityId() === q.id ? 'true' : null" (click)="selectQuality.emit(q.id); closeSheet()">
           <span class="flex-1 text-left">
             {{ q.label }}
             @if (q.lowBandwidth) {
@@ -444,7 +444,7 @@
            drag-to-dismiss (keyed off the sheet's own scrollTop) doesn't fight a
            nested scroller. -->
       @for (q of queueItems(); track $index; let i = $index) {
-        <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" [attr.data-queue-active]="queueIndex() === i ? 'true' : null" (click)="selectQueueItem.emit(i); closeSheet()">
+        <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" [attr.aria-current]="queueIndex() === i ? 'true' : null" (click)="selectQueueItem.emit(i); closeSheet()">
           <span class="w-5 shrink-0 text-white/40 text-xs">{{ i + 1 }}</span>
           <span class="flex-1 text-left min-w-0">
             <span class="block truncate">{{ q.episodeTitle || q.title }}</span>
@@ -537,7 +537,6 @@
             <button
               class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10"
               [appSelectedOption]="queueIndex() === i"
-              [attr.data-queue-active]="queueIndex() === i ? 'true' : null"
               (click)="selectQueueItem.emit(i); closeDropdown($event)"
             >
               <span class="w-5 shrink-0 text-white/40 text-xs">{{ i + 1 }}</span>
@@ -635,7 +634,7 @@
     <div class="divider my-0 before:bg-white/10 after:bg-white/10"></div>
     <!-- No closeSheet() here: the user tweaks several values in a row. -->
     @for (opt of row.options; track opt.value) {
-      <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10" (click)="setAppearance(row, opt.value)">
+      <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10" [attr.aria-current]="currentOption(row) === opt ? 'true' : null" (click)="setAppearance(row, opt.value)">
         <span class="flex-1 text-left">{{ opt.labelKey ? (opt.labelKey | translate) : opt.label }}</span>
         @if (currentOption(row) === opt) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
       </button>
