@@ -108,7 +108,7 @@ export interface QoePipelineStage {
 /** What the server does to the stream of one session. */
 export interface QoePipeline {
   source: { codec: string | null; width: number | null; height: number | null; hdr: 'HDR10' | 'HLG' | 'DV' | null } | null;
-  output: { codec: string | null; hdr: 'HDR10' | 'HLG' | null; quality: string | null; bitrate: number | null } | null;
+  output: { codec: string | null; hdr: 'HDR10' | 'HLG' | null; quality: string | null; bitrate: number | null; requested: string | null } | null;
   decode: QoePipelineStage | null;
   encode: QoePipelineStage | null;
   tonemap: string | null;

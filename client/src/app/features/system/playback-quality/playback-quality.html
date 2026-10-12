@@ -267,12 +267,12 @@
               @for (s of d.sessions; track s.sessionId) {
                 <tr>
                   <td class="font-mono">{{ s.sessionId.slice(0, 8) }}</td>
-                  <td>{{ s.quality ?? '-' }}</td>
+                  <td>{{ qualityText(s) }}</td>
                   <td>{{ s.engine ?? '-' }}</td>
                   <td class="text-right tabular-nums">{{ duration(s.watchedMs) }}</td>
                   <td class="text-right tabular-nums">{{ s.stallCount }}</td>
                   <td>{{ 'qoe.verdict.' + s.verdict | translate }}</td>
-                  <td class="text-xs text-base-content/70 min-w-48">{{ pipelineText(s.pipeline) || '-' }}</td>
+                  <td class="text-xs text-base-content/70 min-w-48">{{ pipelineText(s.pipeline, s) || '-' }}</td>
                 </tr>
               }
             </tbody>

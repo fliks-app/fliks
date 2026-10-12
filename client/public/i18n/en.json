@@ -1582,9 +1582,10 @@
       "audio_transcode": "audio transcode",
       "load": "Server: {{transcodes}} transcodes, {{sessions}} sessions, load {{load}} on {{cpus}} cores",
       "hints": "Possible factors: {{list}}",
-      "res_4k": "4K",
       "res_p": "{{height}}p",
-      "load_no_avg": "Server: {{transcodes}} transcodes, {{sessions}} sessions, {{cpus}} cores"
+      "load_no_avg": "Server: {{transcodes}} transcodes, {{sessions}} sessions, {{cpus}} cores",
+      "rung": "tier {{name}}",
+      "auto": "auto"
     },
     "watched_hint": "Time spent in the player outside of pause, loading included",
     "timeline_time": "Time",

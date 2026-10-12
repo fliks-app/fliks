@@ -91,20 +91,45 @@ export const codecLabel = (c: string | null | undefined) => (c ? (CODEC_LABEL[c.
 
 function resolutionLabel(height: number | null, f: Fmt): string {
   if (height == null) return '';
-  return height >= 2000 ? f.t('qoe.pipeline.res_4k') : f.t('qoe.pipeline.res_p', { height: String(height) });
+  return f.t('qoe.pipeline.res_p', { height: String(height) });
 }
 
 const join = (xs: (string | null | undefined | false)[]) => xs.filter((x): x is string => !!x).join(' ');
 
-/** "4K HEVC HDR10 → 1080p H.264 8.0 Mbps", or just the source when the stream is not re-encoded. */
-export function pipelineChain(p: QoePipeline, f: Fmt): string {
+const HDR_LABEL: Record<string, string> = { DV: 'Dolby Vision' };
+
+const dimensions = (d: { width: number | null; height: number | null } | null | undefined) =>
+  d?.width && d.height ? `${d.width}×${d.height}` : '';
+
+/**
+ * "3840×1588 HEVC HDR10 → auto → 3840×1588 (tier 2160p) H.264 8.0 Mbps", or just the source when the stream is
+ * not re-encoded. The output shows the real dimensions when known, and the rung as a tier name, so a scope film
+ * is never read as an upscale.
+ */
+export function pipelineChain(p: QoePipeline, f: Fmt, outDims?: { width: number | null; height: number | null } | null): string {
   const s = p.source;
-  const src = s ? join([resolutionLabel(s.height, f), codecLabel(s.codec), s.hdr]) : '';
+  const src = s ? join([dimensions(s) || resolutionLabel(s.height, f), codecLabel(s.codec), s.hdr && (HDR_LABEL[s.hdr] ?? s.hdr)]) : '';
   const o = p.output;
-  const quality = o?.quality && !['auto', 'original', 'remux'].includes(o.quality) ? o.quality.replace(/-hdr$/, '') : '';
+  const rung = o?.quality && !['auto', 'original', 'remux'].includes(o.quality) ? o.quality.replace(/-hdr$/, '') : '';
+  const tier = rung ? f.t('qoe.pipeline.rung', { name: rung }) : '';
+  const dims = dimensions(outDims);
+  const size = dims ? join([dims, tier && `(${tier})`]) : tier;
   const rate = o?.bitrate ? f.t('qoe.mbps', { value: f.n(o.bitrate / 1_000_000, 1) }) : '';
-  const out = o ? join([quality, codecLabel(o.codec), o.hdr, rate]) : '';
+  const auto = o?.requested === 'auto' ? `${f.t('qoe.pipeline.auto')} →` : '';
+  const out = o ? join([auto, size, codecLabel(o.codec), o.hdr, rate]) : '';
   return src && out ? `${src} → ${out}` : src || out;
+}
+
+/** "auto → 2160p" when the client left the choice to the server, else the requested rung. */
+export function qualityLabel(
+  row: { quality: string | null; pipeline?: QoePipeline | null },
+  f: Fmt,
+): string {
+  const served = row.pipeline?.output?.quality?.replace(/-hdr$/, '') ?? '';
+  const req = row.quality ?? row.pipeline?.output?.requested ?? null;
+  if (!req) return served || '-';
+  if (req === 'auto') return served ? `${f.t('qoe.pipeline.auto')} → ${served}` : f.t('qoe.pipeline.auto');
+  return req;
 }
 
 export interface PipelinePart {

@@ -1582,9 +1582,10 @@
       "audio_transcode": "transcodage audio",
       "load": "Serveur : {{transcodes}} transcodages, {{sessions}} sessions, charge {{load}} sur {{cpus}} cœurs",
       "hints": "Facteurs possibles : {{list}}",
-      "res_4k": "4K",
       "res_p": "{{height}}p",
-      "load_no_avg": "Serveur : {{transcodes}} transcodages, {{sessions}} sessions, {{cpus}} cœurs"
+      "load_no_avg": "Serveur : {{transcodes}} transcodages, {{sessions}} sessions, {{cpus}} cœurs",
+      "rung": "palier {{name}}",
+      "auto": "auto"
     },
     "watched_hint": "Temps passé dans le lecteur hors pause, chargements compris",
     "timeline_time": "Heure",

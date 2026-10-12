@@ -20,7 +20,7 @@ import { SelectFieldComponent } from '../../../shared/components/forms/select-fi
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 import { parseDeviceLabel } from '../../../core/utils/format-device-label';
-import { QOE_CAUSE_DOT_CLASS, codecLabel, durationParts, eventStartMs, hintParams, loadLine, pipelineChain, pipelineParts, stallBreakdown, stallExplanation, type Fmt } from '../qoe-stall';
+import { QOE_CAUSE_DOT_CLASS, codecLabel, durationParts, eventStartMs, hintParams, loadLine, pipelineChain, pipelineParts, qualityLabel, stallBreakdown, stallExplanation, type Fmt } from '../qoe-stall';
 import { QOE_VERDICTS, QOE_VERDICT_BAR_CLASS, formatMbps, qoeDotClass } from '../qoe-health';
 
 const PAGE_SIZE = 25;
@@ -228,16 +228,17 @@ export class SystemPlaybackQualityComponent implements OnInit {
   }
 
   /** "4K HEVC HDR10 → 1080p H.264 8.0 Mbps · tonemap OpenCL · decode QSV ...". */
-  pipelineText(p: QoePipeline | null | undefined): string {
+  pipelineText(p: QoePipeline | null | undefined, row?: { width: number | null; height: number | null }): string {
     if (!p) return '';
-    return [pipelineChain(p, this.fmt), ...pipelineParts(p).map((x) => this.translate.instant(x.key, x.params))]
+    return [pipelineChain(p, this.fmt, p.output ? row : null), ...pipelineParts(p).map((x) => this.translate.instant(x.key, x.params))]
       .filter(Boolean)
       .join(' · ');
   }
 
   /** The pipeline of the session a stall belongs to. */
   stallPipeline(d: QoeSessionDetail, e: QoeEventRow): string {
-    return this.pipelineText(d.sessions.find((s) => s.sessionId === e.sessionId)?.pipeline);
+    const s = d.sessions.find((x) => x.sessionId === e.sessionId);
+    return this.pipelineText(s?.pipeline, s);
   }
 
   stallLoad(e: QoeEventRow): string {
@@ -293,7 +294,7 @@ export class SystemPlaybackQualityComponent implements OnInit {
     add('qoe.summary.device', this.deviceText(d));
     add('qoe.engine', d.engine, 'qoe.hint.engine');
     const res = d.width && d.height ? `${d.width}×${d.height}` : '';
-    add('qoe.summary.quality', [d.quality && d.quality !== 'auto' ? d.quality : '', res].filter(Boolean).join(' · '), 'qoe.hint.quality');
+    add('qoe.summary.quality', [this.qualityText(d) === '-' ? '' : this.qualityText(d), res].filter(Boolean).join(' · '), 'qoe.hint.quality');
     add('qoe.summary.codec', codecLabel(d.videoCodec));
     if (d.avgBandwidthBps != null || d.avgVariantBitrate != null) {
       add('qoe.throughput', `${formatMbps(d.avgBandwidthBps)} / ${formatMbps(d.avgVariantBitrate)}`, 'qoe.hint.throughput');
@@ -304,10 +305,15 @@ export class SystemPlaybackQualityComponent implements OnInit {
       add('qoe.decoder', [d.decoderName, kind && `(${kind})`].filter(Boolean).join(' '), 'qoe.hint.decoder');
     }
     if (d.cmcd != null) add('CMCD', this.translate.instant(d.cmcd ? 'common.yes' : 'common.no'), 'qoe.hint.cmcd');
-    const pipe = this.pipelineText(d.sessions.at(-1)?.pipeline);
+    const last = d.sessions.at(-1);
+    const pipe = this.pipelineText(last?.pipeline, last);
     add('qoe.pipeline.title', pipe, 'qoe.hint.pipeline');
     add('qoe.summary.sessions', String(d.sessions.length), 'qoe.hint.session');
     return rows;
+  }
+
+  qualityText(row: QoeSessionRow): string {
+    return qualityLabel(row, this.fmt);
   }
 
   reasonText(key: string): string {
