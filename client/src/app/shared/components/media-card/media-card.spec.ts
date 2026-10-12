@@ -5,6 +5,7 @@ import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { vi } from 'vitest';
 import { MediaCardComponent } from './media-card';
+import { DisplaySettingsService } from '../../../core/services/display-settings.service';
 import { Media } from '../../../core/services/api/media.service';
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { RecommendService } from '../../../core/services/recommend.service';
@@ -707,5 +708,20 @@ describe('media-card preview handoff', () => {
 
     clearPosterStamps();
     delete (document as unknown as { startViewTransition?: unknown }).startViewTransition;
+  });
+});
+
+describe('MediaCardComponent type badge scope', () => {
+  const badgeOf = (h: Harness) =>
+    (h.fixture.componentInstance as unknown as { typeBadge(): unknown }).typeBadge();
+
+  it('hides the badge outside search under the default setting, shows it once set to "needed"', async () => {
+    localStorage.removeItem('display.settings');
+    const h = await createFixture(FULL_MEMBER, { mediaTypeBadge: 'movie' });
+    expect(badgeOf(h)).toBeNull();
+
+    TestBed.inject(DisplaySettingsService).save({ mediaTypeBadge: 'needed' });
+    expect(badgeOf(h)).not.toBeNull();
+    localStorage.removeItem('display.settings');
   });
 });

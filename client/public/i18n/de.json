@@ -304,7 +304,11 @@
     "sort_tracks_by_language_hint": "Sortiert die Audio- und Untertitelauswahl alphabetisch nach Sprache; Spuren ohne erkannte Sprache bleiben am Ende.",
     "language": "App-Sprache",
     "language_auto": "System",
-    "language_hint": "Sprache der Oberfläche. Standardmäßig die deines Browsers oder Systems."
+    "language_hint": "Sprache der Oberfläche. Standardmäßig die deines Browsers oder Systems.",
+    "media_type_badge": "Film-/Serien-Badge",
+    "media_type_badge_search": "Nur in der Suche",
+    "media_type_badge_needed": "Wenn nötig",
+    "media_type_badge_hint": "Zeigt den Typ auf Karten nur in der Suche oder überall, wo Filme und Serien gemischt sind."
   },
   "storage_settings": {
     "clear_cache": "Cache leeren",

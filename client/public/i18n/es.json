@@ -304,7 +304,11 @@
     "sort_tracks_by_language_hint": "Ordena los selectores de audio y subtítulos alfabéticamente por idioma; las pistas sin idioma identificado quedan al final.",
     "language": "Idioma de la aplicación",
     "language_auto": "Sistema",
-    "language_hint": "Idioma de la interfaz. Por defecto, el de tu navegador o sistema."
+    "language_hint": "Idioma de la interfaz. Por defecto, el de tu navegador o sistema.",
+    "media_type_badge": "Insignia película / serie",
+    "media_type_badge_search": "Solo en Búsqueda",
+    "media_type_badge_needed": "Cuando sea necesario",
+    "media_type_badge_hint": "Muestra el tipo en las tarjetas solo en la búsqueda, o donde se mezclan películas y series."
   },
   "storage_settings": {
     "clear_cache": "Vaciar la caché",

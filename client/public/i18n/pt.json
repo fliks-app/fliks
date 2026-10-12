@@ -304,7 +304,11 @@
     "sort_tracks_by_language_hint": "Ordena os seletores de áudio e legendas por ordem alfabética de idioma; as faixas sem idioma identificado ficam no fim.",
     "language": "Idioma da aplicação",
     "language_auto": "Sistema",
-    "language_hint": "Idioma da interface. Por predefinição, o do seu navegador ou sistema."
+    "language_hint": "Idioma da interface. Por predefinição, o do seu navegador ou sistema.",
+    "media_type_badge": "Selo filme / série",
+    "media_type_badge_search": "Apenas na Pesquisa",
+    "media_type_badge_needed": "Quando necessário",
+    "media_type_badge_hint": "Mostra o tipo nos cartões apenas na pesquisa, ou onde filmes e séries estão misturados."
   },
   "storage_settings": {
     "clear_cache": "Limpar a cache",

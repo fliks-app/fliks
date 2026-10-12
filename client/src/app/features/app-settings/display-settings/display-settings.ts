@@ -2,7 +2,7 @@ import { Component, inject, signal, OnInit } from '@angular/core';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { DisplaySettingsService } from '../../../core/services/display-settings.service';
+import { DisplaySettingsService, MediaTypeBadgeScope } from '../../../core/services/display-settings.service';
 import { SUPPORTED_LOCALES, resolveInitialLocale } from '../../../core/constants/app-locale';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 
@@ -18,6 +18,7 @@ export class DisplaySettingsPageComponent implements OnInit {
   readonly homeBackground = signal(true);
   readonly grayUnreleased = signal(true);
   readonly sortTracksByLanguage = signal(false);
+  readonly mediaTypeBadge = signal<MediaTypeBadgeScope>('search');
   readonly languageOptions = SUPPORTED_LOCALES;
   /** '' = follow the browser/OS language. */
   readonly language = signal('');
@@ -27,6 +28,7 @@ export class DisplaySettingsPageComponent implements OnInit {
     this.homeBackground.set(s.homeBackground);
     this.grayUnreleased.set(s.grayUnreleased);
     this.sortTracksByLanguage.set(s.sortTracksByLanguage);
+    this.mediaTypeBadge.set(s.mediaTypeBadge);
     this.language.set(s.language);
   }
 
@@ -43,6 +45,11 @@ export class DisplaySettingsPageComponent implements OnInit {
   onSortTracksByLanguageChange(value: boolean) {
     this.sortTracksByLanguage.set(value);
     this.displaySettings.save({ sortTracksByLanguage: value });
+  }
+
+  onMediaTypeBadgeChange(value: MediaTypeBadgeScope) {
+    this.mediaTypeBadge.set(value);
+    this.displaySettings.save({ mediaTypeBadge: value });
   }
 
   onLanguageChange(value: string) {
