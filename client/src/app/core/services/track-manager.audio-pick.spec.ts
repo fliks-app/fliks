@@ -5,7 +5,6 @@ import { TrackManagerService, streamIndexForTrack, trackForStreamIndex } from '.
 import { PlayerSettingsService } from './player-settings.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { AppSettingsService } from './app-settings.service';
-import { BrowserDeviceProfileService } from './browser-device-profile.service';
 import { TranslateService } from '@ngx-translate/core';
 
 /** `streamInfo.audio` order (the backend's list) — always aligned by position
@@ -31,7 +30,6 @@ function setup() {
       PlayerSettingsService,
       { provide: SubtitlesApiService, useValue: {} },
       { provide: AppSettingsService, useValue: {} },
-      { provide: BrowserDeviceProfileService, useValue: {} },
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
     ],
   });

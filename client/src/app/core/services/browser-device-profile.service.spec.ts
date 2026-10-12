@@ -10,15 +10,17 @@ import { AuthService } from './auth.service';
 
 /** Minimal DI graph, only the members `buildProfile()` actually reads. */
 function configure(
-  device: Pick<DeviceService, 'isTv' | 'tvPlatform' | 'isDesktopNative'>,
+  device: Pick<DeviceService, 'isTv' | 'tvPlatform' | 'isDesktopNative'> &
+    Partial<Pick<DeviceService, 'isIosNative'>>,
   auth: Pick<AuthService, 'hasServerFeature'> = { hasServerFeature: () => true },
+  isNative = false,
 ) {
   TestBed.configureTestingModule({
     providers: [
       BrowserDeviceProfileService,
-      { provide: DeviceService, useValue: device },
+      { provide: DeviceService, useValue: { isIosNative: () => false, ...device } },
       { provide: PlayerSettingsService, useValue: { get: () => ({ forceDisableHdr: false }) } },
-      { provide: ServerConfigService, useValue: { isNative: false } },
+      { provide: ServerConfigService, useValue: { isNative } },
       { provide: SystemInfoService, useValue: { systemName: () => '' } },
       { provide: AuthService, useValue: auth },
     ],
@@ -379,5 +381,31 @@ describe('BrowserDeviceProfileService: dolbyVisionProfiles gating', () => {
       delete (window as unknown as { fliksDesktop?: unknown }).fliksDesktop;
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe('BrowserDeviceProfileService: subtitle capabilities per platform', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  /** [platform, device overrides, isNative, renders bitmaps, sideloads text in direct play] */
+  const platforms = [
+    ['web', {}, false, false, true],
+    ['android', {}, true, true, true],
+    ['ios', { isIosNative: () => true }, true, false, false],
+    ['desktop', { isDesktopNative: () => true }, true, true, true],
+    ['androidtv', { tvPlatform: () => 'androidtv', isTv: () => true }, true, true, true],
+    ['tizen', { tvPlatform: () => 'tizen', isTv: () => true }, true, false, true],
+  ] as const;
+
+  it.each(platforms)('%s', (_name, device, isNative, bitmaps, sideloads) => {
+    const service = configure(
+      { isTv: () => false, tvPlatform: () => null, isDesktopNative: () => false, ...device } as unknown as DeviceService,
+      { hasServerFeature: () => true },
+      isNative,
+    );
+    const profile = service.getProfile();
+    expect(profile.supportsImageSubtitles).toBe(bitmaps);
+    expect(service.engineTraits().sideloadsDirectPlaySubtitles).toBe(sideloads);
+    expect(profile).not.toHaveProperty('sideloadsDirectPlaySubtitles');
   });
 });
