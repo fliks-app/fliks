@@ -6,7 +6,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import type { QoeEventType } from '../core/types';
+import type { QoeEvent, QoeEventType } from '../core/types';
 import { PlaybackQoeSession } from './playback-qoe-session.entity';
 
 @Entity('playback_qoe_events')
@@ -31,5 +31,5 @@ export class PlaybackQoeEvent {
 
   /** The event minus `type` and `at`. */
   @Column({ type: 'jsonb', default: () => `'{}'` })
-  data: Record<string, unknown>;
+  data: Omit<QoeEvent, 'type' | 'at'>;
 }

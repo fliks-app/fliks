@@ -1,4 +1,5 @@
 import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
+import type { TranscodeReason } from '../../streaming/dto/playback-info.dto';
 import type { QoeEngine, QoeVerdict } from '../core/types';
 
 /** One row per playback session, upserted while it runs and on its end. */
@@ -51,7 +52,7 @@ export class PlaybackQoeSession {
   quality: string | null;
 
   @Column({ type: 'jsonb', default: () => `'[]'` })
-  transcodeReasons: unknown[];
+  transcodeReasons: TranscodeReason[];
 
   @Column({ type: 'varchar', nullable: true })
   videoCodec: string | null;
