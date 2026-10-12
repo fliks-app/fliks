@@ -9,6 +9,8 @@ import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom, timeout } from 'rxjs';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { ModalHeaderComponent } from '../../shared/components/modal-header';
+import { ModalFooterComponent } from '../../shared/components/modal-footer';
 import { ServerConfigService, KnownServer } from '../../core/services/server-config.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -28,7 +30,7 @@ export function withHttpsFallback(base: string): string[] {
 
 @Component({
   selector: 'app-setup',
-  imports: [FormsModule, TranslatePipe],
+  imports: [FormsModule, TranslatePipe, ModalHeaderComponent, ModalFooterComponent],
   templateUrl: './setup.html',
 })
 export class SetupComponent {
@@ -51,6 +53,10 @@ export class SetupComponent {
   /** URL of the entry whose ⋯ menu is open, or null. */
   readonly openMenuFor = signal<string | null>(null);
   private readonly saveBtn = viewChild<ElementRef<HTMLButtonElement>>('saveBtn');
+  private readonly renameDialog = viewChild<ElementRef<HTMLDialogElement>>('renameDialog');
+  /** Server whose alias the rename dialog edits. */
+  readonly renaming = signal<KnownServer | null>(null);
+  readonly renameValue = signal('');
 
   async test() {
     const raw = this.url().trim().replace(/\/+$/, '');
@@ -141,17 +147,24 @@ export class SetupComponent {
     await this.serverConfig.forgetKnownServer(server.url);
   }
 
-  async rename(server: KnownServer, event: Event) {
+  rename(server: KnownServer, event: Event) {
     event.stopPropagation();
     this.openMenuFor.set(null);
-    // window.prompt is rough but works on native (Capacitor proxies to a system
-    // dialog) and on web. A polished modal can replace it later.
-    const next = window.prompt(
-      this.translate.instant('server_history.rename_prompt'),
-      server.name ?? '',
-    );
-    if (next === null) return;
-    await this.serverConfig.renameKnownServer(server.url, next);
+    this.renaming.set(server);
+    this.renameValue.set(server.name ?? '');
+    this.renameDialog()?.nativeElement.showModal();
+  }
+
+  closeRename() {
+    this.renameDialog()?.nativeElement.close();
+  }
+
+  /** An empty name clears the alias, so the row falls back to the URL. */
+  async confirmRename() {
+    const server = this.renaming();
+    if (!server) return;
+    await this.serverConfig.renameKnownServer(server.url, this.renameValue());
+    this.closeRename();
   }
 
   /** Coarse human-readable freshness. */
