@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import { scrolledBetween } from './bottom-sheet';
+import { Component, ElementRef, provideZonelessChangeDetection, signal, viewChild } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { describe, expect, it, vi } from 'vitest';
+import { BottomSheetComponent, scrolledBetween } from './bottom-sheet';
+import { DismissableStackService } from '../../core/services/dismissable-stack.service';
+import { TvService } from '../../core/services/tv.service';
 
 function sheetWithList() {
   const sheet = document.createElement('div');
@@ -28,5 +32,50 @@ describe('scrolledBetween', () => {
     page.appendChild(sheet);
     Object.defineProperty(page, 'scrollTop', { value: 500 });
     expect(scrolledBetween(row, sheet)).toBe(false);
+  });
+});
+
+@Component({
+  imports: [BottomSheetComponent],
+  template: `
+    <app-bottom-sheet [open]="open()">
+      <div #list style="overflow-y: auto">
+        <button #row type="button" aria-current="true">current</button>
+      </div>
+    </app-bottom-sheet>
+  `,
+})
+class SheetHost {
+  readonly open = signal(false);
+  readonly list = viewChild.required<ElementRef<HTMLElement>>('list');
+  readonly row = viewChild.required<ElementRef<HTMLElement>>('row');
+}
+
+describe('BottomSheetComponent: scroll to the current choice', () => {
+  it('scrolls the list to the selected row on open without moving focus', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: TvService, useValue: { isTv: () => false } },
+        { provide: DismissableStackService, useValue: { push: () => {}, remove: () => {} } },
+      ],
+    });
+    const fixture = TestBed.createComponent(SheetHost);
+    fixture.detectChanges();
+    const list = fixture.componentInstance.list().nativeElement;
+    const row = fixture.componentInstance.row().nativeElement;
+    const box = (top: number, height: number) => ({ top, bottom: top + height, height }) as DOMRect;
+    Object.defineProperties(list, { clientHeight: { value: 300 }, scrollHeight: { value: 1000 } });
+    list.getBoundingClientRect = () => box(100, 300);
+    row.getBoundingClientRect = () => box(700, 40);
+    const scrollTo = vi.fn();
+    list.scrollTo = scrollTo as unknown as typeof list.scrollTo;
+
+    fixture.componentInstance.open.set(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 470, behavior: 'instant' });
+    expect(document.activeElement).not.toBe(row);
   });
 });

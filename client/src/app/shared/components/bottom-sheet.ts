@@ -8,6 +8,8 @@ import {
   effect,
   untracked,
   DestroyRef,
+  Injector,
+  afterNextRender,
   inject,
 } from '@angular/core';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
@@ -17,6 +19,7 @@ import {
   focusOverlayEntry,
   initialOverlayFocus,
   restoreOpenerFocus,
+  scrollSelectedIntoView,
 } from '../../core/services/focusable.constants';
 
 @Component({
@@ -95,6 +98,7 @@ export class BottomSheetComponent {
 
   private readonly dismissStack = inject(DismissableStackService);
   private readonly tv = inject(TvService);
+  private readonly injector = inject(Injector);
   private readonly dismissCallback = () => this.dismiss();
   private startY = 0;
   /** True when the touch gesture began with the sheet already scrolled to the
@@ -169,6 +173,10 @@ export class BottomSheetComponent {
             this.dismissStack.push(this.dismissCallback);
             this.registered = true;
           }
+          // The sheet content only exists after this render; scroll, never focus.
+          afterNextRender(() => scrollSelectedIntoView(this.sheet()?.nativeElement), {
+            injector: this.injector,
+          });
           if (this.tv.isTv() && !this.focusTrapActive && typeof document !== 'undefined') {
             // Snapshot the trigger before the trap can bounce focus inside.
             // Restored on close so the user lands back on the element they
