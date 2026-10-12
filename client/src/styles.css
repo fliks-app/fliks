@@ -1170,15 +1170,8 @@ body.tv .to-base-100\/50 {
 .dropdown-item {
   @apply w-full flex items-center gap-3 px-3 py-2 text-left text-base rounded-lg cursor-pointer hover:bg-white/5 focus-visible:bg-white/10 focus-visible:outline-none active:bg-white/10 disabled:opacity-40;
 }
-/* TV / keyboard focus: subtle hover tint isn't enough on a 10-foot UI —
-   the user can't track which row is highlighted from the couch without
-   a clear ring. */
-html.tv-host .dropdown-item:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: -2px;
-}
-/* Same distance problem for the pointer: `hover:bg-white/5` is ~4 RGB levels,
-   invisible from a couch. Focus stays ahead of it thanks to the ring above. */
+/* `hover:bg-white/5` is ~4 RGB levels, invisible from a couch. Focus stays
+   ahead of it thanks to the global focus ring. */
 html.tv-webos .dropdown-item:hover {
   background-color: color-mix(in oklab, var(--color-white) 12%, transparent);
 }
