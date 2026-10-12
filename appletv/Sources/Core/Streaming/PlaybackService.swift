@@ -54,6 +54,7 @@ import Foundation
         var durationMs: Int?
         var bufferAheadS: Double?
         var bandwidthBps: Double?
+        var variantBitrate: Double?
         var message: String?
 
         /// Nil fields go out as explicit null, like the iOS plugin.
@@ -65,6 +66,7 @@ import Foundation
             try c.encode(durationMs, forKey: QoeKey("durationMs"))
             try c.encode(bufferAheadS, forKey: QoeKey("bufferAheadS"))
             try c.encode(bandwidthBps, forKey: QoeKey("bandwidthBps"))
+            try c.encode(variantBitrate, forKey: QoeKey("variantBitrate"))
             try c.encode(message, forKey: QoeKey("message"))
         }
     }
@@ -344,6 +346,11 @@ import Foundation
         qoeItem?.accessLog()?.events.last.flatMap { $0.observedBitrate > 0 ? $0.observedBitrate : nil }
     }
 
+    /// Rung in play, from the access log.
+    var variantBitrate: Double? {
+        qoeItem?.accessLog()?.events.last.flatMap { $0.indicatedBitrate > 0 ? $0.indicatedBitrate : nil }
+    }
+
     private var bufferAhead: Double? {
         guard let item = qoeItem else { return nil }
         let now = item.currentTime()
@@ -382,7 +389,7 @@ import Foundation
             playbackId: playbackId, cmcd: cmcd,
             droppedFrames: events.isEmpty ? nil : events.map(\.numberOfDroppedVideoFrames).filter { $0 >= 0 }.reduce(0, +),
             decodedFrames: decodedEstimate.update(item: qoeItem, watched: watched, fps: video.fps), bandwidthBps: bandwidth, bufferAheadS: bufferAhead,
-            variantBitrate: events.last.flatMap { $0.indicatedBitrate > 0 ? $0.indicatedBitrate : nil },
+            variantBitrate: variantBitrate,
             width: size.width > 0 ? Int(size.width) : nil, height: size.height > 0 ? Int(size.height) : nil,
             videoCodec: video.codec, decoderName: nil,
             stallCount: stallCount, stallMs: stallMs, recoveryReloads: recoveryReloads
@@ -390,12 +397,14 @@ import Foundation
     }
 
     /// A rebuffer that ended where it began (the coordinator drops seeks).
-    func recordStall(position: Double, durationMs: Int) {
+    /// `variantBitrate` is the rung when the rebuffer began.
+    func recordStall(position: Double, durationMs: Int, variantBitrate: Double?) {
         guard !recovering else { return }
         stallCount += 1
         stallMs += durationMs
         pendingEvents.append(QoeEvent(type: "stall", at: Int(Date().timeIntervalSince1970 * 1000), position: position,
-                                      durationMs: durationMs, bufferAheadS: bufferAhead, bandwidthBps: bandwidth))
+                                      durationMs: durationMs, bufferAheadS: bufferAhead, bandwidthBps: bandwidth,
+                                      variantBitrate: variantBitrate))
     }
 
     private func recordEvent(_ type: String, position: Double, message: String? = nil) {
