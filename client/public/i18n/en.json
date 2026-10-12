@@ -304,7 +304,11 @@
     "sort_tracks_by_language_hint": "Orders the audio and subtitle pickers alphabetically by language; tracks with no known language stay at the end.",
     "language": "Application language",
     "language_auto": "System",
-    "language_hint": "Interface language. Defaults to your browser or system language."
+    "language_hint": "Interface language. Defaults to your browser or system language.",
+    "media_type_badge": "Movie / series badge",
+    "media_type_badge_search": "Only in Search",
+    "media_type_badge_needed": "When needed",
+    "media_type_badge_hint": "Show the type on cards only in search, or wherever movies and series are mixed."
   },
   "storage_settings": {
     "clear_cache": "Clear cache",

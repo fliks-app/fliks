@@ -12,7 +12,11 @@ export interface DisplaySettings {
   /** Order the audio and subtitle pickers by language name instead of the
    *  file's stream order. Unnamed tracks stay at the end. */
   sortTracksByLanguage: boolean;
+  /** Where media cards show the movie / series badge. */
+  mediaTypeBadge: MediaTypeBadgeScope;
 }
+
+export type MediaTypeBadgeScope = 'search' | 'needed';
 
 const STORAGE_KEY = 'display.settings';
 
@@ -22,6 +26,7 @@ const DEFAULTS: DisplaySettings = {
   language: '',
   grayUnreleased: true,
   sortTracksByLanguage: false,
+  mediaTypeBadge: 'search',
 };
 
 @Injectable({ providedIn: 'root' })

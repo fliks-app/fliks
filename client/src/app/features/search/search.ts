@@ -31,7 +31,7 @@ import { DeviceService } from '../../core/services/device.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { MediaType } from '../../core/enums/media-type.enum';
-import { MediaCardComponent, CardBadge } from '../../shared/components/media-card/media-card';
+import { MediaCardComponent, CardBadge, SEARCH_CARD_CONTEXT } from '../../shared/components/media-card/media-card';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
 import { NgTemplateOutlet } from '@angular/common';
@@ -45,6 +45,7 @@ import { UserAvatarComponent } from '../../shared/components/user-avatar/user-av
   selector: 'app-search',
   imports: [TvSelectDirective, UserAvatarComponent, FormsModule, TranslatePipe, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings, ModalHeaderComponent],
   templateUrl: './search.html',
+  providers: [{ provide: SEARCH_CARD_CONTEXT, useValue: true }],
 })
 export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly mediaService = inject(MediaService);

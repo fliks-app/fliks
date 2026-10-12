@@ -1,4 +1,4 @@
-import { Component, ElementRef, input, output, computed, inject, linkedSignal, viewChild } from '@angular/core';
+import { Component, ElementRef, InjectionToken, input, output, computed, inject, linkedSignal, viewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { NgClass, DecimalPipe } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -33,6 +33,10 @@ import { CORE_MEDIA_ACTIONS, sectionOf } from '../media-info-header/core-media-a
 import { resolveMenuContributions } from '../../../core/plugin-ui/resolve-menu-contributions';
 import { resolveMediaAction, type MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
+import { DisplaySettingsService } from '../../../core/services/display-settings.service';
+
+/** Provided by the search page so its cards keep the type badge under the 'search' setting. */
+export const SEARCH_CARD_CONTEXT = new InjectionToken<boolean>('SEARCH_CARD_CONTEXT');
 
 export type MediaCardAspect = 'portrait' | 'landscape';
 
@@ -71,6 +75,8 @@ export class MediaCardComponent {
   private readonly navbar = inject(NavbarService);
   private readonly pluginUi = inject(PluginUiRegistryService);
   protected readonly device = inject(DeviceService);
+  private readonly displaySettings = inject(DisplaySettingsService);
+  private readonly inSearch = inject(SEARCH_CARD_CONTEXT, { optional: true }) ?? false;
   /** Hover overlay (play button) only makes sense on a real pointer device. */
   protected readonly showHoverOverlay = computed(() => this.device.input() === 'mouse');
   /**
@@ -689,6 +695,7 @@ export class MediaCardComponent {
   /** Blue for a movie, pink for a series: `info` and `secondary` are the theme's
    *  blue and pink hues. */
   protected readonly typeBadge = computed((): { text: string; class: string } | null => {
+    if (!this.inSearch && this.displaySettings.settings().mediaTypeBadge === 'search') return null;
     switch (this.mediaTypeBadge()) {
       case 'movie':
         return { text: this.translate.instant('media_card.type_movie'), class: 'badge-info' };

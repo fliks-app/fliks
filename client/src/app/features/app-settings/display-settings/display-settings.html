@@ -17,6 +17,20 @@
       <span class="text-sm text-base-content/60">{{ 'display_settings.language_hint' | translate }}</span>
     </div>
 
+    <div class="flex flex-col gap-1">
+      <span class="text-sm font-medium">{{ 'display_settings.media_type_badge' | translate }}</span>
+      <select
+        appTvSelect
+        class="select select-bordered w-full max-w-xs"
+        [ngModel]="mediaTypeBadge()"
+        (ngModelChange)="onMediaTypeBadgeChange($event)"
+      >
+        <option value="search">{{ 'display_settings.media_type_badge_search' | translate }}</option>
+        <option value="needed">{{ 'display_settings.media_type_badge_needed' | translate }}</option>
+      </select>
+      <span class="text-sm text-base-content/60">{{ 'display_settings.media_type_badge_hint' | translate }}</span>
+    </div>
+
     <app-toggle-field
       [value]="homeBackground()"
       (valueChange)="onHomeBackgroundChange($event)"
