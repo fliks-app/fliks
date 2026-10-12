@@ -756,6 +756,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private audioSwitchPending: string | null = null;
   /** Bumped by every audio switch: an older one that settles late must not touch the UI. */
   private audioRequest = 0;
+  /** Bumped by every subtitle request (and by a new item): an older one whose
+   *  addTextTrack settles late may neither move the check mark nor be remembered. */
+  private subtitleRequest = 0;
   private audioTracksTimer: ReturnType<typeof setTimeout> | null = null;
   /** The playing file's subtitle list, fetched once: the native engine needs the
    *  sidecars before load(), the picker after it. */
@@ -2948,16 +2951,23 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.availableSubtitles.set([]);
     this.activeSubtitleId.set(null);
     this.activeBurnInId = null;
+    this.subtitleRequest++;
   }
 
   /** Engines that pre-select a rendition by language (Shaka's adaptation criteria,
    *  mpv's `alang`) get the target stream's, not the one the session started with. */
   private configureAudioLanguage(): void {
-    const idx = this.activeAudioStreamIndex;
-    const language = idx == null ? undefined : this.audioStreamInfo()[idx]?.language;
+    const language = this.targetAudioLanguage();
     this.engine?.configure({
       preferredAudioLanguage: language ? normalizeLangCode(language) : '',
     });
+  }
+
+  /** Language of the audio that will play, known from streamInfo before any
+   *  engine lists a track. */
+  private targetAudioLanguage(): string | undefined {
+    const idx = this.activeAudioStreamIndex;
+    return idx == null ? undefined : this.audioStreamInfo()[idx]?.language;
   }
 
   /** `startAt` for a reload: the live position, including 0; never omitted,
@@ -3036,33 +3046,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.playbackMode(),
       );
       this.restorePlaybackRate();
-      // Shaka/webOS and the desktop mpv engine drop sidecar text tracks on a fresh
-      // load(), so a recovery reload silently loses the user's subtitle. Re-add +
-      // re-select the active soft subtitle. The Capacitor native players restore
-      // their own pick inside load(); burn-in is re-baked server-side via the
-      // activeBurnInId passed to playback-info above.
-      if (!this.isNativeEngine() || this.isDesktopNative) {
-        const activeId = this.activeSubtitleId();
-        const sub = activeId
-          ? this.availableSubtitles().find((s) => s.id === activeId)
-          : null;
-        if (sub && !sub.burnIn && sub.url) {
-          try {
-            const track = await this.engine.addTextTrack(
-              sub.url,
-              sub.language,
-              sub.label,
-              sub.forced,
-              this.subtitleOrdinal(sub),
-            );
-            this.engine.selectTextTrack(track);
-            this.engine.setTextVisibility(true);
-          } catch (e) {
-            console.error('[Player] re-apply subtitle after reload failed:', e);
-          }
-        }
-      }
       this.restorePlayState(wasPaused);
+      await this.restoreSubtitle();
       return true;
     } catch (e) {
       if (!this.fallBackFromRemuxOnLoadError(e, pos)) throw e;
@@ -3146,8 +3131,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.availableAudioTracks(),
         this.activeAudioTrackId(),
         this.mediaFileId,
-        (sub) => this.selectSubtitle(sub),
+        (sub) => this.applySubtitle(sub),
         this.mediaId,
+        this.targetAudioLanguage(),
       );
     })();
     trackSetupPromise.catch((e) => console.warn('[player] track setup failed', e));
@@ -3218,8 +3204,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.availableAudioTracks(),
       this.activeAudioTrackId(),
       this.mediaFileId,
-      (sub) => this.selectSubtitle(sub),
+      (sub) => this.applySubtitle(sub),
       this.mediaId,
+      this.targetAudioLanguage(),
     );
 
     // Refresh the seek-preview sprites for the new file.
@@ -3951,43 +3938,53 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return idx < 0 ? 0 : idx;
   }
 
-  async selectSubtitle(sub: SubtitleOption | null) {
-    if (!this.engine) return;
+  /** A viewer's pick (menu, remote command): applied, then remembered. Automatic picks
+   *  use {@link applySubtitle} alone, so they never harden into the viewer's choice. */
+  async selectSubtitle(sub: SubtitleOption | null): Promise<void> {
+    if (!(await this.applySubtitle(sub))) return;
+    const image = !!(sub?.isImage || sub?.burnIn);
+    this.trackManager.saveSubtitleSelection(
+      this.mediaId,
+      sub?.language ?? null,
+      sub?.forced,
+      !!sub?.id.startsWith('emb-'),
+      image,
+      sub?.hearingImpaired,
+    );
+  }
+
+  /** Puts `sub` on screen (null: Off) and moves the active id. False when it did
+   *  not take effect: no engine, casting, a load failure, or a newer request. */
+  private async applySubtitle(sub: SubtitleOption | null): Promise<boolean> {
+    if (!this.engine) return false;
     // Cast owns subtitle selection once connected (via applyCastSubtitle):
     // an auto-select racing in from the local engine must not reload it instead.
-    if (this.castService.isConnected()) return;
+    if (this.castService.isConnected()) return false;
+    const request = ++this.subtitleRequest;
     this.chrome.resetHideTimer();
 
     if (!sub) {
-      try { this.engine.setTextVisibility(false); } catch {}
+      this.hideSoftSubtitle();
       this.activeSubtitleId.set(null);
-      this.trackManager.saveSubtitleSelection(this.mediaId, null);
       if (!this.isOfflinePlayback && this.activeBurnInId) {
         this.activeBurnInId = null;
         await this.reloadStream();
       }
-      return;
+      return request === this.subtitleRequest;
     }
 
     // `burnIn` is already device-gated by the track manager: it's only true
     // when the engine can't render bitmap subs itself. Engines that can
     // (ExoPlayer, mpv) get burnIn=false and render the image track natively via
-    // the select path below; the rest burn it into the video (transcode reload).
+    // the soft path below; the rest burn it into the video (transcode reload).
     if (sub.burnIn && sub.subtitleDbId) {
+      // The reload doesn't touch the engine's own selection: without this the
+      // soft track would show under the burned-in one.
+      this.hideSoftSubtitle();
       this.activeBurnInId = sub.subtitleDbId;
       this.activeSubtitleId.set(sub.id);
-      // Persist like the soft/off branches do, so a burn-in pick is restored
-      // on reload / next episode instead of silently reverting.
-      this.trackManager.saveSubtitleSelection(
-        this.mediaId,
-        sub.language,
-        sub.forced,
-        sub.id.startsWith('emb-'),
-        true,
-        sub.hearingImpaired,
-      );
       await this.reloadStream();
-      return;
+      return request === this.subtitleRequest;
     }
 
     try {
@@ -3995,30 +3992,54 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.activeBurnInId = null;
         if (!this.isOfflinePlayback) await this.reloadStream();
       }
-      const track = await this.engine.addTextTrack(sub.url, sub.language, sub.label, sub.forced, this.subtitleOrdinal(sub));
-      // Keep the engine track's own id intact: Shaka's selectTextTrack matches
-      // the rendition by its numeric track id, so overriding it with the app's
-      // `sub.id` made the selection a no-op (subtitles only appeared after a
-      // quality switch, whose reload passes the raw track). Native/desktop/TV
-      // engines key off language/forced/embIndex, not id, so this is a no-op
-      // for them — embIndex is still threaded through for desktop embedded subs.
-      this.engine.selectTextTrack({
-        ...track,
-        embIndex: sub.id.startsWith('emb-') ? Number(sub.id.slice(4)) : null,
-        image: sub.isImage,
-      });
-      try { this.engine.setTextVisibility(true); } catch {}
+      if (!(await this.showSoftSubtitle(sub, request))) return false;
     } catch (e) {
       // Surface the failure instead of silently moving the checkmark to a track
       // that never loaded — leave the prior selection and the picker in place so
       // the user can pick another.
       console.error('[Player] Failed to load subtitle:', e);
       this.toast.error(this.translate.instant('player.subtitle_load_failed'));
-      return;
+      return false;
     }
-
     this.activeSubtitleId.set(sub.id);
-    this.trackManager.saveSubtitleSelection(this.mediaId, sub.language, sub.forced, sub.id.startsWith('emb-'), sub.isImage, sub.hearingImpaired);
+    return true;
+  }
+
+  private hideSoftSubtitle(): void {
+    try { this.engine?.setTextVisibility(false); } catch {}
+  }
+
+  /** Loads `sub` into the engine and selects it unless a newer request took over;
+   *  every engine gets the same descriptor (ordinal, embedded index, image flag). */
+  private async showSoftSubtitle(sub: SubtitleOption, request: number): Promise<boolean> {
+    const engine = this.engine;
+    if (!engine) return false;
+    const track = await engine.addTextTrack(
+      sub.url, sub.language, sub.label, sub.forced, this.subtitleOrdinal(sub),
+    );
+    if (request !== this.subtitleRequest || engine !== this.engine) return false;
+    // Keep the engine track's own id: Shaka matches the rendition by it; the
+    // other engines key off language/forced/embIndex.
+    engine.selectTextTrack({
+      ...track,
+      embIndex: sub.id.startsWith('emb-') ? Number(sub.id.slice(4)) : null,
+      image: sub.isImage,
+    });
+    try { engine.setTextVisibility(true); } catch {}
+    return true;
+  }
+
+  /** Re-selects the active soft subtitle after a reload, which engines drop across
+   *  load(). A burn-in comes back through the burn-in id sent with the negotiation. */
+  private async restoreSubtitle(): Promise<void> {
+    const id = this.activeSubtitleId();
+    const sub = id ? this.availableSubtitles().find((s) => s.id === id) : undefined;
+    if (!sub || sub.burnIn) return;
+    try {
+      await this.showSoftSubtitle(sub, this.subtitleRequest);
+    } catch (e) {
+      console.error('[Player] re-apply subtitle after reload failed:', e);
+    }
   }
 
   // Bound DOM handlers kept as stable references so ngOnDestroy can remove
@@ -4402,11 +4423,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // quality / audio / subtitle switch must not resume a paused player.
       const wasPaused = this.pauseIntent();
 
-      // Remember active subtitle so we can restore it after reload
-      const activeSub = this.activeSubtitleId()
-        ? this.availableSubtitles().find(s => s.id === this.activeSubtitleId())
-        : null;
-
       // Native: stop the player before reload to avoid freeze
       if (this.isNativeEngine()) {
         await NativePlayer.stop().catch(() => {});
@@ -4438,14 +4454,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.restorePlaybackRate();
       this.restorePlayState(wasPaused);
 
-      // Restore active subtitle (non burn-in) after Shaka reload
-      if (activeSub && !activeSub.burnIn && activeSub.url) {
-        try {
-          const track = await this.engine.addTextTrack(activeSub.url, activeSub.language, activeSub.label, activeSub.forced);
-          this.engine.selectTextTrack(track);
-          this.engine.setTextVisibility(true);
-        } catch {}
-      }
+      await this.restoreSubtitle();
     } finally {
       this.state.buffering.set(false);
     }
