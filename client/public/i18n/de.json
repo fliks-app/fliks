@@ -182,6 +182,7 @@
       "ContainerNotSupported": "Containerformat nicht unterstützt",
       "ClientRequiresHls": "Erfordert HLS-Verpackung",
       "ClientCannotSwitchAudio": "Der Player kann Audiospuren in einer Rohdatei nicht wechseln",
+      "ClientNeedsHlsSubtitles": "Der Player kann Untertitel in einer Rohdatei nicht anzeigen",
       "VideoBitrateNotSupported": "Bitrate zu hoch",
       "VideoDolbyVisionP7NotSupported": "Dolby Vision Profil 7 nicht unterstützt"
     },

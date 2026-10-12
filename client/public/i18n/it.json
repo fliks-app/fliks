@@ -182,6 +182,7 @@
       "ContainerNotSupported": "Formato contenitore non supportato",
       "ClientRequiresHls": "Richiede la pacchettizzazione HLS",
       "ClientCannotSwitchAudio": "Il lettore non può cambiare traccia audio in un file non elaborato",
+      "ClientNeedsHlsSubtitles": "Il lettore non può mostrare i sottotitoli in un file non elaborato",
       "VideoBitrateNotSupported": "Bitrate troppo alto",
       "VideoDolbyVisionP7NotSupported": "Dolby Vision profilo 7 non supportato"
     },

@@ -91,4 +91,39 @@ describe('StreamBuilderService - DirectStream guards', () => {
     expect(r.response.playMethod).toBe('Transcode');
     expect(r.response.transcodeReasons.map((x) => x.flag)).toContain('ClientRejectedCopy');
   });
+
+  describe('needsHlsSubtitles', () => {
+    const mkvPlay = {
+      directPlayProfiles: [
+        { containers: ['mkv'], videoCodecs: ['h264'], audioCodecs: ['aac'] },
+      ],
+    };
+    const evaluate = (extra: Partial<DeviceProfileDto>) =>
+      svc().evaluate({
+        resolved: resolved(),
+        profile: profile({ ...mkvPlay, ...extra }),
+        tokenParam: 'tok',
+      });
+
+    it('plays the raw file by default (baseline)', () => {
+      expect(evaluate({}).response.playMethod).toBe('DirectPlay');
+    });
+
+    it('rules out DirectPlay but keeps the copy, flagged ClientNeedsHlsSubtitles', () => {
+      const r = evaluate({ needsHlsSubtitles: true });
+      expect(r.response.playMethod).toBe('DirectStream');
+      expect(r.response.videoCopyStream).toBe(true);
+      expect(flags(r)).toContain('ClientNeedsHlsSubtitles');
+    });
+
+    it('blames nothing when the source was never going to Direct Play', () => {
+      const r = svc().evaluate({
+        resolved: resolved(),
+        profile: profile({ needsHlsSubtitles: true }),
+        tokenParam: 'tok',
+      });
+      expect(r.response.playMethod).toBe('DirectStream');
+      expect(flags(r)).not.toContain('ClientNeedsHlsSubtitles');
+    });
+  });
 });

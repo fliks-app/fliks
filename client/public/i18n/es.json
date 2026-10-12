@@ -182,6 +182,7 @@
       "ContainerNotSupported": "Formato de contenedor no compatible",
       "ClientRequiresHls": "Requiere empaquetado HLS",
       "ClientCannotSwitchAudio": "El reproductor no puede cambiar de pista de audio en un archivo sin procesar",
+      "ClientNeedsHlsSubtitles": "El reproductor no puede mostrar subtítulos en un archivo sin procesar",
       "VideoBitrateNotSupported": "Tasa de bits demasiado alta",
       "VideoDolbyVisionP7NotSupported": "Dolby Vision perfil 7 no compatible"
     },

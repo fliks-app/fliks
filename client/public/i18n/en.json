@@ -182,6 +182,7 @@
       "ContainerNotSupported": "Container format not supported",
       "ClientRequiresHls": "Requires HLS packaging",
       "ClientCannotSwitchAudio": "The player can't switch audio tracks in a raw file",
+      "ClientNeedsHlsSubtitles": "The player can't show subtitles in a raw file",
       "VideoBitrateNotSupported": "Bitrate too high",
       "VideoDolbyVisionP7NotSupported": "Dolby Vision profile 7 not supported"
     },
