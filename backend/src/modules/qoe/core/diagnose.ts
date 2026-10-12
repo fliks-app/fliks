@@ -8,6 +8,8 @@ export const MIN_WATCHED_MS = 60_000;
 export const STALLS_PER_10_MIN = 1;
 export const STALL_RATIO = 0.01;
 export const SERVER_SPEED_FLOOR = 1.0;
+/** Live production is capped at 1x, so its jitter would trip the regular floor. */
+export const LIVE_SERVER_SPEED_FLOOR = 0.9;
 export const STARVED_BUFFER_S = 1;
 /** Throughput must exceed the variant bitrate by this factor to be called sufficient. */
 export const BANDWIDTH_HEADROOM = 1.2;
@@ -51,14 +53,14 @@ function device(
 }
 
 /** First matching rule wins; see plan/playback-qoe.plan.md section 1.3. */
-export function diagnose(s: QoeSessionSummary): QoeDiagnosis {
-  const d = decide(s);
+export function diagnose(s: QoeSessionSummary, live = false): QoeDiagnosis {
+  const d = decide(s, live);
   // A claim with no CMCD on the wire is a hint, never a verdict.
   if (s.cmcdClaimed && !s.cmcd) d.reasons.push('qoe.reason.cmcd_missing');
   return d;
 }
 
-function decide(s: QoeSessionSummary): QoeDiagnosis {
+function decide(s: QoeSessionSummary, live: boolean): QoeDiagnosis {
   if (s.unrecoveredError) return result('error', 'high', 'fatal_error');
 
   const stalling =
@@ -70,7 +72,7 @@ function decide(s: QoeSessionSummary): QoeDiagnosis {
   if (stalling) {
     if (
       s.medianTranscodeSpeed != null &&
-      s.medianTranscodeSpeed < SERVER_SPEED_FLOOR
+      s.medianTranscodeSpeed < (live ? LIVE_SERVER_SPEED_FLOOR : SERVER_SPEED_FLOOR)
     ) {
       return result('server', 'high', 'stalls_server_slow');
     }

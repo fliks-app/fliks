@@ -148,6 +148,17 @@ describe('QoeService', () => {
     });
   });
 
+  it('evicts an idle tracker that never reported, but keeps a reported one that is clean', async () => {
+    const { svc } = build();
+    svc.register({ ...session, sessionId: 'quiet' });
+    svc.recordSample({ ...session, sessionId: 'loud' }, sample);
+    const trackers = (svc as unknown as { trackers: Map<string, { touchedAt: number }> }).trackers;
+    for (const t of trackers.values()) t.touchedAt = Date.now() - 21 * 60_000;
+    await (svc as unknown as { sweep(): Promise<void> }).sweep();
+    expect(svc.trackedSession('quiet')).toBeNull();
+    expect(svc.trackedSession('loud')).toBeNull();
+  });
+
   it('writes no row for a session that never reported a sample or event', async () => {
     const { svc, upsert } = build();
     svc.observeSegment(session, { query: { CMCD: 'bl=100' }, headers: {} } as never, 3, 50);

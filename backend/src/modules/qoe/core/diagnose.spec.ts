@@ -45,6 +45,13 @@ describe('diagnose', () => {
       .toMatchObject({ verdict: 'server', confidence: 'high' });
   });
 
+  it('server: a live session tolerates jitter around 1x, a VOD one does not', () => {
+    const o = { ...stalls, medianTranscodeSpeed: 0.95 };
+    expect(diagnose({ ...base, ...o }, true).verdict).not.toBe('server');
+    expect(diagnose({ ...base, ...o }).verdict).toBe('server');
+    expect(diagnose({ ...base, ...stalls, medianTranscodeSpeed: 0.8 }, true).verdict).toBe('server');
+  });
+
   it('network: starved buffer, engine throughput below 1.2x bitrate', () => {
     expect(
       d({

@@ -171,7 +171,7 @@ function mergePlaybacks(rows: PlaybackQoeSession[]): QoePlayback[] {
       g.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
       const last = g[g.length - 1];
       const m = mergeSummaries(g.map(rowSummary));
-      const d = diagnose(m);
+      const d = diagnose(m, last.playMethod === 'live');
       const {
         stallBufferAheadS: _a,
         stallBandwidthBps: _b,
@@ -271,6 +271,11 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     t.agg.addSample(sample, Date.now(), session.state !== 'paused');
   }
 
+  /** Server-side production timing of one segment, for sessions with no segment route of ours. */
+  recordProduction(session: SessionRef, segmentDurationS: number, waitedMs: number): void {
+    this.track(session, false)?.agg.addSegment({ segmentDurationS, waitedMs });
+  }
+
   recordEvents(
     session: SessionRef,
     events: QoeEvent[],
@@ -319,7 +324,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     if (!t) return null;
     const s = t.agg.summary();
     return {
-      ...diagnose(s),
+      ...diagnose(s, t.session.kind === 'live'),
       stallCount: s.stallCount,
       stallMs: s.stallMs,
       droppedPct: droppedPct(s.droppedFrames, s.decodedFrames),
@@ -381,7 +386,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     const now = Date.now();
     for (const [id, t] of this.trackers) {
       if (t.dirty) await this.flush(t);
-      if (now - t.touchedAt > TRACKER_IDLE_MS && !t.dirty) {
+      if (now - t.touchedAt > TRACKER_IDLE_MS && (!t.dirty || !t.reported)) {
         this.trackers.delete(id);
       }
     }
@@ -435,7 +440,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
 
   private toRow(t: Tracker): PlaybackQoeSession {
     const s = t.agg.summary();
-    const d = diagnose(s);
+    const d = diagnose(s, t.session.kind === 'live');
     const ses = t.session;
     return this.sessions.create({
       sessionId: ses.sessionId,
