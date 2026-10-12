@@ -1,4 +1,7 @@
-import { isCacheable } from './cache.interceptor';
+import { HttpRequest, HttpResponse } from '@angular/common/http';
+import { of, throwError } from 'rxjs';
+import { vi } from 'vitest';
+import { cacheInterceptor, isCacheable } from './cache.interceptor';
 
 describe('cache.interceptor — what may be cached', () => {
   it('caches the core reads it was built for', () => {
@@ -26,5 +29,26 @@ describe('cache.interceptor — what may be cached', () => {
     expect(isCacheable('/api/auth/me')).toBe(false);
     expect(isCacheable('/api/stream/1')).toBe(false);
     expect(isCacheable('/api/media/42/subtitles/search')).toBe(false);
+  });
+});
+
+describe('cache.interceptor — mutations', () => {
+  const post = new HttpRequest('POST', '/api/playback/progress', {});
+  let open: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    open = vi.fn(() => ({}));
+    vi.stubGlobal('indexedDB', { open });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('keeps the cache when the mutation never reaches the server', () => {
+    cacheInterceptor(post, () => throwError(() => ({ status: 0 }))).subscribe({ error: () => undefined });
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('invalidates once the server accepted the mutation', () => {
+    cacheInterceptor(post, () => of(new HttpResponse({ status: 204 }))).subscribe();
+    expect(open).toHaveBeenCalled();
   });
 });
