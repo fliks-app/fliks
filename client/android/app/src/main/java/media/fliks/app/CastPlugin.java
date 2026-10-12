@@ -753,7 +753,8 @@ public class CastPlugin extends Plugin {
                     target = t;
                     break;
                 }
-                if (language.equals(t.getLanguage())) {
+                String tag = t.getLanguage();
+                if (tag != null && language.equals(tag.split("[-_]")[0])) {
                     sameLanguage = t;
                     sameLanguageCount++;
                 }

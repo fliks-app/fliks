@@ -214,6 +214,11 @@ test('same-language audio is told apart by its unique name', () => {
   assert.equal(pickAudioTrack(TWINS, 'en', 'en')?.trackId, 5);
 });
 
+test('a regional tag still stands in for its language', () => {
+  const tagged = [{ trackId: 7, type: 'AUDIO', name: 'es', language: 'es-419' }];
+  assert.equal(pickAudioTrack(tagged, 'es', 'Nonexistent')?.trackId, 7);
+});
+
 test('an ambiguous language never stands in for a missing name', () => {
   assert.equal(pickAudioTrack(TWINS, 'en', 'Nonexistent'), undefined);
 });

@@ -233,6 +233,7 @@ export class SubtitleStreamService implements OnModuleInit {
         kind: 'embedded',
         key: s.streamIndex,
         language: normalizeLanguageCode(s.language),
+        languageTag: s.languageTag,
         name: s.title || normalizeLanguageCode(s.language) || 'Subtitle',
         forced: s.forced,
       });

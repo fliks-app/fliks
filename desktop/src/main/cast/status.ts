@@ -60,14 +60,15 @@ export function mergeActiveTracks(
 }
 
 /** Match an audio rendition by its NAME: unique per rendition, and preserved verbatim from the
- *  manifest. Shaka rewrites HLS LANGUAGE from ISO 639-2 to 639-1, so a language only stands in
- *  for a missing name when it is unambiguous. */
+ *  manifest. Shaka rewrites HLS LANGUAGE from ISO 639-2 to 639-1 and a regional tag (`es-419`)
+ *  stays whole, so a language (its primary subtag) only stands in for a missing name when it
+ *  is unambiguous. */
 export function pickAudioTrack(
   tracks: CastTrack[],
   language: string,
   name: string,
 ): CastTrack | undefined {
   const audio = tracks.filter((t) => t.type === 'AUDIO');
-  const sameLanguage = audio.filter((t) => t.language === language);
+  const sameLanguage = audio.filter((t) => t.language?.split(/[-_]/)[0] === language);
   return audio.find((t) => t.name === name) ?? (sameLanguage.length === 1 ? sameLanguage[0] : undefined);
 }

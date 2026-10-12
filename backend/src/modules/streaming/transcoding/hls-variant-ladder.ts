@@ -54,6 +54,15 @@ export function buildUniqueAudioNames(
   });
 }
 
+/** LANGUAGE of a rendition: its BCP-47 tag when it has one, so a native menu
+ *  (AVKit) can tell `es-419` from `es-ES`; NAME stays tag-free (Cast matches on it). */
+export function renditionLanguage(s: {
+  language?: string;
+  languageTag?: string;
+}): string {
+  return s.languageTag || s.language || 'und';
+}
+
 /** Emit one `EXT-X-MEDIA:TYPE=AUDIO` rendition per source audio stream, sharing
  *  the `audio` group. CHANNELS reports the rendition's real output layout —
  *  Tizen AVPlay needs the hint to pre-allocate the decoder before fetching the
@@ -97,7 +106,7 @@ export function emitAudioRenditions(
   for (let i = 0; i < audioStreams.length; i++) {
     if (publish && !publish.has(i)) continue;
     const a = audioStreams[i];
-    const lang = a.language || 'und';
+    const lang = renditionLanguage(a);
     const isDefault = i === pickedIdx ? 'YES' : 'NO';
     const channels =
       outputChannels?.[i] ?? audioRenditionChannels(outputAudioCodec, a.channels);

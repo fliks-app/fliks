@@ -805,7 +805,10 @@ private struct SkipCueStyle: ButtonStyle {
         if let index = houseIndex(for: id, in: group), group.options.indices.contains(index) {
             return group.options[index]
         }
-        if let byTag = group.options.first(where: { $0.extendedLanguageTag == id }) { return byTag }
+        if let wanted = TrackSelection.canonicalLanguage(id),
+           let byTag = group.options.first(where: { TrackSelection.canonicalLanguage($0.extendedLanguageTag) == wanted }) {
+            return byTag
+        }
         if let index = Int(id), group.options.indices.contains(index) { return group.options[index] }
         return nil
     }

@@ -29,4 +29,31 @@ describe('listTextSubtitleRenditions', () => {
     const out = await svc.listTextSubtitleRenditions(1);
     expect(out.map((r) => r.key)).toEqual([3, 4]);
   });
+
+  it('carries the embedded BCP-47 tag next to the canonical language', async () => {
+    const svc = new SubtitleStreamService(
+      { find: jest.fn().mockResolvedValue([]) } as never,
+      null as never,
+      {
+        resolveFile: jest.fn().mockResolvedValue({
+          mediaFile: {
+            streamInfo: {
+              subtitles: [
+                { streamIndex: 3, language: 'chi', languageTag: 'zh-Hant', codec: 'subrip' },
+                { streamIndex: 4, language: 'eng', codec: 'subrip' },
+              ],
+            },
+          },
+        }),
+      } as never,
+      null as never,
+      null as never,
+      null as never,
+    );
+    const out = await svc.listTextSubtitleRenditions(1);
+    expect(out.map((r) => [r.language, r.languageTag])).toEqual([
+      ['zh', 'zh-Hant'],
+      ['en', undefined],
+    ]);
+  });
 });

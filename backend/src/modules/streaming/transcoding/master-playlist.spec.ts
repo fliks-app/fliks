@@ -502,3 +502,59 @@ describe('generateMasterPlaylist: HDR remux variant (copy path)', () => {
     expect(m).not.toContain('/remux/index.m3u8');
   });
 });
+
+describe('generateMasterPlaylist — LANGUAGE carries the BCP-47 tag', () => {
+  const media = (m: string, type: 'AUDIO' | 'SUBTITLES'): string[] =>
+    m.split('\n').filter((l) => l.startsWith(`#EXT-X-MEDIA:TYPE=${type}`));
+  const base = {
+    mediaFileId: 1,
+    sourceWidth: 1920,
+    sourceHeight: 1080,
+    tokenParam: '',
+    defaultAudioIndex: 0,
+  };
+
+  it('writes the tag on tagged audio and subtitle renditions, the language otherwise', () => {
+    const m = generateMasterPlaylist({
+      ...base,
+      audioStreams: [
+        { language: 'es', languageTag: 'es-419', channels: 2 },
+        { language: 'es', channels: 2 },
+      ],
+      subtitleRenditions: [
+        { kind: 'embedded', key: 3, language: 'zh', languageTag: 'zh-Hans', name: 'zh' },
+        { kind: 'embedded', key: 4, language: 'zh', languageTag: 'zh-Hant', name: 'zh' },
+        { kind: 'external', key: 9, language: 'fr', name: 'fr' },
+      ],
+    });
+    const audio = media(m, 'AUDIO');
+    expect(audio[0]).toContain('NAME="es",LANGUAGE="es-419"');
+    expect(audio[1]).toContain('NAME="es #2",LANGUAGE="es"');
+    const subs = media(m, 'SUBTITLES');
+    expect(subs[0]).toContain('NAME="zh",LANGUAGE="zh-Hans"');
+    expect(subs[1]).toContain('NAME="zh #2",LANGUAGE="zh-Hant"');
+    expect(subs[2]).toContain('NAME="fr",LANGUAGE="fr"');
+  });
+
+  it('falls back to und when a rendition has neither', () => {
+    const m = generateMasterPlaylist({
+      ...base,
+      audioStreams: [{ channels: 2 }],
+      subtitleRenditions: [{ kind: 'embedded', key: 1, name: 'Subtitle' }],
+    });
+    expect(media(m, 'AUDIO')[0]).toContain('LANGUAGE="und"');
+    expect(media(m, 'SUBTITLES')[0]).toContain('LANGUAGE="und"');
+  });
+
+  it('still dedupes audio on the canonical language, whatever the tags', () => {
+    const m = generateMasterPlaylist({
+      ...base,
+      audioStreams: [
+        { language: 'es', languageTag: 'es-419', channels: 2 },
+        { language: 'es', languageTag: 'es-ES', channels: 2 },
+      ],
+      dedupesAudioByLanguage: true,
+    });
+    expect(media(m, 'AUDIO')).toHaveLength(1);
+  });
+});

@@ -103,6 +103,7 @@ describe('normalizeLangCode', () => {
 
   it.each([
     ['fr-FR', 'fr'], ['pt-BR', 'pt'], ['zh_Hans_CN', 'zh'], ['EN', 'en'], [' Fre ', 'fr'],
+    ['es-419', 'es'], ['zh-Hant', 'zh'], ['zh-hant', 'zh'], ['pt-pt', 'pt'],
   ])('strips subtags and case from %s', (input, expected) => {
     expect(normalizeLangCode(input)).toBe(expected);
   });
