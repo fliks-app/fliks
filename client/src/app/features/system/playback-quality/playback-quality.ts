@@ -18,6 +18,7 @@ import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 import { parseDeviceLabel } from '../../../core/utils/format-device-label';
 import { QoeBadgeComponent } from '../qoe-badge/qoe-badge';
+import { QOE_CAUSE_DOT_CLASS, stallBreakdown, stallExplanation } from '../qoe-stall';
 import { QOE_DOT_CLASS, QOE_VERDICTS, QOE_VERDICT_BAR_CLASS, formatMbps, qoeHealth } from '../qoe-health';
 
 const PAGE_SIZE = 25;
@@ -37,6 +38,7 @@ export class SystemPlaybackQualityComponent implements OnInit {
   readonly verdicts = QOE_VERDICTS;
   readonly barClass = QOE_VERDICT_BAR_CLASS;
   readonly mbps = formatMbps;
+  readonly causeDot = QOE_CAUSE_DOT_CLASS;
 
   readonly days = signal(7);
   readonly summary = signal<QoeSummary | null>(null);
@@ -57,6 +59,8 @@ export class SystemPlaybackQualityComponent implements OnInit {
     ...new Set((this.summary()?.byDevice ?? []).map((d) => d.device).filter((d): d is string => !!d)),
   ]);
   readonly detail = signal<QoeSessionDetail | null>(null);
+
+  readonly stallCauses = computed(() => stallBreakdown(this.detail()?.events ?? []));
 
   readonly qoeEnabled = signal(true);
   readonly retentionDays = signal(30);
@@ -194,6 +198,11 @@ export class SystemPlaybackQualityComponent implements OnInit {
 
   eventLabel(e: QoeEventRow): string {
     return this.translate.instant(`qoe.event.${e.type}`);
+  }
+
+  stallLine(e: QoeEventRow): string | null {
+    const x = stallExplanation(e);
+    return x ? this.translate.instant(x.key, x.params) : null;
   }
 
   eventDetail(e: QoeEventRow): string {

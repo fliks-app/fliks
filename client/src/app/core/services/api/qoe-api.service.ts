@@ -25,6 +25,8 @@ export interface QoeEvent {
   variantBitrate?: number | null;
 }
 
+export type QoeStallCause = 'server' | 'network' | 'device' | 'unknown';
+
 export interface QoeDiagnosis {
   verdict: QoeVerdict;
   confidence: 'high' | 'low';
@@ -49,6 +51,7 @@ export interface StreamQoe extends QoeDiagnosis {
   /** The client declared CMCD. */
   cmcdClaimed?: boolean;
   playbackId?: string | null;
+  lastStall?: { at: number; durationMs: number; cause: QoeStallCause; reason: string } | null;
 }
 
 /** One playback: the merged fields of its sessions (a quality switch or recovery mints a new sid). */
@@ -94,12 +97,21 @@ export interface QoeSessionRow extends QoeDiagnosis {
   transcodeSpeed: number | null;
 }
 
+/** Set by the server on a stall once it classified it. */
+export interface QoeStallCauseData {
+  cause?: QoeStallCause;
+  causeConfidence?: 'high' | 'low';
+  /** `qoe.stall.*` i18n key. */
+  causeReason?: string;
+  causeEvidence?: Record<string, number>;
+}
+
 export interface QoeEventRow {
   id: number;
   sessionId?: string;
   at: string | number;
   type: QoeEventType;
-  data: Partial<Omit<QoeEvent, 'type' | 'at'>> | null;
+  data: (Partial<Omit<QoeEvent, 'type' | 'at'>> & QoeStallCauseData) | null;
 }
 
 export interface QoeSessionDetail extends QoeSessionRow {

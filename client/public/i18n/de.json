@@ -1545,7 +1545,27 @@
     "breakdown": "Sitzungen dieser Wiedergabe",
     "col_session": "Sitzung",
     "col_quality": "Qualität",
-    "watched": "Angesehen"
+    "watched": "Angesehen",
+    "stalls_by_cause": "Aussetzer nach Ursache",
+    "col_cause": "Ursache",
+    "col_count": "Anzahl",
+    "col_duration": "Dauer",
+    "last_stall": "Letzter Aussetzer",
+    "cause": {
+      "server": "Server",
+      "network": "Netzwerk",
+      "device": "Gerät",
+      "unknown": "Unbekannt"
+    },
+    "stall": {
+      "server_wait": "{{wait}} s auf die Transkodierung gewartet (Geschwindigkeit {{speed}}×)",
+      "network_starved": "Puffer {{buffer}} s, Durchsatz {{throughput}} Mbps < Bitrate {{bitrate}} Mbps",
+      "network_unconfirmed": "Puffer {{buffer}} s, kein bestätigter Bandbreitenmangel",
+      "network_low_throughput": "Puffer unbekannt, Durchsatz {{throughput}} Mbps < Bitrate {{bitrate}} Mbps",
+      "device_buffer_ahead": "Noch {{buffer}} s gepuffert",
+      "device_dropped_frames": "{{dropped}} % der Frames rund um den Aussetzer verworfen",
+      "unknown": "Zu wenig Daten für eine Aussage"
+    }
   },
   "markers": {
     "detect_intros": "Intros erkennen",

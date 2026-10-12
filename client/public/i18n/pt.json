@@ -1545,7 +1545,27 @@
     "breakdown": "Sessões desta reprodução",
     "col_session": "Sessão",
     "col_quality": "Qualidade",
-    "watched": "Assistido"
+    "watched": "Assistido",
+    "stalls_by_cause": "Paragens por causa",
+    "col_cause": "Causa",
+    "col_count": "Quantidade",
+    "col_duration": "Duração",
+    "last_stall": "Última paragem",
+    "cause": {
+      "server": "Servidor",
+      "network": "Rede",
+      "device": "Dispositivo",
+      "unknown": "Desconhecida"
+    },
+    "stall": {
+      "server_wait": "Esperou {{wait}} s pela transcodificação (velocidade {{speed}}×)",
+      "network_starved": "Buffer {{buffer}} s, taxa {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
+      "network_unconfirmed": "Buffer {{buffer}} s, sem falta de largura de banda confirmada",
+      "network_low_throughput": "Buffer desconhecido, taxa {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
+      "device_buffer_ahead": "{{buffer}} s ainda em buffer",
+      "device_dropped_frames": "{{dropped}} % de quadros descartados em torno da paragem",
+      "unknown": "Dados insuficientes para decidir"
+    }
   },
   "markers": {
     "detect_intros": "Detetar as intros",

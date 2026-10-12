@@ -1545,7 +1545,27 @@
     "breakdown": "Sessions of this playback",
     "col_session": "Session",
     "col_quality": "Quality",
-    "watched": "Watched"
+    "watched": "Watched",
+    "stalls_by_cause": "Stalls by cause",
+    "col_cause": "Cause",
+    "col_count": "Count",
+    "col_duration": "Duration",
+    "last_stall": "Last stall",
+    "cause": {
+      "server": "Server",
+      "network": "Network",
+      "device": "Device",
+      "unknown": "Unknown"
+    },
+    "stall": {
+      "server_wait": "Waited {{wait}} s for the transcode (speed {{speed}}×)",
+      "network_starved": "Buffer {{buffer}} s, throughput {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
+      "network_unconfirmed": "Buffer {{buffer}} s, no confirmed bandwidth shortfall",
+      "network_low_throughput": "Buffer unknown, throughput {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
+      "device_buffer_ahead": "{{buffer}} s still buffered",
+      "device_dropped_frames": "{{dropped}} % of frames dropped around the stall",
+      "unknown": "Not enough data to tell"
+    }
   },
   "markers": {
     "detect_intros": "Detect intros",

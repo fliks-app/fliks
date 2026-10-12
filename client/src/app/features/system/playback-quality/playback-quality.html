@@ -265,19 +265,59 @@
         </div>
       }
 
+      @if (stallCauses().length > 0) {
+        <h4 class="font-semibold mt-4 mb-2">{{ 'qoe.stalls_by_cause' | translate }}</h4>
+        <div class="overflow-x-auto">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>{{ 'qoe.col_cause' | translate }}</th>
+                <th class="text-right">{{ 'qoe.col_count' | translate }}</th>
+                <th class="text-right">{{ 'qoe.col_duration' | translate }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (c of stallCauses(); track c.cause) {
+                <tr>
+                  <td>
+                    <span class="inline-block h-2.5 w-2.5 rounded-full mr-2" [class]="causeDot[c.cause]"></span>{{ 'qoe.cause.' + c.cause | translate }}
+                  </td>
+                  <td class="text-right tabular-nums">{{ c.count }}</td>
+                  <td class="text-right tabular-nums">{{ (c.ms / 1000).toFixed(1) }} s</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+
       <h4 class="font-semibold mt-4 mb-2">{{ 'qoe.timeline' | translate }}</h4>
       @if (d.events.length === 0) {
         <p class="text-sm text-base-content/50">{{ 'qoe.no_events' | translate }}</p>
       } @else {
         <ul class="text-sm">
           @for (e of d.events; track $index) {
-            <li class="flex gap-3 py-1 border-b border-base-200 last:border-0">
+            <li class="py-1 border-b border-base-200 last:border-0">
+              <div class="flex gap-3">
               <span class="w-36 shrink-0 tabular-nums text-base-content/50">
                 {{ e.at | localeDate: { dateStyle: 'short', timeStyle: 'medium' } }}
               </span>
               <span class="w-14 shrink-0 tabular-nums text-base-content/50">{{ formatPosition(e.data?.position ?? null) }}</span>
               <span class="w-28 shrink-0 font-medium">{{ eventLabel(e) }}</span>
               <span class="min-w-0 break-words text-base-content/70">{{ eventDetail(e) }}</span>
+              </div>
+              @if (e.data?.cause; as cause) {
+                <div class="flex items-center gap-2 pl-[calc(9rem+3.5rem+1.5rem)] text-xs text-base-content/70">
+                  <span class="inline-block h-2.5 w-2.5 rounded-full shrink-0" [class]="causeDot[cause]"></span>
+                  <span class="font-medium">{{ 'qoe.cause.' + cause | translate }}</span>
+                  @if (e.data.causeConfidence === 'low') {
+                    <span class="text-base-content/40">({{ 'qoe.confidence_low' | translate }})</span>
+                  }
+                  @if (stallLine(e); as line) {
+                    <span class="min-w-0 break-words">{{ line }}</span>
+                  }
+                </div>
+              }
             </li>
           }
         </ul>

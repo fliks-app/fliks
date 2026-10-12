@@ -1545,7 +1545,27 @@
     "breakdown": "Sesiones de esta reproducción",
     "col_session": "Sesión",
     "col_quality": "Calidad",
-    "watched": "Visto"
+    "watched": "Visto",
+    "stalls_by_cause": "Cortes por causa",
+    "col_cause": "Causa",
+    "col_count": "Cantidad",
+    "col_duration": "Duración",
+    "last_stall": "Último corte",
+    "cause": {
+      "server": "Servidor",
+      "network": "Red",
+      "device": "Dispositivo",
+      "unknown": "Desconocida"
+    },
+    "stall": {
+      "server_wait": "Esperó {{wait}} s por la transcodificación (velocidad {{speed}}×)",
+      "network_starved": "Búfer {{buffer}} s, caudal {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
+      "network_unconfirmed": "Búfer {{buffer}} s, sin falta de ancho de banda confirmada",
+      "network_low_throughput": "Búfer desconocido, caudal {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
+      "device_buffer_ahead": "Aún {{buffer}} s en búfer",
+      "device_dropped_frames": "{{dropped}} % de fotogramas perdidos en torno al corte",
+      "unknown": "Datos insuficientes para decidir"
+    }
   },
   "markers": {
     "detect_intros": "Detectar las intros",

@@ -1545,7 +1545,27 @@
     "breakdown": "Sessions de cette lecture",
     "col_session": "Session",
     "col_quality": "Qualité",
-    "watched": "Regardé"
+    "watched": "Regardé",
+    "stalls_by_cause": "Coupures par cause",
+    "col_cause": "Cause",
+    "col_count": "Nombre",
+    "col_duration": "Durée",
+    "last_stall": "Dernière coupure",
+    "cause": {
+      "server": "Serveur",
+      "network": "Réseau",
+      "device": "Appareil",
+      "unknown": "Inconnue"
+    },
+    "stall": {
+      "server_wait": "Attente de {{wait}} s sur le transcodage (vitesse {{speed}}×)",
+      "network_starved": "Tampon {{buffer}} s, débit {{throughput}} Mbps < débit vidéo {{bitrate}} Mbps",
+      "network_unconfirmed": "Tampon {{buffer}} s, aucun manque de débit confirmé",
+      "network_low_throughput": "Tampon inconnu, débit {{throughput}} Mbps < débit vidéo {{bitrate}} Mbps",
+      "device_buffer_ahead": "{{buffer}} s encore en tampon",
+      "device_dropped_frames": "{{dropped}} % d'images perdues autour de la coupure",
+      "unknown": "Pas assez de données pour trancher"
+    }
   },
   "markers": {
     "detect_intros": "Détecter les intros",

@@ -1545,7 +1545,27 @@
     "breakdown": "Sessioni di questa riproduzione",
     "col_session": "Sessione",
     "col_quality": "Qualità",
-    "watched": "Guardato"
+    "watched": "Guardato",
+    "stalls_by_cause": "Blocchi per causa",
+    "col_cause": "Causa",
+    "col_count": "Numero",
+    "col_duration": "Durata",
+    "last_stall": "Ultimo blocco",
+    "cause": {
+      "server": "Server",
+      "network": "Rete",
+      "device": "Dispositivo",
+      "unknown": "Sconosciuta"
+    },
+    "stall": {
+      "server_wait": "Attesa di {{wait}} s per la transcodifica (velocità {{speed}}×)",
+      "network_starved": "Buffer {{buffer}} s, throughput {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
+      "network_unconfirmed": "Buffer {{buffer}} s, nessuna carenza di banda confermata",
+      "network_low_throughput": "Buffer sconosciuto, throughput {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
+      "device_buffer_ahead": "{{buffer}} s ancora in buffer",
+      "device_dropped_frames": "{{dropped}} % di fotogrammi scartati attorno al blocco",
+      "unknown": "Dati insufficienti per stabilirlo"
+    }
   },
   "markers": {
     "detect_intros": "Rileva le intro",
