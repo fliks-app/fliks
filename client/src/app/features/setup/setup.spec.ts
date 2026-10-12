@@ -6,6 +6,7 @@ import { of, throwError } from 'rxjs';
 import { SetupComponent } from './setup';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { AuthService } from '../../core/services/auth.service';
+import { ToastService } from '../../core/services/toast.service';
 
 /** Reachable over https only — mirrors a host whose http port 301s to https. */
 const httpsOnly = {
@@ -69,5 +70,33 @@ describe('SetupComponent — https fallback', () => {
     await c.test();
 
     expect(c.testResult()).toEqual({ ok: false, message: 'setup.test_error' });
+  });
+});
+
+describe('SetupComponent — known server', () => {
+  const server = { url: 'https://fliks.example.com', name: null, lastUsedAt: 0, lastUsername: null };
+
+  it('switches only once the server answers', async () => {
+    const reachable = { get: () => throwError(() => ({ status: 401 })) } as unknown as HttpClient;
+    const c = await createComponent(reachable);
+    const auth = TestBed.inject(AuthService);
+    vi.spyOn(auth, 'switchToServer').mockResolvedValue();
+
+    await c.useKnown(server);
+
+    expect(auth.switchToServer).toHaveBeenCalledWith(server.url);
+  });
+
+  it('stays on the page with an error when the server is down', async () => {
+    const dead = { get: () => throwError(() => ({ status: 0 })) } as unknown as HttpClient;
+    const c = await createComponent(dead);
+    const auth = TestBed.inject(AuthService);
+    vi.spyOn(auth, 'switchToServer').mockResolvedValue();
+
+    await c.useKnown(server);
+
+    expect(auth.switchToServer).not.toHaveBeenCalled();
+    expect(TestBed.inject(ToastService).toasts()[0]?.type).toBe('error');
+    expect(c.switchingTo()).toBeNull();
   });
 });

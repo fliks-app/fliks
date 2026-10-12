@@ -7,16 +7,19 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, timeout } from 'rxjs';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ServerConfigService, KnownServer } from '../../core/services/server-config.service';
 import { AuthService } from '../../core/services/auth.service';
+import { ToastService } from '../../core/services/toast.service';
 
 /**
  * Bases to probe, in order. An http host that 301s to https is unusable from the
  * native app: the redirect carries no CORS headers, so the XHR dies before it can
  * be followed. Probing https directly is the only way to reach such a server.
  */
+const PROBE_TIMEOUT_MS = 10_000;
+
 export function withHttpsFallback(base: string): string[] {
   return base.startsWith('http://')
     ? [base, `https://${base.slice('http://'.length)}`]
@@ -33,6 +36,7 @@ export class SetupComponent {
   private readonly auth = inject(AuthService);
   private readonly http = inject(HttpClient);
   private readonly translate = inject(TranslateService);
+  private readonly toast = inject(ToastService);
 
   readonly url = signal(this.serverConfig.serverUrl() || 'http://');
   readonly testing = signal(false);
@@ -74,7 +78,9 @@ export class SetupComponent {
   /** 401 counts as reachable: the server answered, we're just not logged in. */
   private async reachable(base: string): Promise<boolean> {
     try {
-      await firstValueFrom(this.http.get(`${base}/api/auth/me`, { responseType: 'json' }));
+      await firstValueFrom(
+        this.http.get(`${base}/api/auth/me`, { responseType: 'json' }).pipe(timeout(PROBE_TIMEOUT_MS)),
+      );
       return true;
     } catch (err: unknown) {
       return (err as { status?: number })?.status === 401;
@@ -92,9 +98,16 @@ export class SetupComponent {
     }
   }
 
-  /** One-tap "use this server" — already known, skip the test step. Its stored
-   *  session, if any, is resumed on the way in. */
+  /** One-tap "use this server": probe it first, then resume its stored session if any. */
   async useKnown(server: KnownServer) {
+    if (this.switchingTo()) return;
+    this.switchingTo.set(server.url);
+    const ok = await this.reachable(server.url);
+    this.switchingTo.set(null);
+    if (!ok) {
+      this.toast.error(this.translate.instant('setup.test_error'));
+      return;
+    }
     await this.switchTo(server.url);
   }
 
