@@ -1,4 +1,4 @@
-<div class="min-h-screen flex items-center justify-center bg-base-200 p-4">
+<div class="min-h-screen flex items-center justify-center bg-base-200 px-4 pt-[calc(env(safe-area-inset-top,0px)+1rem)] pb-[calc(env(safe-area-inset-bottom,0px)+1rem)]">
   <div class="card bg-base-100 shadow-xl w-full max-w-md" (click)="closeMenu()">
     <div class="card-body gap-6">
       <div class="text-center">
@@ -108,3 +108,30 @@
     </div>
   </div>
 </div>
+
+<dialog #renameDialog class="modal" (close)="renaming.set(null)">
+  <div class="modal-box max-w-md">
+    <app-modal-header [title]="'server_history.rename' | translate" />
+    <form class="flex flex-col gap-4" (ngSubmit)="confirmRename()">
+      <input
+        type="text"
+        class="input input-bordered w-full"
+        name="serverName"
+        [placeholder]="renaming()?.url ?? ('server_history.rename_prompt' | translate)"
+        [attr.aria-label]="'server_history.rename_prompt' | translate"
+        [ngModel]="renameValue()"
+        (ngModelChange)="renameValue.set($event)"
+        autofocus
+      />
+      <app-modal-footer>
+        <button type="button" class="btn" (click)="closeRename()">
+          {{ 'common.cancel' | translate }}
+        </button>
+        <button type="submit" class="btn btn-primary">
+          {{ 'common.save' | translate }}
+        </button>
+      </app-modal-footer>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+</dialog>
