@@ -973,11 +973,32 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    /// Frame rate and codec of the enabled video track; HLS exposes the live rate only on the item track.
+    private static func videoTrackInfo(_ item: AVPlayerItem?) -> (fps: Double?, codec: String?) {
+        guard let track = item?.tracks.first(where: { $0.isEnabled && $0.assetTrack?.mediaType == .video }) else {
+            return (nil, nil)
+        }
+        let live = Double(track.currentVideoFrameRate)
+        let nominal = Double(track.assetTrack?.nominalFrameRate ?? 0)
+        let fps = live > 0 ? live : (nominal > 0 ? nominal : nil)
+        var codec: String?
+        if let fd = track.assetTrack?.formatDescriptions.first {
+            let code = CMFormatDescriptionGetMediaSubType(fd as! CMFormatDescription)
+            let chars = (0..<4).map { UInt8((code >> UInt32(24 - 8 * $0)) & 0xff) }
+            codec = String(bytes: chars, encoding: .ascii)
+        }
+        return (fps, codec)
+    }
+
     private static func qoe(_ item: AVPlayerItem?, ahead: Double?) -> [String: Any] {
         let events = item?.accessLog()?.events ?? []
         let last = events.last
         let dropped = events.map(\.numberOfDroppedVideoFrames).filter { $0 >= 0 }.reduce(0, +)
         let size = item?.presentationSize ?? .zero
+        let video = videoTrackInfo(item)
+        // AVPlayer has no decoded-frame counter: estimated as watched seconds x frame rate.
+        let watched = events.map(\.durationWatched).filter { $0 > 0 }.reduce(0, +)
+        let decoded = video.fps.map { Int((watched * $0).rounded()) }
         func pos(_ v: Double?) -> Any { v.flatMap { $0 > 0 ? $0 : nil } ?? NSNull() }
         var cmcd = false
         if #available(iOS 18.0, *) { cmcd = true }
@@ -985,13 +1006,13 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             "engine": "avplayer",
             "cmcd": cmcd,
             "droppedFrames": events.isEmpty ? NSNull() : dropped,
-            "decodedFrames": NSNull(),
+            "decodedFrames": decoded ?? NSNull(),
             "bandwidthBps": pos(last?.observedBitrate),
             "bufferAheadS": ahead.map { max($0, 0) } ?? NSNull(),
             "variantBitrate": pos(last?.indicatedBitrate),
             "width": size.width > 0 ? Int(size.width) : NSNull(),
             "height": size.height > 0 ? Int(size.height) : NSNull(),
-            "videoCodec": NSNull(),
+            "videoCodec": video.codec ?? NSNull(),
             "decoderName": NSNull(),
             "hwDecoder": NSNull(),
         ]

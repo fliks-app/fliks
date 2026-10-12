@@ -4,7 +4,7 @@ import Capacitor
 import GoogleCast
 
 @objc(CastPlugin)
-public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener, GCKRemoteMediaClientListener, GCKDiscoveryManagerListener, GCKRequestDelegate {
+public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener, GCKRemoteMediaClientListener, GCKDiscoveryManagerListener, GCKRequestDelegate, GCKGenericChannelDelegate {
     public let identifier = "CastPlugin"
     public let jsName = "NativeCast"
     public let pluginMethods: [CAPPluginMethod] = [
@@ -25,6 +25,9 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
     ]
 
     private var sessionManager: GCKSessionManager?
+    /** Receiver → sender channel for qoe samples and player errors, forwarded to JS verbatim. */
+    private var fliksChannel: GCKGenericChannel?
+    private static let fliksNamespace = "urn:x-cast:media.fliks.app"
     private var pollTimer: Timer?
     /** LOAD calls awaiting the receiver's verdict, by request id: popping one settles it exactly once. */
     private var pendingLoads: [Int: CAPPluginCall] = [:]
@@ -355,6 +358,7 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
 
     public func sessionManager(_ sessionManager: GCKSessionManager, didStart session: GCKCastSession) {
         sessionStarting = false
+        attachFliksChannel(session)
         emitCastState(connected: true)
     }
 
@@ -363,10 +367,12 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
     }
 
     public func sessionManager(_ sessionManager: GCKSessionManager, didResumeSession session: GCKCastSession) {
+        attachFliksChannel(session)
         emitCastState(connected: true)
     }
 
     public func sessionManager(_ sessionManager: GCKSessionManager, didEnd session: GCKSession, withError error: (any Error)?) {
+        fliksChannel = nil
         stopPolling()
         emitCastState(connected: false)
     }
@@ -375,6 +381,23 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
         stopPolling()
         emitCastState(connected: false)
         emitPickerDismissed()
+    }
+
+    private func attachFliksChannel(_ session: GCKCastSession) {
+        let channel = GCKGenericChannel(namespace: Self.fliksNamespace)
+        channel.delegate = self
+        session.add(channel)
+        fliksChannel = channel
+    }
+
+    public func cast(_ channel: GCKGenericChannel, didReceiveTextMessage message: String, withNamespace protocolNamespace: String) {
+        let detail: [String: Any] = ["namespace": protocolNamespace, "message": message]
+        guard let data = try? JSONSerialization.data(withJSONObject: detail),
+              let json = String(data: data, encoding: .utf8) else { return }
+        let js = "window.dispatchEvent(new CustomEvent('castReceiverMessage', { detail: \(json) }));"
+        DispatchQueue.main.async { [weak self] in
+            self?.bridge?.webView?.evaluateJavaScript(js)
+        }
     }
 
     // MARK: - Discovery Manager Listener
