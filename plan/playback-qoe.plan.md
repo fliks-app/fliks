@@ -22,8 +22,11 @@ live in `/admin/streams` and historically in a new *Playback quality* page.
 
 ### 1.1 `QoeSample` (client → heartbeat `qoe`)
 
-Counters are **cumulative since the engine's last `load()`**; the server
-treats a counter that goes down as a reset. `null` = this engine cannot measure it.
+Counters are **cumulative per sessionId**: a recovery that mints a new sid
+resets them (its `recovery` event and `recoveryReloads = 1` go to the new sid),
+a reload that keeps the sid keeps them. The server treats a counter that goes
+down as a reset. `null` = this engine cannot measure it; `hwDecoder` is only
+set when measured, never assumed.
 
 ```ts
 interface QoeSample {
@@ -86,7 +89,9 @@ Rules (first match wins, thresholds as named constants):
    - else buffer starved (`bl`≈0 / `bufferAheadS` < 1 s at stall) and throughput < 1.2 × variant bitrate → `network`;
    - else buffer starved with no throughput data → `network`, low confidence;
    - else (stalls with buffer ahead) → `device`.
-3. No stall but dropped frames ≥ 5 % of decoded, or `hwDecoder === false` on ≥ 1080p → `device`.
+3. No stall but dropped frames ≥ 5 % of decoded → `device`. A software decoder
+   alone is not a verdict (Linux mpv decodes in software by default); it is
+   added to `reasons` as a hint when the verdict is `device`.
 4. Otherwise `ok`. Too little data (< 60 s watched) → `unknown`.
 
 Confidence is `high` when the deciding signal came from CMCD or the engine,
