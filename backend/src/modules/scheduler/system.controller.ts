@@ -712,7 +712,7 @@ export class SystemController {
         videoReasons: [],
         audioReasons: [],
         containerReasons: [],
-        qoe: null,
+        qoe: this.qoe.liveSummary(row.sessionId),
       });
     }
 

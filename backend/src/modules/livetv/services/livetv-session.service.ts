@@ -99,6 +99,8 @@ export interface LiveTvSessionEntry {
   watcher: fs.FSWatcher | null;
   stallTimer: NodeJS.Timeout | null;
   lastSegmentAt: number;
+  /** Newest `seg-*` file seen and when: successive new files time the production speed. */
+  lastNewSegment: { name: string; at: number } | null;
   failoverIndex: number;
   streamFailures: Map<number, number>;
   restarts: number;
@@ -127,6 +129,7 @@ export interface LiveTvSessionEntry {
   lastConnectError: string | null;
 }
 
+const SEGMENT_FILE_RE = /^seg-\d+\.(m4s|ts)$/;
 const FIRST_SEGMENT_TIMEOUT_MS = 20_000;
 /** No new segment (or, for direct, no new upstream data) this long while viewers are attached: treat as stalled. */
 const STALL_TIMEOUT_MS = 15_000;
@@ -478,6 +481,7 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
         watcher: null,
         stallTimer: null,
         lastSegmentAt: Date.now(),
+        lastNewSegment: null,
         failoverIndex: 0,
         streamFailures: new Map(),
         restarts: 0,
@@ -611,10 +615,19 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
     if (ref) this.qoe?.sessionEnded(ref);
   }
 
-  /** The viewer's QoE session for the heartbeat route; null when unknown. Counts as a sign of life. */
+  /** The viewer's QoE session for the heartbeat route; null when unknown. Not a sign of life:
+   *  only fetching media keeps a viewer, a dead player must not hold its slot by reporting. */
   qoeRef(sessionId: string): SessionRef | null {
-    const session = this.getForServe(sessionId);
+    const session = this.sessions.get(this.viewerIndex.get(sessionId) ?? '');
     return session ? this.qoeRefOf(session, sessionId) : null;
+  }
+
+  /** Feeds every viewer of the session the time the server took to produce a segment. */
+  private recordProduction(session: LiveTvSessionEntry, waitedMs: number): void {
+    for (const id of session.viewers.keys()) {
+      const ref = this.qoeRefOf(session, id);
+      if (ref) this.qoe?.recordProduction(ref, session.segmentSeconds, waitedMs);
+    }
   }
 
   /** CMCD of a media segment request; init segments carry no timing signal. */
@@ -996,7 +1009,14 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
     this.clearWatchers(session);
     try {
       session.watcher = fs.watch(session.dir, { persistent: false }, (_e, filename) => {
-        if (filename?.toString().startsWith('seg-')) session.lastSegmentAt = Date.now();
+        const name = filename?.toString() ?? '';
+        if (!name.startsWith('seg-')) return;
+        const now = Date.now();
+        session.lastSegmentAt = now;
+        // fs.watch fires several times per file: only a new name is a new segment.
+        if (!SEGMENT_FILE_RE.test(name) || session.lastNewSegment?.name === name) return;
+        if (session.lastNewSegment) this.recordProduction(session, now - session.lastNewSegment.at);
+        session.lastNewSegment = { name, at: now };
       });
     } catch {
       /* no directory for direct mode, or briefly absent across a respawn; the interval still catches it */
@@ -1020,6 +1040,9 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
   private async handleFailure(session: LiveTvSessionEntry): Promise<void> {
     if (!this.sessions.has(session.key)) return; // already torn down
     if (session.starting) return; // a recovery attempt already owns the stream list
+    // The stall counts as production that took this long: a server-side signal for the verdict.
+    this.recordProduction(session, Date.now() - session.lastSegmentAt);
+    session.lastNewSegment = null;
     this.clearWatchers(session);
     this.stopTransport(session);
     // Unlike a startup attempt that never connects, this was a live upstream:

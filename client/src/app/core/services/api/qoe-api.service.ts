@@ -66,7 +66,7 @@ export interface QoeSessionRow extends QoeDiagnosis {
   engine: string | null;
   cmcd: boolean | null;
   cmcdClaimed?: boolean;
-  playMethod: 'transcode' | 'remux' | 'directplay' | null;
+  playMethod: 'transcode' | 'remux' | 'directplay' | 'live' | null;
   quality: string | null;
   transcodeReasons: string[] | null;
   videoCodec: string | null;

@@ -112,4 +112,42 @@ describe('LiveQoe', () => {
       expect.any(String),
     );
   });
+
+  it('stops ticking and beating after a fatal error, without recording the overlay as a stall', async () => {
+    const { live, beat, eng, reporter } = setup();
+    live.begin('s1', eng);
+    live.onState('playing');
+    live.onError({ code: 3016, category: 'engine' });
+    live.onState('error');
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(beat).not.toHaveBeenCalled();
+    expect(reporter.record).toHaveBeenCalledTimes(1);
+    expect(reporter.record).toHaveBeenCalledWith('s1', expect.objectContaining({ type: 'error' }), true, expect.any(String));
+  });
+
+  it('does not read a frozen process as a frozen playhead', async () => {
+    const { live, beat, eng, engine } = setup();
+    live.begin('s1', eng);
+    live.onState('playing');
+    for (let i = 1; i <= 5; i++) {
+      engine.currentTime = i;
+      await vi.advanceTimersByTimeAsync(1_000);
+    }
+    vi.setSystemTime(Date.now() + 120_000);
+    await vi.advanceTimersByTimeAsync(1_000);
+    for (let i = 6; i <= 16; i++) {
+      engine.currentTime = i;
+      await vi.advanceTimersByTimeAsync(1_000);
+    }
+    expect(beat.mock.calls.at(-1)?.[1].stallCount).toBe(0);
+  });
+
+  it('tells the server when the player is paused', async () => {
+    const { live, beat, eng } = setup();
+    live.begin('s1', eng);
+    live.onState('playing');
+    live.onState('paused');
+    await vi.advanceTimersByTimeAsync(LIVE_HEARTBEAT_MS);
+    expect(beat.mock.calls[0][2]).toBe('paused');
+  });
 });

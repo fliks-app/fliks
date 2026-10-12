@@ -106,7 +106,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   private readonly guideBtn = viewChild<ElementRef<HTMLButtonElement>>('guideBtn');
 
   private engine: PlaybackEngine | null = null;
-  private readonly liveQoe = new LiveQoe(inject(QoeReporter), (id, qoe) => this.api.heartbeat(id, qoe));
+  private readonly liveQoe = new LiveQoe(inject(QoeReporter), (id, qoe, state) => this.api.heartbeat(id, qoe, state));
   readonly isDesktopNative = this.device.desktopPlatform() === 'electron';
   private readonly isIosNative = Capacitor.getPlatform() === 'ios';
   /** Drives the `directPlay` flag on `POST .../play`, see {@link supportsLiveDirectPlay}. */

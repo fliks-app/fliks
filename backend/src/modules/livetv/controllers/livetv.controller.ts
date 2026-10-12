@@ -228,14 +228,17 @@ export class LivetvController {
   @UseGuards(SessionTokenGuard)
   heartbeat(
     @Param('sessionId') sessionId: string,
-    @Body() body: { qoe?: unknown },
+    @Body() body: { qoe?: unknown; state?: unknown },
     @CurrentUser() user: User,
   ) {
     const ref = this.sessions.qoeRef(sessionId);
     if (!ref) throw new NotFoundException('Live TV session not found');
     if (ref.userId !== user.id) throw new ForbiddenException('Not your session');
     const sample = body?.qoe != null ? parseSample(body.qoe) : null;
-    if (sample) this.qoe.recordSample(ref, sample);
+    if (sample) {
+      const state = body.state === 'paused' ? 'paused' : 'playing';
+      this.qoe.recordSample({ ...ref, state }, sample);
+    }
     return { ok: true };
   }
 

@@ -145,9 +145,15 @@ describe('LivetvController — QoE heartbeat', () => {
     const { controller, recordSample } = build(ref);
     expect(controller.heartbeat('s', { qoe: sample }, user)).toEqual({ ok: true });
     expect(recordSample).toHaveBeenCalledWith(
-      ref,
+      { ...ref, state: 'playing' },
       expect.objectContaining({ engine: 'shaka', cmcd: true, stallCount: 2 }),
     );
+  });
+
+  it('maps the player paused state to the tracker', () => {
+    const { controller, recordSample } = build({ sessionId: 's', userId: 1, state: 'playing' });
+    controller.heartbeat('s', { qoe: sample, state: 'paused' }, user);
+    expect(recordSample).toHaveBeenCalledWith(expect.objectContaining({ state: 'paused' }), expect.anything());
   });
 
   it('ignores a sample that fails validation', () => {

@@ -105,7 +105,7 @@ describe('LiveTvSessionService', () => {
   let settings: { get: jest.Mock };
   let activity: { upsertRunning: jest.Mock; remove: jest.Mock };
   let transcoding: { getDetectedHwAccel: jest.Mock };
-  let qoe: { register: jest.Mock; sessionEnded: jest.Mock; observeSegment: jest.Mock };
+  let qoe: { register: jest.Mock; sessionEnded: jest.Mock; observeSegment: jest.Mock; recordProduction: jest.Mock };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -124,7 +124,7 @@ describe('LiveTvSessionService', () => {
     settings = { get: jest.fn().mockResolvedValue(null) };
     activity = { upsertRunning: jest.fn(), remove: jest.fn() };
     transcoding = { getDetectedHwAccel: jest.fn().mockReturnValue('none') };
-    qoe = { register: jest.fn(), sessionEnded: jest.fn(), observeSegment: jest.fn() };
+    qoe = { register: jest.fn(), sessionEnded: jest.fn(), observeSegment: jest.fn(), recordProduction: jest.fn() };
     service = new LiveTvSessionService(
       channelRepo as never,
       streamRepo as never,
@@ -198,6 +198,38 @@ describe('LiveTvSessionService', () => {
     (service as never as { sweepAbandoned: () => void }).sweepAbandoned();
 
     expect(qoe.sessionEnded).toHaveBeenCalledWith(expect.objectContaining({ sessionId }));
+  });
+
+  it('still frees a viewer whose player keeps sending QoE heartbeats', async () => {
+    mockSpawnAlwaysSucceeds();
+    const { sessionId } = await service.open(makeChannel([makeStream()]), makeUser(1), {});
+    (service as never as { sessions: Map<string, { viewers: Map<string, { lastSeenAt: number }> }> })
+      .sessions.forEach((s) => (s.viewers.get(sessionId)!.lastSeenAt = 0));
+
+    expect(service.qoeRef(sessionId)).not.toBeNull();
+    (service as never as { sweepAbandoned: () => void }).sweepAbandoned();
+
+    expect(service.qoeRef(sessionId)).toBeNull();
+    expect(service.listForActivity()).toEqual([]);
+  });
+
+  it('times segment production from each new seg file, once per name', async () => {
+    mockSpawnAlwaysSucceeds();
+    const { sessionId } = await service.open(makeChannel([makeStream()]), makeUser(1), {});
+    const entry = [...(service as never as { sessions: Map<string, { dir: string }> }).sessions.values()][0];
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    await wait(100);
+    fs.writeFileSync(path.join(entry.dir, 'seg-00001.m4s'), 'x');
+    await wait(100);
+    fs.appendFileSync(path.join(entry.dir, 'seg-00001.m4s'), 'y');
+    await wait(100);
+    fs.writeFileSync(path.join(entry.dir, 'seg-00002.m4s'), 'x');
+    await wait(100);
+
+    const calls = qoe.recordProduction.mock.calls.filter((c) => c[0].sessionId === sessionId);
+    // seg-00000 -> 00001 -> 00002: two intervals, however often fs.watch fired.
+    expect(calls).toHaveLength(2);
+    expect(calls[0][1]).toBeGreaterThan(0);
   });
 
   it('reads CMCD only for a known viewer', async () => {

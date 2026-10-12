@@ -371,8 +371,8 @@ export class LiveTvApiService {
   }
 
   /** Live player heartbeat; the server only reads its optional `qoe` block. */
-  heartbeat(sessionId: string, qoe: QoeSample) {
-    return firstValueFrom(this.http.put<void>(`/api/livetv/sessions/${sessionId}/state`, { qoe }));
+  heartbeat(sessionId: string, qoe: QoeSample, state: 'playing' | 'paused') {
+    return firstValueFrom(this.http.put<void>(`/api/livetv/sessions/${sessionId}/state`, { qoe, state }));
   }
 
   stopSession(sessionId: string) {

@@ -21,10 +21,11 @@ export class LiveQoe {
   private lastAdvanceAt = 0;
   private lastSeekAt = 0;
   private lastBeatAt = 0;
+  private lastWatchAt = 0;
 
   constructor(
     reporter: QoeReporter,
-    private readonly beat: (sessionId: string, qoe: QoeSample) => Promise<unknown>,
+    private readonly beat: (sessionId: string, qoe: QoeSample, state: 'playing' | 'paused') => Promise<unknown>,
   ) {
     this.qoe = new PlayerQoe(reporter);
   }
@@ -38,14 +39,19 @@ export class LiveQoe {
     this.started = this.buffering = this.paused = false;
     this.frozenSince = 0;
     this.lastPos = -1;
-    this.lastAdvanceAt = this.lastBeatAt = Date.now();
+    this.lastAdvanceAt = this.lastBeatAt = this.lastWatchAt = Date.now();
     this.timer = setInterval(() => this.tick(), TICK_MS);
   }
 
   onState(state: PlaybackState): void {
     if (!this.sid) return;
+    if (state === 'error' || state === 'ended') {
+      this.halt();
+      return;
+    }
     this.buffering = state === 'buffering';
     this.paused = state === 'paused';
+    if (state === 'idle') this.started = false;
     if (state === 'playing' && !this.started) {
       this.started = true;
       this.refresh();
@@ -57,8 +63,17 @@ export class LiveQoe {
     this.lastSeekAt = Date.now();
   }
 
+  /** A fatal error: the event goes out, then ticking and beating stop so the dead viewer is not reported as alive. */
   onError(err: { code?: number; message?: string; category?: string }): void {
+    if (!this.sid || !this.timer) return;
+    this.halt();
     this.qoe.onError(this.sid, this.engine?.()?.currentTime ?? 0, err);
+  }
+
+  private halt(): void {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+    this.qoe.setStalled(false, { sessionId: this.sid, position: this.engine?.()?.currentTime ?? 0 });
   }
 
   /** `keepalive` for a page going away, where an Angular request would be cancelled. */
@@ -81,7 +96,10 @@ export class LiveQoe {
   private tick(): void {
     const now = Date.now();
     const pos = this.engine?.()?.currentTime ?? 0;
-    const active = this.started && !this.paused && !(typeof document !== 'undefined' && document.hidden);
+    // A tick that comes back late means the process was frozen (laptop sleep): not a frozen playhead.
+    const gapOk = now - this.lastWatchAt < 3_000;
+    this.lastWatchAt = now;
+    const active = gapOk && this.started && !this.paused && !(typeof document !== 'undefined' && document.hidden);
     if (!active || Math.abs(pos - this.lastPos) >= 0.05) {
       this.lastAdvanceAt = now;
       this.frozenSince = 0;
@@ -95,7 +113,7 @@ export class LiveQoe {
     const sid = this.sid;
     const sample = this.qoe.current(sid);
     this.refresh();
-    if (sid && sample) void this.beat(sid, sample).catch(() => {});
+    if (sid && sample) void this.beat(sid, sample, this.paused ? 'paused' : 'playing').catch(() => {});
     this.qoe.flush(sid);
   }
 
