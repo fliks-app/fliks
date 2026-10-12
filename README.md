@@ -59,6 +59,10 @@ create, no subscription, and nothing leaves the house.
   opacity, margins.
 - **Skip intro, next episode, chapter markers** and thumbnail previews
   when you scrub.
+- **Commercials skipped, cuts and mutes honoured** — drop an `.edl`
+  file next to a video (the Kodi format Comskip and MCEBuddy write) and
+  every client skips the ads, jumps the cuts and silences the muted
+  stretches on its own. Each user can turn it off.
 - **Live TV**, from your own IPTV subscription — add an M3U playlist or
   an Xtream account and channels line up next to your library, with a
   program guide and a rewind buffer to pause live and jump back a few
@@ -110,6 +114,12 @@ create, no subscription, and nothing leaves the house.
   approve the request from the Login requests page on your phone.
 - **Live transcode dashboard** for admins: who's watching what, at which
   quality, on which hardware path, and why a transcode was needed.
+- **Why is it stuttering?** Every client reports how its playback is
+  going, and each session gets a verdict: the network, a device too weak
+  for the stream, a transcode that can't keep up, or a playback error.
+  See it live next to each stream, or look back over the last weeks per
+  device to spot the TV that struggles with HEVC. The numbers stay on
+  your server, and an admin can switch the collection off.
 - **Images cached locally** — no hotlinking to external services while
   you browse.
 
