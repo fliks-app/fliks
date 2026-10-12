@@ -530,7 +530,7 @@ export class StreamingApiService {
 
   postQoeEvents(sessionId: string, events: QoeEvent[], playbackId?: string) {
     return firstValueFrom(
-      this.http.post<void>(`/api/playback/sessions/${encodeURIComponent(sessionId)}/events`, { events, playbackId }),
+      this.http.post<void>(`/api/playback/sessions/${encodeURIComponent(sessionId)}/events`, { events, playbackId, sentAt: Date.now() }),
     );
   }
 

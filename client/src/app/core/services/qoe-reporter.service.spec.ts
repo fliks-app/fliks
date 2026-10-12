@@ -69,9 +69,9 @@ describe('QoeReporter', () => {
     vi.stubGlobal('fetch', fetchMock);
     reporter.record('a', ev(1));
     reporter.flushKeepalive('a');
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/e/a',
-      expect.objectContaining({ method: 'POST', keepalive: true, body: JSON.stringify({ events: [ev(1)], playbackId: undefined }) }),
-    );
+    expect(fetchMock).toHaveBeenCalledWith('/e/a', expect.objectContaining({ method: 'POST', keepalive: true }));
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.events).toEqual([ev(1)]);
+    expect(Math.abs(body.sentAt - Date.now())).toBeLessThan(5_000);
   });
 });

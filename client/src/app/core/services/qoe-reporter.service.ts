@@ -45,7 +45,7 @@ export class QoeReporter {
     try {
       for (const { events, playbackId } of this.take(sessionId)) {
         const { url, init } = this.api.qoeEventsRequest(sessionId);
-        fetch(url, { ...init, body: JSON.stringify({ events, playbackId }) }).catch(() => {});
+        fetch(url, { ...init, body: JSON.stringify({ events, playbackId, sentAt: Date.now() }) }).catch(() => {});
       }
     } catch {
       // best effort
