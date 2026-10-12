@@ -1633,7 +1633,6 @@
     "block": {
       "end": "End of playback",
       "none": "no stalls",
-      "few_seconds": "a few seconds",
       "details": "Technical details",
       "title_start_auto": "Started at auto quality",
       "title_start": "Started at {{rung}}",
@@ -1652,7 +1651,8 @@
       "error_plain": "Playback error",
       "unreported_one": "1 stall of {{duration}} with no details received",
       "unreported_many": "{{count}} stalls, {{duration}} in total, with no details received",
-      "rung_eco": "{{rung}} low bandwidth"
+      "rung_eco": "{{rung}} low bandwidth",
+      "played": "{{duration}} played"
     },
     "throughput_measured": "Measured throughput",
     "bitrate_video": "Video bitrate",

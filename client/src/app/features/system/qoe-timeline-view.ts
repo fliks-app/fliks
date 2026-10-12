@@ -2,8 +2,6 @@ import type { QoeEventRow, QoeSessionRow } from '../../core/services/api/qoe-api
 import { durationParts, eventStartMs, rungDisplay, type Fmt } from './qoe-stall';
 import { rungOf, type Timeline, type TimelineBlock, type TimelineTransition } from './qoe-timeline';
 
-const SHORT_MS = 5000;
-
 /** Plain-words title of a session block, from how it started and what it served. */
 export function blockTitle(s: QoeSessionRow, first: boolean, f: Fmt): string {
   if (s.engine === 'cast') return f.t('qoe.block.title_cast');
@@ -13,12 +11,12 @@ export function blockTitle(s: QoeSessionRow, first: boolean, f: Fmt): string {
   return rung ? f.t('qoe.block.title_play', { rung }) : f.t('qoe.block.title_play_auto');
 }
 
-/** "1 min 00 s · aucune coupure"; a session under 5 s says "quelques secondes" rather than a number. */
+/** "1 min 00 s de lecture · aucune coupure". */
 export function blockSummary(s: Pick<QoeSessionRow, 'watchedMs' | 'stallCount' | 'stallMs'>, f: Fmt): string {
   const parts: string[] = [];
   if (s.watchedMs != null) {
     const d = durationParts(s.watchedMs);
-    parts.push(s.watchedMs < SHORT_MS ? f.t('qoe.block.few_seconds') : f.t(d.key, d.params));
+    parts.push(f.t('qoe.block.played', { duration: f.t(d.key, d.params) }));
   }
   const total = f.t('qoe.seconds', { value: f.n(s.stallMs / 1000, 1) });
   parts.push(
@@ -47,7 +45,15 @@ export function clockLabel(ms: number, startMs: number, lang: string): string {
 
 /** One line of the rail: every kind shares the marker, time and content columns. */
 export type TimelineStep =
-  | { kind: 'session'; at: number; block: TimelineBlock; index: number; incoming: TimelineTransition | null }
+  | {
+      kind: 'session';
+      at: number;
+      block: TimelineBlock;
+      index: number;
+      incoming: TimelineTransition | null;
+      /** Until the next session or the end; null while the last one is still playing. */
+      spanMs: number | null;
+    }
   | { kind: 'event'; at: number; event: QoeEventRow }
   | { kind: 'end'; at: number | null };
 
@@ -59,7 +65,9 @@ export function timelineSteps(tl: Timeline, endMs: number | null): TimelineStep[
   const steps: TimelineStep[] = [];
   tl.blocks.forEach((block, index) => {
     const incoming = index > 0 ? tl.transitions[index - 1] : null;
-    steps.push({ kind: 'session', at: Date.parse(block.session.startedAt), block, index, incoming });
+    const at = Date.parse(block.session.startedAt);
+    const until = index + 1 < tl.blocks.length ? Date.parse(tl.blocks[index + 1].session.startedAt) : endMs;
+    steps.push({ kind: 'session', at, block, index, incoming, spanMs: until == null ? null : Math.max(0, until - at) });
     const events = [...block.events].sort((a, b) => eventStartMs(a) - eventStartMs(b));
     for (const event of events) steps.push({ kind: 'event', at: eventStartMs(event), event });
   });

@@ -348,7 +348,7 @@
                     @if (change?.detail; as detail) {
                       <p class="text-base-content/70">{{ detail }}</p>
                     }
-                    <p class="text-base-content/60">{{ blockSummary(step.block, step.incoming) }}</p>
+                    <p class="text-base-content/60">{{ blockSummary(step.block, step.incoming, step.spanMs) }}</p>
                     @if (unreportedText(step.block, step.incoming); as unreported) {
                       <p class="text-base-content/60">{{ unreported }}</p>
                     }

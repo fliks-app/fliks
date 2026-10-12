@@ -1633,7 +1633,6 @@
     "block": {
       "end": "Ende der Wiedergabe",
       "none": "keine Aussetzer",
-      "few_seconds": "ein paar Sekunden",
       "details": "Technische Details",
       "title_start_auto": "Start in automatischer Qualität",
       "title_start": "Start in {{rung}}",
@@ -1652,7 +1651,8 @@
       "error_plain": "Wiedergabefehler",
       "unreported_one": "1 Aussetzer von {{duration}} ohne übermittelte Details",
       "unreported_many": "{{count}} Aussetzer, {{duration}} insgesamt, ohne übermittelte Details",
-      "rung_eco": "{{rung}} geringer Verbrauch"
+      "rung_eco": "{{rung}} geringer Verbrauch",
+      "played": "{{duration}} Wiedergabe"
     },
     "throughput_measured": "Gemessener Durchsatz",
     "bitrate_video": "Bitrate des Videos",

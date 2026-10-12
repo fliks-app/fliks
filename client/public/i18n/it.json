@@ -1633,7 +1633,6 @@
     "block": {
       "end": "Fine della riproduzione",
       "none": "nessun blocco",
-      "few_seconds": "pochi secondi",
       "details": "Dettagli tecnici",
       "title_start_auto": "Avvio in qualità auto",
       "title_start": "Avvio in {{rung}}",
@@ -1652,7 +1651,8 @@
       "error_plain": "Errore di riproduzione",
       "unreported_one": "1 blocco di {{duration}} senza dettagli ricevuti",
       "unreported_many": "{{count}} blocchi, {{duration}} in totale, senza dettagli ricevuti",
-      "rung_eco": "{{rung}} basso consumo"
+      "rung_eco": "{{rung}} basso consumo",
+      "played": "{{duration}} di riproduzione"
     },
     "throughput_measured": "Throughput misurato",
     "bitrate_video": "Bitrate del video",

@@ -1633,7 +1633,6 @@
     "block": {
       "end": "Fin de lecture",
       "none": "aucune coupure",
-      "few_seconds": "quelques secondes",
       "details": "Détails techniques",
       "title_start_auto": "Démarrage en qualité auto",
       "title_start": "Démarrage en {{rung}}",
@@ -1652,7 +1651,8 @@
       "error_plain": "Erreur de lecture",
       "unreported_one": "1 coupure de {{duration}} sans détail reçu",
       "unreported_many": "{{count}} coupures, {{duration}} au total, sans détail reçu",
-      "rung_eco": "{{rung}} faible consommation"
+      "rung_eco": "{{rung}} faible consommation",
+      "played": "{{duration}} de lecture"
     },
     "throughput_measured": "Débit mesuré",
     "bitrate_video": "Bitrate de la vidéo",

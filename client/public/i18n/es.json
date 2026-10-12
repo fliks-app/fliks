@@ -1633,7 +1633,6 @@
     "block": {
       "end": "Fin de la reproducción",
       "none": "ningún corte",
-      "few_seconds": "unos segundos",
       "details": "Detalles técnicos",
       "title_start_auto": "Inicio en calidad auto",
       "title_start": "Inicio en {{rung}}",
@@ -1652,7 +1651,8 @@
       "error_plain": "Error de reproducción",
       "unreported_one": "1 corte de {{duration}} sin detalles recibidos",
       "unreported_many": "{{count}} cortes, {{duration}} en total, sin detalles recibidos",
-      "rung_eco": "{{rung}} bajo consumo"
+      "rung_eco": "{{rung}} bajo consumo",
+      "played": "{{duration}} de reproducción"
     },
     "throughput_measured": "Caudal medido",
     "bitrate_video": "Bitrate del vídeo",
