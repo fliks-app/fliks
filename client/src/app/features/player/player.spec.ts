@@ -1551,6 +1551,31 @@ describe('PlayerComponent reloadStream: startAt', () => {
   });
 });
 
+describe('PlayerComponent playback-info request', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  /** The burn-in pick and the audio index the backend marks DEFAULT: what every negotiation must carry. */
+  function trackArgs(call: unknown[]) {
+    return { burnIn: call[2], audio: call[3], quality: call[4] };
+  }
+
+  it('reloadStream, the recovery reload and the far-seek reload all negotiate the same track state', async () => {
+    const h = createHarness();
+    h.component.activeBurnInId = 7;
+    h.component.activeAudioStreamIndex = 2;
+    h.engine.currentTime = 30;
+
+    await h.component.reloadStream();
+    await h.component.refreshSidAndReload(30, { preservePause: false, unmute: false });
+
+    const [viaReload, viaRecovery] = h.streamingApi.getPlaybackInfo.mock.calls as unknown[][];
+    expect(trackArgs(viaReload)).toEqual({ burnIn: 7, audio: 2, quality: undefined });
+    expect(trackArgs(viaRecovery)).toEqual(trackArgs(viaReload));
+  });
+});
+
 describe('PlayerComponent remux fallback on a rejected load', () => {
   afterEach(() => {
     TestBed.resetTestingModule();

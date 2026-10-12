@@ -953,23 +953,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // native players start on that one. startQuality/startAt let the backend
       // pre-spawn ffmpeg right here (instead of waiting for master.m3u8).
       await this.deviceProfileService.whenDesktopProbed();
-      const deviceProfile = this.deviceProfileFor(this.mediaFileId);
       // The service is app-scoped: without this the request would carry the
       // previous media's rung instead of the user's saved one.
       this.qualityManager.restorePreference();
-      const prewarmQuality = this.resolveStartQuality();
-      const prewarmStartAt = resumeTime;
       let playbackInfoPromise: ReturnType<StreamingApiService['getPlaybackInfo']> | null = null;
       const requestPlaybackInfo = () => {
         if (this.isOfflinePlayback || playbackInfoPromise) return;
-        playbackInfoPromise = this.streamingApi.getPlaybackInfo(
-          this.mediaFileId,
-          deviceProfile,
-          undefined,
-          this.activeAudioStreamIndex,
-          prewarmQuality,
-          prewarmStartAt,
-        );
+        playbackInfoPromise = this.negotiatePlayback(resumeTime);
       };
       // Mint the long-lived stream JWT in parallel with media/state/playback-info
       // load instead of serially before engine init — it's on the time-to-first-
@@ -2327,15 +2317,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       // Re-negotiate the stream for the new file (DirectPlay vs the ladder).
       await this.authService.ensureStreamToken();
-      const deviceProfile = this.deviceProfileFor(this.mediaFileId);
-      const requestedQuality = this.resolveStartQuality();
-      this.playbackInfo = await this.streamingApi.getPlaybackInfo(
-        this.mediaFileId,
-        deviceProfile,
-        undefined,
-        this.activeAudioStreamIndex,
-        requestedQuality,
-      );
+      this.playbackInfo = await this.negotiatePlayback();
       const pi = this.playbackInfo;
       this.adoptPlaybackInfo(pi);
       startTime = this.edlStartTime(startTime);
@@ -2946,6 +2928,20 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return supportsAbr ? undefined : this.qualityManager.topRungId();
   }
 
+  /** The playback-info call for the current track state: burn-in pick, audio
+   *  index and rung. Every load path negotiates through here. The rung lets the
+   *  backend re-decide DirectPlay vs the ladder and prewarm ffmpeg at `startAt`. */
+  private negotiatePlayback(startAt?: number): Promise<PlaybackInfoResponse> {
+    return this.streamingApi.getPlaybackInfo(
+      this.mediaFileId,
+      this.deviceProfileFor(this.mediaFileId),
+      this.activeBurnInId ?? undefined,
+      this.activeAudioStreamIndex,
+      this.resolveStartQuality(),
+      startAt,
+    );
+  }
+
   /** `startAt` for a reload: the live position, including 0; never omitted,
    *  since an omitted value falls back to the stale saved DB position. */
   private reloadStartAt(pos: number | undefined): number | undefined {
@@ -3006,19 +3002,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       }
       if (opts.unmute) this.engine.muted = false;
       const wasPaused = opts.preservePause ? this.pauseIntent() : false;
-      const deviceProfile = this.deviceProfileFor(this.mediaFileId);
-      // Pass the active rung as startQuality so the backend prewarms ffmpeg at
-      // the resume position — main session at -ss pos plus the bounded early
-      // session that absorbs Shaka's seg-0 VOD probe. Mirrors the initial load.
-      const prewarmQuality = this.resolveStartQuality();
-      this.playbackInfo = await this.streamingApi.getPlaybackInfo(
-        this.mediaFileId,
-        deviceProfile,
-        this.activeBurnInId ?? undefined,
-        this.activeAudioStreamIndex ?? undefined,
-        prewarmQuality,
-        this.reloadStartAt(pos),
-      );
+      this.playbackInfo = await this.negotiatePlayback(this.reloadStartAt(pos));
       this.adoptPlaybackInfo(this.playbackInfo);
       // Refresh the near-expiry stream token before rebuilding the play URL:
       // it's baked into every segment URL and can't be swapped once the engine
@@ -4488,19 +4472,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         await this.streamingApi.stopSession(currentSid).catch(() => {});
       }
 
-      const deviceProfile = this.deviceProfileFor(this.mediaFileId);
-      // Pass the requested rung so the backend re-decides DirectPlay vs the
-      // transcode ladder: a rung below source forces the ladder, 'auto' lets the
-      // server apply its autoQualityMode.
-      const requestedQuality = this.resolveStartQuality();
-      this.playbackInfo = await this.streamingApi.getPlaybackInfo(
-        this.mediaFileId,
-        deviceProfile,
-        this.activeBurnInId ?? undefined,
-        this.activeAudioStreamIndex,
-        requestedQuality,
-        this.reloadStartAt(currentPos),
-      );
+      this.playbackInfo = await this.negotiatePlayback(this.reloadStartAt(currentPos));
       const pi = this.playbackInfo;
       this.adoptPlaybackInfo(pi);
 
