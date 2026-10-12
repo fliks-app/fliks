@@ -27,7 +27,7 @@ import Foundation
     private var sessionId: String?
     private var destroyed = false
     /// One per viewing: survives the sid changes of recover() and quality switches.
-    private let playbackId = UUID().uuidString
+    private var playbackId = UUID().uuidString
 
     private var lastHeartbeatAt = Date.distantPast
     private var lastProgressPos: Double = 0
@@ -96,6 +96,7 @@ import Foundation
         self.episodeId = episodeId
         destroyed = false
         recoverAttempts = 0
+        playbackId = UUID().uuidString
         stallCount = 0; stallMs = 0; recoveryReloads = 0; pendingEvents = []
         let settings = AppSettingsStore.shared
         qualityId = settings.playerQualityId
@@ -367,18 +368,20 @@ import Foundation
         return (fps, codec)
     }
 
+    private var decodedEstimate = DecodedEstimate()
+
     private func qoeSample() -> Qoe {
         let events = qoeItem?.accessLog()?.events ?? []
         let size = qoeItem?.presentationSize ?? .zero
         var cmcd = false
         if #available(tvOS 18.0, *) { cmcd = true }
         let video = videoTrackInfo()
-        // AVPlayer has no decoded-frame counter: estimated as watched seconds x frame rate.
+        // AVPlayer has no decoded-frame counter: estimated from watched time and frame rate.
         let watched = events.map(\.durationWatched).filter { $0 > 0 }.reduce(0, +)
         return Qoe(
             playbackId: playbackId, cmcd: cmcd,
             droppedFrames: events.isEmpty ? nil : events.map(\.numberOfDroppedVideoFrames).filter { $0 >= 0 }.reduce(0, +),
-            decodedFrames: video.fps.map { Int((watched * $0).rounded()) }, bandwidthBps: bandwidth, bufferAheadS: bufferAhead,
+            decodedFrames: decodedEstimate.update(item: qoeItem, watched: watched, fps: video.fps), bandwidthBps: bandwidth, bufferAheadS: bufferAhead,
             variantBitrate: events.last.flatMap { $0.indicatedBitrate > 0 ? $0.indicatedBitrate : nil },
             width: size.width > 0 ? Int(size.width) : nil, height: size.height > 0 ? Int(size.height) : nil,
             videoCodec: video.codec, decoderName: nil,
@@ -485,5 +488,21 @@ import Foundation
                 await recover(position: position, countAsRecovery: countAsRecovery)
             }
         }
+    }
+}
+
+/// Running decoded-frame estimate: each sample adds the newly watched seconds at the current rate,
+/// so a frame-rate change never rescales the history. Restarts with a new AVPlayerItem.
+struct DecodedEstimate {
+    private var item: ObjectIdentifier?
+    private var watched = 0.0
+    private var decoded = 0.0
+
+    mutating func update(item new: AVPlayerItem?, watched total: Double, fps: Double?) -> Int? {
+        let id = new.map(ObjectIdentifier.init)
+        if id != item { self = DecodedEstimate(item: id) }
+        decoded += max(total - watched, 0) * (fps ?? 0)
+        watched = total
+        return decoded > 0 ? Int(decoded.rounded()) : nil
     }
 }
