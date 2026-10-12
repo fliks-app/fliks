@@ -496,28 +496,27 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
     // State transitions
     this.addVideoListener('play', () => {
+      this.bufferingEmitted = false;
       this.emit('stateChanged', { state: 'playing' });
     });
 
     this.addVideoListener('pause', () => {
+      this.bufferingEmitted = false;
       this.emit('stateChanged', { state: 'paused' });
     });
 
-    this.addVideoListener('waiting', () => {
-      this.emit('stateChanged', { state: 'buffering' });
-    });
+    this.addVideoListener('waiting', () => this.emitBuffering());
 
     this.addVideoListener('stalled', () => {
       // Network stall — show buffering if not paused and buffer is nearly empty
       if (!video.paused && video.buffered.length > 0) {
         const bufferedAhead = video.buffered.end(video.buffered.length - 1) - video.currentTime;
-        if (bufferedAhead < 1) {
-          this.emit('stateChanged', { state: 'buffering' });
-        }
+        if (bufferedAhead < 1) this.emitBuffering();
       }
     });
 
     this.addVideoListener('playing', () => {
+      this.bufferingEmitted = false;
       this.emit('stateChanged', { state: 'playing' });
       // Emit firstFrame ONCE, gated on requestVideoFrameCallback so it
       // fires only after a frame has actually been presented to the
@@ -533,6 +532,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     this.addVideoListener('canplay', () => {
       // Resolve buffering state when enough data is available
       if (!video.paused) {
+        this.bufferingEmitted = false;
         this.emit('stateChanged', { state: 'playing' });
       }
     });
@@ -585,7 +585,27 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     return parts.length ? parts.join(' ') : undefined;
   }
 
+  private bufferingEmitted = false;
+
+  private emitBuffering(): void {
+    if (this.bufferingEmitted) return;
+    this.bufferingEmitted = true;
+    this.emit('stateChanged', { state: 'buffering' });
+  }
+
   private bridgeShakaEvents(): void {
+    // Shaka holds playback at its rebuffering goal without a DOM waiting/stalled event.
+    this.addShakaListener('buffering', (e: any) => {
+      const video = this.video;
+      if (!video || video.ended) return;
+      if (e.buffering) {
+        if (!video.paused) this.emitBuffering();
+      } else {
+        this.bufferingEmitted = false;
+        this.emit('stateChanged', { state: video.paused ? 'paused' : 'playing' });
+      }
+    });
+
     // Shaka error events (separate from HTMLVideoElement errors)
     this.addShakaListener('error', (e: any) => {
       const detail = e.detail;

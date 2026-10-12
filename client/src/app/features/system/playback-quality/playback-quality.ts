@@ -16,6 +16,7 @@ import { UserRow, UsersApiService } from '../../../core/services/api/users-api.s
 import { ToastService } from '../../../core/services/toast.service';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
+import { parseDeviceLabel } from '../../../core/utils/format-device-label';
 import { QoeBadgeComponent } from '../qoe-badge/qoe-badge';
 import { QOE_DOT_CLASS, QOE_VERDICTS, QOE_VERDICT_BAR_CLASS, formatMbps, qoeHealth } from '../qoe-health';
 
@@ -162,8 +163,15 @@ export class SystemPlaybackQualityComponent implements OnInit {
     return id == null ? '-' : (this.userNames().get(id) ?? `#${id}`);
   }
 
+  /** `deviceLabel` is the raw user agent for web and desktop clients. */
+  formatDevice(raw: string | null, systemName: string | null = null): string {
+    if (!raw) return '-';
+    const label = parseDeviceLabel(raw, systemName);
+    return label ? this.translate.instant(label.key, label.params) : raw;
+  }
+
   deviceText(r: QoeSessionRow): string {
-    return [r.deviceLabel, r.systemName, r.appVersion].filter(Boolean).join(' · ') || '-';
+    return [this.formatDevice(r.deviceLabel, r.systemName), r.appVersion].filter((x) => x && x !== '-').join(' · ') || '-';
   }
 
   barWidth(v: QoeVerdict): number {

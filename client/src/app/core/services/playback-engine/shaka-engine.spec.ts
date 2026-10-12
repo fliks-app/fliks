@@ -190,3 +190,36 @@ describe('ShakaEngine.getQoeSample unknowns', () => {
     expect(await engine.getQoeSample()).toMatchObject({ bufferAheadS: null, variantBitrate: null });
   });
 });
+
+describe('ShakaEngine buffering bridge', () => {
+  async function setup(paused: boolean) {
+    const container = document.createElement('div');
+    const video = document.createElement('video');
+    container.appendChild(video);
+    Object.defineProperty(video, 'paused', { value: paused });
+    const engine = new ShakaEngine();
+    await engine.init(video);
+    const states: string[] = [];
+    engine.on('stateChanged', (e) => states.push(e.state));
+    const fire = (buffering: boolean) =>
+      player.addEventListener.mock.calls.find((c) => c[0] === 'buffering')![1]({ buffering });
+    return { video, states, fire };
+  }
+
+  it("maps shaka's own buffering event, once per episode", async () => {
+    const { video, states, fire } = await setup(false);
+    fire(true);
+    video.dispatchEvent(new Event('waiting'));
+    fire(true);
+    expect(states).toEqual(['buffering']);
+    fire(false);
+    expect(states).toEqual(['buffering', 'playing']);
+  });
+
+  it('does not report buffering while paused and resumes to paused', async () => {
+    const { states, fire } = await setup(true);
+    fire(true);
+    fire(false);
+    expect(states).toEqual(['paused']);
+  });
+});

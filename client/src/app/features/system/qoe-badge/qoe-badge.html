@@ -18,7 +18,7 @@
   @if (open()) {
     <div class="mt-2 space-y-1 text-base-content/70">
       @for (r of qoe().reasons; track r) {
-        <div class="italic text-warning/80">{{ reasonText(r) }}</div>
+        <div class="italic" [class.text-warning/80]="r !== 'qoe.reason.healthy'">{{ reasonText(r) }}</div>
       }
       <div class="grid grid-cols-2 gap-x-3 gap-y-0.5 tabular-nums">
         <span class="text-base-content/40">{{ 'qoe.throughput' | translate }}</span>

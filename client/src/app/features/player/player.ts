@@ -393,6 +393,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // ceiling) with a frozen-but-healthy playhead; widen the window right after.
   private lastSeekAt = 0;
   private lastQualitySwitchAt = 0;
+  private qoeTick = 0;
   /** Buffering right after a reload or track switch finishes is that switch settling, not a stall. */
   private qoeGraceUntil = 0;
   private readonly seekStallGraceMs = 32_000;
@@ -2693,7 +2694,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  true; the load-time heartbeat ran before any of it was known. */
   private readonly firstFrameReportEffect = effect(() => {
     if (!this.state.videoStarted()) return;
-    untracked(() => void this.savePosition(true));
+    untracked(() => {
+      if (this.engine && !this.castService.isConnected()) {
+        void this.qoe.refresh(this.engine, this.activeSessionId());
+      }
+      void this.savePosition(true);
+    });
   });
 
   /** Buffering after the first frame that no seek, load or quality switch explains. */
@@ -3284,6 +3290,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.statsInterval = setInterval(() => {
       this.tickClockWatch();
       this.checkStall();
+      if (++this.qoeTick % 5 === 0 && this.engine && !this.castService.isConnected()) {
+        void this.qoe.refresh(this.engine, this.activeSessionId());
+      }
       const stats = this.engine?.getStats();
       const variant = stats?.activeVariant;
       if (variant?.height) {
@@ -4766,8 +4775,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (this.castService.isConnected()) {
         payload.qoe = this.castPlayerService.qoeSample() ?? undefined;
       } else if (this.engine) {
-        void this.qoe.refresh(this.engine);
         payload.qoe = this.qoe.current(sessionId) ?? undefined;
+        void this.qoe.refresh(this.engine, sessionId);
       }
     }
 

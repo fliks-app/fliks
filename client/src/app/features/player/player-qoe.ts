@@ -130,7 +130,8 @@ export class PlayerQoe {
   }
 
   /** Re-reads the engine for the next heartbeat; never awaited by it, so a slow engine delays nothing. */
-  async refresh(engine: PlaybackEngine): Promise<void> {
+  async refresh(engine: PlaybackEngine, sessionId?: string): Promise<void> {
+    this.bind(sessionId);
     if (this.refreshing) return;
     this.refreshing = true;
     const gen = this.generation;

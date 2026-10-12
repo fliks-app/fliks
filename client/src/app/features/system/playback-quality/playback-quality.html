@@ -108,7 +108,7 @@
               <tbody>
                 @for (d of summary()?.byDevice; track $index) {
                   <tr>
-                    <td>{{ d.device ?? '-' }}</td>
+                    <td>{{ formatDevice(d.device) }}</td>
                     <td>{{ d.engine ?? '-' }}</td>
                     <td class="text-right tabular-nums">{{ d.sessions }}</td>
                     <td class="text-right tabular-nums">{{ pct(d.stallSessions, d.sessions) }}</td>
@@ -159,7 +159,7 @@
           >
             <option value="">{{ 'qoe.filter_all_devices' | translate }}</option>
             @for (d of deviceOptions(); track d) {
-              <option [value]="d">{{ d }}</option>
+              <option [value]="d">{{ formatDevice(d) }}</option>
             }
           </select>
         </div>
