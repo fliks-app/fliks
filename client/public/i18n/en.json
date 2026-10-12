@@ -1538,9 +1538,15 @@
       "dropped_frames": "The decoder dropped a high share of frames.",
       "software_decoder": "Software decoding at HD resolution or above.",
       "too_little_data": "Not enough playback time to judge.",
-      "healthy": "No issue detected."
+      "healthy": "No issue detected.",
+      "cmcd_missing": "The client declares CMCD but the server received none."
     },
-    "filter_all_devices": "All devices"
+    "filter_all_devices": "All devices",
+    "sessions_count": "{{count}} sessions",
+    "breakdown": "Sessions of this playback",
+    "col_session": "Session",
+    "col_quality": "Quality",
+    "watched": "Watched"
   },
   "markers": {
     "detect_intros": "Detect intros",

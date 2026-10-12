@@ -1538,9 +1538,15 @@
       "dropped_frames": "Il decoder ha scartato una quota elevata di fotogrammi.",
       "software_decoder": "Decodifica software in HD o superiore.",
       "too_little_data": "Tempo di riproduzione insufficiente per giudicare.",
-      "healthy": "Nessun problema rilevato."
+      "healthy": "Nessun problema rilevato.",
+      "cmcd_missing": "Il client dichiara CMCD ma il server non ne ha ricevuto."
     },
-    "filter_all_devices": "Tutti i dispositivi"
+    "filter_all_devices": "Tutti i dispositivi",
+    "sessions_count": "{{count}} sessioni",
+    "breakdown": "Sessioni di questa riproduzione",
+    "col_session": "Sessione",
+    "col_quality": "Qualità",
+    "watched": "Guardato"
   },
   "markers": {
     "detect_intros": "Rileva le intro",

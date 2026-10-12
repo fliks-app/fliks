@@ -181,13 +181,20 @@
                 </tr>
               </thead>
               <tbody>
-                @for (s of sessions(); track s.sessionId) {
+                @for (s of sessions(); track s.playbackId ?? s.sessionId) {
                   <tr class="hover cursor-pointer" (click)="openDetail(s)">
                     <td><span class="inline-block h-2.5 w-2.5 rounded-full" [class]="dotClass(s)"></span></td>
                     <td>{{ 'qoe.verdict.' + s.verdict | translate }}</td>
                     <td>{{ userName(s.userId) }}</td>
                     <td>{{ deviceText(s) }}</td>
-                    <td class="truncate max-w-48">{{ s.mediaTitle ?? '-' }}</td>
+                    <td class="truncate max-w-48">
+                      {{ s.mediaTitle ?? '-' }}
+                      @if (s.sessionIds.length > 1) {
+                        <span class="badge badge-sm badge-ghost ml-1">
+                          {{ 'qoe.sessions_count' | translate: { count: s.sessionIds.length } }}
+                        </span>
+                      }
+                    </td>
                     <td class="tabular-nums text-base-content/60">{{ s.startedAt | localeDate: { dateStyle: 'short', timeStyle: 'short' } }}</td>
                     <td class="text-right tabular-nums">{{ s.stallCount }}</td>
                   </tr>
@@ -227,6 +234,36 @@
       <div class="mt-3">
         <app-qoe-badge [qoe]="d" />
       </div>
+
+      @if (d.sessions.length > 1) {
+        <h4 class="font-semibold mt-4 mb-2">{{ 'qoe.breakdown' | translate }}</h4>
+        <div class="overflow-x-auto">
+          <table class="table table-xs">
+            <thead>
+              <tr>
+                <th>{{ 'qoe.col_session' | translate }}</th>
+                <th>{{ 'qoe.col_quality' | translate }}</th>
+                <th>{{ 'qoe.engine' | translate }}</th>
+                <th class="text-right">{{ 'qoe.watched' | translate }}</th>
+                <th class="text-right">{{ 'qoe.stalls' | translate }}</th>
+                <th>{{ 'qoe.col_verdict' | translate }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (s of d.sessions; track s.sessionId) {
+                <tr>
+                  <td class="font-mono">{{ s.sessionId.slice(0, 8) }}</td>
+                  <td>{{ s.quality ?? '-' }}</td>
+                  <td>{{ s.engine ?? '-' }}</td>
+                  <td class="text-right tabular-nums">{{ watchedText(s.watchedMs) }}</td>
+                  <td class="text-right tabular-nums">{{ s.stallCount }}</td>
+                  <td>{{ 'qoe.verdict.' + s.verdict | translate }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
 
       <h4 class="font-semibold mt-4 mb-2">{{ 'qoe.timeline' | translate }}</h4>
       @if (d.events.length === 0) {

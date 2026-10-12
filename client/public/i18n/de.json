@@ -1538,9 +1538,15 @@
       "dropped_frames": "Der Decoder hat viele Frames verworfen.",
       "software_decoder": "Software-Decodierung in HD oder höher.",
       "too_little_data": "Zu wenig Wiedergabezeit für eine Beurteilung.",
-      "healthy": "Kein Problem erkannt."
+      "healthy": "Kein Problem erkannt.",
+      "cmcd_missing": "Der Client meldet CMCD, aber der Server hat keine Daten erhalten."
     },
-    "filter_all_devices": "Alle Geräte"
+    "filter_all_devices": "Alle Geräte",
+    "sessions_count": "{{count}} Sitzungen",
+    "breakdown": "Sitzungen dieser Wiedergabe",
+    "col_session": "Sitzung",
+    "col_quality": "Qualität",
+    "watched": "Angesehen"
   },
   "markers": {
     "detect_intros": "Intros erkennen",

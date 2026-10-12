@@ -1538,9 +1538,15 @@
       "dropped_frames": "El decodificador descartó una parte alta de los fotogramas.",
       "software_decoder": "Decodificación por software en HD o superior.",
       "too_little_data": "Tiempo de reproducción insuficiente para valorar.",
-      "healthy": "No se detectó ningún problema."
+      "healthy": "No se detectó ningún problema.",
+      "cmcd_missing": "El cliente declara CMCD pero el servidor no recibió ninguno."
     },
-    "filter_all_devices": "Todos los dispositivos"
+    "filter_all_devices": "Todos los dispositivos",
+    "sessions_count": "{{count}} sesiones",
+    "breakdown": "Sesiones de esta reproducción",
+    "col_session": "Sesión",
+    "col_quality": "Calidad",
+    "watched": "Visto"
   },
   "markers": {
     "detect_intros": "Detectar las intros",

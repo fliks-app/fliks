@@ -1538,9 +1538,15 @@
       "dropped_frames": "Le décodeur a perdu une part élevée des images.",
       "software_decoder": "Décodage logiciel en HD ou plus.",
       "too_little_data": "Temps de lecture insuffisant pour juger.",
-      "healthy": "Aucun problème détecté."
+      "healthy": "Aucun problème détecté.",
+      "cmcd_missing": "Le client déclare CMCD mais le serveur n'en a reçu aucun."
     },
-    "filter_all_devices": "Tous les appareils"
+    "filter_all_devices": "Tous les appareils",
+    "sessions_count": "{{count}} sessions",
+    "breakdown": "Sessions de cette lecture",
+    "col_session": "Session",
+    "col_quality": "Qualité",
+    "watched": "Regardé"
   },
   "markers": {
     "detect_intros": "Détecter les intros",

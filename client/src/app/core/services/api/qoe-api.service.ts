@@ -43,10 +43,14 @@ export interface StreamQoe extends QoeDiagnosis {
   transcodeSpeed: number | null;
   engine: string | null;
   cmcd: boolean | null;
+  playbackId?: string | null;
 }
 
+/** One playback: the merged fields of its sessions (a quality switch or recovery mints a new sid). */
 export interface QoeSessionRow extends QoeDiagnosis {
   sessionId: string;
+  playbackId: string | null;
+  sessionIds: string[];
   userId: number | null;
   mediaFileId: number | null;
   mediaTitle: string | null;
@@ -92,6 +96,8 @@ export interface QoeEventRow {
 }
 
 export interface QoeSessionDetail extends QoeSessionRow {
+  /** Per-session breakdown, oldest first. */
+  sessions: QoeSessionRow[];
   events: QoeEventRow[];
 }
 
@@ -127,12 +133,17 @@ export interface QoeSessionFilter {
 export const QOE_SETTING_ENABLED = 'qoe_enabled';
 export const QOE_SETTING_RETENTION_DAYS = 'qoe_retention_days';
 
-type RawRow = Omit<QoeSessionRow, 'droppedPct' | 'bandwidthBps' | 'variantBitrate' | 'transcodeSpeed'>;
+type RawRow = Omit<
+  QoeSessionRow,
+  'droppedPct' | 'bandwidthBps' | 'variantBitrate' | 'transcodeSpeed' | 'playbackId' | 'sessionIds'
+> & { playbackId?: string | null; sessionIds?: string[] };
 
 function normalizeRow(row: RawRow): QoeSessionRow {
   const decoded = row.decodedFrames ?? 0;
   return {
     ...row,
+    playbackId: row.playbackId ?? null,
+    sessionIds: row.sessionIds ?? [row.sessionId],
     droppedPct: row.droppedFrames != null && decoded > 0 ? (row.droppedFrames / decoded) * 100 : null,
     bandwidthBps: row.avgBandwidthBps,
     variantBitrate: row.avgVariantBitrate,
@@ -164,10 +175,17 @@ export class QoeApiService {
     return { total: res.total, items: res.items.map(normalizeRow) };
   }
 
-  async session(sessionId: string): Promise<QoeSessionDetail> {
+  /** `id` is a sessionId or a playbackId. */
+  async session(id: string): Promise<QoeSessionDetail> {
     const res = await firstValueFrom(
-      this.http.get<RawRow & { events: QoeEventRow[] }>(`/api/system/qoe/sessions/${encodeURIComponent(sessionId)}`),
+      this.http.get<RawRow & { sessions?: RawRow[]; events?: QoeEventRow[] }>(
+        `/api/system/qoe/sessions/${encodeURIComponent(id)}`,
+      ),
     );
-    return { ...normalizeRow(res), events: res.events ?? [] };
+    return {
+      ...normalizeRow(res),
+      sessions: (res.sessions ?? []).map(normalizeRow),
+      events: res.events ?? [],
+    };
   }
 }

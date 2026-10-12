@@ -140,7 +140,7 @@ export class SystemPlaybackQualityComponent implements OnInit {
 
   async openDetail(row: QoeSessionRow) {
     try {
-      this.detail.set(await this.api.session(row.sessionId));
+      this.detail.set(await this.api.session(row.playbackId ?? row.sessionId));
     } catch {
       /* interceptor */
     }
@@ -155,7 +155,7 @@ export class SystemPlaybackQualityComponent implements OnInit {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `playback-quality-${d.sessionId}.json`;
+    a.download = `playback-quality-${d.playbackId ?? d.sessionId}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -208,6 +208,10 @@ export class SystemPlaybackQualityComponent implements OnInit {
       default:
         return '';
     }
+  }
+
+  watchedText(ms: number | null): string {
+    return ms == null ? '-' : this.formatPosition(ms / 1000);
   }
 
   formatPosition(s: number | null): string {
