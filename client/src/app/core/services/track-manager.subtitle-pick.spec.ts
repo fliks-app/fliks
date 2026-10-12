@@ -60,11 +60,14 @@ describe('TrackManagerService.autoSelectSubtitle — mode routing', () => {
   const full = sub('full', 'fra');
   const forced = sub('forced', 'fra', { forced: true });
 
-  /** Picks from `subs` under `settings`, with one audio track in `audioLang`. */
+  /** Picks from `subs` under `settings`, with one audio track in `audioLang`, or, when `streamLang`
+   *  is given, with no track listed yet and that language read from the stream that will play. */
   async function pick(
-    settings: Partial<{ subtitleMode: string; preferredSubtitleLanguage: string }>,
+    settings: Partial<{ subtitleMode: string; preferredSubtitleLanguage: string; rememberSubtitleSelections: boolean }>,
     subs: SubtitleOption[],
     audioLang: string,
+    streamLang?: string,
+    remembered: string | null = null,
   ) {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
@@ -80,7 +83,7 @@ describe('TrackManagerService.autoSelectSubtitle — mode routing', () => {
               rememberSubtitleSelections: false,
               ...settings,
             }),
-            getRememberedSubtitleTrack: () => null,
+            getRememberedSubtitleTrack: () => remembered,
           },
         },
         { provide: SubtitlesApiService, useValue: {} },
@@ -92,11 +95,12 @@ describe('TrackManagerService.autoSelectSubtitle — mode routing', () => {
     const selected: (SubtitleOption | null)[] = [];
     await TestBed.inject(TrackManagerService).autoSelectSubtitle(
       subs,
-      [{ id: 'a1', language: audioLang }],
-      'a1',
+      streamLang ? [] : [{ id: 'a1', language: audioLang }],
+      streamLang ? null : 'a1',
       1,
       async (s) => void selected.push(s),
       1,
+      streamLang,
     );
     return selected[0]?.id;
   }
@@ -123,6 +127,34 @@ describe('TrackManagerService.autoSelectSubtitle — mode routing', () => {
     const settings = { subtitleMode: 'onlyForced', preferredSubtitleLanguage: '' };
     expect(await pick(settings, [engForced], 'eng')).toBe('eng-forced');
     expect(await pick(settings, [engForced], 'und')).toBeUndefined();
+  });
+
+  it('reads the audio language from the stream that will play when no track is listed yet', async () => {
+    const fr = sub('fr-full', 'fr');
+    const frForced = sub('fr-forced', 'fr', { forced: true });
+    const settings = { preferredSubtitleLanguage: 'fr' };
+    // French audio in a French viewer's hands: only the forced track, not a full one.
+    expect(await pick(settings, [fr, frForced], 'und', 'fra')).toBe('fr-forced');
+    expect(await pick(settings, [fr], 'und', 'fra')).toBeUndefined();
+    // Foreign audio: a full track.
+    expect(await pick(settings, [fr, frForced], 'und', 'eng')).toBe('fr-full');
+  });
+
+  /** Remembered picks are keyed by the normalized language, as the track options carry it. */
+  describe('with a remembered pick', () => {
+    const settings = { rememberSubtitleSelections: true, subtitleMode: 'off' };
+    const fullFr = sub('full', 'fr');
+    const forcedFr = sub('forced', 'fr', { forced: true });
+
+    it('never turns a remembered forced choice into a full track', async () => {
+      expect(await pick(settings, [fullFr], 'eng', undefined, 'fr:forced')).toBeUndefined();
+      expect(await pick(settings, [fullFr, forcedFr], 'eng', undefined, 'fr:forced')).toBe('forced');
+    });
+
+    it('never turns a remembered full choice into a forced track', async () => {
+      expect(await pick(settings, [forcedFr], 'eng', undefined, 'fr')).toBeUndefined();
+      expect(await pick(settings, [forcedFr, fullFr], 'eng', undefined, 'fr')).toBe('full');
+    });
   });
 
   it('leaves `off` and `always` as they were', async () => {

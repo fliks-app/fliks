@@ -54,3 +54,14 @@ describe('ShakaEngine audio tracks', () => {
     ]);
   });
 });
+
+describe('ShakaEngine subtitle authority', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('leaves forced subtitles to the app, so an explicit Off survives every load', async () => {
+    await initEngine();
+    expect(player.configure).toHaveBeenCalledWith(
+      expect.objectContaining({ accessibility: { handleForcedSubtitlesAutomatically: false } }),
+    );
+  });
+});

@@ -223,14 +223,18 @@ export class TrackManagerService {
    * @param activeAudioTrackId Currently active audio track ID
    * @param mediaFileId        Media file ID (for remembered selections)
    * @param onSelect           Callback to apply the selected subtitle (or null for none)
+   * @param mediaId            Media ID the remembered selection is keyed by
+   * @param audioLanguage      Language of the audio stream that will play, when known
+   *                           before any engine lists a track: it wins over `audioTracks`
    */
   async autoSelectSubtitle(
     subtitles: SubtitleOption[],
     audioTracks: { id: string; language: string }[],
     activeAudioTrackId: string | null,
     mediaFileId: number,
-    onSelect: (sub: SubtitleOption | null) => Promise<void>,
+    onSelect: (sub: SubtitleOption | null) => Promise<unknown>,
     mediaId = 0,
+    audioLanguage?: string,
   ): Promise<void> {
     const settings = this.playerSettings.get();
 
@@ -256,16 +260,18 @@ export class TrackManagerService {
         const isEmbedded = (s: SubtitleOption) => s.id.startsWith('emb-');
         const sameImage = (s: SubtitleOption) => !!s.isImage === wantImage;
         const sameHi = (s: SubtitleOption) => !!s.hearingImpaired === wantHi;
+        // Forced-ness is never relaxed: a full track doesn't stand in for a forced
+        // one (it translates dialogue the viewer follows), nor the reverse.
+        const sameKind = (s: SubtitleOption) => s.language === savedLang && !!s.forced === wantForced;
         // Restore image picks too — selectSubtitle renders them natively
         // (direct play) or burns them in (web / transcode).
         const pool = wantImage ? subtitles : subs;
-        // Best match: language + image-ness + forced + hearing-impaired + type (embedded/external).
+        // Best match: language + forced + image-ness + hearing-impaired + type (embedded/external).
         const match =
-          pool.find((s) => s.language === savedLang && sameImage(s) && !!s.forced === wantForced && sameHi(s) && isEmbedded(s) === wantEmbedded)
-          ?? pool.find((s) => s.language === savedLang && sameImage(s) && !!s.forced === wantForced && sameHi(s))
-          ?? pool.find((s) => s.language === savedLang && sameImage(s) && !!s.forced === wantForced)
-          ?? pool.find((s) => s.language === savedLang && sameImage(s))
-          ?? subs.find((s) => s.language === savedLang && !s.forced);
+          pool.find((s) => sameKind(s) && sameImage(s) && sameHi(s) && isEmbedded(s) === wantEmbedded)
+          ?? pool.find((s) => sameKind(s) && sameImage(s) && sameHi(s))
+          ?? pool.find((s) => sameKind(s) && sameImage(s))
+          ?? subs.find(sameKind);
         if (match) { await onSelect(match); return; }
       }
     }
@@ -273,7 +279,9 @@ export class TrackManagerService {
     if (settings.subtitleMode === 'off') return;
 
     const activeAudio = audioTracks.find((t) => t.id === activeAudioTrackId);
-    const audioLang = activeAudio?.language ?? 'und';
+    const audioLang = audioLanguage
+      ? normalizeLangCode(audioLanguage)
+      : (activeAudio?.language ?? 'und');
     const prefLang = settings.preferredSubtitleLanguage;
     const hi = settings.subtitleHearingImpaired;
 

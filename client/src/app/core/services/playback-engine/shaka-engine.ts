@@ -94,6 +94,9 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
         // dropped instead of aborting video and audio playback.
         ignoreTextStreamFailures: true,
       },
+      // The app's selection is the only authority on subtitles: Shaka would
+      // otherwise show a forced track in the audio language on every load.
+      accessibility: { handleForcedSubtitlesAutomatically: false },
     } as any);
 
     this.installSessionExpiredFilter();
