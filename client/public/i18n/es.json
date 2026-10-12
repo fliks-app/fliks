@@ -1564,7 +1564,23 @@
       "network_low_throughput": "Búfer desconocido, caudal {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
       "device_buffer_ahead": "Aún {{buffer}} s en búfer",
       "device_dropped_frames": "{{dropped}} % de fotogramas perdidos en torno al corte",
-      "unknown": "Datos insuficientes para decidir"
+      "unknown": "Datos insuficientes para decidir",
+      "hint_software_encode": "codificación por software",
+      "hint_burn_in": "subtítulos incrustados",
+      "hint_cpu_tonemap": "tonemap en la CPU",
+      "hint_busy": "{{count}} transcodificaciones a la vez"
+    },
+    "pipeline": {
+      "title": "Pipeline",
+      "tonemap": "tonemap {{path}}",
+      "decode": "decodificación {{kind}}",
+      "encode": "codificación {{kind}}",
+      "burn_in_text": "subtítulos incrustados",
+      "burn_in_image": "subtítulos de imagen incrustados",
+      "crop": "recorte",
+      "audio_transcode": "transcodificación de audio",
+      "load": "Servidor: {{transcodes}} transcodificaciones, {{sessions}} sesiones, carga {{load}} en {{cpus}} núcleos",
+      "hints": "Factores posibles: {{list}}"
     }
   },
   "markers": {

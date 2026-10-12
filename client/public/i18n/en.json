@@ -1564,7 +1564,23 @@
       "network_low_throughput": "Buffer unknown, throughput {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
       "device_buffer_ahead": "{{buffer}} s still buffered",
       "device_dropped_frames": "{{dropped}} % of frames dropped around the stall",
-      "unknown": "Not enough data to tell"
+      "unknown": "Not enough data to tell",
+      "hint_software_encode": "software encode",
+      "hint_burn_in": "burn-in subtitles",
+      "hint_cpu_tonemap": "tonemap on the CPU",
+      "hint_busy": "{{count}} transcodes at once"
+    },
+    "pipeline": {
+      "title": "Pipeline",
+      "tonemap": "tonemap {{path}}",
+      "decode": "decode {{kind}}",
+      "encode": "encode {{kind}}",
+      "burn_in_text": "burn-in subtitles",
+      "burn_in_image": "burn-in image subtitles",
+      "crop": "crop",
+      "audio_transcode": "audio transcode",
+      "load": "Server: {{transcodes}} transcodes, {{sessions}} sessions, load {{load}} on {{cpus}} cores",
+      "hints": "Possible factors: {{list}}"
     }
   },
   "markers": {

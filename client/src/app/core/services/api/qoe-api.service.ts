@@ -74,6 +74,7 @@ export interface QoeSessionRow extends QoeDiagnosis {
   playMethod: 'transcode' | 'remux' | 'directplay' | 'live' | null;
   quality: string | null;
   transcodeReasons: string[] | null;
+  pipeline?: QoePipeline | null;
   videoCodec: string | null;
   width: number | null;
   height: number | null;
@@ -97,6 +98,32 @@ export interface QoeSessionRow extends QoeDiagnosis {
   transcodeSpeed: number | null;
 }
 
+export interface QoePipelineStage {
+  hw: boolean;
+  /** qsv, vaapi, nvenc, amf, videotoolbox or cpu. */
+  kind: string;
+  name?: string | null;
+}
+
+/** What the server does to the stream of one session. */
+export interface QoePipeline {
+  source: { codec: string | null; width: number | null; height: number | null; hdr: 'HDR10' | 'HLG' | 'DV' | null } | null;
+  output: { codec: string | null; hdr: 'HDR10' | 'HLG' | null; quality: string | null; bitrate: number | null } | null;
+  decode: QoePipelineStage | null;
+  encode: QoePipelineStage | null;
+  tonemap: string | null;
+  burnIn: 'text' | 'image' | null;
+  crop: boolean | null;
+  audioTranscode: boolean | null;
+}
+
+export interface QoeServerLoad {
+  activeTranscodes: number;
+  activeSessions: number;
+  loadAvg1: number;
+  cpuCount: number;
+}
+
 /** Set by the server on a stall once it classified it. */
 export interface QoeStallCauseData {
   cause?: QoeStallCause;
@@ -104,6 +131,9 @@ export interface QoeStallCauseData {
   /** `qoe.stall.*` i18n key. */
   causeReason?: string;
   causeEvidence?: Record<string, number>;
+  /** `qoe.stall.hint_*` i18n keys. */
+  causeHints?: string[];
+  serverLoad?: QoeServerLoad | null;
 }
 
 export interface QoeEventRow {

@@ -1564,7 +1564,23 @@
       "network_low_throughput": "Buffer sconosciuto, throughput {{throughput}} Mbps < bitrate {{bitrate}} Mbps",
       "device_buffer_ahead": "{{buffer}} s ancora in buffer",
       "device_dropped_frames": "{{dropped}} % di fotogrammi scartati attorno al blocco",
-      "unknown": "Dati insufficienti per stabilirlo"
+      "unknown": "Dati insufficienti per stabilirlo",
+      "hint_software_encode": "codifica software",
+      "hint_burn_in": "sottotitoli incorporati",
+      "hint_cpu_tonemap": "tonemap sulla CPU",
+      "hint_busy": "{{count}} transcodifiche contemporanee"
+    },
+    "pipeline": {
+      "title": "Pipeline",
+      "tonemap": "tonemap {{path}}",
+      "decode": "decodifica {{kind}}",
+      "encode": "codifica {{kind}}",
+      "burn_in_text": "sottotitoli incorporati",
+      "burn_in_image": "sottotitoli immagine incorporati",
+      "crop": "ritaglio",
+      "audio_transcode": "transcodifica audio",
+      "load": "Server: {{transcodes}} transcodifiche, {{sessions}} sessioni, carico {{load}} su {{cpus}} core",
+      "hints": "Fattori possibili: {{list}}"
     }
   },
   "markers": {

@@ -1564,7 +1564,23 @@
       "network_low_throughput": "Puffer unbekannt, Durchsatz {{throughput}} Mbps < Bitrate {{bitrate}} Mbps",
       "device_buffer_ahead": "Noch {{buffer}} s gepuffert",
       "device_dropped_frames": "{{dropped}} % der Frames rund um den Aussetzer verworfen",
-      "unknown": "Zu wenig Daten für eine Aussage"
+      "unknown": "Zu wenig Daten für eine Aussage",
+      "hint_software_encode": "Software-Kodierung",
+      "hint_burn_in": "eingebrannte Untertitel",
+      "hint_cpu_tonemap": "Tonemapping auf der CPU",
+      "hint_busy": "{{count}} gleichzeitige Transkodierungen"
+    },
+    "pipeline": {
+      "title": "Pipeline",
+      "tonemap": "Tonemapping {{path}}",
+      "decode": "Decodierung {{kind}}",
+      "encode": "Kodierung {{kind}}",
+      "burn_in_text": "eingebrannte Untertitel",
+      "burn_in_image": "eingebrannte Bild-Untertitel",
+      "crop": "Zuschnitt",
+      "audio_transcode": "Audio-Transkodierung",
+      "load": "Server: {{transcodes}} Transkodierungen, {{sessions}} Sitzungen, Last {{load}} auf {{cpus}} Kernen",
+      "hints": "Mögliche Faktoren: {{list}}"
     }
   },
   "markers": {

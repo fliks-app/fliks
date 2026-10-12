@@ -235,7 +235,7 @@
         <app-qoe-badge [qoe]="d" />
       </div>
 
-      @if (d.sessions.length > 1) {
+      @if (d.sessions.length > 1 || d.sessions[0]?.pipeline) {
         <h4 class="font-semibold mt-4 mb-2">{{ 'qoe.breakdown' | translate }}</h4>
         <div class="overflow-x-auto">
           <table class="table">
@@ -247,6 +247,7 @@
                 <th class="text-right">{{ 'qoe.watched' | translate }}</th>
                 <th class="text-right">{{ 'qoe.stalls' | translate }}</th>
                 <th>{{ 'qoe.col_verdict' | translate }}</th>
+                <th>{{ 'qoe.pipeline.title' | translate }}</th>
               </tr>
             </thead>
             <tbody>
@@ -258,6 +259,7 @@
                   <td class="text-right tabular-nums">{{ watchedText(s.watchedMs) }}</td>
                   <td class="text-right tabular-nums">{{ s.stallCount }}</td>
                   <td>{{ 'qoe.verdict.' + s.verdict | translate }}</td>
+                  <td class="text-xs text-base-content/70 min-w-48">{{ pipelineText(s.pipeline) || '-' }}</td>
                 </tr>
               }
             </tbody>
@@ -317,6 +319,19 @@
                     <span class="min-w-0 break-words">{{ line }}</span>
                   }
                 </div>
+                @if (cause === 'server') {
+                  <div class="pl-[calc(9rem+3.5rem+1.5rem)] text-xs text-base-content/50 space-y-0.5">
+                    @if (stallHints(e); as hints) {
+                      <div class="text-warning/80">{{ hints }}</div>
+                    }
+                    @if (stallPipeline(d, e); as pipe) {
+                      <div>{{ pipe }}</div>
+                    }
+                    @if (stallLoad(e); as load) {
+                      <div>{{ load }}</div>
+                    }
+                  </div>
+                }
               }
             </li>
           }

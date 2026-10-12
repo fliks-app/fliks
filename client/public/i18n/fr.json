@@ -1564,7 +1564,23 @@
       "network_low_throughput": "Tampon inconnu, débit {{throughput}} Mbps < débit vidéo {{bitrate}} Mbps",
       "device_buffer_ahead": "{{buffer}} s encore en tampon",
       "device_dropped_frames": "{{dropped}} % d'images perdues autour de la coupure",
-      "unknown": "Pas assez de données pour trancher"
+      "unknown": "Pas assez de données pour trancher",
+      "hint_software_encode": "encodage logiciel",
+      "hint_burn_in": "sous-titres incrustés",
+      "hint_cpu_tonemap": "tonemap sur le CPU",
+      "hint_busy": "{{count}} transcodages en parallèle"
+    },
+    "pipeline": {
+      "title": "Pipeline",
+      "tonemap": "tonemap {{path}}",
+      "decode": "décodage {{kind}}",
+      "encode": "encodage {{kind}}",
+      "burn_in_text": "sous-titres incrustés",
+      "burn_in_image": "sous-titres image incrustés",
+      "crop": "recadrage",
+      "audio_transcode": "transcodage audio",
+      "load": "Serveur : {{transcodes}} transcodages, {{sessions}} sessions, charge {{load}} sur {{cpus}} cœurs",
+      "hints": "Facteurs possibles : {{list}}"
     }
   },
   "markers": {

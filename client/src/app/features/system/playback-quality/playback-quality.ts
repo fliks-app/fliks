@@ -6,6 +6,7 @@ import {
   QOE_SETTING_RETENTION_DAYS,
   QoeApiService,
   QoeEventRow,
+  QoePipeline,
   QoeSessionDetail,
   QoeSessionRow,
   QoeSummary,
@@ -18,7 +19,7 @@ import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 import { parseDeviceLabel } from '../../../core/utils/format-device-label';
 import { QoeBadgeComponent } from '../qoe-badge/qoe-badge';
-import { QOE_CAUSE_DOT_CLASS, stallBreakdown, stallExplanation } from '../qoe-stall';
+import { QOE_CAUSE_DOT_CLASS, hintParams, loadLine, pipelineChain, pipelineParts, stallBreakdown, stallExplanation } from '../qoe-stall';
 import { QOE_DOT_CLASS, QOE_VERDICTS, QOE_VERDICT_BAR_CLASS, formatMbps, qoeHealth } from '../qoe-health';
 
 const PAGE_SIZE = 25;
@@ -198,6 +199,34 @@ export class SystemPlaybackQualityComponent implements OnInit {
 
   eventLabel(e: QoeEventRow): string {
     return this.translate.instant(`qoe.event.${e.type}`);
+  }
+
+  /** "4K HEVC HDR10 → 1080p H.264 8 Mb/s · tonemap OpenCL · decode QSV ...". */
+  pipelineText(p: QoePipeline | null | undefined): string {
+    if (!p) return '';
+    return [pipelineChain(p), ...pipelineParts(p).map((x) => this.translate.instant(x.key, x.params))]
+      .filter(Boolean)
+      .join(' · ');
+  }
+
+  /** The pipeline of the session a stall belongs to. */
+  stallPipeline(d: QoeSessionDetail, e: QoeEventRow): string {
+    return this.pipelineText(d.sessions.find((s) => s.sessionId === e.sessionId)?.pipeline);
+  }
+
+  stallLoad(e: QoeEventRow): string {
+    const l = e.data?.serverLoad;
+    if (!l) return '';
+    const x = loadLine(l);
+    return this.translate.instant(x.key, x.params);
+  }
+
+  stallHints(e: QoeEventRow): string {
+    const hints = e.data?.causeHints ?? [];
+    if (!hints.length) return '';
+    const p = hintParams(e);
+    const list = hints.map((h) => this.translate.instant(h, p)).join(', ');
+    return this.translate.instant('qoe.pipeline.hints', { list });
   }
 
   stallLine(e: QoeEventRow): string | null {
