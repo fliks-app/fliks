@@ -4,6 +4,11 @@
   "testEnvironment": "node",
   "testRegex": ".e2e-spec.ts$",
   "transform": {
-    "^.+\\.(t|j)s$": "ts-jest"
-  }
+    "^.+\\.ts$": "ts-jest",
+    "node_modules/@svta/.+\\.js$": [
+      "ts-jest",
+      { "tsconfig": { "allowJs": true, "module": "commonjs", "target": "ES2022" } }
+    ]
+  },
+  "transformIgnorePatterns": ["/node_modules/(?!@svta/)"]
 }

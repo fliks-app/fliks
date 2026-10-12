@@ -19,7 +19,10 @@ export class PlaybackQoeEvent {
   sessionId: string;
 
   @ManyToOne(() => PlaybackQoeSession, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'sessionId' })
+  @JoinColumn({
+    name: 'sessionId',
+    foreignKeyConstraintName: 'FK_playback_qoe_events_session',
+  })
   session?: PlaybackQoeSession;
 
   /** Client clock. */
