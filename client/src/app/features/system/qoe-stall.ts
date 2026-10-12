@@ -1,5 +1,6 @@
-import type { QoeEventRow, QoePipeline, QoeServerLoad, QoeStallCause } from '../../core/services/api/qoe-api.service';
+import type { QoeEventRow, QoePipeline, QoeServerLoad, QoeSessionRow, QoeStallCause } from '../../core/services/api/qoe-api.service';
 import { QOE_VERDICT_BAR_CLASS } from './qoe-health';
+import { rungOf } from './qoe-timeline';
 
 export const QOE_CAUSES: readonly QoeStallCause[] = ['server', 'network', 'device', 'unknown'];
 
@@ -120,16 +121,15 @@ export function pipelineChain(p: QoePipeline, f: Fmt, outDims?: { width: number 
   return src && out ? `${src} → ${out}` : src || out;
 }
 
-/** "auto → 2160p" when the client left the choice to the server, else the requested rung. */
+/** "auto · 2160p", "auto (tier unknown)" or the requested rung; auto is never shown as a rung. */
 export function qualityLabel(
   row: { quality: string | null; pipeline?: QoePipeline | null },
   f: Fmt,
 ): string {
-  const served = row.pipeline?.output?.quality?.replace(/-hdr$/, '') ?? '';
-  const req = row.quality ?? row.pipeline?.output?.requested ?? null;
-  if (!req) return served || '-';
-  if (req === 'auto') return served ? `${f.t('qoe.pipeline.auto')} → ${served}` : f.t('qoe.pipeline.auto');
-  return req;
+  const r = rungOf(row as QoeSessionRow);
+  const auto = f.t('qoe.pipeline.auto');
+  if (r.auto) return r.rung ? `${auto} · ${r.rung}` : `${auto} (${f.t('qoe.pipeline.tier_unknown')})`;
+  return r.rung ?? '-';
 }
 
 export interface PipelinePart {

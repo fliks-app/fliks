@@ -298,6 +298,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
 
   /** The rung the session is actually encoding, once segments are served. */
   noteServedRung(session: SessionRef, quality: string, bitrate: number | null): void {
+    if (quality === 'auto') return;
     const t = this.trackers.get(session.sessionId);
     if (!t) return;
     const p = t.agg.pipeline;

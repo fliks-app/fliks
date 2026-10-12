@@ -55,8 +55,8 @@ describe('pipelineChain output', () => {
 
   it('labels the quality column with what auto served', () => {
     const row = { quality: 'auto', pipeline: { ...full, output: { ...full.output!, quality: '2160p-hdr' } } };
-    expect(qualityLabel(row, f)).toBe('auto → 2160p');
-    expect(qualityLabel({ quality: null, pipeline: { ...full, output: { ...full.output!, quality: null, requested: 'auto' } } }, f)).toBe('auto');
+    expect(qualityLabel(row, f)).toBe('auto · 2160p');
+    expect(qualityLabel({ quality: null, pipeline: { ...full, output: { ...full.output!, quality: null, requested: 'auto' } } }, f)).toBe('auto (qoe.pipeline.tier_unknown)');
     expect(qualityLabel({ quality: '720p', pipeline: null }, f)).toBe('720p');
   });
 });

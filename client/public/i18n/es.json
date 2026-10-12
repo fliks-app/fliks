@@ -1585,7 +1585,8 @@
       "res_p": "{{height}}p",
       "load_no_avg": "Servidor: {{transcodes}} transcodificaciones, {{sessions}} sesiones, {{cpus}} núcleos",
       "rung": "nivel {{name}}",
-      "auto": "auto"
+      "auto": "auto",
+      "tier_unknown": "nivel no determinado"
     },
     "watched_hint": "Tiempo en el reproductor sin contar las pausas, con las cargas incluidas",
     "timeline_time": "Hora",
@@ -1629,6 +1630,18 @@
       "quality": "Calidad / resolución",
       "codec": "Códec de vídeo",
       "sessions": "Sesiones"
+    },
+    "transition": {
+      "quality_switch": "Cambio de calidad: {{from}} → {{to}}",
+      "recovery": "Reanudado tras un error",
+      "handoff": "Paso a Chromecast",
+      "next": "Nueva sesión"
+    },
+    "block": {
+      "start": "Inicio",
+      "no_stall": "Ningún corte",
+      "end": "Fin de la reproducción",
+      "stalls": "Cortes: {{count}}"
     }
   },
   "markers": {

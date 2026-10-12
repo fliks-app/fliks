@@ -270,6 +270,7 @@ describe('QoeService', () => {
       decode: null, encode: null, tonemap: null, burnIn: null, crop: null, audioTranscode: null,
     });
     svc.recordSample(auto, sample);
+    svc.noteServedRung(auto, 'auto', 8e6);
     svc.noteServedRung(auto, '1080p', 8e6);
     svc.sessionEnded(auto);
     await new Promise((r) => setImmediate(r));

@@ -23,6 +23,7 @@ import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 import { parseDeviceLabel } from '../../../core/utils/format-device-label';
 import { QOE_CAUSE_DOT_CLASS, codecLabel, durationParts, eventStartMs, hintParams, loadLine, pipelineChain, pipelineParts, qualityLabel, stallBreakdown, stallExplanation, type Fmt } from '../qoe-stall';
+import { buildTimeline, isOngoing, type RungName, type TimelineTransition } from '../qoe-timeline';
 import { QOE_VERDICTS, QOE_VERDICT_BAR_CLASS, formatMbps, qoeDotClass } from '../qoe-health';
 
 const PAGE_SIZE = 25;
@@ -65,6 +66,10 @@ export class SystemPlaybackQualityComponent implements OnInit {
   readonly detail = signal<QoeSessionDetail | null>(null);
   private readonly detailDialog = viewChild<ElementRef<HTMLDialogElement>>('detailDialog');
 
+  readonly timeline = computed(() => {
+    const d = this.detail();
+    return d ? buildTimeline(d.sessions, d.events) : null;
+  });
   readonly stallCauses = computed(() => stallBreakdown(this.detail()?.events ?? []));
 
   readonly qoeEnabled = signal(true);
@@ -292,7 +297,7 @@ export class SystemPlaybackQualityComponent implements OnInit {
       if (value) rows.push({ label: this.translate.instant(label), hint: hint ? this.translate.instant(hint) : undefined, value });
     };
     const when = (iso: string) => new Date(iso).toLocaleString(this.lang, { dateStyle: 'short', timeStyle: 'medium' });
-    const ongoing = d.endedAt == null && Date.now() - new Date(d.lastSeenAt).getTime() < 120_000;
+    const ongoing = isOngoing(d);
     add('qoe.summary.period', `${when(d.startedAt)} → ${ongoing ? this.translate.instant('qoe.summary.ongoing') : when(d.endedAt ?? d.lastSeenAt)}`);
     add('qoe.watched', d.watchedMs == null ? null : this.duration(d.watchedMs), 'qoe.watched_hint');
     add('qoe.summary.device', this.deviceText(d));
@@ -318,6 +323,31 @@ export class SystemPlaybackQualityComponent implements OnInit {
 
   qualityText(row: QoeSessionRow): string {
     return qualityLabel(row, this.fmt);
+  }
+
+  /** "Playback end" line: when it ended, or that it is still running. */
+  endText(d: QoeSessionDetail): string {
+    return isOngoing(d)
+      ? this.translate.instant('qoe.summary.ongoing')
+      : new Date(d.endedAt ?? d.lastSeenAt).toLocaleString(this.lang, { dateStyle: 'short', timeStyle: 'medium' });
+  }
+
+  private rungLabel(r: RungName | null, bitrate: number | null, from: boolean): string {
+    const auto = this.translate.instant('qoe.pipeline.auto');
+    const name = !r ? '' : from && r.auto ? auto : (r.rung ?? (r.auto ? auto : ''));
+    const rate = bitrate == null ? '' : this.translate.instant('qoe.mbps', { value: this.fmt.n(bitrate / 1_000_000, 1) });
+    return rate ? (name ? `${name} (${rate})` : rate) : name;
+  }
+
+  /** The sentence between two session blocks. */
+  transitionText(t: TimelineTransition): string {
+    if (t.kind === 'quality_switch') {
+      return this.translate.instant('qoe.transition.quality_switch', {
+        from: this.rungLabel(t.from, t.fromBitrate, true) || '-',
+        to: this.rungLabel(t.to, t.toBitrate, false) || '-',
+      });
+    }
+    return this.translate.instant(`qoe.transition.${t.kind}`);
   }
 
   reasonText(key: string): string {
