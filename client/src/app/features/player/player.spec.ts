@@ -2031,3 +2031,155 @@ describe('PlayerComponent audio target', () => {
     expect(h.component.activeAudioTrackId()).toBe('avplay-audio-2');
   });
 });
+
+const EP1_FILE_ID = MAIN_FILE_ID;
+const EP2_FILE_ID = 2;
+/** Episode 1 lists [en, fr]; episode 2 lists the same languages the other way round. */
+const TWO_EPISODES: Media = {
+  ...MOVIE,
+  files: [
+    { ...MOVIE.files![0], id: EP1_FILE_ID, streamInfo: { durationSeconds: 100, audio: [{ language: 'eng' }, { language: 'fra' }] } as any },
+    { ...MOVIE.files![0], id: EP2_FILE_ID, streamInfo: { durationSeconds: 100, audio: [{ language: 'fra' }, { language: 'eng', isDefault: true }] } as any },
+  ],
+};
+
+const subOption = (id: string, language: string, extra: Record<string, unknown> = {}) =>
+  ({ id, label: id, url: `/${id}`, language, burnIn: false, ...extra }) as any;
+
+/** An engine the player sees as a NativeEngine (Android/iOS), without the Capacitor plugin. */
+function nativeStub() {
+  return Object.assign(Object.create(NativeEngine.prototype), {
+    configure: vi.fn(),
+    setPreloadedSubtitles: vi.fn(),
+    setTextVisibility: vi.fn(),
+    resetRecoveryGuard: vi.fn(),
+    load: vi.fn(async () => {}),
+    play: vi.fn(async () => {}),
+    pause: vi.fn(async () => {}),
+    getVariantTracks: () => [],
+    getStats: () => ({ droppedFrames: 0 }),
+    on: () => {},
+  });
+}
+
+describe('PlayerComponent item change', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  function episodeHarness() {
+    const h = createHarness();
+    h.component.media = TWO_EPISODES;
+    h.component.activeAudioStreamIndex = 1;
+    h.component.availableAudioTracks.set([
+      { id: 'audio-0', label: 'English', language: 'en' },
+      { id: 'audio-1', label: 'French', language: 'fr' },
+    ]);
+    h.component.activeAudioTrackId.set('audio-1');
+    h.component.availableSubtitles.set([subOption('ext-1', 'en')]);
+    h.component.activeSubtitleId.set('ext-1');
+    h.component.activeBurnInId = 5;
+    return h;
+  }
+
+  it('starts the next episode from a clean track state, subtitle off on the engine before it loads', async () => {
+    const h = episodeHarness();
+
+    await h.component.reloadForEpisode(EP2_FILE_ID, MEDIA_ID, undefined);
+
+    expect(h.engine.setTextVisibility).toHaveBeenCalledWith(false);
+    expect(h.engine.setTextVisibility.mock.invocationCallOrder[0]).toBeLessThan(h.engine.load.mock.invocationCallOrder[0]);
+    expect(h.component.activeSubtitleId()).toBeNull();
+    expect(h.component.activeAudioTrackId()).toBeNull();
+    expect(h.component.availableAudioTracks()).toEqual([]);
+    // The new file's own pick is negotiated: no burn-in, and its default-flagged English track (index 1).
+    const [, , burnIn, audio] = h.streamingApi.getPlaybackInfo.mock.calls[0] as any[];
+    expect(burnIn).toBeUndefined();
+    expect(audio).toBe(1);
+    expect(h.engine.configure).toHaveBeenCalledWith({ preferredAudioLanguage: 'en' });
+  });
+
+  it('menus the new episode\'s tracks, not the previous episode\'s same-count list', async () => {
+    const h = episodeHarness();
+    h.component.wireAudioTracks(h.engine);
+
+    await h.component.reloadForEpisode(EP2_FILE_ID, MEDIA_ID, undefined);
+    h.engine.emit('audioTracksChanged', {
+      tracks: [engineTrack('audio-0', 'fra'), engineTrack('audio-1', 'eng', true)],
+    });
+
+    expect(h.component.availableAudioTracks().map((t: { language: string }) => t.language)).toEqual(['fr', 'en']);
+    expect(h.component.activeAudioTrackId()).toBe('audio-1');
+  });
+});
+
+describe('PlayerComponent native sidecar subtitles', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  function sidecarHarness(lists: Record<number, unknown[]>) {
+    const h = createHarness();
+    h.component.media = TWO_EPISODES;
+    const engine = nativeStub();
+    h.component.engine = engine;
+    TestBed.inject(TrackManagerService).loadSubtitles = vi.fn(async (_m: number, fileId: number) => lists[fileId] ?? []) as any;
+    h.state.playbackMode.set('direct');
+    return { h, engine };
+  }
+
+  it('lists the direct-play externals in the order subtitleOrdinal ranks them, forced flag included', async () => {
+    const { h, engine } = sidecarHarness({
+      [EP1_FILE_ID]: [
+        subOption('ext-9', 'en', { subtitleDbId: 9 }),
+        subOption('emb-2', 'en', { subtitleDbId: undefined }),
+        subOption('ext-3', 'en', { subtitleDbId: 3, forced: true }),
+        subOption('ext-1', 'en', { subtitleDbId: 1 }),
+      ],
+    });
+
+    await h.component.prepareLoad();
+
+    expect(engine.setPreloadedSubtitles).toHaveBeenCalledWith([
+      { url: '/ext-1', language: 'en', label: 'ext-1', forced: false },
+      { url: '/ext-3', language: 'en', label: 'ext-3', forced: true },
+      { url: '/ext-9', language: 'en', label: 'ext-9', forced: false },
+    ]);
+  });
+
+  it('hands each load the sidecars of the file and mode it is about to play', async () => {
+    const { h, engine } = sidecarHarness({
+      [EP1_FILE_ID]: [subOption('ext-1', 'en', { subtitleDbId: 1 })],
+      [EP2_FILE_ID]: [subOption('ext-7', 'fr', { subtitleDbId: 7 })],
+    });
+
+    await h.component.prepareLoad();
+    // Next episode, still direct play: never the previous episode's files.
+    h.component.mediaFileId = EP2_FILE_ID;
+    await h.component.prepareLoad();
+    // HLS carries its subtitles as renditions: a list here would show each twice.
+    h.state.playbackMode.set('transcode');
+    await h.component.prepareLoad();
+    // Back to direct play (the "original" rung): the externals return.
+    h.state.playbackMode.set('direct');
+    await h.component.prepareLoad();
+
+    expect(engine.setPreloadedSubtitles.mock.calls.map((c: any[][]) => c[0].map((s: { url: string }) => s.url))).toEqual([
+      ['/ext-1'],
+      ['/ext-7'],
+      [],
+      ['/ext-7'],
+    ]);
+  });
+
+  it('passes an episode its sidecars before its load', async () => {
+    const { h, engine } = sidecarHarness({ [EP2_FILE_ID]: [subOption('ext-7', 'fr', { subtitleDbId: 7 })] });
+
+    await h.component.reloadForEpisode(EP2_FILE_ID, MEDIA_ID, undefined);
+
+    expect(engine.setPreloadedSubtitles).toHaveBeenCalledWith([
+      { url: '/ext-7', language: 'fr', label: 'ext-7', forced: false },
+    ]);
+    expect(engine.setPreloadedSubtitles.mock.invocationCallOrder[0]).toBeLessThan(engine.load.mock.invocationCallOrder[0]);
+  });
+});

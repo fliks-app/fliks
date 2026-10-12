@@ -64,7 +64,7 @@ import {
 import { NativeEngine } from '../../core/services/playback-engine/native-engine';
 import { DesktopEngine } from '../../core/services/playback-engine/desktop-engine';
 import { TizenEngine, isTizenAvplayAvailable } from '../../core/services/playback-engine/tizen-engine';
-import { NativePlayer } from '../../core/plugins/native-player.plugin';
+import { NativePlayer, type NativeSidecarSubtitle } from '../../core/plugins/native-player.plugin';
 import { Orientation, releasePlayerOrientation } from '../../core/plugins/orientation.plugin';
 import { imageUrlWithSize } from '../../core/pipes/resolve-url.pipe';
 import { NotificationLike } from '../../core/services/notification-like';
@@ -756,6 +756,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private audioSwitchPending: string | null = null;
   /** Bumped by every audio switch: an older one that settles late must not touch the UI. */
   private audioRequest = 0;
+  private audioTracksTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The playing file's subtitle list, fetched once: the native engine needs the
+   *  sidecars before load(), the picker after it. */
+  private subtitleFetch: { fileId: number; list: Promise<SubtitleOption[]> } | null = null;
 
   /** Files an AirPlay receiver refused in HDR: renegotiated SDR from then on. */
   private readonly sdrFallbackFileIds = new Set<number>();
@@ -939,8 +943,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.queue.clear();
     }
 
-    // Subtitle loading promise — started early for Shaka path, resolved later
-    let subsPromise: Promise<any[]> | null = null;
     // Hoisted so the catch can anchor a remux fallback at the resume point.
     let startTime: number | undefined = resumeTime ?? undefined;
 
@@ -1069,12 +1071,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           this.applyNativeSubtitleStyle();
           this.applyVideoCrop();
 
-          // Pre-load offline subtitles so they're included in ExoPlayer's MediaItem
-          const offlineSubs = await this.getOfflineSubtitleConfigs();
-          if (offlineSubs.length) {
-            (this.engine as NativeEngine).setPreloadedSubtitles(offlineSubs);
-          }
-
           await this.prepareLoad();
           await this.engine!.load(offlineCheck!, startTime, 'application/x-mpegURL');
         } else {
@@ -1131,9 +1127,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           // `setExternalSubtitlePath` waits for the player to be in
           // READY/PLAYING state, so we load(...) first, then attach
           // the active subtitle after prepareAsync resolves.
-          const tvSubsPromise = this.trackManager.loadSubtitles(
-            this.mediaId, this.mediaFileId, this.streamingApi, this.media,
-          );
+          const tvSubsPromise = this.itemSubtitles();
 
           // Auth rides in the URL query (?token=); the Bearer header is for
           // AVPlay/ExoPlayer only — the webOS <video> ignores it.
@@ -1161,9 +1155,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           // Run it in parallel and resolve it after load() (like the Shaka path
           // below) — awaiting it before load() only adds a network round-trip
           // to the time-to-first-frame critical path.
-          subsPromise = this.trackManager.loadSubtitles(
-            this.mediaId, this.mediaFileId, this.streamingApi, this.media,
-          );
+          void this.itemSubtitles();
 
           if (this.isDesktopNative) await this.createDesktopEngine();
           else await this.createNativeEngine();
@@ -1172,18 +1164,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
           if (this.isDesktopNative) this.applyVideoCrop();
 
-          // Capacitor native players preload sidecar subs into the MediaItem for
-          // direct play; HLS modes and the desktop mpv engine handle subs themselves.
-          if (this.engine instanceof NativeEngine) {
-            this.applyVideoCrop();
-            const ext =
-              mode === 'direct'
-                ? (await subsPromise)
-                    .filter((s) => !s.burnIn && !!s.url && s.id.startsWith('ext-'))
-                    .map((s) => ({ url: s.url, language: s.language, label: s.label }))
-                : [];
-            this.engine.setPreloadedSubtitles(ext);
-          }
+          if (this.engine instanceof NativeEngine) this.applyVideoCrop();
 
           const token =
             this.authService.streamToken() ?? this.authService.accessToken;
@@ -1227,9 +1208,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           this.applyVideoCrop();
 
           // Start subtitle loading in parallel with engine.load (Shaka doesn't need them upfront)
-          subsPromise = this.trackManager.loadSubtitles(
-            this.mediaId, this.mediaFileId, this.streamingApi, this.media,
-          );
+          void this.itemSubtitles();
 
           if (mode !== 'direct') {
             const savedQualityId = this.activeQualityId();
@@ -1288,14 +1267,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.firstLoadPending = false;
       this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, this.playbackMode());
       this.firstLoadSetupDone = true;
-      await this.completePostLoadSetup(subsPromise, resumeTime);
+      await this.completePostLoadSetup(resumeTime);
 
     } catch (e: any) {
       console.error('[Player] Init error:', e?.code, e?.category, e?.data, e);
       const recovered = () => {
         if (this.firstLoadSetupDone) return;
         this.firstLoadSetupDone = true;
-        return this.completePostLoadSetup(subsPromise, resumeTime);
+        return this.completePostLoadSetup(resumeTime);
       };
       if (!this.fallBackFromRemuxOnLoadError(e, startTime ?? 0, recovered)) {
         const userMessage = this.state.failWith(e, { dolbyVision: this.isDolbyVisionPassthrough() });
@@ -2250,8 +2229,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // new getPlaybackInfo resolves reports no playMethod/hwAccel rather
       // than the previous episode's stale values.
       this.playbackInfo = null;
-      this.availableSubtitles.set([]);
-      this.activeSubtitleId.set(null);
+      this.resetTrackState();
 
       // Native engines must be stopped before a fresh load to avoid a freeze;
       // release the outgoing file's session (other devices on it stay alive).
@@ -2262,7 +2240,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       this.mediaFileId = mediaFileId;
       this.episodeId = episodeId;
-      this.activeBurnInId = null;
       // Same series → media is unchanged; reload it only if the id differs
       // (a queue can cross media). Refresh the title/logo when it does.
       if (mediaId && mediaId !== this.mediaId) {
@@ -2928,6 +2905,49 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private async prepareLoad(): Promise<void> {
     this.audioSwitchPending = null;
     this.configureAudioLanguage();
+    if (this.engine instanceof NativeEngine) {
+      this.engine.setPreloadedSubtitles(await this.nativeSidecars());
+    }
+  }
+
+  /** The subtitle list of the file on screen, fetched on first use. */
+  private itemSubtitles(): Promise<SubtitleOption[]> {
+    if (this.subtitleFetch?.fileId !== this.mediaFileId) {
+      this.subtitleFetch = {
+        fileId: this.mediaFileId,
+        list: this.trackManager.loadSubtitles(this.mediaId, this.mediaFileId, this.streamingApi, this.media),
+      };
+    }
+    return this.subtitleFetch.list;
+  }
+
+  /** Sidecar subtitles for the native MediaItem. Direct play carries the external
+   *  files this way (HLS ships its own as renditions, so a list there would show
+   *  every sub twice); an offline copy ships its downloaded VTTs. In the order
+   *  {@link subtitleOrdinal} ranks them, which is the order the player lists them. */
+  private async nativeSidecars(): Promise<NativeSidecarSubtitle[]> {
+    if (this.isOfflinePlayback) return this.getOfflineSubtitleConfigs();
+    if (this.playbackMode() !== 'direct') return [];
+    return (await this.itemSubtitles())
+      .filter((s) => !s.burnIn && !!s.url && s.id.startsWith('ext-'))
+      .sort((a, b) => this.subtitleManifestRank(a) - this.subtitleManifestRank(b))
+      .map((s) => ({ url: s.url, language: s.language, label: s.label, forced: !!s.forced }));
+  }
+
+  /** Drops what the outgoing item chose so the next one starts from a clean track
+   *  state. The engine forgets its subtitle too: engines keep their selection
+   *  across load(), and the auto-selection never asks for Off. */
+  private resetTrackState(): void {
+    try { this.engine?.setTextVisibility(false); } catch {}
+    if (this.audioTracksTimer) clearTimeout(this.audioTracksTimer);
+    this.audioTracksTimer = null;
+    this.availableAudioTracks.set([]);
+    this.activeAudioTrackId.set(null);
+    this.activeAudioStreamIndex = undefined;
+    this.audioSwitchPending = null;
+    this.availableSubtitles.set([]);
+    this.activeSubtitleId.set(null);
+    this.activeBurnInId = null;
   }
 
   /** Engines that pre-select a rendition by language (Shaka's adaptation criteria,
@@ -3105,9 +3125,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** One-time setup after the first successful load (tracks, Cast/autoplay,
    *  intervals, seeked listener, sprites), whether the load or its copy fallback succeeded. */
-  private async completePostLoadSetup(
-    subsPromise: Promise<any[]> | null, resumeTime: number | undefined,
-  ): Promise<void> {
+  private async completePostLoadSetup(resumeTime: number | undefined): Promise<void> {
     // A fallback can settle after ngOnDestroy; its intervals would never be cleared.
     if (this.destroyed || !this.engine) return;
     // Tracks and subtitles load beside playback: a slow subtitle list must not delay the first frame.
@@ -3117,12 +3135,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         await this.loadOfflineSubtitles();
         this.loadAudioTracks();
       } else if (!this.availableSubtitles().length) {
-        // subsPromise was started in parallel with engine.load (Shaka + native);
-        // resolve it here, falling back to a direct fetch if none was started.
-        const subs = subsPromise
-          ? await subsPromise
-          : await this.trackManager.loadSubtitles(this.mediaId, this.mediaFileId, this.streamingApi, this.media);
-        this.availableSubtitles.set(subs);
+        // The fetch started in parallel with engine.load (Shaka + native).
+        this.availableSubtitles.set(await this.itemSubtitles());
         this.loadAudioTracks();
       } else {
         this.loadAudioTracks();
@@ -3197,10 +3211,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Post-load steps for an episode switch, run after its own load or its copy fallback. */
   private async completeEpisodeSwitchSetup(): Promise<void> {
-    const subs = await this.trackManager.loadSubtitles(
-      this.mediaId, this.mediaFileId, this.streamingApi, this.media,
-    );
-    this.availableSubtitles.set(subs);
+    this.availableSubtitles.set(await this.itemSubtitles());
     this.loadAudioTracks();
     await this.trackManager.autoSelectSubtitle(
       this.availableSubtitles(),
@@ -3748,14 +3759,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // ── Offline subtitles ──
 
   /** Get subtitle configs from pre-downloaded local VTT files (for native ExoPlayer preload). */
-  private async getOfflineSubtitleConfigs(): Promise<{ url: string; language: string; label: string }[]> {
+  private async getOfflineSubtitleConfigs(): Promise<NativeSidecarSubtitle[]> {
     const task = this.dlCache.load().find((t) => t.mediaFileId === this.mediaFileId && t.status === 'ready');
     if (!task?.offlineSubtitles?.length) return [];
-    const configs: { url: string; language: string; label: string }[] = [];
+    const configs: NativeSidecarSubtitle[] = [];
     for (const sub of task.offlineSubtitles) {
       // Native: file:// URI (ExoPlayer can read). Web: blob URL (Shaka).
       const localUrl = await this.offlineStorage.getSmallFileNativeUri(sub.key);
-      if (localUrl) configs.push({ url: localUrl, language: sub.language, label: sub.label });
+      if (localUrl) {
+        configs.push({ url: localUrl, language: sub.language, label: sub.label, forced: sub.forced ?? false });
+      }
     }
     return configs;
   }
@@ -3815,7 +3828,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (!this.engine) return;
 
     // Wait a moment for the engine to parse the manifest/file
-    setTimeout(() => {
+    if (this.audioTracksTimer) clearTimeout(this.audioTracksTimer);
+    this.audioTracksTimer = setTimeout(() => {
       if (!this.engine) return;
 
       // Native engines populate audio tracks via audioTracksChanged event.
