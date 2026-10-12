@@ -129,6 +129,8 @@ struct AudioStreamInfo: Codable, Hashable {
     let sampleRate: Int?
     let bitRate: Int?
     let isDefault: Bool?
+    let commentary: Bool?
+    let audioDescription: Bool?
 }
 
 struct SubtitleStreamInfo: Codable, Hashable {
@@ -138,6 +140,19 @@ struct SubtitleStreamInfo: Codable, Hashable {
     let title: String?
     let forced: Bool
     let hearingImpaired: Bool
+}
+
+/// GET /api/media/:id/subtitles row, reduced to what track selection reads.
+struct SubtitleFileRow: Decodable {
+    let id: Int
+    let mediaFileId: Int
+    let language: String
+    let forced: Bool?
+    let hearingImpaired: Bool?
+    let providerType: String?
+    let codec: String?
+    /// Set for sidecar files; embedded rows carry none.
+    let relativePath: String?
 }
 
 struct Chapter: Codable, Hashable {
