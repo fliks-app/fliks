@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { DeviceService } from './device.service';
-import { normalizeLangCode } from '../utils/language.utils';
+import { normalizeLangCode, normalizeLangTag } from '../utils/language.utils';
 import {
   DOM_SUBTITLE_HEIGHT_FRACTION,
   NATIVE_SUBTITLE_SIZE_SCALE,
@@ -94,6 +94,8 @@ const DEFAULTS: PlayerSettings = {
 /** The audio-stream fields the track selection reads. */
 export interface AudioStreamChoice {
   language?: string;
+  /** BCP-47 tag (`pt-PT`): the variant a remembered pick pins down. */
+  languageTag?: string;
   isDefault?: boolean;
   commentary?: boolean;
   audioDescription?: boolean;
@@ -104,23 +106,56 @@ function audioRole(s: AudioStreamChoice): 'main' | 'commentary' | 'ad' {
   return s.commentary ? 'commentary' : s.audioDescription ? 'ad' : 'main';
 }
 
-/** The remembered form of a track, `language:role:channels`: what carries
+/** The remembered form of a track, `language:role:channels[:variant]`: what carries
  *  across episodes whose track order differs. */
 export function rememberedAudioKey(s: AudioStreamChoice): string {
-  return `${normalizeLangCode(s.language)}:${audioRole(s)}:${s.channels ?? ''}`;
+  const tag = normalizeLangTag(s.languageTag);
+  return `${normalizeLangCode(s.language)}:${audioRole(s)}:${s.channels ?? ''}${tag ? ':' + tag : ''}`;
 }
 
-/** Stream a remembered key names: same language, then role, then channel count.
+/** A remembered subtitle pick, `language[:forced][:embedded][:image][:hi][:variant]` (`variant`
+ *  is a tag like `pt-PT`, which no flag resembles), or `off`. */
+export function rememberedSubtitleValue(
+  language: string,
+  flags: { forced?: boolean; embedded?: boolean; image?: boolean; hearingImpaired?: boolean },
+  languageTag?: string | null,
+): string {
+  return [
+    language,
+    flags.forced && 'forced',
+    flags.embedded && 'embedded',
+    flags.image && 'image',
+    flags.hearingImpaired && 'hi',
+    normalizeLangTag(languageTag),
+  ].filter(Boolean).join(':');
+}
+
+export function parseRememberedSubtitle(saved: string) {
+  const parts = saved.split(':');
+  return {
+    language: normalizeLangCode(parts[0]),
+    forced: parts.includes('forced'),
+    embedded: parts.includes('embedded'),
+    image: parts.includes('image'),
+    hearingImpaired: parts.includes('hi'),
+    variant: normalizeLangTag(parts.slice(1).find((p) => /[-_]/.test(p))),
+  };
+}
+
+/** Stream a remembered key names: same language (the variant, when some stream has it), then role,
+ *  then channel count.
  *  Bare `language` and `language:ordinal` keys match too. */
 export function matchRememberedAudio(
   saved: string,
   streams: AudioStreamChoice[],
 ): number | undefined {
-  const [lang, second, channels] = saved.split(':');
-  const same = streams
+  const [lang, second, channels, variant] = saved.split(':');
+  const inLang = streams
     .map((s, i) => (normalizeLangCode(s.language) === normalizeLangCode(lang) ? i : -1))
     .filter((i) => i >= 0);
-  if (!same.length) return undefined;
+  if (!inLang.length) return undefined;
+  const sameVariant = variant ? inLang.filter((i) => normalizeLangTag(streams[i].languageTag) === normalizeLangTag(variant)) : [];
+  const same = sameVariant.length ? sameVariant : inLang;
   if (second === undefined || /^\d+$/.test(second)) {
     return same[Number(second ?? 0)] ?? same[0];
   }

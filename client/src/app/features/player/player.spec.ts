@@ -2375,10 +2375,10 @@ describe('PlayerComponent subtitle selection', () => {
     expect(tracks.saveSubtitleSelection).not.toHaveBeenCalled();
 
     await h.component.onSelectSubtitleById('ext-1');
-    expect(tracks.saveSubtitleSelection).toHaveBeenCalledWith(MEDIA_ID, 'en', true, false, false, undefined);
+    expect(tracks.saveSubtitleSelection).toHaveBeenCalledWith(MEDIA_ID, 'en', true, false, false, undefined, undefined);
 
     await h.component.onSelectSubtitleById(null);
-    expect(tracks.saveSubtitleSelection).toHaveBeenLastCalledWith(MEDIA_ID, null, undefined, false, false, undefined);
+    expect(tracks.saveSubtitleSelection).toHaveBeenLastCalledWith(MEDIA_ID, null, undefined, false, false, undefined, undefined);
   });
 
   it('decides the automatic pick from the audio that will play, before any engine lists a track', async () => {

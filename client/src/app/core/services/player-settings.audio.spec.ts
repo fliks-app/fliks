@@ -117,6 +117,45 @@ describe('PlayerSettingsService audio selection', () => {
     expect(matchRememberedAudio('fra:main:2', ep2)).toBeUndefined();
   });
 
+  describe('language variant', () => {
+    const dubs = [
+      { language: 'por', languageTag: 'pt-BR', channels: 6 },
+      { language: 'por', languageTag: 'pt-PT', channels: 6 },
+      { language: 'eng', channels: 6 },
+    ];
+
+    it('remembers the variant after the channels, and keeps the old key without one', () => {
+      expect(rememberedAudioKey(dubs[1])).toBe('pt:main:6:pt-PT');
+      expect(rememberedAudioKey({ language: 'por', languageTag: 'pt', channels: 2 })).toBe('pt:main:2');
+      expect(rememberedAudioKey({ language: 'eng', channels: 6 })).toBe('en:main:6');
+    });
+
+    it('resolves the remembered variant over the first track of the language', () => {
+      const svc = make({ rememberAudioSelections: true });
+      svc.saveRememberedAudioTrack(1, rememberedAudioKey(dubs[1]));
+      expect(svc.resolveAudioStreamIndex(1, dubs, 1, null)).toBe(1);
+    });
+
+    it('falls back to the language when the variant is gone, never another language', () => {
+      expect(matchRememberedAudio('pt:main:6:pt-PT', [dubs[0], dubs[2]])).toBe(0);
+      expect(matchRememberedAudio('pt:main:6:pt-PT', [dubs[2]])).toBeUndefined();
+    });
+
+    it('still resolves a key saved without a variant as before', () => {
+      expect(matchRememberedAudio('pt:main:6', dubs)).toBe(0);
+      expect(matchRememberedAudio('por', dubs)).toBe(0);
+    });
+
+    it('matches role and channels within the variant', () => {
+      const streams = [
+        { language: 'por', languageTag: 'pt-PT', channels: 2 },
+        { language: 'por', languageTag: 'pt-BR', channels: 6 },
+        { language: 'por', languageTag: 'pt-PT', channels: 6 },
+      ];
+      expect(matchRememberedAudio('pt:main:6:pt-PT', streams)).toBe(2);
+    });
+  });
+
   it('keys a track without a language as undetermined, never by its id', () => {
     expect(rememberedAudioKey({})).toBe('und:main:');
     expect(matchRememberedAudio('und:main:', [{ language: 'eng' }, {}])).toBe(1);

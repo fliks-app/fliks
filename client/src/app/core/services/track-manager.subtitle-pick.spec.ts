@@ -1,6 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TrackManagerService, pickSubtitle } from './track-manager.service';
 import type { SubtitleOption } from './track-manager.service';
 import { PlayerSettingsService } from './player-settings.service';
@@ -168,11 +168,69 @@ describe('TrackManagerService.autoSelectSubtitle — mode routing', () => {
       expect(await pick(settings, [forcedFr], 'eng', undefined, 'fr')).toBeUndefined();
       expect(await pick(settings, [forcedFr, fullFr], 'eng', undefined, 'fr')).toBe('full');
     });
+
+    describe('language variant', () => {
+      const ptBR = sub('br', 'pt', { languageTag: 'pt-BR' });
+      const ptPT = sub('pt', 'pt', { languageTag: 'pt-PT' });
+      const ptPTForced = sub('pt-forced', 'pt', { languageTag: 'pt-PT', forced: true });
+
+      it('picks the remembered variant over the first track of the language', async () => {
+        expect(await pick(settings, [ptBR, ptPT], 'eng', undefined, 'pt:embedded:pt-PT')).toBe('pt');
+        expect(await pick(settings, [ptBR, ptPT], 'eng', undefined, 'pt:pt_pt')).toBe('pt');
+      });
+
+      it('falls back to the first track of the language when the variant is gone', async () => {
+        expect(await pick(settings, [ptBR, sub('plain', 'pt')], 'eng', undefined, 'pt:pt-PT')).toBe('br');
+        expect(await pick(settings, [ptBR], 'eng', undefined, 'pt:embedded:es-419')).toBe('br');
+      });
+
+      it('never crosses languages for a variant', async () => {
+        expect(await pick(settings, [sub('es', 'es', { languageTag: 'es-ES' })], 'eng', undefined, 'pt:pt-PT')).toBeUndefined();
+      });
+
+      it('still resolves a value saved without a variant as before', async () => {
+        expect(await pick(settings, [ptPT, ptBR], 'eng', undefined, 'pt:embedded')).toBe('pt');
+        expect(await pick(settings, [ptBR, ptPT], 'eng', undefined, 'pt')).toBe('br');
+      });
+
+      it('keeps the forced flag within the variant', async () => {
+        expect(await pick(settings, [ptBR, ptPT, ptPTForced], 'eng', undefined, 'pt:forced:pt-PT')).toBe('pt-forced');
+        expect(await pick(settings, [ptBR, ptPT], 'eng', undefined, 'pt:forced:pt-PT')).toBeUndefined();
+      });
+    });
   });
 
   it('leaves `off` and `always` as they were', async () => {
     expect(await pick({ subtitleMode: 'off' }, [full], 'eng')).toBeUndefined();
     expect(await pick({ subtitleMode: 'always' }, [forced, full], 'fra')).toBe('full');
+  });
+});
+
+describe('TrackManagerService.saveSubtitleSelection', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  function save(...args: Parameters<TrackManagerService['saveSubtitleSelection']>) {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: SubtitlesApiService, useValue: {} },
+        { provide: AppSettingsService, useValue: {} },
+        { provide: TranslateService, useValue: { instant: (k: string) => k } },
+        { provide: PlayerSettingsService, useValue: { get: () => ({ rememberSubtitleSelections: true }), saveRememberedSubtitleTrack: vi.fn() } },
+      ],
+    });
+    const settings = TestBed.inject(PlayerSettingsService);
+    TestBed.inject(TrackManagerService).saveSubtitleSelection(...args);
+    return vi.mocked(settings.saveRememberedSubtitleTrack).mock.calls[0]?.[1];
+  }
+
+  it('keeps the variant after the flags, and writes the old format without one', () => {
+    expect(save(1, 'pt', false, true, false, false, 'pt-PT')).toBe('pt:embedded:pt-PT');
+    expect(save(1, 'en', true, false, false, true, 'en_us')).toBe('en:forced:hi:en-US');
+    expect(save(1, 'pt', false, true)).toBe('pt:embedded');
+    expect(save(1, 'pt', false, true, false, false, 'pt')).toBe('pt:embedded');
+    expect(save(1, null)).toBe('off');
   });
 });
 

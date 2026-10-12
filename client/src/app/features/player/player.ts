@@ -3820,6 +3820,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         : { label: sub.label, menuHead: sub.label, menuSub: '' }),
       url,
       language: sub.language,
+      languageTag: sub.languageTag,
       burnIn: false,
       forced: sub.forced ?? false,
       hearingImpaired: sub.hearingImpaired,
@@ -4003,6 +4004,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       !!sub?.id.startsWith('emb-'),
       image,
       sub?.hearingImpaired,
+      sub?.languageTag,
     );
   }
 

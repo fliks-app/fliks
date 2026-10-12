@@ -30,6 +30,17 @@ export function normalizeLangCode(
   return FOLDED_CODES[iso1] ?? iso1;
 }
 
+/**
+ * A BCP-47 tag in comparable form (`pt_pt` → `pt-PT`, `zh-hant` → `zh-Hant`), or '' when it names
+ * no variant past the language: that is what a remembered track pick pins down.
+ */
+export function normalizeLangTag(tag: string | undefined | null): string {
+  const [primary, ...rest] = (tag ?? '').trim().split(/[-_]/);
+  if (!primary || !rest.length) return '';
+  const subtags = rest.map((t) => (t.length === 4 ? t[0].toUpperCase() + t.slice(1).toLowerCase() : t.toUpperCase()));
+  return [primary.toLowerCase(), ...subtags].join('-');
+}
+
 export interface SubtitleTags {
   language: string | null;
   forced: boolean;

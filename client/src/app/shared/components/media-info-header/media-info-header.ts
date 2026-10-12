@@ -29,6 +29,7 @@ import {
 import { OfflinePlaybackSyncService } from '../../../core/services/offline-playback-sync.service';
 import {
   PlayerSettingsService,
+  parseRememberedSubtitle,
   type AudioStreamChoice,
 } from '../../../core/services/player-settings.service';
 import { TrackManagerService, type LaunchTracks } from '../../../core/services/track-manager.service';
@@ -70,7 +71,7 @@ import {
 } from '../../../core/plugin-ui/resolve-menu-contributions';
 import type { UiContribution } from '@fliks/plugin-contract/ui';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
-import { normalizeLangCode } from '../../../core/utils/language.utils';
+import { normalizeLangTag } from '../../../core/utils/language.utils';
 
 /** One `media.actions` contribution resolved to something the template can
  *  render directly — visibility, handler and icon fallback already decided. */
@@ -94,6 +95,7 @@ export interface MediaInfoHeaderSubtitle {
   head?: string;
   sub?: string;
   language: string;
+  languageTag?: string | null;
   forced?: boolean;
   hearingImpaired?: boolean;
   /** Bitmap (PGS/VOBSUB) track. */
@@ -464,17 +466,15 @@ export class MediaInfoHeaderComponent {
 
     const saved = this.playerSettings.getRememberedSubtitleTrack(mediaId);
     if (saved && saved !== 'off') {
-      const parts = saved.split(':');
-      const lang = normalizeLangCode(parts[0]);
-      const wantForced = parts.includes('forced');
-      const wantImage = parts.includes('image');
-      const wantHi = parts.includes('hi');
+      const { language: lang, forced: wantForced, image: wantImage, hearingImpaired: wantHi, variant } =
+        parseRememberedSubtitle(saved);
       const subs = this.subtitles();
-      const match =
-        subs.find(s => s.language === lang && !!s.image === wantImage && !!s.forced === wantForced && !!s.hearingImpaired === wantHi)
-        ?? subs.find(s => s.language === lang && !!s.image === wantImage && !!s.forced === wantForced)
-        ?? subs.find(s => s.language === lang && !!s.image === wantImage)
-        ?? subs.find(s => s.language === lang && !s.forced);
+      const find = (ok: (s: MediaInfoHeaderSubtitle) => boolean) =>
+        subs.find(s => ok(s) && s.language === lang && !!s.image === wantImage && !!s.forced === wantForced && !!s.hearingImpaired === wantHi)
+        ?? subs.find(s => ok(s) && s.language === lang && !!s.image === wantImage && !!s.forced === wantForced)
+        ?? subs.find(s => ok(s) && s.language === lang && !!s.image === wantImage)
+        ?? subs.find(s => ok(s) && s.language === lang && !s.forced);
+      const match = (variant ? find(s => normalizeLangTag(s.languageTag) === variant) : undefined) ?? find(() => true);
       this.selectedSubtitleId.set(match?.id ?? null);
     } else {
       this.selectedSubtitleId.set(null);
@@ -566,7 +566,7 @@ export class MediaInfoHeaderComponent {
       this.trackManager.saveSubtitleSelection(mediaId, null);
     } else {
       const sub = this.subtitles().find(s => s.id === id);
-      if (sub) this.trackManager.saveSubtitleSelection(mediaId, sub.language, sub.forced, sub.id.startsWith('emb-'), sub.image, sub.hearingImpaired);
+      if (sub) this.trackManager.saveSubtitleSelection(mediaId, sub.language, sub.forced, sub.id.startsWith('emb-'), sub.image, sub.hearingImpaired, sub.languageTag);
     }
   }
 

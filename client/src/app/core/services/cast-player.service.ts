@@ -34,6 +34,7 @@ export interface CastSubtitleOption {
   head?: string;
   sub?: string;
   language: string;
+  languageTag?: string | null;
   burnIn: boolean;
   forced?: boolean;
   hearingImpaired?: boolean;
@@ -55,6 +56,7 @@ export interface CastAudioOption {
    *  {@link uniqueAudioNames}): the receiver-side audio switch matches on it. */
   name: string;
   /** What the remembered selection matches on (`rememberedAudioKey`). */
+  languageTag?: string;
   commentary?: boolean;
   audioDescription?: boolean;
   channels?: number;
@@ -91,6 +93,7 @@ export function buildCastAudioOptions(
       sub: parts.sub,
       language: normalizeLangCode(lang),
       name: names[i],
+      languageTag: a.languageTag,
       commentary: a.commentary,
       audioDescription: a.audioDescription,
       channels: a.channels,
@@ -412,6 +415,7 @@ export class CastPlayerService {
         head: s.menuHead,
         sub: s.menuSub,
         language: s.language,
+        languageTag: s.languageTag,
         burnIn,
         isImage: s.isImage,
         forced: s.forced,
@@ -859,6 +863,7 @@ export class CastPlayerService {
       !!opt?.id.startsWith('emb-'),
       !!opt?.isImage,
       opt?.hearingImpaired,
+      opt?.languageTag,
     );
   }
 
@@ -970,6 +975,7 @@ export class CastPlayerService {
       id: t.key,
       ...this.trackManager.describeSubtitle(t, i + 1),
       language: t.language,
+      languageTag: t.languageTag,
       isImage: t.isImage,
       burnIn: t.isImage,
       providerType: t.providerType,
