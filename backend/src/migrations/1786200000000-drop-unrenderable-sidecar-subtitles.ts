@@ -7,8 +7,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * `.idx` is VobSub: the next rescan re-creates it with the right codec, which
  * avoids a filesystem check from a migration (mounts may be absent at boot).
  */
-export class DropUnrenderableSidecarSubtitles1786100000000 implements MigrationInterface {
-  name = 'DropUnrenderableSidecarSubtitles1786100000000';
+export class DropUnrenderableSidecarSubtitles1786200000000 implements MigrationInterface {
+  name = 'DropUnrenderableSidecarSubtitles1786200000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

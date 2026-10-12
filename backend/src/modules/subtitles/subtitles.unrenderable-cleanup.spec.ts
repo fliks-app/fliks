@@ -1,10 +1,10 @@
 import type { QueryRunner } from 'typeorm';
-import { DropUnrenderableSidecarSubtitles1786100000000 } from './1786100000000-drop-unrenderable-sidecar-subtitles';
+import { DropUnrenderableSidecarSubtitles1786200000000 } from '../../migrations/1786200000000-drop-unrenderable-sidecar-subtitles';
 
 describe('DropUnrenderableSidecarSubtitles', () => {
   it('deletes only codec-less rows of the unrenderable sidecar extensions', async () => {
     const query = jest.fn().mockResolvedValue(undefined);
-    await new DropUnrenderableSidecarSubtitles1786100000000().up({
+    await new DropUnrenderableSidecarSubtitles1786200000000().up({
       query,
     } as unknown as QueryRunner);
 
