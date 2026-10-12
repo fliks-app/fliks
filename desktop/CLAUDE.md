@@ -32,8 +32,9 @@ it is NOT the menu-bar server host under `macos/`.
 
   `PlayerSession.createPlayer()` picks #2/#3 by platform; both implement
   `PlayerBackend` (`src/main/mpv/player-backend.ts`). All three share
-  `src/main/mpv/subtitle-style.ts` (`mpvSubtitleProps`) and `tracks.ts`
-  (`parseTracks`).
+  `src/main/mpv/subtitle-style.ts` (`mpvSubtitleProps`), `tracks.ts`
+  (`parseTracks`), `load-options.ts` (the file-local `loadfile` options: `sid=no`,
+  `alang`, `start`) and `first-frame-gate.ts` (`load()` resolves on first frame).
 - This single-window compositor is the only model that works under **Mutter/X11**:
   an embedded mpv child window can't be composited beneath a sibling transparent
   overlay there, so we composite ourselves.
@@ -161,7 +162,9 @@ compound command (a bare `cd` between tool calls can prompt for permission).
        && cp -r client/dist/client/browser/. /tmp/fliks-verify/browser/
      ```
 
-**What to rebuild for a given edit:** addon.cc → step 1. `src/main`/`src/preload`
+**What to rebuild for a given edit:** addon.cc → step 1 (`dev-linux.sh` does it by itself when
+`addon.cc` is newer than the built `.node`; a stale addon ignores new `load()` fields such as
+`fileOptions`). `src/main`/`src/preload`
 → step 2. `client/**` → step 3 (+ the `/tmp` sync). Only the changed unit needs
 rebuilding; the addon is reloaded fresh on each Electron start.
 

@@ -19,6 +19,8 @@ import type {
 } from '../../shared/contract';
 import { MPV_STREAM_OPTIONS } from '../../shared/mpv-stream-options';
 import { muteFilterCommands } from './edl-filter';
+import { FirstFrameGate } from './first-frame-gate';
+import { mpvLoadFileOptions } from './load-options';
 import { mpvSubtitleProps } from './subtitle-style';
 import { mapTrackList, type MpvTrack } from './tracks';
 import { TypedEmitter } from './typed-emitter';
@@ -29,8 +31,6 @@ const CONNECT_TIMEOUT_MS = 5000;
 /** Cap on a single IPC command's round-trip. A live-but-wedged mpv would else
  *  hang an awaiting load/seek forever (only a socket/process death rejects). */
 const COMMAND_TIMEOUT_MS = 30_000;
-/** How long `load()` waits for the first frame before sequencing post-open work. */
-const FIRST_FRAME_TIMEOUT_MS = 10_000;
 /** Grace for mpv to reply to `quit` before the socket/process are torn down. */
 const QUIT_GRACE_MS = 500;
 /** Ring size for buffered error/fatal log lines attached to an error event. */
@@ -85,6 +85,7 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
   private readonly pending = new Map<number, Pending>();
   private buf = '';
   private sawFirstFrame = false;
+  private readonly firstFrameGate = new FirstFrameGate();
   /** `playback-restart` seen for the current load — one of the two signals
    *  {@link maybeEmitFirstFrame} waits on before emitting `firstFrame`. */
   private sawPlaybackRestart = false;
@@ -139,6 +140,8 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
     // Windows; Node's net only accepts the \\.\pipe\ namespace there (a /tmp
     // path is rejected), so build the path per-platform.
     const stamp = `fliks-mpv-${process.pid}-${instanceSeq++}-${Math.floor(performance.now())}`;
+    this.on('firstFrame', () => this.firstFrameGate.release());
+    this.on('error', () => this.firstFrameGate.release()); // don't hang a load() that failed to open
     this.sockPath =
       process.platform === 'win32'
         ? `\\\\.\\pipe\\${stamp}`
@@ -154,8 +157,6 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
       '--no-config',
       '--no-terminal',
       '--keep-open=yes',
-      // The app drives subtitle selection; don't let mpv auto-pick a track.
-      '--sid=no',
       // The Fliks HLS references tokenised same-host segment/rendition URLs;
       // mpv's playlist safety check otherwise refuses them on the fallback path.
       '--load-unsafe-playlists=yes',
@@ -498,54 +499,29 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
     await this.applyMuteRanges();
     if (gen !== this.loadGen) return;
     // mpv >= 0.38 loadfile signature is <url> <flags> <index> <options>; the
-    // bundled mpv is recent, so pass index 0 then the options. Omit the options
-    // string when empty — mpv otherwise parses it as the index and rejects it.
-    const fileOpts: string[] = [];
-    if (opts.startTime && opts.startTime > 0) fileOpts.push(`start=${opts.startTime}`);
-    // Preferred audio language → mpv keeps the matching rendition across reloads/
-    // reconfigs instead of reverting to the manifest default (which may differ).
-    if (opts.audioLanguage) fileOpts.push(`alang=${opts.audioLanguage}`);
+    // bundled mpv is recent, so pass index 0 then the options.
+    const fileOpts = mpvLoadFileOptions(opts);
     // Force the HLS demuxer for manifests so mpv parses the playlist directly,
     // skipping the generic probe whose backward seek the linear HTTP stream
     // can't satisfy.
     this.forcedDemuxFormat = /\.m3u8(\?|$)/.test(opts.url) ? 'hls' : '';
     if (this.forcedDemuxFormat) fileOpts.push(`demuxer-lavf-format=${this.forcedDemuxFormat}`);
-    const cmd: unknown[] = ['loadfile', opts.url, 'replace', 0];
-    if (fileOpts.length) cmd.push(fileOpts.join(','));
-    await this.command(cmd);
+    // Armed before loadfile so a fast first frame can't slip past the wait below.
+    const opened = this.firstFrameGate.wait();
+    await this.command(['loadfile', opts.url, 'replace', 0, fileOpts.join(',')]);
     if (gen !== this.loadGen) return;
     // The persistent mpv keeps its pause state across loads; force playback so a
     // freshly opened file always autoplays. The JS side treats this engine like
     // the mobile native player (playWhenReady) and never calls play() itself.
     await this.set('pause', false);
     if (gen !== this.loadGen) return;
-    if (this.forcedDemuxFormat) {
-      // The manifest is force-demuxed as hls (file-local). Once it has actually
-      // opened, drop the forced format globally so a later sidecar sub-add isn't
-      // demuxed as hls (which fails to open). Clearing it before the manifest
-      // opens would race its own probe and break the load, so wait for the first
-      // frame first.
-      await this.waitFirstFrame(gen);
-      if (gen !== this.loadGen) return;
-      await this.command(['set', 'demuxer-lavf-format', '']).catch(() => {});
-    }
-  }
-
-  /** Resolve once mpv has opened the media (first frame), or on error/timeout.
-   *  Lets load() sequence post-open work after the manifest demuxer is up. */
-  private waitFirstFrame(gen: number): Promise<void> {
-    if (this.sawFirstFrame || gen !== this.loadGen) return Promise.resolve();
-    return new Promise((resolve) => {
-      const done = (): void => {
-        clearTimeout(timer);
-        this.off('firstFrame', done);
-        this.off('error', done);
-        resolve();
-      };
-      const timer = setTimeout(done, FIRST_FRAME_TIMEOUT_MS);
-      this.once('firstFrame', done);
-      this.once('error', done);
-    });
+    // Resolve only once the file has opened, like the libmpv backends: a caller's
+    // follow-up sub-add would otherwise hit mpv while no file is open.
+    await opened;
+    if (gen !== this.loadGen) return;
+    // The manifest was force-demuxed as hls (file-local); drop the forced format
+    // globally now it has opened, or a later sidecar sub-add is demuxed as hls too.
+    if (this.forcedDemuxFormat) await this.command(['set', 'demuxer-lavf-format', '']).catch(() => {});
   }
 
   play(): Promise<void> {
@@ -571,6 +547,7 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
 
   stop(): Promise<void> {
     this.loadGen++;
+    this.firstFrameGate.release();
     // Reset baselines so the persistent player can't replay a stale first-frame
     // / position into the next session after a back-navigation.
     this.sawFirstFrame = false;
@@ -667,6 +644,7 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
   async destroy(): Promise<void> {
     this.muteRanges = [];
     this.loadGen++;
+    this.firstFrameGate.release();
     this.shuttingDown = true;
     try {
       // mpv may close the socket on quit without replying — cap the wait.

@@ -14,6 +14,7 @@ import { setPlaybackKeepAwake, keepAwakeForState } from './power';
 import { IPC, type DesktopEvent, type DesktopMuteRange, type DesktopSubtitleStyle } from '../shared/contract';
 import { muteFilterCommands } from './mpv/edl-filter';
 import { FirstFrameGate } from './mpv/first-frame-gate';
+import { mpvLoadRequest, type MpvLoadRequest } from './mpv/load-options';
 import { mpvSubtitleProps } from './mpv/subtitle-style';
 import { parseTracks } from './mpv/tracks';
 import { MPV_STREAM_OPTIONS } from '../shared/mpv-stream-options';
@@ -78,7 +79,7 @@ type Addon = {
   onEvent(cb: (json: string) => void): void;
   onInput(cb: (json: string) => void): void;
   uploadUi(buf: Buffer, w: number, h: number): void;
-  load(o: { url: string; startTime?: number; headers?: Record<string, string>; subtitles?: unknown[] }): void;
+  load(o: MpvLoadRequest & { subtitles?: unknown[] }): void;
   command(args: string[]): void;
   getProperty(name: string): string | null;
   setProperty(name: string, value: string): void;
@@ -535,7 +536,7 @@ app.whenReady().then(async () => {
     // rectangle would crop the next one.
     addon.setProperty('video-crop', opts?.videoCrop ?? '');
     applyMuteRanges();
-    addon.load(opts);
+    addon.load(mpvLoadRequest(opts));
     await firstFrameGate.wait();
   });
   ipcMain.handle(IPC.play, () => addon.setProperty('pause', 'no'));

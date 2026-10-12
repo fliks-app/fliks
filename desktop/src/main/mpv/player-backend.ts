@@ -37,6 +37,9 @@ export type PlayerBackendEvents = {
  */
 export interface PlayerBackend extends TypedEmitter<PlayerBackendEvents> {
   start(): Promise<unknown>;
+  /** Open `opts.url` and resolve once its first frame is up (or the load fails / times out), so a
+   *  follow-up `sub-add` never runs with no file open. Every backend passes the
+   *  per-file options of `load-options.ts` on `loadfile` (`sid=no`, `alang`, `start`). */
   load(opts: DesktopLoadOptions): Promise<void>;
   play(): Promise<void>;
   pause(): Promise<void>;

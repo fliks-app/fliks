@@ -22,6 +22,7 @@ import type {
 import { MPV_STREAM_OPTIONS } from '../../shared/mpv-stream-options';
 import { muteFilterCommands } from './edl-filter';
 import { FirstFrameGate } from './first-frame-gate';
+import { mpvLoadRequest, type MpvLoadRequest } from './load-options';
 import { mpvSubtitleProps } from './subtitle-style';
 import { mapTrackList, parseTracks, type MpvTrack } from './tracks';
 import { TypedEmitter } from './typed-emitter';
@@ -29,7 +30,7 @@ import { TypedEmitter } from './typed-emitter';
 type MacAddon = {
   start(o: { wid: string; scale?: number }): void;
   onEvent(cb: (json: string) => void): void;
-  load(o: DesktopLoadOptions): void;
+  load(o: MpvLoadRequest): void;
   command(args: string[]): void;
   getProperty(name: string): string | null;
   setProperty(name: string, value: string): void;
@@ -162,7 +163,7 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
     // rectangle would crop the next one.
     this.addon.setProperty('video-crop', opts.videoCrop ?? '');
     this.applyMuteRanges();
-    this.addon.load(opts);
+    this.addon.load(mpvLoadRequest(opts));
     await this.firstFrameGate.wait();
   }
 

@@ -530,8 +530,6 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
     M::set_option_string(g_state.mpv, "ytdl", "no");
     M::set_option_string(g_state.mpv, "terminal", "no");
     M::set_option_string(g_state.mpv, "load-unsafe-playlists", "yes");
-    // The app drives subtitle selection; don't let mpv auto-pick a track.
-    M::set_option_string(g_state.mpv, "sid", "no");
     // Streaming/buffering/reconnect tuning is applied from TS after start
     // (MPV_STREAM_OPTIONS in src/shared/mpv-stream-options.ts) — one source of
     // truth shared with the Windows subprocess + macOS backends.
@@ -570,24 +568,17 @@ Napi::Value OnInput(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
-// load({url, startTime?, headers?, subtitles?})
+// load({url, fileOptions?, headers?, subtitles?})
 Napi::Value Load(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   if (!g_state.mpv || info.Length() < 1 || !info[0].IsObject()) return env.Undefined();
   Napi::Object o = info[0].As<Napi::Object>();
   std::string url = o.Get("url").As<Napi::String>().Utf8Value();
   std::vector<std::string> opts;
-  if (o.Has("startTime") && o.Get("startTime").IsNumber()) {
-    double t = o.Get("startTime").As<Napi::Number>().DoubleValue();
-    if (t > 0) {
-      char b[48];
-      snprintf(b, sizeof(b), "start=+%.3f", t);
-      opts.emplace_back(b);
-    }
-  }
-  if (o.Has("audioLanguage") && o.Get("audioLanguage").IsString()) {
-    std::string alang = o.Get("audioLanguage").As<Napi::String>().Utf8Value();
-    if (!alang.empty()) opts.push_back("alang=" + alang);
+  // Per-file mpv options built in TS (src/main/mpv/load-options.ts), the same for every backend.
+  if (o.Has("fileOptions") && o.Get("fileOptions").IsArray()) {
+    Napi::Array fo = o.Get("fileOptions").As<Napi::Array>();
+    for (uint32_t i = 0; i < fo.Length(); i++) opts.push_back(fo.Get(i).ToString().Utf8Value());
   }
   if (o.Has("headers") && o.Get("headers").IsObject()) {
     Napi::Object h = o.Get("headers").As<Napi::Object>();

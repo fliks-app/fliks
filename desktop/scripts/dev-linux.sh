@@ -55,6 +55,12 @@ if [ "$build_client" = 1 ]; then
   ( cd "$ROOT/client" && npx ng build --configuration development --output-path "$OUT" )
 fi
 
+# A stale addon silently ignores new load() fields, so rebuild when its source moved on.
+if [ "$build_addon" = 0 ] && [ "$ROOT/desktop/native/compositor/addon.cc" -nt "$ROOT/desktop/native/build/Release/fliks_compositor.node" ]; then
+  echo "==> addon.cc is newer than the built addon, rebuilding it"
+  build_addon=1
+fi
+
 if [ "$build_addon" = 1 ]; then
   echo "==> native compositor addon (Electron 42 ABI)"
   ( cd "$ROOT/desktop/native" && ../node_modules/.bin/node-gyp rebuild \
