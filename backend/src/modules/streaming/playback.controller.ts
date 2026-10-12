@@ -364,8 +364,11 @@ export class PlaybackController {
     @Body() body: { events?: unknown },
   ): void {
     const user = req.user as User;
-    const live = this.liveSessions.peek(sessionId);
-    if (!live || !this.qoe.enabled) return;
+    if (!this.qoe.enabled) return;
+    // The exit flush races DELETE /stream/sessions/:id, so an ended session still takes events.
+    const live =
+      this.liveSessions.peek(sessionId) ?? this.qoe.trackedSession(sessionId);
+    if (!live) return;
     if (live.userId !== user.id && live.attributedUserId !== user.id) {
       throw new ForbiddenException('Not your session');
     }

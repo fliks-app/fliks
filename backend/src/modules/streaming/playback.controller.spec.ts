@@ -134,12 +134,12 @@ describe('PlaybackController.updateState: remote.state fan-out', () => {
 });
 
 describe('PlaybackController.postQoeEvents', () => {
-  function build(live: unknown, enabled = true) {
+  function build(live: unknown, enabled = true, tracked: unknown = null) {
     const controller = Object.create(PlaybackController.prototype) as PlaybackController;
     const recordEvents = jest.fn();
     Object.assign(controller, {
       liveSessions: { peek: () => live },
-      qoe: { enabled, recordEvents },
+      qoe: { enabled, recordEvents, trackedSession: () => tracked },
     });
     return { controller, recordEvents };
   }
@@ -159,6 +159,16 @@ describe('PlaybackController.postQoeEvents', () => {
     ).not.toThrow();
     expect(() =>
       build({ userId: 9, attributedUserId: 8 }).controller.postQoeEvents(req, 's', body),
+    ).toThrow('Not your session');
+  });
+
+  it('accepts events for an ended session whose tracker is kept, for its owner only', () => {
+    const ended = { userId: 7, attributedUserId: null };
+    const ok = build(null, true, ended);
+    ok.controller.postQoeEvents(req, 's', body);
+    expect(ok.recordEvents).toHaveBeenCalledWith(ended, expect.any(Array));
+    expect(() =>
+      build(null, true, { userId: 9, attributedUserId: null }).controller.postQoeEvents(req, 's', body),
     ).toThrow('Not your session');
   });
 

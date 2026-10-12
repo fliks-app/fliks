@@ -15,6 +15,7 @@ const session = {
   kind: 'transcode' as const,
   quality: '1080p',
   transcodeReasons: [],
+  attributedUserId: null,
   state: 'playing' as const,
 };
 
@@ -65,7 +66,7 @@ describe('QoeService', () => {
     }));
     svc.recordEvents(session, events);
     svc.recordEvents(session, events);
-    svc.sessionEnded(session, true);
+    svc.sessionEnded(session);
     await new Promise((r) => setImmediate(r));
     expect(upsert).toHaveBeenCalledTimes(1);
     expect(upsert.mock.calls[0][0]).toMatchObject({
@@ -74,7 +75,27 @@ describe('QoeService', () => {
       stallCount: 0,
     });
     expect(insert.mock.calls[0][0]).toHaveLength(200);
-    expect(svc.liveSummary('s1')).toBeNull();
+  });
+
+  it('keeps an ended session for late events and stores them on the ended row', async () => {
+    const { svc, upsert, insert } = build();
+    svc.recordSample(session, sample);
+    svc.sessionEnded(session);
+    await new Promise((r) => setImmediate(r));
+    expect(svc.trackedSession('s1')).toBe(session);
+    svc.recordEvents(session, [{ type: 'error', at: 1, position: 1 }]);
+    await (svc as unknown as { sweep(): Promise<void> }).sweep();
+    expect(insert.mock.calls[0][0]).toHaveLength(1);
+    expect(upsert.mock.calls.at(-1)?.[0].endedAt).toEqual(expect.any(Date));
+    expect(svc.trackedSession('nope')).toBeNull();
+  });
+
+  it('writes no row for a session that never reported a sample or event', async () => {
+    const { svc, upsert } = build();
+    svc.observeSegment(session, { query: { CMCD: 'bl=100' }, headers: {} } as never, 3, 50);
+    svc.sessionEnded(session);
+    await (svc as unknown as { sweep(): Promise<void> }).sweep();
+    expect(upsert).not.toHaveBeenCalled();
   });
 
   it('reads CMCD off a segment request', () => {
@@ -109,7 +130,7 @@ describe('QoeService', () => {
     );
     svc.recordSample(session, sample);
     const sweeping = (svc as unknown as { sweep(): Promise<void> }).sweep();
-    svc.sessionEnded(session, true);
+    svc.sessionEnded(session);
     release();
     await sweeping;
     await new Promise((r) => setImmediate(r));

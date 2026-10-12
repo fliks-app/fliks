@@ -443,7 +443,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       if (own.length >= this.maxSessionsPerUser) {
         const oldest = own.reduce((a, b) => (a.lastBeat <= b.lastBeat ? a : b));
         this.sessions.delete(oldest.sessionId);
-        this.qoe?.sessionEnded(oldest, false);
+        this.qoe?.sessionEnded(oldest);
         this.log.log(
           `evicted oldest session ${oldest.sessionId} for user ${input.userId} (cap ${this.maxSessionsPerUser})`,
         );
@@ -552,7 +552,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
    *  tombstone goes too. Returns whether the id was known. */
   stop(sessionId: string): boolean {
     const session = this.sessions.get(sessionId) ?? this.tombstones.get(sessionId);
-    if (session) this.qoe?.sessionEnded(session, true);
+    if (session) this.qoe?.sessionEnded(session);
     this.tombstones.delete(sessionId);
     return this.sessions.delete(sessionId);
   }
@@ -652,7 +652,7 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
       // Insertion order is beat order, which is what the size trim below
       // walks — oldest first.
       this.tombstones.set(id, session);
-      this.qoe?.sessionEnded(session, false);
+      this.qoe?.sessionEnded(session);
     }
     for (const [id, session] of this.tombstones) {
       if (session.lastBeat < now - this.reviveTtlMs) this.tombstones.delete(id);

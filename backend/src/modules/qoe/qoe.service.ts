@@ -45,6 +45,7 @@ type SessionRef = Pick<
   | 'quality'
   | 'transcodeReasons'
   | 'state'
+  | 'attributedUserId'
 >;
 
 type QoeEventRow = Pick<PlaybackQoeEvent, 'sessionId' | 'at' | 'type' | 'data'>;
@@ -55,6 +56,8 @@ interface Tracker {
   pendingEvents: QoeEventRow[];
   eventCount: number;
   dirty: boolean;
+  /** A sample or event arrived: only then is the session worth a row. */
+  reported: boolean;
   endedAt: number | null;
   touchedAt: number;
   flushing: Promise<void> | null;
@@ -152,12 +155,14 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
   recordSample(session: SessionRef, sample: QoeSample): void {
     const t = this.track(session);
     if (!t) return;
+    t.reported = true;
     t.agg.addSample(sample, Date.now(), session.state !== 'paused');
   }
 
   recordEvents(session: SessionRef, events: QoeEvent[]): void {
-    const t = this.track(session);
+    const t = this.track(session, false);
     if (!t) return;
+    t.reported = true;
     const now = Date.now();
     for (const e of events) {
       if (t.eventCount >= MAX_EVENTS_PER_SESSION) break;
@@ -213,18 +218,21 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /** The session left the registry: flush now. A stop is final, a GC may be revived. */
-  sessionEnded(session: SessionRef, final: boolean): void {
+  /** The session of a tracker kept after its end, so late events can still be owned and stored. */
+  trackedSession(sessionId: string): SessionRef | null {
+    return this.trackers.get(sessionId)?.session ?? null;
+  }
+
+  /** The session left the registry: flush now. The tracker stays for late events and a revive. */
+  sessionEnded(session: SessionRef): void {
     const t = this.trackers.get(session.sessionId);
     if (!t) return;
     t.endedAt = Date.now();
     t.dirty = true;
-    void this.flush(t).then(() => {
-      if (final) this.trackers.delete(session.sessionId);
-    });
+    void this.flush(t);
   }
 
-  private track(session: SessionRef): Tracker | null {
+  private track(session: SessionRef, revive = true): Tracker | null {
     if (!this.enabledFlag) return null;
     let t = this.trackers.get(session.sessionId);
     if (!t) {
@@ -234,6 +242,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
         pendingEvents: [],
         eventCount: 0,
         dirty: false,
+        reported: false,
         endedAt: null,
         touchedAt: 0,
         flushing: null,
@@ -242,7 +251,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
       this.trackers.set(session.sessionId, t);
     }
     t.session = session;
-    t.endedAt = null;
+    if (revive) t.endedAt = null;
     t.dirty = true;
     t.touchedAt = Date.now();
     return t;
@@ -264,7 +273,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
       t.flushAgain = true;
       return t.flushing;
     }
-    if (!t.dirty) return Promise.resolve();
+    if (!t.dirty || !t.reported) return Promise.resolve();
     t.dirty = false;
     const events = t.pendingEvents.splice(0);
     const run = async (): Promise<void> => {
