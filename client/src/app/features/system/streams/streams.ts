@@ -16,6 +16,7 @@ import { LucideMessageSquare, LucidePause, LucidePlay, LucideSquare } from '@luc
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { parseDeviceLabel } from '../../../core/utils/format-device-label';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
+import { QoeBadgeComponent } from '../qoe-badge/qoe-badge';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 
 @Component({
@@ -28,6 +29,7 @@ import { ModalHeaderComponent } from '../../../shared/components/modal-header';
     TranslatePipe,
     FormsModule,
     ResolveUrlPipe,
+    QoeBadgeComponent,
     LucideMessageSquare,
     LucidePause,
     LucidePlay,

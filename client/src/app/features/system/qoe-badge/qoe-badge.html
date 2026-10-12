@@ -1,0 +1,50 @@
+<div class="text-xs">
+  <button
+    type="button"
+    class="flex items-center gap-2 w-full text-left"
+    [attr.aria-expanded]="open()"
+    (click)="open.set(!open())"
+  >
+    <span class="inline-block h-2.5 w-2.5 rounded-full shrink-0" [class]="dotClass()"></span>
+    <span class="font-medium">{{ 'qoe.verdict.' + qoe().verdict | translate }}</span>
+    @if (qoe().confidence === 'low') {
+      <span class="text-base-content/40">({{ 'qoe.confidence_low' | translate }})</span>
+    }
+    <span class="ml-auto link link-hover text-base-content/50">{{
+      (open() ? 'qoe.hide_details' : 'qoe.show_details') | translate
+    }}</span>
+  </button>
+
+  @if (open()) {
+    <div class="mt-2 space-y-1 text-base-content/70">
+      @for (r of qoe().reasons; track r.key) {
+        <div class="italic text-warning/80">{{ reasonText(r) }}</div>
+      }
+      <div class="grid grid-cols-2 gap-x-3 gap-y-0.5 tabular-nums">
+        <span class="text-base-content/40">{{ 'qoe.throughput' | translate }}</span>
+        <span>{{ mbps(qoe().bandwidthBps) }} / {{ mbps(qoe().variantBitrate) }}</span>
+        <span class="text-base-content/40">{{ 'qoe.buffer_ahead' | translate }}</span>
+        <span>{{ bufferLabel(qoe().bufferAheadS) }}</span>
+        <span class="text-base-content/40">{{ 'qoe.dropped' | translate }}</span>
+        <span>{{ droppedLabel() }}</span>
+        <span class="text-base-content/40">{{ 'qoe.decoder' | translate }}</span>
+        <span>
+          {{ qoe().decoderName ?? '-' }}
+          @if (qoe().hwDecoder != null) {
+            ({{ (qoe().hwDecoder ? 'qoe.hardware' : 'qoe.software') | translate }})
+          }
+        </span>
+        @if (qoe().transcodeSpeed != null) {
+          <span class="text-base-content/40">{{ 'qoe.transcode_speed' | translate }}</span>
+          <span>{{ qoe().transcodeSpeed }}x</span>
+        }
+        <span class="text-base-content/40">{{ 'qoe.engine' | translate }}</span>
+        <span>{{ qoe().engine ?? '-' }}</span>
+        <span class="text-base-content/40">CMCD</span>
+        <span>{{ qoe().cmcd == null ? '-' : ((qoe().cmcd ? 'common.yes' : 'common.no') | translate) }}</span>
+        <span class="text-base-content/40">{{ 'qoe.stalls' | translate }}</span>
+        <span>{{ qoe().stallCount ?? 0 }} ({{ ((qoe().stallMs ?? 0) / 1000).toFixed(1) }} s)</span>
+      </div>
+    </div>
+  }
+</div>
