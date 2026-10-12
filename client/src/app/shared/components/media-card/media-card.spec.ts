@@ -681,6 +681,40 @@ describe('media-card poster morph opt-out', () => {
   });
 });
 
+describe('media-card title link morph', () => {
+  it('pairs an episode card with the series page its title opens', async () => {
+    (document as unknown as { startViewTransition: unknown }).startViewTransition = () => ({
+      finished: Promise.resolve(),
+    });
+    const h = await createFixture(FULL_MEMBER, {
+      imageUrl: '/api/images/still.jpg',
+      fanartUrl: '/api/images/fanart.jpg',
+      title: 'Arcane',
+      link: ['/series', '7', 'episode', '42'],
+      titleLink: ['/series', '7'],
+      titlePosterUrl: '/api/images/poster.jpg',
+    });
+    const card = h.fixture.componentInstance;
+
+    expect(card.titleNavState()).toEqual({
+      media: {
+        id: 7,
+        type: 'series',
+        title: 'Arcane',
+        posterUrl: '/api/images/poster.jpg',
+        fanartUrl: '/api/images/fanart.jpg',
+      },
+    });
+    (card as unknown as { onTitleAnchorPointerdown(): void }).onTitleAnchorPointerdown();
+    expect(h.fixture.nativeElement.querySelector('img').style.viewTransitionName).toBe(
+      'media-poster-7',
+    );
+
+    clearPosterStamps();
+    delete (document as unknown as { startViewTransition?: unknown }).startViewTransition;
+  });
+});
+
 describe('media-card preview handoff', () => {
   it('seeds the preview page and pairs on the preview name, not a library id', async () => {
     (document as unknown as { startViewTransition: unknown }).startViewTransition = () => ({

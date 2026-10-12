@@ -522,6 +522,7 @@
               [progressPercent]="item.progressPercent"
               [link]="contentLink(item.mediaType, item.mediaId, item.episodeId)"
               [titleLink]="item.episodeId ? ['/' + (item.mediaType === 'series' ? 'series' : 'movies'), '' + item.mediaId] : null"
+              [titlePosterUrl]="item.posterUrl"
               [playlistMediaId]="item.mediaId"
               [playlistEpisodeId]="item.episodeId"
               [playable]="true"
