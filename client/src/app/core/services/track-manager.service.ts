@@ -30,6 +30,8 @@ export interface SubtitleOption {
   burnIn: boolean;
   /** Database subtitle ID (for burn-in request) */
   subtitleDbId?: number;
+  /** The track's online id (`emb-<streamIndex>` / `ext-<id>`) when `id` is a local one (offline copies). */
+  trackKey?: string;
   /** True if this is a forced subtitle track */
   forced?: boolean;
   hearingImpaired?: boolean;
@@ -38,6 +40,15 @@ export interface SubtitleOption {
   /** Player-menu two-line label: language head + details subline ("SRT • …"). */
   menuHead?: string;
   menuSub?: string;
+}
+
+/** What a viewer picked before pressing play, for one file. A one-shot launch intent: it wins over
+ *  the remembered and automatic rules, and is never written to the remembered store by itself. */
+export interface LaunchTracks {
+  fileId: number;
+  audioStreamIndex?: number;
+  /** `null` is an explicit Off. */
+  subtitleId?: string | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -129,6 +140,16 @@ export class TrackManagerService {
 
   // ── Subtitle methods ──
 
+  /** Menu labels for a subtitle: the one-line label and the two-line head/sub. */
+  describeSubtitle(
+    sub: Parameters<typeof formatSubtitleParts>[0],
+    trackNumber: number,
+  ): Pick<SubtitleOption, 'label' | 'menuHead' | 'menuSub'> {
+    const opts = { showFormat: this.appSettings.showSubtitleFormat() };
+    const parts = formatSubtitleParts(sub, this.translate, trackNumber, opts);
+    return { label: formatSubtitleLabel(sub, this.translate, trackNumber, opts), menuHead: parts.head, menuSub: parts.sub };
+  }
+
   /**
    * Load subtitle options from the API and embedded stream info.
    *
@@ -148,16 +169,11 @@ export class TrackManagerService {
 
     try {
       const hideBurnIn = this.appSettings.hideBurnInSubtitles();
-      const labelOpts = { showFormat: this.appSettings.showSubtitleFormat() };
       const subs = await this.subtitlesApi.getForMedia(mediaId);
       const tracks = buildSubtitleTracks(subs, mediaFileId, { hideBurnIn });
-      const options: SubtitleOption[] = tracks.map((t, i) => {
-        const parts = formatSubtitleParts(t, this.translate, i + 1, labelOpts);
-        return {
+      const options: SubtitleOption[] = tracks.map((t, i) => ({
         id: t.key,
-        label: formatSubtitleLabel(t, this.translate, i + 1, labelOpts),
-        menuHead: parts.head,
-        menuSub: parts.sub,
+        ...this.describeSubtitle(t, i + 1),
         url:
           t.kind === 'external'
             ? streamingApi.getSubtitleUrl(mediaFileId, t.subtitleId)
@@ -171,8 +187,7 @@ export class TrackManagerService {
         forced: t.forced,
         hearingImpaired: t.hearingImpaired,
         providerType: t.providerType,
-        };
-      });
+      }));
       const seen = new Set(tracks.map((t) => t.key));
 
       // Also check streamInfo for embedded subs not yet in DB
@@ -186,13 +201,9 @@ export class TrackManagerService {
           if (isImageBasedSubtitleCodec(emb.codec)) continue; // Bitmap from streamInfo only (no DB ID for burn-in)
           // Numbering continues the list, so a track keeps the position the
           // menu shows it at.
-          const trackNumber = options.length + 1;
-          const embParts = formatSubtitleParts(emb, this.translate, trackNumber, labelOpts);
           options.push({
             id: key,
-            label: formatSubtitleLabel(emb, this.translate, trackNumber, labelOpts),
-            menuHead: embParts.head,
-            menuSub: embParts.sub,
+            ...this.describeSubtitle(emb, options.length + 1),
             url: streamingApi.getEmbeddedSubtitleUrl(mediaFileId, emb.streamIndex),
             language: normalizeLangCode(emb.language),
             burnIn: false,
@@ -221,6 +232,8 @@ export class TrackManagerService {
    * @param mediaId            Media ID the remembered selection is keyed by
    * @param audioLanguage      Language of the audio stream that will play, when known
    *                           before any engine lists a track: it wins over `audioTracks`
+   * @param picked             The viewer's pick for this launch (`null`: Off), honoured before
+   *                           any rule; an id not in `subtitles` is ignored
    */
   async autoSelectSubtitle(
     subtitles: SubtitleOption[],
@@ -230,8 +243,15 @@ export class TrackManagerService {
     onSelect: (sub: SubtitleOption | null) => Promise<unknown>,
     mediaId = 0,
     audioLanguage?: string,
+    picked?: string | null,
   ): Promise<void> {
     const settings = this.playerSettings.get();
+
+    const pick = picked == null ? picked : subtitles.find((s) => s.id === picked);
+    if (pick !== undefined) {
+      if (pick) await onSelect(pick);
+      return;
+    }
 
     // Exclude burn-in subs (PGS, DVD, etc.) — selecting them calls reloadStream() to bake
     // the subtitle into the video server-side, which kills the active transcode session.

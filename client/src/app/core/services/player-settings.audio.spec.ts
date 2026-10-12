@@ -84,6 +84,13 @@ describe('PlayerSettingsService audio selection', () => {
     expect(svc.resolveAudioStreamIndex(1, STREAMS, 1, 'ja')).toBe(2);
   });
 
+  it('lets a launch pick win over a remembered choice, unless it is outside the tracks', () => {
+    const svc = make({ audioSelectionMode: 'default', rememberAudioSelections: true });
+    svc.saveRememberedAudioTrack(1, 'eng');
+    expect(svc.resolveAudioStreamIndex(1, STREAMS, 1, 'ja', 0)).toBe(0);
+    expect(svc.resolveAudioStreamIndex(1, STREAMS, 1, 'ja', 9)).toBe(2);
+  });
+
   it('honours the remembered ordinal among same-language tracks', () => {
     const svc = make({ rememberAudioSelections: true });
     const twoEng = [{ language: 'eng' }, { language: 'fra' }, { language: 'eng' }];

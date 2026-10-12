@@ -64,3 +64,42 @@ describe('DownloadManagerService, offline crop metadata', () => {
     expect(task.offlineCrop).toBeUndefined();
   });
 });
+
+describe('DownloadManagerService, offline subtitle identity', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('records each subtitle\'s online id and descriptors, so offline playback ranks and labels it like online', async () => {
+    let saved = [{ id: 5, mediaId: 1, mediaFileId: 9 }] as unknown as DownloadTask[];
+    const rows = [
+      { id: 40, mediaFileId: 9, language: 'en', relativePath: 'a.srt', streamIndex: null, codec: 'subrip' },
+      { id: 41, mediaFileId: 9, language: 'en', relativePath: null, streamIndex: 3, codec: 'subrip', forced: true },
+    ];
+    TestBed.configureTestingModule({
+      providers: [
+        DownloadManagerService,
+        {
+          provide: StreamingApiService,
+          useValue: { getEmbeddedSubtitleUrl: () => 'emb', getSubtitleUrl: () => 'ext' },
+        },
+        { provide: SubtitlesApiService, useValue: { getForMedia: () => Promise.resolve(rows) } },
+        { provide: MediaService, useValue: { getOne: () => Promise.resolve({ files: [] }) } },
+        { provide: OfflineStorageService, useValue: { downloadSmallFile: () => Promise.resolve(true) } },
+        { provide: DownloadCacheService, useValue: { load: () => saved, save: (t: DownloadTask[]) => (saved = t) } },
+        { provide: DownloadNotificationService, useValue: { nativeEvent: signal(null) } },
+        { provide: AuthService, useValue: {} },
+        { provide: BrowserDeviceProfileService, useValue: {} },
+        { provide: TranslateService, useValue: { instant: (k: string) => k, currentLang: () => 'en', fallbackLang: () => 'en' } },
+        { provide: AppSettingsService, useValue: { showSubtitleFormat: () => false } },
+        { provide: ImageCacheService, useValue: { prefetch: () => Promise.resolve() } },
+        { provide: DownloadSettingsService, useValue: {} },
+        { provide: ServerConfigService, useValue: { isNative: false } },
+        { provide: NetworkService, useValue: { isOnline: () => false } },
+      ],
+    });
+
+    await (TestBed.inject(DownloadManagerService) as any).preDownloadSubtitles(5);
+
+    expect(saved[0].offlineSubtitles?.map((s) => s.trackKey)).toEqual(['ext-40', 'emb-3']);
+    expect(saved[0].offlineSubtitles?.[1]).toMatchObject({ forced: true, hearingImpaired: false, codec: 'subrip' });
+  });
+});

@@ -81,6 +81,8 @@ interface MediaFixture {
   episodeInstance?: boolean;
   /** Playback-state rows keyed by episodeId (0 = media-level), served to the
    *  header's `getPlaybackState` stub. Absent key → no row, like the API. */
+  files?: { id: number; streamInfo?: unknown }[];
+  play?: (ctx: unknown, fromStart: boolean) => Promise<void>;
   playbackStates?: Record<number, { positionSeconds: number; durationSeconds: number; completed: boolean; mediaFileId: number } | undefined>;
 }
 
@@ -147,7 +149,10 @@ async function createFixture(
       },
       { provide: OfflinePlaybackSyncService, useValue: { queuedPositionFor: () => null } },
       { provide: TrackManagerService, useValue: { saveAudioSelection: () => {}, saveSubtitleSelection: () => {} } },
-      { provide: PlayableMediaService, useValue: { loadWatchedState: () => Promise.resolve(watched) } },
+      {
+        provide: PlayableMediaService,
+        useValue: { loadWatchedState: () => Promise.resolve(watched), play: media.play ?? (async () => {}) },
+      },
       {
         provide: StreamingApiService,
         useValue: {
@@ -168,6 +173,7 @@ async function createFixture(
   fixture.componentRef.setInput('mediaType', media.mediaType);
   fixture.componentRef.setInput('episodeId', media.episodeId);
   fixture.componentRef.setInput('selectedFileId', media.selectedFileId);
+  if (media.files) fixture.componentRef.setInput('files', media.files);
   fixture.componentRef.setInput('monitored', media.monitored);
   fixture.componentRef.setInput('qualityProfileName', media.qualityProfileName);
   // Series-root watched state comes from `seriesFullyWatched`, not the playback-state
@@ -797,5 +803,41 @@ describe('MediaInfoHeaderComponent — watched toggle availability', () => {
       qualityProfileName: null,
     });
     expect(canToggle(f)).toBe(true);
+  });
+});
+
+/** The pickers only fed the remembered store, so with remembering off the player never saw them. */
+describe('MediaInfoHeaderComponent — launch picks', () => {
+  async function launch(act: (header: MediaInfoHeaderComponent) => void) {
+    const play = vi.fn(async () => {});
+    const f = await createFixture(READER, {
+      mediaType: 'movie',
+      selectedFileId: 7,
+      monitored: true,
+      qualityProfileName: null,
+      files: [{ id: 7, streamInfo: { audio: [{ language: 'eng' }, { language: 'fra' }] } }],
+      play,
+    });
+    act(f.componentInstance);
+    await f.componentInstance.play(false);
+    return (play.mock.calls[0] as unknown[])[0] as { tracks?: unknown };
+  }
+
+  it('hands the audio and subtitle picked before play to the player', async () => {
+    const ctx = await launch((h) => {
+      h.onAudioChange(1);
+      h.onSubtitleChange('ext-3');
+    });
+    expect(ctx.tracks).toEqual({ fileId: 7, audioStreamIndex: 1, subtitleId: 'ext-3' });
+  });
+
+  it('hands an explicit Off over as Off', async () => {
+    const ctx = await launch((h) => h.onSubtitleChange(null));
+    expect(ctx.tracks).toEqual({ fileId: 7, subtitleId: null });
+  });
+
+  it('sends nothing when the viewer picked nothing: the defaults are not choices', async () => {
+    const ctx = await launch(() => {});
+    expect(ctx.tracks).toBeUndefined();
   });
 });

@@ -6,6 +6,18 @@ import type { OfflineCrop } from '../utils/player.utils';
 import type { EdlRange } from '../utils/edl-policy';
 
 /** Client-side download task tracked in localStorage. */
+export interface OfflineSubtitle {
+  key: string;
+  language: string;
+  label: string;
+  forced?: boolean;
+  hearingImpaired?: boolean;
+  codec?: string | null;
+  relativePath?: string | null;
+  providerType?: string | null;
+  trackKey?: string;
+}
+
 export interface DownloadTask {
   id: number;
   mediaId: number;
@@ -26,8 +38,10 @@ export interface DownloadTask {
    *  the figure the backends report mid-transfer is the part received so far,
    *  which is not what a "size on disk" column should show. */
   sizeBytes?: number;
-  /** Pre-downloaded subtitle metadata for offline playback. */
-  offlineSubtitles?: { key: string; language: string; label: string; forced?: boolean }[];
+  /** Pre-downloaded subtitle metadata for offline playback. `trackKey` is the subtitle's
+   *  online id (`emb-<streamIndex>` / `ext-<id>`); tasks saved before it lack it, and
+   *  before the descriptors (`hearingImpaired`, `codec`…) only `label` describes the track. */
+  offlineSubtitles?: OfflineSubtitle[];
   /** Letterbox rectangle the player removes at playback; absent when the copy was cropped server-side. */
   offlineCrop?: OfflineCrop;
   /** `.edl` ranges captured at download time, on the playback clock of the stored copy. */
