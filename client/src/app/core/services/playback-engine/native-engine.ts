@@ -389,7 +389,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     // the chosen image one (or vice versa), then narrow by forced, using the
     // ordinal to pick the Nth track that shares (language, image, forced) so
     // several same-language subs can each be selected. Fall back to language
-    // alone / a lone track on a tag mismatch.
+    // alone on a tag mismatch, never to another language.
     const sameTagged = tracks.filter(
       (t) =>
         normalizeLangCode(t.language) === want &&
@@ -402,10 +402,10 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
       tracks.find(
         (t) => normalizeLangCode(t.language) === want && !!t.image === !!image,
       ) ??
-      tracks.find((t) => normalizeLangCode(t.language) === want) ??
-      (tracks.length === 1 ? tracks[0] : undefined);
+      tracks.find((t) => normalizeLangCode(t.language) === want);
+    // An unresolved pick leaves the previous track off rather than on screen.
     const selectedId = id?.id ?? null;
-    if (selectedId && selectedId !== this._activeTrackId) {
+    if (selectedId !== this._activeTrackId) {
       this._activeTrackId = selectedId;
       NativePlayer.selectSubtitleTrack({ id: selectedId });
     }

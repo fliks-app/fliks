@@ -188,6 +188,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     if (!this.player) throw new Error('ShakaEngine not initialised');
     this.resetFirstFrame();
     this.sessionExpiredInFlight = false;
+    this.sideloadedTextTracks.clear();
     await this.player.load(url, startTime, mimeType);
   }
 
@@ -324,35 +325,42 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
   // ─── Subtitles ─────────────────────────────────────────────────────
 
+  /** Text tracks sideloaded into a stream that carries no rendition for them
+   *  (DirectPlay), by URL; Shaka drops them with the manifest, see {@link load}. */
+  private sideloadedTextTracks = new Map<string, shaka.extern.TextTrack>();
+
   async addTextTrack(
-    _url: string,
+    url: string,
     language: string,
-    _label: string,
+    label: string,
     forced?: boolean,
     index = 0,
   ): Promise<any> {
     if (!this.player) throw new Error('ShakaEngine not initialised');
-    // Subtitles ship as HLS SUBTITLES renditions in the manifest. Shaka
-    // parses them into text tracks and still renders them through the
-    // configured UITextDisplayer (so multi-line cue styling is preserved),
-    // so we match the chosen track by (language, forced) instead of loading
-    // a sidecar VTT. Match on normalised language codes — the manifest
-    // LANGUAGE may be 2-letter (`en`) while the option carries 3-letter
-    // (`eng`). `index` is the ordinal among tracks that share the same
-    // (language, forced), so several same-language subs can each be picked.
-    // Falls back to the first same-language match, then the first track.
+    // An HLS SUBTITLES rendition is matched by (language, forced), then by `index`
+    // (the ordinal among tracks sharing both). Language codes are normalised: the
+    // manifest may say `en` where the option says `eng`. Another language is never
+    // a substitute.
     const want = normalizeLangCode(language);
-    const tracks: any[] = this.player.getTextTracks();
-    const sameLangForced = tracks.filter(
+    const sideloaded = new Set([...this.sideloadedTextTracks.values()].map((t) => t.id));
+    const renditions: any[] = this.player.getTextTracks().filter((t) => !sideloaded.has(t.id));
+    const sameLangForced = renditions.filter(
       (t) => normalizeLangCode(t.language) === want && !!t.forced === !!forced,
     );
-    return (
+    const rendition =
       sameLangForced[index] ??
       sameLangForced[0] ??
-      tracks.find((t) => normalizeLangCode(t.language) === want) ??
-      tracks[0] ??
-      null
+      renditions.find((t) => normalizeLangCode(t.language) === want);
+    if (rendition) return rendition;
+    if (!url) throw new Error(`No text track for ${language}`);
+    // No rendition (a raw DirectPlay file): attach the WebVTT itself.
+    const known = this.sideloadedTextTracks.get(url);
+    if (known) return known;
+    const track = await this.player.addTextTrackAsync(
+      url, language, 'subtitles', 'text/vtt', undefined, label, !!forced,
     );
+    this.sideloadedTextTracks.set(url, track);
+    return track;
   }
 
   selectTextTrack(track: any): void {
