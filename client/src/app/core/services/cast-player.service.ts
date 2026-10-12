@@ -475,6 +475,7 @@ export class CastPlayerService {
    *  encoder slots and disk cache. */
   private disconnectGrace: ReturnType<typeof setTimeout> | null = null;
   private static readonly DISCONNECT_GRACE_MS = 45_000;
+  private static readonly LOAD_RETRY_DELAY_MS = 1000;
 
   clear() {
     if (this.disconnectGrace) {
@@ -602,7 +603,8 @@ export class CastPlayerService {
 
   /**
    * Build the cast URL from a playback-info response and dispatch loadMedia.
-   * Shared between quickStart (initial cast) and reloadCastStream (changes).
+   * Shared between quickStart (initial cast) and reloadCastStream (changes). A refused LOAD is
+   * reported here (toast, loading state off) and returns false rather than throwing.
    */
   private async dispatchLoad(
     mfId: number,
@@ -611,7 +613,7 @@ export class CastPlayerService {
     transcodeQuality: string | undefined,
     castInfo: { token: string; streamBaseUrl: string },
     autoplay: boolean,
-  ) {
+  ): Promise<boolean> {
     // getCastDeviceProfile lists no direct-play video codec: DirectPlay is unexpected here.
     if (pi.playMethod === 'DirectPlay') {
       console.warn('[cast] unexpected DirectPlay decision for a Cast session', pi);
@@ -655,7 +657,7 @@ export class CastPlayerService {
     // (or a rebuffer) actually starts.
     this.cast.buffering.set(true);
 
-    await this.cast.loadMedia({
+    const load = () => this.cast.loadMedia({
       url: castUrl,
       contentType,
       title: this.mediaTitle(),
@@ -678,6 +680,25 @@ export class CastPlayerService {
         mediaFileId: mfId,
       }),
     });
+
+    // One retry: a rejoined receiver may still hold a dead sender's media session and refuse
+    // the first LOAD. Skipped when disconnected.
+    try {
+      try {
+        await load();
+      } catch (err) {
+        if (!this.cast.isConnected()) throw err;
+        console.warn('[cast] LOAD rejected, retrying once', err);
+        await new Promise((r) => setTimeout(r, CastPlayerService.LOAD_RETRY_DELAY_MS));
+        await load();
+      }
+      return true;
+    } catch (err) {
+      console.error('[cast] LOAD failed', err);
+      this.cast.buffering.set(false);
+      this.toast.error(this.translate.instant('cast.error.load_failed'));
+      return false;
+    }
   }
 
   /** The receiver's EDL input in compact wire form, with the notice texts in the sender's
@@ -892,6 +913,8 @@ export class CastPlayerService {
     streamInfo?: any;
     startTime?: number;
     tracks?: LaunchTracks;
+    /** Open the overlay once the cast state is set, without waiting for the receiver's LOAD. */
+    expand?: boolean;
   }) {
     // Phase 1 — parallelize every fetch that doesn't depend on streamInfo
     // resolution. Saves ~3 sequential round-trips on cold cast.
@@ -999,7 +1022,11 @@ export class CastPlayerService {
       activeSubtitleId: startSubtitle?.id ?? null,
       activeAudioStreamIndex: audioIndex,
     });
+    if (opts.expand) this.expanded.set(true);
 
-    await this.dispatchLoad(opts.mediaFileId, pi, startTime, activeQualityId, castInfo, true);
+    if (!(await this.dispatchLoad(opts.mediaFileId, pi, startTime, activeQualityId, castInfo, true))) {
+      // Nothing is playing: drop the dead overlay (and its transcode) so a new cast starts clean.
+      this.clear();
+    }
   }
 }

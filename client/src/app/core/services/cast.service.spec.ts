@@ -173,3 +173,33 @@ describe('CastService audio switch', () => {
     expect(lastActive(editTracksInfo)).toEqual([7]);
   });
 });
+
+describe('CastService LOAD failure', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    TestBed.resetTestingModule();
+  });
+
+  it('rejects when the receiver refuses the LOAD and clears the pending load', async () => {
+    const { session } = stubCastSdk(TEXT_TRACKS);
+    session.loadMedia.mockRejectedValue(new Error('Invalid Request'));
+    const svc = make(session);
+
+    await expect(svc.loadMedia(load(1))).rejects.toThrow('Invalid Request');
+    expect((svc as unknown as { pendingLoad: unknown }).pendingLoad).toBeNull();
+    await expect(svc.setActiveSubtitle(0)).resolves.toBeUndefined();
+  });
+
+  it('rejects the native path too, without the success side effects', async () => {
+    const svc = make(null);
+    (svc as unknown as { hasCastBridge: boolean }).hasCastBridge = true;
+
+    await expect(svc.loadMedia(load())).rejects.toBeDefined();
+    expect(svc.mediaTitle()).toBe('');
+  });
+
+  it('rejects when there is no session', async () => {
+    const svc = make(null);
+    await expect(svc.loadMedia(load())).rejects.toThrow('No Cast session');
+  });
+});

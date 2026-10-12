@@ -2604,6 +2604,7 @@
   "cast": {
     "error": {
       "generic": "Wiedergabefehler auf dem Chromecast (Code {{code}}).",
+      "load_failed": "Die Wiedergabe auf dem Chromecast konnte nicht gestartet werden. Versuche es erneut.",
       "recovery_failed": "Die Wiedergabe auf dem Chromecast konnte nicht fortgesetzt werden. Starte den Cast neu.",
       "shaka_1001": "Der Chromecast konnte den Server nicht erreichen (Code 1001).",
       "shaka_1002": "Zeitüberschreitung beim Abrufen eines Segments vom Chromecast (Code 1002).",

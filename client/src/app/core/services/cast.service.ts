@@ -555,6 +555,7 @@ export class CastService implements OnDestroy {
     }
   }
 
+  /** Rejects when the receiver refuses the LOAD. */
   async loadMedia(info: CastMediaInfo) {
     // Drop any armed/settling seek from a prior stream so a trailing dispatch
     // can't fire onto the freshly loaded session (quality change, recovery,
@@ -563,9 +564,14 @@ export class CastService implements OnDestroy {
     this.cancelTextReapply();
     this.wantedTextTrackId = info.activeSubtitleTrackId ?? 0;
     const load = this.sendLoad(info);
-    this.pendingLoad = load;
-    await load;
-    if (this.pendingLoad === load) this.pendingLoad = null;
+    // Waiters on pendingLoad only need it settled; the failure goes to our caller.
+    const settled = load.then(() => {}, () => {});
+    this.pendingLoad = settled;
+    try {
+      await load;
+    } finally {
+      if (this.pendingLoad === settled) this.pendingLoad = null;
+    }
   }
 
   private async sendLoad(info: CastMediaInfo): Promise<void> {
@@ -587,31 +593,27 @@ export class CastService implements OnDestroy {
     const subtitleStyle = this.castSettings.get().subtitleStyle;
 
     if (this.hasCastBridge) {
-      try {
-        await CastBridge.loadMedia({
-          url: info.url,
-          contentType: info.contentType,
-          title: info.title,
-          subtitle: info.subtitle ?? '',
-          posterUrl: info.posterUrl ?? '',
-          currentTime: info.currentTime ?? 0,
-          subtitles: info.subtitles ?? [],
-          activeSubtitleTrackId: info.activeSubtitleTrackId ?? 0,
-          autoplay: info.autoplay ?? true,
-          customData,
-          textTrackStyle: subtitleStyle,
-          castTextTrackStyle: buildCastTextTrackStyle(subtitleStyle),
-        });
-      } catch (err) {
-        console.error('CastBridge.loadMedia failed:', err);
-      }
+      await CastBridge.loadMedia({
+        url: info.url,
+        contentType: info.contentType,
+        title: info.title,
+        subtitle: info.subtitle ?? '',
+        posterUrl: info.posterUrl ?? '',
+        currentTime: info.currentTime ?? 0,
+        subtitles: info.subtitles ?? [],
+        activeSubtitleTrackId: info.activeSubtitleTrackId ?? 0,
+        autoplay: info.autoplay ?? true,
+        customData,
+        textTrackStyle: subtitleStyle,
+        castTextTrackStyle: buildCastTextTrackStyle(subtitleStyle),
+      });
       this.isPaused.set(false);
       this.mediaTitle.set(info.title);
       return;
     }
 
     // Web
-    if (!this.session) return;
+    if (!this.session) throw new Error('No Cast session');
 
     const mediaInfo = new chrome.cast.media.MediaInfo(info.url, info.contentType);
     // HLS: use BUFFERED for VOD playlists, the Default Media Receiver handles it
@@ -648,18 +650,14 @@ export class CastService implements OnDestroy {
       request.activeTrackIds = [info.activeSubtitleTrackId];
     }
 
-    try {
-      await this.session.loadMedia(request);
-      this.mediaTitle.set(info.title);
-      this.isPaused.set(info.autoplay === false);
-      if (info.activeSubtitleTrackId) {
-        this.textReapplyTimer = setTimeout(() => {
-          this.textReapplyTimer = null;
-          if (this.wantedTextTrackId > 0) this.applyTextTrack(this.wantedTextTrackId);
-        }, CAST_TEXT_REAPPLY_MS);
-      }
-    } catch (err) {
-      console.error('Cast loadMedia failed:', err);
+    await this.session.loadMedia(request);
+    this.mediaTitle.set(info.title);
+    this.isPaused.set(info.autoplay === false);
+    if (info.activeSubtitleTrackId) {
+      this.textReapplyTimer = setTimeout(() => {
+        this.textReapplyTimer = null;
+        if (this.wantedTextTrackId > 0) this.applyTextTrack(this.wantedTextTrackId);
+      }, CAST_TEXT_REAPPLY_MS);
     }
   }
 
