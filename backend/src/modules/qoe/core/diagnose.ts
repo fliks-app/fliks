@@ -93,7 +93,7 @@ export function diagnose(s: QoeSessionSummary): QoeDiagnosis {
 
   const confidence = s.sampleCount > 0 || s.cmcd ? 'high' : 'low';
   if (s.watchedMs < MIN_WATCHED_MS) {
-    return result('unknown', confidence, 'too_little_data');
+    return result('unknown', 'low', 'too_little_data');
   }
   return result('ok', confidence, 'healthy');
 }
