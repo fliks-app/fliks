@@ -32,6 +32,12 @@ struct SubtitleSettingsView: View {
                 } footer: {
                     Text(tr("playback_settings.sub_mode_hint"))
                 }
+
+                Section {
+                    Toggle(tr("playback_settings.sub_remember"), isOn: $settings.rememberSubtitleSelections)
+                } footer: {
+                    Text(tr("playback_settings.sub_remember_hint"))
+                }
             }
             .contentMargins(.vertical, 28, for: .scrollContent)
             .scrollClipDisabled()

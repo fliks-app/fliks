@@ -174,6 +174,12 @@ private struct SkipCueStyle: ButtonStyle {
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
     private var statusObservation: NSKeyValueObservation?
+    private var selectionObserver: NSObjectProtocol?
+    /// Last audio/subtitle selection the app knows of, to tell a viewer's pick in AVKit's menus
+    /// from one the app made itself. Tracking starts once the item is ready.
+    private var trackingSelection = false
+    private var lastAudio: Int?
+    private var lastLegible: LegibleChoice?
     private var rateObservation: NSKeyValueObservation?
     /// Cached once per item so remote audio/subtitle commands and the
     /// heartbeat's track-index fields can read the current selection
@@ -288,6 +294,8 @@ private struct SkipCueStyle: ButtonStyle {
         edlNoticeTask?.cancel()
         if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
         endObserver = nil
+        if let selectionObserver { NotificationCenter.default.removeObserver(selectionObserver) }
+        selectionObserver = nil
         statusObservation = nil
         rateObservation = nil
         player?.pause()
@@ -426,6 +434,15 @@ private struct SkipCueStyle: ButtonStyle {
     private func attachItemObservers(_ item: AVPlayerItem) {
         audibleGroup = nil
         legibleGroup = nil
+        trackingSelection = false
+        lastAudio = nil
+        lastLegible = nil
+        if let selectionObserver { NotificationCenter.default.removeObserver(selectionObserver) }
+        selectionObserver = NotificationCenter.default.addObserver(
+            forName: AVPlayerItem.mediaSelectionDidChangeNotification, object: item, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.selectionDidChange() }
+        }
         Task {
             let group = try? await item.asset.loadMediaSelectionGroup(for: .audible)
             if player?.currentItem === item { audibleGroup = group }
@@ -462,6 +479,12 @@ private struct SkipCueStyle: ButtonStyle {
         playback.tick(position: time, duration: duration, paused: paused, audioTrackIndex: currentAudioTrackIndex(),
                       subtitleTrackIndex: currentSubtitleTrackIndex(), subtitleId: currentSubtitleId())
         recoveringHint = playback.recovering
+        if !trackingSelection, player?.currentItem?.status == .readyToPlay {
+            trackingSelection = true
+            lastAudio = currentAudioTrackIndex()
+            lastLegible = currentLegibleChoice()
+        }
+        selectionDidChange() // backup for a missed notification
 
         // A jump larger than normal playback advance is a seek — re-arm cues.
         let seeked = lastTickTime >= 0 && abs(time - lastTickTime) > 1.5
@@ -718,7 +741,7 @@ private struct SkipCueStyle: ButtonStyle {
     // MARK: - Subtitle preference
 
     /// The viewer's legible pick, kept over a recovery reload.
-    private enum LegibleChoice {
+    private enum LegibleChoice: Equatable {
         case off
         case option(Int)
     }
@@ -745,19 +768,55 @@ private struct SkipCueStyle: ButtonStyle {
             switch restoring {
             case .off?:
                 item.select(nil, in: group)
+                lastLegible = .off
                 return
             case .option(let index)?:
-                if group.options.indices.contains(index) { item.select(group.options[index], in: group) }
+                if group.options.indices.contains(index) {
+                    item.select(group.options[index], in: group)
+                    lastLegible = .option(index)
+                }
                 return
             case nil:
                 break
             }
             if case .text(let index)? = playback.subtitlePick, group.options.indices.contains(index) {
                 item.select(group.options[index], in: group)
+                lastLegible = .option(index)
             } else {
                 item.select(nil, in: group)
+                lastLegible = .off
             }
         }
+    }
+
+    /// Remembers a change the app didn't make itself: the viewer's pick in AVKit's menus, or a remote
+    /// command. The app's own selections update `lastAudio`/`lastLegible` beforehand, so they never save.
+    private func selectionDidChange() {
+        guard trackingSelection else { return }
+        let audio = currentAudioTrackIndex()
+        if let audio, let lastAudio, audio != lastAudio { rememberAudio(audio) }
+        if audio != nil { lastAudio = audio }
+        let legible = currentLegibleChoice()
+        if let legible, let lastLegible, legible != lastLegible { rememberSubtitle(legible) }
+        if legible != nil { lastLegible = legible }
+    }
+
+    private func rememberAudio(_ index: Int) {
+        guard let streams = currentFileInfo?.audio, streams.indices.contains(index) else { return }
+        AppSettingsStore.shared.rememberAudio(TrackSelection.rememberedAudioKey(streams[index]), for: mediaId)
+    }
+
+    private func rememberSubtitle(_ choice: LegibleChoice) {
+        let value: String
+        switch choice {
+        case .off:
+            value = "off"
+        case .option(let index):
+            guard let group = legibleGroup, case let tracks = subtitleTracks(in: group), tracks.indices.contains(index)
+            else { return }
+            value = TrackSelection.rememberedSubtitleValue(tracks[index])
+        }
+        AppSettingsStore.shared.rememberSubtitle(value, for: mediaId)
     }
 
     private var currentFileInfo: MediaFileInfo? {
@@ -843,6 +902,7 @@ private struct SkipCueStyle: ButtonStyle {
                 return
             }
             item.select(option, in: group)
+            selectionDidChange()
         case "subtitle":
             guard let group = legibleGroup else {
                 print("remote: no subtitle group loaded yet, dropping \(cmd.cmdId)")
@@ -857,6 +917,7 @@ private struct SkipCueStyle: ButtonStyle {
             } else {
                 item.select(nil, in: group) // nil/absent subtitleId means off
             }
+            selectionDidChange()
         case "quality":
             guard let id = cmd.qualityId, playback.qualityOptions.contains(where: { $0.id == id }) else {
                 print("remote: quality \(cmd.qualityId ?? "nil") not offered (\(cmd.cmdId)), ignoring")

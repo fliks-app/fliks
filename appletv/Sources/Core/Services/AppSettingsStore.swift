@@ -2,8 +2,8 @@ import Foundation
 
 /// Display/Player/Subtitle preferences, persisted in UserDefaults — the
 /// tvOS counterpart of the Angular `DisplaySettingsService` /
-/// `PlayerSettingsService`. Per-media "remembered track" maps and desktop-only
-/// prefs aren't ported here; this covers the settings the plan calls out.
+/// `PlayerSettingsService`. Desktop-only prefs aren't ported here; this covers the
+/// settings the plan calls out, plus the per-media remembered audio/subtitle picks.
 @Observable final class AppSettingsStore {
     static let shared = AppSettingsStore()
 
@@ -49,6 +49,9 @@ import Foundation
     var autoPlayNext: Bool {
         didSet { d.set(autoPlayNext, forKey: Keys.autoPlayNext) }
     }
+    var rememberAudioSelections: Bool {
+        didSet { d.set(rememberAudioSelections, forKey: Keys.rememberAudioSelections) }
+    }
 
     // MARK: Subtitles
 
@@ -58,6 +61,39 @@ import Foundation
     /// "off" | "intelligent" | "always"
     var subtitleMode: String {
         didSet { d.set(subtitleMode, forKey: Keys.subtitleMode) }
+    }
+    var rememberSubtitleSelections: Bool {
+        didSet { d.set(rememberSubtitleSelections, forKey: Keys.rememberSubtitleSelections) }
+    }
+
+    // MARK: Remembered picks
+
+    /// Per-media pick the viewer made (`lang:role:channels[:variant]`), by media id: a series covers its episodes.
+    func rememberedAudio(for mediaId: Int) -> String? {
+        rememberAudioSelections ? selections(Keys.audioSelections)[String(mediaId)] : nil
+    }
+
+    func rememberAudio(_ value: String, for mediaId: Int) {
+        if rememberAudioSelections { store(value, for: mediaId, in: Keys.audioSelections) }
+    }
+
+    /// `lang[:forced][:embedded][:image][:hi][:variant]`, or `off`.
+    func rememberedSubtitle(for mediaId: Int) -> String? {
+        rememberSubtitleSelections ? selections(Keys.subtitleSelections)[String(mediaId)] : nil
+    }
+
+    func rememberSubtitle(_ value: String, for mediaId: Int) {
+        if rememberSubtitleSelections { store(value, for: mediaId, in: Keys.subtitleSelections) }
+    }
+
+    private func selections(_ key: String) -> [String: String] {
+        d.dictionary(forKey: key) as? [String: String] ?? [:]
+    }
+
+    private func store(_ value: String, for mediaId: Int, in key: String) {
+        var map = selections(key)
+        map[String(mediaId)] = value
+        d.set(map, forKey: key)
     }
 
     private init() {
@@ -71,8 +107,10 @@ import Foundation
         playerQualityId = d.string(forKey: Keys.playerQualityId) ?? "auto"
         autoSkipIntro = d.bool(forKey: Keys.autoSkipIntro)
         autoPlayNext = d.object(forKey: Keys.autoPlayNext) as? Bool ?? true
+        rememberAudioSelections = d.object(forKey: Keys.rememberAudioSelections) as? Bool ?? true
         preferredSubtitleLanguage = d.string(forKey: Keys.preferredSubtitleLanguage) ?? ""
         subtitleMode = d.string(forKey: Keys.subtitleMode) ?? "intelligent"
+        rememberSubtitleSelections = d.object(forKey: Keys.rememberSubtitleSelections) as? Bool ?? true
         // 10-foot UI: default to large subtitles, matching the web client's isTv() branch.
     }
 
@@ -89,5 +127,10 @@ import Foundation
         static let autoPlayNext = "settings.autoPlayNext"
         static let preferredSubtitleLanguage = "settings.preferredSubtitleLanguage"
         static let subtitleMode = "settings.subtitleMode"
+        static let rememberAudioSelections = "settings.rememberAudioSelections"
+        static let rememberSubtitleSelections = "settings.rememberSubtitleSelections"
+        // Same names as the web client's localStorage maps.
+        static let audioSelections = "player.audioSelections"
+        static let subtitleSelections = "player.subtitleSelections"
     }
 }
