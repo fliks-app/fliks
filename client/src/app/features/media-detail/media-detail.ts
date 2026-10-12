@@ -1197,7 +1197,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const sn = String(foundSeason!.seasonNumber).padStart(2, '0');
     const en = String(foundEpisode.episodeNumber).padStart(2, '0');
     this.navbarService.enterHeroPage(
-      [m.title, `S${sn}:E${en}`, foundEpisode.title].filter(Boolean).join(' — '),
+      [m.title, `S${sn}:E${en}`, foundEpisode.title].filter(Boolean).join(' - '),
       m.logoUrl,
     );
   }
