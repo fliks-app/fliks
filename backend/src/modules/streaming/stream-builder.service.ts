@@ -60,6 +60,7 @@ import {
   DEFAULT_AUDIO_PLAN,
   ENCODE_SAMPLE_RATE,
   encoderMaxChannels,
+  FMP4_COMPATIBLE_AUDIO,
   isEncodableAudio,
   type AudioEncodeCodec,
   type AudioPlan,
@@ -75,12 +76,6 @@ import {
 import { sourceIsMpegTs } from './transcoding/video-packets';
 import { aacConfigMayChange, type SourceScan } from './transcoding/source-scan';
 import type { KeyframeGrid } from './transcoding/segment-boundaries';
-
-/** Audio codecs that can be copied verbatim into fMP4 segments via MSE.
- *  Anything outside this set is re-encoded to AAC on the remux path even when
- *  the device profile claims support — Chrome rejects e.g. `audio/mp4;
- *  codecs="mp4a.6B"` (MP3) on append. */
-const FMP4_COMPATIBLE_AUDIO = new Set(['aac', 'ac3', 'eac3', 'opus', 'flac']);
 
 /** Above the start offset encoder priming alone reports (AAC ~23 ms, E-AC-3 ~5 ms, Opus ~7 ms). */
 const AUDIO_START_OFFSET_THRESHOLD_SECONDS = 0.05;

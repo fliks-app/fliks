@@ -158,6 +158,40 @@ export function audioOutputBitrateBps(
   );
 }
 
+/** Audio codecs that can be copied verbatim into fMP4 segments via MSE.
+ *  Anything outside this set is re-encoded to AAC on the remux path even when
+ *  the device profile claims support — Chrome rejects e.g. `audio/mp4;
+ *  codecs="mp4a.6B"` (MP3) on append. */
+export const FMP4_COMPATIBLE_AUDIO = new Set([
+  'aac',
+  'ac3',
+  'eac3',
+  'opus',
+  'flac',
+]);
+
+/** Bitrate a source track streams at in an HLS download on a rung of
+ *  `stereoBitrateBps`, without a device profile: copied when its codec rides
+ *  fMP4, else encoded to Dolby for surround or AAC. Lower bound for a device
+ *  that must downmix. */
+export function estimateAudioTrackBitrateBps(
+  track: { codec?: string; channels?: number; bitRate?: number },
+  stereoBitrateBps: number,
+): number {
+  const codec = (track.codec ?? '').toLowerCase();
+  const channels = track.channels ?? 2;
+  const plan: AudioPlan = FMP4_COMPATIBLE_AUDIO.has(codec)
+    ? { mode: 'copy', codec, channels, bitrateBps: track.bitRate }
+    : channels >= 6
+      ? {
+          mode: 'transcode',
+          codec: 'eac3',
+          channels: Math.min(channels, ENCODER_MAX_CHANNELS.eac3),
+        }
+      : { mode: 'transcode', codec: 'aac', channels };
+  return audioOutputBitrateBps(plan, stereoBitrateBps);
+}
+
 /** Encode args for one audio output stream (`spec` `''` or `:<i>`). */
 export function audioEncodeArgs(
   spec: string,
