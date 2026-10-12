@@ -13,7 +13,8 @@ import { SseService } from '../sse.service';
 import type { MediaType } from '../../enums/media-type.enum';
 import type { EdlRange } from '../../utils/edl-policy';
 import type { PreRollItem } from '@fliks/plugin-contract/ui';
-import type { QoeSample } from '../playback-engine';
+import type { QoeSample } from '../playback-engine/playback-engine';
+import type { QoeEvent } from './qoe-api.service';
 
 const SSE_CONNECTION_HEADER = 'X-Fliks-Sse-Connection';
 
@@ -523,6 +524,20 @@ export class StreamingApiService {
     const base = this.serverConfig.isNative
       ? this.serverConfig.resolveUrl(path)
       : path;
+    const token = this.playbackToken;
+    return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+  }
+
+  postQoeEvents(sessionId: string, events: QoeEvent[]) {
+    return firstValueFrom(
+      this.http.post<void>(`/api/playback/sessions/${encodeURIComponent(sessionId)}/events`, { events }),
+    );
+  }
+
+  /** Same token-in-query auth as {@link getStopSessionUrl}, for `fetch(keepalive)` on exit. */
+  getQoeEventsUrl(sessionId: string): string {
+    const path = `/api/playback/sessions/${encodeURIComponent(sessionId)}/events`;
+    const base = this.serverConfig.isNative ? this.serverConfig.resolveUrl(path) : path;
     const token = this.playbackToken;
     return token ? `${base}?token=${encodeURIComponent(token)}` : base;
   }

@@ -2,6 +2,7 @@ import shaka from 'shaka-player';
 import {
   AbstractPlaybackEngine,
   AudioTrack,
+  EngineQoeSample,
   EngineStats,
   PlaybackEngine,
   PlaybackState,
@@ -97,6 +98,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
       // The app's selection is the only authority on subtitles: Shaka would
       // otherwise show a forced track in the audio language on every load.
       accessibility: { handleForcedSubtitlesAutomatically: false },
+      cmcd: { enabled: true, useHeaders: false },
     } as any);
 
     this.installSessionExpiredFilter();
@@ -425,6 +427,35 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
         : undefined,
     };
   }
+
+  override async getQoeSample(): Promise<EngineQoeSample | null> {
+    if (!this.player || !this.video) return null;
+    const stats = this.player.getStats();
+    const track = this.player.getVariantTracks().find((t) => t.active);
+    const { currentTime, buffered } = this.video;
+    let bufferAheadS: number | null = null;
+    for (let i = 0; i < buffered.length; i++) {
+      if (currentTime >= buffered.start(i) && currentTime <= buffered.end(i)) {
+        bufferAheadS = buffered.end(i) - currentTime;
+      }
+    }
+    const num = (n: number | undefined | null) => (Number.isFinite(n) ? (n as number) : null);
+    return {
+      engine: 'shaka',
+      cmcd: true,
+      droppedFrames: num(stats.droppedFrames),
+      decodedFrames: num(stats.decodedFrames),
+      bandwidthBps: num(stats.estimatedBandwidth),
+      bufferAheadS: bufferAheadS ?? 0,
+      variantBitrate: num(track?.bandwidth),
+      width: num(track?.width),
+      height: num(track?.height),
+      videoCodec: track?.videoCodec ?? null,
+      decoderName: null,
+      hwDecoder: null,
+    };
+  }
+
 
   // ─── Internal: bridge native events ────────────────────────────────
 

@@ -17,6 +17,7 @@ const player = vi.hoisted(() => {
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
     getVariantTracks: vi.fn(),
+    getStats: vi.fn(),
     getTextTracks: vi.fn(),
     addTextTrackAsync: vi.fn(),
     load: vi.fn(),
@@ -133,5 +134,46 @@ describe('ShakaEngine.addTextTrack', () => {
     player.getTextTracks.mockReturnValue([rendition(1, 'en')]);
     await expect(engine.addTextTrack('', 'fr', 'Français')).rejects.toThrow();
     expect(player.addTextTrackAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe('ShakaEngine.getQoeSample', () => {
+  it('maps shaka stats, the active variant and the buffer ahead of the playhead', async () => {
+    const container = document.createElement('div');
+    const video = document.createElement('video');
+    container.appendChild(video);
+    Object.defineProperty(video, 'currentTime', { value: 10 });
+    Object.defineProperty(video, 'buffered', {
+      value: { length: 1, start: () => 0, end: () => 14.5 },
+    });
+    const engine = new ShakaEngine();
+    await engine.init(video);
+    player.getStats.mockReturnValue({ droppedFrames: 3, decodedFrames: 900, estimatedBandwidth: 8e6 });
+    player.getVariantTracks.mockReturnValue([
+      { active: false, bandwidth: 1 },
+      { active: true, bandwidth: 5e6, width: 1920, height: 1080, videoCodec: 'hvc1' },
+    ]);
+
+    expect(await engine.getQoeSample()).toEqual({
+      engine: 'shaka',
+      cmcd: true,
+      droppedFrames: 3,
+      decodedFrames: 900,
+      bandwidthBps: 8e6,
+      bufferAheadS: 4.5,
+      variantBitrate: 5e6,
+      width: 1920,
+      height: 1080,
+      videoCodec: 'hvc1',
+      decoderName: null,
+      hwDecoder: null,
+    });
+  });
+
+  it('enables CMCD in query mode', async () => {
+    await initEngine();
+    expect(player.configure).toHaveBeenCalledWith(
+      expect.objectContaining({ cmcd: { enabled: true, useHeaders: false } }),
+    );
   });
 });
