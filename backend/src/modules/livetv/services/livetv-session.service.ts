@@ -1050,16 +1050,9 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
   private armStallWatcher(session: LiveTvSessionEntry): void {
     this.clearWatchers(session);
     try {
-      session.watcher = fs.watch(session.dir, { persistent: false }, (_e, filename) => {
-        const name = filename?.toString() ?? '';
-        if (!name.startsWith('seg-')) return;
-        const now = Date.now();
-        session.lastSegmentAt = now;
-        // fs.watch fires several times per file: only a new name is a new segment.
-        if (!SEGMENT_FILE_RE.test(name) || session.lastNewSegment?.name === name) return;
-        if (session.lastNewSegment) this.recordProduction(session, now - session.lastNewSegment.at);
-        session.lastNewSegment = { name, at: now };
-      });
+      session.watcher = fs.watch(session.dir, { persistent: false }, (_e, filename) =>
+        this.onSegmentFile(session, filename?.toString() ?? ''),
+      );
     } catch {
       /* no directory for direct mode, or briefly absent across a respawn; the interval still catches it */
     }
@@ -1068,6 +1061,16 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
         void this.handleFailure(session);
       }
     }, STALL_CHECK_INTERVAL_MS);
+  }
+
+  private onSegmentFile(session: LiveTvSessionEntry, name: string): void {
+    if (!name.startsWith('seg-')) return;
+    const now = Date.now();
+    session.lastSegmentAt = now;
+    // fs.watch fires several times per file: only a new name is a new segment.
+    if (!SEGMENT_FILE_RE.test(name) || session.lastNewSegment?.name === name) return;
+    if (session.lastNewSegment) this.recordProduction(session, now - session.lastNewSegment.at);
+    session.lastNewSegment = { name, at: now };
   }
 
   private clearWatchers(session: LiveTvSessionEntry): void {

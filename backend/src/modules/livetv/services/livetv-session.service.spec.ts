@@ -2,6 +2,7 @@ import { ConflictException } from '@nestjs/common';
 import { EventEmitter } from 'events';
 import { PassThrough } from 'stream';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import type { User } from '../../users/entities/user.entity';
 import type { LiveTvChannel } from '../entities/livetv-channel.entity';
@@ -35,6 +36,9 @@ function mockProbe(video: string | null, audio = 'aac', container = 'mpegts'): v
     },
   );
 }
+
+// The service wipes its live dir on init: a parallel run must not share it.
+process.env.FLIKS_TRANSCODE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'fliks-live-spec-'));
 
 import { LiveTvSessionService } from './livetv-session.service';
 import { LiveTvCapacityService } from './livetv-capacity.service';
@@ -220,20 +224,22 @@ describe('LiveTvSessionService', () => {
   it('times segment production from each new seg file, once per name', async () => {
     mockSpawnAlwaysSucceeds();
     const { sessionId } = await service.open(makeChannel([makeStream()]), makeUser(1), {});
-    const entry = [...(service as never as { sessions: Map<string, { dir: string }> }).sessions.values()][0];
-    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
-    await wait(100);
-    fs.writeFileSync(path.join(entry.dir, 'seg-00001.m4s'), 'x');
-    await wait(100);
-    fs.appendFileSync(path.join(entry.dir, 'seg-00001.m4s'), 'y');
-    await wait(100);
-    fs.writeFileSync(path.join(entry.dir, 'seg-00002.m4s'), 'x');
-    await wait(100);
-
+    const entry = [...(service as never as { sessions: Map<string, unknown> }).sessions.values()][0];
+    const onFile = (name: string) =>
+      (service as never as { onSegmentFile: (e: unknown, n: string) => void }).onSegmentFile(entry, name);
+    const now = jest.spyOn(Date, 'now');
+    try {
+      now.mockReturnValue(10_000);
+      onFile('seg-00001.m4s');
+      now.mockReturnValue(12_000);
+      onFile('seg-00001.m4s');
+      onFile('seg-00002.m4s');
+      onFile('index.m3u8');
+    } finally {
+      now.mockRestore();
+    }
     const calls = qoe.recordProduction.mock.calls.filter((c) => c[0].sessionId === sessionId);
-    // seg-00000 -> 00001 -> 00002: two intervals, however often fs.watch fired.
-    expect(calls).toHaveLength(2);
-    expect(calls[0][1]).toBeGreaterThan(0);
+    expect(calls.map((c) => c[2])).toEqual([2_000]);
   });
 
   it('reads CMCD only for a known viewer', async () => {
