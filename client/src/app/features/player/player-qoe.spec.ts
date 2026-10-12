@@ -66,6 +66,7 @@ describe('PlayerQoe', () => {
       's',
       { type: 'stall', at: 3500, position: 12, durationMs: 2500, bufferAheadS: 0.4, bandwidthBps: 9 },
       false,
+      expect.any(String),
     );
   });
 
@@ -101,6 +102,7 @@ describe('PlayerQoe', () => {
       'a',
       expect.objectContaining({ type: 'stall', durationMs: 3000 }),
       false,
+      expect.any(String),
     );
     expect(qoe.current('b')).toBeNull();
   });
@@ -116,12 +118,55 @@ describe('PlayerQoe', () => {
     expect(qoe.current('b')).toBeNull();
   });
 
+  it('counts every freeze of a throttled run, whichever signal opens it', async () => {
+    await qoe.refresh(engine(async () => raw));
+    const ctx = { sessionId: 's', position: 191 };
+    now = 1000;
+    qoe.setStalled(true, ctx); // engine buffering
+    now = 1400;
+    qoe.setStalled(true, { ...ctx, since: 1200 }); // frozen detector on the same episode
+    now = 2000;
+    qoe.setStalled(false, ctx);
+    now = 5000;
+    qoe.setStalled(true, { ...ctx, since: 4000 }); // frozen, no engine event
+    now = 6000;
+    qoe.setStalled(false, ctx);
+    now = 8000;
+    qoe.setStalled(true, ctx);
+    now = 8500;
+    expect(qoe.current('s')).toMatchObject({ stallCount: 3 });
+    now = 9000;
+    qoe.setStalled(false, ctx);
+    const stalls = reporter.record.mock.calls.filter((c) => c[1].type === 'stall');
+    expect(stalls.map((c) => c[1].durationMs)).toEqual([1000, 2000, 1000]);
+  });
+
+  it('keeps the playbackId across sid changes and renews it on reset', async () => {
+    await qoe.refresh(engine(async () => raw));
+    const id = qoe.playbackId;
+    expect(qoe.current('a')?.playbackId).toBe(id);
+    qoe.onRecovery('b', 1);
+    expect(qoe.playbackId).toBe(id);
+    qoe.onError('b', 1, { code: 1 });
+    expect(reporter.record).toHaveBeenLastCalledWith('b', expect.anything(), true, id);
+    qoe.reset();
+    expect(qoe.playbackId).not.toBe(id);
+  });
+
+  it('sends no sample while the engine measured nothing', async () => {
+    await qoe.refresh(
+      engine(async () => ({ engine: 'shaka', cmcd: true, bufferAheadS: null, bandwidthBps: null })),
+    );
+    expect(qoe.current('s')).toBeNull();
+  });
+
   it('flushes errors immediately', () => {
     qoe.onError('s', 4, { code: 3016, category: 'shaka' });
     expect(reporter.record).toHaveBeenCalledWith(
       's',
       expect.objectContaining({ type: 'error', code: 3016, category: 'shaka' }),
       true,
+      expect.any(String),
     );
   });
 

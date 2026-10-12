@@ -2,6 +2,8 @@ import { Injectable, computed, effect, inject, signal, untracked } from '@angula
 import { TranslateService } from '@ngx-translate/core';
 import { CastService } from './cast.service';
 import type { QoeSample } from './playback-engine';
+import { hasQoeData } from './playback-engine/playback-engine';
+import { newPlaybackId } from './qoe-reporter.service';
 import { CastSettingsService } from './cast-settings.service';
 import { StreamingApiService, type PlayMethod } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
@@ -373,12 +375,15 @@ export class CastPlayerService {
    *  this id, so the sender heartbeats it instead of its local sid while
    *  the cast is connected. */
   readonly liveSessionId = signal<string | null>(null);
+  /** The viewing being cast; kept from the local player that handed it over. */
+  private playbackId: string | null = null;
 
   /**
    * Initialize a Cast session with media data from the player.
    * Called by the PlayerComponent when Cast is active on init or toggled on.
    */
   startCast(opts: {
+    playbackId?: string;
     mediaFileId: number;
     mediaId: number;
     episodeId?: number;
@@ -393,6 +398,7 @@ export class CastPlayerService {
     activeSubtitleId: string | null;
     activeAudioStreamIndex: number | undefined;
   }) {
+    this.playbackId = opts.playbackId ?? newPlaybackId();
     this.mediaFileId.set(opts.mediaFileId);
     this.mediaId.set(opts.mediaId);
     this.episodeId.set(opts.episodeId);
@@ -795,7 +801,8 @@ export class CastPlayerService {
   /** Receiver's latest QoE sample for the heartbeat; null when stale or the sender can't receive it. */
   qoeSample(): QoeSample | null {
     const q = this.cast.receiverQoe();
-    return q && Date.now() - q.receivedAt < QOE_STALE_MS ? q.sample : null;
+    if (!q || Date.now() - q.receivedAt >= QOE_STALE_MS || !hasQoeData(q.sample)) return null;
+    return this.playbackId ? { ...q.sample, playbackId: this.playbackId } : q.sample;
   }
 
   private startPositionSaving() {

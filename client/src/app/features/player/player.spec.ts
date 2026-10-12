@@ -2909,4 +2909,42 @@ describe('PlayerComponent stall counting', () => {
     c.trackStall(true);
     expect(spy).toHaveBeenLastCalledWith(true, expect.objectContaining({ ignored: true }));
   });
+
+  it('flags a frozen playhead without any buffering event', () => {
+    const h = createHarness();
+    const c = h.component as any;
+    h.state.loading.set(false);
+    h.state.paused.set(false);
+    h.state.videoStarted.set(true);
+    h.engine.currentTime = 191;
+    h.engine.duration = 3600;
+    const spy = vi.spyOn(Date, 'now');
+    spy.mockReturnValue(10_000);
+    c.watchPlayhead();
+    spy.mockReturnValue(11_000);
+    c.watchPlayhead();
+    expect(c.frozenSince()).toBe(0);
+    spy.mockReturnValue(12_000);
+    c.watchPlayhead();
+    expect(c.frozenSince()).toBe(10_000);
+    h.engine.currentTime = 191.5;
+    spy.mockReturnValue(13_000);
+    c.watchPlayhead();
+    expect(c.frozenSince()).toBe(0);
+    spy.mockRestore();
+  });
+
+  it('does not flag a paused playhead', () => {
+    const h = createHarness();
+    const c = h.component as any;
+    h.state.loading.set(false);
+    h.state.paused.set(true);
+    h.state.videoStarted.set(true);
+    for (let t = 1000; t <= 5000; t += 1000) {
+      vi.spyOn(Date, 'now').mockReturnValue(t);
+      c.watchPlayhead();
+    }
+    expect(c.frozenSince()).toBe(0);
+    vi.restoreAllMocks();
+  });
 });

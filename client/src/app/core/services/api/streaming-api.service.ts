@@ -528,9 +528,9 @@ export class StreamingApiService {
     return token ? `${base}?token=${encodeURIComponent(token)}` : base;
   }
 
-  postQoeEvents(sessionId: string, events: QoeEvent[]) {
+  postQoeEvents(sessionId: string, events: QoeEvent[], playbackId?: string) {
     return firstValueFrom(
-      this.http.post<void>(`/api/playback/sessions/${encodeURIComponent(sessionId)}/events`, { events }),
+      this.http.post<void>(`/api/playback/sessions/${encodeURIComponent(sessionId)}/events`, { events, playbackId }),
     );
   }
 

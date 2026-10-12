@@ -189,6 +189,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
   async load(url: string, startTime?: number, mimeType?: string, _headers?: Record<string, string>): Promise<void> {
     if (!this.player) throw new Error('ShakaEngine not initialised');
     this.resetFirstFrame();
+    this.shakaBuffering = false;
     this.sessionExpiredInFlight = false;
     this.sideloadedTextTracks.clear();
     await this.player.load(url, startTime, mimeType);
@@ -495,10 +496,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     });
 
     // State transitions
-    this.addVideoListener('play', () => {
-      this.bufferingEmitted = false;
-      this.emit('stateChanged', { state: 'playing' });
-    });
+    this.addVideoListener('play', () => this.emitPlayingUnlessStarved());
 
     this.addVideoListener('pause', () => {
       this.bufferingEmitted = false;
@@ -516,8 +514,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     });
 
     this.addVideoListener('playing', () => {
-      this.bufferingEmitted = false;
-      this.emit('stateChanged', { state: 'playing' });
+      this.emitPlayingUnlessStarved();
       // Emit firstFrame ONCE, gated on requestVideoFrameCallback so it
       // fires only after a frame has actually been presented to the
       // compositor (the DOM 'playing' event can precede the first paint).
@@ -531,10 +528,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
     this.addVideoListener('canplay', () => {
       // Resolve buffering state when enough data is available
-      if (!video.paused) {
-        this.bufferingEmitted = false;
-        this.emit('stateChanged', { state: 'playing' });
-      }
+      if (!video.paused) this.emitPlayingUnlessStarved();
     });
 
     this.addVideoListener('ended', () => {
@@ -586,6 +580,17 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
   }
 
   private bufferingEmitted = false;
+  private shakaBuffering = false;
+
+  /** Shaka fires `buffering` once per episode, so DOM events must not clear the flag while it is open. */
+  private emitPlayingUnlessStarved(): void {
+    if (this.shakaBuffering && this.video && !this.video.paused) {
+      this.emitBuffering();
+      return;
+    }
+    this.bufferingEmitted = false;
+    this.emit('stateChanged', { state: 'playing' });
+  }
 
   private emitBuffering(): void {
     if (this.bufferingEmitted) return;
@@ -597,6 +602,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     // Shaka holds playback at its rebuffering goal without a DOM waiting/stalled event.
     this.addShakaListener('buffering', (e: any) => {
       const video = this.video;
+      this.shakaBuffering = !!e.buffering;
       if (!video || video.ended) return;
       if (e.buffering) {
         if (!video.paused) this.emitBuffering();

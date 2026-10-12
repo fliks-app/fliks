@@ -1739,6 +1739,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const now = Date.now();
     if (now - this.lastTogglePlayAt < this.togglePlayCoalesceMs) return;
     this.lastTogglePlayAt = now;
+    if (this.state.ended()) this.qoe.reset();
     // Like a natural end, play after an EDL end replays from the start.
     if (this.edlEnded && this.state.ended()) {
       this.edlEnded = false;
@@ -2704,11 +2705,45 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Buffering after the first frame that no seek, load or quality switch explains. */
   private readonly qoeStallEffect = effect(() => {
-    const stalled = this.state.buffering() && this.state.videoStarted();
-    untracked(() => this.trackStall(stalled));
+    const frozenSince = this.frozenSince();
+    const stalled = (this.state.buffering() && this.state.videoStarted()) || frozenSince > 0;
+    untracked(() => this.trackStall(stalled, frozenSince || undefined));
   });
 
-  private trackStall(stalled: boolean): void {
+  /** Playhead frozen while it should advance, even when the engine never said `buffering`. */
+  private readonly frozenSince = signal(0);
+  private lastTickPos = -1;
+  private lastAdvanceAt = 0;
+  private lastWatchAt = 0;
+
+  private watchPlayhead(): void {
+    const now = Date.now();
+    const pos = this.engine?.currentTime ?? 0;
+    const dur = this.engine?.duration ?? 0;
+    const active =
+      !!this.engine &&
+      !this.paused() &&
+      !this.uiPaused() &&
+      this.state.videoStarted() &&
+      !this.state.loading() &&
+      !this.state.seekLocked() &&
+      !this.state.ended() &&
+      !this.state.error() &&
+      !this.castService.isConnected() &&
+      !(typeof document !== 'undefined' && document.hidden) &&
+      !(dur && pos >= dur - 0.5) &&
+      now - this.lastWatchAt < 3_000;
+    this.lastWatchAt = now;
+    if (!active || Math.abs(pos - this.lastTickPos) >= 0.05) {
+      this.lastAdvanceAt = now;
+      this.frozenSince.set(0);
+    } else if (now - this.lastAdvanceAt >= 1_500) {
+      this.frozenSince.set(this.lastAdvanceAt);
+    }
+    this.lastTickPos = pos;
+  }
+
+  private trackStall(stalled: boolean, since?: number): void {
     const ignored =
       this.state.seekLocked() ||
       this.reloadingStream ||
@@ -2723,6 +2758,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       sessionId: this.activeSessionId(),
       position,
       ignored,
+      since,
     });
   }
 
@@ -2922,6 +2958,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       activeQualityId: activeCastQualityId,
       activeSubtitleId: subtitleId,
       activeAudioStreamIndex: this.activeAudioStreamIndex,
+      playbackId: this.qoe.playbackId,
     });
     await this.castPlayerService.reloadCastStream(position);
     // Stopped only now: the cast's own sid shares the negotiation's ffmpeg job and keeps it alive.
@@ -3289,6 +3326,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.lastTickAt = Date.now();
     this.statsInterval = setInterval(() => {
       this.tickClockWatch();
+      this.watchPlayhead();
       this.checkStall();
       if (++this.qoeTick % 5 === 0 && this.engine && !this.castService.isConnected()) {
         void this.qoe.refresh(this.engine, this.activeSessionId());

@@ -85,6 +85,16 @@ export interface QoeSample extends EngineQoeSample {
   stallCount: number;
   stallMs: number;
   recoveryReloads: number;
+  /** One viewing, stable across sid changes; set by the player. */
+  playbackId?: string;
+}
+
+/** False when the engine measured nothing yet: such a sample is not worth a `qoe` block. */
+export function hasQoeData(s: EngineQoeSample): boolean {
+  return [
+    s.droppedFrames, s.decodedFrames, s.bandwidthBps, s.bufferAheadS, s.variantBitrate,
+    s.width, s.height, s.videoCodec, s.decoderName, s.hwDecoder,
+  ].some((v) => v != null);
 }
 
 export type EngineEventMap = {

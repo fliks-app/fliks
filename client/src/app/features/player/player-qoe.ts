@@ -1,6 +1,6 @@
-import type { EngineQoeSample, PlaybackEngine, QoeSample } from '../../core/services/playback-engine/playback-engine';
+import { hasQoeData, type EngineQoeSample, type PlaybackEngine, type QoeSample } from '../../core/services/playback-engine/playback-engine';
 import type { QoeEvent } from '../../core/services/api/qoe-api.service';
-import type { QoeReporter } from '../../core/services/qoe-reporter.service';
+import { newPlaybackId, type QoeReporter } from '../../core/services/qoe-reporter.service';
 
 /** Buffering blips shorter than this are decoder hiccups, not a stall the viewer saw. */
 export const MIN_STALL_MS = 250;
@@ -52,6 +52,8 @@ export class PlayerQoe {
   private refreshing = false;
   private generation = 0;
   private sid: string | undefined;
+  /** One per viewing: survives sid changes, renewed by {@link reset}. */
+  playbackId = newPlaybackId();
 
   constructor(
     private readonly reporter: QoeReporter,
@@ -64,6 +66,7 @@ export class PlayerQoe {
     this.recoveryReloads = 0;
     this.last = null;
     this.sid = undefined;
+    this.playbackId = newPlaybackId();
     this.generation++;
   }
 
@@ -82,10 +85,10 @@ export class PlayerQoe {
 
   setStalled(
     stalled: boolean,
-    ctx: { sessionId?: string; position: number; ignored?: boolean; bufferAheadS?: number | null },
+    ctx: { sessionId?: string; position: number; ignored?: boolean; bufferAheadS?: number | null; since?: number },
   ): void {
     if (stalled) {
-      this.stalls.begin(this.now(), ctx.position, !!ctx.ignored, ctx.bufferAheadS ?? null);
+      this.stalls.begin(ctx.since ?? this.now(), ctx.position, !!ctx.ignored, ctx.bufferAheadS ?? null);
       return;
     }
     this.closeStall(ctx.sessionId);
@@ -153,8 +156,13 @@ export class PlayerQoe {
   /** Last engine sample plus our live counters; null until the engine has answered. */
   current(sessionId?: string): QoeSample | null {
     this.bind(sessionId);
-    if (!this.last) return null;
-    return { ...this.last, ...this.stalls.snapshot(this.now()), recoveryReloads: this.recoveryReloads };
+    if (!this.last || !hasQoeData(this.last)) return null;
+    return {
+      ...this.last,
+      ...this.stalls.snapshot(this.now()),
+      recoveryReloads: this.recoveryReloads,
+      playbackId: this.playbackId,
+    };
   }
 
   flush(sessionId: string | undefined): void {
@@ -166,6 +174,6 @@ export class PlayerQoe {
   }
 
   private record(sessionId: string, e: Omit<QoeEvent, 'at'>, immediate = false): void {
-    this.reporter.record(sessionId, { ...e, at: this.now() }, immediate);
+    this.reporter.record(sessionId, { ...e, at: this.now() }, immediate, this.playbackId);
   }
 }
