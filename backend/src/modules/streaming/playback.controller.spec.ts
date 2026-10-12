@@ -193,7 +193,7 @@ describe('PlaybackController.updateState: qoe bitrate fallback', () => {
   async function beat(session: Record<string, unknown>, qoe: object = sample) {
     const { controller } = buildController({ heartbeat: () => session });
     const recordSample = jest.fn();
-    (controller as unknown as { qoe: unknown }).qoe = { recordSample };
+    (controller as unknown as { qoe: unknown }).qoe = { recordSample, updatePipelineOutput: jest.fn() };
     await controller.updateState(req, 3, {
       positionSeconds: 1,
       durationSeconds: 60,

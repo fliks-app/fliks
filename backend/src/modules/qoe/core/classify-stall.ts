@@ -39,6 +39,21 @@ function serverHit(segments: StallSegment[], lo: number, hi: number, live: boole
     : null;
 }
 
+/** Facts that make a slow transcode plausible; they never change the decision. */
+function serverHints(ctx: StallContext, evidence: Record<string, number>): string[] {
+  const p = ctx.pipeline;
+  const hints: string[] = [];
+  if (p?.encode && !p.encode.hw) hints.push('software_encode');
+  if (p?.burnIn) hints.push('burn_in');
+  if (p?.tonemap === 'cpu') hints.push('cpu_tonemap');
+  const busy = ctx.load?.activeTranscodes ?? 0;
+  if (busy >= 2) {
+    hints.push('busy');
+    evidence.activeTranscodes = busy;
+  }
+  return hints.map((h) => `qoe.stall.hint_${h}`);
+}
+
 function droppedBurst(start: number, ctx: StallContext): number | null {
   const before = [...ctx.samples].reverse().find((s) => s.at <= start);
   const after = ctx.samples[ctx.samples.length - 1];
@@ -73,6 +88,7 @@ export function classifyStall(
     confidence,
     reason: `qoe.stall.${reason}`,
     evidence,
+    hints: [],
   });
 
   const strict = serverHit(ctx.segments, start, stall.at, !!ctx.live);
@@ -82,7 +98,9 @@ export function classifyStall(
   const server = strict ?? wide;
   if (server) {
     Object.assign(evidence, server);
-    return out('server', strict ? 'high' : 'low', 'server_wait');
+    const r = out('server', strict ? 'high' : 'low', 'server_wait');
+    r.hints = serverHints(ctx, evidence);
+    return r;
   }
 
   const starved = buffer != null && buffer < STARVED_S;

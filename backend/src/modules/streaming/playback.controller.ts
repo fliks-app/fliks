@@ -279,6 +279,7 @@ export class PlaybackController {
         if (sample) {
           sample.variantBitrate ??= servedRungBitrate(updated);
           this.qoe.recordSample(updated, sample);
+          this.qoe.updatePipelineOutput(updated, updated.quality, servedRungBitrate(updated));
         }
       }
 

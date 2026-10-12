@@ -38,6 +38,7 @@ import { PlaylistsModule } from '../playlists/playlists.module';
 import { PluginsModule } from '../plugins/plugins.module';
 import { SubtitlesModule } from '../subtitles/subtitles.module';
 import { QoeModule } from '../qoe/qoe.module';
+import { QoeLoadProvider } from './qoe-load.provider';
 
 @Module({
   imports: [
@@ -82,6 +83,7 @@ import { QoeModule } from '../qoe/qoe.module';
     SourceScanService,
     StaleProbeRescanService,
     ScanBackfillService,
+    QoeLoadProvider,
   ],
   exports: [
     SourceScanService,

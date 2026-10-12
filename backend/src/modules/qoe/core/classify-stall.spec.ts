@@ -29,6 +29,33 @@ describe('classifyStall', () => {
     expect(r.evidence.transcodeSpeed).toBeCloseTo(6000 / 3200);
   });
 
+  it('server: pipeline and load facts are hints, not a decision', () => {
+    const pipeline = {
+      source: null,
+      output: null,
+      decode: null,
+      encode: { hw: false, kind: 'cpu' },
+      tonemap: 'cpu',
+      burnIn: 'text' as const,
+      crop: null,
+      audioTranscode: null,
+    };
+    const load = { activeTranscodes: 3, activeSessions: 4, loadAvg1: 8, cpuCount: 4 };
+    const segments = [seg(AT - 2_000, 3_200)];
+    const r = classifyStall(stall, ctx({ segments, pipeline, load }));
+    expect(r.cause).toBe('server');
+    expect(r.hints).toEqual([
+      'qoe.stall.hint_software_encode',
+      'qoe.stall.hint_burn_in',
+      'qoe.stall.hint_cpu_tonemap',
+      'qoe.stall.hint_busy',
+    ]);
+    expect(r.evidence.activeTranscodes).toBe(3);
+    const calm = classifyStall(stall, ctx({ segments, load: { ...load, activeTranscodes: 1 } }));
+    expect(calm.hints).toEqual([]);
+    expect(classifyStall(stall, ctx({ pipeline, load })).hints).toEqual([]);
+  });
+
   it('server wins over a starved buffer with low throughput', () => {
     const r = classifyStall(
       { ...stall, bufferAheadS: 0.2, bandwidthBps: 1e6, variantBitrate: 5e6 },

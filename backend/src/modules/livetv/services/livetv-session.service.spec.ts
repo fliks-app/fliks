@@ -105,7 +105,7 @@ describe('LiveTvSessionService', () => {
   let settings: { get: jest.Mock };
   let activity: { upsertRunning: jest.Mock; remove: jest.Mock };
   let transcoding: { getDetectedHwAccel: jest.Mock };
-  let qoe: { register: jest.Mock; sessionEnded: jest.Mock; observeSegment: jest.Mock; recordProduction: jest.Mock };
+  let qoe: { register: jest.Mock; sessionEnded: jest.Mock; observeSegment: jest.Mock; recordProduction: jest.Mock; setPipeline: jest.Mock };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -124,7 +124,7 @@ describe('LiveTvSessionService', () => {
     settings = { get: jest.fn().mockResolvedValue(null) };
     activity = { upsertRunning: jest.fn(), remove: jest.fn() };
     transcoding = { getDetectedHwAccel: jest.fn().mockReturnValue('none') };
-    qoe = { register: jest.fn(), sessionEnded: jest.fn(), observeSegment: jest.fn(), recordProduction: jest.fn() };
+    qoe = { register: jest.fn(), sessionEnded: jest.fn(), observeSegment: jest.fn(), recordProduction: jest.fn(), setPipeline: jest.fn() };
     service = new LiveTvSessionService(
       channelRepo as never,
       streamRepo as never,
@@ -183,6 +183,10 @@ describe('LiveTvSessionService', () => {
       deviceLabel: 'UA',
     });
     expect(qoe.register).toHaveBeenCalledWith(expect.objectContaining({ sessionId }));
+    expect(qoe.setPipeline).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId }),
+      expect.objectContaining({ source: expect.objectContaining({ codec: expect.anything() }), crop: null }),
+    );
 
     await service.leave(sessionId);
     expect(qoe.sessionEnded).toHaveBeenCalledWith(expect.objectContaining({ sessionId }));

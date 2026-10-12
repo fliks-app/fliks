@@ -55,6 +55,48 @@ export interface StallClassification {
   /** i18n key, `qoe.stall.*`. */
   reason: string;
   evidence: Record<string, number>;
+  /** i18n keys, `qoe.stall.hint_*`: pipeline or load facts that make a server cause plausible. */
+  hints: string[];
+}
+
+/** One stage of the stream pipeline: where it runs and, for the encoder, which one. */
+export interface PipelineStage {
+  hw: boolean;
+  /** qsv, vaapi, nvenc, amf, videotoolbox or cpu. */
+  kind: string;
+  name?: string | null;
+}
+
+/** What the server does to the stream of one session; constant unless the rung changes. */
+export interface QoePipeline {
+  source: {
+    codec: string | null;
+    width: number | null;
+    height: number | null;
+    hdr: 'HDR10' | 'HLG' | 'DV' | null;
+  } | null;
+  /** Null when the stream is not re-encoded. */
+  output: {
+    codec: string | null;
+    hdr: 'HDR10' | 'HLG' | null;
+    quality: string | null;
+    bitrate: number | null;
+  } | null;
+  decode: PipelineStage | null;
+  encode: PipelineStage | null;
+  /** opencl, vaapi, qsv, vulkan, cuda, videotoolbox or cpu; null when off. */
+  tonemap: string | null;
+  burnIn: 'text' | 'image' | null;
+  crop: boolean | null;
+  audioTranscode: boolean | null;
+}
+
+/** Server load at the moment a stall was recorded. */
+export interface ServerLoad {
+  activeTranscodes: number;
+  activeSessions: number;
+  loadAvg1: number;
+  cpuCount: number;
 }
 
 /** What the server adds to a stall event's data once it has classified it. */
@@ -63,6 +105,8 @@ export interface StallCauseData {
   causeConfidence: 'high' | 'low';
   causeReason: string;
   causeEvidence: Record<string, number>;
+  causeHints: string[];
+  serverLoad: ServerLoad | null;
 }
 
 /** A served segment with the server time it finished waiting. */
@@ -83,6 +127,8 @@ export interface StallSample {
 export interface StallContext {
   /** Live TV: segment timing is production pacing, judged by speed only. */
   live?: boolean;
+  pipeline?: QoePipeline | null;
+  load?: ServerLoad | null;
   segments: StallSegment[];
   samples: StallSample[];
   /** Fresh sample or CMCD buffer. */

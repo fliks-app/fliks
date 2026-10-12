@@ -45,6 +45,8 @@ export class CreatePlaybackQoe1786300000000 implements MigrationInterface {
         "cmcdThroughputBps" double precision,
         "unrecoveredError" boolean NOT NULL DEFAULT false,
         "sampleCount" integer NOT NULL DEFAULT 0,
+        "stallCauseMs" jsonb,
+        "pipeline" jsonb,
         "verdict" character varying NOT NULL DEFAULT 'unknown',
         "confidence" character varying NOT NULL DEFAULT 'low',
         "reasons" jsonb NOT NULL DEFAULT '[]',

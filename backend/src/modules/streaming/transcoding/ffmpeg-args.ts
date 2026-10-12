@@ -655,6 +655,53 @@ function buildAudioAndMuxerArgs(opts: {
   return args;
 }
 
+/** The decoder a session runs: how the source is brought into memory. Shared by the spawn and
+ *  the QoE pipeline report so neither can name a decoder the other does not use. */
+export function pickDecoder(opts: {
+  sourceVideoCodec: string | undefined;
+  qsvNative: boolean;
+  amfOpenclAvailable: boolean;
+  effectiveHwAccel: HwAccelType;
+  decodeHwAccel: HwAccelType;
+  sourceBitDepth: BitDepth;
+}): ReturnType<typeof decoderRegistry.resolve> {
+  const {
+    sourceVideoCodec,
+    qsvNative,
+    amfOpenclAvailable,
+    effectiveHwAccel,
+    decodeHwAccel,
+    sourceBitDepth,
+  } = opts;
+  const normalisedSourceCodec = normaliseSourceCodec(sourceVideoCodec);
+  const amfOpenclDecode = amfOpenclAvailable && effectiveHwAccel === 'amf';
+  // Opt into the qsv-native decode routing when the qsv crop path is in use
+  // (pre-flighted above so requestedHwAccelFor could keep us on QSV).
+  return (
+    qsvNative && normalisedSourceCodec
+      ? (findQsvNativeDecoder(normalisedSourceCodec) ??
+        decoderRegistry.resolve(
+          {
+            codec: normalisedSourceCodec,
+            bitDepth: sourceBitDepth,
+          },
+          effectiveHwAccel,
+        ))
+      : amfOpenclDecode && normalisedSourceCodec
+        ? // D3D11-native decode, pinned to the AMD adapter: scale_opencl/
+          // tonemap_opencl and the AMF encode share the device, no CPU round-trip.
+          findAmfNativeDecoder(normalisedSourceCodec)
+        : decoderRegistry.resolve(
+            {
+              codec: normalisedSourceCodec ?? 'h264',
+              bitDepth: sourceBitDepth,
+            },
+            // A reported codec with no hw decoder here (vp9, mpeg2video) decodes on the
+            // CPU; an unreported one keeps the h264 assumption.
+            sourceVideoCodec && !normalisedSourceCodec ? 'none' : decodeHwAccel,
+          ));
+}
+
 /**
  * Decode stage: resolve the decoder (how the source is brought into memory —
  * HW device init + `-hwaccel`) via the registry, then emit the matching input
@@ -703,35 +750,15 @@ function resolveDecodeStage(opts: {
   } = opts;
   const args: string[] = [];
 
-  const normalisedSourceCodec = normaliseSourceCodec(sourceVideoCodec);
-  // amfOpenclDecode computed once: reused below for the decoder pick and to
-  // skip the duplicate `ocl` init when the decoder already owns that device.
   const amfOpenclDecode = amfOpenclAvailable && effectiveHwAccel === 'amf';
-  // Opt into the qsv-native decode routing when the qsv crop path is in use
-  // (pre-flighted above so requestedHwAccelFor could keep us on QSV).
-  const decoder: ReturnType<typeof decoderRegistry.resolve> =
-    qsvNative && normalisedSourceCodec
-      ? (findQsvNativeDecoder(normalisedSourceCodec) ??
-        decoderRegistry.resolve(
-          {
-            codec: normalisedSourceCodec,
-            bitDepth: sourceBitDepth,
-          },
-          effectiveHwAccel,
-        ))
-      : amfOpenclDecode && normalisedSourceCodec
-        ? // D3D11-native decode, pinned to the AMD adapter: scale_opencl/
-          // tonemap_opencl and the AMF encode share the device, no CPU round-trip.
-          findAmfNativeDecoder(normalisedSourceCodec)
-        : decoderRegistry.resolve(
-            {
-              codec: normalisedSourceCodec ?? 'h264',
-              bitDepth: sourceBitDepth,
-            },
-            // A reported codec with no hw decoder here (vp9, mpeg2video) decodes on the
-            // CPU; an unreported one keeps the h264 assumption.
-            sourceVideoCodec && !normalisedSourceCodec ? 'none' : decodeHwAccel,
-          );
+  const decoder = pickDecoder({
+    sourceVideoCodec,
+    qsvNative,
+    amfOpenclAvailable,
+    effectiveHwAccel,
+    decodeHwAccel,
+    sourceBitDepth,
+  });
   // The AMF descriptor's own buildInputArgs already pins the adapter and
   // inits the OpenCL device (see d3d11va.ts); nothing more to add here.
   args.push(...decoder.buildInputArgs());

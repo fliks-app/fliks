@@ -10,6 +10,8 @@ import type {
   StallClassification,
   StallSample,
   StallSegment,
+  QoePipeline,
+  ServerLoad,
 } from './types';
 
 /** Longest gap between two samples still counted as watched time (3 missed beats). */
@@ -97,6 +99,7 @@ export class QoeAggregator {
   private cmcdBandwidth: number | null = null;
   private causeMs: Record<StallCause, number> | null = null;
   private last: StallLast | null = null;
+  private pipelineInfo: QoePipeline | null = null;
   private errorCount = 0;
   private lastErrorAt: number | null = null;
   private lastRecoveryAt: number | null = null;
@@ -145,7 +148,11 @@ export class QoeAggregator {
   }
 
   /** A stall comes back classified from what the server knows right now. */
-  addEvent(e: QoeEvent, now: number, live = false): StallClassification | null {
+  addEvent(
+    e: QoeEvent,
+    now: number,
+    opts: { live?: boolean; load?: ServerLoad | null } = {},
+  ): StallClassification | null {
     let classified: StallClassification | null = null;
     if (e.type === 'stall') {
       this.stallEvents++;
@@ -158,7 +165,9 @@ export class QoeAggregator {
       if (buffer != null) push(this.stallBuffers, buffer);
       if (e.bandwidthBps != null) push(this.stallBandwidths, e.bandwidthBps);
       classified = classifyStall(e, {
-        live,
+        live: opts.live,
+        load: opts.load,
+        pipeline: this.pipelineInfo,
         segments: this.segments,
         samples: this.samples,
         bufferAheadS: buffer,
@@ -180,6 +189,14 @@ export class QoeAggregator {
       this.lastRecoveryAt = now;
     }
     return classified;
+  }
+
+  setPipeline(p: QoePipeline | null): void {
+    this.pipelineInfo = p;
+  }
+
+  get pipeline(): QoePipeline | null {
+    return this.pipelineInfo;
   }
 
   get lastStall(): StallLast | null {

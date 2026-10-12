@@ -209,6 +209,37 @@ describe('QoeService', () => {
     });
   });
 
+  it('stores the pipeline, follows a rung change and snapshots the server load on a stall', async () => {
+    const { svc, upsert, insert } = build();
+    svc.setLoadProbe(() => ({ activeTranscodes: 2, activeSessions: 5 }));
+    const pipeline = {
+      source: null,
+      output: { codec: 'h264', hdr: null, quality: '1080p', bitrate: 8e6 },
+      decode: null,
+      encode: { hw: false, kind: 'cpu' },
+      tonemap: null,
+      burnIn: null,
+      crop: null,
+      audioTranscode: null,
+    };
+    svc.setPipeline(session, pipeline);
+    svc.recordSample(session, sample);
+    svc.updatePipelineOutput(session, '720p', 3e6);
+    svc.recordEvents(session, [{ type: 'stall', at: Date.now(), position: 1, durationMs: 2_000 }]);
+    svc.sessionEnded(session);
+    await new Promise((r) => setImmediate(r));
+    expect(upsert.mock.calls[0][0].pipeline).toMatchObject({
+      output: { quality: '720p', bitrate: 3e6 },
+      encode: { hw: false, kind: 'cpu' },
+    });
+    expect(insert.mock.calls[0][0][0].data.serverLoad).toEqual({
+      activeTranscodes: 2,
+      activeSessions: 5,
+      loadAvg1: expect.any(Number),
+      cpuCount: expect.any(Number),
+    });
+  });
+
   it('requeues events when a flush fails and retries them', async () => {
     const { svc, upsert, insert } = build();
     upsert.mockRejectedValueOnce(new Error('db down'));

@@ -16,6 +16,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { TRANSCODE_DIR } from '../../../common/constants/paths';
 import { TranscodingService } from '../../streaming/transcoding';
+import type { QoePipeline } from '../../qoe/core/types';
 import { QoeService, type SessionRef } from '../../qoe/qoe.service';
 import { StreamLifetime } from '../../streaming/lifetime-constants';
 import { LiveTvCapacityService } from './livetv-capacity.service';
@@ -24,7 +25,11 @@ import { LiveTvChannelStream } from '../entities/livetv-channel-stream.entity';
 import { User } from '../../users/entities/user.entity';
 import { SettingsService } from '../../settings/settings.service';
 import { ActivityRegistryService } from '../../scheduler/activity-registry.service';
-import { buildLiveFfmpegArgs } from './live-ffmpeg-args';
+import {
+  buildLiveFfmpegArgs,
+  DEFAULT_TRANSCODE_BITRATE_BPS,
+  H264_ENCODER,
+} from './live-ffmpeg-args';
 import { liveTvFfmpegHeaderArgs, liveTvGet, liveTvIdentityOf } from '../livetv-http';
 import { liveTvAccountStateOf } from './livetv-sources.service';
 
@@ -370,7 +375,9 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
     });
     session.lastAccessAt = Date.now();
     this.reportActivity(session);
-    this.qoe?.register(this.qoeRefOf(session, sessionId)!);
+    const ref = this.qoeRefOf(session, sessionId)!;
+    this.qoe?.register(ref);
+    this.qoe?.setPipeline(ref, this.qoePipeline(session));
     return this.describe(session, sessionId);
   }
 
@@ -607,6 +614,35 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
       transcodeReasons: [],
       state: 'playing',
       attributedUserId: null,
+    };
+  }
+
+  /** What the live transcode knows: input codec, output and whether it runs on a GPU. */
+  private qoePipeline(session: LiveTvSessionEntry): QoePipeline {
+    const transcode = session.mode === 'transcode';
+    const hw = this.transcoding.getDetectedHwAccel();
+    const active = session.streams[session.failoverIndex];
+    return {
+      source: {
+        codec: session.activeVideoCodec ?? active?.probedVideoCodec ?? null,
+        width: null,
+        height: null,
+        hdr: null,
+      },
+      output: transcode
+        ? {
+            codec: 'h264',
+            hdr: null,
+            quality: null,
+            bitrate: session.videoBitrateBps ?? DEFAULT_TRANSCODE_BITRATE_BPS,
+          }
+        : null,
+      decode: null,
+      encode: transcode ? { hw: hw !== 'none', kind: hw === 'none' ? 'cpu' : hw, name: H264_ENCODER[hw] } : null,
+      tonemap: null,
+      burnIn: null,
+      crop: null,
+      audioTranscode: null,
     };
   }
 

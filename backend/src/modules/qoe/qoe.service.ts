@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import { cpus, loadavg } from 'node:os';
 import type { Request } from 'express';
 import { SettingsService } from '../settings/settings.service';
 import type { LiveSession, SessionKind } from '../streaming/live-session.service';
@@ -11,9 +12,11 @@ import { diagnose } from './core/diagnose';
 import type {
   QoeDiagnosis,
   QoeEvent,
+  QoePipeline,
   QoeSample,
   QoeSessionSummary,
   QoeVerdict,
+  ServerLoad,
 } from './core/types';
 import { PlaybackQoeEvent } from './entities/playback-qoe-event.entity';
 import { PlaybackQoeSession } from './entities/playback-qoe-session.entity';
@@ -227,6 +230,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
   private readonly trackers = new Map<string, Tracker>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private enabledFlag = true;
+  private loadProbe: (() => Pick<ServerLoad, 'activeTranscodes' | 'activeSessions'>) | null = null;
 
   constructor(
     private readonly settings: SettingsService,
@@ -279,6 +283,36 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     this.track(session, false)?.agg.addSegment({ segmentDurationS, waitedMs });
   }
 
+  /** The streaming side tells how many transcodes and sessions run; the rest of the load is read here. */
+  setLoadProbe(probe: () => Pick<ServerLoad, 'activeTranscodes' | 'activeSessions'>): void {
+    this.loadProbe = probe;
+  }
+
+  /** What the server does to this session's stream; replaces a previous value. */
+  setPipeline(session: SessionRef, pipeline: QoePipeline): void {
+    const t = this.track(session, false);
+    if (t) t.agg.setPipeline(pipeline);
+  }
+
+  /** The rung changed on a running session: only the output differs. */
+  updatePipelineOutput(session: SessionRef, quality: string | null, bitrate: number | null): void {
+    const t = this.trackers.get(session.sessionId);
+    const p = t?.agg.pipeline;
+    if (!t || !p?.output) return;
+    if (p.output.quality === quality && p.output.bitrate === bitrate) return;
+    t.agg.setPipeline({ ...p, output: { ...p.output, quality, bitrate } });
+    t.dirty = true;
+  }
+
+  private serverLoad(): ServerLoad | null {
+    try {
+      const counts = this.loadProbe?.() ?? { activeTranscodes: 0, activeSessions: 0 };
+      return { ...counts, loadAvg1: loadavg()[0], cpuCount: cpus().length };
+    } catch {
+      return null;
+    }
+  }
+
   recordEvents(
     session: SessionRef,
     events: QoeEvent[],
@@ -289,10 +323,11 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     t.reported = true;
     t.playbackId = playbackId ?? t.playbackId;
     const now = Date.now();
+    const load = events.some((e) => e.type === 'stall') ? this.serverLoad() : null;
     for (const e of events) {
       if (t.eventCount >= MAX_EVENTS_PER_SESSION) break;
       t.eventCount++;
-      const c = t.agg.addEvent(e, now, session.kind === 'live');
+      const c = t.agg.addEvent(e, now, { live: session.kind === 'live', load });
       const { type, at, ...data } = e;
       t.pendingEvents.push({
         sessionId: session.sessionId,
@@ -305,6 +340,8 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
               causeConfidence: c.confidence,
               causeReason: c.reason,
               causeEvidence: c.evidence,
+              causeHints: c.hints,
+              serverLoad: load,
             }
           : data,
       });
@@ -492,6 +529,7 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
       stallBandwidthBps: s.stallBandwidthBps,
       cmcdThroughputBps: s.cmcdThroughputBps,
       stallCauseMs: s.stallCauseMs,
+      pipeline: t.agg.pipeline,
       unrecoveredError: s.unrecoveredError,
       sampleCount: s.sampleCount,
       verdict: d.verdict,

@@ -40,13 +40,13 @@ export interface LiveFfmpegArgsOptions {
 }
 
 /** Used only when `mode: 'transcode'` and the caller didn't pin a target. */
-const DEFAULT_TRANSCODE_BITRATE_BPS = 4_000_000;
+export const DEFAULT_TRANSCODE_BITRATE_BPS = 4_000_000;
 
 const DEFAULT_PROBE_SECONDS = 3;
 /** Bytes at the default probe window; scaled linearly with `probeSeconds`. */
 const BASE_PROBESIZE_BYTES = 5_000_000;
 
-const H264_ENCODER: Record<HwAccelType, string> = {
+export const H264_ENCODER: Record<HwAccelType, string> = {
   none: 'libx264',
   qsv: 'h264_qsv',
   vaapi: 'h264_vaapi',

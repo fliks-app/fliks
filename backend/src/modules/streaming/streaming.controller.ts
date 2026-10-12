@@ -91,6 +91,7 @@ import {
   resolveEncodePipeline,
   resolveTonemapReport,
 } from './transcoding/encode-pipeline';
+import { describeQoePipeline } from './transcoding/qoe-pipeline';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
@@ -1189,6 +1190,27 @@ export class StreamingController {
       canCopyVideo: response.videoCopyStream,
       pinned: isDownload,
     });
+
+    this.qoe.setPipeline(
+      liveSession,
+      describeQoePipeline({
+        playMethod: response.playMethod,
+        source: {
+          codec: pipelineInputs.sourceVideoCodec ?? null,
+          width: v0?.width ?? null,
+          height: v0?.height ?? null,
+          hdr: v0?.dvProfile != null ? 'DV' : (v0?.hdrFormat ?? null),
+        },
+        variant: kind === 'transcode' ? (videoVariant ?? null) : null,
+        quality: response.quality ?? null,
+        videoBitrateBps: response.transcodeBitrateByQuality?.[response.quality]?.videoBitrateBps ?? null,
+        inputs: pipelineInputs,
+        tonemapPath: tonemapReport?.path ?? null,
+        burnIn: burnIn ? burnIn.type : null,
+        crop: pipelineInputs.crop,
+        audioTranscode: !response.audioCopyStream,
+      }),
+    );
 
     // Pre-spawn ffmpeg for the segment the player will soon request. Skipped
     // for DirectPlay/auto (nothing to warm) and DirectStream (a pinned rung
