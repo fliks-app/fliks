@@ -14,6 +14,18 @@ export interface SubtitleRowLike {
   providerType?: string | null;
 }
 
+/** Embedded subtitle streams as `streamInfo.subtitles` lists them. */
+export type SubtitleStreams = { streamIndex: number; title?: string | null }[] | null | undefined;
+
+/** The stream title of an embedded row: `subtitle_files` doesn't store it, `streamInfo` does. */
+export function embeddedSubtitleTitle(
+  sub: Pick<SubtitleRowLike, 'relativePath' | 'streamIndex'>,
+  streams: SubtitleStreams,
+): string | null {
+  if (sub.relativePath || sub.streamIndex == null) return null;
+  return streams?.find((s) => s.streamIndex === sub.streamIndex)?.title || null;
+}
+
 export interface SubtitleTrack {
   /** Stable id: `ext-<id>` for sidecar files, `emb-<streamIndex>` for in-container. */
   key: string;
@@ -24,6 +36,8 @@ export interface SubtitleTrack {
   hearingImpaired: boolean;
   relativePath: string | null;
   streamIndex: number | null;
+  /** Stream title of an embedded track, when the file carries one. */
+  title: string | null;
   kind: 'external' | 'embedded';
   /** Origin of the sub — `translated`, `ocr`, `embedded`, or a download
    *  provider name. Surfaced as an origin hint in the track label. */
@@ -54,12 +68,13 @@ export function subtitleManifestRank(key: string): number {
  * (ISO 639-1), which is what every comparison downstream assumes. Drops burn-required tracks
  * when `hideBurnIn`, classifies image vs text, and dedupes external subs by id
  * and embedded subs by stream index. Callers map the result to their own shape
- * (label, url, …).
+ * (label, url, …). `streams` (the file's `streamInfo.subtitles`) supplies the
+ * embedded titles.
  */
 export function buildSubtitleTracks(
   subs: SubtitleRowLike[],
   mediaFileId: number,
-  opts: { hideBurnIn: boolean },
+  opts: { hideBurnIn: boolean; streams?: SubtitleStreams },
 ): SubtitleTrack[] {
   const out: SubtitleTrack[] = [];
   const seen = new Set<string>();
@@ -83,6 +98,7 @@ export function buildSubtitleTracks(
       hearingImpaired: sub.hearingImpaired ?? false,
       relativePath: sub.relativePath ?? null,
       streamIndex: sub.streamIndex ?? null,
+      title: embeddedSubtitleTitle(sub, opts.streams),
       kind,
       providerType: sub.providerType ?? null,
       isImage,

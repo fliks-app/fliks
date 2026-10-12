@@ -11,7 +11,7 @@ import {
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { StreamingApiService } from './api/streaming-api.service';
 import { AppSettingsService } from './app-settings.service';
-import { formatSubtitleLabel, formatSubtitleParts } from '../utils/player.utils';
+import { formatSubtitleLabel, formatSubtitleParts, type SubtitleLabelSource } from '../utils/player.utils';
 import { isImageBasedSubtitleCodec } from '../utils/subtitle-codecs';
 import { buildSubtitleTracks } from '../utils/subtitle-tracks';
 import { normalizeLangCode } from '../utils/language.utils';
@@ -147,7 +147,7 @@ export class TrackManagerService {
 
   /** Menu labels for a subtitle: the one-line label and the two-line head/sub. */
   describeSubtitle(
-    sub: Parameters<typeof formatSubtitleParts>[0],
+    sub: SubtitleLabelSource,
     trackNumber: number,
   ): Pick<SubtitleOption, 'label' | 'menuHead' | 'menuSub'> {
     const opts = { showFormat: this.appSettings.showSubtitleFormat() };
@@ -175,7 +175,9 @@ export class TrackManagerService {
     try {
       const hideBurnIn = this.appSettings.hideBurnInSubtitles();
       const subs = await this.subtitlesApi.getForMedia(mediaId);
-      const tracks = buildSubtitleTracks(subs, mediaFileId, { hideBurnIn });
+      const file = media?.files?.find((f) => f.id === mediaFileId);
+      const si = file?.streamInfo as any;
+      const tracks = buildSubtitleTracks(subs, mediaFileId, { hideBurnIn, streams: si?.subtitles });
       const options: SubtitleOption[] = tracks.map((t, i) => ({
         id: t.key,
         ...this.describeSubtitle(t, i + 1),
@@ -196,8 +198,6 @@ export class TrackManagerService {
       const seen = new Set(tracks.map((t) => t.key));
 
       // Also check streamInfo for embedded subs not yet in DB
-      const file = media?.files?.find((f) => f.id === mediaFileId);
-      const si = file?.streamInfo as any;
       if (si?.subtitles?.length) {
         for (const emb of si.subtitles) {
           const key = `emb-${emb.streamIndex}`;

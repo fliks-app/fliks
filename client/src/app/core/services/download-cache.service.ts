@@ -15,6 +15,8 @@ export interface OfflineSubtitle {
   codec?: string | null;
   relativePath?: string | null;
   providerType?: string | null;
+  /** Embedded stream title; absent on downloads saved before it was kept. */
+  title?: string | null;
   trackKey?: string;
 }
 

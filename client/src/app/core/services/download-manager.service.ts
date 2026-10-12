@@ -4,7 +4,7 @@ import { StreamingApiService } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { MediaService } from './api/media.service';
 import { isImageBasedSubtitleCodec } from '../utils/subtitle-codecs';
-import { subtitleTrackKey } from '../utils/subtitle-tracks';
+import { embeddedSubtitleTitle, subtitleTrackKey } from '../utils/subtitle-tracks';
 import { OfflineStorageService } from './offline-storage.service';
 import { DownloadCacheService, DownloadTask, type OfflineSubtitle } from './download-cache.service';
 import { DownloadNotificationService } from './download-notification.service';
@@ -462,8 +462,11 @@ export class DownloadManagerService {
       const subs = allSubs.filter(
         (s) => s.mediaFileId === task.mediaFileId && !isImageBasedSubtitleCodec(s.codec),
       );
+      const media = await this.mediaService.getOne(task.mediaId).catch(() => null);
+      const si = (media?.files?.find((f: any) => f.id === task.mediaFileId) as any)?.streamInfo;
       const offlineSubs: OfflineSubtitle[] = [];
-      for (const sub of subs) {
+      for (const row of subs) {
+        const sub = { ...row, title: embeddedSubtitleTitle(row, si?.subtitles) };
         const url = sub.streamIndex != null
           ? this.streamingApi.getEmbeddedSubtitleUrl(task.mediaFileId, sub.streamIndex)
           : sub.relativePath
@@ -488,21 +491,15 @@ export class DownloadManagerService {
           codec: sub.codec,
           relativePath: sub.relativePath,
           providerType: sub.providerType,
+          title: sub.title,
           trackKey: subtitleTrackKey(sub)?.key,
         });
       }
       // Fetch audio stream info for offline audio track picker
       let audioStreams: { language?: string; title?: string; codec?: string; channels?: number }[] | undefined;
       let fanartUrl: string | null = null;
-      try {
-        const media = await this.mediaService.getOne(task.mediaId);
-        fanartUrl = media.fanartUrl ?? null;
-        const file = media.files?.find((f: any) => f.id === task.mediaFileId);
-        const si = (file as any)?.streamInfo;
-        if (si?.audio?.length > 1) {
-          audioStreams = si.audio;
-        }
-      } catch { /* non-critical */ }
+      fanartUrl = media?.fanartUrl ?? null;
+      if (si?.audio?.length > 1) audioStreams = si.audio;
 
       this.prefetchArtwork(task.media?.posterUrl, fanartUrl);
 
