@@ -19,11 +19,18 @@
 # One-shot setup outside this repo: add the tvOS platform to the existing
 # `media.fliks.app` record in App Store Connect — same bundle id as the iOS
 # client, which is what keeps both under one app listing.
+#
+# A pull request touching appletv/ runs the archive alone, as a compile check:
+# no signing, no secret used, nothing uploaded.
 name: Publish tvOS to App Store Connect
 
 on:
   push:
     tags: ['v*']
+  pull_request:
+    paths:
+      - 'appletv/**'
+      - '.github/workflows/tvos-publish.yml'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -40,13 +47,15 @@ jobs:
     defaults:
       run:
         working-directory: appletv
+    env:
+      PUBLISH: ${{ github.event_name != 'pull_request' }}
 
     steps:
       - uses: actions/checkout@v6
         with:
           # Full history → `git rev-list --count HEAD` gives a real commit
           # count for the build number.
-          fetch-depth: 0
+          fetch-depth: ${{ github.event_name == 'pull_request' && 1 || 0 }}
 
       - uses: maxim-lobanov/setup-xcode@v1
         with:
@@ -60,6 +69,7 @@ jobs:
         run: xcodegen generate --spec project.yml
 
       - name: Compute build number from commit count
+        if: env.PUBLISH == 'true'
         id: bnum
         run: echo "value=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
         working-directory: ${{ github.workspace }}
@@ -67,6 +77,7 @@ jobs:
       # Xcode discovers the key at this exact path, so the decode is all the
       # staging it needs.
       - name: Stage App Store Connect API key
+        if: env.PUBLISH == 'true'
         env:
           KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
           KEY_P8: ${{ secrets.APPSTORE_API_KEY_P8_BASE64 }}
@@ -82,6 +93,7 @@ jobs:
       # keychain is ADDED to the search list (login kept) so cloud-managed
       # profiles still resolve.
       - name: Import signing certificate
+        if: env.PUBLISH == 'true'
         env:
           DIST_P12_BASE64: ${{ secrets.IOS_DIST_CERT_P12_BASE64 }}
           DIST_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
@@ -105,27 +117,38 @@ jobs:
       # issued to a team with a registered tvOS device — there is none, and a
       # simulator can't be registered. The export below re-signs the bundle for
       # the App Store, and that profile type needs no device.
+      # The release flags only matter to the export and upload; a pull request
+      # archives without them.
       - name: Archive tvOS app
         env:
           KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
           ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          BUILD_NUMBER: ${{ steps.bnum.outputs.value }}
         run: |
+          release=()
+          if [ "$PUBLISH" = true ]; then
+            release=(
+              -allowProvisioningUpdates
+              -authenticationKeyID "$KEY_ID"
+              -authenticationKeyIssuerID "$ISSUER_ID"
+              -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8
+              CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+              DEVELOPMENT_TEAM="$TEAM_ID"
+            )
+          fi
           xcodebuild \
             -project FliksTV.xcodeproj \
             -scheme FliksTV \
             -configuration Release \
             -destination 'generic/platform=tvOS' \
             -archivePath build/FliksTV.xcarchive \
-            -allowProvisioningUpdates \
-            -authenticationKeyID "$KEY_ID" \
-            -authenticationKeyIssuerID "$ISSUER_ID" \
-            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8 \
-            CURRENT_PROJECT_VERSION=${{ steps.bnum.outputs.value }} \
-            DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }} \
+            "${release[@]}" \
             CODE_SIGNING_ALLOWED=NO \
             clean archive
 
       - name: Export signed IPA
+        if: env.PUBLISH == 'true'
         env:
           KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
           ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
@@ -144,6 +167,7 @@ jobs:
       # on the command line; `notarytool` notarises, it doesn't publish. A dry
       # run checks the same package against App Store Connect without shipping it.
       - name: Upload IPA to App Store Connect
+        if: env.PUBLISH == 'true'
         env:
           KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
           ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
