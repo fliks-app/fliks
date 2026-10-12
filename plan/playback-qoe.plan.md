@@ -1,48 +1,46 @@
 # Playback QoE telemetry: why does this client stutter?
 
-Implementation-ready design. Every client reports playback quality; the server
-diagnoses each session (network, device, server, error) and the admin sees it
-live in `/admin/streams` and historically in a new *Playback quality* page.
+Every client reports how its playback goes; the server diagnoses each viewing
+(network, device, server, error) and the admin sees it live in
+`/admin/streams` and over time in `/admin/playback-quality`.
 
 ## 0. Decisions
 
 | Topic | Decision |
 |---|---|
-| Network signals | **CMCD** (CTA-5004) on segment requests where the player supports it natively: Shaka (query mode), ExoPlayer (query mode), AVPlayer iOS/tvOS 18+ (headers only, the only mode Apple offers), Cast via `shakaConfig` (query). Parsed server-side with `@svta/cml-cmcd` (`fromCmcdQuery` / `fromCmcdHeaders`). The session is resolved from our own `?sid=`, never from CMCD `sid`. |
-| Device signals | `qoe` block on the existing heartbeat `PUT /api/playback/media/:id/state`, built from `PlaybackEngine.getQoeSample()`. Optional, old clients keep working. |
-| Point events | `POST /api/playback/sessions/:sessionId/events` (stall, error, recovery reload, quality switch). Needed because a fatal error ends the heartbeat. Capped at 200 events per session server-side. |
-| Server signals | Per-segment: time the request waited for ffmpeg to produce it vs segment duration (transcode speed), and bytes / send time (fallback throughput for non-CMCD clients). |
-| Stall counting | In `player.ts`, engine-agnostic: a `buffering` state after first frame that is not a seek/load. Engines do not count stalls. |
-| Storage | Postgres: `playback_qoe_sessions` (one row per session, upserted) + `playback_qoe_events`. Purged after `qoeRetentionDays` (default 30). |
-| Diagnosis | One pure function `diagnose()` in `backend/src/modules/qoe/core/`, no Nest/Fliks imports (future open-source extraction). |
-| Setting | App setting `qoeEnabled` (default true). Off: heartbeat `qoe` and events are ignored, nothing stored. |
+| Network signals | **CMCD** (CTA-5004) where the player sends it natively: Shaka (query), ExoPlayer on HLS (query), AVPlayer iOS/tvOS 18+ (headers, Apple's only mode), Cast receiver via `shakaConfig` (query). Parsed with `@svta/cml-cmcd`. The session comes from our own `?sid=`, never from CMCD `sid`. |
+| Device signals | `qoe` block on the heartbeat `PUT /api/playback/media/:id/state` (Live TV: `PUT /api/livetv/sessions/:sid/state`), built from `PlaybackEngine.getQoeSample()`. Optional: old clients keep working. |
+| Point events | `POST /api/playback/sessions/:sid/events` (stall, error, recovery, quality switch). Also accepted shortly after the session ended, since the exit flush races the session DELETE. |
+| Server signals | Per segment: how long the request waited for ffmpeg vs the segment duration (transcode speed). |
+| Stall counting | Client side, engine-agnostic: engine `buffering` after the first frame, merged with a frozen-playhead detector (250 ms watch, 1 s threshold) for players that hold a starved playhead silently. Seeks, reloads, recoveries and quality switches are excluded. |
+| Grouping | A `playbackId` per viewing, stable across the sids a quality switch or a recovery mints. The admin shows one item per (userId, playbackId). |
+| Storage | Postgres `playback_qoe_sessions` (one row per sid, written once it reported something) + `playback_qoe_events`. One migration. Purged after `qoe_retention_days` (default 30). |
+| Diagnosis | Pure `diagnose()` in `backend/src/modules/qoe/core/` (no Nest/Fliks imports, extractable). |
+| Setting | App settings `qoe_enabled` (default on) and `qoe_retention_days`. Off: nothing is recorded. |
 | No new infra | No Prometheus, OpenTelemetry, Sentry. Data never leaves the server. |
 
 ## 1. Wire contract
 
-### 1.1 `QoeSample` (client → heartbeat `qoe`)
+### 1.1 Heartbeat `qoe`
 
-Counters are **cumulative per sessionId**: a recovery that mints a new sid
-resets them (its `recovery` event and `recoveryReloads = 1` go to the new sid),
-a reload that keeps the sid keeps them. The server treats a counter that goes
-down as a reset. `null` = this engine cannot measure it; `hwDecoder` is only
-set when measured, never assumed.
+Counters are cumulative per sid; a counter that goes down is read as a reset.
+`null` means "cannot measure"; nothing is assumed.
 
 ```ts
 interface QoeSample {
   engine: 'shaka' | 'exoplayer' | 'avplayer' | 'mpv' | 'avplay' | 'webos' | 'cast';
-  cmcd: boolean;                 // this playback sends CMCD on segment requests
+  cmcd: boolean;                 // client claims it sends CMCD (stored as cmcdClaimed)
+  playbackId?: string;           // ^[A-Za-z0-9_-]{1,64}$
   droppedFrames: number | null;
-  decodedFrames: number | null;
-  bandwidthBps: number | null;   // player's own throughput estimate
-  bufferAheadS: number | null;   // seconds buffered ahead of the playhead
-  variantBitrate: number | null; // bps of the variant being played
+  decodedFrames: number | null;  // estimated on Apple and mpv
+  bandwidthBps: number | null;
+  bufferAheadS: number | null;
+  variantBitrate: number | null; // bps
   width: number | null;
   height: number | null;
   videoCodec: string | null;
-  decoderName: string | null;    // e.g. c2.qti.hevc.decoder, hevc_vaapi
+  decoderName: string | null;
   hwDecoder: boolean | null;
-  // filled by player.ts, not the engine:
   stallCount: number;
   stallMs: number;
   recoveryReloads: number;
@@ -52,92 +50,78 @@ interface QoeSample {
 ### 1.2 Events
 
 ```ts
-type QoeEventType = 'stall' | 'error' | 'recovery' | 'quality_switch';
 interface QoeEvent {
-  type: QoeEventType;
-  at: number;                 // epoch ms, client clock
+  type: 'stall' | 'error' | 'recovery' | 'quality_switch';
+  at: number;                    // epoch ms; outside now ± 1 day → receive time
   position: number | null;
-  durationMs?: number;        // stall
-  bufferAheadS?: number | null;
-  bandwidthBps?: number | null;
-  code?: number; message?: string; category?: string;   // error (classifyPlaybackError)
-  fromBitrate?: number; toBitrate?: number;             // quality_switch
+  durationMs?: number; bufferAheadS?: number | null; bandwidthBps?: number | null;
+  code?: number; message?: string; category?: string;
+  fromBitrate?: number; toBitrate?: number;
 }
-// POST /api/playback/sessions/:sessionId/events  { events: QoeEvent[] }  → 204
+// POST /api/playback/sessions/:sid/events  { events: QoeEvent[] (≤ 50), playbackId? } → 204
 ```
 
-Sent batched (flush every heartbeat, immediately on `error`, on player exit
-with `fetch(..., { keepalive: true })`). Same auth as the heartbeat
-(`SessionTokenGuard`); a session owned by another user is rejected.
+Batched with each heartbeat, flushed at once on error and with
+`fetch(keepalive)` on exit. 200 events per session at most.
 
 ### 1.3 Verdict
 
-```ts
-type QoeVerdict = 'ok' | 'network' | 'device' | 'server' | 'error' | 'unknown';
-interface QoeDiagnosis {
-  verdict: QoeVerdict;
-  confidence: 'high' | 'low';
-  reasons: string[];          // i18n keys + params, rendered by the admin UI
-}
-```
+`{ verdict: 'ok'|'network'|'device'|'server'|'error'|'unknown', confidence: 'high'|'low', reasons: string[] }`.
+Reasons are `qoe.reason.*` i18n keys without params. First match wins:
 
-Rules (first match wins, thresholds as named constants):
+1. Unrecovered fatal error → `error`.
+2. Stalls (≥ 1 per 10 min or ≥ 1 % of watched time):
+   - median transcode speed < 1 over the session → `server`;
+   - buffer starved at stall (< 1 s) and throughput < 1.2 × bitrate → `network`;
+   - starved, no throughput data → `network`, low confidence;
+   - starved, throughput fine → `device`, low confidence;
+   - stalls with buffer ahead → `device`.
+3. Dropped frames ≥ 5 % of decoded → `device`.
+4. Less than 60 s watched → `unknown` (low); otherwise `ok`.
 
-1. Fatal error with no successful recovery → `error`.
-2. Stalls (≥ 1 stall/10 min or stall ratio ≥ 1 %):
-   - server produced segments slower than real time (median speed < 1.0 over the stall window) → `server`;
-   - else buffer starved (`bl`≈0 / `bufferAheadS` < 1 s at stall) and throughput < 1.2 × variant bitrate → `network`;
-   - else buffer starved with no throughput data → `network`, low confidence;
-   - else (stalls with buffer ahead) → `device`.
-3. No stall but dropped frames ≥ 5 % of decoded → `device`. A software decoder
-   alone is not a verdict (Linux mpv decodes in software by default); it is
-   added to `reasons` as a hint when the verdict is `device`.
-4. Otherwise `ok`. Too little data (< 60 s watched) → `unknown`.
-
-Confidence is `high` when the deciding signal came from CMCD or the engine,
-`low` when inferred from server-side throughput only.
+Hints added to `reasons`, never a verdict: `software_decoder` (≥ 720p, on a
+`device` verdict), `cmcd_missing` (client claims CMCD, none arrived).
 
 ## 2. Backend (`backend/src/modules/qoe/`)
 
-- `core/` (pure, extractable): `types.ts`, `diagnose.ts` (+ spec), `cmcd.ts` (read CMCD from a request's query/headers into a flat `{bl, mtp, br, tb, bs, su}`), `aggregate.ts` (fold samples/events/segment metrics into a session summary, counter-reset aware).
-- `QoeService`: in-memory tracker per live sessionId; `recordSample`, `recordEvents`, `recordSegment`, `recordCmcd`; upserts `playback_qoe_sessions` at most every 30 s and on session end (hook the LiveSession GC / `DELETE sessions/:id`); purge job in the scheduler.
-- Hooks in `streaming.controller.ts` segment routes (video + audio): CMCD read, produce-wait timing, send timing (`res.on('finish')`).
-- Heartbeat: `playback.controller.ts` passes `body.qoe` to `QoeService`.
-- Admin API (same permission as `/api/system/streams`):
-  - `/api/system/streams` items gain `qoe: { verdict, confidence, reasons, stallCount, stallMs, droppedPct, bandwidthBps, variantBitrate, bufferAheadS, hwDecoder, decoderName, transcodeSpeed, engine, cmcd } | null`.
-  - `GET /api/system/qoe/sessions?days&verdict&userId&device&limit&offset`
-  - `GET /api/system/qoe/sessions/:sessionId` (row + events)
-  - `GET /api/system/qoe/summary?days=7` → `{ byVerdict: Record<QoeVerdict, number>, byDevice: { device, engine, sessions, stallSessions, avgDroppedPct, hwDecoderPct, topVerdict }[] }`
-- Migration: two tables, TypeORM migration in `backend/src/migrations/`.
+- `core/`: `types`, `validate` (trust boundary: clamps ints, caps strings), `cmcd`, `aggregate` (fold samples/events/segments/CMCD, counter-reset aware, playback merge), `diagnose`.
+- `QoeService`: in-memory tracker per sid (VOD live sessions and Live TV viewers), `observeSegment` on segment routes, `sessionEnded` on stop/GC, upsert every 30 s and on end, playback verdict stored for SQL filtering, daily purge.
+- `cmcd` on a row is true only when the server parsed CMCD for that sid.
+- Transcode sessions without a client bitrate get the served rung's nominal bitrate.
+- Admin API (Read Settings, like `/api/system/streams`):
+  - `/api/system/streams` items: `qoe` live summary incl. `playbackId`, `cmcd`, `cmcdClaimed`.
+  - `GET /api/system/qoe/sessions?days&verdict&userId&device&limit&offset` → `{ items: QoePlayback[], total }`, one item per playback.
+  - `GET /api/system/qoe/sessions/:sessionId` → the merged playback, its `sessions`, its `events`.
+  - `GET /api/system/qoe/summary?days` → `{ byVerdict, byDevice }`, counted per playback.
 
 ## 3. Clients
 
-`PlaybackEngine.getQoeSample(): Promise<Omit<QoeSample, 'stallCount'|'stallMs'|'recoveryReloads'>>`.
+| Client | CMCD | Frames | Bandwidth | Buffer | Decoder |
+|---|---|---|---|---|---|
+| Web / PWA (Shaka) | query | yes | Shaka estimate | yes | no |
+| Live TV (Shaka) | query | yes | yes | yes | no |
+| Android (ExoPlayer) | HLS online only | DecoderCounters | yes | yes | name + HW |
+| iOS (AVPlayer) | iOS 18+ headers | dropped + estimated decoded | access log | yes | codec only |
+| Apple TV (AVPlayer) | tvOS 18+ headers | dropped + estimated decoded | access log | yes | codec only |
+| Desktop (mpv) | no | drops + estimated decoded | cache-speed | demuxer cache | hwdec |
+| webOS (`<video>`) | no | getVideoPlaybackQuality | no (server fills bitrate) | yes | no |
+| Tizen (AVPlay) | no | no | no until the unit is verified | no | no |
+| Chromecast receiver | query (Shaka) | yes | yes | yes, per stall | no |
 
-| Client | Engine file | CMCD | Sample source |
-|---|---|---|---|
-| Web / PWA | `shaka-engine.ts` | `cmcd: { enabled: true, useHeaders: false }` | `player.getStats()` (decoded/dropped frames, estimatedBandwidth), `getVariantTracks()` active, `bufferedAhead` |
-| Live TV | `live-player.ts` | same | same (counts as `shaka`) |
-| Android | `native-engine.ts` + `NativePlayerPlugin.java` | `CmcdConfiguration`, `MODE_QUERY_PARAMETER` | `AnalyticsListener`: `onDroppedVideoFrames`, `onBandwidthEstimate`, `onVideoDecoderInitialized` (+ `MediaCodecInfo.isHardwareAccelerated`), `DecoderCounters`; new plugin method `getQoe()` |
-| iOS | `native-engine.ts` + `NativePlayerPlugin.swift` | `resourceLoader.sendsCommonMediaClientDataAsHTTPHeaders = true` under `#available(iOS 18)` | `currentItem.accessLog()` last event (`numberOfDroppedVideoFrames`, `observedBitrate`, `indicatedBitrate`), `errorLog()` → error events |
-| Apple TV | `appletv/…/PlaybackService.swift`, `PlayerView.swift` | same, `#available(tvOS 18)` | same; adds `qoe` to its own heartbeat and posts events |
-| Desktop | `desktop-engine.ts` + mpv bridge (3 backends) | none | mpv: `frame-drop-count`, `decoder-frame-drop-count`, `estimated-frame-number`, `hwdec-current`, `cache-speed`, `demuxer-cache-duration`, `video-bitrate`, `video-codec` |
-| webOS | `webos-engine.ts` | none | `getVideoPlaybackQuality()` (webOS 22+, prefixed fallback), buffered ahead |
-| Tizen | `tizen-engine.ts` | none | `getStreamingProperty('CURRENT_BANDWIDTH')`, `getCurrentStreamInfo()` (codec, bitrate); frames `null` |
-| Chromecast | `cast-receiver/receiver.js` | `useShakaForHls` + `shakaConfig.cmcd` | `PlayerManager.getStats()`; receiver posts heartbeat `qoe` itself if it has the sid/token, else via the sender |
-
-`player.ts`: stall/recovery counting, merges the engine sample into the
-heartbeat, sends `state: 'buffering'` (today it never does), owns a small
-`QoeReporter` for events.
+The Cast receiver sends its sample and stall episodes to the sender over
+`urn:x-cast:media.fliks.app`; web, Android, iOS and desktop senders forward it
+in their heartbeat and post the events.
 
 ## 4. Admin UI
 
-- `/admin/streams`: per session a health dot (green ok, orange low-confidence or minor, red verdict ≠ ok), the verdict label, and a details popover (throughput vs bitrate, buffer, dropped %, decoder, transcode speed, engine, CMCD yes/no).
-- New `/admin/playback-quality` (settings section next to Streams): verdict breakdown over 7/30 days, per-device table (the "is this TV too weak" view), filterable session list, session detail with event timeline, JSON export.
-- All strings via ngx-translate (en + fr at least, follow existing locale files).
+- `/admin/streams`: health dot, verdict and details per live session.
+- `/admin/playback-quality`: verdict breakdown (7/30 days), per-device table,
+  playback list with a sessions badge, detail with per-session breakdown and
+  merged timeline, JSON export, the two settings.
 
-## 5. Later (not in this work)
+## 5. Later
 
 - Suggested fixes under a verdict (disable HEVC for a device, enable HW accel).
-- CMCD v2 event mode, Media Capabilities `decodingInfo()` in the DeviceProfile, AVMetricEvent (iOS 18).
-- Extracting `qoe/core` + CMCD shims as an open-source package.
+- AVMetricEvent (iOS 18) for Apple decoded frames; Media Capabilities in the DeviceProfile; CMCD v2 event mode.
+- Verify Tizen `CURRENT_BANDWIDTH` units on a real TV, then enable it.
+- Extract `qoe/core` as an open-source package.
