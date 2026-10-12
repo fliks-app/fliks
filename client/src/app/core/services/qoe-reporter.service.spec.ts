@@ -25,12 +25,18 @@ describe('QoeReporter', () => {
     await reporter.flush('a');
     await reporter.flush('c');
     expect(api.postQoeEvents).toHaveBeenCalledTimes(1);
-    expect(api.postQoeEvents).toHaveBeenCalledWith('a', [ev(1), ev(2)]);
+    expect(api.postQoeEvents).toHaveBeenCalledWith('a', [ev(1), ev(2)], undefined);
   });
 
   it('flushes at once when immediate', () => {
     reporter.record('a', ev(1), true);
-    expect(api.postQoeEvents).toHaveBeenCalledWith('a', [ev(1)]);
+    expect(api.postQoeEvents).toHaveBeenCalledWith('a', [ev(1)], undefined);
+  });
+
+  it('sends the playbackId with the events', async () => {
+    reporter.record('a', ev(1), false, 'pb');
+    await reporter.flush('a');
+    expect(api.postQoeEvents).toHaveBeenCalledWith('a', [ev(1)], 'pb');
   });
 
   it('caps the buffer at 100, dropping the oldest', async () => {
@@ -55,7 +61,7 @@ describe('QoeReporter', () => {
     reporter.flushKeepalive('a');
     expect(fetchMock).toHaveBeenCalledWith(
       '/e/a',
-      expect.objectContaining({ method: 'POST', keepalive: true, body: JSON.stringify({ events: [ev(1)] }) }),
+      expect.objectContaining({ method: 'POST', keepalive: true, body: JSON.stringify({ events: [ev(1)], playbackId: undefined }) }),
     );
   });
 });
