@@ -61,6 +61,32 @@ export interface EngineStats {
   };
 }
 
+export type QoeEngineName = 'shaka' | 'exoplayer' | 'avplayer' | 'mpv' | 'avplay' | 'webos' | 'cast';
+
+/** Playback-quality counters, cumulative since the last load(); null = not measurable here.
+ *  Contract: plan/playback-qoe.plan.md §1.1. */
+export interface EngineQoeSample {
+  engine: QoeEngineName;
+  cmcd: boolean;
+  droppedFrames: number | null;
+  decodedFrames: number | null;
+  bandwidthBps: number | null;
+  bufferAheadS: number | null;
+  variantBitrate: number | null;
+  width: number | null;
+  height: number | null;
+  videoCodec: string | null;
+  decoderName: string | null;
+  hwDecoder: boolean | null;
+}
+
+/** Heartbeat `qoe` block: the engine sample plus what player.ts counts itself. */
+export interface QoeSample extends EngineQoeSample {
+  stallCount: number;
+  stallMs: number;
+  recoveryReloads: number;
+}
+
 export type EngineEventMap = {
   stateChanged: { state: PlaybackState };
   timeUpdate: { position: number; duration: number; buffered: number };
@@ -138,6 +164,11 @@ export abstract class AbstractPlaybackEngine {
       ? (self.duration as number)
       : (self.currentTime ?? 0);
     return { start: 0, end };
+  }
+
+  /** Null until an engine implements it. */
+  async getQoeSample(): Promise<EngineQoeSample | null> {
+    return null;
   }
 
   private handlers = new Map<EngineEvent, Set<EngineEventHandler<any>>>();
@@ -289,6 +320,7 @@ export interface PlaybackEngine {
 
   // ── Stats ──
   getStats(): EngineStats;
+  getQoeSample(): Promise<EngineQoeSample | null>;
 
   // ── Events ──
   on<E extends EngineEvent>(event: E, handler: (data: EngineEventMap[E]) => void): void;

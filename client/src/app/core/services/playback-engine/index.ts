@@ -6,6 +6,9 @@ export type {
   EngineEvent,
   EngineEventMap,
   EngineStats,
+  EngineQoeSample,
+  QoeSample,
+  QoeEngineName,
 } from './playback-engine';
 export { NativeEngine } from './native-engine';
 export { ShakaEngine } from './shaka-engine';
