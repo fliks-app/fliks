@@ -17,6 +17,8 @@ import Foundation
     /// The subtitle the settings select for the item: decided before the first playback-info call,
     /// which carries it (burn-in id, HLS renditions), and kept by every recovery reload.
     private(set) var subtitlePick: SubtitlePick?
+    /// Active rung: the persisted pick at start, then whatever the backend reports for the session.
+    private(set) var qualityId = "auto"
 
     private var mediaFileId = 0
     private var mediaId = 0
@@ -55,6 +57,7 @@ import Foundation
         destroyed = false
         recoverAttempts = 0
         let settings = AppSettingsStore.shared
+        qualityId = settings.playerQualityId
         let audio = streamInfo?.audio ?? []
         audioStreamIndex = TrackSelection.audioIndex(
             in: audio, preferredLanguage: settings.preferredAudioLanguage,
@@ -82,6 +85,27 @@ import Foundation
         Task { try? await api.delete("/api/stream/sessions/\(sid)") }
     }
 
+    // MARK: - Quality
+
+    /// "Auto" + the server's rungs, minus the eco ones when the setting hides them
+    /// (web QualityManagerService.buildQualityOptions).
+    var qualityOptions: [QualityOption] {
+        let auto = QualityOption(id: "auto", label: tr("player.auto"), height: 0, width: nil,
+                                 totalBitrateBps: 0, isRemux: false, lowBandwidth: nil)
+        let showEco = AppSettingsStore.shared.showEcoQualities
+        return [auto] + (info?.qualities ?? []).filter { showEco || $0.lowBandwidth != true }
+    }
+
+    /// Re-negotiates at the chosen rung through the recovery path, so position,
+    /// audio and subtitle carry over via `onReload`.
+    func selectQuality(_ id: String, position: Double) {
+        guard !destroyed, !recoveringGuard, id != qualityId else { return }
+        qualityId = id
+        AppSettingsStore.shared.playerQualityId = id
+        recoverAttempts = 0
+        Task { await recover(position: position) }
+    }
+
     // MARK: - Playback-info + play URL
 
     private func requestPlaybackInfo(startAt: Double) async throws -> URL {
@@ -91,6 +115,7 @@ import Foundation
         var query: [(String, String)] = [("token", token)]
         if startAt > 0 { query.append(("startAt", String(Int(startAt)))) }
         if let audioStreamIndex { query.append(("audioStreamIndex", String(audioStreamIndex))) }
+        if qualityId != "auto" { query.append(("startQuality", qualityId)) }
         var needsHlsSubtitles = false
         switch subtitlePick {
         case .burnIn(let id)?: query.append(("burnInSubtitleId", String(id)))
@@ -107,6 +132,7 @@ import Foundation
         )
         info = response
         sessionId = response.sessionId
+        if let quality = response.quality { qualityId = quality }
         return try buildStreamUrl(response, token: token, startAt: startAt)
     }
 
@@ -121,6 +147,7 @@ import Foundation
         } else {
             path = "/api/stream/\(mediaFileId)/master.m3u8"
             items.append(("device", "desktop"))
+            if qualityId != "auto", !response.playUrl.contains("remux=1") { items.append(("startQuality", qualityId)) }
             if startAt > 0 { items.append(("startAt", String(Int(startAt)))) }
         }
         guard let url = URL(string: ServerStore.shared.resolveUrl(withQuery(path, items))) else {
@@ -186,6 +213,11 @@ import Foundation
                 try container.encode(value)
             }
         }
+        struct Rung: Encodable {
+            let id: String
+            let label: String
+            let lowBandwidth: Bool?
+        }
         struct Body: Encodable {
             let positionSeconds: Double
             let durationSeconds: Double
@@ -197,6 +229,8 @@ import Foundation
             let subtitleTrackIndex: Int?
             let subtitleId: Nullable
             let lastCmdId: String?
+            let quality: String
+            let qualities: [Rung]
             // Links a polled remote target to this live session; nil until registered.
             let targetId: String?
         }
@@ -206,6 +240,8 @@ import Foundation
             episodeId: episodeId, sessionId: sid, state: paused ? "paused" : "playing",
             audioTrackIndex: audioTrackIndex, subtitleTrackIndex: subtitleTrackIndex,
             subtitleId: Nullable(value: subtitleId), lastCmdId: lastCmdId,
+            quality: qualityId,
+            qualities: qualityOptions.map { Rung(id: $0.id, label: $0.label, lowBandwidth: $0.lowBandwidth) },
             targetId: RemoteControlService.shared.targetId
         )
         Task {

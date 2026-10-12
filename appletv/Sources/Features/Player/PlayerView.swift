@@ -190,6 +190,7 @@ private struct SkipCueStyle: ButtonStyle {
     private var skipIntroShownAt: Double = 0
     private var skipIntroTarget: Double = 0
     private var contextualKey = ""
+    private var qualityMenuKey = ""
     private var lastTickTime: Double = -1
     private let skipIntroRevealSeconds: Double = 10
 
@@ -333,6 +334,7 @@ private struct SkipCueStyle: ButtonStyle {
         showSkipCommercial = false
         skipCommercialOrdinal = nil
         contextualKey = ""
+        qualityMenuKey = ""
         lastTickTime = -1
         skippedCommercials = []
         audibleGroup = nil
@@ -432,6 +434,7 @@ private struct SkipCueStyle: ButtonStyle {
         updateSkipIntro(time: time, seeked: seeked)
         updateSkipCommercial(at: time, seeked: seeked)
         updateContextualActions(time: time, duration: duration)
+        updateQualityMenu()
     }
 
     /// Reveal the skip-intro cue on entering the intro window (or on any seek
@@ -639,6 +642,37 @@ private struct SkipCueStyle: ButtonStyle {
         }
     }
 
+    /// Quality picker in the transport bar, next to the system audio/subtitle buttons.
+    /// Rebuilt only when the rung list or the active rung changes, like `contextualActions`.
+    private func updateQualityMenu() {
+        guard let controller = playerViewController else { return }
+        let options = playback.qualityOptions
+        let active = playback.qualityId
+        let key = options.count > 1 ? active + "|" + options.map(\.id).joined(separator: ",") : ""
+        guard key != qualityMenuKey else { return }
+        qualityMenuKey = key
+        guard !key.isEmpty else {
+            controller.transportBarCustomMenuItems = []
+            return
+        }
+        let actions = options.map { option -> UIAction in
+            let action = UIAction(title: option.label, state: option.id == active ? .on : .off) { [weak self] _ in
+                Task { @MainActor in self?.selectQuality(option.id) }
+            }
+            if option.lowBandwidth == true { action.subtitle = tr("player.low_bandwidth") }
+            return action
+        }
+        controller.transportBarCustomMenuItems = [
+            UIMenu(title: tr("player.quality"), image: UIImage(systemName: "slider.horizontal.3"), children: actions)
+        ]
+    }
+
+    private func selectQuality(_ id: String) {
+        guard let player else { return }
+        let position = player.currentTime().seconds
+        playback.selectQuality(id, position: position.isFinite ? position : 0)
+    }
+
     // MARK: - Subtitle preference
 
     /// The viewer's legible pick, kept over a recovery reload.
@@ -781,6 +815,12 @@ private struct SkipCueStyle: ButtonStyle {
             } else {
                 item.select(nil, in: group) // nil/absent subtitleId means off
             }
+        case "quality":
+            guard let id = cmd.qualityId, playback.qualityOptions.contains(where: { $0.id == id }) else {
+                print("remote: quality \(cmd.qualityId ?? "nil") not offered (\(cmd.cmdId)), ignoring")
+                return
+            }
+            selectQuality(id)
         default:
             print("remote: unknown action \(cmd.action) (\(cmd.cmdId)), ignoring")
             return
