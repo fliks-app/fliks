@@ -142,6 +142,8 @@ describe('LiveTvSessionService', () => {
 
   afterEach(async () => {
     await service.onModuleDestroy();
+    // Let the killed fake processes emit their exit before the next test counts spawns.
+    await new Promise((r) => setTimeout(r, 0));
   });
 
   it('drops a viewer that stopped fetching, and keeps the ones still watching', async () => {
@@ -516,7 +518,8 @@ describe('LiveTvSessionService', () => {
 
     const result = await service.open(channel, makeUser(1), {});
     await service.leave(result.sessionId);
-    await new Promise((r) => setTimeout(r, 50));
+    // A zero idle window still tears down on a timer: poll rather than guess how long it takes.
+    for (let i = 0; i < 100 && !procs[0].kill.mock.calls.length; i++) await new Promise((r) => setTimeout(r, 20));
 
     expect(procs[0].kill).toHaveBeenCalled();
   });
