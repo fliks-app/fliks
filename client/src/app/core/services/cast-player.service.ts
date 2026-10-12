@@ -1,6 +1,7 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { CastService } from './cast.service';
+import type { QoeSample } from './playback-engine';
 import { CastSettingsService } from './cast-settings.service';
 import { StreamingApiService, type PlayMethod } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
@@ -153,6 +154,9 @@ interface CastResumeState {
   activeAudioTrackId: string | null;
   activeBurnInId: number | null;
 }
+
+/** A receiver sample older than this is dropped (receiver gone or not pushing). */
+const QOE_STALE_MS = 30_000;
 
 /**
  * Global service managing Cast stream state.
@@ -459,7 +463,7 @@ export class CastPlayerService {
     this.episodeTitle.set(s.episodeTitle);
     this.fanartUrl.set(s.fanartUrl);
     this.playbackMode.set(s.playbackMode);
-    this.liveSessionId.set(s.liveSessionId);
+    this.setLiveSession(s.liveSessionId);
     this.selectionFileId = s.mediaFileId;
     this.availableSubtitles.set(s.availableSubtitles);
     this.availableQualities.set(s.availableQualities);
@@ -492,7 +496,7 @@ export class CastPlayerService {
     // Sid-scoped kill so a sender that's still watching locally on a
     // different profile isn't torn down by the cast stop.
     if (castSid) this.streamingApi.stopSession(castSid).catch(() => {});
-    this.liveSessionId.set(null);
+    this.setLiveSession(null);
     this.hasMedia.set(false);
     this.expanded.set(false);
     this.mediaFileId.set(0);
@@ -644,7 +648,7 @@ export class CastPlayerService {
     // Stash the Cast live-session id so the sender's heartbeat loop
     // (`savePosition` in the local player) keeps the receiver's
     // session warm instead of beating the now-paused browser session.
-    this.liveSessionId.set(pi.sessionId ?? null);
+    this.setLiveSession(pi.sessionId ?? null);
 
     const loaded = this.availableSubtitles().filter(s => !s.burnIn);
     const subtitles = loaded.map(s => ({
@@ -782,6 +786,18 @@ export class CastPlayerService {
     await this.reloadCastStream();
   }
 
+  /** A new session id means new media: the receiver's previous sample no longer applies. */
+  private setLiveSession(id: string | null) {
+    this.liveSessionId.set(id);
+    this.cast.receiverQoe?.set(null);
+  }
+
+  /** Receiver's latest QoE sample for the heartbeat; null when stale or the sender can't receive it. */
+  qoeSample(): QoeSample | null {
+    const q = this.cast.receiverQoe();
+    return q && Date.now() - q.receivedAt < QOE_STALE_MS ? q.sample : null;
+  }
+
   private startPositionSaving() {
     this.stopPositionSaving();
     this.saveInterval = setInterval(() => this.saveCastPosition(), 10_000);
@@ -822,6 +838,7 @@ export class CastPlayerService {
         mediaFileId: mfId,
         episodeId: this.episodeId(),
         ...heartbeat,
+        ...(sid ? { qoe: this.qoeSample() ?? undefined } : {}),
       });
       // Backend lost the session (its keep-alive lapsed, a restart, …).
       // The receiver can't self-heal a session_expired, so re-issue

@@ -7,12 +7,20 @@ import { ToastService } from './toast.service';
 import { CAST_SUBTITLE_SIZE_SCALE } from '../utils/subtitle-presets';
 import { Subject } from 'rxjs';
 import { normalizeLangCode } from '../utils/language.utils';
+import type { QoeSample } from './playback-engine';
 
 /** Custom Cast message namespace shared between the Fliks receiver and
  *  every sender. Used today for receiver → sender error forwarding;
  *  reserved for any future bidirectional control message. Keep in sync
  *  with `cast-receiver/receiver.js`. */
 const FLIKS_CAST_NAMESPACE = 'urn:x-cast:media.fliks.app';
+
+/** Receiver → sender playback-quality push; the sender folds it into its heartbeat. */
+interface ReceiverQoe {
+  kind: 'qoe';
+  at: number;
+  sample: QoeSample;
+}
 
 /** Receiver → sender error payload. Fields mirror what the receiver
  *  pushes via `fliksBus.broadcast`; everything is optional because the
@@ -236,6 +244,8 @@ export class CastService implements OnDestroy {
   /** Tracks which session id we already attached the error listener to
    *  so a reconnect to the same session doesn't double-listen. */
   private errorListenerSessionId: string | null = null;
+  /** Latest receiver QoE push (web senders only: native senders have no custom-message bus). */
+  readonly receiverQoe = signal<{ sample: QoeSample; receivedAt: number } | null>(null);
 
   // Web-only
   private webCastReady = false;
@@ -424,6 +434,7 @@ export class CastService implements OnDestroy {
       this.attachReceiverMessageListener(this.session);
     } else {
       this.errorListenerSessionId = null;
+      this.receiverQoe.set(null);
     }
   }
 
@@ -437,7 +448,11 @@ export class CastService implements OnDestroy {
     try {
       session.addMessageListener(FLIKS_CAST_NAMESPACE, (_ns: string, raw: string) => {
         try {
-          const payload = JSON.parse(raw) as ReceiverPlayerError;
+          const payload = JSON.parse(raw) as ReceiverPlayerError | ReceiverQoe;
+          if (payload?.kind === 'qoe') {
+            if (payload.sample) this.receiverQoe.set({ sample: payload.sample, receivedAt: Date.now() });
+            return;
+          }
           if (payload?.kind !== 'player_error') return;
           // A session-expiry / network failure is recoverable: re-establish
           // a fresh stream rather than just toasting a dead-end error.

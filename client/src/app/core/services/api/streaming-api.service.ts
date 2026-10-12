@@ -13,6 +13,7 @@ import { SseService } from '../sse.service';
 import type { MediaType } from '../../enums/media-type.enum';
 import type { EdlRange } from '../../utils/edl-policy';
 import type { PreRollItem } from '@fliks/plugin-contract/ui';
+import type { QoeSample } from '../playback-engine';
 
 const SSE_CONNECTION_HEADER = 'X-Fliks-Sse-Connection';
 
@@ -578,6 +579,7 @@ export class StreamingApiService {
       volume?: number;
       muted?: boolean;
       lastCmdId?: string;
+      qoe?: QoeSample;
     },
   ) {
     return firstValueFrom(
