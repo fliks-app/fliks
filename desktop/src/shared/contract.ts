@@ -275,7 +275,7 @@ export interface FliksDesktopApi {
   setMuteRanges(ranges: DesktopMuteRange[]): Promise<void>;
   setFullscreen(enabled: boolean): Promise<void>;
   getPosition(): Promise<DesktopPositionInfo>;
-  getQoe(): Promise<DesktopQoe>;
+  getQoe(): Promise<DesktopQoe | null>;
   getAudioTracks(): Promise<DesktopAudioTrack[]>;
   selectAudioTrack(id: string): Promise<void>;
   getSubtitleTracks(): Promise<DesktopSubtitleTrack[]>;

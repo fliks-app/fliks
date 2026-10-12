@@ -24,7 +24,7 @@ import { FirstFrameGate } from './first-frame-gate';
 import { mpvLoadFileOptions } from './load-options';
 import { mpvSubtitleProps } from './subtitle-style';
 import { mapTrackList, type MpvTrack } from './tracks';
-import { readQoe } from './qoe';
+import { QoeReader } from './qoe';
 import { TypedEmitter } from './typed-emitter';
 import type { PlayerBackend, PlayerBackendEvents } from './player-backend';
 
@@ -76,6 +76,7 @@ export interface MpvPlayerOptions {
 }
 
 export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements PlayerBackend {
+  private readonly qoe = new QoeReader();
   private readonly mpvPath: string;
   private readonly baseArgs: string[];
   private readonly env: NodeJS.ProcessEnv;
@@ -474,6 +475,7 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
   // ── NativePlayer-equivalent surface ──────────────────────────────────────
 
   async load(opts: DesktopLoadOptions): Promise<void> {
+    this.qoe.reset();
     this.sawFirstFrame = false;
     this.sawPlaybackRestart = false;
     this.sawVoConfigured = false;
@@ -590,8 +592,8 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
     for (const cmd of commands) await this.command(cmd).catch(() => {});
   }
 
-  getQoe(): Promise<DesktopQoe> {
-    return readQoe((n) => this.get<string | number>(n));
+  getQoe(): Promise<DesktopQoe | null> {
+    return this.qoe.read((n) => this.get<string | number>(n));
   }
 
   async getPosition(): Promise<DesktopPositionInfo> {

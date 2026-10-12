@@ -1,37 +1,85 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readQoe } from './qoe.ts';
+import { QoeReader } from './qoe.ts';
 
-test('maps mpv properties and treats unavailable as null', async () => {
-  const props: Record<string, string | number> = {
+type Props = Record<string, string | number>;
+
+function harness() {
+  let t = 0;
+  let props: Props = {};
+  const reader = new QoeReader(() => t);
+  return {
+    reader,
+    read: async (p: Props, advanceMs = 5000) => {
+      t += advanceMs;
+      props = p;
+      return reader.read((n) => {
+        if (n in props) return props[n];
+        throw new Error('property unavailable');
+      });
+    },
+  };
+}
+
+test('maps properties: summed drops, bits per second, hls bitrate over video-bitrate', async () => {
+  const { read } = harness();
+  const q = await read({
     'frame-drop-count': '3',
     'decoder-frame-drop-count': 2,
     'estimated-frame-number': '1000',
     'hwdec-current': 'vaapi',
     'video-format': 'hevc',
     'cache-speed': '125000',
+    'current-tracks/video/hls-bitrate': 6_000_000,
+    'video-bitrate': 5_000_000,
     'video-params/w': 3840,
-  };
-  const q = await readQoe((n) => {
-    if (n in props) return props[n];
-    throw new Error('property unavailable');
   });
-  assert.equal(q.droppedFrames, 5);
-  assert.equal(q.decodedFrames, 1000);
-  assert.equal(q.bandwidthBps, 1_000_000);
-  assert.equal(q.hwDecoder, true);
-  assert.equal(q.decoderName, 'vaapi');
-  assert.equal(q.videoCodec, 'hevc');
-  assert.equal(q.width, 3840);
-  assert.equal(q.height, null);
-  assert.equal(q.bufferAheadS, null);
+  assert.equal(q?.droppedFrames, 0);
+  assert.equal(q?.bandwidthBps, 1_000_000);
+  assert.equal(q?.variantBitrate, 6_000_000);
+  assert.equal(q?.hwDecoder, true);
+  assert.equal(q?.decoderName, 'vaapi');
+  assert.equal(q?.videoCodec, 'hevc');
+  assert.equal(q?.width, 3840);
+  assert.equal(q?.height, null);
 });
 
-test('software decode falls back to the codec name; nothing readable is all null', async () => {
-  const sw: Record<string, string> = { 'hwdec-current': 'no', 'video-codec': 'h264' };
-  const q = await readQoe((n) => sw[n] ?? null);
-  assert.equal(q.hwDecoder, false);
-  assert.equal(q.decoderName, 'h264');
-  assert.equal(q.droppedFrames, null);
-  assert.equal((await readQoe(() => null)).hwDecoder, null);
+test('falls back to video-bitrate, maps a full cache (speed 0) to null', async () => {
+  const { read } = harness();
+  const q = await read({ 'video-bitrate': 4_000_000, 'cache-speed': 0 });
+  assert.equal(q?.variantBitrate, 4_000_000);
+  assert.equal(q?.bandwidthBps, null);
+});
+
+test('decoded frames count decoding only: resume, forward seek and backward seek', async () => {
+  const { read } = harness();
+  const base = { 'estimated-vf-fps': 24 };
+  // resume at 3000 s: ~72k frames in, but nothing decoded yet
+  assert.equal((await read({ ...base, 'estimated-frame-number': 72000 }))?.decodedFrames, 0);
+  // 5 s of playback = 120 frames
+  assert.equal((await read({ ...base, 'estimated-frame-number': 72120 }))?.decodedFrames, 120);
+  // forward seek of +10 min: delta exceeds 5 s * 24 fps * 1.5 and is capped
+  assert.equal((await read({ ...base, 'estimated-frame-number': 86520 }))?.decodedFrames, 300);
+  // backward seek never goes down; playback resumes from the new position
+  assert.equal((await read({ ...base, 'estimated-frame-number': 1000 }))?.decodedFrames, 300);
+  assert.equal((await read({ ...base, 'estimated-frame-number': 1120 }))?.decodedFrames, 420);
+});
+
+test('drop counters survive the resets mpv does on seek, and reset() starts over', async () => {
+  const { read, reader } = harness();
+  await read({ 'frame-drop-count': 5, 'decoder-frame-drop-count': 1 });
+  assert.equal((await read({ 'frame-drop-count': 9, 'decoder-frame-drop-count': 1 }))?.droppedFrames, 4);
+  // seek: vo counter back to 0, then 2 new drops
+  assert.equal((await read({ 'frame-drop-count': 2, 'decoder-frame-drop-count': 3 }))?.droppedFrames, 8);
+  reader.reset();
+  assert.equal((await read({ 'frame-drop-count': 7, 'decoder-frame-drop-count': 3 }))?.droppedFrames, 0);
+});
+
+test('software decode names the codec; nothing readable gives null', async () => {
+  const { read } = harness();
+  const q = await read({ 'hwdec-current': 'no', 'video-codec': 'h264' });
+  assert.equal(q?.hwDecoder, false);
+  assert.equal(q?.decoderName, 'h264');
+  assert.equal(q?.droppedFrames, null);
+  assert.equal(await read({}), null);
 });

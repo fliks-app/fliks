@@ -52,7 +52,7 @@ export interface PlayerBackend extends TypedEmitter<PlayerBackendEvents> {
   /** Silence these content-time ranges via a labelled mpv `af` entry; re-applied on every load. */
   setMuteRanges(ranges: DesktopMuteRange[]): Promise<void>;
   getPosition(): Promise<DesktopPositionInfo>;
-  getQoe(): Promise<DesktopQoe>;
+  getQoe(): Promise<DesktopQoe | null>;
   getAudioTracks(): Promise<DesktopAudioTrack[]>;
   selectAudioTrack(id: string): Promise<void>;
   getSubtitleTracks(): Promise<DesktopSubtitleTrack[]>;

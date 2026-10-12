@@ -114,7 +114,7 @@ export interface FliksDesktopApi {
   setMuted(muted: boolean): Promise<void>;
   getPosition(): Promise<DesktopPositionInfo>;
   /** Absent on a desktop build that predates QoE telemetry. */
-  getQoe?(): Promise<DesktopQoe>;
+  getQoe?(): Promise<DesktopQoe | null>;
   getAudioTracks(): Promise<DesktopAudioTrack[]>;
   selectAudioTrack(id: string): Promise<void>;
   getSubtitleTracks(): Promise<DesktopSubtitleTrack[]>;
