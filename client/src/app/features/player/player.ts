@@ -55,7 +55,7 @@ import {
 } from '../../core/services/player-settings.service';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
-import { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
+import type { AudioTrack, PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
 import {
   createEngineSurface,
   releaseEngineSurface,
@@ -70,9 +70,18 @@ import { imageUrlWithSize } from '../../core/pipes/resolve-url.pipe';
 import { NotificationLike } from '../../core/services/notification-like';
 import { LikesApiService } from '../../core/services/api/likes-api.service';
 import { PlayerStateService } from '../../core/services/player-state.service';
-import { TrackManagerService, SubtitleOption } from '../../core/services/track-manager.service';
+import { TrackManagerService, SubtitleOption, streamIndexForTrack, trackForStreamIndex } from '../../core/services/track-manager.service';
 import { QualityManagerService } from '../../core/services/quality-manager.service';
 import { DeviceService, viewTransitionsEnabled } from '../../core/services/device.service';
+
+/** An audio entry of the menu: an engine track (or a streamInfo fallback) labelled from streamInfo. */
+interface AudioOption {
+  id: string;
+  label: string;
+  language: string;
+  menuHead?: string;
+  menuSub?: string;
+}
 
 interface ImmersivePlugin {
   enter(options?: { displayBehindNotch?: boolean }): Promise<void>;
@@ -547,7 +556,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly spriteMetadata = signal<SpriteMetadata | null>(null);
   readonly activeSubtitleId = signal<string | null>(null);
   readonly activeAudioTrackId = signal<string | null>(null);
-  readonly availableAudioTracks = signal<{ id: string; label: string; language: string; menuHead?: string; menuSub?: string }[]>([]);
+  readonly availableAudioTracks = signal<AudioOption[]>([]);
   readonly availableSubtitles = signal<SubtitleOption[]>([]);
 
   /** Audio tracks from streamInfo for the Cast remote */
@@ -739,7 +748,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Bumped whenever {@link media} is (re)assigned so reactive computeds re-run. */
   private readonly mediaLoadedTick = signal(0);
   private activeBurnInId: number | null = null;
+  /** The audio the viewer is meant to hear: an index into the file's
+   *  `streamInfo.audio`. The one source of truth every load path negotiates and
+   *  configures from; the engine's own track is reconciled to it, never the reverse. */
   private activeAudioStreamIndex: number | undefined;
+  /** Track id of a switch asked of the engine and not yet seen in its reports. */
+  private audioSwitchPending: string | null = null;
+  /** Bumped by every audio switch: an older one that settles late must not touch the UI. */
+  private audioRequest = 0;
 
   /** Files an AirPlay receiver refused in HDR: renegotiated SDR from then on. */
   private readonly sdrFallbackFileIds = new Set<number>();
@@ -979,12 +995,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             : Promise.resolve(null);
         const media = await mediaPromise;
         this.media = media;
-        this.activeAudioStreamIndex = this.playerSettings.resolveAudioStreamIndex(
-          this.mediaFileId,
-          (this.currentFile()?.streamInfo as any)?.audio ?? [],
-          this.mediaId,
-          this.originalLanguage,
-        );
+        this.resolveAudioTarget();
         requestPlaybackInfo();
         const playbackState = await statePromise;
 
@@ -1041,12 +1052,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.state.playbackMode.set('direct');
         this.qualityManager.availableQualities.set([]);
         this.lastStreamUrl = offlineCheck ?? '';
+        this.resolveAudioTarget();
 
         if (this.isDesktopNative) {
           // Desktop: the original container lives on disk; mpv plays it back
           // offline (file://) with full codec coverage + embedded tracks.
           await this.createDesktopEngine();
           this.applyVideoCrop();
+          await this.prepareLoad();
           await this.engine!.load(offlineCheck!, startTime);
           await this.loadOfflineSubtitles();
         } else if (this.isNative) {
@@ -1062,11 +1075,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             (this.engine as NativeEngine).setPreloadedSubtitles(offlineSubs);
           }
 
+          await this.prepareLoad();
           await this.engine!.load(offlineCheck!, startTime, 'application/x-mpegURL');
         } else {
           // Web: Shaka offline URI ("offline:123") — IndexedDB-backed
           await this.createShakaEngine();
           this.applyVideoCrop();
+          await this.prepareLoad();
           await this.engine!.load(offlineCheck!, startTime);
         }
       } else {
@@ -1129,6 +1144,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           const { url: tizenUrl, mimeType: tizenMimeType } = this.buildPlayUrl({
             startTime,
           });
+          await this.prepareLoad();
           await this.engine!.load(tizenUrl, startTime, tizenMimeType, headers);
 
           // Subtitles loaded — expose to the picker. The full auto-pick path
@@ -1154,19 +1170,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
           this.applyNativeSubtitleStyle();
 
-          // Desktop mpv: pass the preferred audio language so mpv auto-selects the
-          // right rendition on load AND keeps it across seeks/reloads, instead of
-          // reverting to the manifest's default track (which may be a different
-          // language). Same source as the Shaka path's preferredAudioLanguage.
-          if (this.isDesktopNative) {
-            const preferredAudioLang = this.playerSettings.resolveAudioLanguage(
-              this.mediaId, this.originalLanguage,
-            );
-            if (preferredAudioLang) {
-              this.engine!.configure({ preferredAudioLanguage: preferredAudioLang });
-            }
-            this.applyVideoCrop();
-          }
+          if (this.isDesktopNative) this.applyVideoCrop();
 
           // Capacitor native players preload sidecar subs into the MediaItem for
           // direct play; HLS modes and the desktop mpv engine handle subs themselves.
@@ -1207,6 +1211,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
               (this.engine as NativeEngine).selectVariantTrack({ width: w, height: h });
             }
           }
+          await this.prepareLoad();
           const { url: nativeUrl, mimeType: nativeMimeType } = this.buildPlayUrl({
             startTime,
           });
@@ -1234,17 +1239,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
                 this.engine, mode, true,
               );
             }
-
-            // Resolve the target audio language BEFORE load so Shaka picks
-            // the matching variant during manifest parse — otherwise
-            // autoSelectAudioTrack would fire selectVariantTrack after load
-            // and trigger a second init.mp4 + seg-0 fetch.
-            // A remembered ":n" ordinal is stripped by the resolver — Shaka
-            // pre-picks the variant by language; autoSelectAudioTrack
-            // corrects to the Nth post-load.
-            const preferredLang = this.playerSettings.resolveAudioLanguage(
-              this.mediaId, this.originalLanguage,
-            );
 
             // Disable ABR when a specific quality is saved — avoids background
             // variant-switch chatter mid-playback. The backend serves a
@@ -1276,7 +1270,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
                   baseDelay: 1000,
                 },
               },
-              ...(preferredLang ? { preferredAudioLanguage: preferredLang } : {}),
             });
           }
 
@@ -1287,6 +1280,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           const { url: shakaUrl, mimeType: shakaMimeType } = this.buildPlayUrl({
             startTime,
           });
+          await this.prepareLoad();
           await this.engine!.load(shakaUrl, startTime, shakaMimeType);
         }
       }
@@ -1566,17 +1560,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     engine.on('firstFrame', () => {
       this.state.videoStarted.set(true);
     });
+    this.wireAudioTracks(engine);
     this.wireErrorRecovery(engine);
-
-    // Tizen audio-tracks listener is deliberately NOT wired. With MPEG-TS
-    // HLS the variant has a single muxed audio, so AVPlay's
-    // `getTotalTrackInfo()` only ever lists ONE entry — that would
-    // shrink the picker to a single option after each reload, even
-    // though the source has multiple languages. The shared streamInfo
-    // fallback (`populateAudioTracksFromStreamInfo` → `si-*` ids) gives
-    // us the full language list from the backend metadata, and the
-    // reload path on switch (see `onSelectAudioTrack` Tizen branch)
-    // applies the new track muxed-in via FFmpeg.
   }
 
   private async createNativeEngine(): Promise<void> {
@@ -1656,67 +1641,66 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return (file?.streamInfo as any)?.audio ?? [];
   }
 
-  /** Reconcile the engine's audio-track list against the backend streamInfo so
-   *  the dropdown labels match the media-detail header. Every engine that can
-   *  enumerate tracks needs this: the streamInfo fallback in loadAudioTracks
-   *  only covers an engine reporting none. */
+  /** Feeds every report of the engine's audio tracks into {@link adoptAudioTracks}. */
   private wireAudioTracks(engine: PlaybackEngine): void {
-    engine.on('audioTracksChanged', (e) => {
-      // Cross-reference engine tracks with streamInfo.audio so the dropdown
-      // label matches what the media-detail header shows. Engine emits tracks
-      // in streamInfo order.
-      const audioList = this.audioStreamInfo();
-      const tracks = e.tracks.map((t: any, i: number) => ({
+    engine.on('audioTracksChanged', (e) => this.adoptAudioTracks(e.tracks));
+  }
+
+  /** The audio the item opens on, known before any engine reports a track: the
+   *  remembered pick, else the mode's language, else the file's default. */
+  private resolveAudioTarget(): void {
+    this.activeAudioStreamIndex = this.playerSettings.resolveAudioStreamIndex(
+      this.mediaFileId, this.audioStreamInfo(), this.mediaId, this.originalLanguage,
+    );
+  }
+
+  /** Engine tracks labelled from streamInfo (engines list them in its order), so
+   *  the menu reads like the media-detail header. */
+  private describeAudioTracks(raw: AudioTrack[]): (AudioOption & { selected: boolean })[] {
+    const streams = this.audioStreamInfo();
+    return raw.map((t, i) => {
+      const parts = streams[i] ? formatAudioParts(streams[i], this.translate, i + 1) : null;
+      return {
         id: t.id,
-        label: audioList[i] ? formatAudioLabel(audioList[i], this.translate, i + 1) : t.label,
-        menuHead: audioList[i] ? formatAudioParts(audioList[i], this.translate, i + 1).head : t.label,
-        menuSub: audioList[i] ? formatAudioParts(audioList[i], this.translate, i + 1).sub : '',
+        label: streams[i] ? formatAudioLabel(streams[i], this.translate, i + 1) : t.label,
+        menuHead: parts?.head ?? t.label,
+        menuSub: parts?.sub ?? '',
         language: normalizeLangCode(t.language),
         selected: !!t.selected,
-      }));
-      const existing = this.availableAudioTracks();
-      const newIsEngineSourced =
-        tracks.length > 0 &&
-        (tracks[0].id.startsWith('audio-') ||
-          tracks[0].id.startsWith('avplay-audio-') ||
-          tracks[0].id.startsWith('shaka-'));
-      const existingIsFallback =
-        existing.length > 0 && existing[0].id.startsWith('si-');
-      // Upgrade ONLY when incoming has at least as many tracks as existing —
-      // otherwise a transient partial emission would wipe the full si-* list.
-      const upgradeFromFallback =
-        newIsEngineSourced && existingIsFallback && tracks.length >= existing.length;
-      const incomingSelected =
-        tracks.find((t: { selected: boolean }) => t.selected)?.id ?? null;
-      if (tracks.length <= existing.length && !upgradeFromFallback) {
-        // The list is held back, but the active track still has to follow: the
-        // first emission names no active variant, and the one that does carries
-        // the same count, so gating both here left the tick on track 0.
-        if (incomingSelected && existing.some((t) => t.id === incomingSelected)) {
-          this.activeAudioTrackId.set(incomingSelected);
-          // Only the si-*/audio-* ids are streamInfo indices; a shaka-* id is
-          // Shaka's own audioId and would point at the wrong stream.
-          if (
-            incomingSelected.startsWith('si-') ||
-            incomingSelected.startsWith('audio-')
-          ) {
-            this.activeAudioStreamIndex = parseAudioIndex(incomingSelected);
-          }
-        }
-        return;
-      }
-      this.availableAudioTracks.set(tracks);
-      const selected = tracks.find((t: any) => t.selected) ?? tracks[0];
-      this.activeAudioTrackId.set(selected.id);
-      this.reconcileActiveAudioTrack(tracks, selected.id);
-      this.trackManager.autoSelectAudioTrack(
-        tracks, this.mediaId, this.mediaFileId,
-        this.activeAudioTrackId(),
-        (trackId) => this.onSelectAudioTrack(trackId),
-        this.originalLanguage,
-        this.audioStreamInfo(),
-      );
+      };
     });
+  }
+
+  /** Takes a report of the audio tracks the engine (or the streamInfo fallback)
+   *  offers: refreshes the menu list, never shrinking it on a partial report, then
+   *  reconciles the engine's active track with the target. */
+  private adoptAudioTracks(raw: AudioTrack[]): void {
+    const tracks = this.describeAudioTracks(raw);
+    if (!tracks.length) return;
+    const existing = this.availableAudioTracks();
+    const sameList = tracks.length === existing.length && tracks.every((t, i) => t.id === existing[i].id);
+    if (tracks.length >= existing.length && !sameList) this.availableAudioTracks.set(tracks);
+    const list = this.availableAudioTracks();
+    const active = tracks.find((t) => t.selected)?.id ?? null;
+    this.reconcileAudio(list, list.some((t) => t.id === active) ? active : null);
+  }
+
+  /** Makes the engine play the target audio and the menu show it. `engineActive`
+   *  is the track the engine says it plays, null when it doesn't say. A switch
+   *  already asked for counts as done until the engine reports it, so a late or
+   *  stale report neither repeats the request nor loops. */
+  private reconcileAudio(tracks: AudioOption[], engineActive: string | null): void {
+    const idx = this.activeAudioStreamIndex;
+    const target = idx == null ? undefined : trackForStreamIndex(idx, this.audioStreamInfo(), tracks);
+    if (!target) {
+      this.reconcileActiveAudioTrack(tracks, engineActive);
+      return;
+    }
+    this.activeAudioTrackId.set(target.id);
+    if (engineActive === target.id) this.audioSwitchPending = null;
+    else if (engineActive && this.audioSwitchPending !== target.id) {
+      this.applyAudioTrack(target.id).catch((e) => console.warn('[player] audio reconcile failed', e));
+    }
   }
 
   /** Extra bottom margin (vh) keeping native-renderer cues clear of the bar —
@@ -2308,12 +2292,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       }
       this.pendingStartTime = startTime ?? 0;
 
-      // Audio preference for the new file (UI/state; the backend picks the
-      // default during playback-info negotiation).
-      const audioStreams: AudioStreamChoice[] = (file?.streamInfo as any)?.audio ?? [];
-      this.activeAudioStreamIndex = this.playerSettings.resolveAudioStreamIndex(
-        this.mediaFileId, audioStreams, this.mediaId, this.originalLanguage,
-      );
+      // The new file opens on its own audio pick; the backend marks it DEFAULT.
+      this.resolveAudioTarget();
 
       // Re-negotiate the stream for the new file (DirectPlay vs the ladder).
       await this.authService.ensureStreamToken();
@@ -2323,6 +2303,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       startTime = this.edlStartTime(startTime);
 
       const { url, mimeType } = this.buildPlayUrl({ startTime });
+      await this.prepareLoad();
       await this.engine.load(url, startTime, mimeType);
       this.reloadLoadPending = false;
       this.edl.settle();
@@ -2942,6 +2923,23 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     );
   }
 
+  /** What an engine must be told before every load(): its configuration is read
+   *  anew on each one, so nothing carries over from the previous load. */
+  private async prepareLoad(): Promise<void> {
+    this.audioSwitchPending = null;
+    this.configureAudioLanguage();
+  }
+
+  /** Engines that pre-select a rendition by language (Shaka's adaptation criteria,
+   *  mpv's `alang`) get the target stream's, not the one the session started with. */
+  private configureAudioLanguage(): void {
+    const idx = this.activeAudioStreamIndex;
+    const language = idx == null ? undefined : this.audioStreamInfo()[idx]?.language;
+    this.engine?.configure({
+      preferredAudioLanguage: language ? normalizeLangCode(language) : '',
+    });
+  }
+
   /** `startAt` for a reload: the live position, including 0; never omitted,
    *  since an omitted value falls back to the stale saved DB position. */
   private reloadStartAt(pos: number | undefined): number | undefined {
@@ -3011,6 +3009,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const { url, mimeType } = this.buildPlayUrl({
         sid: this.playbackInfo.sessionId,
       });
+      await this.prepareLoad();
       await this.engine.load(url, pos > 0 ? pos : undefined, mimeType);
       this.qualityManager.applyQualityPreferenceAfterLoad(
         this.engine,
@@ -3810,7 +3809,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   // ── Subtitles ──
 
-  /** Load audio tracks (Shaka variant tracks or streamInfo fallback). */
+  /** Load audio tracks: the engine's own once it lists them, else the streamInfo
+   *  fallback (`si-*`), which a backend reload switches. */
   private loadAudioTracks() {
     if (!this.engine) return;
 
@@ -3823,78 +3823,23 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (this.isNativeEngine() && this.availableAudioTracks().length > 1) return;
 
       const engineTracks = this.engine.getAudioTracks();
+      const streams = this.audioStreamInfo();
       // An engine that folds renditions by language enumerates fewer tracks
       // than the source: keep streamInfo so none leaves the menu.
-      const sourceAudioCount = (this.currentFile()?.streamInfo as any)?.audio?.length ?? 0;
       const foldsTracks =
         !!this.deviceProfileService.getProfile().dedupesAudioByLanguage &&
-        engineTracks.length < sourceAudioCount;
+        engineTracks.length < streams.length;
 
       if (engineTracks.length <= 1 || foldsTracks) {
         // Offline: don't show si-* fallback tracks — they can't be switched
         // via the engine. Only real engine-detected tracks are switchable.
-        if (this.isOfflinePlayback) return;
-        // Fallback: use streamInfo for online playback
-        const file = this.currentFile();
-        const si = file?.streamInfo as any;
-        const audioList = si?.audio;
-        if (audioList?.length > 1) {
-          const tracks = audioList.map((a: any, i: number) => ({
-            id: `si-${i}`,
-            label: formatAudioLabel(a, this.translate, i + 1),
-            menuHead: formatAudioParts(a, this.translate, i + 1).head,
-            menuSub: formatAudioParts(a, this.translate, i + 1).sub,
-            language: normalizeLangCode(a.language),
-          }));
-          this.availableAudioTracks.set(tracks);
-          // Set active to the track the backend is already using (preselected at startup)
-          const activeIdx = this.activeAudioStreamIndex ?? 0;
-          this.activeAudioTrackId.set(tracks[activeIdx]?.id ?? tracks[0].id);
-          this.reconcileActiveAudioTrack(tracks, tracks[activeIdx]?.id);
-          this.trackManager.autoSelectAudioTrack(
-            tracks, this.mediaId, this.mediaFileId,
-            this.activeAudioTrackId(),
-            (trackId) => this.onSelectAudioTrack(trackId),
-            this.originalLanguage,
-            this.audioStreamInfo(),
-          );
-        }
+        if (this.isOfflinePlayback || streams.length <= 1) return;
+        this.adoptAudioTracks(
+          streams.map((a, i) => ({ id: `si-${i}`, language: a.language ?? 'und', label: '' })),
+        );
         return;
       }
-
-      // Shaka's variant tracks expose `language` + `audioCodec` but not the
-      // source-side title (English / Portuguese (Brazil) / …) — that lives in
-      // streamInfo. With our HLS backend each EXT-X-MEDIA rendition is emitted
-      // in streamInfo.audio order, so the i-th engine track maps to
-      // streamInfo.audio[i]; use that to render the same label as the
-      // streamInfo dropdown.
-      const file = this.currentFile();
-      const audioList = (file?.streamInfo as any)?.audio ?? [];
-      const tracks = engineTracks.map((t, i) => ({
-        id: t.id,
-        label: audioList[i] ? formatAudioLabel(audioList[i], this.translate, i + 1) : t.label,
-        menuHead: audioList[i] ? formatAudioParts(audioList[i], this.translate, i + 1).head : t.label,
-        menuSub: audioList[i] ? formatAudioParts(audioList[i], this.translate, i + 1).sub : '',
-        language: normalizeLangCode(t.language),
-      }));
-
-      this.availableAudioTracks.set(tracks);
-      // Set active to the currently playing one
-      const active = this.getActiveVariant();
-      if (active?.audioId != null) {
-        this.activeAudioTrackId.set(`shaka-${active.audioId}`);
-      }
-      this.reconcileActiveAudioTrack(
-        tracks,
-        active?.audioId != null ? `shaka-${active.audioId}` : null,
-      );
-      this.trackManager.autoSelectAudioTrack(
-        tracks, this.mediaId, this.mediaFileId,
-        this.activeAudioTrackId(),
-        (trackId) => this.onSelectAudioTrack(trackId),
-        this.originalLanguage,
-        this.audioStreamInfo(),
-      );
+      this.adoptAudioTracks(engineTracks);
     }, 2000);
   }
 
@@ -3915,68 +3860,56 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     );
   }
 
+  /** A viewer's audio pick: remembered for the title, then applied. */
   async onSelectAudioTrack(trackId: string) {
-    this.activeAudioTrackId.set(trackId);
-    // 'si-*' and 'audio-*' suffixes are streamInfo audio indices: the
-    // backend emits EXT-X-MEDIA renditions in streamInfo.audio order
-    // and the native plugins enumerate them in that same order. Keep
-    // activeAudioStreamIndex in sync so a later reloadStream() hands
-    // the right index to /playback-info — otherwise the new master
-    // marks the wrong rendition DEFAULT=YES and the player reverts
-    // to the original language on the item swap. 'shaka-*' is
-    // Shaka's internal audioId, not a streamInfo index.
-    if (trackId.startsWith('si-') || trackId.startsWith('audio-')) {
-      this.activeAudioStreamIndex = parseAudioIndex(trackId);
-    }
     this.chrome.resetHideTimer();
-
-    // Save selection
     this.trackManager.saveAudioSelection(
       trackId, this.availableAudioTracks(), this.mediaId, this.audioStreamInfo(),
     );
+    await this.applyAudioTrack(trackId);
+  }
 
-    const isEngineTrack =
-      this.engine && (
-        trackId.startsWith('shaka-') ||
-        trackId.startsWith('audio-') ||
-        trackId.startsWith('avplay-audio-')
-      );
-
-    // Engine-level audio switch (Shaka native or NativeEngine)
-    if (isEngineTrack) {
-      // Capture the play/pause intent first: a native engine reloads the stream
-      // to switch track, which comes back playing — switching language must not
-      // resume a player the user paused. `reloadStream` does the same below.
-      const wasPaused = this.pauseIntent();
-      // Show spinner during audio switch (native player reloads the stream)
-      if (this.isNativeEngine()) {
-        this.state.buffering.set(true);
-      }
-      await this.engine!.selectAudioTrack(trackId);
-      if (this.isNativeEngine()) {
-        this.state.buffering.set(false);
-      }
-      this.restorePlayState(wasPaused);
-      return;
-    }
+  /** Makes `trackId` the target audio. A later reloadStream() hands its streamInfo
+   *  index to /playback-info; without it the new master marks the old rendition
+   *  DEFAULT=YES and the language reverts on the item swap. */
+  private async applyAudioTrack(trackId: string): Promise<void> {
+    const request = ++this.audioRequest;
+    this.activeAudioTrackId.set(trackId);
+    const index = streamIndexForTrack(
+      trackId, this.availableAudioTracks(), this.audioStreamInfo(), this.activeAudioStreamIndex,
+    );
+    if (index != null) this.activeAudioStreamIndex = index;
+    this.audioSwitchPending = trackId;
 
     // si-* tracks are the streamInfo fallback list shown before the engine
-    // surfaces client-switchable tracks. For HLS the transient si-* list
-    // upgrades to shaka-* once Shaka fires trackschanged, and a shaka-* pick
-    // switches client-side. But a si-* pick means there is no engine-level
-    // track for that rendition yet, so the only way to honour it — in direct,
-    // remux or transcode alike — is a backend reload that marks the new
-    // audioStreamIndex DEFAULT (set above from the si-* index). Offline: no
-    // backend, nothing to reload.
-    if (this.isOfflinePlayback) {
-      console.warn('[player] onSelectAudioTrack: no backend to reload for offline playback', trackId);
+    // surfaces client-switchable tracks: no engine-level track exists for that
+    // rendition yet, so the only way to honour it — in direct, remux or
+    // transcode alike — is a backend reload that marks the new audio index
+    // DEFAULT. Offline: no backend, nothing to reload.
+    if (trackId.startsWith('si-')) {
+      this.audioSwitchPending = null;
+      if (this.isOfflinePlayback) {
+        console.warn('[player] applyAudioTrack: no backend to reload for offline playback', trackId);
+        return;
+      }
+      await this.reloadStream();
       return;
     }
-    if (!trackId.startsWith('si-')) {
-      console.warn('[player] onSelectAudioTrack: unrecognized track id, tracks may not be enumerated yet', trackId);
-      return;
+
+    // Engine-level audio switch. Capture the play/pause intent first: a native
+    // engine reloads the stream to switch track, which comes back playing —
+    // switching language must not resume a player the user paused.
+    const wasPaused = this.pauseIntent();
+    if (this.isNativeEngine()) this.state.buffering.set(true);
+    try {
+      await this.engine?.selectAudioTrack(trackId);
+    } finally {
+      // A newer switch owns the buffering veil and the play state now.
+      if (request === this.audioRequest) {
+        if (this.isNativeEngine()) this.state.buffering.set(false);
+      }
     }
-    await this.reloadStream();
+    if (request === this.audioRequest) this.restorePlayState(wasPaused);
   }
 
   /** Sort key mirroring the manifest's SUBTITLES order: embedded renditions
@@ -4482,6 +4415,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // loads, so a token that lapsed mid-film would 401 every segment.
       await this.authService.ensureStreamToken();
       const { url, mimeType } = this.buildPlayUrl({ startTime: currentPos });
+      await this.prepareLoad();
       await this.engine.load(url, currentPos, mimeType);
       this.reloadReachedPlayback = true;
       this.reloadLoadPending = false;
@@ -4536,14 +4470,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private forcedSaveTrailing: ReturnType<typeof setTimeout> | null = null;
 
   /** Active audio as a streamInfo index: the one space the backend, the media
-   *  detail header and every client agree on. `availableAudioTracks()` is in
-   *  streamInfo order, so position is the index; a shaka-* id is engine-local
-   *  and means nothing to anyone else. */
+   *  detail header and every client agree on; a shaka-* id is engine-local and
+   *  means nothing to anyone else. */
   private activeAudioIndex(): number | null {
+    if (this.activeAudioStreamIndex != null) return this.activeAudioStreamIndex;
     const id = this.activeAudioTrackId();
     const pos = this.availableAudioTracks().findIndex((t) => t.id === id);
-    if (pos >= 0) return pos;
-    return this.activeAudioStreamIndex ?? null;
+    return pos >= 0 ? pos : null;
   }
 
   private async savePosition(force = false) {

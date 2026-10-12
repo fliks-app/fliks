@@ -91,6 +91,8 @@ function fakeEngine() {
     play: vi.fn(async () => {}),
     pause: vi.fn(async () => {}),
     destroy: vi.fn(async () => {}),
+    selectAudioTrack: vi.fn(async (_id: string) => {}),
+    getAudioTracks: vi.fn(() => [] as any[]),
     configure: vi.fn(),
     getVariantTracks: vi.fn(() => [] as any[]),
     getStats: vi.fn(() => ({ droppedFrames: 0 }) as any),
@@ -1888,5 +1890,144 @@ describe('PlayerComponent startup', () => {
 
     expect(engine.setCrop).toHaveBeenCalledWith(crop, 1920, 1080);
     expect(calls.indexOf('setCrop')).toBeLessThan(calls.indexOf('load'));
+  });
+});
+
+/** Two-language file: the target audio is an index into this list. */
+const AUDIO_STREAMS = [{ language: 'eng' }, { language: 'fra' }];
+const AUDIO_MEDIA: Media = {
+  ...MOVIE,
+  files: [{ ...MOVIE.files![0], streamInfo: { durationSeconds: 100, audio: AUDIO_STREAMS } as any }],
+};
+
+function audioHarness() {
+  const h = createHarness();
+  h.component.media = AUDIO_MEDIA;
+  h.component.activeAudioStreamIndex = 0;
+  return h;
+}
+
+const engineTrack = (id: string, language: string, selected = false) => ({ id, language, label: id, selected });
+
+describe('PlayerComponent audio target', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  it.each([
+    ['shaka-4', 'shaka-7'],
+    ['avplay-audio-1', 'avplay-audio-2'],
+  ])('a pick of %s / %s reaches the next negotiation as a streamInfo index', async (first, second) => {
+    const h = audioHarness();
+    h.component.availableAudioTracks.set([
+      { id: first, label: '', language: 'en' },
+      { id: second, label: '', language: 'fr' },
+    ]);
+
+    await h.component.onSelectAudioTrack(second);
+    await h.component.reloadStream();
+
+    expect(h.engine.selectAudioTrack).toHaveBeenCalledWith(second);
+    expect((h.streamingApi.getPlaybackInfo.mock.calls[0] as any[])[3]).toBe(1);
+  });
+
+  it('configures the engine with the target language before every load, not the session-start one', async () => {
+    const h = audioHarness();
+    h.component.activeAudioStreamIndex = 1;
+    h.engine.currentTime = 10;
+
+    await h.component.reloadStream();
+    await h.component.refreshSidAndReload(10, { preservePause: false, unmute: false });
+
+    const configures = h.engine.configure.mock.calls
+      .map((c: any[], i: number) => (c[0]?.preferredAudioLanguage != null ? h.engine.configure.mock.invocationCallOrder[i] : 0))
+      .filter(Boolean);
+    const loads = h.engine.load.mock.invocationCallOrder;
+    expect(configures).toHaveLength(2);
+    expect(h.engine.configure).toHaveBeenCalledWith({ preferredAudioLanguage: 'fr' });
+    configures.forEach((order: number, i: number) => expect(order).toBeLessThan(loads[i]));
+  });
+
+  it('puts an engine that fell back to its default track back on the target, keeping the target', () => {
+    const h = audioHarness();
+    h.component.activeAudioStreamIndex = 1;
+    h.component.wireAudioTracks(h.engine);
+
+    h.engine.emit('audioTracksChanged', {
+      tracks: [engineTrack('audio-0', 'eng', true), engineTrack('audio-1', 'fra')],
+    });
+
+    expect(h.engine.selectAudioTrack).toHaveBeenCalledWith('audio-1');
+    expect(h.component.activeAudioTrackId()).toBe('audio-1');
+    expect(h.component.activeAudioStreamIndex).toBe(1);
+  });
+
+  it('does nothing when the engine already plays the target', () => {
+    const h = audioHarness();
+    h.component.activeAudioStreamIndex = 1;
+    h.component.wireAudioTracks(h.engine);
+
+    h.engine.emit('audioTracksChanged', {
+      tracks: [engineTrack('audio-0', 'eng'), engineTrack('audio-1', 'fra', true)],
+    });
+
+    expect(h.engine.selectAudioTrack).not.toHaveBeenCalled();
+    expect(h.component.activeAudioTrackId()).toBe('audio-1');
+  });
+
+  it('asks once for a switch even when the engine keeps reporting the old track for a moment', () => {
+    const h = audioHarness();
+    h.component.activeAudioStreamIndex = 1;
+    h.component.wireAudioTracks(h.engine);
+    const stale = { tracks: [engineTrack('audio-0', 'eng', true), engineTrack('audio-1', 'fra')] };
+    const landed = { tracks: [engineTrack('audio-0', 'eng'), engineTrack('audio-1', 'fra', true)] };
+
+    h.engine.emit('audioTracksChanged', stale);
+    h.engine.emit('audioTracksChanged', stale);
+    h.engine.emit('audioTracksChanged', landed);
+    expect(h.engine.selectAudioTrack).toHaveBeenCalledTimes(1);
+
+    // Once the switch has landed, a later revert (webOS reloads on a seek) is corrected again.
+    h.engine.emit('audioTracksChanged', stale);
+    expect(h.engine.selectAudioTrack).toHaveBeenCalledTimes(2);
+  });
+
+  it('lets the latest of two quick picks keep the target and the check mark', async () => {
+    const h = audioHarness();
+    h.component.availableAudioTracks.set([
+      { id: 'shaka-4', label: '', language: 'en' },
+      { id: 'shaka-7', label: '', language: 'fr' },
+    ]);
+    const releases: (() => void)[] = [];
+    h.engine.selectAudioTrack.mockImplementation(() => new Promise<void>((r) => releases.push(r)));
+
+    const first = h.component.onSelectAudioTrack('shaka-7');
+    const second = h.component.onSelectAudioTrack('shaka-4');
+    releases[1]();
+    await second;
+    releases[0]();
+    await first;
+
+    expect(h.component.activeAudioTrackId()).toBe('shaka-4');
+    expect(h.component.activeAudioStreamIndex).toBe(0);
+    expect(h.engine.play).toHaveBeenCalledTimes(1);
+  });
+
+  it('wires the Tizen engine to the same track reports as the others', async () => {
+    const h = audioHarness();
+    h.component.activeAudioStreamIndex = 1;
+    h.component.createSurface = async () => ({ engine: h.engine });
+
+    await h.component.createTizenEngine();
+    h.engine.emit('audioTracksChanged', {
+      tracks: [engineTrack('avplay-audio-1', 'eng', true), engineTrack('avplay-audio-2', 'fra')],
+    });
+
+    expect(h.component.availableAudioTracks().map((t: { id: string }) => t.id)).toEqual([
+      'avplay-audio-1',
+      'avplay-audio-2',
+    ]);
+    expect(h.engine.selectAudioTrack).toHaveBeenCalledWith('avplay-audio-2');
+    expect(h.component.activeAudioTrackId()).toBe('avplay-audio-2');
   });
 });

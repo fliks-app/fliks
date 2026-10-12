@@ -3,6 +3,7 @@ import { TranslateService } from '@ngx-translate/core';
 import {
   PlayerSettingsService,
   matchRememberedAudio,
+  pickAudioStreamForLanguage,
   rememberedAudioKey,
   type AudioStreamChoice,
   type HearingImpairedPreference,
@@ -49,18 +50,6 @@ export class TrackManagerService {
 
   // ── Audio track methods ──
 
-  /** Maps a `streams`-order index to its engine track: by position when the lists align,
-   *  else by language (webOS folds same-language streams into one track). */
-  private trackForStreamIndex<T extends { id: string; language: string }>(
-    idx: number,
-    streams: AudioStreamChoice[],
-    tracks: T[],
-  ): T | undefined {
-    if (streams.length === tracks.length) return tracks[idx];
-    const lang = normalizeLangCode(streams[idx]?.language);
-    return tracks.find((t) => normalizeLangCode(t.language) === lang);
-  }
-
   /**
    * Auto-select audio track based on user preferences.
    *
@@ -89,18 +78,19 @@ export class TrackManagerService {
       const saved = this.playerSettings.getRememberedAudioTrack(key);
       const source = streams?.length ? streams : tracks;
       const idx = saved ? matchRememberedAudio(saved, source) : undefined;
-      const match = idx != null ? this.trackForStreamIndex(idx, source, tracks) : undefined;
+      const match = idx != null ? trackForStreamIndex(idx, source, tracks) : undefined;
       if (match) {
         if (match.id !== activeAudioTrackId) onSelect(match.id);
         return;
       }
     }
 
-    // Priority 2: the mode's target language.
+    // Priority 2: the mode's target language, picked by the rule
+    // resolveAudioStreamIndex applies before load.
     const lang = this.playerSettings.audioLanguage(originalLanguage);
-    const match = lang
-      ? tracks.find((t) => normalizeLangCode(t.language) === normalizeLangCode(lang))
-      : undefined;
+    const source = streams?.length ? streams : tracks;
+    const idx = lang ? pickAudioStreamForLanguage(source, lang) : undefined;
+    const match = idx != null ? trackForStreamIndex(idx, source, tracks) : undefined;
     if (match && match.id !== activeAudioTrackId) onSelect(match.id);
   }
 
@@ -321,6 +311,39 @@ export class TrackManagerService {
       if (match) await onSelect(match);
     }
   }
+}
+
+/** Maps a `streams`-order index to its engine track: by position when the lists align,
+ *  else by language (webOS folds same-language streams into one track). */
+export function trackForStreamIndex<T extends { id: string; language: string }>(
+  idx: number,
+  streams: AudioStreamChoice[],
+  tracks: T[],
+): T | undefined {
+  if (!streams[idx]) return undefined;
+  if (streams.length === tracks.length) return tracks[idx];
+  const lang = normalizeLangCode(streams[idx].language);
+  return tracks.find((t) => normalizeLangCode(t.language) === lang);
+}
+
+/** The reverse of {@link trackForStreamIndex}: the `streams` index an engine track plays.
+ *  A folded track stands for several streams of its language; `hint` (the index already
+ *  targeted) wins when it is one of them, so a report of the folded track keeps a pick of
+ *  its commentary rendition. Undefined when the track or the streams are unknown. */
+export function streamIndexForTrack(
+  trackId: string,
+  tracks: { id: string; language: string }[],
+  streams: AudioStreamChoice[],
+  hint?: number,
+): number | undefined {
+  const pos = tracks.findIndex((t) => t.id === trackId);
+  if (pos < 0 || !streams.length) return undefined;
+  if (streams.length === tracks.length) return pos;
+  const lang = normalizeLangCode(tracks[pos].language);
+  const same = streams
+    .map((s, i) => (normalizeLangCode(s.language) === lang ? i : -1))
+    .filter((i) => i >= 0);
+  return hint != null && same.includes(hint) ? hint : same[0];
 }
 
 /** Machine-made subs (translated / OCR) read worse than a real track, so they
