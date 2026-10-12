@@ -17,6 +17,14 @@ export interface DesktopSubtitleTrack {
   label: string;
   forced: boolean;
   selected: boolean;
+  /** Bitmap codec (PGS / VobSub / DVB): mpv renders it itself, there is no text. */
+  image: boolean;
+  /** True for a sidecar added with `sub-add`, false for a track of the media. */
+  external: boolean;
+  /** What a sidecar was loaded from (the `sub-add` URL); null otherwise. */
+  source: string | null;
+  /** Container stream index of an embedded track (`ff-index`); null when mpv reports none. */
+  ffIndex: number | null;
 }
 
 export interface DesktopLoadOptions {
