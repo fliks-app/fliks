@@ -102,8 +102,8 @@ export class QoeAggregator {
   private last: StallLast | null = null;
   private pipelineInfo: QoePipeline | null = null;
   private errorCount = 0;
-  private lastErrorAt: number | null = null;
-  private lastRecoveryAt: number | null = null;
+  /** An error with no recovery or sample after it, in arrival order. */
+  private errorOpen = false;
 
   /** `playing`: the session is not paused, so the gap since the last sample is watched time. */
   addSample(s: QoeSample, now: number, playing = true): void {
@@ -111,6 +111,7 @@ export class QoeAggregator {
       this.watchedMs += Math.min(now - this.lastSampleAt, MAX_WATCH_GAP_MS);
     }
     this.lastSampleAt = now;
+    this.errorOpen = false;
     this.sampleCount++;
     this.engine = s.engine;
     if (s.cmcd) this.cmcdClaimed = true;
@@ -193,9 +194,9 @@ export class QoeAggregator {
     }
     if (e.type === 'error') {
       this.errorCount++;
-      this.lastErrorAt = now;
+      this.errorOpen = true;
     } else if (e.type === 'recovery') {
-      this.lastRecoveryAt = now;
+      this.errorOpen = false;
     }
     return classified;
   }
@@ -238,7 +239,6 @@ export class QoeAggregator {
   }
 
   summary(): QoeSessionSummary {
-    const lastErrorAt = this.lastErrorAt;
     return {
       engine: this.engine,
       cmcd: this.cmcdSeen,
@@ -255,10 +255,7 @@ export class QoeAggregator {
       decodedFrames: this.decoded.total,
       recoveryReloads: this.reloads.total ?? 0,
       errorCount: this.errorCount,
-      unrecoveredError:
-        lastErrorAt != null &&
-        (this.lastRecoveryAt ?? -1) < lastErrorAt &&
-        (this.lastSampleAt ?? -1) <= lastErrorAt,
+      unrecoveredError: this.errorOpen,
       bandwidthBps: this.bandwidth,
       variantBitrate: this.variantBitrate,
       bufferAheadS: this.bufferAhead,

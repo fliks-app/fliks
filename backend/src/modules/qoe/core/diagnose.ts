@@ -60,6 +60,8 @@ const STALL_REASON: Record<string, string> = {
   'qoe.stall.network_unconfirmed': 'stalls_starved_bandwidth_ok',
   'qoe.stall.device_buffer_ahead': 'stalls_buffer_ahead',
   'qoe.stall.device_dropped_frames': 'dropped_frames',
+  'qoe.stall.server_session_lost': 'session_lost',
+  'qoe.stall.server_session_expired': 'session_expired',
 };
 const CAUSE_REASON = {
   server: 'stalls_server_slow',

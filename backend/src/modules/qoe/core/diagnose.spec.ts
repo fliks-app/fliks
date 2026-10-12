@@ -172,6 +172,8 @@ describe('diagnose', () => {
       expect(r({ 'qoe.stall.network_unconfirmed': 5_000 }, { network: 5_000 })).toEqual(['qoe.reason.stalls_starved_bandwidth_ok']);
       expect(r({ 'qoe.stall.device_dropped_frames': 5_000 }, { device: 5_000 })).toEqual(['qoe.reason.dropped_frames']);
       expect(r({ 'qoe.stall.network_starved': 5_000 }, { network: 5_000 })).toEqual(['qoe.reason.stalls_starved_low_throughput']);
+      expect(r({ 'qoe.stall.server_session_lost': 5_000 }, { server: 5_000 })).toEqual(['qoe.reason.session_lost']);
+      expect(r({ 'qoe.stall.server_session_expired': 5_000 }, { server: 5_000 })).toEqual(['qoe.reason.session_expired']);
     });
 
     it('weigh by duration, not by count', () => {

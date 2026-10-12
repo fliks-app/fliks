@@ -100,6 +100,15 @@ describe('QoeAggregator', () => {
     expect(a.summary().unrecoveredError).toBe(false);
   });
 
+  it('keeps event order within one batch stamped with the same time', () => {
+    const a = new QoeAggregator();
+    a.addEvent({ type: 'recovery', at: 1, position: 5 }, 5_000);
+    a.addEvent({ type: 'error', at: 2, position: 5 }, 5_000);
+    expect(a.summary().unrecoveredError).toBe(true);
+    a.addEvent({ type: 'recovery', at: 3, position: 5 }, 5_000);
+    expect(a.summary().unrecoveredError).toBe(false);
+  });
+
   it('takes stall context medians from events', () => {
     const a = new QoeAggregator();
     for (const b of [0, 0.4, 9]) {
