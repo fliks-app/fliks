@@ -294,7 +294,7 @@ private struct SkipCueStyle: ButtonStyle {
     }
 
     /// Rebuffer in flight: set on `.waitingToPlayAtSpecifiedRate` after the first frame, settled on `.playing`.
-    private var stallStart: (at: Date, position: Double, variantBitrate: Double?)?
+    private var stallStart: (at: Date, position: Double, variantBitrate: Double?, bufferAheadS: Double?)?
     private var playedOnce = false
     /// A seek also waits to buffer: no stall is armed right after a time jump.
     private var lastJumpAt = Date.distantPast
@@ -303,7 +303,7 @@ private struct SkipCueStyle: ButtonStyle {
         guard let start = stallStart else { return }
         stallStart = nil
         playback.recordStall(position: start.position, durationMs: Int(Date().timeIntervalSince(start.at) * 1000),
-                           variantBitrate: start.variantBitrate)
+                           variantBitrate: start.variantBitrate, bufferAheadS: start.bufferAheadS)
     }
 
     private func trackStall(_ player: AVPlayer) {
@@ -315,7 +315,7 @@ private struct SkipCueStyle: ButtonStyle {
         case .waitingToPlayAtSpecifiedRate:
             if playedOnce, stallStart == nil, Date().timeIntervalSince(lastJumpAt) > 1,
                player.reasonForWaitingToPlay == .toMinimizeStalls {
-                stallStart = (Date(), position, playback.variantBitrate)
+                stallStart = (Date(), position, playback.variantBitrate, playback.bufferAhead)
             }
         default:
             stallStart = nil

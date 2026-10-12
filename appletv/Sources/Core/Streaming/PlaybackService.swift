@@ -351,7 +351,8 @@ import Foundation
         qoeItem?.accessLog()?.events.last.flatMap { $0.indicatedBitrate > 0 ? $0.indicatedBitrate : nil }
     }
 
-    private var bufferAhead: Double? {
+    /// Seconds buffered ahead of the playhead.
+    var bufferAhead: Double? {
         guard let item = qoeItem else { return nil }
         let now = item.currentTime()
         return item.loadedTimeRanges.map(\.timeRangeValue).first { $0.containsTime(now) }
@@ -397,13 +398,13 @@ import Foundation
     }
 
     /// A rebuffer that ended where it began (the coordinator drops seeks).
-    /// `variantBitrate` is the rung when the rebuffer began.
-    func recordStall(position: Double, durationMs: Int, variantBitrate: Double?) {
+    /// `variantBitrate` and `bufferAheadS` are what the player had when the rebuffer began.
+    func recordStall(position: Double, durationMs: Int, variantBitrate: Double?, bufferAheadS: Double?) {
         guard !recovering else { return }
         stallCount += 1
         stallMs += durationMs
         pendingEvents.append(QoeEvent(type: "stall", at: Int(Date().timeIntervalSince1970 * 1000), position: position,
-                                      durationMs: durationMs, bufferAheadS: bufferAhead, bandwidthBps: bandwidth,
+                                      durationMs: durationMs, bufferAheadS: bufferAheadS, bandwidthBps: bandwidth,
                                       variantBitrate: variantBitrate))
     }
 
@@ -418,9 +419,11 @@ import Foundation
     }
 
     private func postEvents(_ events: [QoeEvent], sid: String) async {
-        struct Body: Encodable { let playbackId: String; let events: [QoeEvent] }
+        // sentAt lets the server correct this device's clock offset.
+        struct Body: Encodable { let playbackId: String; let events: [QoeEvent]; let sentAt: Int }
         guard !events.isEmpty else { return }
-        try? await api.post("/api/playback/sessions/\(sid)/events", body: Body(playbackId: playbackId, events: events))
+        let sentAt = Int(Date().timeIntervalSince1970 * 1000)
+        try? await api.post("/api/playback/sessions/\(sid)/events", body: Body(playbackId: playbackId, events: events, sentAt: sentAt))
     }
 
     private func flushNow() {
