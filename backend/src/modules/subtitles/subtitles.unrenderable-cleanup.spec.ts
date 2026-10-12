@@ -11,6 +11,8 @@ describe('DropUnrenderableSidecarSubtitles', () => {
     const sql = (query.mock.calls as [string][])[0][0];
     expect(sql).toMatch(/^DELETE FROM "subtitle_files"/);
     expect(sql).toContain('"codec" IS NULL');
+    // The entity's relativePath maps to the filePath column.
+    expect(sql).toContain('"filePath" ~*');
     const re = new RegExp(/'([^']+)'/.exec(sql)![1], 'i');
     for (const f of ['a.en.sub', 'a.MKS', 'a.smi', 'a.sami'])
       expect(re.test(f)).toBe(true);

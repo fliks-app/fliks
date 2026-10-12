@@ -13,7 +13,7 @@ export class DropUnrenderableSidecarSubtitles1786200000000 implements MigrationI
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
       `DELETE FROM "subtitle_files"
-       WHERE "codec" IS NULL AND "relativePath" ~* '\\.(sub|mks|smi|sami)$'`,
+       WHERE "codec" IS NULL AND "filePath" ~* '\\.(sub|mks|smi|sami)$'`,
     );
   }
 
