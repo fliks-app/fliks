@@ -1218,7 +1218,7 @@ describe('StreamingController.hlsSegment - CMCD reaches the QoE tracker', () => 
       },
     });
     expect(summary).toMatchObject({ cmcd: true, bandwidthBps: 25_400_000, variantBitrate: 3_000_000 });
-    expect(row).toMatchObject({ cmcd: true, stallCount: 1 });
+    expect(row).toMatchObject({ cmcd: true, stallCount: 0 });
   });
 
   it('stays false when the client claims CMCD but none arrives', async () => {

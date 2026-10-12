@@ -128,11 +128,9 @@ describe('QoeAggregator', () => {
     expect(diagnose(a.summary()).reasons).not.toContain('qoe.reason.cmcd_missing');
   });
 
-  it('turns CMCD buffer starvation into a starved stall when the client reports none', () => {
+  it('turns CMCD buffer starvation into a starved stall when the client sends nothing', () => {
     const a = new QoeAggregator();
-    a.addSample(sample({ bandwidthBps: 1e6, variantBitrate: 8e6 }), 0);
-    a.addSample(sample({ bandwidthBps: 1e6, variantBitrate: 8e6 }), 30_000);
-    a.addCmcd({ bl: 200, bs: true });
+    a.addCmcd({ bl: 200, bs: true, mtp: 1000, br: 8000 });
     const s = a.summary();
     expect(s).toMatchObject({ stallCount: 1, stallBufferAheadS: 0.2 });
     expect(diagnose({ ...s, watchedMs: 5 * 60_000 })).toMatchObject({
@@ -141,11 +139,38 @@ describe('QoeAggregator', () => {
     });
   });
 
-  it('ignores CMCD starvation once the client reports its own stalls', () => {
+  it('never overrides a client that reports samples, even with zero stalls', () => {
     const a = new QoeAggregator();
-    a.addEvent({ type: 'stall', at: 1, position: 1, bufferAheadS: 5 }, 0);
+    a.addSample(sample({ stallCount: 0 }), 0);
     a.addCmcd({ bl: 100, bs: true });
-    expect(a.summary()).toMatchObject({ stallCount: 0, stallBufferAheadS: 5 });
+    expect(a.summary()).toMatchObject({ stallCount: 0, stallBufferAheadS: null });
+    const b = new QoeAggregator();
+    b.addEvent({ type: 'stall', at: 1, position: 1, bufferAheadS: 5 }, 0);
+    b.addCmcd({ bl: 100, bs: true });
+    expect(b.summary()).toMatchObject({ stallCount: 0, stallBufferAheadS: 5 });
+  });
+
+  it('counts a run of bs requests as one stall and ignores startup', () => {
+    const a = new QoeAggregator();
+    a.addCmcd({ bs: true, su: true }, 0);
+    a.addCmcd({ bs: true, bl: 100 }, 10_000);
+    a.addCmcd({ bs: true, bl: 300 }, 12_000);
+    a.addCmcd({ bs: true, bl: 200 }, 16_000);
+    expect(a.summary().stallCount).toBe(1);
+    a.addCmcd({ bs: true, bl: 400 }, 30_000);
+    expect(a.summary()).toMatchObject({ stallCount: 2, stallBufferAheadS: 0.25 });
+  });
+
+  it('reads the stall buffer off video objects, not audio', () => {
+    const a = new QoeAggregator();
+    a.addCmcd({ bl: 9000, ot: 'a' }, 1_000);
+    a.addCmcd({ bl: 300, ot: 'v' }, 1_500);
+    a.addCmcd({ bl: 9000, ot: 'a' }, 1_800);
+    a.addEvent({ type: 'stall', at: 1, position: 1 }, 2_000);
+    expect(a.summary().stallBufferAheadS).toBe(0.3);
+    const b = new QoeAggregator();
+    b.addCmcd({ bl: 8000, bs: true, ot: 'a' }, 0);
+    expect(b.summary().stallBufferAheadS).toBeNull();
   });
 
   it('takes a stall buffer from a fresh CMCD bl', () => {
@@ -181,5 +206,14 @@ describe('mergeSummaries', () => {
       errorCount: 1,
       unrecoveredError: false,
     });
+  });
+
+  it('adds frame counters only over parts that report both', () => {
+    const m = mergeSummaries([
+      part({ droppedFrames: 10, decodedFrames: null }),
+      part({ droppedFrames: 5, decodedFrames: 100 }),
+      part({ droppedFrames: null, decodedFrames: 50 }),
+    ]);
+    expect(m).toMatchObject({ droppedFrames: 5, decodedFrames: 100 });
   });
 });

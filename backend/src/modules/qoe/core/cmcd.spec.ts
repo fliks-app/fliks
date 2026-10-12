@@ -4,7 +4,7 @@ describe('readCmcd', () => {
   it('reads the CMCD query param', () => {
     expect(
       readCmcd({ query: { CMCD: 'bl=2100,br=3000,mtp=25400,su,sid="x",ot=v' } }),
-    ).toEqual({ bl: 2100, br: 3000, mtp: 25400, su: true });
+    ).toEqual({ bl: 2100, br: 3000, mtp: 25400, su: true, ot: 'v' });
   });
 
   it('reads the CMCD-* headers', () => {

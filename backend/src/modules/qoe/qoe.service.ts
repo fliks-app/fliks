@@ -151,7 +151,13 @@ const rowSummary = (r: PlaybackQoeSession): QoeSessionSummary => ({
   sampleCount: r.sampleCount,
 });
 
-const playbackKey = (r: PlaybackQoeSession) => r.playbackId ?? r.sessionId;
+/** A playbackId is only unique per user: another user's identical id must stay a separate playback. */
+const KEY_SQL = `COALESCE(s."userId"::text || ':' || s."playbackId", s."sessionId")`;
+
+const playbackKey = (r: PlaybackQoeSession) =>
+  r.userId != null && r.playbackId != null
+    ? `${r.userId}:${r.playbackId}`
+    : r.sessionId;
 
 /** Rows grouped by playback, each merged; newest playback first. */
 function mergePlaybacks(rows: PlaybackQoeSession[]): QoePlayback[] {
@@ -388,7 +394,9 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     const events = t.pendingEvents.splice(0);
     const run = async (): Promise<void> => {
       try {
-        await this.sessions.upsert(this.toRow(t), ['sessionId']);
+        const row = this.toRow(t);
+        await this.sessions.upsert(row, ['sessionId']);
+        await this.refreshPlaybackVerdict(row);
         if (events.length) await this.events.insert(events);
       } catch (e) {
         // bounded by the per-session event cap
@@ -407,6 +415,18 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     };
     t.flushing = run();
     return t.flushing;
+  }
+
+  /** The verdict covers every row of the playback, so a new row restates it on its siblings. */
+  private async refreshPlaybackVerdict(row: PlaybackQoeSession): Promise<void> {
+    const { userId, playbackId } = row;
+    if (userId == null || playbackId == null) return;
+    const rows = await this.sessions.find({ where: { userId, playbackId } });
+    const p = mergePlaybacks(rows)[0];
+    await this.sessions.update(
+      { userId, playbackId },
+      { playbackVerdict: p.verdict, playbackConfidence: p.confidence },
+    );
   }
 
   private toRow(t: Tracker): PlaybackQoeSession {
@@ -455,6 +475,8 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
       verdict: d.verdict,
       confidence: d.confidence,
       reasons: d.reasons,
+      playbackVerdict: d.verdict,
+      playbackConfidence: d.confidence,
     });
   }
 
@@ -473,50 +495,69 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
 
   // ── Admin reads ──
 
-  /** Playbacks (sessions sharing a playbackId merged), newest first. */
+  /** Playbacks (a user's sessions sharing a playbackId, merged), newest first. */
   async listSessions(q: QoeSessionQuery) {
     const limit = Math.min(Math.max(q.limit ?? 50, 1), 200);
-    const offset = Math.max(q.offset ?? 0, 0);
     const qb = this.sessions
       .createQueryBuilder('s')
-      .select('COALESCE(s."playbackId", s."sessionId")', 'key')
+      .select(KEY_SQL, 'key')
       .addSelect('MAX(s."lastSeenAt")', 'last')
-      .where('s."lastSeenAt" >= :since', { since: this.since(q.days ?? 7) })
-      .groupBy('COALESCE(s."playbackId", s."sessionId")')
+      .addSelect('MAX(s."userId")', 'uid')
+      .addSelect('MAX(s."playbackId")', 'pid')
+      .addSelect('COUNT(*) OVER()', 'total')
+      .groupBy(KEY_SQL)
+      .having('MAX(s."lastSeenAt") >= :since', { since: this.since(q.days ?? 7) })
       .orderBy('last', 'DESC')
-      .limit(MAX_SUMMARY_ROWS);
+      .limit(limit)
+      .offset(Math.max(q.offset ?? 0, 0));
+    if (q.verdict) qb.andWhere('s."playbackVerdict" = :v', { v: q.verdict });
     if (q.userId != null) qb.andWhere('s."userId" = :u', { u: q.userId });
     if (q.device) qb.andWhere('s."deviceLabel" = :d', { d: q.device });
-    const keys = (await qb.getRawMany<{ key: string }>()).map((r) => r.key);
-
-    // The verdict is computed on the merged playback, so it can only filter after merging.
-    if (q.verdict) {
-      const all = (await this.rowsOf(keys)).filter((p) => p.verdict === q.verdict);
-      return { items: all.slice(offset, offset + limit), total: all.length };
-    }
-    const page = keys.slice(offset, offset + limit);
-    return { items: await this.rowsOf(page), total: keys.length };
+    const page = await qb.getRawMany<{
+      key: string;
+      uid: number | null;
+      pid: string | null;
+      total: string;
+    }>();
+    return {
+      items: await this.rowsOf(page),
+      total: page.length ? Number(page[0].total) : 0,
+    };
   }
 
-  private async rowsOf(keys: string[]): Promise<QoePlayback[]> {
-    if (!keys.length) return [];
+  private async rowsOf(
+    page: { key: string; uid: number | null; pid: string | null }[],
+  ): Promise<QoePlayback[]> {
+    if (!page.length) return [];
+    const grouped = page.filter((p) => p.uid != null && p.pid != null);
     const rows = await this.sessions
       .createQueryBuilder('s')
-      .where('s."playbackId" = ANY(:keys)', { keys })
-      .orWhere('s."playbackId" IS NULL AND s."sessionId" = ANY(:keys)', { keys })
+      .where('s."sessionId" = ANY(:sids)', {
+        sids: page.filter((p) => !grouped.includes(p)).map((p) => p.key),
+      })
+      .orWhere(
+        '(s."userId", s."playbackId") IN (SELECT * FROM unnest(:uids::int[], :pids::text[]))',
+        { uids: grouped.map((p) => p.uid), pids: grouped.map((p) => p.pid) },
+      )
       .getMany();
     return mergePlaybacks(rows);
   }
 
-  /** `id` is a sessionId or a playbackId. */
+  /** `id` is a sessionId or a playbackId (the latest user's, when several share it). */
   async getSession(id: string) {
-    const bySession = await this.sessions.findOne({ where: { sessionId: id } });
-    const rows = bySession?.playbackId
-      ? await this.sessions.find({ where: { playbackId: bySession.playbackId } })
-      : bySession
-        ? [bySession]
-        : await this.sessions.find({ where: { playbackId: id } });
-    if (!rows.length) return null;
+    const anchor =
+      (await this.sessions.findOne({ where: { sessionId: id } })) ??
+      (await this.sessions.findOne({
+        where: { playbackId: id },
+        order: { lastSeenAt: 'DESC' },
+      }));
+    if (!anchor) return null;
+    const rows =
+      anchor.userId != null && anchor.playbackId != null
+        ? await this.sessions.find({
+            where: { userId: anchor.userId, playbackId: anchor.playbackId },
+          })
+        : [anchor];
     rows.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
     const events = await this.events.find({
       where: { sessionId: In(rows.map((r) => r.sessionId)) },
@@ -536,19 +577,40 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
   }
 
   async summary(days = 7) {
+    const latest = (col: string) =>
+      `(ARRAY_AGG(s."${col}" ORDER BY s."lastSeenAt" DESC) FILTER (WHERE s."${col}" IS NOT NULL))[1]`;
+    const both = (col: string) =>
+      `SUM(CASE WHEN s."droppedFrames" IS NOT NULL AND s."decodedFrames" IS NOT NULL THEN s."${col}" END)`;
     const rows = await this.sessions
       .createQueryBuilder('s')
-      .where('s."lastSeenAt" >= :since', { since: this.since(days) })
-      .take(MAX_SUMMARY_ROWS)
-      .getMany();
-    const playbacks = mergePlaybacks(rows);
+      .select(KEY_SQL, 'key')
+      .addSelect('MAX(s."lastSeenAt")', 'last')
+      .addSelect(latest('deviceLabel'), 'device')
+      .addSelect(latest('engine'), 'engine')
+      .addSelect(latest('hwDecoder'), 'hw')
+      .addSelect('MAX(s."playbackVerdict")', 'verdict')
+      .addSelect('SUM(s."stallCount")', 'stalls')
+      .addSelect(both('droppedFrames'), 'dropped')
+      .addSelect(both('decodedFrames'), 'decoded')
+      .groupBy(KEY_SQL)
+      .having('MAX(s."lastSeenAt") >= :since', { since: this.since(days) })
+      .orderBy('last', 'DESC')
+      .getRawMany<{
+        device: string | null;
+        engine: string | null;
+        hw: boolean | null;
+        verdict: QoeVerdict;
+        stalls: string;
+        dropped: string | null;
+        decoded: string | null;
+      }>();
     const byVerdict = Object.fromEntries(
       VERDICTS.map((v) => [v, 0]),
     ) as Record<QoeVerdict, number>;
-    const groups = new Map<string, QoePlayback[]>();
-    for (const r of playbacks) {
+    const groups = new Map<string, typeof rows>();
+    for (const r of rows) {
       byVerdict[r.verdict]++;
-      const key = `${r.deviceLabel ?? ''}\u0000${r.engine ?? ''}`;
+      const key = `${r.device ?? ''}\u0000${r.engine ?? ''}`;
       const g = groups.get(key);
       if (g) g.push(r);
       else groups.set(key, [r]);
@@ -556,22 +618,27 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     const byDevice: QoeDeviceSummary[] = [...groups.values()]
       .map((g) => {
         const pcts = g
-          .map((r) => droppedPct(r.droppedFrames, r.decodedFrames))
+          .map((r) =>
+            droppedPct(
+              r.dropped == null ? null : Number(r.dropped),
+              r.decoded == null ? null : Number(r.decoded),
+            ),
+          )
           .filter((p): p is number => p != null);
-        const hw = g.filter((r) => r.hwDecoder != null);
+        const hw = g.filter((r) => r.hw != null);
         const counts = new Map<QoeVerdict, number>();
         for (const r of g) counts.set(r.verdict, (counts.get(r.verdict) ?? 0) + 1);
         const top = [...counts].sort((a, b) => b[1] - a[1])[0][0];
         return {
-          device: g[0].deviceLabel,
+          device: g[0].device,
           engine: g[0].engine,
           sessions: g.length,
-          stallSessions: g.filter((r) => r.stallCount > 0).length,
+          stallSessions: g.filter((r) => Number(r.stalls) > 0).length,
           avgDroppedPct: pcts.length
             ? pcts.reduce((a, b) => a + b, 0) / pcts.length
             : null,
           hwDecoderPct: hw.length
-            ? (hw.filter((r) => r.hwDecoder).length / hw.length) * 100
+            ? (hw.filter((r) => r.hw).length / hw.length) * 100
             : null,
           topVerdict: top,
         };

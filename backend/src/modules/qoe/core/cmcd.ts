@@ -15,6 +15,7 @@ function pick(raw: Record<string, unknown>): CmcdSnapshot | null {
   for (const k of ['bs', 'su'] as const) {
     if (raw[k] === true) out[k] = true;
   }
+  if (raw.ot === 'v' || raw.ot === 'a' || raw.ot === 'av') out.ot = raw.ot;
   return Object.keys(out).length ? out : null;
 }
 

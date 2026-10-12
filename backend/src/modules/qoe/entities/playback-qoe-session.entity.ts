@@ -5,14 +5,14 @@ import type { QoeEngine, QoeVerdict } from '../core/types';
 /** One row per playback session, upserted while it runs and on its end. */
 @Entity('playback_qoe_sessions')
 @Index('IDX_playback_qoe_sessions_last_seen', ['lastSeenAt'])
-@Index('IDX_playback_qoe_sessions_verdict', ['verdict'])
+@Index('IDX_playback_qoe_sessions_playback_verdict', ['playbackVerdict'])
 @Index('IDX_playback_qoe_sessions_device', ['deviceLabel'])
-@Index('IDX_playback_qoe_sessions_playback', ['playbackId'])
+@Index('IDX_playback_qoe_sessions_playback', ['userId', 'playbackId'])
 export class PlaybackQoeSession {
   @PrimaryColumn({ type: 'varchar', length: 64 })
   sessionId: string;
 
-  /** Client id of one viewing; several sids (quality switch, recovery) share it. */
+  /** Client id of one viewing, unique per user; several sids (quality switch, recovery) share it. */
   @Column({ type: 'varchar', length: 64, nullable: true })
   playbackId: string | null;
 
@@ -135,4 +135,11 @@ export class PlaybackQoeSession {
 
   @Column({ type: 'jsonb', default: () => `'[]'` })
   reasons: string[];
+
+  /** Verdict of the whole playback (all rows of this user and playbackId), rewritten at flush. */
+  @Column({ type: 'varchar', default: 'unknown' })
+  playbackVerdict: QoeVerdict;
+
+  @Column({ type: 'varchar', default: 'low' })
+  playbackConfidence: 'high' | 'low';
 }

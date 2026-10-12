@@ -14,6 +14,8 @@ const MIN_SPEED_SAMPLES = 3;
 const MAX_SAMPLE_AGE_MS = 15_000;
 /** Bounds memory on a multi-hour session. */
 const MAX_KEPT = 200;
+/** CMCD `bs` requests closer than this belong to the same starvation. */
+const BS_RUN_GAP_MS = 5_000;
 
 /** A cumulative counter that restarts from zero when the engine reloads. */
 class ResettingCounter {
@@ -51,7 +53,8 @@ export class QoeAggregator {
   private engine: QoeEngine | null = null;
   private cmcdSeen = false;
   private cmcdClaimed = false;
-  private bsCount = 0;
+  private bsRuns = 0;
+  private lastBsAt: number | null = null;
   private readonly bsBuffers: number[] = [];
   private cmcdBuffer: number | null = null;
   private cmcdBufferAt: number | null = null;
@@ -148,13 +151,19 @@ export class QoeAggregator {
 
   addCmcd(c: CmcdSnapshot, now = Date.now()): void {
     this.cmcdSeen = true;
-    if (c.bl != null) {
-      this.cmcdBuffer = c.bl / 1000;
+    // Audio buffers run deeper than video: only video or muxed objects say anything about a stall.
+    const buffer = c.bl != null && c.ot !== 'a' ? c.bl / 1000 : null;
+    if (buffer != null) {
+      this.cmcdBuffer = buffer;
       this.cmcdBufferAt = now;
     }
-    if (c.bs) {
-      this.bsCount++;
-      if (c.bl != null) push(this.bsBuffers, c.bl / 1000);
+    // Startup requests carry `bs` too; that is not a stall.
+    if (c.bs && !c.su) {
+      if (this.lastBsAt == null || now - this.lastBsAt > BS_RUN_GAP_MS) {
+        this.bsRuns++;
+        if (buffer != null) push(this.bsBuffers, buffer);
+      }
+      this.lastBsAt = now;
     }
     if (c.mtp != null) push(this.cmcdMtp, c.mtp * 1000);
     if (c.br != null && this.variantBitrates.length === 0) {
@@ -164,9 +173,9 @@ export class QoeAggregator {
 
   summary(): QoeSessionSummary {
     const lastErrorAt = this.lastErrorAt;
-    const clientStalls = Math.max(this.stalls.total ?? 0, this.stallEvents);
-    // Without client stall reports, CMCD buffer starvation stands in for them.
-    const fromCmcd = clientStalls === 0 && this.bsCount > 0;
+    // A client that reports at all (even zero stalls) is believed; `bs` only covers silent ones.
+    const fromCmcd =
+      this.sampleCount === 0 && this.stallEvents === 0 && this.bsRuns > 0;
     return {
       engine: this.engine,
       cmcd: this.cmcdSeen,
@@ -177,7 +186,7 @@ export class QoeAggregator {
       decoderName: this.decoderName,
       hwDecoder: this.hwDecoder,
       watchedMs: this.watchedMs,
-      stallCount: fromCmcd ? this.bsCount : (this.stalls.total ?? 0),
+      stallCount: fromCmcd ? this.bsRuns : (this.stalls.total ?? 0),
       stallMs: this.stallMs.total ?? 0,
       droppedFrames: this.dropped.total,
       decodedFrames: this.decoded.total,
@@ -220,10 +229,17 @@ function weighted(
   return w ? sum / w : null;
 }
 
-const sumOrNull = (xs: (number | null)[]): number | null => {
-  const k = xs.filter((x): x is number => x != null);
-  return k.length ? k.reduce((a, b) => a + b, 0) : null;
-};
+/** Frame counters only add up over the parts that report both. */
+function frames(
+  parts: QoeSessionSummary[],
+): Pick<QoeSessionSummary, 'droppedFrames' | 'decodedFrames'> {
+  const both = parts.filter((p) => p.droppedFrames != null && p.decodedFrames != null);
+  if (!both.length) return { droppedFrames: null, decodedFrames: null };
+  return {
+    droppedFrames: both.reduce((a, p) => a + (p.droppedFrames ?? 0), 0),
+    decodedFrames: both.reduce((a, p) => a + (p.decodedFrames ?? 0), 0),
+  };
+}
 
 /**
  * One viewing split over several sids: counters add up, rates are weighted by
@@ -256,8 +272,7 @@ export function mergeSummaries(parts: QoeSessionSummary[]): QoeSessionSummary {
     watchedMs: total((p) => p.watchedMs),
     stallCount: total((p) => p.stallCount),
     stallMs: total((p) => p.stallMs),
-    droppedFrames: sumOrNull(parts.map((p) => p.droppedFrames)),
-    decodedFrames: sumOrNull(parts.map((p) => p.decodedFrames)),
+    ...frames(parts),
     recoveryReloads: total((p) => p.recoveryReloads),
     errorCount: total((p) => p.errorCount),
     // A later sid means the viewing carried on after the error.

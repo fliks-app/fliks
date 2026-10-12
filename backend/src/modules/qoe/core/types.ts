@@ -67,6 +67,8 @@ export interface CmcdSnapshot {
   br?: number;
   tb?: number;
   bs?: boolean;
+  /** Object type: video, audio or muxed. */
+  ot?: 'v' | 'a' | 'av';
   su?: boolean;
 }
 

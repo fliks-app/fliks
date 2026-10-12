@@ -8,6 +8,7 @@ export class CreatePlaybackQoe1786300000000 implements MigrationInterface {
     await queryRunner.query(
       `CREATE TABLE "playback_qoe_sessions" (
         "sessionId" character varying(64) NOT NULL,
+        "playbackId" character varying(64),
         "userId" integer,
         "mediaFileId" integer NOT NULL,
         "mediaTitle" character varying,
@@ -19,6 +20,7 @@ export class CreatePlaybackQoe1786300000000 implements MigrationInterface {
         "appVersion" character varying,
         "engine" character varying,
         "cmcd" boolean NOT NULL DEFAULT false,
+        "cmcdClaimed" boolean NOT NULL DEFAULT false,
         "playMethod" character varying,
         "quality" character varying,
         "transcodeReasons" jsonb NOT NULL DEFAULT '[]',
@@ -38,9 +40,16 @@ export class CreatePlaybackQoe1786300000000 implements MigrationInterface {
         "recoveryReloads" integer NOT NULL DEFAULT 0,
         "errorCount" integer NOT NULL DEFAULT 0,
         "medianTranscodeSpeed" double precision,
+        "stallBufferAheadS" double precision,
+        "stallBandwidthBps" double precision,
+        "cmcdThroughputBps" double precision,
+        "unrecoveredError" boolean NOT NULL DEFAULT false,
+        "sampleCount" integer NOT NULL DEFAULT 0,
         "verdict" character varying NOT NULL DEFAULT 'unknown',
         "confidence" character varying NOT NULL DEFAULT 'low',
         "reasons" jsonb NOT NULL DEFAULT '[]',
+        "playbackVerdict" character varying NOT NULL DEFAULT 'unknown',
+        "playbackConfidence" character varying NOT NULL DEFAULT 'low',
         CONSTRAINT "PK_playback_qoe_sessions" PRIMARY KEY ("sessionId")
       )`,
     );
@@ -48,7 +57,10 @@ export class CreatePlaybackQoe1786300000000 implements MigrationInterface {
       `CREATE INDEX "IDX_playback_qoe_sessions_last_seen" ON "playback_qoe_sessions" ("lastSeenAt")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_playback_qoe_sessions_verdict" ON "playback_qoe_sessions" ("verdict")`,
+      `CREATE INDEX "IDX_playback_qoe_sessions_playback_verdict" ON "playback_qoe_sessions" ("playbackVerdict")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_playback_qoe_sessions_playback" ON "playback_qoe_sessions" ("userId", "playbackId")`,
     );
     await queryRunner.query(
       `CREATE INDEX "IDX_playback_qoe_sessions_device" ON "playback_qoe_sessions" ("deviceLabel")`,

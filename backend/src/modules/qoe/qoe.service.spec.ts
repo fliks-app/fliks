@@ -42,7 +42,13 @@ function build(repo: object = {}, eventsRepo: object = {}) {
   const insert = jest.fn().mockResolvedValue(undefined);
   const svc = new QoeService(
     { get: jest.fn(), addChangeListener: jest.fn() } as never,
-    { upsert, create: (x: unknown) => x, ...repo } as never,
+    {
+      upsert,
+      create: (x: unknown) => x,
+      find: jest.fn().mockResolvedValue([]),
+      update: jest.fn().mockResolvedValue(undefined),
+      ...repo,
+    } as never,
     { insert, ...eventsRepo } as never,
   );
   return { svc, upsert, insert };
@@ -79,6 +85,7 @@ const row = (o: Record<string, unknown>) => ({
   unrecoveredError: false,
   sampleCount: 3,
   verdict: 'unknown',
+  playbackVerdict: 'unknown',
   ...o,
 });
 
@@ -185,14 +192,13 @@ describe('QoeService playbacks', () => {
   });
 
   it('merges the sessions of one playback and re-diagnoses the whole', async () => {
+    const find = jest.fn().mockResolvedValue([b, a]);
     const { svc } = build(
-      {
-        findOne: jest.fn().mockResolvedValue(b),
-        find: jest.fn().mockResolvedValue([b, a]),
-      },
+      { findOne: jest.fn().mockResolvedValue(b), find },
       { find: jest.fn().mockResolvedValue([{ id: 1, sessionId: 'a', at: new Date(1), type: 'error', data: {} }]) },
     );
     const p = await svc.getSession('b');
+    expect(find).toHaveBeenCalledWith({ where: { userId: 7, playbackId: 'pb' } });
     expect(p).toMatchObject({
       sessionId: 'b',
       sessionIds: ['a', 'b'],
@@ -208,33 +214,64 @@ describe('QoeService playbacks', () => {
     expect(p?.events[0]).toMatchObject({ sessionId: 'a', type: 'error' });
   });
 
-  it('resolves a playbackId and returns null for nothing', async () => {
-    const find = jest.fn().mockResolvedValueOnce([a, b]).mockResolvedValueOnce([]);
-    const { svc } = build(
-      { findOne: jest.fn().mockResolvedValue(null), find },
-      { find: jest.fn().mockResolvedValue([]) },
-    );
+  it('resolves a playbackId within its user and returns null for nothing', async () => {
+    const findOne = jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(b).mockResolvedValue(null);
+    const find = jest.fn().mockResolvedValue([a, b]);
+    const { svc } = build({ findOne, find }, { find: jest.fn().mockResolvedValue([]) });
     expect(await svc.getSession('pb')).toMatchObject({ sessionIds: ['a', 'b'] });
+    expect(find).toHaveBeenCalledWith({ where: { userId: 7, playbackId: 'pb' } });
     expect(await svc.getSession('nope')).toBeNull();
   });
 
+  it('keeps two users sending the same playbackId as two playbacks', async () => {
+    const other = row({ sessionId: 'z', userId: 8, watchedMs: 90_000, lastSeenAt: new Date(300_000) });
+    const getMany = jest.fn().mockResolvedValue([a, b, other]);
+    const getRawMany = jest.fn().mockResolvedValue([
+      { key: 'x', uid: 8, pid: 'pb', total: '2' },
+      { key: 'y', uid: 7, pid: 'pb', total: '2' },
+    ]);
+    const qb: Record<string, unknown> = { getMany, getRawMany };
+    for (const m of ['select', 'addSelect', 'groupBy', 'having', 'orderBy', 'limit', 'offset', 'andWhere', 'where', 'orWhere']) {
+      qb[m] = () => qb;
+    }
+    const { svc } = build({ createQueryBuilder: () => qb });
+    const r = await svc.listSessions({ limit: 2, offset: 0 });
+    expect(r.total).toBe(2);
+    expect(r.items.map((i) => [i.userId, i.sessionIds])).toEqual([
+      [8, ['z']],
+      [7, ['a', 'b']],
+    ]);
+  });
+
   it('counts playbacks, not sessions, in the summary', async () => {
-    const getMany = jest.fn().mockResolvedValue([a, b, row({ sessionId: 'c', playbackId: null, watchedMs: 5_000 })]);
-    const qb = { where: () => qb, take: () => qb, getMany };
+    const rows = [
+      { device: 'TV', engine: 'shaka', hw: true, verdict: 'ok', stalls: '0', dropped: '5', decoded: '100' },
+      { device: 'TV', engine: 'shaka', hw: null, verdict: 'unknown', stalls: '2', dropped: null, decoded: null },
+    ];
+    const qb: Record<string, unknown> = { getRawMany: jest.fn().mockResolvedValue(rows) };
+    for (const m of ['select', 'addSelect', 'groupBy', 'having', 'orderBy']) qb[m] = () => qb;
     const { svc } = build({ createQueryBuilder: () => qb });
     const s = await svc.summary();
     expect(s.byVerdict).toMatchObject({ ok: 1, unknown: 1 });
-    expect(s.byDevice.reduce((n, d) => n + d.sessions, 0)).toBe(2);
+    expect(s.byDevice).toEqual([
+      expect.objectContaining({ sessions: 2, stallSessions: 1, avgDroppedPct: 5, hwDecoderPct: 100 }),
+    ]);
   });
 
-  it('stores the playbackId from a sample or the events body', async () => {
-    const { svc, upsert } = build();
+  it('stores the playbackId and restates the playback verdict on the siblings', async () => {
+    const { svc, upsert } = build({ find: jest.fn().mockResolvedValue([a, b]) });
+    const update = jest.fn();
+    (svc as unknown as { sessions: { update: jest.Mock } }).sessions.update = update;
     svc.recordSample(session, { ...sample, playbackId: 'pb1' });
     svc.recordEvents(session, [], 'pb2');
     svc.sessionEnded(session);
     await new Promise((r) => setImmediate(r));
     expect(upsert.mock.calls[0][0].playbackId).toBe('pb2');
     expect(svc.liveSummary('s1')?.playbackId).toBe('pb2');
+    expect(update).toHaveBeenCalledWith(
+      { userId: 7, playbackId: 'pb2' },
+      { playbackVerdict: 'ok', playbackConfidence: 'high' },
+    );
   });
 });
 
