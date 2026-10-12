@@ -18,7 +18,7 @@ import {
 } from '../utils/edl-policy';
 import { ENGINE_TRAITS, EngineKind } from './engine-traits';
 import { ServerConfigService } from './server-config.service';
-import { formatAudioParts, formatAudioLabel, formatSubtitleLabel, formatSubtitleParts, parseAudioIndex, playbackModeOf, SpriteMetadata, type PlaybackMode } from '../utils/player.utils';
+import { formatAudioParts, formatAudioLabel, parseAudioIndex, playbackModeOf, SpriteMetadata, type PlaybackMode } from '../utils/player.utils';
 import {
   PlayerSettingsService,
   type AudioStreamChoice,
@@ -945,12 +945,7 @@ export class CastPlayerService {
       { hideBurnIn: this.appSettings.hideBurnInSubtitles() },
     ).map((t, i) => ({
       id: t.key,
-      label: formatSubtitleLabel(t, this.translate, i + 1, {
-        showFormat: this.appSettings.showSubtitleFormat(),
-      }),
-      ...formatSubtitleParts(t, this.translate, i + 1, {
-        showFormat: this.appSettings.showSubtitleFormat(),
-      }),
+      ...this.trackManager.describeSubtitle(t, i + 1),
       language: t.language,
       isImage: t.isImage,
       burnIn: t.isImage,

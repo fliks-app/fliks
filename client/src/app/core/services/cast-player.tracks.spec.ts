@@ -62,6 +62,9 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
     }),
     saveSubtitleSelection: vi.fn(),
     saveAudioSelection: vi.fn(),
+    describeSubtitle: vi.fn((t: { language: string; forced?: boolean }) => ({
+      label: t.language, menuHead: t.language, menuSub: t.forced ? 'forced' : '',
+    })),
   };
   const streamingApi = {
     getPlaybackInfo: vi.fn(async (..._args: unknown[]) => ({
@@ -331,6 +334,20 @@ describe('cast quick start', () => {
       expect(h.playerSettings.resolveAudioStreamIndex.mock.calls[0][4]).toBeUndefined();
       expect(h.trackManager.autoSelectSubtitle.mock.calls[0][7]).toBeUndefined();
     });
+  });
+
+  it('gives the quick-start subtitle rows the two-line menu labels', async () => {
+    const h = setup();
+    h.subtitlesApi.getForMedia.mockResolvedValue(rows(21));
+    await h.svc.quickStart({
+      mediaFileId: MEDIA_FILE_ID,
+      mediaId: MEDIA_ID,
+      title: 't',
+      streamInfo: { audio: [{ language: 'en' }] },
+      startTime: 0,
+    });
+    const [row] = h.svc.availableSubtitles();
+    expect([row.head, row.sub]).toEqual([row.language, '']);
   });
 
   it('starts without subtitles when the rules pick none', async () => {
