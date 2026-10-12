@@ -91,6 +91,7 @@ import {
   resolveEncodePipeline,
   resolveTonemapReport,
 } from './transcoding/encode-pipeline';
+import { servedRungBitrate } from './served-rung';
 import { describeQoePipeline } from './transcoding/qoe-pipeline';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
@@ -528,12 +529,15 @@ export class StreamingController {
   private observeSegment(
     req: Request,
     live: LiveSession | null | undefined,
-    session: { segmentDuration?: number; sourceFps?: number; actualHwAccel?: string },
+    session: { segmentDuration?: number; sourceFps?: number; actualHwAccel?: string; quality?: string },
     segment: string,
     waitedMs: number | null,
   ): void {
     if (!live || segment.startsWith('init')) return;
     this.qoe.noteHwAccel(live, session.actualHwAccel);
+    if (live.kind === 'transcode' && session.quality) {
+      this.qoe.noteServedRung(live, session.quality, servedRungBitrate({ ...live, quality: session.quality }));
+    }
     this.qoe.observeSegment(
       live,
       req,
@@ -1203,7 +1207,7 @@ export class StreamingController {
           hdr: v0?.dvProfile != null ? 'DV' : (v0?.hdrFormat ?? null),
         },
         variant: kind === 'transcode' ? (videoVariant ?? null) : null,
-        quality: response.quality ?? null,
+        quality: response.quality && response.quality !== 'auto' ? response.quality : null,
         videoBitrateBps: response.transcodeBitrateByQuality?.[response.quality]?.videoBitrateBps ?? null,
         inputs: pipelineInputs,
         tonemapPath: tonemapReport?.path ?? null,

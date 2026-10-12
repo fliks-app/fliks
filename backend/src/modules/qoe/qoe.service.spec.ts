@@ -262,6 +262,22 @@ describe('QoeService', () => {
     expect(insert.mock.calls[0][0][0].data.serverLoad).toMatchObject({ activeTranscodes: 3, activeSessions: 2 });
   });
 
+  it('fills the row quality and the pipeline output from the rung actually served', async () => {
+    const { svc, upsert } = build();
+    const auto = { ...session, quality: 'auto' };
+    svc.setPipeline(auto, {
+      source: null, output: { codec: 'h264', hdr: null, quality: null, bitrate: null },
+      decode: null, encode: null, tonemap: null, burnIn: null, crop: null, audioTranscode: null,
+    });
+    svc.recordSample(auto, sample);
+    svc.noteServedRung(auto, '1080p', 8e6);
+    svc.sessionEnded(auto);
+    await new Promise((r) => setImmediate(r));
+    const row = upsert.mock.calls[0][0];
+    expect(row.quality).toBe('1080p');
+    expect(row.pipeline.output).toMatchObject({ quality: '1080p', bitrate: 8e6 });
+  });
+
   it('requeues events when a flush fails and retries them', async () => {
     const { svc, upsert, insert } = build();
     upsert.mockRejectedValueOnce(new Error('db down'));
