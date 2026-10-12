@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   NotFoundException,
   Param,
@@ -26,6 +27,8 @@ import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { AuthService } from '../../auth/auth.service';
 import { User } from '../../users/entities/user.entity';
 import { ImageService, ImageSize } from '../../images/image.service';
+import { QoeService } from '../../qoe/qoe.service';
+import { parseSample } from '../../qoe/core/validate';
 import { LiveTvChannel } from '../entities/livetv-channel.entity';
 import { LiveTvChannelsService } from '../services/livetv-channels.service';
 import { LiveTvGuideService } from '../services/livetv-guide.service';
@@ -87,6 +90,7 @@ export class LivetvController {
     private readonly sessions: LiveTvSessionService,
     private readonly auth: AuthService,
     private readonly images: ImageService,
+    private readonly qoe: QoeService,
   ) {}
 
   /** "Configured" means this user's lineup is not empty, not just that they can read it. */
@@ -218,6 +222,23 @@ export class LivetvController {
     return { ok: true };
   }
 
+  /** Live player heartbeat carrying its optional QoE sample. */
+  @Put('sessions/:sessionId/state')
+  @CheckPolicies((ability) => ability.can(Action.Read, LiveTvChannel))
+  @UseGuards(SessionTokenGuard)
+  heartbeat(
+    @Param('sessionId') sessionId: string,
+    @Body() body: { qoe?: unknown },
+    @CurrentUser() user: User,
+  ) {
+    const ref = this.sessions.qoeRef(sessionId);
+    if (!ref) throw new NotFoundException('Live TV session not found');
+    if (ref.userId !== user.id) throw new ForbiddenException('Not your session');
+    const sample = body?.qoe != null ? parseSample(body.qoe) : null;
+    if (sample) this.qoe.recordSample(ref, sample);
+    return { ok: true };
+  }
+
   @Get('sessions/:sessionId/index.m3u8')
   @CheckPolicies((ability) => ability.can(Action.Read, LiveTvChannel))
   async servePlaylist(
@@ -270,6 +291,7 @@ export class LivetvController {
   serveSegment(
     @Param('sessionId') sessionId: string,
     @Param('segment') segment: string,
+    @Req() req: Request,
     @Res() res: Response,
   ): void {
     const session = this.sessions.getForServe(sessionId);
@@ -282,6 +304,9 @@ export class LivetvController {
     const filePath = path.join(session.dir, segment);
     if (!fs.existsSync(filePath))
       throw new NotFoundException('Live TV segment not found');
+    if (segment !== 'init.mp4') {
+      this.sessions.observeSegment(sessionId, req, session.segmentSeconds);
+    }
     res.setHeader(
       'Content-Type',
       segment.endsWith('.ts') ? 'video/mp2t' : 'video/mp4',

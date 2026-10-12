@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { LivetvController, SEGMENT_NAME_RE } from './livetv.controller';
 import { SessionTokenGuard } from '../../auth/guards/session-token.guard';
@@ -50,6 +50,7 @@ describe('LivetvController — revocation reaches an in-progress session', () =>
       sessions as never,
       {} as never,
       {} as never,
+      {} as never,
     );
     const req = { query: {} } as unknown as Request;
     const res = {} as Response;
@@ -76,6 +77,7 @@ describe('LivetvController — revocation reaches an in-progress session', () =>
       channels as never,
       {} as never,
       sessions as never,
+      {} as never,
       {} as never,
       {} as never,
     );
@@ -111,6 +113,7 @@ describe('LivetvController — channel logo', () => {
       {} as never,
       {} as never,
       { getDiskPath } as never,
+      {} as never,
     );
     const res = {} as Response;
 
@@ -118,5 +121,55 @@ describe('LivetvController — channel logo', () => {
       controller.serveLogo(5, undefined, user, res),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(getDiskPath).not.toHaveBeenCalled();
+  });
+});
+
+describe('LivetvController — QoE heartbeat', () => {
+  const user = { id: 1 } as User;
+  const sample = { engine: 'shaka', cmcd: true, stallCount: 2 };
+  const build = (ref: unknown) => {
+    const recordSample = jest.fn();
+    const controller = new LivetvController(
+      {} as never,
+      {} as never,
+      { qoeRef: jest.fn().mockReturnValue(ref) } as never,
+      {} as never,
+      {} as never,
+      { recordSample } as never,
+    );
+    return { controller, recordSample };
+  };
+
+  it('stores the validated sample of the owner', () => {
+    const ref = { sessionId: 's', userId: 1 };
+    const { controller, recordSample } = build(ref);
+    expect(controller.heartbeat('s', { qoe: sample }, user)).toEqual({ ok: true });
+    expect(recordSample).toHaveBeenCalledWith(
+      ref,
+      expect.objectContaining({ engine: 'shaka', cmcd: true, stallCount: 2 }),
+    );
+  });
+
+  it('ignores a sample that fails validation', () => {
+    const { controller, recordSample } = build({ sessionId: 's', userId: 1 });
+    controller.heartbeat('s', { qoe: { engine: 'nope' } }, user);
+    expect(recordSample).not.toHaveBeenCalled();
+  });
+
+  it("rejects another user's session", () => {
+    const { controller, recordSample } = build({ sessionId: 's', userId: 2 });
+    expect(() => controller.heartbeat('s', { qoe: sample }, user)).toThrow(ForbiddenException);
+    expect(recordSample).not.toHaveBeenCalled();
+  });
+
+  it('answers not found for an unknown session', () => {
+    const { controller } = build(null);
+    expect(() => controller.heartbeat('s', {}, user)).toThrow(NotFoundException);
+  });
+
+  it('requires a stream-scoped session token', () => {
+    expect(
+      Reflect.getMetadata('__guards__', LivetvController.prototype.heartbeat),
+    ).toContain(SessionTokenGuard);
   });
 });

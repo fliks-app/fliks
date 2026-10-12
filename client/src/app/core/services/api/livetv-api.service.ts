@@ -1,3 +1,4 @@
+import type { QoeSample } from '../playback-engine/playback-engine';
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
@@ -367,6 +368,11 @@ export class LiveTvApiService {
     return firstValueFrom(
       this.http.post<{ location: string }>('/api/livetv/admin/sources/playlist', body),
     );
+  }
+
+  /** Live player heartbeat; the server only reads its optional `qoe` block. */
+  heartbeat(sessionId: string, qoe: QoeSample) {
+    return firstValueFrom(this.http.put<void>(`/api/livetv/sessions/${sessionId}/state`, { qoe }));
   }
 
   stopSession(sessionId: string) {

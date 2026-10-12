@@ -1,12 +1,14 @@
 import {
   Injectable,
   Logger,
+  Optional,
   OnModuleDestroy,
   OnModuleInit,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import type { Request } from 'express';
 import { ChildProcess, execFile, spawn } from 'child_process';
 import { randomUUID } from 'crypto';
 import { PassThrough, type Readable } from 'stream';
@@ -14,6 +16,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { TRANSCODE_DIR } from '../../../common/constants/paths';
 import { TranscodingService } from '../../streaming/transcoding';
+import { QoeService, type SessionRef } from '../../qoe/qoe.service';
 import { StreamLifetime } from '../../streaming/lifetime-constants';
 import { LiveTvCapacityService } from './livetv-capacity.service';
 import { LiveTvChannel } from '../entities/livetv-channel.entity';
@@ -241,6 +244,7 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
     private readonly activity: ActivityRegistryService,
     private readonly transcoding: TranscodingService,
     private readonly capacity: LiveTvCapacityService,
+    @Optional() private readonly qoe?: QoeService,
   ) {}
 
   onModuleInit(): void {
@@ -270,6 +274,7 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
       const streaming = new Set(session.directTees?.values() ?? []);
       for (const [viewerId, viewer] of [...session.viewers]) {
         if (viewer.lastSeenAt > cutoff || streaming.has(viewerId)) continue;
+        this.endQoe(session, viewerId);
         session.viewers.delete(viewerId);
         this.viewerIndex.delete(viewerId);
         dropped++;
@@ -362,6 +367,7 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
     });
     session.lastAccessAt = Date.now();
     this.reportActivity(session);
+    this.qoe?.register(this.qoeRefOf(session, sessionId)!);
     return this.describe(session, sessionId);
   }
 
@@ -530,6 +536,7 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
     this.viewerIndex.delete(sessionId);
     const session = this.sessions.get(key);
     if (!session) return;
+    this.endQoe(session, sessionId);
     session.viewers.delete(sessionId);
     this.reportActivity(session);
     if (session.viewers.size === 0) await this.armIdleTimer(session);
@@ -575,6 +582,46 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
       if (viewer) viewer.lastSeenAt = now;
     }
     return session;
+  }
+
+  /** The viewer as a QoE session (kind 'live', channel as title); null once it is gone. */
+  private qoeRefOf(session: LiveTvSessionEntry, sessionId: string): SessionRef | null {
+    const v = session.viewers.get(sessionId);
+    if (!v) return null;
+    return {
+      sessionId,
+      userId: v.userId,
+      mediaFileId: null,
+      mediaTitle: session.channelName,
+      startedAt: v.startedAt,
+      lastBeat: v.lastSeenAt,
+      deviceLabel: v.device,
+      systemName: null,
+      appVersion: null,
+      kind: 'live',
+      quality: null,
+      transcodeReasons: [],
+      state: 'playing',
+      attributedUserId: null,
+    };
+  }
+
+  private endQoe(session: LiveTvSessionEntry, sessionId: string): void {
+    const ref = this.qoeRefOf(session, sessionId);
+    if (ref) this.qoe?.sessionEnded(ref);
+  }
+
+  /** The viewer's QoE session for the heartbeat route; null when unknown. Counts as a sign of life. */
+  qoeRef(sessionId: string): SessionRef | null {
+    const session = this.getForServe(sessionId);
+    return session ? this.qoeRefOf(session, sessionId) : null;
+  }
+
+  /** CMCD of a media segment request; init segments carry no timing signal. */
+  observeSegment(sessionId: string, req: Request, segmentSeconds: number): void {
+    const session = this.sessions.get(this.viewerIndex.get(sessionId) ?? '');
+    const ref = session && this.qoeRefOf(session, sessionId);
+    if (ref) this.qoe?.observeSegment(ref, req, segmentSeconds, null);
   }
 
   /** One PassThrough per viewer of a direct session; the shared upstream itself
@@ -1032,7 +1079,10 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
     this.sessions.delete(session.key);
     // A viewer only ever clears its own entry via `leave()`; one still attached
     // when every stream dies would otherwise dangle here forever.
-    for (const viewerId of session.viewers.keys()) this.viewerIndex.delete(viewerId);
+    for (const viewerId of session.viewers.keys()) {
+      this.endQoe(session, viewerId);
+      this.viewerIndex.delete(viewerId);
+    }
     this.clearIdleTimer(session);
     this.clearWatchers(session);
     this.stopTransport(session);

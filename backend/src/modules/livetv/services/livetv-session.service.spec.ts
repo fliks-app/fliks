@@ -105,6 +105,7 @@ describe('LiveTvSessionService', () => {
   let settings: { get: jest.Mock };
   let activity: { upsertRunning: jest.Mock; remove: jest.Mock };
   let transcoding: { getDetectedHwAccel: jest.Mock };
+  let qoe: { register: jest.Mock; sessionEnded: jest.Mock; observeSegment: jest.Mock };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -123,6 +124,7 @@ describe('LiveTvSessionService', () => {
     settings = { get: jest.fn().mockResolvedValue(null) };
     activity = { upsertRunning: jest.fn(), remove: jest.fn() };
     transcoding = { getDetectedHwAccel: jest.fn().mockReturnValue('none') };
+    qoe = { register: jest.fn(), sessionEnded: jest.fn(), observeSegment: jest.fn() };
     service = new LiveTvSessionService(
       channelRepo as never,
       streamRepo as never,
@@ -130,6 +132,7 @@ describe('LiveTvSessionService', () => {
       activity as never,
       transcoding as never,
       new LiveTvCapacityService(),
+      qoe as never,
     );
   });
 
@@ -162,6 +165,49 @@ describe('LiveTvSessionService', () => {
     expect(rows.map((r) => r.sessionId)).toEqual([staying.sessionId]);
     expect(service.getForServe(gone.sessionId)).toBeUndefined();
     expect(service.getForServe(staying.sessionId)).toBeDefined();
+  });
+
+  it('tracks each viewer as a live QoE session titled by the channel, and ends it on leave', async () => {
+    mockSpawnAlwaysSucceeds();
+    const channel = makeChannel([makeStream()]);
+
+    const { sessionId } = await service.open(channel, makeUser(7), { userAgent: 'UA' });
+
+    const ref = service.qoeRef(sessionId);
+    expect(ref).toMatchObject({
+      sessionId,
+      userId: 7,
+      kind: 'live',
+      mediaFileId: null,
+      mediaTitle: channel.name,
+      deviceLabel: 'UA',
+    });
+    expect(qoe.register).toHaveBeenCalledWith(expect.objectContaining({ sessionId }));
+
+    await service.leave(sessionId);
+    expect(qoe.sessionEnded).toHaveBeenCalledWith(expect.objectContaining({ sessionId }));
+    expect(service.qoeRef(sessionId)).toBeNull();
+  });
+
+  it('ends the QoE session of a viewer dropped as abandoned', async () => {
+    mockSpawnAlwaysSucceeds();
+    const { sessionId } = await service.open(makeChannel([makeStream()]), makeUser(1), {});
+    (service as never as { sessions: Map<string, { viewers: Map<string, { lastSeenAt: number }> }> })
+      .sessions.forEach((s) => (s.viewers.get(sessionId)!.lastSeenAt = 0));
+
+    (service as never as { sweepAbandoned: () => void }).sweepAbandoned();
+
+    expect(qoe.sessionEnded).toHaveBeenCalledWith(expect.objectContaining({ sessionId }));
+  });
+
+  it('reads CMCD only for a known viewer', async () => {
+    mockSpawnAlwaysSucceeds();
+    const { sessionId } = await service.open(makeChannel([makeStream()]), makeUser(1), {});
+
+    service.observeSegment(sessionId, {} as never, 2);
+    service.observeSegment('nope', {} as never, 2);
+
+    expect(qoe.observeSegment).toHaveBeenCalledTimes(1);
   });
 
   it('reuses the session for a second viewer, no second ffmpeg', async () => {

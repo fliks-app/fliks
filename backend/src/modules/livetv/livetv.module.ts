@@ -23,6 +23,7 @@ import { LivetvAdminController } from './controllers/livetv-admin.controller';
 import { LiveTvAccessController } from './controllers/livetv-access.controller';
 import { AuthModule } from '../auth/auth.module';
 import { SettingsModule } from '../settings/settings.module';
+import { QoeModule } from '../qoe/qoe.module';
 import { StreamingModule } from '../streaming/streaming.module';
 import { ScheduledJobRegistryModule } from '../scheduler/scheduled-job-registry.module';
 import { ImageModule } from '../images/image.module';
@@ -45,6 +46,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     forwardRef(() => AuthModule),
     SettingsModule,
     StreamingModule,
+    QoeModule,
     ScheduledJobRegistryModule,
     ImageModule,
     NotificationsModule,

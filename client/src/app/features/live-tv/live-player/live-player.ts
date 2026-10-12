@@ -28,6 +28,8 @@ import { ToastService } from '../../../core/services/toast.service';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../../shared/directives/cached-src.directive';
 import { liveNeedsTs, supportsLiveDirectPlay } from './live-direct-play.util';
+import { LiveQoe } from './live-qoe';
+import { QoeReporter } from '../../../core/services/qoe-reporter.service';
 import { liveKeyAction } from './live-keymap';
 import { PlaybackEngine } from '../../../core/services/playback-engine/playback-engine';
 import {
@@ -104,6 +106,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   private readonly guideBtn = viewChild<ElementRef<HTMLButtonElement>>('guideBtn');
 
   private engine: PlaybackEngine | null = null;
+  private readonly liveQoe = new LiveQoe(inject(QoeReporter), (id, qoe) => this.api.heartbeat(id, qoe));
   readonly isDesktopNative = this.device.desktopPlatform() === 'electron';
   private readonly isIosNative = Capacitor.getPlatform() === 'ios';
   /** Drives the `directPlay` flag on `POST .../play`, see {@link supportsLiveDirectPlay}. */
@@ -322,6 +325,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
    *  through a keepalive request rather than the Angular client. */
   private readonly releaseOnUnload = (): void => {
     const id = this.currentSessionId ?? this.session()?.sessionId;
+    this.liveQoe.end(true);
     if (id) this.api.stopSessionOnUnload(id);
   };
 
@@ -391,6 +395,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     // Released before tuning, not after: a subscription capped at one connection
     // answers 409 to every zap while the outgoing channel still holds the slot.
     if (outgoingSessionId) {
+      this.liveQoe.end();
       this.session.set(null);
       await this.api.stopSession(outgoingSessionId).catch(() => {});
       this.currentSessionId = null;
@@ -408,6 +413,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
       }
       this.currentSessionId = session.sessionId;
       this.session.set(session);
+      this.liveQoe.begin(session.sessionId, () => this.engine);
       await this.loadIntoEngine(session);
       if (seq !== this.tuneSeq) return;
       this.liveEdgeReached.set(true);
@@ -474,6 +480,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     engine.on('error', (e) => {
       // Same taxonomy and same panel as on-demand playback.
       const source = e.source ?? 'engine';
+      this.liveQoe.onError({ code: e.code, message: e.message, category: source });
       this.playbackError.set({
         userMessage: this.translate.instant(
           e.errorKey ?? userMessageKeyFor({ source, code: e.code, category: e.category }),
@@ -488,7 +495,10 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
       });
       this.loading.set(false);
     });
-    engine.on('stateChanged', ({ state }) => this.paused.set(state === 'paused'));
+    engine.on('stateChanged', ({ state }) => {
+      this.paused.set(state === 'paused');
+      this.liveQoe.onState(state);
+    });
     engine.on('volumechange', ({ volume, muted }) => {
       this.volume.set(volume);
       this.muted.set(muted);
@@ -552,6 +562,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     if (!engine) return;
     // Seeking is expressed against the manifest edge; how far behind live that
     // leaves the viewer is the clock tracker's to say, on the next tick.
+    this.liveQoe.onSeek();
     void engine.seek(this.liveEdge() - this.behindLiveForBarPosition(seconds));
   }
 
@@ -594,12 +605,14 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     const engine = this.engine;
     if (!engine) return;
     const behind = Math.min(this.rewindable(), this.behindEdge() + REWIND_STEP_SECONDS);
+    this.liveQoe.onSeek();
     await engine.seek(this.liveEdge() - behind);
     this.liveEdgeReached.set(false);
   }
 
   async backToLive(): Promise<void> {
     if (!this.engine) return;
+    this.liveQoe.onSeek();
     await this.engine.seek(this.liveEdge());
     this.liveEdgeReached.set(true);
   }
@@ -817,6 +830,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
 
   private async teardownSession(): Promise<void> {
     const id = this.currentSessionId ?? this.session()?.sessionId;
+    this.liveQoe.end();
     if (id) await this.api.stopSession(id).catch(() => {});
   }
 
