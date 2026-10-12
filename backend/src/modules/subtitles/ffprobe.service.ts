@@ -12,6 +12,7 @@ import { ffprobeLines } from '../../common/utils/ffprobe-lines';
 import { mapWithConcurrency } from '../../common/utils/concurrency';
 import { ffmpegSlots, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
 import { priorityExecFileArgs } from '../../common/utils/spawn-priority';
+import { applyMkvLanguageTags, readMkvLanguageTags } from './mkv-language-tags';
 
 const execFileAsync = promisify(execFile);
 
@@ -179,6 +180,9 @@ export interface AudioStreamInfo {
   streamIndex: number;
   codec: string;
   language: string;
+  /** BCP-47 tag (`es-419`, `pt-BR`, `zh-Hant`) when the container carries a
+   *  region/script beyond `language`; display only, `language` drives matching. */
+  languageTag?: string;
   title?: string;
   channels?: number;
   channelLayout?: string;
@@ -202,6 +206,9 @@ export interface SubtitleStreamInfo {
   streamIndex: number;
   codec: string;
   language: string;
+  /** BCP-47 tag (`es-419`, `pt-BR`, `zh-Hant`) when the container carries a
+   *  region/script beyond `language`; display only, `language` drives matching. */
+  languageTag?: string;
   title?: string;
   forced: boolean;
   hearingImpaired: boolean;
@@ -705,6 +712,10 @@ export class FfprobeService {
           ...resolveSubtitleFlags(s),
           isImageBased: isImageBasedSubtitleCodec(s.codec_name),
         }));
+
+      if (/matroska/.test(parsed.format?.format_name ?? '')) {
+        applyMkvLanguageTags(await readMkvLanguageTags(videoPath), audio, subtitles);
+      }
 
       const chapters: Chapter[] = (parsed.chapters ?? [])
         .map((c) => ({
