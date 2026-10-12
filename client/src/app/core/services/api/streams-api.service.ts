@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { normalizeReasons, StreamQoe } from './qoe-api.service';
+import { StreamQoe } from './qoe-api.service';
 
 export interface ActiveStream {
   sessionId: string;
@@ -60,12 +60,9 @@ export interface ActiveStream {
 export class StreamsApiService {
   private readonly http = inject(HttpClient);
 
-  async list() {
-    const streams = await firstValueFrom(
+  list() {
+    return firstValueFrom(
       this.http.get<ActiveStream[]>('/api/system/streams'),
-    );
-    return streams.map((s) =>
-      s.qoe ? { ...s, qoe: { ...s.qoe, reasons: normalizeReasons(s.qoe.reasons) } } : { ...s, qoe: null },
     );
   }
 

@@ -3,6 +3,7 @@ import { StreamingApiService } from './api/streaming-api.service';
 import type { QoeEvent } from './api/qoe-api.service';
 
 export const QOE_BUFFER_CAP = 100;
+const MAX_PER_REQUEST = 50;
 
 /** Buffers playback-quality events per session; every failure is swallowed. */
 @Injectable({ providedIn: 'root' })
@@ -23,7 +24,9 @@ export class QoeReporter {
     const events = this.take(sessionId);
     if (!events.length) return;
     try {
-      await this.api.postQoeEvents(sessionId, events);
+      for (let i = 0; i < events.length; i += MAX_PER_REQUEST) {
+        await this.api.postQoeEvents(sessionId, events.slice(i, i + MAX_PER_REQUEST));
+      }
     } catch {
       // best effort
     }
@@ -34,12 +37,14 @@ export class QoeReporter {
     const events = this.take(sessionId);
     if (!events.length) return;
     try {
-      fetch(this.api.getQoeEventsUrl(sessionId), {
-        method: 'POST',
-        keepalive: true,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ events }),
-      }).catch(() => {});
+      for (let i = 0; i < events.length; i += MAX_PER_REQUEST) {
+        fetch(this.api.getQoeEventsUrl(sessionId), {
+          method: 'POST',
+          keepalive: true,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ events: events.slice(i, i + MAX_PER_REQUEST) }),
+        }).catch(() => {});
+      }
     } catch {
       // best effort
     }

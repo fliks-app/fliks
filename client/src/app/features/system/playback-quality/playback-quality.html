@@ -183,8 +183,8 @@
                   <tr class="hover cursor-pointer" (click)="openDetail(s)">
                     <td><span class="inline-block h-2.5 w-2.5 rounded-full" [class]="dotClass(s)"></span></td>
                     <td>{{ 'qoe.verdict.' + s.verdict | translate }}</td>
-                    <td>{{ s.username ?? '-' }}</td>
-                    <td>{{ formatDevice(s.device) }}</td>
+                    <td>{{ userName(s.userId) }}</td>
+                    <td>{{ deviceText(s) }}</td>
                     <td class="truncate max-w-48">{{ s.mediaTitle ?? '-' }}</td>
                     <td class="tabular-nums text-base-content/60">{{ s.startedAt | localeDate: { dateStyle: 'short', timeStyle: 'short' } }}</td>
                     <td class="text-right tabular-nums">{{ s.stallCount }}</td>
@@ -209,7 +209,7 @@
         <div class="min-w-0">
           <h3 class="text-lg font-bold">{{ d.mediaTitle ?? d.sessionId }}</h3>
           <p class="text-sm text-base-content/60">
-            {{ d.username ?? '-' }} · {{ formatDevice(d.device) }}
+            {{ userName(d.userId) }} · {{ deviceText(d) }}
           </p>
         </div>
         <div class="flex gap-2 shrink-0">
@@ -236,7 +236,7 @@
               <span class="w-36 shrink-0 tabular-nums text-base-content/50">
                 {{ e.at | localeDate: { dateStyle: 'short', timeStyle: 'medium' } }}
               </span>
-              <span class="w-14 shrink-0 tabular-nums text-base-content/50">{{ formatPosition(e.position) }}</span>
+              <span class="w-14 shrink-0 tabular-nums text-base-content/50">{{ formatPosition(e.data?.position ?? null) }}</span>
               <span class="w-28 shrink-0 font-medium">{{ eventLabel(e) }}</span>
               <span class="min-w-0 break-words text-base-content/70">{{ eventDetail(e) }}</span>
             </li>

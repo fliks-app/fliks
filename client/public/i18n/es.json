@@ -1529,14 +1529,16 @@
       "quality_switch": "Cambio de calidad"
     },
     "reason": {
-      "server_slow": "El servidor generó los segmentos más lento que el tiempo real ({{speed}}x).",
-      "buffer_starved_low_throughput": "El búfer se vació y el caudal ({{bandwidth}} Mbps) es inferior a 1,2x el bitrate del flujo ({{bitrate}} Mbps).",
-      "buffer_starved_no_throughput": "El búfer se vació, sin datos de caudal para confirmar la red.",
-      "stalls_with_buffer": "{{count}} corte(s) con datos en búfer: el dispositivo no pudo seguir el ritmo.",
-      "dropped_frames_high": "El decodificador descartó el {{pct}} % de los fotogramas.",
-      "software_decoder_hd": "Decodificación por software a {{height}}p.",
       "fatal_error": "La reproducción falló con un error y no se recuperó.",
-      "not_enough_data": "Tiempo de reproducción insuficiente para valorar."
+      "stalls_server_slow": "Cortes: el servidor generó los segmentos más lento que el tiempo real.",
+      "stalls_starved_low_throughput": "Cortes: el búfer se vació y el caudal es inferior a 1,2x el bitrate del flujo.",
+      "stalls_starved_no_throughput": "Cortes: el búfer se vació, sin datos de caudal para confirmar la red.",
+      "stalls_starved_bandwidth_ok": "Cortes: el búfer se vació aunque el caudal parecía suficiente.",
+      "stalls_buffer_ahead": "Cortes con datos en búfer: el dispositivo no pudo seguir el ritmo.",
+      "dropped_frames": "El decodificador descartó una parte alta de los fotogramas.",
+      "software_decoder": "Decodificación por software en HD o superior.",
+      "too_little_data": "Tiempo de reproducción insuficiente para valorar.",
+      "healthy": "No se detectó ningún problema."
     }
   },
   "markers": {

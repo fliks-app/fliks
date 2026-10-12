@@ -1529,14 +1529,16 @@
       "quality_switch": "Cambio di qualità"
     },
     "reason": {
-      "server_slow": "Il server ha prodotto i segmenti più lentamente del tempo reale ({{speed}}x).",
-      "buffer_starved_low_throughput": "Il buffer si è svuotato e il throughput ({{bandwidth}} Mbps) è sotto 1,2x il bitrate del flusso ({{bitrate}} Mbps).",
-      "buffer_starved_no_throughput": "Il buffer si è svuotato, senza dati di throughput per confermare la rete.",
-      "stalls_with_buffer": "{{count}} blocco/i con dati in buffer: il dispositivo non è riuscito a stare al passo.",
-      "dropped_frames_high": "Il decoder ha scartato il {{pct}} % dei fotogrammi.",
-      "software_decoder_hd": "Decodifica software a {{height}}p.",
       "fatal_error": "La riproduzione è fallita con un errore e non si è ripresa.",
-      "not_enough_data": "Tempo di riproduzione insufficiente per giudicare."
+      "stalls_server_slow": "Blocchi: il server ha prodotto i segmenti più lentamente del tempo reale.",
+      "stalls_starved_low_throughput": "Blocchi: il buffer si è svuotato e il throughput è sotto 1,2x il bitrate del flusso.",
+      "stalls_starved_no_throughput": "Blocchi: il buffer si è svuotato, senza dati di throughput per confermare la rete.",
+      "stalls_starved_bandwidth_ok": "Blocchi: il buffer si è svuotato anche se il throughput sembrava sufficiente.",
+      "stalls_buffer_ahead": "Blocchi con dati in buffer: il dispositivo non è riuscito a stare al passo.",
+      "dropped_frames": "Il decoder ha scartato una quota elevata di fotogrammi.",
+      "software_decoder": "Decodifica software in HD o superiore.",
+      "too_little_data": "Tempo di riproduzione insufficiente per giudicare.",
+      "healthy": "Nessun problema rilevato."
     }
   },
   "markers": {

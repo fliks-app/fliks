@@ -1,6 +1,6 @@
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import type { QoeDiagnosis, QoeReason, StreamQoe } from '../../../core/services/api/qoe-api.service';
+import type { QoeDiagnosis, StreamQoe } from '../../../core/services/api/qoe-api.service';
 import { QOE_DOT_CLASS, formatMbps, qoeHealth } from '../qoe-health';
 
 export type QoeBadgeData = QoeDiagnosis & Partial<Omit<StreamQoe, keyof QoeDiagnosis>>;
@@ -25,8 +25,8 @@ export class QoeBadgeComponent {
 
   readonly mbps = formatMbps;
 
-  reasonText(r: QoeReason): string {
-    return this.translate.instant(r.key, r.params);
+  reasonText(key: string): string {
+    return this.translate.instant(key);
   }
 
   bufferLabel(s: number | null | undefined): string {

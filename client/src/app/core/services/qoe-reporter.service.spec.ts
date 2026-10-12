@@ -36,9 +36,10 @@ describe('QoeReporter', () => {
   it('caps the buffer at 100, dropping the oldest', async () => {
     for (let i = 0; i < QOE_BUFFER_CAP + 5; i++) reporter.record('a', ev(i));
     await reporter.flush('a');
-    const sent = api.postQoeEvents.mock.calls[0][1] as QoeEvent[];
+    const sent = api.postQoeEvents.mock.calls.flatMap((c) => c[1] as QoeEvent[]);
     expect(sent).toHaveLength(QOE_BUFFER_CAP);
     expect(sent[0].at).toBe(5);
+    expect(api.postQoeEvents.mock.calls.every((c) => (c[1] as QoeEvent[]).length <= 50)).toBe(true);
   });
 
   it('stays silent when the request fails', async () => {

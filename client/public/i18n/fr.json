@@ -1529,14 +1529,16 @@
       "quality_switch": "Changement de qualité"
     },
     "reason": {
-      "server_slow": "Le serveur a produit les segments plus lentement que le temps réel ({{speed}}x).",
-      "buffer_starved_low_throughput": "Le tampon s'est vidé et le débit ({{bandwidth}} Mbps) est sous 1,2x le bitrate du flux ({{bitrate}} Mbps).",
-      "buffer_starved_no_throughput": "Le tampon s'est vidé, sans mesure de débit pour confirmer le réseau.",
-      "stalls_with_buffer": "{{count}} coupure(s) avec des données en tampon : l'appareil n'a pas suivi.",
-      "dropped_frames_high": "{{pct}} % des images perdues par le décodeur.",
-      "software_decoder_hd": "Décodage logiciel en {{height}}p.",
       "fatal_error": "La lecture a échoué sur une erreur sans reprise.",
-      "not_enough_data": "Temps de lecture insuffisant pour juger."
+      "stalls_server_slow": "Coupures : le serveur a produit les segments plus lentement que le temps réel.",
+      "stalls_starved_low_throughput": "Coupures : le tampon s'est vidé et le débit est sous 1,2x le bitrate du flux.",
+      "stalls_starved_no_throughput": "Coupures : le tampon s'est vidé, sans mesure de débit pour confirmer le réseau.",
+      "stalls_starved_bandwidth_ok": "Coupures : le tampon s'est vidé alors que le débit semblait suffisant.",
+      "stalls_buffer_ahead": "Coupures avec des données en tampon : l'appareil n'a pas suivi.",
+      "dropped_frames": "Le décodeur a perdu une part élevée des images.",
+      "software_decoder": "Décodage logiciel en HD ou plus.",
+      "too_little_data": "Temps de lecture insuffisant pour juger.",
+      "healthy": "Aucun problème détecté."
     }
   },
   "markers": {

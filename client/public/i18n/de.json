@@ -1529,14 +1529,16 @@
       "quality_switch": "Qualitätswechsel"
     },
     "reason": {
-      "server_slow": "Der Server lieferte Segmente langsamer als in Echtzeit ({{speed}}x).",
-      "buffer_starved_low_throughput": "Der Puffer lief leer und der Durchsatz ({{bandwidth}} Mbps) liegt unter dem 1,2-fachen der Stream-Bitrate ({{bitrate}} Mbps).",
-      "buffer_starved_no_throughput": "Der Puffer lief leer, ohne Durchsatzdaten zur Bestätigung des Netzwerks.",
-      "stalls_with_buffer": "{{count}} Aussetzer trotz Puffer: das Gerät kam nicht mit.",
-      "dropped_frames_high": "{{pct}} % der Frames wurden vom Decoder verworfen.",
-      "software_decoder_hd": "Software-Decodierung mit {{height}}p.",
       "fatal_error": "Die Wiedergabe ist mit einem Fehler fehlgeschlagen und wurde nicht wiederhergestellt.",
-      "not_enough_data": "Zu wenig Wiedergabezeit für eine Beurteilung."
+      "stalls_server_slow": "Aussetzer: Der Server lieferte Segmente langsamer als in Echtzeit.",
+      "stalls_starved_low_throughput": "Aussetzer: Der Puffer lief leer und der Durchsatz liegt unter dem 1,2-fachen der Stream-Bitrate.",
+      "stalls_starved_no_throughput": "Aussetzer: Der Puffer lief leer, ohne Durchsatzdaten zur Bestätigung des Netzwerks.",
+      "stalls_starved_bandwidth_ok": "Aussetzer: Der Puffer lief leer, obwohl der Durchsatz ausreichend schien.",
+      "stalls_buffer_ahead": "Aussetzer trotz Puffer: Das Gerät kam nicht mit.",
+      "dropped_frames": "Der Decoder hat viele Frames verworfen.",
+      "software_decoder": "Software-Decodierung in HD oder höher.",
+      "too_little_data": "Zu wenig Wiedergabezeit für eine Beurteilung.",
+      "healthy": "Kein Problem erkannt."
     }
   },
   "markers": {

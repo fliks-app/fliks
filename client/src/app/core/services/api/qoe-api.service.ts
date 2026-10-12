@@ -23,16 +23,11 @@ export interface QoeEvent {
   toBitrate?: number;
 }
 
-export interface QoeReason {
-  /** `qoe.reason.*` i18n key. */
-  key: string;
-  params?: Record<string, string | number>;
-}
-
 export interface QoeDiagnosis {
   verdict: QoeVerdict;
   confidence: 'high' | 'low';
-  reasons: QoeReason[];
+  /** `qoe.reason.*` i18n keys, no params. */
+  reasons: string[];
 }
 
 /** The `qoe` block of an `/api/system/streams` item. */
@@ -53,24 +48,51 @@ export interface StreamQoe extends QoeDiagnosis {
 export interface QoeSessionRow extends QoeDiagnosis {
   sessionId: string;
   userId: number | null;
-  username: string | null;
-  device: string | null;
-  engine: string | null;
+  mediaFileId: number | null;
   mediaTitle: string | null;
   startedAt: string;
-  watchedS: number | null;
+  lastSeenAt: string;
+  endedAt: string | null;
+  deviceLabel: string | null;
+  systemName: string | null;
+  appVersion: string | null;
+  engine: string | null;
+  cmcd: boolean | null;
+  playMethod: 'transcode' | 'remux' | 'directplay' | null;
+  quality: string | null;
+  transcodeReasons: string[] | null;
+  videoCodec: string | null;
+  width: number | null;
+  height: number | null;
+  decoderName: string | null;
+  hwDecoder: boolean | null;
+  watchedMs: number | null;
   stallCount: number;
   stallMs: number;
+  droppedFrames: number | null;
+  decodedFrames: number | null;
+  avgBandwidthBps: number | null;
+  minBandwidthBps: number | null;
+  avgVariantBitrate: number | null;
+  recoveryReloads: number;
+  errorCount: number;
+  medianTranscodeSpeed: number | null;
+  /** Derived client-side for the shared badge. */
   droppedPct: number | null;
-  hwDecoder: boolean | null;
-  decoderName: string | null;
   bandwidthBps: number | null;
   variantBitrate: number | null;
-  cmcd: boolean | null;
+  transcodeSpeed: number | null;
+}
+
+export interface QoeEventRow {
+  id: number;
+  at: string | number;
+  type: QoeEventType;
+  data: Partial<Omit<QoeEvent, 'type' | 'at'>> | null;
 }
 
 export interface QoeSessionDetail extends QoeSessionRow {
-  events: QoeEvent[];
+  events: QoeEventRow[];
 }
 
 export interface QoeSessionPage {
@@ -105,14 +127,17 @@ export interface QoeSessionFilter {
 export const QOE_SETTING_ENABLED = 'qoe_enabled';
 export const QOE_SETTING_RETENTION_DAYS = 'qoe_retention_days';
 
-/** Backend may send a bare i18n key or `{ key, params }`. */
-export function normalizeReasons(raw: unknown): QoeReason[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.map((r) => (typeof r === 'string' ? { key: r } : (r as QoeReason)));
-}
+type RawRow = Omit<QoeSessionRow, 'droppedPct' | 'bandwidthBps' | 'variantBitrate' | 'transcodeSpeed'>;
 
-function normalizeRow<T extends { reasons?: unknown }>(row: T): T & { reasons: QoeReason[] } {
-  return { ...row, reasons: normalizeReasons(row.reasons) };
+function normalizeRow(row: RawRow): QoeSessionRow {
+  const decoded = row.decodedFrames ?? 0;
+  return {
+    ...row,
+    droppedPct: row.droppedFrames != null && decoded > 0 ? (row.droppedFrames / decoded) * 100 : null,
+    bandwidthBps: row.avgBandwidthBps,
+    variantBitrate: row.avgVariantBitrate,
+    transcodeSpeed: row.medianTranscodeSpeed,
+  };
 }
 
 @Injectable({ providedIn: 'root' })
@@ -134,15 +159,14 @@ export class QoeApiService {
     if (filter.userId) params = params.set('userId', filter.userId);
     if (filter.device) params = params.set('device', filter.device);
     const res = await firstValueFrom(
-      this.http.get<QoeSessionPage | QoeSessionRow[]>('/api/system/qoe/sessions', { params }),
+      this.http.get<{ items: RawRow[]; total: number }>('/api/system/qoe/sessions', { params }),
     );
-    const page = Array.isArray(res) ? { items: res, total: res.length } : res;
-    return { total: page.total, items: page.items.map(normalizeRow) };
+    return { total: res.total, items: res.items.map(normalizeRow) };
   }
 
   async session(sessionId: string): Promise<QoeSessionDetail> {
     const res = await firstValueFrom(
-      this.http.get<QoeSessionDetail>(`/api/system/qoe/sessions/${encodeURIComponent(sessionId)}`),
+      this.http.get<RawRow & { events: QoeEventRow[] }>(`/api/system/qoe/sessions/${encodeURIComponent(sessionId)}`),
     );
     return { ...normalizeRow(res), events: res.events ?? [] };
   }

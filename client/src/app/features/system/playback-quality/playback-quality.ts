@@ -5,7 +5,7 @@ import {
   QOE_SETTING_ENABLED,
   QOE_SETTING_RETENTION_DAYS,
   QoeApiService,
-  QoeEvent,
+  QoeEventRow,
   QoeSessionDetail,
   QoeSessionRow,
   QoeSummary,
@@ -16,7 +16,6 @@ import { UserRow, UsersApiService } from '../../../core/services/api/users-api.s
 import { ToastService } from '../../../core/services/toast.service';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
-import { parseDeviceLabel } from '../../../core/utils/format-device-label';
 import { QoeBadgeComponent } from '../qoe-badge/qoe-badge';
 import { QOE_DOT_CLASS, QOE_VERDICTS, QOE_VERDICT_BAR_CLASS, formatMbps, qoeHealth } from '../qoe-health';
 
@@ -51,6 +50,7 @@ export class SystemPlaybackQualityComponent implements OnInit {
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.total() / PAGE_SIZE)));
   readonly userOptions = signal<UserRow[]>([]);
 
+  readonly userNames = computed(() => new Map(this.userOptions().map((u) => [u.id, u.username])));
   readonly detail = signal<QoeSessionDetail | null>(null);
 
   readonly qoeEnabled = signal(true);
@@ -82,10 +82,11 @@ export class SystemPlaybackQualityComponent implements OnInit {
   async saveSettings() {
     this.savingSettings.set(true);
     try {
-      await this.settings.setBulk({
-        [QOE_SETTING_ENABLED]: String(this.qoeEnabled()),
-        [QOE_SETTING_RETENTION_DAYS]: String(Math.max(1, Math.floor(this.retentionDays() || 30))),
-      });
+      await this.settings.set(QOE_SETTING_ENABLED, String(this.qoeEnabled()));
+      await this.settings.set(
+        QOE_SETTING_RETENTION_DAYS,
+        String(Math.max(1, Math.floor(this.retentionDays() || 30))),
+      );
       this.toast.success(this.translate.instant('qoe.settings_saved'));
     } catch {
       /* interceptor */
@@ -154,6 +155,14 @@ export class SystemPlaybackQualityComponent implements OnInit {
     URL.revokeObjectURL(url);
   }
 
+  userName(id: number | null): string {
+    return id == null ? '-' : (this.userNames().get(id) ?? `#${id}`);
+  }
+
+  deviceText(r: QoeSessionRow): string {
+    return [r.deviceLabel, r.systemName, r.appVersion].filter(Boolean).join(' · ') || '-';
+  }
+
   barWidth(v: QoeVerdict): number {
     const total = this.verdictTotal();
     return total ? ((this.summary()?.byVerdict[v] ?? 0) / total) * 100 : 0;
@@ -171,23 +180,19 @@ export class SystemPlaybackQualityComponent implements OnInit {
     return QOE_DOT_CLASS[qoeHealth(row)];
   }
 
-  formatDevice(ua: string | null): string {
-    const label = parseDeviceLabel(ua, null);
-    return label ? this.translate.instant(label.key, label.params) : (ua ?? '-');
-  }
-
-  eventLabel(e: QoeEvent): string {
+  eventLabel(e: QoeEventRow): string {
     return this.translate.instant(`qoe.event.${e.type}`);
   }
 
-  eventDetail(e: QoeEvent): string {
+  eventDetail(e: QoeEventRow): string {
+    const d = e.data ?? {};
     switch (e.type) {
       case 'stall':
-        return `${((e.durationMs ?? 0) / 1000).toFixed(1)} s`;
+        return `${((d.durationMs ?? 0) / 1000).toFixed(1)} s`;
       case 'error':
-        return [e.category, e.code, e.message].filter((x) => x != null && x !== '').join(' · ');
+        return [d.category, d.code, d.message].filter((x) => x != null && x !== '').join(' · ');
       case 'quality_switch':
-        return `${formatMbps(e.fromBitrate)} → ${formatMbps(e.toBitrate)}`;
+        return `${formatMbps(d.fromBitrate)} → ${formatMbps(d.toBitrate)}`;
       default:
         return '';
     }
