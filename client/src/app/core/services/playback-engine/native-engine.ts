@@ -3,6 +3,7 @@ import {
   AbstractPlaybackEngine,
   type PlaybackEngine,
   type AudioTrack,
+  type EngineQoeSample,
   type EngineStats,
   type PlaybackState,
 } from './playback-engine';
@@ -427,6 +428,10 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
 
   getStats(): EngineStats {
     return { droppedFrames: 0 };
+  }
+
+  override async getQoeSample(): Promise<EngineQoeSample | null> {
+    return NativePlayer.getQoe().catch(() => null);
   }
 
   // ── Quality ──
