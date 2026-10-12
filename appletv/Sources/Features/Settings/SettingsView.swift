@@ -11,10 +11,10 @@ struct SettingsView: View {
                 .padding(.top, 48)
                 .padding(.bottom, 24)
             List {
-                NavigationLink(tr("app_settings.nav.display")) { DisplaySettingsView() }
-                NavigationLink(tr("app_settings.nav.player")) { PlayerSettingsView() }
-                NavigationLink(tr("app_settings.nav.subtitles")) { SubtitleSettingsView() }
-                NavigationLink(tr("app_settings.nav.home")) { HomeLayoutView() }
+                NavigationLink(tr("app_settings.nav.display")) { DisplaySettingsView().shellBackdrop() }
+                NavigationLink(tr("app_settings.nav.player")) { PlayerSettingsView().shellBackdrop() }
+                NavigationLink(tr("app_settings.nav.subtitles")) { SubtitleSettingsView().shellBackdrop() }
+                NavigationLink(tr("app_settings.nav.home")) { HomeLayoutView().shellBackdrop() }
             }
             // A focused row grows past the scroller's bounds; without room and
             // without clipping the first one gets its top shaved off.

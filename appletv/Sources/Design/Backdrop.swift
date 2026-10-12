@@ -36,6 +36,20 @@ struct BackdropView: View {
     }
 }
 
+extension View {
+    /// The shell's ambient backdrop behind a pushed page: a navigation push paints
+    /// the system background otherwise.
+    func shellBackdrop() -> some View { modifier(ShellBackdrop()) }
+}
+
+private struct ShellBackdrop: ViewModifier {
+    @Environment(Backdrop.self) private var backdrop
+
+    func body(content: Content) -> some View {
+        content.background { BackdropView(backdrop: backdrop).ignoresSafeArea() }
+    }
+}
+
 /// Image that dissolves between sources: the one on screen stays fully opaque
 /// while the next loads, then the next fades in on top of it and takes its
 /// place. Two layers rather than one fading view — a single view dropping to

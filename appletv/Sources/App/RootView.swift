@@ -154,8 +154,7 @@ struct RootView: View {
                         EmptyView() // onboarding routes never belong in the signed-in stack
                     }
                     }
-                    // Pushed pages get the system background otherwise, not the shell's.
-                    .background { BackdropView(backdrop: backdrop).ignoresSafeArea() }
+                    .shellBackdrop()
                 }
             }
         } else {
