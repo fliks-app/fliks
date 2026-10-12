@@ -290,6 +290,8 @@ export class SystemPlaybackQualityComponent implements OnInit {
           from: d.fromBitrate == null ? '-' : this.fmt.n(d.fromBitrate / 1_000_000, 1),
           to: d.toBitrate == null ? '-' : this.fmt.n(d.toBitrate / 1_000_000, 1),
         });
+      case 'reload':
+        return this.reloadText(d);
       default:
         return this.translate.instant('qoe.line.recovery');
     }
@@ -392,7 +394,31 @@ export class SystemPlaybackQualityComponent implements OnInit {
         to: this.rungLabel(t.to, t.toBitrate, false) || '-',
       });
     }
+    if (t.kind === 'reload') return this.reloadText(t.event?.data ?? null);
     return this.translate.instant(`qoe.transition.${t.kind}`);
+  }
+
+  private reloadText(d: QoeEventRow['data']): string {
+    const lang = (code?: string) => {
+      try {
+        return (code && new Intl.DisplayNames(this.lang, { type: 'language' }).of(code)) || code || '-';
+      } catch {
+        return code || '-';
+      }
+    };
+    switch (d?.reason) {
+      case 'audio':
+        return this.translate.instant('qoe.transition.reload_audio', { from: d.from ?? '-', to: d.to ?? '-' });
+      case 'subtitles':
+        if (d.from === 'hls') return this.translate.instant('qoe.transition.reload_subtitles_hls', { lang: lang(d.to) });
+        return d.to
+          ? this.translate.instant('qoe.transition.reload_subtitles_on', { lang: lang(d.to) })
+          : this.translate.instant('qoe.transition.reload_subtitles_off');
+      case 'remux_fallback':
+        return this.translate.instant('qoe.transition.reload_remux_fallback');
+      default:
+        return this.translate.instant('qoe.transition.reload_other');
+    }
   }
 
   reasonText(key: string): string {

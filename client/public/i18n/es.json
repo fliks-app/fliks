@@ -1630,7 +1630,13 @@
       "quality_switch": "Cambio de calidad: {{from}} → {{to}}",
       "recovery": "Reanudado tras un error",
       "handoff": "Paso a Chromecast",
-      "next": "Nueva sesión"
+      "next": "Nueva sesión",
+      "reload_audio": "Cambio de idioma de audio: {{from}} → {{to}}",
+      "reload_subtitles_on": "Subtítulos incrustados activados ({{lang}})",
+      "reload_subtitles_off": "Subtítulos incrustados desactivados",
+      "reload_subtitles_hls": "Subtítulos cargados por HLS ({{lang}})",
+      "reload_remux_fallback": "El remux pasó a transcodificación",
+      "reload_other": "Recarga del flujo"
     },
     "block": {
       "end": "Fin de la reproducción",

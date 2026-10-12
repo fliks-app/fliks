@@ -1630,7 +1630,13 @@
       "quality_switch": "Mudança de qualidade: {{from}} → {{to}}",
       "recovery": "Retomado após um erro",
       "handoff": "Passagem para Chromecast",
-      "next": "Nova sessão"
+      "next": "Nova sessão",
+      "reload_audio": "Mudança de idioma do áudio: {{from}} → {{to}}",
+      "reload_subtitles_on": "Legendas incorporadas ativadas ({{lang}})",
+      "reload_subtitles_off": "Legendas incorporadas desativadas",
+      "reload_subtitles_hls": "Legendas carregadas via HLS ({{lang}})",
+      "reload_remux_fallback": "O remux passou para a transcodificação",
+      "reload_other": "Recarga do fluxo"
     },
     "block": {
       "end": "Fim da reprodução",

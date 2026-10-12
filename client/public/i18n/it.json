@@ -1630,7 +1630,13 @@
       "quality_switch": "Cambio di qualità: {{from}} → {{to}}",
       "recovery": "Ripresa dopo un errore",
       "handoff": "Passaggio a Chromecast",
-      "next": "Nuova sessione"
+      "next": "Nuova sessione",
+      "reload_audio": "Cambio della lingua audio: {{from}} → {{to}}",
+      "reload_subtitles_on": "Sottotitoli incorporati attivati ({{lang}})",
+      "reload_subtitles_off": "Sottotitoli incorporati disattivati",
+      "reload_subtitles_hls": "Sottotitoli caricati via HLS ({{lang}})",
+      "reload_remux_fallback": "Il remux è passato alla transcodifica",
+      "reload_other": "Ricarica del flusso"
     },
     "block": {
       "end": "Fine della riproduzione",

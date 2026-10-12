@@ -1,6 +1,6 @@
 import type { QoeEventRow, QoeSessionRow } from '../../core/services/api/qoe-api.service';
 
-export type TransitionKind = 'quality_switch' | 'recovery' | 'handoff' | 'next';
+export type TransitionKind = 'quality_switch' | 'recovery' | 'reload' | 'handoff' | 'next';
 
 /** A rung as the admin names it: `auto` (the server chose) or a rung such as 2160p. */
 export interface RungName {
@@ -41,7 +41,7 @@ export function rungOf(s: QoeSessionRow): RungName {
   return { auto: false, rung: rung && rung !== 'auto' ? rung : req };
 }
 
-const LINKS = new Set(['quality_switch', 'recovery']);
+const LINKS = new Set(['quality_switch', 'recovery', 'reload']);
 
 /**
  * One chronological timeline grouped by session. Sessions of a playback follow each other, never overlap, and every

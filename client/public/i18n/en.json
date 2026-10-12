@@ -1630,7 +1630,13 @@
       "quality_switch": "Quality change: {{from}} → {{to}}",
       "recovery": "Resumed after an error",
       "handoff": "Switched to Chromecast",
-      "next": "New session"
+      "next": "New session",
+      "reload_audio": "Audio language change: {{from}} → {{to}}",
+      "reload_subtitles_on": "Burned-in subtitles enabled ({{lang}})",
+      "reload_subtitles_off": "Burned-in subtitles disabled",
+      "reload_subtitles_hls": "Subtitles loaded through HLS ({{lang}})",
+      "reload_remux_fallback": "Remux fell back to transcoding",
+      "reload_other": "Stream reload"
     },
     "block": {
       "end": "End of playback",

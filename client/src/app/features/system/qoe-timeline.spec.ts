@@ -46,6 +46,20 @@ describe('buildTimeline', () => {
     ]);
   });
 
+  it.each(['audio', 'subtitles', 'remux_fallback', 'other'] as const)(
+    'turns a %s reload into the transition and keeps the data',
+    (reason) => {
+      const reload = ev('a', 'reload', 10, { reason, from: 'Français 5.1', to: 'English' });
+      const t = buildTimeline([session('a'), session('b')], [ev('a', 'stall', 3), reload]);
+      expect(t.blocks[0].events.map((e) => e.type)).toEqual(['stall']);
+      expect(t.transitions[0]).toMatchObject({ kind: 'reload', event: { data: { reason, from: 'Français 5.1', to: 'English' } } });
+    },
+  );
+
+  it('keeps "next" when no event explains the new session', () => {
+    expect(buildTimeline([session('a'), session('b')], [ev('a', 'stall', 3)]).transitions[0].kind).toBe('next');
+  });
+
   it('turns the quality switch that ended a session into the transition, with rungs and bitrates', () => {
     const switchEv = ev('a', 'quality_switch', 10, { fromBitrate: 30_900_000, toBitrate: 20_200_000 });
     const t = buildTimeline([session('a'), session('b', { served: '2160p' })], [ev('a', 'stall', 3), switchEv]);
