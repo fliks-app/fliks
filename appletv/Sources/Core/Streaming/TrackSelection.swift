@@ -9,6 +9,16 @@ struct SubtitleTrack: Equatable {
     let hearingImpaired: Bool
     /// Translated or OCR'd: reads worse than a real track, so it loses every tie.
     let machineMade: Bool
+    /// Database id of a bitmap track, which only a server burn-in can show.
+    var burnInId: Int? = nil
+}
+
+/// The subtitle the settings put on screen for one item.
+enum SubtitlePick: Equatable {
+    /// Position in `TrackSelection.subtitleTracks`, i.e. in the HLS `subs` group.
+    case text(Int)
+    /// Database id of the bitmap track to burn into the video.
+    case burnIn(Int)
 }
 
 /// Audio and subtitle choice rules, ported from the web client's
@@ -57,12 +67,41 @@ enum TrackSelection {
             SubtitleTrack(id: "emb-\($0.streamIndex)", language: canonicalLanguage($0.language),
                           forced: $0.forced, hearingImpaired: $0.hearingImpaired, machineMade: false)
         }
-        let sidecars = external.filter(isRenderableTextSidecar).sorted { $0.id < $1.id }.map {
-            SubtitleTrack(id: "ext-\($0.id)", language: canonicalLanguage($0.language),
-                          forced: $0.forced ?? false, hearingImpaired: $0.hearingImpaired ?? false,
-                          machineMade: $0.providerType == "translated" || $0.providerType == "ocr")
-        }
+        let sidecars = external.filter(isRenderableTextSidecar).sorted { $0.id < $1.id }
+            .map { track($0, id: "ext-\($0.id)") }
         return inContainer + sidecars
+    }
+
+    /// Bitmap tracks, embedded or sidecar: never in the `subs` group, shown only by a burn-in.
+    static func bitmapSubtitleTracks(_ rows: [SubtitleFileRow]) -> [SubtitleTrack] {
+        rows.filter { isImageBasedSubtitleCodec($0.codec ?? "") }.compactMap { row -> SubtitleTrack? in
+            var id = "ext-\(row.id)"
+            if row.relativePath?.isEmpty ?? true {
+                guard let streamIndex = row.streamIndex else { return nil }
+                id = "emb-\(streamIndex)"
+            }
+            var bitmap = track(row, id: id)
+            bitmap.burnInId = row.id
+            return bitmap
+        }
+    }
+
+    private static func track(_ row: SubtitleFileRow, id: String) -> SubtitleTrack {
+        SubtitleTrack(id: id, language: canonicalLanguage(row.language),
+                      forced: row.forced ?? false, hearingImpaired: row.hearingImpaired ?? false,
+                      machineMade: row.providerType == "translated" || row.providerType == "ocr")
+    }
+
+    /// What the subtitle settings select for an item: nil shows none, never another language.
+    /// A text track wins over a bitmap one. `audioLanguage` is canonical, nil when unknown.
+    static func autoSubtitle(mode: String, preferredLanguage: String, audioLanguage: String?,
+                             text: [SubtitleTrack], bitmap: [SubtitleTrack]) -> SubtitlePick? {
+        guard mode != "off", let wanted = canonicalLanguage(preferredLanguage) else { return nil }
+        let forcedOnly = mode == "intelligent" && wanted == audioLanguage
+        if let index = pickSubtitle(text, language: wanted, forcedOnly: forcedOnly) { return .text(index) }
+        return pickSubtitle(bitmap, language: wanted, forcedOnly: forcedOnly)
+            .flatMap { bitmap[$0].burnInId }
+            .map(SubtitlePick.burnIn)
     }
 
     /// Index of the track to auto-select for `language`: forced-ness first (a forced

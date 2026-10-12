@@ -58,6 +58,8 @@ struct User: Codable, Identifiable, Hashable {
     // carry no ACL per its own comment); included here for parity with the
     // Angular User/PublicUser shape but likely always `[]` from /auth/me.
     let libraryIds: [Int]?
+    /// Capability flags of the server build; present on live responses only.
+    let features: [String]?
 }
 
 /// GET /auth/users-public — pre-login picker. Deliberately thin: no email,
@@ -153,6 +155,8 @@ struct SubtitleFileRow: Decodable {
     let codec: String?
     /// Set for sidecar files; embedded rows carry none.
     let relativePath: String?
+    /// Position in the container; set for embedded rows only.
+    let streamIndex: Int?
 }
 
 struct Chapter: Codable, Hashable {

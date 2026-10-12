@@ -37,6 +37,8 @@ struct DeviceProfile: Encodable {
     let switchesDirectPlayAudio: Bool
     let supportsHlsSubtitles: Bool
     let supportsImageSubtitles: Bool
+    /// Nil is omitted from the body: a server that doesn't advertise the field rejects it.
+    let needsHlsSubtitles: Bool?
     let probesSegZero: Bool
     let deviceType: String
     let deviceName: String
@@ -51,7 +53,7 @@ enum DeviceProfileBuilder {
     private static let hdrModes = AVPlayer.availableHDRModes
     private static let audioChannels = max(2, AVAudioSession.sharedInstance().maximumOutputNumberOfChannels)
 
-    static func build() -> DeviceProfile {
+    static func build(needsHlsSubtitles: Bool = false) -> DeviceProfile {
         let hevc10 = videoCodecs.contains("hevc") && !hdrModes.isEmpty
         return DeviceProfile(
             directPlayProfiles: [DirectPlayProfile(
@@ -71,9 +73,10 @@ enum DeviceProfileBuilder {
             // AVPlayer can't switch tracks inside a progressive file: a non-first pick must go through HLS.
             switchesDirectPlayAudio: false,
             supportsHlsSubtitles: true,
-            // AVFoundation doesn't decode PGS/VOBSUB bitmap tracks natively —
-            // those need a server burn-in (burnInSubtitleId), not wired yet.
+            // AVFoundation doesn't decode PGS/VOBSUB bitmap tracks natively: the server burns them in.
             supportsImageSubtitles: false,
+            // AVPlayer can't sideload a subtitle into a progressive item: it needs the HLS renditions.
+            needsHlsSubtitles: needsHlsSubtitles ? true : nil,
             // AVPlayer seeks straight to the resume segment; it never probes seg-0.
             probesSegZero: false,
             deviceType: "desktop",

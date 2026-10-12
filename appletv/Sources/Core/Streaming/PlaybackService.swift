@@ -14,6 +14,9 @@ import Foundation
     /// Position in the source's audio list of the track the session plays: the one
     /// requested at start, then whatever the viewer switched to. Nil when unknown.
     private(set) var audioStreamIndex: Int?
+    /// The subtitle the settings select for the item: decided before the first playback-info call,
+    /// which carries it (burn-in id, HLS renditions), and kept by every recovery reload.
+    private(set) var subtitlePick: SubtitlePick?
 
     private var mediaFileId = 0
     private var mediaId = 0
@@ -40,11 +43,11 @@ import Foundation
 
     // MARK: - Start / stop
 
-    /// `audioStreams` is the source file's own audio track list, used to pick the
-    /// master playlist's DEFAULT rendition from the viewer's audio preferences.
+    /// `streamInfo` is the source file's own track list: the viewer's audio preferences pick
+    /// the master playlist's DEFAULT rendition, and with `subtitleRows` the subtitle to show.
     func start(
         mediaFileId: Int, mediaId: Int, episodeId: Int?, startAt: Double,
-        audioStreams: [AudioStreamInfo]? = nil
+        streamInfo: MediaFileInfo?, subtitleRows: [SubtitleFileRow]
     ) async throws -> URL {
         self.mediaFileId = mediaFileId
         self.mediaId = mediaId
@@ -52,9 +55,17 @@ import Foundation
         destroyed = false
         recoverAttempts = 0
         let settings = AppSettingsStore.shared
+        let audio = streamInfo?.audio ?? []
         audioStreamIndex = TrackSelection.audioIndex(
-            in: audioStreams ?? [], preferredLanguage: settings.preferredAudioLanguage,
+            in: audio, preferredLanguage: settings.preferredAudioLanguage,
             useDefault: settings.useDefaultAudioStream
+        )
+        let rows = subtitleRows.filter { $0.mediaFileId == mediaFileId }
+        subtitlePick = TrackSelection.autoSubtitle(
+            mode: settings.subtitleMode, preferredLanguage: settings.preferredSubtitleLanguage,
+            audioLanguage: audioStreamIndex.flatMap { TrackSelection.canonicalLanguage(audio[$0].language) },
+            text: TrackSelection.subtitleTracks(embedded: streamInfo?.subtitles ?? [], external: rows),
+            bitmap: TrackSelection.bitmapSubtitleTracks(rows)
         )
         let url = try await requestPlaybackInfo(startAt: startAt)
         lastProgressPos = startAt
@@ -80,8 +91,16 @@ import Foundation
         var query: [(String, String)] = [("token", token)]
         if startAt > 0 { query.append(("startAt", String(Int(startAt)))) }
         if let audioStreamIndex { query.append(("audioStreamIndex", String(audioStreamIndex))) }
+        var needsHlsSubtitles = false
+        switch subtitlePick {
+        case .burnIn(let id)?: query.append(("burnInSubtitleId", String(id)))
+        case .text?: needsHlsSubtitles = AuthService.shared.hasServerFeature("hlsSubtitleRequest")
+        case nil: break
+        }
         let path = withQuery("/api/stream/\(mediaFileId)/playback-info", query)
-        let response: PlaybackInfoResponse = try await api.post(path, body: DeviceProfileBuilder.build())
+        let response: PlaybackInfoResponse = try await api.post(
+            path, body: DeviceProfileBuilder.build(needsHlsSubtitles: needsHlsSubtitles)
+        )
         info = response
         sessionId = response.sessionId
         return try buildStreamUrl(response, token: token, startAt: startAt)
