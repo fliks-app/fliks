@@ -129,6 +129,8 @@ export interface LiveSession {
    *  The master then publishes one rendition per language. Sourced from the
    *  device profile. */
   dedupesAudioByLanguage: boolean;
+  /** Client reads a URI-less audio rendition as the muxed track (AVKit). */
+  supportsMuxedAudioRendition: boolean;
   /** Client drives HLS trick play from an `EXT-X-I-FRAME-STREAM-INF`
    *  rendition (Tizen AVPlay). Sourced from the device profile. */
   supportsIFrameTrickPlay: boolean;
@@ -213,6 +215,7 @@ export interface CreateLiveSessionInput {
   hdrLadder?: boolean;
   supportsHlsSubtitles?: boolean;
   dedupesAudioByLanguage?: boolean;
+  supportsMuxedAudioRendition?: boolean;
   supportsIFrameTrickPlay?: boolean;
   probesSegZero?: boolean;
   supportsAbr?: boolean;
@@ -335,6 +338,7 @@ export function buildLiveSession(
       hdrLadder: input.hdrLadder ?? false,
       supportsHlsSubtitles: input.supportsHlsSubtitles ?? false,
       dedupesAudioByLanguage: input.dedupesAudioByLanguage ?? false,
+      supportsMuxedAudioRendition: input.supportsMuxedAudioRendition ?? false,
       supportsIFrameTrickPlay: input.supportsIFrameTrickPlay ?? false,
       // Default true: only a client that explicitly declares it seeks straight
       // to the resume segment opts out of the seg-0 companion. Pre-flag clients

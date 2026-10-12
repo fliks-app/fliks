@@ -409,3 +409,33 @@ describe('BrowserDeviceProfileService: subtitle capabilities per platform', () =
     expect(profile).not.toHaveProperty('sideloadsDirectPlaySubtitles');
   });
 });
+
+describe('BrowserDeviceProfileService: supportsMuxedAudioRendition gating', () => {
+  afterEach(() => TestBed.resetTestingModule());
+  const ios = {
+    isTv: () => false,
+    tvPlatform: () => null,
+    isDesktopNative: () => false,
+    isIosNative: () => true,
+  } as DeviceService;
+  const web = {
+    isTv: () => false,
+    tvPlatform: () => null,
+    isDesktopNative: () => false,
+  } as DeviceService;
+
+  it('is sent by iOS once the server advertises muxedAudioRendition', () => {
+    const service = configure(ios, { hasServerFeature: () => true }, true);
+    expect(service.getProfile().supportsMuxedAudioRendition).toBe(true);
+  });
+
+  it('is omitted for an older server, which 400s on an unknown field', () => {
+    const service = configure(ios, { hasServerFeature: () => false }, true);
+    expect(service.getProfile().supportsMuxedAudioRendition).toBeUndefined();
+  });
+
+  it('is never sent by the web (Shaka) engine', () => {
+    const service = configure(web, { hasServerFeature: () => true });
+    expect(service.getProfile().supportsMuxedAudioRendition).toBeUndefined();
+  });
+});

@@ -170,6 +170,15 @@ export class DeviceProfileDto {
   dedupesAudioByLanguage?: boolean;
 
   /**
+   * Client reads an `EXT-X-MEDIA` audio rendition with no URI as the track muxed
+   * into the variant (AVKit), so a single-audio master names it instead of
+   * leaving "Unknown". Shaka (web, Cast) throws on it: leave unset there.
+   */
+  @IsBoolean()
+  @IsOptional()
+  supportsMuxedAudioRendition?: boolean;
+
+  /**
    * Client accelerates HLS through an `EXT-X-I-FRAME-STREAM-INF` rendition
    * (Tizen AVPlay's `setSpeed`). Only clients that declare it get the tag: any
    * player that reads one will fetch the frames behind it, and each frame costs

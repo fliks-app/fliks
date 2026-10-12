@@ -156,6 +156,9 @@ export interface DeviceProfile {
    *  language, the picked track winning its own. */
   dedupesAudioByLanguage?: boolean;
 
+  /** Engine names a single muxed audio track from a URI-less `EXT-X-MEDIA` (AVKit). */
+  supportsMuxedAudioRendition?: boolean;
+
   /** Engine accelerates HLS from an `EXT-X-I-FRAME-STREAM-INF` rendition. */
   supportsIFrameTrickPlay?: boolean;
 
@@ -322,10 +325,16 @@ export class BrowserDeviceProfileService {
       this.cachedProfile.dolbyVisionProfiles?.length
         ? this.cachedProfile.dolbyVisionProfiles
         : undefined;
-    if (!needsOverride) return { ...this.cachedProfile, systemName, dolbyVisionProfiles };
+    const supportsMuxedAudioRendition = this.auth.hasServerFeature('muxedAudioRendition')
+      ? this.cachedProfile.supportsMuxedAudioRendition
+      : undefined;
+    if (!needsOverride) {
+      return { ...this.cachedProfile, systemName, dolbyVisionProfiles, supportsMuxedAudioRendition };
+    }
     return {
       ...this.cachedProfile,
       systemName,
+      supportsMuxedAudioRendition,
       supportsHdr: forceDisableHdr ? false : this.cachedProfile.supportsHdr,
       // Forcing HDR off (user wants SDR) also drops DV passthrough — DV is HDR.
       supportsDolbyVision: forceDisableHdr
@@ -682,6 +691,7 @@ export class BrowserDeviceProfileService {
       // overlay fed by sidecar VTT instead of the HLS renditions.
       supportsHlsSubtitles: traits.supportsHlsSubtitles,
       dedupesAudioByLanguage: traits.dedupesAudioByLanguage,
+      supportsMuxedAudioRendition: traits.supportsMuxedAudioRendition,
       supportsIFrameTrickPlay: traits.supportsIFrameTrickPlay,
       supportsImageSubtitles: traits.supportsImageSubtitles,
       // Only the web/Shaka path probes seg-0 on a load-then-seek; that is

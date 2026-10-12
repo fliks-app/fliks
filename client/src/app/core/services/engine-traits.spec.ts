@@ -25,6 +25,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
   [EngineKind.IOS]: {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: true,
+    supportsMuxedAudioRendition: true,
     supportsImageSubtitles: false,
     sideloadsDirectPlaySubtitles: false,
     probesSegZero: false,
@@ -122,6 +123,14 @@ describe('ENGINE_TRAITS', () => {
     expect(ENGINE_TRAITS[EngineKind.IOS].sideloadsDirectPlaySubtitles).toBe(false);
     expect(ENGINE_TRAITS[EngineKind.ANDROID].supportsImageSubtitles).toBe(true);
     expect(ENGINE_TRAITS[EngineKind.ANDROID].sideloadsDirectPlaySubtitles).toBe(true);
+  });
+
+  it('only iOS opts in to the URI-less muxed audio rendition', () => {
+    for (const kind of Object.values(EngineKind)) {
+      expect(ENGINE_TRAITS[kind].supportsMuxedAudioRendition).toBe(
+        kind === EngineKind.IOS ? true : undefined,
+      );
+    }
   });
 
   it('CAST omits the three non-seg-zero traits (undefined on the wire)', () => {

@@ -43,6 +43,9 @@ export interface EngineTraits {
   /** Engine surfaces one audio track per LANGUAGE rather than one per
    *  rendition, so same-language renditions can't be picked client-side. */
   dedupesAudioByLanguage?: boolean;
+  /** Engine (AVKit) names the single audio muxed into the variants from a
+   *  URI-less `EXT-X-MEDIA`; Shaka throws on one, so every other row leaves it off. */
+  supportsMuxedAudioRendition?: boolean;
   /** Engine accelerates HLS from an `EXT-X-I-FRAME-STREAM-INF` rendition
    *  (Tizen AVPlay `setSpeed`). */
   supportsIFrameTrickPlay?: boolean;
@@ -99,6 +102,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
   [EngineKind.IOS]: {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: true,
+    supportsMuxedAudioRendition: true,
     supportsImageSubtitles: false,
     sideloadsDirectPlaySubtitles: false,
     probesSegZero: false,

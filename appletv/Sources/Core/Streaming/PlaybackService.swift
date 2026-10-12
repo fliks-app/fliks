@@ -99,7 +99,11 @@ import Foundation
         }
         let path = withQuery("/api/stream/\(mediaFileId)/playback-info", query)
         let response: PlaybackInfoResponse = try await api.post(
-            path, body: DeviceProfileBuilder.build(needsHlsSubtitles: needsHlsSubtitles)
+            path,
+            body: DeviceProfileBuilder.build(
+                needsHlsSubtitles: needsHlsSubtitles,
+                supportsMuxedAudioRendition: AuthService.shared.hasServerFeature("muxedAudioRendition")
+            )
         )
         info = response
         sessionId = response.sessionId
