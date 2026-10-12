@@ -17,6 +17,8 @@ export interface OfflineSubtitle {
   providerType?: string | null;
   /** Embedded stream title; absent on downloads saved before it was kept. */
   title?: string | null;
+  /** Embedded stream BCP-47 tag; absent on downloads saved before it was kept. */
+  languageTag?: string | null;
   trackKey?: string;
 }
 
@@ -49,7 +51,7 @@ export interface DownloadTask {
   /** `.edl` ranges captured at download time, on the playback clock of the stored copy. */
   offlineEdl?: EdlRange[];
   /** Audio stream info for offline audio track picker. */
-  audioStreams?: { language?: string; title?: string; codec?: string; channels?: number }[];
+  audioStreams?: { language?: string; languageTag?: string; title?: string; codec?: string; channels?: number }[];
   media?: {
     id: number;
     title: string;

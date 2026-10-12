@@ -284,6 +284,8 @@ export interface AudioStreamInfo {
   streamIndex: number;
   codec: string;
   language: string;
+  /** BCP-47 tag with region/script (`pt-BR`), Matroska only; labels, never matching. */
+  languageTag?: string;
   title?: string;
   channels?: number;
   channelLayout?: string;
@@ -296,6 +298,7 @@ export interface SubtitleStreamInfo {
   streamIndex: number;
   codec: string;
   language: string;
+  languageTag?: string;
   title?: string;
   forced: boolean;
   hearingImpaired: boolean;

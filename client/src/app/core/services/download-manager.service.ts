@@ -4,7 +4,7 @@ import { StreamingApiService } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { MediaService } from './api/media.service';
 import { isImageBasedSubtitleCodec } from '../utils/subtitle-codecs';
-import { embeddedSubtitleTitle, subtitleTrackKey } from '../utils/subtitle-tracks';
+import { embeddedSubtitleTag, embeddedSubtitleTitle, subtitleTrackKey } from '../utils/subtitle-tracks';
 import { OfflineStorageService } from './offline-storage.service';
 import { DownloadCacheService, DownloadTask, type OfflineSubtitle } from './download-cache.service';
 import { DownloadNotificationService } from './download-notification.service';
@@ -466,7 +466,11 @@ export class DownloadManagerService {
       const si = (media?.files?.find((f: any) => f.id === task.mediaFileId) as any)?.streamInfo;
       const offlineSubs: OfflineSubtitle[] = [];
       for (const row of subs) {
-        const sub = { ...row, title: embeddedSubtitleTitle(row, si?.subtitles) };
+        const sub = {
+          ...row,
+          title: embeddedSubtitleTitle(row, si?.subtitles),
+          languageTag: embeddedSubtitleTag(row, si?.subtitles),
+        };
         const url = sub.streamIndex != null
           ? this.streamingApi.getEmbeddedSubtitleUrl(task.mediaFileId, sub.streamIndex)
           : sub.relativePath
@@ -492,11 +496,12 @@ export class DownloadManagerService {
           relativePath: sub.relativePath,
           providerType: sub.providerType,
           title: sub.title,
+          languageTag: sub.languageTag,
           trackKey: subtitleTrackKey(sub)?.key,
         });
       }
       // Fetch audio stream info for offline audio track picker
-      let audioStreams: { language?: string; title?: string; codec?: string; channels?: number }[] | undefined;
+      let audioStreams: { language?: string; languageTag?: string; title?: string; codec?: string; channels?: number }[] | undefined;
       let fanartUrl: string | null = null;
       fanartUrl = media?.fanartUrl ?? null;
       if (si?.audio?.length > 1) audioStreams = si.audio;

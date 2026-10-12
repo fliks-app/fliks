@@ -76,7 +76,7 @@ function uniqueAudioNames(streams: { language?: string; title?: string }[]): str
  *  truth for both quickStart (cast from a detail page) and the player's
  *  castAudioOptions (cast in-progress). */
 export function buildCastAudioOptions(
-  audioStreams: (AudioStreamChoice & { title?: string; codec?: string })[] | undefined,
+  audioStreams: (AudioStreamChoice & { title?: string; languageTag?: string; codec?: string })[] | undefined,
   translate: TranslateService,
 ): CastAudioOption[] {
   if (!audioStreams?.length) return [];
