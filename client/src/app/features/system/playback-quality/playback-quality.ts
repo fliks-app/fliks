@@ -16,6 +16,8 @@ import { SettingsApiService } from '../../../core/services/api/settings-api.serv
 import { UserRow, UsersApiService } from '../../../core/services/api/users-api.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
+import { SelectFieldComponent } from '../../../shared/components/forms/select-field/select-field';
+import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 import { parseDeviceLabel } from '../../../core/utils/format-device-label';
 import { QoeBadgeComponent } from '../qoe-badge/qoe-badge';
@@ -26,7 +28,7 @@ const PAGE_SIZE = 25;
 
 @Component({
   selector: 'app-system-playback-quality',
-  imports: [FormsModule, TranslatePipe, LocaleDatePipe, PaginationComponent, QoeBadgeComponent],
+  imports: [FormsModule, TranslatePipe, LocaleDatePipe, PaginationComponent, QoeBadgeComponent, SelectFieldComponent, ToggleFieldComponent],
   templateUrl: './playback-quality.html',
 })
 export class SystemPlaybackQualityComponent implements OnInit {
@@ -137,6 +139,11 @@ export class SystemPlaybackQualityComponent implements OnInit {
       this.sessions.set([]);
       this.total.set(0);
     }
+  }
+
+  setUserFilter(id: string) {
+    this.userFilter.set(id ? Number(id) : null);
+    this.applyFilters();
   }
 
   applyFilters() {

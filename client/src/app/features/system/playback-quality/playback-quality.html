@@ -27,15 +27,7 @@
     <div class="card bg-base-100 border border-base-200">
       <div class="card-body gap-3">
         <h2 class="card-title text-base">{{ 'qoe.settings' | translate }}</h2>
-        <label class="label cursor-pointer justify-start gap-3 max-w-max">
-          <input
-            type="checkbox"
-            class="toggle toggle-sm"
-            [ngModel]="qoeEnabled()"
-            (ngModelChange)="qoeEnabled.set($event)"
-          />
-          <span class="label-text">{{ 'qoe.setting_enabled' | translate }}</span>
-        </label>
+        <app-toggle-field [(value)]="qoeEnabled" [label]="'qoe.setting_enabled' | translate" />
         <label class="form-control max-w-xs">
           <div class="label">
             <span class="label-text">{{ 'qoe.setting_retention' | translate }}</span>
@@ -129,39 +121,45 @@
       <div class="card-body gap-3">
         <h2 class="card-title text-base">{{ 'qoe.sessions' | translate }}</h2>
         <div class="flex flex-wrap gap-2">
-          <select
-            class="select select-bordered select-sm"
-            [ngModel]="verdictFilter()"
-            (ngModelChange)="verdictFilter.set($event); applyFilters()"
-            [attr.aria-label]="'qoe.filter_verdict' | translate"
+          <app-select-field
+            class="block w-44"
+            size="sm"
+            [hideLabel]="true"
+            [label]="'qoe.filter_verdict' | translate"
+            [value]="verdictFilter()"
+            (valueChange)="verdictFilter.set($event); applyFilters()"
           >
             <option value="">{{ 'qoe.filter_all_verdicts' | translate }}</option>
             @for (v of verdicts; track v) {
               <option [value]="v">{{ 'qoe.verdict.' + v | translate }}</option>
             }
-          </select>
-          <select
-            class="select select-bordered select-sm"
-            [ngModel]="userFilter()"
-            (ngModelChange)="userFilter.set($event); applyFilters()"
-            [attr.aria-label]="'qoe.filter_user' | translate"
+          </app-select-field>
+          <app-select-field
+            class="block w-44"
+            size="sm"
+            [hideLabel]="true"
+            [label]="'qoe.filter_user' | translate"
+            [value]="userFilter()?.toString() ?? ''"
+            (valueChange)="setUserFilter($event)"
           >
-            <option [ngValue]="null">{{ 'qoe.filter_all_users' | translate }}</option>
+            <option value="">{{ 'qoe.filter_all_users' | translate }}</option>
             @for (u of userOptions(); track u.id) {
-              <option [ngValue]="u.id">{{ u.username }}</option>
+              <option [value]="u.id">{{ u.username }}</option>
             }
-          </select>
-          <select
-            class="select select-bordered select-sm"
-            [ngModel]="deviceFilter()"
-            (ngModelChange)="deviceFilter.set($event); applyFilters()"
-            [attr.aria-label]="'qoe.filter_device' | translate"
+          </app-select-field>
+          <app-select-field
+            class="block w-44"
+            size="sm"
+            [hideLabel]="true"
+            [label]="'qoe.filter_device' | translate"
+            [value]="deviceFilter()"
+            (valueChange)="deviceFilter.set($event); applyFilters()"
           >
             <option value="">{{ 'qoe.filter_all_devices' | translate }}</option>
             @for (d of deviceOptions(); track d) {
               <option [value]="d">{{ formatDevice(d) }}</option>
             }
-          </select>
+          </app-select-field>
         </div>
 
         @if (sessions().length === 0) {
