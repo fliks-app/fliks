@@ -37,7 +37,7 @@ export class LibrariesSettingsComponent implements OnInit {
   }
 
   formatBytes(bytes: number): string {
-    if (bytes < 0) return '—';
+    if (bytes < 0) return '-';
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
     let val = bytes;
     let i = 0;

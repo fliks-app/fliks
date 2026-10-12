@@ -183,7 +183,7 @@
 
           <!-- User + device -->
           <div class="text-center text-xs text-base-content/60 py-1.5">
-            {{ s.username ?? '—' }}
+            {{ s.username ?? '-' }}
             @if (formatDevice(s.device, s.systemName); as deviceLabel) {
               <div class="text-base-content/40">
                 {{ deviceLabel }}
@@ -244,7 +244,7 @@
           <p class="text-sm text-base-content/60 mt-1">
             {{
               'system.stream_message_subtitle'
-                | translate: { user: target.username ?? '—', title: target.mediaTitle }
+                | translate: { user: target.username ?? '-', title: target.mediaTitle }
             }}
           </p>
         </div>

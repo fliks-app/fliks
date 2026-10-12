@@ -48,7 +48,7 @@ export function getDeviceName(): string {
   // Desktop — best-effort browser + OS (shared UA parser).
   const browser = detectBrowser(ua);
   const os = detectOs(ua) ?? '';
-  return os ? `${browser} — ${os}` : browser;
+  return os ? `${browser} - ${os}` : browser;
 }
 
 function generateUuid(): string {

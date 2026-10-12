@@ -66,7 +66,7 @@ export class UserStatsComponent implements OnInit {
   }
 
   formatRelative(iso: string | null): string {
-    if (!iso) return '—';
+    if (!iso) return '-';
     return formatRelativeTime(iso, this.translate.currentLang() ?? 'fr');
   }
 }

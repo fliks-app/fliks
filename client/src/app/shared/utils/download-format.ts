@@ -32,7 +32,7 @@ export function formatEta(seconds: number): string {
   // 8640000s (100 days) is the "infinite" ETA sentinel a stalled download reports —
   // show ∞ rather than a bogus "2400h 0m".
   if (!isFinite(seconds) || seconds >= 8640000) return '∞';
-  if (seconds <= 0) return '—';
+  if (seconds <= 0) return '-';
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = seconds % 60;

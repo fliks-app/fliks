@@ -54,8 +54,8 @@ export class RequestCardComponent {
 
   readonly request = input.required<FliksRequestRow>();
   readonly canManage = input(false);
-  readonly qualityProfileName = input('—');
-  readonly languageProfileName = input('—');
+  readonly qualityProfileName = input('-');
+  readonly languageProfileName = input('-');
   readonly busy = input(false);
 
   readonly approve = output<number>();

@@ -155,7 +155,7 @@ export class MediaFileInfoComponent {
     const crop = (v as any).crop;
     if (crop) {
       const ratio = (crop.width / crop.height).toFixed(2);
-      return `${ratio}:1 (${crop.width}\u00d7${crop.height} — crop auto)`;
+      return `${ratio}:1 (${crop.width}\u00d7${crop.height} - crop auto)`;
     }
     if (v.width && v.height) {
       const ratio = (v.width / v.height).toFixed(2);

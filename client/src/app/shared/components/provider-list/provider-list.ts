@@ -755,7 +755,7 @@ export class ProviderListComponent implements OnInit {
       if (!action.result) return;
       this.resultView.set({
         url,
-        title: `${row.name} — ${this.translate.instant(action.labelKey)}`,
+        title: `${row.name} - ${this.translate.instant(action.labelKey)}`,
         result: action.result,
       });
       this.resultDialog()?.nativeElement.showModal();

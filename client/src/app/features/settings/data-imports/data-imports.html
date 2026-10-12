@@ -564,7 +564,7 @@
                     [ngModel]="m.ignore ? IGNORE_VALUE : m.localLibraryId"
                     (ngModelChange)="setMapping('radarr', m.remotePath, $event)"
                   >
-                    <option [ngValue]="null">—</option>
+                    <option [ngValue]="null">-</option>
                     @for (lib of eligibleLocalLibraries('radarr'); track lib.id) {
                       <option [ngValue]="lib.id">{{ lib.name }} ({{ lib.path }})</option>
                     }
@@ -640,7 +640,7 @@
                     [ngModel]="m.ignore ? IGNORE_VALUE : m.localLibraryId"
                     (ngModelChange)="setMapping('sonarr', m.remotePath, $event)"
                   >
-                    <option [ngValue]="null">—</option>
+                    <option [ngValue]="null">-</option>
                     @for (lib of eligibleLocalLibraries('sonarr'); track lib.id) {
                       <option [ngValue]="lib.id">{{ lib.name }} ({{ lib.path }})</option>
                     }
