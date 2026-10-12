@@ -84,11 +84,13 @@ Reasons are `qoe.reason.*` i18n keys without params. First match wins:
 
 The server classifies each stall when it is recorded and stores `cause`, `causeConfidence`,
 `causeReason` (`qoe.stall.*`) and `causeEvidence` in the event `data`. First match wins; the stall
-window is [at - durationMs, at] on the client clock, widened by 5 s each side for clock skew
-(a match that needs the slack is low confidence):
+window is [at - durationMs, at]. Clients send `sentAt` with each events batch and the server shifts
+`at` by its offset from it; the 5 s margin each side then only covers transport jitter (a match
+that needs it is low confidence):
 
-1. `server`: a segment of the session waited for ffmpeg > 1 s in the window, or the median transcode
-   speed of the segments there is < 1.
+1. `server`, only when the buffer is unknown or < 1 s (a wait with data buffered is ffmpeg paused
+   ahead of the client): a segment of the session waited for ffmpeg > 1 s in the window, or the
+   median transcode speed of the segments there is < 1.
 2. `network`: buffer < 1 s (event, else a fresh sample or CMCD `bl`) and throughput (event, else
    latest sample, else CMCD `mtp`) < 1.2 x the variant bitrate (event, else latest sample).
 3. `device`: dropped / decoded delta >= 10 % between the samples around the stall (low confidence
@@ -106,7 +108,8 @@ software and which), tonemap path, burn-in, crop, audio transcode. It is built f
 spawn uses at playback-info and follows a rung change on the running sid.
 
 The session verdict's stall rule follows the cause holding most of the stalled time (the stored
-`stallCauseMs`); `unknown` winning or no classified stall falls back to the aggregate rules above.
+`stallCauseMs`, a low-confidence stall counting half) and takes its reason from the dominant
+per-stall reason (`stallReasonMs`); `unknown` winning or no classified stall falls back to the aggregate rules above.
 
 Hints added to `reasons`, never a verdict: `software_decoder` (≥ 720p, on a
 `device` verdict), `cmcd_missing` (client claims CMCD, none arrived).
