@@ -3108,6 +3108,16 @@ describe('PlayerComponent stall counting', () => {
     expect(c.lastSeekAt).toBeGreaterThan(0);
   });
 
+  it('leaves the engine position unread while the playhead is not watched', () => {
+    const h = createHarness();
+    const c = h.component as any;
+    h.state.paused.set(true);
+    const read = vi.fn(() => 5);
+    Object.defineProperty(h.engine, 'currentTime', { get: read, configurable: true });
+    c.watchPlayhead();
+    expect(read).not.toHaveBeenCalled();
+  });
+
   it('does not flag a paused playhead', () => {
     const h = createHarness();
     const c = h.component as any;

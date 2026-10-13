@@ -395,7 +395,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // ceiling) with a frozen-but-healthy playhead; widen the window right after.
   private lastSeekAt = 0;
   private lastQualitySwitchAt = 0;
-  private qoeTick = 0;
   /** Buffering right after a reload or track switch finishes is that switch settling, not a stall. */
   private qoeGraceUntil = 0;
   private readonly seekStallGraceMs = 32_000;
@@ -2741,10 +2740,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private bufferStartPos = 0;
   private watchPlayhead(): void {
     const now = Date.now();
-    const pos = this.engine?.currentTime ?? 0;
-    const dur = this.engine?.duration ?? 0;
-    const active =
-      !!this.engine &&
+    const engine = this.engine;
+    // Decided before touching the position: on Tizen it is a synchronous AVPlay call.
+    const watching =
+      !!engine &&
       !this.paused() &&
       !this.uiPaused() &&
       this.state.videoStarted() &&
@@ -2753,9 +2752,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       !this.state.ended() &&
       !this.state.error() &&
       !this.castService.isConnected() &&
-      !(typeof document !== 'undefined' && document.hidden) &&
-      !(dur && pos >= dur - 0.5);
-    this.playheadWatch.tick(pos, active, now, frozenAfterMs(this.engine?.positionUpdateMs));
+      !(typeof document !== 'undefined' && document.hidden);
+    const pos = watching ? engine.currentTime : -1;
+    const dur = watching ? engine.duration : 0;
+    this.playheadWatch.tick(pos, watching && !(dur && pos >= dur - 0.5), now, frozenAfterMs(engine?.positionUpdateMs));
     this.frozenSince.set(this.playheadWatch.frozenSince);
   }
 
@@ -3346,13 +3346,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     // Update stats every second
     this.lastTickAt = Date.now();
-    this.playheadInterval = setInterval(() => this.watchPlayhead(), 250);
+    this.playheadInterval = setInterval(() => this.watchPlayhead(), this.isTizen ? 500 : 250);
     this.statsInterval = setInterval(() => {
       this.tickClockWatch();
       this.checkStall();
-      if (++this.qoeTick % 5 === 0 && this.engine && !this.castService.isConnected()) {
-        void this.qoe.refresh(this.engine, this.activeSessionId());
-      }
       const stats = this.engine?.getStats();
       const variant = stats?.activeVariant;
       if (variant?.height) {
