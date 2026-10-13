@@ -2544,7 +2544,7 @@ describe('PlayerComponent cast session picks', () => {
     h.fixture.destroy();
   });
 
-  it('stops the local and the negotiation sessions once the cast stream is up', async () => {
+  it('stops the local session once the cast stream is up', async () => {
     const { h, cp } = casting();
     (h.component as unknown as { playbackInfo: { sessionId: string } }).playbackInfo = { sessionId: 'local-sid' };
     h.streamingApi.stopSession.mockClear();
@@ -2552,7 +2552,7 @@ describe('PlayerComponent cast session picks', () => {
     await h.component.startCastFromPlayer(10);
 
     expect(cp['reloadCastStream']).toHaveBeenCalled();
-    expect((h.streamingApi.stopSession.mock.calls as unknown[][]).map((c) => c[0])).toEqual([`sid-${MAIN_FILE_ID}`, 'local-sid']);
+    expect((h.streamingApi.stopSession.mock.calls as unknown[][]).map((c) => c[0])).toEqual(['local-sid']);
   });
 
   it('hands a local Off over to the cast as Off', async () => {
@@ -2914,23 +2914,16 @@ describe('PlayerComponent negotiation entry points', () => {
     expect([call[2], call[3]]).toEqual([undefined, undefined]);
   });
 
-  it('negotiates the cast start through the shared path with the cast profile and its own burn-in', async () => {
+  it('leaves the cast ladder to the cast service: no playback-info of its own, local rung handed over', async () => {
     const h = createHarness();
-    const castProfile = { ...DEVICE_PROFILE, deviceType: 'mobile' } as DeviceProfile;
     const cp = TestBed.inject(CastPlayerService) as any;
-    cp.getCastDeviceProfile = () => castProfile;
-    h.component.activeAudioStreamIndex = 1;
-    h.component.needsHlsSubtitles = true;
     h.component.activeQualityId.set('720p');
-    h.component.availableSubtitles.set([subOption('emb-9', 'en', { isImage: true, burnIn: true, subtitleDbId: 9 })]);
-    const negotiate = vi.spyOn(h.component, 'negotiatePlayback');
+    h.streamingApi.getPlaybackInfo.mockClear();
 
-    await h.component.startCastFromPlayer(10, 'emb-9');
+    await h.component.startCastFromPlayer(10);
 
-    expect(negotiate).toHaveBeenCalledTimes(1);
-    const call = h.streamingApi.getPlaybackInfo.mock.calls[0] as unknown[];
-    expect(call[1]).toBe(castProfile);
-    expect(call.slice(2, 5)).toEqual([9, 1, undefined]);
+    expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
+    expect(cp.reloadCastStream).toHaveBeenCalledWith(10, true, '720p');
   });
 });
 

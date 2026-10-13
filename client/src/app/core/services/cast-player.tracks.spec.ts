@@ -394,3 +394,21 @@ describe('cast quick start', () => {
     expect(h.streamingApi.getPlaybackInfo.mock.calls[0][2]).toBeUndefined();
   });
 });
+
+describe('cast start from the player', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('makes one cast playback-info call and builds the ladder from it', async () => {
+    const { svc, streamingApi } = setup();
+    svc.startCast({
+      ...base, subtitles: [PGS_EN], activeSubtitleId: 'emb-4', activeQualityId: 'original', qualities: [],
+    });
+    await svc.reloadCastStream(5, true, 'original');
+    const calls = streamingApi.getPlaybackInfo.mock.calls as unknown as unknown[][];
+    expect(calls).toHaveLength(1);
+    expect(calls[0][1]).toEqual(svc.getCastDeviceProfile());
+    expect(calls[0][2]).toBe(12);
+    expect(svc.availableQualities().map((q) => q.id)).toEqual(['1080p']);
+    expect(svc.activeQualityId()).toBe('1080p');
+  });
+});
