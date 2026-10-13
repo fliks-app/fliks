@@ -74,6 +74,15 @@ public class CastPlugin extends Plugin {
     private volatile boolean sessionPending = false;
     private boolean routeDiscoveryActive = false;
 
+    /** A dead process left a cast behind and CAF is not resuming it: join the receiver by hand. */
+    private boolean rejoinArmed = false;
+    private boolean rejoining = false;
+    /** Active scan for the saved receiver, bounded by HUNT_MS. */
+    private boolean hunting = false;
+    /** A connected session went through this process, so its end is a real stop. */
+    private boolean live = false;
+    private static final long HUNT_MS = 60_000;
+
     /**
      * Cast session updates must stay on the main thread (same as Session / isConnected rules).
      * Some Play Services versions invoke these callbacks off the UI thread.
@@ -81,13 +90,7 @@ public class CastPlugin extends Plugin {
     private final SessionManagerListener<CastSession> sessionListener = new SessionManagerListener<CastSession>() {
         @Override
         public void onSessionStarted(CastSession session, String sessionId) {
-            runOnMainThread(() -> {
-                sessionPending = false;
-                castSession = session;
-                listenReceiver(session);
-                acquireWifiLock();
-                notifyJS("connected", true);
-            });
+            runOnMainThread(() -> onConnected(session));
         }
         @Override
         public void onSessionEnded(CastSession session, int error) {
@@ -95,20 +98,15 @@ public class CastPlugin extends Plugin {
                 sessionPending = false;
                 castSession = null;
                 unlistenReceiver(session);
-                resumeState = null;
+                if (live) prefs().edit().clear().apply();
+                live = false;
                 releaseWifiLock();
                 notifyJS("connected", false);
             });
         }
         @Override
         public void onSessionResumed(CastSession session, boolean wasSuspended) {
-            runOnMainThread(() -> {
-                sessionPending = false;
-                castSession = session;
-                listenReceiver(session);
-                acquireWifiLock();
-                notifyJS("connected", true);
-            });
+            runOnMainThread(() -> onConnected(session));
         }
         @Override
         public void onSessionSuspended(CastSession session, int reason) {
@@ -125,6 +123,7 @@ public class CastPlugin extends Plugin {
         public void onSessionStartFailed(CastSession session, int error) {
             runOnMainThread(() -> {
                 sessionPending = false;
+                rejoining = false;
                 notifyJS("connected", false);
                 notifyPickerDismissed(); // also reset connecting spinner
             });
@@ -141,19 +140,86 @@ public class CastPlugin extends Plugin {
                 sessionPending = false;
                 notifyJS("connected", false);
                 notifyPickerDismissed();
+                if (hunting && hasSavedCast()) {
+                    Log.d(TAG, "rejoin armed after resume failure");
+                    rejoinArmed = true;
+                    MediaRouter router = MediaRouter.getInstance(getContext());
+                    for (MediaRouter.RouteInfo route : router.getRoutes()) tryRejoin(router, route);
+                }
             });
         }
     };
 
-    /** Passive route discovery: the picker's own list doesn't warrant an active scan on top. */
+    private void onConnected(CastSession session) {
+        sessionPending = false;
+        castSession = session;
+        live = true;
+        rejoinArmed = false;
+        listenReceiver(session);
+        acquireWifiLock();
+        JSObject resume = savedResumeState(session.getSessionId());
+        boolean rejoined = rejoining;
+        rejoining = false;
+        RemoteMediaClient client = session.getRemoteMediaClient();
+        if (resume == null || client == null) {
+            // A rejoin that found another cast than ours has nothing to take back.
+            if (rejoined) {
+                Log.d(TAG, "rejoin found no saved cast, ending session " + session.getSessionId());
+                sessionManager.endCurrentSession(false);
+            } else {
+                notifyJS("connected", true);
+            }
+            return;
+        }
+        if (client.getMediaInfo() != null) {
+            handBack(client, resume);
+            return;
+        }
+        // A joined session only knows its media after the first status.
+        client.registerCallback(new RemoteMediaClient.Callback() {
+            @Override
+            public void onStatusUpdated() {
+                client.unregisterCallback(this);
+                handBack(client, resume);
+            }
+        });
+        client.requestStatus();
+    }
+
+    private void handBack(RemoteMediaClient client, JSObject resume) {
+        if (client.getMediaInfo() == null) {
+            notifyJS("connected", true);
+            return;
+        }
+        startMediaPolling(client);
+        notifyResumed(resume);
+    }
+
+    /** Selecting a route launches the receiver when it is not running, so only join a device
+     *  whose status still reads what it read while we cast. */
+    private void tryRejoin(MediaRouter router, MediaRouter.RouteInfo route) {
+        if (!rejoinArmed || sessionPending) return;
+        CastDevice device = CastDevice.getFromBundle(route.getExtras());
+        android.content.SharedPreferences p = prefs();
+        if (device == null || !device.getDeviceId().equals(p.getString("deviceId", null))) return;
+        if (!String.valueOf(route.getDescription()).equals(p.getString("routeStatus", null))) return;
+        rejoinArmed = false;
+        rejoining = true;
+        Log.d(TAG, "rejoin: selecting saved route " + route.getName());
+        router.selectRoute(route);
+    }
+
+    /** Passive route discovery, active only while hunting for a cast to take back. */
     private final MediaRouter.Callback routeCallback = new MediaRouter.Callback() {
         @Override
         public void onRouteAdded(MediaRouter router, MediaRouter.RouteInfo route) {
             notifyRoutesChanged();
+            tryRejoin(router, route);
         }
         @Override
         public void onRouteChanged(MediaRouter router, MediaRouter.RouteInfo route) {
             notifyRoutesChanged();
+            tryRejoin(router, route);
         }
         @Override
         public void onRouteRemoved(MediaRouter router, MediaRouter.RouteInfo route) {
@@ -212,6 +278,14 @@ public class CastPlugin extends Plugin {
         );
     }
 
+    private void notifyResumed(JSObject resume) {
+        String js = "window.dispatchEvent(new CustomEvent('castStateChanged', { detail: { connected: true, resume: "
+            + resume + " } }));";
+        getBridge().getWebView().post(() ->
+            getBridge().getWebView().evaluateJavascript(js, null)
+        );
+    }
+
     private void notifyPickerDismissed() {
         String js = "window.dispatchEvent(new CustomEvent('castPickerDismissed'));";
         getBridge().getWebView().post(() ->
@@ -260,50 +334,100 @@ public class CastPlugin extends Plugin {
         );
     }
 
+    private boolean setUpCast() {
+        if (castContext != null) return true;
+        try {
+            castContext = CastContext.getSharedInstance(getContext());
+        } catch (Exception e) {
+            // Expected where the Cast module is absent (Android TV): one line, no stack.
+            Log.w(TAG, "Cast unavailable: " + e.getMessage());
+            return false;
+        }
+        sessionManager = castContext.getSessionManager();
+        sessionManager.addSessionManagerListener(sessionListener, CastSession.class);
+        CastSession current = sessionManager.getCurrentCastSession();
+        if (!hasSavedCast()) {
+            prefs().edit().clear().apply();
+        } else if (current == null || !current.isConnected()) {
+            // No current session: CAF attempts no resume (app update), so rejoin right away.
+            rejoinArmed = current == null;
+            Log.d(TAG, "saved cast pending, active scan, rejoinArmed=" + rejoinArmed);
+            setHunting(true);
+            mainHandler.postDelayed(() -> {
+                rejoinArmed = false;
+                setHunting(false);
+            }, HUNT_MS);
+        }
+        startRouteDiscovery();
+        return true;
+    }
+
     @PluginMethod()
     public void initialize(PluginCall call) {
         runOnMainThread(() -> {
-            try {
-                castContext = CastContext.getSharedInstance(getContext());
-                sessionManager = castContext.getSessionManager();
-                sessionManager.addSessionManagerListener(sessionListener, CastSession.class);
-                startRouteDiscovery();
-
-                // A session outlives the WebView (Back, reopening from the Cast
-                // notification): hand it and the sender's saved state back.
-                castSession = sessionManager.getCurrentCastSession();
-                if (castSession != null) listenReceiver(castSession);
-                // Discovery has only just started, so this is usually false; the
-                // route callback raises it as soon as a receiver answers.
-                JSObject result = new JSObject().put("available", hasCastRoute());
-                RemoteMediaClient client = castSession != null && castSession.isConnected()
-                    ? castSession.getRemoteMediaClient() : null;
-                if (client != null) {
-                    result.put("connected", true);
-                    if (resumeState != null && client.getMediaInfo() != null) {
-                        result.put("resume", resumeState);
-                        startMediaPolling(client);
-                    }
-                }
-                call.resolve(result);
-            } catch (Exception e) {
-                // Expected where the Cast module is absent (Android TV): one line, no stack.
-                Log.w(TAG, "Cast unavailable: " + e.getMessage());
+            if (!setUpCast()) {
                 call.resolve(new JSObject().put("available", false));
+                return;
             }
+            // A session outlives the WebView (Back, reopening from the Cast
+            // notification): hand it and the sender's saved state back.
+            castSession = sessionManager.getCurrentCastSession();
+            if (castSession != null) listenReceiver(castSession);
+            // Discovery has only just started, so this is usually false; the
+            // route callback raises it as soon as a receiver answers.
+            JSObject result = new JSObject().put("available", hasCastRoute());
+            RemoteMediaClient client = castSession != null && castSession.isConnected()
+                ? castSession.getRemoteMediaClient() : null;
+            if (client != null) {
+                result.put("connected", true);
+                JSObject resume = savedResumeState(castSession.getSessionId());
+                if (resume != null && client.getMediaInfo() != null) {
+                    result.put("resume", resume);
+                    startMediaPolling(client);
+                }
+            }
+            call.resolve(result);
         });
     }
 
-    /** The sender's cast state, kept by the process across WebView reloads. */
-    private static JSObject resumeState;
+    private android.content.SharedPreferences prefs() {
+        return getContext().getSharedPreferences("fliks_cast", Context.MODE_PRIVATE);
+    }
 
+    /** The sender's cast state, keyed by its Cast session id so a process restart takes the
+     *  session back and a later session never picks up an old cast's state. */
     @PluginMethod()
     public void setResumeState(PluginCall call) {
         JSObject state = call.getObject("state");
         runOnMainThread(() -> {
-            resumeState = state;
+            if (castSession != null && castSession.isConnected() && state != null) {
+                prefs().edit()
+                    .putString("sessionId", castSession.getSessionId())
+                    .putString("deviceId", castSession.getCastDevice().getDeviceId())
+                    .putString("routeStatus", String.valueOf(
+                        MediaRouter.getInstance(getContext()).getSelectedRoute().getDescription()))
+                    .putString("state", state.toString())
+                    .apply();
+            }
             call.resolve();
         });
+    }
+
+    /** Partial prefs (an older build's) never arm a rejoin. */
+    private boolean hasSavedCast() {
+        android.content.SharedPreferences p = prefs();
+        return p.contains("sessionId") && p.contains("deviceId") && p.contains("routeStatus") && p.contains("state");
+    }
+
+    private JSObject savedResumeState(String sessionId) {
+        android.content.SharedPreferences p = prefs();
+        String state = p.getString("state", null);
+        if (sessionId == null || state == null || !sessionId.equals(p.getString("sessionId", null))) return null;
+        try {
+            return new JSObject(state);
+        } catch (org.json.JSONException e) {
+            return null;
+        }
     }
 
     @PluginMethod()
@@ -330,9 +454,21 @@ public class CastPlugin extends Plugin {
      *  getRoutes() only ever holds the default route. */
     private void startRouteDiscovery() {
         if (routeDiscoveryActive) return;
-        MediaRouter.getInstance(getContext()).addCallback(
-            buildCastSelector(), routeCallback, MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY);
+        addRouteCallback();
         routeDiscoveryActive = true;
+    }
+
+    /** Re-adding the callback only updates its flags. */
+    private void addRouteCallback() {
+        int flags = MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY
+            | (hunting ? MediaRouter.CALLBACK_FLAG_PERFORM_ACTIVE_SCAN : 0);
+        MediaRouter.getInstance(getContext()).addCallback(buildCastSelector(), routeCallback, flags);
+    }
+
+    private void setHunting(boolean on) {
+        if (hunting == on) return;
+        hunting = on;
+        if (routeDiscoveryActive) addRouteCallback();
     }
 
     private void stopRouteDiscovery() {

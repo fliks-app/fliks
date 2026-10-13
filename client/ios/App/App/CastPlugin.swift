@@ -9,6 +9,7 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
     public let jsName = "NativeCast"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "initialize", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setResumeState", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "isConnected", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "requestSession", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getCastDevices", returnType: CAPPluginReturnPromise),
@@ -71,8 +72,21 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
             let hasDevices = discoveryManager.deviceCount > 0
             print("[CastPlugin] initialize: discoveryState=\(discoveryManager.discoveryState.rawValue), deviceCount=\(discoveryManager.deviceCount), hasDevices=\(hasDevices)")
 
-            // Resolve immediately with current state
-            call.resolve(["available": hasDevices])
+            // A session that outlived the WebView or the process: hand it and the sender's state back.
+            var result: [String: Any] = ["available": hasDevices]
+            if let session = self.currentSession, session.connectionState == .connected,
+               let client = session.remoteMediaClient {
+                self.live = true
+                result["available"] = true
+                result["connected"] = true
+                if let resume = self.savedResumeState(session.sessionID),
+                   client.mediaStatus?.mediaInformation != nil {
+                    result["resume"] = resume
+                    client.add(self)
+                    self.startPolling()
+                }
+            }
+            call.resolve(result)
 
             // Discovery results often arrive after initialize — poll briefly
             if !hasDevices {
@@ -84,6 +98,73 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - Resume state
+
+    private static let resumeKey = "fliksCastResume"
+    /** A connected session went through this process, so its end is a real stop. */
+    private var live = false
+    /** Resume state waiting for a resumed session's first media status. */
+    private var pendingResume: [String: Any]?
+
+    /// Keyed by the GCK session id so a process restart takes the session back and a later
+    /// session never picks up an old cast's state. JSON: UserDefaults rejects the state's nulls.
+    @objc func setResumeState(_ call: CAPPluginCall) {
+        let state = call.getObject("state")
+        DispatchQueue.main.async { [weak self] in
+            if let state = state, let sid = self?.currentSession?.sessionID,
+               self?.currentSession?.connectionState == .connected,
+               let data = try? JSONSerialization.data(withJSONObject: ["sessionId": sid, "state": state]) {
+                UserDefaults.standard.set(data, forKey: Self.resumeKey)
+            }
+            call.resolve()
+        }
+    }
+
+    private func savedResumeState(_ sessionID: String?) -> [String: Any]? {
+        guard let sessionID = sessionID,
+              let data = UserDefaults.standard.data(forKey: Self.resumeKey),
+              let saved = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              saved["sessionId"] as? String == sessionID else { return nil }
+        return saved["state"] as? [String: Any]
+    }
+
+    private func onConnected(_ session: GCKCastSession) {
+        live = true
+        attachFliksChannel(session)
+        guard let resume = savedResumeState(session.sessionID), let client = session.remoteMediaClient else {
+            emitCastState(connected: true)
+            return
+        }
+        client.add(self)
+        if client.mediaStatus?.mediaInformation != nil {
+            handBack(resume)
+        } else {
+            // A resumed session only knows its media after the first status.
+            pendingResume = resume
+            client.requestStatus()
+        }
+    }
+
+    private func handBack(_ resume: [String: Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: ["connected": true, "resume": resume]),
+              let json = String(data: data, encoding: .utf8) else { return }
+        startPolling()
+        let js = "window.dispatchEvent(new CustomEvent('castStateChanged', { detail: \(json) }));"
+        DispatchQueue.main.async { [weak self] in
+            self?.bridge?.webView?.evaluateJavaScript(js)
+        }
+    }
+
+    public func remoteMediaClient(_ client: GCKRemoteMediaClient, didUpdate mediaStatus: GCKMediaStatus?) {
+        guard let resume = pendingResume else { return }
+        pendingResume = nil
+        if mediaStatus?.mediaInformation != nil {
+            handBack(resume)
+        } else {
+            emitCastState(connected: true)
         }
     }
 
@@ -359,20 +440,21 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
 
     public func sessionManager(_ sessionManager: GCKSessionManager, didStart session: GCKCastSession) {
         sessionStarting = false
-        attachFliksChannel(session)
-        emitCastState(connected: true)
+        onConnected(session)
     }
 
     public func sessionManager(_ sessionManager: GCKSessionManager, willStart session: GCKCastSession) {
         sessionStarting = true
     }
 
-    public func sessionManager(_ sessionManager: GCKSessionManager, didResumeSession session: GCKCastSession) {
-        attachFliksChannel(session)
-        emitCastState(connected: true)
+    public func sessionManager(_ sessionManager: GCKSessionManager, didResumeCastSession session: GCKCastSession) {
+        onConnected(session)
     }
 
     public func sessionManager(_ sessionManager: GCKSessionManager, didEnd session: GCKSession, withError error: (any Error)?) {
+        if live { UserDefaults.standard.removeObject(forKey: Self.resumeKey) }
+        live = false
+        pendingResume = nil
         detachFliksChannel()
         stopPolling()
         emitCastState(connected: false)

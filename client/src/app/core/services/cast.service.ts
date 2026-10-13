@@ -116,13 +116,14 @@ export interface CastTextTrackStyle {
 
 interface NativeCastPlugin {
   /** `connected` + `resume` (the state last given to setResumeState) when a
-   *  session outlived the WebView. */
+   *  session outlived the WebView or the app process. A session resumed later
+   *  brings `resume` on `castStateChanged`. */
   initialize(opts: { appId: string }): Promise<{
     available: boolean;
     connected?: boolean;
     resume?: unknown;
   }>;
-  /** Android: kept by the process, dropped when the session ends. */
+  /** Persisted per Cast session id, dropped when the session ends. */
   setResumeState?(opts: { state: unknown }): Promise<void>;
   isConnected(): Promise<{ connected: boolean }>;
   requestSession(): Promise<void>;
@@ -190,7 +191,7 @@ export class CastService implements OnDestroy {
    *  entry points are hidden when nothing can be cast to. */
   readonly isAvailable = signal(false);
   readonly isConnected = signal(false);
-  /** Set once at startup when a session survived a WebView reload: the state
+  /** Set when a session survived a WebView reload or a process restart: the state
    *  the player saved with {@link saveResumeState}. */
   readonly resumedState = signal<unknown>(null);
   /** True while waiting for the Cast session to establish. Written only through
@@ -297,6 +298,7 @@ export class CastService implements OnDestroy {
       // Listen for native Cast events
       window.addEventListener('castStateChanged', ((e: CustomEvent) => {
         const connected = e.detail?.connected ?? false;
+        if (e.detail?.resume) this.resumedState.set(e.detail.resume);
         this.isConnected.set(connected);
         if (connected) this.endConnecting();
         else {

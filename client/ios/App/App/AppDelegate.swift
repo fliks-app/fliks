@@ -39,6 +39,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         let castOptions = GCKCastOptions(discoveryCriteria:
             GCKDiscoveryCriteria(applicationID: "66BF4DAE"))
         castOptions.disableDiscoveryAutostart = false
+        // Session resumption at launch needs the device found before any Cast button is tapped.
+        castOptions.startDiscoveryAfterFirstTapOnCastButton = false
         GCKCastContext.setSharedInstanceWith(castOptions)
 
         // Enable Cast SDK logging for debug
