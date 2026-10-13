@@ -343,9 +343,10 @@ private struct SkipCueStyle: ButtonStyle {
         }
     }
 
-    /// Paused by the viewer, not frozen: a stall keeps the watchdog and the heartbeat in "playing".
+    /// Paused by the viewer. Waiting to play (before the first frame, after a jump) still means to play,
+    /// so the watchdog and the heartbeat keep running.
     private var heldPaused: Bool {
-        player?.timeControlStatus != .playing && stallStart == nil
+        player?.timeControlStatus == .paused && stallStart == nil
     }
 
     func teardown() {
@@ -1020,7 +1021,7 @@ private struct SkipCueStyle: ButtonStyle {
         playback.notifyStateChange(
             position: position.isFinite ? position : 0,
             duration: duration.isFinite ? duration : 0,
-            paused: player.timeControlStatus != .playing,
+            paused: heldPaused,
             audioTrackIndex: currentAudioTrackIndex(),
             subtitleTrackIndex: currentSubtitleTrackIndex(),
             subtitleId: currentSubtitleId(),
