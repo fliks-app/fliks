@@ -86,8 +86,8 @@ import Foundation
     var onReload: ((URL, Double) -> Void)?
     /// Recovery exhausted `maxRecoverAttempts` — terminal, caller shows an error.
     var onFatalError: (() -> Void)?
-    /// A recovery is starting: the caller closes its open rebuffer on the old sid and says whether one was counted.
-    var onRecoveryStart: (@MainActor () -> Bool)?
+    /// A recovery is starting: returns when its wait began, or nil to start it at the frozen playhead.
+    var onRecoveryStart: (@MainActor (_ reason: String) -> Date?)?
 
     // MARK: - Start / stop
 
@@ -478,7 +478,7 @@ import Foundation
             onFatalError?()
             return
         }
-        let waitStart = waitStart ?? (countAsRecovery && (onRecoveryStart?() ?? false) ? Date() : (frozenSince ?? Date()))
+        let waitStart = waitStart ?? (countAsRecovery ? onRecoveryStart?(reason) : nil) ?? frozenSince ?? Date()
         recoveringGuard = true
         recovering = true
         recoverAttempts += 1

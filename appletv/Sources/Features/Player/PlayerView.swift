@@ -171,7 +171,8 @@ private struct SkipCueStyle: ButtonStyle {
     private var media: Media?
     private var nextEpisode: (mediaFileId: Int, episodeId: Int)?
 
-    private var timeObserver: Any?
+    private var tickTimer: Timer?
+    private var stalledObserver: NSObjectProtocol?
     private var endObserver: NSObjectProtocol?
     private var statusObservation: NSKeyValueObservation?
     private var selectionObserver: NSObjectProtocol?
@@ -230,7 +231,17 @@ private struct SkipCueStyle: ButtonStyle {
         playback.onReload = { [weak self] url, position in
             Task { @MainActor in self?.reload(url: url, position: position, keepingSubtitle: true) }
         }
-        playback.onRecoveryStart = { [weak self] in self?.closeStall() ?? false }
+        playback.onRecoveryStart = { [weak self] reason in
+            guard let self else { return nil }
+            // AVPlayer drops to .paused once the stream errors out, so the intent is read before the reload.
+            self.resumeAfterRecovery = self.stallStart != nil || self.player?.timeControlStatus != .paused
+            // A lost sid takes no more events: its open rebuffer becomes the recovery wait on the new sid.
+            if reason == "session_lost", let start = self.stallStart {
+                self.stallStart = nil
+                return start.at
+            }
+            return self.closeStall() ? Date() : nil
+        }
         playback.onFatalError = { [weak self] in
             Task { @MainActor in self?.fatalError = true }
         }
@@ -269,7 +280,8 @@ private struct SkipCueStyle: ButtonStyle {
     private func reload(url: URL, position: Double, keepingSubtitle: Bool = false) {
         guard let player else { return }
         let subtitleChoice = keepingSubtitle ? currentLegibleChoice() : nil
-        let wasPaused = player.timeControlStatus == .paused
+        let wasPaused = resumeAfterRecovery.map { !$0 } ?? (player.timeControlStatus == .paused)
+        resumeAfterRecovery = nil
         let item = Self.makeItem(url: url)
         playback.qoeItem = item
         playedOnce = false
@@ -297,6 +309,9 @@ private struct SkipCueStyle: ButtonStyle {
     /// Rebuffer in flight: set on `.waitingToPlayAtSpecifiedRate` after the first frame, settled on `.playing`.
     private var stallStart: (at: Date, position: Double, variantBitrate: Double?, bufferAheadS: Double?)?
     private var playedOnce = false
+    private var resumeAfterRecovery: Bool?
+    /// The item posted playbackStalled: AVPlayer gave up waiting and paused itself.
+    private var ranDry = false
     /// A seek also waits to buffer: no stall is armed right after a time jump.
     private var lastJumpAt = Date.distantPast
 
@@ -315,6 +330,7 @@ private struct SkipCueStyle: ButtonStyle {
         switch player.timeControlStatus {
         case .playing:
             playedOnce = true
+            ranDry = false
             closeStall()
         case .waitingToPlayAtSpecifiedRate:
             if playedOnce, stallStart == nil, Date().timeIntervalSince(lastJumpAt) > 1,
@@ -322,15 +338,23 @@ private struct SkipCueStyle: ButtonStyle {
                 stallStart = (Date(), position, playback.variantBitrate, playback.bufferAhead)
             }
         default:
-            stallStart = nil
+            // A network error stops AVPlayer instead of waiting: that pause is still the stall.
+            if !ranDry { stallStart = nil }
         }
+    }
+
+    /// Paused by the viewer, not frozen: a stall keeps the watchdog and the heartbeat in "playing".
+    private var heldPaused: Bool {
+        player?.timeControlStatus != .playing && stallStart == nil
     }
 
     func teardown() {
         closeStall()
         playback.stop()
-        if let timeObserver, let player { player.removeTimeObserver(timeObserver) }
-        timeObserver = nil
+        tickTimer?.invalidate()
+        tickTimer = nil
+        if let stalledObserver { NotificationCenter.default.removeObserver(stalledObserver) }
+        stalledObserver = nil
         if let edlBoundaryObserver, let player { player.removeTimeObserver(edlBoundaryObserver) }
         edlBoundaryObserver = nil
         if let timeJumpObserver { NotificationCenter.default.removeObserver(timeJumpObserver) }
@@ -451,12 +475,14 @@ private struct SkipCueStyle: ButtonStyle {
                 player.seek(to: Self.seekTime(initialSeek))
             }
         }
-        let interval = CMTime(seconds: 1, preferredTimescale: 1)
-        timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-            Task { @MainActor in self?.onTick(time: time.seconds) }
+        // A periodic time observer stops while the picture is frozen; the watchdog and heartbeat must not.
+        tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, let t = self.player?.currentTime().seconds else { return }
+                self.onTick(time: t)
+            }
         }
         rateObservation = player.observe(\.timeControlStatus, options: [.new]) { [weak self] player, _ in
-            let paused = player.timeControlStatus != .playing
             let position = player.currentTime().seconds
             let duration = player.currentItem?.duration.seconds ?? 0
             Task { @MainActor in
@@ -466,7 +492,7 @@ private struct SkipCueStyle: ButtonStyle {
                 self.playback.notifyStateChange(
                     position: position.isFinite ? position : 0,
                     duration: duration.isFinite ? duration : 0,
-                    paused: paused,
+                    paused: self.heldPaused,
                     audioTrackIndex: self.currentAudioTrackIndex(),
                     subtitleTrackIndex: self.currentSubtitleTrackIndex(),
                     subtitleId: self.currentSubtitleId()
@@ -504,6 +530,20 @@ private struct SkipCueStyle: ButtonStyle {
                 self.enforceEdl(at: t)
             }
         }
+        if let stalledObserver { NotificationCenter.default.removeObserver(stalledObserver) }
+        ranDry = false
+        stalledObserver = NotificationCenter.default.addObserver(
+            forName: AVPlayerItem.playbackStalledNotification, object: item, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, let player = self.player, self.playedOnce else { return }
+                self.ranDry = true
+                if self.stallStart == nil {
+                    self.stallStart = (Date(), player.currentTime().seconds, self.playback.variantBitrate,
+                                       self.playback.bufferAhead)
+                }
+            }
+        }
         if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
         endObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main
@@ -523,8 +563,7 @@ private struct SkipCueStyle: ButtonStyle {
         guard time.isFinite else { return }
         let durationRaw = player?.currentItem?.duration.seconds ?? 0
         let duration = durationRaw.isFinite ? durationRaw : 0
-        let paused = player?.timeControlStatus != .playing
-        playback.tick(position: time, duration: duration, paused: paused, audioTrackIndex: currentAudioTrackIndex(),
+        playback.tick(position: time, duration: duration, paused: heldPaused, audioTrackIndex: currentAudioTrackIndex(),
                       subtitleTrackIndex: currentSubtitleTrackIndex(), subtitleId: currentSubtitleId())
         recoveringHint = playback.recovering
         if !trackingSelection, player?.currentItem?.status == .readyToPlay {
