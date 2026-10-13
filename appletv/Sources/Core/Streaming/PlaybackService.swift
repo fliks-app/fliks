@@ -38,6 +38,9 @@ import Foundation
     // recoverConfirmPending) — a reload that keeps re-stalling just burns through
     // the cap faster. Add if flaky rebuffering trips the cap too eagerly.
     private let maxRecoverAttempts = 3
+    /// Playback sustained this long after a recovery makes it clean: a later blip gets fresh attempts.
+    private let recoverConfirmSeconds: TimeInterval = 5
+    private var recoveredAt: Date?
     private var recoveringGuard = false
 
     /// The item being played, read for the heartbeat's `qoe` block. Set by the coordinator on every (re)load.
@@ -441,6 +444,10 @@ import Foundation
 
     private func checkStall(position: Double, paused: Bool) {
         if paused || abs(position - lastProgressPos) > 0.25 {
+            if !paused, let at = recoveredAt, Date().timeIntervalSince(at) >= recoverConfirmSeconds {
+                recoveredAt = nil
+                recoverAttempts = 0
+            }
             lastProgressPos = position
             lastProgressAt = Date()
             return
@@ -493,6 +500,7 @@ import Foundation
             lastProgressAt = Date()
             recovering = false
             recoveringGuard = false
+            recoveredAt = Date()
             // Counters are per session id: the new sid starts from zero.
             stallCount = 0; stallMs = 0; recoveryReloads = 0
             if countAsRecovery {
