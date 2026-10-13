@@ -33,6 +33,9 @@ import Foundation
     private var lastProgressPos: Double = 0
     private var lastProgressAt = Date()
     private let stallTimeoutSeconds: TimeInterval = 15
+    /// A load or a seek waits on a transcode (re)spawn and AVPlayer's first variant pick: the web player's seek grace.
+    private let seekStallGraceSeconds: TimeInterval = 32
+    private var lastSeekAt = Date.distantPast
     private var recoverAttempts = 0
     // ponytail: no "sustained playback clears the counter" tracking (player.ts's
     // recoverConfirmPending) — a reload that keeps re-stalling just burns through
@@ -125,6 +128,7 @@ import Foundation
         let url = try await requestPlaybackInfo(startAt: startAt)
         lastProgressPos = startAt
         lastProgressAt = Date()
+        lastSeekAt = lastProgressAt
         return url
     }
 
@@ -443,7 +447,9 @@ import Foundation
     // MARK: - Stall watchdog + recovery
 
     private func checkStall(position: Double, paused: Bool) {
-        if paused || abs(position - lastProgressPos) > 0.25 {
+        let moved = abs(position - lastProgressPos)
+        if moved > 2 { lastSeekAt = Date() }
+        if paused || moved > 0.25 {
             if !paused, let at = recoveredAt, Date().timeIntervalSince(at) >= recoverConfirmSeconds {
                 recoveredAt = nil
                 recoverAttempts = 0
@@ -452,7 +458,8 @@ import Foundation
             lastProgressAt = Date()
             return
         }
-        guard Date().timeIntervalSince(lastProgressAt) >= stallTimeoutSeconds else { return }
+        let timeout = Date().timeIntervalSince(lastSeekAt) < seekStallGraceSeconds ? seekStallGraceSeconds : stallTimeoutSeconds
+        guard Date().timeIntervalSince(lastProgressAt) >= timeout else { return }
         let frozenSince = lastProgressAt
         lastProgressAt = Date()
         Task { await recover(position: position, reason: "stall", frozenSince: frozenSince) }
@@ -498,6 +505,7 @@ import Foundation
             guard !destroyed else { return }
             lastProgressPos = position
             lastProgressAt = Date()
+            lastSeekAt = lastProgressAt
             recovering = false
             recoveringGuard = false
             recoveredAt = Date()
