@@ -18,6 +18,8 @@ import { realSegmentSeconds } from './transcoding/constants';
 import type { PreRollItem } from '../../common/plugin-contract';
 import type { User } from '../users/entities/user.entity';
 import { ForbiddenException } from '@nestjs/common';
+import { TranscodingService } from './transcoding/transcoding.service';
+import type { TranscodeSession } from './transcoding/types';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -1075,6 +1077,108 @@ describe('StreamingController.hlsSegment - kind refresh', () => {
     );
     const { liveSessions } = await serveSegment('1080p', live);
     expect(liveSessions.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('StreamingController.hlsSegment - ABR rung switch', () => {
+  const jobDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fliks-abr-switch-'));
+  afterAll(() => fs.rmSync(jobDir, { recursive: true, force: true }));
+  // The live run is on 2160p; an earlier run left 720p output next to it.
+  const live2160 = {
+    quality: '2160p',
+    variant: { kind: 'main' },
+    cachePath: path.join(jobDir, '2160p'),
+    segmentDuration: 3,
+    lastAccess: 0,
+    process: { exitCode: null },
+  };
+  fs.mkdirSync(path.join(jobDir, '720p'), { recursive: true });
+  fs.writeFileSync(path.join(jobDir, '720p', 'init.mp4'), 'moov');
+  fs.writeFileSync(path.join(jobDir, '720p', 'seg-0005.m4s'), 'x');
+
+  const rungs = new TranscodingService(
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
+
+  function setup(session: object = live2160) {
+    const serve = jest
+      .fn<Promise<void>, [unknown, string]>()
+      .mockResolvedValue(undefined);
+    const getOrCreateSession = jest.fn().mockResolvedValue(session);
+    const res = {
+      setHeader: jest.fn(),
+      status: jest.fn(),
+      end: jest.fn(),
+      send: jest.fn(),
+    };
+    res.status.mockReturnValue(res);
+    const controller = makeController({
+      streamingService: {
+        resolveFile: jest.fn().mockResolvedValue({ absolutePath: '/src.mkv' }),
+      },
+      activeStreamTracker: { getSegmentDuration: () => 3 },
+      segmentPackaging: { serve },
+      transcodingService: {
+        rungCacheDir: (s: TranscodeSession, q: string) =>
+          rungs.rungCacheDir(s, q),
+        getOrCreateSession,
+        getSegmentPath: jest.fn().mockResolvedValue(null),
+        isProducing: () => false,
+      },
+      sessionRouter: {
+        assertFresh: jest.fn(),
+        findRequestSession: jest.fn().mockReturnValue(null),
+        resolveSession: jest.fn().mockReturnValue(session),
+        resolveEarlySession: jest.fn().mockReturnValue(undefined),
+      },
+      sessionContextBuilder: {
+        build: () => ({ videoVariant: { codec: 'h264' } }),
+      },
+    });
+    const get = (quality: string, segment: string) =>
+      controller.hlsSegment(
+        42,
+        quality,
+        segment,
+        { query: {}, user: { id: 7 } } as never,
+        { id: 7 } as User,
+        res as never,
+      );
+    return { get, serve, getOrCreateSession, res };
+  }
+
+  it("serves a previous rung's init and segments from disk without restarting ffmpeg", async () => {
+    const { get, serve, getOrCreateSession } = setup();
+    await get('720p', 'init.mp4');
+    await get('720p', 'seg-0005.m4s');
+    expect(serve.mock.calls.map((c) => c[1])).toEqual([
+      path.join(jobDir, '720p', 'init.mp4'),
+      path.join(jobDir, '720p', 'seg-0005.m4s'),
+    ]);
+    expect(getOrCreateSession).not.toHaveBeenCalled();
+  });
+
+  it('switches the run only for a segment that rung has not produced', async () => {
+    const { get, getOrCreateSession } = setup();
+    await get('720p', 'seg-0006.m4s');
+    expect(getOrCreateSession).toHaveBeenCalledWith(
+      42,
+      '720p',
+      '/src.mkv',
+      6,
+      expect.anything(),
+    );
+  });
+
+  it('answers a retryable 503, never a 404, when a rung switch killed the run it waited on', async () => {
+    const killed = { ...live2160, quality: '720p', intentionallyKilled: true };
+    const { get, res } = setup(killed);
+    await get('720p', 'seg-0009.m4s');
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.status).not.toHaveBeenCalledWith(404);
   });
 });
 
