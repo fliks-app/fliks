@@ -1528,7 +1528,9 @@
       "software_decoder": "Software-Decodierung.",
       "too_little_data": "Zu wenig Wiedergabezeit für eine Beurteilung.",
       "healthy": "Kein Problem erkannt.",
-      "cmcd_missing": "Der Client meldet CMCD, aber der Server hat keine Daten erhalten."
+      "cmcd_missing": "Der Client meldet CMCD, aber der Server hat keine Daten erhalten.",
+      "session_lost": "Unterbrechungen: Der Server kannte die Sitzung nicht mehr, der Player musste sie neu erstellen.",
+      "session_expired": "Unterbrechungen: Der Server hat den weiteren Stream verweigert, der Player musste ihn neu starten."
     },
     "filter_all_devices": "Alle Geräte",
     "sessions_count": "{{count}} Sitzungen",

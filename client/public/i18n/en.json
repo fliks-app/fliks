@@ -1528,7 +1528,9 @@
       "software_decoder": "Software decoding.",
       "too_little_data": "Not enough playback time to judge.",
       "healthy": "No issue detected.",
-      "cmcd_missing": "The client declares CMCD but the server received none."
+      "cmcd_missing": "The client declares CMCD but the server received none.",
+      "session_lost": "Stalls: the server no longer knew the session and the player had to recreate it.",
+      "session_expired": "Stalls: the server refused the rest of the stream and the player had to restart it."
     },
     "filter_all_devices": "All devices",
     "sessions_count": "{{count}} sessions",

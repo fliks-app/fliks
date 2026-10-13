@@ -1528,7 +1528,9 @@
       "software_decoder": "Décodage logiciel.",
       "too_little_data": "Temps de lecture insuffisant pour juger.",
       "healthy": "Aucun problème détecté.",
-      "cmcd_missing": "Le client déclare CMCD mais le serveur n'en a reçu aucun."
+      "cmcd_missing": "Le client déclare CMCD mais le serveur n'en a reçu aucun.",
+      "session_lost": "Coupures : le serveur ne connaissait plus la session et le lecteur a dû la recréer.",
+      "session_expired": "Coupures : le serveur a refusé la suite du flux et le lecteur a dû le relancer."
     },
     "filter_all_devices": "Tous les appareils",
     "sessions_count": "{{count}} sessions",
