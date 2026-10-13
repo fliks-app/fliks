@@ -546,7 +546,7 @@ export class CastPlayerService {
       const state = this.cast.resumedState() as CastResumeState | null;
       if (state && !untracked(this.hasMedia)) untracked(() => this.restore(state));
     });
-    // The native side keeps this across a WebView reload, so the session can be
+    // The native side keeps this across a reload or process restart, so the session can be
     // taken over as it was left without reloading the receiver.
     effect(() => {
       if (!this.hasMedia()) return;
