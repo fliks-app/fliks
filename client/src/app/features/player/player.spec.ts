@@ -626,6 +626,18 @@ describe('PlayerComponent wake / resume', () => {
     expect(h.engine.loadCalls.length).toBe(0);
   });
 
+  it('unloads the engine when recovery gives up, so nothing plays behind the error card', async () => {
+    const h = createHarness();
+    const unload = vi.fn(async () => {});
+    h.component.engine.unload = unload;
+    h.component.recoverAttempts = h.component.maxRecoverAttempts;
+
+    await h.component.recoverFromLostSession('stall');
+
+    expect(unload).toHaveBeenCalled();
+    expect(h.state.error()?.source).toBe('session');
+  });
+
   it('direct play has no encoder to warm', async () => {
     const h = createHarness();
     const fetchMock = vi.fn(async () => ({ ok: true }) as any);
