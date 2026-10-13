@@ -3661,9 +3661,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Exhausted recovery — surface a terminal error card instead of
       // returning silently, which would leave a stuck spinner (recovering
       // still veiled) or a stale overlay with no way out.
-      this.state.setRecovering(false);
-      if (!this.state.error()) this.state.failWith(undefined, { source: 'session' });
-      this.recoveryEpisode = null;
+      this.giveUpRecovery();
       return;
     }
     if (this.castService.isConnected()) return;
@@ -3717,9 +3715,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.recoverConfirmAt = Date.now();
     } catch (e) {
       if (this.recoverAttempts >= this.maxRecoverAttempts) {
-        this.recoveryEpisode = null;
-        this.state.setRecovering(false);
-        this.state.failWith(e);
+        this.giveUpRecovery(e);
       } else {
         // Hold the recovering veil up across the backoff so the user sees a
         // reconnect, not a flash of the fatal overlay between attempts.
@@ -3733,6 +3729,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.recoveringFromLostSession = false;
       this.qoeGraceUntil = Date.now() + 3_000;
     }
+  }
+
+  /** The terminal card means playback is over: an engine left loaded would keep buffering and play
+   *  on behind it once the network comes back. */
+  private giveUpRecovery(e?: unknown): void {
+    this.recoveryEpisode = null;
+    this.state.setRecovering(false);
+    void this.engine?.unload();
+    if (e !== undefined) this.state.failWith(e);
+    else if (!this.state.error()) this.state.failWith(undefined, { source: 'session' });
   }
 
   /** Reload local engine and resume after Cast disconnect. The
