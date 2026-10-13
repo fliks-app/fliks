@@ -3,6 +3,7 @@ import { WebOsEngine } from './webos-engine';
 
 function engineWith(video: Record<string, unknown>) {
   const engine = new WebOsEngine();
+  (engine as unknown as { frameBaseline: unknown }).frameBaseline = { dropped: 0, decoded: 0 };
   (engine as unknown as { video: unknown }).video = {
     currentTime: 10,
     videoWidth: 1920,
