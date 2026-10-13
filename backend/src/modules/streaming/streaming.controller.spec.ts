@@ -1159,6 +1159,7 @@ describe('StreamingController.hlsSegment - CMCD reaches the QoE tracker', () => 
       { upsert, create: (x: unknown) => x } as never,
       { insert: jest.fn() } as never,
     );
+    (qoe as unknown as { enabledFlag: boolean }).enabledFlag = true;
     const live = buildLiveSession(
       { userId: 7, username: null, mediaFileId: 42, kind: 'transcode' },
       'sid-1',
