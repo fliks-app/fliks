@@ -1999,6 +1999,8 @@ export class StreamingController {
           startSeg,
           ctx,
           /* skipVerify */ true,
+          // A guessed rung must not kill the one the player picked, still registering.
+          /* anyRung */ true,
         );
       }
     }
@@ -2376,6 +2378,24 @@ export class StreamingController {
       // Segment not on disk — fall through to full resolve + getOrCreateSession.
     }
 
+    // ABR switch back to a rung an earlier run produced: serve its init and
+    // segments from disk rather than killing the live run to restart that rung.
+    const rungDir =
+      existing && !sessionQualityMatches
+        ? this.transcodingService.rungCacheDir(existing, quality)
+        : null;
+    if (existing && rungDir) {
+      const cachedPath = path.join(
+        rungDir,
+        this.videoSegName(segment, quality, live?.useExtXMedia ?? false),
+      );
+      if ((statSizeOrNull(cachedPath) ?? 0) > 0) {
+        existing.lastAccess = Date.now();
+        await this.serveFrom(res, cachedPath, segment, existing);
+        return;
+      }
+    }
+
     // Slow path: need to create/restart a session — requires DB lookup.
     const resolved = await this.streamingService.resolveFile(
       mediaFileId,
@@ -2498,7 +2518,11 @@ export class StreamingController {
     if (!segPath) {
       // Still producing → the segment arrives on a later tick; surface as
       // transient so players retry. Hard 404 only once the run is over.
-      if (this.transcodingService.isProducing(session)) {
+      // A run killed by a concurrent rung switch or seek is not a missing segment.
+      if (
+        this.transcodingService.isProducing(session) ||
+        session.intentionallyKilled
+      ) {
         this.log.warn(
           `Segment 503 (transient): ${segment} (quality=${quality}, mfid=${mediaFileId})`,
         );

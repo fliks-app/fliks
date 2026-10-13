@@ -614,6 +614,18 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     return generateMasterPlaylist({ ...opts, canEmitHdrLadder });
   }
 
+  /** Directory another rung of this main job writes to: a client switching
+   *  back to that rung is served what is already there instead of a restart. */
+  rungCacheDir(session: TranscodeSession, quality: string): string | null {
+    if (
+      session.remux ||
+      session.variant?.kind !== 'main' ||
+      quality === 'remux'
+    )
+      return null;
+    return path.join(path.dirname(session.cachePath), quality);
+  }
+
   /**
    * Start or retrieve a transcode session.
    * Key: one session per user per file.
@@ -626,19 +638,26 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     requestedSegment = 0,
     ctx?: SessionContext,
     skipVerify = false,
+    /** Return any rung already producing for this job instead of switching to `quality`. */
+    anyRung = false,
   ): Promise<TranscodeSession> {
     const profileHash = this.computeProfileHashForCtx(ctx);
     const key = sessionKey(mediaFileId, ctx?.userId, profileHash);
-    const session = await this.withLock(key, () =>
-      this.doGetOrCreateSession(
+    const session = await this.withLock(key, async () => {
+      const existing = this.sessions.get(key);
+      if (anyRung && existing && !existing.remux && this.isProducing(existing))
+        return existing;
+      return this.doGetOrCreateSession(
         key,
         mediaFileId,
         quality,
         absolutePath,
         requestedSegment,
         ctx,
-      ),
-    );
+      );
+    });
+    // The kept rung is verified by the request that spawned it.
+    if (session.quality !== quality) return session;
     if (skipVerify) {
       // Return without blocking the caller on seg-0, but still run the
       // HW-crash → CPU fallback in the BACKGROUND. A HW encoder that crashes on
