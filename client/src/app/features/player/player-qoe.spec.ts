@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PlayerQoe, PlayheadWatch, SAMPLE_TIMEOUT_MS, StallTracker } from './player-qoe';
+import { PlayerQoe, PlayheadWatch, SAMPLE_TIMEOUT_MS, StallTracker, frozenAfterMs } from './player-qoe';
 import type { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
 import type { QoeReporter } from '../../core/services/qoe-reporter.service';
 
@@ -60,6 +60,19 @@ describe('PlayheadWatch', () => {
     w.tick(5, true, 2_250);
     w.tick(5, true, 9_000);
     expect(w.frozenSince).toBe(0);
+  });
+
+  it('waits past a 1 s position cadence before calling it frozen', () => {
+    const slow = frozenAfterMs(1_000);
+    expect(slow).toBe(2_500);
+    expect(frozenAfterMs()).toBe(1_000);
+    const w = new PlayheadWatch(0);
+    w.tick(5, true, 250, slow);
+    w.tick(5, true, 1_500, slow);
+    w.tick(5, true, 2_500, slow);
+    expect(w.frozenSince).toBe(0);
+    w.tick(5, true, 2_750, slow);
+    expect(w.frozenSince).toBe(250);
   });
 
   it('keeps a buffering episode open when the playhead never moved', () => {
@@ -150,6 +163,26 @@ describe('PlayerQoe', () => {
       expect.anything(),
       expect.any(String),
     );
+  });
+
+  it('counts a 17 s freeze once when its recovery closes the stall first', async () => {
+    await qoe.refresh(engine(async () => raw));
+    qoe.current('a');
+    now = 1000;
+    qoe.setStalled(true, { sessionId: 'a', position: 3, bufferAheadS: 0 });
+    now = 18_000;
+    expect(qoe.closeStall('a')).toBe(true);
+    now = 20_000;
+    qoe.onRecovery('b', 3, { reason: 'stall', durationMs: 2_000 });
+    await qoe.refresh(engine(async () => raw));
+    expect(qoe.current('b')).toMatchObject({ stallCount: 1, stallMs: 2_000 });
+    const stalls = reporter.record.mock.calls.filter((c) => c[1].type === 'stall');
+    expect(stalls.map((c) => [c[0], c[1].durationMs])).toEqual([['a', 17_000]]);
+  });
+
+  it('caps an error message so the keepalive payload stays small', () => {
+    qoe.onError('a', 1, { message: 'x'.repeat(500) });
+    expect(reporter.record.mock.calls[0][1].message).toHaveLength(200);
   });
 
   it('restarts the counters when a recovery mints a new session id', async () => {

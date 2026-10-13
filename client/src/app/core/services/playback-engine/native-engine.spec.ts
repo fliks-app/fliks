@@ -156,3 +156,9 @@ describe('NativeEngine.getQoeSample', () => {
     expect(await new NativeEngine().getQoeSample()).toBeNull();
   });
 });
+
+describe('NativeEngine position cadence', () => {
+  it('declares the 1 s refresh of ExoPlayer and AVPlayer so the freeze watch waits for it', () => {
+    expect(new NativeEngine().positionUpdateMs).toBe(1_000);
+  });
+});

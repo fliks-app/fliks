@@ -2951,6 +2951,13 @@ describe('PlayerComponent stall counting', () => {
     expect(spy).toHaveBeenLastCalledWith(true, expect.objectContaining({ ignored: false }));
   });
 
+  it('does not count buffering behind a fatal error', () => {
+    const { c, spy } = stalling();
+    c.state.failWith(new Error('boom'));
+    c.trackStall(true);
+    expect(spy).toHaveBeenLastCalledWith(false, expect.anything());
+  });
+
   it('ignores buffering inside the grace window a finished reload leaves', () => {
     const { c, spy } = stalling();
     c.qoeGraceUntil = Date.now() + 3_000;
@@ -3031,6 +3038,65 @@ describe('PlayerComponent stall counting', () => {
     expect(c.frozenSince()).toBe(0);
     expect(c.qoe.stalls.count).toBe(1);
     expect(c.qoe.stalls.totalMs).toBe(5_250);
+    spy.mockRestore();
+  });
+
+  it('does not carry buffering over into a stall before the first frame', () => {
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(100_000);
+    const h = createHarness();
+    const c = h.component as any;
+    h.state.loading.set(false);
+    h.state.paused.set(false);
+    h.state.videoStarted.set(false);
+    h.engine.currentTime = 0;
+    h.state.buffering.set(true);
+    c.syncStall();
+    spy.mockReturnValue(103_000);
+    h.state.buffering.set(false);
+    c.syncStall();
+    expect(c.frozenSince()).toBe(0);
+    expect(c.qoe.stalls.count).toBe(0);
+    spy.mockRestore();
+  });
+
+  it('does not flag a native engine whose position refreshes once a second', () => {
+    const h = createHarness();
+    const c = h.component as any;
+    h.state.loading.set(false);
+    h.state.paused.set(false);
+    h.state.videoStarted.set(true);
+    h.engine.currentTime = 191;
+    h.engine.duration = 3600;
+    (h.engine as any).positionUpdateMs = 1_000;
+    const spy = vi.spyOn(Date, 'now');
+    for (const t of [10_000, 10_250, 10_500, 10_750, 11_000, 11_250, 11_500, 11_750, 12_000]) {
+      spy.mockReturnValue(t);
+      c.watchPlayhead();
+    }
+    expect(c.frozenSince()).toBe(0);
+    spy.mockRestore();
+  });
+
+  it('counts a freeze once when the recovery it triggers follows it', async () => {
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(100_000);
+    const h = createHarness();
+    const c = h.component as any;
+    c.mediaFileId = 1;
+    c.playbackInfo = { sessionId: 's1' };
+    c.qoe.current('s1');
+    const record = vi.spyOn(c.qoe.reporter, 'record').mockImplementation(() => {});
+    h.state.loading.set(false);
+    c.trackStall(true, 100_000);
+    spy.mockReturnValue(117_000);
+    vi.spyOn(c, 'refreshSidAndReload').mockImplementation(async () => {
+      spy.mockReturnValue(119_000);
+      c.playbackInfo = { sessionId: 's2' };
+    });
+    await c.recoverFromLostSession('stall', 100_000);
+    spy.mockReturnValue(120_000);
+    expect(c.qoe.stalls.totalMs).toBe(2_000);
+    const stalls = record.mock.calls.filter((a) => (a[1] as { type: string }).type === 'stall');
+    expect(stalls.map((a) => [a[0], (a[1] as { durationMs: number }).durationMs])).toEqual([['s1', 17_000]]);
     spy.mockRestore();
   });
 

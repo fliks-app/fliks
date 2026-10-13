@@ -80,6 +80,11 @@ export class StallTracker {
 
 /** The playhead did not move for this long while it should have. */
 export const FROZEN_AFTER_MS = 1_000;
+
+/** Frozen threshold for an engine whose position only updates every `updateMs` (native: 1 s). */
+export function frozenAfterMs(updateMs?: number): number {
+  return Math.max(FROZEN_AFTER_MS, (updateMs ?? 0) * 2.5);
+}
 /** A tick this late means the process was frozen (sleep), not the playhead. */
 const MAX_TICK_GAP_MS = 3_000;
 
@@ -102,13 +107,13 @@ export class PlayheadWatch {
   }
 
   /** `active`: the viewer should be seeing the playhead move. */
-  tick(pos: number, active: boolean, now = Date.now()): void {
+  tick(pos: number, active: boolean, now = Date.now(), frozenAfter = FROZEN_AFTER_MS): void {
     const gapOk = now - this.lastTickAt < MAX_TICK_GAP_MS;
     this.lastTickAt = now;
     if (!active || !gapOk || Math.abs(pos - this.lastPos) >= 0.05) {
       this.lastAdvanceAt = now;
       this.frozenSince = 0;
-    } else if (!this.frozenSince && now - this.lastAdvanceAt >= FROZEN_AFTER_MS) {
+    } else if (!this.frozenSince && now - this.lastAdvanceAt >= frozenAfter) {
       this.frozenSince = this.lastAdvanceAt;
     }
     this.lastPos = pos;
@@ -181,7 +186,8 @@ export class PlayerQoe {
     this.closeStall(ctx.sessionId);
   }
 
-  private closeStall(sessionId: string | undefined): void {
+  /** Closes the open episode on its own sid; true when it counted. */
+  closeStall(sessionId: string | undefined): boolean {
     const done = this.stalls.end(this.now());
     if (done && sessionId) {
       this.record(sessionId, {
@@ -193,6 +199,7 @@ export class PlayerQoe {
         variantBitrate: done.variantBitrate,
       });
     }
+    return !!done;
   }
 
   /** `wait`: what forced the recovery and how long the picture stayed frozen before playback came back. */
@@ -215,7 +222,7 @@ export class PlayerQoe {
     if (!sessionId) return;
     this.record(
       sessionId,
-      { type: 'error', position, code: err.code, message: err.message, category: err.category },
+      { type: 'error', position, code: err.code, message: err.message?.slice(0, 200), category: err.category },
       true,
     );
   }

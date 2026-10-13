@@ -59,7 +59,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 import type { AudioTrack, PlaybackEngine, QoeSample } from '../../core/services/playback-engine/playback-engine';
 import { QoeReporter } from '../../core/services/qoe-reporter.service';
 import type { QoeRecoveryReason } from '../../core/services/api/qoe-api.service';
-import { PlayerQoe, PlayheadWatch, type ReloadWhy } from './player-qoe';
+import { PlayerQoe, PlayheadWatch, frozenAfterMs, type ReloadWhy } from './player-qoe';
 import {
   createEngineSurface,
   releaseEngineSurface,
@@ -916,6 +916,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   async ngAfterViewInit() {
     this.state.reset();
     this.qoe.reset();
+    this.recoveryEpisode = null;
     this.firstLoadSetupDone = false;
 
     // On native: listen to orientation changes (immersive handled by effect)
@@ -2254,6 +2255,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.reloadLoadPending = true;
     this.engine.resetRecoveryGuard();
     const previousSessionId = this.playbackInfo?.sessionId;
+    this.qoe.setStalled(false, { sessionId: previousSessionId, position: this.engine.currentTime });
     this.qoe.flushKeepalive(previousSessionId);
     let startTime: number | undefined;
     try {
@@ -2261,6 +2263,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // over the outgoing frame and rewind the playhead UI to the start.
       this.state.reset();
       this.qoe.reset();
+      this.recoveryEpisode = null;
       this.edlEnded = false;
       // Drop the outgoing episode's negotiated info so a failure before the
       // new getPlaybackInfo resolves reports no playMethod/hwAccel rather
@@ -2715,7 +2718,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.bufferStartPos = pos;
       } else if (this.wasBuffering && !buffering) {
         // Still frozen once the engine calls it over: keep one episode open until the playhead moves.
-        if (this.playheadWatch.carryOver(Date.now(), this.bufferStartAt, this.bufferStartPos, pos)) {
+        if (
+          started &&
+          !this.paused() &&
+          this.playheadWatch.carryOver(Date.now(), this.bufferStartAt, this.bufferStartPos, pos)
+        ) {
           this.frozenSince.set(this.bufferStartAt);
           frozenSince = this.bufferStartAt;
         }
@@ -2748,7 +2755,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       !this.castService.isConnected() &&
       !(typeof document !== 'undefined' && document.hidden) &&
       !(dur && pos >= dur - 0.5);
-    this.playheadWatch.tick(pos, active, now);
+    this.playheadWatch.tick(pos, active, now, frozenAfterMs(this.engine?.positionUpdateMs));
     this.frozenSince.set(this.playheadWatch.frozenSince);
   }
 
@@ -2763,7 +2770,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       at - Math.max(this.lastSeekAt, this.lastQualitySwitchAt) < 2_000;
     const position = this.engine?.currentTime ?? 0;
     const end = this.state.bufferedEnd();
-    this.qoe.setStalled(stalled, {
+    this.qoe.setStalled(stalled && !this.state.error(), {
       bufferAheadS: end > 0 && this.engine?.measuresBuffer !== false ? Math.max(0, end - position) : null,
       sessionId: this.activeSessionId(),
       position,
@@ -3678,6 +3685,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // session — so it isn't leaked true after the reload settles.
     if (this.reloadingStream) {
       this.state.setRecovering(false);
+      this.recoveryEpisode = null;
       return;
     }
     if (this.recoverRetryTimer) return; // a backoff retry is already queued
@@ -3692,8 +3700,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
     if (this.castService.isConnected()) return;
     if (!this.engine || !this.mediaFileId) return;
-    // The first trigger names the episode; the picture froze at the last progress, not at the trigger.
-    this.recoveryEpisode ??= { reason, since: Math.min(Date.now(), frozenSince ?? (this.lastProgressAt || Date.now())) };
+    // The first trigger names the episode. An open stall already counts the freeze on the old sid, so the
+    // recovery wait starts now; otherwise it starts when the picture froze, at the last progress.
+    if (!this.recoveryEpisode) {
+      const counted = this.qoe.closeStall(this.activeSessionId());
+      const since = counted
+        ? Date.now()
+        : Math.min(Date.now(), frozenSince ?? (this.lastProgressAt || Date.now()));
+      this.recoveryEpisode = { reason, since };
+    }
     this.recoveringFromLostSession = true;
     // Suppress the fatal-error overlay the engine tears off as the stream
     // reloads — recovery is about to resume playback, so the reload window
