@@ -2495,6 +2495,17 @@ describe('PlayerComponent cast session picks', () => {
     h.fixture.destroy();
   });
 
+  it('stops the local and the negotiation sessions once the cast stream is up', async () => {
+    const { h, cp } = casting();
+    (h.component as unknown as { playbackInfo: { sessionId: string } }).playbackInfo = { sessionId: 'local-sid' };
+    h.streamingApi.stopSession.mockClear();
+
+    await h.component.startCastFromPlayer(10);
+
+    expect(cp['reloadCastStream']).toHaveBeenCalled();
+    expect((h.streamingApi.stopSession.mock.calls as unknown[][]).map((c) => c[0])).toEqual([`sid-${MAIN_FILE_ID}`, 'local-sid']);
+  });
+
   it('hands a local Off over to the cast as Off', async () => {
     const { h, cp } = casting();
     h.component.availableSubtitles.set([castSub('ext-5')]);

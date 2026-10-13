@@ -2833,6 +2833,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // bitrate (e.g. 8 Mbps for 1080p). Reusing the browser pi here
     // makes `buildCastQualityOptions` drop the `'original'` entry and
     // present the wrong bitrates in the cast dropdown.
+    const localSid = this.playbackInfo?.sessionId;
     const castProfile = this.castPlayerService.getCastDeviceProfile();
     const castPi = await this.negotiatePlayback(this.reloadStartAt(position), {
       profile: castProfile,
@@ -2868,6 +2869,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       activeAudioStreamIndex: this.activeAudioStreamIndex,
     });
     await this.castPlayerService.reloadCastStream(position);
+    // Stopped only now: the cast's own sid shares the negotiation's ffmpeg job and keeps it alive.
+    for (const sid of [castPi.sessionId, localSid]) {
+      if (sid && sid !== this.castPlayerService.liveSessionId()) {
+        void this.streamingApi.stopSession(sid).catch(() => {});
+      }
+    }
   }
 
   /**
