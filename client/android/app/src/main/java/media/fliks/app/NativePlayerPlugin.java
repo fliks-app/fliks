@@ -409,6 +409,8 @@ public class NativePlayerPlugin extends Plugin {
                 public void onPlaybackStateChanged(int state) {
                     syncKeepScreenOn();
                     if (state == Player.STATE_READY) applyGate();
+                    // The 1 Hz push can be a second old: a stall must read the buffer it starts on.
+                    emitPosition();
                     switch (state) {
                         case Player.STATE_BUFFERING: emitStateChanged("buffering"); break;
                         case Player.STATE_READY: emitStateChanged(player.getPlayWhenReady() ? "playing" : "paused"); break;

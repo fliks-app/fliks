@@ -1145,6 +1145,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             case .paused:
                 self?.emitStateChanged("paused")
             case .waitingToPlayAtSpecifiedRate:
+                // The periodic push stops with the picture: a stall must read the buffer it starts on.
+                self?.emitTimeUpdate()
                 self?.emitStateChanged("buffering")
             case .playing:
                 self?.emitStateChanged("playing")
