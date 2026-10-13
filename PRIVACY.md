@@ -1,6 +1,6 @@
 # Privacy Policy
 
-_Last updated: 3 May 2026_
+_Last updated: 13 October 2026_
 
 Fliks is an open-source self-hosted media server. This document
 describes which data is collected, by whom, and how it is used in the
@@ -52,7 +52,19 @@ control**:
   etc.);
 - Watch history, playback progress, intro / outro markers;
 - Downloaded subtitles;
+- Playback quality reports: how each playback went (stalls, errors,
+  throughput, buffer, dropped frames, decoder, and what the server did
+  to the stream), stored with the user, the media title, the device
+  name (the browser's user agent on the web and desktop apps) and the
+  app version. No IP address and no media content. They are deleted
+  after 30 days by default; an administrator can change that, or turn
+  the collection off;
 - Application preferences.
+
+Playback quality reports are sent by the apps to your own Fliks server
+only. The Chromecast receiver hands its measurements to the app that
+started the cast, which forwards them to your server. They are read
+by your server's administrators and go to no third party.
 
 Fliks (the publisher) **has no access to any of this data**: it lives
 on your server, behind your network, and is never transmitted to any
