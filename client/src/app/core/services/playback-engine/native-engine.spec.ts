@@ -10,6 +10,7 @@ const plugin = vi.hoisted(() => ({
   setFillScreen: vi.fn(() => Promise.resolve()),
   setSubtitleStyle: vi.fn(() => Promise.resolve()),
   destroy: vi.fn(() => Promise.resolve()),
+  getQoe: vi.fn(() => Promise.resolve({ engine: 'exoplayer' })),
 }));
 
 vi.mock('@capacitor/core', () => ({
@@ -142,5 +143,22 @@ describe('NativeEngine audio tracks across loads', () => {
 
     expect(engine.getAudioTracks()).toEqual([]);
     await engine.destroy();
+  });
+});
+
+describe('NativeEngine.getQoeSample', () => {
+  it('returns the plugin sample', async () => {
+    expect(await new NativeEngine().getQoeSample()).toEqual({ engine: 'exoplayer' });
+  });
+
+  it('returns null when the plugin lacks getQoe', async () => {
+    plugin.getQoe.mockRejectedValueOnce(new Error('not implemented'));
+    expect(await new NativeEngine().getQoeSample()).toBeNull();
+  });
+});
+
+describe('NativeEngine position cadence', () => {
+  it('declares the 1 s refresh of ExoPlayer and AVPlayer so the freeze watch waits for it', () => {
+    expect(new NativeEngine().positionUpdateMs).toBe(1_000);
   });
 });

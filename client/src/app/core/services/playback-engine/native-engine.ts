@@ -3,6 +3,7 @@ import {
   AbstractPlaybackEngine,
   type PlaybackEngine,
   type AudioTrack,
+  type EngineQoeSample,
   type EngineStats,
   type PlaybackState,
 } from './playback-engine';
@@ -22,6 +23,7 @@ import type { TimeRange } from '../../utils/edl-policy';
  * The native player renders behind the WebView — the Angular UI sits on top.
  */
 export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngine {
+  readonly positionUpdateMs = 1_000;
   private _currentTime = 0;
   private _duration = 0;
   private _buffered = 0;
@@ -427,6 +429,10 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
 
   getStats(): EngineStats {
     return { droppedFrames: 0 };
+  }
+
+  override async getQoeSample(): Promise<EngineQoeSample | null> {
+    return NativePlayer.getQoe().catch(() => null);
   }
 
   // ── Quality ──

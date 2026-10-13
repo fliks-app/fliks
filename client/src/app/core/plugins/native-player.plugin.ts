@@ -1,3 +1,4 @@
+import type { EngineQoeSample } from '../services/playback-engine/playback-engine';
 import { registerPlugin } from '@capacitor/core';
 
 // ---------------------------------------------------------------------------
@@ -172,6 +173,8 @@ export interface NativePlayerPlugin {
   // ── State ──
 
   getPosition(): Promise<NativePlayerPosition>;
+  /** Playback-quality sample; `engine` is set natively. Rejects on builds that predate it. */
+  getQoe(): Promise<EngineQoeSample>;
   setPlaybackRate(options: { rate: number }): Promise<void>;
 }
 

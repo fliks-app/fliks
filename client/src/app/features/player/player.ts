@@ -56,7 +56,10 @@ import {
 } from '../../core/services/player-settings.service';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
-import type { AudioTrack, PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
+import type { AudioTrack, PlaybackEngine, QoeSample } from '../../core/services/playback-engine/playback-engine';
+import { QoeReporter } from '../../core/services/qoe-reporter.service';
+import type { QoeRecoveryReason } from '../../core/services/api/qoe-api.service';
+import { PlayerQoe, PlayheadWatch, frozenAfterMs, type ReloadWhy } from './player-qoe';
 import {
   createEngineSurface,
   releaseEngineSurface,
@@ -278,6 +281,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly qoe = new PlayerQoe(inject(QoeReporter));
   private readonly offlineStorage = inject(OfflineStorageService);
   private readonly offlineSync = inject(OfflinePlaybackSyncService);
   private readonly autoDownload = inject(AutoDownloadService);
@@ -378,6 +382,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** True while the user is actively dragging / scrubbing the seekbar. */
   private readonly seekDragging = signal(false);
   private statsInterval: ReturnType<typeof setInterval> | null = null;
+  private playheadInterval: ReturnType<typeof setInterval> | null = null;
   private subtitleStyleEl: HTMLStyleElement | null = null;
   /** Stall watchdog: last position we saw the playhead at, and when. If the
    *  playhead doesn't advance for {@link stallTimeoutMs} while the player is
@@ -389,6 +394,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // A backward seek can trigger a 10-30s backend respawn (awaitSeekUnlock's
   // ceiling) with a frozen-but-healthy playhead; widen the window right after.
   private lastSeekAt = 0;
+  private lastQualitySwitchAt = 0;
+  /** Buffering right after a reload or track switch finishes is that switch settling, not a stall. */
+  private qoeGraceUntil = 0;
   private readonly seekStallGraceMs = 32_000;
   // Desktop mpv far-seek → reload thresholds: forward slack above mpv's cache
   // end, and the backward window still served from its back-cache. A seek
@@ -408,19 +416,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private resumeDue = false;
   private lastResumeAt = 0;
   private readonly resumeRetryMs = 5_000;
-  /** How long buffering has to hold before the overlay explains itself: a
-   *  cold ffmpeg respawn (after a sleep, or a far seek) takes seconds, and a
-   *  bare spinner over a black frame reads as a broken player. */
-  private static readonly preparingAfterMs = 5_000;
-  private stalledSince = 0;
 
   // ── Template-facing signal aliases (delegate to services) ──
   readonly loading = this.state.loading;
   readonly videoStarted = this.state.videoStarted;
   readonly error = this.state.error;
   /** Transient "copied ✓" feedback for the error card's copy button. */
-  /** Buffering has lasted long enough to be worth a word on screen. */
-  readonly preparing = signal(false);
   readonly paused = this.state.paused;
   readonly uiPaused = this.state.uiPaused;
   readonly autoplayBlocked = this.state.autoplayBlocked;
@@ -438,6 +439,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       !this.autoplayBlocked() &&
       (this.loading() ||
         this.buffering() ||
+        // Shaka can hold a starved playhead without ever reporting `buffering`.
+        this.frozenSince() > 0 ||
         (!this.videoStarted() && !this.error())),
   );
   readonly playbackMode = this.state.playbackMode;
@@ -911,6 +914,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   async ngAfterViewInit() {
     this.state.reset();
+    this.qoe.reset();
+    this.recoveryEpisode = null;
     this.firstLoadSetupDone = false;
 
     // On native: listen to orientation changes (immersive handled by effect)
@@ -1361,6 +1366,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.forcedSaveTrailing) clearTimeout(this.forcedSaveTrailing);
     this.remoteCommandSub.unsubscribe();
     this.savePosition();
+    this.qoe.setStalled(false, { sessionId: this.activeSessionId(), position: this.engine?.currentTime ?? 0 });
+    this.qoe.flushKeepalive(this.activeSessionId());
     if (!this.castService.isConnected()) {
       // keepalive fetch (not HttpClient) so the stop survives if this destroy
       // coincides with a page unload / app background.
@@ -1378,6 +1385,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.removeSubtitleStyle();
     const video = this.videoEl()?.nativeElement;
     if (video) {
+      video.removeEventListener('seeking', this.onSeeking);
       video.removeEventListener('seeked', this.onSeeked);
     }
     this.spriteAbort?.abort();
@@ -1386,6 +1394,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.nextEpisodeCue.cancel();
     this.commercialCue.cancel();
     if (this.statsInterval) clearInterval(this.statsInterval);
+    if (this.playheadInterval) clearInterval(this.playheadInterval);
     if (this.recoverRetryTimer) clearTimeout(this.recoverRetryTimer);
     if (this.adminMessageTimer) clearTimeout(this.adminMessageTimer);
     document.removeEventListener('keydown', this.onKeyDown);
@@ -1939,6 +1948,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.state.loading.set(false);
     } finally {
       this.reloadingStream = false;
+      this.qoeGraceUntil = Date.now() + 3_000;
     }
   }
 
@@ -2244,11 +2254,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.reloadLoadPending = true;
     this.engine.resetRecoveryGuard();
     const previousSessionId = this.playbackInfo?.sessionId;
+    this.qoe.setStalled(false, { sessionId: previousSessionId, position: this.engine.currentTime });
+    this.qoe.flushKeepalive(previousSessionId);
     let startTime: number | undefined;
     try {
       // Surface the loading backdrop (set to the new episode's still below)
       // over the outgoing frame and rewind the playhead UI to the start.
       this.state.reset();
+      this.qoe.reset();
+      this.recoveryEpisode = null;
       this.edlEnded = false;
       // Drop the outgoing episode's negotiated info so a failure before the
       // new getPlaybackInfo resolves reports no playMethod/hwAccel rather
@@ -2318,6 +2332,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.state.failWith(e, { dolbyVision: this.isDolbyVisionPassthrough() });
     } finally {
       this.reloadingStream = false;
+      this.qoeGraceUntil = Date.now() + 3_000;
       this.reloadLoadPending = false;
       this.state.loading.set(false);
     }
@@ -2680,7 +2695,100 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  true; the load-time heartbeat ran before any of it was known. */
   private readonly firstFrameReportEffect = effect(() => {
     if (!this.state.videoStarted()) return;
-    untracked(() => void this.savePosition(true));
+    untracked(() => {
+      if (this.engine && !this.castService.isConnected()) {
+        void this.qoe.refresh(this.engine, this.activeSessionId());
+      }
+      void this.savePosition(true);
+    });
+  });
+
+  /** Buffering after the first frame that no seek, load or quality switch explains. */
+  private readonly qoeStallEffect = effect(() => this.syncStall());
+
+  private syncStall(): void {
+    let frozenSince = this.frozenSince();
+    const buffering = this.state.buffering();
+    const started = this.state.videoStarted();
+    untracked(() => {
+      const pos = this.engine?.currentTime ?? 0;
+      if (!this.wasBuffering && buffering) {
+        this.bufferStartAt = Date.now();
+        this.bufferStartPos = pos;
+      } else if (this.wasBuffering && !buffering) {
+        // Still frozen once the engine calls it over: keep one episode open until the playhead moves.
+        if (
+          started &&
+          !this.paused() &&
+          this.playheadWatch.carryOver(Date.now(), this.bufferStartAt, this.bufferStartPos, pos)
+        ) {
+          this.frozenSince.set(this.bufferStartAt);
+          frozenSince = this.bufferStartAt;
+        }
+      }
+      this.wasBuffering = buffering;
+      const stalled = (buffering && started) || frozenSince > 0;
+      this.trackStall(stalled, frozenSince || undefined);
+    });
+  }
+
+  /** Playhead frozen while it should advance, even when the engine never said `buffering`. */
+  private readonly frozenSince = signal(0);
+  private readonly playheadWatch = new PlayheadWatch(0);
+  private wasBuffering = false;
+  private bufferStartAt = 0;
+  private bufferStartPos = 0;
+  private watchPlayhead(): void {
+    const now = Date.now();
+    const engine = this.engine;
+    // Decided before touching the position: on Tizen it is a synchronous AVPlay call.
+    const watching =
+      !!engine &&
+      !this.paused() &&
+      !this.uiPaused() &&
+      this.state.videoStarted() &&
+      !this.state.loading() &&
+      !this.state.seekLocked() &&
+      !this.state.ended() &&
+      !this.state.error() &&
+      !this.castService.isConnected() &&
+      !(typeof document !== 'undefined' && document.hidden);
+    const pos = watching ? engine.currentTime : -1;
+    const dur = watching ? engine.duration : 0;
+    this.playheadWatch.tick(pos, watching && !(dur && pos >= dur - 0.5), now, frozenAfterMs(engine?.positionUpdateMs));
+    this.frozenSince.set(this.playheadWatch.frozenSince);
+  }
+
+  private trackStall(stalled: boolean, since?: number): void {
+    const at = since ?? Date.now();
+    const ignored =
+      this.state.seekLocked() ||
+      this.reloadingStream ||
+      this.reloadLoadPending ||
+      this.recoveringFromLostSession ||
+      at < this.qoeGraceUntil ||
+      at - Math.max(this.lastSeekAt, this.lastQualitySwitchAt) < 2_000;
+    const position = this.engine?.currentTime ?? 0;
+    const end = this.state.bufferedEnd();
+    this.qoe.setStalled(stalled && !this.state.error(), {
+      bufferAheadS: end > 0 && this.engine?.measuresBuffer !== false ? Math.max(0, end - position) : null,
+      sessionId: this.activeSessionId(),
+      position,
+      ignored,
+      since,
+    });
+  }
+
+  private readonly qoeErrorEffect = effect(() => {
+    const err = this.state.error();
+    if (!err) return;
+    untracked(() =>
+      this.qoe.onError(this.activeSessionId(), this.engine?.currentTime ?? 0, {
+        code: err.code,
+        message: err.message ? this.redactSecrets(err.message) : undefined,
+        category: err.source,
+      }),
+    );
   });
 
   onToggleFullscreen() {
@@ -2867,6 +2975,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       activeQualityId: activeCastQualityId,
       activeSubtitleId: subtitleId,
       activeAudioStreamIndex: this.activeAudioStreamIndex,
+      playbackId: this.qoe.playbackId,
     });
     await this.castPlayerService.reloadCastStream(position);
     // Stopped only now: the cast's own sid shares the negotiation's ffmpeg job and keeps it alive.
@@ -3148,6 +3257,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    * surface `sessionLost: true` in the interval.
    */
   private recoveringFromLostSession = false;
+  /** The recovery in progress: what triggered it and when the picture froze, kept across retries. */
+  private recoveryEpisode: { reason: QoeRecoveryReason; since: number } | null = null;
   /** Recovery attempts in the current loss episode. Cleared only once a
    *  reload sustains playback (see {@link recoverConfirmPending}), NOT on the
    *  instant a reload resolves — a reload that succeeds then re-fails within
@@ -3224,7 +3335,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.saveInterval = setInterval(() => this.savePosition(), 10_000);
     this.resetStallWatchdog();
     const video = this.videoEl()?.nativeElement;
-    if (video) video.addEventListener('seeked', this.onSeeked);
+    if (video) {
+      video.addEventListener('seeking', this.onSeeking);
+      video.addEventListener('seeked', this.onSeeked);
+    }
 
     // Apply subtitle appearance + load thumbnail sprite metadata
     this.applySubtitleStyle();
@@ -3232,6 +3346,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     // Update stats every second
     this.lastTickAt = Date.now();
+    this.playheadInterval = setInterval(() => this.watchPlayhead(), this.isTizen ? 500 : 250);
     this.statsInterval = setInterval(() => {
       this.tickClockWatch();
       this.checkStall();
@@ -3272,7 +3387,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  410) recovers immediately; `error` routes to {@link CopyFallbackController.maybeFallback}. */
   private wireErrorRecovery(engine: PlaybackEngine): void {
     engine.on('sessionExpired', () => {
-      void this.recoverFromLostSession();
+      void this.recoverFromLostSession('session_expired');
     });
     engine.on('externalPlaybackFailed', ({ reason }) => {
       void this.onExternalPlaybackFailed(reason);
@@ -3313,7 +3428,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         return;
       }
       this.state.setRecovering(true);
-      await this.reloadStream(this.engine.currentTime);
+      await this.reloadStream(this.engine.currentTime, { reason: 'other' });
     } catch (e) {
       if (!this.state.error()) this.state.failWith(e);
     } finally {
@@ -3430,15 +3545,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     ) {
       void this.resumeAfterGap(0);
     }
-    if (!this.loading() && !this.buffering()) {
-      this.stalledSince = 0;
-      this.preparing.set(false);
-      return;
-    }
-    if (!this.stalledSince) this.stalledSince = now;
-    this.preparing.set(
-      now - this.stalledSince >= PlayerComponent.preparingAfterMs,
-    );
   }
 
   /**
@@ -3550,8 +3656,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         ? this.seekStallGraceMs
         : this.stallTimeoutMs;
     if (Date.now() - this.lastProgressAt >= timeout) {
+      const frozenSince = this.lastProgressAt;
       this.resetStallWatchdog();
-      void this.recoverFromLostSession();
+      void this.recoverFromLostSession('stall', frozenSince);
     }
   }
 
@@ -3564,7 +3671,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    * failures rather than reloading forever. Cast playbacks are skipped —
    * the cast receiver owns its own session lifecycle.
    */
-  private async recoverFromLostSession(): Promise<void> {
+  private async recoverFromLostSession(reason: QoeRecoveryReason = 'other', frozenSince?: number): Promise<void> {
     if (this.destroyed) return;
     if (this.recoveringFromLostSession) return;
     // A user reload (quality / audio switch, episode swap) re-mints the session
@@ -3575,6 +3682,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // session — so it isn't leaked true after the reload settles.
     if (this.reloadingStream) {
       this.state.setRecovering(false);
+      this.recoveryEpisode = null;
       return;
     }
     if (this.recoverRetryTimer) return; // a backoff retry is already queued
@@ -3584,10 +3692,22 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // still veiled) or a stale overlay with no way out.
       this.state.setRecovering(false);
       if (!this.state.error()) this.state.failWith(undefined, { source: 'session' });
+      this.recoveryEpisode = null;
       return;
     }
     if (this.castService.isConnected()) return;
     if (!this.engine || !this.mediaFileId) return;
+    // The first trigger names the episode. An open stall already counts the freeze on the old sid, so the
+    // recovery wait starts now; otherwise it starts when the picture froze, at the last progress.
+    // A lost sid takes no more events: its open stall moves into the wait on the new sid.
+    if (!this.recoveryEpisode) {
+      const openSince = reason === 'session_lost' ? this.qoe.dropStall() : null;
+      const counted = openSince == null && this.qoe.closeStall(this.activeSessionId());
+      const since =
+        openSince ??
+        (counted ? Date.now() : Math.min(Date.now(), frozenSince ?? (this.lastProgressAt || Date.now())));
+      this.recoveryEpisode = { reason, since };
+    }
     this.recoveringFromLostSession = true;
     // Suppress the fatal-error overlay the engine tears off as the stream
     // reloads — recovery is about to resume playback, so the reload window
@@ -3610,6 +3730,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         preservePause: true,
         unmute: false,
       });
+      const episode = this.recoveryEpisode;
+      this.recoveryEpisode = null;
+      this.qoe.onRecovery(
+        this.activeSessionId(),
+        pos,
+        episode ? { reason: episode.reason, durationMs: Date.now() - episode.since } : undefined,
+      );
       this.resetStallWatchdog();
       this.state.setRecovering(false);
       // Don't clear the episode counter yet — only once the reload proves it
@@ -3619,6 +3746,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.recoverConfirmAt = Date.now();
     } catch (e) {
       if (this.recoverAttempts >= this.maxRecoverAttempts) {
+        this.recoveryEpisode = null;
         this.state.setRecovering(false);
         this.state.failWith(e);
       } else {
@@ -3627,11 +3755,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         const backoff = 2_000 * 2 ** (this.recoverAttempts - 1); // 2s, 4s
         this.recoverRetryTimer = setTimeout(() => {
           this.recoverRetryTimer = null;
-          void this.recoverFromLostSession();
+          void this.recoverFromLostSession(reason);
         }, backoff);
       }
     } finally {
       this.recoveringFromLostSession = false;
+      this.qoeGraceUntil = Date.now() + 3_000;
     }
   }
 
@@ -3940,6 +4069,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  DEFAULT=YES and the language reverts on the item swap. */
   private async applyAudioTrack(trackId: string): Promise<void> {
     const request = ++this.audioRequest;
+    const tracks = this.availableAudioTracks();
+    const fromLabel = tracks.find((t) => t.id === this.activeAudioTrackId())?.label;
     this.activeAudioTrackId.set(trackId);
     const index = streamIndexForTrack(
       trackId, this.availableAudioTracks(), this.audioStreamInfo(), this.activeAudioStreamIndex,
@@ -3958,7 +4089,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         console.warn('[player] applyAudioTrack: no backend to reload for offline playback', trackId);
         return;
       }
-      await this.reloadStream();
+      const toLabel = tracks.find((t) => t.id === trackId)?.label;
+      await this.reloadStream(undefined, { reason: 'audio', from: fromLabel, to: toLabel });
       return;
     }
 
@@ -3967,9 +4099,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // switching language must not resume a player the user paused.
     const wasPaused = this.pauseIntent();
     if (this.isNativeEngine()) this.state.buffering.set(true);
+    this.qoeGraceUntil = Number.MAX_SAFE_INTEGER;
     try {
       await this.engine?.selectAudioTrack(trackId);
     } finally {
+      this.qoeGraceUntil = Date.now() + 3_000;
       // A newer switch owns the buffering veil and the play state now.
       if (request === this.audioRequest) {
         if (this.isNativeEngine()) this.state.buffering.set(false);
@@ -4031,7 +4165,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.activeSubtitleId.set(null);
       if (!this.isOfflinePlayback && this.activeBurnInId) {
         this.activeBurnInId = null;
-        await this.reloadStream();
+        await this.reloadStream(undefined, { reason: 'subtitles' });
       }
       return request === this.subtitleRequest;
     }
@@ -4045,7 +4179,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.needsHlsSubtitles = false;
       this.activeBurnInId = sub.subtitleDbId;
       this.activeSubtitleId.set(sub.id);
-      await this.reloadStream();
+      await this.reloadStream(undefined, { reason: 'subtitles', to: sub.language });
       return request === this.subtitleRequest;
     }
 
@@ -4060,7 +4194,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.activeBurnInId = null;
       // The burned-in pick is replaced: the restore after the reload must not bring it back.
       if (burnedIn) this.activeSubtitleId.set(null);
-      if ((burnedIn || leavesDirectPlay) && !this.isOfflinePlayback) await this.reloadStream();
+      if ((burnedIn || leavesDirectPlay) && !this.isOfflinePlayback) {
+        await this.reloadStream(undefined, {
+          reason: 'subtitles',
+          ...(leavesDirectPlay && { from: 'hls', to: sub.language }),
+        });
+      }
       if (!(await this.showSoftSubtitle(sub, request))) return false;
     } catch (e) {
       // Surface the failure instead of silently moving the checkmark to a track
@@ -4134,7 +4273,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   // Bound DOM handlers kept as stable references so ngOnDestroy can remove
   // them — inline closures would pin this route-scoped component per session.
+  private onSeeking = () => {
+    this.lastSeekAt = Date.now();
+  };
   private onSeeked = () => {
+    this.lastSeekAt = Date.now();
     this.resetStallWatchdog();
     // Forced: a jump is exactly what a controller cannot interpolate, so
     // leaving it to the ten-second cadence left every other remote showing a
@@ -4305,6 +4448,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // ── Event handlers ──
 
   private onBeforeUnload = () => {
+    this.qoe.setStalled(false, { sessionId: this.activeSessionId(), position: this.engine?.currentTime ?? 0 });
+    this.qoe.flushKeepalive(this.activeSessionId());
     this.fireAndForgetStopSessions();
   };
 
@@ -4418,6 +4563,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       return;
     }
     const mode = this.playbackMode();
+    this.lastQualitySwitchAt = Date.now();
+    const from = this.availableQualities().find(q => q.id === this.activeQualityId())?.totalBitrateBps;
+    this.qoe.onQualitySwitch(this.activeSessionId(), this.engine?.currentTime ?? 0, option.totalBitrateBps, from);
     // Picking a rung below source — or any rung while already on the HLS
     // ladder — re-negotiates playback: reloadStream() re-requests playback-info
     // with the chosen quality, the backend re-decides DirectPlay vs the
@@ -4428,7 +4576,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const willReload = mode !== 'direct' || id !== 'original';
     this.qualityManager.selectQuality(option, willReload ? null : this.engine, mode, false, true);
     if (willReload) {
-      await this.reloadStream();
+      await this.reloadStream(undefined, { reason: 'quality' });
     }
 
     this.chrome.resetHideTimer();
@@ -4469,7 +4617,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Reload the stream (e.g. when toggling burn-in subtitles or switching
    *  audio). User-initiated, so re-arm the native recovery guard and serialise
    *  against any concurrent reload/recovery. `at` overrides the resume anchor. */
-  async reloadStream(at?: number) {
+  async reloadStream(at?: number, why: ReloadWhy = { reason: 'other' }) {
     if (!this.engine || this.reloadingStream) return;
     this.reloadingStream = true;
     this.reloadReachedPlayback = false;
@@ -4477,6 +4625,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // A locked seekbar holds a target the engine hasn't reached: anchor there,
     // or a mid-seek switch restarts where the user just left.
     const anchor = at ?? (this.state.seekLocked() ? this.currentTime() : this.engine.currentTime);
+    this.qoe.onReload(this.activeSessionId(), anchor, why);
     try {
       await this.doReloadStream(anchor);
     } catch (e) {
@@ -4500,6 +4649,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       throw e;
     } finally {
       this.reloadingStream = false;
+      this.qoeGraceUntil = Date.now() + 3_000;
       this.reloadLoadPending = false;
     }
   }
@@ -4667,6 +4817,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       qualities?: RemoteQualityRung[] | null;
       autoplayBlocked?: boolean;
       hasNext?: boolean;
+      qoe?: QoeSample;
     } = {
       positionSeconds: pos,
       durationSeconds: dur || 0,
@@ -4677,7 +4828,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const sessionId = this.activeSessionId();
     if (sessionId) {
       payload.sessionId = sessionId;
-      payload.state = this.uiPaused() ? 'paused' : 'playing';
+      payload.state = this.state.buffering() ? 'buffering' : this.uiPaused() ? 'paused' : 'playing';
       // This device's own truth: while casting, the local engine is
       // deliberately muted (castSyncEffect) and must not be reported as the
       // target's volume.
@@ -4703,6 +4854,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       payload.subtitleId = onReceiver ? onReceiver.subtitleId : this.activeSubtitleId();
       payload.autoplayBlocked = this.autoplayBlocked();
       payload.hasNext = this.upNext() !== null;
+      // While casting, CastPlayerService's own heartbeat carries the receiver's sample.
+      if (!this.castService.isConnected() && this.engine) {
+        payload.qoe = this.qoe.current(sessionId) ?? undefined;
+        void this.qoe.refresh(this.engine, sessionId);
+      }
     }
 
     // Offline queue persists position only — the heartbeat-related
@@ -4721,12 +4877,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           this.mediaId,
           payload,
         );
+        this.qoe.flush(sessionId);
         // The backend has GC'd / lost our LiveSession (restart, long
         // idle, …). Re-issue playback-info and reload the engine
         // with the fresh sid at the current position before the
         // player's buffer drains.
         if (response?.sessionLost) {
-          void this.recoverFromLostSession();
+          void this.recoverFromLostSession('session_lost');
         }
         // Auto-delete-after-watched: the moment the server marks this item
         // completed, drop its auto-managed download (no-op otherwise).

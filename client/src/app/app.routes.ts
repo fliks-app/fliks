@@ -405,6 +405,7 @@ export const routes: Routes = [
         ],
       },
       { path: 'streams', loadComponent: () => import('./features/system/streams/streams').then((m) => m.SystemStreamsComponent) },
+      { path: 'playback-quality', loadComponent: () => import('./features/system/playback-quality/playback-quality').then((m) => m.SystemPlaybackQualityComponent) },
       {
         path: 'settings',
         loadComponent: () => import('./features/settings/settings-shell').then((m) => m.SettingsShellComponent),

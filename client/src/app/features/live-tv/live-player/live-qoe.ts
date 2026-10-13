@@ -1,0 +1,129 @@
+import type { PlaybackEngine, PlaybackState, QoeSample } from '../../../core/services/playback-engine/playback-engine';
+import type { QoeReporter } from '../../../core/services/qoe-reporter.service';
+import { PlayerQoe, PlayheadWatch, frozenAfterMs } from '../../player/player-qoe';
+
+export const LIVE_HEARTBEAT_MS = 10_000;
+const TICK_MS = 1_000;
+const SEEK_GRACE_MS = 2_000;
+
+/** Stall accounting and the QoE heartbeat of one live channel tune-in. */
+export class LiveQoe {
+  private readonly qoe: PlayerQoe;
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private sid: string | undefined;
+  private engine: (() => PlaybackEngine | null) | null = null;
+  private started = false;
+  private buffering = false;
+  private paused = false;
+  private readonly watch = new PlayheadWatch();
+  private lastSeekAt = 0;
+  private lastBeatAt = 0;
+  private startPos = 0;
+
+  constructor(
+    reporter: QoeReporter,
+    private readonly beat: (sessionId: string, qoe: QoeSample, state: 'playing' | 'paused') => Promise<unknown>,
+  ) {
+    this.qoe = new PlayerQoe(reporter);
+  }
+
+  /** A new tune-in: fresh counters and playbackId, the previous one is closed first. */
+  begin(sessionId: string, engine: () => PlaybackEngine | null): void {
+    this.end();
+    this.qoe.reset();
+    this.sid = sessionId;
+    this.engine = engine;
+    this.started = this.buffering = this.paused = false;
+    this.startPos = -1;
+    this.lastBeatAt = Date.now();
+    this.watch.reset(this.lastBeatAt);
+    this.timer = setInterval(() => this.tick(), TICK_MS);
+  }
+
+  onState(state: PlaybackState): void {
+    if (!this.sid || !this.timer) return;
+    if (state === 'error' || state === 'ended') {
+      this.halt();
+      return;
+    }
+    this.buffering = state === 'buffering';
+    this.paused = state === 'paused';
+    if (state === 'idle') {
+      this.started = false;
+      this.startPos = -1;
+    }
+    this.syncStall();
+  }
+
+  /** Buffering before the first frame is the tune-in, not a stall. */
+  onFirstFrame(): void {
+    if (!this.sid || !this.timer || this.started) return;
+    this.started = true;
+    this.refresh();
+  }
+
+  onSeek(): void {
+    this.lastSeekAt = Date.now();
+  }
+
+  /** A fatal error: the event goes out, then ticking and beating stop so the dead viewer is not reported as alive. */
+  onError(err: { code?: number; message?: string; category?: string }): void {
+    if (!this.sid || !this.timer) return;
+    this.halt();
+    this.qoe.onError(this.sid, this.engine?.()?.currentTime ?? 0, err);
+  }
+
+  private halt(): void {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+    this.qoe.setStalled(false, { sessionId: this.sid, position: this.engine?.()?.currentTime ?? 0 });
+  }
+
+  /** `keepalive` for a page going away, where an Angular request would be cancelled. */
+  end(keepalive = false): void {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+    const sid = this.sid;
+    if (!sid) return;
+    this.qoe.setStalled(false, { sessionId: sid, position: this.engine?.()?.currentTime ?? 0 });
+    if (keepalive) this.qoe.flushKeepalive(sid);
+    else this.qoe.flush(sid);
+    this.sid = undefined;
+  }
+
+  private refresh(): void {
+    const engine = this.engine?.();
+    if (engine) void this.qoe.refresh(engine, this.sid);
+  }
+
+  private tick(): void {
+    const now = Date.now();
+    const engine = this.engine?.();
+    const pos = engine?.currentTime ?? 0;
+    if (!this.started && !this.paused) {
+      if (this.startPos < 0) this.startPos = pos;
+      else if (Math.abs(pos - this.startPos) >= 0.05) this.onFirstFrame();
+    }
+    const active = this.started && !this.paused && !(typeof document !== 'undefined' && document.hidden);
+    this.watch.tick(pos, active, now, frozenAfterMs(engine?.positionUpdateMs));
+    this.syncStall();
+    if (now - this.lastBeatAt < LIVE_HEARTBEAT_MS) return;
+    this.lastBeatAt = now;
+    const sid = this.sid;
+    const sample = this.qoe.current(sid);
+    this.refresh();
+    if (sid && sample) void this.beat(sid, sample, this.paused ? 'paused' : 'playing').catch(() => {});
+    this.qoe.flush(sid);
+  }
+
+  private syncStall(): void {
+    if (!this.timer) return;
+    const stalled = !this.paused && ((this.buffering && this.started) || this.watch.frozenSince > 0);
+    this.qoe.setStalled(stalled, {
+      sessionId: this.sid,
+      position: this.engine?.()?.currentTime ?? 0,
+      ignored: Date.now() - this.lastSeekAt < SEEK_GRACE_MS,
+      since: this.watch.frozenSince || undefined,
+    });
+  }
+}

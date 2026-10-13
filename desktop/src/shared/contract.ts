@@ -66,6 +66,20 @@ export interface DesktopRect {
 
 export type DesktopPlayerState = 'idle' | 'playing' | 'paused' | 'buffering' | 'ended' | 'error';
 
+/** Playback-quality properties read from mpv; null = mpv can't report it right now. */
+export interface DesktopQoe {
+  droppedFrames: number | null;
+  decodedFrames: number | null;
+  bandwidthBps: number | null;
+  bufferAheadS: number | null;
+  variantBitrate: number | null;
+  width: number | null;
+  height: number | null;
+  videoCodec: string | null;
+  decoderName: string | null;
+  hwDecoder: boolean | null;
+}
+
 export interface DesktopPositionInfo {
   position: number;
   duration: number;
@@ -120,6 +134,7 @@ export const IPC = {
   setMuteRanges: 'player:setMuteRanges',
   setFullscreen: 'player:setFullscreen',
   getPosition: 'player:getPosition',
+  getQoe: 'player:getQoe',
   getAudioTracks: 'player:getAudioTracks',
   selectAudioTrack: 'player:selectAudioTrack',
   getSubtitleTracks: 'player:getSubtitleTracks',
@@ -260,6 +275,7 @@ export interface FliksDesktopApi {
   setMuteRanges(ranges: DesktopMuteRange[]): Promise<void>;
   setFullscreen(enabled: boolean): Promise<void>;
   getPosition(): Promise<DesktopPositionInfo>;
+  getQoe(): Promise<DesktopQoe | null>;
   getAudioTracks(): Promise<DesktopAudioTrack[]>;
   selectAudioTrack(id: string): Promise<void>;
   getSubtitleTracks(): Promise<DesktopSubtitleTrack[]>;
@@ -342,8 +358,11 @@ export interface DesktopCastEvent {
     | 'castStateChanged'
     | 'castPickerDismissed'
     | 'castMediaUpdate'
-    | 'castError';
+    | 'castError'
+    | 'castReceiverMessage';
   detail: DesktopCastMediaUpdate & {
+    namespace?: string;
+    message?: string;
     available?: boolean;
     connected?: boolean;
     position?: number;

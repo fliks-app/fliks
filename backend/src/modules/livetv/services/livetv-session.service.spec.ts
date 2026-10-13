@@ -2,6 +2,7 @@ import { ConflictException } from '@nestjs/common';
 import { EventEmitter } from 'events';
 import { PassThrough } from 'stream';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import type { User } from '../../users/entities/user.entity';
 import type { LiveTvChannel } from '../entities/livetv-channel.entity';
@@ -35,6 +36,9 @@ function mockProbe(video: string | null, audio = 'aac', container = 'mpegts'): v
     },
   );
 }
+
+// The service wipes its live dir on init: a parallel run must not share it.
+process.env.FLIKS_TRANSCODE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'fliks-live-spec-'));
 
 import { LiveTvSessionService } from './livetv-session.service';
 import { LiveTvCapacityService } from './livetv-capacity.service';
@@ -105,6 +109,7 @@ describe('LiveTvSessionService', () => {
   let settings: { get: jest.Mock };
   let activity: { upsertRunning: jest.Mock; remove: jest.Mock };
   let transcoding: { getDetectedHwAccel: jest.Mock };
+  let qoe: { register: jest.Mock; sessionEnded: jest.Mock; observeSegment: jest.Mock; recordProduction: jest.Mock; setPipeline: jest.Mock; addTranscodeProbe: jest.Mock };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -123,6 +128,7 @@ describe('LiveTvSessionService', () => {
     settings = { get: jest.fn().mockResolvedValue(null) };
     activity = { upsertRunning: jest.fn(), remove: jest.fn() };
     transcoding = { getDetectedHwAccel: jest.fn().mockReturnValue('none') };
+    qoe = { register: jest.fn(), sessionEnded: jest.fn(), observeSegment: jest.fn(), recordProduction: jest.fn(), setPipeline: jest.fn(), addTranscodeProbe: jest.fn() };
     service = new LiveTvSessionService(
       channelRepo as never,
       streamRepo as never,
@@ -130,11 +136,14 @@ describe('LiveTvSessionService', () => {
       activity as never,
       transcoding as never,
       new LiveTvCapacityService(),
+      qoe as never,
     );
   });
 
   afterEach(async () => {
     await service.onModuleDestroy();
+    // Let the killed fake processes emit their exit before the next test counts spawns.
+    await new Promise((r) => setTimeout(r, 0));
   });
 
   it('drops a viewer that stopped fetching, and keeps the ones still watching', async () => {
@@ -162,6 +171,88 @@ describe('LiveTvSessionService', () => {
     expect(rows.map((r) => r.sessionId)).toEqual([staying.sessionId]);
     expect(service.getForServe(gone.sessionId)).toBeUndefined();
     expect(service.getForServe(staying.sessionId)).toBeDefined();
+  });
+
+  it('tracks each viewer as a live QoE session titled by the channel, and ends it on leave', async () => {
+    mockSpawnAlwaysSucceeds();
+    const channel = makeChannel([makeStream()]);
+
+    const { sessionId } = await service.open(channel, makeUser(7), { userAgent: 'UA' });
+
+    const ref = service.qoeRef(sessionId);
+    expect(ref).toMatchObject({
+      sessionId,
+      userId: 7,
+      kind: 'live',
+      mediaFileId: null,
+      mediaTitle: channel.name,
+      deviceLabel: 'UA',
+    });
+    expect(qoe.register).toHaveBeenCalledWith(expect.objectContaining({ sessionId }));
+    expect(qoe.setPipeline).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId }),
+      expect.objectContaining({ source: expect.objectContaining({ codec: expect.anything() }), crop: null }),
+    );
+
+    await service.leave(sessionId);
+    expect(qoe.sessionEnded).toHaveBeenCalledWith(expect.objectContaining({ sessionId }));
+    expect(service.qoeRef(sessionId)).toBeNull();
+  });
+
+  it('ends the QoE session of a viewer dropped as abandoned', async () => {
+    mockSpawnAlwaysSucceeds();
+    const { sessionId } = await service.open(makeChannel([makeStream()]), makeUser(1), {});
+    (service as never as { sessions: Map<string, { viewers: Map<string, { lastSeenAt: number }> }> })
+      .sessions.forEach((s) => (s.viewers.get(sessionId)!.lastSeenAt = 0));
+
+    (service as never as { sweepAbandoned: () => void }).sweepAbandoned();
+
+    expect(qoe.sessionEnded).toHaveBeenCalledWith(expect.objectContaining({ sessionId }));
+  });
+
+  it('still frees a viewer whose player keeps sending QoE heartbeats', async () => {
+    mockSpawnAlwaysSucceeds();
+    const { sessionId } = await service.open(makeChannel([makeStream()]), makeUser(1), {});
+    (service as never as { sessions: Map<string, { viewers: Map<string, { lastSeenAt: number }> }> })
+      .sessions.forEach((s) => (s.viewers.get(sessionId)!.lastSeenAt = 0));
+
+    expect(service.qoeRef(sessionId)).not.toBeNull();
+    (service as never as { sweepAbandoned: () => void }).sweepAbandoned();
+
+    expect(service.qoeRef(sessionId)).toBeNull();
+    expect(service.listForActivity()).toEqual([]);
+  });
+
+  it('times segment production from each new seg file, ignoring repeats and deletions of older ones', async () => {
+    mockSpawnAlwaysSucceeds();
+    const { sessionId } = await service.open(makeChannel([makeStream()]), makeUser(1), {});
+    const entry = [...(service as never as { sessions: Map<string, unknown> }).sessions.values()][0];
+    const onFile = (name: string) =>
+      (service as never as { onSegmentFile: (e: unknown, n: string) => void }).onSegmentFile(entry, name);
+    const now = jest.spyOn(Date, 'now');
+    try {
+      now.mockReturnValue(10_000);
+      onFile('seg-00001.m4s');
+      now.mockReturnValue(12_000);
+      onFile('seg-00001.m4s');
+      onFile('seg-00002.m4s');
+      onFile('seg-00001.m4s');
+      onFile('index.m3u8');
+    } finally {
+      now.mockRestore();
+    }
+    const calls = qoe.recordProduction.mock.calls.filter((c) => c[0].sessionId === sessionId);
+    expect(calls.map((c) => c[2])).toEqual([2_000]);
+  });
+
+  it('reads CMCD only for a known viewer', async () => {
+    mockSpawnAlwaysSucceeds();
+    const { sessionId } = await service.open(makeChannel([makeStream()]), makeUser(1), {});
+
+    service.observeSegment(sessionId, {} as never, 2);
+    service.observeSegment('nope', {} as never, 2);
+
+    expect(qoe.observeSegment).toHaveBeenCalledTimes(1);
   });
 
   it('reuses the session for a second viewer, no second ffmpeg', async () => {
@@ -428,7 +519,8 @@ describe('LiveTvSessionService', () => {
 
     const result = await service.open(channel, makeUser(1), {});
     await service.leave(result.sessionId);
-    await new Promise((r) => setTimeout(r, 50));
+    // A zero idle window still tears down on a timer: poll rather than guess how long it takes.
+    for (let i = 0; i < 100 && !procs[0].kill.mock.calls.length; i++) await new Promise((r) => setTimeout(r, 20));
 
     expect(procs[0].kill).toHaveBeenCalled();
   });

@@ -36,6 +36,7 @@ const api: FliksDesktopApi = {
   setMuteRanges: (ranges: DesktopMuteRange[]) => ipcRenderer.invoke(IPC.setMuteRanges, ranges),
   setFullscreen: (enabled: boolean) => ipcRenderer.invoke(IPC.setFullscreen, enabled),
   getPosition: () => ipcRenderer.invoke(IPC.getPosition),
+  getQoe: () => ipcRenderer.invoke(IPC.getQoe),
   getAudioTracks: () => ipcRenderer.invoke(IPC.getAudioTracks),
   selectAudioTrack: (id: string) => ipcRenderer.invoke(IPC.selectAudioTrack, id),
   getSubtitleTracks: () => ipcRenderer.invoke(IPC.getSubtitleTracks),

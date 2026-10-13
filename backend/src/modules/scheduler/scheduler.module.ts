@@ -31,6 +31,7 @@ import { PluginsModule } from '../plugins/plugins.module';
 import { ScheduledJobRegistryModule } from './scheduled-job-registry.module';
 import { LibraryIngestModule } from '../../common/library-ingest/library-ingest.module';
 import { LiveTvModule } from '../livetv/livetv.module';
+import { QoeModule } from '../qoe/qoe.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { LiveTvModule } from '../livetv/livetv.module';
     ScheduledJobRegistryModule,
     forwardRef(() => LibraryIngestModule),
     LiveTvModule,
+    QoeModule,
   ],
   controllers: [CommandsController, SystemController, LivenessController],
   providers: [

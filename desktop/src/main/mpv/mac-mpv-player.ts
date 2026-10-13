@@ -16,6 +16,7 @@ import type {
   DesktopMuteRange,
   DesktopPlayerState,
   DesktopPositionInfo,
+  DesktopQoe,
   DesktopSubtitleStyle,
   DesktopSubtitleTrack,
 } from '../../shared/contract';
@@ -25,6 +26,7 @@ import { FirstFrameGate } from './first-frame-gate';
 import { mpvLoadRequest, type MpvLoadRequest } from './load-options';
 import { mpvSubtitleProps } from './subtitle-style';
 import { mapTrackList, parseTracks, type MpvTrack } from './tracks';
+import { QoeReader } from './qoe';
 import { TypedEmitter } from './typed-emitter';
 
 type MacAddon = {
@@ -65,6 +67,7 @@ export function roundWindowBottomCorners(win: BrowserWindow, radius: number): vo
 }
 
 export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements PlayerBackend {
+  private readonly qoe = new QoeReader();
   private readonly addon: MacAddon;
   private readonly wid: string;
   private sawFirstFrame = false;
@@ -158,6 +161,7 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
 
   // ── PlayerBackend surface (mirrors index.ts ipc handlers) ───────────────────
   async load(opts: DesktopLoadOptions): Promise<void> {
+    this.qoe.reset();
     this.sawFirstFrame = false;
     // Global property, so it is always written — otherwise the previous file's
     // rectangle would crop the next one.
@@ -217,6 +221,10 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
     const { commands, count } = muteFilterCommands(this.muteRanges, this.muteFilterCount);
     this.muteFilterCount = count;
     for (const cmd of commands) this.addon.command(cmd);
+  }
+
+  getQoe(): Promise<DesktopQoe | null> {
+    return this.qoe.read((n) => this.addon.getProperty(n));
   }
 
   async getPosition(): Promise<DesktopPositionInfo> {

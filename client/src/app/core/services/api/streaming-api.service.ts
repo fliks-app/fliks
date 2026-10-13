@@ -13,6 +13,8 @@ import { SseService } from '../sse.service';
 import type { MediaType } from '../../enums/media-type.enum';
 import type { EdlRange } from '../../utils/edl-policy';
 import type { PreRollItem } from '@fliks/plugin-contract/ui';
+import type { QoeSample } from '../playback-engine/playback-engine';
+import type { QoeEvent } from './qoe-api.service';
 
 const SSE_CONNECTION_HEADER = 'X-Fliks-Sse-Connection';
 
@@ -526,6 +528,27 @@ export class StreamingApiService {
     return token ? `${base}?token=${encodeURIComponent(token)}` : base;
   }
 
+  postQoeEvents(sessionId: string, events: QoeEvent[], playbackId?: string) {
+    return firstValueFrom(
+      this.http.post<void>(`/api/playback/sessions/${encodeURIComponent(sessionId)}/events`, { events, playbackId, sentAt: Date.now() }),
+    );
+  }
+
+  /** `fetch` init for the events POST on exit: bearer on standalone bundles, the cookie on web. */
+  qoeEventsRequest(sessionId: string): { url: string; init: RequestInit } {
+    const path = `/api/playback/sessions/${encodeURIComponent(sessionId)}/events`;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (!this.serverConfig.isNative) {
+      return { url: path, init: { headers, credentials: 'include', keepalive: true, method: 'POST' } };
+    }
+    const token = this.auth.accessToken;
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return {
+      url: this.serverConfig.resolveUrl(path),
+      init: { headers, keepalive: true, method: 'POST' },
+    };
+  }
+
   stopSession(sessionId: string) {
     return firstValueFrom(
       this.http.delete(`/api/stream/sessions/${encodeURIComponent(sessionId)}`),
@@ -578,6 +601,7 @@ export class StreamingApiService {
       volume?: number;
       muted?: boolean;
       lastCmdId?: string;
+      qoe?: QoeSample;
     },
   ) {
     return firstValueFrom(

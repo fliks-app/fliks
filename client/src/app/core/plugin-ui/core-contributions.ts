@@ -51,6 +51,7 @@ export const CORE_SETTINGS_SECTIONS: readonly CoreSettingsSection[] = [
       { id: 'core.statistics', slot: 'settings.page', weight: 100, labelKey: 'nav.statistics', icon: 'bar-chart-3', action: { kind: 'route', path: '/admin/statistics' } },
       { id: 'core.system', slot: 'settings.page', weight: 200, labelKey: 'nav.system', icon: 'layout-grid', action: { kind: 'route', path: '/admin/system' } },
       { id: 'core.streams', slot: 'settings.page', weight: 300, labelKey: 'system.tab_streams', icon: 'play', action: { kind: 'route', path: '/admin/streams' } },
+      { id: 'core.playback-quality', slot: 'settings.page', weight: 400, labelKey: 'qoe.title', icon: 'bar-chart-3', action: { kind: 'route', path: '/admin/playback-quality' } },
     ],
   },
   {

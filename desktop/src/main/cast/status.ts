@@ -72,3 +72,11 @@ export function pickAudioTrack(
   const sameLanguage = audio.filter((t) => t.language?.split(/[-_]/)[0] === language);
   return audio.find((t) => t.name === name) ?? (sameLanguage.length === 1 ? sameLanguage[0] : undefined);
 }
+
+export const NS_FLIKS = 'urn:x-cast:media.fliks.app';
+
+/** A message on the Fliks namespace, re-sent to the renderer as the raw JSON string. */
+export function receiverMessageEvent(ns: string, data: Record<string, unknown>): DesktopCastEvent | null {
+  if (ns !== NS_FLIKS) return null;
+  return { name: 'castReceiverMessage', detail: { namespace: ns, message: JSON.stringify(data) } };
+}

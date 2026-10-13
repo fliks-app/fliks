@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { MediaType } from '../../enums/media-type.enum';
 import { CACHE_BYPASS_HEADER } from '../../interceptors/cache.interceptor';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
+import { saveFile } from '../../plugins/save-file.plugin';
 
 export interface QualityProfileBrief {
   id: number;
@@ -470,7 +471,7 @@ export class MediaService {
     );
   }
 
-  /** Fetched through HttpClient so cookie and Bearer auth both apply, then saved by an anchor. */
+  /** Fetched through HttpClient so cookie and Bearer auth both apply. */
   async downloadCompanion(mediaId: number, fileId: number, c: Pick<CompanionFile, 'name' | 'relativePath'>) {
     const blob = await firstValueFrom(
       this.http.get(`/api/media/${mediaId}/files/${fileId}/companions/download`, {
@@ -478,11 +479,7 @@ export class MediaService {
         responseType: 'blob',
       }),
     );
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = c.name;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    await saveFile(blob, c.name);
   }
 
   deleteCompanion(mediaId: number, fileId: number, relativePath: string) {

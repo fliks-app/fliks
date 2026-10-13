@@ -26,6 +26,10 @@ const { EdlSkipPolicy, MuteGate, decodeWire } = self.FliksEdl;
 // detect the same fatal state via the Cast SDK's IDLE/ERROR status.
 const FLIKS_NAMESPACE = 'urn:x-cast:media.fliks.app';
 
+// Flip to false to stop asking Shaka for CMCD (unverified on real devices).
+const CAST_CMCD = true;
+const QOE_INTERVAL_MS = 5000;
+
 // Verbose CAF + Shaka logging — surfaces in chrome://inspect on the
 // receiver, the only practical way to diagnose a Cast freeze or load
 // failure on a real device.
@@ -42,6 +46,7 @@ playerManager.addEventListener(
   () => {
     console.log('[fliks-cast] PLAYER_LOAD_COMPLETE');
     document.body.classList.add('playing');
+    qoeLoaded();
     publishAudioTracks();
     startEdl();
   },
@@ -123,6 +128,109 @@ function publishAudioTracks() {
   // new tracks land in their `media.tracks`.
   playerManager.broadcastStatus(true);
 }
+
+// --- Playback QoE ----------------------------------------------------------
+//
+// The receiver has no API auth: it pushes samples over FLIKS_NAMESPACE and the sender reports them.
+
+const qoe = { playbackId: null, sid: null, played: false, seeking: false, stallStart: null, stallCount: 0, stallMs: 0, stalls: [], lastSeekAt: 0, base: { dropped: 0, decoded: 0 }, statsBase: { dropped: 0, decoded: 0 } };
+const EventType = cast.framework.events.EventType;
+
+function qoeVideoQuality() {
+  const el = findMediaElement();
+  const q = el && typeof el.getVideoPlaybackQuality === 'function' ? el.getVideoPlaybackQuality() : null;
+  return { dropped: q ? q.droppedVideoFrames : 0, decoded: q ? q.totalVideoFrames : 0 };
+}
+
+function qoeReset() {
+  Object.assign(qoe, { played: false, seeking: false, stallStart: null, stallCount: 0, stallMs: 0, stalls: [] });
+}
+
+function qoeStats() {
+  try { return playerManager.getStats() || {}; } catch { return {}; }
+}
+
+function qoeLoaded() {
+  qoe.base = qoeVideoQuality();
+  const st = qoeStats();
+  qoe.statsBase = { dropped: qoeCount(st.droppedFrames) ?? 0, decoded: qoeCount(st.decodedFrames) ?? 0 };
+}
+
+playerManager.addEventListener(EventType.LOAD_START, qoeReset);
+playerManager.addEventListener(EventType.PLAYING, () => { qoe.played = true; qoe.seeking = false; });
+const SEEK_GRACE_MS = 2000;
+playerManager.addEventListener(EventType.SEEKING, () => { qoe.seeking = true; qoe.lastSeekAt = Date.now(); });
+playerManager.addEventListener(EventType.SEEKED, () => { qoe.lastSeekAt = Date.now(); });
+playerManager.addEventListener(EventType.BUFFERING, (event) => {
+  if (event.isBuffering) {
+    if (qoe.stallStart == null && qoe.played && !qoe.seeking && Date.now() - qoe.lastSeekAt > SEEK_GRACE_MS) {
+      const s = buildQoeSample();
+      qoe.stallStart = Date.now();
+      qoe.stallAt = { position: playerManager.getCurrentTimeSec(), bufferAheadS: s.bufferAheadS, bandwidthBps: s.bandwidthBps, variantBitrate: s.variantBitrate };
+    }
+  } else if (qoe.stallStart != null) {
+    const durationMs = Date.now() - qoe.stallStart;
+    qoe.stallCount += 1;
+    qoe.stallMs += durationMs;
+    qoe.stalls = [...qoe.stalls, { at: qoe.stallStart, durationMs, ...qoe.stallAt }].slice(-20);
+    qoe.stallStart = null;
+  }
+});
+
+function qoeCount(v) {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null;
+}
+
+function qoeNum(v) {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null;
+}
+
+function buildQoeSample() {
+  const stats = qoeStats();
+  const vq = qoeVideoQuality();
+  const el = findMediaElement();
+  let ahead = null;
+  if (el) {
+    for (let i = 0; i < el.buffered.length; i++) {
+      if (el.currentTime >= el.buffered.start(i) && el.currentTime <= el.buffered.end(i)) {
+        ahead = el.buffered.end(i) - el.currentTime;
+      }
+    }
+  }
+  const open = qoe.stallStart != null ? Date.now() - qoe.stallStart : 0;
+  return {
+    engine: 'cast',
+    cmcd: CAST_CMCD,
+    droppedFrames: qoeCount(stats.droppedFrames) != null
+      ? Math.max(0, stats.droppedFrames - qoe.statsBase.dropped)
+      : Math.max(0, vq.dropped - qoe.base.dropped),
+    decodedFrames: qoeCount(stats.decodedFrames) != null
+      ? Math.max(0, stats.decodedFrames - qoe.statsBase.decoded)
+      : Math.max(0, vq.decoded - qoe.base.decoded),
+    bandwidthBps: qoeNum(stats.estimatedBandwidth),
+    bufferAheadS: ahead,
+    variantBitrate: qoeNum(stats.streamBandwidth),
+    width: qoeNum(stats.width) ?? qoeNum(el && el.videoWidth),
+    height: qoeNum(stats.height) ?? qoeNum(el && el.videoHeight),
+    videoCodec: null,
+    decoderName: null,
+    hwDecoder: null,
+    stallCount: qoe.stallCount + (open ? 1 : 0),
+    stallMs: qoe.stallMs + open,
+    recoveryReloads: 0,
+    stalls: qoe.stalls,
+    ...(qoe.playbackId ? { playbackId: qoe.playbackId } : {}),
+  };
+}
+
+setInterval(() => {
+  if (!document.body.classList.contains('playing')) return;
+  try {
+    context.sendCustomMessage(FLIKS_NAMESPACE, undefined, { kind: 'qoe', at: Date.now(), ...(qoe.sid ? { sid: qoe.sid } : {}), sample: buildQoeSample() });
+  } catch (e) {
+    console.warn('[fliks-cast] qoe send failed', e);
+  }
+}, QOE_INTERVAL_MS);
 
 // --- EDL (cut / commercial skip, mute ranges) ----------------------------
 // Ranges arrive in LOAD customData.edl on the playback clock.
@@ -226,6 +334,8 @@ function startEdl() {
 
 function prepareEdl(media, loadRequest) {
   const cd = media.customData || {};
+  qoe.playbackId = typeof cd.playbackId === 'string' ? cd.playbackId : null;
+  qoe.sid = typeof cd.sid === 'string' ? cd.sid : null;
   const ranges = decodeWire(cd.edl);
   const key = edlSessionKey(media, cd);
   const auto = cd.autoSkipCommercials !== false;
@@ -362,8 +472,15 @@ context.addCustomMessageListener(CAPS_NAMESPACE, (event) => {
 const options = new cast.framework.CastReceiverOptions();
 options.disableIdleTimeout = true;
 options.useShakaForHls = true;
+options.customNamespaces = {
+  [FLIKS_NAMESPACE]: cast.framework.system.MessageType.JSON,
+  [CAPS_NAMESPACE]: cast.framework.system.MessageType.JSON,
+};
 options.playbackConfig = new cast.framework.PlaybackConfig();
 options.playbackConfig.autoResumeDuration = 5;
+if (CAST_CMCD) {
+  options.playbackConfig.shakaConfig = { cmcd: { enabled: true, useHeaders: false } };
+}
 options.supportedCommands = cast.framework.messages.Command.ALL_BASIC_MEDIA;
 context.start(options);
 console.log('[fliks-cast] context.start called');

@@ -12,6 +12,7 @@ import {
   ParseIntPipe,
   HttpCode,
   Logger,
+  ForbiddenException,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
@@ -23,9 +24,13 @@ import { User } from '../users/entities/user.entity';
 import { LibrariesService } from '../libraries/libraries.service';
 import {
   LiveSessionRegistry,
+  type LiveSession,
   type PlaybackState as LivePlaybackState,
 } from './live-session.service';
 import { EventsService, type RemoteQualityRung } from '../scheduler/events.service';
+import { QoeService } from '../qoe/qoe.service';
+import { servedRungBitrate } from './served-rung';
+import { parseEvents, parsePlaybackId, parseSample, parseSentAt } from '../qoe/core/validate';
 
 /** Debounce window for DB writes — heartbeat fires every 10 s but we
  *  flush playback state on a coarser cadence to avoid hammering
@@ -50,6 +55,7 @@ export class PlaybackController {
     private readonly libraries: LibrariesService,
     private readonly liveSessions: LiveSessionRegistry,
     private readonly events: EventsService,
+    private readonly qoe: QoeService,
   ) {}
 
   @Get('recommendations')
@@ -224,6 +230,7 @@ export class PlaybackController {
       volume?: number;
       muted?: boolean;
       lastCmdId?: string;
+      qoe?: unknown;
     },
   ): Promise<{ sessionLost?: true; state?: unknown } | null> {
     const user = req.user as User;
@@ -261,6 +268,17 @@ export class PlaybackController {
       // The client believes the session is alive but the registry
       // doesn't know it — surface that so the client can recover.
       sessionLost = !updated;
+      if (updated && body.qoe != null && (updated.userId === user.id || updated.attributedUserId === user.id)) {
+        const sample = parseSample(body.qoe);
+        if (sample) {
+          sample.variantBitrate ??= servedRungBitrate(updated);
+          this.qoe.recordSample(updated, sample);
+          const rung = servedRungBitrate(updated);
+          if (rung != null && typeof updated.quality === 'string' && updated.quality !== 'auto' && updated.quality.length <= 32) {
+            this.qoe.updatePipelineOutput(updated, updated.quality, rung);
+          }
+        }
+      }
 
       // Remote-control fan-out: must fire on every heartbeat, not just a DB
       // flush, so it stays inside this block rather than after it.
@@ -342,6 +360,32 @@ export class PlaybackController {
     });
     if (sessionLost) return { sessionLost: true, state };
     return { state };
+  }
+
+  /** Point events (stall, error, recovery, quality switch) of a live session.
+   *  Silent 204 for an unknown session: a fatal error often outlives it. */
+  @Post('sessions/:sessionId/events')
+  @UseGuards(SessionTokenGuard)
+  @HttpCode(204)
+  postQoeEvents(
+    @Req() req: Request,
+    @Param('sessionId') sessionId: string,
+    @Body() body: { events?: unknown; playbackId?: unknown; sentAt?: unknown },
+  ): void {
+    const user = req.user as User;
+    if (!this.qoe.enabled) return;
+    // The exit flush races DELETE /stream/sessions/:id, so an ended session still takes events.
+    const live =
+      this.liveSessions.peek(sessionId) ?? this.qoe.trackedSession(sessionId);
+    if (!live) return;
+    if (live.userId !== user.id && live.attributedUserId !== user.id) {
+      throw new ForbiddenException('Not your session');
+    }
+    this.qoe.recordEvents(
+      live,
+      parseEvents(body?.events, Date.now(), parseSentAt(body?.sentAt)),
+      parsePlaybackId(body?.playbackId),
+    );
   }
 
   /** Toggle watched/unwatched for a media or episode. */

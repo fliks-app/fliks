@@ -1,6 +1,10 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { CastService } from './cast.service';
+import type { QoeSample } from './playback-engine';
+import { hasQoeData } from './playback-engine/playback-engine';
+import { QoeReporter, newPlaybackId } from './qoe-reporter.service';
+import type { QoeRecoveryReason } from './api/qoe-api.service';
 import { CastSettingsService } from './cast-settings.service';
 import { StreamingApiService, type PlayMethod } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
@@ -145,6 +149,7 @@ interface CastResumeState {
   fanartUrl: string | null;
   playbackMode: PlaybackMode;
   liveSessionId: string | null;
+  playbackId?: string | null;
   availableSubtitles: CastSubtitleOption[];
   availableQualities: CastQualityOption[];
   availableAudioTracks: CastAudioOption[];
@@ -153,6 +158,13 @@ interface CastResumeState {
   activeAudioTrackId: string | null;
   activeBurnInId: number | null;
 }
+
+/** A receiver sample older than this is dropped (receiver gone or not pushing). */
+const QOE_STALE_MS = 30_000;
+type ReceiverSample = NonNullable<ReturnType<CastService['receiverQoe']>>;
+
+/** A sample of the previous load, still in flight when a reload minted a new sid. */
+const fromOtherLoad = (q: ReceiverSample, sid: string | null) => !!q.sid && q.sid !== sid;
 
 /**
  * Global service managing Cast stream state.
@@ -163,6 +175,7 @@ export class CastPlayerService {
   private readonly cast = inject(CastService);
   private readonly castSettings = inject(CastSettingsService);
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly qoeReporter = inject(QoeReporter);
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly appSettings = inject(AppSettingsService);
   private readonly authService = inject(AuthService);
@@ -369,12 +382,15 @@ export class CastPlayerService {
    *  this id, so the sender heartbeats it instead of its local sid while
    *  the cast is connected. */
   readonly liveSessionId = signal<string | null>(null);
+  /** The viewing being cast; kept from the local player that handed it over. */
+  private playbackId: string | null = null;
 
   /**
    * Initialize a Cast session with media data from the player.
    * Called by the PlayerComponent when Cast is active on init or toggled on.
    */
   startCast(opts: {
+    playbackId?: string;
     mediaFileId: number;
     mediaId: number;
     episodeId?: number;
@@ -389,6 +405,7 @@ export class CastPlayerService {
     activeSubtitleId: string | null;
     activeAudioStreamIndex: number | undefined;
   }) {
+    this.playbackId = opts.playbackId ?? newPlaybackId();
     this.mediaFileId.set(opts.mediaFileId);
     this.mediaId.set(opts.mediaId);
     this.episodeId.set(opts.episodeId);
@@ -441,6 +458,7 @@ export class CastPlayerService {
       fanartUrl: this.fanartUrl(),
       playbackMode: this.playbackMode(),
       liveSessionId: this.liveSessionId(),
+      playbackId: this.playbackId,
       availableSubtitles: this.availableSubtitles(),
       availableQualities: this.availableQualities(),
       availableAudioTracks: this.availableAudioTracks(),
@@ -459,7 +477,8 @@ export class CastPlayerService {
     this.episodeTitle.set(s.episodeTitle);
     this.fanartUrl.set(s.fanartUrl);
     this.playbackMode.set(s.playbackMode);
-    this.liveSessionId.set(s.liveSessionId);
+    this.setLiveSession(s.liveSessionId);
+    this.playbackId = s.playbackId ?? null;
     this.selectionFileId = s.mediaFileId;
     this.availableSubtitles.set(s.availableSubtitles);
     this.availableQualities.set(s.availableQualities);
@@ -489,10 +508,12 @@ export class CastPlayerService {
     const castSid = this.liveSessionId();
     this.saveCastPosition(); // Save final position before clearing
     this.stopPositionSaving();
+    if (castSid) this.qoeReporter.flushKeepalive(castSid);
     // Sid-scoped kill so a sender that's still watching locally on a
     // different profile isn't torn down by the cast stop.
     if (castSid) this.streamingApi.stopSession(castSid).catch(() => {});
-    this.liveSessionId.set(null);
+    this.setLiveSession(null);
+    this.playbackId = null;
     this.hasMedia.set(false);
     this.expanded.set(false);
     this.mediaFileId.set(0);
@@ -545,6 +566,10 @@ export class CastPlayerService {
     this.cast.playbackError$.subscribe(({ position }) => {
       void this.recoverFromCastError(position);
     });
+    this.cast.receiverError$.subscribe((e) => {
+      const sid = this.liveSessionId();
+      if (sid) this.qoeReporter.record(sid, { type: 'error', at: Date.now(), position: this.cast.currentTime(), ...e }, true, this.playbackId ?? undefined);
+    });
   }
 
   /** Recover from a fatal receiver error by reloading with a fresh sid at
@@ -553,9 +578,11 @@ export class CastPlayerService {
    *  errors recover freely, but three inside 30 s give up with a toast. */
   private recoverAttempts = 0;
   private lastRecoverAt = 0;
+  /** The receiver error and the native IDLE/ERROR poll fire for one failure; the second must not restart the reload. */
+  private recovering = false;
 
   private async recoverFromCastError(position?: number): Promise<void> {
-    if (!this.hasMedia()) return;
+    if (!this.hasMedia() || this.recovering) return;
     const now = Date.now();
     if (now - this.lastRecoverAt > 30_000) this.recoverAttempts = 0;
     if (this.recoverAttempts >= 3) {
@@ -565,10 +592,14 @@ export class CastPlayerService {
     this.recoverAttempts++;
     this.lastRecoverAt = now;
     const pos = position && position > 0 ? position : this.cast.currentTime();
+    this.recovering = true;
     try {
       await this.reloadCastStream(pos);
+      this.recordRecovery(pos);
     } catch {
       /* a still-broken stream re-fires the error, subject to the throttle */
+    } finally {
+      this.recovering = false;
     }
   }
 
@@ -644,7 +675,7 @@ export class CastPlayerService {
     // Stash the Cast live-session id so the sender's heartbeat loop
     // (`savePosition` in the local player) keeps the receiver's
     // session warm instead of beating the now-paused browser session.
-    this.liveSessionId.set(pi.sessionId ?? null);
+    this.setLiveSession(pi.sessionId ?? null);
 
     const loaded = this.availableSubtitles().filter(s => !s.burnIn);
     const subtitles = loaded.map(s => ({
@@ -674,6 +705,8 @@ export class CastPlayerService {
       episodeId: this.episodeId(),
       autoplay,
       mediaFileId: mfId,
+      playbackId: this.playbackId ?? undefined,
+      sid: pi.sessionId,
       autoSkipCommercials: this.authService.user()?.edlAutoSkipCommercials !== false,
       ...this.edlPayload(pi.edl, {
         title: this.mediaTitle(),
@@ -782,6 +815,55 @@ export class CastPlayerService {
     await this.reloadCastStream();
   }
 
+  /** A new session id means new media: the receiver's previous sample no longer applies. */
+  private setLiveSession(id: string | null) {
+    this.liveSessionId.set(id);
+    this.cast.receiverQoe?.set(null);
+    this.recoveries = 0;
+    this.seenStalls = new Set();
+  }
+
+  /** The reload that just minted the current sid was a recovery. */
+  private recordRecovery(position: number, reason?: QoeRecoveryReason): void {
+    this.recoveries = 1;
+    const sid = this.liveSessionId();
+    if (sid) this.qoeReporter.record(sid, { type: 'recovery', at: Date.now(), position, reason }, false, this.playbackId ?? undefined);
+  }
+
+  /** Recovery reloads of the current sid: the receiver never reloads on its own. */
+  private recoveries = 0;
+  private seenStalls = new Set<number>();
+
+  private readonly receiverStallEffect = effect(() => {
+    const q = this.cast.receiverQoe();
+    untracked(() => this.recordReceiverStalls(q));
+  });
+
+  /** Receiver stall episodes become `stall` events once each, deduped by start time. */
+  private recordReceiverStalls(q: ReceiverSample | null): void {
+    const sid = this.liveSessionId();
+    if (!q || !sid || fromOtherLoad(q, sid)) return;
+    const sample = q.sample;
+    for (const s of sample.stalls ?? []) {
+      if (this.seenStalls.has(s.at)) continue;
+      this.seenStalls.add(s.at);
+      const { at, ...rest } = s;
+      this.qoeReporter.record(sid, { type: 'stall', at: at + s.durationMs, ...rest }, false, this.playbackId ?? undefined);
+    }
+  }
+
+  /** Receiver's latest QoE sample for the heartbeat; null when stale or the sender can't receive it. */
+  qoeSample(): QoeSample | null {
+    const q = this.cast.receiverQoe();
+    if (!q || fromOtherLoad(q, this.liveSessionId()) || Date.now() - q.receivedAt >= QOE_STALE_MS || !hasQoeData(q.sample)) return null;
+    const { stalls: _stalls, ...sample } = q.sample;
+    return {
+      ...sample,
+      recoveryReloads: sample.recoveryReloads + this.recoveries,
+      playbackId: sample.playbackId || this.playbackId || undefined,
+    };
+  }
+
   private startPositionSaving() {
     this.stopPositionSaving();
     this.saveInterval = setInterval(() => this.saveCastPosition(), 10_000);
@@ -822,6 +904,7 @@ export class CastPlayerService {
         mediaFileId: mfId,
         episodeId: this.episodeId(),
         ...heartbeat,
+        ...(sid ? { qoe: this.qoeSample() ?? undefined } : {}),
       });
       // Backend lost the session (its keep-alive lapsed, a restart, …).
       // The receiver can't self-heal a session_expired, so re-issue
@@ -829,8 +912,11 @@ export class CastPlayerService {
       // Preserve the receiver's pause state across an auto-recovery reload — a
       // paused cast whose session was reaped (missed heartbeats) must not be
       // force-resumed by the reload's default autoplay.
-      if (response?.sessionLost)
+      if (sid) void this.qoeReporter.flush(sid);
+      if (response?.sessionLost) {
         await this.reloadCastStream(pos, !this.cast.isPaused());
+        this.recordRecovery(pos, 'session_lost');
+      }
     } catch { /* ignore */ }
   }
 

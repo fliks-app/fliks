@@ -1,12 +1,14 @@
 import {
   Injectable,
   Logger,
+  Optional,
   OnModuleDestroy,
   OnModuleInit,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import type { Request } from 'express';
 import { ChildProcess, execFile, spawn } from 'child_process';
 import { randomUUID } from 'crypto';
 import { PassThrough, type Readable } from 'stream';
@@ -14,6 +16,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { TRANSCODE_DIR } from '../../../common/constants/paths';
 import { TranscodingService } from '../../streaming/transcoding';
+import type { QoePipeline } from '../../qoe/core/types';
+import { QoeService, type SessionRef } from '../../qoe/qoe.service';
 import { StreamLifetime } from '../../streaming/lifetime-constants';
 import { LiveTvCapacityService } from './livetv-capacity.service';
 import { LiveTvChannel } from '../entities/livetv-channel.entity';
@@ -21,7 +25,11 @@ import { LiveTvChannelStream } from '../entities/livetv-channel-stream.entity';
 import { User } from '../../users/entities/user.entity';
 import { SettingsService } from '../../settings/settings.service';
 import { ActivityRegistryService } from '../../scheduler/activity-registry.service';
-import { buildLiveFfmpegArgs } from './live-ffmpeg-args';
+import {
+  buildLiveFfmpegArgs,
+  DEFAULT_TRANSCODE_BITRATE_BPS,
+  H264_ENCODER,
+} from './live-ffmpeg-args';
 import { liveTvFfmpegHeaderArgs, liveTvGet, liveTvIdentityOf } from '../livetv-http';
 import { liveTvAccountStateOf } from './livetv-sources.service';
 
@@ -96,6 +104,8 @@ export interface LiveTvSessionEntry {
   watcher: fs.FSWatcher | null;
   stallTimer: NodeJS.Timeout | null;
   lastSegmentAt: number;
+  /** Highest `seg-*` number seen and when: successive new files time the production speed. */
+  lastNewSegment: { num: number; at: number } | null;
   failoverIndex: number;
   streamFailures: Map<number, number>;
   restarts: number;
@@ -124,6 +134,7 @@ export interface LiveTvSessionEntry {
   lastConnectError: string | null;
 }
 
+const SEGMENT_FILE_RE = /^seg-(\d+)\.(m4s|ts)$/;
 const FIRST_SEGMENT_TIMEOUT_MS = 20_000;
 /** No new segment (or, for direct, no new upstream data) this long while viewers are attached: treat as stalled. */
 const STALL_TIMEOUT_MS = 15_000;
@@ -241,6 +252,7 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
     private readonly activity: ActivityRegistryService,
     private readonly transcoding: TranscodingService,
     private readonly capacity: LiveTvCapacityService,
+    @Optional() private readonly qoe?: QoeService,
   ) {}
 
   onModuleInit(): void {
@@ -253,6 +265,11 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
       StreamLifetime.liveSessionGcIntervalMs(),
     );
     this.sweepTimer.unref?.();
+    this.qoe?.addTranscodeProbe(
+      () =>
+        [...this.sessions.values()].filter((s) => s.mode === 'transcode' && s.proc && s.proc.exitCode === null)
+          .length,
+    );
   }
 
   /**
@@ -270,6 +287,7 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
       const streaming = new Set(session.directTees?.values() ?? []);
       for (const [viewerId, viewer] of [...session.viewers]) {
         if (viewer.lastSeenAt > cutoff || streaming.has(viewerId)) continue;
+        this.endQoe(session, viewerId);
         session.viewers.delete(viewerId);
         this.viewerIndex.delete(viewerId);
         dropped++;
@@ -362,6 +380,9 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
     });
     session.lastAccessAt = Date.now();
     this.reportActivity(session);
+    const ref = this.qoeRefOf(session, sessionId)!;
+    this.qoe?.register(ref);
+    this.qoe?.setPipeline(ref, this.qoePipeline(session));
     return this.describe(session, sessionId);
   }
 
@@ -472,6 +493,7 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
         watcher: null,
         stallTimer: null,
         lastSegmentAt: Date.now(),
+        lastNewSegment: null,
         failoverIndex: 0,
         streamFailures: new Map(),
         restarts: 0,
@@ -530,6 +552,7 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
     this.viewerIndex.delete(sessionId);
     const session = this.sessions.get(key);
     if (!session) return;
+    this.endQoe(session, sessionId);
     session.viewers.delete(sessionId);
     this.reportActivity(session);
     if (session.viewers.size === 0) await this.armIdleTimer(session);
@@ -575,6 +598,85 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
       if (viewer) viewer.lastSeenAt = now;
     }
     return session;
+  }
+
+  /** The viewer as a QoE session (kind 'live', channel as title); null once it is gone. */
+  private qoeRefOf(session: LiveTvSessionEntry, sessionId: string): SessionRef | null {
+    const v = session.viewers.get(sessionId);
+    if (!v) return null;
+    return {
+      sessionId,
+      userId: v.userId,
+      mediaFileId: null,
+      mediaTitle: session.channelName,
+      startedAt: v.startedAt,
+      lastBeat: v.lastSeenAt,
+      deviceLabel: v.device,
+      systemName: null,
+      appVersion: null,
+      kind: 'live',
+      quality: null,
+      transcodeReasons: [],
+      state: 'playing',
+      attributedUserId: null,
+    };
+  }
+
+  /** What the live transcode knows: input codec, output and whether it runs on a GPU. */
+  private qoePipeline(session: LiveTvSessionEntry): QoePipeline {
+    const transcode = session.mode === 'transcode';
+    const hw = this.transcoding.getDetectedHwAccel();
+    const active = session.streams[session.failoverIndex];
+    return {
+      source: {
+        codec: session.activeVideoCodec ?? active?.probedVideoCodec ?? null,
+        width: null,
+        height: null,
+        hdr: null,
+      },
+      output: transcode
+        ? {
+            codec: 'h264',
+            hdr: null,
+            quality: null,
+            requested: null,
+            bitrate: session.videoBitrateBps ?? DEFAULT_TRANSCODE_BITRATE_BPS,
+          }
+        : null,
+      decode: null,
+      encode: transcode ? { hw: hw !== 'none', kind: hw === 'none' ? 'cpu' : hw, name: H264_ENCODER[hw] } : null,
+      tonemap: null,
+      burnIn: null,
+      crop: null,
+      audioTranscode: null,
+    };
+  }
+
+  private endQoe(session: LiveTvSessionEntry, sessionId: string): void {
+    const ref = this.qoeRefOf(session, sessionId);
+    if (ref) this.qoe?.sessionEnded(ref);
+  }
+
+  /** The viewer's QoE session for the heartbeat route; null when unknown. Not a sign of life:
+   *  only fetching media keeps a viewer, a dead player must not hold its slot by reporting. */
+  qoeRef(sessionId: string): SessionRef | null {
+    const session = this.sessions.get(this.viewerIndex.get(sessionId) ?? '');
+    return session ? this.qoeRefOf(session, sessionId) : null;
+  }
+
+  /** Feeds every viewer of the session the time the server took to produce a segment. */
+  private recordProduction(session: LiveTvSessionEntry, waitedMs: number): void {
+    for (const id of session.viewers.keys()) {
+      const ref = this.qoeRefOf(session, id);
+      if (ref) this.qoe?.recordProduction(ref, session.segmentSeconds, waitedMs);
+    }
+  }
+
+  /** CMCD of a media segment request; init segments carry no timing signal. */
+  observeSegment(sessionId: string, req: Request, segmentSeconds: number): void {
+    const session = this.sessions.get(this.viewerIndex.get(sessionId) ?? '');
+    const ref = session && this.qoeRefOf(session, sessionId);
+    if (ref) this.qoe?.observeSegment(ref, req, segmentSeconds, null);
   }
 
   /** One PassThrough per viewer of a direct session; the shared upstream itself
@@ -948,9 +1050,9 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
   private armStallWatcher(session: LiveTvSessionEntry): void {
     this.clearWatchers(session);
     try {
-      session.watcher = fs.watch(session.dir, { persistent: false }, (_e, filename) => {
-        if (filename?.toString().startsWith('seg-')) session.lastSegmentAt = Date.now();
-      });
+      session.watcher = fs.watch(session.dir, { persistent: false }, (_e, filename) =>
+        this.onSegmentFile(session, filename?.toString() ?? ''),
+      );
     } catch {
       /* no directory for direct mode, or briefly absent across a respawn; the interval still catches it */
     }
@@ -959,6 +1061,17 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
         void this.handleFailure(session);
       }
     }, STALL_CHECK_INTERVAL_MS);
+  }
+
+  private onSegmentFile(session: LiveTvSessionEntry, name: string): void {
+    if (!name.startsWith('seg-')) return;
+    const now = Date.now();
+    session.lastSegmentAt = now;
+    // fs.watch repeats events and reports deletions of old segments: only a higher number is new.
+    const num = Number(SEGMENT_FILE_RE.exec(name)?.[1]);
+    if (!Number.isFinite(num) || (session.lastNewSegment && num <= session.lastNewSegment.num)) return;
+    if (session.lastNewSegment) this.recordProduction(session, now - session.lastNewSegment.at);
+    session.lastNewSegment = { num, at: now };
   }
 
   private clearWatchers(session: LiveTvSessionEntry): void {
@@ -973,6 +1086,9 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
   private async handleFailure(session: LiveTvSessionEntry): Promise<void> {
     if (!this.sessions.has(session.key)) return; // already torn down
     if (session.starting) return; // a recovery attempt already owns the stream list
+    // The stall counts as production that took this long: a server-side signal for the verdict.
+    this.recordProduction(session, Date.now() - session.lastSegmentAt);
+    session.lastNewSegment = null;
     this.clearWatchers(session);
     this.stopTransport(session);
     // Unlike a startup attempt that never connects, this was a live upstream:
@@ -1032,7 +1148,10 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
     this.sessions.delete(session.key);
     // A viewer only ever clears its own entry via `leave()`; one still attached
     // when every stream dies would otherwise dangle here forever.
-    for (const viewerId of session.viewers.keys()) this.viewerIndex.delete(viewerId);
+    for (const viewerId of session.viewers.keys()) {
+      this.endQoe(session, viewerId);
+      this.viewerIndex.delete(viewerId);
+    }
     this.clearIdleTimer(session);
     this.clearWatchers(session);
     this.stopTransport(session);

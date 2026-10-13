@@ -21,6 +21,7 @@ const BASELINE_SIDEBAR = [
     { label: 'nav.statistics', href: '/admin/statistics' },
     { label: 'nav.system', href: '/admin/system' },
     { label: 'system.tab_streams', href: '/admin/streams' },
+    { label: 'qoe.title', href: '/admin/playback-quality' },
   ] },
   { label: 'admin.section_settings', links: [
     { label: 'settings.nav.general', href: '/admin/settings/general' },

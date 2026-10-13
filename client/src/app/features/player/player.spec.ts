@@ -252,6 +252,7 @@ function createHarness(opts: {
         provide: CastPlayerService,
         useValue: {
           liveSessionId: () => undefined,
+          qoeSample: () => null,
           expanded: { set: vi.fn() },
           getCastDeviceProfile: () => DEVICE_PROFILE,
           reloadCastStream: vi.fn(),
@@ -659,25 +660,6 @@ describe('PlayerComponent wake / resume', () => {
     expect(h.streamingApi.updatePlaybackState).toHaveBeenCalledTimes(2);
   });
 
-  it('a long buffer explains itself, a short one stays mute', async () => {
-    const h = createHarness();
-    h.state.loading.set(false);
-    h.state.buffering.set(true);
-
-    h.component.lastTickAt = Date.now();
-    h.component.tickClockWatch();
-    expect(h.component.preparing()).toBe(false);
-
-    h.component.stalledSince = Date.now() - 6_000;
-    h.component.lastTickAt = Date.now();
-    h.component.tickClockWatch();
-    expect(h.component.preparing()).toBe(true);
-
-    h.state.buffering.set(false);
-    h.component.lastTickAt = Date.now();
-    h.component.tickClockWatch();
-    expect(h.component.preparing()).toBe(false);
-  });
 });
 
 describe('PlayerComponent seek OSD', () => {
@@ -1564,6 +1546,73 @@ describe('PlayerComponent reloadStream: startAt', () => {
     await h.component.reloadStream();
 
     expect((h.streamingApi.getPlaybackInfo.mock.calls[0] as any[])[5]).toBe(0);
+  });
+});
+
+describe('PlayerComponent reload QoE event', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  function spied() {
+    const h = createHarness();
+    h.state.videoStarted.set(true);
+    h.component.media = AUDIO_MEDIA;
+    h.component.playbackInfo = buildPi(MAIN_FILE_ID, { sessionId: 'sid-old' });
+    return { h, spy: vi.spyOn((h.component as any).qoe, 'onReload') };
+  }
+
+  it('names the audio tracks of a streamInfo audio switch, on the old sid', async () => {
+    const { h, spy } = spied();
+    h.component.availableAudioTracks.set([
+      { id: 'si-0', label: 'Français 5.1', language: 'fr' },
+      { id: 'si-1', label: 'English', language: 'en' },
+    ]);
+    h.component.activeAudioTrackId.set('si-0');
+
+    await h.component.onSelectAudioTrack('si-1');
+
+    expect(spy).toHaveBeenCalledExactlyOnceWith('sid-old', expect.any(Number), {
+      reason: 'audio',
+      from: 'Français 5.1',
+      to: 'English',
+    });
+  });
+
+  it('flags a burn-in switch with its language, and its removal without one', async () => {
+    const { h, spy } = spied();
+    h.component.availableSubtitles.set([
+      subOption('emb-9', 'fr', { burnIn: true, subtitleDbId: 9, isImage: true }),
+    ]);
+
+    await h.component.selectSubtitle(h.component.availableSubtitles()[0]);
+    await h.component.selectSubtitle(null);
+
+    expect(spy.mock.calls.map((c) => c[2])).toEqual([
+      { reason: 'subtitles', to: 'fr' },
+      { reason: 'subtitles' },
+    ]);
+  });
+
+  it('reports a quality reload as quality, so no event is added for it', async () => {
+    const { h, spy } = spied();
+    TestBed.inject(QualityManagerService).availableQualities.set([
+      { id: 'original', label: 'Original', height: 1080 },
+      { id: '720p', label: '720p', height: 720 },
+    ] as any);
+    TestBed.inject(QualityManagerService).activeQualityId.set('original');
+    h.state.playbackMode.set('transcode');
+
+    await h.component.onSelectQualityById('720p');
+
+    expect(spy.mock.calls.map((c) => c[2])).toEqual([{ reason: 'quality' }]);
+  });
+
+  it('defaults to other, and the remux fallback reports its own reason', async () => {
+    const { h, spy } = spied();
+    await h.component.reloadStream();
+    await h.component.reloadStream(5, { reason: 'remux_fallback' });
+    expect(spy.mock.calls.map((c) => c[2])).toEqual([{ reason: 'other' }, { reason: 'remux_fallback' }]);
   });
 });
 
@@ -2882,5 +2931,204 @@ describe('PlayerComponent negotiation entry points', () => {
     const call = h.streamingApi.getPlaybackInfo.mock.calls[0] as unknown[];
     expect(call[1]).toBe(castProfile);
     expect(call.slice(2, 5)).toEqual([9, 1, undefined]);
+  });
+});
+
+describe('PlayerComponent stall counting', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  function stalling() {
+    const h = createHarness();
+    const c = h.component as any;
+    return { c, spy: vi.spyOn(c.qoe, 'setStalled') };
+  }
+
+  it('counts buffering that nothing explains', () => {
+    const { c, spy } = stalling();
+    c.trackStall(true);
+    expect(spy).toHaveBeenLastCalledWith(true, expect.objectContaining({ ignored: false }));
+  });
+
+  it('does not count buffering behind a fatal error', () => {
+    const { c, spy } = stalling();
+    c.state.failWith(new Error('boom'));
+    c.trackStall(true);
+    expect(spy).toHaveBeenLastCalledWith(false, expect.anything());
+  });
+
+  it('ignores buffering inside the grace window a finished reload leaves', () => {
+    const { c, spy } = stalling();
+    c.qoeGraceUntil = Date.now() + 3_000;
+    c.trackStall(true);
+    expect(spy).toHaveBeenLastCalledWith(true, expect.objectContaining({ ignored: true }));
+  });
+
+  it('reports an unknown buffer when the engine only echoes the playhead', () => {
+    const { c, spy } = stalling();
+    c.engine.measuresBuffer = false;
+    c.engine.currentTime = 200;
+    c.state.bufferedEnd.set(200);
+    c.trackStall(true);
+    expect(spy).toHaveBeenLastCalledWith(true, expect.objectContaining({ bufferAheadS: null }));
+  });
+
+  it('flags a frozen playhead without any buffering event', () => {
+    const h = createHarness();
+    const c = h.component as any;
+    h.state.loading.set(false);
+    h.state.paused.set(false);
+    h.state.videoStarted.set(true);
+    h.engine.currentTime = 191;
+    h.engine.duration = 3600;
+    const spy = vi.spyOn(Date, 'now');
+    spy.mockReturnValue(10_000);
+    c.watchPlayhead();
+    spy.mockReturnValue(10_500);
+    c.watchPlayhead();
+    expect(c.frozenSince()).toBe(0);
+    spy.mockReturnValue(11_000);
+    c.watchPlayhead();
+    expect(c.frozenSince()).toBe(10_000);
+    h.engine.currentTime = 191.5;
+    spy.mockReturnValue(11_250);
+    c.watchPlayhead();
+    expect(c.frozenSince()).toBe(0);
+    spy.mockRestore();
+  });
+
+  it('judges the ignore windows at the backdated start', () => {
+    const { c, spy } = stalling();
+    const now = Date.now();
+    c.lastSeekAt = now - 3_000;
+    c.trackStall(true, now - 2_500);
+    expect(spy).toHaveBeenLastCalledWith(true, expect.objectContaining({ ignored: true }));
+    c.lastSeekAt = now - 10_000;
+    c.trackStall(true, now - 2_500);
+    expect(spy).toHaveBeenLastCalledWith(true, expect.objectContaining({ ignored: false }));
+  });
+
+  it('keeps one episode when the engine ends a short buffering but the playhead stays frozen', () => {
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(100_000);
+    const h = createHarness();
+    const c = h.component as any;
+    h.state.loading.set(false);
+    h.state.paused.set(false);
+    h.state.videoStarted.set(true);
+    h.engine.currentTime = 191;
+    h.engine.duration = 3600;
+    spy.mockReturnValue(101_000);
+    c.watchPlayhead();
+    h.state.buffering.set(true);
+    c.syncStall();
+    spy.mockReturnValue(101_300);
+    h.state.buffering.set(false);
+    c.syncStall();
+    expect(c.frozenSince()).toBe(101_000);
+    for (let t = 101_500; t <= 106_000; t += 250) {
+      spy.mockReturnValue(t);
+      c.watchPlayhead();
+    }
+    expect(c.frozenSince()).toBe(101_000);
+    h.engine.currentTime = 192;
+    spy.mockReturnValue(106_250);
+    c.watchPlayhead();
+    c.syncStall();
+    expect(c.frozenSince()).toBe(0);
+    expect(c.qoe.stalls.count).toBe(1);
+    expect(c.qoe.stalls.totalMs).toBe(5_250);
+    spy.mockRestore();
+  });
+
+  it('does not carry buffering over into a stall before the first frame', () => {
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(100_000);
+    const h = createHarness();
+    const c = h.component as any;
+    h.state.loading.set(false);
+    h.state.paused.set(false);
+    h.state.videoStarted.set(false);
+    h.engine.currentTime = 0;
+    h.state.buffering.set(true);
+    c.syncStall();
+    spy.mockReturnValue(103_000);
+    h.state.buffering.set(false);
+    c.syncStall();
+    expect(c.frozenSince()).toBe(0);
+    expect(c.qoe.stalls.count).toBe(0);
+    spy.mockRestore();
+  });
+
+  it('does not flag a native engine whose position refreshes once a second', () => {
+    const h = createHarness();
+    const c = h.component as any;
+    h.state.loading.set(false);
+    h.state.paused.set(false);
+    h.state.videoStarted.set(true);
+    h.engine.currentTime = 191;
+    h.engine.duration = 3600;
+    (h.engine as any).positionUpdateMs = 1_000;
+    const spy = vi.spyOn(Date, 'now');
+    for (const t of [10_000, 10_250, 10_500, 10_750, 11_000, 11_250, 11_500, 11_750, 12_000]) {
+      spy.mockReturnValue(t);
+      c.watchPlayhead();
+    }
+    expect(c.frozenSince()).toBe(0);
+    spy.mockRestore();
+  });
+
+  it('counts a freeze once when the recovery it triggers follows it', async () => {
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(100_000);
+    const h = createHarness();
+    const c = h.component as any;
+    c.mediaFileId = 1;
+    c.playbackInfo = { sessionId: 's1' };
+    c.qoe.current('s1');
+    const record = vi.spyOn(c.qoe.reporter, 'record').mockImplementation(() => {});
+    h.state.loading.set(false);
+    c.trackStall(true, 100_000);
+    spy.mockReturnValue(117_000);
+    vi.spyOn(c, 'refreshSidAndReload').mockImplementation(async () => {
+      spy.mockReturnValue(119_000);
+      c.playbackInfo = { sessionId: 's2' };
+    });
+    await c.recoverFromLostSession('stall', 100_000);
+    spy.mockReturnValue(120_000);
+    expect(c.qoe.stalls.totalMs).toBe(2_000);
+    const stalls = record.mock.calls.filter((a) => (a[1] as { type: string }).type === 'stall');
+    expect(stalls.map((a) => [a[0], (a[1] as { durationMs: number }).durationMs])).toEqual([['s1', 17_000]]);
+    spy.mockRestore();
+  });
+
+  it('stamps the seek grace from the video seeking event', () => {
+    const h = createHarness();
+    const c = h.component as any;
+    c.lastSeekAt = 0;
+    c.onSeeking();
+    expect(c.lastSeekAt).toBeGreaterThan(0);
+  });
+
+  it('leaves the engine position unread while the playhead is not watched', () => {
+    const h = createHarness();
+    const c = h.component as any;
+    h.state.paused.set(true);
+    const read = vi.fn(() => 5);
+    Object.defineProperty(h.engine, 'currentTime', { get: read, configurable: true });
+    c.watchPlayhead();
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it('does not flag a paused playhead', () => {
+    const h = createHarness();
+    const c = h.component as any;
+    h.state.loading.set(false);
+    h.state.paused.set(true);
+    h.state.videoStarted.set(true);
+    for (let t = 1000; t <= 5000; t += 1000) {
+      vi.spyOn(Date, 'now').mockReturnValue(t);
+      c.watchPlayhead();
+    }
+    expect(c.frozenSince()).toBe(0);
+    vi.restoreAllMocks();
   });
 });

@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 
 /// One playback session: playback-info -> play URL, ~10s heartbeat (+ instant
@@ -5,7 +6,7 @@ import Foundation
 /// stall-watchdog recovery. Mirrors client/src/app/features/player/player.ts.
 /// Doesn't hold an AVPlayer — PlayerView's coordinator feeds live playhead
 /// state via `tick`/`notifyStateChange` and reacts to `onReload`.
-@Observable final class PlaybackService {
+@MainActor @Observable final class PlaybackService {
     private let api = APIClient.shared
 
     private(set) var info: PlaybackInfoResponse?
@@ -25,6 +26,8 @@ import Foundation
     private var episodeId: Int?
     private var sessionId: String?
     private var destroyed = false
+    /// One per viewing: survives the sid changes of recover() and quality switches.
+    private var playbackId = UUID().uuidString
 
     private var lastHeartbeatAt = Date.distantPast
     private var lastProgressPos: Double = 0
@@ -35,13 +38,59 @@ import Foundation
     // recoverConfirmPending) — a reload that keeps re-stalling just burns through
     // the cap faster. Add if flaky rebuffering trips the cap too eagerly.
     private let maxRecoverAttempts = 3
+    /// Playback sustained this long after a recovery makes it clean: a later blip gets fresh attempts.
+    private let recoverConfirmSeconds: TimeInterval = 5
+    private var recoveredAt: Date?
     private var recoveringGuard = false
+
+    /// The item being played, read for the heartbeat's `qoe` block. Set by the coordinator on every (re)load.
+    weak var qoeItem: AVPlayerItem?
+    private var stallCount = 0
+    private var stallMs = 0
+    private var recoveryReloads = 0
+    private var pendingEvents: [QoeEvent] = []
+
+    struct QoeEvent: Encodable {
+        let type: String
+        let at: Int
+        let position: Double?
+        var durationMs: Int?
+        var bufferAheadS: Double?
+        var bandwidthBps: Double?
+        var variantBitrate: Double?
+        var message: String?
+        var reason: String?
+
+        /// Nil fields go out as explicit null, like the iOS plugin.
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: QoeKey.self)
+            try c.encode(type, forKey: QoeKey("type"))
+            try c.encode(at, forKey: QoeKey("at"))
+            try c.encode(position, forKey: QoeKey("position"))
+            try c.encode(durationMs, forKey: QoeKey("durationMs"))
+            try c.encode(bufferAheadS, forKey: QoeKey("bufferAheadS"))
+            try c.encode(bandwidthBps, forKey: QoeKey("bandwidthBps"))
+            try c.encode(variantBitrate, forKey: QoeKey("variantBitrate"))
+            try c.encode(message, forKey: QoeKey("message"))
+            try c.encode(reason, forKey: QoeKey("reason"))
+        }
+    }
+
+    struct QoeKey: CodingKey {
+        let stringValue: String
+        var intValue: Int? { nil }
+        init(_ s: String) { stringValue = s }
+        init?(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { nil }
+    }
 
     /// Fired with a fresh play URL after a lost-session / stall recovery mints
     /// a new sid — the caller reloads the AVPlayerItem at `position`.
     var onReload: ((URL, Double) -> Void)?
     /// Recovery exhausted `maxRecoverAttempts` — terminal, caller shows an error.
     var onFatalError: (() -> Void)?
+    /// A recovery is starting: returns when its wait began, or nil to start it at the frozen playhead.
+    var onRecoveryStart: (@MainActor (_ reason: String) -> Date?)?
 
     // MARK: - Start / stop
 
@@ -56,6 +105,8 @@ import Foundation
         self.episodeId = episodeId
         destroyed = false
         recoverAttempts = 0
+        playbackId = UUID().uuidString
+        stallCount = 0; stallMs = 0; recoveryReloads = 0; pendingEvents = []
         let settings = AppSettingsStore.shared
         qualityId = settings.playerQualityId
         let audio = streamInfo?.audio ?? []
@@ -83,7 +134,11 @@ import Foundation
         destroyed = true
         guard let sid = sessionId else { return }
         sessionId = nil
-        Task { try? await api.delete("/api/stream/sessions/\(sid)") }
+        let events = takeEvents()
+        Task {
+            await postEvents(events, sid: sid)
+            try? await api.delete("/api/stream/sessions/\(sid)")
+        }
     }
 
     // MARK: - Quality
@@ -104,7 +159,7 @@ import Foundation
         qualityId = id
         AppSettingsStore.shared.playerQualityId = id
         recoverAttempts = 0
-        Task { await recover(position: position) }
+        Task { await recover(position: position, countAsRecovery: false) }
     }
 
     // MARK: - Playback-info + play URL
@@ -234,6 +289,7 @@ import Foundation
             let qualities: [Rung]
             // Links a polled remote target to this live session; nil until registered.
             let targetId: String?
+            let qoe: Qoe
         }
         struct Response: Decodable { let sessionLost: Bool? }
         let body = Body(
@@ -243,25 +299,163 @@ import Foundation
             subtitleId: Nullable(value: subtitleId), lastCmdId: lastCmdId,
             quality: qualityId,
             qualities: qualityOptions.map { Rung(id: $0.id, label: $0.label, lowBandwidth: $0.lowBandwidth) },
-            targetId: RemoteControlService.shared.targetId
+            targetId: RemoteControlService.shared.targetId,
+            qoe: qoeSample()
         )
+        let events = takeEvents()
         Task {
+            await postEvents(events, sid: sid)
             guard let res: Response = try? await api.put("/api/playback/media/\(mediaId)/state", body: body) else { return }
-            if res.sessionLost == true { await recover(position: position) }
+            if res.sessionLost == true { await recover(position: position, reason: "session_lost") }
         }
+    }
+
+    // MARK: - QoE
+
+    struct Qoe: Encodable {
+        let playbackId: String
+        let cmcd: Bool
+        let droppedFrames: Int?
+        let decodedFrames: Int?
+        let bandwidthBps: Double?
+        let bufferAheadS: Double?
+        let variantBitrate: Double?
+        let width: Int?
+        let height: Int?
+        let videoCodec: String?
+        let decoderName: String?
+        let stallCount: Int
+        let stallMs: Int
+        let recoveryReloads: Int
+
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: QoeKey.self)
+            try c.encode("avplayer", forKey: QoeKey("engine"))
+            try c.encode(playbackId, forKey: QoeKey("playbackId"))
+            try c.encode(cmcd, forKey: QoeKey("cmcd"))
+            try c.encode(droppedFrames, forKey: QoeKey("droppedFrames"))
+            try c.encode(decodedFrames, forKey: QoeKey("decodedFrames"))
+            try c.encode(bandwidthBps, forKey: QoeKey("bandwidthBps"))
+            try c.encode(bufferAheadS, forKey: QoeKey("bufferAheadS"))
+            try c.encode(variantBitrate, forKey: QoeKey("variantBitrate"))
+            try c.encode(width, forKey: QoeKey("width"))
+            try c.encode(height, forKey: QoeKey("height"))
+            try c.encode(videoCodec, forKey: QoeKey("videoCodec"))
+            try c.encode(decoderName, forKey: QoeKey("decoderName"))
+            try c.encode(Bool?.none, forKey: QoeKey("hwDecoder"))
+            try c.encode(stallCount, forKey: QoeKey("stallCount"))
+            try c.encode(stallMs, forKey: QoeKey("stallMs"))
+            try c.encode(recoveryReloads, forKey: QoeKey("recoveryReloads"))
+        }
+    }
+
+    private var bandwidth: Double? {
+        qoeItem?.accessLog()?.events.last.flatMap { $0.observedBitrate > 0 ? $0.observedBitrate : nil }
+    }
+
+    /// Rung in play, from the access log.
+    var variantBitrate: Double? {
+        qoeItem?.accessLog()?.events.last.flatMap { $0.indicatedBitrate > 0 ? $0.indicatedBitrate : nil }
+    }
+
+    /// Seconds buffered ahead of the playhead.
+    var bufferAhead: Double? {
+        guard let item = qoeItem else { return nil }
+        let now = item.currentTime()
+        return item.loadedTimeRanges.map(\.timeRangeValue).first { $0.containsTime(now) }
+            .map { max(CMTimeGetSeconds($0.end) - now.seconds, 0) }
+    }
+
+    /// Frame rate and codec of the enabled video track; HLS exposes the live rate only on the item track.
+    private func videoTrackInfo() -> (fps: Double?, codec: String?) {
+        guard let track = qoeItem?.tracks.first(where: { $0.isEnabled && $0.assetTrack?.mediaType == .video }) else {
+            return (nil, nil)
+        }
+        let live = Double(track.currentVideoFrameRate)
+        let nominal = Double(track.assetTrack?.nominalFrameRate ?? 0)
+        let fps = live > 0 ? live : (nominal > 0 ? nominal : nil)
+        var codec: String?
+        if let fd = track.assetTrack?.formatDescriptions.first {
+            let code = CMFormatDescriptionGetMediaSubType(fd as! CMFormatDescription)
+            let chars = (0..<4).map { UInt8((code >> UInt32(24 - 8 * $0)) & 0xff) }
+            codec = String(bytes: chars, encoding: .ascii)
+        }
+        return (fps, codec)
+    }
+
+    private var decodedEstimate = DecodedEstimate()
+
+    private func qoeSample() -> Qoe {
+        let events = qoeItem?.accessLog()?.events ?? []
+        let size = qoeItem?.presentationSize ?? .zero
+        var cmcd = false
+        if #available(tvOS 18.0, *) { cmcd = true }
+        let video = videoTrackInfo()
+        // AVPlayer has no decoded-frame counter: estimated from watched time and frame rate.
+        let watched = events.map(\.durationWatched).filter { $0 > 0 }.reduce(0, +)
+        return Qoe(
+            playbackId: playbackId, cmcd: cmcd,
+            droppedFrames: events.isEmpty ? nil : events.map(\.numberOfDroppedVideoFrames).filter { $0 >= 0 }.reduce(0, +),
+            decodedFrames: decodedEstimate.update(item: qoeItem, watched: watched, fps: video.fps), bandwidthBps: bandwidth, bufferAheadS: bufferAhead,
+            variantBitrate: variantBitrate,
+            width: size.width > 0 ? Int(size.width) : nil, height: size.height > 0 ? Int(size.height) : nil,
+            videoCodec: video.codec, decoderName: nil,
+            stallCount: stallCount, stallMs: stallMs, recoveryReloads: recoveryReloads
+        )
+    }
+
+    /// A rebuffer that ended where it began (the coordinator drops seeks).
+    /// `variantBitrate` and `bufferAheadS` are what the player had when the rebuffer began.
+    func recordStall(position: Double, durationMs: Int, variantBitrate: Double?, bufferAheadS: Double?) {
+        guard !recovering else { return }
+        stallCount += 1
+        stallMs += durationMs
+        pendingEvents.append(QoeEvent(type: "stall", at: Int(Date().timeIntervalSince1970 * 1000), position: position,
+                                      durationMs: durationMs, bufferAheadS: bufferAheadS, bandwidthBps: bandwidth,
+                                      variantBitrate: variantBitrate))
+    }
+
+    private func recordEvent(_ type: String, position: Double, message: String? = nil, reason: String? = nil, durationMs: Int? = nil) {
+        pendingEvents.append(QoeEvent(type: type, at: Int(Date().timeIntervalSince1970 * 1000), position: position,
+                                      durationMs: durationMs, bufferAheadS: bufferAhead, bandwidthBps: bandwidth,
+                                      message: message, reason: reason))
+    }
+
+    private func takeEvents() -> [QoeEvent] {
+        defer { pendingEvents = [] }
+        return pendingEvents
+    }
+
+    private func postEvents(_ events: [QoeEvent], sid: String) async {
+        // sentAt lets the server correct this device's clock offset.
+        struct Body: Encodable { let playbackId: String; let events: [QoeEvent]; let sentAt: Int }
+        guard !events.isEmpty else { return }
+        let sentAt = Int(Date().timeIntervalSince1970 * 1000)
+        try? await api.post("/api/playback/sessions/\(sid)/events", body: Body(playbackId: playbackId, events: events, sentAt: sentAt))
+    }
+
+    private func flushNow() {
+        guard let sid = sessionId else { return }
+        let events = takeEvents()
+        Task { await postEvents(events, sid: sid) }
     }
 
     // MARK: - Stall watchdog + recovery
 
     private func checkStall(position: Double, paused: Bool) {
         if paused || abs(position - lastProgressPos) > 0.25 {
+            if !paused, let at = recoveredAt, Date().timeIntervalSince(at) >= recoverConfirmSeconds {
+                recoveredAt = nil
+                recoverAttempts = 0
+            }
             lastProgressPos = position
             lastProgressAt = Date()
             return
         }
         guard Date().timeIntervalSince(lastProgressAt) >= stallTimeoutSeconds else { return }
+        let frozenSince = lastProgressAt
         lastProgressAt = Date()
-        Task { await recover(position: position) }
+        Task { await recover(position: position, reason: "stall", frozenSince: frozenSince) }
     }
 
     /// Called when the AVPlayerItem itself reports a hard failure (unsupported
@@ -269,23 +463,34 @@ import Foundation
     /// through the same one-fresh-sid-then-give-up recovery as a stall.
     func handleItemFailed(position: Double) {
         guard !destroyed else { return }
+        recordEvent("error", position: position, message: qoeItem?.error?.localizedDescription)
+        flushNow()
         Task { await recover(position: position) }
     }
 
     /// The carried sid is unknown to the backend (restart/GC) or the playhead
     /// wedged. Mint a fresh LiveSession and hand the caller a URL to reload at
     /// `position`. Retries with backoff, gives up after `maxRecoverAttempts`.
-    private func recover(position: Double) async {
+    /// The wait counts as a stall on the new sid, from `frozenSince` when no rebuffer was open
+    /// (that one is already counted on the old sid), else from the start of the recovery.
+    private func recover(
+        position: Double, countAsRecovery: Bool = true, reason: String = "other",
+        frozenSince: Date? = nil, waitStart: Date? = nil
+    ) async {
         guard !destroyed, !recoveringGuard else { return }
         if recoverAttempts >= maxRecoverAttempts {
             recovering = false
+            recordEvent("error", position: position, message: "recovery exhausted")
+            flushNow()
             onFatalError?()
             return
         }
+        let waitStart = waitStart ?? (countAsRecovery ? onRecoveryStart?(reason) : nil) ?? frozenSince ?? Date()
         recoveringGuard = true
         recovering = true
         recoverAttempts += 1
         if let sid = sessionId {
+            await postEvents(takeEvents(), sid: sid)
             try? await api.delete("/api/stream/sessions/\(sid)")
         }
         do {
@@ -295,17 +500,47 @@ import Foundation
             lastProgressAt = Date()
             recovering = false
             recoveringGuard = false
+            recoveredAt = Date()
+            // Counters are per session id: the new sid starts from zero.
+            stallCount = 0; stallMs = 0; recoveryReloads = 0
+            if countAsRecovery {
+                let waitMs = Int(Date().timeIntervalSince(waitStart) * 1000)
+                recoveryReloads = 1
+                if waitMs >= 250 { stallCount = 1; stallMs = waitMs }
+                recordEvent("recovery", position: position, reason: reason, durationMs: waitMs)
+            }
             onReload?(url, position)
         } catch {
             recoveringGuard = false
             if recoverAttempts >= maxRecoverAttempts {
                 recovering = false
+                recordEvent("error", position: position, message: "recovery exhausted")
+                flushNow()
                 onFatalError?()
             } else {
                 let backoffSeconds = 2 * recoverAttempts // 2s, 4s
                 try? await Task.sleep(for: .seconds(backoffSeconds))
-                await recover(position: position)
+                await recover(
+                    position: position, countAsRecovery: countAsRecovery, reason: reason,
+                    frozenSince: frozenSince, waitStart: waitStart
+                )
             }
         }
+    }
+}
+
+/// Running decoded-frame estimate: each sample adds the newly watched seconds at the current rate,
+/// so a frame-rate change never rescales the history. Restarts with a new AVPlayerItem.
+struct DecodedEstimate {
+    private var item: ObjectIdentifier?
+    private var watched = 0.0
+    private var decoded = 0.0
+
+    mutating func update(item new: AVPlayerItem?, watched total: Double, fps: Double?) -> Int? {
+        let id = new.map(ObjectIdentifier.init)
+        if id != item { self = DecodedEstimate(item: id) }
+        decoded += max(total - watched, 0) * (fps ?? 0)
+        watched = total
+        return decoded > 0 ? Int(decoded.rounded()) : nil
     }
 }

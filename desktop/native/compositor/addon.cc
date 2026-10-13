@@ -542,7 +542,8 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
     // opens and the HTTP status it gets back (diagnosing transcode/seg-0
     // failures). Override with FLIKS_MPV_LOGLEVEL (warn / info / v / debug).
     M::request_log_messages(g_state.mpv, getenv("FLIKS_MPV_LOGLEVEL") ? getenv("FLIKS_MPV_LOGLEVEL") : "v");
-    fprintf(stderr, "[compositor] mpv ready (hwdec=auto-copy)\n");
+    fprintf(stderr, "[compositor] mpv ready (hwdec=%s)\n",
+            getenv("FLIKS_HWDEC") ? getenv("FLIKS_HWDEC") : "no");
   }
   g_state.run.store(true);
   g_state.renderThread = std::thread(RenderThreadMain, &g_state);

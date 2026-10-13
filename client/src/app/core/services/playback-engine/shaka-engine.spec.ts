@@ -17,6 +17,7 @@ const player = vi.hoisted(() => {
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
     getVariantTracks: vi.fn(),
+    getStats: vi.fn(),
     getTextTracks: vi.fn(),
     addTextTrackAsync: vi.fn(),
     load: vi.fn(),
@@ -133,5 +134,112 @@ describe('ShakaEngine.addTextTrack', () => {
     player.getTextTracks.mockReturnValue([rendition(1, 'en')]);
     await expect(engine.addTextTrack('', 'fr', 'Français')).rejects.toThrow();
     expect(player.addTextTrackAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe('ShakaEngine.getQoeSample', () => {
+  it('maps shaka stats, the active variant and the buffer ahead of the playhead', async () => {
+    const container = document.createElement('div');
+    const video = document.createElement('video');
+    container.appendChild(video);
+    Object.defineProperty(video, 'currentTime', { value: 10 });
+    Object.defineProperty(video, 'buffered', {
+      value: { length: 1, start: () => 0, end: () => 14.5 },
+    });
+    const engine = new ShakaEngine();
+    await engine.init(video);
+    player.getStats.mockReturnValue({ droppedFrames: 3, decodedFrames: 900, estimatedBandwidth: 8e6 });
+    player.getVariantTracks.mockReturnValue([
+      { active: false, bandwidth: 1 },
+      { active: true, bandwidth: 5e6, width: 1920, height: 1080, videoCodec: 'hvc1' },
+    ]);
+
+    expect(await engine.getQoeSample()).toEqual({
+      engine: 'shaka',
+      cmcd: true,
+      droppedFrames: 3,
+      decodedFrames: 900,
+      bandwidthBps: 8e6,
+      bufferAheadS: 4.5,
+      variantBitrate: 5e6,
+      width: 1920,
+      height: 1080,
+      videoCodec: 'hvc1',
+      decoderName: null,
+      hwDecoder: null,
+    });
+  });
+
+  it('enables CMCD in query mode', async () => {
+    await initEngine();
+    expect(player.configure).toHaveBeenCalledWith(
+      expect.objectContaining({ cmcd: { enabled: true, useHeaders: false } }),
+    );
+  });
+});
+
+describe('ShakaEngine.getQoeSample unknowns', () => {
+  it('reports null rather than 0 for nothing buffered and an unknown bitrate', async () => {
+    const container = document.createElement('div');
+    const video = document.createElement('video');
+    container.appendChild(video);
+    const engine = new ShakaEngine();
+    await engine.init(video);
+    player.getStats.mockReturnValue({});
+    player.getVariantTracks.mockReturnValue([{ active: true, bandwidth: 0 }]);
+    expect(await engine.getQoeSample()).toMatchObject({ bufferAheadS: null, variantBitrate: null });
+  });
+});
+
+describe('ShakaEngine buffering bridge', () => {
+  async function setup(paused: boolean) {
+    const container = document.createElement('div');
+    const video = document.createElement('video');
+    container.appendChild(video);
+    Object.defineProperty(video, 'paused', { value: paused });
+    const engine = new ShakaEngine();
+    await engine.init(video);
+    const states: string[] = [];
+    engine.on('stateChanged', (e) => states.push(e.state));
+    const fire = (buffering: boolean) =>
+      player.addEventListener.mock.calls.find((c) => c[0] === 'buffering')![1]({ buffering });
+    return { video, states, fire };
+  }
+
+  it("maps shaka's own buffering event, once per episode", async () => {
+    const { video, states, fire } = await setup(false);
+    fire(true);
+    video.dispatchEvent(new Event('waiting'));
+    fire(true);
+    expect(states).toEqual(['buffering']);
+    fire(false);
+    expect(states).toEqual(['buffering', 'playing']);
+  });
+
+  it('does not report buffering while paused and resumes to paused', async () => {
+    const { states, fire } = await setup(true);
+    fire(true);
+    fire(false);
+    expect(states).toEqual(['paused']);
+  });
+
+  it('re-asserts buffering when canplay fires inside an open shaka episode', async () => {
+    const { video, states, fire } = await setup(false);
+    fire(true);
+    video.dispatchEvent(new Event('canplay'));
+    video.dispatchEvent(new Event('playing'));
+    video.dispatchEvent(new Event('waiting'));
+    expect(states).toEqual(['buffering']);
+    fire(false);
+    video.dispatchEvent(new Event('waiting'));
+    expect(states).toEqual(['buffering', 'playing', 'buffering']);
+  });
+
+  it('a play after a pause inside an open shaka episode reports playing, then buffering', async () => {
+    const { video, states, fire } = await setup(false);
+    fire(true);
+    video.dispatchEvent(new Event('pause'));
+    video.dispatchEvent(new Event('play'));
+    expect(states).toEqual(['buffering', 'paused', 'playing', 'buffering']);
   });
 });

@@ -1,0 +1,413 @@
+<div class="flex flex-col gap-6">
+  <div class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-bold">{{ 'qoe.title' | translate }}</h1>
+      <p class="text-sm text-base-content/60 mt-1">{{ 'qoe.subtitle' | translate }}</p>
+    </div>
+    <div class="join">
+      @for (d of [7, 30]; track d) {
+        <button
+          type="button"
+          class="btn btn-sm join-item"
+          [class.btn-active]="days() === d"
+          (click)="setDays(d)"
+        >
+          {{ 'qoe.last_days' | translate: { count: d } }}
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="flex justify-center py-12">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else {
+    <!-- Verdict breakdown -->
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-3">
+        <h2 class="card-title text-base">{{ 'qoe.verdict_breakdown' | translate }}</h2>
+        @if (verdictTotal() === 0) {
+          <p class="text-sm text-base-content/50">{{ 'qoe.empty' | translate }}</p>
+        } @else {
+          <div class="space-y-2">
+            @for (v of verdicts; track v) {
+              <div class="flex items-center gap-3 text-sm">
+                <span class="w-28 shrink-0">{{ 'qoe.verdict.' + v | translate }}</span>
+                <div class="flex-1 h-3 rounded bg-base-200 overflow-hidden">
+                  <div class="h-full" [class]="barClass[v]" [style.width.%]="barWidth(v)"></div>
+                </div>
+                <span class="w-24 text-right tabular-nums text-base-content/60">
+                  {{ summary()?.byVerdict?.[v] ?? 0 }} ({{ pct(summary()?.byVerdict?.[v] ?? 0, verdictTotal()) }})
+                </span>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </div>
+
+    <div role="tablist" class="tabs tabs-bordered">
+      @for (t of tabs; track t) {
+        <button type="button" role="tab" class="tab" [class.tab-active]="tab() === t" [attr.aria-selected]="tab() === t" (click)="setTab(t)">
+          {{ 'qoe.tab.' + t | translate }}
+        </button>
+      }
+    </div>
+
+    @switch (tab()) {
+      @case ('sessions') {
+        <div class="card bg-base-100 border border-base-200">
+          <div class="card-body gap-3">
+            <div class="flex flex-wrap gap-2">
+              <app-select-field
+                class="block w-44"
+                size="sm"
+                [hideLabel]="true"
+                [label]="'qoe.filter_verdict' | translate"
+                [value]="verdictFilter()"
+                (valueChange)="verdictFilter.set($event); applyFilters()"
+              >
+                <option value="">{{ 'qoe.filter_all_verdicts' | translate }}</option>
+                @for (v of verdicts; track v) {
+                  <option [value]="v">{{ 'qoe.verdict.' + v | translate }}</option>
+                }
+              </app-select-field>
+              <app-select-field
+                class="block w-44"
+                size="sm"
+                [hideLabel]="true"
+                [label]="'qoe.filter_user' | translate"
+                [value]="userFilter()?.toString() ?? ''"
+                (valueChange)="setUserFilter($event)"
+              >
+                <option value="">{{ 'qoe.filter_all_users' | translate }}</option>
+                @for (u of userOptions(); track u.id) {
+                  <option [value]="u.id">{{ u.username }}</option>
+                }
+              </app-select-field>
+              <app-select-field
+                class="block w-44"
+                size="sm"
+                [hideLabel]="true"
+                [label]="'qoe.filter_device' | translate"
+                [value]="deviceFilter()"
+                (valueChange)="deviceFilter.set($event); applyFilters()"
+              >
+                <option value="">{{ 'qoe.filter_all_devices' | translate }}</option>
+                @for (o of deviceOptions(); track o.label) {
+                  <option [value]="o.label">{{ o.label }}</option>
+                }
+              </app-select-field>
+            </div>
+    
+            @if (sessions().length === 0) {
+              <p class="text-sm text-base-content/50">{{ 'qoe.empty' | translate }}</p>
+            } @else {
+              <div class="overflow-x-auto">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th></th>
+                      <th [title]="'qoe.hint.verdict' | translate">{{ 'qoe.col_verdict' | translate }}</th>
+                      <th>{{ 'qoe.col_user' | translate }}</th>
+                      <th>{{ 'qoe.col_device' | translate }}</th>
+                      <th>{{ 'qoe.col_media' | translate }}</th>
+                      <th>{{ 'qoe.col_started' | translate }}</th>
+                      <th [title]="'qoe.hint.stalls' | translate" class="text-right">{{ 'qoe.stalls' | translate }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (s of sessions(); track s.sessionId) {
+                      <tr class="hover cursor-pointer" tabindex="0" (click)="openDetail(s)" (keydown.enter)="openDetail(s)">
+                        <td><span class="inline-block h-2.5 w-2.5 rounded-full" [class]="dotClass(s)"></span></td>
+                        <td>{{ 'qoe.verdict.' + s.verdict | translate }}</td>
+                        <td>{{ userName(s.userId) }}</td>
+                        <td>{{ deviceText(s) }}</td>
+                        <td class="truncate max-w-48">
+                          {{ s.mediaTitle ?? '-' }}
+                          @if (s.sessionIds.length > 1) {
+                            <span class="ml-1 text-base-content/50">
+                              {{ 'qoe.sessions_count' | translate: { count: s.sessionIds.length } }}
+                            </span>
+                          }
+                        </td>
+                        <td class="tabular-nums text-base-content/60">{{ s.startedAt | localeDate: { dateStyle: 'short', timeStyle: 'short' } }}</td>
+                        <td class="text-right tabular-nums">{{ s.stallCount }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+              @if (totalPages() > 1) {
+                <app-pagination
+                class="pt-1 self-center"
+                [current]="page()"
+                [total]="totalPages()"
+                (pageChange)="loadSessions($event)"
+              />
+              }
+            }
+          </div>
+        </div>
+      }
+      @case ('devices') {
+        <div class="card bg-base-100 border border-base-200">
+          <div class="card-body gap-3">
+            @if (devices().length === 0) {
+              <p class="text-sm text-base-content/50">{{ 'qoe.empty' | translate }}</p>
+            } @else {
+              <div class="overflow-x-auto">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>{{ 'qoe.col_device' | translate }}</th>
+                      <th [title]="'qoe.hint.engine' | translate">{{ 'qoe.engine' | translate }}</th>
+                      <th [title]="'qoe.hint.sessions' | translate" class="text-right">{{ 'qoe.col_sessions' | translate }}</th>
+                      <th [title]="'qoe.hint.stall_sessions' | translate" class="text-right">{{ 'qoe.col_stall_sessions' | translate }}</th>
+                      <th [title]="'qoe.hint.dropped' | translate" class="text-right">{{ 'qoe.col_avg_dropped' | translate }}</th>
+                      <th [title]="'qoe.hint.hw_decoder' | translate" class="text-right">{{ 'qoe.col_hw_decoder' | translate }}</th>
+                      <th [title]="'qoe.hint.top_verdict' | translate">{{ 'qoe.col_top_verdict' | translate }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (d of devices(); track d.label + d.engine) {
+                      <tr>
+                        <td>{{ d.label }}</td>
+                        <td>{{ d.engine ?? '-' }}</td>
+                        <td class="text-right tabular-nums">{{ d.sessions }}</td>
+                        <td class="text-right tabular-nums">{{ pct(d.stallSessions, d.sessions) }}</td>
+                        <td class="text-right tabular-nums">{{ d.avgDroppedPct == null ? '-' : percent(d.avgDroppedPct) }}</td>
+                        <td class="text-right tabular-nums">{{ pctValue(d.hwDecoderPct) }}</td>
+                        <td>{{ 'qoe.verdict.' + d.topVerdict | translate }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </div>
+        </div>
+      }
+      @case ('settings') {
+        <div class="card bg-base-100 border border-base-200">
+          <div class="card-body gap-5">
+            <app-toggle-field
+              [(value)]="qoeEnabled"
+              [label]="'qoe.setting_enabled' | translate"
+              [hint]="'qoe.setting_enabled_hint' | translate"
+              toggleClass="toggle-sm toggle-primary" />
+
+            <app-input-field
+              class="max-w-xs"
+              type="number"
+              size="sm"
+              [value]="'' + retentionDays()"
+              (valueChange)="retentionDays.set(+$event)"
+              [label]="'qoe.setting_retention' | translate"
+              [hint]="'qoe.setting_retention_hint' | translate" />
+
+            <div class="card-actions justify-end">
+              <button type="button" class="btn btn-primary" (click)="saveSettings()" [disabled]="savingSettings()">
+                @if (savingSettings()) {
+                  <span class="loading loading-spinner loading-sm"></span>
+                }
+                {{ 'common.save' | translate }}
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+    }
+  }
+</div>
+
+<dialog #detailDialog class="modal" (close)="detail.set(null)">
+  <div class="modal-box w-11/12 max-w-6xl p-0 gap-0 overflow-hidden flex flex-col max-h-[90vh]">
+    @if (detail(); as d) {
+      <app-modal-header flush>
+        <div class="min-w-0">
+          <h3 class="text-lg font-bold">{{ d.mediaTitle ?? d.sessionId }}</h3>
+          <p class="text-sm text-base-content/60">{{ userName(d.userId) }} · {{ deviceText(d) }}</p>
+        </div>
+      </app-modal-header>
+      <div class="px-5 sm:px-6 py-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
+      <div class="mt-3 rounded-lg border border-base-200 p-3 text-sm">
+        <div class="flex flex-wrap items-center gap-2" [title]="'qoe.hint.verdict' | translate">
+          <span class="inline-block h-2.5 w-2.5 rounded-full shrink-0" [class]="dotClass(d)"></span>
+          <span class="font-semibold">{{ 'qoe.verdict.' + d.verdict | translate }}</span>
+          @if (d.confidence === 'low') {
+            <span class="text-base-content/40">({{ 'qoe.confidence_low' | translate }})</span>
+          }
+        </div>
+        @for (r of d.reasons; track r) {
+          <div class="mt-1 italic text-base-content/70">{{ reasonText(r) }}</div>
+        }
+        <dl class="mt-3 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
+          @for (row of summaryRows(d); track row.label) {
+            <dt class="text-base-content/50" [title]="row.hint ?? ''">{{ row.label }}</dt>
+            <dd class="min-w-0 break-words">{{ row.value }}</dd>
+          }
+        </dl>
+      </div>
+
+      @if (stallCauses().length > 0) {
+        <h4 class="font-semibold mt-4 mb-2">{{ 'qoe.stalls_by_cause' | translate }}</h4>
+        <div class="overflow-x-auto">
+          <table class="table">
+            <thead>
+              <tr>
+                <th [title]="'qoe.hint.cause' | translate">{{ 'qoe.col_cause' | translate }}</th>
+                <th class="text-right">{{ 'qoe.col_count' | translate }}</th>
+                <th class="text-right">{{ 'qoe.col_duration' | translate }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (c of stallCauses(); track c.cause) {
+                <tr>
+                  <td>
+                    <span class="inline-block h-2.5 w-2.5 rounded-full mr-2" [class]="causeDot[c.cause]"></span>{{ 'qoe.cause.' + c.cause | translate }}
+                  </td>
+                  <td class="text-right tabular-nums">{{ c.count }}</td>
+                  <td class="text-right tabular-nums">{{ seconds(c.ms) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+
+      <h4 class="font-semibold mt-4">{{ 'qoe.timeline' | translate }}</h4>
+      <p class="text-sm text-base-content/60 mb-3">{{ timelineHeader(d) }}</p>
+      <!-- One grid for every step (marker, time, content) so the rail, the times and the text line up. -->
+      <div class="relative text-sm">
+        <span class="absolute left-2.5 top-2.5 bottom-2.5 w-px -translate-x-1/2 bg-base-300" aria-hidden="true"></span>
+        <ol class="relative space-y-4">
+          @for (step of steps(); track $index) {
+            <li class="grid grid-cols-[1.25rem_4.75rem_minmax(0,1fr)] gap-x-3 leading-5">
+              <span class="flex h-5 items-center justify-center" aria-hidden="true">
+                @switch (step.kind) {
+                  @case ('session') {
+                    <span class="h-3 w-3 rounded-full ring-4 ring-base-100" [class]="dotClass(step.block.session)"></span>
+                  }
+                  @case ('event') {
+                    <span class="flex h-5 w-5 items-center justify-center rounded-full bg-base-100">
+                      @if (step.event.type === 'stall') {
+                        <svg lucideTriangleAlert class="h-4 w-4" [class]="causeTextClass(step.event)"></svg>
+                      } @else if (step.event.type === 'error') {
+                        <svg lucideCircleX class="h-4 w-4 text-error"></svg>
+                      } @else {
+                        @switch (changeIcon(step.event.type, step.event.data?.reason)) {
+                        @case ('quality') { <svg lucideArrowUpDown class="h-4 w-4 text-base-content/50"></svg> }
+                        @case ('recovery') { <svg lucideRotateCcw class="h-4 w-4 text-base-content/50"></svg> }
+                        @case ('audio') { <svg lucideAudioLines class="h-4 w-4 text-base-content/50"></svg> }
+                        @case ('subtitles') { <svg lucideCaptions class="h-4 w-4 text-base-content/50"></svg> }
+                        @case ('reload') { <svg lucideRefreshCw class="h-4 w-4 text-base-content/50"></svg> }
+                        @case ('cast') { <svg lucideCast class="h-4 w-4 text-base-content/50"></svg> }
+                        @default { <svg lucideArrowRightLeft class="h-4 w-4 text-base-content/50"></svg> }
+                      }
+                      }
+                    </span>
+                  }
+                  @case ('end') {
+                    <span class="flex h-5 w-5 items-center justify-center rounded-full bg-base-100">
+                      <svg lucideCircleStop class="h-4 w-4 text-base-content/50"></svg>
+                    </span>
+                  }
+                }
+              </span>
+              <span class="tabular-nums text-base-content/60">{{ step.at == null ? '' : clock(step.at, d) }}</span>
+              <div class="min-w-0">
+                @switch (step.kind) {
+                  @case ('session') {
+                    @let change = step.incoming ? transitionLines(step.incoming) : null;
+                    <div class="flex flex-wrap items-center gap-x-3" [title]="step.block.session.sessionId">
+                      <span class="inline-flex items-center gap-1.5 font-semibold">
+                        @if (step.incoming; as incoming) {
+                          <span class="inline-flex shrink-0" aria-hidden="true">
+                            @switch (transitionIcon(incoming)) {
+                              @case ('quality') { <svg lucideArrowUpDown class="h-4 w-4"></svg> }
+                              @case ('recovery') { <svg lucideRotateCcw class="h-4 w-4"></svg> }
+                              @case ('audio') { <svg lucideAudioLines class="h-4 w-4"></svg> }
+                              @case ('subtitles') { <svg lucideCaptions class="h-4 w-4"></svg> }
+                              @case ('reload') { <svg lucideRefreshCw class="h-4 w-4"></svg> }
+                              @case ('cast') { <svg lucideCast class="h-4 w-4"></svg> }
+                              @default { <svg lucideArrowRightLeft class="h-4 w-4"></svg> }
+                            }
+                          </span>
+                        }
+                        {{ change?.title ?? blockTitle(step.block) }}
+                      </span>
+                      <span class="ml-auto inline-flex items-center gap-1.5 text-base-content/70" [title]="'qoe.hint.verdict' | translate">
+                        <span class="h-2 w-2 rounded-full" [class]="dotClass(step.block.session)"></span>
+                        {{ 'qoe.verdict.' + step.block.session.verdict | translate }}
+                      </span>
+                    </div>
+                    @if (change?.detail; as detail) {
+                      <p class="text-base-content/70">{{ detail }}</p>
+                    }
+                    <p class="text-base-content/60">{{ blockSummary(step.block, step.incoming) }}</p>
+                    @if (unreportedText(step.block, step.incoming); as unreported) {
+                      <p class="text-base-content/60">{{ unreported }}</p>
+                    }
+                    @if (detailRows(step.block.session, step.spanMs); as rows) {
+                      @if (rows.length > 0) {
+                        <details class="mt-1" [attr.open]="detailsOpen(step.block.session.verdict) ? '' : null">
+                          <summary class="cursor-pointer text-base-content/60">{{ 'qoe.block.details' | translate }}</summary>
+                          <dl class="mt-1 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
+                            @for (row of rows; track row.label) {
+                              <dt class="text-base-content/50">{{ row.label }}</dt>
+                              <dd class="min-w-0 break-words">{{ row.value }}</dd>
+                            }
+                          </dl>
+                        </details>
+                      }
+                    }
+                  }
+                  @case ('event') {
+                    @if (step.event.type === 'stall') {
+                      <p class="font-medium">{{ frozenTitle(step.event) }}</p>
+                      <p class="text-base-content/70">{{ causeSentence(step.event) }}</p>
+                      @if (step.event.data?.cause === 'server') {
+                        @if (stallHints(step.event); as hints) {
+                          <p class="text-base-content/60">{{ hints }}</p>
+                        }
+                        @if (stallPipeline(d, step.event); as pipe) {
+                          <p class="text-base-content/60">{{ pipe }}</p>
+                        }
+                        @if (stallLoad(step.event); as load) {
+                          <p class="text-base-content/60">{{ load }}</p>
+                        }
+                      }
+                    } @else if (step.event.type === 'error') {
+                      <p class="font-medium">{{ errorTitle(step.event) }}</p>
+                      @if (errorDetail(step.event); as detail) {
+                        <p class="text-base-content/60">{{ detail }}</p>
+                      }
+                    } @else {
+                      @let other = otherEventLines(step.event);
+                      <p class="font-medium">{{ other.title }}</p>
+                      @if (other.detail) {
+                        <p class="text-base-content/70">{{ other.detail }}</p>
+                      }
+                    }
+                  }
+                  @case ('end') {
+                    <p class="font-medium">{{ (step.at == null ? 'qoe.summary.ongoing' : 'qoe.block.end') | translate }}</p>
+                  }
+                }
+              </div>
+            </li>
+          }
+        </ol>
+      </div>
+      </div>
+      <app-modal-footer flush>
+        <button type="button" class="btn btn-ghost" (click)="exportJson(d)">{{ 'qoe.export_json' | translate }}</button>
+      </app-modal-footer>
+    }
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeDetail()" [attr.aria-label]="'common.close' | translate">{{ 'common.close' | translate }}</button>
+  </form>
+</dialog>

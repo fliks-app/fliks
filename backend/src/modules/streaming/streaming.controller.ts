@@ -68,6 +68,7 @@ import type { EdlRange } from './edl/edl-parser';
 import { readEdlSidecar, toPlaybackTimeline } from './edl/edl-sidecar';
 import { copySourceCodecString } from './transcoding/codec/codec-strings';
 import { dvSupplementalCodecs, dvStandaloneCodecs } from './transcoding/codec/dolby-vision';
+import { QoeService } from '../qoe/qoe.service';
 import { LiveSessionRegistry, type LiveSession, type SessionKind } from './live-session.service';
 import * as path from 'path';
 import { SegmentPackagingService } from './services/segment-packaging.service';
@@ -90,6 +91,8 @@ import {
   resolveEncodePipeline,
   resolveTonemapReport,
 } from './transcoding/encode-pipeline';
+import { servedRungBitrate } from './served-rung';
+import { describeQoePipeline } from './transcoding/qoe-pipeline';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamBuilderService } from './stream-builder.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
@@ -378,6 +381,7 @@ export class StreamingController {
     private readonly pluginPreRoll: PluginPreRollService,
     private readonly events: EventsService,
     private readonly caslAbilityFactory: CaslAbilityFactory,
+    private readonly qoe: QoeService,
   ) {}
 
   private getStreamingSettings() {
@@ -519,6 +523,27 @@ export class StreamingController {
       startPts: session.sourceStartPts,
       keyframeCut,
     });
+  }
+
+  /** QoE: CMCD off the request and how long the segment took to be produced. */
+  private observeSegment(
+    req: Request,
+    live: LiveSession | null | undefined,
+    session: { segmentDuration?: number; sourceFps?: number; actualHwAccel?: string; quality?: string },
+    segment: string,
+    waitedMs: number | null,
+  ): void {
+    if (!live || segment.startsWith('init')) return;
+    this.qoe.noteHwAccel(live, session.actualHwAccel);
+    if (live.kind === 'transcode' && session.quality) {
+      this.qoe.noteServedRung(live, session.quality, servedRungBitrate({ ...live, quality: session.quality }));
+    }
+    this.qoe.observeSegment(
+      live,
+      req,
+      realSegmentSeconds(this.segDur(session), session.sourceFps),
+      waitedMs,
+    );
   }
 
   /** var_stream_map writes video files under `0/`; a remux session (video-only,
@@ -1170,6 +1195,28 @@ export class StreamingController {
       canCopyVideo: response.videoCopyStream,
       pinned: isDownload,
     });
+
+    this.qoe.setPipeline(
+      liveSession,
+      describeQoePipeline({
+        playMethod: response.playMethod,
+        source: {
+          codec: pipelineInputs.sourceVideoCodec ?? null,
+          width: v0?.width ?? null,
+          height: v0?.height ?? null,
+          hdr: v0?.dvProfile != null ? 'DV' : (v0?.hdrFormat ?? null),
+        },
+        variant: kind === 'transcode' ? (videoVariant ?? null) : null,
+        quality: response.quality && response.quality !== 'auto' ? response.quality : null,
+        requested: typeof startQuality === 'string' && startQuality ? startQuality : 'auto',
+        videoBitrateBps: response.transcodeBitrateByQuality?.[response.quality]?.videoBitrateBps ?? null,
+        inputs: pipelineInputs,
+        tonemapPath: tonemapReport?.path ?? null,
+        burnIn: burnIn ? burnIn.type : null,
+        crop: pipelineInputs.crop,
+        audioTranscode: !response.audioCopyStream,
+      }),
+    );
 
     // Pre-spawn ffmpeg for the segment the player will soon request. Skipped
     // for DirectPlay/auto (nothing to warm) and DirectStream (a pinned rung
@@ -1998,6 +2045,7 @@ export class StreamingController {
       earlySession != null &&
       earlySession.quality === videoSession.quality;
 
+    const waitStart = Date.now();
     let segPath: string | null = null;
     if (useEarly && earlySession) {
       segPath = await this.transcodingService.getSegmentPath(
@@ -2066,6 +2114,7 @@ export class StreamingController {
       }
     }
 
+    this.observeSegment(req, live, videoSession, segment, Date.now() - waitStart);
     // A remux rendition is already assembled onto the served timeline
     // (`RemuxSegmentAssembler`); re-anchoring it here would shift it twice.
     await this.serveFrom(res, segPath, segment, videoSession, videoSession.quality === 'remux');
@@ -2319,6 +2368,7 @@ export class StreamingController {
           return;
         }
         existing.lastAccess = Date.now();
+        this.observeSegment(req, live, existing, segment, null);
         // Remux is cut on source keyframes, off the grid.
         await this.serveFrom(res, segPath, segment, existing, quality === 'remux');
         return;
@@ -2386,6 +2436,7 @@ export class StreamingController {
       }
       if (earlySession && earlySession.quality === quality) {
         const segName = this.videoSegName(segment, quality, live?.useExtXMedia ?? false);
+        const waitStart = Date.now();
         const segPath = await this.transcodingService.getSegmentPath(
           earlySession,
           segName,
@@ -2397,6 +2448,7 @@ export class StreamingController {
             sendTransientUnavailable(res);
             return;
           }
+          this.observeSegment(req, live, earlySession, segment, Date.now() - waitStart);
           await this.serveFrom(res, segPath, segment, earlySession);
           return;
         }
@@ -2437,10 +2489,12 @@ export class StreamingController {
     }
 
     const segName = this.videoSegName(segment, quality, live?.useExtXMedia ?? false);
+    const waitStart = Date.now();
     const segPath = await this.transcodingService.getSegmentPath(
       session,
       segName,
     );
+    const waitedMs = Date.now() - waitStart;
     if (!segPath) {
       // Still producing → the segment arrives on a later tick; surface as
       // transient so players retry. Hard 404 only once the run is over.
@@ -2463,6 +2517,7 @@ export class StreamingController {
       sendTransientUnavailable(res);
       return;
     }
+    this.observeSegment(req, live, session, segment, waitedMs);
     // Remux is cut on source keyframes, off the grid; the early-probe
     // paths never run for remux (gated on quality !== 'remux').
     await this.serveFrom(res, segPath, segment, session, quality === 'remux');

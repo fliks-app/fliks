@@ -1,6 +1,7 @@
 import {
   AbstractPlaybackEngine,
   AudioTrack,
+  EngineQoeSample,
   EngineStats,
   PlaybackEngine,
   PlaybackState,
@@ -54,6 +55,7 @@ declare const webapis: {
     setSelectTrack(type: 'AUDIO' | 'TEXT' | 'VIDEO', index: number): void;
     setSpeed(rate: number): void;
     setStreamingProperty(name: string, value: string): void;
+    getStreamingProperty?(name: string): string;
     setExternalSubtitlePath(path: string): void;
     setSilentSubtitle(silent: boolean): void;
   };
@@ -91,6 +93,9 @@ export const isTizenAvplayAvailable = (): boolean => {
 /** Firmware that exposes the video region-of-interest API can crop letterbox bars on the plane. */
 export const isTizenCropSupported = (): boolean =>
   isTizenAvplayAvailable() && typeof webapis.avplay.setVideoRoi === 'function';
+
+/** Flip once CURRENT_BANDWIDTH is confirmed to be bps on a real TV: a wrong unit would flag every stall as network. */
+const TIZEN_BANDWIDTH_UNIT_VERIFIED = false;
 
 export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngine {
   /** Most recently `init()`'d instance. The shared AVPlay surface and
@@ -583,6 +588,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
   }
   get volume(): number { return this._volume; }
   readonly supportsVolume = false;
+  readonly measuresBuffer = false;
 
   set volume(v: number) {
     this._volume = v;
@@ -752,6 +758,39 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
   getStats(): EngineStats {
     return { droppedFrames: 0 };
+  }
+
+  override async getQoeSample(): Promise<EngineQoeSample | null> {
+    let bandwidth: number | null = null;
+    if (TIZEN_BANDWIDTH_UNIT_VERIFIED) {
+      try {
+        const n = Number(webapis.avplay.getStreamingProperty?.('CURRENT_BANDWIDTH'));
+        if (Number.isFinite(n) && n > 0) bandwidth = n;
+      } catch { /* state-dependent */ }
+    }
+    let info: { fourCC?: unknown; Width?: unknown; Height?: unknown; Bit_rate?: unknown } = {};
+    try {
+      const video = webapis.avplay.getCurrentStreamInfo().find((s) => s.type === 'VIDEO');
+      if (video) info = JSON.parse(video.extra_info) ?? {};
+    } catch { /* state-dependent or malformed */ }
+    const num = (v: unknown): number | null => {
+      const n = Number(v);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
+    return {
+      engine: 'avplay',
+      cmcd: false,
+      droppedFrames: null,
+      decodedFrames: null,
+      bandwidthBps: bandwidth,
+      bufferAheadS: null,
+      variantBitrate: num(info.Bit_rate),
+      width: num(info.Width),
+      height: num(info.Height),
+      videoCodec: typeof info.fourCC === 'string' && info.fourCC ? info.fourCC : null,
+      decoderName: null,
+      hwDecoder: null,
+    };
   }
 }
 

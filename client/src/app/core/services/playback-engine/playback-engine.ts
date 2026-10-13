@@ -61,6 +61,62 @@ export interface EngineStats {
   };
 }
 
+export type QoeEngineName = 'shaka' | 'exoplayer' | 'avplayer' | 'mpv' | 'avplay' | 'webos' | 'cast';
+
+/** Playback-quality counters, cumulative since the last load(); null = not measurable here.
+ *  Contract: plan/playback-qoe.plan.md §1.1. */
+export interface EngineQoeSample {
+  engine: QoeEngineName;
+  cmcd: boolean;
+  droppedFrames: number | null;
+  decodedFrames: number | null;
+  bandwidthBps: number | null;
+  bufferAheadS: number | null;
+  variantBitrate: number | null;
+  width: number | null;
+  height: number | null;
+  videoCodec: string | null;
+  decoderName: string | null;
+  hwDecoder: boolean | null;
+}
+
+/** Heartbeat `qoe` block: the engine sample plus what player.ts counts itself. */
+export interface QoeSample extends EngineQoeSample {
+  stallCount: number;
+  stallMs: number;
+  recoveryReloads: number;
+  /** One viewing, stable across sid changes; set by the player. */
+  playbackId?: string;
+  /** Receiver only: recent closed stall episodes, resent until the sender has seen them. */
+  stalls?: QoeStallEpisode[];
+}
+
+export interface QoeStallEpisode {
+  at: number;
+  position: number | null;
+  durationMs: number;
+  bufferAheadS: number | null;
+  bandwidthBps: number | null;
+  variantBitrate: number | null;
+}
+
+/** Seconds buffered ahead of the playhead, null when it sits outside every range. */
+export function bufferAheadOf(video: Pick<HTMLVideoElement, 'buffered' | 'currentTime'>): number | null {
+  const { buffered, currentTime } = video;
+  for (let i = 0; i < buffered.length; i++) {
+    if (currentTime >= buffered.start(i) && currentTime <= buffered.end(i)) return buffered.end(i) - currentTime;
+  }
+  return null;
+}
+
+/** False when the engine measured nothing yet: such a sample is not worth a `qoe` block. */
+export function hasQoeData(s: EngineQoeSample): boolean {
+  return [
+    s.droppedFrames, s.decodedFrames, s.bandwidthBps, s.bufferAheadS, s.variantBitrate,
+    s.width, s.height, s.videoCodec, s.decoderName, s.hwDecoder,
+  ].some((v) => v != null);
+}
+
 export type EngineEventMap = {
   stateChanged: { state: PlaybackState };
   timeUpdate: { position: number; duration: number; buffered: number };
@@ -138,6 +194,11 @@ export abstract class AbstractPlaybackEngine {
       ? (self.duration as number)
       : (self.currentTime ?? 0);
     return { start: 0, end };
+  }
+
+  /** Null until an engine implements it. */
+  async getQoeSample(): Promise<EngineQoeSample | null> {
+    return null;
   }
 
   private handlers = new Map<EngineEvent, Set<EngineEventHandler<any>>>();
@@ -257,6 +318,11 @@ export interface PlaybackEngine {
    *  (AVPlay, and the Capacitor players until they expose one). A UI must hide
    *  its slider instead of offering a control that silently does nothing. */
   readonly supportsVolume: boolean;
+  /** False when `timeUpdate.buffered` is not a real read-ahead (it then just echoes the playhead). */
+  readonly measuresBuffer?: boolean;
+  /** How often `currentTime` refreshes when slower than a frame (native players: 1 s); a playhead
+   *  that stays put for less than that is not frozen. */
+  readonly positionUpdateMs?: number;
   /** Silences `ranges` (content seconds, sorted, disjoint) without touching the user's mute/volume.
    *  Persists across loads until replaced; [] clears. */
   setMuteRanges(ranges: readonly TimeRange[]): void;
@@ -289,6 +355,7 @@ export interface PlaybackEngine {
 
   // ── Stats ──
   getStats(): EngineStats;
+  getQoeSample(): Promise<EngineQoeSample | null>;
 
   // ── Events ──
   on<E extends EngineEvent>(event: E, handler: (data: EngineEventMap[E]) => void): void;

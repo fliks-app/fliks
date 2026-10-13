@@ -179,6 +179,13 @@
             </div>
           </div>
 
+          @if (s.qoe; as qoe) {
+            <div class="divider my-0 mx-3"></div>
+            <div class="px-3 py-2">
+              <app-qoe-badge [qoe]="qoe" />
+            </div>
+          }
+
           <div class="divider my-0 mx-3"></div>
 
           <!-- User + device -->

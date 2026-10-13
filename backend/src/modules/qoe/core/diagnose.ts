@@ -1,0 +1,138 @@
+import type { QoeDiagnosis, QoeSessionSummary } from './types';
+
+export const MIN_WATCHED_MS = 60_000;
+export const STALLS_PER_10_MIN = 1;
+export const STALL_RATIO = 0.01;
+export const SERVER_SPEED_FLOOR = 1.0;
+/** Live production is capped at 1x, so its jitter would trip the regular floor. */
+export const LIVE_SERVER_SPEED_FLOOR = 0.9;
+export const STARVED_BUFFER_S = 1;
+/** Throughput must exceed the variant bitrate by this factor to be called sufficient. */
+export const BANDWIDTH_HEADROOM = 1.2;
+export const DROPPED_RATIO = 0.05;
+/** Below this many decoded frames a dropped ratio is noise. */
+export const MIN_DECODED_FRAMES = 300;
+
+const TEN_MIN_MS = 600_000;
+
+const throughput = (s: QoeSessionSummary): number | null =>
+  s.stallBandwidthBps ?? s.avgBandwidthBps ?? s.cmcdThroughputBps;
+
+const result = (
+  verdict: QoeDiagnosis['verdict'],
+  confidence: QoeDiagnosis['confidence'],
+  ...reasons: string[]
+): QoeDiagnosis => ({
+  verdict,
+  confidence,
+  reasons: reasons.map((r) => `qoe.reason.${r}`),
+});
+
+/** A software decoder is a hint on a device verdict, never a verdict by itself. */
+function device(
+  s: QoeSessionSummary,
+  confidence: QoeDiagnosis['confidence'],
+  reason: string,
+): QoeDiagnosis {
+  // Below 720p a software decoder is normal, so it says nothing.
+  return s.hwDecoder === false && (s.height ?? 0) >= 720
+    ? result('device', confidence, reason, 'software_decoder')
+    : result('device', confidence, reason);
+}
+
+/** Session reason for each per-stall reason, so the two never tell different stories. */
+const STALL_REASON: Record<string, string> = {
+  'qoe.stall.server_wait': 'stalls_server_slow',
+  'qoe.stall.network_starved': 'stalls_starved_low_throughput',
+  'qoe.stall.network_low_throughput': 'stalls_starved_low_throughput',
+  'qoe.stall.network_unconfirmed': 'stalls_starved_bandwidth_ok',
+  'qoe.stall.device_buffer_ahead': 'stalls_buffer_ahead',
+  'qoe.stall.device_dropped_frames': 'dropped_frames',
+  'qoe.stall.server_session_lost': 'session_lost',
+  'qoe.stall.server_session_expired': 'session_expired',
+};
+const CAUSE_REASON = {
+  server: 'stalls_server_slow',
+  network: 'stalls_starved_low_throughput',
+  device: 'stalls_buffer_ahead',
+} as const;
+
+/** The reason of the cause's heaviest stalls. */
+function dominantReason(s: QoeSessionSummary, cause: 'server' | 'network' | 'device'): string {
+  const best = Object.entries(s.stallReasonMs ?? {})
+    .filter(([k]) => k.startsWith(`qoe.stall.${cause}_`))
+    .sort((a, b) => b[1] - a[1])[0];
+  return (best && STALL_REASON[best[0]]) || CAUSE_REASON[cause];
+}
+
+/** The cause holding most of the stalled time; null when stalls were not classified or unknown wins. */
+function fromCauses(s: QoeSessionSummary): QoeDiagnosis | null {
+  const ms = s.stallCauseMs;
+  if (!ms) return null;
+  const total = ms.server + ms.network + ms.device + ms.unknown;
+  const [cause, top] = (['server', 'network', 'device', 'unknown'] as const)
+    .map((c) => [c, ms[c]] as const)
+    .reduce((a, b) => (b[1] > a[1] ? b : a));
+  if (cause === 'unknown') return null;
+  const confidence = top / total > 0.5 ? 'high' : 'low';
+  const reason = dominantReason(s, cause);
+  return cause === 'device' ? device(s, confidence, reason) : result(cause, confidence, reason);
+}
+
+/** First matching rule wins; see plan/playback-qoe.plan.md section 1.3. */
+export function diagnose(s: QoeSessionSummary, live = false): QoeDiagnosis {
+  const d = decide(s, live);
+  // A claim with no CMCD on the wire is a hint, never a verdict.
+  if (s.cmcdClaimed && !s.cmcd) d.reasons.push('qoe.reason.cmcd_missing');
+  return d;
+}
+
+function decide(s: QoeSessionSummary, live: boolean): QoeDiagnosis {
+  if (s.unrecoveredError) return result('error', 'high', 'fatal_error');
+
+  const stalling =
+    s.stallCount > 0 &&
+    (s.stallCount / (s.watchedMs / TEN_MIN_MS || Infinity) >=
+      STALLS_PER_10_MIN ||
+      s.stallMs / Math.max(s.watchedMs, 1) >= STALL_RATIO);
+
+  if (stalling) {
+    const byCause = fromCauses(s);
+    if (byCause) return byCause;
+    if (
+      s.medianTranscodeSpeed != null &&
+      s.medianTranscodeSpeed < (live ? LIVE_SERVER_SPEED_FLOOR : SERVER_SPEED_FLOOR)
+    ) {
+      return result('server', 'high', 'stalls_server_slow');
+    }
+    // A stall with no buffer report counts as starved, but only at low confidence.
+    const buffer = s.stallBufferAheadS;
+    const starved = buffer == null || buffer < STARVED_BUFFER_S;
+    if (starved) {
+      const tp = throughput(s);
+      const bitrate = s.avgVariantBitrate;
+      if (tp == null || bitrate == null) {
+        return result('network', 'low', 'stalls_starved_no_throughput');
+      }
+      const confidence = buffer != null ? 'high' : 'low';
+      if (tp < BANDWIDTH_HEADROOM * bitrate) {
+        return result('network', confidence, 'stalls_starved_low_throughput');
+      }
+      return result('network', 'low', 'stalls_starved_bandwidth_ok');
+    }
+    return device(s, 'high', 'stalls_buffer_ahead');
+  }
+
+  const dropped =
+    s.droppedFrames != null &&
+    s.decodedFrames != null &&
+    s.decodedFrames >= MIN_DECODED_FRAMES &&
+    s.droppedFrames / s.decodedFrames >= DROPPED_RATIO;
+  if (dropped) return device(s, 'high', 'dropped_frames');
+
+  const confidence = s.sampleCount > 0 || s.cmcd ? 'high' : 'low';
+  if (s.watchedMs < MIN_WATCHED_MS) {
+    return result('unknown', 'low', 'too_little_data');
+  }
+  return result('ok', confidence, 'healthy');
+}

@@ -1,6 +1,8 @@
 import {
   AbstractPlaybackEngine,
   AudioTrack,
+  bufferAheadOf,
+  EngineQoeSample,
   EngineStats,
   PlaybackEngine,
   SeekRange,
@@ -52,6 +54,8 @@ const SEEK_DEBOUNCE_MS = 280;
  */
 export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngine {
   private video: HTMLVideoElement | null = null;
+  /** Taken at the first sample after a load: the counters only restart once Chromium recreates its player. */
+  private frameBaseline: { dropped: number; decoded: number } | null = null;
   private readonly subtitles = new SubtitleOverlay(WEBOS_CUE_SIZE_BOOST);
   private _duration = 0;
   /** Last URL handed to `load()` — the base for reload-on-seek. */
@@ -235,6 +239,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
   async load(url: string, startTime?: number): Promise<void> {
     if (!this.video) throw new Error('WebOsEngine not initialised');
     this.loadedUrl = url;
+    this.frameBaseline = null;
     this.resetFirstFrame();
     this.clearSeekDebounce();
     this.pendingReloadTarget = null;
@@ -538,6 +543,45 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
   configure(_config: unknown): void { /* Shaka-specific */ }
 
   // ── Stats ───────────────────────────────────────────────────────────
+
+  /** Chromium recreates its media player on load(), so counters can restart at 0 under a stale baseline. */
+  private frameCounts(): { dropped: number; decoded: number } {
+    const v = this.video as (HTMLVideoElement & {
+      webkitDroppedFrameCount?: number;
+      webkitDecodedFrameCount?: number;
+    }) | null;
+    if (!v) return { dropped: 0, decoded: 0 };
+    const q = typeof v.getVideoPlaybackQuality === 'function' ? v.getVideoPlaybackQuality() : null;
+    return {
+      dropped: q?.droppedVideoFrames ?? v.webkitDroppedFrameCount ?? 0,
+      decoded: q?.totalVideoFrames ?? v.webkitDecodedFrameCount ?? 0,
+    };
+  }
+
+  override async getQoeSample(): Promise<EngineQoeSample | null> {
+    const v = this.video;
+    if (!v) return null;
+    let counts: { dropped: number; decoded: number } | null = null;
+    try { counts = this.frameCounts(); } catch { /* unsupported */ }
+    if (counts && (!this.frameBaseline || counts.decoded < this.frameBaseline.decoded)) {
+      this.frameBaseline = this.frameBaseline ? { dropped: 0, decoded: 0 } : counts;
+    }
+    const base = this.frameBaseline ?? { dropped: 0, decoded: 0 };
+    return {
+      engine: 'webos',
+      cmcd: false,
+      droppedFrames: counts && Math.max(0, counts.dropped - base.dropped),
+      decodedFrames: counts && Math.max(0, counts.decoded - base.decoded),
+      bandwidthBps: null,
+      bufferAheadS: bufferAheadOf(v),
+      variantBitrate: null,
+      width: v.videoWidth || null,
+      height: v.videoHeight || null,
+      videoCodec: null,
+      decoderName: null,
+      hwDecoder: null,
+    };
+  }
 
   getStats(): EngineStats {
     const v = this.video;

@@ -75,6 +75,7 @@ describe('SystemController.activeStreams recency filter', () => {
       {} as never, // episodeRepo
       {} as never, // requestRepo
       {} as never, // updateCheck
+      { liveSummary: () => null } as never, // qoe
     );
 
     return { controller };
@@ -168,6 +169,7 @@ describe('SystemController.sendPlayerCommand', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
 
     return {
@@ -229,6 +231,7 @@ describe('SystemController.restart', () => {
 
   function makeController() {
     return new SystemController(
+      {} as never,
       {} as never,
       {} as never,
       {} as never,

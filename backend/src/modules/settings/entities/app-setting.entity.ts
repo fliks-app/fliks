@@ -20,6 +20,8 @@ import { BaseEntity } from '../../../common/entities/base.entity';
  *   streaming_tonemap_curve — "hable" | "mobius" | "reinhard" (HDR→SDR curve)
  *   streaming_cache_max_gb / streaming_cache_ttl_hours — transcode-cache budget
  *   streaming_ffmpeg_slots — concurrent background ffmpeg jobs; absent = auto
+ *   qoe_enabled           — "false" stops collecting playback quality telemetry; absent = on
+ *   qoe_retention_days    — days a playback quality session is kept (30)
  *   subtitle_translation_enabled — "true" | "false" (machine translation)
  *   subtitle_translation_engine — "gemini" | "openai" | "libretranslate"
  *   subtitle_translation_max_concurrency — parallel translation runs, e.g. "1"

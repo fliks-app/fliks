@@ -7,12 +7,22 @@ import { ToastService } from './toast.service';
 import { CAST_SUBTITLE_SIZE_SCALE } from '../utils/subtitle-presets';
 import { Subject } from 'rxjs';
 import { normalizeLangCode } from '../utils/language.utils';
+import type { QoeSample } from './playback-engine';
 
 /** Custom Cast message namespace shared between the Fliks receiver and
  *  every sender. Used today for receiver → sender error forwarding;
  *  reserved for any future bidirectional control message. Keep in sync
  *  with `cast-receiver/receiver.js`. */
 const FLIKS_CAST_NAMESPACE = 'urn:x-cast:media.fliks.app';
+
+/** Receiver → sender playback-quality push; the sender folds it into its heartbeat. */
+interface ReceiverQoe {
+  kind: 'qoe';
+  at: number;
+  /** Session id of the LOAD the sample belongs to; absent on an older receiver. */
+  sid?: string;
+  sample: QoeSample;
+}
 
 /** Receiver → sender error payload. Fields mirror what the receiver
  *  pushes via `fliksBus.broadcast`; everything is optional because the
@@ -64,6 +74,10 @@ export interface CastMediaInfo {
   edl?: EdlWire;
   /** Receiver session key: skipped commercials survive reloads of the same file. */
   mediaFileId?: number;
+  /** The viewing being cast; the receiver echoes it in its qoe sample. */
+  playbackId?: string;
+  /** Live-session id of this load; the receiver echoes it in each qoe message. */
+  sid?: string;
   /** Translated notice texts the receiver shows when it skips. */
   edlLabels?: { cut: string; commercial: string };
   /** False: the receiver never skips commercials. Absent means true. */
@@ -214,12 +228,10 @@ export class CastService implements OnDestroy {
   private wantedTextTrackId = 0;
   private textReapplyTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /** Fires when the receiver hits a fatal playback error that a fresh
-   *  stream (new sid) can recover — a live session GC'd mid-cast 410s the
-   *  next segment. `position` is the last known playhead to resume from.
-   *  Fed by the native plugin's IDLE/ERROR signal and the web receiver's
-   *  custom error message; consumed by CastPlayerService to reload. */
+  /** A receiver failure a fresh stream may fix; `position` is the playhead to resume from. */
   readonly playbackError$ = new Subject<{ position?: number }>();
+  /** Every `player_error` the receiver reports, for QoE. */
+  readonly receiverError$ = new Subject<{ code?: number; category: string; message?: string }>();
 
   /** Whether a native-process Cast sender backs this client — the Capacitor
    *  plugin on mobile, the Electron main process on desktop. Without one we are
@@ -236,6 +248,8 @@ export class CastService implements OnDestroy {
   /** Tracks which session id we already attached the error listener to
    *  so a reconnect to the same session doesn't double-listen. */
   private errorListenerSessionId: string | null = null;
+  /** Latest receiver QoE push. */
+  readonly receiverQoe = signal<{ sample: QoeSample; receivedAt: number; sid?: string } | null>(null);
 
   // Web-only
   private webCastReady = false;
@@ -285,7 +299,10 @@ export class CastService implements OnDestroy {
         const connected = e.detail?.connected ?? false;
         this.isConnected.set(connected);
         if (connected) this.endConnecting();
-        else this.buffering.set(false);
+        else {
+          this.buffering.set(false);
+          this.receiverQoe.set(null);
+        }
         // `connected` rides the device listing, so the picker's rows are stale
         // the moment a session starts or ends.
         void this.getCastDevices();
@@ -307,10 +324,16 @@ export class CastService implements OnDestroy {
         if (e.detail?.muted != null) this.muted.set(e.detail.muted);
       }) as EventListener);
 
-      // The plugin maps the receiver's IDLE/ERROR state to this event —
-      // the native equivalent of the web receiver's custom error message.
+      // Native IDLE/ERROR poll; overlaps with the forwarded `player_error`, deduped downstream.
       window.addEventListener('castError', ((e: CustomEvent) => {
         this.playbackError$.next({ position: e.detail?.position });
+      }) as EventListener);
+
+      // Native senders (Android, iOS, desktop) forward the Fliks-namespace messages here.
+      window.addEventListener('castReceiverMessage', ((e: CustomEvent) => {
+        if (e.detail?.namespace === FLIKS_CAST_NAMESPACE && typeof e.detail.message === 'string') {
+          this.handleReceiverMessage(e.detail.message);
+        }
       }) as EventListener);
 
       // Device discovery updates
@@ -424,6 +447,7 @@ export class CastService implements OnDestroy {
       this.attachReceiverMessageListener(this.session);
     } else {
       this.errorListenerSessionId = null;
+      this.receiverQoe.set(null);
     }
   }
 
@@ -435,24 +459,39 @@ export class CastService implements OnDestroy {
     const sessionId = session?.getSessionId?.();
     if (sessionId && sessionId === this.errorListenerSessionId) return;
     try {
-      session.addMessageListener(FLIKS_CAST_NAMESPACE, (_ns: string, raw: string) => {
-        try {
-          const payload = JSON.parse(raw) as ReceiverPlayerError;
-          if (payload?.kind !== 'player_error') return;
-          // A session-expiry / network failure is recoverable: re-establish
-          // a fresh stream rather than just toasting a dead-end error.
-          if (this.isRecoverableReceiverError(payload)) {
-            this.playbackError$.next({});
-          } else {
-            this.handleReceiverError(payload);
-          }
-        } catch {
-          /* malformed messages are ignored — receiver is forward-compatible */
-        }
-      });
+      session.addMessageListener(FLIKS_CAST_NAMESPACE, (_ns: string, raw: string) =>
+        this.handleReceiverMessage(raw),
+      );
       this.errorListenerSessionId = sessionId ?? null;
     } catch (err) {
       console.warn('Cast addMessageListener failed', err);
+    }
+  }
+
+  /** One receiver message on the Fliks namespace, from the web SDK or a native sender. */
+  private handleReceiverMessage(raw: string) {
+    try {
+      const payload = JSON.parse(raw) as ReceiverPlayerError | ReceiverQoe;
+      if (payload?.kind === 'qoe') {
+        if (payload.sample) this.receiverQoe.set({ sample: payload.sample, receivedAt: Date.now(), sid: payload.sid });
+        return;
+      }
+      if (payload?.kind !== 'player_error') return;
+      const shaka = payload.shakaErrorCode;
+      this.receiverError$.next({
+        code: shaka ?? payload.detailedErrorCode,
+        category: shaka != null ? 'shaka' : 'cast',
+        message: payload.reason,
+      });
+      // A session-expiry / network failure is recoverable: re-establish
+      // a fresh stream rather than just toasting a dead-end error.
+      if (this.isRecoverableReceiverError(payload)) {
+        this.playbackError$.next({});
+      } else {
+        this.handleReceiverError(payload);
+      }
+    } catch {
+      /* malformed messages are ignored — receiver is forward-compatible */
     }
   }
 
@@ -585,6 +624,8 @@ export class CastService implements OnDestroy {
       mediaId: info.mediaId,
       episodeId: info.episodeId,
       mediaFileId: info.mediaFileId,
+      playbackId: info.playbackId,
+      sid: info.sid,
       edl: info.edl,
       edlLabels: info.edl ? info.edlLabels : undefined,
       autoSkipCommercials: info.edl ? info.autoSkipCommercials : undefined,

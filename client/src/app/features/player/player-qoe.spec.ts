@@ -1,0 +1,332 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PlayerQoe, PlayheadWatch, SAMPLE_TIMEOUT_MS, StallTracker, frozenAfterMs } from './player-qoe';
+import type { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
+import type { QoeReporter } from '../../core/services/qoe-reporter.service';
+
+describe('StallTracker', () => {
+  it('counts a completed stall and its duration', () => {
+    const t = new StallTracker();
+    t.begin(1000, 5, false);
+    expect(t.end(3000)).toEqual({ durationMs: 2000, position: 5, bufferAheadS: null, variantBitrate: null });
+    expect(t.snapshot(4000)).toEqual({ stallCount: 1, stallMs: 2000 });
+  });
+
+  it('drops an open stall uncounted and gives its start', () => {
+    const t = new StallTracker();
+    t.begin(1000, 5, false);
+    expect(t.drop()).toBe(1000);
+    expect(t.end(3000)).toBeNull();
+    expect(t.snapshot(4000)).toEqual({ stallCount: 0, stallMs: 0 });
+  });
+
+  it('keeps the first begin of an episode', () => {
+    const t = new StallTracker();
+    t.begin(1000, 5, false);
+    t.begin(2000, 9, true);
+    expect(t.end(3000)).toEqual({ durationMs: 2000, position: 5, bufferAheadS: null, variantBitrate: null });
+  });
+
+  it('ignores seek/reload episodes and sub-threshold blips', () => {
+    const t = new StallTracker();
+    t.begin(0, 0, true);
+    expect(t.end(5000)).toBeNull();
+    t.begin(6000, 0, false);
+    expect(t.end(6100)).toBeNull();
+    expect(t.snapshot(7000)).toEqual({ stallCount: 0, stallMs: 0 });
+  });
+
+  it('does not count an open stall before the minimum duration', () => {
+    const t = new StallTracker();
+    t.begin(1000, 0, false);
+    expect(t.snapshot(1100)).toEqual({ stallCount: 0, stallMs: 0 });
+  });
+
+  it('includes an open stall in the snapshot', () => {
+    const t = new StallTracker();
+    t.begin(1000, 0, false);
+    expect(t.snapshot(1800)).toEqual({ stallCount: 1, stallMs: 800 });
+  });
+});
+
+describe('PlayheadWatch', () => {
+  it('flags a playhead that stayed put for a second, from the last advance', () => {
+    const w = new PlayheadWatch(0);
+    w.tick(5, true, 250);
+    w.tick(5, true, 500);
+    expect(w.frozenSince).toBe(0);
+    w.tick(5, true, 1_500);
+    expect(w.frozenSince).toBe(250);
+    w.tick(6, true, 1_750);
+    expect(w.frozenSince).toBe(0);
+  });
+
+  it('never flags an inactive playhead, nor a tick that came back late', () => {
+    const w = new PlayheadWatch(0);
+    w.tick(5, false, 250);
+    w.tick(5, false, 2_000);
+    expect(w.frozenSince).toBe(0);
+    w.tick(5, true, 2_250);
+    w.tick(5, true, 9_000);
+    expect(w.frozenSince).toBe(0);
+  });
+
+  it('waits past a 1 s position cadence before calling it frozen', () => {
+    const slow = frozenAfterMs(1_000);
+    expect(slow).toBe(2_500);
+    expect(frozenAfterMs()).toBe(1_000);
+    const w = new PlayheadWatch(0);
+    w.tick(5, true, 250, slow);
+    w.tick(5, true, 1_500, slow);
+    w.tick(5, true, 2_500, slow);
+    expect(w.frozenSince).toBe(0);
+    w.tick(5, true, 2_750, slow);
+    expect(w.frozenSince).toBe(250);
+  });
+
+  it('keeps a buffering episode open when the playhead never moved', () => {
+    const w = new PlayheadWatch(0);
+    expect(w.carryOver(2_000, 1_000, 5, 5)).toBe(true);
+    expect(w.frozenSince).toBe(1_000);
+    expect(new PlayheadWatch(0).carryOver(2_000, 1_900, 5, 5)).toBe(false);
+    expect(new PlayheadWatch(0).carryOver(2_000, 1_000, 5, 6)).toBe(false);
+  });
+});
+
+describe('StallTracker overlap', () => {
+  it('clamps a backdated start to the end of the previous episode', () => {
+    const t = new StallTracker();
+    t.begin(1000, 5, false);
+    expect(t.end(2000)?.durationMs).toBe(1000);
+    t.begin(1500, 5, false);
+    expect(t.end(2600)?.durationMs).toBe(600);
+    expect(t.count).toBe(2);
+    expect(t.totalMs).toBe(1600);
+  });
+});
+
+describe('PlayerQoe', () => {
+  let now = 0;
+  const reporter = { record: vi.fn(), flush: vi.fn(), flushKeepalive: vi.fn() };
+  const engine = (impl: () => Promise<unknown>) =>
+    ({ getQoeSample: vi.fn(impl) }) as unknown as PlaybackEngine;
+  const raw = { engine: 'shaka', cmcd: true, bufferAheadS: 3, bandwidthBps: 9, variantBitrate: 5 };
+  let qoe: PlayerQoe;
+
+  beforeEach(() => {
+    now = 0;
+    vi.useFakeTimers();
+    reporter.record.mockReset();
+    qoe = new PlayerQoe(reporter as unknown as QoeReporter, () => now);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('emits a stall event with the latest sample context', async () => {
+    await qoe.refresh(engine(async () => raw));
+    now = 1000;
+    qoe.setStalled(true, { sessionId: 's', position: 12, bufferAheadS: 0.4 });
+    now = 3500;
+    qoe.setStalled(false, { sessionId: 's', position: 12 });
+    expect(reporter.record).toHaveBeenCalledWith(
+      's',
+      { type: 'stall', at: 3500, position: 12, durationMs: 2500, bufferAheadS: 0.4, bandwidthBps: 9, variantBitrate: 5 },
+      false,
+      expect.any(String),
+    );
+  });
+
+  it('reports the variant bitrate active when the stall began', async () => {
+    await qoe.refresh(engine(async () => raw));
+    now = 1000;
+    qoe.setStalled(true, { sessionId: 's', position: 1 });
+    await qoe.refresh(engine(async () => ({ ...raw, variantBitrate: 2 })));
+    now = 3000;
+    qoe.setStalled(false, { sessionId: 's', position: 1 });
+    expect(reporter.record).toHaveBeenCalledWith(
+      's',
+      expect.objectContaining({ type: 'stall', variantBitrate: 5 }),
+      false,
+      expect.any(String),
+    );
+  });
+
+  it('merges counters into the current sample and restarts them on reset', async () => {
+    await qoe.refresh(engine(async () => raw));
+    qoe.onRecovery('s', 1);
+    now = 10;
+    qoe.setStalled(true, { sessionId: 's', position: 1 });
+    now = 1010;
+    expect(qoe.current('s')).toMatchObject({ stallCount: 1, stallMs: 1000, recoveryReloads: 1 });
+    qoe.reset();
+    await qoe.refresh(engine(async () => raw));
+    expect(qoe.current('s')).toMatchObject({ stallCount: 0, stallMs: 0, recoveryReloads: 0 });
+  });
+
+  it('counts the wait before a recovery as a stall and reports why it happened', async () => {
+    await qoe.refresh(engine(async () => raw));
+    qoe.onRecovery('b', 873, { reason: 'session_lost', durationMs: 9000 });
+    expect(qoe.current('b')).toMatchObject({ stallCount: 1, stallMs: 9000, recoveryReloads: 1 });
+    expect(reporter.record).toHaveBeenCalledWith(
+      'b',
+      expect.objectContaining({ type: 'recovery', position: 873, reason: 'session_lost', durationMs: 9000 }),
+      expect.anything(),
+      expect.any(String),
+    );
+  });
+
+  it('counts a 17 s freeze once when its recovery closes the stall first', async () => {
+    await qoe.refresh(engine(async () => raw));
+    qoe.current('a');
+    now = 1000;
+    qoe.setStalled(true, { sessionId: 'a', position: 3, bufferAheadS: 0 });
+    now = 18_000;
+    expect(qoe.closeStall('a')).toBe(true);
+    now = 20_000;
+    qoe.onRecovery('b', 3, { reason: 'stall', durationMs: 2_000 });
+    await qoe.refresh(engine(async () => raw));
+    expect(qoe.current('b')).toMatchObject({ stallCount: 1, stallMs: 2_000 });
+    const stalls = reporter.record.mock.calls.filter((c) => c[1].type === 'stall');
+    expect(stalls.map((c) => [c[0], c[1].durationMs])).toEqual([['a', 17_000]]);
+  });
+
+  it('caps an error message so the keepalive payload stays small', () => {
+    qoe.onError('a', 1, { message: 'x'.repeat(500) });
+    expect(reporter.record.mock.calls[0][1].message).toHaveLength(200);
+  });
+
+  it('restarts the counters when a recovery mints a new session id', async () => {
+    await qoe.refresh(engine(async () => raw));
+    expect(qoe.current('a')).not.toBeNull();
+    qoe.onRecovery('a', 1);
+    qoe.onRecovery('b', 2);
+    await qoe.refresh(engine(async () => raw));
+    expect(qoe.current('b')).toMatchObject({ recoveryReloads: 1 });
+  });
+
+  it('closes the open stall under the old sid when the sid changes', async () => {
+    await qoe.refresh(engine(async () => raw));
+    qoe.current('a');
+    now = 1000;
+    qoe.setStalled(true, { sessionId: 'a', position: 3, bufferAheadS: 0 });
+    now = 4000;
+    qoe.current('b');
+    expect(reporter.record).toHaveBeenCalledWith(
+      'a',
+      expect.objectContaining({ type: 'stall', durationMs: 3000 }),
+      false,
+      expect.any(String),
+    );
+    expect(qoe.current('b')).toBeNull();
+  });
+
+  it('drops a sample that resolves after the sid changed', async () => {
+    qoe.current('a');
+    let resolve!: (v: unknown) => void;
+    const pending = qoe.refresh(engine(() => new Promise((r) => (resolve = r))));
+    await vi.advanceTimersByTimeAsync(1);
+    qoe.current('b');
+    resolve(raw);
+    await pending;
+    expect(qoe.current('b')).toBeNull();
+  });
+
+  it('counts every freeze of a throttled run, whichever signal opens it', async () => {
+    await qoe.refresh(engine(async () => raw));
+    const ctx = { sessionId: 's', position: 191 };
+    now = 1000;
+    qoe.setStalled(true, ctx); // engine buffering
+    now = 1400;
+    qoe.setStalled(true, { ...ctx, since: 1200 }); // frozen detector on the same episode
+    now = 2000;
+    qoe.setStalled(false, ctx);
+    now = 5000;
+    qoe.setStalled(true, { ...ctx, since: 4000 }); // frozen, no engine event
+    now = 6000;
+    qoe.setStalled(false, ctx);
+    now = 8000;
+    qoe.setStalled(true, ctx);
+    now = 8500;
+    expect(qoe.current('s')).toMatchObject({ stallCount: 3 });
+    now = 9000;
+    qoe.setStalled(false, ctx);
+    const stalls = reporter.record.mock.calls.filter((c) => c[1].type === 'stall');
+    expect(stalls.map((c) => c[1].durationMs)).toEqual([1000, 2000, 1000]);
+  });
+
+  it('keeps the playbackId across sid changes and renews it on reset', async () => {
+    await qoe.refresh(engine(async () => raw));
+    const id = qoe.playbackId;
+    expect(qoe.current('a')?.playbackId).toBe(id);
+    qoe.onRecovery('b', 1);
+    expect(qoe.playbackId).toBe(id);
+    qoe.onError('b', 1, { code: 1 });
+    expect(reporter.record).toHaveBeenLastCalledWith('b', expect.anything(), true, id);
+    qoe.reset();
+    expect(qoe.playbackId).not.toBe(id);
+  });
+
+  it('sends no sample while the engine measured nothing', async () => {
+    await qoe.refresh(
+      engine(async () => ({ engine: 'shaka', cmcd: true, bufferAheadS: null, bandwidthBps: null })),
+    );
+    expect(qoe.current('s')).toBeNull();
+  });
+
+  it('flushes a quality switch at once, before its session goes away', () => {
+    qoe.onQualitySwitch('a', 10, 2_000_000);
+    expect(reporter.record).toHaveBeenCalledWith(
+      'a',
+      expect.objectContaining({ type: 'quality_switch', toBitrate: 2_000_000 }),
+      true,
+      expect.any(String),
+    );
+  });
+
+  it('records a reload with its reason on the old sid, flushed at once', () => {
+    qoe.onReload('a', 12, { reason: 'audio', from: 'Français 5.1', to: 'English' });
+    expect(reporter.record).toHaveBeenCalledWith(
+      'a',
+      expect.objectContaining({ type: 'reload', position: 12, reason: 'audio', from: 'Français 5.1', to: 'English' }),
+      true,
+      expect.any(String),
+    );
+  });
+
+  it('adds no reload event for a quality change, which has its own', () => {
+    reporter.record.mockClear();
+    qoe.onReload('a', 12, { reason: 'quality' });
+    qoe.onReload(undefined, 12, { reason: 'other' });
+    expect(reporter.record).not.toHaveBeenCalled();
+  });
+
+  it('takes the from-bitrate off the rung left, falling back to the sample', async () => {
+    qoe.onQualitySwitch('a', 1, 2_000_000, 8_000_000);
+    expect(reporter.record).toHaveBeenLastCalledWith('a', expect.objectContaining({ fromBitrate: 8_000_000 }), true, expect.any(String));
+  });
+
+  it('flushes the old sid when a new one takes over', async () => {
+    await qoe.refresh(engine(async () => raw));
+    qoe.current('a');
+    reporter.flush.mockClear();
+    qoe.current('b');
+    expect(reporter.flush).toHaveBeenCalledWith('a');
+  });
+
+  it('flushes errors immediately', () => {
+    qoe.onError('s', 4, { code: 3016, category: 'shaka' });
+    expect(reporter.record).toHaveBeenCalledWith(
+      's',
+      expect.objectContaining({ type: 'error', code: 3016, category: 'shaka' }),
+      true,
+      expect.any(String),
+    );
+  });
+
+  it('keeps no sample when the engine throws, has none, or is too slow', async () => {
+    await qoe.refresh(engine(async () => { throw new Error('x'); }));
+    await qoe.refresh(engine(async () => null));
+    const slow = qoe.refresh(engine(() => new Promise(() => {})));
+    await vi.advanceTimersByTimeAsync(SAMPLE_TIMEOUT_MS);
+    await slow;
+    expect(qoe.current('s')).toBeNull();
+  });
+});

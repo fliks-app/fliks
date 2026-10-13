@@ -53,11 +53,11 @@ function createService(opts: { isAdmin?: boolean; permissions?: string[]; entrie
 }
 
 describe('SettingsSectionsService', () => {
-  it('resolves the 8 core sections with 23 items total, and nothing else, with an empty registry', () => {
+  it('resolves the 8 core sections with 24 items total, and nothing else, with an empty registry', () => {
     const svc = createService({ permissions: ALL_PERMISSIONS });
     const sections = svc.sections();
     expect(sections).toHaveLength(8);
-    expect(sections.reduce((n, s) => n + s.items.length, 0)).toBe(23);
+    expect(sections.reduce((n, s) => n + s.items.length, 0)).toBe(24);
   });
 
   it('drops the core entries whose own pages the viewer has no permission for', () => {
@@ -87,7 +87,7 @@ describe('SettingsSectionsService', () => {
     });
     const sections = svc.sections();
     const system = sections.find((s) => s.id === 'core:admin.section_system')!;
-    expect(system.items).toHaveLength(3); // its 3 real core items only, not 4
+    expect(system.items).toHaveLength(4); // its 4 real core items only, not 5
     expect(sections.at(-1)!.items.map((i) => i.id)).toEqual(['core.system']);
   });
 

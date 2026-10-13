@@ -6,6 +6,14 @@ import { CastService } from './cast.service';
 import { CastSettingsService } from './cast-settings.service';
 import { ToastService } from './toast.service';
 
+vi.mock('@capacitor/core', async () => ({
+  Capacitor: { isNativePlatform: () => false, getPlatform: () => 'web' },
+  registerPlugin: () => ({
+    initialize: async () => ({ available: false }),
+    getCastDevices: async () => ({ devices: [] }),
+  }),
+}));
+
 const AUDIO = 'AUDIO';
 const TEXT = 'TEXT';
 
@@ -201,5 +209,40 @@ describe('CastService LOAD failure', () => {
   it('rejects when there is no session', async () => {
     const svc = make(null);
     await expect(svc.loadMedia(load())).rejects.toThrow('No Cast session');
+  });
+});
+
+describe('CastService receiver messages', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('stores a qoe sample and signals a recoverable player_error', () => {
+    const svc = make(null);
+    const handle = (m: unknown) =>
+      (svc as unknown as { handleReceiverMessage(raw: string): void }).handleReceiverMessage(JSON.stringify(m));
+    const errors: unknown[] = [];
+    svc.playbackError$.subscribe((e) => errors.push(e));
+    handle({ kind: 'qoe', at: 1, sample: { engine: 'cast', playbackId: 'p' } });
+    expect(svc.receiverQoe()?.sample).toMatchObject({ engine: 'cast', playbackId: 'p' });
+    handle({ kind: 'player_error', httpStatus: 410 });
+    expect(errors).toEqual([{}]);
+  });
+
+  it('feeds castReceiverMessage window events through the namespace filter', async () => {
+    const svc = make(null);
+    vi.stubGlobal('chrome', { cast: {} });
+    (svc as unknown as { hasCastBridge: boolean }).hasCastBridge = true;
+    await (svc as unknown as { initNative(): Promise<void> }).initNative();
+    const send = (namespace: string, sample: object) =>
+      window.dispatchEvent(
+        new CustomEvent('castReceiverMessage', {
+          detail: { namespace, message: JSON.stringify({ kind: 'qoe', at: 1, sample }) },
+        }),
+      );
+    send('urn:x-cast:other', { engine: 'x' });
+    expect(svc.receiverQoe()).toBeNull();
+    send('urn:x-cast:media.fliks.app', { engine: 'cast' });
+    expect(svc.receiverQoe()?.sample).toMatchObject({ engine: 'cast' });
+    window.dispatchEvent(new CustomEvent('castStateChanged', { detail: { connected: false } }));
+    expect(svc.receiverQoe()).toBeNull();
   });
 });

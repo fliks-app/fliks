@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { StreamQoe } from './qoe-api.service';
 
 export interface ActiveStream {
   sessionId: string;
@@ -51,6 +52,8 @@ export interface ActiveStream {
   videoReasons: string[];
   audioReasons: string[];
   containerReasons: string[];
+  /** Playback-quality diagnosis; null until the client has reported. */
+  qoe: StreamQoe | null;
 }
 
 @Injectable({ providedIn: 'root' })

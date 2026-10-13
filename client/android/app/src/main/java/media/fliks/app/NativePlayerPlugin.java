@@ -1,6 +1,9 @@
 package media.fliks.app;
 
 import android.graphics.Color;
+import android.media.MediaCodecInfo;
+import android.media.MediaCodecList;
+import android.os.Build;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
@@ -39,6 +42,7 @@ import androidx.media3.exoplayer.audio.AudioSink;
 import androidx.media3.exoplayer.audio.DefaultAudioSink;
 import androidx.media3.exoplayer.analytics.AnalyticsListener;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.exoplayer.upstream.CmcdConfiguration;
 import androidx.media3.session.MediaSession;
 import java.util.ArrayList;
 import android.content.Context;
@@ -105,6 +109,11 @@ public class NativePlayerPlugin extends Plugin {
     // cold-prepare race below where the video renderer never enables — only the
     // latter warrants the unstick seek. Reset on each load().
     private boolean videoRendererEnabled = false;
+    // QoE counters, cumulative since the last load().
+    private boolean qoeCmcd = false;
+    private long qoeBandwidthBps = -1;
+    private String qoeDecoderName = null;
+    private Boolean qoeHwDecoder = null;
     // Only exists while background audio is on: it is what keeps playback alive off-screen.
     private MediaSession mediaSession;
     private boolean hasNext = false;
@@ -368,6 +377,14 @@ public class NativePlayerPlugin extends Plugin {
             DefaultMediaSourceFactory mediaSourceFactory =
                     new DefaultMediaSourceFactory(dataSourceFactory)
                             .setLoadErrorHandlingPolicy(new RetryHttp404LoadErrorPolicy());
+            // Offline cache keys are the bare URL, so CMCD stays off there.
+            qoeCmcd = !offline && androidx.media3.common.util.Util.inferContentType(Uri.parse(url)) == C.CONTENT_TYPE_HLS;
+            if (!offline) {
+                final String cmcdSid = java.util.UUID.randomUUID().toString();
+                mediaSourceFactory.setCmcdConfigurationFactory(item ->
+                        new CmcdConfiguration(cmcdSid, null, new CmcdConfiguration.RequestConfig() {},
+                                CmcdConfiguration.MODE_QUERY_PARAMETER));
+            }
             player = new ExoPlayer.Builder(getContext())
                     .setRenderersFactory(renderersFactory)
                     .setMediaSourceFactory(mediaSourceFactory)
@@ -534,7 +551,21 @@ public class NativePlayerPlugin extends Plugin {
                         @NonNull DecoderCounters counters) {
                     videoRendererEnabled = true;
                 }
+                @Override public void onBandwidthEstimate(
+                        @NonNull AnalyticsListener.EventTime eventTime, int totalLoadTimeMs,
+                        long totalBytesLoaded, long bitrateEstimate) {
+                    qoeBandwidthBps = bitrateEstimate;
+                }
+                @Override public void onVideoDecoderInitialized(
+                        @NonNull AnalyticsListener.EventTime eventTime, @NonNull String decoderName,
+                        long initializedTimestampMs, long initializationDurationMs) {
+                    qoeDecoderName = decoderName;
+                    qoeHwDecoder = isHardwareDecoder(decoderName);
+                }
             });
+            qoeBandwidthBps = -1;
+            qoeDecoderName = null;
+            qoeHwDecoder = null;
 
             MediaItem.Builder itemBuilder = new MediaItem.Builder()
                     .setUri(Uri.parse(currentHlsUrl));
@@ -1084,6 +1115,73 @@ public class NativePlayerPlugin extends Plugin {
     }
 
     // ── State ──
+
+    private static final Map<String, Boolean> HW_DECODER_CACHE = new HashMap<>();
+
+    private static synchronized boolean isHardwareDecoder(String name) {
+        Boolean cached = HW_DECODER_CACHE.get(name);
+        if (cached != null) return cached;
+        Boolean hw = null;
+        if (Build.VERSION.SDK_INT >= 29) {
+            for (MediaCodecInfo info : new MediaCodecList(MediaCodecList.ALL_CODECS).getCodecInfos()) {
+                if (info.getName().equals(name)) { hw = info.isHardwareAccelerated(); break; }
+            }
+        }
+        if (hw == null) {
+            String n = name.toLowerCase(Locale.ROOT);
+            hw = !(n.startsWith("omx.google.") || n.startsWith("c2.android.") || n.contains(".sw."));
+        }
+        HW_DECODER_CACHE.put(name, hw);
+        return hw;
+    }
+
+    private static Object orNull(Object v) {
+        return v != null ? v : org.json.JSONObject.NULL;
+    }
+
+    @PluginMethod()
+    public void getQoe(PluginCall call) {
+        mainHandler.post(() -> {
+            JSObject r = new JSObject();
+            r.put("engine", "exoplayer");
+            r.put("cmcd", qoeCmcd);
+            Long decoded = null, dropped = null, bandwidth = null, bitrate = null;
+            Double ahead = null;
+            Integer w = null, h = null;
+            String codec = null;
+            if (player != null) {
+                DecoderCounters c = player.getVideoDecoderCounters();
+                if (c != null) {
+                    c.ensureUpdated();
+                    dropped = (long) c.droppedBufferCount;
+                    decoded = (long) c.renderedOutputBufferCount + c.skippedOutputBufferCount + c.droppedBufferCount;
+                }
+                androidx.media3.common.Format f = player.getVideoFormat();
+                if (f != null) {
+                    int br = f.bitrate != androidx.media3.common.Format.NO_VALUE ? f.bitrate
+                            : f.averageBitrate != androidx.media3.common.Format.NO_VALUE ? f.averageBitrate
+                            : f.peakBitrate;
+                    if (br > 0) bitrate = (long) br;
+                    if (f.width > 0) w = f.width;
+                    if (f.height > 0) h = f.height;
+                    codec = f.codecs != null ? f.codecs : f.sampleMimeType;
+                }
+                if (qoeBandwidthBps >= 0) bandwidth = qoeBandwidthBps;
+                ahead = Math.max(0, player.getBufferedPosition() - player.getCurrentPosition()) / 1000.0;
+            }
+            r.put("droppedFrames", orNull(dropped));
+            r.put("decodedFrames", orNull(decoded));
+            r.put("bandwidthBps", orNull(bandwidth));
+            r.put("bufferAheadS", orNull(ahead));
+            r.put("variantBitrate", orNull(bitrate));
+            r.put("width", orNull(w));
+            r.put("height", orNull(h));
+            r.put("videoCodec", orNull(codec));
+            r.put("decoderName", orNull(qoeDecoderName));
+            r.put("hwDecoder", orNull(qoeHwDecoder));
+            call.resolve(r);
+        });
+    }
 
     @PluginMethod()
     public void getPosition(PluginCall call) {
