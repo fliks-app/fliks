@@ -4,6 +4,7 @@ import { CastService } from './cast.service';
 import type { QoeSample } from './playback-engine';
 import { hasQoeData } from './playback-engine/playback-engine';
 import { QoeReporter, newPlaybackId } from './qoe-reporter.service';
+import type { QoeRecoveryReason } from './api/qoe-api.service';
 import { CastSettingsService } from './cast-settings.service';
 import { StreamingApiService, type PlayMethod } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
@@ -160,6 +161,10 @@ interface CastResumeState {
 
 /** A receiver sample older than this is dropped (receiver gone or not pushing). */
 const QOE_STALE_MS = 30_000;
+type ReceiverSample = NonNullable<ReturnType<CastService['receiverQoe']>>;
+
+/** A sample of the previous load, still in flight when a reload minted a new sid. */
+const fromOtherLoad = (q: ReceiverSample, sid: string | null) => !!q.sid && q.sid !== sid;
 
 /**
  * Global service managing Cast stream state.
@@ -503,6 +508,7 @@ export class CastPlayerService {
     const castSid = this.liveSessionId();
     this.saveCastPosition(); // Save final position before clearing
     this.stopPositionSaving();
+    if (castSid) this.qoeReporter.flushKeepalive(castSid);
     // Sid-scoped kill so a sender that's still watching locally on a
     // different profile isn't torn down by the cast stop.
     if (castSid) this.streamingApi.stopSession(castSid).catch(() => {});
@@ -589,9 +595,7 @@ export class CastPlayerService {
     this.recovering = true;
     try {
       await this.reloadCastStream(pos);
-      this.recoveries = 1;
-      const sid = this.liveSessionId();
-      if (sid) this.qoeReporter.record(sid, { type: 'recovery', at: Date.now(), position: pos }, false, this.playbackId ?? undefined);
+      this.recordRecovery(pos);
     } catch {
       /* a still-broken stream re-fires the error, subject to the throttle */
     } finally {
@@ -702,6 +706,7 @@ export class CastPlayerService {
       autoplay,
       mediaFileId: mfId,
       playbackId: this.playbackId ?? undefined,
+      sid: pi.sessionId,
       autoSkipCommercials: this.authService.user()?.edlAutoSkipCommercials !== false,
       ...this.edlPayload(pi.edl, {
         title: this.mediaTitle(),
@@ -818,19 +823,27 @@ export class CastPlayerService {
     this.seenStalls = new Set();
   }
 
+  /** The reload that just minted the current sid was a recovery. */
+  private recordRecovery(position: number, reason?: QoeRecoveryReason): void {
+    this.recoveries = 1;
+    const sid = this.liveSessionId();
+    if (sid) this.qoeReporter.record(sid, { type: 'recovery', at: Date.now(), position, reason }, false, this.playbackId ?? undefined);
+  }
+
   /** Recovery reloads of the current sid: the receiver never reloads on its own. */
   private recoveries = 0;
   private seenStalls = new Set<number>();
 
   private readonly receiverStallEffect = effect(() => {
     const q = this.cast.receiverQoe();
-    untracked(() => this.recordReceiverStalls(q?.sample));
+    untracked(() => this.recordReceiverStalls(q));
   });
 
   /** Receiver stall episodes become `stall` events once each, deduped by start time. */
-  private recordReceiverStalls(sample: QoeSample | undefined): void {
+  private recordReceiverStalls(q: ReceiverSample | null): void {
     const sid = this.liveSessionId();
-    if (!sample || !sid) return;
+    if (!q || !sid || fromOtherLoad(q, sid)) return;
+    const sample = q.sample;
     for (const s of sample.stalls ?? []) {
       if (this.seenStalls.has(s.at)) continue;
       this.seenStalls.add(s.at);
@@ -842,7 +855,7 @@ export class CastPlayerService {
   /** Receiver's latest QoE sample for the heartbeat; null when stale or the sender can't receive it. */
   qoeSample(): QoeSample | null {
     const q = this.cast.receiverQoe();
-    if (!q || Date.now() - q.receivedAt >= QOE_STALE_MS || !hasQoeData(q.sample)) return null;
+    if (!q || fromOtherLoad(q, this.liveSessionId()) || Date.now() - q.receivedAt >= QOE_STALE_MS || !hasQoeData(q.sample)) return null;
     const { stalls: _stalls, ...sample } = q.sample;
     return {
       ...sample,
@@ -899,8 +912,11 @@ export class CastPlayerService {
       // Preserve the receiver's pause state across an auto-recovery reload — a
       // paused cast whose session was reaped (missed heartbeats) must not be
       // force-resumed by the reload's default autoplay.
-      if (response?.sessionLost)
+      if (sid) void this.qoeReporter.flush(sid);
+      if (response?.sessionLost) {
         await this.reloadCastStream(pos, !this.cast.isPaused());
+        this.recordRecovery(pos, 'session_lost');
+      }
     } catch { /* ignore */ }
   }
 

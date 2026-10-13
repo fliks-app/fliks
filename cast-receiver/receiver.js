@@ -133,7 +133,7 @@ function publishAudioTracks() {
 //
 // The receiver has no API auth: it pushes samples over FLIKS_NAMESPACE and the sender reports them.
 
-const qoe = { playbackId: null, played: false, seeking: false, stallStart: null, stallCount: 0, stallMs: 0, stalls: [], lastSeekAt: 0, base: { dropped: 0, decoded: 0 }, statsBase: { dropped: 0, decoded: 0 } };
+const qoe = { playbackId: null, sid: null, played: false, seeking: false, stallStart: null, stallCount: 0, stallMs: 0, stalls: [], lastSeekAt: 0, base: { dropped: 0, decoded: 0 }, statsBase: { dropped: 0, decoded: 0 } };
 const EventType = cast.framework.events.EventType;
 
 function qoeVideoQuality() {
@@ -226,7 +226,7 @@ function buildQoeSample() {
 setInterval(() => {
   if (!document.body.classList.contains('playing')) return;
   try {
-    context.sendCustomMessage(FLIKS_NAMESPACE, undefined, { kind: 'qoe', at: Date.now(), sample: buildQoeSample() });
+    context.sendCustomMessage(FLIKS_NAMESPACE, undefined, { kind: 'qoe', at: Date.now(), ...(qoe.sid ? { sid: qoe.sid } : {}), sample: buildQoeSample() });
   } catch (e) {
     console.warn('[fliks-cast] qoe send failed', e);
   }
@@ -335,6 +335,7 @@ function startEdl() {
 function prepareEdl(media, loadRequest) {
   const cd = media.customData || {};
   qoe.playbackId = typeof cd.playbackId === 'string' ? cd.playbackId : null;
+  qoe.sid = typeof cd.sid === 'string' ? cd.sid : null;
   const ranges = decodeWire(cd.edl);
   const key = edlSessionKey(media, cd);
   const auto = cd.autoSkipCommercials !== false;

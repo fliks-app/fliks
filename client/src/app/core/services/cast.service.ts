@@ -19,6 +19,8 @@ const FLIKS_CAST_NAMESPACE = 'urn:x-cast:media.fliks.app';
 interface ReceiverQoe {
   kind: 'qoe';
   at: number;
+  /** Session id of the LOAD the sample belongs to; absent on an older receiver. */
+  sid?: string;
   sample: QoeSample;
 }
 
@@ -74,6 +76,8 @@ export interface CastMediaInfo {
   mediaFileId?: number;
   /** The viewing being cast; the receiver echoes it in its qoe sample. */
   playbackId?: string;
+  /** Live-session id of this load; the receiver echoes it in each qoe message. */
+  sid?: string;
   /** Translated notice texts the receiver shows when it skips. */
   edlLabels?: { cut: string; commercial: string };
   /** False: the receiver never skips commercials. Absent means true. */
@@ -245,7 +249,7 @@ export class CastService implements OnDestroy {
    *  so a reconnect to the same session doesn't double-listen. */
   private errorListenerSessionId: string | null = null;
   /** Latest receiver QoE push. */
-  readonly receiverQoe = signal<{ sample: QoeSample; receivedAt: number } | null>(null);
+  readonly receiverQoe = signal<{ sample: QoeSample; receivedAt: number; sid?: string } | null>(null);
 
   // Web-only
   private webCastReady = false;
@@ -469,7 +473,7 @@ export class CastService implements OnDestroy {
     try {
       const payload = JSON.parse(raw) as ReceiverPlayerError | ReceiverQoe;
       if (payload?.kind === 'qoe') {
-        if (payload.sample) this.receiverQoe.set({ sample: payload.sample, receivedAt: Date.now() });
+        if (payload.sample) this.receiverQoe.set({ sample: payload.sample, receivedAt: Date.now(), sid: payload.sid });
         return;
       }
       if (payload?.kind !== 'player_error') return;
@@ -621,6 +625,7 @@ export class CastService implements OnDestroy {
       episodeId: info.episodeId,
       mediaFileId: info.mediaFileId,
       playbackId: info.playbackId,
+      sid: info.sid,
       edl: info.edl,
       edlLabels: info.edl ? info.edlLabels : undefined,
       autoSkipCommercials: info.edl ? info.autoSkipCommercials : undefined,
