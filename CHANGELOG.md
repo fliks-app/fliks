@@ -1,5 +1,100 @@
 # Changelog
 
+## [4.5.0](https://github.com/fliks-app/fliks/compare/v4.4.0...v4.5.0) (2026-10-13)
+
+
+### Features
+
+* **display:** add setting for where the movie/series badge shows ([#1591](https://github.com/fliks-app/fliks/issues/1591)) ([5462a59](https://github.com/fliks-app/fliks/commit/5462a59111fd01567d7f247b7e38fb9e0a6eac48))
+* **layout:** float the server-unreachable notice as a compact pill ([#1638](https://github.com/fliks-app/fliks/issues/1638)) ([c97a32b](https://github.com/fliks-app/fliks/commit/c97a32b2a769ecfd56d2628da1de5c227b6b31e6))
+* **media-card:** morph an episode card into the series page from its title ([#1643](https://github.com/fliks-app/fliks/issues/1643)) ([817d769](https://github.com/fliks-app/fliks/commit/817d7699f0e7de366e75721cee583994e8bb75b1))
+* **menus:** open pickers scrolled to the selected item ([#1624](https://github.com/fliks-app/fliks/issues/1624)) ([79e0543](https://github.com/fliks-app/fliks/commit/79e054318fbfefcbc9f990be83b59e9df73d94b3))
+* **player:** remember the language variant of a picked track ([#1630](https://github.com/fliks-app/fliks/issues/1630)) ([d37320f](https://github.com/fliks-app/fliks/commit/d37320fd32bbf9f7be1c2af0fc8c71e3f013abbd))
+* **player:** show the track region or script in language labels ([#1619](https://github.com/fliks-app/fliks/issues/1619)) ([fd241e7](https://github.com/fliks-app/fliks/commit/fd241e7e54eeb05abc01fa5e331dd1e4799c33d3))
+* **probe:** expose bcp-47 language tags for matroska tracks ([#1618](https://github.com/fliks-app/fliks/issues/1618)) ([5f1451e](https://github.com/fliks-app/fliks/commit/5f1451ee5d9d18f0f9bb2e71f721125704beb368))
+* **qoe:** report playback quality from every client and diagnose it ([#1651](https://github.com/fliks-app/fliks/issues/1651)) ([aaf5c94](https://github.com/fliks-app/fliks/commit/aaf5c9421502712a4096cbc760c9b06fc52740d3))
+* **streaming:** tag HLS renditions with their BCP-47 language ([#1622](https://github.com/fliks-app/fliks/issues/1622)) ([20c2f50](https://github.com/fliks-app/fliks/commit/20c2f50f98df88468ca4a9f3d64d5ea7fc146209))
+* **tvos:** add a quality menu to the player ([#1628](https://github.com/fliks-app/fliks/issues/1628)) ([982b708](https://github.com/fliks-app/fliks/commit/982b708334058e52b0df1de427b4cfe2026b3133))
+* **tvos:** open continue-watching episodes on their resume page ([#1634](https://github.com/fliks-app/fliks/issues/1634)) ([3959719](https://github.com/fliks-app/fliks/commit/3959719278ac860ab72248feb877db2a6f5af72d))
+* **tvos:** remember audio and subtitle picks per media ([#1632](https://github.com/fliks-app/fliks/issues/1632)) ([aa846f3](https://github.com/fliks-app/fliks/commit/aa846f3e8482f6bcf54a78c9f179177c71764e6a))
+* **tvos:** show missing badge and episode number on cards ([#1626](https://github.com/fliks-app/fliks/issues/1626)) ([5550bee](https://github.com/fliks-app/fliks/commit/5550beed122804ff1111c8ae2d57f1f670b880d7))
+* **tvos:** show title and episode in the player transport bar ([#1629](https://github.com/fliks-app/fliks/issues/1629)) ([63ca300](https://github.com/fliks-app/fliks/commit/63ca300c380fda22f5ae20c6ea8744fd9a118717))
+* **tvos:** tint the ambient backdrop with the fliks primary ([#1633](https://github.com/fliks-app/fliks/issues/1633)) ([6961d66](https://github.com/fliks-app/fliks/commit/6961d6647e667749be13f3cbe6dd825467c3c4ed))
+
+
+### Bug Fixes
+
+* **android:** give sidecar subtitles identity and one text-N scheme ([b6503e9](https://github.com/fliks-app/fliks/commit/b6503e936aeed62df0736154d99dcf7852d8b341))
+* **android:** offer only decodable audio tracks and report track changes ([#1605](https://github.com/fliks-app/fliks/issues/1605)) ([8a6bc3a](https://github.com/fliks-app/fliks/commit/8a6bc3a15739f96e9dad0234c3f69c16cb0e9729))
+* **appletv:** count waiting as playing and stop recovering after a failed start ([#1658](https://github.com/fliks-app/fliks/issues/1658)) ([8fd95bd](https://github.com/fliks-app/fliks/commit/8fd95bd4685fc040387206881352fc7c6b728fed))
+* **bottom-sheet:** dismiss on a drag from the handle when scrolled ([#1642](https://github.com/fliks-app/fliks/issues/1642)) ([97cf4f0](https://github.com/fliks-app/fliks/commit/97cf4f0322c16ad6d18d3cda24e3c55307810eca))
+* **bottom-sheet:** don't dismiss while an inner list is scrolled ([#1604](https://github.com/fliks-app/fliks/issues/1604)) ([d096977](https://github.com/fliks-app/fliks/commit/d0969772e039923f6afe24a092d626e695f7011c))
+* **cache:** invalidate only after the server accepts a mutation ([#1640](https://github.com/fliks-app/fliks/issues/1640)) ([f646bdc](https://github.com/fliks-app/fliks/commit/f646bdcbc188c86009645cfadabfce40f4ebfac8))
+* **cast:** build the quality ladder from the single cast playback-info ([#1654](https://github.com/fliks-app/fliks/issues/1654)) ([8842f1f](https://github.com/fliks-app/fliks/commit/8842f1f84f5e4ef50223d1de7c1fa67ca89aa2c2)), closes [#1649](https://github.com/fliks-app/fliks/issues/1649)
+* **cast:** carry audio and subtitle choices across cast sessions ([5fe807b](https://github.com/fliks-app/fliks/commit/5fe807bb152ee0ada2e7ac632722f1946ffff246))
+* **cast:** carry audio and subtitle choices across cast sessions ([#1602](https://github.com/fliks-app/fliks/issues/1602)) ([5fe807b](https://github.com/fliks-app/fliks/commit/5fe807bb152ee0ada2e7ac632722f1946ffff246))
+* **cast:** label quick-start subtitles on two lines ([7662df5](https://github.com/fliks-app/fliks/commit/7662df529ea35c5d4b23bd916b553bc8379e4050))
+* **cast:** let the latest track pick win over an in-flight load ([5fe807b](https://github.com/fliks-app/fliks/commit/5fe807bb152ee0ada2e7ac632722f1946ffff246))
+* **cast:** stop the sessions left behind by a cast handoff ([#1648](https://github.com/fliks-app/fliks/issues/1648)) ([27afd51](https://github.com/fliks-app/fliks/commit/27afd51ba4c9be8992f9aa2c004c1c3632d1d068))
+* **cast:** surface a rejected load instead of spinning forever ([#1614](https://github.com/fliks-app/fliks/issues/1614)) ([a959888](https://github.com/fliks-app/fliks/commit/a959888f80818f24bc263b8e31e46872718aafeb))
+* **cast:** take a cast back after the app process restarts ([#1655](https://github.com/fliks-app/fliks/issues/1655)) ([81ffeb3](https://github.com/fliks-app/fliks/commit/81ffeb3b50a2b01f4575d45ecec44bfb38e4c2d3)), closes [#1650](https://github.com/fliks-app/fliks/issues/1650)
+* **client:** separate episode code and title with a hyphen ([2889fcb](https://github.com/fliks-app/fliks/commit/2889fcb4d5334feb237777299d72f25c6ef024e8))
+* **desktop:** load files with their subtitle intent on every backend ([#1607](https://github.com/fliks-app/fliks/issues/1607)) ([b13b9c0](https://github.com/fliks-app/fliks/commit/b13b9c079e962fa0fb465f1f373971227dea5240))
+* **desktop:** select mpv subtitle tracks by identity, not by language ([#1598](https://github.com/fliks-app/fliks/issues/1598)) ([e3b3b66](https://github.com/fliks-app/fliks/commit/e3b3b6693b307e9c6b1e38ddca3726f1a20ff687))
+* **downloads:** label offline subtitles on two lines like online ([82cc42f](https://github.com/fliks-app/fliks/commit/82cc42f9925536f59c6b5ebf5bf9bd95cfe9bfe7))
+* **focus:** give TV menu rows one complete focus ring ([#1615](https://github.com/fliks-app/fliks/issues/1615)) ([5086a3d](https://github.com/fliks-app/fliks/commit/5086a3d6b198cc46603dbc16a430f889b013f085))
+* **ios-player:** keep captions rendering across items in PiP ([#1593](https://github.com/fliks-app/fliks/issues/1593)) ([4297b35](https://github.com/fliks-app/fliks/commit/4297b35b82446352ae944f26fc853b145da81aae))
+* **languages:** canonicalize language codes like the players do ([#1596](https://github.com/fliks-app/fliks/issues/1596)) ([a6c4402](https://github.com/fliks-app/fliks/commit/a6c44025534437346153ad4e77a7c9362f706e10))
+* **native:** restart the app from the root after a server switch ([#1641](https://github.com/fliks-app/fliks/issues/1641)) ([48618bb](https://github.com/fliks-app/fliks/commit/48618bb7cf88419b6d4afd3cf7134114c6f4858e))
+* **player:** apply subtitles the same way on every load path ([b6503e9](https://github.com/fliks-app/fliks/commit/b6503e936aeed62df0736154d99dcf7852d8b341))
+* **player:** decide automatic subtitles from the audio that will play ([b6503e9](https://github.com/fliks-app/fliks/commit/b6503e936aeed62df0736154d99dcf7852d8b341))
+* **player:** honour detail picks on cast start and remote send ([#1612](https://github.com/fliks-app/fliks/issues/1612)) ([7662df5](https://github.com/fliks-app/fliks/commit/7662df529ea35c5d4b23bd916b553bc8379e4050))
+* **player:** honour every track pick entry point ([#1608](https://github.com/fliks-app/fliks/issues/1608)) ([82cc42f](https://github.com/fliks-app/fliks/commit/82cc42f9925536f59c6b5ebf5bf9bd95cfe9bfe7))
+* **player:** keep audio and subtitle choices consistent across loads ([#1599](https://github.com/fliks-app/fliks/issues/1599)) ([b6503e9](https://github.com/fliks-app/fliks/commit/b6503e936aeed62df0736154d99dcf7852d8b341))
+* **player:** keep one authoritative audio target across loads ([b6503e9](https://github.com/fliks-app/fliks/commit/b6503e936aeed62df0736154d99dcf7852d8b341))
+* **player:** name track variants in their dialect form ([#1620](https://github.com/fliks-app/fliks/issues/1620)) ([96e66ff](https://github.com/fliks-app/fliks/commit/96e66ff5f7033f7946d2052d4e62c89705d38dd5))
+* **player:** report the buffer a native stall starts on ([#1657](https://github.com/fliks-app/fliks/issues/1657)) ([acab046](https://github.com/fliks-app/fliks/commit/acab04643e5ed518e8eb3c747eb6d208e469c7d9))
+* **player:** show the home variant of a language unqualified ([96e66ff](https://github.com/fliks-app/fliks/commit/96e66ff5f7033f7946d2052d4e62c89705d38dd5))
+* **player:** show the stream title in subtitle labels ([#1617](https://github.com/fliks-app/fliks/issues/1617)) ([5accda1](https://github.com/fliks-app/fliks/commit/5accda127c0b1cfeae5b7ad4a1b369ec471f72d6))
+* **player:** start each item from a clean track state ([b6503e9](https://github.com/fliks-app/fliks/commit/b6503e936aeed62df0736154d99dcf7852d8b341))
+* **player:** unload the engine when stall recovery gives up ([#1656](https://github.com/fliks-app/fliks/issues/1656)) ([c012980](https://github.com/fliks-app/fliks/commit/c0129808c47d73d02f6402f1b8087e32c12bbfc1))
+* separate episode code and title with a hyphen ([#1635](https://github.com/fliks-app/fliks/issues/1635)) ([2889fcb](https://github.com/fliks-app/fliks/commit/2889fcb4d5334feb237777299d72f25c6ef024e8))
+* **setup:** probe a known server before switching to it ([#1639](https://github.com/fliks-app/fliks/issues/1639)) ([09488fc](https://github.com/fliks-app/fliks/commit/09488fc3f2c1d5bd768c59b8cab9a6741a4e1327))
+* **setup:** rename servers in an app modal and clear the status bar ([#1645](https://github.com/fliks-app/fliks/issues/1645)) ([913cd99](https://github.com/fliks-app/fliks/commit/913cd99a7f5d8747f05b0dff145bbc5bcb4952db))
+* **sse:** re-dial the stream after a user switch ([#1644](https://github.com/fliks-app/fliks/issues/1644)) ([47c5d76](https://github.com/fliks-app/fliks/commit/47c5d76d226fc69c0ab69e3a0cf3ba412f6700ae))
+* **streaming:** name the muxed audio track for AVKit ([#1627](https://github.com/fliks-app/fliks/issues/1627)) ([5b1dfb2](https://github.com/fliks-app/fliks/commit/5b1dfb2fc7bb43b797aad246dbc9e3a2b30509e5))
+* **streaming:** price download size estimates with real audio bitrates ([#1611](https://github.com/fliks-app/fliks/issues/1611)) ([44d0ec1](https://github.com/fliks-app/fliks/commit/44d0ec11cda60e5cd430c259b85c8ad22f2bc785))
+* **streaming:** stop restarting ffmpeg on every abr rung switch ([#1653](https://github.com/fliks-app/fliks/issues/1653)) ([859db99](https://github.com/fliks-app/fliks/commit/859db99ebb87aee8fef6a4dda542a5442c7f5c97)), closes [#1647](https://github.com/fliks-app/fliks/issues/1647)
+* **subtitles:** drop existing unrenderable sidecar rows ([cd373d5](https://github.com/fliks-app/fliks/commit/cd373d57bbfe67d3e972adf47a2c6b2b05ef05ea))
+* **subtitles:** keep the sidecar cleanup migration loadable ([cd373d5](https://github.com/fliks-app/fliks/commit/cd373d57bbfe67d3e972adf47a2c6b2b05ef05ea))
+* **subtitles:** match subtitle delivery to what each engine can render ([#1603](https://github.com/fliks-app/fliks/issues/1603)) ([7d247fc](https://github.com/fliks-app/fliks/commit/7d247fc5dcf2b80836247973f34cb124df291856))
+* **subtitles:** serve only renderable subtitle renditions ([#1595](https://github.com/fliks-app/fliks/issues/1595)) ([cd373d5](https://github.com/fliks-app/fliks/commit/cd373d57bbfe67d3e972adf47a2c6b2b05ef05ea))
+* **subtitles:** split overlapping overlay cues and label cast subtitles ([#1610](https://github.com/fliks-app/fliks/issues/1610)) ([e22718d](https://github.com/fliks-app/fliks/commit/e22718d2426645c61b37d908ef6d95b7ac1b97ae))
+* **subtitles:** target the filePath column in the sidecar cleanup ([cd373d5](https://github.com/fliks-app/fliks/commit/cd373d57bbfe67d3e972adf47a2c6b2b05ef05ea))
+* **tv-player:** load overlay subtitles in order and show every active cue ([#1594](https://github.com/fliks-app/fliks/issues/1594)) ([b2e93ac](https://github.com/fliks-app/fliks/commit/b2e93acfb70259755a4d49bba7cf0bb67d1c9aba))
+* **tv-player:** trust the requested audio index after a tizen switch ([b2e93ac](https://github.com/fliks-app/fliks/commit/b2e93acfb70259755a4d49bba7cf0bb67d1c9aba))
+* **tvos:** decode libraries without the dropped default flags ([#1621](https://github.com/fliks-app/fliks/issues/1621)) ([daa80ee](https://github.com/fliks-app/fliks/commit/daa80ee1d01498d118c8e4a3a11ba6678ed51eab))
+* **tvos:** give pushed pages the shell backdrop ([6961d66](https://github.com/fliks-app/fliks/commit/6961d6647e667749be13f3cbe6dd825467c3c4ed))
+* **tvos:** give settings sub-pages the shell backdrop ([#1637](https://github.com/fliks-app/fliks/issues/1637)) ([6cc8258](https://github.com/fliks-app/fliks/commit/6cc8258a5e61e437650940847c2249fd00373a40))
+* **tvos:** keep poster card titles aligned on focus ([5550bee](https://github.com/fliks-app/fliks/commit/5550beed122804ff1111c8ae2d57f1f670b880d7))
+* **tvos:** map only renderable text sidecars to the subs group ([792aa9f](https://github.com/fliks-app/fliks/commit/792aa9ff16066f7e37eb72a27db22ae51aee4604))
+* **tvos:** pick audio and subtitles with the web client's rules ([#1597](https://github.com/fliks-app/fliks/issues/1597)) ([792aa9f](https://github.com/fliks-app/fliks/commit/792aa9ff16066f7e37eb72a27db22ae51aee4604))
+* **tvos:** show direct-play and bitmap subtitles, never another language ([#1606](https://github.com/fliks-app/fliks/issues/1606)) ([e85f2d1](https://github.com/fliks-app/fliks/commit/e85f2d1c93fc6a6d2b087c4c724d2f852ef79334))
+* **tvos:** sit card titles under the artwork, lower them on focus ([#1631](https://github.com/fliks-app/fliks/issues/1631)) ([13b17e2](https://github.com/fliks-app/fliks/commit/13b17e25e834b832ef48e0d403a6315e42fab7ba))
+* **tvos:** top-align cards in rails and grids ([#1625](https://github.com/fliks-app/fliks/issues/1625)) ([4f3e7e3](https://github.com/fliks-app/fliks/commit/4f3e7e359a3fb16ea67ea45e18e33f821d1e79c5))
+* **tvos:** use the web client's backdrop veil ([6961d66](https://github.com/fliks-app/fliks/commit/6961d6647e667749be13f3cbe6dd825467c3c4ed))
+* **ui:** replace em dashes in user-facing text ([#1636](https://github.com/fliks-app/fliks/issues/1636)) ([25e8b01](https://github.com/fliks-app/fliks/commit/25e8b01344f7bfc2c5620eb26e62c94e9760c989))
+
+
+### Reverts
+
+* **player:** name track variants as language (region) again ([#1623](https://github.com/fliks-app/fliks/issues/1623)) ([f06aaa0](https://github.com/fliks-app/fliks/commit/f06aaa0b32eb06b9101a33a1febd69f01ceae11c))
+
+
+### Miscellaneous Chores
+
+* release 4.5.0 ([#1646](https://github.com/fliks-app/fliks/issues/1646)) ([5c68d2e](https://github.com/fliks-app/fliks/commit/5c68d2ead8a81ee619b9bfdafe1bfad039bb6f90))
+
 ## [4.4.0](https://github.com/fliks-app/fliks/compare/v4.3.1...v4.4.0) (2026-10-11)
 
 
