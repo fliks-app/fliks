@@ -42,6 +42,7 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
   const cast = {
     isConnected: signal(true),
     resumedState: signal(null),
+    receiverQoe: signal(null),
     playbackError$: new Subject<{ position?: number }>(),
     receiverError$: new Subject<object>(),
     saveResumeState: vi.fn(),
