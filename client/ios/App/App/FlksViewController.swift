@@ -32,6 +32,7 @@ class FlksViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(DownloadPlugin())
         bridge?.registerPluginInstance(BackGesturePlugin())
         bridge?.registerPluginInstance(AirPlayPlugin())
+        bridge?.registerPluginInstance(SaveFilePlugin())
     }
 
     func updateStatusBar(hidden: Bool) {

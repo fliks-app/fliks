@@ -41,6 +41,7 @@ import { buildTimeline, isOngoing, type RungName, type TimelineBlock, type Timel
 import { blockSummary, blockTitle, clockLabel, detailsOpen, formatPosition, ownStalls, timelineSteps, unreportedStalls } from '../qoe-timeline-view';
 import { QOE_VERDICTS, QOE_VERDICT_BAR_CLASS, formatMbps, qoeDotClass } from '../qoe-health';
 import { mergeDevices } from '../qoe-devices';
+import { saveFile } from '../../../core/plugins/save-file.plugin';
 
 const PAGE_SIZE = 25;
 
@@ -251,12 +252,7 @@ export class SystemPlaybackQualityComponent implements OnInit {
 
   exportJson(d: QoeSessionDetail) {
     const blob = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `playback-quality-${d.playbackId ?? d.sessionId}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    return saveFile(blob, `playback-quality-${d.playbackId ?? d.sessionId}.json`);
   }
 
   userName(id: number | null): string {
