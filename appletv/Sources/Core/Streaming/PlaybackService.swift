@@ -56,6 +56,7 @@ import Foundation
         var bandwidthBps: Double?
         var variantBitrate: Double?
         var message: String?
+        var reason: String?
 
         /// Nil fields go out as explicit null, like the iOS plugin.
         func encode(to encoder: Encoder) throws {
@@ -68,6 +69,7 @@ import Foundation
             try c.encode(bandwidthBps, forKey: QoeKey("bandwidthBps"))
             try c.encode(variantBitrate, forKey: QoeKey("variantBitrate"))
             try c.encode(message, forKey: QoeKey("message"))
+            try c.encode(reason, forKey: QoeKey("reason"))
         }
     }
 
@@ -84,6 +86,8 @@ import Foundation
     var onReload: ((URL, Double) -> Void)?
     /// Recovery exhausted `maxRecoverAttempts` — terminal, caller shows an error.
     var onFatalError: (() -> Void)?
+    /// A recovery is starting: the caller closes its open rebuffer on the old sid and says whether one was counted.
+    var onRecoveryStart: (@MainActor () -> Bool)?
 
     // MARK: - Start / stop
 
@@ -299,7 +303,7 @@ import Foundation
         Task {
             await postEvents(events, sid: sid)
             guard let res: Response = try? await api.put("/api/playback/media/\(mediaId)/state", body: body) else { return }
-            if res.sessionLost == true { await recover(position: position) }
+            if res.sessionLost == true { await recover(position: position, reason: "session_lost") }
         }
     }
 
@@ -408,9 +412,10 @@ import Foundation
                                       variantBitrate: variantBitrate))
     }
 
-    private func recordEvent(_ type: String, position: Double, message: String? = nil) {
+    private func recordEvent(_ type: String, position: Double, message: String? = nil, reason: String? = nil, durationMs: Int? = nil) {
         pendingEvents.append(QoeEvent(type: type, at: Int(Date().timeIntervalSince1970 * 1000), position: position,
-                                      bufferAheadS: bufferAhead, bandwidthBps: bandwidth, message: message))
+                                      durationMs: durationMs, bufferAheadS: bufferAhead, bandwidthBps: bandwidth,
+                                      message: message, reason: reason))
     }
 
     private func takeEvents() -> [QoeEvent] {
@@ -441,8 +446,9 @@ import Foundation
             return
         }
         guard Date().timeIntervalSince(lastProgressAt) >= stallTimeoutSeconds else { return }
+        let frozenSince = lastProgressAt
         lastProgressAt = Date()
-        Task { await recover(position: position) }
+        Task { await recover(position: position, reason: "stall", frozenSince: frozenSince) }
     }
 
     /// Called when the AVPlayerItem itself reports a hard failure (unsupported
@@ -458,7 +464,12 @@ import Foundation
     /// The carried sid is unknown to the backend (restart/GC) or the playhead
     /// wedged. Mint a fresh LiveSession and hand the caller a URL to reload at
     /// `position`. Retries with backoff, gives up after `maxRecoverAttempts`.
-    private func recover(position: Double, countAsRecovery: Bool = true) async {
+    /// The wait counts as a stall on the new sid, from `frozenSince` when no rebuffer was open
+    /// (that one is already counted on the old sid), else from the start of the recovery.
+    private func recover(
+        position: Double, countAsRecovery: Bool = true, reason: String = "other",
+        frozenSince: Date? = nil, waitStart: Date? = nil
+    ) async {
         guard !destroyed, !recoveringGuard else { return }
         if recoverAttempts >= maxRecoverAttempts {
             recovering = false
@@ -467,6 +478,7 @@ import Foundation
             onFatalError?()
             return
         }
+        let waitStart = waitStart ?? (countAsRecovery && (onRecoveryStart?() ?? false) ? Date() : (frozenSince ?? Date()))
         recoveringGuard = true
         recovering = true
         recoverAttempts += 1
@@ -484,8 +496,10 @@ import Foundation
             // Counters are per session id: the new sid starts from zero.
             stallCount = 0; stallMs = 0; recoveryReloads = 0
             if countAsRecovery {
+                let waitMs = Int(Date().timeIntervalSince(waitStart) * 1000)
                 recoveryReloads = 1
-                recordEvent("recovery", position: position)
+                if waitMs >= 250 { stallCount = 1; stallMs = waitMs }
+                recordEvent("recovery", position: position, reason: reason, durationMs: waitMs)
             }
             onReload?(url, position)
         } catch {
@@ -498,7 +512,10 @@ import Foundation
             } else {
                 let backoffSeconds = 2 * recoverAttempts // 2s, 4s
                 try? await Task.sleep(for: .seconds(backoffSeconds))
-                await recover(position: position, countAsRecovery: countAsRecovery)
+                await recover(
+                    position: position, countAsRecovery: countAsRecovery, reason: reason,
+                    frozenSince: frozenSince, waitStart: waitStart
+                )
             }
         }
     }

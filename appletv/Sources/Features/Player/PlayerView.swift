@@ -230,6 +230,7 @@ private struct SkipCueStyle: ButtonStyle {
         playback.onReload = { [weak self] url, position in
             Task { @MainActor in self?.reload(url: url, position: position, keepingSubtitle: true) }
         }
+        playback.onRecoveryStart = { [weak self] in self?.closeStall() ?? false }
         playback.onFatalError = { [weak self] in
             Task { @MainActor in self?.fatalError = true }
         }
@@ -272,7 +273,7 @@ private struct SkipCueStyle: ButtonStyle {
         let item = Self.makeItem(url: url)
         playback.qoeItem = item
         playedOnce = false
-        stallStart = nil // the recovery event covers the stall that triggered it
+        stallStart = nil
         applyMetadata(to: item)
         player.replaceCurrentItem(with: item)
         let target = edlStart(position, duration: edlDuration(item))
@@ -299,11 +300,14 @@ private struct SkipCueStyle: ButtonStyle {
     /// A seek also waits to buffer: no stall is armed right after a time jump.
     private var lastJumpAt = Date.distantPast
 
-    private func closeStall() {
-        guard let start = stallStart else { return }
+    /// True when a rebuffer was open and has been counted.
+    @discardableResult
+    private func closeStall() -> Bool {
+        guard let start = stallStart else { return false }
         stallStart = nil
         playback.recordStall(position: start.position, durationMs: Int(Date().timeIntervalSince(start.at) * 1000),
                            variantBitrate: start.variantBitrate, bufferAheadS: start.bufferAheadS)
+        return true
     }
 
     private func trackStall(_ player: AVPlayer) {
