@@ -11,6 +11,14 @@ describe('StallTracker', () => {
     expect(t.snapshot(4000)).toEqual({ stallCount: 1, stallMs: 2000 });
   });
 
+  it('drops an open stall uncounted and gives its start', () => {
+    const t = new StallTracker();
+    t.begin(1000, 5, false);
+    expect(t.drop()).toBe(1000);
+    expect(t.end(3000)).toBeNull();
+    expect(t.snapshot(4000)).toEqual({ stallCount: 0, stallMs: 0 });
+  });
+
   it('keeps the first begin of an episode', () => {
     const t = new StallTracker();
     t.begin(1000, 5, false);

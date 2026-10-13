@@ -3699,11 +3699,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (!this.engine || !this.mediaFileId) return;
     // The first trigger names the episode. An open stall already counts the freeze on the old sid, so the
     // recovery wait starts now; otherwise it starts when the picture froze, at the last progress.
+    // A lost sid takes no more events: its open stall moves into the wait on the new sid.
     if (!this.recoveryEpisode) {
-      const counted = this.qoe.closeStall(this.activeSessionId());
-      const since = counted
-        ? Date.now()
-        : Math.min(Date.now(), frozenSince ?? (this.lastProgressAt || Date.now()));
+      const openSince = reason === 'session_lost' ? this.qoe.dropStall() : null;
+      const counted = openSince == null && this.qoe.closeStall(this.activeSessionId());
+      const since =
+        openSince ??
+        (counted ? Date.now() : Math.min(Date.now(), frozenSince ?? (this.lastProgressAt || Date.now())));
       this.recoveryEpisode = { reason, since };
     }
     this.recoveringFromLostSession = true;

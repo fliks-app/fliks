@@ -54,6 +54,13 @@ export class StallTracker {
     return { durationMs, position: o.position, bufferAheadS: o.bufferAheadS, variantBitrate: o.variantBitrate };
   }
 
+  /** Drops the open episode uncounted; returns when it began. */
+  drop(): number | null {
+    const o = this.open;
+    this.open = null;
+    return o && !o.ignored ? o.at : null;
+  }
+
   /** A freeze measured elsewhere (the wait before a recovery) counts like any stall. */
   add(durationMs: number): void {
     if (durationMs < MIN_STALL_MS) return;
@@ -184,6 +191,11 @@ export class PlayerQoe {
       return;
     }
     this.closeStall(ctx.sessionId);
+  }
+
+  /** Drops the open episode so a recovery can count it on the next sid; returns when it began. */
+  dropStall(): number | null {
+    return this.stalls.drop();
   }
 
   /** Closes the open episode on its own sid; true when it counted. */
