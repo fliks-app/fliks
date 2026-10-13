@@ -50,6 +50,15 @@ describe('WebOsEngine.getQoeSample', () => {
     expect(await engine.getQoeSample()).toMatchObject({ droppedFrames: 1, decodedFrames: 40 });
   });
 
+  it('takes the baseline at the first sample after a load, not at load time', async () => {
+    let counts = { droppedVideoFrames: 9, totalVideoFrames: 500 };
+    const engine = engineWith({ getVideoPlaybackQuality: () => counts });
+    (engine as unknown as { frameBaseline: unknown }).frameBaseline = null;
+    expect(await engine.getQoeSample()).toMatchObject({ droppedFrames: 0, decodedFrames: 0 });
+    counts = { droppedVideoFrames: 11, totalVideoFrames: 560 };
+    expect(await engine.getQoeSample()).toMatchObject({ droppedFrames: 2, decodedFrames: 60 });
+  });
+
   it('has no buffer figure when the playhead is outside every range', async () => {
     const engine = engineWith({ currentTime: 99 });
     expect((await engine.getQoeSample())?.bufferAheadS).toBeNull();
