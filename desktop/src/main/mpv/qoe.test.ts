@@ -34,7 +34,7 @@ test('maps properties: summed drops, bits per second, hls bitrate over video-bit
     'video-bitrate': 5_000_000,
     'video-params/w': 3840,
   });
-  assert.equal(q?.droppedFrames, 0);
+  assert.equal(q?.droppedFrames, 5);
   assert.equal(q?.bandwidthBps, 1_000_000);
   assert.equal(q?.variantBitrate, 6_000_000);
   assert.equal(q?.hwDecoder, true);
@@ -70,12 +70,44 @@ test('decoded frames count decoding only: resume, forward seek and backward seek
 
 test('drop counters survive the resets mpv does on seek, and reset() starts over', async () => {
   const { read, reader } = harness();
-  await read({ 'frame-drop-count': 5, 'decoder-frame-drop-count': 1 });
-  assert.equal((await read({ 'frame-drop-count': 9, 'decoder-frame-drop-count': 1 }))?.droppedFrames, 4);
+  // mpv zeroes both counters per file: the first reading is all drops since the load
+  assert.equal((await read({ 'frame-drop-count': 5, 'decoder-frame-drop-count': 1 }))?.droppedFrames, 6);
+  assert.equal((await read({ 'frame-drop-count': 9, 'decoder-frame-drop-count': 1 }))?.droppedFrames, 10);
   // seek: vo counter back to 0, then 2 new drops
-  assert.equal((await read({ 'frame-drop-count': 2, 'decoder-frame-drop-count': 3 }))?.droppedFrames, 8);
+  assert.equal((await read({ 'frame-drop-count': 2, 'decoder-frame-drop-count': 3 }))?.droppedFrames, 14);
   reader.reset();
-  assert.equal((await read({ 'frame-drop-count': 7, 'decoder-frame-drop-count': 3 }))?.droppedFrames, 0);
+  assert.equal((await read({ 'frame-drop-count': 7, 'decoder-frame-drop-count': 3 }))?.droppedFrames, 10);
+});
+
+test('reads the per-load properties once the video is configured, and again after reset()', async () => {
+  const reads: string[] = [];
+  const reader = new QoeReader(() => 0);
+  const props = { 'video-params/w': 1920, 'video-params/h': 1080, 'hwdec-current': 'vaapi', 'frame-drop-count': 0 };
+  const get = (n: string) => {
+    reads.push(n);
+    if (n in props) return props[n as keyof typeof props];
+    throw new Error('property unavailable');
+  };
+  const count = (n: string) => reads.filter((r) => r === n).length;
+  await reader.read(get);
+  await reader.read(get);
+  assert.equal(count('hwdec-current'), 1);
+  assert.equal(count('frame-drop-count'), 2);
+  reader.reset();
+  await reader.read(get);
+  assert.equal(count('hwdec-current'), 2);
+});
+
+test('keeps asking for the per-load properties until the video size is known', async () => {
+  const reads: string[] = [];
+  const reader = new QoeReader(() => 0);
+  const get = (n: string) => {
+    reads.push(n);
+    return n === 'hwdec-current' ? 'no' : null;
+  };
+  await reader.read(get);
+  await reader.read(get);
+  assert.equal(reads.filter((r) => r === 'hwdec-current').length, 2);
 });
 
 test('software decode names the codec; nothing readable gives null', async () => {

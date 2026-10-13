@@ -31,12 +31,16 @@ class Counter {
   }
 }
 
+const STATIC_PROPS = ['container-fps', 'hwdec-current', 'video-format', 'video-params/w', 'video-params/h'];
+
 /** Turns mpv's seek-sensitive properties into counters cumulative since the last reset(). */
 export class QoeReader {
-  private dropVo = new Counter();
-  private dropDec = new Counter();
+  private dropVo = new Counter(0);
+  private dropDec = new Counter(0);
   private decoded = new Counter(0);
   private lastAt: number;
+  /** Per-load properties, kept once the video is configured so each read skips five mpv calls. */
+  private statics: Raw[] | null = null;
 
   private readonly now: () => number;
 
@@ -46,9 +50,10 @@ export class QoeReader {
   }
 
   reset(): void {
-    this.dropVo = new Counter();
-    this.dropDec = new Counter();
+    this.dropVo = new Counter(0);
+    this.dropDec = new Counter(0);
     this.decoded = new Counter(0);
+    this.statics = null;
     this.lastAt = this.now();
   }
 
@@ -61,22 +66,20 @@ export class QoeReader {
         return null;
       }
     };
-    const [vo, dec, est, cfps, vfps, hwdec, fmt, speed, ahead, hls, bitrate, w, h] =
-      await Promise.all([
-        raw('frame-drop-count'),
-        raw('decoder-frame-drop-count'),
-        raw('estimated-frame-number'),
-        raw('container-fps'),
-        raw('estimated-vf-fps'),
-        raw('hwdec-current'),
-        raw('video-format'),
-        raw('cache-speed'),
-        raw('demuxer-cache-duration'),
-        raw('current-tracks/video/hls-bitrate'),
-        raw('video-bitrate'),
-        raw('video-params/w'),
-        raw('video-params/h'),
-      ]);
+    const loadStatics = (): Promise<Raw[]> => Promise.all(STATIC_PROPS.map(raw));
+    const known = this.statics;
+    const [vo, dec, est, vfps, speed, ahead, hls, bitrate, [cfps, hwdec, fmt, w, h]] = await Promise.all([
+      raw('frame-drop-count'),
+      raw('decoder-frame-drop-count'),
+      raw('estimated-frame-number'),
+      raw('estimated-vf-fps'),
+      raw('cache-speed'),
+      raw('demuxer-cache-duration'),
+      raw('current-tracks/video/hls-bitrate'),
+      raw('video-bitrate'),
+      known ?? loadStatics(),
+    ]);
+    if (!known && toNum(w) != null && toNum(h) != null) this.statics = [cfps, hwdec, fmt, w, h];
     const t = this.now();
     const elapsedS = (t - this.lastAt) / 1000;
     this.lastAt = t;
