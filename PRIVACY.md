@@ -54,11 +54,13 @@ control**:
 - Downloaded subtitles;
 - Playback quality reports: how each playback went (stalls, errors,
   throughput, buffer, dropped frames, decoder, and what the server did
-  to the stream), stored with the user, the media title, the device
-  name (the browser's user agent on the web and desktop apps) and the
-  app version. No IP address and no media content. They are deleted
-  after 30 days by default; an administrator can change that, or turn
-  the collection off;
+  to the stream), stored with the user, a random id drawn for each
+  viewing, the media title, the device (the user agent of the app or
+  browser that started the playback, which can name the device model,
+  and the system name) and the app version. No IP address and no media
+  content. They are deleted 30 days after the playback was last seen
+  by default; an administrator can change that, or turn the collection
+  off;
 - Application preferences.
 
 Playback quality reports are sent by the apps to your own Fliks server
