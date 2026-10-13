@@ -609,7 +609,7 @@ export class CastPlayerService {
    * audio/burn-in context wouldn't be picked up by an existing session
    * (transcoding.service only auto-replaces on quality change).
    */
-  async reloadCastStream(positionOverride?: number, autoplay = true) {
+  async reloadCastStream(positionOverride?: number, autoplay = true, snapQualityId?: string) {
     const mfId = this.mediaFileId();
     if (!mfId) return;
 
@@ -622,7 +622,14 @@ export class CastPlayerService {
     const audioIdx = this.activeAudioStreamIndex();
     // The cast dropdown only contains concrete transcode rungs, so the
     // active id is the rung name to send to the backend.
-    const transcodeQuality = this.activeQualityId();
+    let transcodeQuality = this.activeQualityId();
+    // First load of a cast started from the player: no ladder yet, built from this response.
+    if (snapQualityId) {
+      const cap = this.castSettings.get().maxQuality;
+      transcodeQuality = snapQualityId === 'auto' || snapQualityId === 'original'
+        ? (cap === 'original' ? '1080p' : cap)
+        : snapQualityId;
+    }
 
     // Parallel: playback-info (triggers backend prewarm) + cast token fetch.
     const [pi, castInfo] = await Promise.all([
@@ -632,6 +639,13 @@ export class CastPlayerService {
       ),
       this.authService.getCastInfo(),
     ]);
+
+    if (snapQualityId) {
+      const qualities = buildCastQualityOptions(pi.qualities, this.castSettings.get().maxQuality);
+      transcodeQuality = qualities.find(q => q.id === snapQualityId)?.id ?? qualities[0]?.id ?? '1080p';
+      this.availableQualities.set(qualities);
+      this.activeQualityId.set(transcodeQuality);
+    }
 
     await this.dispatchLoad(mfId, pi, currentPos, transcodeQuality, castInfo, autoplay);
   }

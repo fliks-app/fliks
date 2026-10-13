@@ -2932,34 +2932,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     position?: number,
     subtitleId: string | null = this.activeSubtitleId(),
   ) {
-    // Re-derive the quality ladder from a fresh playback-info call made
-    // with the Cast device profile, not the local player's pi. The
-    // local pi was computed with the browser profile that accepts HEVC,
-    // so its top rung is `'original'` (remux) at the source bitrate;
-    // Cast can't direct-play HEVC and the cast ladder is a pure H.264
-    // transcode set with the source-resolution rung at the profile
-    // bitrate (e.g. 8 Mbps for 1080p). Reusing the browser pi here
-    // makes `buildCastQualityOptions` drop the `'original'` entry and
-    // present the wrong bitrates in the cast dropdown.
     const localSid = this.playbackInfo?.sessionId;
-    const castProfile = this.castPlayerService.getCastDeviceProfile();
-    const castPi = await this.negotiatePlayback(this.reloadStartAt(position), {
-      profile: castProfile,
-      burnInId: castBurnInId(this.availableSubtitles(), subtitleId),
-      quality: undefined,
-    });
-    const castQualities = buildCastQualityOptions(
-      castPi.qualities,
-      this.castSettings.get().maxQuality,
-    );
-    // Snap the active pick onto the cast list when the local quality (e.g.
-    // 'auto', 'original', '2160p' on a 1080p-capped cast profile) doesn't
-    // exist there.
-    const localActive = this.activeQualityId();
-    const activeCastQualityId =
-      castQualities.find(q => q.id === localActive)?.id
-      ?? castQualities[0]?.id
-      ?? '1080p';
 
     this.castPlayerService.startCast({
       mediaFileId: this.mediaFileId,
@@ -2970,19 +2943,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       fanartUrl: this.fanartUrl(),
       playbackMode: this.playbackMode(),
       subtitles: this.availableSubtitles(),
-      qualities: castQualities,
+      qualities: [],
       audioTracks: this.castAudioOptions(),
-      activeQualityId: activeCastQualityId,
+      activeQualityId: this.activeQualityId(),
       activeSubtitleId: subtitleId,
       activeAudioStreamIndex: this.activeAudioStreamIndex,
       playbackId: this.qoe.playbackId,
     });
-    await this.castPlayerService.reloadCastStream(position);
-    // Stopped only now: the cast's own sid shares the negotiation's ffmpeg job and keeps it alive.
-    for (const sid of [castPi.sessionId, localSid]) {
-      if (sid && sid !== this.castPlayerService.liveSessionId()) {
-        void this.streamingApi.stopSession(sid).catch(() => {});
-      }
+    // The cast ladder comes from the cast profile's own playback-info, not the browser one (HEVC remux).
+    await this.castPlayerService.reloadCastStream(position, true, this.activeQualityId());
+    if (localSid && localSid !== this.castPlayerService.liveSessionId()) {
+      void this.streamingApi.stopSession(localSid).catch(() => {});
     }
   }
 
