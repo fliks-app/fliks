@@ -499,6 +499,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
       this.paused.set(state === 'paused');
       this.liveQoe.onState(state);
     });
+    engine.on('firstFrame', () => this.liveQoe.onFirstFrame());
     engine.on('volumechange', ({ volume, muted }) => {
       this.volume.set(volume);
       this.muted.set(muted);

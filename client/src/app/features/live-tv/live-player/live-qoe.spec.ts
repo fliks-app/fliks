@@ -19,7 +19,10 @@ const engineSample = {
 };
 
 function setup() {
-  const engine = { currentTime: 0, getQoeSample: vi.fn().mockResolvedValue(engineSample) };
+  const engine: { currentTime: number; positionUpdateMs?: number; getQoeSample: ReturnType<typeof vi.fn> } = {
+    currentTime: 0,
+    getQoeSample: vi.fn().mockResolvedValue(engineSample),
+  };
   const reporter = { record: vi.fn(), flush: vi.fn(), flushKeepalive: vi.fn() };
   const beat = vi.fn().mockResolvedValue(undefined);
   const live = new LiveQoe(reporter as unknown as QoeReporter, beat);
@@ -35,6 +38,7 @@ describe('LiveQoe', () => {
     const { live, beat, eng, engine } = setup();
     live.begin('s1', eng);
     live.onState('playing');
+    live.onFirstFrame();
     for (let i = 1; i <= 10; i++) {
       engine.currentTime = i;
       await vi.advanceTimersByTimeAsync(1_000);
@@ -48,6 +52,7 @@ describe('LiveQoe', () => {
 
     live.begin('s2', eng);
     live.onState('playing');
+    live.onFirstFrame();
     for (let i = 1; i <= 10; i++) {
       engine.currentTime = 100 + i;
       await vi.advanceTimersByTimeAsync(1_000);
@@ -60,6 +65,7 @@ describe('LiveQoe', () => {
     const { live, beat, eng, reporter } = setup();
     live.begin('s1', eng);
     live.onState('playing');
+    live.onFirstFrame();
     await vi.advanceTimersByTimeAsync(3_000);
     // The playhead never moved and the engine never said buffering.
     await vi.advanceTimersByTimeAsync(LIVE_HEARTBEAT_MS - 3_000);
@@ -77,6 +83,7 @@ describe('LiveQoe', () => {
     const { live, beat, eng } = setup();
     live.begin('s1', eng);
     live.onState('playing');
+    live.onFirstFrame();
     live.onState('paused');
     await vi.advanceTimersByTimeAsync(5_000);
     live.onState('playing');
@@ -117,6 +124,7 @@ describe('LiveQoe', () => {
     const { live, beat, eng, reporter } = setup();
     live.begin('s1', eng);
     live.onState('playing');
+    live.onFirstFrame();
     live.onError({ code: 3016, category: 'engine' });
     live.onState('error');
     await vi.advanceTimersByTimeAsync(60_000);
@@ -129,6 +137,7 @@ describe('LiveQoe', () => {
     const { live, beat, eng, engine } = setup();
     live.begin('s1', eng);
     live.onState('playing');
+    live.onFirstFrame();
     for (let i = 1; i <= 5; i++) {
       engine.currentTime = i;
       await vi.advanceTimersByTimeAsync(1_000);
@@ -146,8 +155,59 @@ describe('LiveQoe', () => {
     const { live, beat, eng } = setup();
     live.begin('s1', eng);
     live.onState('playing');
+    live.onFirstFrame();
     live.onState('paused');
     await vi.advanceTimersByTimeAsync(LIVE_HEARTBEAT_MS);
     expect(beat.mock.calls[0][2]).toBe('paused');
+  });
+
+  it('does not count the tune-in buffering before the first frame as a stall', async () => {
+    const { live, beat, eng, engine } = setup();
+    live.begin('s1', eng);
+    live.onState('buffering');
+    await vi.advanceTimersByTimeAsync(4_000);
+    live.onState('playing');
+    live.onFirstFrame();
+    for (let i = 1; i <= 6; i++) {
+      engine.currentTime = i;
+      await vi.advanceTimersByTimeAsync(1_000);
+    }
+    await vi.advanceTimersByTimeAsync(LIVE_HEARTBEAT_MS - 6_000);
+    expect(beat.mock.calls[0][1].stallCount).toBe(0);
+  });
+
+  it('starts counting once the playhead advances even without a firstFrame event', async () => {
+    const { live, beat, eng, engine } = setup();
+    live.begin('s1', eng);
+    live.onState('playing');
+    await vi.advanceTimersByTimeAsync(1_000);
+    engine.currentTime = 1;
+    await vi.advanceTimersByTimeAsync(1_000);
+    // Frozen from here on.
+    await vi.advanceTimersByTimeAsync(LIVE_HEARTBEAT_MS - 2_000);
+    expect(beat.mock.calls[0][1].stallCount).toBe(1);
+  });
+
+  it('does not take a 1 s position cadence for a freeze on a native engine', async () => {
+    const { live, beat, eng, engine } = setup();
+    engine.positionUpdateMs = 1_000;
+    live.begin('s1', eng);
+    live.onState('playing');
+    live.onFirstFrame();
+    [900, 2_900, 3_900, 5_700, 7_000, 8_900].forEach((at, i) => setTimeout(() => (engine.currentTime = i + 1), at));
+    await vi.advanceTimersByTimeAsync(LIVE_HEARTBEAT_MS);
+    expect(beat.mock.calls[0][1].stallCount).toBe(0);
+  });
+
+  it('ignores state changes after a fatal error', async () => {
+    const { live, eng, reporter } = setup();
+    live.begin('s1', eng);
+    live.onState('playing');
+    live.onFirstFrame();
+    live.onError({ code: 3016, category: 'engine' });
+    live.onState('buffering');
+    await vi.advanceTimersByTimeAsync(3_000);
+    live.end();
+    expect(reporter.record).toHaveBeenCalledTimes(1);
   });
 });
