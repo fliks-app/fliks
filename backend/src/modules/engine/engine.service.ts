@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { createEngineClient, type EngineClient } from './engine-client';
 import type { components } from './schema';
 import type { StreamingSettings } from '../streaming/streaming-settings-cache.service';
@@ -13,6 +18,7 @@ export const REQUIRED_FEATURES = ['probe', 'capabilities'];
 
 const HELLO_ATTEMPTS = 20;
 const HELLO_RETRY_MS = 500;
+const POLL_MS = 10_000;
 /** Detection runs every probe once; a cold GPU host takes minutes. */
 const CAPABILITIES_TIMEOUT_MS = 5 * 60_000;
 const DEFAULT_RENDER_NODE = '/dev/dri/renderD128';
@@ -38,10 +44,15 @@ export function toEngineStreaming(
 }
 
 @Injectable()
-export class EngineService implements OnModuleInit {
+export class EngineService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger(EngineService.name);
   private client: EngineClient | null = null;
   private ready: Promise<void> | null = null;
+  private candidate: EngineClient | null = null;
+  private instanceId = '';
+  private delay = HELLO_RETRY_MS;
+  private timer?: NodeJS.Timeout;
+  private listeners: (() => void)[] = [];
   private revision = 0;
   private lastPushed = '';
   protected sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -73,41 +84,99 @@ export class EngineService implements OnModuleInit {
     await this.connect(createEngineClient(url, token));
   }
 
-  /** Handshake: retries while the engine starts, refuses an incompatible one. */
+  /** Handshake: retries while the engine starts, then keeps going in the background (TS fallback meanwhile). */
   async connect(client: EngineClient): Promise<void> {
+    this.candidate = client;
     for (let attempt = 1; attempt <= HELLO_ATTEMPTS; attempt++) {
-      try {
-        const { data } = await client.GET('/v1/hello');
-        if (data) {
-          if (data.protocolVersion < MIN_ENGINE_PROTOCOL) {
-            this.log.error(
-              `engine protocol ${data.protocolVersion} < ${MIN_ENGINE_PROTOCOL} (engine ${data.engineVersion}): engine disabled`,
-            );
-            return;
-          }
-          const missing = REQUIRED_FEATURES.filter(
-            (f) => !data.features.includes(f),
-          );
-          if (missing.length) {
-            this.log.error(
-              `engine lacks features ${missing.join(', ')}: engine disabled`,
-            );
-            return;
-          }
-          const { data: cfg } = await client.GET('/v1/config');
-          this.revision = cfg?.revision ?? 0;
-          this.client = client;
-          this.log.log(
-            `engine ${data.engineVersion} hello OK (protocol ${data.protocolVersion}, features ${data.features.join(',')})`,
-          );
-          return;
-        }
-      } catch {
-        /* engine not listening yet */
+      const data = await this.hello();
+      if (data) {
+        if (await this.adopt(data, false)) this.schedule(POLL_MS);
+        return;
       }
       await this.sleep(HELLO_RETRY_MS);
     }
-    this.log.error('engine did not answer /v1/hello: engine disabled');
+    this.log.error(
+      'engine did not answer /v1/hello: TS paths until it does, retrying in the background',
+    );
+    this.schedule(this.backoff());
+  }
+
+  onModuleDestroy(): void {
+    clearTimeout(this.timer);
+  }
+
+  /** Called when the engine (re)appears after boot, so the config and capabilities get loaded again. */
+  onConnect(listener: () => void): void {
+    this.listeners.push(listener);
+  }
+
+  private async hello() {
+    try {
+      const { data } = await this.candidate!.GET('/v1/hello');
+      return data;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** Validates the engine and takes it as the current instance; false when it is refused. */
+  private async adopt(
+    data: NonNullable<Awaited<ReturnType<EngineService['hello']>>>,
+    notify: boolean,
+  ): Promise<boolean> {
+    const client = this.candidate!;
+    const missing = REQUIRED_FEATURES.filter((f) => !data.features.includes(f));
+    const refusal =
+      data.protocolVersion < MIN_ENGINE_PROTOCOL
+        ? `engine protocol ${data.protocolVersion} < ${MIN_ENGINE_PROTOCOL} (engine ${data.engineVersion})`
+        : missing.length && `engine lacks features ${missing.join(', ')}`;
+    if (refusal) {
+      this.log.error(`${refusal}: engine disabled`);
+      this.client = null;
+      return false;
+    }
+    const { data: cfg } = await client.GET('/v1/config');
+    this.revision = cfg?.revision ?? 0;
+    this.lastPushed = '';
+    this.instanceId = data.instanceId;
+    this.client = client;
+    this.delay = HELLO_RETRY_MS;
+    this.log.log(
+      `engine ${data.engineVersion} hello OK (protocol ${data.protocolVersion}, features ${data.features.join(',')})`,
+    );
+    if (notify) this.listeners.forEach((l) => l());
+    return true;
+  }
+
+  private backoff(): number {
+    this.delay = Math.min(this.delay * 2, POLL_MS);
+    return this.delay;
+  }
+
+  private schedule(ms: number): void {
+    this.timer = setTimeout(() => void this.tick(), ms);
+    this.timer.unref();
+  }
+
+  /** Background step: reconnect while down, otherwise detect an engine restart by its instanceId. */
+  private async tick(): Promise<void> {
+    const data = await this.hello();
+    const connected = this.client !== null;
+    if (!data) {
+      this.schedule(connected ? POLL_MS : this.backoff());
+      return;
+    }
+    if (connected && data.instanceId === this.instanceId) {
+      this.schedule(POLL_MS);
+      return;
+    }
+    if (connected)
+      this.log.log('engine restarted: reloading config and capabilities');
+    try {
+      if (await this.adopt(data, true)) this.schedule(POLL_MS);
+    } catch {
+      this.schedule(POLL_MS);
+    }
   }
 
   /** PUT /v1/config with the next revision; a no-op when nothing changed since the last push. */

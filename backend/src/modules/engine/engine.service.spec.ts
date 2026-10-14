@@ -113,6 +113,67 @@ describe('EngineService hello gating', () => {
   });
 });
 
+describe('EngineService background connection', () => {
+  const tick = (s: EngineService) => (s as any).tick();
+  afterEach(() => jest.clearAllTimers());
+
+  it('keeps retrying after the boot window and notifies once the engine answers', async () => {
+    const s = svc();
+    const get = jest
+      .fn()
+      .mockRejectedValue(new Error('down'))
+      .mockImplementation(async (u: string) =>
+        u === '/v1/hello'
+          ? Promise.reject(new Error('down'))
+          : { data: { revision: 4 } },
+      );
+    const c = mockClient({ GET: get });
+    const onConnect = jest.fn();
+    s.onConnect(onConnect);
+    await s.connect(c);
+    expect(s.enabled).toBe(false);
+
+    await tick(s);
+    expect(s.enabled).toBe(false);
+    expect(onConnect).not.toHaveBeenCalled();
+
+    get.mockImplementation(async (u: string) =>
+      u === '/v1/hello' ? { data: HELLO } : { data: { revision: 4 } },
+    );
+    await tick(s);
+    expect(s.enabled).toBe(true);
+    expect(onConnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('reloads on an instanceId change and keeps its state while hello fails', async () => {
+    const s = svc();
+    const c = mockClient();
+    const onConnect = jest.fn();
+    s.onConnect(onConnect);
+    await s.connect(c);
+    await s.pushStreaming(toEngineStreaming(settings));
+
+    await tick(s);
+    expect(onConnect).not.toHaveBeenCalled();
+
+    c.GET.mockRejectedValue(new Error('down'));
+    await tick(s);
+    expect(s.enabled).toBe(true);
+    expect(onConnect).not.toHaveBeenCalled();
+
+    c.GET.mockImplementation(async (u: string) =>
+      u === '/v1/hello'
+        ? { data: { ...HELLO, instanceId: 'y' }, response: { status: 200 } }
+        : { data: { revision: 0 }, response: { status: 200 } },
+    );
+    await tick(s);
+    expect(onConnect).toHaveBeenCalledTimes(1);
+    await s.pushStreaming(toEngineStreaming(settings));
+    expect(c.PUT).toHaveBeenCalledTimes(2);
+    expect((c.PUT.mock.calls[1] as any)[1].body.revision).toBe(1);
+  });
+});
+
 describe('EngineService config push', () => {
   it('maps the streaming settings onto EngineConfig.streaming', () => {
     expect(toEngineStreaming(settings)).toEqual(settings);

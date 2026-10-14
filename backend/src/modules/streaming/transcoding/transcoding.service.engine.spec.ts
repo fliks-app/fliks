@@ -70,6 +70,7 @@ describe('TranscodingService boot with the engine', () => {
   it('loads the engine detection and runs no local probe', async () => {
     const engine = {
       whenReady: jest.fn(async () => undefined),
+      onConnect: jest.fn(),
       enabled: true,
       pushStreaming: jest.fn(async () => undefined),
       capabilitiesFor: jest.fn(async () => qsv.capabilities),
@@ -109,6 +110,7 @@ describe('TranscodingService boot with the engine', () => {
     (detectHwAccel as jest.Mock).mockResolvedValue('none');
     const svc = make({
       whenReady: jest.fn(async () => undefined),
+      onConnect: jest.fn(),
       enabled: false,
     });
     await svc.onModuleInit();
@@ -121,6 +123,7 @@ describe('TranscodingService boot with the engine', () => {
   it('re-pinning pushes the config then reloads the capabilities', async () => {
     const engine = {
       whenReady: jest.fn(async () => undefined),
+      onConnect: jest.fn(),
       enabled: true,
       pushStreaming: jest.fn(async () => undefined),
       capabilitiesFor: jest.fn(async (node: string) =>

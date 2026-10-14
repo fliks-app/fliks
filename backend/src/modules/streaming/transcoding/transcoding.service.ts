@@ -144,6 +144,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         ),
     );
 
+    this.engine?.onConnect(() => void this.loadEngineHost());
     await this.engine?.whenReady();
     if (this.engine?.enabled) await this.loadEngineHost();
     else await this.detectHostLocally();
