@@ -30,8 +30,8 @@ on:
         description: 'Custom tag to publish (e.g. "test", "preview-foo"). Builds from the branch you trigger the workflow on.'
         required: false
         default: 'test'
-      engine_ref:
-        description: 'fliks-engine git ref to build into the image (e.g. "main"). Empty = the engine.lock release.'
+      engine_image:
+        description: 'Engine image to build on (e.g. "ghcr.io/fliks-app/engine:sha-abc1234"). Empty = the Dockerfile default.'
         required: false
         default: ''
 
@@ -99,7 +99,7 @@ jobs:
           build-args: |
             TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}
             TVDB_API_KEY=${{ secrets.TVDB_API_KEY }}
-            ENGINE_REF=${{ github.event.inputs.engine_ref }}
+            ${{ github.event.inputs.engine_image && format('ENGINE_IMAGE={0}', github.event.inputs.engine_image) || '' }}
           # Per-platform cache scope: amd64 and arm64 caches never share
           # layers (different base manifest + apt arch), so a single
           # `gha` scope just causes cross-eviction.

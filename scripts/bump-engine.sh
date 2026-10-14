@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: scripts/bump-engine.sh <version>          rewrite engine.lock and the generated schema (e.g. 0.1.1)
+# Usage: scripts/bump-engine.sh <version>          rewrite engine.lock, the Dockerfile engine image and the generated schema (e.g. 0.1.1)
 #        scripts/bump-engine.sh --schema <version> regenerate the schema only, from that release (CI)
 #        scripts/bump-engine.sh --local <checkout> regenerate the schema from <checkout>/openapi.json
 set -euo pipefail
@@ -42,5 +42,6 @@ gh release download "v$v" -R fliks-app/engine -p 'fliks-engine-*.sha256' -D "$tm
     done
 } > engine.lock.new
 mv engine.lock.new engine.lock
+sed -i "s|^ARG ENGINE_IMAGE=.*|ARG ENGINE_IMAGE=ghcr.io/fliks-app/engine:$v|" Dockerfile
 cat engine.lock
 release_schema "$v"

@@ -1,4 +1,4 @@
-# fliks-app/engine release consumed by the image and the desktop bundles. Bump: scripts/bump-engine.sh
+# fliks-app/engine release consumed by the desktop bundles (the image tag is ENGINE_IMAGE in the Dockerfile). Bump: scripts/bump-engine.sh
 version=0.1.0
 sha256_linux_x64=745e610d4ee9c00bf2b2919f0f97e2ceb0e0e6934ce993a1d577ce10aa862272
 sha256_linux_arm64=3d181f3088eccb3f04ca20a904a27aace245d2ab9a4e06248c7c2e56fed65f5b

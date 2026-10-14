@@ -2,7 +2,8 @@
 # Fliks — production image (backend + client)
 # ============================================================
 
-ARG ENGINE_REF=
+# Engine image (ffmpeg, mkvmerge, fpcalc, OpenCL, the fliks-engine binary): bump with scripts/bump-engine.sh.
+ARG ENGINE_IMAGE=ghcr.io/fliks-app/engine:main
 
 # --- Stage 1: Build client ---
 FROM node:24-alpine AS client-build
@@ -35,42 +36,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && cargo install subtile-ocr --version 0.2.6 --root /opt/subtile-ocr \
   && rm -rf /var/lib/apt/lists/* "$HOME/.cargo/registry" "$HOME/.rustup"
 
-# --- Stage 2c: Fetch fliks-engine (pinned in engine.lock) ---
-FROM alpine:3.22 AS engine
-ARG TARGETARCH
-RUN apk add --no-cache curl
-COPY engine.lock /engine.lock
-RUN set -eu; \
-  case "$TARGETARCH" in amd64) p=linux-x64 ;; arm64) p=linux-arm64 ;; *) echo "unsupported arch $TARGETARCH" >&2; exit 1 ;; esac; \
-  v=$(sed -n 's/^version=//p' /engine.lock); \
-  sum=$(sed -n "s/^sha256_$(echo "$p" | tr - _)=//p" /engine.lock); \
-  [ -n "$sum" ] || { echo "engine.lock has no sha256 for $p" >&2; exit 1; }; \
-  curl -fsSL -o /fliks-engine "https://github.com/fliks-app/engine/releases/download/v$v/fliks-engine-$p"; \
-  echo "$sum  /fliks-engine" | sha256sum -c -; \
-  chmod +x /fliks-engine
-
-# ENGINE_REF (an engine git branch/tag/sha) builds the engine from source instead of engine.lock,
-# for test images ahead of an engine release.
-FROM rust:1-alpine AS engine-git
-ARG ENGINE_REF
-RUN apk add --no-cache musl-dev
-ADD https://github.com/fliks-app/engine.git#${ENGINE_REF} /src
-WORKDIR /src
-RUN cargo build --release --locked -p fliks-engine --bin fliks-engine && cp target/release/fliks-engine /fliks-engine
-
-FROM engine${ENGINE_REF:+-git} AS engine-selected
-
 # --- Stage 3: Production runtime ---
-# Runtime toolchain (node + jellyfin-ffmpeg + subtitle/OCR tools). Split out so
-# the dev compose can build it as-is with `target: runtime-base`.
-FROM ubuntu:24.04 AS runtime-base
+# Runtime toolchain: the engine image plus node and the subtitle/OCR/backup tools node still runs.
+# Split out so the dev compose can build it as-is with `target: runtime-base`.
+FROM ${ENGINE_IMAGE} AS runtime-base
+ENTRYPOINT []
 
 # Populated by Docker buildx with the target platform's arch (amd64,
 # arm64, ...). Used below to skip x86-only packages on arm64 builds.
 ARG TARGETARCH
-
-# jellyfin-ffmpeg release to bundle. Same build as the Windows server (unified).
-ARG JELLYFIN_FFMPEG_VERSION=8.1.2-1
 
 # Install Node.js 24
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
@@ -79,18 +53,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
   && apt-get purge -y curl gnupg \
   && rm -rf /var/lib/apt/lists/*
 
-# Install runtime dependencies + FFmpeg (jellyfin-ffmpeg — self-contained
-# VAAPI/QSV stack). jellyfin-ffmpeg bundles libva, iHD and oneVPL/libmfx, so the
-# apt ffmpeg and Intel VA drivers are gone. It does NOT bundle intel-opencl-icd
-# (needed for tonemap_opencl, which also carries the Dolby Vision `apply_dovi`
-# RPU tone-map) — that stays, amd64-only. The jellyfin-ffmpeg deb is per-arch;
-# on arm64 there's no Intel HW so the image is CPU-only (libx264) + ffsubsync.
+# Host-only tools (ffmpeg, mkvmerge, fpcalc and OpenCL come from the engine image).
 RUN apt-get update && apt-get install -y --no-install-recommends \
   procps \
   python3 \
   python3-pip \
-  libchromaprint-tools \
-  mkvtoolnix \
   tesseract-ocr \
   tesseract-ocr-all \
   wget \
@@ -104,15 +71,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && echo "deb [signed-by=/usr/share/keyrings/pgdg.asc] http://apt.postgresql.org/pub/repos/apt noble-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
   && apt-get update \
   && apt-get install -y --no-install-recommends postgresql-client \
-  && if [ "$TARGETARCH" = "amd64" ]; then \
-       apt-get install -y --no-install-recommends \
-         intel-opencl-icd; \
-     fi \
-  && wget -q -O /tmp/jellyfin-ffmpeg.deb "https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v${JELLYFIN_FFMPEG_VERSION}/jellyfin-ffmpeg8_${JELLYFIN_FFMPEG_VERSION}-noble_${TARGETARCH}.deb" \
-  && apt-get install -y --no-install-recommends /tmp/jellyfin-ffmpeg.deb \
-  && ln -sf /usr/lib/jellyfin-ffmpeg/ffmpeg /usr/local/bin/ffmpeg \
-  && ln -sf /usr/lib/jellyfin-ffmpeg/ffprobe /usr/local/bin/ffprobe \
-  && rm -f /tmp/jellyfin-ffmpeg.deb \
   && python3 -m pip install --no-cache-dir --break-system-packages ffsubsync pgsrip \
   # pgsrip pulls opencv-python (GUI build, needs libGL.so.1, missing here) —
   # remove it first so its files don't collide with the headless build below.
@@ -129,17 +87,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # VobSub OCR binary (links against the tesseract/leptonica installed above).
 COPY --from=vobsub-ocr-build /opt/subtile-ocr/bin/subtile-ocr /usr/local/bin/subtile-ocr
 
-# Register the NVIDIA OpenCL ICD so tonemap_opencl can run HDR→SDR on the GPU
-# on NVENC hosts. The container toolkit mounts libnvidia-opencl.so with the
-# `compute` capability (same path as CUDA/NVENC, no Vulkan/GLX needed) but
-# doesn't create the ICD entry — without it the OpenCL loader reports no
-# NVIDIA platform. Arch-agnostic: the entry is just the soname, resolved
-# per-arch by the loader, and harmless on non-NVIDIA hosts (the loader skips
-# an ICD whose library is absent), so it runs for amd64 and arm64 alike (the
-# latter covers NVIDIA-on-ARM hosts like Jetson / Grace).
-RUN mkdir -p /etc/OpenCL/vendors \
-  && echo 'libnvidia-opencl.so.1' > /etc/OpenCL/vendors/nvidia.icd
-
 # Dev stage for docker-compose: deps in the image at /src, sources bind-mounted
 # at /src/backend. Rebuild the image when package.json changes.
 FROM runtime-base AS dev
@@ -148,9 +95,10 @@ COPY backend/package.json backend/package-lock.json ./
 RUN npm ci
 WORKDIR /src/backend
 
-# Dev stage for the engine compose service: runtime-base + a Rust toolchain, the
+# Dev stage for the engine compose service: the engine image + a Rust toolchain, the
 # engine checkout is bind-mounted and rebuilt by cargo-watch.
-FROM runtime-base AS engine-dev
+FROM ${ENGINE_IMAGE} AS engine-dev
+ENTRYPOINT []
 ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo PATH=/usr/local/cargo/bin:$PATH
 RUN apt-get update && apt-get install -y --no-install-recommends curl gcc libc6-dev \
   && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal \
@@ -160,9 +108,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl gcc libc6-
 FROM runtime-base AS runtime
 
 WORKDIR /app
-
-# PID 1: supervises node, forwards signals, reaps zombies.
-COPY --from=engine-selected /fliks-engine /usr/local/bin/fliks-engine
 
 # Copy backend production dependencies
 COPY backend/package.json backend/package-lock.json ./
@@ -176,6 +121,7 @@ COPY --from=client-build /app/dist/client/browser ./client
 
 ENV NODE_ENV=production
 ENV SERVE_STATIC_PATH=/app/client
+ENV FLIKS_TRANSCODE_DIR=/app/transcode
 
 # Provider API keys baked at build time from CI secrets. Empty in local
 # builds unless `--build-arg TMDB_API_KEY=… --build-arg TVDB_API_KEY=…`
