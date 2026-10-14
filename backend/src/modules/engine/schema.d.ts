@@ -259,25 +259,25 @@ export interface components {
              * @description Position in `info.audio`, not a stream index.
              * @default null
              */
-            audioStreamIndex: number | null;
+            audioStreamIndex?: number | null;
             /**
              * @description Text (not image) burn-in: only libass forces the pipeline off HW.
              * @default null
              */
-            burnInIsText: boolean | null;
+            burnInIsText?: boolean | null;
             /**
              * Format: int32
              * @description Only tested for truthiness: id 0 means no burn-in.
              * @default null
              */
-            burnInSubtitleId: number | null;
+            burnInSubtitleId?: number | null;
             /** @default null */
-            requestedQuality: string | null;
+            requestedQuality?: string | null;
             /**
              * @description Host URL suffix (`?token=...`), copied verbatim into `playUrl`.
              * @default null
              */
-            tokenParam: string | null;
+            tokenParam?: string | null;
         };
         Decision: {
             /** @description Per-rendition audio output, in `info.audio` order. */
@@ -332,12 +332,12 @@ export interface components {
         };
         EngineConfig: {
             /** @default null */
-            hostToken: string | null;
+            hostToken?: string | null;
             /**
              * @description Resolver callback base URL of the host.
              * @default null
              */
-            hostUrl: string | null;
+            hostUrl?: string | null;
             /**
              * @default {
              *       "cacheGcIntervalMs": 300000,
@@ -350,12 +350,12 @@ export interface components {
              *       "sessionReviveTtlMs": 900000
              *     }
              */
-            lifetime: components["schemas"]["LifetimeConfig"];
+            lifetime?: components["schemas"]["LifetimeConfig"];
             /**
              * Format: int32
              * @default 0
              */
-            revision: number;
+            revision?: number;
             /**
              * @default {
              *       "autoCropEnabled": true,
@@ -370,7 +370,7 @@ export interface components {
              *       "tonemapCurve": "mobius"
              *     }
              */
-            streaming: components["schemas"]["StreamingConfig"];
+            streaming?: components["schemas"]["StreamingConfig"];
         };
         /** @description Body of `POST /v1/estimate-sizes`. `fileSize` is the source size in bytes, 0 when unknown. */
         EstimateSizesRequest: {
@@ -404,30 +404,30 @@ export interface components {
              * @description Decoder descriptor ids the boot probe blacklisted (`hevc_qsv_decode`, ...).
              * @default []
              */
-            disabledDecoders: string[];
+            disabledDecoders?: string[];
             /**
              * @description Encoder descriptor ids the boot probe blacklisted (`hevc_qsv_main10`, `libx265`, ...).
              * @default []
              */
-            disabledEncoders: string[];
+            disabledEncoders?: string[];
             /** @default none */
-            hwAccel: components["schemas"]["HwAccel"];
+            hwAccel?: components["schemas"]["HwAccel"];
             /**
              * @description Not read by `decide` (it picks the AAC encoder binary in the argv builder).
              * @default false
              */
-            libfdkAac: boolean;
+            libfdkAac?: boolean;
             /** @default linux */
-            platform: components["schemas"]["Platform"];
+            platform?: components["schemas"]["Platform"];
             /**
              * @description Names of the probes that passed; unlisted ones read false. Known names: `tonemapOpencl`,
              *     `tonemapOpenclCrop`, `tonemapOpenclHdr10`, `qsvOpencl`, `qsvOpenclHdr10`, `vppQsv`,
              *     `vulkan`, `cuda`, `cudaHdr10`, `opencl`, `openclHdr10`, `amfOpencl`.
              * @default []
              */
-            probes: string[];
+            probes?: string[];
             /** @default false */
-            vaapiWritesHdrMetadata: boolean;
+            vaapiWritesHdrMetadata?: boolean;
         };
         /** @enum {string} */
         HwAccel: "vaapi" | "nvenc" | "qsv" | "amf" | "videotoolbox" | "none";
@@ -446,48 +446,48 @@ export interface components {
              * Format: int32
              * @default 300000
              */
-            cacheGcIntervalMs: number;
+            cacheGcIntervalMs?: number;
             /**
              * Format: int32
              * @description Idle window of a job that never had a viewer.
              * @default 1800000
              */
-            jobFallbackTimeoutMs: number;
+            jobFallbackTimeoutMs?: number;
             /**
              * Format: int32
              * @description Delay between the last viewer leaving and the ffmpeg job being killed.
              * @default 60000
              */
-            jobGraceMs: number;
+            jobGraceMs?: number;
             /**
              * Format: int32
              * @default 5000
              */
-            liveSessionGcIntervalMs: number;
+            liveSessionGcIntervalMs?: number;
             /**
              * Format: int32
              * @description A session without a heartbeat for this long is dropped (kept revivable).
              * @default 30000
              */
-            liveSessionTtlMs: number;
+            liveSessionTtlMs?: number;
             /**
              * Format: int32
              * @description Beyond it the owner's oldest session is evicted, never the new one.
              * @default 10
              */
-            maxSessionsPerOwner: number;
+            maxSessionsPerOwner?: number;
             /**
              * Format: int32
              * @description Heartbeat TTL of pinned (download, offline) sessions.
              * @default 3600000
              */
-            pinnedSessionTtlMs: number;
+            pinnedSessionTtlMs?: number;
             /**
              * Format: int32
              * @description How long a dropped session's id can still revive.
              * @default 900000
              */
-            sessionReviveTtlMs: number;
+            sessionReviveTtlMs?: number;
         };
         MediaInfo: {
             audio: components["schemas"]["AudioStreamInfo"][];
@@ -664,52 +664,52 @@ export interface components {
         /** @description The `streaming_*` settings, already resolved by the host. Defaults match the host's. */
         StreamingConfig: {
             /** @default true */
-            autoCropEnabled: boolean;
+            autoCropEnabled?: boolean;
             /** @default directplay */
-            autoQualityMode: components["schemas"]["AutoQualityMode"];
+            autoQualityMode?: components["schemas"]["AutoQualityMode"];
             /**
              * Format: double
              * @description Absent: the engine default.
              * @default null
              */
-            cacheMaxBytes: number | null;
+            cacheMaxBytes?: number | null;
             /**
              * Format: double
              * @description Absent: the engine default.
              * @default null
              */
-            cacheTtlMs: number | null;
+            cacheTtlMs?: number | null;
             /**
              * Format: int32
              * @description Absent: derived from cgroup/CPU budget.
              * @default null
              */
-            ffmpegSlots: number | null;
+            ffmpegSlots?: number | null;
             /**
              * @description `auto` or a `/dev/dri/renderD*` path.
              * @default auto
              */
-            gpuRenderNode: string;
+            gpuRenderNode?: string;
             /** @default faster */
-            qsvPreset: components["schemas"]["QsvPreset"];
+            qsvPreset?: components["schemas"]["QsvPreset"];
             /**
              * Format: double
              * @default 3
              */
-            segmentDuration: number;
+            segmentDuration?: number;
             /** @default playback */
-            subtitlePrewarm: components["schemas"]["SubtitlePrewarm"];
+            subtitlePrewarm?: components["schemas"]["SubtitlePrewarm"];
             /** @default true */
-            throttleEnabled: boolean;
+            throttleEnabled?: boolean;
             /**
              * Format: double
              * @default 90
              */
-            throttleThresholdSeconds: number;
+            throttleThresholdSeconds?: number;
             /** @default auto */
-            tonemapAlgo: components["schemas"]["TonemapAlgo"];
+            tonemapAlgo?: components["schemas"]["TonemapAlgo"];
             /** @default mobius */
-            tonemapCurve: components["schemas"]["TonemapCurve"];
+            tonemapCurve?: components["schemas"]["TonemapCurve"];
         };
         /** @enum {string} */
         SubtitlePrewarm: "off" | "playback" | "import";

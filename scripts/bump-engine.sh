@@ -10,7 +10,7 @@ schema=backend/src/modules/engine/schema.d.ts
 
 # gen_schema <openapi.json> <label>: the label is the engine version, or `local`.
 gen_schema() {
-    (cd backend && npx --no-install openapi-typescript "$1" -o "$tmp/schema.d.ts" >/dev/null)
+    (cd backend && npx --no-install openapi-typescript "$1" --default-non-nullable=false -o "$tmp/schema.d.ts" >/dev/null)
     { echo "// Generated from fliks-engine openapi.json ($2). Do not edit: run scripts/bump-engine.sh."; cat "$tmp/schema.d.ts"; } > "$schema"
 }
 

@@ -49,18 +49,18 @@ describe('applyEngineCapabilities', () => {
     ({ capabilities: caps }) => {
       const { hwAccel, gpus } = applyEngineCapabilities(caps);
       const host = caps.hostCaps;
-      const on = (n: string) => host.probes.includes(n);
+      const on = (n: string) => (host.probes ?? []).includes(n);
 
       expect(hwAccel).toBe(host.hwAccel);
       expect(getPauseCapability()).toBe(caps.pauseCapability);
       for (const d of ALL_DESCRIPTORS) {
         expect(isEncoderEnabled(d.id)).toBe(
-          !host.disabledEncoders.includes(d.id),
+          !(host.disabledEncoders ?? []).includes(d.id),
         );
       }
       for (const d of ALL_DECODERS) {
         expect(isDecoderEnabled(d.id)).toBe(
-          !host.disabledDecoders.includes(d.id),
+          !(host.disabledDecoders ?? []).includes(d.id),
         );
       }
       expect({

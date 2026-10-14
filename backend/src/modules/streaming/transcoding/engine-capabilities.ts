@@ -40,7 +40,7 @@ export function applyEngineCapabilities(caps: Capabilities): {
     ALL_DECODERS.map((d) => d.id),
     new Set(caps.decoders),
   );
-  const on = (name: string) => caps.hostCaps.probes.includes(name);
+  const on = (name: string) => (caps.hostCaps.probes ?? []).includes(name);
   setTonemapOpenclEnabled({
     basic: on('tonemapOpencl'),
     crop: on('tonemapOpenclCrop'),
@@ -55,8 +55,8 @@ export function applyEngineCapabilities(caps: Capabilities): {
   setCudaTonemapHdr10Enabled(on('cudaHdr10'));
   setVulkanTonemapEnabled(on('vulkan'));
   setAmfOpenclEnabled(on('amfOpencl'));
-  setLibfdkAacEnabled(caps.hostCaps.libfdkAac);
-  setVaapiWritesHdrMetadata(caps.hostCaps.vaapiWritesHdrMetadata);
+  setLibfdkAacEnabled(caps.hostCaps.libfdkAac ?? false);
+  setVaapiWritesHdrMetadata(caps.hostCaps.vaapiWritesHdrMetadata ?? false);
   setPauseCapability(caps.pauseCapability as PauseCapability);
   return {
     hwAccel: caps.hwAccel as HwAccelType,
