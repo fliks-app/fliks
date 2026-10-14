@@ -28,6 +28,10 @@ export type JobRequest = components['schemas']['JobRequest'];
 export type JobResult = components['schemas']['JobResult'];
 export type JobSnapshot = components['schemas']['JobSnapshot'];
 export type JobPriority = components['schemas']['JobPriority'];
+export type OpenLiveRequest = components['schemas']['OpenLiveRequest'];
+export type OpenLiveResponse = components['schemas']['OpenLiveResponse'];
+export type LiveSnapshot = components['schemas']['LiveSnapshot'];
+export type LiveTvConfig = components['schemas']['LiveTvConfig'];
 export type SourceScan = components['schemas']['SourceScan'];
 export type SpriteMeta = components['schemas']['SpriteMeta'];
 export type Fingerprint = components['schemas']['Fingerprint'];
@@ -49,6 +53,8 @@ export class EngineError extends Error {
   constructor(
     readonly status: number,
     what: string,
+    /** The `code` of the engine's error body, when it sent one. */
+    readonly code?: string,
   ) {
     super(`${what} -> ${status}`);
   }
@@ -121,6 +127,9 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
   private readonly jobWaiters = new Map<string, JobWaiter[]>();
   private revision = 0;
   private lastPushed = '';
+  private streaming?: EngineStreamingConfig;
+  private livetv?: LiveTvConfig;
+  private pushing: Promise<unknown> = Promise.resolve();
   private reachable = false;
   protected sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -269,23 +278,42 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** PUT /v1/config with the next revision; a no-op when nothing changed since the last push. */
-  async pushStreaming(streaming: EngineStreamingConfig): Promise<void> {
-    const key = JSON.stringify(streaming);
-    if (!this.client || key === this.lastPushed) return;
-    const { response } = await this.client.PUT('/v1/config', {
-      body: {
-        revision: this.revision + 1,
-        hostUrl: hostUrl(),
-        hostToken: this.hostToken,
-        streaming,
-        lifetime: engineLifetime(),
-      },
+  /** Pushes the streaming settings; a no-op when nothing changed since the last push. */
+  pushStreaming(streaming: EngineStreamingConfig): Promise<void> {
+    this.streaming = streaming;
+    return this.push();
+  }
+
+  /** Remembers the live TV settings; they go out with the streaming ones, which the engine needs first. */
+  pushLivetv(livetv: LiveTvConfig): Promise<void> {
+    this.livetv = livetv;
+    return this.push();
+  }
+
+  /** PUT /v1/config with the next revision, one at a time so two callers never race the revision. */
+  private push(): Promise<void> {
+    const run = this.pushing.then(async () => {
+      const { streaming, livetv } = this;
+      if (!this.client || !streaming) return;
+      const key = JSON.stringify({ streaming, livetv });
+      if (key === this.lastPushed) return;
+      const { response } = await this.client.PUT('/v1/config', {
+        body: {
+          revision: this.revision + 1,
+          hostUrl: hostUrl(),
+          hostToken: this.hostToken,
+          streaming,
+          ...(livetv && { livetv }),
+          lifetime: engineLifetime(),
+        },
+      });
+      if (!response.ok) throw new Error(`PUT /v1/config -> ${response.status}`);
+      this.revision++;
+      this.lastPushed = key;
+      this.log.log(`config pushed (revision ${this.revision})`);
     });
-    if (!response.ok) throw new Error(`PUT /v1/config -> ${response.status}`);
-    this.revision++;
-    this.lastPushed = key;
-    this.log.log(`config pushed (revision ${this.revision})`);
+    this.pushing = run.catch(() => undefined);
+    return run;
   }
 
   /** Constant-time check of the `Authorization` header the engine sends to the resolver. */
@@ -396,6 +424,36 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
         (Number(response.headers.get('retry-after')) || 1) * 1000,
       );
     }
+  }
+
+  /** POST /v1/live, waiting out the 503 + Retry-After of the first detection run; a `live_*` error
+   *  body surfaces as an {@link EngineError} with its code. */
+  async openLive(body: OpenLiveRequest): Promise<OpenLiveResponse> {
+    const client = this.need();
+    if (!this.features.includes('live'))
+      throw new ServiceUnavailableException(
+        'The engine has no live TV runtime',
+      );
+    const deadline = Date.now() + OPEN_TIMEOUT_MS;
+    for (;;) {
+      const { data, error, response } = await client.POST('/v1/live', { body });
+      if (data) return data;
+      const code = error?.code;
+      if (response.status !== 503 || code || Date.now() > deadline) {
+        throw new EngineError(response.status, 'POST /v1/live', code);
+      }
+      await this.sleep(
+        (Number(response.headers.get('retry-after')) || 1) * 1000,
+      );
+    }
+  }
+
+  async listLive(ownerId?: string): Promise<LiveSnapshot[]> {
+    const { data, response } = await this.need().GET('/v1/live', {
+      query: { ownerId },
+    });
+    if (!data) throw new EngineError(response.status, 'GET /v1/live');
+    return data;
   }
 
   /** `sessionLost` when the engine no longer knows the sid; throws EngineError 403 for another owner. */

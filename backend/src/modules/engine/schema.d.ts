@@ -165,6 +165,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_live"];
+        put?: never;
+        post: operations["open_live"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/live/{sid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_live"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/probe": {
         parameters: {
             query?: never;
@@ -561,6 +593,15 @@ export interface components {
              */
             lifetime?: components["schemas"]["LifetimeConfig"];
             /**
+             * @default {
+             *       "channelIdleSeconds": 30,
+             *       "probeSeconds": 3,
+             *       "segmentSeconds": 2,
+             *       "timeshiftMinutes": 15
+             *     }
+             */
+            livetv?: components["schemas"]["LiveTvConfig"];
+            /**
              * Format: int32
              * @default 0
              */
@@ -653,6 +694,22 @@ export interface components {
             state: components["schemas"]["BgJobState"];
             /** @enum {string} */
             type: "BgJobDone";
+        } | {
+            capacityToken: string;
+            error?: string | null;
+            probe?: null | components["schemas"]["LiveProbe"];
+            /** @enum {string} */
+            type: "LiveAttempt";
+            /**
+             * Format: int32
+             * @description Position in the upstreams of the open that started the session.
+             */
+            upstream: number;
+        } | {
+            capacityToken: string;
+            reason: string;
+            /** @enum {string} */
+            type: "LiveReleased";
         };
         /** @description Body of `POST /v1/estimate-sizes`. `fileSize` is the source size in bytes, 0 when unknown. */
         EstimateSizesRequest: {
@@ -946,6 +1003,120 @@ export interface components {
              */
             sessionReviveTtlMs?: number;
         };
+        /** @description What the viewer's player takes. */
+        LiveCaps: {
+            /** @default false */
+            directPlay?: boolean;
+            /**
+             * Format: double
+             * @description Forces a transcode; snapped to a rung of 1.5, 3, 6, 10 or 20 Mb/s.
+             * @default null
+             */
+            maxBitrateBps?: number | null;
+            /**
+             * @description MPEG-TS segments instead of fMP4.
+             * @default false
+             */
+            useTs?: boolean;
+        };
+        /** @description Body of a refused `POST /v1/live`: `live_at_capacity` (409) or `live_unavailable` (503). */
+        LiveError: {
+            code: string;
+        };
+        /** @enum {string} */
+        LiveMode: "direct" | "remux" | "transcode";
+        /** @description ffprobe's view of an upstream. */
+        LiveProbe: {
+            /** @default null */
+            audioCodec?: string | null;
+            /**
+             * @description ffprobe's `format_name` (comma list).
+             * @default null
+             */
+            container?: string | null;
+            /** @default null */
+            videoCodec?: string | null;
+        };
+        /** @description One viewer of a live session (`GET /v1/live`). */
+        LiveSnapshot: {
+            audioCodec?: string | null;
+            capacityToken: string;
+            channelId: string;
+            /** @description `fmp4` or `mpegts`. */
+            container: string;
+            /** Format: double */
+            lastSeenMs: number;
+            mode: components["schemas"]["LiveMode"];
+            /** Format: double */
+            openedAtMs: number;
+            ownerId?: string | null;
+            /**
+             * Format: int32
+             * @description Failed attempts since the session started.
+             */
+            restarts: number;
+            sessionId: string;
+            tags: {
+                [key: string]: string;
+            };
+            /** Format: int32 */
+            upstream: number;
+            videoCodec?: string | null;
+            /**
+             * Format: int32
+             * @description Viewers sharing the upstream, this one included.
+             */
+            viewersOnUpstream: number;
+        };
+        /** @description `EngineConfig.livetv`: the host's `livetv_*` settings. */
+        LiveTvConfig: {
+            /**
+             * Format: int32
+             * @description A session without viewers is torn down after this long.
+             * @default 30
+             */
+            channelIdleSeconds?: number;
+            /**
+             * @description `true`: transcode, `false`: remux; absent: transcode on a hardware host only.
+             * @default null
+             */
+            fastZap?: boolean | null;
+            /**
+             * Format: int32
+             * @description ffmpeg's input probe window; never below 3.
+             * @default 3
+             */
+            probeSeconds?: number;
+            /**
+             * Format: int32
+             * @description HLS segment length; floored at 1.
+             * @default 2
+             */
+            segmentSeconds?: number;
+            /**
+             * Format: int32
+             * @description DVR window; floored at 1.
+             * @default 15
+             */
+            timeshiftMinutes?: number;
+        };
+        /** @description One way to reach the channel. */
+        LiveUpstream: {
+            /** @description Sent with every request to the upstream; `User-Agent` defaults to VLC's. */
+            headers?: {
+                [key: string]: string;
+            };
+            /**
+             * Format: int32
+             * @description Lower first; ties keep the request's order.
+             */
+            priority?: number;
+            probedAudioCodec?: string | null;
+            /** @description From an earlier probe (`LiveAttempt.probe`): the engine skips its own. */
+            probedContainer?: string | null;
+            probedVideoCodec?: string | null;
+            url: string;
+        };
         MediaInfo: {
             audio: components["schemas"]["AudioStreamInfo"][];
             chapters?: components["schemas"]["Chapter"][] | null;
@@ -990,6 +1161,45 @@ export interface components {
          * @enum {string}
          */
         MuxFlavour: "ts" | "fmp4";
+        /** @description `POST /v1/live`. */
+        OpenLiveRequest: {
+            /** @description The host's capacity policy refuses a new upstream: answered 409 unless a session is joined. */
+            atCapacity?: boolean;
+            /** @description The host's capacity hold; given back by `LiveReleased` when the session ends. */
+            capacityToken: string;
+            caps?: components["schemas"]["LiveCaps"];
+            /** @description Opaque; viewers of one channel, mode, container and bitrate share one upstream. */
+            channelId: string;
+            ownerId?: string | null;
+            tags?: {
+                [key: string]: string;
+            };
+            upstreams: components["schemas"]["LiveUpstream"][];
+        };
+        OpenLiveResponse: {
+            /** @description The session's hold: the request's when this open started it, else the joined session's. */
+            capacityToken: string;
+            /**
+             * Format: double
+             * @description 0 for `direct`.
+             */
+            dvrWindowSeconds: number;
+            /** @description The mode served (a remux of a non-H.264 upstream is a transcode). */
+            mode: components["schemas"]["LiveMode"];
+            /** @description `/api/livetv/sessions/<sid>/index.m3u8`, or `direct.ts` for `direct`. */
+            playPath: string;
+            probe?: null | components["schemas"]["LiveProbe"];
+            qoePipeline: components["schemas"]["QoePipeline"];
+            /** Format: double */
+            segmentSeconds: number;
+            /** @description This viewer's id: the data-plane sid, `DELETE /v1/sessions/{sid}`. */
+            sessionId: string;
+            /**
+             * Format: int32
+             * @description The feeding upstream, a position in the upstreams of the open that started the session.
+             */
+            upstream: number;
+        };
         /** @description `POST /v1/sessions`: decide, open the session and prewarm its job, atomically. */
         OpenSessionRequest: {
             burnIn?: null | components["schemas"]["BurnInSpec"];
@@ -1808,6 +2018,101 @@ export interface operations {
             };
         };
     };
+    list_live: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ownerId: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveSnapshot"][];
+                };
+            };
+        };
+    };
+    open_live: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenLiveRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenLiveResponse"];
+                };
+            };
+            /** @description no config set yet, or an invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `live_at_capacity`: a new upstream is needed and `atCapacity` is set */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveError"];
+                };
+            };
+            /** @description `live_unavailable`: every upstream failed; or, without a body, hardware detection has not finished (Retry-After: 1) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveError"];
+                };
+            };
+        };
+    };
+    get_live: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveSnapshot"];
+                };
+            };
+            /** @description unknown or ended viewer */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     probe: {
         parameters: {
             query?: never;
@@ -1965,7 +2270,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description gone (idempotent) */
+            /** @description gone (idempotent); a live sid leaves its live session */
             204: {
                 headers: {
                     [name: string]: unknown;

@@ -329,6 +329,22 @@ describe('EngineEventsService.resync', () => {
   });
 });
 
+describe('EngineEventsService listeners', () => {
+  it('hands every event to the subscribers, and runs theirs after the resync', async () => {
+    const t = setup();
+    const heard: unknown[] = [];
+    const resynced = jest.fn(async () => undefined);
+    t.svc.onEvent((ev) => heard.push(ev.type));
+    t.svc.onResync(resynced);
+
+    t.svc.handle({ type: 'LiveReleased', capacityToken: 't', reason: 'idle' });
+    await t.svc.resync();
+
+    expect(heard).toEqual(['LiveReleased']);
+    expect(resynced).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('EngineEventsService follower', () => {
   const sleeps: number[] = [];
   const frame = (e: EngineEvent) =>

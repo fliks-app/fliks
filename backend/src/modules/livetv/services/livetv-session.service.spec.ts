@@ -1,854 +1,475 @@
-import { ConflictException } from '@nestjs/common';
-import { EventEmitter } from 'events';
-import { PassThrough } from 'stream';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
+import { ConflictException, ServiceUnavailableException } from '@nestjs/common';
+import { EngineError, type EngineEvent } from '../../engine/engine.service';
 import type { User } from '../../users/entities/user.entity';
 import type { LiveTvChannel } from '../entities/livetv-channel.entity';
 import type { LiveTvChannelStream } from '../entities/livetv-channel-stream.entity';
-
-jest.mock('child_process', () => ({
-  ...jest.requireActual('child_process'),
-  spawn: jest.fn(),
-  execFile: jest.fn(),
-}));
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { spawn, execFile } = require('child_process') as {
-  spawn: jest.Mock;
-  execFile: jest.Mock;
-};
-
-import axios from 'axios';
-jest.mock('axios');
-const mockedAxiosGet = axios.get as jest.Mock;
-
-/** ffprobe answering with a given video codec, in its csv=p=0 shape: one line
- *  per stream, then the container. */
-function mockProbe(video: string | null, audio = 'aac', container = 'mpegts'): void {
-  execFile.mockImplementation(
-    (_cmd: string, _args: string[], _opts: unknown, cb: (e: unknown, out: string) => void) => {
-      if (!video) {
-        cb(new Error('probe failed'), '');
-        return;
-      }
-      cb(null, `${video},video\n${audio},audio\n${container}\n`);
-    },
-  );
-}
-
-// The service wipes its live dir on init: a parallel run must not share it.
-process.env.FLIKS_TRANSCODE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'fliks-live-spec-'));
-
-import { LiveTvSessionService } from './livetv-session.service';
 import { LiveTvCapacityService } from './livetv-capacity.service';
+import { LiveTvSessionService } from './livetv-session.service';
 
-class FakeProc extends EventEmitter {
-  exitCode: number | null = null;
-  stderr = new EventEmitter();
-  kill = jest.fn(() => {
-    this.exitCode = 137;
-    setImmediate(() => this.emit('exit', null));
-    return true;
-  });
-}
+const user = { id: 7, username: 'ann' } as User;
 
-function makeUser(id = 1): User {
-  return { id } as User;
-}
-
-function makeSource(overrides: Record<string, unknown> = {}) {
+function source(over: Record<string, unknown> = {}) {
   return {
     id: 1,
-    name: 'Test source',
+    name: 'Src',
     maxStreams: 0,
     userAgent: null,
     referer: null,
-    ...overrides,
+    ...over,
   };
 }
 
-function makeStream(overrides: Record<string, unknown> = {}): LiveTvChannelStream {
-  const source = (overrides.source as ReturnType<typeof makeSource>) ?? makeSource();
+function stream(
+  id: number,
+  over: Record<string, unknown> = {},
+): LiveTvChannelStream {
+  const src = (over.source as ReturnType<typeof source>) ?? source();
   return {
-    id: 1,
+    id,
     channelId: 1,
-    sourceId: source.id,
+    sourceId: src.id,
     priority: 0,
-    url: 'http://provider.example/1.ts',
-    source,
-    ...overrides,
+    url: `http://provider.example/${id}.ts`,
+    source: src,
+    ...over,
   } as unknown as LiveTvChannelStream;
 }
 
-function makeChannel(
-  streams: LiveTvChannelStream[],
-  overrides: Record<string, unknown> = {},
-): LiveTvChannel {
-  return { id: 1, name: 'Channel 1', streams, ...overrides } as unknown as LiveTvChannel;
-}
-
-/** Every spawned ffmpeg immediately "produces" a first segment. */
-function mockSpawnAlwaysSucceeds(): FakeProc[] {
-  const procs: FakeProc[] = [];
-  spawn.mockImplementation((_cmd: string, args: string[]) => {
-    const dir = path.dirname(args[args.indexOf('-hls_segment_filename') + 1]);
-    fs.mkdirSync(dir, { recursive: true });
-    setImmediate(() => fs.writeFileSync(path.join(dir, 'seg-00000.m4s'), 'x'));
-    const proc = new FakeProc();
-    procs.push(proc);
-    return proc as unknown as ReturnType<typeof spawn>;
-  });
-  return procs;
-}
+const channel = (streams: LiveTvChannelStream[]) =>
+  ({ id: 1, name: 'Channel 1', streams }) as unknown as LiveTvChannel;
 
 describe('LiveTvSessionService', () => {
   let service: LiveTvSessionService;
-  let channelRepo: { update: jest.Mock; createQueryBuilder: jest.Mock };
+  let engine: {
+    openLive: jest.Mock;
+    deleteSession: jest.Mock;
+    listLive: jest.Mock;
+    pushLivetv: jest.Mock;
+    whenReady: jest.Mock;
+  };
   let streamRepo: { update: jest.Mock };
-  let settings: { get: jest.Mock };
+  let bump: { execute: jest.Mock; where: jest.Mock };
+  let settings: { get: jest.Mock; addChangeListener: jest.Mock };
   let activity: { upsertRunning: jest.Mock; remove: jest.Mock };
-  let hardware: { hwAccel: string; libfdkAac: boolean };
-  let qoe: { register: jest.Mock; sessionEnded: jest.Mock; observeSegment: jest.Mock; recordProduction: jest.Mock; setPipeline: jest.Mock; addTranscodeProbe: jest.Mock };
+  let qoe: {
+    register: jest.Mock;
+    setPipeline: jest.Mock;
+    sessionEnded: jest.Mock;
+    observeServed: jest.Mock;
+  };
+  let capacity: LiveTvCapacityService;
+  let events: {
+    handle?: (ev: EngineEvent) => void;
+    resync?: () => Promise<void>;
+  };
+
+  const answer = (over: Record<string, unknown> = {}) => ({
+    sessionId: 'sid-1',
+    playPath: '/api/livetv/sessions/sid-1/index.m3u8',
+    mode: 'remux',
+    upstream: 0,
+    capacityToken: '',
+    dvrWindowSeconds: 900,
+    segmentSeconds: 2,
+    qoePipeline: {},
+    ...over,
+  });
+  /** An engine answering the open with the request's own token, as a fresh session does. */
+  const startsSession = (over: Record<string, unknown> = {}) =>
+    engine.openLive.mockImplementation(async (req: { capacityToken: string }) =>
+      answer({ capacityToken: req.capacityToken, ...over }),
+    );
+  const tokenOf = () =>
+    (engine.openLive.mock.calls[0][0] as { capacityToken: string })
+      .capacityToken;
+  const emit = async (ev: unknown) => {
+    events.handle!(ev as EngineEvent);
+    await new Promise((r) => setImmediate(r));
+  };
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    mockProbe('h264');
-    mockedAxiosGet.mockReset();
-    channelRepo = {
-      update: jest.fn(),
+    engine = {
+      openLive: jest.fn(),
+      deleteSession: jest.fn(),
+      listLive: jest.fn().mockResolvedValue([]),
+      pushLivetv: jest.fn(),
+      whenReady: jest.fn().mockResolvedValue(undefined),
+    };
+    streamRepo = { update: jest.fn() };
+    bump = { execute: jest.fn(), where: jest.fn() };
+    bump.where.mockReturnValue(bump);
+    const channelRepo = {
       createQueryBuilder: jest.fn(() => ({
         update: jest.fn().mockReturnThis(),
         set: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        execute: jest.fn().mockResolvedValue({}),
+        where: bump.where,
+        execute: bump.execute,
       })),
     };
-    streamRepo = { update: jest.fn() };
-    settings = { get: jest.fn().mockResolvedValue(null) };
+    settings = {
+      get: jest.fn().mockResolvedValue(null),
+      addChangeListener: jest.fn(),
+    };
     activity = { upsertRunning: jest.fn(), remove: jest.fn() };
-    hardware = { hwAccel: 'none', libfdkAac: false };
-    qoe = { register: jest.fn(), sessionEnded: jest.fn(), observeSegment: jest.fn(), recordProduction: jest.fn(), setPipeline: jest.fn(), addTranscodeProbe: jest.fn() };
+    qoe = {
+      register: jest.fn(),
+      setPipeline: jest.fn(),
+      sessionEnded: jest.fn(),
+      observeServed: jest.fn(),
+    };
+    capacity = new LiveTvCapacityService();
+    events = {};
+    const bus = {
+      onEvent: (l: (ev: EngineEvent) => void) => (events.handle = l),
+      onResync: (l: () => Promise<void>) => (events.resync = l),
+    };
     service = new LiveTvSessionService(
       channelRepo as never,
       streamRepo as never,
       settings as never,
       activity as never,
-      hardware as never,
-      new LiveTvCapacityService(),
+      capacity,
+      engine as never,
+      bus as never,
       qoe as never,
     );
+    service.onModuleInit();
   });
 
-  afterEach(async () => {
-    await service.onModuleDestroy();
-    // Let the killed fake processes emit their exit before the next test counts spawns.
-    await new Promise((r) => setTimeout(r, 0));
-  });
-
-  it('drops a viewer that stopped fetching, and keeps the ones still watching', async () => {
-    mockSpawnAlwaysSucceeds();
-    const channel = makeChannel([makeStream()]);
-
-    const gone = await service.open(channel, makeUser(1), {});
-    const staying = await service.open(channel, makeUser(2), {});
-
-    // Only the second viewer keeps fetching; the first is a killed tab that
-    // never calls leave().
-    service.getForServe(staying.sessionId);
-    const stale = Date.now() - 10 * 60 * 1000;
-    const entry = service.listForActivity().find((r) => r.sessionId === gone.sessionId);
-    expect(entry).toBeDefined();
-    (service as never as { sessions: Map<string, { viewers: Map<string, { lastSeenAt: number }> }> })
-      .sessions.forEach((session) => {
-        const viewer = session.viewers.get(gone.sessionId);
-        if (viewer) viewer.lastSeenAt = stale;
-      });
-
-    (service as never as { sweepAbandoned: () => void }).sweepAbandoned();
-
-    const rows = service.listForActivity();
-    expect(rows.map((r) => r.sessionId)).toEqual([staying.sessionId]);
-    expect(service.getForServe(gone.sessionId)).toBeUndefined();
-    expect(service.getForServe(staying.sessionId)).toBeDefined();
-  });
-
-  it('tracks each viewer as a live QoE session titled by the channel, and ends it on leave', async () => {
-    mockSpawnAlwaysSucceeds();
-    const channel = makeChannel([makeStream()]);
-
-    const { sessionId } = await service.open(channel, makeUser(7), { userAgent: 'UA' });
-
-    const ref = service.qoeRef(sessionId);
-    expect(ref).toMatchObject({
-      sessionId,
-      userId: 7,
-      kind: 'live',
-      mediaFileId: null,
-      mediaTitle: channel.name,
-      deviceLabel: 'UA',
+  it('opens through the engine with the sorted upstreams, its headers and the viewer as owner', async () => {
+    startsSession();
+    const bad = stream(1, { lastError: 'x' });
+    const good = stream(2, {
+      source: source({ id: 2, userAgent: 'UA', referer: 'http://r/' }),
+      probedVideoCodec: 'h264',
     });
-    expect(qoe.register).toHaveBeenCalledWith(expect.objectContaining({ sessionId }));
-    expect(qoe.setPipeline).toHaveBeenCalledWith(
-      expect.objectContaining({ sessionId }),
-      expect.objectContaining({ source: expect.objectContaining({ codec: expect.anything() }), crop: null }),
-    );
 
-    await service.leave(sessionId);
-    expect(qoe.sessionEnded).toHaveBeenCalledWith(expect.objectContaining({ sessionId }));
-    expect(service.qoeRef(sessionId)).toBeNull();
-  });
+    const res = await service.open(channel([bad, good]), user, {
+      maxBitrateBps: 3_000_000,
+      userAgent: 'Dev',
+    });
 
-  it('ends the QoE session of a viewer dropped as abandoned', async () => {
-    mockSpawnAlwaysSucceeds();
-    const { sessionId } = await service.open(makeChannel([makeStream()]), makeUser(1), {});
-    (service as never as { sessions: Map<string, { viewers: Map<string, { lastSeenAt: number }> }> })
-      .sessions.forEach((s) => (s.viewers.get(sessionId)!.lastSeenAt = 0));
-
-    (service as never as { sweepAbandoned: () => void }).sweepAbandoned();
-
-    expect(qoe.sessionEnded).toHaveBeenCalledWith(expect.objectContaining({ sessionId }));
-  });
-
-  it('still frees a viewer whose player keeps sending QoE heartbeats', async () => {
-    mockSpawnAlwaysSucceeds();
-    const { sessionId } = await service.open(makeChannel([makeStream()]), makeUser(1), {});
-    (service as never as { sessions: Map<string, { viewers: Map<string, { lastSeenAt: number }> }> })
-      .sessions.forEach((s) => (s.viewers.get(sessionId)!.lastSeenAt = 0));
-
-    expect(service.qoeRef(sessionId)).not.toBeNull();
-    (service as never as { sweepAbandoned: () => void }).sweepAbandoned();
-
-    expect(service.qoeRef(sessionId)).toBeNull();
-    expect(service.listForActivity()).toEqual([]);
-  });
-
-  it('times segment production from each new seg file, ignoring repeats and deletions of older ones', async () => {
-    mockSpawnAlwaysSucceeds();
-    const { sessionId } = await service.open(makeChannel([makeStream()]), makeUser(1), {});
-    const entry = [...(service as never as { sessions: Map<string, unknown> }).sessions.values()][0];
-    const onFile = (name: string) =>
-      (service as never as { onSegmentFile: (e: unknown, n: string) => void }).onSegmentFile(entry, name);
-    const now = jest.spyOn(Date, 'now');
-    try {
-      now.mockReturnValue(10_000);
-      onFile('seg-00001.m4s');
-      now.mockReturnValue(12_000);
-      onFile('seg-00001.m4s');
-      onFile('seg-00002.m4s');
-      onFile('seg-00001.m4s');
-      onFile('index.m3u8');
-    } finally {
-      now.mockRestore();
-    }
-    const calls = qoe.recordProduction.mock.calls.filter((c) => c[0].sessionId === sessionId);
-    expect(calls.map((c) => c[2])).toEqual([2_000]);
-  });
-
-  it('reads CMCD only for a known viewer', async () => {
-    mockSpawnAlwaysSucceeds();
-    const { sessionId } = await service.open(makeChannel([makeStream()]), makeUser(1), {});
-
-    service.observeSegment(sessionId, {} as never, 2);
-    service.observeSegment('nope', {} as never, 2);
-
-    expect(qoe.observeSegment).toHaveBeenCalledTimes(1);
-  });
-
-  it('reuses the session for a second viewer, no second ffmpeg', async () => {
-    mockSpawnAlwaysSucceeds();
-    const channel = makeChannel([makeStream()]);
-
-    const first = await service.open(channel, makeUser(1), {});
-    const second = await service.open(channel, makeUser(2), {});
-
-    expect(spawn).toHaveBeenCalledTimes(1);
-    expect(second.sessionId).not.toBe(first.sessionId);
-    expect(second.channelId).toBe(first.channelId);
-    expect(activity.upsertRunning).toHaveBeenLastCalledWith(
-      expect.any(String),
+    expect(res).toMatchObject({
+      sessionId: 'sid-1',
+      url: '/api/livetv/sessions/sid-1/index.m3u8',
+      mode: 'remux',
+      isLive: true,
+      dvrWindowSeconds: 900,
+    });
+    const req = engine.openLive.mock.calls[0][0];
+    expect(req).toMatchObject({
+      channelId: '1',
+      ownerId: '7',
+      atCapacity: false,
+      caps: { maxBitrateBps: 3_000_000 },
+      tags: { channelName: 'Channel 1', username: 'ann', device: 'Dev' },
+    });
+    expect(req.upstreams.map((u: { url: string }) => u.url)).toEqual([
+      good.url,
+      bad.url,
+    ]);
+    expect(req.upstreams[0]).toMatchObject({
+      headers: { 'User-Agent': 'UA', Referer: 'http://r/' },
+      probedVideoCodec: 'h264',
+    });
+    expect(service.viewer('sid-1')).toMatchObject({ channelId: 1 });
+    expect(qoe.register).toHaveBeenCalled();
+    expect(activity.upsertRunning).toHaveBeenCalledWith(
+      expect.stringContaining('livetv:'),
       'livetv.viewing',
-      expect.any(Object),
-      2,
+      { title: 'Channel 1' },
+      1,
     );
   });
 
-  it('waits on an in-flight opening attempt rather than handing back a session not yet confirmed', async () => {
-    // `openNewSession` registers into `sessions` before its own `recover()` settles,
-    // so a caller landing between those two must still resolve from `opening`,
-    // not from the placeholder entry `sessions` already carries for the same key.
-    const svc = service as unknown as {
-      sessions: Map<string, unknown>;
-      opening: Map<string, Promise<unknown>>;
-      acquireSession(
-        key: string,
-        channel: unknown,
-        streams: unknown[],
-        mode: string,
-        caps: unknown,
-      ): Promise<unknown>;
-    };
-    const key = 'race-key';
-    let resolveOpening!: (v: unknown) => void;
-    svc.opening.set(
-      key,
-      new Promise((resolve) => {
-        resolveOpening = resolve;
-      }),
+  it('frees its hold at once when the open joined a running session', async () => {
+    engine.openLive.mockResolvedValue(
+      answer({ capacityToken: 'someone-else' }),
     );
-    svc.sessions.set(key, { placeholder: true });
+    const limited = source({ maxStreams: 1 });
+    await service.open(channel([stream(1, { source: limited })]), user, {});
 
-    const result = svc.acquireSession(key, {}, [], 'remux', {});
-    resolveOpening({ real: true });
-
-    await expect(result).resolves.toEqual({ real: true });
+    // The slot is free again: a second open is not told the source is full.
+    engine.openLive.mockClear();
+    startsSession();
+    await service.open(channel([stream(1, { source: limited })]), user, {});
+    expect(engine.openLive.mock.calls[0][0].atCapacity).toBe(false);
   });
 
-  it('coalesces two concurrent opens on the same key into one session, one ffmpeg', async () => {
-    mockSpawnAlwaysSucceeds();
-    // Distinct id: isolates this test's transcode dir from its neighbours.
-    const channel = makeChannel([makeStream({ id: 101, channelId: 101 })], { id: 101 });
+  it('sends the capacity verdict and maps the engine 409 onto it', async () => {
+    startsSession();
+    const limited = source({ maxStreams: 1 });
+    await service.open(channel([stream(1, { source: limited })]), user, {});
 
-    const [first, second] = await Promise.all([
-      service.open(channel, makeUser(1), {}),
-      service.open(channel, makeUser(2), {}),
-    ]);
-
-    expect(spawn).toHaveBeenCalledTimes(1);
-    expect(first.sessionId).not.toBe(second.sessionId);
-    const sessionA = service.getForServe(first.sessionId);
-    const sessionB = service.getForServe(second.sessionId);
-    expect(sessionA).toBe(sessionB);
-    expect(sessionA?.viewers.size).toBe(2);
-  });
-
-  it('leaves no orphan session when two opens race: every spawned process gets killed', async () => {
-    settings.get.mockImplementation((key: string) =>
-      Promise.resolve(key === 'livetv_channel_idle_seconds' ? '0' : null),
+    engine.openLive.mockReset();
+    engine.openLive.mockRejectedValue(
+      new EngineError(409, 'POST /v1/live', 'live_at_capacity'),
     );
-    const procs = mockSpawnAlwaysSucceeds();
-    const channel = makeChannel([makeStream({ id: 102, channelId: 102 })], { id: 102 });
+    await expect(
+      service.open(channel([stream(1, { source: limited })]), user, {}),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(engine.openLive.mock.calls[0][0].atCapacity).toBe(true);
 
-    const [first, second] = await Promise.all([
-      service.open(channel, makeUser(1), {}),
-      service.open(channel, makeUser(2), {}),
-    ]);
-    await service.leave(first.sessionId);
-    await service.leave(second.sessionId);
-    await new Promise((r) => setTimeout(r, 50)); // idle timeout (0s) tears the session down
-
-    // A second, un-deduped session would spawn its own ffmpeg and never get killed:
-    // nothing left in `sessions` points back to it once the surviving one wins.
-    expect(procs.length).toBe(1);
-    expect(procs.every((p) => p.kill.mock.calls.length > 0)).toBe(true);
+    // The refused open held nothing: only the first session's hold remains.
+    engine.openLive.mockReset();
+    engine.openLive.mockRejectedValue(
+      new EngineError(409, 'POST /v1/live', 'live_at_capacity'),
+    );
+    await expect(
+      service.open(channel([stream(1, { source: limited })]), user, {}),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(engine.openLive.mock.calls[0][0].atCapacity).toBe(true);
   });
 
-  it('lets a later caller retry after every concurrent opener saw the same failure', async () => {
-    spawn.mockImplementation((_cmd: string, args: string[]) => {
-      const dir = path.dirname(args[args.indexOf('-hls_segment_filename') + 1]);
-      fs.mkdirSync(dir, { recursive: true });
-      const proc = new FakeProc();
-      setImmediate(() => {
-        proc.exitCode = 1;
-        proc.emit('exit', 1);
-      });
-      return proc as unknown as ReturnType<typeof spawn>;
-    });
-    const channel = makeChannel([makeStream({ id: 103, channelId: 103 })], { id: 103 });
+  it('answers a dead channel as unavailable, counting the failure and starting the release grace', async () => {
+    engine.openLive.mockRejectedValue(
+      new EngineError(503, 'POST /v1/live', 'live_unavailable'),
+    );
+    const release = jest.spyOn(capacity, 'recordRelease');
 
     await expect(
-      Promise.all([service.open(channel, makeUser(1), {}), service.open(channel, makeUser(2), {})]),
-    ).rejects.toMatchObject({ response: { code: 'livetv_channel_unavailable' } });
-    // One shared attempt tried the only stream twice (MAX_FAILURES_PER_STREAM), not four times.
-    expect(spawn).toHaveBeenCalledTimes(2);
-
-    mockSpawnAlwaysSucceeds();
-    const result = await service.open(channel, makeUser(3), {});
-    expect(result.channelId).toBe(103);
-  });
-
-  it('gives a reopened channel a fresh dir, so a still-pending teardown fs.rm never lands on it', async () => {
-    settings.get.mockImplementation((key: string) =>
-      Promise.resolve(key === 'livetv_channel_idle_seconds' ? '0' : null),
-    );
-    mockSpawnAlwaysSucceeds();
-    const channel = makeChannel([makeStream({ id: 106, channelId: 106 })], { id: 106 });
-
-    const first = await service.open(channel, makeUser(1), {});
-    const firstDir = service.getForServe(first.sessionId)!.dir;
-    await service.leave(first.sessionId);
-    await new Promise((r) => setTimeout(r, 30)); // idle timeout (0s) tears it down, queuing fs.rm(firstDir)
-
-    const second = await service.open(channel, makeUser(2), {});
-    const secondDir = service.getForServe(second.sessionId)!.dir;
-    expect(secondDir).not.toBe(firstDir);
-
-    // Give the stale teardown's fs.rm every chance to run before asserting.
-    await new Promise((r) => setTimeout(r, 60));
-    expect(fs.existsSync(path.join(secondDir, 'seg-00000.m4s'))).toBe(true);
-  });
-
-  it('purges viewerIndex entries when a running session exhausts every stream', async () => {
-    let calls = 0;
-    spawn.mockImplementation((_cmd: string, args: string[]) => {
-      calls++;
-      const dir = path.dirname(args[args.indexOf('-hls_segment_filename') + 1]);
-      fs.mkdirSync(dir, { recursive: true });
-      const proc = new FakeProc();
-      if (calls === 1) {
-        setImmediate(() => fs.writeFileSync(path.join(dir, 'seg-00000.m4s'), 'x'));
-      } else {
-        setImmediate(() => {
-          proc.exitCode = 1;
-          proc.emit('exit', 1);
-        });
-      }
-      return proc as unknown as ReturnType<typeof spawn>;
-    });
-    const channel = makeChannel([makeStream({ id: 104, channelId: 104 })], { id: 104 });
-
-    const result = await service.open(channel, makeUser(1), {});
-    const runningProc = spawn.mock.results[0].value as FakeProc;
-    runningProc.exitCode = 1;
-    runningProc.emit('exit', 1); // upstream dies while the viewer is still attached
-    await new Promise((r) => setTimeout(r, 700)); // handleFailure -> recover's 300ms poll, twice over
-
-    expect(service.getForServe(result.sessionId)).toBeUndefined();
-    expect(
-      (service as never as { viewerIndex: Map<string, string> }).viewerIndex.has(result.sessionId),
-    ).toBe(false);
-  });
-
-  it('rejects a new session when the source is already at capacity', async () => {
-    mockSpawnAlwaysSucceeds();
-    const source = makeSource({ id: 10, maxStreams: 1 });
-    const channel1 = makeChannel([makeStream({ id: 1, sourceId: 10, source })], { id: 1 });
-    const channel2 = makeChannel([makeStream({ id: 2, sourceId: 10, source })], { id: 2 });
-
-    await service.open(channel1, makeUser(1), {});
-    await expect(service.open(channel2, makeUser(1), {})).rejects.toBeInstanceOf(
-      ConflictException,
-    );
-    try {
-      await service.open(channel2, makeUser(1), {});
-    } catch (err) {
-      expect((err as ConflictException).getResponse()).toMatchObject({
-        code: 'livetv_source_at_capacity',
-        sourceName: 'Test source',
-        limit: 1,
-      });
-    }
-  });
-
-  it('advances to the next stream when the first one fails', async () => {
-    let calls = 0;
-    spawn.mockImplementation((_cmd: string, args: string[]) => {
-      calls++;
-      const dir = path.dirname(args[args.indexOf('-hls_segment_filename') + 1]);
-      fs.mkdirSync(dir, { recursive: true });
-      const proc = new FakeProc();
-      if (calls === 1) {
-        // First stream: dies without ever producing a segment.
-        setImmediate(() => {
-          proc.exitCode = 1;
-          proc.emit('exit', 1);
-        });
-      } else {
-        setImmediate(() => fs.writeFileSync(path.join(dir, 'seg-00000.m4s'), 'x'));
-      }
-      return proc as unknown as ReturnType<typeof spawn>;
-    });
-
-    const streamA = makeStream({ id: 1, priority: 0, url: 'http://a.example/1.ts' });
-    const streamB = makeStream({ id: 2, priority: 1, url: 'http://b.example/1.ts' });
-    const channel = makeChannel([streamA, streamB]);
-
-    const result = await service.open(channel, makeUser(1), {});
-
-    expect(calls).toBe(2);
-    expect(spawn.mock.calls[1][1]).toContain('http://b.example/1.ts');
-    expect(result.channelId).toBe(1);
-  });
-
-  it('gives up and reports the channel unavailable once every stream has failed twice', async () => {
-    spawn.mockImplementation((_cmd: string, args: string[]) => {
-      const dir = path.dirname(args[args.indexOf('-hls_segment_filename') + 1]);
-      fs.mkdirSync(dir, { recursive: true });
-      const proc = new FakeProc();
-      setImmediate(() => {
-        proc.exitCode = 1;
-        proc.emit('exit', 1);
-      });
-      return proc as unknown as ReturnType<typeof spawn>;
-    });
-
-    const channel = makeChannel([makeStream({ id: 1 })]);
-    await expect(service.open(channel, makeUser(1), {})).rejects.toMatchObject({
+      service.open(channel([stream(1)]), user, {}),
+    ).rejects.toMatchObject({
       response: { code: 'livetv_channel_unavailable' },
     });
-    expect(spawn).toHaveBeenCalledTimes(2); // one stream, tried twice
+    expect(bump.where).toHaveBeenCalledWith('id = :id', { id: 1 });
+    expect(release).toHaveBeenCalledWith(1);
+
+    // The engine's own LiveReleased for the same token arrives later: nothing counted twice.
+    await emit({
+      type: 'LiveReleased',
+      capacityToken: tokenOf(),
+      reason: 'failed',
+    });
+    expect(bump.execute).toHaveBeenCalledTimes(1);
   });
 
-  it('names the expired account instead of the generic message once every stream on it has failed', async () => {
-    spawn.mockImplementation((_cmd: string, args: string[]) => {
-      const dir = path.dirname(args[args.indexOf('-hls_segment_filename') + 1]);
-      fs.mkdirSync(dir, { recursive: true });
-      const proc = new FakeProc();
-      setImmediate(() => {
-        proc.exitCode = 1;
-        proc.emit('exit', 1);
+  it('names an expired account', async () => {
+    engine.openLive.mockRejectedValue(
+      new EngineError(503, 'POST /v1/live', 'live_unavailable'),
+    );
+    const expired = source({
+      name: 'Old',
+      expiresAt: new Date(Date.now() - 1000),
+      accountStatus: null,
+    });
+    const err = await service
+      .open(channel([stream(1, { source: expired })]), user, {})
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ServiceUnavailableException);
+    expect((err as ServiceUnavailableException).getResponse()).toMatchObject({
+      code: 'livetv_account_expired',
+      sourceName: 'Old',
+    });
+  });
+
+  it('gives the hold back on any other refusal', async () => {
+    engine.openLive.mockRejectedValue(new EngineError(400, 'POST /v1/live'));
+    const limited = source({ maxStreams: 1 });
+    await expect(
+      service.open(channel([stream(1, { source: limited })]), user, {}),
+    ).rejects.toBeInstanceOf(EngineError);
+
+    startsSession();
+    await service.open(channel([stream(1, { source: limited })]), user, {});
+    expect(engine.openLive.mock.calls[1][0].atCapacity).toBe(false);
+  });
+
+  describe('engine events', () => {
+    beforeEach(async () => {
+      startsSession();
+    });
+
+    it('moves the hold to the source of the upstream that now feeds the session', async () => {
+      const a = stream(1, { source: source({ id: 1, maxStreams: 1 }) });
+      const b = stream(2, { source: source({ id: 2, maxStreams: 1 }) });
+      await service.open(channel([a, b]), user, {});
+
+      await emit({
+        type: 'LiveAttempt',
+        capacityToken: tokenOf(),
+        upstream: 1,
+        probe: { videoCodec: 'h264', container: 'mpegts' },
       });
-      return proc as unknown as ReturnType<typeof spawn>;
+
+      expect(streamRepo.update).toHaveBeenCalledWith(2, {
+        probedVideoCodec: 'h264',
+        probedContainer: 'mpegts',
+        lastOkAt: expect.any(Date),
+        lastError: null,
+      });
+      // Source 1 is free again, source 2 holds the connection.
+      engine.openLive.mockClear();
+      await service.open(channel([a]), { id: 8 } as User, {});
+      expect(engine.openLive.mock.calls[0][0].atCapacity).toBe(false);
+      engine.openLive.mockClear();
+      await service.open(channel([b]), { id: 8 } as User, {});
+      expect(engine.openLive.mock.calls[0][0].atCapacity).toBe(true);
     });
 
-    const source = makeSource({ id: 20, accountStatus: 'Expired' });
-    const channel = makeChannel([makeStream({ id: 1, sourceId: 20, source })]);
+    it('records a failed upstream and starts the release grace only when it had been feeding', async () => {
+      const a = stream(1);
+      const b = stream(2);
+      await service.open(channel([a, b]), user, {});
+      const release = jest.spyOn(capacity, 'recordRelease');
+      const token = tokenOf();
 
-    await expect(service.open(channel, makeUser(1), {})).rejects.toMatchObject({
-      response: { code: 'livetv_account_expired', sourceName: 'Test source' },
-    });
-    expect(streamRepo.update).toHaveBeenCalledWith(1, { lastError: 'account expired' });
-  });
+      await emit({
+        type: 'LiveAttempt',
+        capacityToken: token,
+        upstream: 0,
+        error: 'no segment',
+      });
+      expect(streamRepo.update).toHaveBeenLastCalledWith(1, {
+        lastError: 'no segment',
+      });
+      expect(release).not.toHaveBeenCalled();
 
-  it('kills the process after the idle window once the last viewer leaves', async () => {
-    settings.get.mockImplementation((key: string) =>
-      Promise.resolve(key === 'livetv_channel_idle_seconds' ? '0' : null),
-    );
-    const procs = mockSpawnAlwaysSucceeds();
-    const channel = makeChannel([makeStream()]);
-
-    const result = await service.open(channel, makeUser(1), {});
-    await service.leave(result.sessionId);
-    // A zero idle window still tears down on a timer: poll rather than guess how long it takes.
-    for (let i = 0; i < 100 && !procs[0].kill.mock.calls.length; i++) await new Promise((r) => setTimeout(r, 20));
-
-    expect(procs[0].kill).toHaveBeenCalled();
-  });
-
-  it('does not tear down when a viewer rejoins inside the idle window', async () => {
-    settings.get.mockImplementation((key: string) =>
-      Promise.resolve(key === 'livetv_channel_idle_seconds' ? '5' : null),
-    );
-    const procs = mockSpawnAlwaysSucceeds();
-    const channel = makeChannel([makeStream()]);
-
-    const result = await service.open(channel, makeUser(1), {});
-    await service.leave(result.sessionId);
-    // Instant zap-back: same channel, same mode, no new ffmpeg process.
-    await service.open(channel, makeUser(1), {});
-
-    expect(spawn).toHaveBeenCalledTimes(1);
-    expect(procs[0].kill).not.toHaveBeenCalled();
-  });
-
-  it('transcodes a channel the probe says is not h264, rather than copying it', async () => {
-    mockSpawnAlwaysSucceeds();
-    mockProbe('mpeg2video', 'mp2');
-    const channel = makeChannel([makeStream()]);
-
-    const result = await service.open(channel, makeUser(), {});
-
-    // Copying MPEG-2 into fMP4 succeeds and plays nowhere, so the gate must bite.
-    expect(result.mode).toBe('transcode');
-    expect(streamRepo.update).toHaveBeenCalledWith(1, {
-      probedVideoCodec: 'mpeg2video',
-      probedAudioCodec: 'mp2',
-      probedContainer: 'mpegts',
-    });
-  });
-
-  it('probes a stream once and reuses the answer', async () => {
-    mockSpawnAlwaysSucceeds();
-    const stream = makeStream();
-    const channel = makeChannel([stream]);
-
-    await service.open(channel, makeUser(), {});
-    await service.open(channel, makeUser(2), {});
-
-    expect(execFile).toHaveBeenCalledTimes(1);
-  });
-
-  it('transcodes rather than guessing when the probe cannot reach the stream', async () => {
-    mockSpawnAlwaysSucceeds();
-    mockProbe(null);
-    const channel = makeChannel([makeStream()]);
-
-    const result = await service.open(channel, makeUser(), {});
-
-    // An unknown codec is never assumed to be remuxable: that assumption is
-    // what serves a browser an MPEG-2 track and a black screen.
-    expect(result.mode).toBe('transcode');
-  });
-
-  it('prefers transcode over remux for a cold session when hardware encoding is available', async () => {
-    mockSpawnAlwaysSucceeds();
-    hardware.hwAccel = 'qsv';
-    const channel = makeChannel([makeStream()]);
-
-    const result = await service.open(channel, makeUser(), {});
-
-    expect(result.mode).toBe('transcode');
-  });
-
-  it('keeps a different container from sharing the same session', async () => {
-    mockSpawnAlwaysSucceeds();
-    const channel = makeChannel([makeStream()]);
-
-    await service.open(channel, makeUser(1), { useTs: false });
-    await service.open(channel, makeUser(2), { useTs: true });
-
-    // webOS (TS) and a browser (fMP4) must never share one ffmpeg output.
-    expect(spawn).toHaveBeenCalledTimes(2);
-  });
-
-  it('snaps a requested bitrate to a fixed rung, so nearby values share one session', async () => {
-    mockSpawnAlwaysSucceeds();
-    const channel = makeChannel([makeStream()]);
-
-    await service.open(channel, makeUser(1), { maxBitrateBps: 2_000_000 });
-    await service.open(channel, makeUser(2), { maxBitrateBps: 2_900_000 });
-
-    // Both requests round up to the same 3 Mbps rung: one shared ffmpeg, not two,
-    // and an unbounded requested value can never key its own distinct process.
-    expect(spawn).toHaveBeenCalledTimes(1);
-    const args = spawn.mock.calls[0][1] as string[];
-    expect(args[args.indexOf('-b:v') + 1]).toBe('3000000');
-  });
-
-  it('orders same-priority streams by health, a clean stream before an errored one', async () => {
-    const picked: string[] = [];
-    spawn.mockImplementation((_cmd: string, args: string[]) => {
-      picked.push(args[args.indexOf('-i') + 1]);
-      const dir = path.dirname(args[args.indexOf('-hls_segment_filename') + 1]);
-      fs.mkdirSync(dir, { recursive: true });
-      const proc = new FakeProc();
-      setImmediate(() => fs.writeFileSync(path.join(dir, 'seg-00000.m4s'), 'x'));
-      return proc as unknown as ReturnType<typeof spawn>;
+      await emit({ type: 'LiveAttempt', capacityToken: token, upstream: 1 });
+      await emit({
+        type: 'LiveAttempt',
+        capacityToken: token,
+        upstream: 1,
+        error: 'upstream closed',
+      });
+      expect(release).toHaveBeenCalledTimes(1);
     });
 
-    const bad = makeStream({ id: 1, priority: 0, url: 'http://bad.example/1.ts', lastError: 'timeout' });
-    const good = makeStream({
-      id: 2,
-      priority: 0,
-      url: 'http://good.example/1.ts',
-      lastError: null,
-      lastOkAt: new Date(),
+    it('frees the token on LiveReleased and counts a failed session against the channel', async () => {
+      await service.open(channel([stream(1)]), user, {});
+      const release = jest.spyOn(capacity, 'recordRelease');
+
+      await emit({
+        type: 'LiveReleased',
+        capacityToken: tokenOf(),
+        reason: 'idle',
+      });
+      expect(release).toHaveBeenCalledWith(1);
+      expect(bump.execute).not.toHaveBeenCalled();
+      expect(activity.remove).toHaveBeenCalledWith(`livetv:${tokenOf()}`);
     });
-    const channel = makeChannel([bad, good]);
 
-    await service.open(channel, makeUser(1), {});
+    it('bumps the failure count on LiveReleased failed', async () => {
+      await service.open(channel([stream(1)]), user, {});
+      await emit({
+        type: 'LiveReleased',
+        capacityToken: tokenOf(),
+        reason: 'failed',
+      });
+      expect(bump.execute).toHaveBeenCalledTimes(1);
+    });
 
-    expect(picked[0]).toBe('http://good.example/1.ts');
+    it('drops the viewer and its QoE session on SessionEnded', async () => {
+      await service.open(channel([stream(1)]), user, {});
+      await emit({
+        type: 'SessionEnded',
+        sessionId: 'sid-1',
+        reason: 'expired',
+      });
+      expect(service.viewer('sid-1')).toBeUndefined();
+      expect(qoe.sessionEnded).toHaveBeenCalled();
+    });
+
+    it("feeds a live segment's CMCD to the viewer's QoE session", async () => {
+      await service.open(channel([stream(1)]), user, {});
+      await emit({ type: 'SegmentServed', sessionId: 'sid-1', waitedMs: 0 });
+      expect(qoe.observeServed).toHaveBeenCalledWith(
+        expect.objectContaining({ sessionId: 'sid-1', kind: 'live' }),
+        null,
+        2,
+        0,
+      );
+    });
   });
 
-  it('switches a remux session to transcode when a failover stream is not remuxable', async () => {
-    let spawnCalls = 0;
-    execFile.mockImplementation(
-      (_cmd: string, args: string[], _opts: unknown, cb: (e: unknown, out: string) => void) => {
-        const url = args[args.length - 1];
-        if (url.includes('a.example')) cb(null, 'h264,video\naac,audio\nmpegts\n');
-        else cb(null, 'mpeg2video,video\nmp2,audio\nmpegts\n');
+  it('leaves through the engine', async () => {
+    startsSession();
+    await service.open(channel([stream(1)]), user, {});
+    await service.leave('sid-1');
+    expect(engine.deleteSession).toHaveBeenCalledWith('sid-1');
+    expect(service.viewer('sid-1')).toBeUndefined();
+  });
+
+  it('rebuilds viewers from the engine on resync and drops the ones it lost', async () => {
+    startsSession();
+    await service.open(channel([stream(1)]), user, {});
+    engine.listLive.mockResolvedValue([
+      {
+        sessionId: 'sid-9',
+        channelId: '4',
+        ownerId: '3',
+        capacityToken: 'other',
+        tags: { channelName: 'Four' },
+        openedAtMs: 1,
       },
+    ]);
+
+    await new Promise((r) => setTimeout(r, 5));
+    await events.resync!();
+
+    expect(service.viewer('sid-9')).toMatchObject({ channelId: 4 });
+    expect(service.viewer('sid-1')).toBeUndefined();
+    // Its token is gone too: the capacity it held is released, with no grace.
+    settings.get.mockImplementation(async (k: string) =>
+      k === 'livetv_slot_release_seconds' ? '0' : null,
     );
-    spawn.mockImplementation((_cmd: string, args: string[]) => {
-      spawnCalls++;
-      const dir = path.dirname(args[args.indexOf('-hls_segment_filename') + 1]);
-      fs.mkdirSync(dir, { recursive: true });
-      const proc = new FakeProc();
-      if (spawnCalls === 1) {
-        // The h264 primary dies without ever producing a segment.
-        setImmediate(() => {
-          proc.exitCode = 1;
-          proc.emit('exit', 1);
-        });
-      } else {
-        setImmediate(() => fs.writeFileSync(path.join(dir, 'seg-00000.m4s'), 'x'));
-      }
-      return proc as unknown as ReturnType<typeof spawn>;
-    });
-
-    const streamA = makeStream({ id: 1, priority: 0, url: 'http://a.example/1.ts' });
-    const streamB = makeStream({ id: 2, priority: 1, url: 'http://b.example/1.ts' });
-    const channel = makeChannel([streamA, streamB]);
-
-    const result = await service.open(channel, makeUser(1), {});
-
-    // A failover to an unremuxable backup must force transcode, not a black screen.
-    expect(result.mode).toBe('transcode');
-    const secondArgs: string[] = spawn.mock.calls[1][1];
-    expect(secondArgs).toContain('-b:v');
-    const flagsIdx = secondArgs.indexOf('-hls_flags');
-    // The old init segment described h264: this run must start fresh, not append.
-    expect(secondArgs[flagsIdx + 1]).not.toContain('append_list');
+    engine.openLive.mockClear();
+    await service.open(
+      channel([stream(1, { source: source({ maxStreams: 1 }) })]),
+      user,
+      {},
+    );
+    expect(engine.openLive.mock.calls[0][0].atCapacity).toBe(false);
   });
 
-  it('recounts against the new source after a cross-source failover', async () => {
-    // Isolated from the release-grace behaviour (covered by its own test below).
-    settings.get.mockImplementation((key: string) =>
-      Promise.resolve(key === 'livetv_slot_release_seconds' ? '0' : null),
-    );
-    let spawnCalls = 0;
-    spawn.mockImplementation((_cmd: string, args: string[]) => {
-      spawnCalls++;
-      const dir = path.dirname(args[args.indexOf('-hls_segment_filename') + 1]);
-      fs.mkdirSync(dir, { recursive: true });
-      const proc = new FakeProc();
-      if (spawnCalls === 1) {
-        setImmediate(() => {
-          proc.exitCode = 1;
-          proc.emit('exit', 1);
-        });
-      } else {
-        setImmediate(() => fs.writeFileSync(path.join(dir, 'seg-00000.m4s'), 'x'));
-      }
-      return proc as unknown as ReturnType<typeof spawn>;
-    });
-
-    const sourceA = makeSource({ id: 1, maxStreams: 1 });
-    const sourceB = makeSource({ id: 2, maxStreams: 1 });
-    const streamA = makeStream({ id: 1, sourceId: 1, source: sourceA, priority: 0, url: 'http://a.example/1.ts' });
-    const streamB = makeStream({ id: 2, sourceId: 2, source: sourceB, priority: 1, url: 'http://b.example/1.ts' });
-    const channel = makeChannel([streamA, streamB], { id: 1 });
-
-    await service.open(channel, makeUser(1), {});
-
-    // The session now lives on source B: source A's single slot must be free again.
-    const otherOnA = makeChannel([makeStream({ id: 3, sourceId: 1, source: sourceA })], { id: 2 });
-    await expect(service.open(otherOnA, makeUser(2), {})).resolves.toBeDefined();
-  });
-
-  it('charges an in-flight probe against the capacity budget', async () => {
-    mockSpawnAlwaysSucceeds();
-    const source = makeSource({ id: 10, maxStreams: 1 });
-    const channel1 = makeChannel([makeStream({ id: 1, sourceId: 10, source })], { id: 1 });
-    const channel2 = makeChannel([makeStream({ id: 2, sourceId: 10, source })], { id: 2 });
-
-    let finishProbe: (() => void) | undefined;
-    execFile.mockImplementation(
-      (_cmd: string, _args: string[], _opts: unknown, cb: (e: unknown, out: string) => void) => {
-        finishProbe = () => cb(null, 'h264,video\naac,audio\n');
+  it('lists the activity rows from the engine snapshots', async () => {
+    engine.listLive.mockResolvedValue([
+      {
+        sessionId: 's',
+        channelId: '1',
+        ownerId: '7',
+        capacityToken: 't',
+        mode: 'transcode',
+        tags: { channelName: 'C', username: 'ann', device: '' },
+        openedAtMs: 5,
+        lastSeenMs: 6,
+        videoCodec: 'h264',
+        container: 'fmp4',
+        upstream: 0,
+        viewersOnUpstream: 2,
       },
+    ]);
+    expect(await service.listForActivity()).toEqual([
+      expect.objectContaining({
+        sessionId: 's',
+        channelId: 1,
+        userId: 7,
+        username: 'ann',
+        device: null,
+        videoCodec: 'h264',
+        audioCodec: null,
+        viewersOnUpstream: 2,
+      }),
+    ]);
+  });
+
+  it('pushes the live TV settings to the engine, with the segment floor', async () => {
+    const values: Record<string, string> = {
+      livetv_segment_seconds: '0',
+      livetv_fast_zap: 'false',
+      livetv_channel_idle_seconds: '45',
+    };
+    settings.get.mockImplementation(async (k: string) => values[k] ?? null);
+    (settings.addChangeListener.mock.calls[0][0] as (key: string) => void)(
+      'livetv_segment_seconds',
     );
-
-    const opening = service.open(channel1, makeUser(1), {});
-    await new Promise((r) => setImmediate(r)); // let ensureProbed register the in-flight probe
-
-    await expect(service.open(channel2, makeUser(2), {})).rejects.toBeInstanceOf(ConflictException);
-
-    finishProbe?.();
-    await opening;
-  });
-
-  it('keeps a just-closed upstream counted during the release grace window', async () => {
-    mockSpawnAlwaysSucceeds();
-    settings.get.mockImplementation((key: string) =>
-      Promise.resolve(
-        key === 'livetv_channel_idle_seconds' ? '0' : key === 'livetv_slot_release_seconds' ? '30' : null,
-      ),
-    );
-    const source = makeSource({ id: 10, maxStreams: 1 });
-    const channel = makeChannel([makeStream({ id: 1, sourceId: 10, source })], { id: 1 });
-
-    const result = await service.open(channel, makeUser(1), {});
-    await service.leave(result.sessionId);
-    await new Promise((r) => setTimeout(r, 50)); // idle timeout (0s) tears the session down
-
-    await expect(service.open(channel, makeUser(2), {})).rejects.toBeInstanceOf(ConflictException);
-  });
-
-  it('packages a playlist channel instead of opening it, and never dials the upstream', async () => {
-    mockSpawnAlwaysSucceeds();
-    mockProbe('h264', 'aac', 'hls');
-    const channel = makeChannel([makeStream()]);
-
-    const result = await service.open(channel, makeUser(1), { directPlay: true });
-
-    // The probe settles it: a playlist describes a stream instead of being one,
-    // and a direct attempt would cost the channel a recorded failure.
-    expect(result.mode).not.toBe('direct');
-    expect(mockedAxiosGet).not.toHaveBeenCalled();
-  });
-
-  it('tees one shared upstream to two direct viewers', async () => {
-    const upstream = new PassThrough();
-    mockedAxiosGet.mockResolvedValue({ data: upstream, headers: { 'content-type': 'video/mp2t' } });
-    const channel = makeChannel([makeStream()]);
-
-    const first = await service.open(channel, makeUser(1), { directPlay: true });
-    const second = await service.open(channel, makeUser(2), { directPlay: true });
-    expect(mockedAxiosGet).toHaveBeenCalledTimes(1);
-
-    const sessionA = service.getForServe(first.sessionId)!;
-    const sessionB = service.getForServe(second.sessionId)!;
-    expect(sessionA).toBe(sessionB);
-
-    const teeA = service.attachDirectViewer(sessionA, first.sessionId);
-    const teeB = service.attachDirectViewer(sessionB, second.sessionId);
-    const gotA: Buffer[] = [];
-    const gotB: Buffer[] = [];
-    teeA.on('data', (c: Buffer) => gotA.push(c));
-    teeB.on('data', (c: Buffer) => gotB.push(c));
-
-    upstream.emit('data', Buffer.from('hello'));
     await new Promise((r) => setImmediate(r));
-
-    expect(Buffer.concat(gotA).toString()).toBe('hello');
-    expect(Buffer.concat(gotB).toString()).toBe('hello');
-    expect(mockedAxiosGet).toHaveBeenCalledTimes(1);
-  });
-
-  it('drops a slow direct viewer without touching the shared upstream', async () => {
-    const upstream = new PassThrough();
-    mockedAxiosGet.mockResolvedValue({ data: upstream, headers: {} });
-    const channel = makeChannel([makeStream()]);
-
-    const result = await service.open(channel, makeUser(1), { directPlay: true });
-    const session = service.getForServe(result.sessionId)!;
-    const slowTee = service.attachDirectViewer(session, result.sessionId);
-    const destroyed = jest.fn();
-    slowTee.on('close', destroyed);
-    // Simulate a full buffer: the very next write reports backpressure.
-    jest.spyOn(slowTee, 'write').mockReturnValue(false);
-
-    upstream.emit('data', Buffer.from('x'));
-    await new Promise((r) => setImmediate(r));
-
-    expect(destroyed).toHaveBeenCalled();
-    expect(session.directTees?.has(slowTee)).toBe(false);
-    expect(upstream.destroyed).toBe(false);
-  });
-
-  it('keeps a direct viewer whose tee is flowing, even past the TTL', async () => {
-    const upstream = new PassThrough();
-    mockedAxiosGet.mockResolvedValue({ data: upstream, headers: { 'content-type': 'video/mp2t' } });
-    const channel = makeChannel([makeStream()]);
-
-    const result = await service.open(channel, makeUser(1), { directPlay: true });
-    const session = service.getForServe(result.sessionId)!;
-    service.attachDirectViewer(session, result.sessionId);
-
-    // Simulate the TTL having elapsed with no getForServe call in between: a
-    // direct client makes one long GET and never polls a playlist again.
-    session.viewers.get(result.sessionId)!.lastSeenAt = Date.now() - 10 * 60 * 1000;
-
-    upstream.emit('data', Buffer.from('x'));
-    await new Promise((r) => setImmediate(r));
-
-    (service as never as { sweepAbandoned: () => void }).sweepAbandoned();
-
-    expect(service.getForServe(result.sessionId)).toBeDefined();
-  });
-
-  it('records the real upstream-open failure in lastError, not the generic startup message', async () => {
-    mockedAxiosGet.mockRejectedValue(new Error('connect ECONNREFUSED 203.0.113.1:443'));
-    const channel = makeChannel([makeStream({ id: 1 })]);
-
-    await expect(service.open(channel, makeUser(1), { directPlay: true })).rejects.toMatchObject({
-      response: { code: 'livetv_channel_unavailable' },
-    });
-
-    expect(streamRepo.update).toHaveBeenCalledWith(1, {
-      lastError: expect.stringContaining('ECONNREFUSED'),
+    expect(engine.pushLivetv).toHaveBeenLastCalledWith({
+      segmentSeconds: 1,
+      timeshiftMinutes: 15,
+      probeSeconds: 3,
+      channelIdleSeconds: 45,
+      fastZap: false,
     });
   });
 });

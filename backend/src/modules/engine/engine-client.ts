@@ -12,7 +12,12 @@ type Json<O, K extends 'requestBody' | 'responses'> = O extends {
       ? D
       : never
   : never;
-type Reply<O> = Promise<{ data?: Json<O, 'responses'>; response: Response }>;
+type Reply<O> = Promise<{
+  data?: Json<O, 'responses'>;
+  /** The `{ code }` body the engine sends with some errors (`live_at_capacity`...). */
+  error?: { code?: string };
+  response: Response;
+}>;
 
 /** `{sid}` placeholders of the route and its query string; the generated types do not model them. */
 export interface Params {
@@ -20,7 +25,7 @@ export interface Params {
   query?: Record<string, string | number | undefined>;
 }
 
-/** Typed JSON calls to the control plane; `data` is set on a 2xx JSON reply only. */
+/** Typed JSON calls to the control plane; `data` is set on a 2xx JSON reply, `error` on any other. */
 export interface EngineClient {
   GET<P extends With<'get'>>(url: P, init?: Params): Reply<paths[P]['get']>;
   PUT<P extends With<'put'>>(
@@ -73,9 +78,12 @@ export function createEngineClient(
       body: body === undefined ? undefined : JSON.stringify(body),
       signal,
     });
-    const json =
-      response.ok && response.headers.get('content-type')?.includes('json');
-    return { data: json ? await response.json() : undefined, response };
+    const json: unknown = response.headers.get('content-type')?.includes('json')
+      ? await response.json().catch(() => undefined)
+      : undefined;
+    return response.ok
+      ? { data: json, response }
+      : { error: json as { code?: string } | undefined, response };
   };
   return {
     GET: (url, init) => call('GET', url, init) as never,

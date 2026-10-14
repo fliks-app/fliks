@@ -111,12 +111,13 @@ export class EngineResolverService {
   private async locate(
     user: User,
     dto: ResolveRequestDto,
-  ): Promise<Pick<ResolveResult, 'path' | 'format'>> {
+  ): Promise<Partial<Pick<ResolveResult, 'path' | 'format' | 'ttlS'>>> {
     if (dto.purpose === 'live') {
-      const session = this.liveSessions.getForServe(String(dto.mediaId));
-      if (!session) throw new HttpException('not found', 404);
-      await this.channels.findPlayable(session.channelId, user);
-      return { path: session.dir, format: session.mode };
+      const viewer = this.liveSessions.viewer(String(dto.mediaId));
+      if (!viewer) throw new HttpException('not found', 404);
+      await this.channels.findPlayable(viewer.channelId, user);
+      // Re-checked on every request, as the playlist poll was.
+      return { ttlS: 0 };
     }
     const id = Number(dto.mediaId);
     if (!Number.isInteger(id) || id <= 0)

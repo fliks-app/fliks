@@ -4,17 +4,6 @@ import * as path from 'path';
 import { Logger } from '@nestjs/common';
 import { resolveWritableDir } from './writable-dir';
 
-/** Base directory for transient transcode/thumbnail data.
- *  `FLIKS_TRANSCODE_DIR` overrides; Windows falls back to `%TEMP%`, other
- *  platforms to `/tmp/transcode`. */
-const transcodeDirOverride = process.env.FLIKS_TRANSCODE_DIR?.trim();
-export const TRANSCODE_DIR =
-  transcodeDirOverride && transcodeDirOverride.length > 0
-    ? transcodeDirOverride
-    : process.platform === 'win32'
-      ? path.join(os.tmpdir(), 'fliks-transcode')
-      : '/tmp/transcode';
-
 let cachedDataDir: string | null = null;
 
 /** Picked before the write probe so a legacy mount is honoured rather than
@@ -89,7 +78,9 @@ let cachedPluginsRuntimeDir: string | null = null;
 export function getPluginsRuntimeDir(): string {
   if (cachedPluginsRuntimeDir) return cachedPluginsRuntimeDir;
   const override = process.env.FLIKS_RUNTIME_DIR?.trim();
-  const preferred = override ? path.join(override, 'fliks-plugins') : path.join(os.tmpdir(), 'fliks-plugins');
+  const preferred = override
+    ? path.join(override, 'fliks-plugins')
+    : path.join(os.tmpdir(), 'fliks-plugins');
   cachedPluginsRuntimeDir = resolveWritableDir(
     [preferred, path.join(os.tmpdir(), 'fliks-plugins')],
     'Cannot write to the plugins runtime directory — installed plugin files ' +

@@ -44,6 +44,17 @@ describe('createEngineClient', () => {
     expect(response.status).toBe(503);
   });
 
+  it('returns the code of a JSON error body', async () => {
+    global.fetch = (async () =>
+      new Response(JSON.stringify({ code: 'live_at_capacity' }), {
+        status: 409,
+        headers: { 'content-type': 'application/json' },
+      })) as never;
+    const { data, error } = await createEngineClient('http://x', 't').GET('/v1/live');
+    expect(data).toBeUndefined();
+    expect(error).toEqual({ code: 'live_at_capacity' });
+  });
+
   it('fills the path placeholders and the query string, and drops unset query values', async () => {
     const fetchMock = jest.fn(async () => new Response(null, { status: 204 }));
     global.fetch = fetchMock as never;

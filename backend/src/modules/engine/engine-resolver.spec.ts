@@ -30,7 +30,7 @@ function make(enabled = true) {
   };
   const thumbnails = { getSpritePath: jest.fn(() => '/c/7/sprite.jpg') };
   const liveSessions = {
-    getForServe: jest.fn(() => ({ channelId: 9, dir: '/t/live', mode: 'hls' })),
+    viewer: jest.fn(() => ({ channelId: 9 })),
   };
   const channels = { findPlayable: jest.fn(async () => ({})) };
   const service = new EngineResolverService(
@@ -114,13 +114,13 @@ describe('EngineResolverService', () => {
     expect(await service.resolve(req({ purpose: 'subtitle' }))).toEqual(DENIED);
   });
 
-  it('answers a live session dir after the channel check', async () => {
+  it('allows a live viewer after the channel check, re-checked on every request', async () => {
     const { service, channels, liveSessions } = make();
     const out = await service.resolve(
       req({ purpose: 'live', mediaId: 'sid-1' }),
     );
-    expect(out).toMatchObject({ allow: true, path: '/t/live', format: 'hls' });
-    expect(liveSessions.getForServe).toHaveBeenCalledWith('sid-1');
+    expect(out).toEqual({ allow: true, ownerId: '3', ttlS: 0 });
+    expect(liveSessions.viewer).toHaveBeenCalledWith('sid-1');
     expect(channels.findPlayable).toHaveBeenCalledWith(9, { id: 3 });
   });
 

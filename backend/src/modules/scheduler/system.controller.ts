@@ -641,7 +641,7 @@ export class SystemController {
 
     // Live TV keeps its own sessions: a channel has no media file, so it cannot
     // live in the on-demand registry. Same dashboard, one row per viewer.
-    for (const row of this.liveTvSessions.listForActivity()) {
+    for (const row of await this.liveTvSessions.listForActivity()) {
       streams.push({
         sessionId: row.sessionId,
         userId: row.userId,

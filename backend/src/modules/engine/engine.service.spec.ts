@@ -209,6 +209,27 @@ describe('EngineService config push', () => {
     expect((c.PUT.mock.calls[1] as any)[1].body.revision).toBe(9);
   });
 
+  it('sends the live TV settings with the streaming ones, once the streaming ones are known', async () => {
+    const s = svc();
+    const c = mockClient();
+    await s.connect(c);
+    const livetv = { segmentSeconds: 4, timeshiftMinutes: 5, fastZap: null };
+
+    await s.pushLivetv(livetv);
+    expect(c.PUT).not.toHaveBeenCalled();
+
+    await s.pushStreaming(toEngineStreaming(settings));
+    expect(c.PUT).toHaveBeenCalledTimes(1);
+    expect((c.PUT.mock.calls[0] as any)[1].body).toMatchObject({ livetv, streaming: toEngineStreaming(settings) });
+
+    await s.pushLivetv({ ...livetv, segmentSeconds: 2 });
+    expect((c.PUT.mock.calls[1] as any)[1].body).toMatchObject({
+      revision: 9,
+      livetv: { segmentSeconds: 2 },
+      streaming: toEngineStreaming(settings),
+    });
+  });
+
   it('does not count a rejected push', async () => {
     const s = svc();
     const c = mockClient({
@@ -459,6 +480,25 @@ describe('EngineService runtime', () => {
       (s as any).sleep = async (ms: number) => void slept.push(ms);
       await expect(s.openSession({} as never)).resolves.toEqual({ sessionId: 'a' });
       expect(slept).toEqual([2000]);
+    });
+
+    it('opens a live session, waiting out the detection 503 but not a coded one', async () => {
+      const post = jest
+        .fn()
+        .mockResolvedValueOnce(reply(503, undefined, { 'retry-after': '1' }))
+        .mockResolvedValueOnce(reply(200, { sessionId: 'v' }));
+      const { s } = await connected({ GET: hello([...RUNTIME, 'live']), POST: post });
+      await expect(s.openLive({} as never)).resolves.toEqual({ sessionId: 'v' });
+
+      post.mockResolvedValue({ ...reply(503), error: { code: 'live_unavailable' } });
+      await expect(s.openLive({} as never)).rejects.toMatchObject({ status: 503, code: 'live_unavailable' });
+      post.mockResolvedValue({ ...reply(409), error: { code: 'live_at_capacity' } });
+      await expect(s.openLive({} as never)).rejects.toMatchObject({ status: 409, code: 'live_at_capacity' });
+    });
+
+    it('refuses a live open on an engine without the live runtime', async () => {
+      const { s } = await connected();
+      await expect(s.openLive({} as never)).rejects.toThrow('no live TV runtime');
     });
 
     it('throws the status of any other refusal', async () => {
