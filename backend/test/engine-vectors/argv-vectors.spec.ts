@@ -81,11 +81,11 @@ const REPLAYED_SPECS = [
   'streaming/transcoding/subtitle-overlay-filter',
 ];
 
-const withExpected = (v: ArgvVector): ArgvVector => ({
-  ...v,
-  input: sortKeys(v.input),
-  expected: runArgvVector(v),
-});
+// Run from the stored key order: a thrown message can embed the input's JSON.
+const withExpected = (v: ArgvVector): ArgvVector => {
+  const stored = { ...v, input: sortKeys(v.input) };
+  return { ...stored, expected: runArgvVector(stored) };
+};
 
 function writeVectors(repo: string, vectors: ArgvVector[]): void {
   const dir = join(repo, 'fixtures', 'argv');
