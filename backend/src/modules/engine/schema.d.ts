@@ -12,10 +12,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["cache"];
+        get: operations["get_cache"];
         put?: never;
         post?: never;
-        delete: operations["cache_delete"];
+        delete: operations["delete_cache"];
         options?: never;
         head?: never;
         patch?: never;
@@ -140,9 +140,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list"];
+        get: operations["list_jobs"];
         put?: never;
-        post: operations["create"];
+        post: operations["create_job"];
         delete?: never;
         options?: never;
         head?: never;
@@ -156,10 +156,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_one"];
+        get: operations["get_job"];
         put?: never;
         post?: never;
-        delete: operations["delete"];
+        delete: operations["cancel_job"];
         options?: never;
         head?: never;
         patch?: never;
@@ -204,9 +204,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_get_v1_sessions"];
+        get: operations["list_sessions"];
         put?: never;
-        post: operations["open"];
+        post: operations["open_session"];
         delete?: never;
         options?: never;
         head?: never;
@@ -220,10 +220,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_one_get_v1_sessions_sid_"];
+        get: operations["get_session"];
         put?: never;
         post?: never;
-        delete: operations["delete_delete_v1_sessions_sid_"];
+        delete: operations["delete_session"];
         options?: never;
         head?: never;
         patch?: never;
@@ -238,7 +238,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["command"];
+        post: operations["command_session"];
         delete?: never;
         options?: never;
         head?: never;
@@ -254,7 +254,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["heartbeat"];
+        post: operations["heartbeat_session"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1468,7 +1468,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    cache: {
+    get_cache: {
         parameters: {
             query?: never;
             header?: never;
@@ -1487,7 +1487,7 @@ export interface operations {
             };
         };
     };
-    cache_delete: {
+    delete_cache: {
         parameters: {
             query?: never;
             header?: never;
@@ -1707,7 +1707,7 @@ export interface operations {
             };
         };
     };
-    list: {
+    list_jobs: {
         parameters: {
             query?: never;
             header?: never;
@@ -1726,7 +1726,7 @@ export interface operations {
             };
         };
     };
-    create: {
+    create_job: {
         parameters: {
             query?: never;
             header?: never;
@@ -1757,7 +1757,7 @@ export interface operations {
             };
         };
     };
-    get_one: {
+    get_job: {
         parameters: {
             query?: never;
             header?: never;
@@ -1783,7 +1783,7 @@ export interface operations {
             };
         };
     };
-    delete: {
+    cancel_job: {
         parameters: {
             query?: never;
             header?: never;
@@ -1868,7 +1868,7 @@ export interface operations {
             };
         };
     };
-    list_get_v1_sessions: {
+    list_sessions: {
         parameters: {
             query?: never;
             header?: never;
@@ -1890,7 +1890,7 @@ export interface operations {
             };
         };
     };
-    open: {
+    open_session: {
         parameters: {
             query?: never;
             header?: never;
@@ -1927,7 +1927,7 @@ export interface operations {
             };
         };
     };
-    get_one_get_v1_sessions_sid_: {
+    get_session: {
         parameters: {
             query?: never;
             header?: never;
@@ -1953,7 +1953,7 @@ export interface operations {
             };
         };
     };
-    delete_delete_v1_sessions_sid_: {
+    delete_session: {
         parameters: {
             query?: never;
             header?: never;
@@ -1974,7 +1974,7 @@ export interface operations {
             };
         };
     };
-    command: {
+    command_session: {
         parameters: {
             query?: never;
             header?: never;
@@ -2010,7 +2010,7 @@ export interface operations {
             };
         };
     };
-    heartbeat: {
+    heartbeat_session: {
         parameters: {
             query?: never;
             header?: never;

@@ -10,16 +10,7 @@ schema=backend/src/modules/engine/schema.d.ts
 
 # gen_schema <openapi.json> <label>: the label is the engine version, or `local`.
 gen_schema() {
-    # openapi-typescript merges operations sharing an operationId (sessions and jobs both have `list`).
-    node -e '
-const o = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")), seen = new Set();
-for (const [p, item] of Object.entries(o.paths)) for (const [m, op] of Object.entries(item)) {
-  if (!op.operationId) continue;
-  if (seen.has(op.operationId)) op.operationId += "_" + (m + p).replace(/\W+/g, "_");
-  seen.add(op.operationId);
-}
-process.stdout.write(JSON.stringify(o));' "$1" > "$tmp/openapi.json"
-    (cd backend && npx --no-install openapi-typescript "$tmp/openapi.json" --default-non-nullable=false -o "$tmp/schema.d.ts" >/dev/null)
+    (cd backend && npx --no-install openapi-typescript "$1" --default-non-nullable=false -o "$tmp/schema.d.ts" >/dev/null)
     { echo "// Generated from fliks-engine openapi.json ($2). Do not edit: run scripts/bump-engine.sh."; cat "$tmp/schema.d.ts"; } > "$schema"
 }
 
