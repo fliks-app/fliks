@@ -51,3 +51,11 @@ Golden state of the boot detection (`TranscodingService.onModuleInit`, the probe
 - `hw-scenarios.ts` scripts the synthetic hosts (nvenc, amf/win32, qsv/win32, videotoolbox/darwin, cpu-only, broken GPU, blacklisted ids). nvenc, win32 and darwin are synthetic only; the real ones are recorded on a machine with the GPUs.
 - Generate/verify with `FLIKS_ENGINE_REPO` / `FLIKS_ENGINE_REPO_CHECK` as above; `FLIKS_HW_RECORD=<name>` re-records one real scenario here; `FLIKS_HW_LIVE=<out.json>` (+ `FLIKS_HW_NODE`) runs the detection for real and writes the state, for parity against the engine's `hw-detect`.
 - A change to a probe's argv, timeout or conditions must regenerate these too.
+
+## Session vectors (`session-vectors.spec.ts`)
+
+Golden results of the real session services for the engine's `core::session` (`fixtures/session`): `TranscodingService.resolveExistingSession` and `cleanupStaleSessions`, the throttle predicates and `tickOnce`, `TranscodeCacheService.runGc`, `LiveSessionRegistry` gc/revive/cap, `SessionRouter.assertFresh`, variant keys.
+
+- `session-vectors.ts` runs each kind against stubs of the services' private state (`session-cases.ts` holds the replays of the resolve-existing-session and ffmpeg-throttle specs, the cache and lifecycle TTL/LRU cases, the synthetic matrices and the seeded fuzz generators); inputs and `expected` are in the engine's wire shape.
+- Generate/verify with `FLIKS_ENGINE_REPO` / `FLIKS_ENGINE_REPO_CHECK` as above; fuzz with `SESSION_FUZZ_OUT=<dir> SESSION_FUZZ_SEED=<n> SESSION_FUZZ_COUNT=<n>`; `SESSION_FUZZ_EXPECT=<dir>` recomputes a promoted vector.
+- A change to the seek matrix, the throttle, the cache GC or the job/live-session lifetimes must regenerate them too.
