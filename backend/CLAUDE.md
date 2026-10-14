@@ -77,3 +77,17 @@ One recorded call each of the playlist builders (master, media, routes) and the 
 - Replays the master-playlist, controller, timeline, cmaf-rewrite, remux-assembler, segment-boundaries, source-timeline and output-timeline specs, wrapping the exports to record their calls, plus a synthetic matrix (`packaging-cases.ts`). Bytes are base64, bigints strings.
 - Generate/verify with `FLIKS_ENGINE_REPO` / `FLIKS_ENGINE_REPO_CHECK` as above; `PACKAGING_FFMPEG=<ffmpeg>` re-records the `real-*` clip fixtures. Fuzz: `PACKAGING_FUZZ_OUT=<dir> PACKAGING_FUZZ_SEED=<n> PACKAGING_FUZZ_COUNT=<n> npx jest test/engine-vectors/packaging-vectors`.
 - A change to those files (or to a playlist route) must regenerate these.
+
+## Remux assembler vectors (`remux-vectors.spec.ts`)
+
+Golden runs of `RemuxSegmentAssembler` for the engine's `core::mp4` (`fixtures/mp4/assembler`): `input` is the GOP files a remux run wrote (base64), `expected` the segments served from them plus the frontiers.
+
+- Check derives the plan with `remuxAssemblyPlan` from the stored scan, grid and run, assembles the stored GOP files and compares; no ffmpeg needed.
+- `FLIKS_ENGINE_REPO` alone recomputes `expected` of the stored runs. With `REMUX_TOOLS=<bin dir with ffmpeg, ffprobe>` it re-records them from freshly encoded clips, whose bytes follow the ffmpeg build: expect a diff on another version.
+- A change to `remux-assembler.ts`, `segment-boundaries.ts` or the remux argv must regenerate them.
+
+## Dolby Vision codecs and open report vectors (`dv-codecs-vectors.spec.ts`, `report-vectors.spec.ts`)
+
+- `fixtures/hls/dv-codecs.json`: `dvSupplementalCodecs` / `dvStandaloneCodecs` over a DV field matrix.
+- `fixtures/report/open-report.json`: what playback-info derives beside the decision (`playbackClockOffsetS`, `tonemapAlgo`/`tonemapCurve`, QoE pipeline) for every `fixtures/decide` vector, so regenerate `decide` first. The curve cycles over the vectors.
+- Generate/verify with `FLIKS_ENGINE_REPO` / `FLIKS_ENGINE_REPO_CHECK`. A change to `dolby-vision.ts`, `encode-pipeline.ts`, `qoe-pipeline.ts` or `source-timeline.ts` must regenerate them.
