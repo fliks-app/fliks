@@ -265,7 +265,8 @@ function writeVectors(repo: string, vectors: Vector[]): void {
   const dir = join(repo, 'fixtures', 'decide');
   mkdirSync(dir, { recursive: true });
   for (const f of readdirSync(dir))
-    if (f.endsWith('.json')) rmSync(join(dir, f));
+    // Fuzz-promoted fixtures are hand-curated, not regenerated.
+    if (f.endsWith('.json') && !f.startsWith('fuzz-')) rmSync(join(dir, f));
   const used = new Set<string>();
   for (const v of vectors) {
     let file = slug(v.name);
