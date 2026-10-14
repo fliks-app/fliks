@@ -2,6 +2,7 @@
 import { Logger } from '@nestjs/common';
 import { computeMovieHash } from '../../src/modules/subtitles/moviehash';
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -10,7 +11,8 @@ import {
   statSync,
   writeFileSync,
 } from 'fs';
-import { join } from 'path';
+import { extname, join } from 'path';
+import { VIDEO_EXTS } from '../../src/common/constants/video-extensions';
 import { promisify } from 'util';
 import { FfprobeService } from '../../src/modules/media-probe/ffprobe.service';
 import { resetMkvmergeAvailability } from '../../src/modules/media-probe/mkv-language-tags';
@@ -22,10 +24,13 @@ import { io, type Backend, type Call, type ToolResult } from './probe-io';
 import { slug, sortKeys } from './vector';
 
 // The service's child_process and stat run against a backend: real tools, canned answers or a recording.
+// With PROBE_LIBRARY the real child_process runs the tools found on PATH.
 jest.mock('child_process', () =>
-  (require('./probe-io') as typeof import('./probe-io')).childProcessMock(
-    jest.requireActual('child_process'),
-  ),
+  process.env.PROBE_LIBRARY
+    ? jest.requireActual<typeof import('child_process')>('child_process')
+    : (require('./probe-io') as typeof import('./probe-io')).childProcessMock(
+        jest.requireActual('child_process'),
+      ),
 );
 jest.mock('fs/promises', () => {
   const actual =
@@ -44,6 +49,8 @@ const GEN = process.env.FLIKS_ENGINE_REPO;
 const CHECK = process.env.FLIKS_ENGINE_REPO_CHECK;
 const CORPUS = process.env.PROBE_CORPUS_DIR;
 const TOOLS = process.env.PROBE_TOOLS;
+const LIBRARY = process.env.PROBE_LIBRARY;
+const LIBRARY_OUT = process.env.PROBE_OUT;
 
 export interface Opts {
   crop: boolean;
@@ -302,7 +309,37 @@ function readFixtures(repo: string): Fixture[] {
 
 Logger.overrideLogger(false);
 
-if (GEN) {
+function* videoFiles(d: string): Generator<string> {
+  for (const e of readdirSync(d, { withFileTypes: true }).sort((a, b) =>
+    a.name.localeCompare(b.name),
+  )) {
+    const p = join(d, e.name);
+    if (e.isDirectory()) yield* videoFiles(p);
+    else if (VIDEO_EXTS.has(extname(e.name).toLowerCase())) yield p;
+  }
+}
+
+if (LIBRARY && LIBRARY_OUT) {
+  // Differential run on a real library (read-only), tools from PATH (PATH=$(tools/probe-tools.sh):$PATH):
+  // one NDJSON line per video file, never committed.
+  it('probes PROBE_LIBRARY into PROBE_OUT', async () => {
+    writeFileSync(LIBRARY_OUT, '');
+    let total = 0;
+    for (const path of videoFiles(LIBRARY)) {
+      resetMkvmergeAvailability();
+      const t0 = Date.now();
+      const info = await runService(path, { crop: true, mkvTags: true });
+      const moviehash = await computeMovieHash(path);
+      const ms = Date.now() - t0;
+      total += ms;
+      appendFileSync(
+        LIBRARY_OUT,
+        JSON.stringify({ path, info, moviehash, ms }) + '\n',
+      );
+    }
+    console.log(`library probe: ${total} ms`);
+  }, 3_600_000);
+} else if (GEN) {
   it('writes fixtures/probe', async () => {
     const d = dir(GEN);
     mkdirSync(d, { recursive: true });

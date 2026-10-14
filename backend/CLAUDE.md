@@ -42,6 +42,7 @@ Golden raw tool output and results of `FfprobeService.detectMediaFileInfo` + `de
 - `probe-io.ts` stands in for `child_process` (and `stat`): the real service runs against recorded output, canned answers (`probe-synthetic.ts`, `probe-fuzz.ts`) or the real tools on a corpus (`tools/gen-probe-corpus.sh` in the engine repo). Crop runs in software (platform forced off Linux).
 - Regenerate: `FLIKS_ENGINE_REPO=/path/to/engine PROBE_CORPUS_DIR=<corpus> PROBE_TOOLS=<bin dir with ffprobe, ffmpeg, mkvmerge> npx jest test/engine-vectors/probe-vectors`. Without the corpus variables the recorded corpus runs are kept and `expected` is recomputed by the service. Verify: `FLIKS_ENGINE_REPO_CHECK=/path/to/engine npx jest test/engine-vectors` (replays the recorded runs, no tools needed).
 - A change to `ffprobe.service.ts`, `mkv-language-tags.ts` or `moviehash.ts` must regenerate them.
+- Library differential (personal data, output never committed): `PATH=$(tools/probe-tools.sh):$PATH PROBE_LIBRARY=<dir> PROBE_OUT=<out.ndjson> npx jest test/engine-vectors/probe-vectors` writes `{path, info, moviehash, ms}` per video file; the engine's `probe_library` test replays it.
 
 ## Host capability vectors (`hw-vectors.spec.ts`)
 
