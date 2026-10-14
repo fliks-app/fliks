@@ -10,6 +10,7 @@ import {
   appendFileSync,
 } from 'fs';
 import { join } from 'path';
+import { StreamingController } from '../../src/modules/streaming/streaming.controller';
 import { evaluateRecorder } from '../../src/modules/streaming/stream-builder.test-helpers';
 import { syntheticVectors } from './cases';
 import { genVector, mulberry32 } from './fuzz';
@@ -197,6 +198,69 @@ function prune(vectors: Vector[]): Vector[] {
   });
 }
 
+const ESTIMATE_FILE_SIZES = [0, 1_500_000_000];
+
+/** Runs the real controller method; only the file resolution is stubbed. */
+async function estimateExpected(info: Vector['input']['info'], size: number) {
+  const ctl = {
+    streamingService: {
+      resolveFile: () =>
+        Promise.resolve({ mediaFile: { id: 1, streamInfo: info }, size }),
+    },
+  };
+  return sortKeys(
+    JSON.parse(
+      JSON.stringify(
+        await StreamingController.prototype.downloadQualities.call(
+          ctl as never,
+          { user: {} } as never,
+          1,
+        ),
+      ),
+    ),
+  );
+}
+
+interface EstimateVector {
+  name: string;
+  input: { info: Vector['input']['info']; fileSize: number };
+  expected: unknown;
+}
+
+async function estimateVectors(vectors: Vector[]): Promise<EstimateVector[]> {
+  const seen = new Set<string>();
+  const out: EstimateVector[] = [];
+  for (const v of vectors) {
+    const key = JSON.stringify(sortKeys(v.input.info));
+    if (seen.has(key)) continue;
+    seen.add(key);
+    for (const fileSize of ESTIMATE_FILE_SIZES)
+      out.push({
+        name: `${v.name} size ${fileSize}`,
+        input: { info: v.input.info, fileSize },
+        expected: await estimateExpected(v.input.info, fileSize),
+      });
+  }
+  return out;
+}
+
+function writeEstimateVectors(repo: string, vectors: EstimateVector[]): void {
+  const dir = join(repo, 'fixtures', 'estimate-sizes');
+  mkdirSync(dir, { recursive: true });
+  for (const f of readdirSync(dir))
+    if (f.endsWith('.json')) rmSync(join(dir, f));
+  const used = new Set<string>();
+  for (const v of vectors) {
+    let file = slug(v.name);
+    for (let n = 2; used.has(file); n++) file = `${slug(v.name)}-${n}`;
+    used.add(file);
+    writeFileSync(
+      join(dir, `${file}.json`),
+      JSON.stringify(sortKeys(v), null, 2) + '\n',
+    );
+  }
+}
+
 function writeVectors(repo: string, vectors: Vector[]): void {
   const dir = join(repo, 'fixtures', 'decide');
   mkdirSync(dir, { recursive: true });
@@ -272,7 +336,7 @@ if (GEN) {
   }
 
   describe('generate decide vectors', () => {
-    afterAll(() => {
+    afterAll(async () => {
       evaluateRecorder.current = undefined;
       const seen = new Set<string>();
       const all: Vector[] = [];
@@ -292,6 +356,9 @@ if (GEN) {
         `decide vectors: ${pruned.length} ${JSON.stringify(bySource)}`,
       );
       writeVectors(GEN, pruned);
+      const est = await estimateVectors(pruned);
+      console.log(`estimate-sizes vectors: ${est.length}`);
+      writeEstimateVectors(GEN, est);
     });
     it('writes fixtures/decide', () => {
       expect(DEFAULT_CONFIG.segmentDuration).toBe(3);
@@ -362,6 +429,23 @@ if (GEN) {
     it.each(files)('%s', (f) => {
       const v = JSON.parse(readFileSync(join(dir, f), 'utf8')) as Vector;
       expect(sortKeys(runVector(v))).toEqual(v.expected);
+    });
+  });
+  const estDir = join(CHECK, 'fixtures', 'estimate-sizes');
+  const estFiles = existsSync(estDir)
+    ? readdirSync(estDir)
+        .filter((f) => f.endsWith('.json'))
+        .sort()
+    : [];
+  describe('estimate-sizes vectors match the engine checkout', () => {
+    it('has fixtures', () => expect(estFiles.length).toBeGreaterThan(0));
+    it.each(estFiles)('%s', async (f) => {
+      const v = JSON.parse(
+        readFileSync(join(estDir, f), 'utf8'),
+      ) as EstimateVector;
+      expect(await estimateExpected(v.input.info, v.input.fileSize)).toEqual(
+        v.expected,
+      );
     });
   });
 } else {
