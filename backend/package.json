@@ -99,10 +99,6 @@
       "ts"
     ],
     "rootDir": "src",
-    "roots": [
-      "<rootDir>",
-      "<rootDir>/../test/engine-vectors"
-    ],
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.ts$": "ts-jest",
