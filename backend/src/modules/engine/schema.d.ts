@@ -5,6 +5,22 @@
  */
 
 export interface paths {
+    "/v1/cache": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["cache"];
+        put?: never;
+        post?: never;
+        delete: operations["cache_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/capabilities": {
         parameters: {
             query?: never;
@@ -69,6 +85,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/hello": {
         parameters: {
             query?: never;
@@ -85,6 +117,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/invalidate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["invalidate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/probe": {
         parameters: {
             query?: never;
@@ -95,6 +143,86 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["probe"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revoke"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list"];
+        put?: never;
+        post: operations["open"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sessions/{sid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_one"];
+        put?: never;
+        post?: never;
+        delete: operations["delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sessions/{sid}/command": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["command"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sessions/{sid}/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["heartbeat"];
         delete?: never;
         options?: never;
         head?: never;
@@ -180,6 +308,41 @@ export interface components {
             /** Format: int32 */
             videoBitrateBps: number;
         };
+        /** @enum {string} */
+        BurnInKind: "text" | "image";
+        /** @description A subtitle burnt into the video, already resolved by the host. */
+        BurnInSpec: {
+            /** @description The libass `-vf` step (`subtitles='...'`) of a text track. */
+            filter?: string | null;
+            /**
+             * Format: int32
+             * @description Stream index of an image track, overlaid.
+             */
+            streamIndex?: number | null;
+            type: components["schemas"]["BurnInKind"];
+        };
+        CacheDeleteResult: {
+            /** Format: int32 */
+            removed: number;
+        };
+        /** @description One `<owner>/<file>/<profileHash>` directory of the cache. */
+        CacheEntry: {
+            /** Format: double */
+            bytes: number;
+            /** Format: double */
+            lastAccessMs: number;
+            /** @description A session or job uses it: never evicted. */
+            live: boolean;
+            /** Format: int32 */
+            mediaFileId: number;
+            ownerId?: string | null;
+            profileHash: string;
+        };
+        CacheSummary: {
+            entries: components["schemas"]["CacheEntry"][];
+            /** Format: double */
+            usedBytes: number;
+        };
         Capabilities: {
             decoders: string[];
             defaultGpu?: string | null;
@@ -202,6 +365,17 @@ export interface components {
             /** Format: double */
             startSeconds: number;
             title?: string | null;
+        };
+        /** @description Display facts of the client a session plays on; opaque to the engine. */
+        ClientInfo: {
+            /** @default null */
+            appVersion?: string | null;
+            /** @default null */
+            deviceName?: string | null;
+            /** @default null */
+            systemName?: string | null;
+            /** @default null */
+            userAgent?: string | null;
         };
         CodecCondition: {
             codec: string;
@@ -372,6 +546,64 @@ export interface components {
              */
             streaming?: components["schemas"]["StreamingConfig"];
         };
+        /** @description `GET /v1/events` (SSE): the SSE event name is `type`. */
+        EngineEvent: {
+            session: components["schemas"]["SessionSnapshot"];
+            /** @enum {string} */
+            type: "SessionOpened";
+        } | {
+            reason: string;
+            session_id: string;
+            /** @enum {string} */
+            type: "SessionEnded";
+        } | {
+            hw_accel: components["schemas"]["HwAccel"];
+            quality: string;
+            session_id: string;
+            /** @enum {string} */
+            type: "PipelineChanged";
+        } | {
+            /** @description Already on disk when requested. */
+            cache_hit: boolean;
+            /** @description The request's CMCD data, raw. */
+            cmcd_raw?: string | null;
+            /** Format: int32 */
+            index: number;
+            rung: string;
+            session_id: string;
+            track: components["schemas"]["Track"];
+            /** @enum {string} */
+            type: "SegmentServed";
+            /**
+             * Format: double
+             * @description How long the request waited for the segment to be produced.
+             */
+            waited_ms: number;
+        } | {
+            hw_accel: components["schemas"]["HwAccel"];
+            job_key: string;
+            /** Format: int32 */
+            media_file_id: number;
+            quality: string;
+            /** Format: int32 */
+            start_segment: number;
+            /** @enum {string} */
+            type: "JobStarted";
+        } | {
+            /** Format: int32 */
+            exit_code?: number | null;
+            job_key: string;
+            state: components["schemas"]["JobState"];
+            /** @enum {string} */
+            type: "JobEnded";
+        } | {
+            from: components["schemas"]["HwAccel"];
+            job_key: string;
+            stderr_tail: string[];
+            to: components["schemas"]["HwAccel"];
+            /** @enum {string} */
+            type: "HwFallback";
+        };
         /** @description Body of `POST /v1/estimate-sizes`. `fileSize` is the source size in bytes, 0 when unknown. */
         EstimateSizesRequest: {
             /** Format: double */
@@ -391,12 +623,41 @@ export interface components {
             /** Format: int32 */
             maxFall: number;
         };
+        HeartbeatRequest: {
+            /**
+             * @description When given, must be the session's owner (403 otherwise).
+             * @default null
+             */
+            ownerId?: string | null;
+            /**
+             * Format: double
+             * @default null
+             */
+            positionS?: number | null;
+            /** @default null */
+            quality?: string | null;
+            /**
+             * @description Player state, opaque (`playing`, `paused`, ...).
+             * @default null
+             */
+            state?: string | null;
+        };
+        HeartbeatResponse: {
+            /** @description The sid is unknown: the client re-opens a session. */
+            sessionLost: boolean;
+        };
         Hello: {
             engineVersion: string;
             features: string[];
             instanceId: string;
             /** Format: int32 */
             protocolVersion: number;
+        };
+        Hints: {
+            /** @description The probe blob predates the engine's schema version. */
+            probeStale: boolean;
+            /** @description No source scan: the remux keyframe grid and audio checks were skipped. */
+            scanMissing: boolean;
         };
         /** @description What the decision reads of the host: detected backend and boot probe results (`core::hw`). */
         HostCaps: {
@@ -431,6 +692,45 @@ export interface components {
         };
         /** @enum {string} */
         HwAccel: "vaapi" | "nvenc" | "qsv" | "amf" | "videotoolbox" | "none";
+        InvalidateRequest: {
+            /** Format: int32 */
+            mediaFileId: number;
+        };
+        InvalidateResult: {
+            /** Format: int32 */
+            cacheEntries: number;
+            /** Format: int32 */
+            jobs: number;
+        };
+        /** @enum {string} */
+        JobState: "running" | "paused" | "done" | "failed" | "killed";
+        /** @description The ffmpeg run behind a session ("stats for nerds"). */
+        JobStats: {
+            /** @description `none` after a hardware failure fell back to the CPU. */
+            actualHw: components["schemas"]["HwAccel"];
+            /** Format: int32 */
+            exitCode?: number | null;
+            /**
+             * Format: int32
+             * @description Latest segment written, absent before the first one.
+             */
+            frontierSegment?: number | null;
+            quality: string;
+            requestedHw: components["schemas"]["HwAccel"];
+            /**
+             * Format: int32
+             * @description Spawns of this job key after the first (seeks, rung switches, fallbacks).
+             */
+            restarts: number;
+            /** Format: int32 */
+            startSegment: number;
+            state: components["schemas"]["JobState"];
+            /** @description Last stderr lines, bounded. */
+            stderrTail: string[];
+            throttled: boolean;
+            /** Format: double */
+            transcodePercent: number;
+        };
         Keyframe: {
             /** Format: double */
             dts: number;
@@ -533,6 +833,41 @@ export interface components {
          * @enum {string}
          */
         MuxFlavour: "ts" | "fmp4";
+        /** @description `POST /v1/sessions`: decide, open the session and prewarm its job, atomically. */
+        OpenSessionRequest: {
+            burnIn?: null | components["schemas"]["BurnInSpec"];
+            client?: components["schemas"]["ClientInfo"];
+            decide: components["schemas"]["DecideRequest"];
+            /** @description Opaque owner id (`[A-Za-z0-9_.-]`, 1 to 64 chars); absent = anonymous. */
+            ownerId?: string | null;
+            /** @description Offline download: the session lives on the pinned TTL and is never throttled. */
+            pinned?: boolean;
+            /** @description Version of the source file (rescan counter, mtime): part of the cache key. */
+            sourceVersion?: string | null;
+            /**
+             * Format: double
+             * @description Resume position, seconds on the content timeline.
+             */
+            startAtS?: number | null;
+            /**
+             * @description Master `SUBTITLES` group for clients with `supportsHlsSubtitles`; absent: the embedded
+             *     text tracks of `info`.
+             */
+            subtitleRenditions?: components["schemas"]["SubtitleTrack"][] | null;
+            /** @description Opaque to the engine, echoed in snapshots (e.g. the host's connection ids). */
+            tags?: {
+                [key: string]: string;
+            };
+        };
+        OpenSessionResponse: {
+            decision: components["schemas"]["Decision"];
+            hints: components["schemas"]["Hints"];
+            /** @description `decision.response.playUrl` with `sid=` appended. */
+            playPath: string;
+            /** @description Cache profile hash; absent on Direct Play. */
+            profileHash?: string | null;
+            sessionId: string;
+        };
         /** @enum {string} */
         Platform: "linux" | "darwin" | "win32";
         /** @enum {string} */
@@ -648,6 +983,102 @@ export interface components {
             /** Format: int32 */
             width: number;
         };
+        /** @description `mediaId` of a resolve: a media file id, or a live session id (`purpose: live`, M6). */
+        ResolveMediaId: number | string;
+        /** @enum {string} */
+        ResolvePurpose: "stream" | "download" | "sprite" | "subtitle" | "live";
+        /** @description `POST {hostUrl}/engine/resolve`, implemented by the host. */
+        ResolveRequest: {
+            /**
+             * @description The client credential exactly as received, one of: the `Cookie` header value, the
+             *     `Authorization` header value (`Bearer <jwt>`), the bare `?token=` value.
+             */
+            credential: string;
+            mediaId: components["schemas"]["ResolveMediaId"];
+            purpose: components["schemas"]["ResolvePurpose"];
+            /**
+             * Format: int32
+             * @description Embedded subtitle stream (`purpose: subtitle`).
+             */
+            streamIndex?: number | null;
+            /**
+             * Format: int32
+             * @description External subtitle (`purpose: subtitle`).
+             */
+            subtitleId?: number | null;
+        };
+        ResolveResponse: {
+            allow: boolean;
+            /** @description MIME type of a media file; a subtitle's extension (`srt`, `ass`, `vtt`) or `embedded`. */
+            format?: string | null;
+            ownerId?: string | null;
+            /**
+             * @description Media file; `sprite.jpg` (`sprite`, may not exist); the subtitle file (external
+             *     subtitle) or the media file (embedded subtitle).
+             */
+            path?: string | null;
+            /**
+             * Format: double
+             * @description Cache lifetime of this answer; 60 when absent.
+             */
+            ttlS?: number | null;
+        };
+        /** @description `POST /v1/revoke`: at least one field. */
+        RevokeRequest: {
+            /** @default null */
+            mediaFileIds?: number[] | null;
+            /** @default null */
+            ownerId?: string | null;
+        };
+        RevokeResult: {
+            /** Format: int32 */
+            sessions: number;
+        };
+        /** @enum {string} */
+        SessionAction: "stop" | "pauseJob" | "resumeJob";
+        SessionCommand: {
+            action: components["schemas"]["SessionAction"];
+        };
+        /** @description 410 body of a data-plane request whose `sid` the engine no longer knows. */
+        SessionExpired: {
+            /** @description Always `session_expired`. */
+            code: string;
+            message: string;
+            sid?: string | null;
+        };
+        /** @enum {string} */
+        SessionKind: "directplay" | "remux" | "transcode";
+        SessionSnapshot: {
+            client: components["schemas"]["ClientInfo"];
+            /**
+             * Format: int32
+             * @description `EngineConfig.revision` the session froze.
+             */
+            configRevision: number;
+            decision: components["schemas"]["Decision"];
+            job?: null | components["schemas"]["JobStats"];
+            kind: components["schemas"]["SessionKind"];
+            /** Format: double */
+            lastBeatMs: number;
+            /** Format: double */
+            lastSegmentAtMs?: number | null;
+            /** Format: int32 */
+            mediaFileId: number;
+            /** Format: double */
+            openedAtMs: number;
+            ownerId?: string | null;
+            pinned: boolean;
+            /** Format: double */
+            positionS: number;
+            profileHash?: string | null;
+            /** @description Last rung served or reported by a heartbeat. */
+            quality?: string | null;
+            sessionId: string;
+            state: string;
+            tags: {
+                [key: string]: string;
+            };
+        };
         /** @description Mirrors `SourceScan` (source-scan.ts); `audioConfigChanges` is keyed by audio stream index. */
         SourceScan: {
             audioConfigChanges: {
@@ -725,10 +1156,27 @@ export interface components {
             streamIndex: number;
             title?: string | null;
         };
+        /** @description One text subtitle rendition of the master. */
+        SubtitleTrack: {
+            forced?: boolean;
+            /**
+             * Format: int32
+             * @description Stream index (embedded) or subtitle id (external).
+             */
+            key: number;
+            kind: components["schemas"]["SubtitleTrackKind"];
+            language?: string | null;
+            languageTag?: string | null;
+            name: string;
+        };
+        /** @enum {string} */
+        SubtitleTrackKind: "embedded" | "external";
         /** @enum {string} */
         TonemapAlgo: "auto" | "opencl" | "vaapi" | "qsv";
         /** @enum {string} */
         TonemapCurve: "hable" | "mobius" | "reinhard";
+        /** @enum {string} */
+        Track: "video" | "audio";
         TranscodeReason: {
             flag: string;
             message: string;
@@ -789,6 +1237,48 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    cache: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CacheSummary"];
+                };
+            };
+        };
+    };
+    cache_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mediaFileId: number | null;
+                ownerId: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description live entries are kept */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CacheDeleteResult"];
+                };
+            };
+        };
+    };
     capabilities: {
         parameters: {
             query?: never;
@@ -924,6 +1414,26 @@ export interface operations {
             };
         };
     };
+    events: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description one EngineEvent per `data:` line, event name = `type` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["EngineEvent"];
+                };
+            };
+        };
+    };
     hello: {
         parameters: {
             query?: never;
@@ -939,6 +1449,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Hello"];
+                };
+            };
+        };
+    };
+    invalidate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvalidateRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvalidateResult"];
                 };
             };
         };
@@ -966,6 +1499,208 @@ export interface operations {
             };
             /** @description path is not absolute */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    revoke: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevokeRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevokeResult"];
+                };
+            };
+            /** @description neither ownerId nor mediaFileIds */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ownerId: string | null;
+                mediaFileId: number | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionSnapshot"][];
+                };
+            };
+        };
+    };
+    open: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenSessionRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenSessionResponse"];
+                };
+            };
+            /** @description no config set yet, or an invalid ownerId/path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description hardware detection has not finished (Retry-After: 1) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_one: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionSnapshot"];
+                };
+            };
+            /** @description unknown or ended session */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Default `stopped`. */
+                reason: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description gone (idempotent) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    command: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionCommand"];
+            };
+        };
+        responses: {
+            /** @description done */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description unknown session */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description no running job, or the host cannot pause ffmpeg */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    heartbeat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeartbeatRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeartbeatResponse"];
+                };
+            };
+            /** @description not the session's owner */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
