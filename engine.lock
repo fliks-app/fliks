@@ -1,6 +1,6 @@
 # fliks-app/engine release consumed by the image and the desktop bundles. Bump: scripts/bump-engine.sh
 version=0.1.0
-sha256_linux_x64=
-sha256_linux_arm64=
-sha256_darwin_arm64=
-sha256_windows_x64=
+sha256_linux_x64=745e610d4ee9c00bf2b2919f0f97e2ceb0e0e6934ce993a1d577ce10aa862272
+sha256_linux_arm64=3d181f3088eccb3f04ca20a904a27aace245d2ab9a4e06248c7c2e56fed65f5b
+sha256_darwin_arm64=9d7b3247a3cba8288ba3d42d99d0d0701abf1f3cccd6c76e8b39eb353c3ad0c5
+sha256_windows_x64=a6927a28054f716477eb338f3db751a71e0d86191d5a115967010013af2e62ce
