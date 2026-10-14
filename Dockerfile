@@ -2,6 +2,8 @@
 # Fliks — production image (backend + client)
 # ============================================================
 
+ARG ENGINE_REF=
+
 # --- Stage 1: Build client ---
 FROM node:24-alpine AS client-build
 WORKDIR /app
@@ -46,6 +48,17 @@ RUN set -eu; \
   curl -fsSL -o /fliks-engine "https://github.com/fliks-app/engine/releases/download/v$v/fliks-engine-$p"; \
   echo "$sum  /fliks-engine" | sha256sum -c -; \
   chmod +x /fliks-engine
+
+# ENGINE_REF (an engine git branch/tag/sha) builds the engine from source instead of engine.lock,
+# for test images ahead of an engine release.
+FROM rust:1-alpine AS engine-git
+ARG ENGINE_REF
+RUN apk add --no-cache musl-dev
+ADD https://github.com/fliks-app/engine.git#${ENGINE_REF} /src
+WORKDIR /src
+RUN cargo build --release --locked -p fliks-engine --bin fliks-engine && cp target/release/fliks-engine /fliks-engine
+
+FROM engine${ENGINE_REF:+-git} AS engine-selected
 
 # --- Stage 3: Production runtime ---
 # Runtime toolchain (node + jellyfin-ffmpeg + subtitle/OCR tools). Split out so
@@ -140,7 +153,7 @@ FROM runtime-base AS runtime
 WORKDIR /app
 
 # PID 1: supervises node, forwards signals, reaps zombies.
-COPY --from=engine /fliks-engine /usr/local/bin/fliks-engine
+COPY --from=engine-selected /fliks-engine /usr/local/bin/fliks-engine
 
 # Copy backend production dependencies
 COPY backend/package.json backend/package-lock.json ./
