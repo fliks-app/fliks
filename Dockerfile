@@ -148,6 +148,15 @@ COPY backend/package.json backend/package-lock.json ./
 RUN npm ci
 WORKDIR /src/backend
 
+# Dev stage for the engine compose service: runtime-base + a Rust toolchain, the
+# engine checkout is bind-mounted and rebuilt by cargo-watch.
+FROM runtime-base AS engine-dev
+ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo PATH=/usr/local/cargo/bin:$PATH
+RUN apt-get update && apt-get install -y --no-install-recommends curl gcc libc6-dev \
+  && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal \
+  && cargo install cargo-watch --locked \
+  && rm -rf /var/lib/apt/lists/* "$CARGO_HOME/registry"
+
 FROM runtime-base AS runtime
 
 WORKDIR /app
