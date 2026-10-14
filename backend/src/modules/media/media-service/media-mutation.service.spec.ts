@@ -86,7 +86,6 @@ describe('MediaMutationService monitoring cascade', () => {
       requestLifecycle as never,
       { emitDomain: jest.fn() } as never,
       { deleteForFile: jest.fn() } as never,
-      { clearMediaFileSubtitleCache: jest.fn() } as never,
       {} as never,
     );
   });
@@ -191,7 +190,6 @@ describe('MediaMutationService remove disk cleanup', () => {
       requestLifecycle as never,
       { emitDomain: jest.fn() } as never,
       { deleteForFile: jest.fn() } as never,
-      { clearMediaFileSubtitleCache: jest.fn() } as never,
       {} as never,
     );
   });
@@ -258,10 +256,9 @@ describe('MediaMutationService remove disk cleanup', () => {
 });
 
 describe('MediaMutationService deleteMediaFile cache cleanup', () => {
-  it('purges the sprite and subtitle caches with the id the row had', async () => {
+  it('purges the sprite and subtitle caches (the engine drops both) with the id the row had', async () => {
     const file = { id: 77, episodeId: null, relativePath: 'a.mkv' };
     const thumbnails = { deleteForFile: jest.fn() };
-    const subtitleStream = { clearMediaFileSubtitleCache: jest.fn() };
     const mediaFileRepo = {
       findOne: jest.fn().mockResolvedValue(file),
       // TypeORM blanks the primary key of a removed entity.
@@ -284,14 +281,12 @@ describe('MediaMutationService deleteMediaFile cache cleanup', () => {
       {} as never,
       { emitDomain: jest.fn() } as never,
       thumbnails as never,
-      subtitleStream as never,
       {} as never,
     );
 
     await service.deleteMediaFile(1, 77, false);
 
     expect(thumbnails.deleteForFile).toHaveBeenCalledWith(77);
-    expect(subtitleStream.clearMediaFileSubtitleCache).toHaveBeenCalledWith(77);
   });
 });
 
@@ -315,7 +310,6 @@ describe('MediaMutationService deleteMediaFile EDL sidecar', () => {
       {} as never,
       { emitDomain: jest.fn() } as never,
       { deleteForFile: jest.fn() } as never,
-      { clearMediaFileSubtitleCache: jest.fn() } as never,
       {} as never,
     );
     (service as unknown as { subtitles: unknown }).subtitles = { deleteSubtitleFilesOnDisk: jest.fn() };

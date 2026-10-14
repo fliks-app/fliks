@@ -2,7 +2,6 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { SourceScanService, sourceVersion } from './source-scan.service';
-import * as sourceScan from './source-scan';
 
 describe('SourceScanService', () => {
   const ts = { formatName: 'mpegts', video: [{ streamIndex: 0, codec: 'h264' }], audio: [], subtitles: [] };
@@ -30,12 +29,19 @@ describe('SourceScanService', () => {
   };
 
   const setup = (row: object | null = null) => {
+    const runJob = jest.fn().mockResolvedValue({ type: 'Scan', scan: result });
     const scans = {
       findOne: jest.fn().mockResolvedValue(row),
       upsert: jest.fn().mockResolvedValue(undefined),
     };
     const files = { update: jest.fn().mockResolvedValue(undefined) };
-    return { scans, files, svc: new SourceScanService(scans as never, files as never) };
+    const engine = { runJob };
+    return {
+      scans,
+      files,
+      runJob,
+      svc: new SourceScanService(scans as never, files as never, engine as never),
+    };
   };
 
   it('holds a stored scan only while the file keeps its size and mtime', async () => {
@@ -55,14 +61,17 @@ describe('SourceScanService', () => {
   });
 
   it('scans once for concurrent callers, stores it, and the clock break on the row', async () => {
-    const scan = jest.spyOn(sourceScan, 'scanSource').mockResolvedValue(result);
-    const { scans, files, svc } = setup();
+    const { scans, files, runJob, svc } = setup();
     await Promise.all([
       svc.scheduleIfNeeded(3, file, ts as never),
       svc.scheduleIfNeeded(3, file, ts as never),
     ]);
-    expect(scan).toHaveBeenCalledTimes(1);
-    expect(scan.mock.calls[0][2]).toEqual({ background: true });
+    expect(runJob).toHaveBeenCalledTimes(1);
+    expect(runJob).toHaveBeenCalledWith({
+      kind: { type: 'Scan', info: ts },
+      media: { mediaFileId: 3, path: file },
+      priority: 'low',
+    });
     const st = fs.statSync(file);
     expect(scans.upsert).toHaveBeenCalledWith(
       { mediaFileId: 3, size: st.size, mtimeMs: st.mtimeMs, scan: result },
@@ -72,12 +81,11 @@ describe('SourceScanService', () => {
   });
 
   it('skips a file scanned at its current version, and one without video', async () => {
-    const scan = jest.spyOn(sourceScan, 'scanSource');
     const st = fs.statSync(file);
-    const { svc } = setup({ size: st.size, mtimeMs: st.mtimeMs, scan: result });
+    const { runJob, svc } = setup({ size: st.size, mtimeMs: st.mtimeMs, scan: result });
     await svc.scheduleIfNeeded(3, file, ts as never);
     await svc.scheduleIfNeeded(3, file, { ...ts, video: [] } as never);
-    expect(scan).not.toHaveBeenCalled();
+    expect(runJob).not.toHaveBeenCalled();
   });
 
   it('restores a dropped clock break in the caller streamInfo and the row', async () => {
@@ -98,12 +106,30 @@ describe('SourceScanService', () => {
   });
 
   it('drops a scan of a file that changed under it', async () => {
-    jest.spyOn(sourceScan, 'scanSource').mockImplementation(async () => {
+    const { scans, runJob, svc } = setup();
+    runJob.mockImplementation(async () => {
       fs.writeFileSync(file, 'z'.repeat(300));
-      return result;
+      return { type: 'Scan', scan: result };
     });
-    const { scans, svc } = setup();
     await svc.scheduleIfNeeded(3, file, ts as never);
     expect(scans.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe('SourceScanService clock break', () => {
+  it('clears a stored break the new scan no longer finds', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'scan-svc-'));
+    const file = path.join(dir, 'a.ts');
+    fs.writeFileSync(file, 'x');
+    const scans = { findOne: jest.fn().mockResolvedValue(null), upsert: jest.fn() };
+    const files = { update: jest.fn() };
+    const scan = { keyframes: [], end: 1, audioConfigChanges: {} };
+    const engine = { runJob: jest.fn().mockResolvedValue({ type: 'Scan', scan }) };
+    const svc = new SourceScanService(scans as never, files as never, engine as never);
+    const info = { video: [{ streamIndex: 0 }], timestampBreakSeconds: 9 };
+    await svc.scheduleIfNeeded(3, file, info as never);
+    const [, { streamInfo }] = files.update.mock.calls[0];
+    expect(streamInfo()).toContain(`'null'::jsonb`);
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });

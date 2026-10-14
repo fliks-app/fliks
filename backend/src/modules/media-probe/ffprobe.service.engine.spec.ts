@@ -25,9 +25,8 @@ const INFO = {
   durationSeconds: 120,
 };
 
-function make(probe: jest.Mock, enabled = true) {
-  const engine = { enabled, probe } as unknown as EngineService;
-  return new FfprobeService(engine);
+function make(probe: jest.Mock) {
+  return new FfprobeService({ probe } as unknown as EngineService);
 }
 
 describe('FfprobeService with the engine', () => {
@@ -38,7 +37,7 @@ describe('FfprobeService with the engine', () => {
     expect(probe).toHaveBeenCalledWith('/m/a.mkv', { mkvTags: true });
   });
 
-  it('maps ok:false to the failure result of the TS path', async () => {
+  it('maps ok:false to a failure result', async () => {
     const probe = jest.fn(async () => ({
       ok: false,
       error: 'moov atom not found',
@@ -57,17 +56,11 @@ describe('FfprobeService with the engine', () => {
     } satisfies MediaFileInfo);
   });
 
-  it('maps a transport failure to the same failure result', async () => {
-    const probe = jest
-      .fn()
-      .mockRejectedValue(new Error('POST /v1/probe -> 400'));
-    const out = await make(probe).detectMediaFileInfo('/m/a.mp4');
-    expect(out).toEqual({
-      video: [],
-      audio: [],
-      subtitles: [],
-      error: 'POST /v1/probe -> 400',
-    });
+  it('rejects when the engine cannot be reached, so an import retries later', async () => {
+    const probe = jest.fn().mockRejectedValue(new Error('engine down'));
+    await expect(make(probe).detectMediaFileInfo('/m/a.mp4')).rejects.toThrow(
+      'engine down',
+    );
   });
 
   it('keeps "No streams detected" as a readable file', async () => {
@@ -84,7 +77,7 @@ describe('FfprobeService with the engine', () => {
   it('detectCrop reads video[0].crop and null when there is none', async () => {
     const probe = jest.fn(async () => ({ ok: true, info: INFO }));
     const svc = make(probe);
-    expect(await svc.detectCrop('/m/a.mkv', 120, 1920, 1080)).toEqual(
+    expect(await svc.detectCrop('/m/a.mkv')).toEqual(
       INFO.video[0].crop,
     );
     expect(probe).toHaveBeenCalledWith('/m/a.mkv', { crop: true });
@@ -142,12 +135,13 @@ describe('FfprobeService with the engine', () => {
     ]);
   });
 
-  it('does not call the engine when it is disabled', async () => {
-    const probe = jest.fn();
-    const out = await make(probe, false).detectMediaFileInfo(
-      '/nonexistent/a.mkv',
-    );
-    expect(probe).not.toHaveBeenCalled();
-    expect(out.error).toBeDefined();
+  it('the soft probes read an unreachable engine as an unreadable file', async () => {
+    const svc = make(jest.fn().mockRejectedValue(new Error('engine down')));
+    expect(await svc.detectCrop('/m/a.mkv')).toBeNull();
+    expect(await svc.detectStreams('/m/a.mkv')).toEqual([]);
+    expect(await svc.detectEmbeddedSubtitles('/m/a.mkv')).toEqual({
+      ok: false,
+      streams: [],
+    });
   });
 });

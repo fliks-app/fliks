@@ -2,7 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Repository } from 'typeorm';
-import { freeFfmpegSlots } from '../../../common/utils/ffmpeg-slots';
 import { MediaFile } from '../../media/entities/media-file.entity';
 import { StreamingService } from '../streaming.service';
 import { SourceScanService } from './source-scan.service';
@@ -41,9 +40,6 @@ export class ScanBackfillService {
     // A live session may start mid-scan; the scan already run isn't pulled
     // back, but no new one starts until the account is idle again.
     if (this.liveSessions.size() > 0) return;
-    // Leave at least one slot free: a background scan must never be the one
-    // that makes an interactive job wait behind it in the FIFO queue.
-    if (freeFfmpegSlots() <= 1) return;
 
     this.running = true;
     try {

@@ -1,9 +1,5 @@
 import { Logger } from '@nestjs/common';
-import {
-  inputSeekSeconds,
-  sourceTimeline,
-  videoPresentationStart,
-} from './source-timeline';
+import { sourceTimeline, videoPresentationStart } from './source-timeline';
 
 describe('sourceTimeline', () => {
   const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
@@ -38,16 +34,5 @@ describe('sourceTimeline', () => {
     expect(videoPresentationStart({ startTimeSeconds: 1.2 })).toBe(1.2);
     expect(videoPresentationStart({ startTimeSeconds: 1.2, firstFrameSeconds: 1.6 })).toBe(1.6);
     expect(videoPresentationStart(undefined)).toBeUndefined();
-  });
-});
-
-describe('inputSeekSeconds', () => {
-  it('counts from the container start, which precedes a late video', () => {
-    // Video at 4.2, audio (the container start) at 3.18: content 6 s is source 10.2.
-    expect(inputSeekSeconds(6, { origin: 4.2, formatStart: 3.18 })).toBeCloseTo(7.02, 9);
-  });
-
-  it('is the content position when the video starts the container', () => {
-    expect(inputSeekSeconds(6, { origin: 2.8, formatStart: 2.8 })).toBe(6);
   });
 });

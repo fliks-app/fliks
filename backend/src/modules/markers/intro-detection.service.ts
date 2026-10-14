@@ -1,8 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { execFile, spawn } from 'child_process';
-import { promisify } from 'util';
 import * as path from 'path';
 import { Episode } from '../media/entities/episode.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
@@ -10,13 +8,10 @@ import { Media } from '../media/entities/media.entity';
 import { Season } from '../media/entities/season.entity';
 import { EpisodeMarker } from './entities/episode-marker.entity';
 import { SettingsService } from '../settings/settings.service';
-import { ffmpegSlots, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
-import {
-  spawnBackground,
-  priorityExecFileArgs,
-} from '../../common/utils/spawn-priority';
+import { EngineService, type JobPriority } from '../engine/engine.service';
 
-const execFileAsync = promisify(execFile);
+/** Fingerprint jobs in flight at once; the engine queues them behind its own slot budget. */
+const FINGERPRINT_CONCURRENCY = 4;
 
 interface Fingerprint {
   /** Raw int32 chromaprint hashes (~8 per second by default). */
@@ -97,6 +92,7 @@ export class IntroDetectionService {
     @InjectRepository(Media)
     private readonly mediaRepo: Repository<Media>,
     private readonly settings: SettingsService,
+    private readonly engine: EngineService,
   ) {}
 
   /**
@@ -106,6 +102,7 @@ export class IntroDetectionService {
   async detectSeasonIntros(
     seasonId: number,
     onProgress?: (current: number, total: number, message: string) => void,
+    priority: JobPriority = 'low',
   ): Promise<{ introsDetected: number; skipped: number }> {
     const t0 = Date.now();
     const season = await this.seasonRepo.findOne({ where: { id: seasonId } });
@@ -251,7 +248,7 @@ export class IntroDetectionService {
     // Fingerprint every remaining episode (+ the reference peer so we can
     // use its intro audio as a template search pattern).
     const fingerprints = new Map<number, Fingerprint>();
-    const concurrency = ffmpegSlots();
+    const concurrency = FINGERPRINT_CONCURRENCY;
     let processed = 0;
     const toFingerprint = referencePeer
       ? [...needsFingerprint, referencePeer.episode]
@@ -275,7 +272,13 @@ export class IntroDetectionService {
           const abs = path.resolve(mediaPath, file.relativePath);
           const epT0 = Date.now();
           try {
-            const fp = await this.fingerprint(abs, lookupSec);
+            const fp = await this.fingerprint(
+              file.id,
+              abs,
+              lookupSec,
+              null,
+              priority,
+            );
             fingerprints.set(ep.id, fp);
             this.log.log(
               `  ✓ E${ep.episodeNumber} fingerprinted in ${((Date.now() - epT0) / 1000).toFixed(1)}s (${fp.hashes.length} hashes, ${fp.durationSeconds.toFixed(1)}s audio)`,
@@ -519,11 +522,12 @@ export class IntroDetectionService {
    * Detect end-credits / outro markers for a season. Mirrors the intro
    * pipeline: chapter shortcut → reference-template search using a chapter
    * peer → pairwise chromaprint fallback. Scans only the last `lookupSec`
-   * seconds of each episode via ffmpeg-seek → fpcalc pipeline.
+   * seconds of each episode through the engine's fingerprint job.
    */
   async detectSeasonOutros(
     seasonId: number,
     onProgress?: (current: number, total: number, message: string) => void,
+    priority: JobPriority = 'low',
   ): Promise<{ outrosDetected: number; skipped: number }> {
     const t0 = Date.now();
     const season = await this.seasonRepo.findOne({ where: { id: seasonId } });
@@ -635,7 +639,7 @@ export class IntroDetectionService {
     const toFingerprint = referencePeer
       ? [...needsFingerprint, referencePeer.episode]
       : needsFingerprint;
-    const concurrency = ffmpegSlots();
+    const concurrency = FINGERPRINT_CONCURRENCY;
     let processed = 0;
     onProgress?.(
       0,
@@ -658,7 +662,13 @@ export class IntroDetectionService {
           const startSec = Math.max(0, dur - lookupSec);
           const epT0 = Date.now();
           try {
-            const fp = await this.fingerprintWindow(abs, startSec, lookupSec);
+            const fp = await this.fingerprint(
+              file.id,
+              abs,
+              lookupSec,
+              dur,
+              priority,
+            );
             fingerprints.set(ep.id, fp);
             this.log.log(
               `  ✓ E${ep.episodeNumber} outro fingerprint in ${((Date.now() - epT0) / 1000).toFixed(1)}s (${fp.hashes.length} hashes, offset ${this.fmtTime(startSec)})`,
@@ -811,130 +821,28 @@ export class IntroDetectionService {
     return { outrosDetected: detected, skipped };
   }
 
-  /**
-   * Run `fpcalc -raw -length <s> <path>` and parse out the int32 fingerprint.
-   * fpcalc uses libavcodec internally and accepts video containers directly.
-   */
+  /** Chromaprint of the head of the file, or of its last `lookupSec` seconds when `outroOfSeconds`
+   *  (the file's duration) is set: the engine's `Fingerprint` job. */
   private async fingerprint(
+    mediaFileId: number,
     absPath: string,
-    maxSeconds: number,
+    lookupSec: number,
+    outroOfSeconds: number | null,
+    priority: JobPriority,
   ): Promise<Fingerprint> {
-    const fpcalcArgs = ['-raw', '-length', String(maxSeconds), absPath];
-    const [cmd, args] = priorityExecFileArgs('fpcalc', fpcalcArgs, {
-      background: true,
-      io: true,
-      cpu: true,
+    const { fingerprint } = await this.engine.runJob({
+      kind: {
+        type: 'Fingerprint',
+        window:
+          outroOfSeconds == null
+            ? { type: 'head' }
+            : { type: 'outro', durationSeconds: outroOfSeconds },
+        maxLookupMinutes: lookupSec / 60,
+      },
+      media: { mediaFileId, path: absPath },
+      priority,
     });
-    const { stdout } = await withFfmpegSlot(() =>
-      execFileAsync(cmd, args, {
-        timeout: 180_000,
-        maxBuffer: 16 * 1024 * 1024,
-      }),
-    );
-    const durMatch = stdout.match(/DURATION=([\d.]+)/);
-    const fpMatch = stdout.match(/FINGERPRINT=([\d,\-]+)/);
-    if (!fpMatch) throw new Error('fpcalc returned no FINGERPRINT line');
-    const hashes = fpMatch[1].split(',').map((s) => parseInt(s, 10) | 0);
-    return {
-      hashes,
-      durationSeconds: durMatch ? parseFloat(durMatch[1]) : maxSeconds,
-      baseOffsetSec: 0,
-    };
-  }
-
-  /**
-   * Fingerprint a specific [startSec, startSec+lengthSec] window of the file
-   * by piping ffmpeg audio output into fpcalc stdin. fpcalc 1.5.1 doesn't
-   * expose a `-start` flag, so we use ffmpeg's `-ss` seek.
-   */
-  private fingerprintWindow(
-    absPath: string,
-    startSec: number,
-    lengthSec: number,
-  ): Promise<Fingerprint> {
-    // ffmpeg and fpcalc form one pipeline, held under a single slot so the
-    // pair counts once against the budget, not twice.
-    return withFfmpegSlot(() =>
-      this.runFingerprintWindow(absPath, startSec, lengthSec),
-    );
-  }
-
-  private runFingerprintWindow(
-    absPath: string,
-    startSec: number,
-    lengthSec: number,
-  ): Promise<Fingerprint> {
-    return new Promise((resolve, reject) => {
-      const ffmpegArgs = [
-        '-nostdin',
-        '-hide_banner',
-        '-loglevel',
-        'error',
-        '-ss',
-        String(Math.max(0, Math.floor(startSec))),
-        '-i',
-        absPath,
-        '-t',
-        String(lengthSec),
-        '-vn',
-        '-ac',
-        '1',
-        '-ar',
-        '22050',
-        '-f',
-        'wav',
-        '-',
-      ];
-      // Low I/O + CPU priority for background detection
-      const ffmpeg = spawnBackground('ffmpeg', ffmpegArgs, {
-        background: true,
-        io: true,
-        cpu: true,
-      });
-      const fpcalc = spawn(
-        'fpcalc',
-        ['-raw', '-length', String(lengthSec), '-'],
-        { stdio: ['pipe', 'pipe', 'pipe'] },
-      );
-
-      let stdout = '';
-      let fpcalcErr = '';
-      let ffmpegErr = '';
-      fpcalc.stdout.on('data', (d) => (stdout += d.toString()));
-      fpcalc.stderr.on('data', (d) => (fpcalcErr += d.toString()));
-      ffmpeg.stderr?.on('data', (d) => (ffmpegErr += d.toString()));
-      ffmpeg.stdout!.pipe(fpcalc.stdin);
-      ffmpeg.on('error', reject);
-      fpcalc.on('error', reject);
-
-      const timeout = setTimeout(() => {
-        ffmpeg.kill('SIGKILL');
-        fpcalc.kill('SIGKILL');
-        reject(new Error('fingerprintWindow timed out'));
-      }, 180_000);
-
-      fpcalc.on('close', (code) => {
-        clearTimeout(timeout);
-        if (code !== 0) {
-          return reject(
-            new Error(
-              `fpcalc exited ${code}: ${fpcalcErr.trim() || ffmpegErr.trim()}`,
-            ),
-          );
-        }
-        const fpMatch = stdout.match(/FINGERPRINT=([\d,\-]+)/);
-        if (!fpMatch) {
-          return reject(new Error('fpcalc returned no FINGERPRINT line'));
-        }
-        const durMatch = stdout.match(/DURATION=([\d.]+)/);
-        const hashes = fpMatch[1].split(',').map((s) => parseInt(s, 10) | 0);
-        resolve({
-          hashes,
-          durationSeconds: durMatch ? parseFloat(durMatch[1]) : lengthSec,
-          baseOffsetSec: startSec,
-        });
-      });
-    });
+    return { ...fingerprint, baseOffsetSec: fingerprint.baseOffsetSec ?? 0 };
   }
 
   /**

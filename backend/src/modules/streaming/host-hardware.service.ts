@@ -5,7 +5,6 @@ import {
   type Capabilities,
 } from '../engine/engine.service';
 import type { components } from '../engine/schema';
-import { setFfmpegSlots } from '../../common/utils/ffmpeg-slots';
 import {
   setSelectedRenderNode,
   vaapiRenderNode,
@@ -18,7 +17,7 @@ import {
 export type HwAccelType = components['schemas']['HwAccel'];
 
 /** The host's hardware as the engine detected it, for live TV, the dashboard and `info/*`;
- *  also applies the admin GPU pin and job slots the Node-side ffmpeg runs read. */
+ *  also applies the admin GPU pin the Node-side ffmpeg runs read. */
 @Injectable()
 export class HostHardwareService implements OnModuleInit {
   private readonly log = new Logger(HostHardwareService.name);
@@ -50,7 +49,6 @@ export class HostHardwareService implements OnModuleInit {
   /** Applies the admin settings; a GPU re-pin re-runs the engine's detection. */
   async apply(ss: StreamingSettings, redetect = false): Promise<void> {
     setSelectedRenderNode(ss.gpuRenderNode);
-    setFfmpegSlots(ss.ffmpegSlots);
     const rePinned = this.node !== undefined && this.node !== ss.gpuRenderNode;
     this.node = ss.gpuRenderNode;
     if (!this.engine.enabled) return;

@@ -3,12 +3,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { stat } from 'fs/promises';
 import * as path from 'path';
 import { Repository } from 'typeorm';
-import { withFfmpegSlot } from '../../../common/utils/ffmpeg-slots';
+import {
+  EngineService,
+  type JobPriority,
+  type SourceScan,
+} from '../../engine/engine.service';
 import { MediaFile } from '../../media/entities/media-file.entity';
 import type { MediaFileInfo } from '../../media-probe/ffprobe.service';
-import { sourceIsMpegTs } from './video-packets';
 import { MediaFileScan } from '../entities/media-file-scan.entity';
-import { scanSource, type SourceScan } from './source-scan';
 
 /** Identifies the bytes of a file as far as a scan or a cached segment goes. */
 export function sourceVersion(st: { size: number; mtimeMs: number }): string {
@@ -23,7 +25,7 @@ export interface HeldScan {
 }
 
 /** One whole-file read per file version (keyframes, clock break, AAC header
- *  changes), run as background work and stored; requests only look it up. */
+ *  changes), run by the engine as a `Scan` job and stored; requests only look it up. */
 @Injectable()
 export class SourceScanService {
   private readonly log = new Logger(SourceScanService.name);
@@ -34,6 +36,7 @@ export class SourceScanService {
     private readonly scans: Repository<MediaFileScan>,
     @InjectRepository(MediaFile)
     private readonly files: Repository<MediaFile>,
+    private readonly engine: EngineService,
   ) {}
 
   /** The stored scan of the file as it is now. Never scans. Given the caller's
@@ -66,17 +69,17 @@ export class SourceScanService {
     }
   }
 
-  /** Scan the file unless its current version was, in the background budget.
-   *  Never rejects. */
+  /** Scan the file unless its current version was. Never rejects. */
   scheduleIfNeeded(
     mediaFileId: number,
     absolutePath: string,
     streamInfo: MediaFileInfo | null | undefined,
+    priority: JobPriority = 'low',
   ): Promise<void> {
     if (!streamInfo?.video?.[0]) return Promise.resolve();
     let scan = this.inFlight.get(mediaFileId);
     if (!scan) {
-      scan = this.scan(mediaFileId, absolutePath, streamInfo).finally(() =>
+      scan = this.scan(mediaFileId, absolutePath, streamInfo, priority).finally(() =>
         this.inFlight.delete(mediaFileId),
       );
       this.inFlight.set(mediaFileId, scan);
@@ -88,15 +91,17 @@ export class SourceScanService {
     mediaFileId: number,
     absolutePath: string,
     streamInfo: MediaFileInfo,
+    priority: JobPriority,
   ): Promise<void> {
     const label = path.basename(absolutePath);
     try {
       if ((await this.lookup(mediaFileId, absolutePath)).scan) return;
       const before = await stat(absolutePath);
-      let t0 = 0;
-      const scan = await withFfmpegSlot(() => {
-        t0 = Date.now();
-        return scanSource(absolutePath, streamInfo, { background: true });
+      const t0 = Date.now();
+      const { scan } = await this.engine.runJob({
+        kind: { type: 'Scan', info: streamInfo },
+        media: { mediaFileId, path: absolutePath },
+        priority,
       });
       const after = await stat(absolutePath);
       if (sourceVersion(after) !== sourceVersion(before)) {
@@ -110,8 +115,9 @@ export class SourceScanService {
       this.log.log(
         `"${label}" scanned in ${Date.now() - t0} ms: ${scan.keyframes.length} keyframes`,
       );
-      if (sourceIsMpegTs(streamInfo, absolutePath)) {
-        await this.storeClockBreak(mediaFileId, label, scan.breakSeconds ?? null);
+      const clockBreak = scan.breakSeconds ?? null;
+      if (clockBreak !== (streamInfo.timestampBreakSeconds ?? null)) {
+        await this.storeClockBreak(mediaFileId, label, clockBreak);
       }
     } catch (err) {
       this.log.warn(`Source scan failed for "${label}": ${(err as Error).message}`);

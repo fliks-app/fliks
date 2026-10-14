@@ -16,15 +16,11 @@ describe('listTextSubtitleRenditions', () => {
     ];
     const svc = new SubtitleStreamService(
       { find: jest.fn().mockResolvedValue(rows) } as never,
-      null as never,
       {
         resolveFile: jest
           .fn()
           .mockResolvedValue({ mediaFile: { streamInfo: null } }),
       } as never,
-      null as never,
-      null as never,
-      null as never,
     );
     const out = await svc.listTextSubtitleRenditions(1);
     expect(out.map((r) => r.key)).toEqual([3, 4]);
@@ -33,7 +29,6 @@ describe('listTextSubtitleRenditions', () => {
   it('carries the embedded BCP-47 tag next to the canonical language', async () => {
     const svc = new SubtitleStreamService(
       { find: jest.fn().mockResolvedValue([]) } as never,
-      null as never,
       {
         resolveFile: jest.fn().mockResolvedValue({
           mediaFile: {
@@ -46,9 +41,6 @@ describe('listTextSubtitleRenditions', () => {
           },
         }),
       } as never,
-      null as never,
-      null as never,
-      null as never,
     );
     const out = await svc.listTextSubtitleRenditions(1);
     expect(out.map((r) => [r.language, r.languageTag])).toEqual([

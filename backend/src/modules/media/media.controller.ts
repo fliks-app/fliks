@@ -509,9 +509,8 @@ export class MediaController {
       'Rescan',
       buildMediaProgressSubject(media),
     );
-    // Fire-and-forget: don't await. skipWarmup=true — rescan should be fast,
-    // subtitle cache will warm lazily when the user actually plays the file.
-    void this.mediaService.rescanFiles(id, { skipWarmup: true }).then(
+    // Fire-and-forget: don't await.
+    void this.mediaService.rescanFiles(id).then(
       (result) => {
         this.activityRegistry.remove(activityId);
         this.eventsService.emitToUser(user.id, {

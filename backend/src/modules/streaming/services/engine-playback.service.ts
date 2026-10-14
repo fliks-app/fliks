@@ -309,6 +309,7 @@ export class EnginePlaybackService {
         mediaFileId,
         resolved.absolutePath,
         info,
+        'high',
       );
     }
   }

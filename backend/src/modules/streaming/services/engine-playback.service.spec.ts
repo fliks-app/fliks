@@ -405,6 +405,7 @@ describe('EnginePlaybackService.playbackInfo', () => {
         1,
         t.resolved.absolutePath,
         streamInfo,
+        'high',
       );
       expect(t.deps.staleProbeRescan.schedule).not.toHaveBeenCalled();
       t.cleanup();

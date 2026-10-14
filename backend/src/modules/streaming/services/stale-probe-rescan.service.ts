@@ -2,13 +2,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { stat } from 'fs/promises';
 import { Repository } from 'typeorm';
-import { withFfmpegSlot } from '../../../common/utils/ffmpeg-slots';
 import { MediaFile } from '../../media/entities/media-file.entity';
 import { FfprobeService } from '../../media-probe/ffprobe.service';
 import { SourceScanService, sourceVersion } from './source-scan.service';
 
 /** Re-probes a row the engine reports stale (`hints.probeStale`), in the background, deduped per
- *  file under the shared ffmpeg slot budget. Never blocks the caller. */
+ *  file. Never blocks the caller. */
 @Injectable()
 export class StaleProbeRescanService {
   private readonly log = new Logger(StaleProbeRescanService.name);
@@ -41,9 +40,7 @@ export class StaleProbeRescanService {
   private async reprobe(mediaFileId: number, absolutePath: string): Promise<void> {
     try {
       const before = await stat(absolutePath);
-      const fresh = await withFfmpegSlot(() =>
-        this.ffprobe.detectMediaFileInfo(absolutePath),
-      );
+      const fresh = await this.ffprobe.detectMediaFileInfo(absolutePath);
       const after = await stat(absolutePath);
       if (sourceVersion(before) !== sourceVersion(after)) {
         this.log.warn(`"${absolutePath}" changed during re-probe; result dropped`);

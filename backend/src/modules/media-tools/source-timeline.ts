@@ -9,7 +9,7 @@ const reported = new Set<string>();
 /** Files reported before the set starts over. */
 const MAX_REPORTED = 1000;
 
-/** The source times the Node-side ffmpeg runs (sprites, burn-in extracts) seek and cue from. */
+/** The source times a burn-in subtitle's cues are counted from. */
 export interface SourceTimeline {
   /** Source time of the first presented video frame. */
   origin: number;
@@ -47,13 +47,4 @@ export function sourceTimeline(
   }
   const formatStart = si?.formatStartSeconds ?? streamStart;
   return { origin: videoPresentationStart(v) ?? 0, formatStart };
-}
-
-/** Input `-ss` value that lands on content position `contentSeconds`: ffmpeg
- *  adds the container start to an input seek. */
-export function inputSeekSeconds(
-  contentSeconds: number,
-  timeline: SourceTimeline,
-): number {
-  return contentSeconds + (timeline.origin - timeline.formatStart);
 }

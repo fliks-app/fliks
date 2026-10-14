@@ -20,7 +20,7 @@ import { Action } from '../auth/casl/actions.enum';
 import { EventsService } from '../scheduler/events.service';
 import { User } from '../users/entities/user.entity';
 import { EngineService } from '../engine/engine.service';
-import { autoFfmpegSlots } from '../../common/utils/ffmpeg-slots';
+import { availableParallelism } from 'os';
 import { parseSourceFps } from '../media-tools/fps';
 import type { EdlRange } from './edl/edl-parser';
 import { readEdlSidecar } from './edl/edl-sidecar';
@@ -108,7 +108,8 @@ export class StreamingController {
       cacheMaxGb: +(ss.cacheMaxBytes / 1024 ** 3).toFixed(1),
       cacheTtlHours: +(ss.cacheTtlMs / 3_600_000).toFixed(1),
       ffmpegSlots: ss.ffmpegSlots,
-      ffmpegSlotsAuto: autoFfmpegSlots(),
+      // The engine's default (cores - 1); it does not report the figure.
+      ffmpegSlotsAuto: Math.max(1, availableParallelism() - 1),
       pauseCapability: this.hardware.pauseCapability,
     };
   }

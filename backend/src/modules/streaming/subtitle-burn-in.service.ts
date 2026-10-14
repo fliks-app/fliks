@@ -7,11 +7,7 @@ import { resolveSubtitleAbsolutePath } from '../subtitles/subtitle-path.util';
 import { isImageBasedSubtitleCodec } from '../../common/constants/subtitle-codecs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import { sourceTimeline } from '../media-tools/source-timeline';
-
-const execFileAsync = promisify(execFile);
 
 export interface BurnInInfo {
   /** 'text' for SRT/ASS/SSA, 'image' for PGS/VOBSUB */
@@ -20,8 +16,10 @@ export interface BurnInInfo {
   videoPath: string;
   /** Absolute path to the subtitle file (for external or extracted subs) */
   subtitlePath?: string;
-  /** Stream index in the video file (for embedded subs via si= filter) */
+  /** Stream index in the video file (image subs overlaid by index) */
   streamIndex?: number;
+  /** Position among the video's subtitle streams: what the `si=` filter of an embedded text track counts. */
+  subtitleOrdinal?: number;
   /** Original codec name */
   codec: string;
   /** Source time cue 0 of a text file sits at (the container start). */
@@ -55,15 +53,12 @@ export function atCueTime(subtitleFilter: string, cueOffsetSeconds = 0): string 
 @Injectable()
 export class SubtitleBurnInService {
   private readonly log = new Logger(SubtitleBurnInService.name);
-  private readonly tmpDir = '/tmp/fliks-burn-in';
 
   constructor(
     @InjectRepository(SubtitleFile)
     private readonly subtitleFileRepo: Repository<SubtitleFile>,
     private readonly streamingService: StreamingService,
-  ) {
-    fs.mkdir(this.tmpDir, { recursive: true }).catch(() => {});
-  }
+  ) {}
 
   /**
    * Resolve burn-in info for a subtitle (external file or embedded stream).
@@ -125,40 +120,19 @@ export class SubtitleBurnInService {
         };
       }
 
-      // Text embedded: extracted without -copyts, so its cues count from the
-      // container start like a sidecar's.
-      const tmpPath = path.join(
-        this.tmpDir,
-        `${mediaFileId}-${sub.streamIndex}.ass`,
+      // Text embedded: the engine's ffmpeg reads the track from the video itself (`si=` filter).
+      const subtitleOrdinal = resolved.mediaFile.streamInfo?.subtitles?.findIndex(
+        (s) => s.streamIndex === sub.streamIndex,
       );
-      try {
-        await execFileAsync(
-          'ffmpeg',
-          [
-            '-y',
-            '-i',
-            videoPath,
-            '-map',
-            `0:${sub.streamIndex}`,
-            '-c:s',
-            'ass',
-            tmpPath,
-          ],
-          { timeout: 30_000 },
-        );
-      } catch (err) {
-        this.log.error(
-          `Failed to extract subtitle stream ${sub.streamIndex}: ${err}`,
-        );
-        throw new NotFoundException('Failed to extract embedded subtitle');
+      if (subtitleOrdinal == null || subtitleOrdinal < 0) {
+        throw new NotFoundException('Embedded subtitle not found in the probed streams');
       }
-
       return {
         type: 'text',
         videoPath,
-        subtitlePath: tmpPath,
+        streamIndex: sub.streamIndex,
+        subtitleOrdinal,
         codec: sub.codec ?? 'unknown',
-        cueOffsetSeconds,
       };
     }
 
@@ -185,13 +159,13 @@ export class SubtitleBurnInService {
             : `subtitles='${escaped}'`;
         return atCueTime(filter, info.cueOffsetSeconds);
       }
-      // Embedded text with stream index (using video file as subtitle source)
-      if (info.streamIndex != null) {
+      // Embedded text: the video file is the subtitle source
+      if (info.subtitleOrdinal != null) {
         const escaped = info.videoPath
           .replace(/\\/g, '\\\\')
           .replace(/:/g, '\\:')
           .replace(/'/g, "'\\''");
-        return `subtitles='${escaped}':si=${info.streamIndex}`;
+        return `subtitles='${escaped}':si=${info.subtitleOrdinal}`;
       }
     }
     // Image-based: needs -filter_complex, handled separately

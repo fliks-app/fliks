@@ -29,7 +29,6 @@ import { MediaMetadataService } from './media-metadata.service';
 import { VIDEO_EXTS } from '../../../common/constants/video-extensions';
 import { resolveEdlPath } from '../../streaming/edl/edl-sidecar';
 import { ThumbnailService } from '../../streaming/thumbnail.service';
-import { SubtitleStreamService } from '../../streaming/subtitle-stream.service';
 import { SubtitlesService } from '../../subtitles/subtitles.service';
 
 @Injectable()
@@ -55,7 +54,6 @@ export class MediaMutationService {
     private readonly requestLifecycle: RequestLifecycleService,
     private readonly events: EventsService,
     private readonly thumbnails: ThumbnailService,
-    private readonly subtitleStream: SubtitleStreamService,
     private readonly subtitles: SubtitlesService,
   ) {}
 
@@ -223,14 +221,13 @@ export class MediaMutationService {
     const tmdbId = media.tmdbId;
     const mediaType = media.type;
     const diskPath = this.resolveSafeMediaDir(media);
-    // Sprites live outside the media folder, keyed by file id — the cascade
+    // Sprites and subtitle extracts live outside the media folder, keyed by file id — the cascade
     // that drops the file rows would strand them.
     const fileIds = (media.files ?? []).map((f) => f.id);
     await this.requestLifecycle.onMediaRemoved(media);
     await this.mediaRepo.remove(media);
     for (const fileId of fileIds) {
       void this.thumbnails.deleteForFile(fileId);
-      void this.subtitleStream.clearMediaFileSubtitleCache(fileId);
     }
     this.events.emitDomain({
       type: 'media.removed',
@@ -383,7 +380,6 @@ export class MediaMutationService {
     const removedFileId = file.id;
     await this.mediaFileRepo.remove(file);
     void this.thumbnails.deleteForFile(removedFileId);
-    void this.subtitleStream.clearMediaFileSubtitleCache(removedFileId);
     if (episodeId != null) {
       const remaining = await this.mediaFileRepo.count({
         where: { episode: { id: episodeId } },
