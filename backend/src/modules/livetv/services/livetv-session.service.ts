@@ -89,6 +89,8 @@ interface Hold {
   fed: number | null;
   /** The engine has not answered the open yet. */
   pending: boolean;
+  /** What the engine serves; null until its answer. */
+  mode: LiveTvPlayMode | null;
 }
 
 const CONFIG_KEYS = [
@@ -130,6 +132,7 @@ export class LiveTvSessionService implements OnModuleInit {
   onModuleInit(): void {
     this.events.onEvent((ev) => this.onEvent(ev));
     this.events.onResync(() => this.resync());
+    this.qoe?.addTranscodeProbe(() => this.activeTranscodes());
     this.settings.addChangeListener((key) => {
       if ((CONFIG_KEYS as readonly string[]).includes(key))
         void this.pushConfig();
@@ -189,6 +192,7 @@ export class LiveTvSessionService implements OnModuleInit {
       streams,
       fed: null,
       pending: true,
+      mode: null,
     });
 
     let res;
@@ -226,7 +230,10 @@ export class LiveTvSessionService implements OnModuleInit {
 
     const hold = this.holds.get(token);
     if (res.capacityToken !== token) this.holds.delete(token);
-    else if (hold) hold.pending = false;
+    else if (hold) {
+      hold.pending = false;
+      hold.mode = res.mode;
+    }
 
     const viewer: Viewer = {
       channelId: channel.id,
@@ -441,6 +448,8 @@ export class LiveTvSessionService implements OnModuleInit {
     if (!ev.error) {
       hold.sourceId = stream.sourceId;
       hold.fed = ev.upstream;
+      // A remux of a non-H.264 upstream becomes a transcode: the engine's snapshot has the verdict.
+      if (!hold.pending) void this.refreshModes();
       patch.lastOkAt = new Date();
       patch.lastError = null;
     } else {
@@ -486,6 +495,7 @@ export class LiveTvSessionService implements OnModuleInit {
     const listedAt = Date.now();
     const snaps = await this.engine.listLive();
     const tokens = new Set(snaps.map((s) => s.capacityToken));
+    await this.restoreHolds(snaps);
     const known = new Set(snaps.map((s) => s.sessionId));
     for (const s of snaps) {
       if (this.viewers.has(s.sessionId)) continue;
@@ -506,6 +516,51 @@ export class LiveTvSessionService implements OnModuleInit {
       if (!tokens.has(token) && !hold.pending)
         await this.release(token, 'shutdown');
     }
+  }
+
+  /** Holds for the sessions the engine runs that this process lost (a restart): the feeding upstream
+   *  is resolved from the snapshot, the other positions of the original open are unknown. */
+  private async restoreHolds(snaps: LiveSnapshot[]): Promise<void> {
+    for (const s of snaps) {
+      const hold = this.holds.get(s.capacityToken);
+      if (hold) {
+        hold.mode ??= s.mode;
+        continue;
+      }
+      const channelId = Number(s.channelId);
+      const fed = (
+        await this.streamRepo.find({
+          where: { channelId },
+          relations: ['source'],
+        })
+      ).find(
+        (x) => x.url === s.upstreamUrl && x.priority === s.upstreamPriority,
+      );
+      if (!fed || this.holds.has(s.capacityToken)) continue;
+      const streams: LiveTvChannelStream[] = [];
+      streams[s.upstream] = fed;
+      this.holds.set(s.capacityToken, {
+        sourceId: fed.sourceId,
+        channelId,
+        streams,
+        fed: s.upstream,
+        pending: false,
+        mode: s.mode,
+      });
+    }
+  }
+
+  private async refreshModes(): Promise<void> {
+    for (const s of await this.engine.listLive().catch(() => [])) {
+      const hold = this.holds.get(s.capacityToken);
+      if (hold) hold.mode = s.mode;
+    }
+  }
+
+  /** Running transcodes, one per hold: viewers of a session share its encoder. */
+  private activeTranscodes(): number {
+    return [...this.holds.values()].filter((h) => h.mode === 'transcode')
+      .length;
   }
 
   private reportActivity(token: string): void {

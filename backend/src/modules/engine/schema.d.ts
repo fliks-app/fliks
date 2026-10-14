@@ -1059,8 +1059,18 @@ export interface components {
             tags: {
                 [key: string]: string;
             };
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description The feeding upstream, a position in the upstreams of the open that started the session.
+             */
             upstream: number;
+            /**
+             * Format: int32
+             * @description `priority` of the feeding upstream.
+             */
+            upstreamPriority?: number | null;
+            /** @description URL of the feeding upstream, so a host can name its source after a restart. */
+            upstreamUrl?: string | null;
             videoCodec?: string | null;
             /**
              * Format: int32

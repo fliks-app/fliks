@@ -47,7 +47,7 @@ describe('LiveTvSessionService', () => {
     pushLivetv: jest.Mock;
     whenReady: jest.Mock;
   };
-  let streamRepo: { update: jest.Mock };
+  let streamRepo: { update: jest.Mock; find: jest.Mock };
   let bump: { execute: jest.Mock; where: jest.Mock };
   let settings: { get: jest.Mock; addChangeListener: jest.Mock };
   let activity: { upsertRunning: jest.Mock; remove: jest.Mock };
@@ -56,6 +56,7 @@ describe('LiveTvSessionService', () => {
     setPipeline: jest.Mock;
     sessionEnded: jest.Mock;
     observeServed: jest.Mock;
+    addTranscodeProbe: jest.Mock;
   };
   let capacity: LiveTvCapacityService;
   let events: {
@@ -95,7 +96,7 @@ describe('LiveTvSessionService', () => {
       pushLivetv: jest.fn(),
       whenReady: jest.fn().mockResolvedValue(undefined),
     };
-    streamRepo = { update: jest.fn() };
+    streamRepo = { update: jest.fn(), find: jest.fn().mockResolvedValue([]) };
     bump = { execute: jest.fn(), where: jest.fn() };
     bump.where.mockReturnValue(bump);
     const channelRepo = {
@@ -116,6 +117,7 @@ describe('LiveTvSessionService', () => {
       setPipeline: jest.fn(),
       sessionEnded: jest.fn(),
       observeServed: jest.fn(),
+      addTranscodeProbe: jest.fn(),
     };
     capacity = new LiveTvCapacityService();
     events = {};
@@ -420,6 +422,80 @@ describe('LiveTvSessionService', () => {
       {},
     );
     expect(engine.openLive.mock.calls[0][0].atCapacity).toBe(false);
+  });
+
+  it('rebuilds the capacity holds from the snapshots on resync', async () => {
+    const fed = stream(5, {
+      channelId: 4,
+      priority: 2,
+      url: 'http://p/five.ts',
+      source: source({ id: 9, maxStreams: 1 }),
+    });
+    streamRepo.find = jest
+      .fn()
+      .mockResolvedValue([stream(4, { channelId: 4, priority: 0 }), fed]);
+    engine.listLive.mockResolvedValue([
+      {
+        sessionId: 'sid-9',
+        channelId: '4',
+        capacityToken: 'lost',
+        mode: 'transcode',
+        tags: {},
+        upstream: 1,
+        upstreamUrl: 'http://p/five.ts',
+        upstreamPriority: 2,
+        openedAtMs: 1,
+      },
+    ]);
+
+    await events.resync!();
+
+    startsSession();
+    await service.open(
+      channel([stream(1, { source: source({ id: 9, maxStreams: 1 }) })]),
+      user,
+      {},
+    );
+    expect(engine.openLive.mock.calls[0][0].atCapacity).toBe(true);
+    // An attempt of the restored session reaches its stream's health.
+    await emit({ type: 'LiveAttempt', capacityToken: 'lost', upstream: 1 });
+    expect(streamRepo.update).toHaveBeenCalledWith(
+      5,
+      expect.objectContaining({ lastError: null }),
+    );
+  });
+
+  it('counts the live transcodes for the QoE load probe', async () => {
+    const probe = (qoe as unknown as { addTranscodeProbe: jest.Mock })
+      .addTranscodeProbe.mock.calls[0][0] as () => number;
+    startsSession({ mode: 'transcode' });
+    await service.open(channel([stream(1)]), user, {});
+    expect(probe()).toBe(1);
+    await emit({
+      type: 'LiveReleased',
+      capacityToken: tokenOf(),
+      reason: 'idle',
+    });
+    expect(probe()).toBe(0);
+
+    streamRepo.find = jest
+      .fn()
+      .mockResolvedValue([stream(1, { channelId: 4, url: 'u', priority: 0 })]);
+    engine.listLive.mockResolvedValue([
+      {
+        sessionId: 's',
+        channelId: '4',
+        capacityToken: 'lost',
+        mode: 'transcode',
+        tags: {},
+        upstream: 0,
+        upstreamUrl: 'u',
+        upstreamPriority: 0,
+        openedAtMs: 1,
+      },
+    ]);
+    await events.resync!();
+    expect(probe()).toBe(1);
   });
 
   it('lists the activity rows from the engine snapshots', async () => {
