@@ -7,10 +7,12 @@ import {
   readFileSync,
   rmSync,
   writeFileSync,
+  appendFileSync,
 } from 'fs';
 import { join } from 'path';
 import { evaluateRecorder } from '../../src/modules/streaming/stream-builder.test-helpers';
 import { syntheticVectors } from './cases';
+import { genVector, mulberry32 } from './fuzz';
 import { HOST_CAPS } from './host-caps';
 import {
   DEFAULT_CONFIG,
@@ -144,6 +146,7 @@ jest.mock(
 );
 
 const GEN = process.env.FLIKS_ENGINE_REPO;
+const FUZZ = process.env.FUZZ_OUT;
 const CHECK = process.env.FLIKS_ENGINE_REPO_CHECK;
 const REPLAYED_SPECS = [
   'audio-decision',
@@ -294,6 +297,57 @@ if (GEN) {
       expect(DEFAULT_CONFIG.segmentDuration).toBe(3);
     });
   });
+} else if (process.env.FUZZ_EXPECT) {
+  const dir = process.env.FUZZ_EXPECT;
+  it('recomputes `expected` of every vector file in FUZZ_EXPECT', () => {
+    for (const f of readdirSync(dir).filter((x) => x.endsWith('.json'))) {
+      const v = JSON.parse(readFileSync(join(dir, f), 'utf8')) as Vector;
+      v.expected = runVector(v);
+      writeFileSync(join(dir, f), JSON.stringify(sortKeys(v), null, 2) + '\n');
+    }
+  });
+} else if (FUZZ) {
+  const seed = Number(process.env.FUZZ_SEED ?? 1);
+  const count = Number(process.env.FUZZ_COUNT ?? 5000);
+  it(`fuzz seed ${seed} x ${count} -> ${FUZZ}`, () => {
+    mkdirSync(FUZZ, { recursive: true });
+    const file = join(FUZZ, `fuzz-${seed}.ndjson`);
+    rmSync(file, { force: true });
+    const rng = mulberry32(seed);
+    const throws: Record<string, number> = {};
+    let buf: string[] = [];
+    let ok = 0;
+    for (let i = 0; i < count; i++) {
+      const v = genVector(rng, `fuzz-${seed}-${i}`);
+      try {
+        const expected = runVector(v);
+        buf.push(
+          JSON.stringify({
+            seed,
+            i,
+            input: v.input,
+            hostCaps: v.hostCaps,
+            config: v.config,
+            expected: sortKeys(expected),
+          }),
+        );
+        ok++;
+      } catch (e) {
+        const m = (e as Error).message;
+        throws[m] = (throws[m] ?? 0) + 1;
+      }
+      if (buf.length >= 200 || i === count - 1) {
+        appendFileSync(file, buf.map((l) => l + '\n').join(''));
+        buf = [];
+      }
+    }
+    writeFileSync(
+      join(FUZZ, `fuzz-${seed}.throws.json`),
+      JSON.stringify({ seed, ok, throws }, null, 2) + '\n',
+    );
+    console.log(`fuzz seed ${seed}: ${ok} ok, throws ${JSON.stringify(throws)}`);
+    expect(ok).toBeGreaterThan(0);
+  }, 600_000);
 } else if (CHECK) {
   const dir = join(CHECK, 'fixtures', 'decide');
   const files = existsSync(dir)
