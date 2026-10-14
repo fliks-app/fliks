@@ -108,7 +108,7 @@ describe('LiveTvSessionService', () => {
   let streamRepo: { update: jest.Mock };
   let settings: { get: jest.Mock };
   let activity: { upsertRunning: jest.Mock; remove: jest.Mock };
-  let transcoding: { getDetectedHwAccel: jest.Mock };
+  let hardware: { hwAccel: string; libfdkAac: boolean };
   let qoe: { register: jest.Mock; sessionEnded: jest.Mock; observeSegment: jest.Mock; recordProduction: jest.Mock; setPipeline: jest.Mock; addTranscodeProbe: jest.Mock };
 
   beforeEach(() => {
@@ -127,14 +127,14 @@ describe('LiveTvSessionService', () => {
     streamRepo = { update: jest.fn() };
     settings = { get: jest.fn().mockResolvedValue(null) };
     activity = { upsertRunning: jest.fn(), remove: jest.fn() };
-    transcoding = { getDetectedHwAccel: jest.fn().mockReturnValue('none') };
+    hardware = { hwAccel: 'none', libfdkAac: false };
     qoe = { register: jest.fn(), sessionEnded: jest.fn(), observeSegment: jest.fn(), recordProduction: jest.fn(), setPipeline: jest.fn(), addTranscodeProbe: jest.fn() };
     service = new LiveTvSessionService(
       channelRepo as never,
       streamRepo as never,
       settings as never,
       activity as never,
-      transcoding as never,
+      hardware as never,
       new LiveTvCapacityService(),
       qoe as never,
     );
@@ -582,7 +582,7 @@ describe('LiveTvSessionService', () => {
 
   it('prefers transcode over remux for a cold session when hardware encoding is available', async () => {
     mockSpawnAlwaysSucceeds();
-    transcoding.getDetectedHwAccel.mockReturnValue('qsv');
+    hardware.hwAccel = 'qsv';
     const channel = makeChannel([makeStream()]);
 
     const result = await service.open(channel, makeUser(), {});

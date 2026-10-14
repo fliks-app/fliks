@@ -7,10 +7,10 @@ import {
 import { EngineService, type EngineEvent } from '../../engine/engine.service';
 import { readCmcdRaw } from '../../qoe/core/cmcd';
 import { QoeService } from '../../qoe/qoe.service';
-import { ActiveStreamTracker } from '../active-stream-tracker.service';
+import { StreamingSettingsCache } from '../streaming-settings-cache.service';
 import { LiveSessionRegistry } from '../live-session.service';
 import { servedRungBitrate } from '../served-rung';
-import { realSegmentSeconds } from '../transcoding/constants';
+import { realSegmentSeconds } from '../../media-tools/fps';
 import { jobKeyOf, restorePresence } from './engine-presence';
 
 const MIN_BACKOFF_MS = 500;
@@ -67,7 +67,7 @@ export class EngineEventsService implements OnModuleInit, OnModuleDestroy {
     private readonly engine: EngineService,
     private readonly liveSessions: LiveSessionRegistry,
     private readonly qoe: QoeService,
-    private readonly activeStreamTracker: ActiveStreamTracker,
+    private readonly settings: StreamingSettingsCache,
   ) {}
 
   onModuleInit(): void {
@@ -183,7 +183,7 @@ export class EngineEventsService implements OnModuleInit, OnModuleDestroy {
           live,
           ev.cmcdRaw ? readCmcdRaw(ev.cmcdRaw) : null,
           realSegmentSeconds(
-            this.activeStreamTracker.getSegmentDuration(),
+            this.settings.segmentDuration,
             live.sourceFps ?? undefined,
           ),
           ev.waitedMs,

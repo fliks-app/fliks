@@ -1,5 +1,3 @@
-import { parseSrt } from '../subtitles/srt.util';
-
 /** SSA v4 `\a` / style numbering → the numpad layout `\an` uses. */
 const SSA_TO_NUMPAD: Record<number, number> = {
   1: 1,
@@ -37,40 +35,8 @@ function inlineAlignment(text: string): number | undefined {
   return an;
 }
 
-/** Keep only the markup WebVTT and every renderer share: b, i, u. */
-function keepBasicTags(text: string): string {
-  return text.replace(/<\/?(?!(?:b|i|u)>)[a-z][^>]*>/gi, '');
-}
-
 function cue(start: string, end: string, settings: string, text: string) {
   return `${start} --> ${end}${settings}\n${text}`;
-}
-
-function vttTime(t: string): string {
-  const [h, m, s] = t.replace(',', '.').split(':');
-  return `${h.padStart(2, '0')}:${m}:${s}`;
-}
-
-export function srtToVtt(srt: string): string {
-  const cues: string[] = [];
-  for (const { timing, text } of parseSrt(srt)) {
-    const m =
-      /(\d+:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d+:\d{2}:\d{2}[,.]\d{3})/.exec(
-        timing,
-      );
-    if (!m) continue;
-    const body = keepBasicTags(text.replace(/\{\\[^}]*\}/g, '')).trim();
-    if (!body) continue;
-    cues.push(
-      cue(
-        vttTime(m[1]),
-        vttTime(m[2]),
-        cueSettings(inlineAlignment(text)),
-        body,
-      ),
-    );
-  }
-  return `WEBVTT\n\n${cues.join('\n\n')}\n`;
 }
 
 /** Override block → the b/i/u tags it toggles; everything else is dropped. */
@@ -151,9 +117,4 @@ export function assToVtt(ass: string): string {
     }
   }
   return `WEBVTT\n\n${cues.join('\n\n')}\n`;
-}
-
-/** A served .vtt as the parsers expect it: no BOM, LF line endings. */
-export function normalizeVtt(vtt: string): string {
-  return vtt.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
 }

@@ -26,7 +26,7 @@ function buildController(liveSessionsOverrides?: Record<string, unknown>) {
   };
   wired.playbackService = { updateState };
   wired.liveSessions = {
-    get: () => null,
+    peek: () => null,
     heartbeat: () => null,
     ...liveSessionsOverrides,
   };
@@ -208,7 +208,7 @@ describe('PlaybackController.updateState: qoe bitrate fallback', () => {
     });
     return recordSample.mock.calls[0]?.[1].variantBitrate;
   }
-  const live = { userId: 7, attributedUserId: null, kind: 'transcode', quality: '1080p', hdrLadder: false, deviceType: 'desktop', sseConnectionId: null };
+  const live = { userId: 7, attributedUserId: null, kind: 'transcode', quality: '1080p', hdrLadder: false, sseConnectionId: null, bitrateByQuality: { '1080p': { videoBitrateBps: 8_000_000, audioBitrateBps: 192_000, totalBitrateBps: 8_192_000 } } };
 
   it('fills the bitrate from the served transcode rung', async () => {
     expect(await beat(live)).toBe(8_000_000);

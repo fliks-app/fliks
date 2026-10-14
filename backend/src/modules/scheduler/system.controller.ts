@@ -36,18 +36,8 @@ import { ActivityRegistryService, type ActivityRow } from './activity-registry.s
 import { LiveTvSessionService } from '../livetv/services/livetv-session.service';
 import { UpdateCheckService, type UpdateStatus } from './update-check.service';
 import { Observable } from 'rxjs';
-import {
-  type HwAccelType,
-  type TranscodeProfile,
-  type TranscodeSession,
-  TranscodingService,
-  TranscodeCacheService,
-  getLadderForDevice,
-  getHdrLadderForDevice,
-  parseBitrateToBps,
-} from '../streaming/transcoding';
-import { audioOutputBitrateBps } from '../streaming/transcoding/audio-encode';
-import { REMUX_STEREO_AUDIO_BITRATE } from '../streaming/transcoding/ffmpeg-args';
+import { HostHardwareService } from '../streaming/host-hardware.service';
+import { servedRung } from '../streaming/served-rung';
 import {
   type LiveSessionSnapshot,
   type SessionKind,
@@ -122,10 +112,10 @@ export interface ActiveStreamDto {
   containerReasons: string[];
   /** Playback quality so far; null when QoE is off or the session is not tracked. */
   qoe: QoeLiveSummary | null;
-  /** The engine's state: `off` runs the TS runtime, `down` is a configured engine that does not answer. */
+  /** The engine's state: `off` is not configured, `down` is a configured engine that does not answer. */
   engineStatus: 'off' | 'up' | 'down';
   /** The ffmpeg run behind the session as the engine reports it (`actualHw` is the backend in use,
-   *  `none` after a CPU fallback); null on direct play, live TV and the TS runtime. */
+   *  `none` after a CPU fallback); null on direct play and live TV. */
   job: SessionSnapshot['job'] | null;
 }
 
@@ -171,11 +161,12 @@ export interface StatsReport {
 
 /** Map a LiveSession `audioPlan` to the dashboard's audio output fields.
  *  With a plan, the plan is authoritative (copy or transcode); without one,
- *  remux copies the bitstream and every other mode is a straight direct play. */
+ *  remux copies the bitstream and every other mode is a straight direct play.
+ *  A re-encode's bitrate is the served rung's, unknown off the ladder. */
 function deriveAudioOutput(
   audioPlan: LiveSessionSnapshot['audioPlan'],
   mode: SessionKind,
-  rung: TranscodeProfile | undefined,
+  rungAudioBps: number | null,
 ): {
   audioMode: 'direct' | 'copy' | 'transcode';
   audioOutputCodec: string | null;
@@ -193,12 +184,7 @@ function deriveAudioOutput(
       audioOutputBitrateBps:
         audioPlan.mode === 'copy'
           ? (audioPlan.bitrateBps ?? null)
-          : audioOutputBitrateBps(
-              audioPlan,
-              parseBitrateToBps(
-                rung?.audioBitrate ?? REMUX_STEREO_AUDIO_BITRATE,
-              ),
-            ),
+          : rungAudioBps,
     };
   }
   return {
@@ -223,8 +209,7 @@ export class SystemController {
     private readonly logBuffer: LogBufferService,
     private readonly eventsService: EventsService,
     private readonly activityRegistry: ActivityRegistryService,
-    private readonly transcodingService: TranscodingService,
-    private readonly transcodeCache: TranscodeCacheService,
+    private readonly hardware: HostHardwareService,
     private readonly liveSessions: LiveSessionRegistry,
     private readonly liveTvSessions: LiveTvSessionService,
     private readonly playbackService: PlaybackService,
@@ -430,7 +415,7 @@ export class SystemController {
   @Get('streams')
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
   async activeStreams(): Promise<ActiveStreamDto[]> {
-    const hwAccel = this.transcodingService.getDetectedHwAccel();
+    const hwAccel = this.hardware.hwAccel;
     const streams: ActiveStreamDto[] = [];
 
     // LiveSessionRegistry is the single source of truth for "who is
@@ -451,21 +436,6 @@ export class SystemController {
           ? engineSessions.has(s.sessionId)
           : s.lastBeat.getTime() > Date.now() - liveTtlMs,
       );
-    const transcodeSessions = this.transcodingService.getActiveSessions();
-    const findTranscodeSession = (
-      userId: number | null,
-      mediaFileId: number,
-      profileHash: string | null,
-    ): TranscodeSession | undefined => {
-      if (profileHash == null) return undefined;
-      return transcodeSessions.find(
-        (ts) =>
-          ts.userId === userId &&
-          ts.mediaFileId === mediaFileId &&
-          ts.baseProfileHash === profileHash,
-      );
-    };
-
     // Collect lookups before the per-session loop so we batch DB hits.
     // DirectPlay is a LiveSession (kind='directplay') like any other mode, so
     // the registry is the only source — no separate tracker to merge in.
@@ -491,10 +461,11 @@ export class SystemController {
       deviceLabel: string | null;
       systemName: string | null;
       appVersion: string | null;
-      transcodeSession: TranscodeSession | undefined;
       engine: SessionSnapshot | undefined;
       clientTonemap: boolean;
       audioPlan: LiveSessionSnapshot['audioPlan'];
+      hdrLadder: boolean;
+      bitrateByQuality: LiveSessionSnapshot['bitrateByQuality'];
       position: number;
       episodeId: number | null;
     };
@@ -502,20 +473,15 @@ export class SystemController {
     const work: StreamWorkItem[] = [];
 
     for (const session of live) {
-      const ts = findTranscodeSession(
-        session.userId,
-        session.mediaFileId,
-        session.profileHash,
-      );
       const eng = engineSessions?.get(session.sessionId);
       const quality =
         session.kind === 'directplay'
           ? 'original'
-          : (eng?.quality ?? ts?.quality ?? session.quality ?? 'original');
+          : (eng?.quality ?? session.quality ?? 'original');
       const hwAccelVal =
         session.kind === 'directplay' || session.kind === 'remux'
           ? 'none'
-          : (eng?.job?.actualHw ?? ts?.actualHwAccel ?? hwAccel);
+          : (eng?.job?.actualHw ?? hwAccel);
       work.push({
         sessionId: session.sessionId,
         userId: session.userId,
@@ -532,10 +498,11 @@ export class SystemController {
         deviceLabel: session.deviceLabel,
         systemName: session.systemName,
         appVersion: session.appVersion,
-        transcodeSession: ts,
         engine: eng,
         clientTonemap: session.clientTonemap,
         audioPlan: session.audioPlan,
+        hdrLadder: session.hdrLadder,
+        bitrateByQuality: session.bitrateByQuality,
         // The LiveSession keeps the playhead fresh on every heartbeat — read
         // it straight from memory instead of a per-row playback_states query.
         position: session.position,
@@ -559,21 +526,19 @@ export class SystemController {
       // `audioPlan`; mode/codec/bitrate read directly.
       let outputContainer: string | null = null;
       let outputBitrate: number | null = null;
-      const rung =
-        s.mode === 'transcode'
-          ? [
-              ...getLadderForDevice(undefined),
-              ...getHdrLadderForDevice(undefined),
-            ].find((p) => p.name === s.quality)
-          : undefined;
-      const audio = deriveAudioOutput(s.audioPlan, s.mode, rung);
+      const rung = servedRung({ ...s, kind: s.mode });
+      const audio = deriveAudioOutput(
+        s.audioPlan,
+        s.mode,
+        rung?.audioBitrateBps ?? null,
+      );
       const audioMode = audio.audioMode;
       const audioOutputCodec = audio.audioOutputCodec;
       const audioOutputBitrateBps = audio.audioOutputBitrateBps;
 
       if (s.mode === 'transcode') {
         outputContainer = 'HLS';
-        outputBitrate = rung ? parseBitrateToBps(rung.videoBitrate) : null;
+        outputBitrate = rung?.videoBitrateBps ?? null;
       } else if (s.mode === 'remux') {
         outputContainer = 'HLS';
         outputBitrate = (v?.bitRate ?? 0) + (a?.bitRate ?? 0) || null;
@@ -659,47 +624,19 @@ export class SystemController {
       }
     }
 
-    // Fill transcode progress / reasons for sessions that have a
-    // matching ffmpeg session.
+    // Progress and reasons of the engine's run behind each session.
     for (let i = 0; i < streams.length; i++) {
       const stream = streams[i];
       const eng = work[i].engine;
-      if (eng && stream.mode !== 'directplay') {
-        stream.transcodePercent = eng.job?.transcodePercent ?? null;
-        const flags = (prefix: string) =>
-          eng.decision.response.transcodeReasons
-            .filter((r) => r.flag.startsWith(prefix))
-            .map((r) => r.message);
-        stream.videoReasons = flags('Video');
-        stream.audioReasons = flags('Audio');
-        stream.containerReasons = flags('Container');
-        continue;
-      }
-      const ts = work[i].transcodeSession;
-      if (!ts || stream.mode === 'directplay') continue;
-      if (stream.durationSeconds > 0) {
-        stream.transcodePercent =
-          await this.transcodingService.getTranscodePercent(
-            ts,
-            stream.durationSeconds,
-          );
-      }
-      // Deduplicate by flag (reasons can be pushed from multiple code paths)
-      const seen = new Set<string>();
-      const reasons = (ts.transcodeReasons ?? []).filter((r) => {
-        if (seen.has(r.flag)) return false;
-        seen.add(r.flag);
-        return true;
-      });
-      stream.videoReasons = reasons
-        .filter((r) => r.flag.startsWith('Video'))
-        .map((r) => r.message);
-      stream.audioReasons = reasons
-        .filter((r) => r.flag.startsWith('Audio'))
-        .map((r) => r.message);
-      stream.containerReasons = reasons
-        .filter((r) => r.flag.startsWith('Container'))
-        .map((r) => r.message);
+      if (!eng || stream.mode === 'directplay') continue;
+      stream.transcodePercent = eng.job?.transcodePercent ?? null;
+      const flags = (prefix: string) =>
+        eng.decision.response.transcodeReasons
+          .filter((r) => r.flag.startsWith(prefix))
+          .map((r) => r.message);
+      stream.videoReasons = flags('Video');
+      stream.audioReasons = flags('Audio');
+      stream.containerReasons = flags('Container');
     }
 
     // Live TV keeps its own sessions: a channel has no media file, so it cannot
@@ -763,51 +700,11 @@ export class SystemController {
     }
   }
 
-  /**
-   * Resolve a dashboard `sessionId` to the (user, mediaFile) pair the
-   * command targets. The dashboard hands us two flavours of id:
-   *   - A `LiveSession.sessionId` UUID — the canonical id (every mode,
-   *     DirectPlay included, is a LiveSession).
-   *   - A `TranscodeSession.id` hash — left in for completeness; the
-   *     dashboard hasn't emitted these in a while but a stale client
-   *     tab could still send one.
-   * Returns null when neither lookup produces a (user, file) pair the
-   * command can act on.
-   */
-  private resolveStreamCommandTarget(sessionId: string): {
-    userId: number;
-    mediaFileId: number;
-    profileHash: string | null;
-    isDirectPlay: boolean;
-  } | null {
-    const live = this.liveSessions.get(sessionId);
-    if (live && live.userId != null) {
-      return {
-        userId: live.userId,
-        mediaFileId: live.mediaFileId,
-        profileHash: live.profileHash ?? null,
-        isDirectPlay: live.kind === 'directplay',
-      };
-    }
-    const transcode = this.transcodingService
-      .getActiveSessions()
-      .find((s) => s.id === sessionId);
-    if (transcode && transcode.userId != null) {
-      return {
-        userId: transcode.userId,
-        mediaFileId: transcode.mediaFileId,
-        profileHash: transcode.baseProfileHash ?? null,
-        isDirectPlay: false,
-      };
-    }
-    return null;
-  }
-
   /** Current on-disk transcode cache footprint, for the admin UI. */
   @Get('transcode-cache')
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
   async transcodeCacheStats(): Promise<{ entries: number; bytes: number }> {
-    if (!this.engine?.runtime) return this.transcodeCache.diskUsage();
+    if (!this.engine?.runtime) return { entries: 0, bytes: 0 };
     const { entries, usedBytes } = await this.engine.cache();
     return { entries: entries.length, bytes: usedBytes };
   }
@@ -845,12 +742,12 @@ export class SystemController {
     return { ok: true, ...(await this.purge({ mediaFileId, userId: owner })) };
   }
 
-  /** Purges the engine's cache when it runs playback (live entries stay), else the TS one. */
+  /** Purges the engine's cache (live entries stay). */
   private async purge(f: {
     mediaFileId?: number;
     userId?: number;
   }): Promise<{ entries: number; bytes: number }> {
-    if (!this.engine?.runtime) return this.transcodeCache.purge(f.mediaFileId, f.userId);
+    if (!this.engine?.runtime) return { entries: 0, bytes: 0 };
     const ownerId = f.userId === undefined ? undefined : String(f.userId);
     const { entries } = await this.engine.cache();
     const gone = entries.filter(
@@ -869,52 +766,34 @@ export class SystemController {
     @Param('sessionId') sessionId: string,
     @Body() body: { action: 'pause' | 'play' | 'stop' | 'message'; message?: string },
   ) {
-    const target = this.resolveStreamCommandTarget(sessionId);
-    if (!target) {
+    const live = this.liveSessions.peek(sessionId);
+    if (!live || live.userId == null) {
       throw new BadRequestException('Session not found');
     }
 
-    const live = this.liveSessions.get(sessionId);
     const cmdEvent = {
       type: 'player.command' as const,
       sessionId,
-      mediaFileId: target.mediaFileId,
-      userId: target.userId,
+      mediaFileId: live.mediaFileId,
+      userId: live.userId,
       action: body.action,
       message: body.message,
     };
-    const sseConnectionId = live?.sseConnectionId;
+    const sseConnectionId = live.sseConnectionId;
     if (sseConnectionId && this.eventsService.hasConnection(sseConnectionId)) {
       this.eventsService.emitToConnection(sseConnectionId, cmdEvent);
     } else {
       // Clients without a bound SSE connection: every tab/device for
       // this user receives the command — they must filter on sessionId.
-      this.eventsService.emitToUser(target.userId, cmdEvent);
+      this.eventsService.emitToUser(live.userId, cmdEvent);
     }
 
-    if (body.action === 'stop' && this.engine?.runtime) {
+    if (body.action === 'stop') {
       this.liveSessions.stop(sessionId);
-      void this.engine
-        .deleteSession(sessionId)
-        .catch((err: Error) => this.logger.warn(`engine session ${sessionId} not deleted: ${err.message}`));
-    } else if (body.action === 'stop') {
-      this.liveSessions.stop(sessionId);
-      if (!target.isDirectPlay && target.profileHash) {
-        const remaining = this.liveSessions.listForJob(
-          target.userId,
-          target.mediaFileId,
-          target.profileHash,
-        );
-        if (remaining.length === 0) {
-          // Admin stop is a force-kill: reap every ffmpeg variant of the job
-          // (main / early / remux / per-audio), not just the main one — the
-          // companions would otherwise idle on until the reaper sweeps them.
-          this.transcodingService.killSessionsForJob(
-            target.mediaFileId,
-            target.userId,
-            target.profileHash,
-          );
-        }
+      if (this.engine?.runtime) {
+        void this.engine
+          .deleteSession(sessionId)
+          .catch((err: Error) => this.logger.warn(`engine session ${sessionId} not deleted: ${err.message}`));
       }
     }
 

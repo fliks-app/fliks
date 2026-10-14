@@ -7,7 +7,7 @@ import { isImageBasedSubtitleCodec } from '../../common/constants/subtitle-codec
 import { subtitleFlagsFromTitle } from '../../common/constants/subtitle-flags';
 import { existsSync } from 'fs';
 import { stat } from 'fs/promises';
-import { vaapiRenderNode } from '../streaming/transcoding/hw-device';
+import { vaapiRenderNode } from '../media-tools/hw-device';
 import { ffprobeLines } from '../../common/utils/ffprobe-lines';
 import { mapWithConcurrency } from '../../common/utils/concurrency';
 import { ffmpegSlots, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';

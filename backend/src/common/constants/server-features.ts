@@ -15,13 +15,12 @@ const ENGINE_FEATURE: Partial<
   muxedAudioRendition: 'serve',
 };
 
-/** The features this server advertises: with the engine running playback, those it announces. */
+/** The features this server advertises: those the engine announces. */
 export function serverFeatures(
-  engine: { runtime: boolean; engineFeatures: readonly string[] } | undefined,
+  engine: { engineFeatures: readonly string[] } | undefined,
 ): readonly string[] {
-  if (!engine?.runtime) return SERVER_FEATURES;
   return SERVER_FEATURES.filter((f) => {
     const needed = ENGINE_FEATURE[f];
-    return !needed || engine.engineFeatures.includes(needed);
+    return !needed || !!engine?.engineFeatures.includes(needed);
   });
 }

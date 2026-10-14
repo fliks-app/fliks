@@ -3,11 +3,13 @@ import {
   Logger,
   OnModuleDestroy,
   OnModuleInit,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { createEngineClient, type EngineClient } from './engine-client';
 import type { components } from './schema';
 import type { StreamingSettings } from '../streaming/streaming-settings-cache.service';
+import { engineLifetime } from '../streaming/lifetime-constants';
 
 export type { EngineClient };
 export type Capabilities = components['schemas']['CapabilitiesResponse'];
@@ -20,6 +22,8 @@ export type EngineEvent = components['schemas']['EngineEvent'];
 export type CacheSummary = components['schemas']['CacheSummary'];
 export type HeartbeatRequest = components['schemas']['HeartbeatRequest'];
 export type SessionAction = components['schemas']['SessionAction'];
+export type QualityEstimate = components['schemas']['QualityEstimate'];
+type EstimateSizesRequest = components['schemas']['EstimateSizesRequest'];
 
 /** A non-2xx answer of the engine; `status` tells the caller what to map it to. */
 export class EngineError extends Error {
@@ -96,7 +100,7 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
     return this.client !== null;
   }
 
-  /** The engine owns playback; otherwise the TS runtime does. */
+  /** The engine runs playback; without it playback-info answers 503. */
   get runtime(): boolean {
     return (
       this.client !== null &&
@@ -130,15 +134,15 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
     const url = process.env.FLIKS_ENGINE_URL;
     const token = process.env.FLIKS_ENGINE_TOKEN;
     if (!url || !token) {
-      this.log.log(
-        'FLIKS_ENGINE_URL/FLIKS_ENGINE_TOKEN unset: engine disabled, using the TS paths',
+      this.log.error(
+        'FLIKS_ENGINE_URL/FLIKS_ENGINE_TOKEN unset: playback is unavailable without the engine',
       );
       return;
     }
     await this.connect(createEngineClient(url, token));
   }
 
-  /** Handshake: retries while the engine starts, then keeps going in the background (TS fallback meanwhile). */
+  /** Handshake: retries while the engine starts, then keeps going in the background. */
   async connect(client: EngineClient): Promise<void> {
     this.candidate = client;
     for (let attempt = 1; attempt <= HELLO_ATTEMPTS; attempt++) {
@@ -150,7 +154,7 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
       await this.sleep(HELLO_RETRY_MS);
     }
     this.log.error(
-      'engine did not answer /v1/hello: TS paths until it does, retrying in the background',
+      'engine did not answer /v1/hello: no playback until it does, retrying in the background',
     );
     this.schedule(this.backoff());
   }
@@ -246,6 +250,7 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
         hostUrl: hostUrl(),
         hostToken: this.hostToken,
         streaming,
+        lifetime: engineLifetime(),
       },
     });
     if (!response.ok) throw new Error(`PUT /v1/config -> ${response.status}`);
@@ -319,6 +324,33 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
     });
     if (!data) throw new Error(`POST /v1/probe -> ${response.status}`);
     return data;
+  }
+
+  /** Download size per quality rung of a probed file. */
+  async estimateSizes(
+    info: unknown,
+    fileSize: number,
+  ): Promise<QualityEstimate[]> {
+    const { data, response } = await this.need().POST('/v1/estimate-sizes', {
+      body: { info: (info ?? {}) as EstimateSizesRequest['info'], fileSize },
+    });
+    if (!data)
+      throw new EngineError(response.status, 'POST /v1/estimate-sizes');
+    return data;
+  }
+
+  /** Drops the file's jobs, cache entries and subtitle extracts, best effort: a replaced file. */
+  async invalidate(mediaFileId: number): Promise<void> {
+    if (!this.client) return;
+    try {
+      const { response } = await this.client.POST('/v1/invalidate', {
+        body: { mediaFileId },
+      });
+      if (!response.ok)
+        this.log.warn(`POST /v1/invalidate -> ${response.status}`);
+    } catch (err) {
+      this.log.warn(`POST /v1/invalidate failed: ${err}`);
+    }
   }
 
   /** POST /v1/sessions, waiting out the 503 + Retry-After of the first detection run. */
@@ -413,7 +445,10 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
   }
 
   private need(): EngineClient {
-    if (!this.client) throw new Error('engine disabled');
+    if (!this.client)
+      throw new ServiceUnavailableException(
+        'The streaming engine is not running',
+      );
     return this.client;
   }
 }

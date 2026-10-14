@@ -5,11 +5,7 @@ import {
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import {
-  EngineError,
-  EngineService,
-  toEngineStreaming,
-} from '../../engine/engine.service';
+import { EngineError, EngineService } from '../../engine/engine.service';
 import type {
   OpenSessionRequest,
   OpenSessionResponse,
@@ -20,7 +16,6 @@ import { PlaybackService } from '../../playback/playback.service';
 import { QoeService } from '../../qoe/qoe.service';
 import { PluginPreRollService } from '../../plugins/plugin-pre-roll.service';
 import { User } from '../../users/entities/user.entity';
-import { ActiveStreamTracker } from '../active-stream-tracker.service';
 import { DeviceProfileDto } from '../dto/device-profile.dto';
 import type { PlaybackInfoResponse } from '../dto/playback-info.dto';
 import { readEdlSidecar, shiftRanges } from '../edl/edl-sidecar';
@@ -32,10 +27,13 @@ import {
 } from '../playback-info.util';
 import { StreamingService, type ResolvedFile } from '../streaming.service';
 import { StreamingSettingsCache } from '../streaming-settings-cache.service';
-import { SubtitleBurnInService } from '../subtitle-burn-in.service';
+import {
+  SubtitleBurnInService,
+  type BurnInSubtitle,
+} from '../subtitle-burn-in.service';
 import { SubtitleStreamService } from '../subtitle-stream.service';
-import { parseSourceFps } from '../transcoding/constants';
-import type { BurnInSubtitle } from '../transcoding';
+import { HostHardwareService } from '../host-hardware.service';
+import { parseSourceFps } from '../../media-tools/fps';
 import { presenceInput, toQoePipeline, toTags } from './engine-presence';
 import { SourceScanService } from './source-scan.service';
 import { StaleProbeRescanService } from './stale-probe-rescan.service';
@@ -63,8 +61,8 @@ export type EnginePlaybackInfo = PlaybackInfoResponse & {
   chapters?: { title?: string; startSeconds: number; endSeconds: number }[];
 };
 
-/** `POST :id/playback-info` when the engine runs playback: the host decides nothing, it gathers
- *  what the engine needs, opens the session and adds the app-side extras to the engine's decision. */
+/** `POST :id/playback-info`: the host decides nothing, it gathers what the engine needs, opens the
+ *  session and adds the app-side extras to the engine's decision. */
 @Injectable()
 export class EnginePlaybackService {
   private readonly log = new Logger(EnginePlaybackService.name);
@@ -77,7 +75,7 @@ export class EnginePlaybackService {
     private readonly sourceScans: SourceScanService,
     private readonly staleProbeRescan: StaleProbeRescanService,
     private readonly settingsCache: StreamingSettingsCache,
-    private readonly activeStreamTracker: ActiveStreamTracker,
+    private readonly hardware: HostHardwareService,
     private readonly markersService: MarkersService,
     private readonly playbackService: PlaybackService,
     private readonly pluginPreRoll: PluginPreRollService,
@@ -92,17 +90,14 @@ export class EnginePlaybackService {
     device: DeviceProfileDto,
     q: PlaybackQuery,
   ): Promise<EnginePlaybackInfo> {
+    if (!this.engine.runtime)
+      throw new ServiceUnavailableException(
+        'Playback needs the streaming engine, which is not running',
+      );
     const resolved = await this.streamingService.resolveFile(mediaFileId, user);
     const info = resolved.mediaFile.streamInfo;
     const burnIn = await this.resolveBurnIn(q.burnInSubtitleId, mediaFileId);
-    const ss = await this.settingsCache.get();
-    this.activeStreamTracker.setSegmentDuration(ss.segmentDuration);
-    await this.engine
-      .pushStreaming(toEngineStreaming(ss))
-      .catch((err: Error) =>
-        this.log.warn(`engine config not pushed: ${err.message}`),
-      );
-    this.warmSubtitles(resolved, mediaFileId);
+    await this.hardware.apply(await this.settingsCache.get());
 
     const held = await this.sourceScans.lookup(
       mediaFileId,
@@ -136,7 +131,6 @@ export class EnginePlaybackService {
       fanartUrl: resolved.media?.fanartUrl,
       sseConnectionId: q.sseConnectionId,
       attributedUserId,
-      deviceType: device.deviceType,
     });
     const client = {
       deviceName: device.deviceName,
@@ -197,8 +191,8 @@ export class EnginePlaybackService {
         : response.playMethod === 'DirectStream'
           ? 'remux'
           : 'transcode';
-    const live = this.liveSessions.create({
-      ...presenceInput({
+    const live = this.liveSessions.create(
+      presenceInput({
         sessionId: open.sessionId,
         userId: user.id,
         mediaFileId,
@@ -209,22 +203,8 @@ export class EnginePlaybackService {
         client,
         tags,
         positionS: position,
-        pinned: q.download,
       }),
-      supportsHlsSubtitles: !!device.supportsHlsSubtitles,
-      dedupesAudioByLanguage: device.dedupesAudioByLanguage,
-      supportsMuxedAudioRendition: !!device.supportsMuxedAudioRendition,
-      supportsIFrameTrickPlay: !!device.supportsIFrameTrickPlay,
-      probesSegZero: device.probesSegZero,
-      supportsAbr: device.supportsAbr,
-      audioStreamIndex:
-        resolveAudioStreamIndex(q.audioStreamIndex, info?.audio?.length ?? 0) ??
-        null,
-      audioStreamCount: info?.audio?.length ?? 0,
-      burnIn,
-      encoderPreset: ss.qsvPreset,
-      tonemapCurve: ss.tonemapCurve,
-    });
+    );
 
     this.qoe.register(live);
     if (open.qoePipeline)
@@ -294,7 +274,7 @@ export class EnginePlaybackService {
     }
   }
 
-  /** Same shape as the TS path: a subtitle that cannot be resolved plays without a burn-in. */
+  /** A subtitle that cannot be resolved plays without a burn-in. */
   private async resolveBurnIn(
     subtitleId: number | undefined,
     mediaFileId: number,
@@ -315,22 +295,6 @@ export class EnginePlaybackService {
     }
   }
 
-  private warmSubtitles(resolved: ResolvedFile, mediaFileId: number): void {
-    void this.subtitleStreamService
-      .warmupCache(
-        resolved.absolutePath,
-        mediaFileId,
-        resolved.mediaFile.streamInfo?.subtitles,
-        {
-          title: resolved.media.title,
-          mediaId: resolved.media.id,
-          mediaType: resolved.media.type,
-        },
-        'playback',
-      )
-      .catch(() => undefined);
-  }
-
   /** The engine's hints: a stale probe is re-probed (which chains the scan), else a missing scan is made. */
   private rescanIf(
     open: OpenSessionResponse,
@@ -339,12 +303,7 @@ export class EnginePlaybackService {
   ): void {
     const info = resolved.mediaFile.streamInfo;
     if (open.hints.probeStale) {
-      void this.staleProbeRescan.scheduleIfNeeded(
-        mediaFileId,
-        resolved.absolutePath,
-        info,
-        true,
-      );
+      void this.staleProbeRescan.schedule(mediaFileId, resolved.absolutePath);
     } else if (open.hints.scanMissing) {
       void this.sourceScans.scheduleIfNeeded(
         mediaFileId,

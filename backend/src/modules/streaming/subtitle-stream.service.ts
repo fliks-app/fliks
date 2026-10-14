@@ -22,8 +22,7 @@ import { StreamingSettingsCache } from './streaming-settings-cache.service';
 import { Command } from '../scheduler/entities/command.entity';
 import { resolveSubtitleAbsolutePath } from '../subtitles/subtitle-path.util';
 import { normalizeLanguageCode } from '../../common/constants/app-languages';
-import type { SubtitleRenditionMeta } from './transcoding/types';
-import { assToVtt, normalizeVtt, srtToVtt } from './subtitle-vtt.util';
+import { assToVtt } from './subtitle-vtt.util';
 import { isRenderableTextSidecar } from '../../common/constants/subtitle-codecs';
 import { withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
 import { spawnBackground } from '../../common/utils/spawn-priority';
@@ -36,10 +35,17 @@ import {
   formatMediaProgressSubject,
   type MediaProgressSubject,
 } from '../../common/utils/media-progress-subject.util';
-import {
-  cueOffsetSeconds as cueOffsetOnServedTimeline,
-  sourceTimeline,
-} from './transcoding/source-timeline';
+
+/** A text subtitle track the engine publishes as an HLS `SUBTITLES` rendition. */
+export interface SubtitleRenditionMeta {
+  kind: 'embedded' | 'external';
+  key: number;
+  language?: string;
+  /** Embedded tracks only: the container's BCP-47 tag (`es-419`). */
+  languageTag?: string;
+  name: string;
+  forced?: boolean;
+}
 
 /** getCacheDir() probes the filesystem on its first call, keep this lazy. */
 const subsDir = () => path.join(getCacheDir(), 'subs');
@@ -132,10 +138,10 @@ export class SubtitleStreamService implements OnModuleInit {
   private async resolveSubtitleOnDisk(
     subtitleId: number,
     user?: User,
-  ): Promise<{ sub: SubtitleFile; realSubPath: string }> {
+  ): Promise<string> {
     const sub = await this.subtitleFileRepo.findOne({
       where: { id: subtitleId },
-      relations: ['media', 'media.library', 'mediaFile'],
+      relations: ['media', 'media.library'],
     });
     await this.streamingService.assertLibraryAccess(
       sub?.media?.libraryId ?? null,
@@ -155,9 +161,8 @@ export class SubtitleStreamService implements OnModuleInit {
       throw new NotFoundException(`Subtitle file not found on disk`);
     }
 
-    let realSubPath: string;
     try {
-      realSubPath = await fs.realpath(absolute);
+      return await fs.realpath(absolute);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       this.log.error(
@@ -165,7 +170,6 @@ export class SubtitleStreamService implements OnModuleInit {
       );
       throw new NotFoundException(`Subtitle file not found on disk`);
     }
-    return { sub, realSubPath };
   }
 
   /** The stored file, named after the copy on disk so its original extension
@@ -174,41 +178,8 @@ export class SubtitleStreamService implements OnModuleInit {
     subtitleId: number,
     user?: User,
   ): Promise<{ path: string; filename: string }> {
-    const { realSubPath } = await this.resolveSubtitleOnDisk(subtitleId, user);
+    const realSubPath = await this.resolveSubtitleOnDisk(subtitleId, user);
     return { path: realSubPath, filename: path.basename(realSubPath) };
-  }
-
-  /**
-   * Get an external subtitle file converted to WebVTT.
-   */
-  async getSubtitleAsVtt(
-    subtitleId: number,
-    user?: User,
-  ): Promise<{ vtt: string; cueOffsetSeconds: number }> {
-    const { sub, realSubPath } = await this.resolveSubtitleOnDisk(
-      subtitleId,
-      user,
-    );
-
-    const content = await fs.readFile(realSubPath, 'utf-8');
-    const ext = path.extname(realSubPath).toLowerCase();
-    // Sidecars count from the container start, like the extracts and the
-    // players' clocks they are authored against (X-TIMESTAMP-MAP offset).
-    const cueOffsetSeconds = cueOffsetOnServedTimeline(
-      sourceTimeline(
-        sub.mediaFile?.streamInfo,
-        sub.media?.path && sub.mediaFile?.relativePath
-          ? path.join(sub.media.path, sub.mediaFile.relativePath)
-          : realSubPath,
-      ),
-    );
-    const vtt =
-      ext === '.vtt'
-        ? normalizeVtt(content)
-        : ext === '.ass' || ext === '.ssa'
-          ? assToVtt(content)
-          : srtToVtt(content); // .srt + unknown fallback
-    return { vtt, cueOffsetSeconds };
   }
 
   /**

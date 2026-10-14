@@ -1,5 +1,4 @@
 import { QoeService } from './qoe.service';
-import { SessionRouter } from '../streaming/services/session-router.service';
 import type { QoeSample } from './core/types';
 
 const session = {
@@ -458,16 +457,5 @@ describe('QoeService playbacks', () => {
     svc.sessionEnded(session);
     await new Promise((r) => setImmediate(r));
     expect(createQueryBuilder).not.toHaveBeenCalled();
-  });
-});
-
-describe('CMCD query param on stream URLs', () => {
-  it('does not disturb sid resolution or the freshness gate', () => {
-    const touch = jest.fn().mockReturnValue(true);
-    const router = new SessionRouter({ touch } as never, {} as never);
-    router.assertFresh({
-      query: { sid: 'abc', token: 't', CMCD: 'bl=100,sid="other",su' },
-    } as never);
-    expect(touch).toHaveBeenCalledWith('abc');
   });
 });

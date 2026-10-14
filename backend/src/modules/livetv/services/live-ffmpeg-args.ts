@@ -1,14 +1,10 @@
-import type { HwAccelType } from '../../streaming/transcoding/types';
-import {
-  audioCopyArgs,
-  audioEncodeArgs,
-} from '../../streaming/transcoding/audio-encode';
+import type { HwAccelType } from '../../streaming/host-hardware.service';
 import {
   QSV_DEVICE_ALIAS,
   VAAPI_DEVICE_ALIAS,
   qsvDeviceInitArgs,
   vaapiDeviceInitArgs,
-} from '../../streaming/transcoding/hw-device';
+} from '../../media-tools/hw-device';
 import { liveTvFfmpegHeaderArgs } from '../livetv-http';
 
 /** Stereo, which every client decodes whatever the broadcast carries. */
@@ -27,6 +23,8 @@ export interface LiveFfmpegArgsOptions {
   userAgent?: string | null;
   referer?: string | null;
   hwAccel: HwAccelType;
+  /** The host's ffmpeg has libfdk_aac, which encodes AAC better than the native one. */
+  libfdkAac?: boolean;
   videoBitrateBps?: number;
   /** Probed source audio codec. AAC is copied into MPEG-TS segments only. */
   audioCodec?: string | null;
@@ -89,7 +87,7 @@ function hwaccelInputFlags(hwAccel: HwAccelType): string[] {
 }
 
 /**
- * Live HLS output flags, kept separate from the VOD `buildFfmpegArgs`: live has
+ * Live HLS output flags: live has
  * no known duration and no seekable segment grid, so it uses ffmpeg's own
  * sliding-window HLS muxer instead of the VOD cache/timeline machinery.
  *
@@ -158,9 +156,18 @@ export function buildLiveFfmpegArgs(opts: LiveFfmpegArgsOptions): string[] {
   // A broadcast switches AAC between 2.0 and 5.1 at programme boundaries: each
   // ADTS frame in MPEG-TS says so, while fMP4 keeps the first configuration.
   if (opts.audioCodec === 'aac' && opts.useTs) {
-    args.push(...audioCopyArgs('', 'aac', opts.useTs));
+    args.push('-c:a', 'copy');
   } else {
-    args.push(...audioEncodeArgs('', 'aac', 2, LIVE_AAC_BITRATE_BPS));
+    args.push(
+      '-c:a',
+      opts.libfdkAac ? 'libfdk_aac' : 'aac',
+      '-b:a',
+      `${LIVE_AAC_BITRATE_BPS / 1000}k`,
+      '-ac',
+      '2',
+      '-ar',
+      '48000',
+    );
   }
 
   // Floored at 1: a 0 here (bad segment/window settings) would tell ffmpeg to

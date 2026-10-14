@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { SourceScanService, sourceVersion } from './source-scan.service';
-import * as sourceScan from '../transcoding/source-scan';
+import * as sourceScan from './source-scan';
 
 describe('SourceScanService', () => {
   const ts = { formatName: 'mpegts', video: [{ streamIndex: 0, codec: 'h264' }], audio: [], subtitles: [] };

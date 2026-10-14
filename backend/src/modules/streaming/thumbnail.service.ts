@@ -16,13 +16,13 @@ import {
   pickExtractor,
   type CropArea,
 } from './thumbnail-extractors';
-import { TranscodingService } from './transcoding';
+import { EngineEventsService } from './services/engine-events.service';
 import { ffmpegSlots, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
 import type { MediaFileInfo } from '../media-probe/ffprobe.service';
 import {
   inputSeekSeconds,
   sourceTimeline,
-} from './transcoding/source-timeline';
+} from '../media-tools/source-timeline';
 import {
   buildMediaProgressSubject,
   formatMediaProgressSubject,
@@ -81,7 +81,7 @@ export class ThumbnailService implements OnModuleInit {
     private readonly eventsService: EventsService,
     @InjectRepository(Command)
     private readonly commandRepo: Repository<Command>,
-    private readonly transcoding: TranscodingService,
+    private readonly engineEvents: EngineEventsService,
     private readonly activityRegistry: ActivityRegistryService,
   ) {
     this.log.log(
@@ -107,7 +107,7 @@ export class ThumbnailService implements OnModuleInit {
   private chooseExtractor(crop?: CropArea) {
     return pickExtractor(
       crop,
-      HWACCEL_AVAILABLE && this.transcoding.hasActiveTranscode(),
+      HWACCEL_AVAILABLE && this.engineEvents.activeJobs > 0,
     );
   }
 

@@ -200,6 +200,11 @@ describe('EngineService config push', () => {
         hostUrl: hostUrl(),
         hostToken: s.hostToken,
         streaming: toEngineStreaming(settings),
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        lifetime: expect.objectContaining({
+          jobGraceMs: 60_000,
+          maxSessionsPerOwner: 10,
+        }),
       },
     });
     expect((c.PUT.mock.calls[1] as any)[1].body.revision).toBe(9);
@@ -509,7 +514,7 @@ describe('EngineService runtime', () => {
     });
 
     it('refuses to call a disabled engine', async () => {
-      await expect(svc().openSession({} as never)).rejects.toThrow('engine disabled');
+      await expect(svc().openSession({} as never)).rejects.toThrow('The streaming engine is not running');
     });
   });
 });

@@ -1,6 +1,6 @@
 import { buildLiveFfmpegArgs, type LiveFfmpegArgsOptions } from './live-ffmpeg-args';
 import { LIVETV_USER_AGENT } from '../livetv-http';
-import { setSelectedRenderNode } from '../../streaming/transcoding/hw-device';
+import { setSelectedRenderNode } from '../../media-tools/hw-device';
 
 function base(overrides: Partial<LiveFfmpegArgsOptions> = {}): LiveFfmpegArgsOptions {
   return {
@@ -54,6 +54,14 @@ describe('buildLiveFfmpegArgs', () => {
     const args = buildLiveFfmpegArgs(base({ mode: 'remux', audioCodec: 'aac', useTs: true }));
     expect(flagValue(args, '-c:a')).toBe('copy');
     expect(args).not.toContain('-bsf:a');
+  });
+
+  it('encodes on libfdk_aac when the host has it', () => {
+    const args = buildLiveFfmpegArgs(
+      base({ audioCodec: 'mp2', libfdkAac: true }),
+    );
+    expect(flagValue(args, '-c:a')).toBe('libfdk_aac');
+    expect(flagValue(args, '-b:a')).toBe('128k');
   });
 
   it('re-encodes when the codec is unknown, rather than assuming', () => {

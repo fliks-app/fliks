@@ -1,44 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { StaleProbeRescanService, needsReprobe } from './stale-probe-rescan.service';
-
-describe('needsReprobe', () => {
-  const withVideo = { formatName: 'mov,mp4', video: [{ firstFrameSeconds: 0 }] };
-
-  it('is false for a row carrying formatName', () => {
-    expect(needsReprobe(withVideo as never)).toBe(false);
-  });
-
-  it('is false with no video stream, nothing this backfill can fix', () => {
-    expect(needsReprobe({ video: [] } as never)).toBe(false);
-    expect(needsReprobe(null)).toBe(false);
-  });
-
-  it('is true when formatName predates the current probe', () => {
-    expect(needsReprobe({ video: [{ firstFrameSeconds: 0 }] } as never)).toBe(true);
-  });
-
-  it.each([
-    ['formatStartSeconds', { ...withVideo, formatStartSeconds: undefined }],
-    ['firstFrameSeconds', { ...withVideo, video: [{ firstFrameSeconds: undefined }] }],
-    ['per-track audio start', { ...withVideo, audio: [{ startTimeSeconds: undefined }] }],
-  ])('is false when only %s is missing: formatName alone decides staleness', (_label, si) => {
-    expect(needsReprobe(si as never)).toBe(false);
-  });
-
-  it('is true for an HDR row that predates hdr10Plus', () => {
-    const hdrRow = { ...withVideo, video: [{ firstFrameSeconds: 0, hdrFormat: 'HDR10' }] };
-    expect(needsReprobe(hdrRow as never)).toBe(true);
-  });
-
-  it('is false once hdr10Plus is probed, true or false', () => {
-    const probedTrue = { ...withVideo, video: [{ hdrFormat: 'HDR10', hdr10Plus: true }] };
-    const probedFalse = { ...withVideo, video: [{ hdrFormat: 'HDR10', hdr10Plus: false }] };
-    expect(needsReprobe(probedTrue as never)).toBe(false);
-    expect(needsReprobe(probedFalse as never)).toBe(false);
-  });
-});
+import { StaleProbeRescanService } from './stale-probe-rescan.service';
 
 describe('StaleProbeRescanService', () => {
   const stale = {
@@ -81,31 +44,17 @@ describe('StaleProbeRescanService', () => {
   it('re-probes and saves a stale row, then chains the keyframe scan on the fresh row', async () => {
     const freshProbe = { formatName: 'mov,mp4', video: [{ firstFrameSeconds: 0 }], audio: [] };
     const { svc, detectMediaFileInfo, files, sourceScans } = setup({ streamInfo: stale }, freshProbe);
-    await svc.scheduleIfNeeded(3, file, stale as never);
+    await svc.schedule(3, file);
     expect(detectMediaFileInfo).toHaveBeenCalledWith(file);
     expect(files.update).toHaveBeenCalledWith(3, { streamInfo: freshProbe });
     expect(sourceScans.scheduleIfNeeded).toHaveBeenCalledWith(3, file, freshProbe);
   });
 
-  it('re-probes a current-looking row when forced, as the engine reports its schema stale', async () => {
-    const current = { ...stale, formatName: 'mov,mp4' };
-    const { svc, detectMediaFileInfo } = setup({ streamInfo: current });
-    await svc.scheduleIfNeeded(3, file, current as never, true);
-    expect(detectMediaFileInfo).toHaveBeenCalledWith(file);
-  });
-
-  it('never probes a row whose fields are all current', async () => {
-    const current = { ...stale, formatName: 'mov,mp4' };
-    const { svc, detectMediaFileInfo } = setup({ streamInfo: current });
-    await svc.scheduleIfNeeded(3, file, current as never);
-    expect(detectMediaFileInfo).not.toHaveBeenCalled();
-  });
-
   it('dedupes concurrent calls for the same file into one probe', async () => {
     const { svc, detectMediaFileInfo } = setup();
     await Promise.all([
-      svc.scheduleIfNeeded(3, file, stale as never),
-      svc.scheduleIfNeeded(3, file, stale as never),
+      svc.schedule(3, file),
+      svc.schedule(3, file),
     ]);
     expect(detectMediaFileInfo).toHaveBeenCalledTimes(1);
   });
@@ -118,7 +67,7 @@ describe('StaleProbeRescanService', () => {
     };
     const freshProbe = { formatName: 'mov,mp4', video: [{ firstFrameSeconds: 0 }], audio: [] };
     const { svc, files } = setup({ streamInfo: withExtras }, freshProbe);
-    await svc.scheduleIfNeeded(3, file, withExtras as never);
+    await svc.schedule(3, file);
     expect(files.update).toHaveBeenCalledWith(3, {
       streamInfo: {
         ...freshProbe,
@@ -131,7 +80,7 @@ describe('StaleProbeRescanService', () => {
   it('never saves a probe that resolved with an error, the real ffprobe behaviour on a timeout or a corrupt header, but still chains the scan on the existing row', async () => {
     const broken = { video: [], audio: [], subtitles: [], error: 'ffprobe file info failed: timed out' };
     const { svc, files, sourceScans } = setup({ streamInfo: stale }, broken);
-    await expect(svc.scheduleIfNeeded(3, file, stale as never)).resolves.toBeUndefined();
+    await expect(svc.schedule(3, file)).resolves.toBeUndefined();
     expect(files.update).not.toHaveBeenCalled();
     expect(sourceScans.scheduleIfNeeded).toHaveBeenCalledWith(3, file, stale);
   });
@@ -139,8 +88,8 @@ describe('StaleProbeRescanService', () => {
   it('remembers a rejected re-probe and never retries it, even on a later play', async () => {
     const broken = { video: [], audio: [], subtitles: [], error: 'ffprobe file info failed: timed out' };
     const { svc, detectMediaFileInfo } = setup({ streamInfo: stale }, broken);
-    await svc.scheduleIfNeeded(3, file, stale as never);
-    await svc.scheduleIfNeeded(3, file, stale as never);
+    await svc.schedule(3, file);
+    await svc.schedule(3, file);
     expect(detectMediaFileInfo).toHaveBeenCalledTimes(1);
   });
 
@@ -151,8 +100,8 @@ describe('StaleProbeRescanService', () => {
       { findOne: jest.fn(), update: jest.fn() } as never,
       { scheduleIfNeeded: jest.fn() } as never,
     );
-    await svc.scheduleIfNeeded(3, file, stale as never);
-    await svc.scheduleIfNeeded(3, file, stale as never);
+    await svc.schedule(3, file);
+    await svc.schedule(3, file);
     expect(detectMediaFileInfo).toHaveBeenCalledTimes(1);
   });
 
@@ -168,21 +117,21 @@ describe('StaleProbeRescanService', () => {
       files as never,
       sourceScans as never,
     );
-    await svc.scheduleIfNeeded(3, file, stale as never);
+    await svc.schedule(3, file);
     expect(sourceScans.scheduleIfNeeded).toHaveBeenCalledWith(3, file, stale);
   });
 
   it('never saves a probe that detected no streams at all', async () => {
     const broken = { video: [], audio: [], subtitles: [], formatName: 'mov,mp4', error: 'No streams detected' };
     const { svc, files } = setup({ streamInfo: stale }, broken);
-    await svc.scheduleIfNeeded(3, file, stale as never);
+    await svc.schedule(3, file);
     expect(files.update).not.toHaveBeenCalled();
   });
 
   it('never saves a probe that silently lost the video stream the old row had', async () => {
     const broken = { video: [], audio: [{ streamIndex: 1 }], subtitles: [], formatName: 'mov,mp4' };
     const { svc, files } = setup({ streamInfo: stale }, broken);
-    await svc.scheduleIfNeeded(3, file, stale as never);
+    await svc.schedule(3, file);
     expect(files.update).not.toHaveBeenCalled();
   });
 
@@ -192,7 +141,7 @@ describe('StaleProbeRescanService', () => {
       fs.writeFileSync(file, 'y'.repeat(500));
       return { formatName: 'mov,mp4', video: [{ firstFrameSeconds: 0 }], audio: [] };
     });
-    await svc.scheduleIfNeeded(3, file, stale as never);
+    await svc.schedule(3, file);
     expect(files.findOne).not.toHaveBeenCalled();
     expect(files.update).not.toHaveBeenCalled();
   });
@@ -209,7 +158,7 @@ describe('StaleProbeRescanService', () => {
       files as never,
       sourceScans as never,
     );
-    await expect(svc.scheduleIfNeeded(3, file, stale as never)).resolves.toBeUndefined();
+    await expect(svc.schedule(3, file)).resolves.toBeUndefined();
     expect(files.update).not.toHaveBeenCalled();
   });
 });

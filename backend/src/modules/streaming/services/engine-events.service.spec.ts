@@ -55,7 +55,7 @@ function setup(runtime = true) {
     engine as never,
     liveSessions,
     qoe as never,
-    { getSegmentDuration: () => 3 } as never,
+    { segmentDuration: 3 } as never,
   );
   return { svc, engine, qoe, liveSessions };
 }
@@ -110,21 +110,6 @@ describe('EngineEventsService.handle', () => {
     expect(t.qoe.sessionEnded).toHaveBeenCalledTimes(1);
   });
 
-  it('does not expire presence on its own: only SessionEnded does', () => {
-    const t = setup();
-    const live = t.liveSessions.create({
-      sessionId: 'sid-1',
-      userId: 7,
-      username: null,
-      mediaFileId: 42,
-      kind: 'transcode',
-    });
-    live.lastBeat = 0;
-    (t.liveSessions as any).engine = t.engine;
-    (t.liveSessions as any).runGc();
-    expect(t.liveSessions.peek('sid-1')).not.toBeNull();
-  });
-
   it('feeds the served rung and a CPU fallback of a transcode to QoE', () => {
     const t = setup();
     const live = t.liveSessions.create({
@@ -133,7 +118,9 @@ describe('EngineEventsService.handle', () => {
       username: null,
       mediaFileId: 42,
       kind: 'transcode',
-      deviceType: 'desktop',
+      bitrateByQuality: {
+        '720p': { videoBitrateBps: 3_000_000, audioBitrateBps: 192_000, totalBitrateBps: 3_192_000 },
+      },
     });
     t.svc.handle({
       type: 'PipelineChanged',
@@ -141,11 +128,7 @@ describe('EngineEventsService.handle', () => {
       quality: '720p',
       hwAccel: 'none',
     });
-    expect(t.qoe.noteServedRung).toHaveBeenCalledWith(
-      live,
-      '720p',
-      expect.any(Number),
-    );
+    expect(t.qoe.noteServedRung).toHaveBeenCalledWith(live, '720p', 3_000_000);
     expect(t.qoe.noteHwAccel).toHaveBeenCalledWith(live, 'none');
   });
 
@@ -282,7 +265,6 @@ describe('EngineEventsService.resync', () => {
       profileHash: 'abc',
       sseConnectionId: 'conn-1',
       attributedUserId: 9,
-      deviceType: 'mobile',
       deviceLabel: 'UA',
       systemName: 'macOS 26',
       appVersion: '1.2.3',

@@ -253,7 +253,7 @@ export class PlaybackController {
       if (this.engine?.runtime) {
         engineLost = await this.engineBeat(user, body.sessionId, body);
       }
-      const before = this.liveSessions.get(body.sessionId);
+      const before = this.liveSessions.peek(body.sessionId);
       const previousState = before?.state;
       const updated = engineLost
         ? null

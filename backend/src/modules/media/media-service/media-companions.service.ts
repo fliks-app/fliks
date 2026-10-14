@@ -13,7 +13,7 @@ import { matchSubtitleVideo } from '../../subtitles/subtitle-matching';
 import { resolveSubtitleAbsolutePath } from '../../subtitles/subtitle-path.util';
 import { MAX_EDL_BYTES, edlPathFor, resolveEdlPath } from '../../streaming/edl/edl-sidecar';
 import { parseEdl } from '../../streaming/edl/edl-parser';
-import { parseSourceFps } from '../../streaming/transcoding/constants';
+import { parseSourceFps } from '../../media-tools/fps';
 import { writeAtomically } from '../../../common/utils/atomic-file';
 import { VIDEO_EXTS } from '../../../common/constants/video-extensions';
 

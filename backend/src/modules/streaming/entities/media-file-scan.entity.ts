@@ -1,7 +1,7 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { MediaFile } from '../../media/entities/media-file.entity';
-import type { SourceScan } from '../transcoding/source-scan';
+import type { SourceScan } from '../services/source-scan';
 
 /** The whole-file scan of a media file, valid while its size and mtime match.
  *  Its own table: the keyframe list is never loaded with the media rows. */

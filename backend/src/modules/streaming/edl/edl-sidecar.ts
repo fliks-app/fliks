@@ -1,8 +1,6 @@
 import { Logger } from '@nestjs/common';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
-import type { PlayMethod } from '../dto/playback-info.dto';
-import type { SourceTimeline } from '../transcoding/source-timeline';
 import { EdlRange, parseEdl } from './edl-parser';
 
 const log = new Logger('EdlSidecar');
@@ -88,18 +86,6 @@ function warnOnce(key: string, message: string): void {
   if (warned.size >= MAX_CACHED) warned.clear();
   warned.add(key);
   log.warn(message);
-}
-
-/** Container-time ranges moved onto the clock of the chosen play method. */
-export function toPlaybackTimeline(
-  ranges: EdlRange[],
-  timeline: Pick<SourceTimeline, 'formatStart' | 'origin'>,
-  playMethod: PlayMethod,
-): EdlRange[] {
-  return shiftRanges(
-    ranges,
-    playMethod === 'DirectPlay' ? 0 : timeline.formatStart - timeline.origin,
-  );
 }
 
 /** Ranges moved by `shift` seconds, clamped at 0, empty ones dropped. */

@@ -5,8 +5,7 @@ import type {
   LiveSessionRegistry,
 } from '../live-session.service';
 import type { QoePipeline } from '../../qoe/core/types';
-import type { CodecVariant } from '../transcoding/codec/types';
-import { parseSourceFps } from '../transcoding/constants';
+import { parseSourceFps } from '../../media-tools/fps';
 
 type Decision = components['schemas']['Decision'];
 type ClientInfo = components['schemas']['ClientInfo'];
@@ -22,7 +21,6 @@ export interface PresenceTags {
   fanartUrl?: string | null;
   sseConnectionId?: string | null;
   attributedUserId?: number | null;
-  deviceType?: string | null;
 }
 
 export function toTags(t: PresenceTags): Record<string, string> {
@@ -68,7 +66,6 @@ export interface PresenceFacts {
   client: ClientInfo;
   tags: Record<string, string>;
   positionS: number;
-  pinned: boolean;
 }
 
 /** The presence entry (remote control, dashboard, QoE) of an engine session, from the decision it runs. */
@@ -93,18 +90,12 @@ export function presenceInput(f: PresenceFacts): CreateLiveSessionInput {
     appVersion: f.client.appVersion ?? null,
     sseConnectionId: f.tags.sseConnectionId ?? null,
     position: f.positionS,
-    audioPlan: r.audioPlan as never,
-    audioTrackPlans: f.decision.audioPlans as never,
-    videoVariant: f.decision.videoVariant as CodecVariant,
-    deviceType: f.tags.deviceType === 'mobile' ? 'mobile' : 'desktop',
+    audioPlan: r.audioPlan,
+    bitrateByQuality: r.transcodeBitrateByQuality ?? null,
     hdrLadder: f.decision.useHdrLadder,
-    tonemapping: f.decision.transcodeTonemapping,
     clientTonemap: r.clientTonemap,
-    dolbyVision: r.dolbyVision,
     transcodeReasons: r.transcodeReasons,
-    canCopyVideo: r.videoCopyStream,
     sourceFps: parseSourceFps(r.source.frameRate ?? undefined),
-    pinned: f.pinned,
   };
 }
 
@@ -124,7 +115,6 @@ export function presenceFromSnapshot(
     client: s.client,
     tags: s.tags,
     positionS: s.positionS,
-    pinned: s.pinned,
   });
 }
 

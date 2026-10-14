@@ -1,5 +1,4 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { formatSeconds } from './transcoding/ffmpeg-args';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
@@ -10,7 +9,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { sourceTimeline } from './transcoding/source-timeline';
+import { sourceTimeline } from '../media-tools/source-timeline';
 
 const execFileAsync = promisify(execFile);
 
@@ -29,10 +28,18 @@ export interface BurnInInfo {
   cueOffsetSeconds?: number;
 }
 
+/** What the engine's `OpenSessionRequest.burnIn` carries. */
+export interface BurnInSubtitle {
+  /** `-vf` filter for a text subtitle, null for an image one (overlaid from `streamIndex`). */
+  filter: string | null;
+  streamIndex?: number;
+  type: 'text' | 'image';
+}
+
 /** Seconds as a signed `setpts` term, microsecond precision. */
 function ptsTerm(sign: 1 | -1, seconds: number): string {
   const v = sign * seconds;
-  return `${v < 0 ? '-' : '+'}${formatSeconds(Math.abs(v))}/TB`;
+  return `${v < 0 ? '-' : '+'}${Number(Math.abs(v).toFixed(6))}/TB`;
 }
 
 /** Render `subtitleFilter` against cue time: under `-copyts` frames carry

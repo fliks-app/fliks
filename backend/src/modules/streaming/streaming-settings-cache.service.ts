@@ -2,13 +2,10 @@ import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { EngineService, toEngineStreaming } from '../engine/engine.service';
 import { SettingsService } from '../settings/settings.service';
 import { StreamLifetime } from './lifetime-constants';
-import {
-  DEFAULT_TONEMAP_CURVE,
-  type TonemapCurve,
-} from './transcoding/codec/types';
-import type { TonemapAlgo } from './transcoding/types';
 
-export type { TonemapAlgo, TonemapCurve };
+export type TonemapAlgo = 'auto' | 'opencl' | 'vaapi' | 'qsv';
+export type TonemapCurve = 'hable' | 'mobius' | 'reinhard';
+const DEFAULT_TONEMAP_CURVE: TonemapCurve = 'mobius';
 
 export interface StreamingSettings {
   segmentDuration: number;
@@ -127,6 +124,8 @@ export class StreamingSettingsCache implements OnModuleInit {
   private readonly log = new Logger(StreamingSettingsCache.name);
 
   private cache: StreamingSettings | null = null;
+  /** The segment duration of the last load, for synchronous readers. */
+  segmentDuration = 3;
   private inflight: Promise<StreamingSettings> | null = null;
   /** Bumped on every change so an in-flight load that was invalidated mid-flight
    *  doesn't commit its now-stale value. */
@@ -154,7 +153,10 @@ export class StreamingSettingsCache implements OnModuleInit {
     this.inflight = (async () => {
       try {
         const s = await this.load();
-        if (this.epoch === epoch) this.cache = s;
+        if (this.epoch === epoch) {
+          this.cache = s;
+          this.segmentDuration = s.segmentDuration;
+        }
         return s;
       } finally {
         // Clear so a rejected load can be retried, and so a fresh read after an

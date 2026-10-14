@@ -3,23 +3,14 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
-import { Episode } from '../media/entities/episode.entity';
-import { Season } from '../media/entities/season.entity';
 import { StreamingController } from './streaming.controller';
 import { StreamingService } from './streaming.service';
 import { SubtitleStreamService } from './subtitle-stream.service';
-import { TranscodingService } from './transcoding';
-import { TranscodeCacheService } from './transcoding/transcode-cache.service';
-import { FfmpegThrottleService } from './transcoding/ffmpeg-throttle.service';
 import { LiveSessionRegistry } from './live-session.service';
-import { StreamBuilderService } from './stream-builder.service';
-import { ActiveStreamTracker } from './active-stream-tracker.service';
 import { SubtitleBurnInService } from './subtitle-burn-in.service';
 import { ThumbnailService } from './thumbnail.service';
+import { HostHardwareService } from './host-hardware.service';
 import { StreamingSettingsCache } from './streaming-settings-cache.service';
-import { SegmentPackagingService } from './services/segment-packaging.service';
-import { SessionRouter } from './services/session-router.service';
-import { SessionContextBuilder } from './services/session-context-builder.service';
 import { SourceScanService } from './services/source-scan.service';
 import { StaleProbeRescanService } from './services/stale-probe-rescan.service';
 import { EnginePlaybackService } from './services/engine-playback.service';
@@ -31,9 +22,7 @@ import { AuthModule } from '../auth/auth.module';
 import { SettingsModule } from '../settings/settings.module';
 import { LibrariesModule } from '../libraries/libraries.module';
 import { MarkersModule } from '../markers/markers.module';
-import { PlaylistsModule } from '../playlists/playlists.module';
 import { PluginsModule } from '../plugins/plugins.module';
-import { SubtitlesModule } from '../subtitles/subtitles.module';
 import { PlaybackModule } from '../playback/playback.module';
 import { QoeModule } from '../qoe/qoe.module';
 import { QoeLoadProvider } from './qoe-load.provider';
@@ -47,36 +36,25 @@ import { MediaProbeModule } from '../media-probe/media-probe.module';
       MediaFile,
       MediaFileScan,
       SubtitleFile,
-      Episode,
-      Season,
       Command,
     ]),
     AuthModule,
     SettingsModule,
     LibrariesModule,
     MarkersModule,
-    PlaylistsModule,
     PluginsModule,
-    SubtitlesModule,
     QoeModule,
     forwardRef(() => PlaybackModule),
   ],
   controllers: [StreamingController],
   providers: [
     StreamingService,
+    HostHardwareService,
     SubtitleStreamService,
-    TranscodingService,
-    TranscodeCacheService,
-    FfmpegThrottleService,
     LiveSessionRegistry,
-    StreamBuilderService,
-    ActiveStreamTracker,
     SubtitleBurnInService,
     ThumbnailService,
     StreamingSettingsCache,
-    SegmentPackagingService,
-    SessionRouter,
-    SessionContextBuilder,
     SourceScanService,
     StaleProbeRescanService,
     ScanBackfillService,
@@ -86,10 +64,8 @@ import { MediaProbeModule } from '../media-probe/media-probe.module';
   ],
   exports: [
     SourceScanService,
-    TranscodingService,
-    TranscodeCacheService,
+    HostHardwareService,
     StreamingService,
-    ActiveStreamTracker,
     LiveSessionRegistry,
     ThumbnailService,
     SubtitleStreamService,

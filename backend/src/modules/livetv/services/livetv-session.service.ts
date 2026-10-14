@@ -15,7 +15,7 @@ import { PassThrough, type Readable } from 'stream';
 import * as fs from 'fs';
 import * as path from 'path';
 import { TRANSCODE_DIR } from '../../../common/constants/paths';
-import { TranscodingService } from '../../streaming/transcoding';
+import { HostHardwareService } from '../../streaming/host-hardware.service';
 import type { QoePipeline } from '../../qoe/core/types';
 import { QoeService, type SessionRef } from '../../qoe/qoe.service';
 import { StreamLifetime } from '../../streaming/lifetime-constants';
@@ -250,7 +250,7 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
     private readonly streamRepo: Repository<LiveTvChannelStream>,
     private readonly settings: SettingsService,
     private readonly activity: ActivityRegistryService,
-    private readonly transcoding: TranscodingService,
+    private readonly hardware: HostHardwareService,
     private readonly capacity: LiveTvCapacityService,
     @Optional() private readonly qoe?: QoeService,
   ) {}
@@ -625,7 +625,7 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
   /** What the live transcode knows: input codec, output and whether it runs on a GPU. */
   private qoePipeline(session: LiveTvSessionEntry): QoePipeline {
     const transcode = session.mode === 'transcode';
-    const hw = this.transcoding.getDetectedHwAccel();
+    const hw = this.hardware.hwAccel;
     const active = session.streams[session.failoverIndex];
     return {
       source: {
@@ -700,7 +700,7 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
     if (override === 'false') return 'remux';
     // Measured: transcoding reaches the first segment ~1.5s sooner than copying,
     // because we own the keyframe cadence. Only worth it when encoding is free.
-    return this.transcoding.getDetectedHwAccel() !== 'none' ? 'transcode' : 'remux';
+    return this.hardware.hwAccel !== 'none' ? 'transcode' : 'remux';
   }
 
   /** `channelId:mode:container:bitrate`: two viewers share ffmpeg only when
@@ -894,7 +894,8 @@ export class LiveTvSessionService implements OnModuleInit, OnModuleDestroy {
       mode: session.mode === 'transcode' ? 'transcode' : 'remux',
       useTs: session.useTs,
       ...liveTvIdentityOf(stream.source),
-      hwAccel: session.mode === 'transcode' ? this.transcoding.getDetectedHwAccel() : 'none',
+      hwAccel: session.mode === 'transcode' ? this.hardware.hwAccel : 'none',
+      libfdkAac: this.hardware.libfdkAac,
       videoBitrateBps: session.videoBitrateBps,
       audioCodec: stream.probedAudioCodec,
       append,

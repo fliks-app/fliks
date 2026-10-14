@@ -4,20 +4,11 @@ import { stat } from 'fs/promises';
 import { Repository } from 'typeorm';
 import { withFfmpegSlot } from '../../../common/utils/ffmpeg-slots';
 import { MediaFile } from '../../media/entities/media-file.entity';
-import { FfprobeService, type MediaFileInfo } from '../../media-probe/ffprobe.service';
+import { FfprobeService } from '../../media-probe/ffprobe.service';
 import { SourceScanService, sourceVersion } from './source-scan.service';
 
-/** True once a row predates `formatName`, or an HDR row predates `hdr10Plus`:
- *  either absence alone flags it stale. */
-export function needsReprobe(si: MediaFileInfo | null | undefined): boolean {
-  const v = si?.video?.[0];
-  if (!si || !v) return false;
-  if (!si.formatName) return true;
-  return !!v.hdrFormat && v.hdr10Plus === undefined;
-}
-
-/** Backfills a stale row's probe fields in the background, deduped per file
- *  under the shared ffmpeg slot budget. Never blocks the caller. */
+/** Re-probes a row the engine reports stale (`hints.probeStale`), in the background, deduped per
+ *  file under the shared ffmpeg slot budget. Never blocks the caller. */
 @Injectable()
 export class StaleProbeRescanService {
   private readonly log = new Logger(StaleProbeRescanService.name);
@@ -33,19 +24,10 @@ export class StaleProbeRescanService {
     private readonly sourceScans: SourceScanService,
   ) {}
 
-  /** Re-probes `mediaFileId` when `streamInfo` needs it, else resolves immediately.
-   *  No-op while an attempt for the same file is already in flight, or a past
-   *  attempt for it was rejected/failed. `force` re-probes a row `needsReprobe` accepts (the
-   *  engine's schema moved on). */
-  scheduleIfNeeded(
-    mediaFileId: number,
-    absolutePath: string,
-    streamInfo: MediaFileInfo | null | undefined,
-    force = false,
-  ): Promise<void> {
-    if ((!force && !needsReprobe(streamInfo)) || this.rejected.has(mediaFileId)) {
-      return Promise.resolve();
-    }
+  /** Re-probes `mediaFileId` the engine flagged stale. No-op while an attempt for the same file is
+   *  in flight, or a past attempt for it was rejected/failed. */
+  schedule(mediaFileId: number, absolutePath: string): Promise<void> {
+    if (this.rejected.has(mediaFileId)) return Promise.resolve();
     let attempt = this.inFlight.get(mediaFileId);
     if (!attempt) {
       attempt = this.reprobe(mediaFileId, absolutePath).finally(() =>

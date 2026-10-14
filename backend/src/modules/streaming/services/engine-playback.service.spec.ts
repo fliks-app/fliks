@@ -88,7 +88,7 @@ function setup(
     },
   };
   const engine = {
-    pushStreaming: jest.fn().mockResolvedValue(undefined),
+    runtime: true,
     openSession: jest.fn().mockResolvedValue(recorded.engine),
     ...over.engine,
   };
@@ -102,7 +102,6 @@ function setup(
     streamingService: { resolveFile: jest.fn().mockResolvedValue(resolved) },
     subtitleBurnIn: { resolve: jest.fn(), buildFilter: jest.fn() },
     subtitleStreamService: {
-      warmupCache: jest.fn().mockResolvedValue(undefined),
       listTextSubtitleRenditions: jest
         .fn()
         .mockResolvedValue([{ kind: 'embedded', key: 3, name: 'en' }]),
@@ -111,9 +110,9 @@ function setup(
       lookup: jest.fn().mockResolvedValue({ scan: null, version: '99-1' }),
       scheduleIfNeeded: jest.fn(),
     },
-    staleProbeRescan: { scheduleIfNeeded: jest.fn() },
+    staleProbeRescan: { schedule: jest.fn() },
     settingsCache: { get: jest.fn().mockResolvedValue(settings) },
-    activeStreamTracker: { setSegmentDuration: jest.fn() },
+    hardware: { apply: jest.fn().mockResolvedValue(undefined) },
     markersService: {
       findIntroForEpisode: jest.fn(),
       findOutroForEpisode: jest.fn(),
@@ -137,7 +136,7 @@ function setup(
     deps.sourceScans as never,
     deps.staleProbeRescan as never,
     deps.settingsCache as never,
-    deps.activeStreamTracker as never,
+    deps.hardware as never,
     deps.markersService as never,
     deps.playbackService as never,
     deps.pluginPreRoll as never,
@@ -158,7 +157,7 @@ function setup(
 }
 
 describe('EnginePlaybackService.playbackInfo', () => {
-  it('answers the same JSON as the TS runtime for a recorded engine decision', async () => {
+  it('answers the recorded playback-info JSON for a recorded engine decision', async () => {
     const t = setup();
     const out = await t.svc.playbackInfo(user, 1, device as never, query);
     expect(JSON.parse(JSON.stringify(out))).toEqual(recorded.host);
@@ -202,11 +201,10 @@ describe('EnginePlaybackService.playbackInfo', () => {
         username: 'admin',
         mediaTitle: 'Clip',
         sseConnectionId: 'conn-9',
-        deviceType: 'desktop',
       },
       subtitleRenditions: [{ kind: 'embedded', key: 3, name: 'en' }],
     });
-    expect(t.engine.pushStreaming).toHaveBeenCalled();
+    expect(t.deps.hardware.apply).toHaveBeenCalledWith(settings);
     t.cleanup();
   });
 
@@ -384,11 +382,9 @@ describe('EnginePlaybackService.playbackInfo', () => {
         },
       });
       await t.svc.playbackInfo(user, 1, device as never, query);
-      expect(t.deps.staleProbeRescan.scheduleIfNeeded).toHaveBeenCalledWith(
+      expect(t.deps.staleProbeRescan.schedule).toHaveBeenCalledWith(
         1,
         t.resolved.absolutePath,
-        streamInfo,
-        true,
       );
       expect(t.deps.sourceScans.scheduleIfNeeded).not.toHaveBeenCalled();
       t.cleanup();
@@ -410,7 +406,7 @@ describe('EnginePlaybackService.playbackInfo', () => {
         t.resolved.absolutePath,
         streamInfo,
       );
-      expect(t.deps.staleProbeRescan.scheduleIfNeeded).not.toHaveBeenCalled();
+      expect(t.deps.staleProbeRescan.schedule).not.toHaveBeenCalled();
       t.cleanup();
     });
 
@@ -418,7 +414,7 @@ describe('EnginePlaybackService.playbackInfo', () => {
       const t = setup();
       await t.svc.playbackInfo(user, 1, device as never, query);
       expect(t.deps.sourceScans.scheduleIfNeeded).not.toHaveBeenCalled();
-      expect(t.deps.staleProbeRescan.scheduleIfNeeded).not.toHaveBeenCalled();
+      expect(t.deps.staleProbeRescan.schedule).not.toHaveBeenCalled();
       t.cleanup();
     });
   });
@@ -492,15 +488,13 @@ describe('EnginePlaybackService.playbackInfo', () => {
       t.cleanup();
     });
 
-    it('still opens the session when the config push fails', async () => {
-      const t = setup({
-        engine: {
-          pushStreaming: jest.fn().mockRejectedValue(new Error('409')),
-        },
-      });
+    it('answers 503 without opening anything when the engine does not run playback', async () => {
+      const t = setup({ engine: { runtime: false } });
       await expect(
         t.svc.playbackInfo(user, 1, device as never, query),
-      ).resolves.toBeDefined();
+      ).rejects.toThrow(ServiceUnavailableException);
+      expect(t.engine.openSession).not.toHaveBeenCalled();
+      expect(t.deps.streamingService.resolveFile).not.toHaveBeenCalled();
       t.cleanup();
     });
   });

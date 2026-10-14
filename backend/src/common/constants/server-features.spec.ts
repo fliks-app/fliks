@@ -1,24 +1,20 @@
 import { SERVER_FEATURES, serverFeatures } from './server-features';
 
 describe('serverFeatures', () => {
-  const engine = (runtime: boolean, engineFeatures: string[]) => ({
-    runtime,
-    engineFeatures,
+  const engine = (engineFeatures: string[]) => ({ engineFeatures });
+
+  it('is empty without an engine', () => {
+    expect(serverFeatures(undefined)).toEqual([]);
   });
 
-  it('is the static list on the TS runtime', () => {
-    expect(serverFeatures(undefined)).toBe(SERVER_FEATURES);
-    expect(serverFeatures(engine(false, []))).toBe(SERVER_FEATURES);
-  });
-
-  it('is what the engine announces when it runs playback', () => {
+  it('is what the engine announces', () => {
     expect(
-      serverFeatures(engine(true, ['decide', 'serve', 'sessions', 'events'])),
+      serverFeatures(engine(['decide', 'serve', 'sessions', 'events'])),
     ).toEqual([...SERVER_FEATURES]);
-    expect(serverFeatures(engine(true, ['decide']))).toEqual([
+    expect(serverFeatures(engine(['decide']))).toEqual([
       'deviceProfileExtensions',
     ]);
-    expect(serverFeatures(engine(true, ['serve']))).toEqual([
+    expect(serverFeatures(engine(['serve']))).toEqual([
       'hlsSubtitleRequest',
       'muxedAudioRendition',
     ]);
