@@ -219,6 +219,47 @@ describe('LiveSessionRegistry', () => {
   });
 });
 
+describe('LiveSessionRegistry of an engine session', () => {
+  const ENV = process.env;
+  let svc: LiveSessionRegistry;
+  afterEach(() => {
+    svc?.onModuleDestroy();
+    process.env = ENV;
+  });
+
+  it('keeps the sid the engine issued, and does not split or cap it itself', () => {
+    process.env = { ...ENV, STREAM_MAX_SESSIONS_PER_USER: '1' };
+    svc = new LiveSessionRegistry();
+    const a = svc.create({ ...BASE, sessionId: 'eng-1' });
+    const b = svc.create({ ...BASE, sessionId: 'eng-2' });
+    expect([a.sessionId, b.sessionId]).toEqual(['eng-1', 'eng-2']);
+    expect(b.profileHash).toBe(BASE.profileHash);
+    expect(b.instanceId).toBeNull();
+    expect(svc.size()).toBe(2);
+  });
+
+  it('replaces the presence a resync built before the open finished', () => {
+    svc = new LiveSessionRegistry();
+    svc.create({ ...BASE, sessionId: 'eng-1', mediaTitle: 'from tags' });
+    svc.create({ ...BASE, sessionId: 'eng-1', mediaTitle: 'full' });
+    expect(svc.size()).toBe(1);
+    expect(svc.peek('eng-1')!.mediaTitle).toBe('full');
+  });
+
+  it('is expired by the engine only: its GC leaves a silent session alone', async () => {
+    process.env = { ...ENV, STREAM_LIVE_SESSION_TTL_MS: '20', STREAM_LIVE_SESSION_GC_INTERVAL_MS: '10' };
+    const engine = { runtime: true };
+    svc = new LiveSessionRegistry(undefined, engine as never);
+    svc.onModuleInit();
+    svc.create({ ...BASE, sessionId: 'eng-1' });
+    await new Promise((r) => setTimeout(r, 80));
+    expect(svc.size()).toBe(1);
+    engine.runtime = false;
+    await new Promise((r) => setTimeout(r, 80));
+    expect(svc.size()).toBe(0);
+  });
+});
+
 describe('LiveSessionRegistry GC', () => {
   const ENV = process.env;
   let svc: LiveSessionRegistry;

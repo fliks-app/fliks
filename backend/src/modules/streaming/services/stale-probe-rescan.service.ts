@@ -35,13 +35,15 @@ export class StaleProbeRescanService {
 
   /** Re-probes `mediaFileId` when `streamInfo` needs it, else resolves immediately.
    *  No-op while an attempt for the same file is already in flight, or a past
-   *  attempt for it was rejected/failed. */
+   *  attempt for it was rejected/failed. `force` re-probes a row `needsReprobe` accepts (the
+   *  engine's schema moved on). */
   scheduleIfNeeded(
     mediaFileId: number,
     absolutePath: string,
     streamInfo: MediaFileInfo | null | undefined,
+    force = false,
   ): Promise<void> {
-    if (!needsReprobe(streamInfo) || this.rejected.has(mediaFileId)) {
+    if ((!force && !needsReprobe(streamInfo)) || this.rejected.has(mediaFileId)) {
       return Promise.resolve();
     }
     let attempt = this.inFlight.get(mediaFileId);

@@ -13,6 +13,7 @@ import {
   Sse,
   UseGuards,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -54,6 +55,7 @@ import {
 } from '../streaming/live-session.service';
 import { StreamLifetime } from '../streaming/lifetime-constants';
 import { PlaybackService } from '../playback/playback.service';
+import { EngineService, type SessionSnapshot } from '../engine/engine.service';
 import { QoeService, type QoeLiveSummary } from '../qoe/qoe.service';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { Episode } from '../media/entities/episode.entity';
@@ -120,6 +122,11 @@ export interface ActiveStreamDto {
   containerReasons: string[];
   /** Playback quality so far; null when QoE is off or the session is not tracked. */
   qoe: QoeLiveSummary | null;
+  /** The engine's state: `off` runs the TS runtime, `down` is a configured engine that does not answer. */
+  engineStatus: 'off' | 'up' | 'down';
+  /** The ffmpeg run behind the session as the engine reports it (`actualHw` is the backend in use,
+   *  `none` after a CPU fallback); null on direct play, live TV and the TS runtime. */
+  job: SessionSnapshot['job'] | null;
 }
 
 export interface ServiceStatus {
@@ -229,6 +236,7 @@ export class SystemController {
     private readonly requestRepo: Repository<FliksRequest>,
     private readonly updateCheck: UpdateCheckService,
     private readonly qoe: QoeService,
+    @Optional() private readonly engine?: EngineService,
   ) {}
 
   // Authentication is the whole gate: the stream only ever emits what this user id is
@@ -433,10 +441,16 @@ export class SystemController {
     // bulk DELETE handler relies on that), so a client that died still shows
     // here until the next GC sweep. Filter to the same TTL the registry GCs
     // on so a dead session drops off the dashboard at once.
+    // The engine, when it runs playback, is the authority on what is live and how it runs.
+    const engineSessions = await this.engineSessions();
     const liveTtlMs = StreamLifetime.liveSessionTtlMs();
     const live = this.liveSessions
       .list()
-      .filter((s) => s.lastBeat.getTime() > Date.now() - liveTtlMs);
+      .filter((s) =>
+        engineSessions
+          ? engineSessions.has(s.sessionId)
+          : s.lastBeat.getTime() > Date.now() - liveTtlMs,
+      );
     const transcodeSessions = this.transcodingService.getActiveSessions();
     const findTranscodeSession = (
       userId: number | null,
@@ -478,6 +492,7 @@ export class SystemController {
       systemName: string | null;
       appVersion: string | null;
       transcodeSession: TranscodeSession | undefined;
+      engine: SessionSnapshot | undefined;
       clientTonemap: boolean;
       audioPlan: LiveSessionSnapshot['audioPlan'];
       position: number;
@@ -492,14 +507,15 @@ export class SystemController {
         session.mediaFileId,
         session.profileHash,
       );
+      const eng = engineSessions?.get(session.sessionId);
       const quality =
         session.kind === 'directplay'
           ? 'original'
-          : (ts?.quality ?? session.quality ?? 'original');
+          : (eng?.quality ?? ts?.quality ?? session.quality ?? 'original');
       const hwAccelVal =
         session.kind === 'directplay' || session.kind === 'remux'
           ? 'none'
-          : (ts?.actualHwAccel ?? hwAccel);
+          : (eng?.job?.actualHw ?? ts?.actualHwAccel ?? hwAccel);
       work.push({
         sessionId: session.sessionId,
         userId: session.userId,
@@ -512,11 +528,12 @@ export class SystemController {
         quality,
         hwAccelVal,
         startedAt: session.startedAt.toISOString(),
-        lastActivity: session.lastBeat.toISOString(),
+        lastActivity: (eng ? new Date(eng.lastBeatMs) : session.lastBeat).toISOString(),
         deviceLabel: session.deviceLabel,
         systemName: session.systemName,
         appVersion: session.appVersion,
         transcodeSession: ts,
+        engine: eng,
         clientTonemap: session.clientTonemap,
         audioPlan: session.audioPlan,
         // The LiveSession keeps the playhead fresh on every heartbeat — read
@@ -615,6 +632,8 @@ export class SystemController {
         audioReasons: [] as string[],
         containerReasons: [] as string[],
         qoe: this.qoe.liveSummary(s.sessionId),
+        engineStatus: this.engine?.status ?? 'off',
+        job: s.engine?.job ?? null,
       });
     }
 
@@ -644,6 +663,18 @@ export class SystemController {
     // matching ffmpeg session.
     for (let i = 0; i < streams.length; i++) {
       const stream = streams[i];
+      const eng = work[i].engine;
+      if (eng && stream.mode !== 'directplay') {
+        stream.transcodePercent = eng.job?.transcodePercent ?? null;
+        const flags = (prefix: string) =>
+          eng.decision.response.transcodeReasons
+            .filter((r) => r.flag.startsWith(prefix))
+            .map((r) => r.message);
+        stream.videoReasons = flags('Video');
+        stream.audioReasons = flags('Audio');
+        stream.containerReasons = flags('Container');
+        continue;
+      }
       const ts = work[i].transcodeSession;
       if (!ts || stream.mode === 'directplay') continue;
       if (stream.durationSeconds > 0) {
@@ -713,10 +744,23 @@ export class SystemController {
         audioReasons: [],
         containerReasons: [],
         qoe: this.qoe.liveSummary(row.sessionId),
+        engineStatus: this.engine?.status ?? 'off',
+        job: null,
       });
     }
 
     return streams;
+  }
+
+  /** The engine's sessions by sid when it runs playback and answers; null otherwise. */
+  private async engineSessions(): Promise<Map<string, SessionSnapshot> | null> {
+    if (!this.engine?.runtime) return null;
+    try {
+      return new Map((await this.engine.listSessions()).map((s) => [s.sessionId, s]));
+    } catch (err) {
+      this.logger.warn(`engine sessions not listed: ${(err as Error).message}`);
+      return null;
+    }
   }
 
   /**
@@ -762,8 +806,10 @@ export class SystemController {
   /** Current on-disk transcode cache footprint, for the admin UI. */
   @Get('transcode-cache')
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
-  transcodeCacheStats(): Promise<{ entries: number; bytes: number }> {
-    return this.transcodeCache.diskUsage();
+  async transcodeCacheStats(): Promise<{ entries: number; bytes: number }> {
+    if (!this.engine?.runtime) return this.transcodeCache.diskUsage();
+    const { entries, usedBytes } = await this.engine.cache();
+    return { entries: entries.length, bytes: usedBytes };
   }
 
   /**
@@ -779,8 +825,7 @@ export class SystemController {
     entries: number;
     bytes: number;
   }> {
-    const freed = await this.transcodeCache.purge();
-    return { ok: true, ...freed };
+    return { ok: true, ...(await this.purge({})) };
   }
 
   /**
@@ -796,11 +841,26 @@ export class SystemController {
     @Query('userId') userId?: string,
   ): Promise<{ ok: true; entries: number; bytes: number }> {
     const scopedUser = userId ? Number.parseInt(userId, 10) : undefined;
-    const freed = await this.transcodeCache.purge(
-      mediaFileId,
-      Number.isFinite(scopedUser) ? scopedUser : undefined,
+    const owner = Number.isFinite(scopedUser) ? scopedUser : undefined;
+    return { ok: true, ...(await this.purge({ mediaFileId, userId: owner })) };
+  }
+
+  /** Purges the engine's cache when it runs playback (live entries stay), else the TS one. */
+  private async purge(f: {
+    mediaFileId?: number;
+    userId?: number;
+  }): Promise<{ entries: number; bytes: number }> {
+    if (!this.engine?.runtime) return this.transcodeCache.purge(f.mediaFileId, f.userId);
+    const ownerId = f.userId === undefined ? undefined : String(f.userId);
+    const { entries } = await this.engine.cache();
+    const gone = entries.filter(
+      (e) =>
+        !e.live &&
+        (f.mediaFileId === undefined || e.mediaFileId === f.mediaFileId) &&
+        (ownerId === undefined || e.ownerId === ownerId),
     );
-    return { ok: true, ...freed };
+    await this.engine.purgeCache({ mediaFileId: f.mediaFileId, ownerId });
+    return { entries: gone.length, bytes: gone.reduce((n, e) => n + e.bytes, 0) };
   }
 
   @Post('streams/:sessionId/command')
@@ -832,7 +892,12 @@ export class SystemController {
       this.eventsService.emitToUser(target.userId, cmdEvent);
     }
 
-    if (body.action === 'stop') {
+    if (body.action === 'stop' && this.engine?.runtime) {
+      this.liveSessions.stop(sessionId);
+      void this.engine
+        .deleteSession(sessionId)
+        .catch((err: Error) => this.logger.warn(`engine session ${sessionId} not deleted: ${err.message}`));
+    } else if (body.action === 'stop') {
       this.liveSessions.stop(sessionId);
       if (!target.isDirectPlay && target.profileHash) {
         const remaining = this.liveSessions.listForJob(

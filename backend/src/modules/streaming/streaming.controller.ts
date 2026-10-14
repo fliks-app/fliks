@@ -13,6 +13,7 @@ import {
   ParseIntPipe,
   UseGuards,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { execFile } from 'child_process';
@@ -69,6 +70,8 @@ import { readEdlSidecar, toPlaybackTimeline } from './edl/edl-sidecar';
 import { copySourceCodecString } from './transcoding/codec/codec-strings';
 import { dvSupplementalCodecs, dvStandaloneCodecs } from './transcoding/codec/dolby-vision';
 import { QoeService } from '../qoe/qoe.service';
+import { EngineService } from '../engine/engine.service';
+import { EnginePlaybackService } from './services/engine-playback.service';
 import { LiveSessionRegistry, type LiveSession, type SessionKind } from './live-session.service';
 import * as path from 'path';
 import { SegmentPackagingService } from './services/segment-packaging.service';
@@ -103,7 +106,9 @@ import { MarkersService } from '../markers/markers.service';
 import { DeviceProfileDto } from './dto/device-profile.dto';
 import { StreamingSettingsCache } from './streaming-settings-cache.service';
 import { PluginPreRollService } from '../plugins/plugin-pre-roll.service';
-import type { PreRollItem } from '../../common/plugin-contract';
+import { resolveAudioStreamIndex, resolvePreRoll, resolveEffectiveStartAt } from './playback-info.util';
+
+export { resolveAudioStreamIndex, resolvePreRoll };
 
 // Derived from the ladders themselves (SDR + HDR, full + eco) so a new rung
 // can never be forgotten here — the missing eco entry is exactly what 400'd
@@ -127,34 +132,6 @@ export function withTimestampMap(
     .slice(11, 23);
   const map = `X-TIMESTAMP-MAP=MPEGTS:${mpegts},LOCAL:${local}`;
   return text.replace(/^(WEBVTT[^\n]*)\n/, `$1\n${map}\n`);
-}
-
-/** The requested audio track if the file has it, else undefined (first track). */
-export function resolveAudioStreamIndex(
-  raw: string | undefined,
-  audioCount: number,
-): number | undefined {
-  const index = raw != null ? Number(raw) : NaN;
-  return Number.isInteger(index) && index >= 0 && index < audioCount
-    ? index
-    : undefined;
-}
-
-/**
- * Asks the plugin, then ACL-gates every candidate through the same `resolveFile` the main item
- * uses, for the same user: a plugin only names an id, it never grants access to one. Answers
- * `undefined` rather than `[]` so a plugin-free install serializes with `preRoll` absent.
- */
-export async function resolvePreRoll<TUser>(deps: {
-  ask: () => Promise<PreRollItem[]>;
-  resolveFile: (mediaFileId: number, user: TUser) => Promise<unknown>;
-  user: TUser;
-}): Promise<PreRollItem[] | undefined> {
-  const candidates = await deps.ask();
-  if (!candidates.length) return undefined;
-  const checks = await Promise.allSettled(candidates.map((c) => deps.resolveFile(c.mediaFileId, deps.user)));
-  const allowed = candidates.filter((_, i) => checks[i].status === 'fulfilled');
-  return allowed.length ? allowed : undefined;
 }
 
 /** Accepted HLS segment / init filenames (fMP4 init, fMP4 or TS segment). */
@@ -382,6 +359,8 @@ export class StreamingController {
     private readonly events: EventsService,
     private readonly caslAbilityFactory: CaslAbilityFactory,
     private readonly qoe: QoeService,
+    @Optional() private readonly engine?: EngineService,
+    @Optional() private readonly enginePlayback?: EnginePlaybackService,
   ) {}
 
   private getStreamingSettings() {
@@ -389,34 +368,13 @@ export class StreamingController {
   }
 
 
-  /**
-   * Effective resume offset in seconds. The explicit `startAt` query wins when
-   * supplied (including `0` = restart from the top, which must override a saved
-   * position); otherwise fall back to the saved playback position when it's a
-   * meaningful resume (>10 s in, not finished), else 0. Shared by the prewarm
-   * and the LiveSession `position` seed so the session's playhead matches where
-   * ffmpeg actually starts — otherwise a resume that relies on the saved
-   * position leaves `position` at 0, and a fresh main spawned off it anchors at
-   * segment 0 instead of the resume segment.
-   */
-  private async resolveEffectiveStartAt(
+  private resolveEffectiveStartAt(
     startAt: number | undefined,
     userId: number | undefined,
     mediaId: number | undefined,
     episodeId: number | undefined,
   ): Promise<number> {
-    if (startAt !== undefined) return startAt;
-    if (userId != null && mediaId != null) {
-      const state = await this.playbackService.getState(
-        userId,
-        mediaId,
-        episodeId,
-      );
-      if (state && !state.completed && state.positionSeconds > 10) {
-        return state.positionSeconds;
-      }
-    }
-    return 0;
+    return resolveEffectiveStartAt(this.playbackService, startAt, userId, mediaId, episodeId);
   }
 
   /**
@@ -855,6 +813,20 @@ export class StreamingController {
     @Body() deviceProfile: DeviceProfileDto,
     @Req() req: Request,
   ) {
+    if (this.engine?.runtime && this.enginePlayback) {
+      const burnIn = firstQueryString(req.query, 'burnInSubtitleId');
+      const startAt = firstQueryString(req.query, 'startAt');
+      return this.enginePlayback.playbackInfo(req.user as User, mediaFileId, deviceProfile, {
+        tokenParam: buildTokenParam(req),
+        burnInSubtitleId: burnIn ? parseInt(burnIn, 10) : undefined,
+        audioStreamIndex: firstQueryString(req.query, 'audioStreamIndex'),
+        startQuality: firstQueryString(req.query, 'startQuality'),
+        startAt: startAt != null ? parseFloat(startAt) : undefined,
+        download: firstQueryString(req.query, 'download') === '1',
+        sseConnectionId: req.get('x-fliks-sse-connection') ?? null,
+        userAgent: req.get('user-agent') ?? null,
+      });
+    }
     const resolved = await this.streamingService.resolveFile(
       mediaFileId,
       req.user as User,
@@ -1265,6 +1237,13 @@ export class StreamingController {
     };
   }
 
+  /** Owner of a session the host has no presence for but the engine still holds. */
+  private async engineOwnerOf(sessionId: string): Promise<number | null> {
+    if (!this.engine?.runtime) return null;
+    const owner = Number((await this.engine.getSession(sessionId).catch(() => null))?.ownerId);
+    return Number.isInteger(owner) ? owner : null;
+  }
+
   /** `.edl` sidecar ranges on the container timeline (DirectPlay clock), for original-file downloads. */
   @Get(':mediaFileId/edl')
   async edl(
@@ -1289,15 +1268,16 @@ export class StreamingController {
    */
   @Delete('sessions/:sessionId')
   @HttpCode(204)
-  stopLiveSession(
+  async stopLiveSession(
     @Param('sessionId') sessionId: string,
     @CurrentUser() user: User | undefined,
   ) {
     const live = this.liveSessions.get(sessionId);
+    const ownerId = live ? live.userId : await this.engineOwnerOf(sessionId);
 
     // Sids travel in HLS URLs, so a bare ownership-blind stop would let any
     // authenticated user end anyone else's playback.
-    if (live?.userId != null && live.userId !== user?.id) {
+    if (ownerId != null && ownerId !== user?.id) {
       const allowed =
         !!user &&
         this.caslAbilityFactory
@@ -1305,7 +1285,7 @@ export class StreamingController {
           .can(Action.Manage, 'Settings');
       if (!allowed) {
         this.log.warn(
-          `Refused: user ${user?.id ?? 'unknown'} tried to stop session ${sessionId} owned by user ${live.userId}`,
+          `Refused: user ${user?.id ?? 'unknown'} tried to stop session ${sessionId} owned by user ${ownerId}`,
         );
         throw new ForbiddenException('Not your session');
       }
@@ -1337,6 +1317,12 @@ export class StreamingController {
     }
 
     this.liveSessions.stop(sessionId);
+    if (this.engine?.runtime) {
+      await this.engine
+        .deleteSession(sessionId)
+        .catch((err: Error) => this.log.warn(`engine session ${sessionId} not deleted: ${err.message}`));
+      return;
+    }
     if (!live || !live.profileHash) return;
     // Only kill the underlying ffmpeg job(s) when no other live
     // session is still referencing this (user, file, profileHash) —

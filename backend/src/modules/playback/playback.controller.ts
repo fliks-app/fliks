@@ -13,6 +13,7 @@ import {
   HttpCode,
   Logger,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
@@ -29,6 +30,8 @@ import {
 } from '../streaming/live-session.service';
 import { EventsService, type RemoteQualityRung } from '../scheduler/events.service';
 import { QoeService } from '../qoe/qoe.service';
+import { EngineError, EngineService } from '../engine/engine.service';
+import { restorePresence } from '../streaming/services/engine-presence';
 import { servedRungBitrate } from '../streaming/served-rung';
 import { parseEvents, parsePlaybackId, parseSample, parseSentAt } from '../qoe/core/validate';
 
@@ -56,6 +59,7 @@ export class PlaybackController {
     private readonly liveSessions: LiveSessionRegistry,
     private readonly events: EventsService,
     private readonly qoe: QoeService,
+    @Optional() private readonly engine?: EngineService,
   ) {}
 
   @Get('recommendations')
@@ -244,10 +248,16 @@ export class PlaybackController {
     // Declared out here on purpose: `updated` is scoped to the block below, and
     // the history write happens after it.
     let attributedUserId: number | null = null;
+    let engineLost: boolean | undefined;
     if (body.sessionId) {
+      if (this.engine?.runtime) {
+        engineLost = await this.engineBeat(user, body.sessionId, body);
+      }
       const before = this.liveSessions.get(body.sessionId);
       const previousState = before?.state;
-      const updated = this.liveSessions.heartbeat(body.sessionId, {
+      const updated = engineLost
+        ? null
+        : this.liveSessions.heartbeat(body.sessionId, {
         position: body.positionSeconds,
         state: body.state,
         quality: body.quality,
@@ -267,7 +277,7 @@ export class PlaybackController {
       stateChanged = !!updated && !!body.state && previousState !== body.state;
       // The client believes the session is alive but the registry
       // doesn't know it — surface that so the client can recover.
-      sessionLost = !updated;
+      sessionLost = engineLost ?? !updated;
       if (updated && body.qoe != null && (updated.userId === user.id || updated.attributedUserId === user.id)) {
         const sample = parseSample(body.qoe);
         if (sample) {
@@ -360,6 +370,38 @@ export class PlaybackController {
     });
     if (sessionLost) return { sessionLost: true, state };
     return { state };
+  }
+
+  /** The engine's heartbeat (and the owner check the registry never made): true when it lost the
+   *  session, undefined when it could not be asked, so the registry answers as before. */
+  private async engineBeat(
+    user: User,
+    sid: string,
+    body: { positionSeconds: number; state?: string; quality?: string | null },
+  ): Promise<boolean | undefined> {
+    const known = this.liveSessions.peek(sid);
+    if (known?.userId != null && known.userId !== user.id && known.attributedUserId !== user.id) {
+      throw new ForbiddenException('Not your session');
+    }
+    try {
+      const { sessionLost } = await this.engine!.heartbeat(sid, {
+        ownerId: String(known?.userId ?? user.id),
+        positionS: body.positionSeconds,
+        state: body.state,
+        quality: body.quality ?? undefined,
+      });
+      if (!sessionLost && !known) {
+        const snap = await this.engine!.getSession(sid);
+        if (snap) restorePresence(this.liveSessions, snap);
+      }
+      return sessionLost;
+    } catch (err) {
+      if (err instanceof EngineError && err.status === 403) {
+        throw new ForbiddenException('Not your session');
+      }
+      this.log.warn(`engine heartbeat failed: ${(err as Error).message}`);
+      return undefined;
+    }
   }
 
   /** Point events (stall, error, recovery, quality switch) of a live session.

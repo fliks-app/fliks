@@ -1,3 +1,8 @@
+import { ForbiddenException } from '@nestjs/common';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { EngineError } from '../engine/engine.service';
+import { LiveSessionRegistry } from '../streaming/live-session.service';
 import { PlaybackController } from './playback.controller';
 
 /**
@@ -17,7 +22,7 @@ function buildController(liveSessionsOverrides?: Record<string, unknown>) {
     liveSessions: unknown;
     events: unknown;
     lastDbWriteAt: Map<string, { at: number; pos: number }>;
-    log: { debug: jest.Mock };
+    log: { debug: jest.Mock; warn: jest.Mock };
   };
   wired.playbackService = { updateState };
   wired.liveSessions = {
@@ -27,7 +32,7 @@ function buildController(liveSessionsOverrides?: Record<string, unknown>) {
   };
   wired.events = { emitToUser, targetIdFor: () => null };
   wired.lastDbWriteAt = new Map();
-  wired.log = { debug: jest.fn() };
+  wired.log = { debug: jest.fn(), warn: jest.fn() };
   return { controller, updateState, emitToUser };
 }
 
@@ -221,5 +226,91 @@ describe('PlaybackController.updateState: qoe bitrate fallback', () => {
   it('records nothing for a session that is not the caller\'s', async () => {
     expect(await beat({ ...live, userId: 8 })).toBeUndefined();
     expect(await beat({ ...live, userId: 8, attributedUserId: 7 })).toBe(8_000_000);
+  });
+});
+
+describe('PlaybackController.updateState: engine runtime', () => {
+  const tick = (over: Record<string, unknown> = {}) => ({
+    positionSeconds: 120,
+    durationSeconds: 6000,
+    mediaFileId: 9,
+    sessionId: 'sid-1',
+    state: 'playing' as const,
+    quality: '720p',
+    ...over,
+  });
+  const snap = {
+    sessionId: 'sid-1',
+    ownerId: '7',
+    mediaFileId: 9,
+    profileHash: 'h',
+    kind: 'transcode',
+    quality: '720p',
+    client: {},
+    tags: { sseConnectionId: 'conn-1', mediaTitle: 'Dune' },
+    openedAtMs: 1,
+    lastBeatMs: 2,
+    positionS: 0,
+    state: 'playing',
+    pinned: false,
+    decision: JSON.parse(readFileSync(join(__dirname, '../streaming/services/engine-playback.recorded.json'), 'utf8')).engine.decision,
+  };
+
+  function build(engine: Record<string, unknown>, present: { userId?: number; attributedUserId?: number } | null = { userId: 7 }) {
+    const { controller, emitToUser } = buildController();
+    const liveSessions = new LiveSessionRegistry();
+    if (present) liveSessions.create({ sessionId: 'sid-1', username: null, mediaFileId: 9, kind: 'transcode', sseConnectionId: 'conn-1', userId: 7, ...present });
+    const wired = controller as unknown as Record<string, unknown>;
+    wired.liveSessions = liveSessions;
+    wired.engine = { runtime: true, heartbeat: jest.fn().mockResolvedValue({ sessionLost: false }), getSession: jest.fn().mockResolvedValue(snap), ...engine };
+    (wired.events as { targetIdFor: () => string }).targetIdFor = () => 'target-1';
+    return { controller, emitToUser, liveSessions, engine: wired.engine as Record<string, jest.Mock> };
+  }
+
+  it('beats the engine as the owner, and keeps the app-side heartbeat and remote.state', async () => {
+    const { controller, emitToUser, liveSessions, engine } = build({});
+    const res = await controller.updateState(req, 3, tick());
+    expect(engine.heartbeat).toHaveBeenCalledWith('sid-1', { ownerId: '7', positionS: 120, state: 'playing', quality: '720p' });
+    expect(liveSessions.peek('sid-1')).toMatchObject({ position: 120, quality: '720p' });
+    expect(emitToUser).toHaveBeenCalledWith(7, expect.objectContaining({ type: 'remote.state', sessionId: 'sid-1' }));
+    expect(res).toMatchObject({ state: { id: 1 } });
+    expect((res as { sessionLost?: boolean }).sessionLost).toBeUndefined();
+  });
+
+  it('answers sessionLost when the engine lost the session, and does not fan out', async () => {
+    const { controller, emitToUser } = build({ heartbeat: jest.fn().mockResolvedValue({ sessionLost: true }) });
+    expect(await controller.updateState(req, 3, tick())).toMatchObject({ sessionLost: true });
+    expect(emitToUser).not.toHaveBeenCalled();
+  });
+
+  it('refuses another user\'s session before asking the engine', async () => {
+    const { controller, engine } = build({}, { userId: 9 });
+    await expect(controller.updateState(req, 3, tick())).rejects.toThrow(ForbiddenException);
+    expect(engine.heartbeat).not.toHaveBeenCalled();
+  });
+
+  it('lets the attributed user beat, as the engine\'s owner of the session', async () => {
+    const { controller, engine } = build({}, { userId: 9, attributedUserId: 7 });
+    await controller.updateState(req, 3, tick());
+    expect(engine.heartbeat.mock.calls[0][1].ownerId).toBe('9');
+  });
+
+  it('maps the engine\'s 403 (no presence to check against) to a refusal', async () => {
+    const { controller } = build({ heartbeat: jest.fn().mockRejectedValue(new EngineError(403, 'x')) }, null);
+    await expect(controller.updateState(req, 3, tick())).rejects.toThrow(ForbiddenException);
+  });
+
+  it('rebuilds the presence of a session the engine revived', async () => {
+    const { controller, liveSessions, emitToUser } = build({}, null);
+    await controller.updateState(req, 3, tick());
+    expect(liveSessions.peek('sid-1')).toMatchObject({ userId: 7, mediaTitle: 'Dune', position: 120 });
+    expect(emitToUser).toHaveBeenCalledWith(7, expect.objectContaining({ type: 'remote.state', mediaTitle: 'Dune' }));
+  });
+
+  it('falls back to the registry when the engine cannot be asked', async () => {
+    const { controller, liveSessions } = build({ heartbeat: jest.fn().mockRejectedValue(new TypeError('fetch failed')) });
+    const res = await controller.updateState(req, 3, tick());
+    expect(liveSessions.peek('sid-1')!.position).toBe(120);
+    expect((res as { sessionLost?: boolean }).sessionLost).toBeUndefined();
   });
 });

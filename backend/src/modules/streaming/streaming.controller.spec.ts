@@ -47,6 +47,8 @@ interface ControllerDeps {
   events?: unknown;
   caslAbilityFactory?: unknown;
   qoe?: unknown;
+  engine?: unknown;
+  enginePlayback?: unknown;
 }
 
 function makeController(deps: ControllerDeps = {}): StreamingController {
@@ -73,6 +75,8 @@ function makeController(deps: ControllerDeps = {}): StreamingController {
     (deps.events ?? {}) as never,
     (deps.caslAbilityFactory ?? {}) as never,
     (deps.qoe ?? { observeSegment: jest.fn(), noteHwAccel: jest.fn(), noteServedRung: jest.fn() }) as never,
+    deps.engine as never,
+    deps.enginePlayback as never,
   );
 }
 
@@ -224,21 +228,21 @@ describe('StreamingController.stopLiveSession', () => {
     };
   }
 
-  it('stops a DirectPlay sid (null profileHash) without touching ffmpeg', () => {
+  it('stops a DirectPlay sid (null profileHash) without touching ffmpeg', async () => {
     const live = makeLive({ profileHash: null, userId: 7, mediaFileId: 42 });
     const { controller, liveSessions, transcodingService } = setup(live);
 
-    controller.stopLiveSession('sid-1', owner);
+    await controller.stopLiveSession('sid-1', owner);
 
     expect(liveSessions.stop).toHaveBeenCalledWith('sid-1');
     expect(transcodingService.killSessionsForJob).not.toHaveBeenCalled();
   });
 
-  it('walks the ffmpeg-kill path for a transcode sid', () => {
+  it('walks the ffmpeg-kill path for a transcode sid', async () => {
     const live = makeLive({ profileHash: 'abc123', userId: 7, mediaFileId: 42 });
     const { controller, liveSessions, transcodingService } = setup(live);
 
-    controller.stopLiveSession('sid-1', owner);
+    await controller.stopLiveSession('sid-1', owner);
 
     expect(liveSessions.listForJob).toHaveBeenCalledWith(7, 42, 'abc123');
     // No other live session references the job → reap every ffmpeg variant.
@@ -249,21 +253,21 @@ describe('StreamingController.stopLiveSession', () => {
     );
   });
 
-  it('is a no-op on an unknown sid', () => {
+  it('is a no-op on an unknown sid', async () => {
     const { controller, liveSessions, events } = setup(null);
 
-    controller.stopLiveSession('missing', owner);
+    await controller.stopLiveSession('missing', owner);
 
     expect(liveSessions.stop).toHaveBeenCalledWith('missing');
     // Nobody to notify: there's no live entry to read a userId off.
     expect(events.emitToUser).not.toHaveBeenCalled();
   });
 
-  it('lets the owner stop their own session and notifies their other devices', () => {
+  it('lets the owner stop their own session and notifies their other devices', async () => {
     const live = makeLive({ profileHash: null, userId: 7, mediaFileId: 42 });
     const { controller, liveSessions, events } = setup(live);
 
-    controller.stopLiveSession('sid-1', owner);
+    await controller.stopLiveSession('sid-1', owner);
 
     expect(liveSessions.stop).toHaveBeenCalledWith('sid-1');
     expect(events.emitToUser).toHaveBeenCalledWith(7, {
@@ -271,22 +275,22 @@ describe('StreamingController.stopLiveSession', () => {
     });
   });
 
-  it('refuses a non-owner without Manage:Settings: the ownership hole', () => {
+  it('refuses a non-owner without Manage:Settings: the ownership hole', async () => {
     const live = makeLive({ profileHash: null, userId: 7, mediaFileId: 42 });
     const { controller, liveSessions, events } = setup(live, false);
 
-    expect(() => controller.stopLiveSession('sid-1', stranger)).toThrow(
+    await expect(controller.stopLiveSession('sid-1', stranger)).rejects.toThrow(
       ForbiddenException,
     );
     expect(liveSessions.stop).not.toHaveBeenCalled();
     expect(events.emitToUser).not.toHaveBeenCalled();
   });
 
-  it('lets a user with Manage:Settings stop someone else\'s session', () => {
+  it('lets a user with Manage:Settings stop someone else\'s session', async () => {
     const live = makeLive({ profileHash: null, userId: 7, mediaFileId: 42 });
     const { controller, liveSessions, events } = setup(live, true);
 
-    controller.stopLiveSession('sid-1', stranger);
+    await controller.stopLiveSession('sid-1', stranger);
 
     expect(liveSessions.stop).toHaveBeenCalledWith('sid-1');
     expect(events.emitToUser).toHaveBeenCalledWith(7, {
@@ -294,13 +298,115 @@ describe('StreamingController.stopLiveSession', () => {
     });
   });
 
-  it('does not notify a shared-device session (no owning userId)', () => {
+  it('does not notify a shared-device session (no owning userId)', async () => {
     const live = makeLive({ profileHash: null, userId: null, mediaFileId: 42 });
     const { controller, events } = setup(live);
 
-    controller.stopLiveSession('sid-1', owner);
+    await controller.stopLiveSession('sid-1', owner);
 
     expect(events.emitToUser).not.toHaveBeenCalled();
+  });
+});
+
+describe('StreamingController with the engine running playback', () => {
+  const owner = { id: 7 } as User;
+  const stranger = { id: 99 } as User;
+  const live = (over: Partial<LiveSession> = {}): LiveSession => ({
+    ...buildLiveSession({ userId: 7, username: 'alice', mediaFileId: 42, kind: 'transcode', profileHash: 'abc' }, 'sid-1', 0),
+    ...over,
+  });
+
+  function setup(presence: LiveSession | null, snapshotOwner: string | null = null, canManage = false) {
+    const liveSessions = { get: jest.fn().mockReturnValue(presence), stop: jest.fn(), listForJob: jest.fn() };
+    const transcodingService = { killSessionsForJob: jest.fn() };
+    const engine = {
+      runtime: true,
+      deleteSession: jest.fn().mockResolvedValue(undefined),
+      getSession: jest.fn().mockResolvedValue(snapshotOwner ? { ownerId: snapshotOwner } : null),
+    };
+    const events = { emitToUser: jest.fn(), targetIdFor: jest.fn().mockReturnValue(null) };
+    const caslAbilityFactory = { createForUser: () => ({ can: () => canManage }) };
+    const controller = makeController({ liveSessions, transcodingService, events, caslAbilityFactory, engine });
+    return { controller, liveSessions, transcodingService, engine, events };
+  }
+
+  describe('DELETE sessions/:sid', () => {
+    it('ends the presence, then the engine session, and leaves ffmpeg to the engine', async () => {
+      const { controller, liveSessions, engine, transcodingService } = setup(live());
+      await controller.stopLiveSession('sid-1', owner);
+      expect(liveSessions.stop).toHaveBeenCalledWith('sid-1');
+      expect(engine.deleteSession).toHaveBeenCalledWith('sid-1');
+      expect(transcodingService.killSessionsForJob).not.toHaveBeenCalled();
+    });
+
+    it('refuses a non-owner before anything is deleted', async () => {
+      const { controller, liveSessions, engine } = setup(live());
+      await expect(controller.stopLiveSession('sid-1', stranger)).rejects.toThrow(ForbiddenException);
+      expect(liveSessions.stop).not.toHaveBeenCalled();
+      expect(engine.deleteSession).not.toHaveBeenCalled();
+    });
+
+    it('lets Manage:Settings stop another user\'s session', async () => {
+      const { controller, engine } = setup(live(), null, true);
+      await controller.stopLiveSession('sid-1', stranger);
+      expect(engine.deleteSession).toHaveBeenCalledWith('sid-1');
+    });
+
+    it('takes the owner from the engine when the host holds no presence', async () => {
+      const gone = setup(null, '7');
+      await gone.controller.stopLiveSession('sid-1', owner);
+      expect(gone.engine.deleteSession).toHaveBeenCalledWith('sid-1');
+
+      const foreign = setup(null, '7');
+      await expect(foreign.controller.stopLiveSession('sid-1', stranger)).rejects.toThrow(ForbiddenException);
+      expect(foreign.engine.deleteSession).not.toHaveBeenCalled();
+    });
+
+    it('stays idempotent for a sid nobody knows, and when the engine cannot be reached', async () => {
+      const { controller, engine } = setup(null, null);
+      engine.deleteSession.mockRejectedValue(new Error('down'));
+      await expect(controller.stopLiveSession('nope', owner)).resolves.toBeUndefined();
+      expect(engine.deleteSession).toHaveBeenCalledWith('nope');
+    });
+  });
+
+  describe('POST :id/playback-info', () => {
+    const request = (query: object) =>
+      ({ user: owner, query, get: (h: string) => ({ 'x-fliks-sse-connection': 'conn-1', 'user-agent': 'UA' })[h] }) as never;
+
+    it('hands the request to the engine orchestrator, not to the TS runtime', async () => {
+      const enginePlayback = { playbackInfo: jest.fn().mockResolvedValue({ sessionId: 'x' }) };
+      const streamingService = { resolveFile: jest.fn() };
+      const c = makeController({ engine: { runtime: true }, enginePlayback, streamingService });
+      const device = { directPlayProfiles: [] } as never;
+
+      const out = await c.playbackInfo(
+        42,
+        device,
+        request({ token: 'tok', sid: 'old', burnInSubtitleId: '12', audioStreamIndex: '1', startQuality: '720p', startAt: '33.5', download: '1' }),
+      );
+
+      expect(out).toEqual({ sessionId: 'x' });
+      expect(enginePlayback.playbackInfo).toHaveBeenCalledWith(owner, 42, device, {
+        tokenParam: '?token=tok&sid=old',
+        burnInSubtitleId: 12,
+        audioStreamIndex: '1',
+        startQuality: '720p',
+        startAt: 33.5,
+        download: true,
+        sseConnectionId: 'conn-1',
+        userAgent: 'UA',
+      });
+      expect(streamingService.resolveFile).not.toHaveBeenCalled();
+    });
+
+    it('stays on the TS runtime when the engine does not run playback', async () => {
+      const enginePlayback = { playbackInfo: jest.fn() };
+      const streamingService = { resolveFile: jest.fn().mockRejectedValue(new Error('ts path')) };
+      const c = makeController({ engine: { runtime: false }, enginePlayback, streamingService });
+      await expect(c.playbackInfo(42, {} as never, request({}))).rejects.toThrow('ts path');
+      expect(enginePlayback.playbackInfo).not.toHaveBeenCalled();
+    });
   });
 });
 

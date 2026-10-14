@@ -2,6 +2,7 @@ import {
   Injectable,
   UnauthorizedException,
   ConflictException,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -14,9 +15,10 @@ import { LoginDto, RegisterDto } from './dto/login.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { MediaServerType } from '../../common/enums';
 import { DEFAULT_ROLES } from '../../common/constants/permissions';
-import { SERVER_FEATURES } from '../../common/constants/server-features';
+import { serverFeatures } from '../../common/constants/server-features';
 import type { PublicUser } from '../users/users.service';
 import { RefreshTokenService } from './refresh-token.service';
+import { EngineService } from '../engine/engine.service';
 
 export interface TokenPair {
   accessToken: string;
@@ -41,6 +43,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
     private readonly refreshTokenService: RefreshTokenService,
+    @Optional() private readonly engine?: EngineService,
   ) {}
 
   /** Durée du cookie httpOnly (alignée sur JWT_EXPIRATION). */
@@ -131,7 +134,7 @@ export class AuthService {
       // Not hydrated here — callers that need libraryIds should use
       // UsersService.findOne(). Auth payloads don't carry ACL.
       libraryIds: [],
-      features: SERVER_FEATURES,
+      features: serverFeatures(this.engine),
     };
   }
 

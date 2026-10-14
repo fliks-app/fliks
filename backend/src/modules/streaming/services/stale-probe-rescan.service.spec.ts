@@ -87,6 +87,13 @@ describe('StaleProbeRescanService', () => {
     expect(sourceScans.scheduleIfNeeded).toHaveBeenCalledWith(3, file, freshProbe);
   });
 
+  it('re-probes a current-looking row when forced, as the engine reports its schema stale', async () => {
+    const current = { ...stale, formatName: 'mov,mp4' };
+    const { svc, detectMediaFileInfo } = setup({ streamInfo: current });
+    await svc.scheduleIfNeeded(3, file, current as never, true);
+    expect(detectMediaFileInfo).toHaveBeenCalledWith(file);
+  });
+
   it('never probes a row whose fields are all current', async () => {
     const current = { ...stale, formatName: 'mov,mp4' };
     const { svc, detectMediaFileInfo } = setup({ streamInfo: current });

@@ -6,6 +6,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import { EngineService } from '../engine/engine.service';
 import { QoeService } from '../qoe/qoe.service';
 import type { RemoteQualityRung } from '../scheduler/events.service';
 import { StreamLifetime } from './lifetime-constants';
@@ -187,6 +188,8 @@ export interface LiveSessionSnapshot extends Omit<
 /** Optional initial values when creating a session. Anything not
  *  supplied falls back to a safe default. */
 export interface CreateLiveSessionInput {
+  /** The engine's sid when the engine runs playback; absent: one is minted. */
+  sessionId?: string;
   userId: number | null;
   username: string | null;
   mediaFileId: number;
@@ -293,7 +296,7 @@ export function buildLiveSession(
   now: number,
 ): LiveSession {
   return {
-      sessionId: randomUUID(),
+      sessionId,
       userId: input.userId,
       username: input.username,
       mediaFileId: input.mediaFileId,
@@ -378,7 +381,10 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
   private readonly tombstones = new Map<string, LiveSession>();
   private gcTimer: ReturnType<typeof setInterval> | null = null;
 
-  constructor(@Optional() private readonly qoe?: QoeService) {}
+  constructor(
+    @Optional() private readonly qoe?: QoeService,
+    @Optional() private readonly engine?: EngineService,
+  ) {}
 
   private readonly ttlMs = StreamLifetime.liveSessionTtlMs();
   private readonly gcIntervalMs = StreamLifetime.liveSessionGcIntervalMs();
@@ -408,7 +414,12 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
    */
   create(input: CreateLiveSessionInput): LiveSession {
     const now = Date.now();
-    const session: LiveSession = buildLiveSession(input, randomUUID(), now);
+    const session: LiveSession = buildLiveSession(input, input.sessionId ?? randomUUID(), now);
+    // The engine already split concurrent playbacks and capped the owner's sessions.
+    if (input.sessionId) {
+      this.sessions.set(session.sessionId, session);
+      return session;
+    }
     // #638: split a concurrent playback of the same content onto its own job so
     // two live viewers never share (and mutually kill) one ffmpeg. Race-free:
     // no await between this scan and sessions.set. A same-tab reload shares the
@@ -640,6 +651,8 @@ export class LiveSessionRegistry implements OnModuleInit, OnModuleDestroy {
   }
 
   private runGc(): void {
+    // The engine expires sessions and says so with SessionEnded.
+    if (this.engine?.runtime) return;
     const now = Date.now();
     const expired: string[] = [];
     for (const [id, session] of this.sessions) {

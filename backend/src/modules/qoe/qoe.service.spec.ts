@@ -206,6 +206,12 @@ describe('QoeService', () => {
     });
   });
 
+  it('takes the CMCD and the production wait of a segment served elsewhere', () => {
+    const { svc } = build();
+    for (let i = 0; i < 5; i++) svc.observeServed(session, { mtp: 20_000, bl: 3_000 }, 3, 1_500);
+    expect(svc.liveSummary('s1')).toMatchObject({ cmcd: true, bandwidthBps: 20_000_000, transcodeSpeed: 2 });
+  });
+
   it('stores the cause of a recorded stall in the event data and exposes the last stall', async () => {
     const { svc, insert } = build();
     svc.recordSample(session, sample);
