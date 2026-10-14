@@ -5,916 +5,972 @@
  */
 
 export interface paths {
-  '/v1/capabilities': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/v1/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["capabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get: operations['capabilities'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/v1/config': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/v1/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_config"];
+        put: operations["put_config"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get: operations['get_config'];
-    put: operations['put_config'];
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/v1/decide': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/v1/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["decide"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    post: operations['decide'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/v1/estimate-sizes': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/v1/estimate-sizes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["estimate_sizes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    post: operations['estimate_sizes'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/v1/hello': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/v1/hello": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["hello"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get: operations['hello'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/v1/probe': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/v1/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["probe"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    post: operations['probe'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-  schemas: {
-    /** @enum {string} */
-    AudioCodec: 'aac' | 'ac3' | 'eac3' | 'opus';
-    /** @description One audio output's decision: a verbatim copy of the source or the encode target. */
-    AudioPlan:
-      | {
-          /** Format: int32 */
-          bitrate_bps?: number | null;
-          /** Format: int32 */
-          channels?: number | null;
-          /** @description Source codec, lowercased, whatever it is. */
-          codec: string;
-          /** @enum {string} */
-          mode: 'copy';
-          profile?: string | null;
-        }
-      | {
-          /** Format: int32 */
-          channels: number;
-          codec: components['schemas']['AudioCodec'];
-          /** @enum {string} */
-          mode: 'transcode';
+    schemas: {
+        /** @enum {string} */
+        AudioCodec: "aac" | "ac3" | "eac3" | "opus";
+        /** @description One audio output's decision: a verbatim copy of the source or the encode target. */
+        AudioPlan: {
+            /** Format: int32 */
+            bitrate_bps?: number | null;
+            /** Format: int32 */
+            channels?: number | null;
+            /** @description Source codec, lowercased, whatever it is. */
+            codec: string;
+            /** @enum {string} */
+            mode: "copy";
+            profile?: string | null;
+        } | {
+            /** Format: int32 */
+            channels: number;
+            codec: components["schemas"]["AudioCodec"];
+            /** @enum {string} */
+            mode: "transcode";
         };
-    AudioStreamInfo: {
-      audioDescription?: boolean | null;
-      /** Format: int32 */
-      bitRate?: number | null;
-      channelLayout?: string | null;
-      /** Format: int32 */
-      channels?: number | null;
-      codec: string;
-      commentary?: boolean | null;
-      /** Format: double */
-      endSeconds?: number | null;
-      isDefault?: boolean | null;
-      language: string;
-      languageTag?: string | null;
-      profile?: string | null;
-      /** Format: int32 */
-      sampleRate?: number | null;
-      /** Format: double */
-      startTimeSeconds?: number | null;
-      /** Format: int32 */
-      streamIndex: number;
-      title?: string | null;
+        AudioStreamInfo: {
+            audioDescription?: boolean | null;
+            /** Format: int32 */
+            bitRate?: number | null;
+            channelLayout?: string | null;
+            /** Format: int32 */
+            channels?: number | null;
+            codec: string;
+            commentary?: boolean | null;
+            /** Format: double */
+            endSeconds?: number | null;
+            isDefault?: boolean | null;
+            language: string;
+            languageTag?: string | null;
+            profile?: string | null;
+            /** Format: int32 */
+            sampleRate?: number | null;
+            /** Format: double */
+            startTimeSeconds?: number | null;
+            /** Format: int32 */
+            streamIndex: number;
+            title?: string | null;
+        };
+        AudioTrackPlan: {
+            /** Format: int32 */
+            bitrateBps: number;
+            /** Format: int32 */
+            channels?: number | null;
+            /** @description Source codec, lowercased. */
+            codec: string;
+            copy: boolean;
+            /**
+             * Format: int32
+             * @description Position in `info.audio`.
+             */
+            index: number;
+            language: string;
+            /** Format: int32 */
+            outputChannels?: number | null;
+            outputCodec: string;
+            /** @description Why the track is re-encoded (`Audio*` flags); empty when copied. */
+            reasonFlags: string[];
+            /** Format: int32 */
+            sampleRate?: number | null;
+        };
+        /** @enum {string} */
+        AutoQualityMode: "directplay" | "abr";
+        BitrateHint: {
+            /** Format: int32 */
+            audioBitrateBps: number;
+            /** Format: int32 */
+            totalBitrateBps: number;
+            /** Format: int32 */
+            videoBitrateBps: number;
+        };
+        Capabilities: {
+            decoders: string[];
+            defaultGpu?: string | null;
+            encoders: string[];
+            gpus: components["schemas"]["Gpu"][];
+            /** @description `vaapi` | `nvenc` | `qsv` | `amf` | `videotoolbox` | `none` */
+            hwAccel: string;
+            /** @description `signal` | `stdin` | `none` */
+            pauseCapability: string;
+            platform: string;
+            tonemapAlgos: string[];
+        };
+        /** @description `GET /v1/capabilities`: the summary plus the exact host state the decision reads. */
+        CapabilitiesResponse: components["schemas"]["Capabilities"] & {
+            hostCaps: components["schemas"]["HostCaps"];
+        };
+        Chapter: {
+            /** Format: double */
+            endSeconds: number;
+            /** Format: double */
+            startSeconds: number;
+            title?: string | null;
+        };
+        CodecCondition: {
+            codec: string;
+            /** Format: double */
+            maxBitDepth?: number | null;
+            /** Format: double */
+            maxHeight?: number | null;
+            /** Format: double */
+            maxLevel?: number | null;
+            /** Format: double */
+            maxWidth?: number | null;
+            profiles?: string[] | null;
+        };
+        /** @description Output video format: `hdr` is `null` for SDR. */
+        CodecVariant: {
+            /** Format: int32 */
+            bitDepth: number;
+            codec: components["schemas"]["VideoCodec"];
+            hdr: null | components["schemas"]["HdrFormat"];
+        };
+        CropInfo: {
+            /** Format: int32 */
+            height: number;
+            /** Format: int32 */
+            width: number;
+            /** Format: int32 */
+            x: number;
+            /** Format: int32 */
+            y: number;
+        };
+        /** @description Body of `POST /v1/decide`. `hostCaps` overrides the engine's detected capabilities (debug, shadow runs). */
+        DecideBody: {
+            hostCaps?: null | components["schemas"]["HostCaps"];
+            request: components["schemas"]["DecideRequest"];
+        };
+        DecideMedia: {
+            /** @description Host MIME type of the file, echoed for Direct Play. */
+            contentType: string;
+            /** @description With the dot, e.g. `.mkv`. */
+            ext: string;
+            /** Format: int32 */
+            mediaFileId: number;
+            path: string;
+        };
+        DecideRequest: {
+            device: components["schemas"]["DeviceProfile"];
+            info: components["schemas"]["MediaInfo"];
+            media: components["schemas"]["DecideMedia"];
+            scan?: null | components["schemas"]["SourceScan"];
+            selection?: components["schemas"]["DecideSelection"];
+        };
+        DecideSelection: {
+            /**
+             * Format: int32
+             * @description Position in `info.audio`, not a stream index.
+             * @default null
+             */
+            audioStreamIndex: number | null;
+            /**
+             * @description Text (not image) burn-in: only libass forces the pipeline off HW.
+             * @default null
+             */
+            burnInIsText: boolean | null;
+            /**
+             * Format: int32
+             * @description Only tested for truthiness: id 0 means no burn-in.
+             * @default null
+             */
+            burnInSubtitleId: number | null;
+            /** @default null */
+            requestedQuality: string | null;
+            /**
+             * @description Host URL suffix (`?token=...`), copied verbatim into `playUrl`.
+             * @default null
+             */
+            tokenParam: string | null;
+        };
+        Decision: {
+            /** @description Per-rendition audio output, in `info.audio` order. */
+            audioPlans: components["schemas"]["AudioPlan"][];
+            muxFlavour: components["schemas"]["MuxFlavour"];
+            response: components["schemas"]["PlaybackInfo"];
+            /** @description Whether a transcoded rung runs a tone-map, whatever the play method. */
+            transcodeTonemapping: boolean;
+            useHdrLadder: boolean;
+            videoVariant: components["schemas"]["CodecVariant"];
+        };
+        /** @description Mirrors `DeviceProfileDto`; bitrates and counts are f64 (JS numbers). */
+        DeviceProfile: {
+            appVersion?: string | null;
+            audioChannelsByCodec?: {
+                [key: string]: number;
+            } | null;
+            codecConditions?: components["schemas"]["CodecCondition"][] | null;
+            cropsBlackBarsLocally?: boolean | null;
+            dedupesAudioByLanguage?: boolean | null;
+            deviceName?: string | null;
+            deviceType?: null | components["schemas"]["DeviceType"];
+            directPlayProfiles: components["schemas"]["DirectPlayProfile"][];
+            dolbyVisionProfiles?: number[] | null;
+            /** Format: double */
+            maxAudioChannels?: number | null;
+            /** Format: double */
+            maxStreamingBitrate?: number | null;
+            needsHlsSubtitles?: boolean | null;
+            probesSegZero?: boolean | null;
+            rejectCopy?: boolean | null;
+            supportsAbr?: boolean | null;
+            supportsDirectPlay?: boolean | null;
+            supportsDolbyVision?: boolean | null;
+            supportsHdr?: boolean | null;
+            supportsHlsSubtitles?: boolean | null;
+            supportsIFrameTrickPlay?: boolean | null;
+            supportsImageSubtitles?: boolean | null;
+            supportsMuxedAudioRendition?: boolean | null;
+            switchesDirectPlayAudio?: boolean | null;
+            systemName?: string | null;
+            tonemapsHdrLocally?: boolean | null;
+            useTs?: boolean | null;
+            useTsOnSingleAudio?: boolean | null;
+        };
+        /** @enum {string} */
+        DeviceType: "mobile" | "desktop";
+        DirectPlayProfile: {
+            audioCodecs: string[];
+            containers: string[];
+            videoCodecs: string[];
+        };
+        EngineConfig: {
+            /** @default null */
+            hostToken: string | null;
+            /**
+             * @description Resolver callback base URL of the host.
+             * @default null
+             */
+            hostUrl: string | null;
+            /**
+             * @default {
+             *       "cacheGcIntervalMs": 300000,
+             *       "jobFallbackTimeoutMs": 1800000,
+             *       "jobGraceMs": 60000,
+             *       "liveSessionGcIntervalMs": 5000,
+             *       "liveSessionTtlMs": 30000,
+             *       "maxSessionsPerOwner": 10,
+             *       "pinnedSessionTtlMs": 3600000,
+             *       "sessionReviveTtlMs": 900000
+             *     }
+             */
+            lifetime: components["schemas"]["LifetimeConfig"];
+            /**
+             * Format: int32
+             * @default 0
+             */
+            revision: number;
+            /**
+             * @default {
+             *       "autoCropEnabled": true,
+             *       "autoQualityMode": "directplay",
+             *       "gpuRenderNode": "auto",
+             *       "qsvPreset": "faster",
+             *       "segmentDuration": 3,
+             *       "subtitlePrewarm": "playback",
+             *       "throttleEnabled": true,
+             *       "throttleThresholdSeconds": 90,
+             *       "tonemapAlgo": "auto",
+             *       "tonemapCurve": "mobius"
+             *     }
+             */
+            streaming: components["schemas"]["StreamingConfig"];
+        };
+        /** @description Body of `POST /v1/estimate-sizes`. `fileSize` is the source size in bytes, 0 when unknown. */
+        EstimateSizesRequest: {
+            /** Format: double */
+            fileSize?: number;
+            info: components["schemas"]["MediaInfo"];
+        };
+        Gpu: {
+            name: string;
+            renderNode: string;
+        };
+        /** @enum {string} */
+        HdrFormat: "HDR10" | "HLG";
+        HdrMetadata: {
+            masteringDisplay: string;
+            /** Format: int32 */
+            maxCll: number;
+            /** Format: int32 */
+            maxFall: number;
+        };
+        Hello: {
+            engineVersion: string;
+            features: string[];
+            instanceId: string;
+            /** Format: int32 */
+            protocolVersion: number;
+        };
+        /** @description What the decision reads of the host: detected backend and boot probe results (`core::hw`). */
+        HostCaps: {
+            /**
+             * @description Decoder descriptor ids the boot probe blacklisted (`hevc_qsv_decode`, ...).
+             * @default []
+             */
+            disabledDecoders: string[];
+            /**
+             * @description Encoder descriptor ids the boot probe blacklisted (`hevc_qsv_main10`, `libx265`, ...).
+             * @default []
+             */
+            disabledEncoders: string[];
+            /** @default none */
+            hwAccel: components["schemas"]["HwAccel"];
+            /**
+             * @description Not read by `decide` (it picks the AAC encoder binary in the argv builder).
+             * @default false
+             */
+            libfdkAac: boolean;
+            /** @default linux */
+            platform: components["schemas"]["Platform"];
+            /**
+             * @description Names of the probes that passed; unlisted ones read false. Known names: `tonemapOpencl`,
+             *     `tonemapOpenclCrop`, `tonemapOpenclHdr10`, `qsvOpencl`, `qsvOpenclHdr10`, `vppQsv`,
+             *     `vulkan`, `cuda`, `cudaHdr10`, `opencl`, `openclHdr10`, `amfOpencl`.
+             * @default []
+             */
+            probes: string[];
+            /** @default false */
+            vaapiWritesHdrMetadata: boolean;
+        };
+        /** @enum {string} */
+        HwAccel: "vaapi" | "nvenc" | "qsv" | "amf" | "videotoolbox" | "none";
+        Keyframe: {
+            /** Format: double */
+            dts: number;
+            /** Format: double */
+            pts: number;
+        };
+        /**
+         * @description How long sessions, ffmpeg jobs and cache sweeps live; the cache TTL and budget are in
+         *     `StreamingConfig`. Zero is not a duration: `session::LifetimeConfig` keeps the default then.
+         */
+        LifetimeConfig: {
+            /**
+             * Format: int32
+             * @default 300000
+             */
+            cacheGcIntervalMs: number;
+            /**
+             * Format: int32
+             * @description Idle window of a job that never had a viewer.
+             * @default 1800000
+             */
+            jobFallbackTimeoutMs: number;
+            /**
+             * Format: int32
+             * @description Delay between the last viewer leaving and the ffmpeg job being killed.
+             * @default 60000
+             */
+            jobGraceMs: number;
+            /**
+             * Format: int32
+             * @default 5000
+             */
+            liveSessionGcIntervalMs: number;
+            /**
+             * Format: int32
+             * @description A session without a heartbeat for this long is dropped (kept revivable).
+             * @default 30000
+             */
+            liveSessionTtlMs: number;
+            /**
+             * Format: int32
+             * @description Beyond it the owner's oldest session is evicted, never the new one.
+             * @default 10
+             */
+            maxSessionsPerOwner: number;
+            /**
+             * Format: int32
+             * @description Heartbeat TTL of pinned (download, offline) sessions.
+             * @default 3600000
+             */
+            pinnedSessionTtlMs: number;
+            /**
+             * Format: int32
+             * @description How long a dropped session's id can still revive.
+             * @default 900000
+             */
+            sessionReviveTtlMs: number;
+        };
+        MediaInfo: {
+            audio: components["schemas"]["AudioStreamInfo"][];
+            chapters?: components["schemas"]["Chapter"][] | null;
+            /** Format: double */
+            durationSeconds?: number | null;
+            error?: string | null;
+            /** Format: int32 */
+            formatBitRate?: number | null;
+            formatName?: string | null;
+            /** Format: double */
+            formatStartSeconds?: number | null;
+            /**
+             * Format: int32
+             * @description Bumped when probing changes what it records; absent on blobs persisted before the engine existed.
+             */
+            schemaVersion?: number | null;
+            subtitles: components["schemas"]["SubtitleStreamInfo"][];
+            /**
+             * Format: double
+             * @description Absent until the background scan ran; `null` when there is no break.
+             */
+            timestampBreakSeconds?: number | null;
+            video: components["schemas"]["VideoStreamInfo"][];
+        };
+        MediaRef: {
+            /** Format: int32 */
+            mediaFileId: number;
+            /** @description Absolute path, already authorised by the host. */
+            path: string;
+        };
+        MovieHash: {
+            /**
+             * Format: double
+             * @description File size in bytes.
+             */
+            bytesize: number;
+            /** @description 16 lowercase hex digits. */
+            hash: string;
+        };
+        /**
+         * @description Segment container of the HLS output.
+         * @enum {string}
+         */
+        MuxFlavour: "ts" | "fmp4";
+        /** @enum {string} */
+        Platform: "linux" | "darwin" | "win32";
+        /** @enum {string} */
+        PlayMethod: "DirectPlay" | "DirectStream" | "Transcode";
+        /** @description The public playback-info answer (`PlaybackInfoResponse`). */
+        PlaybackInfo: {
+            audioCopyStream: boolean;
+            audioPlan: components["schemas"]["AudioPlan"];
+            audioTracks: components["schemas"]["AudioTrackPlan"][];
+            /** @description HDR copied to an SDR client that tone-maps it itself. */
+            clientTonemap: boolean;
+            contentType: string;
+            dolbyVision: boolean;
+            hwAccel: components["schemas"]["HwAccel"];
+            /** Format: int32 */
+            mediaFileId: number;
+            outputAudioCodec: string;
+            /** @description `hls` or the source container on Direct Play. */
+            outputContainer: string;
+            outputVideoCodec: string;
+            playMethod: components["schemas"]["PlayMethod"];
+            playUrl: string;
+            qualities: components["schemas"]["QualityOption"][];
+            /** @description `original`, or the pinned rung id, or `auto`. */
+            quality: string;
+            /**
+             * Format: int32
+             * @description BANDWIDTH of the remux variant (DirectStream only).
+             */
+            remuxMasterBandwidthBps?: number | null;
+            source: components["schemas"]["PlaybackSource"];
+            tonemapping: boolean;
+            /** @description By rung id; absent on Direct Play. */
+            transcodeBitrateByQuality?: {
+                [key: string]: components["schemas"]["BitrateHint"];
+            } | null;
+            /** @description Empty on Direct Play. */
+            transcodeReasons: components["schemas"]["TranscodeReason"][];
+            videoCopyStream: boolean;
+        };
+        /** @description The facts of the source the decision was made on. */
+        PlaybackSource: {
+            /** Format: int32 */
+            audioBitRate?: number | null;
+            audioChannelLayout?: string | null;
+            /** Format: int32 */
+            audioChannels?: number | null;
+            audioCodec: string;
+            audioLanguage?: string | null;
+            /** Format: int32 */
+            audioSampleRate?: number | null;
+            colorPrimaries?: string | null;
+            colorSpace?: string | null;
+            colorTransfer?: string | null;
+            container: string;
+            crop?: null | components["schemas"]["CropInfo"];
+            /** Format: double */
+            durationSeconds?: number | null;
+            /** Format: int32 */
+            formatBitRate?: number | null;
+            frameRate?: string | null;
+            hdrFormat?: null | components["schemas"]["HdrFormat"];
+            /** Format: int32 */
+            height?: number | null;
+            /** Format: int32 */
+            videoBitDepth?: number | null;
+            /** Format: int32 */
+            videoBitRate?: number | null;
+            videoCodec: string;
+            /** Format: int32 */
+            videoLevel?: number | null;
+            videoProfile?: string | null;
+            /** Format: int32 */
+            width?: number | null;
+        };
+        ProbeRequest: {
+            /** @description Run `cropdetect` and set `video[0].crop` when bars are significant. */
+            crop?: boolean;
+            media: components["schemas"]["MediaRef"];
+            /** @description Read BCP-47 language tags of a Matroska file with `mkvmerge -J`. */
+            mkvTags?: boolean;
+            /** @description Compute the OpenSubtitles moviehash. */
+            moviehash?: boolean;
+        };
+        /**
+         * @description `ok: false` means ffprobe could not tell (unreadable file, timeout): leave stored rows alone.
+         *     `ok: true` with `info.error` is a readable file without streams.
+         */
+        ProbeResult: {
+            error?: string | null;
+            info?: null | components["schemas"]["MediaInfo"];
+            moviehash?: null | components["schemas"]["MovieHash"];
+            ok: boolean;
+        };
+        /** @enum {string} */
+        QsvPreset: "veryfast" | "faster" | "fast" | "medium" | "slow" | "slower" | "veryslow";
+        /** @description One download quality; `estimatedSize` is in bytes. */
+        QualityEstimate: {
+            /** Format: double */
+            estimatedSize: number;
+            key: string;
+            label: string;
+        };
+        QualityOption: {
+            /** Format: int32 */
+            height: number;
+            id: string;
+            isRemux: boolean;
+            label: string;
+            lowBandwidth?: boolean | null;
+            /** Format: int32 */
+            totalBitrateBps: number;
+            /** Format: int32 */
+            width: number;
+        };
+        /** @description Mirrors `SourceScan` (source-scan.ts); `audioConfigChanges` is keyed by audio stream index. */
+        SourceScan: {
+            audioConfigChanges: {
+                [key: string]: boolean;
+            };
+            /** Format: double */
+            breakSeconds?: number | null;
+            /** Format: double */
+            end: number;
+            keyframes: components["schemas"]["Keyframe"][];
+            /** Format: int32 */
+            schemaVersion?: number | null;
+        };
+        /** @description The `streaming_*` settings, already resolved by the host. Defaults match the host's. */
+        StreamingConfig: {
+            /** @default true */
+            autoCropEnabled: boolean;
+            /** @default directplay */
+            autoQualityMode: components["schemas"]["AutoQualityMode"];
+            /**
+             * Format: double
+             * @description Absent: the engine default.
+             * @default null
+             */
+            cacheMaxBytes: number | null;
+            /**
+             * Format: double
+             * @description Absent: the engine default.
+             * @default null
+             */
+            cacheTtlMs: number | null;
+            /**
+             * Format: int32
+             * @description Absent: derived from cgroup/CPU budget.
+             * @default null
+             */
+            ffmpegSlots: number | null;
+            /**
+             * @description `auto` or a `/dev/dri/renderD*` path.
+             * @default auto
+             */
+            gpuRenderNode: string;
+            /** @default faster */
+            qsvPreset: components["schemas"]["QsvPreset"];
+            /**
+             * Format: double
+             * @default 3
+             */
+            segmentDuration: number;
+            /** @default playback */
+            subtitlePrewarm: components["schemas"]["SubtitlePrewarm"];
+            /** @default true */
+            throttleEnabled: boolean;
+            /**
+             * Format: double
+             * @default 90
+             */
+            throttleThresholdSeconds: number;
+            /** @default auto */
+            tonemapAlgo: components["schemas"]["TonemapAlgo"];
+            /** @default mobius */
+            tonemapCurve: components["schemas"]["TonemapCurve"];
+        };
+        /** @enum {string} */
+        SubtitlePrewarm: "off" | "playback" | "import";
+        SubtitleStreamInfo: {
+            codec: string;
+            forced: boolean;
+            hearingImpaired: boolean;
+            /** @description Bitmap subtitles (PGS, VOBSUB, DVB) need burn-in. */
+            isImageBased: boolean;
+            language: string;
+            languageTag?: string | null;
+            /** Format: int32 */
+            streamIndex: number;
+            title?: string | null;
+        };
+        /** @enum {string} */
+        TonemapAlgo: "auto" | "opencl" | "vaapi" | "qsv";
+        /** @enum {string} */
+        TonemapCurve: "hable" | "mobius" | "reinhard";
+        TranscodeReason: {
+            flag: string;
+            message: string;
+        };
+        /** @enum {string} */
+        VideoCodec: "h264" | "hevc" | "av1";
+        VideoStreamInfo: {
+            avgFrameRate?: string | null;
+            /** Format: int32 */
+            bitDepth?: number | null;
+            /** Format: int32 */
+            bitRate?: number | null;
+            codec: string;
+            colorPrimaries?: string | null;
+            colorRange?: string | null;
+            colorSpace?: string | null;
+            colorTransfer?: string | null;
+            crop?: null | components["schemas"]["CropInfo"];
+            displayAspectRatio?: string | null;
+            dvBlPresent?: boolean | null;
+            /** Format: int32 */
+            dvBlSignalCompatId?: number | null;
+            dvElPresent?: boolean | null;
+            /** Format: int32 */
+            dvLevel?: number | null;
+            /** Format: int32 */
+            dvProfile?: number | null;
+            dvRpuPresent?: boolean | null;
+            /** Format: double */
+            endSeconds?: number | null;
+            /** Format: double */
+            firstFrameSeconds?: number | null;
+            frameRate?: string | null;
+            hdr10Plus?: boolean | null;
+            hdrFormat?: null | components["schemas"]["HdrFormat"];
+            hdrMetadata?: null | components["schemas"]["HdrMetadata"];
+            /** Format: int32 */
+            height?: number | null;
+            /** Format: int32 */
+            level?: number | null;
+            pixelFormat?: string | null;
+            profile?: string | null;
+            /** Format: int32 */
+            reorderFrames?: number | null;
+            /** Format: double */
+            startTimeSeconds?: number | null;
+            /** Format: int32 */
+            streamIndex: number;
+            /** Format: int32 */
+            width?: number | null;
+        };
     };
-    AudioTrackPlan: {
-      /** Format: int32 */
-      bitrateBps: number;
-      /** Format: int32 */
-      channels?: number | null;
-      /** @description Source codec, lowercased. */
-      codec: string;
-      copy: boolean;
-      /**
-       * Format: int32
-       * @description Position in `info.audio`.
-       */
-      index: number;
-      language: string;
-      /** Format: int32 */
-      outputChannels?: number | null;
-      outputCodec: string;
-      /** @description Why the track is re-encoded (`Audio*` flags); empty when copied. */
-      reasonFlags: string[];
-      /** Format: int32 */
-      sampleRate?: number | null;
-    };
-    /** @enum {string} */
-    AutoQualityMode: 'directplay' | 'abr';
-    BitrateHint: {
-      /** Format: int32 */
-      audioBitrateBps: number;
-      /** Format: int32 */
-      totalBitrateBps: number;
-      /** Format: int32 */
-      videoBitrateBps: number;
-    };
-    Capabilities: {
-      decoders: string[];
-      defaultGpu?: string | null;
-      encoders: string[];
-      gpus: components['schemas']['Gpu'][];
-      /** @description `vaapi` | `nvenc` | `qsv` | `amf` | `videotoolbox` | `none` */
-      hwAccel: string;
-      /** @description `signal` | `stdin` | `none` */
-      pauseCapability: string;
-      platform: string;
-      tonemapAlgos: string[];
-    };
-    /** @description `GET /v1/capabilities`: the summary plus the exact host state the decision reads. */
-    CapabilitiesResponse: components['schemas']['Capabilities'] & {
-      hostCaps: components['schemas']['HostCaps'];
-    };
-    Chapter: {
-      /** Format: double */
-      endSeconds: number;
-      /** Format: double */
-      startSeconds: number;
-      title?: string | null;
-    };
-    CodecCondition: {
-      codec: string;
-      /** Format: double */
-      maxBitDepth?: number | null;
-      /** Format: double */
-      maxHeight?: number | null;
-      /** Format: double */
-      maxLevel?: number | null;
-      /** Format: double */
-      maxWidth?: number | null;
-      profiles?: string[] | null;
-    };
-    /** @description Output video format: `hdr` is `null` for SDR. */
-    CodecVariant: {
-      /** Format: int32 */
-      bitDepth: number;
-      codec: components['schemas']['VideoCodec'];
-      hdr: null | components['schemas']['HdrFormat'];
-    };
-    CropInfo: {
-      /** Format: int32 */
-      height: number;
-      /** Format: int32 */
-      width: number;
-      /** Format: int32 */
-      x: number;
-      /** Format: int32 */
-      y: number;
-    };
-    /** @description Body of `POST /v1/decide`. `hostCaps` overrides the engine's detected capabilities (debug, shadow runs). */
-    DecideBody: {
-      hostCaps?: null | components['schemas']['HostCaps'];
-      request: components['schemas']['DecideRequest'];
-    };
-    DecideMedia: {
-      /** @description Host MIME type of the file, echoed for Direct Play. */
-      contentType: string;
-      /** @description With the dot, e.g. `.mkv`. */
-      ext: string;
-      /** Format: int32 */
-      mediaFileId: number;
-      path: string;
-    };
-    DecideRequest: {
-      device: components['schemas']['DeviceProfile'];
-      info: components['schemas']['MediaInfo'];
-      media: components['schemas']['DecideMedia'];
-      scan?: null | components['schemas']['SourceScan'];
-      selection?: components['schemas']['DecideSelection'];
-    };
-    DecideSelection: {
-      /**
-       * Format: int32
-       * @description Position in `info.audio`, not a stream index.
-       * @default null
-       */
-      audioStreamIndex: number | null;
-      /**
-       * @description Text (not image) burn-in: only libass forces the pipeline off HW.
-       * @default null
-       */
-      burnInIsText: boolean | null;
-      /**
-       * Format: int32
-       * @description Only tested for truthiness: id 0 means no burn-in.
-       * @default null
-       */
-      burnInSubtitleId: number | null;
-      /** @default null */
-      requestedQuality: string | null;
-      /**
-       * @description Host URL suffix (`?token=...`), copied verbatim into `playUrl`.
-       * @default null
-       */
-      tokenParam: string | null;
-    };
-    Decision: {
-      /** @description Per-rendition audio output, in `info.audio` order. */
-      audioPlans: components['schemas']['AudioPlan'][];
-      muxFlavour: components['schemas']['MuxFlavour'];
-      response: components['schemas']['PlaybackInfo'];
-      /** @description Whether a transcoded rung runs a tone-map, whatever the play method. */
-      transcodeTonemapping: boolean;
-      useHdrLadder: boolean;
-      videoVariant: components['schemas']['CodecVariant'];
-    };
-    /** @description Mirrors `DeviceProfileDto`; bitrates and counts are f64 (JS numbers). */
-    DeviceProfile: {
-      appVersion?: string | null;
-      audioChannelsByCodec?: {
-        [key: string]: number;
-      } | null;
-      codecConditions?: components['schemas']['CodecCondition'][] | null;
-      cropsBlackBarsLocally?: boolean | null;
-      dedupesAudioByLanguage?: boolean | null;
-      deviceName?: string | null;
-      deviceType?: null | components['schemas']['DeviceType'];
-      directPlayProfiles: components['schemas']['DirectPlayProfile'][];
-      dolbyVisionProfiles?: number[] | null;
-      /** Format: double */
-      maxAudioChannels?: number | null;
-      /** Format: double */
-      maxStreamingBitrate?: number | null;
-      needsHlsSubtitles?: boolean | null;
-      probesSegZero?: boolean | null;
-      rejectCopy?: boolean | null;
-      supportsAbr?: boolean | null;
-      supportsDirectPlay?: boolean | null;
-      supportsDolbyVision?: boolean | null;
-      supportsHdr?: boolean | null;
-      supportsHlsSubtitles?: boolean | null;
-      supportsIFrameTrickPlay?: boolean | null;
-      supportsImageSubtitles?: boolean | null;
-      supportsMuxedAudioRendition?: boolean | null;
-      switchesDirectPlayAudio?: boolean | null;
-      systemName?: string | null;
-      tonemapsHdrLocally?: boolean | null;
-      useTs?: boolean | null;
-      useTsOnSingleAudio?: boolean | null;
-    };
-    /** @enum {string} */
-    DeviceType: 'mobile' | 'desktop';
-    DirectPlayProfile: {
-      audioCodecs: string[];
-      containers: string[];
-      videoCodecs: string[];
-    };
-    EngineConfig: {
-      /** @default null */
-      hostToken: string | null;
-      /**
-       * @description Resolver callback base URL of the host.
-       * @default null
-       */
-      hostUrl: string | null;
-      /**
-       * Format: int32
-       * @default 0
-       */
-      revision: number;
-      /**
-       * @default {
-       *       "autoCropEnabled": true,
-       *       "autoQualityMode": "directplay",
-       *       "gpuRenderNode": "auto",
-       *       "qsvPreset": "faster",
-       *       "segmentDuration": 3,
-       *       "subtitlePrewarm": "playback",
-       *       "throttleEnabled": true,
-       *       "throttleThresholdSeconds": 90,
-       *       "tonemapAlgo": "auto",
-       *       "tonemapCurve": "mobius"
-       *     }
-       */
-      streaming: components['schemas']['StreamingConfig'];
-    };
-    /** @description Body of `POST /v1/estimate-sizes`. `fileSize` is the source size in bytes, 0 when unknown. */
-    EstimateSizesRequest: {
-      /** Format: double */
-      fileSize?: number;
-      info: components['schemas']['MediaInfo'];
-    };
-    Gpu: {
-      name: string;
-      renderNode: string;
-    };
-    /** @enum {string} */
-    HdrFormat: 'HDR10' | 'HLG';
-    HdrMetadata: {
-      masteringDisplay: string;
-      /** Format: int32 */
-      maxCll: number;
-      /** Format: int32 */
-      maxFall: number;
-    };
-    Hello: {
-      engineVersion: string;
-      features: string[];
-      instanceId: string;
-      /** Format: int32 */
-      protocolVersion: number;
-    };
-    /** @description What the decision reads of the host: detected backend and boot probe results (`core::hw`). */
-    HostCaps: {
-      /**
-       * @description Decoder descriptor ids the boot probe blacklisted (`hevc_qsv_decode`, ...).
-       * @default []
-       */
-      disabledDecoders: string[];
-      /**
-       * @description Encoder descriptor ids the boot probe blacklisted (`hevc_qsv_main10`, `libx265`, ...).
-       * @default []
-       */
-      disabledEncoders: string[];
-      /** @default none */
-      hwAccel: components['schemas']['HwAccel'];
-      /**
-       * @description Not read by `decide` (it picks the AAC encoder binary in the argv builder).
-       * @default false
-       */
-      libfdkAac: boolean;
-      /** @default linux */
-      platform: components['schemas']['Platform'];
-      /**
-       * @description Names of the probes that passed; unlisted ones read false. Known names: `tonemapOpencl`,
-       *     `tonemapOpenclCrop`, `tonemapOpenclHdr10`, `qsvOpencl`, `qsvOpenclHdr10`, `vppQsv`,
-       *     `vulkan`, `cuda`, `cudaHdr10`, `opencl`, `openclHdr10`, `amfOpencl`.
-       * @default []
-       */
-      probes: string[];
-      /** @default false */
-      vaapiWritesHdrMetadata: boolean;
-    };
-    /** @enum {string} */
-    HwAccel: 'vaapi' | 'nvenc' | 'qsv' | 'amf' | 'videotoolbox' | 'none';
-    Keyframe: {
-      /** Format: double */
-      dts: number;
-      /** Format: double */
-      pts: number;
-    };
-    MediaInfo: {
-      audio: components['schemas']['AudioStreamInfo'][];
-      chapters?: components['schemas']['Chapter'][] | null;
-      /** Format: double */
-      durationSeconds?: number | null;
-      error?: string | null;
-      /** Format: int32 */
-      formatBitRate?: number | null;
-      formatName?: string | null;
-      /** Format: double */
-      formatStartSeconds?: number | null;
-      /**
-       * Format: int32
-       * @description Bumped when probing changes what it records; absent on blobs persisted before the engine existed.
-       */
-      schemaVersion?: number | null;
-      subtitles: components['schemas']['SubtitleStreamInfo'][];
-      /**
-       * Format: double
-       * @description Absent until the background scan ran; `null` when there is no break.
-       */
-      timestampBreakSeconds?: number | null;
-      video: components['schemas']['VideoStreamInfo'][];
-    };
-    MediaRef: {
-      /** Format: int32 */
-      mediaFileId: number;
-      /** @description Absolute path, already authorised by the host. */
-      path: string;
-    };
-    MovieHash: {
-      /**
-       * Format: double
-       * @description File size in bytes.
-       */
-      bytesize: number;
-      /** @description 16 lowercase hex digits. */
-      hash: string;
-    };
-    /**
-     * @description Segment container of the HLS output.
-     * @enum {string}
-     */
-    MuxFlavour: 'ts' | 'fmp4';
-    /** @enum {string} */
-    Platform: 'linux' | 'darwin' | 'win32';
-    /** @enum {string} */
-    PlayMethod: 'DirectPlay' | 'DirectStream' | 'Transcode';
-    /** @description The public playback-info answer (`PlaybackInfoResponse`). */
-    PlaybackInfo: {
-      audioCopyStream: boolean;
-      audioPlan: components['schemas']['AudioPlan'];
-      audioTracks: components['schemas']['AudioTrackPlan'][];
-      /** @description HDR copied to an SDR client that tone-maps it itself. */
-      clientTonemap: boolean;
-      contentType: string;
-      dolbyVision: boolean;
-      hwAccel: components['schemas']['HwAccel'];
-      /** Format: int32 */
-      mediaFileId: number;
-      outputAudioCodec: string;
-      /** @description `hls` or the source container on Direct Play. */
-      outputContainer: string;
-      outputVideoCodec: string;
-      playMethod: components['schemas']['PlayMethod'];
-      playUrl: string;
-      qualities: components['schemas']['QualityOption'][];
-      /** @description `original`, or the pinned rung id, or `auto`. */
-      quality: string;
-      /**
-       * Format: int32
-       * @description BANDWIDTH of the remux variant (DirectStream only).
-       */
-      remuxMasterBandwidthBps?: number | null;
-      source: components['schemas']['PlaybackSource'];
-      tonemapping: boolean;
-      /** @description By rung id; absent on Direct Play. */
-      transcodeBitrateByQuality?: {
-        [key: string]: components['schemas']['BitrateHint'];
-      } | null;
-      /** @description Empty on Direct Play. */
-      transcodeReasons: components['schemas']['TranscodeReason'][];
-      videoCopyStream: boolean;
-    };
-    /** @description The facts of the source the decision was made on. */
-    PlaybackSource: {
-      /** Format: int32 */
-      audioBitRate?: number | null;
-      audioChannelLayout?: string | null;
-      /** Format: int32 */
-      audioChannels?: number | null;
-      audioCodec: string;
-      audioLanguage?: string | null;
-      /** Format: int32 */
-      audioSampleRate?: number | null;
-      colorPrimaries?: string | null;
-      colorSpace?: string | null;
-      colorTransfer?: string | null;
-      container: string;
-      crop?: null | components['schemas']['CropInfo'];
-      /** Format: double */
-      durationSeconds?: number | null;
-      /** Format: int32 */
-      formatBitRate?: number | null;
-      frameRate?: string | null;
-      hdrFormat?: null | components['schemas']['HdrFormat'];
-      /** Format: int32 */
-      height?: number | null;
-      /** Format: int32 */
-      videoBitDepth?: number | null;
-      /** Format: int32 */
-      videoBitRate?: number | null;
-      videoCodec: string;
-      /** Format: int32 */
-      videoLevel?: number | null;
-      videoProfile?: string | null;
-      /** Format: int32 */
-      width?: number | null;
-    };
-    ProbeRequest: {
-      /** @description Run `cropdetect` and set `video[0].crop` when bars are significant. */
-      crop?: boolean;
-      media: components['schemas']['MediaRef'];
-      /** @description Read BCP-47 language tags of a Matroska file with `mkvmerge -J`. */
-      mkvTags?: boolean;
-      /** @description Compute the OpenSubtitles moviehash. */
-      moviehash?: boolean;
-    };
-    /**
-     * @description `ok: false` means ffprobe could not tell (unreadable file, timeout): leave stored rows alone.
-     *     `ok: true` with `info.error` is a readable file without streams.
-     */
-    ProbeResult: {
-      error?: string | null;
-      info?: null | components['schemas']['MediaInfo'];
-      moviehash?: null | components['schemas']['MovieHash'];
-      ok: boolean;
-    };
-    /** @enum {string} */
-    QsvPreset:
-      | 'veryfast'
-      | 'faster'
-      | 'fast'
-      | 'medium'
-      | 'slow'
-      | 'slower'
-      | 'veryslow';
-    /** @description One download quality; `estimatedSize` is in bytes. */
-    QualityEstimate: {
-      /** Format: double */
-      estimatedSize: number;
-      key: string;
-      label: string;
-    };
-    QualityOption: {
-      /** Format: int32 */
-      height: number;
-      id: string;
-      isRemux: boolean;
-      label: string;
-      lowBandwidth?: boolean | null;
-      /** Format: int32 */
-      totalBitrateBps: number;
-      /** Format: int32 */
-      width: number;
-    };
-    /** @description Mirrors `SourceScan` (source-scan.ts); `audioConfigChanges` is keyed by audio stream index. */
-    SourceScan: {
-      audioConfigChanges: {
-        [key: string]: boolean;
-      };
-      /** Format: double */
-      breakSeconds?: number | null;
-      /** Format: double */
-      end: number;
-      keyframes: components['schemas']['Keyframe'][];
-      /** Format: int32 */
-      schemaVersion?: number | null;
-    };
-    /** @description The `streaming_*` settings, already resolved by the host. Defaults match the host's. */
-    StreamingConfig: {
-      /** @default true */
-      autoCropEnabled: boolean;
-      /** @default directplay */
-      autoQualityMode: components['schemas']['AutoQualityMode'];
-      /**
-       * Format: double
-       * @description Absent: the engine default.
-       * @default null
-       */
-      cacheMaxBytes: number | null;
-      /**
-       * Format: double
-       * @description Absent: the engine default.
-       * @default null
-       */
-      cacheTtlMs: number | null;
-      /**
-       * Format: int32
-       * @description Absent: derived from cgroup/CPU budget.
-       * @default null
-       */
-      ffmpegSlots: number | null;
-      /**
-       * @description `auto` or a `/dev/dri/renderD*` path.
-       * @default auto
-       */
-      gpuRenderNode: string;
-      /** @default faster */
-      qsvPreset: components['schemas']['QsvPreset'];
-      /**
-       * Format: double
-       * @default 3
-       */
-      segmentDuration: number;
-      /** @default playback */
-      subtitlePrewarm: components['schemas']['SubtitlePrewarm'];
-      /** @default true */
-      throttleEnabled: boolean;
-      /**
-       * Format: double
-       * @default 90
-       */
-      throttleThresholdSeconds: number;
-      /** @default auto */
-      tonemapAlgo: components['schemas']['TonemapAlgo'];
-      /** @default mobius */
-      tonemapCurve: components['schemas']['TonemapCurve'];
-    };
-    /** @enum {string} */
-    SubtitlePrewarm: 'off' | 'playback' | 'import';
-    SubtitleStreamInfo: {
-      codec: string;
-      forced: boolean;
-      hearingImpaired: boolean;
-      /** @description Bitmap subtitles (PGS, VOBSUB, DVB) need burn-in. */
-      isImageBased: boolean;
-      language: string;
-      languageTag?: string | null;
-      /** Format: int32 */
-      streamIndex: number;
-      title?: string | null;
-    };
-    /** @enum {string} */
-    TonemapAlgo: 'auto' | 'opencl' | 'vaapi' | 'qsv';
-    /** @enum {string} */
-    TonemapCurve: 'hable' | 'mobius' | 'reinhard';
-    TranscodeReason: {
-      flag: string;
-      message: string;
-    };
-    /** @enum {string} */
-    VideoCodec: 'h264' | 'hevc' | 'av1';
-    VideoStreamInfo: {
-      avgFrameRate?: string | null;
-      /** Format: int32 */
-      bitDepth?: number | null;
-      /** Format: int32 */
-      bitRate?: number | null;
-      codec: string;
-      colorPrimaries?: string | null;
-      colorRange?: string | null;
-      colorSpace?: string | null;
-      colorTransfer?: string | null;
-      crop?: null | components['schemas']['CropInfo'];
-      displayAspectRatio?: string | null;
-      dvBlPresent?: boolean | null;
-      /** Format: int32 */
-      dvBlSignalCompatId?: number | null;
-      dvElPresent?: boolean | null;
-      /** Format: int32 */
-      dvLevel?: number | null;
-      /** Format: int32 */
-      dvProfile?: number | null;
-      dvRpuPresent?: boolean | null;
-      /** Format: double */
-      endSeconds?: number | null;
-      /** Format: double */
-      firstFrameSeconds?: number | null;
-      frameRate?: string | null;
-      hdr10Plus?: boolean | null;
-      hdrFormat?: null | components['schemas']['HdrFormat'];
-      hdrMetadata?: null | components['schemas']['HdrMetadata'];
-      /** Format: int32 */
-      height?: number | null;
-      /** Format: int32 */
-      level?: number | null;
-      pixelFormat?: string | null;
-      profile?: string | null;
-      /** Format: int32 */
-      reorderFrames?: number | null;
-      /** Format: double */
-      startTimeSeconds?: number | null;
-      /** Format: int32 */
-      streamIndex: number;
-      /** Format: int32 */
-      width?: number | null;
-    };
-  };
-  responses: never;
-  parameters: never;
-  requestBodies: never;
-  headers: never;
-  pathItems: never;
+    responses: never;
+    parameters: never;
+    requestBodies: never;
+    headers: never;
+    pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
-  capabilities: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    capabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilitiesResponse"];
+                };
+            };
+            /** @description hardware detection has not finished (Retry-After: 1) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
     };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
+    get_config: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          'application/json': components['schemas']['CapabilitiesResponse'];
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EngineConfig"];
+                };
+            };
         };
-      };
-      /** @description hardware detection has not finished (Retry-After: 1) */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
     };
-  };
-  get_config: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
+    put_config: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          'application/json': components['schemas']['EngineConfig'];
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EngineConfig"];
+            };
         };
-      };
-    };
-  };
-  put_config: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['EngineConfig'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EngineConfig"];
+                };
+            };
+            /** @description revision lower than current */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
-        content: {
-          'application/json': components['schemas']['EngineConfig'];
-        };
-      };
-      /** @description revision lower than current */
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
     };
-  };
-  decide: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['DecideBody'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
+    decide: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          'application/json': components['schemas']['Decision'];
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideBody"];
+            };
         };
-      };
-      /** @description no config set yet */
-      400: {
-        headers: {
-          [name: string]: unknown;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Decision"];
+                };
+            };
+            /** @description no config set yet */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description no `hostCaps` given and hardware detection has not finished (Retry-After: 1) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
-        content?: never;
-      };
-      /** @description no `hostCaps` given and hardware detection has not finished (Retry-After: 1) */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
     };
-  };
-  estimate_sizes: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['EstimateSizesRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
+    estimate_sizes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          'application/json': components['schemas']['QualityEstimate'][];
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EstimateSizesRequest"];
+            };
         };
-      };
-    };
-  };
-  hello: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualityEstimate"][];
+                };
+            };
         };
-        content: {
-          'application/json': components['schemas']['Hello'];
-        };
-      };
     };
-  };
-  probe: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['ProbeRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
+    hello: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          'application/json': components['schemas']['ProbeResult'];
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Hello"];
+                };
+            };
         };
-      };
-      /** @description path is not absolute */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
     };
-  };
+    probe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProbeRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProbeResult"];
+                };
+            };
+            /** @description path is not absolute */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
 }
