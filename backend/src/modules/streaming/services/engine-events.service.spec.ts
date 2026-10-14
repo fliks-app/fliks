@@ -1,11 +1,8 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { LiveSessionRegistry } from '../live-session.service';
-import {
-  EngineEventsService,
-  sseData,
-  type EngineEvent,
-} from './engine-events.service';
+import type { EngineEvent } from '../../engine/engine.service';
+import { EngineEventsService, sseData } from './engine-events.service';
 import { jobKeyOf } from './engine-presence';
 
 const { engine: recorded } = JSON.parse(

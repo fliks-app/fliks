@@ -16,6 +16,7 @@ export type ProbeResult = components['schemas']['ProbeResult'];
 export type OpenSessionRequest = components['schemas']['OpenSessionRequest'];
 export type OpenSessionResponse = components['schemas']['OpenSessionResponse'];
 export type SessionSnapshot = components['schemas']['SessionSnapshot'];
+export type EngineEvent = components['schemas']['EngineEvent'];
 export type CacheSummary = components['schemas']['CacheSummary'];
 export type HeartbeatRequest = components['schemas']['HeartbeatRequest'];
 export type SessionAction = components['schemas']['SessionAction'];

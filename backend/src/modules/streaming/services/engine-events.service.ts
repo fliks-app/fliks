@@ -4,10 +4,7 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
-import {
-  EngineService,
-  type SessionSnapshot,
-} from '../../engine/engine.service';
+import { EngineService, type EngineEvent } from '../../engine/engine.service';
 import { readCmcdRaw } from '../../qoe/core/cmcd';
 import { QoeService } from '../../qoe/qoe.service';
 import { ActiveStreamTracker } from '../active-stream-tracker.service';
@@ -15,49 +12,6 @@ import { LiveSessionRegistry } from '../live-session.service';
 import { servedRungBitrate } from '../served-rung';
 import { realSegmentSeconds } from '../transcoding/constants';
 import { jobKeyOf, restorePresence } from './engine-presence';
-
-/** `EngineEvent` as serialised (camelCase): the generated type shows snake_case fields, which utoipa
- *  does not rename on enum variants. */
-export type EngineEvent =
-  | { type: 'SessionOpened'; session: SessionSnapshot }
-  | { type: 'SessionEnded'; sessionId: string; reason: string }
-  | {
-      type: 'PipelineChanged';
-      sessionId: string;
-      quality: string;
-      hwAccel: string;
-    }
-  | {
-      type: 'SegmentServed';
-      sessionId: string;
-      track: 'video' | 'audio';
-      rung: string;
-      index: number;
-      waitedMs: number;
-      cacheHit: boolean;
-      cmcdRaw?: string | null;
-    }
-  | {
-      type: 'JobStarted';
-      jobKey: string;
-      mediaFileId: number;
-      quality: string;
-      startSegment: number;
-      hwAccel: string;
-    }
-  | {
-      type: 'JobEnded';
-      jobKey: string;
-      state: string;
-      exitCode?: number | null;
-    }
-  | {
-      type: 'HwFallback';
-      jobKey: string;
-      from: string;
-      to: string;
-      stderrTail: string[];
-    };
 
 const MIN_BACKOFF_MS = 500;
 const MAX_BACKOFF_MS = 15_000;

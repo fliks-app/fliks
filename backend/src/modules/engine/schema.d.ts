@@ -238,7 +238,7 @@ export interface components {
         /** @description One audio output's decision: a verbatim copy of the source or the encode target. */
         AudioPlan: {
             /** Format: int32 */
-            bitrate_bps?: number | null;
+            bitrateBps?: number | null;
             /** Format: int32 */
             channels?: number | null;
             /** @description Source codec, lowercased, whatever it is. */
@@ -553,24 +553,24 @@ export interface components {
             type: "SessionOpened";
         } | {
             reason: string;
-            session_id: string;
+            sessionId: string;
             /** @enum {string} */
             type: "SessionEnded";
         } | {
-            hw_accel: components["schemas"]["HwAccel"];
+            hwAccel: components["schemas"]["HwAccel"];
             quality: string;
-            session_id: string;
+            sessionId: string;
             /** @enum {string} */
             type: "PipelineChanged";
         } | {
             /** @description Already on disk when requested. */
-            cache_hit: boolean;
+            cacheHit: boolean;
             /** @description The request's CMCD data, raw. */
-            cmcd_raw?: string | null;
+            cmcdRaw?: string | null;
             /** Format: int32 */
             index: number;
             rung: string;
-            session_id: string;
+            sessionId: string;
             track: components["schemas"]["Track"];
             /** @enum {string} */
             type: "SegmentServed";
@@ -578,28 +578,28 @@ export interface components {
              * Format: double
              * @description How long the request waited for the segment to be produced.
              */
-            waited_ms: number;
+            waitedMs: number;
         } | {
-            hw_accel: components["schemas"]["HwAccel"];
-            job_key: string;
+            hwAccel: components["schemas"]["HwAccel"];
+            jobKey: string;
             /** Format: int32 */
-            media_file_id: number;
+            mediaFileId: number;
             quality: string;
             /** Format: int32 */
-            start_segment: number;
+            startSegment: number;
             /** @enum {string} */
             type: "JobStarted";
         } | {
             /** Format: int32 */
-            exit_code?: number | null;
-            job_key: string;
+            exitCode?: number | null;
+            jobKey: string;
             state: components["schemas"]["JobState"];
             /** @enum {string} */
             type: "JobEnded";
         } | {
             from: components["schemas"]["HwAccel"];
-            job_key: string;
-            stderr_tail: string[];
+            jobKey: string;
+            stderrTail: string[];
             to: components["schemas"]["HwAccel"];
             /** @enum {string} */
             type: "HwFallback";
@@ -864,9 +864,29 @@ export interface components {
             hints: components["schemas"]["Hints"];
             /** @description `decision.response.playUrl` with `sid=` appended. */
             playPath: string;
+            /**
+             * Format: double
+             * @description Source container time less the served timeline's: add it to a container time (an EDL
+             *     range) to reach the player's clock; 0 on Direct Play.
+             */
+            playbackClockOffsetS?: number | null;
             /** @description Cache profile hash; absent on Direct Play. */
             profileHash?: string | null;
+            qoePipeline?: null | components["schemas"]["QoePipeline"];
             sessionId: string;
+            /**
+             * @description The tone-map step the session runs: `vaapi`, `qsv`, `opencl`, `vulkan`, `cuda`,
+             *     `videotoolbox` or `cpu`; absent without one.
+             */
+            tonemapAlgo?: string | null;
+            tonemapCurve?: null | components["schemas"]["TonemapCurve"];
+        };
+        PipelineStage: {
+            hw: boolean;
+            /** @description `qsv`, `vaapi`, `nvenc`, `amf`, `videotoolbox` or `cpu`. */
+            kind: string;
+            /** @description Decoder or encoder id. */
+            name?: string | null;
         };
         /** @enum {string} */
         Platform: "linux" | "darwin" | "win32";
@@ -961,6 +981,40 @@ export interface components {
             info?: null | components["schemas"]["MediaInfo"];
             moviehash?: null | components["schemas"]["MovieHash"];
             ok: boolean;
+        };
+        QoeOutput: {
+            /** Format: int32 */
+            bitrate?: number | null;
+            codec?: string | null;
+            hdr?: null | components["schemas"]["HdrFormat"];
+            /** @description The pinned rung; `null` on `auto`. */
+            quality?: string | null;
+            /** @description What the client asked for: `auto` or a rung name. */
+            requested?: string | null;
+        };
+        /**
+         * @description What the server does to the session's stream, for QoE reports. `null` members: not
+         *     re-encoded (or, for `audioTranscode`, Direct Play).
+         */
+        QoePipeline: {
+            audioTranscode?: boolean | null;
+            burnIn?: null | components["schemas"]["BurnInKind"];
+            crop?: boolean | null;
+            decode?: null | components["schemas"]["PipelineStage"];
+            encode?: null | components["schemas"]["PipelineStage"];
+            output?: null | components["schemas"]["QoeOutput"];
+            source?: null | components["schemas"]["QoeSource"];
+            /** @description As `tonemapAlgo`. */
+            tonemap?: string | null;
+        };
+        QoeSource: {
+            codec?: string | null;
+            /** @description `HDR10`, `HLG` or `DV`. */
+            hdr?: string | null;
+            /** Format: int32 */
+            height?: number | null;
+            /** Format: int32 */
+            width?: number | null;
         };
         /** @enum {string} */
         QsvPreset: "veryfast" | "faster" | "fast" | "medium" | "slow" | "slower" | "veryslow";
