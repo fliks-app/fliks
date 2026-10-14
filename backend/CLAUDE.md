@@ -34,3 +34,20 @@ Without any of these variables the spec skips. Then commit the fixtures in the e
 
 New decision inputs: add a case to `cases.ts` or a test in one of the replayed specs, never edit `expected` by hand.
 Wire field names must match `crates/core/src/api.rs`: the engine's round-trip test fails otherwise.
+
+## Probe vectors (`test/engine-vectors/probe-*.ts`)
+
+Golden raw tool output and results of `FfprobeService.detectMediaFileInfo` + `detectCrop`, consumed by the engine's `core::probe` (`fixtures/probe/`).
+
+- `probe-io.ts` stands in for `child_process` (and `stat`): the real service runs against recorded output, canned answers (`probe-synthetic.ts`, `probe-fuzz.ts`) or the real tools on a corpus (`tools/gen-probe-corpus.sh` in the engine repo). Crop runs in software (platform forced off Linux).
+- Regenerate: `FLIKS_ENGINE_REPO=/path/to/engine PROBE_CORPUS_DIR=<corpus> PROBE_TOOLS=<bin dir with ffprobe, ffmpeg, mkvmerge> npx jest test/engine-vectors/probe-vectors`. Without the corpus variables the recorded corpus runs are kept and `expected` is recomputed by the service. Verify: `FLIKS_ENGINE_REPO_CHECK=/path/to/engine npx jest test/engine-vectors` (replays the recorded runs, no tools needed).
+- A change to `ffprobe.service.ts`, `mkv-language-tags.ts` or `moviehash.ts` must regenerate them.
+
+## Host capability vectors (`hw-vectors.spec.ts`)
+
+Golden state of the boot detection (`TranscodingService.onModuleInit`, the probes, GPU enumeration, pause probe) for the engine's `core::hw`.
+
+- Runs the real service against a mocked `child_process` and `fs`; each fixture in `fixtures/hw` stores what ffmpeg and sysfs answered (`calls`, `env`), `expected` is the TS state serialised as the engine's `Capabilities`/`HostCaps` plus the set of ffmpeg commands.
+- `hw-scenarios.ts` scripts the synthetic hosts (nvenc, amf/win32, qsv/win32, videotoolbox/darwin, cpu-only, broken GPU, blacklisted ids). nvenc, win32 and darwin are synthetic only; the real ones are recorded on a machine with the GPUs.
+- Generate/verify with `FLIKS_ENGINE_REPO` / `FLIKS_ENGINE_REPO_CHECK` as above; `FLIKS_HW_RECORD=<name>` re-records one real scenario here; `FLIKS_HW_LIVE=<out.json>` (+ `FLIKS_HW_NODE`) runs the detection for real and writes the state, for parity against the engine's `hw-detect`.
+- A change to a probe's argv, timeout or conditions must regenerate these too.
