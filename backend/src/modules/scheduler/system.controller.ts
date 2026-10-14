@@ -53,7 +53,7 @@ import {
   LiveSessionRegistry,
 } from '../streaming/live-session.service';
 import { StreamLifetime } from '../streaming/lifetime-constants';
-import { PlaybackService } from '../streaming/playback.service';
+import { PlaybackService } from '../playback/playback.service';
 import { QoeService, type QoeLiveSummary } from '../qoe/qoe.service';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { Episode } from '../media/entities/episode.entity';

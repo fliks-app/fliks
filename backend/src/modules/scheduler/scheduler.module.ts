@@ -24,6 +24,7 @@ import { SubtitlesModule } from '../subtitles/subtitles.module';
 import { SettingsModule } from '../settings/settings.module';
 import { MediaServersModule } from '../media-servers/media-servers.module';
 import { StreamingModule } from '../streaming/streaming.module';
+import { PlaybackModule } from '../playback/playback.module';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { MarkersModule } from '../markers/markers.module';
 import { Library } from '../libraries/entities/library.entity';
@@ -53,6 +54,7 @@ import { QoeModule } from '../qoe/qoe.module';
     SettingsModule,
     MediaServersModule,
     StreamingModule,
+    PlaybackModule,
     MarkersModule,
     LogBufferModule,
     // Imported directly so SchedulerService can inject PluginJobsService for

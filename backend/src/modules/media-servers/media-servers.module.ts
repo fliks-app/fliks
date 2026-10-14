@@ -4,7 +4,7 @@ import { MediaServer } from '../users/entities/media-server.entity';
 import { User } from '../users/entities/user.entity';
 import { Media } from '../media/entities/media.entity';
 import { Episode } from '../media/entities/episode.entity';
-import { PlaybackState } from '../streaming/entities/playback-state.entity';
+import { PlaybackState } from '../playback/entities/playback-state.entity';
 import { Command } from '../scheduler/entities/command.entity';
 import { MediaServersService } from './media-servers.service';
 import { MediaServersController } from './media-servers.controller';

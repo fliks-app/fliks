@@ -98,7 +98,7 @@ import { StreamBuilderService } from './stream-builder.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
 import { SessionExpiredException } from './session-expired.exception';
 import { SubtitleBurnInService } from './subtitle-burn-in.service';
-import { PlaybackService } from './playback.service';
+import { PlaybackService } from '../playback/playback.service';
 import { MarkersService } from '../markers/markers.service';
 import { DeviceProfileDto } from './dto/device-profile.dto';
 import { StreamingSettingsCache } from './streaming-settings-cache.service';

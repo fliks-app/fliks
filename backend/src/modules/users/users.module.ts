@@ -9,7 +9,7 @@ import { UsersStatsService } from './users-stats.service';
 import { UsersController } from './users.controller';
 import { AuthModule } from '../auth/auth.module';
 import { ImageModule } from '../images/image.module';
-import { PlaybackState } from '../streaming/entities/playback-state.entity';
+import { PlaybackState } from '../playback/entities/playback-state.entity';
 import { FliksRequest } from '../requests/entities/request.entity';
 
 @Module({

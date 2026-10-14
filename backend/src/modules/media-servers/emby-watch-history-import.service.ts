@@ -7,7 +7,7 @@ import { RolesService } from '../roles/roles.service';
 import { Media } from '../media/entities/media.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { Season } from '../media/entities/season.entity';
-import { PlaybackState } from '../streaming/entities/playback-state.entity';
+import { PlaybackState } from '../playback/entities/playback-state.entity';
 import { MediaType, MediaServerType } from '../../common/enums';
 import { EmbyItem, EmbyProvider, EmbyUser } from './providers/emby.provider';
 

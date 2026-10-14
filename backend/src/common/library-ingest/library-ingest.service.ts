@@ -16,7 +16,7 @@ import { FfprobeService } from '../../modules/subtitles/ffprobe.service';
 import { EventsService } from '../../modules/scheduler/events.service';
 import { qualityFromResolution } from '../release-parsing';
 import { MediaService } from '../../modules/media/media.service';
-import { PlaybackState } from '../../modules/streaming/entities/playback-state.entity';
+import { PlaybackState } from '../../modules/playback/entities/playback-state.entity';
 import { resolveEdlPath } from '../../modules/streaming/edl/edl-sidecar';
 import { SubtitlesService } from '../../modules/subtitles/subtitles.service';
 import { SubtitleSyncService } from '../../modules/subtitles/subtitle-sync.service';
