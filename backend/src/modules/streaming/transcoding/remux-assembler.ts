@@ -135,7 +135,7 @@ export function remuxAssemblyPlan(o: {
 
 /** Segment `i`'s planned source-time boundary: the real grid boundary, or
  *  (uniform fallback) `segmentDuration` multiples from the plan's origin. */
-function planBoundarySeconds(
+export function planBoundarySeconds(
   plan: Pick<RemuxAssemblyPlan, 'boundaries' | 'start' | 'segmentDuration'>,
   i: number,
 ): number {
@@ -144,7 +144,10 @@ function planBoundarySeconds(
 }
 
 /** The GOP files of `segment`, by ffmpeg number, or null past the end. */
-function gopsOf(plan: RemuxAssemblyPlan, segment: number): number[] | null {
+export function gopsOf(
+  plan: RemuxAssemblyPlan,
+  segment: number,
+): number[] | null {
   if (!plan.firstGop) return [segment];
   if (segment + 1 >= plan.firstGop.length) return null;
   const out: number[] = [];
@@ -796,14 +799,14 @@ async function copyRange(
 
 /** One audio frame read from a track's growing file: its own moof (one
  *  sample per fragment, `frag_every_frame`) and its mdat's sample bytes. */
-interface RawFrame {
+export interface RawFrame {
   tfdt: bigint;
   sample: RawSample;
   data: Buffer;
 }
 
 /** Parse one (moof, mdat) fragment pair. */
-function parseFrame(moof: Buffer, mdat: Buffer): RawFrame {
+export function parseFrame(moof: Buffer, mdat: Buffer): RawFrame {
   const moofBody = moof.readUInt32BE(0) === 1 ? 16 : 8;
   const traf = findBox(moof, moofBody, moof.length, 'traf');
   const tfdt = traf && readTfdt(moof, traf);
@@ -828,7 +831,7 @@ function fullbox(version: number, flags: number): Buffer {
 /** One served audio segment: `samples` coalesced into a single moof/trun
  *  instead of one moof per source frame, cutting the box overhead a
  *  raw fragment-per-frame stream would otherwise carry into every segment. */
-function buildFragment(
+export function buildFragment(
   trackId: number,
   sequenceNumber: number,
   tfdt: bigint,

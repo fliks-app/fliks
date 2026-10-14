@@ -68,3 +68,11 @@ Golden ffmpeg argv of `buildFfmpegArgs`, `buildRemuxArgs`, the encoder descripto
 - `expected` is always recomputed from the stored input under its `hostCaps` and `env` (render node pin, `FLIKS_OPENCL_DEVICE`); a throw is stored as `{ error }`.
 - Generate/verify with `FLIKS_ENGINE_REPO` / `FLIKS_ENGINE_REPO_CHECK`. Fuzz: `ARGV_FUZZ_OUT=<dir> ARGV_FUZZ_SEED=<n> ARGV_FUZZ_COUNT=<n>` (NDJSON for the engine's `ARGV_FUZZ_DIR`); promote with `ARGV_FUZZ_EXPECT=<dir>`.
 - A change to the argv builders, encoders, filter graph or `hw-device.ts` must regenerate these.
+
+## Packaging vectors (`packaging-*.ts`)
+
+One recorded call each of the playlist builders (master, media, routes) and the fMP4 packaging functions (`timeline.ts`, `cmaf-rewrite.ts`, `segment-boundaries.ts`, `source-timeline.ts`, `remuxRunStart`, the pure `remux-assembler.ts` helpers), for the engine's `core::hls` (`fixtures/hls`) and `core::mp4` (`fixtures/mp4`).
+
+- Replays the master-playlist, controller, timeline, cmaf-rewrite, remux-assembler, segment-boundaries, source-timeline and output-timeline specs, wrapping the exports to record their calls, plus a synthetic matrix (`packaging-cases.ts`). Bytes are base64, bigints strings.
+- Generate/verify with `FLIKS_ENGINE_REPO` / `FLIKS_ENGINE_REPO_CHECK` as above; `PACKAGING_FFMPEG=<ffmpeg>` re-records the `real-*` clip fixtures. Fuzz: `PACKAGING_FUZZ_OUT=<dir> PACKAGING_FUZZ_SEED=<n> PACKAGING_FUZZ_COUNT=<n> npx jest test/engine-vectors/packaging-vectors`.
+- A change to those files (or to a playlist route) must regenerate these.
