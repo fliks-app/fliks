@@ -117,9 +117,15 @@ export class EnginePlaybackService {
       resolved.mediaFile.mediaId,
       episodeId,
     );
-    // Taken before the open: the claim is consumed and the engine tags carry it.
+    const subtitleRenditions = device.supportsHlsSubtitles
+      ? await this.subtitleStreamService
+          .listTextSubtitleRenditions(mediaFileId, user)
+          .catch(() => undefined)
+      : undefined;
+    // Taken before the open, the tags carry it; given back when the open fails.
+    const attributionTarget = this.events.targetIdFor(q.sseConnectionId);
     const attributedUserId = this.events.takeAttribution(
-      this.events.targetIdFor(q.sseConnectionId),
+      attributionTarget,
       mediaFileId,
     );
     const tags = toTags({
@@ -172,11 +178,15 @@ export class EnginePlaybackService {
         streamIndex: burnIn.streamIndex,
       },
       sourceVersion: held.version ?? undefined,
-      subtitleRenditions: device.supportsHlsSubtitles
-        ? await this.subtitleStreamService
-            .listTextSubtitleRenditions(mediaFileId, user)
-            .catch(() => undefined)
-        : undefined,
+      subtitleRenditions,
+    }).catch((err: unknown) => {
+      if (attributionTarget && attributedUserId != null)
+        this.events.claimAttribution(
+          attributionTarget,
+          attributedUserId,
+          mediaFileId,
+        );
+      throw err;
     });
     const { response } = open.decision;
     const v0 = info?.video?.[0];

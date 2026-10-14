@@ -125,6 +125,7 @@ function setup(
     pluginPreRoll: { ask: jest.fn().mockResolvedValue([]) },
     events: {
       takeAttribution: jest.fn().mockReturnValue(null),
+      claimAttribution: jest.fn(),
       targetIdFor: jest.fn().mockReturnValue('tv#1'),
     },
   };
@@ -242,6 +243,27 @@ describe('EnginePlaybackService.playbackInfo', () => {
     expect(
       t.liveSessions.peek(recorded.engine.sessionId)!.attributedUserId,
     ).toBe(9);
+    t.cleanup();
+  });
+
+  it('gives the attribution back when the engine fails to open the session', async () => {
+    const t = setup();
+    t.deps.events.takeAttribution.mockReturnValue(9);
+    t.engine.openSession.mockRejectedValue(new Error('down'));
+    await expect(
+      t.svc.playbackInfo(user, 1, device as never, query),
+    ).rejects.toThrow('unavailable');
+    expect(t.deps.events.claimAttribution).toHaveBeenCalledWith('tv#1', 9, 1);
+    t.cleanup();
+  });
+
+  it('claims nothing back when there was no attribution', async () => {
+    const t = setup();
+    t.engine.openSession.mockRejectedValue(new Error('down'));
+    await expect(
+      t.svc.playbackInfo(user, 1, device as never, query),
+    ).rejects.toThrow();
+    expect(t.deps.events.claimAttribution).not.toHaveBeenCalled();
     t.cleanup();
   });
 
