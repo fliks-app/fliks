@@ -517,17 +517,11 @@ export class LiveTvSessionService implements OnModuleInit {
     }
   }
 
-  /** The stream an engine event or snapshot names: by url and priority, which survive a restart,
-   *  else by its position in the open's list. */
+  /** The stream an engine event or snapshot names: url and priority survive a restart. */
   private streamOf(
     hold: Pick<Hold, 'streams'> | undefined,
-    at: {
-      upstream: number;
-      upstreamUrl?: string | null;
-      upstreamPriority?: number | null;
-    },
+    at: { upstreamUrl: string; upstreamPriority: number },
   ): LiveTvChannelStream | undefined {
-    if (at.upstreamUrl == null) return hold?.streams[at.upstream];
     return hold?.streams.find(
       (x) => x.url === at.upstreamUrl && x.priority === at.upstreamPriority,
     );

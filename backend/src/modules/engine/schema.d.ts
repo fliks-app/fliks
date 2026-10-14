@@ -706,9 +706,9 @@ export interface components {
              */
             upstream: number;
             /** Format: int32 */
-            upstreamPriority?: number | null;
+            upstreamPriority: number;
             /** @description URL of that upstream, so a host that lost the open's list can still place it. */
-            upstreamUrl?: string | null;
+            upstreamUrl: string;
         } | {
             capacityToken: string;
             reason: string;
@@ -1072,9 +1072,9 @@ export interface components {
              * Format: int32
              * @description `priority` of the feeding upstream.
              */
-            upstreamPriority?: number | null;
+            upstreamPriority: number;
             /** @description URL of the feeding upstream, so a host can name its source after a restart. */
-            upstreamUrl?: string | null;
+            upstreamUrl: string;
             videoCodec?: string | null;
             /**
              * Format: int32

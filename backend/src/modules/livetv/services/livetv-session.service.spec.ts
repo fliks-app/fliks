@@ -35,6 +35,13 @@ function stream(
   } as unknown as LiveTvChannelStream;
 }
 
+/** The engine's way to name the upstream of `stream(id)`. */
+const at = (id: number) => ({
+  upstream: id - 1,
+  upstreamUrl: `http://provider.example/${id}.ts`,
+  upstreamPriority: 0,
+});
+
 const channel = (streams: LiveTvChannelStream[]) =>
   ({ id: 1, name: 'Channel 1', streams }) as unknown as LiveTvChannel;
 
@@ -290,7 +297,7 @@ describe('LiveTvSessionService', () => {
       await emit({
         type: 'LiveAttempt',
         capacityToken: tokenOf(),
-        upstream: 1,
+        ...at(2),
         probe: { videoCodec: 'h264', container: 'mpegts' },
       });
 
@@ -319,7 +326,7 @@ describe('LiveTvSessionService', () => {
       await emit({
         type: 'LiveAttempt',
         capacityToken: token,
-        upstream: 0,
+        ...at(1),
         error: 'no segment',
       });
       expect(streamRepo.update).toHaveBeenLastCalledWith(1, {
@@ -327,11 +334,11 @@ describe('LiveTvSessionService', () => {
       });
       expect(release).not.toHaveBeenCalled();
 
-      await emit({ type: 'LiveAttempt', capacityToken: token, upstream: 1 });
+      await emit({ type: 'LiveAttempt', capacityToken: token, ...at(2) });
       await emit({
         type: 'LiveAttempt',
         capacityToken: token,
-        upstream: 1,
+        ...at(2),
         error: 'upstream closed',
       });
       expect(release).toHaveBeenCalledTimes(1);
@@ -518,6 +525,8 @@ describe('LiveTvSessionService', () => {
         videoCodec: 'h264',
         container: 'fmp4',
         upstream: 0,
+        upstreamUrl: 'u',
+        upstreamPriority: 0,
         viewersOnUpstream: 2,
       },
     ]);
