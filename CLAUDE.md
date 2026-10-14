@@ -5,6 +5,11 @@
 - Keep them short and rare. Comment only what the code can't say: a non-obvious constraint, a why.
 - No verbose block comments, no restating the next line, no narrating a past bug — that belongs in the commit message.
 
+## Engine
+
+- The video/streaming engine lives in github.com/fliks-app/engine; its protocol is that repo's `PROTOCOL.md`.
+- Bump it with `scripts/bump-engine.sh <version>`, which rewrites `engine.lock` (version + sha256 per platform).
+
 ## Angular conventions
 
 - Always use external template files (`templateUrl`) instead of inline templates (`template`) in components.
