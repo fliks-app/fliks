@@ -13,6 +13,22 @@ export type { EngineClient };
 export type Capabilities = components['schemas']['CapabilitiesResponse'];
 export type EngineStreamingConfig = components['schemas']['StreamingConfig'];
 export type ProbeResult = components['schemas']['ProbeResult'];
+export type OpenSessionRequest = components['schemas']['OpenSessionRequest'];
+export type OpenSessionResponse = components['schemas']['OpenSessionResponse'];
+export type SessionSnapshot = components['schemas']['SessionSnapshot'];
+export type CacheSummary = components['schemas']['CacheSummary'];
+export type HeartbeatRequest = components['schemas']['HeartbeatRequest'];
+export type SessionAction = components['schemas']['SessionAction'];
+
+/** A non-2xx answer of the engine; `status` tells the caller what to map it to. */
+export class EngineError extends Error {
+  constructor(
+    readonly status: number,
+    what: string,
+  ) {
+    super(`${what} -> ${status}`);
+  }
+}
 
 export const MIN_ENGINE_PROTOCOL = 1;
 /** Where the engine reaches the resolver. FLIKS_HOST_URL for a remote engine; the loopback
@@ -24,15 +40,10 @@ export function hostUrl(): string {
   );
 }
 
-/** `/v1/revoke` is not in schema.d.ts yet: type it by hand until bump-engine regenerates it. */
-type RevokeClient = {
-  POST(
-    url: '/v1/revoke',
-    init: { body: { ownerId: number } },
-  ): Promise<{ response: Response }>;
-};
-
 export const REQUIRED_FEATURES = ['probe', 'capabilities'];
+/** The engine runs playback (sessions, data plane, events) only when it announces all three. */
+export const RUNTIME_FEATURES = ['sessions', 'serve', 'events'];
+const OPEN_TIMEOUT_MS = 15_000;
 
 const HELLO_ATTEMPTS = 20;
 const HELLO_RETRY_MS = 500;
@@ -76,11 +87,32 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
   private listeners: (() => void)[] = [];
   private revision = 0;
   private lastPushed = '';
+  private reachable = false;
   protected sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
   /** True once the engine answered `hello` with a compatible protocol. */
   get enabled(): boolean {
     return this.client !== null;
+  }
+
+  /** The engine owns playback; otherwise the TS runtime does. */
+  get runtime(): boolean {
+    return (
+      this.client !== null &&
+      RUNTIME_FEATURES.every((f) => this.features.includes(f))
+    );
+  }
+
+  /** `off`: not configured or refused; `down`: configured but the last hello failed. */
+  get status(): 'off' | 'up' | 'down' {
+    if (!process.env.FLIKS_ENGINE_URL) return 'off';
+    if (!this.client) return this.candidate ? 'down' : 'off';
+    return this.reachable ? 'up' : 'down';
+  }
+
+  /** `hello.features` of the adopted engine, empty without one. */
+  get engineFeatures(): readonly string[] {
+    return this.client ? this.features : [];
   }
 
   onModuleInit(): Promise<void> {
@@ -162,6 +194,7 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
     this.instanceId = data.instanceId;
     this.features = data.features;
     this.client = client;
+    this.reachable = true;
     this.delay = HELLO_RETRY_MS;
     this.log.log(
       `engine ${data.engineVersion} hello OK (protocol ${data.protocolVersion}, features ${data.features.join(',')})`,
@@ -184,6 +217,7 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
   private async tick(): Promise<void> {
     const data = await this.hello();
     const connected = this.client !== null;
+    this.reachable = !!data;
     if (!data) {
       this.schedule(connected ? POLL_MS : this.backoff());
       return;
@@ -232,10 +266,9 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
   async revokeOwner(ownerId: number): Promise<void> {
     if (!this.client || !this.features.includes('revoke')) return;
     try {
-      const { response } = await (this.client as unknown as RevokeClient).POST(
-        '/v1/revoke',
-        { body: { ownerId } },
-      );
+      const { response } = await this.client.POST('/v1/revoke', {
+        body: { ownerId: String(ownerId) },
+      });
       if (!response.ok) this.log.warn(`POST /v1/revoke -> ${response.status}`);
     } catch (err) {
       this.log.warn(`POST /v1/revoke failed: ${err}`);
@@ -285,6 +318,97 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
     });
     if (!data) throw new Error(`POST /v1/probe -> ${response.status}`);
     return data;
+  }
+
+  /** POST /v1/sessions, waiting out the 503 + Retry-After of the first detection run. */
+  async openSession(body: OpenSessionRequest): Promise<OpenSessionResponse> {
+    const client = this.need();
+    const deadline = Date.now() + OPEN_TIMEOUT_MS;
+    for (;;) {
+      const { data, response } = await client.POST('/v1/sessions', { body });
+      if (data) return data;
+      if (response.status !== 503 || Date.now() > deadline) {
+        throw new EngineError(response.status, 'POST /v1/sessions');
+      }
+      await this.sleep(
+        (Number(response.headers.get('retry-after')) || 1) * 1000,
+      );
+    }
+  }
+
+  /** `sessionLost` when the engine no longer knows the sid; throws EngineError 403 for another owner. */
+  async heartbeat(
+    sid: string,
+    body: HeartbeatRequest,
+  ): Promise<{ sessionLost: boolean }> {
+    const { data, response } = await this.need().POST(
+      '/v1/sessions/{sid}/heartbeat',
+      {
+        path: { sid },
+        body,
+      },
+    );
+    if (!data) throw new EngineError(response.status, 'POST heartbeat');
+    return data;
+  }
+
+  /** Idempotent: an unknown sid is fine. */
+  async deleteSession(sid: string, reason?: string): Promise<void> {
+    const { response } = await this.need().DELETE('/v1/sessions/{sid}', {
+      path: { sid },
+      query: { reason },
+    });
+    if (!response.ok) throw new EngineError(response.status, 'DELETE session');
+  }
+
+  /** The HTTP status of the command: 204 done, 404 unknown sid, 409 nothing to pause or stop. */
+  async sessionCommand(sid: string, action: SessionAction): Promise<number> {
+    const { response } = await this.need().POST('/v1/sessions/{sid}/command', {
+      path: { sid },
+      body: { action },
+    });
+    return response.status;
+  }
+
+  async listSessions(
+    filter: { ownerId?: string; mediaFileId?: number } = {},
+  ): Promise<SessionSnapshot[]> {
+    const { data, response } = await this.need().GET('/v1/sessions', {
+      query: filter,
+    });
+    if (!data) throw new EngineError(response.status, 'GET /v1/sessions');
+    return data;
+  }
+
+  async getSession(sid: string): Promise<SessionSnapshot | null> {
+    const { data, response } = await this.need().GET('/v1/sessions/{sid}', {
+      path: { sid },
+    });
+    if (response.status === 404) return null;
+    if (!data) throw new EngineError(response.status, 'GET session');
+    return data;
+  }
+
+  async cache(): Promise<CacheSummary> {
+    const { data, response } = await this.need().GET('/v1/cache');
+    if (!data) throw new EngineError(response.status, 'GET /v1/cache');
+    return data;
+  }
+
+  /** Removes the matching non-live entries; the count of entries removed. */
+  async purgeCache(
+    filter: { mediaFileId?: number; ownerId?: string } = {},
+  ): Promise<number> {
+    const { data, response } = await this.need().DELETE('/v1/cache', {
+      query: filter,
+    });
+    if (!data) throw new EngineError(response.status, 'DELETE /v1/cache');
+    return data.removed;
+  }
+
+  /** The open SSE response of `GET /v1/events`; the caller reads and aborts it. */
+  events(signal: AbortSignal): Promise<Response> {
+    return this.need().stream('/v1/events', signal);
   }
 
   private need(): EngineClient {

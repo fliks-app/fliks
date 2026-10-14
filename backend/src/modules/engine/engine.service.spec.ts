@@ -346,7 +346,7 @@ describe('EngineService revoke', () => {
     const post = jest.fn(async () => ({ response: { ok: true, status: 200 } }));
     await s.connect(withRevoke(post));
     await s.revokeOwner(5);
-    expect(post).toHaveBeenCalledWith('/v1/revoke', { body: { ownerId: 5 } });
+    expect(post).toHaveBeenCalledWith('/v1/revoke', { body: { ownerId: '5' } });
   });
 
   it('is a no-op without the feature or without an engine', async () => {
@@ -364,5 +364,152 @@ describe('EngineService revoke', () => {
       withRevoke(jest.fn(async () => Promise.reject(new Error('down')))),
     );
     await expect(s.revokeOwner(5)).resolves.toBeUndefined();
+  });
+});
+
+describe('EngineService runtime', () => {
+  const RUNTIME = [...HELLO.features, 'sessions', 'serve', 'events'];
+  const hello = (features: string[]) =>
+    jest.fn(async (url: string) =>
+      url === '/v1/hello'
+        ? { data: { ...HELLO, features }, response: { status: 200 } }
+        : { data: { revision: 7 }, response: { status: 200 } },
+    );
+  const env = { ...process.env };
+  afterEach(() => {
+    process.env = { ...env };
+  });
+
+  it.each([
+    [RUNTIME, true],
+    [HELLO.features, false],
+    [[...HELLO.features, 'sessions', 'serve'], false],
+    [[...HELLO.features, 'sessions', 'events'], false],
+  ])('runs playback only with sessions, serve and events: %j', async (features, runtime) => {
+    const s = svc();
+    await s.connect(mockClient({ GET: hello(features) }));
+    expect(s.enabled).toBe(true);
+    expect(s.runtime).toBe(runtime);
+  });
+
+  it('is not a runtime before it is adopted, nor once it is refused', async () => {
+    const s = svc();
+    expect(s.runtime).toBe(false);
+    await s.connect(mockClient({ GET: jest.fn(async () => ({ data: { ...HELLO, features: ['sessions', 'serve', 'events'] } })) }));
+    expect(s.enabled).toBe(false);
+    expect(s.runtime).toBe(false);
+  });
+
+  it('exposes the announced features of the adopted engine only', async () => {
+    const s = svc();
+    expect(s.engineFeatures).toEqual([]);
+    await s.connect(mockClient({ GET: hello(RUNTIME) }));
+    expect(s.engineFeatures).toEqual(RUNTIME);
+  });
+
+  it('reports off, up and down', async () => {
+    delete process.env.FLIKS_ENGINE_URL;
+    expect(svc().status).toBe('off');
+    process.env.FLIKS_ENGINE_URL = 'http://engine';
+    const s = svc();
+    expect(s.status).toBe('off');
+    await s.connect(mockClient({ GET: hello(RUNTIME) }));
+    expect(s.status).toBe('up');
+    (s as any).sleep = async () => undefined;
+    const down = mockClient({ GET: jest.fn().mockRejectedValue(new Error('down')) });
+    (s as any).candidate = down;
+    await (s as any).tick();
+    expect(s.status).toBe('down');
+    (s as any).candidate = mockClient({ GET: hello(RUNTIME) });
+    await (s as any).tick();
+    expect(s.status).toBe('up');
+    clearTimeout((s as any).timer);
+  });
+
+  describe('session calls', () => {
+    async function connected(over: Record<string, jest.Mock> = {}) {
+      const s = svc();
+      const c = mockClient({ GET: hello(RUNTIME), DELETE: jest.fn(), ...over });
+      await s.connect(c);
+      return { s, c: c as typeof c & { DELETE: jest.Mock } };
+    }
+    const reply = (status: number, data?: unknown, headers: Record<string, string> = {}) => ({
+      data,
+      response: { ok: status < 300, status, headers: new Headers(headers) },
+    });
+
+    it('opens a session', async () => {
+      const post = jest.fn(async () => reply(200, { sessionId: 'a' }));
+      const { s } = await connected({ POST: post });
+      await expect(s.openSession({ x: 1 } as never)).resolves.toEqual({ sessionId: 'a' });
+      expect(post).toHaveBeenCalledWith('/v1/sessions', { body: { x: 1 } });
+    });
+
+    it('waits out the 503 + Retry-After of the first detection run', async () => {
+      const post = jest
+        .fn()
+        .mockResolvedValueOnce(reply(503, undefined, { 'retry-after': '2' }))
+        .mockResolvedValueOnce(reply(200, { sessionId: 'a' }));
+      const slept: number[] = [];
+      const { s } = await connected({ POST: post });
+      (s as any).sleep = async (ms: number) => void slept.push(ms);
+      await expect(s.openSession({} as never)).resolves.toEqual({ sessionId: 'a' });
+      expect(slept).toEqual([2000]);
+    });
+
+    it('throws the status of any other refusal', async () => {
+      const { s } = await connected({ POST: jest.fn(async () => reply(400)) });
+      await expect(s.openSession({} as never)).rejects.toMatchObject({ status: 400 });
+    });
+
+    it('heartbeats with the sid as a path parameter, and surfaces another owner as 403', async () => {
+      const post = jest
+        .fn()
+        .mockResolvedValueOnce(reply(200, { sessionLost: false }))
+        .mockResolvedValueOnce(reply(403));
+      const { s } = await connected({ POST: post });
+      await expect(s.heartbeat('a/b', { ownerId: '7', positionS: 3 })).resolves.toEqual({ sessionLost: false });
+      expect(post).toHaveBeenCalledWith('/v1/sessions/{sid}/heartbeat', {
+        path: { sid: 'a/b' },
+        body: { ownerId: '7', positionS: 3 },
+      });
+      await expect(s.heartbeat('a', {})).rejects.toMatchObject({ status: 403 });
+    });
+
+    it('deletes a session with its reason, idempotently', async () => {
+      const del = jest.fn(async () => reply(204));
+      const { s } = await connected({ DELETE: del });
+      await s.deleteSession('a', 'stopped');
+      expect(del).toHaveBeenCalledWith('/v1/sessions/{sid}', { path: { sid: 'a' }, query: { reason: 'stopped' } });
+    });
+
+    it('lists with filters, and answers null for an unknown session', async () => {
+      const get = jest.fn(async (url: string) =>
+        url === '/v1/hello' ? { data: { ...HELLO, features: RUNTIME }, response: { status: 200 } }
+        : url === '/v1/sessions' ? reply(200, [{ sessionId: 'a' }])
+        : url === '/v1/config' ? { data: { revision: 1 }, response: { status: 200 } }
+        : reply(404),
+      );
+      const { s, c } = await connected({ GET: get });
+      await expect(s.listSessions({ ownerId: '7' })).resolves.toEqual([{ sessionId: 'a' }]);
+      expect(c.GET).toHaveBeenCalledWith('/v1/sessions', { query: { ownerId: '7' } });
+      await expect(s.getSession('zz')).resolves.toBeNull();
+    });
+
+    it('answers the status of a command', async () => {
+      const { s } = await connected({ POST: jest.fn(async () => reply(409)) });
+      await expect(s.sessionCommand('a', 'pauseJob')).resolves.toBe(409);
+    });
+
+    it('reads and purges the cache', async () => {
+      const del = jest.fn(async () => reply(200, { removed: 3 }));
+      const { s } = await connected({ DELETE: del });
+      await expect(s.purgeCache({ mediaFileId: 4, ownerId: '7' })).resolves.toBe(3);
+      expect(del).toHaveBeenCalledWith('/v1/cache', { query: { mediaFileId: 4, ownerId: '7' } });
+    });
+
+    it('refuses to call a disabled engine', async () => {
+      await expect(svc().openSession({} as never)).rejects.toThrow('engine disabled');
+    });
   });
 });
