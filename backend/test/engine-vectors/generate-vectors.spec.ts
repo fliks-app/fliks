@@ -7,10 +7,13 @@ import {
   readFileSync,
   rmSync,
   writeFileSync,
+  appendFileSync,
 } from 'fs';
 import { join } from 'path';
+import { StreamingController } from '../../src/modules/streaming/streaming.controller';
 import { evaluateRecorder } from '../../src/modules/streaming/stream-builder.test-helpers';
 import { syntheticVectors } from './cases';
+import { genVector, mulberry32 } from './fuzz';
 import { HOST_CAPS } from './host-caps';
 import {
   DEFAULT_CONFIG,
@@ -144,6 +147,7 @@ jest.mock(
 );
 
 const GEN = process.env.FLIKS_ENGINE_REPO;
+const FUZZ = process.env.FUZZ_OUT;
 const CHECK = process.env.FLIKS_ENGINE_REPO_CHECK;
 const REPLAYED_SPECS = [
   'audio-decision',
@@ -194,11 +198,75 @@ function prune(vectors: Vector[]): Vector[] {
   });
 }
 
+const ESTIMATE_FILE_SIZES = [0, 1_500_000_000];
+
+/** Runs the real controller method; only the file resolution is stubbed. */
+async function estimateExpected(info: Vector['input']['info'], size: number) {
+  const ctl = {
+    streamingService: {
+      resolveFile: () =>
+        Promise.resolve({ mediaFile: { id: 1, streamInfo: info }, size }),
+    },
+  };
+  return sortKeys(
+    JSON.parse(
+      JSON.stringify(
+        await StreamingController.prototype.downloadQualities.call(
+          ctl as never,
+          { user: {} } as never,
+          1,
+        ),
+      ),
+    ),
+  );
+}
+
+interface EstimateVector {
+  name: string;
+  input: { info: Vector['input']['info']; fileSize: number };
+  expected: unknown;
+}
+
+async function estimateVectors(vectors: Vector[]): Promise<EstimateVector[]> {
+  const seen = new Set<string>();
+  const out: EstimateVector[] = [];
+  for (const v of vectors) {
+    const key = JSON.stringify(sortKeys(v.input.info));
+    if (seen.has(key)) continue;
+    seen.add(key);
+    for (const fileSize of ESTIMATE_FILE_SIZES)
+      out.push({
+        name: `${v.name} size ${fileSize}`,
+        input: { info: v.input.info, fileSize },
+        expected: await estimateExpected(v.input.info, fileSize),
+      });
+  }
+  return out;
+}
+
+function writeEstimateVectors(repo: string, vectors: EstimateVector[]): void {
+  const dir = join(repo, 'fixtures', 'estimate-sizes');
+  mkdirSync(dir, { recursive: true });
+  for (const f of readdirSync(dir))
+    if (f.endsWith('.json')) rmSync(join(dir, f));
+  const used = new Set<string>();
+  for (const v of vectors) {
+    let file = slug(v.name);
+    for (let n = 2; used.has(file); n++) file = `${slug(v.name)}-${n}`;
+    used.add(file);
+    writeFileSync(
+      join(dir, `${file}.json`),
+      JSON.stringify(sortKeys(v), null, 2) + '\n',
+    );
+  }
+}
+
 function writeVectors(repo: string, vectors: Vector[]): void {
   const dir = join(repo, 'fixtures', 'decide');
   mkdirSync(dir, { recursive: true });
   for (const f of readdirSync(dir))
-    if (f.endsWith('.json')) rmSync(join(dir, f));
+    // Fuzz-promoted fixtures are hand-curated, not regenerated.
+    if (f.endsWith('.json') && !f.startsWith('fuzz-')) rmSync(join(dir, f));
   const used = new Set<string>();
   for (const v of vectors) {
     let file = slug(v.name);
@@ -269,7 +337,7 @@ if (GEN) {
   }
 
   describe('generate decide vectors', () => {
-    afterAll(() => {
+    afterAll(async () => {
       evaluateRecorder.current = undefined;
       const seen = new Set<string>();
       const all: Vector[] = [];
@@ -289,11 +357,67 @@ if (GEN) {
         `decide vectors: ${pruned.length} ${JSON.stringify(bySource)}`,
       );
       writeVectors(GEN, pruned);
+      const est = await estimateVectors(pruned);
+      console.log(`estimate-sizes vectors: ${est.length}`);
+      writeEstimateVectors(GEN, est);
     });
     it('writes fixtures/decide', () => {
       expect(DEFAULT_CONFIG.segmentDuration).toBe(3);
     });
   });
+} else if (process.env.FUZZ_EXPECT) {
+  const dir = process.env.FUZZ_EXPECT;
+  it('recomputes `expected` of every vector file in FUZZ_EXPECT', () => {
+    for (const f of readdirSync(dir).filter((x) => x.endsWith('.json'))) {
+      const v = JSON.parse(readFileSync(join(dir, f), 'utf8')) as Vector;
+      v.expected = runVector(v);
+      writeFileSync(join(dir, f), JSON.stringify(sortKeys(v), null, 2) + '\n');
+    }
+  });
+} else if (FUZZ) {
+  const seed = Number(process.env.FUZZ_SEED ?? 1);
+  const count = Number(process.env.FUZZ_COUNT ?? 5000);
+  it(`fuzz seed ${seed} x ${count} -> ${FUZZ}`, () => {
+    mkdirSync(FUZZ, { recursive: true });
+    const file = join(FUZZ, `fuzz-${seed}.ndjson`);
+    rmSync(file, { force: true });
+    const rng = mulberry32(seed);
+    const throws: Record<string, number> = {};
+    let buf: string[] = [];
+    let ok = 0;
+    for (let i = 0; i < count; i++) {
+      const v = genVector(rng, `fuzz-${seed}-${i}`);
+      try {
+        const expected = runVector(v);
+        buf.push(
+          JSON.stringify({
+            seed,
+            i,
+            input: v.input,
+            hostCaps: v.hostCaps,
+            config: v.config,
+            expected: sortKeys(expected),
+          }),
+        );
+        ok++;
+      } catch (e) {
+        const m = (e as Error).message;
+        throws[m] = (throws[m] ?? 0) + 1;
+      }
+      if (buf.length >= 200 || i === count - 1) {
+        appendFileSync(file, buf.map((l) => l + '\n').join(''));
+        buf = [];
+      }
+    }
+    writeFileSync(
+      join(FUZZ, `fuzz-${seed}.throws.json`),
+      JSON.stringify({ seed, ok, throws }, null, 2) + '\n',
+    );
+    console.log(
+      `fuzz seed ${seed}: ${ok} ok, throws ${JSON.stringify(throws)}`,
+    );
+    expect(ok).toBeGreaterThan(0);
+  }, 600_000);
 } else if (CHECK) {
   const dir = join(CHECK, 'fixtures', 'decide');
   const files = existsSync(dir)
@@ -306,6 +430,23 @@ if (GEN) {
     it.each(files)('%s', (f) => {
       const v = JSON.parse(readFileSync(join(dir, f), 'utf8')) as Vector;
       expect(sortKeys(runVector(v))).toEqual(v.expected);
+    });
+  });
+  const estDir = join(CHECK, 'fixtures', 'estimate-sizes');
+  const estFiles = existsSync(estDir)
+    ? readdirSync(estDir)
+        .filter((f) => f.endsWith('.json'))
+        .sort()
+    : [];
+  describe('estimate-sizes vectors match the engine checkout', () => {
+    it('has fixtures', () => expect(estFiles.length).toBeGreaterThan(0));
+    it.each(estFiles)('%s', async (f) => {
+      const v = JSON.parse(
+        readFileSync(join(estDir, f), 'utf8'),
+      ) as EstimateVector;
+      expect(await estimateExpected(v.input.info, v.input.fileSize)).toEqual(
+        v.expected,
+      );
     });
   });
 } else {

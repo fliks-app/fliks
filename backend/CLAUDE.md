@@ -28,7 +28,9 @@ Verify without writing:
 FLIKS_ENGINE_REPO_CHECK=/path/to/engine npx jest test/engine-vectors
 ```
 
-Without either variable the spec skips. Then commit the fixtures in the engine repo and run its `cargo test`.
+Differential fuzz for the engine's `decide_fuzz` test (seeded random inputs, NDJSON out): `FUZZ_OUT=<dir> FUZZ_SEED=<n> FUZZ_COUNT=<n> npx jest test/engine-vectors`.
+
+Without any of these variables the spec skips. Then commit the fixtures in the engine repo and run its `cargo test`.
 
 New decision inputs: add a case to `cases.ts` or a test in one of the replayed specs, never edit `expected` by hand.
 Wire field names must match `crates/core/src/api.rs`: the engine's round-trip test fails otherwise.
