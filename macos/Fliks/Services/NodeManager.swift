@@ -35,8 +35,13 @@ actor NodeManager {
         logger.info("Starting Node.js backend on port \(config.port)...")
 
         let proc = Process()
-        proc.executableURL = Paths.nodeBinary
-        proc.arguments = ["dist/main.js"]
+        if let engine = Paths.engineBinary {
+            proc.executableURL = engine
+            proc.arguments = ["--supervise", "--", Paths.nodeBinary.path, "dist/main.js"]
+        } else {
+            proc.executableURL = Paths.nodeBinary
+            proc.arguments = ["dist/main.js"]
+        }
         proc.currentDirectoryURL = Paths.dataDir
         proc.environment = config.asEnvironment
 

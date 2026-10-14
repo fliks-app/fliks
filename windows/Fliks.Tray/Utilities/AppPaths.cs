@@ -27,6 +27,16 @@ internal static class AppPaths
         RepoRoot is null ? null : Path.Combine(RepoRoot, "windows", "Vendored", "node", "node.exe"),
         "node.exe");
 
+    /// <summary>Supervisor beside node.exe; null in dev runs, which launch node directly.</summary>
+    public static string? EngineExe
+    {
+        get
+        {
+            var p = Path.Combine(Path.GetDirectoryName(NodeExe) ?? "", "fliks-engine.exe");
+            return File.Exists(p) ? p : null;
+        }
+    }
+
     /// <summary>PostgreSQL bin dir (initdb.exe, pg_ctl.exe, …).</summary>
     public static string PgBinDir => ResolveDir(
         Path.Combine(BaseDir, "pgsql", "bin"),

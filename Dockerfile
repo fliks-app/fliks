@@ -33,6 +33,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && cargo install subtile-ocr --version 0.2.6 --root /opt/subtile-ocr \
   && rm -rf /var/lib/apt/lists/* "$HOME/.cargo/registry" "$HOME/.rustup"
 
+# --- Stage 2c: Fetch fliks-engine (pinned in engine.lock) ---
+FROM alpine:3.22 AS engine
+ARG TARGETARCH
+RUN apk add --no-cache curl
+COPY engine.lock /engine.lock
+RUN set -eu; \
+  case "$TARGETARCH" in amd64) p=linux-x64 ;; arm64) p=linux-arm64 ;; *) echo "unsupported arch $TARGETARCH" >&2; exit 1 ;; esac; \
+  v=$(sed -n 's/^version=//p' /engine.lock); \
+  sum=$(sed -n "s/^sha256_$(echo "$p" | tr - _)=//p" /engine.lock); \
+  [ -n "$sum" ] || { echo "engine.lock has no sha256 for $p" >&2; exit 1; }; \
+  curl -fsSL -o /fliks-engine "https://github.com/fliks-app/engine/releases/download/v$v/fliks-engine-$p"; \
+  echo "$sum  /fliks-engine" | sha256sum -c -; \
+  chmod +x /fliks-engine
+
 # --- Stage 3: Production runtime ---
 # Runtime toolchain (node + jellyfin-ffmpeg + subtitle/OCR tools). Split out so
 # the dev compose can build it as-is with `target: runtime-base`.
@@ -125,6 +139,9 @@ FROM runtime-base AS runtime
 
 WORKDIR /app
 
+# PID 1: supervises node, forwards signals, reaps zombies.
+COPY --from=engine /fliks-engine /usr/local/bin/fliks-engine
+
 # Copy backend production dependencies
 COPY backend/package.json backend/package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
@@ -161,4 +178,4 @@ EXPOSE 4848
 HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=3 \
   CMD node -e "require('http').get('http://localhost:'+(process.env.PORT||4848)+'/api/system/liveness',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
-CMD ["node", "dist/main"]
+CMD ["fliks-engine", "--supervise", "--", "node", "dist/main"]

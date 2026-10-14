@@ -56,6 +56,12 @@ enum Paths {
         return bundled // will fail at runtime with a clear error
     }()
 
+    /// Supervisor shipped beside the bundled node; nil in dev runs, which launch node directly.
+    static let engineBinary: URL? = {
+        let engine = nodeBinary.deletingLastPathComponent().appendingPathComponent("fliks-engine")
+        return isExecutable(engine) ? engine : nil
+    }()
+
     // MARK: - PostgreSQL
 
     /// PostgreSQL binaries directory.

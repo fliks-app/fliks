@@ -70,6 +70,14 @@ Copy-Item (Join-Path $build 'tray-publish\*') $bundle -Recurse -Force
 New-Item -ItemType Directory -Force -Path (Join-Path $bundle 'node') | Out-Null
 Copy-Item (Join-Path $vendored 'node\node.exe') (Join-Path $bundle 'node\node.exe')
 
+# fliks-engine (supervisor, pinned in engine.lock) sits beside node.exe.
+$lock = @{}
+Get-Content (Join-Path $repo 'engine.lock') | Where-Object { $_ -match '^\w+=' } | ForEach-Object { $k, $v = $_ -split '=', 2; $lock[$k] = $v }
+if (-not $lock['sha256_windows_x64']) { throw 'engine.lock has no sha256_windows_x64 (run scripts/bump-engine.sh).' }
+$engine = Join-Path $bundle 'node\fliks-engine.exe'
+Invoke-WebRequest "https://github.com/fliks-app/engine/releases/download/v$($lock['version'])/fliks-engine-windows-x64.exe" -OutFile $engine
+if ((Get-FileHash $engine -Algorithm SHA256).Hash -ne $lock['sha256_windows_x64']) { throw 'fliks-engine sha256 mismatch' }
+
 # Setup's extraction time follows the file count (each one is scanned by the antivirus), so
 # what the server never loads stays out: message translations, sourcemaps, typings, docs.
 Copy-Tree (Join-Path $vendored 'pgsql')  (Join-Path $bundle 'pgsql') @('/XD', (Join-Path $vendored 'pgsql\share\locale'))

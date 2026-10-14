@@ -67,8 +67,17 @@ internal sealed class NodeManager
         Log.Info($"backend spawn: {AppPaths.NodeExe} {AppPaths.BackendMainJs} (cwd={AppPaths.DataDir})");
 
         var proc = new Process();
-        proc.StartInfo.FileName = AppPaths.NodeExe;
-        proc.StartInfo.ArgumentList.Add(AppPaths.BackendMainJs);
+        if (AppPaths.EngineExe is { } engine)
+        {
+            proc.StartInfo.FileName = engine;
+            foreach (var a in new[] { "--supervise", "--", AppPaths.NodeExe, AppPaths.BackendMainJs })
+                proc.StartInfo.ArgumentList.Add(a);
+        }
+        else
+        {
+            proc.StartInfo.FileName = AppPaths.NodeExe;
+            proc.StartInfo.ArgumentList.Add(AppPaths.BackendMainJs);
+        }
         proc.StartInfo.WorkingDirectory = AppPaths.DataDir;
         proc.StartInfo.UseShellExecute = false;
         proc.StartInfo.CreateNoWindow = true;
