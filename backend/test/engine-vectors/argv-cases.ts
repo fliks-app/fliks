@@ -212,28 +212,24 @@ function decideMatrix(engineRepo: string): ArgvVector[] {
     const base = file.replace(/\.json$/, '');
     if (method === 'Transcode') {
       const [altName, alt] = ALT_CAPS[n % ALT_CAPS.length];
-      const hosts: [string, HostCaps][] = [
-        ['own', f.hostCaps],
-        [altName, alt],
+      // Two runs per decision keep the fixtures small; the fuzz covers the rest of the grid.
+      const runs: [string, HostCaps, number, boolean][] = [
+        ['own', f.hostCaps, 0, false],
+        [altName, alt, 7, n % 2 === 1],
       ];
-      for (const [hostName, hostCaps] of hosts)
-        for (const [start, early] of [
-          [0, false],
-          [7, false],
-          [7, true],
-        ] as const)
-          out.push({
-            name: `vod ${base} on ${hostName} seg ${start}${early ? ' early' : ''}`,
-            source: 'synthetic',
-            kind: 'vod',
-            hostCaps,
-            env: DEFAULT_ENV,
-            input: {
-              ...vodOptions(f, hostCaps, n),
-              startSegment: start,
-              early,
-            },
-          });
+      for (const [hostName, hostCaps, start, early] of runs)
+        out.push({
+          name: `vod ${base} on ${hostName} seg ${start}${early ? ' early' : ''}`,
+          source: 'synthetic',
+          kind: 'vod',
+          hostCaps,
+          env: DEFAULT_ENV,
+          input: {
+            ...vodOptions(f, hostCaps, n),
+            startSegment: start,
+            early,
+          },
+        });
     } else if (method === 'DirectStream') {
       for (const start of [0, 7])
         out.push({
