@@ -64,7 +64,7 @@ describe('EngineResolverService', () => {
     await expect(service.resolve(req({ credential }))).resolves.toEqual({
       allow: true,
       path: '/m/a.mkv',
-      ownerId: 3,
+      ownerId: '3',
       ttlS: 60,
     });
     expect(streaming.resolveFile).toHaveBeenCalledWith(7, { id: 3 });

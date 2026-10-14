@@ -50,7 +50,7 @@ export class ResolveRequestDto {
 export interface ResolveResult {
   allow: boolean;
   path?: string;
-  ownerId?: number;
+  ownerId?: string;
   format?: string;
   ttlS: number;
 }
@@ -84,7 +84,7 @@ export class EngineResolverService {
     if (!user) return DENY;
     try {
       const found = await this.locate(user, dto);
-      return { allow: true, ownerId: user.id, ttlS: TTL_S, ...found };
+      return { allow: true, ownerId: String(user.id), ttlS: TTL_S, ...found };
     } catch (err) {
       // An HTTP error is the routes' own refusal (404 shape included); anything else is a host fault.
       if (err instanceof HttpException) return DENY;
