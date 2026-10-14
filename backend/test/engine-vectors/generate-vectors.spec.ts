@@ -345,7 +345,9 @@ if (GEN) {
       join(FUZZ, `fuzz-${seed}.throws.json`),
       JSON.stringify({ seed, ok, throws }, null, 2) + '\n',
     );
-    console.log(`fuzz seed ${seed}: ${ok} ok, throws ${JSON.stringify(throws)}`);
+    console.log(
+      `fuzz seed ${seed}: ${ok} ok, throws ${JSON.stringify(throws)}`,
+    );
     expect(ok).toBeGreaterThan(0);
   }, 600_000);
 } else if (CHECK) {
