@@ -29,6 +29,7 @@ describe('LiveTvAccessService', () => {
   };
   let settingsService: { get: jest.Mock; set: jest.Mock };
   let calls: string[];
+  let engine: { revokeOwner: jest.Mock };
   let service: LiveTvAccessService;
 
   beforeEach(() => {
@@ -96,10 +97,12 @@ describe('LiveTvAccessService', () => {
         return Promise.resolve();
       }),
     };
+    engine = { revokeOwner: jest.fn() };
     service = new LiveTvAccessService(
       accessRepo as never,
       userRepo as never,
       settingsService as never,
+      engine as never,
     );
   });
 
@@ -533,6 +536,12 @@ describe('LiveTvAccessService', () => {
   });
 
   describe('setGrants', () => {
+    it('revokes the user engine sessions once the grants changed', async () => {
+      await service.setGrants(4, []);
+
+      expect(engine.revokeOwner).toHaveBeenCalledWith(4);
+    });
+
     it('grants only the requested groups that are currently restricted', async () => {
       settings[RESTRICTED_KEY] = JSON.stringify(['News', 'XXX FR']);
 

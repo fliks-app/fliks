@@ -4,6 +4,7 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
+import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { createEngineClient, type EngineClient } from './engine-client';
 import type { components } from './schema';
 import type { StreamingSettings } from '../streaming/streaming-settings-cache.service';
@@ -14,6 +15,23 @@ export type EngineStreamingConfig = components['schemas']['StreamingConfig'];
 export type ProbeResult = components['schemas']['ProbeResult'];
 
 export const MIN_ENGINE_PROTOCOL = 1;
+/** Where the engine reaches the resolver. FLIKS_HOST_URL for a remote engine; the loopback
+ *  default is the one acceptable one: the host is local whenever the engine is supervised. */
+export function hostUrl(): string {
+  return (
+    process.env.FLIKS_HOST_URL ||
+    `http://127.0.0.1:${Number(process.env.PORT) || 4848}`
+  );
+}
+
+/** `/v1/revoke` is not in schema.d.ts yet: type it by hand until bump-engine regenerates it. */
+type RevokeClient = {
+  POST(
+    url: '/v1/revoke',
+    init: { body: { ownerId: number } },
+  ): Promise<{ response: Response }>;
+};
+
 export const REQUIRED_FEATURES = ['probe', 'capabilities'];
 
 const HELLO_ATTEMPTS = 20;
@@ -50,6 +68,9 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
   private ready: Promise<void> | null = null;
   private candidate: EngineClient | null = null;
   private instanceId = '';
+  private features: string[] = [];
+  /** Random per boot: the engine presents it to the resolver as its Bearer. */
+  readonly hostToken = randomBytes(32).toString('hex');
   private delay = HELLO_RETRY_MS;
   private timer?: NodeJS.Timeout;
   private listeners: (() => void)[] = [];
@@ -139,6 +160,7 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
     this.revision = cfg?.revision ?? 0;
     this.lastPushed = '';
     this.instanceId = data.instanceId;
+    this.features = data.features;
     this.client = client;
     this.delay = HELLO_RETRY_MS;
     this.log.log(
@@ -186,8 +208,8 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
     const { response } = await this.client.PUT('/v1/config', {
       body: {
         revision: this.revision + 1,
-        hostUrl: null,
-        hostToken: null,
+        hostUrl: hostUrl(),
+        hostToken: this.hostToken,
         streaming,
       },
     });
@@ -195,6 +217,29 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
     this.revision++;
     this.lastPushed = key;
     this.log.log(`config pushed (revision ${this.revision})`);
+  }
+
+  /** Constant-time check of the `Authorization` header the engine sends to the resolver. */
+  isHostAuth(header: string | undefined): boolean {
+    const digest = (v: string) => createHash('sha256').update(v).digest();
+    return timingSafeEqual(
+      digest(header ?? ''),
+      digest(`Bearer ${this.hostToken}`),
+    );
+  }
+
+  /** Kills the owner's engine sessions and purges their resolver cache, best effort: the 60 s TTL bounds a miss. */
+  async revokeOwner(ownerId: number): Promise<void> {
+    if (!this.client || !this.features.includes('revoke')) return;
+    try {
+      const { response } = await (this.client as unknown as RevokeClient).POST(
+        '/v1/revoke',
+        { body: { ownerId } },
+      );
+      if (!response.ok) this.log.warn(`POST /v1/revoke -> ${response.status}`);
+    } catch (err) {
+      this.log.warn(`POST /v1/revoke failed: ${err}`);
+    }
   }
 
   /** GET /v1/capabilities, waiting out the 503 + Retry-After of the first detection run. */

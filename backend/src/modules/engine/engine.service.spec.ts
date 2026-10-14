@@ -1,5 +1,6 @@
 import {
   EngineService,
+  hostUrl,
   MIN_ENGINE_PROTOCOL,
   toEngineStreaming,
   type EngineClient,
@@ -196,8 +197,8 @@ describe('EngineService config push', () => {
     expect(c.PUT).toHaveBeenNthCalledWith(1, '/v1/config', {
       body: {
         revision: 8,
-        hostUrl: null,
-        hostToken: null,
+        hostUrl: hostUrl(),
+        hostToken: s.hostToken,
         streaming: toEngineStreaming(settings),
       },
     });
@@ -303,5 +304,65 @@ describe('EngineService probe', () => {
       }),
     );
     await expect(s.probe('rel.mkv')).rejects.toThrow('400');
+  });
+});
+
+describe('EngineService host callback', () => {
+  const env = { ...process.env };
+  afterEach(() => {
+    process.env = { ...env };
+  });
+
+  it('defaults the host url to loopback on PORT, FLIKS_HOST_URL wins', () => {
+    delete process.env.FLIKS_HOST_URL;
+    process.env.PORT = '4849';
+    expect(hostUrl()).toBe('http://127.0.0.1:4849');
+    process.env.FLIKS_HOST_URL = 'http://nas:4848';
+    expect(hostUrl()).toBe('http://nas:4848');
+  });
+
+  it('accepts only its own bearer', () => {
+    const s = svc();
+    expect(s.isHostAuth(`Bearer ${s.hostToken}`)).toBe(true);
+    expect(s.isHostAuth(`Bearer ${s.hostToken}x`)).toBe(false);
+    expect(s.isHostAuth(undefined)).toBe(false);
+    expect(svc().isHostAuth(`Bearer ${s.hostToken}`)).toBe(false);
+  });
+});
+
+describe('EngineService revoke', () => {
+  const withRevoke = (post: jest.Mock, features = [...HELLO.features, 'revoke']) =>
+    mockClient({
+      GET: jest.fn(async (url: string) =>
+        url === '/v1/hello'
+          ? { data: { ...HELLO, features }, response: { status: 200 } }
+          : { data: { revision: 7 }, response: { status: 200 } },
+      ),
+      POST: post,
+    });
+
+  it('posts the owner when the engine announces revoke', async () => {
+    const s = svc();
+    const post = jest.fn(async () => ({ response: { ok: true, status: 200 } }));
+    await s.connect(withRevoke(post));
+    await s.revokeOwner(5);
+    expect(post).toHaveBeenCalledWith('/v1/revoke', { body: { ownerId: 5 } });
+  });
+
+  it('is a no-op without the feature or without an engine', async () => {
+    const post = jest.fn();
+    const s = svc();
+    await s.revokeOwner(5);
+    await s.connect(withRevoke(post, HELLO.features));
+    await s.revokeOwner(5);
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('swallows a failing engine', async () => {
+    const s = svc();
+    await s.connect(
+      withRevoke(jest.fn(async () => Promise.reject(new Error('down')))),
+    );
+    await expect(s.revokeOwner(5)).resolves.toBeUndefined();
   });
 });

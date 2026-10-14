@@ -20,6 +20,7 @@ import { CreateLibraryDto } from './dto/create-library.dto';
 import { UpdateLibraryDto } from './dto/update-library.dto';
 import { MediaType } from '../../common/enums/media-type.enum';
 import { sanitizeFsPath } from '../../common/utils/fs-path.util';
+import { EngineService } from '../engine/engine.service';
 
 interface DiskMetrics {
   freeSpace: number;
@@ -45,6 +46,7 @@ export class LibrariesService {
     private readonly mediaRepo: Repository<Media>,
     private readonly dataSource: DataSource,
     private readonly moduleRef: ModuleRef,
+    private readonly engine: EngineService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -256,9 +258,13 @@ export class LibrariesService {
   }
 
   async setUserAccess(libraryId: number, userIds: number[]): Promise<void> {
+    const before = await this.getUserAccess(libraryId);
     await this.dataSource.transaction((m) =>
       this.replaceUserAccess(m, libraryId, userIds),
     );
+    for (const id of before.filter((u) => !userIds.includes(u))) {
+      void this.engine.revokeOwner(id);
+    }
   }
 
   /**

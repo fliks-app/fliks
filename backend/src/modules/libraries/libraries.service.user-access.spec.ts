@@ -34,6 +34,7 @@ describe('LibrariesService.create — user access', () => {
       {} as never,
       { transaction: async (fn: (mm: unknown) => unknown) => fn(m) } as never,
       {} as never,
+      { revokeOwner: jest.fn() } as never,
     );
     return { service, deletes, saved };
   }
