@@ -51,3 +51,12 @@ Golden state of the boot detection (`TranscodingService.onModuleInit`, the probe
 - `hw-scenarios.ts` scripts the synthetic hosts (nvenc, amf/win32, qsv/win32, videotoolbox/darwin, cpu-only, broken GPU, blacklisted ids). nvenc, win32 and darwin are synthetic only; the real ones are recorded on a machine with the GPUs.
 - Generate/verify with `FLIKS_ENGINE_REPO` / `FLIKS_ENGINE_REPO_CHECK` as above; `FLIKS_HW_RECORD=<name>` re-records one real scenario here; `FLIKS_HW_LIVE=<out.json>` (+ `FLIKS_HW_NODE`) runs the detection for real and writes the state, for parity against the engine's `hw-detect`.
 - A change to a probe's argv, timeout or conditions must regenerate these too.
+
+## Argv vectors (`argv-vectors.spec.ts`)
+
+Golden ffmpeg argv of `buildFfmpegArgs`, `buildRemuxArgs`, the encoder descriptors, `buildLiveFfmpegArgs` and `buildIFrameSegmentArgs`, consumed by the engine's `core::args` (`fixtures/argv/`).
+
+- Records every builder call of the replayed argv specs (golden, encoders, live, iframe, timeline), plus a matrix built from the engine's `fixtures/decide` (Transcode as VOD runs on two hosts, DirectStream as remux runs) and a live matrix (`argv-cases.ts`).
+- `expected` is always recomputed from the stored input under its `hostCaps` and `env` (render node pin, `FLIKS_OPENCL_DEVICE`); a throw is stored as `{ error }`.
+- Generate/verify with `FLIKS_ENGINE_REPO` / `FLIKS_ENGINE_REPO_CHECK`. Fuzz: `ARGV_FUZZ_OUT=<dir> ARGV_FUZZ_SEED=<n> ARGV_FUZZ_COUNT=<n>` (NDJSON for the engine's `ARGV_FUZZ_DIR`); promote with `ARGV_FUZZ_EXPECT=<dir>`.
+- A change to the argv builders, encoders, filter graph or `hw-device.ts` must regenerate these.
