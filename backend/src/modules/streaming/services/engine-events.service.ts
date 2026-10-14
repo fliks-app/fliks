@@ -49,7 +49,7 @@ export async function* sseData(
 }
 
 /** Follows `GET /v1/events` and keeps the app's view of the engine's sessions in step: presence,
- *  remote control, QoE signals and the load counters. Resyncs from `GET /v1/sessions` on every (re)connect. */
+ *  remote control, QoE signals and the load counters, and settles the engine's background jobs. Resyncs from `GET /v1/sessions` on every (re)connect. */
 @Injectable()
 export class EngineEventsService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger(EngineEventsService.name);
@@ -145,6 +145,7 @@ export class EngineEventsService implements OnModuleInit, OnModuleDestroy {
     this.jobs.clear();
     for (const s of snaps)
       if (s.job?.state === 'running') this.jobs.add(jobKeyOf(s));
+    await this.engine.resyncJobs();
   }
 
   handle(ev: EngineEvent): void {
@@ -162,6 +163,12 @@ export class EngineEventsService implements OnModuleInit, OnModuleDestroy {
         break;
       case 'JobEnded':
         this.jobs.delete(ev.jobKey);
+        break;
+      case 'BgJobProgress':
+        this.engine.jobProgress(ev.jobId, ev.pct);
+        break;
+      case 'BgJobDone':
+        this.engine.jobEnded(ev.jobId, ev);
         break;
       case 'PipelineChanged': {
         const live = this.liveSessions.peek(ev.sessionId);

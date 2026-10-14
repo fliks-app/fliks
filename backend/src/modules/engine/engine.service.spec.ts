@@ -45,7 +45,6 @@ const settings: StreamingSettings = {
   autoQualityMode: 'directplay',
   autoCropEnabled: true,
   gpuRenderNode: '/dev/dri/renderD129',
-  subtitlePrewarm: 'playback',
   throttleEnabled: true,
   throttleThresholdSeconds: 90,
 };
@@ -516,5 +515,72 @@ describe('EngineService runtime', () => {
     it('refuses to call a disabled engine', async () => {
       await expect(svc().openSession({} as never)).rejects.toThrow('The streaming engine is not running');
     });
+  });
+});
+
+describe('EngineService jobs', () => {
+  const REQ = {
+    kind: { type: 'Fingerprint', window: { type: 'head' } },
+    media: { mediaFileId: 3, path: '/m/a.mkv' },
+  } as const;
+  const FP = { type: 'Fingerprint', fingerprint: { hashes: [1], durationSeconds: 5 } };
+
+  async function connected(get: jest.Mock) {
+    const post = jest.fn(async () => ({
+      data: { jobId: 'j1' },
+      response: { ok: true, status: 200 },
+    }));
+    const s = svc();
+    await s.connect(
+      mockClient({
+        GET: jest.fn(async (u: string, init?: unknown) =>
+          u === '/v1/jobs/{id}' ? get(u, init) : { data: HELLO, response: { status: 200 } },
+        ),
+        POST: post,
+      }),
+    );
+    return { s, post };
+  }
+  const running: { data?: object; response: { status: number } } = {
+    data: { jobId: 'j1', state: 'running' },
+    response: { status: 200 },
+  };
+  const flush = () => new Promise((r) => setImmediate(r));
+
+  it('resolves with the result on BgJobDone and reports progress', async () => {
+    const { s, post } = await connected(jest.fn(async () => running));
+    const onProgress = jest.fn();
+    const p = s.runJob(REQ, onProgress);
+    await flush();
+    s.jobProgress('j1', 50);
+    s.jobEnded('j1', { state: 'done', result: FP } as never);
+    await expect(p).resolves.toBe(FP);
+    expect(post).toHaveBeenCalledWith('/v1/jobs', { body: REQ });
+    expect(onProgress).toHaveBeenCalledWith(50);
+  });
+
+  it('rejects a failed job with its error', async () => {
+    const { s } = await connected(jest.fn(async () => running));
+    const p = s.runJob(REQ);
+    await flush();
+    s.jobEnded('j1', { state: 'failed', error: 'fpcalc exited 1' });
+    await expect(p).rejects.toThrow('engine job failed: fpcalc exited 1');
+  });
+
+  it('settles a job that ended before it was registered', async () => {
+    const done = { data: { jobId: 'j1', state: 'done', result: FP }, response: { status: 200 } };
+    const { s } = await connected(jest.fn(async () => done));
+    await expect(s.runJob(REQ)).resolves.toBe(FP);
+  });
+
+  it('re-checks pending jobs on resync, and rejects one the engine lost', async () => {
+    const get = jest.fn(async () => running);
+    const { s } = await connected(get);
+    const p = s.runJob(REQ);
+    const caught = p.catch((e: Error) => e.message);
+    await flush();
+    get.mockResolvedValue({ data: undefined, response: { status: 404 } });
+    await s.resyncJobs();
+    expect(await caught).toBe('engine lost job j1');
   });
 });

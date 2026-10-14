@@ -133,6 +133,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list"];
+        put?: never;
+        post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/jobs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_one"];
+        put?: never;
+        post?: never;
+        delete: operations["delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/probe": {
         parameters: {
             query?: never;
@@ -172,7 +204,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list"];
+        get: operations["list_get_v1_sessions"];
         put?: never;
         post: operations["open"];
         delete?: never;
@@ -188,10 +220,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_one"];
+        get: operations["get_one_get_v1_sessions_sid_"];
         put?: never;
         post?: never;
-        delete: operations["delete"];
+        delete: operations["delete_delete_v1_sessions_sid_"];
         options?: never;
         head?: never;
         patch?: never;
@@ -300,6 +332,8 @@ export interface components {
         };
         /** @enum {string} */
         AutoQualityMode: "directplay" | "abr";
+        /** @enum {string} */
+        BgJobState: "queued" | "running" | "paused" | "done" | "failed" | "cancelled";
         BitrateHint: {
             /** Format: int32 */
             audioBitrateBps: number;
@@ -517,6 +551,7 @@ export interface components {
              *       "cacheGcIntervalMs": 300000,
              *       "jobFallbackTimeoutMs": 1800000,
              *       "jobGraceMs": 60000,
+             *       "jobStallTimeoutMs": 30000,
              *       "liveSessionGcIntervalMs": 5000,
              *       "liveSessionTtlMs": 30000,
              *       "maxSessionsPerOwner": 10,
@@ -593,6 +628,8 @@ export interface components {
             /** Format: int32 */
             exitCode?: number | null;
             jobKey: string;
+            /** @description Set when the watchdog ended the run: `stalled` or `overran`. */
+            reason?: string | null;
             state: components["schemas"]["JobState"];
             /** @enum {string} */
             type: "JobEnded";
@@ -603,12 +640,50 @@ export interface components {
             to: components["schemas"]["HwAccel"];
             /** @enum {string} */
             type: "HwFallback";
+        } | {
+            jobId: string;
+            /** Format: double */
+            pct: number;
+            /** @enum {string} */
+            type: "BgJobProgress";
+        } | {
+            error?: string | null;
+            jobId: string;
+            result?: null | components["schemas"]["JobResult"];
+            state: components["schemas"]["BgJobState"];
+            /** @enum {string} */
+            type: "BgJobDone";
         };
         /** @description Body of `POST /v1/estimate-sizes`. `fileSize` is the source size in bytes, 0 when unknown. */
         EstimateSizesRequest: {
             /** Format: double */
             fileSize?: number;
             info: components["schemas"]["MediaInfo"];
+        };
+        /** @description Chromaprint hashes of one audio window; mirrors the host's in-memory `Fingerprint`. */
+        Fingerprint: {
+            /**
+             * Format: double
+             * @description File offset the window starts at (0 for the head of the file).
+             */
+            baseOffsetSec?: number;
+            /**
+             * Format: double
+             * @description Seconds fpcalc reports (the file's length for a file read, 0 on stdin), else the length asked for.
+             */
+            durationSeconds: number;
+            /** @description Raw int32 hashes, about 8 per second. */
+            hashes: number[];
+        };
+        /** @description Which audio the fingerprint reads. */
+        FingerprintWindow: {
+            /** @enum {string} */
+            type: "head";
+        } | {
+            /** Format: double */
+            durationSeconds: number;
+            /** @enum {string} */
+            type: "outro";
         };
         Gpu: {
             name: string;
@@ -702,6 +777,82 @@ export interface components {
             /** Format: int32 */
             jobs: number;
         };
+        JobAccepted: {
+            /** @description The in-flight job of an identical request, else a new one. */
+            jobId: string;
+        };
+        /** @description What a job does; new kinds are additive variants. */
+        JobKind: {
+            info: components["schemas"]["MediaInfo"];
+            /** @enum {string} */
+            type: "Sprite";
+        } | {
+            info: components["schemas"]["MediaInfo"];
+            /** @enum {string} */
+            type: "Scan";
+        } | {
+            /**
+             * Format: double
+             * @description `introMaxLookupMinutes`: minutes of audio read; absent or 0: 10.
+             */
+            maxLookupMinutes?: number | null;
+            /** @enum {string} */
+            type: "Fingerprint";
+            window: components["schemas"]["FingerprintWindow"];
+        } | {
+            info: components["schemas"]["MediaInfo"];
+            /** @enum {string} */
+            type: "SubtitleExtract";
+        };
+        /** @enum {string} */
+        JobPriority: "high" | "normal" | "low";
+        JobRequest: {
+            /** @description Redo the work even when its output exists. */
+            force?: boolean;
+            kind: components["schemas"]["JobKind"];
+            media: components["schemas"]["MediaRef"];
+            priority?: null | components["schemas"]["JobPriority"];
+        };
+        /** @description What a finished job hands back, as data (files stay in the engine and are served by it). */
+        JobResult: {
+            sprite: components["schemas"]["SpriteMeta"];
+            /** @enum {string} */
+            type: "Sprite";
+        } | {
+            scan: components["schemas"]["SourceScan"];
+            /** @enum {string} */
+            type: "Scan";
+        } | {
+            fingerprint: components["schemas"]["Fingerprint"];
+            /** @enum {string} */
+            type: "Fingerprint";
+        } | {
+            streams: number[];
+            /** @enum {string} */
+            type: "SubtitleExtract";
+        };
+        JobSnapshot: {
+            /** Format: double */
+            createdMs: number;
+            /** Format: double */
+            endedMs?: number | null;
+            error?: string | null;
+            jobId: string;
+            /** @description The request's `kind.type`. */
+            kind: string;
+            /** Format: int32 */
+            mediaFileId: number;
+            /**
+             * Format: double
+             * @description 0 to 100.
+             */
+            pct: number;
+            priority: components["schemas"]["JobPriority"];
+            result?: null | components["schemas"]["JobResult"];
+            /** Format: double */
+            startedMs?: number | null;
+            state: components["schemas"]["BgJobState"];
+        };
         /** @enum {string} */
         JobState: "running" | "paused" | "done" | "failed" | "killed";
         /** @description The ffmpeg run behind a session ("stats for nerds"). */
@@ -749,16 +900,22 @@ export interface components {
             cacheGcIntervalMs?: number;
             /**
              * Format: int32
-             * @description Idle window of a job that never had a viewer.
+             * @description Unused by the engine: jobs stop with their session.
              * @default 1800000
              */
             jobFallbackTimeoutMs?: number;
             /**
              * Format: int32
-             * @description Delay between the last viewer leaving and the ffmpeg job being killed.
+             * @description Unused by the engine: jobs stop with their session.
              * @default 60000
              */
             jobGraceMs?: number;
+            /**
+             * Format: int32
+             * @description A running, unpaused job with no output and no stderr line for this long is killed; 0 disables.
+             * @default 30000
+             */
+            jobStallTimeoutMs?: number;
             /**
              * Format: int32
              * @default 5000
@@ -1146,6 +1303,19 @@ export interface components {
             /** Format: int32 */
             schemaVersion?: number | null;
         };
+        /** @description `sprite.json`: tile `i` covers `[i * interval, (i + 1) * interval)` seconds of content. */
+        SpriteMeta: {
+            /** Format: int32 */
+            columns: number;
+            /** Format: int32 */
+            count: number;
+            /** Format: int32 */
+            interval: number;
+            /** Format: int32 */
+            thumbHeight: number;
+            /** Format: int32 */
+            thumbWidth: number;
+        };
         /** @description The `streaming_*` settings, already resolved by the host. Defaults match the host's. */
         StreamingConfig: {
             /** @default true */
@@ -1175,6 +1345,13 @@ export interface components {
              * @default auto
              */
             gpuRenderNode?: string;
+            /**
+             * Format: double
+             * @description A job that writes files fails below this much free disk under the cache root; absent: 1 GiB, 0
+             *     disables.
+             * @default null
+             */
+            jobMinFreeBytes?: number | null;
             /** @default faster */
             qsvPreset?: components["schemas"]["QsvPreset"];
             /**
@@ -1530,6 +1707,107 @@ export interface operations {
             };
         };
     };
+    list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobSnapshot"][];
+                };
+            };
+        };
+    };
+    create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobRequest"];
+            };
+        };
+        responses: {
+            /** @description queued, or the in-flight identical request */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobAccepted"];
+                };
+            };
+            /** @description relative path or unusable request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_one: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobSnapshot"];
+                };
+            };
+            /** @description unknown job */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description cancelled (an ended job is left as is) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description unknown job */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     probe: {
         parameters: {
             query?: never;
@@ -1590,7 +1868,7 @@ export interface operations {
             };
         };
     };
-    list: {
+    list_get_v1_sessions: {
         parameters: {
             query?: never;
             header?: never;
@@ -1649,7 +1927,7 @@ export interface operations {
             };
         };
     };
-    get_one: {
+    get_one_get_v1_sessions_sid_: {
         parameters: {
             query?: never;
             header?: never;
@@ -1675,7 +1953,7 @@ export interface operations {
             };
         };
     };
-    delete: {
+    delete_delete_v1_sessions_sid_: {
         parameters: {
             query?: never;
             header?: never;

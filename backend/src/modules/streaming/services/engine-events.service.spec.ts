@@ -49,6 +49,9 @@ function setup(runtime = true) {
     whenReady: jest.fn().mockResolvedValue(undefined),
     onConnect: jest.fn(),
     listSessions: jest.fn().mockResolvedValue([]),
+    resyncJobs: jest.fn().mockResolvedValue(undefined),
+    jobProgress: jest.fn(),
+    jobEnded: jest.fn(),
     events: jest.fn(),
   };
   const svc = new EngineEventsService(
@@ -92,6 +95,15 @@ describe('sseData', () => {
 });
 
 describe('EngineEventsService.handle', () => {
+  it('hands background job events to the engine service', () => {
+    const t = setup();
+    t.svc.handle({ type: 'BgJobProgress', jobId: 'j1', pct: 40 });
+    expect(t.engine.jobProgress).toHaveBeenCalledWith('j1', 40);
+    const done = { type: 'BgJobDone', jobId: 'j1', state: 'done' } as const;
+    t.svc.handle(done);
+    expect(t.engine.jobEnded).toHaveBeenCalledWith('j1', done);
+  });
+
   it('ends the presence on SessionEnded, which closes its QoE tracker', () => {
     const t = setup();
     t.liveSessions.create({

@@ -24,6 +24,25 @@ export type HeartbeatRequest = components['schemas']['HeartbeatRequest'];
 export type SessionAction = components['schemas']['SessionAction'];
 export type QualityEstimate = components['schemas']['QualityEstimate'];
 type EstimateSizesRequest = components['schemas']['EstimateSizesRequest'];
+export type JobRequest = components['schemas']['JobRequest'];
+export type JobResult = components['schemas']['JobResult'];
+export type JobSnapshot = components['schemas']['JobSnapshot'];
+export type JobPriority = components['schemas']['JobPriority'];
+export type SourceScan = components['schemas']['SourceScan'];
+export type SpriteMeta = components['schemas']['SpriteMeta'];
+export type Fingerprint = components['schemas']['Fingerprint'];
+type JobEnd = Pick<JobSnapshot, 'state' | 'result' | 'error'>;
+/** The result variant a request's `kind.type` yields. */
+type ResultOf<R extends JobRequest> = Extract<
+  JobResult,
+  { type: R['kind']['type'] }
+>;
+
+interface JobWaiter {
+  resolve: (end: JobEnd) => void;
+  reject: (err: Error) => void;
+  onProgress?: (pct: number) => void;
+}
 
 /** A non-2xx answer of the engine; `status` tells the caller what to map it to. */
 export class EngineError extends Error {
@@ -32,6 +51,16 @@ export class EngineError extends Error {
     what: string,
   ) {
     super(`${what} -> ${status}`);
+  }
+}
+
+/** A background job that ended `failed` or `cancelled`. */
+export class JobError extends Error {
+  constructor(
+    readonly state: JobSnapshot['state'],
+    what: string,
+  ) {
+    super(`engine job ${state}: ${what}`);
   }
 }
 
@@ -71,7 +100,6 @@ export function toEngineStreaming(
     autoQualityMode: ss.autoQualityMode,
     autoCropEnabled: ss.autoCropEnabled,
     gpuRenderNode: ss.gpuRenderNode,
-    subtitlePrewarm: ss.subtitlePrewarm,
     throttleEnabled: ss.throttleEnabled,
     throttleThresholdSeconds: ss.throttleThresholdSeconds,
   };
@@ -90,6 +118,7 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
   private delay = HELLO_RETRY_MS;
   private timer?: NodeJS.Timeout;
   private listeners: (() => void)[] = [];
+  private readonly jobWaiters = new Map<string, JobWaiter[]>();
   private revision = 0;
   private lastPushed = '';
   private reachable = false;
@@ -437,6 +466,86 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
     });
     if (!data) throw new EngineError(response.status, 'DELETE /v1/cache');
     return data.removed;
+  }
+
+  /** The job's id; an identical request still queued or running answers the same one. */
+  async submitJob(req: JobRequest): Promise<string> {
+    const { data, response } = await this.need().POST('/v1/jobs', {
+      body: req,
+    });
+    if (!data) throw new EngineError(response.status, 'POST /v1/jobs');
+    return data.jobId;
+  }
+
+  /** Idempotent: an ended or unknown job is fine. */
+  async cancelJob(jobId: string): Promise<void> {
+    const { response } = await this.need().DELETE('/v1/jobs/{id}', {
+      path: { id: jobId },
+    });
+    if (!response.ok && response.status !== 404)
+      throw new EngineError(response.status, 'DELETE job');
+  }
+
+  async getJob(jobId: string): Promise<JobSnapshot | null> {
+    const { data, response } = await this.need().GET('/v1/jobs/{id}', {
+      path: { id: jobId },
+    });
+    if (response.status === 404) return null;
+    if (!data) throw new EngineError(response.status, 'GET job');
+    return data;
+  }
+
+  /** Submits and resolves with the result on `BgJobDone`; rejects with {@link JobError} when the
+   *  job fails or is cancelled. Survives an events reconnect: {@link resyncJobs} re-checks it. */
+  async runJob<R extends JobRequest>(
+    req: R,
+    onProgress?: (pct: number) => void,
+  ): Promise<ResultOf<R>> {
+    const jobId = await this.submitJob(req);
+    const ended = new Promise<JobEnd>((resolve, reject) => {
+      const list = this.jobWaiters.get(jobId) ?? [];
+      list.push({ resolve, reject, onProgress });
+      this.jobWaiters.set(jobId, list);
+    });
+    // It may have ended between the POST and the registration above.
+    void this.checkJob(jobId);
+    const { state, result, error } = await ended;
+    if (state !== 'done' || !result)
+      throw new JobError(state, error ?? req.kind.type);
+    return result as ResultOf<R>;
+  }
+
+  /** Fed by the events follower. */
+  jobProgress(jobId: string, pct: number): void {
+    this.jobWaiters.get(jobId)?.forEach((w) => w.onProgress?.(pct));
+  }
+
+  jobEnded(jobId: string, end: JobEnd): void {
+    const waiters = this.jobWaiters.get(jobId);
+    this.jobWaiters.delete(jobId);
+    waiters?.forEach((w) => w.resolve(end));
+  }
+
+  /** After an events (re)connect: a `BgJobDone` may have been missed while disconnected. */
+  async resyncJobs(): Promise<void> {
+    await Promise.all(
+      [...this.jobWaiters.keys()].map((id) => this.checkJob(id)),
+    );
+  }
+
+  private async checkJob(jobId: string): Promise<void> {
+    try {
+      const snap = await this.getJob(jobId);
+      if (!snap) {
+        const lost = this.jobWaiters.get(jobId);
+        this.jobWaiters.delete(jobId);
+        lost?.forEach((w) => w.reject(new Error(`engine lost job ${jobId}`)));
+      } else if (['done', 'failed', 'cancelled'].includes(snap.state)) {
+        this.jobEnded(jobId, snap);
+      }
+    } catch {
+      // The next resync retries.
+    }
   }
 
   /** The open SSE response of `GET /v1/events`; the caller reads and aborts it. */
