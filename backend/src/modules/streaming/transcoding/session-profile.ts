@@ -1,5 +1,5 @@
 import type { LiveSession } from '../live-session.service';
-import type { MediaFileInfo } from '../../subtitles/ffprobe.service';
+import type { MediaFileInfo } from '../../media-probe/ffprobe.service';
 import { audioLayout } from './audio-layout';
 import {
   buildPlaybackProfileFromContext,

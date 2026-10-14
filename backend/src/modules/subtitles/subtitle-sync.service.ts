@@ -15,7 +15,7 @@ import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 import { NotificationsService } from '../notifications/notifications.service';
-import { FfprobeService } from './ffprobe.service';
+import { FfprobeService } from '../media-probe/ffprobe.service';
 import { EventsService } from '../scheduler/events.service';
 import { ActivityRegistryService } from '../scheduler/activity-registry.service';
 import { MediaServersService } from '../media-servers/media-servers.service';

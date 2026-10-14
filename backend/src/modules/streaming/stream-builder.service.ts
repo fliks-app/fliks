@@ -68,7 +68,7 @@ import {
 import type {
   AudioStreamInfo,
   MediaFileInfo,
-} from '../subtitles/ffprobe.service';
+} from '../media-probe/ffprobe.service';
 import {
   sourceTimeline,
   videoPresentationStart,

@@ -35,9 +35,11 @@ import { SubtitlesModule } from '../subtitles/subtitles.module';
 import { PlaybackModule } from '../playback/playback.module';
 import { QoeModule } from '../qoe/qoe.module';
 import { QoeLoadProvider } from './qoe-load.provider';
+import { MediaProbeModule } from '../media-probe/media-probe.module';
 
 @Module({
   imports: [
+    MediaProbeModule,
     TypeOrmModule.forFeature([
       Media,
       MediaFile,

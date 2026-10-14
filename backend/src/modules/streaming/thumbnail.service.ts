@@ -18,7 +18,7 @@ import {
 } from './thumbnail-extractors';
 import { TranscodingService } from './transcoding';
 import { ffmpegSlots, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
-import type { MediaFileInfo } from '../subtitles/ffprobe.service';
+import type { MediaFileInfo } from '../media-probe/ffprobe.service';
 import {
   inputSeekSeconds,
   sourceTimeline,

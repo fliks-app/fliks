@@ -15,7 +15,6 @@ import { SubtitlesService } from './subtitles.service';
 import { SubtitleProviderService } from './subtitle-provider.service';
 import { SubtitleSyncService } from './subtitle-sync.service';
 import { SubtitleProviderFactory } from './providers/subtitle-provider.factory';
-import { FfprobeService } from './ffprobe.service';
 import { EmbeddedSubtitleService } from './embedded-subtitle.service';
 import { SubtitleOcrService } from './subtitle-ocr.service';
 import { SubtitleTranslationService } from './subtitle-translation.service';
@@ -25,9 +24,11 @@ import { TranslationProviderFactory } from './providers/translation-provider.fac
 import { SubtitlesController } from './subtitles.controller';
 import { TranslationProvidersController } from './translation-providers.controller';
 import { SubtitleActivityController } from './subtitle-activity.controller';
+import { MediaProbeModule } from '../media-probe/media-probe.module';
 
 @Module({
   imports: [
+    MediaProbeModule,
     TypeOrmModule.forFeature([
       SubtitleProvider,
       SubtitleProviderStat,
@@ -52,7 +53,6 @@ import { SubtitleActivityController } from './subtitle-activity.controller';
     SubtitleProviderService,
     SubtitleSyncService,
     SubtitleProviderFactory,
-    FfprobeService,
     EmbeddedSubtitleService,
     SubtitleOcrService,
     SubtitleTranslationService,
@@ -65,7 +65,6 @@ import { SubtitleActivityController } from './subtitle-activity.controller';
     SubtitleProviderService,
     SubtitleSyncService,
     EmbeddedSubtitleService,
-    FfprobeService,
     SubtitleOcrService,
     SubtitleTranslationService,
     TranslationProviderService,

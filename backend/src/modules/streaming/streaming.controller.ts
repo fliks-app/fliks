@@ -26,7 +26,7 @@ import { Action } from '../auth/casl/actions.enum';
 import { EventsService } from '../scheduler/events.service';
 import { parseByteRange } from './byte-range.util';
 import { User } from '../users/entities/user.entity';
-import type { MediaFileInfo } from '../subtitles/ffprobe.service';
+import type { MediaFileInfo } from '../media-probe/ffprobe.service';
 import { StreamingService, ResolvedFile } from './streaming.service';
 import { SubtitleStreamService } from './subtitle-stream.service';
 import {

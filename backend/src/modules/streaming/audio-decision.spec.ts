@@ -4,7 +4,7 @@ import { audioOutputBitrateBps } from './transcoding/audio-encode';
 import { remuxSegmentGrid } from './transcoding/segment-boundaries';
 import { sourceTimeline } from './transcoding/source-timeline';
 import { makeStreamBuilder as svc } from './stream-builder.test-helpers';
-import type { MediaFileInfo } from '../subtitles/ffprobe.service';
+import type { MediaFileInfo } from '../media-probe/ffprobe.service';
 
 type Track = {
   codec: string;

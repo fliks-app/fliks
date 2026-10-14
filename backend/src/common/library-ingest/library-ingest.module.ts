@@ -9,9 +9,11 @@ import { PostImportQueueService } from '../post-import/post-import-queue.service
 import { FliksSchedulerModule } from '../../modules/scheduler/scheduler.module';
 import { MediaModule } from '../../modules/media/media.module';
 import { SubtitlesModule } from '../../modules/subtitles/subtitles.module';
+import { MediaProbeModule } from '../../modules/media-probe/media-probe.module';
 
 @Module({
   imports: [
+    MediaProbeModule,
     TypeOrmModule.forFeature([Media, MediaFile, Episode, Season]),
     forwardRef(() => FliksSchedulerModule),
     forwardRef(() => MediaModule),

@@ -7,7 +7,7 @@ import {
   Unique,
 } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
-import type { MediaFileInfo } from '../../subtitles/ffprobe.service';
+import type { MediaFileInfo } from '../../media-probe/ffprobe.service';
 import { Media } from './media.entity';
 import { Episode } from './episode.entity';
 

@@ -5,7 +5,7 @@ import * as path from 'path';
 import { SubtitleFile } from './entities/subtitle-file.entity';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
-import { FfprobeService } from './ffprobe.service';
+import { FfprobeService } from '../media-probe/ffprobe.service';
 import { SettingsService } from '../settings/settings.service';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 import { EventsService } from '../scheduler/events.service';
