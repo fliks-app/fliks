@@ -3,6 +3,7 @@
 # library, then `docker compose up` → UI on http://localhost:4500.
 # node_modules live in the images at /src, above the bind-mounted sources:
 # `docker compose build` after any package.json change.
+# The dev stack does not exercise the gateway: Node keeps its own port, no --upstream.
 # The engine runs from the checkout at ${FLIKS_ENGINE_SRC:-../fliks-engine} (cargo watch); first build takes minutes.
 
 services:

@@ -70,7 +70,11 @@ internal sealed class NodeManager
         if (AppPaths.EngineExe is { } engine)
         {
             proc.StartInfo.FileName = engine;
-            foreach (var a in new[] { "--supervise", "--", AppPaths.NodeExe, AppPaths.BackendMainJs })
+            // Gateway opt-in until engine.lock pins a release with --upstream; Node then listens on port + 1.
+            var gateway = Environment.GetEnvironmentVariable("FLIKS_ENGINE_GATEWAY") == "1"
+                ? new[] { "--public-listen", $"0.0.0.0:{config.Port}", "--upstream", $"http://127.0.0.1:{config.Port + 1}" }
+                : Array.Empty<string>();
+            foreach (var a in new[] { "--supervise" }.Concat(gateway).Concat(new[] { "--", AppPaths.NodeExe, AppPaths.BackendMainJs }))
                 proc.StartInfo.ArgumentList.Add(a);
         }
         else

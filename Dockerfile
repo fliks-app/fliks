@@ -200,4 +200,8 @@ EXPOSE 4848
 HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=3 \
   CMD node -e "require('http').get('http://localhost:'+(process.env.PORT||4848)+'/api/system/liveness',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
-CMD ["fliks-engine", "--supervise", "--", "node", "dist/main"]
+# FLIKS_ENGINE_GATEWAY=1 puts the engine on the public port in front of Node (4849); off until
+# engine.lock pins a release with --upstream.
+ARG FLIKS_ENGINE_GATEWAY=0
+ENV FLIKS_ENGINE_GATEWAY=${FLIKS_ENGINE_GATEWAY}
+CMD ["sh", "-c", "if [ \"$FLIKS_ENGINE_GATEWAY\" = 1 ]; then exec fliks-engine --supervise --upstream http://127.0.0.1:4849 -- node dist/main; else exec fliks-engine --supervise -- node dist/main; fi"]

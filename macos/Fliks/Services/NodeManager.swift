@@ -37,7 +37,11 @@ actor NodeManager {
         let proc = Process()
         if let engine = Paths.engineBinary {
             proc.executableURL = engine
-            proc.arguments = ["--supervise", "--", Paths.nodeBinary.path, "dist/main.js"]
+            // Gateway opt-in until engine.lock pins a release with --upstream; Node then listens on port + 1.
+            let gateway = ProcessInfo.processInfo.environment["FLIKS_ENGINE_GATEWAY"] == "1"
+                ? ["--public-listen", "0.0.0.0:\(config.port)", "--upstream", "http://127.0.0.1:\(config.port + 1)"]
+                : []
+            proc.arguments = ["--supervise"] + gateway + ["--", Paths.nodeBinary.path, "dist/main.js"]
         } else {
             proc.executableURL = Paths.nodeBinary
             proc.arguments = ["dist/main.js"]
