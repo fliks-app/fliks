@@ -83,7 +83,7 @@ interface Viewer {
 interface Hold {
   sourceId: number;
   channelId: number;
-  /** The open's upstreams: the engine's events index into this list. */
+  /** The open's upstreams, or the channel's streams for a hold restored after a restart. */
   streams: LiveTvChannelStream[];
   /** Index of the upstream that feeds the session now. */
   fed: number | null;
@@ -364,8 +364,7 @@ export class LiveTvSessionService implements OnModuleInit {
       videoCodec: s.videoCodec ?? null,
       audioCodec: s.audioCodec ?? null,
       sourceName:
-        this.holds.get(s.capacityToken)?.streams[s.upstream]?.source?.name ??
-        null,
+        this.streamOf(this.holds.get(s.capacityToken), s)?.source?.name ?? null,
       container: s.container,
       viewersOnUpstream: s.viewersOnUpstream,
     }));
@@ -439,7 +438,7 @@ export class LiveTvSessionService implements OnModuleInit {
     ev: Extract<EngineEvent, { type: 'LiveAttempt' }>,
   ): Promise<void> {
     const hold = this.holds.get(ev.capacityToken);
-    const stream = hold?.streams[ev.upstream];
+    const stream = this.streamOf(hold, ev);
     if (!hold || !stream) return;
     const patch: Partial<LiveTvChannelStream> = {};
     if (ev.probe?.videoCodec) patch.probedVideoCodec = ev.probe.videoCodec;
@@ -518,8 +517,24 @@ export class LiveTvSessionService implements OnModuleInit {
     }
   }
 
-  /** Holds for the sessions the engine runs that this process lost (a restart): the feeding upstream
-   *  is resolved from the snapshot, the other positions of the original open are unknown. */
+  /** The stream an engine event or snapshot names: by url and priority, which survive a restart,
+   *  else by its position in the open's list. */
+  private streamOf(
+    hold: Pick<Hold, 'streams'> | undefined,
+    at: {
+      upstream: number;
+      upstreamUrl?: string | null;
+      upstreamPriority?: number | null;
+    },
+  ): LiveTvChannelStream | undefined {
+    if (at.upstreamUrl == null) return hold?.streams[at.upstream];
+    return hold?.streams.find(
+      (x) => x.url === at.upstreamUrl && x.priority === at.upstreamPriority,
+    );
+  }
+
+  /** Holds for the sessions the engine runs that this process lost (a restart); their upstreams
+   *  are the channel's streams. */
   private async restoreHolds(snaps: LiveSnapshot[]): Promise<void> {
     for (const s of snaps) {
       const hold = this.holds.get(s.capacityToken);
@@ -528,17 +543,12 @@ export class LiveTvSessionService implements OnModuleInit {
         continue;
       }
       const channelId = Number(s.channelId);
-      const fed = (
-        await this.streamRepo.find({
-          where: { channelId },
-          relations: ['source'],
-        })
-      ).find(
-        (x) => x.url === s.upstreamUrl && x.priority === s.upstreamPriority,
-      );
+      const streams = await this.streamRepo.find({
+        where: { channelId },
+        relations: ['source'],
+      });
+      const fed = this.streamOf({ streams }, s);
       if (!fed || this.holds.has(s.capacityToken)) continue;
-      const streams: LiveTvChannelStream[] = [];
-      streams[s.upstream] = fed;
       this.holds.set(s.capacityToken, {
         sourceId: fed.sourceId,
         channelId,

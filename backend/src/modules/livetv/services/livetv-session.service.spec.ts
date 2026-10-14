@@ -458,7 +458,13 @@ describe('LiveTvSessionService', () => {
     );
     expect(engine.openLive.mock.calls[0][0].atCapacity).toBe(true);
     // An attempt of the restored session reaches its stream's health.
-    await emit({ type: 'LiveAttempt', capacityToken: 'lost', upstream: 1 });
+    await emit({
+      type: 'LiveAttempt',
+      capacityToken: 'lost',
+      upstream: 3,
+      upstreamUrl: 'http://p/five.ts',
+      upstreamPriority: 2,
+    });
     expect(streamRepo.update).toHaveBeenCalledWith(
       5,
       expect.objectContaining({ lastError: null }),

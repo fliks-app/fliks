@@ -705,6 +705,10 @@ export interface components {
              * @description Position in the upstreams of the open that started the session.
              */
             upstream: number;
+            /** Format: int32 */
+            upstreamPriority?: number | null;
+            /** @description URL of that upstream, so a host that lost the open's list can still place it. */
+            upstreamUrl?: string | null;
         } | {
             capacityToken: string;
             reason: string;
