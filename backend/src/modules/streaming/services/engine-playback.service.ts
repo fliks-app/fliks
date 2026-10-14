@@ -23,7 +23,7 @@ import { User } from '../../users/entities/user.entity';
 import { ActiveStreamTracker } from '../active-stream-tracker.service';
 import { DeviceProfileDto } from '../dto/device-profile.dto';
 import type { PlaybackInfoResponse } from '../dto/playback-info.dto';
-import { readEdlSidecar, toPlaybackTimeline } from '../edl/edl-sidecar';
+import { readEdlSidecar, shiftRanges } from '../edl/edl-sidecar';
 import { LiveSessionRegistry } from '../live-session.service';
 import {
   resolveAudioStreamIndex,
@@ -35,15 +35,8 @@ import { StreamingSettingsCache } from '../streaming-settings-cache.service';
 import { SubtitleBurnInService } from '../subtitle-burn-in.service';
 import { SubtitleStreamService } from '../subtitle-stream.service';
 import { parseSourceFps } from '../transcoding/constants';
-import {
-  encodePipelineInputs,
-  resolveEncodePipeline,
-  resolveTonemapReport,
-} from '../transcoding/encode-pipeline';
-import { describeQoePipeline } from '../transcoding/qoe-pipeline';
-import { sourceTimeline } from '../transcoding/source-timeline';
-import type { BurnInSubtitle, HwAccelType } from '../transcoding';
-import { presenceInput, toTags } from './engine-presence';
+import type { BurnInSubtitle } from '../transcoding';
+import { presenceInput, toQoePipeline, toTags } from './engine-presence';
 import { SourceScanService } from './source-scan.service';
 import { StaleProbeRescanService } from './stale-probe-rescan.service';
 
@@ -185,35 +178,8 @@ export class EnginePlaybackService {
             .catch(() => undefined)
         : undefined,
     });
-    const { response, videoVariant } = open.decision;
-
+    const { response } = open.decision;
     const v0 = info?.video?.[0];
-    const inputs = encodePipelineInputs({
-      hwAccel: response.hwAccel as HwAccelType,
-      crop: ss.autoCropEnabled && v0?.crop != null,
-      textBurnIn: !!burnIn?.filter,
-      tonemap: response.tonemapping,
-      tonemapAlgo: ss.tonemapAlgo,
-      sourceVideoCodec: (v0?.codec ?? '').toLowerCase() || undefined,
-      isSourceHdr: !!v0?.hdrFormat,
-      sourceDvProfile: v0?.dvProfile,
-      sourceDvBlSignalCompatId: v0?.dvBlSignalCompatId,
-    });
-    const tonemapReport =
-      response.tonemapping && videoVariant
-        ? resolveTonemapReport(
-            resolveEncodePipeline(videoVariant as never, inputs),
-            {
-              tonemap: true,
-              dvNoBase: inputs.dvNoBase,
-              dvApplyRpu: inputs.dvApplyRpu,
-              burnIn: !!burnIn,
-              sourceVideoCodec: inputs.sourceVideoCodec,
-              hdr10Target: inputs.dvNoBase && videoVariant.hdr === 'HDR10',
-              curve: ss.tonemapCurve,
-            },
-          )
-        : null;
 
     const kind =
       response.playMethod === 'DirectPlay'
@@ -251,33 +217,8 @@ export class EnginePlaybackService {
     });
 
     this.qoe.register(live);
-    this.qoe.setPipeline(
-      live,
-      describeQoePipeline({
-        playMethod: response.playMethod,
-        source: {
-          codec: inputs.sourceVideoCodec ?? null,
-          width: v0?.width ?? null,
-          height: v0?.height ?? null,
-          hdr: v0?.dvProfile != null ? 'DV' : (v0?.hdrFormat ?? null),
-        },
-        variant:
-          kind === 'transcode' ? ((videoVariant as never) ?? null) : null,
-        quality:
-          response.quality && response.quality !== 'auto'
-            ? response.quality
-            : null,
-        requested: q.startQuality || 'auto',
-        videoBitrateBps:
-          response.transcodeBitrateByQuality?.[response.quality]
-            ?.videoBitrateBps ?? null,
-        inputs,
-        tonemapPath: tonemapReport?.path ?? null,
-        burnIn: burnIn ? burnIn.type : null,
-        crop: inputs.crop,
-        audioTranscode: !response.audioCopyStream,
-      }),
-    );
+    if (open.qoePipeline)
+      this.qoe.setPipeline(live, toQoePipeline(open.qoePipeline));
 
     this.rescanIf(open, mediaFileId, resolved);
     const fps = parseSourceFps(v0?.frameRate);
@@ -316,14 +257,10 @@ export class EnginePlaybackService {
       ...(response as unknown as PlaybackInfoResponse),
       playUrl: open.playPath,
       edl: edl?.length
-        ? toPlaybackTimeline(
-            edl,
-            sourceTimeline(info, resolved.absolutePath),
-            response.playMethod,
-          )
+        ? shiftRanges(edl, open.playbackClockOffsetS ?? 0)
         : undefined,
-      tonemapAlgo: tonemapReport?.path ?? null,
-      tonemapCurve: tonemapReport?.curve,
+      tonemapAlgo: open.tonemapAlgo ?? null,
+      tonemapCurve: open.tonemapCurve ?? undefined,
       durationSeconds: info?.durationSeconds ?? 0,
       markers,
       chapters: info?.chapters?.length ? info.chapters : undefined,

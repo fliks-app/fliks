@@ -96,7 +96,14 @@ export function toPlaybackTimeline(
   timeline: Pick<SourceTimeline, 'formatStart' | 'origin'>,
   playMethod: PlayMethod,
 ): EdlRange[] {
-  const shift = playMethod === 'DirectPlay' ? 0 : timeline.formatStart - timeline.origin;
+  return shiftRanges(
+    ranges,
+    playMethod === 'DirectPlay' ? 0 : timeline.formatStart - timeline.origin,
+  );
+}
+
+/** Ranges moved by `shift` seconds, clamped at 0, empty ones dropped. */
+export function shiftRanges(ranges: EdlRange[], shift: number): EdlRange[] {
   const out: EdlRange[] = [];
   for (const r of ranges) {
     const end = Math.round((r.end + shift) * 1000) / 1000;

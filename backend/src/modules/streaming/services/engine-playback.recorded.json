@@ -191,6 +191,36 @@
   "hints": {
    "probeStale": false,
    "scanMissing": false
+  },
+  "playbackClockOffsetS": 0,
+  "qoePipeline": {
+   "source": {
+    "codec": "h264",
+    "width": 1280,
+    "height": 720,
+    "hdr": null
+   },
+   "output": {
+    "codec": "h264",
+    "hdr": null,
+    "quality": "360p",
+    "bitrate": null,
+    "requested": "360p"
+   },
+   "decode": {
+    "hw": false,
+    "kind": "cpu",
+    "name": null
+   },
+   "encode": {
+    "hw": false,
+    "kind": "cpu",
+    "name": "libx264"
+   },
+   "tonemap": null,
+   "burnIn": null,
+   "crop": false,
+   "audioTranscode": false
   }
  },
  "host": {

@@ -224,8 +224,9 @@ describe('EnginePlaybackService.playbackInfo', () => {
       deviceLabel: 'livecheck/1.0',
     });
     expect(t.qoe.register).toHaveBeenCalledWith(live);
-    expect(t.qoe.setPipeline.mock.calls[0][1]).toMatchObject({
-      output: { quality: '360p', requested: '360p' },
+    expect(t.qoe.setPipeline.mock.calls[0][1]).toEqual({
+      ...recorded.engine.qoePipeline,
+      source: { ...recorded.engine.qoePipeline.source, hdr: null },
     });
     t.cleanup();
   });
@@ -292,7 +293,7 @@ describe('EnginePlaybackService.playbackInfo', () => {
     t.cleanup();
   });
 
-  it('shifts the EDL onto the playback clock of an HLS session, not of a direct play', async () => {
+  it('shifts the EDL by the engine clock offset of an HLS session, not of a direct play', async () => {
     const info = {
       ...streamInfo,
       formatStartSeconds: 1.4,
@@ -306,8 +307,12 @@ describe('EnginePlaybackService.playbackInfo', () => {
     };
     const t = setup({ info });
     writeFileSync(join(t.dir, 'clip.edl'), '10 20 0\n');
+    t.engine.openSession.mockResolvedValue({
+      ...recorded.engine,
+      playbackClockOffsetS: 2,
+    });
     const hls = await t.svc.playbackInfo(user, 1, device as never, query);
-    expect(hls.edl).toEqual([{ start: 11, end: 21, action: 'cut' }]);
+    expect(hls.edl).toEqual([{ start: 12, end: 22, action: 'cut' }]);
 
     const direct = structuredClone(recorded.engine);
     direct.decision.response.playMethod = 'DirectPlay';
@@ -315,6 +320,18 @@ describe('EnginePlaybackService.playbackInfo', () => {
     expect(
       (await t.svc.playbackInfo(user, 1, device as never, query)).edl,
     ).toEqual([{ start: 10, end: 20, action: 'cut' }]);
+    t.cleanup();
+  });
+
+  it('relays the engine tone-map report', async () => {
+    const t = setup();
+    t.engine.openSession.mockResolvedValue({
+      ...recorded.engine,
+      tonemapAlgo: 'opencl',
+      tonemapCurve: 'hable',
+    });
+    const out = await t.svc.playbackInfo(user, 1, device as never, query);
+    expect(out).toMatchObject({ tonemapAlgo: 'opencl', tonemapCurve: 'hable' });
     t.cleanup();
   });
 
