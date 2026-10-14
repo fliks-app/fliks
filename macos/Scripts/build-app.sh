@@ -106,6 +106,19 @@ echo "    [node] Copying Node.js 24..."
 mkdir -p "$RESOURCES/node/bin"
 cp "$VENDORED/node/bin/node" "$RESOURCES/node/bin/"
 
+# ── fliks-engine (supervisor, pinned in engine.lock) ──
+echo "    [engine] Fetching fliks-engine..."
+ENGINE_VERSION="$(sed -n 's/^version=//p' "$REPO_ROOT/engine.lock")"
+ENGINE_SHA="$(sed -n 's/^sha256_darwin_arm64=//p' "$REPO_ROOT/engine.lock")"
+if [ -z "$ENGINE_SHA" ]; then
+    echo "Error: engine.lock has no sha256_darwin_arm64 (run scripts/bump-engine.sh)." >&2
+    exit 1
+fi
+curl -fsSL -o "$RESOURCES/node/bin/fliks-engine" \
+    "https://github.com/fliks-app/engine/releases/download/v$ENGINE_VERSION/fliks-engine-darwin-arm64"
+echo "$ENGINE_SHA  $RESOURCES/node/bin/fliks-engine" | shasum -a 256 -c -
+chmod +x "$RESOURCES/node/bin/fliks-engine"
+
 # ── PostgreSQL (from Homebrew installed, needs dylib bundling) ──
 # The bottle hardcodes /opt/homebrew/share/postgresql@18 and lib/postgresql@18, and only
 # resolves them relative to itself when run from <prefix>/Cellar/<formula>/<version>/bin.
