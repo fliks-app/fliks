@@ -4,7 +4,7 @@ import { stat } from 'fs/promises';
 import { Repository } from 'typeorm';
 import { withFfmpegSlot } from '../../../common/utils/ffmpeg-slots';
 import { MediaFile } from '../../media/entities/media-file.entity';
-import { FfprobeService, type MediaFileInfo } from '../../subtitles/ffprobe.service';
+import { FfprobeService, type MediaFileInfo } from '../../media-probe/ffprobe.service';
 import { SourceScanService, sourceVersion } from './source-scan.service';
 
 /** True once a row predates `formatName`, or an HDR row predates `hdr10Plus`:

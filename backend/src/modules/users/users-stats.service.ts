@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
-import { PlaybackState } from '../streaming/entities/playback-state.entity';
+import { PlaybackState } from '../playback/entities/playback-state.entity';
 import { FliksRequest } from '../requests/entities/request.entity';
 import { MediaType } from '../../common/enums';
 import { RequestStatus } from '../../common/enums/request-status.enum';

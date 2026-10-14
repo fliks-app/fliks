@@ -34,9 +34,11 @@ import { FliksSchedulerModule } from '../scheduler/scheduler.module';
 import { ImageModule } from '../images/image.module';
 import { StreamingModule } from '../streaming/streaming.module';
 import { LibraryIngestModule } from '../../common/library-ingest/library-ingest.module';
+import { MediaProbeModule } from '../media-probe/media-probe.module';
 
 @Module({
   imports: [
+    MediaProbeModule,
     TypeOrmModule.forFeature([
       Media,
       Season,

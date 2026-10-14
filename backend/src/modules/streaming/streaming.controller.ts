@@ -26,7 +26,7 @@ import { Action } from '../auth/casl/actions.enum';
 import { EventsService } from '../scheduler/events.service';
 import { parseByteRange } from './byte-range.util';
 import { User } from '../users/entities/user.entity';
-import type { MediaFileInfo } from '../subtitles/ffprobe.service';
+import type { MediaFileInfo } from '../media-probe/ffprobe.service';
 import { StreamingService, ResolvedFile } from './streaming.service';
 import { SubtitleStreamService } from './subtitle-stream.service';
 import {
@@ -98,7 +98,7 @@ import { StreamBuilderService } from './stream-builder.service';
 import { ActiveStreamTracker } from './active-stream-tracker.service';
 import { SessionExpiredException } from './session-expired.exception';
 import { SubtitleBurnInService } from './subtitle-burn-in.service';
-import { PlaybackService } from './playback.service';
+import { PlaybackService } from '../playback/playback.service';
 import { MarkersService } from '../markers/markers.service';
 import { DeviceProfileDto } from './dto/device-profile.dto';
 import { StreamingSettingsCache } from './streaming-settings-cache.service';

@@ -26,10 +26,10 @@ import {
   LiveSessionRegistry,
   type LiveSession,
   type PlaybackState as LivePlaybackState,
-} from './live-session.service';
+} from '../streaming/live-session.service';
 import { EventsService, type RemoteQualityRung } from '../scheduler/events.service';
 import { QoeService } from '../qoe/qoe.service';
-import { servedRungBitrate } from './served-rung';
+import { servedRungBitrate } from '../streaming/served-rung';
 import { parseEvents, parsePlaybackId, parseSample, parseSentAt } from '../qoe/core/validate';
 
 /** Debounce window for DB writes — heartbeat fires every 10 s but we

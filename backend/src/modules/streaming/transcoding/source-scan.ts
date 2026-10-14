@@ -3,7 +3,7 @@ import { stat } from 'fs/promises';
 import { PassThrough, type Readable } from 'stream';
 import { Logger } from '@nestjs/common';
 import { spawnBackground, collectStderrTail } from '../../../common/utils/spawn-priority';
-import type { MediaFileInfo } from '../../subtitles/ffprobe.service';
+import type { MediaFileInfo } from '../../media-probe/ffprobe.service';
 import {
   scanVideoPackets,
   sourceIsMpegTs,

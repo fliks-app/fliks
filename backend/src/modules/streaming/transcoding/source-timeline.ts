@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import type {
   MediaFileInfo,
   VideoStreamInfo,
-} from '../../subtitles/ffprobe.service';
+} from '../../media-probe/ffprobe.service';
 
 const log = new Logger('SourceTimeline');
 const reported = new Set<string>();

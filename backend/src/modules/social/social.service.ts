@@ -8,7 +8,7 @@ import { In, IsNull, Repository } from 'typeorm';
 import { UserFollow } from './entities/user-follow.entity';
 import { ContentRecommendation } from './entities/content-recommendation.entity';
 import { User } from '../users/entities/user.entity';
-import { PlaybackState } from '../streaming/entities/playback-state.entity';
+import { PlaybackState } from '../playback/entities/playback-state.entity';
 import { Media } from '../media/entities/media.entity';
 import { Season } from '../media/entities/season.entity';
 import { Episode } from '../media/entities/episode.entity';
@@ -18,11 +18,11 @@ import { PlaylistsService, PlaylistView } from '../playlists/playlists.service';
 import {
   RecommendationItem,
   RecommendationService,
-} from '../streaming/recommendation.service';
+} from '../playback/recommendation.service';
 import {
   PlaybackService,
   WatchHistoryItem,
-} from '../streaming/playback.service';
+} from '../playback/playback.service';
 import { LibrariesService } from '../libraries/libraries.service';
 import { EventsService } from '../scheduler/events.service';
 import { UsersStatsService } from '../users/users-stats.service';

@@ -50,7 +50,7 @@ import { MAX_EDL_BYTES } from '../streaming/edl/edl-sidecar';
 import { SubtitleOcrService } from '../subtitles/subtitle-ocr.service';
 import { SubtitleTranslationService } from '../subtitles/subtitle-translation.service';
 import { SubtitleSyncService } from '../subtitles/subtitle-sync.service';
-import { FfprobeService } from '../subtitles/ffprobe.service';
+import { FfprobeService } from '../media-probe/ffprobe.service';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { EventsService } from '../scheduler/events.service';
 import { ActivityRegistryService } from '../scheduler/activity-registry.service';

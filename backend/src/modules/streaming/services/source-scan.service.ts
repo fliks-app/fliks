@@ -5,7 +5,7 @@ import * as path from 'path';
 import { Repository } from 'typeorm';
 import { withFfmpegSlot } from '../../../common/utils/ffmpeg-slots';
 import { MediaFile } from '../../media/entities/media-file.entity';
-import type { MediaFileInfo } from '../../subtitles/ffprobe.service';
+import type { MediaFileInfo } from '../../media-probe/ffprobe.service';
 import { sourceIsMpegTs } from '../transcoding/video-packets';
 import { MediaFileScan } from '../entities/media-file-scan.entity';
 import { scanSource, type SourceScan } from '../transcoding/source-scan';
