@@ -16,6 +16,7 @@ const execFileAsync = promisify(execFile);
 const probe = createCapabilityProbe('amf-opencl-probe');
 
 export const isAmfOpenclEnabled = probe.isEnabled;
+export const setAmfOpenclEnabled = probe.set;
 
 /** Runs one encode with `-vf` built from `amfOpenclFilter`, the same helper
  *  a real session calls, over the given decoder input args. */

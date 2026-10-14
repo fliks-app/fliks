@@ -8,6 +8,7 @@ import {
   runLeadSeconds,
   FfmpegThrottleService,
 } from './ffmpeg-throttle.service';
+import * as pause from './ffmpeg-pause';
 import { setPauseCapabilityForTest } from './ffmpeg-pause';
 
 describe('decideThrottle', () => {
@@ -189,5 +190,20 @@ describe('FfmpegThrottleService: transcode run frontier', () => {
     const { kill, tick } = setup(0);
     await tick();
     expect(kill).not.toHaveBeenCalled();
+  });
+});
+
+describe('FfmpegThrottleService pause detection with the engine', () => {
+  it('leaves the pause probe to the engine when it is enabled', async () => {
+    const detect = jest.spyOn(pause, 'detectPauseCapability').mockResolvedValue();
+    const svc = new FfmpegThrottleService({} as never, {} as never, {} as never, {
+      whenReady: async () => undefined,
+      enabled: true,
+    } as never);
+    svc.onModuleInit();
+    svc.onModuleDestroy();
+    await new Promise((r) => setImmediate(r));
+    expect(detect).not.toHaveBeenCalled();
+    detect.mockRestore();
   });
 });

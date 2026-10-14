@@ -40,6 +40,16 @@ export function isEncoderEnabled(descriptorId: string): boolean {
   return probeResult.get(descriptorId) ?? false;
 }
 
+/** Engine detection result: ids in `enabled` pass, every other id in `all` is disabled. */
+export function loadEncoderProbeResults(
+  all: Iterable<string>,
+  enabled: ReadonlySet<string>,
+): void {
+  probeResult.clear();
+  for (const id of all) probeResult.set(id, enabled.has(id));
+  probedOnce = true;
+}
+
 /** True when the last boot probe found Intel's iHD VAAPI driver. Keyed to
  *  the render node it ran on, so a later admin re-pin invalidates it. */
 let vaapiIsIntelIhd = false;
@@ -47,6 +57,12 @@ let vaapiIhdCheckedNode: string | null = null;
 
 export function vaapiWritesHdrMetadata(): boolean {
   return vaapiIsIntelIhd && vaapiIhdCheckedNode === vaapiRenderNode();
+}
+
+/** Engine detection result, for the render node currently selected. */
+export function setVaapiWritesHdrMetadata(value: boolean): void {
+  vaapiIsIntelIhd = value;
+  vaapiIhdCheckedNode = vaapiRenderNode();
 }
 
 /** ffmpeg logs the VAAPI driver's vendor string at verbose level during

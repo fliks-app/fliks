@@ -1,4 +1,5 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
+import { EngineService } from '../../engine/engine.service';
 import { TranscodingService } from './transcoding.service';
 import type { RemuxSegmentAssembler } from './remux-assembler';
 import type { TranscodeSession } from './types';
@@ -101,11 +102,18 @@ export class FfmpegThrottleService implements OnModuleInit, OnModuleDestroy {
     private readonly transcoding: TranscodingService,
     private readonly liveSessions: LiveSessionRegistry,
     private readonly settings: StreamingSettingsCache,
+    @Optional() private readonly engine?: EngineService,
   ) {}
 
   onModuleInit(): void {
-    void detectPauseCapability(this.log);
+    void this.detectPause();
     this.timer = setInterval(() => void this.tick(), CHECK_INTERVAL_MS);
+  }
+
+  /** With the engine, its detection sets the capability (see TranscodingService). */
+  private async detectPause(): Promise<void> {
+    await this.engine?.whenReady();
+    if (!this.engine?.enabled) await detectPauseCapability(this.log);
   }
 
   onModuleDestroy(): void {

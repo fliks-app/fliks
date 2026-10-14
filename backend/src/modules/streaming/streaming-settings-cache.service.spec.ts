@@ -85,3 +85,26 @@ describe('StreamingSettingsCache tuning resolution', () => {
     expect(s.ffmpegSlots).toBeNull();
   });
 });
+
+describe('StreamingSettingsCache engine push', () => {
+  it('pushes the resolved settings to the engine on a streaming_* change only', async () => {
+    let listener: (key: string) => void = () => undefined;
+    const settings = {
+      get: () => Promise.resolve(null),
+      addChangeListener: (l: (key: string) => void) => (listener = l),
+    } as unknown as SettingsService;
+    const engine = { enabled: true, pushStreaming: jest.fn(async () => undefined) };
+    const cache = new StreamingSettingsCache(settings, engine as never);
+    cache.onModuleInit();
+
+    listener('library_path');
+    await new Promise((r) => setImmediate(r));
+    expect(engine.pushStreaming).not.toHaveBeenCalled();
+
+    listener('streaming_gpu_render_node');
+    await new Promise((r) => setImmediate(r));
+    expect(engine.pushStreaming).toHaveBeenCalledWith(
+      expect.objectContaining({ gpuRenderNode: 'auto', segmentDuration: 3 }),
+    );
+  });
+});

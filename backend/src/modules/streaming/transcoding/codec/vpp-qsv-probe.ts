@@ -14,6 +14,7 @@ const execFileAsync = promisify(execFile);
 const probe = createCapabilityProbe('vpp-qsv-tonemap-probe');
 
 export const isVppQsvTonemapEnabled = probe.isEnabled;
+export const setVppQsvTonemapEnabled = probe.set;
 
 export async function runVppQsvTonemapProbe(log: Logger): Promise<void> {
   const hdrSample = probeSamplePath('vpp-qsv-tonemap');

@@ -38,6 +38,17 @@ export function isTonemapOpenclHdr10Enabled(): boolean {
   return probedOnce && hdr10Enabled;
 }
 
+export function setTonemapOpenclEnabled(flags: {
+  basic: boolean;
+  crop: boolean;
+  hdr10: boolean;
+}): void {
+  probedOnce = true;
+  noCropEnabled = flags.basic;
+  withCropEnabled = flags.crop;
+  hdr10Enabled = flags.hdr10;
+}
+
 export async function runTonemapOpenclProbe(
   log: Logger,
   hwAccel: 'qsv' | 'vaapi',

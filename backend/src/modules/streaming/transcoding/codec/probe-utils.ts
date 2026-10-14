@@ -19,6 +19,8 @@ export function probeSamplePath(name: string, ext = 'hevc'): string {
 export interface CapabilityProbe {
   isEnabled(): boolean;
   run(log: Logger, attempt: () => Promise<void>): Promise<boolean>;
+  /** Engine detection result, in place of a local run. */
+  set(enabled: boolean): void;
 }
 
 /** `attempt` runs once and reports its own argv/pre-steps; this owns the
@@ -28,6 +30,10 @@ export function createCapabilityProbe(name: string): CapabilityProbe {
   let enabled = false;
   return {
     isEnabled: () => probedOnce && enabled,
+    set(value) {
+      probedOnce = true;
+      enabled = value;
+    },
     async run(log, attempt) {
       const t0 = Date.now();
       let failure = '';

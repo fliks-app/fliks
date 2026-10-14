@@ -15,6 +15,7 @@ const execFileAsync = promisify(execFile);
 const probe = createCapabilityProbe('vulkan-tonemap-probe');
 
 export const isVulkanTonemapEnabled = probe.isEnabled;
+export const setVulkanTonemapEnabled = probe.set;
 
 export async function runVulkanTonemapProbe(log: Logger): Promise<void> {
   const hdrSample = probeSamplePath('vulkan-tonemap');

@@ -1,4 +1,5 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
+import { EngineService, toEngineStreaming } from '../engine/engine.service';
 import { SettingsService } from '../settings/settings.service';
 import { StreamLifetime } from './lifetime-constants';
 import {
@@ -118,7 +119,12 @@ function positive(raw: string | null): number | null {
 
 @Injectable()
 export class StreamingSettingsCache implements OnModuleInit {
-  constructor(private readonly settings: SettingsService) {}
+  constructor(
+    private readonly settings: SettingsService,
+    @Optional() private readonly engine?: EngineService,
+  ) {}
+
+  private readonly log = new Logger(StreamingSettingsCache.name);
 
   private cache: StreamingSettings | null = null;
   private inflight: Promise<StreamingSettings> | null = null;
@@ -132,6 +138,11 @@ export class StreamingSettingsCache implements OnModuleInit {
         this.cache = null;
         this.inflight = null;
         this.epoch++;
+        if (this.engine?.enabled) {
+          void this.get()
+            .then((ss) => this.engine?.pushStreaming(toEngineStreaming(ss)))
+            .catch((err: Error) => this.log.warn(`engine config not pushed: ${err.message}`));
+        }
       }
     });
   }

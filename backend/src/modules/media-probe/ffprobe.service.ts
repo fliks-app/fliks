@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
@@ -13,6 +13,7 @@ import { mapWithConcurrency } from '../../common/utils/concurrency';
 import { ffmpegSlots, withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
 import { priorityExecFileArgs } from '../../common/utils/spawn-priority';
 import { applyMkvLanguageTags, readMkvLanguageTags } from './mkv-language-tags';
+import { EngineService } from '../engine/engine.service';
 
 const execFileAsync = promisify(execFile);
 
@@ -511,9 +512,43 @@ export function hasHdr10PlusSideData(sideDataList: unknown[] | undefined): boole
 export class FfprobeService {
   private readonly logger = new Logger(FfprobeService.name);
 
+  constructor(@Optional() private readonly engine?: EngineService) {}
+
+  /** The engine's probe of `videoPath`; `error` when ffprobe could not read the file (logged). */
+  private async probeViaEngine(
+    videoPath: string,
+    opts: { crop?: boolean; mkvTags?: boolean },
+  ): Promise<{ info: MediaFileInfo } | { error: string }> {
+    let error: string;
+    try {
+      const r = await this.engine!.probe(path.resolve(videoPath), opts);
+      if (r.ok && r.info) return { info: r.info as unknown as MediaFileInfo };
+      error = r.error ?? r.info?.error ?? 'ffprobe failed';
+    } catch (err) {
+      error = (err as Error).message;
+    }
+    this.logger.warn(`ffprobe file info failed for "${videoPath}": ${error}`);
+    return { error };
+  }
+
   async detectEmbeddedSubtitles(
     videoPath: string,
   ): Promise<EmbeddedSubtitleProbe> {
+    if (this.engine?.enabled) {
+      const r = await this.probeViaEngine(videoPath, {});
+      if (!('info' in r)) return { ok: false, streams: [] };
+      return {
+        ok: true,
+        streams: r.info.subtitles.map((s) => ({
+          streamIndex: s.streamIndex,
+          codec: s.codec,
+          language: s.language,
+          forced: s.forced,
+          hearingImpaired: s.hearingImpaired,
+          isImageBased: s.isImageBased,
+        })),
+      };
+    }
     try {
       const { stdout } = await execFileAsync(
         'ffprobe',
@@ -556,6 +591,22 @@ export class FfprobeService {
    * Used by the sync modal to let the user pick a reference track.
    */
   async detectStreams(videoPath: string): Promise<MediaStream[]> {
+    if (this.engine?.enabled) {
+      const r = await this.probeViaEngine(videoPath, {});
+      if (!('info' in r)) return [];
+      return [
+        ...r.info.audio.map((s) => ({ ...s, type: 'audio' as const })),
+        ...r.info.subtitles.map((s) => ({ ...s, type: 'subtitle' as const })),
+      ]
+        .sort((a, b) => a.streamIndex - b.streamIndex)
+        .map((s) => ({
+          streamIndex: s.streamIndex,
+          type: s.type,
+          codec: s.codec,
+          language: s.language,
+          title: s.title,
+        }));
+    }
     try {
       const { stdout } = await execFileAsync(
         'ffprobe',
@@ -583,6 +634,10 @@ export class FfprobeService {
   }
 
   async detectMediaFileInfo(videoPath: string): Promise<MediaFileInfo> {
+    if (this.engine?.enabled) {
+      const r = await this.probeViaEngine(videoPath, { mkvTags: true });
+      return 'info' in r ? r.info : { video: [], audio: [], subtitles: [], error: r.error };
+    }
     try {
       const { stdout } = await execFileAsync(
         'ffprobe',
@@ -1027,6 +1082,12 @@ export class FfprobeService {
     originalWidth?: number,
     originalHeight?: number,
   ): Promise<CropInfo | null> {
+    if (this.engine?.enabled) {
+      const r = await withFfmpegSlot(() =>
+        this.probeViaEngine(videoPath, { crop: true }),
+      );
+      return ('info' in r && r.info.video[0]?.crop) || null;
+    }
     const label = path.basename(videoPath);
     try {
       // Sample 6 timestamps spread across the file (5–80%): 4K animation mixes

@@ -13,12 +13,14 @@ const execFileAsync = promisify(execFile);
 const probe = createCapabilityProbe('qsv-opencl-probe');
 
 export const isQsvOpenclTonemapEnabled = probe.isEnabled;
+export const setQsvOpenclTonemapEnabled = probe.set;
 
 /** No-base Dolby Vision reshaped to HDR10 (`apply_dovi=1`, PQ/BT.2020), a
  *  distinct option/format set from the SDR recipe above, probed separately. */
 const hdr10Probe = createCapabilityProbe('qsv-opencl-hdr10-probe');
 
 export const isQsvOpenclTonemapHdr10Enabled = hdr10Probe.isEnabled;
+export const setQsvOpenclTonemapHdr10Enabled = hdr10Probe.set;
 
 function runVf(hdrSample: string, vf: string, encoder: string[]): Promise<void> {
   return execFileAsync(

@@ -12,11 +12,13 @@ export function getPauseCapability(): PauseCapability {
   return capability;
 }
 
-/** Test-only: force a capability without spawning a real probe ffmpeg. */
-export function setPauseCapabilityForTest(c: PauseCapability): void {
+/** Set the capability without spawning the probe ffmpeg (engine result, tests). */
+export function setPauseCapability(c: PauseCapability): void {
   capability = c;
   probed = true;
 }
+
+export const setPauseCapabilityForTest = setPauseCapability;
 
 /** Pause a running ffmpeg the way this host's build supports. No-op under
  *  `'none'`, the throttle service never calls this then, but a stray call

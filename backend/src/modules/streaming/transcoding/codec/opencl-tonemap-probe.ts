@@ -14,12 +14,14 @@ const execFileAsync = promisify(execFile);
 const probe = createCapabilityProbe('opencl-tonemap-probe');
 
 export const isOpenclTonemapEnabled = probe.isEnabled;
+export const setOpenclTonemapEnabled = probe.set;
 
 /** No-base Dolby Vision reshaped to HDR10 (`apply_dovi=1`, PQ/BT.2020), a
  *  distinct option/format set from the SDR recipe above, probed separately. */
 const hdr10Probe = createCapabilityProbe('opencl-tonemap-hdr10-probe');
 
 export const isOpenclTonemapHdr10Enabled = hdr10Probe.isEnabled;
+export const setOpenclTonemapHdr10Enabled = hdr10Probe.set;
 
 export async function runOpenclTonemapProbe(
   log: Logger,

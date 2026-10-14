@@ -3,6 +3,7 @@ import {
   Logger,
   OnModuleInit,
   OnModuleDestroy,
+  Optional,
 } from '@nestjs/common';
 import { ChildProcess, spawn } from 'child_process';
 import { existsSync } from 'fs';
@@ -44,6 +45,8 @@ import { setSelectedRenderNode, vaapiRenderNode } from './hw-device';
 import { encodePipelineInputs } from './encode-pipeline';
 import { setFfmpegSlots } from '../../../common/utils/ffmpeg-slots';
 import { enumerateGpus, type GpuInfo } from './gpu-registry';
+import { applyEngineCapabilities } from './engine-capabilities';
+import { EngineService, toEngineStreaming } from '../../engine/engine.service';
 import { ALL_DESCRIPTORS, encoderRegistry } from './codec/encoders';
 import { runEncoderProbes } from './codec/encoder-probe';
 import { runAudioEncoderProbe } from './audio-encoder-probe';
@@ -125,6 +128,7 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     private readonly liveSessions: LiveSessionRegistry,
     private readonly streamingSettings: StreamingSettingsCache,
     private readonly sourceScans: SourceScanService,
+    @Optional() private readonly engine?: EngineService,
   ) {}
 
   async onModuleInit() {
@@ -140,6 +144,17 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
         ),
     );
 
+    await this.engine?.whenReady();
+    if (this.engine?.enabled) await this.loadEngineHost();
+    else await this.detectHostLocally();
+
+    // Tight cleanup cadence — paired with the live-session 30 s TTL +
+    // 60 s job grace, this puts ffmpeg death within ~100 s of the last
+    // viewer disappearing.
+    this.cleanupTimer = setInterval(() => this.cleanupStaleSessions(), 10_000);
+  }
+
+  private async detectHostLocally(): Promise<void> {
     this.detectedHwAccel = await detectHwAccel(this.log);
     this.log.log(`Hardware acceleration: ${this.detectedHwAccel}`);
 
@@ -167,11 +182,33 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     // Runs async, serialised (see runBootProbeChain); the codec/decoder
     // selectors default to "usable" until it lands.
     void this.scheduleProbeChain(false);
+  }
 
-    // Tight cleanup cadence — paired with the live-session 30 s TTL +
-    // 60 s job grace, this puts ffmpeg death within ~100 s of the last
-    // viewer disappearing.
-    this.cleanupTimer = setInterval(() => this.cleanupStaleSessions(), 10_000);
+  /** Engine boot: pin the GPU and push the settings first, so the one detection run is on the
+   *  right node, then load its result (in the background, like the local probe chain). */
+  private async loadEngineHost(): Promise<void> {
+    let node = 'auto';
+    try {
+      const ss = await this.streamingSettings.get();
+      this.applyStreamingSettings(ss);
+      node = ss.gpuRenderNode;
+      await this.engine!.pushStreaming(toEngineStreaming(ss));
+    } catch (err) {
+      this.log.warn(`engine config not pushed: ${(err as Error).message}`);
+    }
+    void this.refreshEngineCapabilities(node);
+  }
+
+  private async refreshEngineCapabilities(node: string): Promise<void> {
+    try {
+      const caps = await this.engine!.capabilitiesFor(node);
+      const { hwAccel, gpus } = applyEngineCapabilities(caps);
+      this.detectedHwAccel = hwAccel;
+      this.gpus = gpus;
+      this.log.log(`Hardware acceleration: ${hwAccel} (from the engine)`);
+    } catch (err) {
+      this.log.warn(`engine capabilities unavailable: ${(err as Error).message}`);
+    }
   }
 
   /** Get an existing session for an exact `(file, user, base hash,
@@ -286,9 +323,18 @@ export class TranscodingService implements OnModuleInit, OnModuleDestroy {
     this.lastGpuRenderNode = ss.gpuRenderNode;
     if (rePinned) {
       this.log.log(
-        `GPU re-pinned to ${ss.gpuRenderNode} (admin setting); re-running the boot probe chain`,
+        `GPU re-pinned to ${ss.gpuRenderNode} (admin setting); re-running hardware detection`,
       );
-      void this.scheduleProbeChain(true);
+      if (this.engine?.enabled) {
+        void this.engine
+          .pushStreaming(toEngineStreaming(ss))
+          .then(() => this.refreshEngineCapabilities(ss.gpuRenderNode))
+          .catch((err: Error) =>
+            this.log.warn(`engine re-detection failed: ${err.message}`),
+          );
+      } else {
+        void this.scheduleProbeChain(true);
+      }
     }
   }
 

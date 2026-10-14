@@ -15,6 +15,10 @@ export function isLibfdkAacEnabled(): boolean {
   return libfdkEnabled;
 }
 
+export function setLibfdkAacEnabled(value: boolean): void {
+  libfdkEnabled = value;
+}
+
 /** `ffmpeg -encoders` lists every compiled-in codec once; audio encoders carry
  *  no device/driver risk the way HW video encoders do, so a listing check is
  *  enough, no black-frame encode test needed. */

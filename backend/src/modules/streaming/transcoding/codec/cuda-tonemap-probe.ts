@@ -10,12 +10,14 @@ const execFileAsync = promisify(execFile);
 const probe = createCapabilityProbe('cuda-tonemap-probe');
 
 export const isCudaTonemapEnabled = probe.isEnabled;
+export const setCudaTonemapEnabled = probe.set;
 
 /** No-base Dolby Vision reshaped to HDR10 (`apply_dovi=1`, PQ/BT.2020), a
  *  distinct option/format set from the SDR recipe above, probed separately. */
 const hdr10Probe = createCapabilityProbe('cuda-tonemap-hdr10-probe');
 
 export const isCudaTonemapHdr10Enabled = hdr10Probe.isEnabled;
+export const setCudaTonemapHdr10Enabled = hdr10Probe.set;
 
 async function runVf(vf: string): Promise<void> {
   await execFileAsync(

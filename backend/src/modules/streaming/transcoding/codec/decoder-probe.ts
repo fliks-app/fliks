@@ -24,6 +24,16 @@ export function isDecoderEnabled(descriptorId: string): boolean {
   return probeResult.get(descriptorId) ?? false;
 }
 
+/** Engine detection result: ids in `enabled` pass, every other id in `all` is disabled. */
+export function loadDecoderProbeResults(
+  all: Iterable<string>,
+  enabled: ReadonlySet<string>,
+): void {
+  probeResult.clear();
+  for (const id of all) probeResult.set(id, enabled.has(id));
+  probedOnce = true;
+}
+
 /** Walk every decoder descriptor: synthesize a 1-frame bitstream in the
  *  matching codec via a CPU encoder, then decode it with the descriptor
  *  under test. HW decoders run strictly serially because Intel iGPUs
