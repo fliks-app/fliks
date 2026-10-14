@@ -854,7 +854,7 @@ function genDevice(r: Rng): DeviceProfileDto {
 
 // --- host caps, config, selection ---
 
-function genHostCaps(r: Rng): HostCaps {
+export function genHostCaps(r: Rng): HostCaps {
   const platform = pick(r, [
     'linux',
     'linux',

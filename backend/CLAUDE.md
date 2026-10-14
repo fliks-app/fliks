@@ -59,3 +59,12 @@ Golden results of the real session services for the engine's `core::session` (`f
 - `session-vectors.ts` runs each kind against stubs of the services' private state (`session-cases.ts` holds the replays of the resolve-existing-session and ffmpeg-throttle specs, the cache and lifecycle TTL/LRU cases, the synthetic matrices and the seeded fuzz generators); inputs and `expected` are in the engine's wire shape.
 - Generate/verify with `FLIKS_ENGINE_REPO` / `FLIKS_ENGINE_REPO_CHECK` as above; fuzz with `SESSION_FUZZ_OUT=<dir> SESSION_FUZZ_SEED=<n> SESSION_FUZZ_COUNT=<n>`; `SESSION_FUZZ_EXPECT=<dir>` recomputes a promoted vector.
 - A change to the seek matrix, the throttle, the cache GC or the job/live-session lifetimes must regenerate them too.
+
+## Argv vectors (`argv-vectors.spec.ts`)
+
+Golden ffmpeg argv of `buildFfmpegArgs`, `buildRemuxArgs`, the encoder descriptors, `buildLiveFfmpegArgs` and `buildIFrameSegmentArgs`, consumed by the engine's `core::args` (`fixtures/argv/`).
+
+- Records every builder call of the replayed argv specs (golden, encoders, live, iframe, timeline), plus a matrix built from the engine's `fixtures/decide` (Transcode as VOD runs on two hosts, DirectStream as remux runs) and a live matrix (`argv-cases.ts`).
+- `expected` is always recomputed from the stored input under its `hostCaps` and `env` (render node pin, `FLIKS_OPENCL_DEVICE`); a throw is stored as `{ error }`.
+- Generate/verify with `FLIKS_ENGINE_REPO` / `FLIKS_ENGINE_REPO_CHECK`. Fuzz: `ARGV_FUZZ_OUT=<dir> ARGV_FUZZ_SEED=<n> ARGV_FUZZ_COUNT=<n>` (NDJSON for the engine's `ARGV_FUZZ_DIR`); promote with `ARGV_FUZZ_EXPECT=<dir>`.
+- A change to the argv builders, encoders, filter graph or `hw-device.ts` must regenerate these.
