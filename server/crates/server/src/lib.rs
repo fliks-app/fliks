@@ -44,10 +44,13 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     let pool = connect(&cfg).await?;
     db::migrate(&pool).await?;
     roles::seed(&pool).await?;
+    users::seed_admin(&pool)
+        .await
+        .map_err(|e| format!("seed admin: {e:?}"))?;
     let secret = jwt_secret::resolve(&cfg);
     let upstream = Upstream::parse(&nest::url(&cfg))?;
+    let db = pool.clone();
     let state = AppState::new(pool, cfg, &secret);
-    auth::spawn_jobs(state.db.clone());
     let cfg = state.cfg.clone();
     let app = app::router(
         state,
@@ -59,6 +62,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     // Bind before spawning Nest so a port clash cannot orphan it.
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", cfg.port)).await?;
     let nest = nest::spawn(&cfg, &secret);
+    auth::spawn_jobs(db);
     tracing::info!("listening on {}", listener.local_addr()?);
     let served = axum::serve(
         listener,
