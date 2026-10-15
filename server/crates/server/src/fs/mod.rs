@@ -15,7 +15,7 @@ pub fn router() -> Router<AppState> {
 }
 
 #[derive(Deserialize)]
-struct Q {
+pub(crate) struct Q {
     path: Option<String>,
 }
 
@@ -28,13 +28,14 @@ struct Entry {
 }
 
 #[derive(Serialize)]
-struct Listing {
+pub(crate) struct Listing {
     current: String,
     parent: Option<String>,
     entries: Vec<Entry>,
 }
 
-async fn browse(authed: Authed, Query(q): Query<Q>) -> Result<Json<Listing>, AppError> {
+#[utoipa::path(get, path = "/api/fs/browse", responses((status = 200)))]
+pub(crate) async fn browse(authed: Authed, Query(q): Query<Q>) -> Result<Json<Listing>, AppError> {
     authed.require(Action::Manage, Subject::Settings)?;
     match q.path.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
         Some(p) => list(resolve(p)).await,

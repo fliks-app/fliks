@@ -81,7 +81,11 @@ async fn notify(st: &AppState, keys: &[String]) {
     }
 }
 
-pub async fn list(State(st): State<AppState>, authed: Authed) -> Result<Json<Value>, AppError> {
+#[utoipa::path(get, path = "/api/settings", responses((status = 200)))]
+pub(crate) async fn list(
+    State(st): State<AppState>,
+    authed: Authed,
+) -> Result<Json<Value>, AppError> {
     authed.require(Action::Manage, Subject::Settings)?;
     let rows = db::list(&st.db).await.map_err(db_err)?;
     let secrets = Secrets::load(&st.db, rows.iter().map(|(k, _)| k.as_str()))
@@ -90,7 +94,8 @@ pub async fn list(State(st): State<AppState>, authed: Authed) -> Result<Json<Val
     Ok(Json(secrets.redact_all(rows)))
 }
 
-pub async fn get_one(
+#[utoipa::path(get, path = "/api/settings/{key}", responses((status = 200)))]
+pub(crate) async fn get_one(
     State(st): State<AppState>,
     authed: Authed,
     Path(key): Path<String>,
@@ -104,7 +109,8 @@ pub async fn get_one(
     Ok(Json(secrets.redact_one(&key, value)))
 }
 
-pub async fn put_one(
+#[utoipa::path(put, path = "/api/settings/{key}", responses((status = 200)))]
+pub(crate) async fn put_one(
     State(st): State<AppState>,
     authed: Authed,
     Path(key): Path<String>,
@@ -141,7 +147,8 @@ pub async fn put_one(
     Ok(Json(saved))
 }
 
-pub async fn put_bulk(
+#[utoipa::path(put, path = "/api/settings", responses((status = 200)))]
+pub(crate) async fn put_bulk(
     State(st): State<AppState>,
     authed: Authed,
     ValidJson(body): ValidJson<Value>,

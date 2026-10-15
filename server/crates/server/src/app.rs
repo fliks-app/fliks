@@ -1,5 +1,5 @@
 use crate::http::{layers, static_files};
-use crate::{state::AppState, system, users};
+use crate::{auth, fs, roles, settings, state::AppState, system, users};
 use axum::{Router, extract::Request, response::Response, routing::any, routing::any_service};
 use fliks_engine::gateway::{self, RouteTable, Upstream};
 use std::path::PathBuf;
@@ -14,6 +14,30 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
     info(title = "Fliks", version = "1"),
     paths(
         system::liveness,
+        auth::login,
+        auth::refresh,
+        auth::logout,
+        auth::register,
+        auth::me,
+        auth::users_public,
+        auth::cast_info,
+        auth::stream_token,
+        auth::pairing_request,
+        auth::pairing_status,
+        auth::pairing_pending,
+        auth::pairing_approve,
+        auth::pairing_deny,
+        roles::list,
+        roles::create,
+        roles::permissions,
+        roles::get,
+        roles::update,
+        roles::remove,
+        settings::list,
+        settings::put_bulk,
+        settings::get_one,
+        settings::put_one,
+        fs::browse,
         users::list,
         users::create,
         users::get_one,
@@ -45,9 +69,13 @@ pub fn router(
         .route("/internal/", any(internal_404))
         .route("/internal/{*rest}", any(internal_404))
         .fallback_service(static_files::router(client_dir, cast_dir));
-    // Merged after the layers so Nest answers the other methods unlayered instead of a 405.
-    let local = layers::apply(local, cors_origin, BODY_LIMIT_BYTES)
-        .route(system::LIVENESS, any_service(forwarder.clone()));
+    // Merged after the layers so Nest answers the methods Rust does not own, unlayered instead of a 405.
+    let local = layers::apply(local, cors_origin, BODY_LIMIT_BYTES);
+    let local = ApiDoc::openapi()
+        .paths
+        .paths
+        .keys()
+        .fold(local, |r, p| r.route(p, any_service(forwarder.clone())));
     // Nest's only unprefixed route is `/engine/resolve` (bootstrap.md rule 1).
     ["/api", "/api/", "/api/{*rest}", "/engine/resolve"]
         .into_iter()

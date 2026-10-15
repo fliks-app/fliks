@@ -73,7 +73,7 @@ struct LoginBody {
 /// `SafeUser` (auth.md rule 40).
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct SafeUser {
+pub(crate) struct SafeUser {
     #[serde(flatten)]
     user: UserRow,
     role: Option<String>,
@@ -136,13 +136,14 @@ fn check(errs: Vec<String>) -> Result<(), AppError> {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-struct LoginDto {
+pub(crate) struct LoginDto {
     username: String,
     password: String,
     server_type: Option<String>,
 }
 
-async fn login(
+#[utoipa::path(post, path = "/api/auth/login", responses((status = 200)))]
+pub(crate) async fn login(
     State(st): State<AppState>,
     headers: HeaderMap,
     ValidJson(dto): ValidJson<LoginDto>,
@@ -211,11 +212,12 @@ async fn login(
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RefreshDto {
+pub(crate) struct RefreshDto {
     refresh_token: Option<Value>,
 }
 
-async fn refresh(
+#[utoipa::path(post, path = "/api/auth/refresh", responses((status = 200)))]
+pub(crate) async fn refresh(
     State(st): State<AppState>,
     headers: HeaderMap,
     ValidJson(dto): ValidJson<RefreshDto>,
@@ -257,7 +259,8 @@ async fn refresh(
     Ok((StatusCode::CREATED, set, Json(pair(access, issued))).into_response())
 }
 
-async fn logout(
+#[utoipa::path(post, path = "/api/auth/logout", responses((status = 200)))]
+pub(crate) async fn logout(
     State(st): State<AppState>,
     headers: HeaderMap,
     ValidJson(body): ValidJson<Value>,
@@ -298,7 +301,8 @@ struct RegisterDto {
     email: Option<String>,
 }
 
-async fn register(
+#[utoipa::path(post, path = "/api/auth/register", responses((status = 200)))]
+pub(crate) async fn register(
     State(st): State<AppState>,
     authed: Authed,
     ValidJson(body): ValidJson<Value>,
@@ -347,7 +351,8 @@ async fn register(
     Ok((StatusCode::CREATED, Json(safe_user(&st, user, None).await)).into_response())
 }
 
-async fn me(State(st): State<AppState>, a: Authed) -> Result<Json<SafeUser>, AppError> {
+#[utoipa::path(get, path = "/api/auth/me", responses((status = 200)))]
+pub(crate) async fn me(State(st): State<AppState>, a: Authed) -> Result<Json<SafeUser>, AppError> {
     let stale = a
         .user
         .last_login
@@ -364,7 +369,8 @@ async fn me(State(st): State<AppState>, a: Authed) -> Result<Json<SafeUser>, App
     Ok(Json(safe_user(&st, a.user, a.role).await))
 }
 
-async fn users_public(State(st): State<AppState>) -> Result<Json<Value>, AppError> {
+#[utoipa::path(get, path = "/api/auth/users-public", responses((status = 200)))]
+pub(crate) async fn users_public(State(st): State<AppState>) -> Result<Json<Value>, AppError> {
     let rows = sqlx::query!(
         r#"SELECT id, username, avatar FROM users WHERE enabled = true ORDER BY username ASC"#
     )
@@ -377,7 +383,8 @@ async fn users_public(State(st): State<AppState>) -> Result<Json<Value>, AppErro
     ))
 }
 
-async fn cast_info(
+#[utoipa::path(post, path = "/api/auth/cast-info", responses((status = 200)))]
+pub(crate) async fn cast_info(
     State(st): State<AppState>,
     a: Authed,
     headers: HeaderMap,
@@ -411,7 +418,11 @@ async fn cast_info(
         .into_response())
 }
 
-async fn stream_token(State(st): State<AppState>, a: Authed) -> Result<Response, AppError> {
+#[utoipa::path(post, path = "/api/auth/stream-token", responses((status = 200)))]
+pub(crate) async fn stream_token(
+    State(st): State<AppState>,
+    a: Authed,
+) -> Result<Response, AppError> {
     let token = st.jwt.sign_stream(a.user.id, &a.user.username)?.token;
     let expires_at = Utc::now().timestamp_millis() + (st.jwt.stream_ttl_secs as i64) * 1000;
     Ok((
@@ -451,7 +462,7 @@ async fn internal_stream_token(
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-struct PairingRequestDto {
+pub(crate) struct PairingRequestDto {
     user_id: i32,
     device_name: String,
     system_name: Option<String>,
@@ -464,7 +475,8 @@ fn device_id(h: &HeaderMap) -> Result<&str, AppError> {
         .ok_or_else(|| AppError::bad_request("Missing X-Device-Id header"))
 }
 
-async fn pairing_request(
+#[utoipa::path(post, path = "/api/auth/pairing/request", responses((status = 200)))]
+pub(crate) async fn pairing_request(
     State(st): State<AppState>,
     headers: HeaderMap,
     ValidJson(dto): ValidJson<PairingRequestDto>,
@@ -515,7 +527,8 @@ async fn pairing_request(
         .into_response())
 }
 
-async fn pairing_status(
+#[utoipa::path(get, path = "/api/auth/pairing/status", responses((status = 200)))]
+pub(crate) async fn pairing_status(
     State(st): State<AppState>,
     headers: HeaderMap,
     Query(q): Query<Vec<(String, String)>>,
@@ -554,7 +567,7 @@ async fn pairing_status(
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct Pending {
+pub(crate) struct Pending {
     pairing_id: String,
     device_id: String,
     device_name: String,
@@ -565,7 +578,8 @@ struct Pending {
     expires_at: DateTime<Utc>,
 }
 
-async fn pairing_pending(
+#[utoipa::path(get, path = "/api/auth/pairing/pending", responses((status = 200)))]
+pub(crate) async fn pairing_pending(
     State(st): State<AppState>,
     a: Authed,
 ) -> Result<Json<Vec<Pending>>, AppError> {
@@ -584,7 +598,8 @@ async fn pairing_pending(
     ))
 }
 
-async fn pairing_approve(
+#[utoipa::path(post, path = "/api/auth/pairing/{id}/approve", responses((status = 200)))]
+pub(crate) async fn pairing_approve(
     State(st): State<AppState>,
     a: Authed,
     PathParams(id): PathParams<String>,
@@ -599,7 +614,8 @@ async fn pairing_approve(
     }
 }
 
-async fn pairing_deny(
+#[utoipa::path(post, path = "/api/auth/pairing/{id}/deny", responses((status = 200)))]
+pub(crate) async fn pairing_deny(
     State(st): State<AppState>,
     a: Authed,
     PathParams(id): PathParams<String>,
