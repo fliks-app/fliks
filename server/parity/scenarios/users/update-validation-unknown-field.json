@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "users-update-validation-unknown-field",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "zzz": 1
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property zzz should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/users/2"
+    }
+  ]
+}

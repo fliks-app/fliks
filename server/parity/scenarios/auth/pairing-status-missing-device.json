@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "name": "auth-pairing-status-missing-device",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Missing X-Device-Id header",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/auth/pairing/status?pairingId=x"
+    }
+  ]
+}

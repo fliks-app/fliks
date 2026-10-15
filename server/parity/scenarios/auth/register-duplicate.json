@@ -1,0 +1,24 @@
+{
+  "deviation": null,
+  "name": "auth-register-duplicate",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "password": "pw",
+        "username": "user"
+      },
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "message": "Username already taken",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "POST",
+      "path": "/api/auth/register"
+    }
+  ]
+}

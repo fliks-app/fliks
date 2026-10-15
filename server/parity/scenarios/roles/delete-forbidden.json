@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "name": "roles-delete-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "manager",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "DELETE",
+      "path": "/api/roles/3"
+    }
+  ]
+}

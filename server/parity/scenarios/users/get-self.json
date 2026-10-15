@@ -1,0 +1,60 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..lastLogin"
+  ],
+  "name": "users-get-self",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "avatar": null,
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "user@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 2,
+          "isAdmin": false,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "private",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "username": "user"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/users/2"
+    }
+  ]
+}

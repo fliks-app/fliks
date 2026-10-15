@@ -1,0 +1,62 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "users-update-manager-edits-other",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "manager",
+      "body": {
+        "email": "m@parity.test",
+        "enabled": false
+      },
+      "expect": {
+        "body": {
+          "avatar": null,
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "m@parity.test",
+          "enabled": false,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 3,
+          "isAdmin": false,
+          "lastLogin": null,
+          "libraryIds": [
+            1
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read"
+          ],
+          "profileVisibility": "private",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "Readonly",
+          "roleId": 3,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "readonly"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/3"
+    }
+  ]
+}

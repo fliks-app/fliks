@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "settings-put-key-non-string",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "value": 5
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "value must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/settings/parity_flag"
+    }
+  ]
+}

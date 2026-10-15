@@ -1,0 +1,65 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "users-create-manager-no-role",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "manager",
+      "body": {
+        "email": "new@parity.test",
+        "password": "longenough1",
+        "username": "newuser"
+      },
+      "expect": {
+        "body": {
+          "avatar": null,
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "new@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 6,
+          "isAdmin": false,
+          "lastLogin": null,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "private",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "newuser"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/users"
+    }
+  ]
+}

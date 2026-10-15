@@ -1,0 +1,21 @@
+{
+  "deviation": null,
+  "name": "auth-refresh-missing",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Unauthorized",
+          "message": "Missing refresh token",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/auth/refresh"
+    }
+  ]
+}

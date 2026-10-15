@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "roles-update-not-found",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Role #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PUT",
+      "path": "/api/roles/999"
+    }
+  ]
+}

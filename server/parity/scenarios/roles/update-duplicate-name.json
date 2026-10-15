@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "roles-update-duplicate-name",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "User"
+      },
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "message": "Role name already exists",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "PUT",
+      "path": "/api/roles/3"
+    }
+  ]
+}

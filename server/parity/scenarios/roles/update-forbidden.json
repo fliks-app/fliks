@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "roles-update-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "manager",
+      "body": {
+        "name": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/roles/3"
+    }
+  ]
+}

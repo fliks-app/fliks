@@ -1,0 +1,92 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "roles-update-libraries",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "defaultLibraryIds": [
+          2
+        ]
+      },
+      "expect": {
+        "body": {
+          "defaultLibraries": [
+            {
+              "color": "#10b981",
+              "defaultLanguageProfileId": null,
+              "defaultQualityProfileId": null,
+              "icon": "tv",
+              "id": 2,
+              "label": null,
+              "mediaTypes": [
+                "series"
+              ],
+              "metadataLanguage": null,
+              "metadataRegion": null,
+              "name": "Series",
+              "path": "/tmp/fliks-parity/media/series",
+              "preferredProvider": null
+            }
+          ],
+          "defaultLibraryIds": [
+            2
+          ],
+          "id": 3,
+          "isDefault": false,
+          "name": "Readonly",
+          "permissions": [
+            "media.read",
+            "livetv.read"
+          ]
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/roles/3"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "defaultLibraries": [
+            {
+              "color": "#10b981",
+              "defaultLanguageProfileId": null,
+              "defaultQualityProfileId": null,
+              "icon": "tv",
+              "id": 2,
+              "label": null,
+              "mediaTypes": [
+                "series"
+              ],
+              "metadataLanguage": null,
+              "metadataRegion": null,
+              "name": "Series",
+              "path": "/tmp/fliks-parity/media/series",
+              "preferredProvider": null
+            }
+          ],
+          "defaultLibraryIds": [
+            2
+          ],
+          "id": 3,
+          "isDefault": false,
+          "name": "Readonly",
+          "permissions": [
+            "media.read",
+            "livetv.read"
+          ]
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/roles/3"
+    }
+  ]
+}

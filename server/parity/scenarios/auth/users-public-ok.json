@@ -1,0 +1,42 @@
+{
+  "deviation": null,
+  "name": "auth-users-public-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": [
+          {
+            "avatar": null,
+            "id": 1,
+            "username": "admin"
+          },
+          {
+            "avatar": null,
+            "id": 5,
+            "username": "manager"
+          },
+          {
+            "avatar": null,
+            "id": 4,
+            "username": "other"
+          },
+          {
+            "avatar": null,
+            "id": 3,
+            "username": "readonly"
+          },
+          {
+            "avatar": null,
+            "id": 2,
+            "username": "user"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/auth/users-public"
+    }
+  ]
+}

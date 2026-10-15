@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "users-update-self-manager-fields-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "isAdmin": true
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Only users with users.manage permission can change role or enabled status",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/users/2"
+    }
+  ]
+}

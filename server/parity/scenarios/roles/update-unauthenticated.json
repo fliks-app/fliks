@@ -1,0 +1,22 @@
+{
+  "deviation": null,
+  "name": "roles-update-unauthenticated",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "name": "x"
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "PUT",
+      "path": "/api/roles/3"
+    }
+  ]
+}

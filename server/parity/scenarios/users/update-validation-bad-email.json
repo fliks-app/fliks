@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "users-update-validation-bad-email",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "email": "nope"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "email must be an email"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/users/2"
+    }
+  ]
+}

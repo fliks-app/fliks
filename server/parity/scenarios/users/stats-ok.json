@@ -1,0 +1,34 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..lastActiveAt",
+    "$..memberSince"
+  ],
+  "name": "users-stats-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "activity": {},
+          "playback": {
+            "episodesWatched": 0,
+            "lastPlayedAt": "2026-01-04T00:00:00.000Z",
+            "moviesWatched": 1,
+            "seriesStarted": 0,
+            "totalWatchTimeSeconds": 3500
+          },
+          "requests": {
+            "approved": 0,
+            "declined": 0,
+            "pending": 1
+          }
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/users/2/stats"
+    }
+  ]
+}

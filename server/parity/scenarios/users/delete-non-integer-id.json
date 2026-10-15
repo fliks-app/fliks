@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "name": "users-delete-non-integer-id",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "DELETE",
+      "path": "/api/users/abc"
+    }
+  ]
+}

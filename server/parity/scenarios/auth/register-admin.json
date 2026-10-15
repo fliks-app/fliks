@@ -1,0 +1,58 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "auth-register-admin",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "password": "pw",
+        "username": "newbie"
+      },
+      "expect": {
+        "body": {
+          "avatar": null,
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": null,
+          "enabled": true,
+          "features": [],
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 6,
+          "isAdmin": false,
+          "lastLogin": null,
+          "libraryIds": [],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [],
+          "profileVisibility": "private",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": null,
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "newbie"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/auth/register"
+    }
+  ]
+}

@@ -1,0 +1,138 @@
+{
+  "capture": {
+    "rt": "$.steps[0].body.refreshToken"
+  },
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..accessToken",
+    "$..refreshToken",
+    "$..accessTokenExpiresAt",
+    "$..refreshTokenExpiresAt",
+    "$..lastLogin"
+  ],
+  "name": "auth-refresh-disabled-account",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "password": "user-pass",
+        "username": "user"
+      },
+      "expect": {
+        "body": {
+          "user": {
+            "avatar": null,
+            "edlAutoSkipCommercials": true,
+            "edlEnabled": true,
+            "email": "user@parity.test",
+            "enabled": true,
+            "features": [],
+            "hiddenLibraryIds": [],
+            "hideSpoilers": false,
+            "id": 2,
+            "isAdmin": false,
+            "libraryIds": [],
+            "libraryOrder": [],
+            "mediaServerId": null,
+            "mediaServerType": "local",
+            "movieQuotaLimit": 0,
+            "permissions": [
+              "media.read",
+              "livetv.read",
+              "requests.create"
+            ],
+            "profileVisibility": "private",
+            "quotaPeriodDays": 7,
+            "requirePasswordChange": false,
+            "role": "User",
+            "roleId": 2,
+            "seriesQuotaLimit": 0,
+            "shareDisabled": false,
+            "shareLikes": false,
+            "shareRecommendations": false,
+            "shareStats": false,
+            "shareTastes": false,
+            "shareWatchHistory": false,
+            "spoilerHideOverviews": true,
+            "spoilerHideStills": true,
+            "spoilerHideTitles": true,
+            "username": "user"
+          }
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/auth/login"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "enabled": false
+      },
+      "expect": {
+        "body": {
+          "avatar": null,
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "user@parity.test",
+          "enabled": false,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 2,
+          "isAdmin": false,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "private",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "user"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/2"
+    },
+    {
+      "as": "anon",
+      "body": {
+        "refreshToken": "{rt}"
+      },
+      "expect": {
+        "body": {
+          "error": "Unauthorized",
+          "message": "Account disabled",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/auth/refresh"
+    }
+  ]
+}

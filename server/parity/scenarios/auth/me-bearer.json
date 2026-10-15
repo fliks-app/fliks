@@ -1,0 +1,57 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..lastLogin"
+  ],
+  "name": "auth-me-bearer",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "auth": "bearer",
+      "expect": {
+        "body": {
+          "avatar": null,
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "admin@parity.test",
+          "enabled": true,
+          "features": [],
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 1,
+          "isAdmin": true,
+          "libraryIds": [],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "manage:all"
+          ],
+          "profileVisibility": "private",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "Admin",
+          "roleId": null,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "username": "admin"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/auth/me"
+    }
+  ]
+}

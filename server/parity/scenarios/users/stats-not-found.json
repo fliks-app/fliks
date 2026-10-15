@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "name": "users-stats-not-found",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "User #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/users/999/stats"
+    }
+  ]
+}

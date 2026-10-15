@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "auth-refresh-invalid",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "refreshToken": "garbage"
+      },
+      "expect": {
+        "body": {
+          "error": "Unauthorized",
+          "message": "Invalid refresh token",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/auth/refresh"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "auth-login-media-server-not-implemented",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "password": "b",
+        "serverType": "jellyfin",
+        "username": "a"
+      },
+      "expect": {
+        "body": {
+          "error": "Unauthorized",
+          "message": "Media server login for jellyfin not yet implemented",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/auth/login"
+    }
+  ]
+}

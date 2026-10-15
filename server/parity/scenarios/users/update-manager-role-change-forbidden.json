@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "users-update-manager-role-change-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "manager",
+      "body": {
+        "roleId": 2
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Only users with roles.manage permission can change a role",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/users/3"
+    }
+  ]
+}

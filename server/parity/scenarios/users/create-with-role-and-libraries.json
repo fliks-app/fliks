@@ -1,0 +1,67 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "users-create-with-role-and-libraries",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "email": "new@parity.test",
+        "libraryIds": [
+          1
+        ],
+        "password": "longenough1",
+        "roleId": 3,
+        "username": "newuser"
+      },
+      "expect": {
+        "body": {
+          "avatar": null,
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "new@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 6,
+          "isAdmin": false,
+          "lastLogin": null,
+          "libraryIds": [
+            1
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read"
+          ],
+          "profileVisibility": "private",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "Readonly",
+          "roleId": 3,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "newuser"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/users"
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "roles-update-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "Viewer",
+        "permissions": [
+          "media.read"
+        ]
+      },
+      "expect": {
+        "body": {
+          "defaultLibraries": [],
+          "defaultLibraryIds": [],
+          "id": 3,
+          "isDefault": false,
+          "name": "Viewer",
+          "permissions": [
+            "media.read"
+          ]
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/roles/3"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "defaultLibraries": [],
+          "defaultLibraryIds": [],
+          "id": 3,
+          "isDefault": false,
+          "name": "Viewer",
+          "permissions": [
+            "media.read"
+          ]
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/roles/3"
+    }
+  ]
+}

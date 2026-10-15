@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "users-update-duplicate-username",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "username": "other"
+      },
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "message": "Username already taken",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "PUT",
+      "path": "/api/users/2"
+    }
+  ]
+}

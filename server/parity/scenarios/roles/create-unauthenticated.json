@@ -1,0 +1,30 @@
+{
+  "deviation": null,
+  "name": "roles-create-unauthenticated",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "defaultLibraryIds": [
+          1
+        ],
+        "isDefault": false,
+        "name": "Editor",
+        "permissions": [
+          "media.read",
+          "media.edit"
+        ]
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/roles"
+    }
+  ]
+}

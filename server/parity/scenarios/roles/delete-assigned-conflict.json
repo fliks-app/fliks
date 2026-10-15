@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "name": "roles-delete-assigned-conflict",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "message": "Cannot delete role \"User\": still assigned to 2 user(s)",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "DELETE",
+      "path": "/api/roles/2"
+    }
+  ]
+}

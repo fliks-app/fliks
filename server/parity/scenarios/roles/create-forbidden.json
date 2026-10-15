@@ -1,0 +1,31 @@
+{
+  "deviation": null,
+  "name": "roles-create-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "manager",
+      "body": {
+        "defaultLibraryIds": [
+          1
+        ],
+        "isDefault": false,
+        "name": "Editor",
+        "permissions": [
+          "media.read",
+          "media.edit"
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/roles"
+    }
+  ]
+}

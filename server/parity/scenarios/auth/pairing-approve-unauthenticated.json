@@ -1,0 +1,19 @@
+{
+  "deviation": null,
+  "name": "auth-pairing-approve-unauthenticated",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/auth/pairing/x/approve"
+    }
+  ]
+}

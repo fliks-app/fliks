@@ -1,0 +1,66 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..accessToken",
+    "$..refreshToken",
+    "$..accessTokenExpiresAt",
+    "$..refreshTokenExpiresAt",
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin"
+  ],
+  "name": "auth-login-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "password": "admin-pass",
+        "username": "admin"
+      },
+      "expect": {
+        "body": {
+          "user": {
+            "avatar": null,
+            "edlAutoSkipCommercials": true,
+            "edlEnabled": true,
+            "email": "admin@parity.test",
+            "enabled": true,
+            "features": [],
+            "hiddenLibraryIds": [],
+            "hideSpoilers": false,
+            "id": 1,
+            "isAdmin": true,
+            "libraryIds": [],
+            "libraryOrder": [],
+            "mediaServerId": null,
+            "mediaServerType": "local",
+            "movieQuotaLimit": 0,
+            "permissions": [
+              "manage:all"
+            ],
+            "profileVisibility": "private",
+            "quotaPeriodDays": 7,
+            "requirePasswordChange": false,
+            "role": "Admin",
+            "roleId": null,
+            "seriesQuotaLimit": 0,
+            "shareDisabled": false,
+            "shareLikes": false,
+            "shareRecommendations": false,
+            "shareStats": false,
+            "shareTastes": false,
+            "shareWatchHistory": false,
+            "spoilerHideOverviews": true,
+            "spoilerHideStills": true,
+            "spoilerHideTitles": true,
+            "username": "admin"
+          }
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/auth/login"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "deviation": null,
+  "name": "settings-put-key-unauthenticated",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "value": "x"
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "PUT",
+      "path": "/api/settings/parity_flag"
+    }
+  ]
+}

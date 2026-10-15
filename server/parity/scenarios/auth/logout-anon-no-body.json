@@ -1,0 +1,15 @@
+{
+  "deviation": null,
+  "name": "auth-logout-anon-no-body",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "status": 204
+      },
+      "method": "POST",
+      "path": "/api/auth/logout"
+    }
+  ]
+}

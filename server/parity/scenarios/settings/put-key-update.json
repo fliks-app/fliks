@@ -1,0 +1,27 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "settings-put-key-update",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "value": "off"
+      },
+      "expect": {
+        "body": {
+          "id": 1,
+          "key": "parity_flag",
+          "value": "off"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/settings/parity_flag"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "settings-bulk-put-missing-data",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "data must be an object"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/settings"
+    }
+  ]
+}

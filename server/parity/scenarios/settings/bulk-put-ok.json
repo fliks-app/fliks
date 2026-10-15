@@ -1,0 +1,39 @@
+{
+  "deviation": null,
+  "name": "settings-bulk-put-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "data": {
+          "a_key": "1",
+          "parity_flag": "off",
+          "parity_null": null
+        }
+      },
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/settings"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "a_key": "1",
+          "parity_flag": "off",
+          "parity_json": "{\"a\":1}",
+          "parity_null": null
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/settings"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "name": "settings-list-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "parity_flag": "on",
+          "parity_json": "{\"a\":1}",
+          "parity_null": null
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/settings"
+    }
+  ]
+}

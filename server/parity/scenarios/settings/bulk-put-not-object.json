@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "settings-bulk-put-not-object",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "data": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "data must be an object"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/settings"
+    }
+  ]
+}
