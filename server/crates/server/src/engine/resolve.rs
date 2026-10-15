@@ -261,7 +261,7 @@ async fn locate(
     let file = file.to_string_lossy().into_owned();
     match req.purpose {
         ResolvePurpose::Sprite => {
-            let sprite = cache_dir()
+            let sprite = crate::paths::cache_dir()
                 .join("thumbnails")
                 .join(id.to_string())
                 .join("sprite.jpg");
@@ -406,33 +406,6 @@ fn lexical_resolve(base: &Path, rel: &str) -> PathBuf {
         }
     }
     out
-}
-
-/// Extracted subtitles and legacy sprites: `FLIKS_CACHE_DIR`, else `<data dir>/cache`.
-pub fn cache_dir() -> PathBuf {
-    let env = |k| {
-        std::env::var(k)
-            .ok()
-            .map(|v| v.trim().to_owned())
-            .filter(|v| !v.is_empty())
-    };
-    env("FLIKS_CACHE_DIR").map_or_else(
-        || {
-            let data = env("FLIKS_DATA_DIR")
-                .or_else(|| env("FLIKS_IMAGES_DIR"))
-                .map(PathBuf::from)
-                .unwrap_or_else(|| {
-                    let legacy = PathBuf::from("images");
-                    if legacy.exists() {
-                        legacy
-                    } else {
-                        "data".into()
-                    }
-                });
-            data.join("cache")
-        },
-        PathBuf::from,
-    )
 }
 
 /// Bridge B1: Nest answers `live` (it owns the viewers and the channel access policy) until S7.

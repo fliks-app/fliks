@@ -10,6 +10,7 @@ pub mod fs;
 pub mod http;
 pub mod jwt_secret;
 pub mod nest;
+pub mod paths;
 pub mod roles;
 pub mod settings;
 pub mod state;

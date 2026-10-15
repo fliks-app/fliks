@@ -16,7 +16,6 @@ pub use config::validate_streaming_setting;
 pub use events::Feed;
 pub use jobs::Progress;
 pub use remote::router;
-pub use resolve::cache_dir;
 
 use client::Client;
 use fliks_engine_core::api::{Hello, LiveTvConfig, PathMapping};
