@@ -7,6 +7,7 @@ import {
   signal,
   untracked,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { HttpClient } from '@angular/common/http';
@@ -16,7 +17,7 @@ import { LucideDownload } from '@lucide/angular';
 import { firstValueFrom } from 'rxjs';
 import { ImportDiskComponent } from '../../import-disk/import-disk';
 import { SeerrApiService } from '../../../core/services/api/seerr-api.service';
-import { SettingsApiService } from '../../../core/services/api/settings-api.service';
+import { SettingsApiService, settingsSecretsSet } from '../../../core/services/api/settings-api.service';
 import { LibrariesApiService, Library } from '../../../core/services/api/libraries-api.service';
 import {
   MediaServersApiService,
@@ -24,6 +25,7 @@ import {
 } from '../../../core/services/api/media-servers-api.service';
 import { SseService } from '../../../core/services/sse.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { SECRET_MASK } from '../../../shared/components/schema-form/schema-form';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 
@@ -81,6 +83,7 @@ type LibrarySelection = number | null;
     ModalHeaderComponent,
     ModalFooterComponent,
     FormsModule,
+    NgTemplateOutlet,
     TranslatePipe,
     LucideDownload,
     ImportDiskComponent,
@@ -99,6 +102,11 @@ export class DataImportsSettingsComponent implements OnInit {
   private readonly translate = inject(TranslateService);
 
   readonly loading = signal(true);
+  readonly secretMask = SECRET_MASK;
+  /** Keys the server holds but does not return; blank on save keeps them. */
+  readonly storedKeys = signal<ReadonlySet<string>>(new Set());
+  /** Stored keys the user chose to erase on the next save. */
+  readonly clearedKeys = signal<ReadonlySet<string>>(new Set());
 
   // ---- Emby (watch history) ----
   readonly embyServers = signal<MediaServerRow[]>([]);
@@ -235,6 +243,14 @@ export class DataImportsSettingsComponent implements OnInit {
       ]);
       this.seerrUrl.set(all[SETTING_SEERR_URL] ?? '');
       this.seerrApiKey.set(all[SETTING_SEERR_API_KEY] ?? '');
+      this.storedKeys.set(
+        new Set([
+          ...settingsSecretsSet(all),
+          ...[SETTING_SEERR_API_KEY, SETTING_RADARR_API_KEY, SETTING_SONARR_API_KEY].filter(
+            (k) => !!all[k],
+          ),
+        ]),
+      );
       this.radarrUrl.set(all[SETTING_RADARR_URL] ?? '');
       this.radarrApiKey.set(all[SETTING_RADARR_API_KEY] ?? '');
       this.sonarrUrl.set(all[SETTING_SONARR_URL] ?? '');
@@ -291,8 +307,56 @@ export class DataImportsSettingsComponent implements OnInit {
   // Seerr
   // ---------------------------------------------------------------------------
 
+  private hasKey(setting: string, typed: string): boolean {
+    const kept = this.storedKeys().has(setting) && !this.clearedKeys().has(setting);
+    return typed.trim().length > 0 || kept;
+  }
+
+  keyStored(p: 'seerr' | Provider): boolean {
+    return this.storedKeys().has(`${p}_api_key`);
+  }
+
+  keyCleared(p: 'seerr' | Provider): boolean {
+    return this.clearedKeys().has(`${p}_api_key`);
+  }
+
+  /** Clearing empties the field; typing a new key or "keep" cancels it. */
+  setKeyCleared(p: 'seerr' | Provider, cleared: boolean) {
+    this.clearedKeys.update((s) => {
+      const next = new Set(s);
+      if (cleared) next.add(`${p}_api_key`);
+      else next.delete(`${p}_api_key`);
+      return next;
+    });
+    if (cleared) this.keySig(p).set('');
+  }
+
+  onKeyInput(p: 'seerr' | Provider, value: string) {
+    this.keySig(p).set(value);
+    if (value.trim()) this.setKeyCleared(p, false);
+  }
+
+  private keySig(p: 'seerr' | Provider) {
+    return p === 'seerr' ? this.seerrApiKey : this.apiKeySig(p);
+  }
+
+  private markStored(setting: string, typed: string) {
+    if (typed.trim()) this.storedKeys.update((s) => new Set(s).add(setting));
+    else if (this.clearedKeys().has(setting)) {
+      this.storedKeys.update((s) => new Set([...s].filter((k) => k !== setting)));
+      this.clearedKeys.update((s) => new Set([...s].filter((k) => k !== setting)));
+    }
+  }
+
+  /** Blank leaves a stored key alone: omit it from the write and from the request body. */
+  private keyEntry<K extends string>(name: K, typed: string, setting: string) {
+    const v = typed.trim();
+    if (!v && this.clearedKeys().has(setting)) return { [name]: null };
+    return v || !this.storedKeys().has(setting) ? { [name]: v } : {};
+  }
+
   get canSubmitSeerr(): boolean {
-    return this.seerrUrl().trim().length > 0 && this.seerrApiKey().trim().length > 0;
+    return this.seerrUrl().trim().length > 0 && this.hasKey(SETTING_SEERR_API_KEY, this.seerrApiKey());
   }
 
   async saveSeerrCredentials() {
@@ -301,8 +365,9 @@ export class DataImportsSettingsComponent implements OnInit {
     try {
       await this.settingsApi.setBulk({
         [SETTING_SEERR_URL]: this.seerrUrl().trim().replace(/\/$/, ''),
-        [SETTING_SEERR_API_KEY]: this.seerrApiKey().trim(),
+        ...this.keyEntry(SETTING_SEERR_API_KEY, this.seerrApiKey(), SETTING_SEERR_API_KEY),
       });
+      this.markStored(SETTING_SEERR_API_KEY, this.seerrApiKey());
       this.toast.success(this.translate.instant('common.saved'));
     } finally {
       this.seerrSaving.set(false);
@@ -316,7 +381,7 @@ export class DataImportsSettingsComponent implements OnInit {
     try {
       const r = await this.seerrApi.testConnection(
         this.seerrUrl().trim().replace(/\/$/, ''),
-        this.seerrApiKey().trim(),
+        this.seerrApiKey().trim() || undefined,
       );
       this.seerrTestResult.set(r);
     } catch (err: unknown) {
@@ -354,7 +419,7 @@ export class DataImportsSettingsComponent implements OnInit {
   // ---------------------------------------------------------------------------
 
   get canSubmitRadarr(): boolean {
-    return this.radarrUrl().trim().length > 0 && this.radarrApiKey().trim().length > 0;
+    return this.radarrUrl().trim().length > 0 && this.hasKey(SETTING_RADARR_API_KEY, this.radarrApiKey());
   }
 
   /** Import-specific gate: credentials AND a picked target library. */
@@ -363,7 +428,7 @@ export class DataImportsSettingsComponent implements OnInit {
   }
 
   get canSubmitSonarr(): boolean {
-    return this.sonarrUrl().trim().length > 0 && this.sonarrApiKey().trim().length > 0;
+    return this.sonarrUrl().trim().length > 0 && this.hasKey(SETTING_SONARR_API_KEY, this.sonarrApiKey());
   }
 
   get canImportSonarr(): boolean {
@@ -376,8 +441,9 @@ export class DataImportsSettingsComponent implements OnInit {
     try {
       await this.settingsApi.setBulk({
         [SETTING_RADARR_URL]: this.radarrUrl().trim().replace(/\/$/, ''),
-        [SETTING_RADARR_API_KEY]: this.radarrApiKey().trim(),
+        ...this.keyEntry(SETTING_RADARR_API_KEY, this.radarrApiKey(), SETTING_RADARR_API_KEY),
       });
+      this.markStored(SETTING_RADARR_API_KEY, this.radarrApiKey());
       this.toast.success(this.translate.instant('common.saved'));
     } finally {
       this.radarrSaving.set(false);
@@ -392,7 +458,7 @@ export class DataImportsSettingsComponent implements OnInit {
       const r = await firstValueFrom(
         this.http.post<{ ok: boolean; message: string }>('/api/imports/radarr/test', {
           url: this.radarrUrl().trim().replace(/\/$/, ''),
-          apiKey: this.radarrApiKey().trim(),
+          ...this.keyEntry('apiKey', this.radarrApiKey(), SETTING_RADARR_API_KEY),
         }),
       );
       this.radarrTestResult.set(r);
@@ -413,8 +479,9 @@ export class DataImportsSettingsComponent implements OnInit {
     try {
       await this.settingsApi.setBulk({
         [SETTING_SONARR_URL]: this.sonarrUrl().trim().replace(/\/$/, ''),
-        [SETTING_SONARR_API_KEY]: this.sonarrApiKey().trim(),
+        ...this.keyEntry(SETTING_SONARR_API_KEY, this.sonarrApiKey(), SETTING_SONARR_API_KEY),
       });
+      this.markStored(SETTING_SONARR_API_KEY, this.sonarrApiKey());
       this.toast.success(this.translate.instant('common.saved'));
     } finally {
       this.sonarrSaving.set(false);
@@ -429,7 +496,7 @@ export class DataImportsSettingsComponent implements OnInit {
       const r = await firstValueFrom(
         this.http.post<{ ok: boolean; message: string }>('/api/imports/sonarr/test', {
           url: this.sonarrUrl().trim().replace(/\/$/, ''),
-          apiKey: this.sonarrApiKey().trim(),
+          ...this.keyEntry('apiKey', this.sonarrApiKey(), SETTING_SONARR_API_KEY),
         }),
       );
       this.sonarrTestResult.set(r);
@@ -465,8 +532,13 @@ export class DataImportsSettingsComponent implements OnInit {
 
   private async openWizard(provider: Provider) {
     const url = this.urlSig(provider)().trim();
-    const apiKey = this.apiKeySig(provider)().trim();
-    if (!url || !apiKey) return;
+    const canSubmit = provider === 'radarr' ? this.canSubmitRadarr : this.canSubmitSonarr;
+    if (!url || !canSubmit) return;
+    const apiKey = this.keyEntry(
+      'apiKey',
+      this.apiKeySig(provider)(),
+      provider === 'radarr' ? SETTING_RADARR_API_KEY : SETTING_SONARR_API_KEY,
+    );
 
     if (provider === 'radarr') await this.saveRadarrCredentials();
     else await this.saveSonarrCredentials();
@@ -476,7 +548,7 @@ export class DataImportsSettingsComponent implements OnInit {
     this.resultSig(provider).set(null);
     try {
       const preview = await firstValueFrom(
-        this.http.post<PreviewImportResult>(`/api/imports/${provider}/preview`, { url, apiKey }),
+        this.http.post<PreviewImportResult>(`/api/imports/${provider}/preview`, { url, ...apiKey }),
       );
       this.previewSig(provider).set(preview);
       if (preview.remoteRootFolders.length === 0) {
@@ -551,8 +623,13 @@ export class DataImportsSettingsComponent implements OnInit {
 
   private async confirmImport(provider: Provider, mappings: PathMapping[]) {
     const url = this.urlSig(provider)().trim();
-    const apiKey = this.apiKeySig(provider)().trim();
-    if (!url || !apiKey) return;
+    const canSubmit = provider === 'radarr' ? this.canSubmitRadarr : this.canSubmitSonarr;
+    if (!url || !canSubmit) return;
+    const apiKey = this.keyEntry(
+      'apiKey',
+      this.apiKeySig(provider)(),
+      provider === 'radarr' ? SETTING_RADARR_API_KEY : SETTING_SONARR_API_KEY,
+    );
 
     this.showWizardSig(provider).set(false);
     this.loadingSig(provider).set(true);
@@ -567,7 +644,7 @@ export class DataImportsSettingsComponent implements OnInit {
       const result = await firstValueFrom(
         this.http.post<ArrImportResult>(`/api/imports/${provider}`, {
           url,
-          apiKey,
+          ...apiKey,
           mode,
           importSubtitles: importSubs,
           pathMappings: mappings,

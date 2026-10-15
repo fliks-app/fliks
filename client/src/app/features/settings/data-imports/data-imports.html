@@ -120,9 +120,11 @@
             type="password"
             class="input input-bordered input-sm w-full"
             [ngModel]="seerrApiKey()"
-            (ngModelChange)="seerrApiKey.set($event)"
+            (ngModelChange)="onKeyInput('seerr', $event)"
+            [placeholder]="keyStored('seerr') && !keyCleared('seerr') && !seerrApiKey() ? secretMask : ''"
           />
-        </label>
+        <ng-container *ngTemplateOutlet="keyActions; context: { $implicit: 'seerr' }" />
+          </label>
 
         <div class="flex flex-wrap gap-2 pt-2">
           <button
@@ -208,10 +210,11 @@
             <input
               type="password"
               class="input input-bordered input-sm w-full"
-              [placeholder]="'import.api_key_placeholder' | translate"
+              [placeholder]="keyStored('radarr') && !keyCleared('radarr') && !radarrApiKey() ? secretMask : ('import.api_key_placeholder' | translate)"
               [ngModel]="radarrApiKey()"
-              (ngModelChange)="radarrApiKey.set($event)"
+              (ngModelChange)="onKeyInput('radarr', $event)"
             />
+          <ng-container *ngTemplateOutlet="keyActions; context: { $implicit: 'radarr' }" />
           </label>
 
           <label class="form-control w-full">
@@ -376,10 +379,11 @@
             <input
               type="password"
               class="input input-bordered input-sm w-full"
-              [placeholder]="'import.api_key_placeholder' | translate"
+              [placeholder]="keyStored('sonarr') && !keyCleared('sonarr') && !sonarrApiKey() ? secretMask : ('import.api_key_placeholder' | translate)"
               [ngModel]="sonarrApiKey()"
-              (ngModelChange)="sonarrApiKey.set($event)"
+              (ngModelChange)="onKeyInput('sonarr', $event)"
             />
+          <ng-container *ngTemplateOutlet="keyActions; context: { $implicit: 'sonarr' }" />
           </label>
 
           <label class="form-control w-full">
@@ -676,3 +680,24 @@
     </div>
   }
 </div>
+
+<ng-template #keyActions let-p>
+  @if (keyStored(p)) {
+    @if (keyCleared(p)) {
+      <span class="label-text-alt text-warning">
+        {{ 'common.secret_will_clear' | translate }}
+        <button type="button" class="link link-hover font-medium" (click)="setKeyCleared(p, false)">
+          {{ 'common.secret_keep' | translate }}
+        </button>
+      </span>
+    } @else {
+      <button
+        type="button"
+        class="link link-hover label-text-alt self-start text-base-content/60"
+        (click)="setKeyCleared(p, true)"
+      >
+        {{ 'common.secret_clear' | translate }}
+      </button>
+    }
+  }
+</ng-template>
