@@ -151,12 +151,7 @@ pub async fn put_bulk(
     let Value::Object(data) = data else {
         return Err(AppError::bad_request(vec!["data must be an object"]));
     };
-    for (key, value) in &data {
-        if !value.is_string() && !value.is_null() {
-            return Err(AppError::bad_request(vec![format!(
-                "data.{key} must be a string"
-            )]));
-        }
+    for key in data.keys() {
         refuse_protected(key)?;
     }
     let secrets = Secrets::load(&st.db, data.keys().map(String::as_str))
@@ -166,8 +161,8 @@ pub async fn put_bulk(
     let mut written = Vec::new();
     for (key, value) in data {
         let incoming = match value {
-            Value::String(v) => Incoming::Text(v),
-            _ => Incoming::Null,
+            Value::Null => Incoming::Null,
+            v => Incoming::Text(db::pg_text(&v)),
         };
         if let Write::Set(v) = secrets.merge(&key, incoming) {
             db::set(&mut tx, &key, v.as_deref()).await.map_err(db_err)?;

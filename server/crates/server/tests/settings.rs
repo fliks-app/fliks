@@ -235,21 +235,22 @@ async fn bulk_validates_everything_before_writing(pool: PgPool) {
             (400, json!(["data must be an object"]))
         );
     }
-    let (s, _) = call(&c.app, "PUT", "/api/settings", a, json!({"data": {"a": 1}})).await;
-    assert_eq!(s, 400);
     let (s, b) = call(
         &c.app,
         "PUT",
         "/api/settings",
         a,
-        json!({"data": {"a": "1", "b": null}}),
+        json!({"data": {"a": "1", "b": null, "c": 2, "d": false}}),
     )
     .await;
     assert_eq!((s, b), (200, json!({"ok": true})));
     assert_eq!(stored(&c.pool, "a").await, Some(Some("1".into())));
     assert_eq!(stored(&c.pool, "b").await, Some(None));
+    assert_eq!(stored(&c.pool, "c").await, Some(Some("2".into())));
+    assert_eq!(stored(&c.pool, "d").await, Some(Some("false".into())));
 }
 
+#[cfg(unix)]
 #[sqlx::test(migrations = false)]
 async fn fs_browse_lists_sorted_directories_only(pool: PgPool) {
     let c = ctx(pool).await;
