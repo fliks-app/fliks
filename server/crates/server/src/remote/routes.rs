@@ -3,12 +3,9 @@ use super::{
     dto::{Claim, Command, CreateCode, Register},
     fanout::device_id_of,
 };
+use crate::presence::{Live, NowPlaying, live_sessions};
 use crate::{
-    events::{
-        Identity, Num, SseEvent,
-        event::{PlayState, RemoteAction},
-        uuid_v4,
-    },
+    events::{Identity, SseEvent, event::RemoteAction, uuid_v4},
     http::{
         AppError,
         auth::{Authed, SessionAuthed},
@@ -48,29 +45,6 @@ pub fn router() -> Router<AppState> {
         .route("/api/remote/grants", get(grants))
         .route("/api/remote/grants/{id}", delete(revoke))
         .route("/api/remote/{targetId}/command", post(command))
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NowPlaying {
-    pub media_file_id: i64,
-    pub media_title: Option<String>,
-    pub media_type: Option<String>,
-    pub poster_url: Option<String>,
-    pub position_seconds: Num,
-    pub state: PlayState,
-}
-
-/// A non-stale presence session bound to an SSE connection (`nowPlaying` is `None` once stale).
-pub struct Live {
-    pub connection_id: String,
-    pub system_name: Option<String>,
-    pub now_playing: Option<NowPlaying>,
-}
-
-// ponytail: presence is not ported yet; this returns no sessions until it exposes its registry.
-fn live_sessions(_: &AppState) -> Vec<Live> {
-    vec![]
 }
 
 #[derive(Serialize)]
