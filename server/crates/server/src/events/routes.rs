@@ -9,7 +9,7 @@ use crate::{
 use axum::{
     Json, Router,
     body::{Body, Bytes},
-    extract::{Path, Query, State},
+    extract::{Query, State},
     http::{HeaderMap, StatusCode, header},
     response::{
         IntoResponse, Response,
@@ -32,7 +32,7 @@ pub fn router() -> Router<AppState> {
         .route("/internal/events/stream", get(internal_stream))
         .route("/internal/events/progress", get(internal_progress))
         .route("/internal/activity", post(internal_activity))
-        .route("/internal/activity/{key}", get(internal_has))
+        .route("/internal/activity/claim", post(internal_claim))
 }
 
 /// Parsed after the bearer check so an unauthenticated caller learns nothing about the shapes.
@@ -192,6 +192,17 @@ async fn internal_progress(
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Running {
+    id: String,
+    r#type: String,
+    subject: Option<Subject>,
+    current: Option<Num>,
+    total: Option<Num>,
+    parent_id: Option<String>,
+}
+
+#[derive(Deserialize)]
 #[serde(tag = "op", rename_all = "lowercase", rename_all_fields = "camelCase")]
 enum ActivityOp {
     Pending {
@@ -200,14 +211,7 @@ enum ActivityOp {
         subject: Option<Subject>,
         parent_id: Option<String>,
     },
-    Running {
-        id: String,
-        r#type: String,
-        subject: Option<Subject>,
-        current: Option<Num>,
-        total: Option<Num>,
-        parent_id: Option<String>,
-    },
+    Running(Running),
     Remove {
         id: String,
     },
@@ -229,29 +233,28 @@ async fn internal_activity(
             subject,
             parent_id,
         } => a.upsert_pending(&id, &r#type, subject, parent_id),
-        ActivityOp::Running {
-            id,
-            r#type,
-            subject,
-            current,
-            total,
-            parent_id,
-        } => {
-            a.upsert_running(&id, &r#type, subject, current, total, parent_id);
+        ActivityOp::Running(r) => {
+            a.upsert_running(&r.id, &r.r#type, r.subject, r.current, r.total, r.parent_id);
         }
         ActivityOp::Remove { id } => a.remove(&id),
     }
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// `ActivityRegistryService.has`, the 409 gate of a duplicate rescan.
-async fn internal_has(
+/// Registers the work as running, or 409 when it already is (a duplicate rescan, refresh or sync).
+async fn internal_claim(
     State(st): State<AppState>,
     headers: HeaderMap,
-    Path(key): Path<String>,
-) -> Result<Json<Value>, AppError> {
+    body: Bytes,
+) -> Result<StatusCode, AppError> {
     st.bridge.check(&headers)?;
-    Ok(Json(json!({"has": st.hub.activity().has(&key)})))
+    let r: Running = parse(&body)?;
+    let a = st.hub.activity();
+    if a.claim(&r.id, &r.r#type, r.subject, r.current, r.total, r.parent_id) {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(AppError::bare(StatusCode::CONFLICT))
+    }
 }
 
 #[cfg(test)]

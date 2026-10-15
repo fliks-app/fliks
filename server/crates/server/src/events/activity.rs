@@ -105,8 +105,25 @@ impl Activity {
         );
     }
 
-    pub fn has(&self, id: &str) -> bool {
-        self.state().entries.contains_key(id)
+    /// Registers the work as running unless it already is, in one lock: the 409 gate of a duplicate.
+    pub fn claim(
+        &self,
+        id: &str,
+        r#type: &str,
+        subject: Option<Subject>,
+        current: Option<Num>,
+        total: Option<Num>,
+        parent_id: Option<String>,
+    ) -> bool {
+        let mut st = self.state();
+        if st.entries.contains_key(id) {
+            return false;
+        }
+        let running = Status::Running;
+        self.put(
+            &mut st, id, r#type, subject, running, current, total, parent_id,
+        );
+        true
     }
 
     pub fn remove(&self, id: &str) {
@@ -165,6 +182,23 @@ impl Activity {
         parent_id: Option<String>,
     ) {
         let mut st = self.state();
+        self.put(
+            &mut st, id, r#type, subject, status, current, total, parent_id,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn put(
+        &self,
+        st: &mut State,
+        id: &str,
+        r#type: &str,
+        subject: Option<Subject>,
+        status: Status,
+        current: Option<Num>,
+        total: Option<Num>,
+        parent_id: Option<String>,
+    ) {
         let existing = st.entries.get(id).map(|(s, e)| (*s, e.parent_id.clone()));
         if existing.is_none() && st.entries.len() >= MAX_ENTRIES {
             st.dropped += 1;
@@ -194,7 +228,7 @@ impl Activity {
             parent_id,
         };
         st.entries.insert(id.to_owned(), (seq, entry));
-        self.arm(&mut st);
+        self.arm(st);
     }
 
     /// One `activity.changed` per 250 ms window; the next mutation after it fires arms a new timer.
@@ -307,13 +341,26 @@ mod tests {
         a.upsert_pending("extra2", "T", None, None);
         a.upsert_running("0", "T", None, None, None, None);
         let l = a.list(1, 1);
-        assert_eq!(
-            (l.dropped, l.total, a.has("extra")),
-            (2, MAX_ENTRIES, false)
-        );
+        assert_eq!((l.dropped, l.total), (2, MAX_ENTRIES));
         assert_eq!(l.data[0].entry.id, "0");
         a.remove("0");
-        assert!(!a.has("0"));
+        assert!(a.claim("0", "T", None, None, None, None));
+    }
+
+    #[tokio::test]
+    async fn a_claim_refuses_work_already_registered() {
+        let hub = Hub::new();
+        let a = hub.activity();
+        a.upsert_pending("p", "T", None, None);
+        assert!(!a.claim("p", "T", None, None, None, None));
+        assert!(a.claim("r", "T", titled("r"), None, None, None));
+        assert!(!a.claim("r", "T", None, None, None, None));
+        let l = json_of(&a.list(1, 25));
+        assert_eq!(
+            l["data"][0],
+            json!({"id": "r", "type": "T", "subject": {"title": "r"}, "status": "running"})
+        );
+        assert_eq!(l["data"][1]["status"], "pending");
     }
 
     #[tokio::test(start_paused = true)]

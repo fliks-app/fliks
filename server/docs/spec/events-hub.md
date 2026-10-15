@@ -228,7 +228,7 @@ Parity scenarios (SSE steps need runner support to read N frames then close; a s
 
 1. `pairing.requested` is broadcast to every connected user (payload names the target `userId`, `deviceName`, `deviceId`; clients filter on `userId`). Keep frozen, or restrict to `U(userId)` as a new §7.6 deviation (clients stay compatible)? No F-number exists.
 2. `FliksHostImpl.publishOne` reads the replay cache (`progressCache.current(mediaId)`, [ts:src/modules/plugins/host/fliks-host.service.ts:963]) to build the grab placeholder. Once the cache is in Rust (S2) that read has no bridge in plan §6.4 (`POST /internal/events` is write-only); needs a bridge read or moving the "add to current set" logic into the hub.
-3. `ActivityRegistryService.has(id)` is synchronous and gates a 409 ([ts:src/modules/media/media.controller.ts:504]); the bridge makes it async (or Nest keeps a local mirror). Decide before S2 step 2.
+3. (Answered: the `has`-then-upsert gate becomes one atomic `POST /internal/activity/claim`, see `docs/bridge.md`.)
 4. (Answered, plan §10 S2 step 2: Nest is a thin forwarder + local re-emitter of the stream, so no dedupe; see Bridges item 2.)
 5. (Answered: C5 closes the superseded socket, rule 22.)
 6. Parity runner (§5.3) has no SSE step type; one has to be defined (read N frames with a timeout, then close) before the `events-*` scenarios can be recorded.

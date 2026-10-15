@@ -55,7 +55,7 @@ async fn every_internal_route_needs_the_bridge_bearer() {
         ("GET", "/internal/events/stream"),
         ("GET", "/internal/events/progress?mediaId=1"),
         ("POST", "/internal/activity"),
-        ("GET", "/internal/activity/a"),
+        ("POST", "/internal/activity/claim"),
     ] {
         let body = (m == "POST").then(|| json!({}));
         assert_eq!(call(&st, m, u, body, false).await.0, 401, "{m} {u}");
@@ -128,19 +128,14 @@ async fn activity_and_progress_bridges_round_trip() {
         .0,
         204
     );
-    assert_eq!(
-        call(&st, "GET", "/internal/activity/Rescan%3A1", None, true)
-            .await
-            .1,
-        json!({"has": true})
-    );
+    let claim = || {
+        let body = json!({"id": "Rescan:1", "type": "Rescan"});
+        call(&st, "POST", "/internal/activity/claim", Some(body), true)
+    };
+    assert_eq!(claim().await.0, 409);
     assert_eq!(post(json!({"op": "remove", "id": "Rescan:1"})).await.0, 204);
-    assert_eq!(
-        call(&st, "GET", "/internal/activity/Rescan%3A1", None, true)
-            .await
-            .1,
-        json!({"has": false})
-    );
+    assert_eq!(claim().await.0, 204);
+    assert_eq!(claim().await.0, 409);
     let (s, _) = call(
         &st,
         "GET",
