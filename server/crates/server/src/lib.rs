@@ -4,10 +4,12 @@ pub mod bridge;
 pub mod config;
 pub mod db;
 pub mod engine;
+pub mod fs;
 pub mod http;
 pub mod jwt_secret;
 pub mod nest;
 pub mod roles;
+pub mod settings;
 pub mod state;
 pub mod system;
 
