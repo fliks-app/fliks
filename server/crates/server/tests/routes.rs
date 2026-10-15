@@ -87,6 +87,10 @@ fn no_openapi_operation_is_in_the_nest_manifest() {
     let doc = serde_json::to_value(ApiDoc::openapi()).unwrap();
     for r in routes {
         let (method, path) = (r["method"].as_str().unwrap(), r["path"].as_str().unwrap());
+        // Nest keeps the live delegate Rust calls over the bridge (bridge.md).
+        if (method, path) == ("POST", "/engine/resolve") {
+            continue;
+        }
         let ops = &doc["paths"][openapi_path(path)];
         assert!(
             !ops[method.to_lowercase()].is_object() && !(method == "ALL" && ops.is_object()),

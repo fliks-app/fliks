@@ -214,47 +214,6 @@
   },
   {
     "method": "GET",
-    "path": "/api/engine/remote",
-    "controller": "EngineRemoteController",
-    "handler": "getRemote",
-    "file": "src/modules/engine/engine-remote.controller.ts",
-    "line": 90,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
-  },
-  {
-    "method": "PUT",
-    "path": "/api/engine/remote",
-    "controller": "EngineRemoteController",
-    "handler": "putRemote",
-    "file": "src/modules/engine/engine-remote.controller.ts",
-    "line": 96,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
-    "body": "PutEngineRemoteDto"
-  },
-  {
-    "method": "POST",
-    "path": "/api/engine/remote/test",
-    "controller": "EngineRemoteController",
-    "handler": "testRemote",
-    "file": "src/modules/engine/engine-remote.controller.ts",
-    "line": 111,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
-    "body": "TestEngineRemoteDto"
-  },
-  {
-    "method": "GET",
     "path": "/api/images/:type/:id",
     "controller": "ImageController",
     "handler": "serveWithoutVariant",
@@ -4092,19 +4051,6 @@
     "body": "TestTranslationProviderDto"
   },
   {
-    "method": "GET",
-    "path": "/api/system/activity",
-    "controller": "SystemController",
-    "handler": "activity",
-    "file": "src/modules/scheduler/system.controller.ts",
-    "line": 298,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
-  },
-  {
     "method": "POST",
     "path": "/api/system/backup",
     "controller": "SystemController",
@@ -4155,21 +4101,6 @@
       "PoliciesGuard"
     ],
     "policies": "(ability) => ability.can(Action.Read, 'Settings')"
-  },
-  {
-    "method": "GET",
-    "path": "/api/system/events",
-    "controller": "SystemController",
-    "handler": "events",
-    "file": "src/modules/scheduler/system.controller.ts",
-    "line": 234,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard",
-      "SessionTokenGuard"
-    ],
-    "policies": "() => true",
-    "sse": true
   },
   {
     "method": "GET",
