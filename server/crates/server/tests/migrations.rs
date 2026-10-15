@@ -115,8 +115,8 @@ async fn m1779100_collapses_multi_root_libraries_into_spin_offs(pool: PgPool) {
     );
     let settings: Vec<(String,)> = rows(&pool, r#"SELECT concat_ws('|', icon, "preferredProvider", "stalledCleanupProfile", "mediaTypes", "isDefaultForMovies", "isDefaultForSeries") FROM libraries WHERE id <> 2 ORDER BY id"#).await;
     let want = [
-        r#"film|tmdb|strict|["movie"]|true|true"#,
-        r#"film|tmdb|strict|["movie"]|false|false"#,
+        r#"film|tmdb|strict|["movie"]|t|t"#,
+        r#"film|tmdb|strict|["movie"]|f|f"#,
     ];
     assert_eq!(settings[0].0, want[0]);
     assert!(settings[1..].iter().all(|l| l.0 == want[1]), "{settings:?}");
@@ -427,5 +427,88 @@ async fn m1785600_skips_unexpected_setting_shapes(pool: PgPool) {
             .await
             .as_deref(),
         Some("[1]")
+    );
+}
+
+const SQL_FILES: i64 = 81;
+
+#[sqlx::test(migrations = false)]
+async fn migrate_builds_a_fresh_database(pool: PgPool) {
+    fliks_server::db::migrate(&pool).await.unwrap();
+
+    let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM _sqlx_migrations WHERE success")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(n, SQL_FILES);
+}
+
+/// One text line per column, index, constraint and enum value, ledgers excluded.
+const SCHEMA: &str = r#"
+    SELECT 'col ' || concat_ws(' | ', table_name, column_name, data_type, udt_name, is_nullable, column_default)
+      FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name NOT IN ('migrations', '_sqlx_migrations')
+    UNION ALL SELECT 'idx ' || indexdef FROM pg_indexes
+     WHERE schemaname = 'public' AND tablename NOT IN ('migrations', '_sqlx_migrations')
+    UNION ALL SELECT 'con ' || conrelid::regclass || ' ' || conname || ' ' || pg_get_constraintdef(oid)
+      FROM pg_constraint
+     WHERE connamespace = 'public'::regnamespace AND conrelid::regclass::text NOT IN ('migrations', '_sqlx_migrations')
+    UNION ALL SELECT 'enum ' || t.typname || ' ' || e.enumlabel
+      FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
+    ORDER BY 1
+"#;
+
+#[sqlx::test(migrations = false)]
+async fn adopting_a_typeorm_database_matches_a_fresh_one(pool: PgPool) {
+    sqlx::raw_sql(include_str!("fixtures/typeorm-81.sql"))
+        .execute(&pool)
+        .await
+        .unwrap();
+    fliks_server::db::migrate(&pool).await.unwrap();
+
+    let ledger: Vec<(i64, i64)> = rows(
+        &pool,
+        "SELECT version, execution_time FROM _sqlx_migrations ORDER BY version",
+    )
+    .await;
+    assert_eq!(ledger.len() as i64, SQL_FILES);
+    assert!(ledger.iter().all(|r| r.1 == 0), "a migration re-ran");
+
+    let fresh_db = "fliks_p7_fresh";
+    for stmt in [
+        format!("DROP DATABASE IF EXISTS {fresh_db}"),
+        format!("CREATE DATABASE {fresh_db}"),
+    ] {
+        sqlx::query(&stmt).execute(&pool).await.unwrap();
+    }
+    let fresh = PgPool::connect_with(pool.connect_options().as_ref().clone().database(fresh_db))
+        .await
+        .unwrap();
+    fliks_server::db::migrate(&fresh).await.unwrap();
+
+    let adopted: Vec<(String,)> = rows(&pool, SCHEMA).await;
+    let built: Vec<(String,)> = rows(&fresh, SCHEMA).await;
+    fresh.close().await;
+    sqlx::query(&format!("DROP DATABASE {fresh_db}"))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    assert!(built.len() > 100);
+    let only_in = |a: &[(String,)], b: &[(String,)]| -> Vec<String> {
+        a.iter()
+            .filter(|x| !b.contains(x))
+            .map(|x| x.0.clone())
+            .collect()
+    };
+    assert_eq!(
+        only_in(&adopted, &built),
+        Vec::<String>::new(),
+        "only in the TypeORM-built schema"
+    );
+    assert_eq!(
+        only_in(&built, &adopted),
+        Vec::<String>::new(),
+        "only in the sqlx-built schema"
     );
 }
