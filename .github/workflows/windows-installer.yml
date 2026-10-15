@@ -61,6 +61,17 @@ jobs:
             client/package-lock.json
             backend/package-lock.json
 
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache server build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            server/target
+          key: win-server-${{ hashFiles('server/Cargo.lock') }}
+          restore-keys: win-server-
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
