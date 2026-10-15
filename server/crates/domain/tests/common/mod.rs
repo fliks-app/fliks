@@ -103,3 +103,49 @@ pub fn diff(path: &str, a: &Value, b: &Value, out: &mut Vec<String>) {
         _ => out.push(format!("{path}: got {a}, expected {b}")),
     }
 }
+
+/// JSON as JS prints it: a whole float is an integer (`6.0` -> `6`), `-0` -> `0`.
+pub fn norm(v: Value) -> Value {
+    match v {
+        Value::Number(n) => match n.as_f64() {
+            Some(f) if n.is_f64() && f.fract() == 0.0 && f.abs() < 9e15 => Value::from(f as i64),
+            _ => Value::Number(n),
+        },
+        Value::Array(a) => Value::Array(a.into_iter().map(norm).collect()),
+        Value::Object(o) => Value::Object(o.into_iter().map(|(k, v)| (k, norm(v))).collect()),
+        v => v,
+    }
+}
+
+/// Replays every case of `fixtures/<set>/cases.json` through `run(input)` (blessing under `BLESS=1`).
+pub fn replay(set: &str, count: usize, run: impl Fn(&Value) -> Value) {
+    // Read at run time: a target dir shared across worktrees reuses binaries built in another one.
+    let dir = std::env::var("CARGO_MANIFEST_DIR").expect("run through cargo test");
+    let path = PathBuf::from(dir).join(format!("../../fixtures/{set}/cases.json"));
+    let mut fx = Fixture::load(&path);
+    let cases = fx.root["cases"].as_array().unwrap().clone();
+    assert_eq!(cases.len(), count);
+    let mut failed = vec![];
+    for (idx, c) in cases.iter().enumerate() {
+        let got = norm(run(&c["input"]));
+        let mut d = vec![];
+        diff("", &got, &norm(c["expected"].clone()), &mut d);
+        if d.is_empty() {
+            continue;
+        }
+        if blessing() {
+            fx.bless(Some(idx), got);
+        } else {
+            failed.push(format!("#{idx} {}\n  {}", c["input"], d.join("\n  ")));
+        }
+    }
+    fx.save();
+    for f in failed.iter().take(20) {
+        eprintln!("FAIL {}", f.chars().take(1500).collect::<String>());
+    }
+    assert!(
+        failed.is_empty(),
+        "{set}: {} of {count} cases fail",
+        failed.len()
+    );
+}
