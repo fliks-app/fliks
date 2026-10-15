@@ -1,0 +1,52 @@
+{
+  "deviation": "F11",
+  "name": "users-update-self-quota-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "movieQuotaLimit": 5
+      },
+      "expect": {
+        "body": {
+          "message": "Forbidden",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/users/2"
+    },
+    {
+      "as": "user",
+      "body": {
+        "seriesQuotaLimit": 5
+      },
+      "expect": {
+        "body": {
+          "message": "Forbidden",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/users/2"
+    },
+    {
+      "as": "user",
+      "body": {
+        "quotaPeriodDays": 30
+      },
+      "expect": {
+        "body": {
+          "message": "Forbidden",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/users/2"
+    }
+  ]
+}

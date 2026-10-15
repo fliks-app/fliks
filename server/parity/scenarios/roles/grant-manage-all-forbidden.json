@@ -1,0 +1,73 @@
+{
+  "deviation": "F12",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "roles-grant-manage-all-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "permissions": [
+          "media.read",
+          "users.manage",
+          "roles.manage"
+        ]
+      },
+      "expect": {
+        "body": {
+          "defaultLibraries": [],
+          "defaultLibraryIds": [],
+          "id": 4,
+          "isDefault": false,
+          "name": "Manager",
+          "permissions": [
+            "media.read",
+            "users.manage",
+            "roles.manage"
+          ]
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/roles/4"
+    },
+    {
+      "as": "manager",
+      "body": {
+        "name": "Super",
+        "permissions": [
+          "manage:all"
+        ]
+      },
+      "expect": {
+        "body": {
+          "message": "Forbidden",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/roles"
+    },
+    {
+      "as": "manager",
+      "body": {
+        "permissions": [
+          "manage:all"
+        ]
+      },
+      "expect": {
+        "body": {
+          "message": "Forbidden",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/roles/3"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "deviation": "F10",
+  "name": "users-manager-edits-admin-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "manager",
+      "body": {
+        "email": "changed@parity.test"
+      },
+      "expect": {
+        "body": {
+          "message": "Forbidden",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/users/1"
+    },
+    {
+      "as": "manager",
+      "body": {
+        "password": "newpassword1"
+      },
+      "expect": {
+        "body": {
+          "message": "Forbidden",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/users/1"
+    }
+  ]
+}
