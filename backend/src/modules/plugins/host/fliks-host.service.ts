@@ -957,7 +957,7 @@ export class FliksHostImpl implements PluginHostApi {
         await this.pushProgress({
           mediaId: event.mediaId,
           downloads: [
-            ...(this.progressCache.current(event.mediaId)?.downloads ?? []).map((d) => ({
+            ...((await this.progressCache.current(event.mediaId))?.downloads ?? []).map((d) => ({
               ref: d.ref,
               seasonNumber: d.seasonNumber,
               episodeNumber: d.episodeNumber,

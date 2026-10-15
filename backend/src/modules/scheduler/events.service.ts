@@ -1,8 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Subject, Observable, Subscription } from 'rxjs';
-import { randomUUID } from 'crypto';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
+import { Subject, Subscription } from 'rxjs';
 import { DownloadProgressState } from '../../common/constants/download-progress-state';
-import { DownloadProgressCacheService } from './download-progress-cache.service';
+import { bridgeConfigured, bridgeFetch } from '../bridge/server-bridge';
 import type { MediaProgressSubject } from '../../common/utils/media-progress-subject.util';
 
 export type SseEvent =
@@ -330,458 +334,73 @@ export interface RemoteStatePayload {
   lastCmdId: string | null;
 }
 
-/**
- * What one live SSE connection knows about itself. The open socket IS the
- * presence signal, so there is deliberately no `lastSeen` and no sweeper: a
- * second liveness source would need its own GC and would be wrong the moment
- * a device is unplugged.
- */
-export interface ConnectionIdentity {
-  userId: number;
-  /** `deviceId#tabNonce`: stable across this connection's reconnects (unlike
-   *  the connection id, reminted every time) and unique per screen (unlike the
-   *  device id alone, shared by two tabs). Null for a client that predates the
-   *  announce: it simply never becomes a target. */
-  targetId: string | null;
-  formFactor: string | null;
-  tvPlatform: string | null;
-  /** The name its owner gave the device, which no User-Agent can state. A
-   *  proper noun, so it travels verbatim rather than through a translation. */
-  deviceName: string | null;
-  userAgent: string | null;
-  since: number;
-}
+/** Where an event goes: `/internal/events` of fliks-server (server/docs/bridge.md). */
+type Forward =
+  | { kind: 'sse'; event: SseEvent; userId?: number; userIds?: number[] }
+  | {
+      kind: 'raw';
+      event: { type: string; payload: unknown };
+      userIds?: number[];
+    }
+  | { kind: 'domain'; event: DomainEvent };
 
-export interface RemoteTargetConnection extends ConnectionIdentity {
-  connectionId: string;
-}
-
-/** A client with no SSE primitive (the native TV app) polls instead, so its
- *  commands wait in a queue rather than being written to a socket. */
-interface PolledTarget extends ConnectionIdentity {
-  queue: SseEvent[];
-  lastPoll: number;
-}
-
-/** A polled target is present only as long as it keeps polling: the same rule
- *  as an open socket, expressed on the cadence the client actually uses. */
-const POLLED_TARGET_TTL_MS = 30_000;
-/** A remote launch is claimed here and consumed by the playback the target
- *  starts a moment later; anything older never belonged to that launch. */
-const ATTRIBUTION_TTL_MS = 60_000;
-/** Bounded so a device that registers and never polls cannot grow unchecked. */
-const POLLED_QUEUE_MAX = 20;
+const RECONNECT_MIN_MS = 500;
+const RECONNECT_MAX_MS = 15_000;
 
 /**
- * Wraps an `SseEvent` with its delivery audience.
- *   - `audience: null` + `connectionIds: null` → every SSE connection.
- *   - `audience: [userId, …]` → every connection owned by those users.
- *   - `connectionIds: [id, …]` → only those specific SSE connections.
- * Backend-internal `subscribe()` listeners ignore the audience and always see
- * the event — the audience only gates the client-facing stream.
+ * Thin client of the Rust hub. Every emit is forwarded (never dispatched locally) and comes back
+ * through `GET /internal/events/stream`, so each in-process subscriber runs once per event,
+ * asynchronously. At-most-once: an event emitted while the stream is down is lost.
  */
-interface SseEnvelope {
-  audience: number[] | null;
-  connectionIds: string[] | null;
-  event: SseEvent;
-}
-
-/** Short enough to beat the ~60s idle cut of mobile carriers and proxies. */
-const PING_INTERVAL_MS = 30_000;
-
 @Injectable()
-export class EventsService {
+export class EventsService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger(EventsService.name);
-  private readonly subject = new Subject<SseEnvelope>();
+  private readonly subject = new Subject<SseEvent>();
   private readonly domainSubject = new Subject<DomainEvent>();
-  private readonly connections = new Map<string, ConnectionIdentity>();
-  /** One completer per live connection, keyed the same as `connections`. Kept
-   *  separate so `RemoteTargetConnection` (built by spreading an identity)
-   *  never leaks a function into the client-facing DTO. */
-  private readonly connectionCompleters = new Map<string, () => void>();
-  private readonly polled = new Map<string, PolledTarget>();
-  /** Who launched what on which target, pending the playback that claims it.
-   *  Lives here rather than in the remote module so the streaming module can
-   *  read it without depending on that module. */
-  private readonly attributions = new Map<
-    string,
-    { userId: number; mediaFileId: number; at: number }
-  >();
-  /** Set by `RemoteService` so a household-scoped event reaches mutual
-   *  followers too, without this generic pub/sub knowing about follows or
-   *  consent flags. Never invoked for `emitToUsers`, so the household
-   *  fan-out itself can't re-trigger and loop. */
-  private householdFanOut: ((event: SseEvent, ownerId: number) => void) | null = null;
+  /** Forwards run one after the other so the hub sees them in emit order. */
+  private sent: Promise<void> = Promise.resolve();
+  private readonly stop = new AbortController();
 
-  // Defaulted so every existing `new EventsService()` in other services'
-  // tests keeps compiling — Nest's own DI always supplies the real instance.
-  constructor(
-    private readonly progressCache: DownloadProgressCacheService = new DownloadProgressCacheService(),
-  ) {}
+  onModuleInit(): void {
+    if (bridgeConfigured()) void this.consume();
+  }
+
+  onModuleDestroy(): void {
+    this.stop.abort();
+  }
 
   /** Broadcast to every connected client. */
   emit(event: SseEvent): void {
-    this.dispatch({ audience: null, connectionIds: null, event });
+    this.forward({ kind: 'sse', event });
   }
 
   /** Deliver only to the given user's SSE connections. */
   emitToUser(userId: number, event: SseEvent): void {
-    this.dispatch({ audience: [userId], connectionIds: null, event });
-    if (
-      event.type === 'remote.state' ||
-      event.type === 'remote.targets_changed' ||
-      event.type === 'remote.stopped'
-    ) {
-      this.householdFanOut?.(event, userId);
-    }
-  }
-
-  /** Registered once by `RemoteService`: extends a household-scoped event's
-   *  audience past its owner. Keeps consent/mutual-follow logic out of this
-   *  generic pub/sub while letting every `emitToUser` call site benefit. */
-  registerHouseholdFanOut(fn: (event: SseEvent, ownerId: number) => void): void {
-    this.householdFanOut = fn;
+    this.forward({ kind: 'sse', event, userId });
   }
 
   /** Deliver only to the given users' SSE connections. Empty list = nobody. */
   emitToUsers(userIds: number[], event: SseEvent): void {
-    this.dispatch({ audience: userIds, connectionIds: null, event });
+    this.forward({ kind: 'sse', event, userIds });
   }
 
-  /** Escape hatch for a type outside the closed `SseEvent` union — namespaced
-   *  plugin events (`plugin.<id>.<type>`). `audience: null` broadcasts. */
+  /** Namespaced plugin events (`plugin.<id>.<type>`); `audience: null` broadcasts. */
   emitRaw(type: string, payload: unknown, audience: number[] | null): void {
-    const event = { type, payload } as unknown as SseEvent;
-    this.dispatch({ audience, connectionIds: null, event });
-  }
-
-  /** Deliver only to one SSE connection (multi-device remote control).
-   *  Returns false when the socket is already gone: a caller that reported
-   *  success on a dropped command would be lying, so the miss is logged. */
-  emitToConnection(connectionId: string, event: SseEvent): boolean {
-    const polledTarget = this.polled.get(connectionId);
-    if (polledTarget) {
-      if (polledTarget.queue.length >= POLLED_QUEUE_MAX) {
-        this.log.warn(
-          `Dropped ${event.type}: queue full for polled target ${polledTarget.targetId}`,
-        );
-        return false;
-      }
-      polledTarget.queue.push(event);
-      return true;
-    }
-    if (!this.connections.has(connectionId)) {
-      this.log.warn(
-        `Dropped ${event.type}: SSE connection ${connectionId} is gone`,
-      );
-      return false;
-    }
-    this.dispatch({
-      audience: null,
-      connectionIds: [connectionId],
-      event,
-    });
-    return true;
-  }
-
-  /** Every user-scoped emit funnels through here, so `download.progress`'s
-   *  replay cache (fed by whichever caller pushes it — core or an in-process
-   *  bundle) never depends on catching every call site individually. */
-  private dispatch(env: SseEnvelope): void {
-    if (env.audience) {
-      if (env.event.type === 'download.progress') {
-        this.progressCache.record(env.audience, env.event);
-      } else if (env.event.type === 'import.complete') {
-        this.progressCache.clear(
-          env.event.mediaId,
-          env.event.seasonNumber,
-          env.event.episodeNumber,
-        );
-      }
-    }
-    this.subject.next(env);
-  }
-
-  hasConnection(connectionId: string): boolean {
-    return this.connections.has(connectionId);
-  }
-
-  /** Live targets owned by `userId`, newest connection first. */
-  /** Record that `userId` started this file on `targetId` from elsewhere, so the
-   *  playback about to begin there counts as theirs. */
-  claimAttribution(targetId: string, userId: number, mediaFileId: number): void {
-    this.log.debug(
-      `User ${userId} claims file ${mediaFileId} on ${targetId}`,
-    );
-    this.attributions.set(targetId, { userId, mediaFileId, at: Date.now() });
-  }
-
-  /** Consume the claim for a playback starting on `targetId`. Matched on the
-   *  file as well as the target: a target that starts something else in the
-   *  meantime must not inherit the launcher. */
-  takeAttribution(targetId: string | null, mediaFileId: number): number | null {
-    if (!targetId) return null;
-    const claim = this.attributions.get(targetId);
-    if (!claim) return null;
-    this.attributions.delete(targetId);
-    if (Date.now() - claim.at > ATTRIBUTION_TTL_MS) {
-      this.log.debug(`Attribution claim for ${targetId} expired unused`);
-      return null;
-    }
-    if (claim.mediaFileId !== mediaFileId) {
-      this.log.debug(
-        `Attribution claim for ${targetId} was for file ${claim.mediaFileId}, not ${mediaFileId}`,
-      );
-      return null;
-    }
-    return claim.userId;
-  }
-
-  listForUser(userId: number): RemoteTargetConnection[] {
-    return this.collect((ownerId) => ownerId === userId);
-  }
-
-  /** Every live target, whichever account owns it. For the admin listing, which
-   *  has to match what the command path already authorizes. */
-  listAll(): RemoteTargetConnection[] {
-    return this.collect(() => true);
-  }
-
-  private collect(owns: (userId: number) => boolean): RemoteTargetConnection[] {
-    const rows: RemoteTargetConnection[] = [];
-    for (const [connectionId, identity] of this.connections) {
-      if (!owns(identity.userId)) continue;
-      if (!identity.targetId) continue;
-      rows.push({ connectionId, ...identity });
-    }
-    for (const [key, target] of this.polled) {
-      if (Date.now() - target.lastPoll > POLLED_TARGET_TTL_MS) {
-        this.polled.delete(key);
-        this.log.log(`Polled target ${target.targetId} stopped polling`);
-        this.emitToUser(target.userId, { type: 'remote.targets_changed' });
-        continue;
-      }
-      if (!owns(target.userId) || !target.targetId) continue;
-      rows.push({ connectionId: key, ...target });
-    }
-    return rows.sort((a, b) => b.since - a.since);
-  }
-
-  /** One device cannot hold two live streams under one target id, so an older
-   *  entry is a corpse the socket never reported: a killed webview or a dropped
-   *  mobile network sends no FIN, and the ping write does not reliably fail. */
-  private evictSupersededConnections(userId: number, targetId: string): void {
-    for (const [connectionId, identity] of this.connections) {
-      if (identity.userId !== userId || identity.targetId !== targetId) continue;
-      this.connections.delete(connectionId);
-      this.log.log(`Evicted superseded connection for target ${targetId}`);
-    }
-  }
-
-  /** Announce a client that cannot hold an SSE stream. The key doubles as its
-   *  connection id so command delivery needs no branch at the call site. */
-  registerPolledTarget(
-    userId: number,
-    identity: Omit<ConnectionIdentity, 'userId' | 'since'>,
-  ): void {
-    if (!identity.targetId) {
-      this.log.warn(`Refused a polled-target registration with no target id (user ${userId})`);
-      return;
-    }
-    const key = `polled:${identity.targetId}`;
-    const existing = this.polled.get(key);
-    this.polled.set(key, {
-      userId,
-      targetId: identity.targetId,
-      formFactor: identity.formFactor ?? null,
-      tvPlatform: identity.tvPlatform ?? null,
-      deviceName: identity.deviceName ?? null,
-      userAgent: identity.userAgent ?? null,
-      since: existing?.since ?? Date.now(),
-      queue: existing?.queue ?? [],
-      lastPoll: Date.now(),
-    });
-    if (!existing) {
-      this.emitToUser(userId, { type: 'remote.targets_changed' });
-    }
-  }
-
-  /** Hand a polled target its pending commands, at most once each. `null`
-   *  distinguishes an unknown target from one with nothing waiting. */
-  drainCommands(userId: number, targetId: string): SseEvent[] | null {
-    const target = this.polled.get(`polled:${targetId}`);
-    if (!target || target.userId !== userId) return null;
-    target.lastPoll = Date.now();
-    const pending = target.queue;
-    target.queue = [];
-    return pending;
-  }
-
-  /** Resolve a caller-scoped target id to the connection that currently owns
-   *  it. Scoping to `userId` IS the authorization: a target id names nothing
-   *  outside its owner's connections. */
-  resolveTarget(userId: number, targetId: string): string | null {
-    const matches = this.listForUser(userId).filter(
-      (row) => row.targetId === targetId,
-    );
-    if (matches.length > 1) {
-      this.log.warn(
-        `Target ${targetId} maps to ${matches.length} live connections for user ${userId}: using the newest`,
-      );
-    }
-    return matches[0]?.connectionId ?? null;
-  }
-
-  /** A polled target's connection id is its `polled:<targetId>` map key, so
-   *  the same id resolves through either map with no branch at the caller. */
-  targetIdFor(connectionId: string | null | undefined): string | null {
-    if (!connectionId) return null;
-    return (
-      this.connections.get(connectionId)?.targetId ??
-      this.polled.get(connectionId)?.targetId ??
-      null
-    );
-  }
-
-  /** Drop every stream a user holds, SSE and polled alike. Called when an
-   *  account is disabled or its role changes: an SSE request is authorized
-   *  once at connect and then lives for hours, and a polled target survives
-   *  until its next `register` call, so without this a revoked client stays
-   *  a listed, commandable target. */
-  dropConnectionsForUser(userId: number): void {
-    let dropped = 0;
-    for (const [connectionId, identity] of this.connections) {
-      if (identity.userId !== userId) continue;
-      // Complete the subscriber, not just delete the entry: the HTTP response
-      // has to actually close, or the client never sees it needs to reconnect.
-      this.connectionCompleters.get(connectionId)?.();
-      dropped++;
-    }
-    let polledDropped = 0;
-    for (const [key, target] of this.polled) {
-      if (target.userId !== userId) continue;
-      this.polled.delete(key);
-      polledDropped++;
-    }
-    if (dropped > 0 || polledDropped > 0) {
-      this.log.log(
-        `Dropped ${dropped} SSE connection(s) and ${polledDropped} polled target(s) for user ${userId}`,
-      );
-    }
-    // Completing an SSE connection above already re-announces via its own
-    // teardown; a polled-only drop needs its own announce.
-    if (polledDropped > 0) {
-      this.emitToUser(userId, { type: 'remote.targets_changed' });
-    }
-  }
-
-  /** Drop only the caller's own device: the scope for a plain logout, as
-   *  opposed to the account-wide {@link dropConnectionsForUser}. `targetId`
-   *  is caller-supplied, so a miss is logged rather than silently no-op'd. */
-  dropConnectionsForTarget(userId: number, targetId: string): void {
-    let droppedSse = 0;
-    for (const [connectionId, identity] of this.connections) {
-      if (identity.userId !== userId || identity.targetId !== targetId) continue;
-      this.connectionCompleters.get(connectionId)?.();
-      droppedSse++;
-    }
-    let droppedPolled = 0;
-    const polledKey = `polled:${targetId}`;
-    const polled = this.polled.get(polledKey);
-    if (polled && polled.userId === userId) {
-      this.polled.delete(polledKey);
-      droppedPolled++;
-    }
-    if (droppedSse === 0 && droppedPolled === 0) {
-      this.log.warn(`Logout target scope: no connection for user ${userId} target ${targetId}`);
-      return;
-    }
-    this.log.log(`Dropped ${droppedSse + droppedPolled} connection(s) for user ${userId} target ${targetId}`);
-    if (droppedPolled > 0) {
-      this.emitToUser(userId, { type: 'remote.targets_changed' });
-    }
-  }
-
-  getStream(
-    userId: number,
-    identity?: Omit<ConnectionIdentity, 'userId' | 'since'>,
-  ): Observable<MessageEvent> {
-    return new Observable((subscriber) => {
-      const connectionId = randomUUID();
-      if (identity?.targetId) {
-        this.evictSupersededConnections(userId, identity.targetId);
-      }
-      this.connections.set(connectionId, {
-        userId,
-        targetId: identity?.targetId ?? null,
-        formFactor: identity?.formFactor ?? null,
-        tvPlatform: identity?.tvPlatform ?? null,
-        deviceName: identity?.deviceName ?? null,
-        userAgent: identity?.userAgent ?? null,
-        since: Date.now(),
-      });
-      this.connectionCompleters.set(connectionId, () => subscriber.complete());
-      if (identity?.targetId) {
-        this.emitToUser(userId, { type: 'remote.targets_changed' });
-      }
-
-      subscriber.next({
-        data: JSON.stringify({
-          type: 'sse.connected',
-          connectionId,
-        } satisfies SseEvent),
-      } as MessageEvent);
-
-      // Replay this user's last-known progress so a client connecting between
-      // publisher ticks isn't blind until the next one (audience-scoped —
-      // `snapshotFor` only returns leaves this user was already a recipient of).
-      for (const event of this.progressCache.snapshotFor(userId)) {
-        subscriber.next({ data: JSON.stringify(event) } as MessageEvent);
-      }
-
-      const sub = this.subject.subscribe((env) => {
-        if (!this.shouldDeliver(env, userId, connectionId)) return;
-        subscriber.next({ data: JSON.stringify(env.event) } as MessageEvent);
-      });
-
-      // Named, so it never reaches the domain-event handler, but carrying data:
-      // the spec drops an empty buffer, and the client times the silence out.
-      const ping = setInterval(() => {
-        subscriber.next({ type: 'ping', data: String(PING_INTERVAL_MS) } as MessageEvent);
-      }, PING_INTERVAL_MS);
-
-      return () => {
-        clearInterval(ping);
-        sub.unsubscribe();
-        this.connectionCompleters.delete(connectionId);
-        const had = this.connections.get(connectionId)?.targetId;
-        this.connections.delete(connectionId);
-        if (had) {
-          this.emitToUser(userId, { type: 'remote.targets_changed' });
-        }
-      };
+    this.forward({
+      kind: 'raw',
+      event: { type, payload },
+      userIds: audience ?? undefined,
     });
   }
 
-  private shouldDeliver(
-    env: SseEnvelope,
-    userId: number,
-    connectionId: string,
-  ): boolean {
-    if (env.audience === null && env.connectionIds === null) return true;
-    if (env.connectionIds?.includes(connectionId)) return true;
-    if (env.audience?.includes(userId)) return true;
-    return false;
-  }
-
-  /** Backend-internal listener — used by services that react to other modules' events. */
-  subscribe(handler: (event: SseEvent) => void): Subscription {
-    return this.subject.subscribe((env) => handler(env.event));
-  }
-
-  /** Publish a domain event. Never throws: subscriber errors are swallowed by `onDomain`. */
+  /** Publish a domain event to the in-process subscribers of every process. */
   emitDomain(event: DomainEvent): void {
-    this.domainSubject.next(event);
+    this.forward({ kind: 'domain', event });
+  }
+
+  /** Backend-internal listener: sees every SSE event whatever its audience. */
+  subscribe(handler: (event: SseEvent) => void): Subscription {
+    return this.subject.subscribe(handler);
   }
 
   /** Subscribe to domain events. A handler that throws — or returns a rejected
@@ -802,5 +421,67 @@ export class EventsService {
         fail(event, err);
       }
     });
+  }
+
+  private forward(body: Forward): void {
+    if (!bridgeConfigured()) return;
+    this.sent = this.sent
+      .then(() => bridgeFetch('/internal/events', { method: 'POST', body }))
+      .then(
+        () => undefined,
+        (err: Error) =>
+          this.log.error(
+            `Event ${body.event.type} not delivered: ${err.message}`,
+          ),
+      );
+  }
+
+  private async consume(): Promise<void> {
+    let delay = RECONNECT_MIN_MS;
+    while (!this.stop.signal.aborted) {
+      try {
+        const res = await bridgeFetch('/internal/events/stream', {
+          signal: this.stop.signal,
+          raw: true,
+        });
+        delay = RECONNECT_MIN_MS;
+        const decoder = new TextDecoder();
+        let buffer = '';
+        for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+          buffer += decoder.decode(chunk, { stream: true });
+          for (
+            let end = buffer.indexOf('\n\n');
+            end >= 0;
+            end = buffer.indexOf('\n\n')
+          ) {
+            this.dispatch(buffer.slice(0, end));
+            buffer = buffer.slice(end + 2);
+          }
+        }
+      } catch (err) {
+        if (this.stop.signal.aborted) return;
+        this.log.warn(`Event stream down: ${(err as Error).message}`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      delay = Math.min(delay * 2, RECONNECT_MAX_MS);
+    }
+  }
+
+  private dispatch(block: string): void {
+    const data = block
+      .split('\n')
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice(5).trimStart())
+      .join('\n');
+    if (!data) return;
+    let msg: Forward;
+    try {
+      msg = JSON.parse(data) as Forward;
+    } catch {
+      this.log.warn('Unreadable event on the internal stream');
+      return;
+    }
+    if (msg.kind === 'domain') this.domainSubject.next(msg.event);
+    else this.subject.next(msg.event as SseEvent);
   }
 }

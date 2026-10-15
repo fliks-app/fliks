@@ -1,6 +1,7 @@
 use super::db::{self, Approval, Opened, PairingStatus, Refreshed};
 use crate::{
     auth_token::Signed,
+    events::SseEvent,
     http::{
         AppError,
         auth::{Authed, UserRow, load_enabled, logout_token},
@@ -22,7 +23,6 @@ use chrono::{DateTime, Utc};
 use fliks_domain::acl::{Action, Subject};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use subtle::ConstantTimeEq;
 
 const BCRYPT_COST: u32 = 12;
 const SERVER_TYPES: [&str; 4] = ["local", "jellyfin", "emby", "plex"];
@@ -280,9 +280,7 @@ pub(crate) async fn logout(
     if let Some(c) = claims {
         match text("targetId") {
             Some(target) => {
-                if let Err(e) = st.bridge.drop_connections(c.sub, Some(target)).await {
-                    tracing::warn!(error = %e, "logout connection drop failed");
-                }
+                st.hub.drop_connections_for_target(c.sub, target);
             }
             None => tracing::warn!(
                 user = c.sub,
@@ -438,14 +436,7 @@ async fn internal_stream_token(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Json<Value>, AppError> {
-    let bearer = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
-        .unwrap_or_default();
-    if !bool::from(bearer.as_bytes().ct_eq(st.cfg.bridge_token.as_bytes())) {
-        return Err(AppError::bare(StatusCode::UNAUTHORIZED));
-    }
+    st.bridge.check(&headers)?;
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields, rename_all = "camelCase")]
     struct Req {
@@ -513,13 +504,15 @@ pub(crate) async fn pairing_request(
             ));
         }
     };
-    if let Err(e) = st
-        .bridge
-        .pairing_requested(dto.user_id, &id, &dto.device_name, device)
-        .await
-    {
-        tracing::warn!(error = %e, "pairing.requested not delivered");
-    }
+    st.hub.emit_to_user(
+        dto.user_id,
+        SseEvent::PairingRequested {
+            user_id: dto.user_id.into(),
+            pairing_id: id.clone(),
+            device_name: dto.device_name.clone(),
+            device_id: device.to_owned(),
+        },
+    );
     Ok((
         StatusCode::CREATED,
         Json(json!({"pairingId": id, "expiresIn": db::PAIRING_TTL_SECS})),

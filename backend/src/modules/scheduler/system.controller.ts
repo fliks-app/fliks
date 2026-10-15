@@ -8,14 +8,12 @@ import {
   Param,
   ParseIntPipe,
   Query,
-  Req,
   Res,
-  Sse,
   UseGuards,
   BadRequestException,
   Optional,
 } from '@nestjs/common';
-import type { Request, Response } from 'express';
+import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import * as fs from 'fs';
@@ -23,7 +21,6 @@ import * as path from 'path';
 import { Library } from '../libraries/entities/library.entity';
 import { PluginPackage } from '../plugins/entities/plugin-package.entity';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
-import { SessionTokenGuard } from '../auth/guards/session-token.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
 import { Action } from '../auth/casl/actions.enum';
@@ -32,10 +29,8 @@ import { User } from '../users/entities/user.entity';
 import { BackupService } from './backup.service';
 import { LogBufferService } from './log-buffer.service';
 import { EventsService } from './events.service';
-import { ActivityRegistryService, type ActivityRow } from './activity-registry.service';
 import { LiveTvSessionService } from '../livetv/services/livetv-session.service';
 import { UpdateCheckService, type UpdateStatus } from './update-check.service';
-import { Observable } from 'rxjs';
 import { HostHardwareService } from '../streaming/host-hardware.service';
 import { servedRung } from '../streaming/served-rung';
 import {
@@ -208,7 +203,6 @@ export class SystemController {
     private readonly backup: BackupService,
     private readonly logBuffer: LogBufferService,
     private readonly eventsService: EventsService,
-    private readonly activityRegistry: ActivityRegistryService,
     private readonly hardware: HostHardwareService,
     private readonly liveSessions: LiveSessionRegistry,
     private readonly liveTvSessions: LiveTvSessionService,
@@ -223,33 +217,6 @@ export class SystemController {
     private readonly qoe: QoeService,
     @Optional() private readonly engine?: EngineService,
   ) {}
-
-  // Authentication is the whole gate: the stream only ever emits what this user id is
-  // already a recipient of, and `PoliciesGuard` denies a handler that declares nothing.
-  //
-  // The device identity rides the query string because `EventSource` cannot set
-  // headers, and because arriving with the connection removes any
-  // connect-then-announce race and re-announces free on every reconnect.
-  // A client that sends no `device` simply never becomes a remote target.
-  @Sse('events')
-  @UseGuards(SessionTokenGuard)
-  @CheckPolicies(() => true)
-  events(
-    @CurrentUser() user: User,
-    @Req() req: Request,
-    @Query('device') device?: string,
-    @Query('ff') ff?: string,
-    @Query('tvPlatform') tvPlatform?: string,
-    @Query('name') name?: string,
-  ): Observable<MessageEvent> {
-    return this.eventsService.getStream(user.id, {
-      targetId: device ?? null,
-      formFactor: ff ?? null,
-      tvPlatform: tvPlatform ?? null,
-      deviceName: name ?? null,
-      userAgent: req.get('user-agent') ?? null,
-    });
-  }
 
   @Get('health')
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
@@ -290,23 +257,6 @@ export class SystemController {
   @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
   async update(): Promise<UpdateStatus> {
     return this.updateCheck.getStatus();
-  }
-
-  /** Running + queued work, running first: backs the System page's Activity
-   *  table. The client refetches this on an `activity.changed` ping rather than
-   *  the registry pushing rows over SSE itself. */
-  @Get('activity')
-  @CheckPolicies((ability) => ability.can(Action.Read, 'Settings'))
-  activity(
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-  ): { data: ActivityRow[]; total: number; dropped: number } {
-    const parsedPage = page ? Number.parseInt(page, 10) : 1;
-    const parsedLimit = limit ? Number.parseInt(limit, 10) : 25;
-    return this.activityRegistry.list(
-      Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1,
-      Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 25,
-    );
   }
 
   private async checkDatabase(): Promise<ServiceStatus> {

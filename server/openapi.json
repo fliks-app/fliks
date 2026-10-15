@@ -312,6 +312,32 @@
         }
       }
     },
+    "/api/system/activity": {
+      "get": {
+        "tags": [
+          "events"
+        ],
+        "operationId": "activity",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/events": {
+      "get": {
+        "tags": [
+          "events"
+        ],
+        "operationId": "events",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/system/liveness": {
       "get": {
         "tags": [

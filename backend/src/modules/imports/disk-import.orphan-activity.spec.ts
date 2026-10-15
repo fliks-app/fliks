@@ -36,7 +36,7 @@ describe('orphan batch activity', () => {
 
   beforeEach(() => {
     jest.useFakeTimers();
-    registry = new ActivityRegistryService({ emit: jest.fn() } as never);
+    registry = new ActivityRegistryService();
     service = makeService(registry);
   });
 
@@ -84,7 +84,11 @@ describe('orphan batch activity', () => {
 
   // Every group fails here (no repositories), which is the case that would leak.
   it('leaves nothing in the registry once the batch is done', async () => {
+    const open = new Set<string>();
+    jest.spyOn(registry, 'upsertPending').mockImplementation((id) => void open.add(id));
+    jest.spyOn(registry, 'upsertRunning').mockImplementation((id) => void open.add(id));
+    jest.spyOn(registry, 'remove').mockImplementation((id) => void open.delete(id));
     await service.relinkOrphansBatch([group('A Folder'), group('B Folder')], null);
-    expect(registry.list(1, 50)).toMatchObject({ data: [], total: 0 });
+    expect([...open]).toEqual([]);
   });
 });
