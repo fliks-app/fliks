@@ -74,7 +74,17 @@ docker-compose.yml
 .dev/
 docker-compose.prod.yml
 .worktrees/
-.claude/
+.claude/*
+!.claude/settings.json
+!.claude/agents/
+!.claude/agents/**
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+.claude/worktrees/
+
+/server/target/
+.tags
+/server/.cargo/config.toml
 
 release/
 

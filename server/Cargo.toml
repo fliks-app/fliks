@@ -1,0 +1,16 @@
+[workspace]
+resolver = "3"
+members = ["crates/domain", "crates/server"]
+
+[workspace.package]
+version = "4.5.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/fliks-app/fliks"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
+regex = "1"
+fancy-regex = "0.14"
