@@ -1,6 +1,4 @@
-//! HTTP parity runner (plan 5.3): `cargo test -p fliks-server --test parity -- --ignored --nocapture`.
-//! Env: PARITY_TARGET, PARITY_RECORD=1, PARITY_FILTER=<substring>, PARITY_HOST_TOKEN (engine actor),
-//! PARITY_ENGINE=up|down (scenarios with `"engine"` set to the other value are skipped).
+//! HTTP parity runner (plan 5.3); env knobs and usage in server/parity/README.md.
 use reqwest::{Client, Method, multipart};
 use serde_json::{Map, Value, json};
 use std::{collections::HashMap, fs, path::Path, process::Command, time::Duration};
@@ -14,9 +12,8 @@ fn env(k: &str, d: &str) -> String {
 
 /// Recreates `fliks_parity` from the template; the psql runs inside the container so no credentials are needed.
 fn reset_db() {
-    let c = env("PARITY_DB_CONTAINER", "fliks-postgres-1");
     let out = Command::new("docker")
-        .args(["exec", &c, "sh", "-c"])
+        .args(["exec", "fliks-postgres-1", "sh", "-c"])
         .arg(r#"psql -U "$POSTGRES_USER" -v ON_ERROR_STOP=1 -q -d postgres -c 'DROP DATABASE IF EXISTS fliks_parity WITH (FORCE)' -c 'CREATE DATABASE fliks_parity TEMPLATE fliks_parity_tpl'"#)
         .output()
         .expect("docker");
@@ -94,16 +91,26 @@ fn remove(v: &mut Value, p: &[Seg]) {
                 o.remove(k);
             }
         }
-        [first, rest @ ..] => {
-            let kids: Vec<&mut Value> = match (first, v) {
-                (Seg::Key(k), Value::Object(o)) => o.get_mut(k).into_iter().collect(),
-                (Seg::Idx(i), Value::Array(a)) => a.get_mut(*i).into_iter().collect(),
-                (Seg::Wild, Value::Array(a)) => a.iter_mut().collect(),
-                (Seg::Wild, Value::Object(o)) => o.values_mut().collect(),
-                _ => vec![],
-            };
-            kids.into_iter().for_each(|c| remove(c, rest));
-        }
+        [first, rest @ ..] => kids(v, first).into_iter().for_each(|c| remove(c, rest)),
+    }
+}
+
+fn kids<'a>(v: &'a mut Value, s: &Seg) -> Vec<&'a mut Value> {
+    match (s, v) {
+        (Seg::Key(k), Value::Object(o)) => o.get_mut(k).into_iter().collect(),
+        (Seg::Idx(i), Value::Array(a)) => a.get_mut(*i).into_iter().collect(),
+        (Seg::Wild, Value::Array(a)) => a.iter_mut().collect(),
+        (Seg::Wild, Value::Object(o)) => o.values_mut().collect(),
+        _ => vec![],
+    }
+}
+
+/// Sorts the arrays at `p` so list order is not compared.
+fn sort_at(v: &mut Value, p: &[Seg]) {
+    match (p, v) {
+        ([], Value::Array(a)) => a.sort_by_key(|x| x.to_string()),
+        ([first, rest @ ..], v) => kids(v, first).into_iter().for_each(|c| sort_at(c, rest)),
+        _ => {}
     }
 }
 
@@ -400,6 +407,15 @@ async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default();
+    let unordered: Vec<Vec<Seg>> = sc["unordered"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|p| p.as_str())
+                .map(parse_path)
+                .collect()
+        })
+        .unwrap_or_default();
     let strict = sc["strictMessage"].as_bool().unwrap_or(false);
     let record = record && sc["deviation"].is_null();
     let captures: Vec<(String, Vec<Seg>)> = sc["capture"]
@@ -471,9 +487,13 @@ async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
                 }
             }
             (e, _) => {
-                let mut e = e.clone();
+                let (mut e, mut b) = (e.clone(), body.clone());
                 ignore.iter().for_each(|p| remove(&mut e, p));
-                diff("", &e, &body, &mut d)
+                unordered.iter().for_each(|p| {
+                    sort_at(&mut e, p);
+                    sort_at(&mut b, p);
+                });
+                diff("", &e, &b, &mut d)
             }
         }
         for (k, ev) in ex["headers"].as_object().into_iter().flatten() {
