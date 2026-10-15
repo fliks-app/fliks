@@ -30,6 +30,7 @@ internal sealed record BackendEnvironment(ushort Port, ushort DbPort)
             ["FLIKS_TRANSCODE_DIR"] = AppPaths.TranscodeDir,
             ["PATH"] = path,
             ["UV_THREADPOOL_SIZE"] = "16",
+            ["FLIKS_CAST_DIR"] = Path.Combine(Path.GetDirectoryName(AppPaths.BackendMainJs)!, "..", "public"),
             ["FLIKS_NODE_BIN"] = AppPaths.NodeExe,
             ["FLIKS_NEST_ENTRY"] = AppPaths.BackendMainJs,
             ["TMDB_API_KEY"] = BuildConfig.TmdbApiKey,
