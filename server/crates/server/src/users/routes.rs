@@ -577,3 +577,16 @@ pub async fn seed_admin(db: &PgPool) -> Result<(), AppError> {
     tracing::warn!("change the default admin password now");
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    /// Nest's `bcrypt` 6 verifies only `$2a$`/`$2b$`, so Rust must keep writing `$2b$`.
+    #[tokio::test]
+    async fn bcrypt_matches_nest() {
+        let h = super::hash("pass".into()).await.unwrap();
+        assert!(h.starts_with("$2b$12$") && bcrypt::verify("pass", &h).unwrap());
+        let nest = "$2b$12$uz0IJTjIwyn42EOSchUXwuIceXfuXd3h0I9fNbV7SQKT4VkmTuZly";
+        assert!(bcrypt::verify("nest-pass", nest).unwrap());
+        assert!(bcrypt::verify("nest-pass", &nest.replace("$2b$", "$2a$")).unwrap());
+    }
+}
