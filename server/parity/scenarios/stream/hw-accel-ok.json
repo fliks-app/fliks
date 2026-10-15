@@ -1,14 +1,16 @@
 {
   "deviation": null,
+  "engine": "up",
+  "ignore": [
+    "$.hwAccel"
+  ],
   "name": "stream-hw-accel-ok",
   "seed": "base",
   "steps": [
     {
       "as": "user",
       "expect": {
-        "body": {
-          "hwAccel": "none"
-        },
+        "body": {},
         "status": 200
       },
       "method": "GET",

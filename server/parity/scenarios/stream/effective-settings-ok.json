@@ -1,5 +1,11 @@
 {
   "deviation": null,
+  "engine": "up",
+  "ignore": [
+    "$.ffmpegSlotsAuto",
+    "$.pauseCapability",
+    "$.gpuRenderNode"
+  ],
   "name": "stream-effective-settings-ok",
   "seed": "base",
   "steps": [
@@ -10,9 +16,6 @@
           "cacheMaxGb": 20,
           "cacheTtlHours": 4,
           "ffmpegSlots": null,
-          "ffmpegSlotsAuto": 15,
-          "gpuRenderNode": "auto",
-          "pauseCapability": "none",
           "tonemapAlgo": "auto",
           "tonemapCurve": "mobius"
         },

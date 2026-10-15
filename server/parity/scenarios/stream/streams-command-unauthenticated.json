@@ -1,5 +1,6 @@
 {
   "deviation": null,
+  "engine": "up",
   "name": "stream-streams-command-unauthenticated",
   "seed": "base",
   "steps": [

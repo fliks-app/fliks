@@ -1,6 +1,7 @@
 {
   "deviation": null,
-  "name": "engine-remote-put-disconnect",
+  "engine": "down",
+  "name": "engine-remote-put-disconnect-engine-down",
   "seed": "base",
   "steps": [
     {

@@ -53,6 +53,14 @@
             "type": "remote.command"
           },
           {
+            "action": "load",
+            "byTargetId": null,
+            "mediaFileId": 1,
+            "mediaId": 1,
+            "mediaType": "movie",
+            "type": "remote.command"
+          },
+          {
             "action": "seek",
             "byTargetId": null,
             "positionSeconds": 12,

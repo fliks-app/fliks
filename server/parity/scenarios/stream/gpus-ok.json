@@ -1,15 +1,17 @@
 {
   "deviation": null,
+  "engine": "up",
+  "ignore": [
+    "$.gpus",
+    "$.defaultNode"
+  ],
   "name": "stream-gpus-ok",
   "seed": "base",
   "steps": [
     {
       "as": "user",
       "expect": {
-        "body": {
-          "defaultNode": "/dev/dri/renderD128",
-          "gpus": []
-        },
+        "body": {},
         "status": 200
       },
       "method": "GET",

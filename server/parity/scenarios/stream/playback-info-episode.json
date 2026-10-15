@@ -1,0 +1,116 @@
+{
+  "capture": {
+    "sid": "$.steps[0].body.sessionId"
+  },
+  "deviation": null,
+  "engine": "up",
+  "ignore": [
+    "$.sessionId",
+    "$.playUrl",
+    "$..hwAccel",
+    "$.profileHash",
+    "$.tonemapAlgo"
+  ],
+  "name": "stream-playback-info-episode",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceName": "Parity",
+        "deviceType": "desktop",
+        "directPlayProfiles": [
+          {
+            "audioCodecs": [
+              "aac"
+            ],
+            "containers": [
+              "mkv",
+              "mp4"
+            ],
+            "videoCodecs": [
+              "h264"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "audioCopyStream": true,
+          "audioPlan": {
+            "channels": 1,
+            "codec": "aac",
+            "mode": "copy",
+            "profile": "LC"
+          },
+          "audioTracks": [
+            {
+              "bitrateBps": 192000,
+              "channels": 1,
+              "codec": "aac",
+              "copy": true,
+              "index": 0,
+              "language": "eng",
+              "outputChannels": 1,
+              "outputCodec": "aac",
+              "reasonFlags": [],
+              "sampleRate": 48000
+            }
+          ],
+          "clientTonemap": false,
+          "contentType": "video/x-matroska",
+          "dolbyVision": false,
+          "durationSeconds": 3.021,
+          "mediaFileId": 19,
+          "outputAudioCodec": "aac",
+          "outputContainer": "mkv",
+          "outputVideoCodec": "h264",
+          "playMethod": "DirectPlay",
+          "qualities": [
+            {
+              "height": 90,
+              "id": "original",
+              "isRemux": false,
+              "label": "144p",
+              "totalBitrateBps": 193941,
+              "width": 160
+            }
+          ],
+          "quality": "original",
+          "source": {
+            "audioChannelLayout": "mono",
+            "audioChannels": 1,
+            "audioCodec": "aac",
+            "audioLanguage": "eng",
+            "audioSampleRate": 48000,
+            "container": "mkv",
+            "durationSeconds": 3.021,
+            "formatBitRate": 193941,
+            "frameRate": "24",
+            "height": 90,
+            "videoBitDepth": 8,
+            "videoBitRate": 193941,
+            "videoCodec": "h264",
+            "videoLevel": 10,
+            "videoProfile": "high",
+            "width": 160
+          },
+          "tonemapping": false,
+          "transcodeReasons": [],
+          "videoCopyStream": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/stream/19/playback-info"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "status": 204
+      },
+      "method": "DELETE",
+      "path": "/api/stream/sessions/{sid}"
+    }
+  ]
+}

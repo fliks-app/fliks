@@ -1,0 +1,29 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "name": "engine-resolve-validation-unknown-field",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "engine",
+      "body": {
+        "credential": "x",
+        "extra": 1,
+        "mediaId": 1,
+        "purpose": "stream"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property extra should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/engine/resolve"
+    }
+  ]
+}

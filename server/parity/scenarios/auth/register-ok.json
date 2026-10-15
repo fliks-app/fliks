@@ -1,5 +1,6 @@
 {
   "deviation": null,
+  "engine": "up",
   "ignore": [
     "$..createdAt",
     "$..updatedAt"
@@ -21,7 +22,11 @@
           "edlEnabled": true,
           "email": "n@parity.test",
           "enabled": true,
-          "features": [],
+          "features": [
+            "deviceProfileExtensions",
+            "hlsSubtitleRequest",
+            "muxedAudioRendition"
+          ],
           "hiddenLibraryIds": [],
           "hideSpoilers": false,
           "id": 6,

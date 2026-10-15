@@ -3,6 +3,7 @@
     "rt": "$.steps[0].body.refreshToken"
   },
   "deviation": null,
+  "engine": "up",
   "ignore": [
     "$..accessToken",
     "$..refreshToken",
@@ -29,7 +30,11 @@
             "edlEnabled": true,
             "email": "user@parity.test",
             "enabled": true,
-            "features": [],
+            "features": [
+              "deviceProfileExtensions",
+              "hlsSubtitleRequest",
+              "muxedAudioRendition"
+            ],
             "hiddenLibraryIds": [],
             "hideSpoilers": false,
             "id": 2,

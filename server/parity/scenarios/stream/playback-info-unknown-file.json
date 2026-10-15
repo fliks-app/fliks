@@ -1,5 +1,6 @@
 {
   "deviation": null,
+  "engine": "up",
   "name": "stream-playback-info-unknown-file",
   "seed": "base",
   "steps": [
@@ -25,11 +26,11 @@
       },
       "expect": {
         "body": {
-          "error": "Service Unavailable",
-          "message": "Playback needs the streaming engine, which is not running",
-          "statusCode": 503
+          "error": "Not Found",
+          "message": "MediaFile #999 not found",
+          "statusCode": 404
         },
-        "status": 503
+        "status": 404
       },
       "method": "POST",
       "path": "/api/stream/999/playback-info"

@@ -1,5 +1,6 @@
 {
   "deviation": null,
+  "engine": "up",
   "ignore": [
     "$..lastLogin"
   ],
@@ -17,7 +18,11 @@
           "edlEnabled": true,
           "email": "admin@parity.test",
           "enabled": true,
-          "features": [],
+          "features": [
+            "deviceProfileExtensions",
+            "hlsSubtitleRequest",
+            "muxedAudioRendition"
+          ],
           "hiddenLibraryIds": [],
           "hideSpoilers": false,
           "id": 1,

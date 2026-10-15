@@ -1,0 +1,28 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "name": "engine-resolve-validation-purpose",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "engine",
+      "body": {
+        "credential": "x",
+        "mediaId": 1,
+        "purpose": "bogus"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "purpose must be one of the following values: stream, download, sprite, subtitle, live"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/engine/resolve"
+    }
+  ]
+}

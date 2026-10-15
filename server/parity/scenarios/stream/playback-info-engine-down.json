@@ -1,5 +1,6 @@
 {
   "deviation": null,
+  "engine": "down",
   "name": "stream-playback-info-engine-down",
   "seed": "base",
   "steps": [

@@ -1,5 +1,6 @@
 {
   "deviation": null,
+  "engine": "up",
   "name": "stream-playback-info-unauthenticated",
   "seed": "base",
   "steps": [

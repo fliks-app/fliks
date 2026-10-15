@@ -1,5 +1,6 @@
 {
   "deviation": null,
+  "engine": "up",
   "name": "stream-hw-accel-unauthenticated",
   "seed": "base",
   "steps": [

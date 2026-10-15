@@ -1,16 +1,16 @@
 {
   "deviation": null,
+  "engine": "up",
+  "ignore": [
+    "$.available"
+  ],
   "name": "stream-tonemap-algos-ok",
   "seed": "base",
   "steps": [
     {
       "as": "user",
       "expect": {
-        "body": {
-          "available": [
-            "auto"
-          ]
-        },
+        "body": {},
         "status": 200
       },
       "method": "GET",

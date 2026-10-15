@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "name": "stream-qualities-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "estimatedSize": 27380,
+            "key": "144p",
+            "label": "144p"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/stream/info/qualities/1"
+    }
+  ]
+}
