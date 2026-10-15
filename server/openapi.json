@@ -10,6 +10,32 @@
     "version": "1"
   },
   "paths": {
+    "/api/system/activity": {
+      "get": {
+        "tags": [
+          "events"
+        ],
+        "operationId": "activity",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/events": {
+      "get": {
+        "tags": [
+          "events"
+        ],
+        "operationId": "events",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/system/liveness": {
       "get": {
         "tags": [
@@ -27,6 +53,102 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/users": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "users"
+        ],
+        "operationId": "create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/users/me/avatar": {
+      "post": {
+        "tags": [
+          "users"
+        ],
+        "operationId": "set_avatar",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "users"
+        ],
+        "operationId": "clear_avatar",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/users/{id}": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "operationId": "get_one",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "users"
+        ],
+        "operationId": "update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "users"
+        ],
+        "operationId": "remove",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/users/{id}/stats": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "operationId": "stats",
+        "responses": {
+          "200": {
+            "description": ""
           }
         }
       }

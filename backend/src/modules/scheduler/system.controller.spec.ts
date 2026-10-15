@@ -1,7 +1,6 @@
 import * as fs from 'fs';
 import { join } from 'path';
 import { SystemController } from './system.controller';
-import { CHECK_POLICIES_KEY, type PolicyHandler } from '../auth/casl/check-policies.decorator';
 
 jest.mock('fs', () => ({
   ...jest.requireActual<typeof import('fs')>('fs'),
@@ -62,7 +61,6 @@ describe('SystemController.activeStreams recency filter', () => {
       {} as never, // backup
       {} as never, // logBuffer
       {} as never, // eventsService
-      {} as never, // activityRegistry
       { hwAccel: 'none' } as never, // hardware
       liveSessions as never,
       { listForActivity: () => [] } as never, // liveTvSessions
@@ -148,7 +146,6 @@ describe('SystemController.sendPlayerCommand', () => {
       {} as never,
       {} as never,
       eventsService as never,
-      {} as never, // activityRegistry
       {} as never, // hardware
       liveSessions as never,
       { listForActivity: () => [] } as never, // liveTvSessions
@@ -251,7 +248,6 @@ describe('SystemController with the engine', () => {
     const controller = new SystemController(
       {} as never, {} as never, {} as never, {} as never, {} as never,
       { emitToUser: jest.fn(), hasConnection: () => false } as never,
-      {} as never,
       { hwAccel: 'vaapi' } as never,
       liveSessions as never,
       { listForActivity: () => [] } as never,
@@ -381,7 +377,6 @@ describe('SystemController.restart', () => {
       {} as never,
       {} as never,
       {} as never,
-      {} as never,
     );
   }
 
@@ -434,15 +429,5 @@ describe('SystemController.restart', () => {
     });
     jest.runAllTimers();
     expect(kill).toHaveBeenCalledWith(1, 'SIGTERM');
-  });
-});
-
-describe('SystemController.events policy', () => {
-  it('VERDICT: declares a policy, because PoliciesGuard denies a handler that declares none', () => {
-    const handlers = Reflect.getMetadata(CHECK_POLICIES_KEY, SystemController.prototype.events) as
-      | PolicyHandler[]
-      | undefined;
-
-    expect(handlers?.length).toBeGreaterThan(0);
   });
 });

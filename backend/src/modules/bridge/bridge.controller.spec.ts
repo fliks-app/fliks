@@ -46,44 +46,10 @@ describe('BridgeAuthGuard', () => {
 });
 
 describe('BridgeController', () => {
-  const events = {
-    emitToUser: jest.fn(),
-    dropConnectionsForUser: jest.fn(),
-    dropConnectionsForTarget: jest.fn(),
-  };
   const settings = { notifyChange: jest.fn() };
   const engine = { reconfigure: jest.fn() };
-  const controller = new BridgeController(
-    events as never,
-    settings as never,
-    engine as never,
-  );
+  const controller = new BridgeController(settings as never, engine as never);
   beforeEach(() => jest.clearAllMocks());
-
-  it('emits pairing.requested to the target user only', () => {
-    const dto = {
-      event: 'pairing.requested' as const,
-      userId: 7,
-      pairingId: 'p',
-      deviceName: 'TV',
-      deviceId: 'd',
-    };
-    controller.emit(dto);
-    expect(events.emitToUser).toHaveBeenCalledWith(7, {
-      type: 'pairing.requested',
-      userId: 7,
-      pairingId: 'p',
-      deviceName: 'TV',
-      deviceId: 'd',
-    });
-  });
-
-  it('drops the whole account without a targetId, one device with it', () => {
-    controller.dropConnections({ userId: 3 });
-    expect(events.dropConnectionsForUser).toHaveBeenCalledWith(3);
-    controller.dropConnections({ userId: 3, targetId: 't' });
-    expect(events.dropConnectionsForTarget).toHaveBeenCalledWith(3, 't');
-  });
 
   it('notifies each key in order with the origin, without re-adopting', async () => {
     await controller.settingsChanged({ keys: ['a', 'b'], origin: 'plug' });

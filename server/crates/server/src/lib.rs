@@ -5,6 +5,7 @@ pub mod bridge;
 pub mod config;
 pub mod db;
 pub mod engine;
+pub mod events;
 pub mod fs;
 pub mod http;
 pub mod jwt_secret;
@@ -49,6 +50,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     let state = AppState::new(pool, cfg, &secret);
     auth::spawn_jobs(state.db.clone());
     let cfg = state.cfg.clone();
+    let hub = state.hub.clone();
     let app = app::router(
         state,
         upstream,
@@ -64,7 +66,10 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .with_graceful_shutdown(supervise::shutdown_signal())
+    .with_graceful_shutdown(async move {
+        supervise::shutdown_signal().await;
+        hub.shutdown();
+    })
     .await;
     if let Some(nest) = nest {
         let _ = nest.await;
