@@ -1126,7 +1126,7 @@ mod events {
         let e = engine_with(&f.url, fast());
         let mut rx = e.subscribe();
         e.start_with(None, 4849).await;
-        assert!(matches!(next(&mut rx).await, Feed::Resync(s) if s.is_empty()));
+        assert!(matches!(next(&mut rx).await, Feed::Resync(s, _) if s.is_empty()));
         let mut sids = vec![];
         for _ in 0..2 {
             match next(&mut rx).await {

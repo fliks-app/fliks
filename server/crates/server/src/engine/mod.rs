@@ -12,7 +12,7 @@ mod store;
 mod testkit;
 
 pub use calls::{ConnectionTest, EngineError, SessionFilter};
-pub use config::validate_streaming_setting;
+pub use config::{lifetime, validate_streaming_setting};
 pub use events::Feed;
 pub use jobs::Progress;
 pub use remote::router;

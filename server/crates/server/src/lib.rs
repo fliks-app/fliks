@@ -11,6 +11,7 @@ pub mod http;
 pub mod jwt_secret;
 pub mod nest;
 pub mod paths;
+pub mod presence;
 pub mod roles;
 pub mod settings;
 pub mod state;
@@ -53,6 +54,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     let upstream = Upstream::parse(&nest::url(&cfg))?;
     let db = pool.clone();
     let state = AppState::new(pool, cfg, &secret);
+    presence::spawn(state.presence.clone(), state.engine.clone());
     state.engine.start(state.db.clone(), state.cfg.port).await;
     let cfg = state.cfg.clone();
     let hub = state.hub.clone();
