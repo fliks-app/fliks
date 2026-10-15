@@ -3,6 +3,7 @@ import {
   Equals,
   IsArray,
   IsInt,
+  IsNotEmpty,
   IsOptional,
   IsString,
   Min,
@@ -34,6 +35,7 @@ export class DropConnectionsDto {
   /** Logout scope: drop only this device; absent = account-wide drop. */
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
   targetId?: string;
 }
 
