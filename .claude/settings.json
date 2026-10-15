@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(server/target/**)",
+      "Read(server/.sqlx/**)",
+      "Read(server/fixtures/**)",
+      "Read(server/parity/seed/*.sql)",
+      "Read(backend/src/modules/engine/schema.d.ts)",
+      "Read(CHANGELOG.md)",
+      "Read(client/**)",
+      "Read(docker-compose.yml)"
+    ]
+  }
+}
