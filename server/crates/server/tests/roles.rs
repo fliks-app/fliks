@@ -421,3 +421,32 @@ async fn f12_only_checks_added_permissions(pool: PgPool) {
     let (s, b) = put(json!(["plugin:gone:x", "plugin:new:y"])).await;
     assert_eq!((s, b), (400, bad(&["permissions contains invalid values"])));
 }
+
+#[sqlx::test(migrations = false)]
+async fn null_fields_on_update(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    sqlx::query(r#"INSERT INTO libraries (name) VALUES ('Movies')"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let a = Some(c.admin.as_str());
+    let put = |b: Value| call(&c, "PUT", "/api/roles/3", a, Some(b));
+    assert_eq!(
+        put(json!({"defaultLibraryIds": [1]})).await.1["defaultLibraryIds"],
+        json!([1])
+    );
+    let (s, b) = put(json!({"defaultLibraryIds": null})).await;
+    assert_eq!((s, b["defaultLibraries"].clone()), (200, json!([])));
+    assert_eq!(
+        put(json!({"name": null})).await,
+        (400, bad(&["name must be a string"]))
+    );
+    assert_eq!(
+        put(json!({"isDefault": null})).await,
+        (400, bad(&["isDefault must be a boolean value"]))
+    );
+    let post =
+        json!({"name": "n", "permissions": [], "isDefault": null, "defaultLibraryIds": null});
+    let (s, b) = call(&c, "POST", "/api/roles", a, Some(post)).await;
+    assert_eq!((s, b["isDefault"].clone()), (201, json!(false)));
+}

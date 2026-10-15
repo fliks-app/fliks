@@ -14,14 +14,22 @@ use serde_json::Value;
 
 type Res<T> = Result<T, AppError>;
 
-/// Raw JSON per field: class-validator's per-field messages are built by hand in `Dto::parse`.
+/// Raw JSON per field (`null` kept as `Some(Null)`): class-validator's messages are built in `Dto::parse`.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct RawDto {
+    #[serde(default, deserialize_with = "present")]
     name: Option<Value>,
+    #[serde(default, deserialize_with = "present")]
     permissions: Option<Value>,
+    #[serde(default, deserialize_with = "present")]
     is_default: Option<Value>,
+    #[serde(default, deserialize_with = "present")]
     default_library_ids: Option<Value>,
+}
+
+fn present<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Value>, D::Error> {
+    Value::deserialize(d).map(Some)
 }
 
 #[derive(Default)]
@@ -73,6 +81,8 @@ impl Dto {
         match raw.is_default {
             Some(Value::Bool(b)) => dto.is_default = Some(b),
             None => {}
+            // Nest reads a create's null as false; on update it would store NULL (C1: 400 instead).
+            Some(Value::Null) if create => {}
             _ => msgs.push("isDefault must be a boolean value".into()),
         }
 
@@ -86,6 +96,7 @@ impl Dto {
                 );
             }
             None => {}
+            Some(Value::Null) => dto.default_library_ids = Some(vec![]),
             other => {
                 if !other.as_ref().is_some_and(|v| int(v).is_some()) {
                     msgs.push("each value in defaultLibraryIds must be an integer number".into());
