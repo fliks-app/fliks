@@ -32,32 +32,13 @@ import { PluginHostModule } from './modules/plugins/host/plugin-host.module';
 import { LiveTvModule } from './modules/livetv/livetv.module';
 import { CommonModule } from './common/common.module';
 import { EngineModule } from './modules/engine/engine.module';
-import { ServeStaticModule } from '@nestjs/serve-static';
-import { join } from 'path';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    ServeStaticModule.forRoot(
-      {
-        rootPath: join(__dirname, '..', 'public'),
-        serveRoot: '/cast',
-        serveStaticOptions: { index: false },
-      },
-      // Serve the Angular frontend in production (when SERVE_STATIC_PATH is set)
-      ...(process.env.SERVE_STATIC_PATH
-        ? [
-            {
-              rootPath: process.env.SERVE_STATIC_PATH,
-              exclude: ['/api/{*path}', '/cast/{*path}'],
-            },
-          ]
-        : []),
-    ),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const isDev = config.get('NODE_ENV', 'development') !== 'production';
         return {
           type: 'postgres',
           host: config.get('DB_HOST', 'localhost'),
@@ -66,14 +47,9 @@ import { join } from 'path';
           password: config.get('DB_PASSWORD', 'fliks'),
           database: config.get('DB_NAME', 'fliks'),
           autoLoadEntities: true,
-          // Dev: auto-sync the schema from entity metadata so a column
-          // rename takes effect on the next restart without writing a
-          // migration. Prod: migrations are the only sanctioned schema
-          // mechanism — see `src/data-source.ts` and the
-          // `db:migration:*` scripts.
-          synchronize: isDev,
-          migrations: [join(__dirname, 'migrations', '*.{ts,js}')],
-          migrationsRun: !isDev,
+          // Schema is owned by server/migrations (fliks-server), never by Nest.
+          synchronize: false,
+          migrationsRun: false,
           extra: { max: 30 },
         };
       },

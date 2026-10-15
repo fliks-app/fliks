@@ -430,7 +430,9 @@ async fn m1785600_skips_unexpected_setting_shapes(pool: PgPool) {
     );
 }
 
-const SQL_FILES: i64 = 81;
+const TYPEORM_VERSIONS: i64 = 81;
+const SQL_FILES: i64 = 83;
+const LAST_TYPEORM_VERSION: i64 = 1_786_300_000_000;
 
 #[sqlx::test(migrations = false)]
 async fn migrate_builds_a_fresh_database(pool: PgPool) {
@@ -472,7 +474,14 @@ async fn adopting_a_typeorm_database_matches_a_fresh_one(pool: PgPool) {
     )
     .await;
     assert_eq!(ledger.len() as i64, SQL_FILES);
-    assert!(ledger.iter().all(|r| r.1 == 0), "a migration re-ran");
+    let adopted_rows = || ledger.iter().filter(|r| r.0 <= LAST_TYPEORM_VERSION);
+    assert_eq!(adopted_rows().count() as i64, TYPEORM_VERSIONS);
+    assert!(
+        adopted_rows().all(|r| r.1 == 0),
+        "a TypeORM migration re-ran"
+    );
+    let new_rows = ledger.iter().filter(|r| r.0 > LAST_TYPEORM_VERSION);
+    assert!(new_rows.clone().count() == 2 && new_rows.into_iter().all(|r| r.1 > 0));
 
     let fresh_db = "fliks_p7_fresh";
     for stmt in [
@@ -511,4 +520,44 @@ async fn adopting_a_typeorm_database_matches_a_fresh_one(pool: PgPool) {
         Vec::<String>::new(),
         "only in the sqlx-built schema"
     );
+}
+
+#[sqlx::test(migrations = false)]
+async fn updating_a_row_bumps_updated_at(pool: PgPool) {
+    fliks_server::db::migrate(&pool).await.unwrap();
+    sql(
+        &pool,
+        r#"INSERT INTO app_settings (key, value, "updatedAt") VALUES ('k', 'a', '2020-01-01')"#,
+    )
+    .await;
+
+    sql(&pool, "UPDATE app_settings SET value = 'b'").await;
+    let bumped: bool =
+        sqlx::query_scalar(r#"SELECT "updatedAt" > now() - interval '1 minute' FROM app_settings"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(bumped);
+
+    sql(
+        &pool,
+        r#"UPDATE app_settings SET "updatedAt" = '2021-01-01'"#,
+    )
+    .await;
+    let kept: bool =
+        sqlx::query_scalar(r#"SELECT "updatedAt" = '2021-01-01+00' FROM app_settings"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(kept);
+}
+
+#[sqlx::test(migrations = false)]
+async fn migrate_enables_pg_trgm(pool: PgPool) {
+    fliks_server::db::migrate(&pool).await.unwrap();
+    let sim: f32 = sqlx::query_scalar("SELECT similarity('a', 'a')")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(sim, 1.0);
 }

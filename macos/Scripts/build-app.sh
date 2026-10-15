@@ -6,6 +6,7 @@
 #   1. brew install xcodegen postgresql@18
 #   2. ./Scripts/fetch-vendored.sh  (Node.js 24 + jellyfin-ffmpeg, arm64)
 #   3. Xcode 16+ with command line tools
+#   4. Rust toolchain (cargo) for fliks-server
 #
 # Usage: ./build-app.sh [--skip-web] [--skip-xcode]
 #
@@ -118,6 +119,11 @@ curl -fsSL -o "$RESOURCES/node/bin/fliks-engine" \
     "https://github.com/fliks-app/engine/releases/download/v$ENGINE_VERSION/fliks-engine-darwin-arm64"
 echo "$ENGINE_SHA  $RESOURCES/node/bin/fliks-engine" | shasum -a 256 -c -
 chmod +x "$RESOURCES/node/bin/fliks-engine"
+
+# ── fliks-server (Rust, built here; spawns Nest behind the engine) ──
+echo "    [server] Building fliks-server..."
+(cd "$REPO_ROOT/server" && cargo build --release -p fliks-server)
+cp "$REPO_ROOT/server/target/release/fliks-server" "$RESOURCES/node/bin/"
 
 # ── PostgreSQL (from Homebrew installed, needs dylib bundling) ──
 # The bottle hardcodes /opt/homebrew/share/postgresql@18 and lib/postgresql@18, and only

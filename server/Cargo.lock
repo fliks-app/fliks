@@ -619,8 +619,8 @@ checksum = "aedcfb3409746eddb02b9e19ebda1c3394f759a152e48ee875a0844d1b955484"
 
 [[package]]
 name = "fliks-engine"
-version = "0.3.1"
-source = "git+https://github.com/fliks-app/engine?tag=v0.3.1#c54ac8270d3b2b2217d3d10fde66734e9b061c12"
+version = "0.3.2"
+source = "git+https://github.com/fliks-app/engine?tag=v0.3.2#f05c41853107021524ce9224cc18a33be67c98c0"
 dependencies = [
  "alass-util",
  "axum",
@@ -646,8 +646,8 @@ dependencies = [
 
 [[package]]
 name = "fliks-engine-core"
-version = "0.3.1"
-source = "git+https://github.com/fliks-app/engine?tag=v0.3.1#c54ac8270d3b2b2217d3d10fde66734e9b061c12"
+version = "0.3.2"
+source = "git+https://github.com/fliks-app/engine?tag=v0.3.2#f05c41853107021524ce9224cc18a33be67c98c0"
 dependencies = [
  "serde",
  "serde_json",
@@ -659,12 +659,21 @@ name = "fliks-server"
 version = "4.5.0"
 dependencies = [
  "axum",
+ "chrono",
  "fliks-engine",
  "fliks-engine-core",
+ "getrandom 0.3.4",
+ "httpdate",
  "reqwest",
+ "serde",
  "serde_json",
  "sqlx",
  "tokio",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "utoipa",
 ]
 
 [[package]]
@@ -911,6 +920,12 @@ dependencies = [
  "http-body",
  "pin-project-lite",
 ]
+
+[[package]]
+name = "http-range-header"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9171a2ea8a68358193d15dd5d70c1c10a2afc3e7e4c5bc92bc9f025cebd7359c"
 
 [[package]]
 name = "httparse"
@@ -1254,6 +1269,15 @@ name = "log"
 version = "0.4.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
+
+[[package]]
+name = "matchers"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1525a2a28c7f4fa0fc98bb91ae755d1e2d1505079e05539e35bc876b5d65ae9"
+dependencies = [
+ "regex-automata",
+]
 
 [[package]]
 name = "matchit"
@@ -2418,6 +2442,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-util"
+version = "0.7.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e464cf451ba96ebfc6f9b6542f17ee8b8956e33f1e40d9690624e59d7a7f8a4b"
+dependencies = [
+ "bytes",
+ "futures-core",
+ "futures-sink",
+ "pin-project-lite",
+ "tokio",
+]
+
+[[package]]
 name = "tower"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2441,13 +2478,23 @@ checksum = "4cfcf7e2740e6fc6d4d688b4ef00650406bb94adf4731e43c096c3a19fe40840"
 dependencies = [
  "bitflags",
  "bytes",
+ "futures-core",
  "futures-util",
  "http",
  "http-body",
+ "http-body-util",
+ "http-range-header",
+ "httpdate",
+ "mime",
+ "mime_guess",
+ "percent-encoding",
  "pin-project-lite",
+ "tokio",
+ "tokio-util",
  "tower",
  "tower-layer",
  "tower-service",
+ "tracing",
  "url",
 ]
 
@@ -2513,10 +2560,14 @@ version = "0.3.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb7f578e5945fb242538965c2d0b04418d38ec25c79d160cd279bf0731c8d319"
 dependencies = [
+ "matchers",
  "nu-ansi-term",
+ "once_cell",
+ "regex-automata",
  "sharded-slab",
  "smallvec",
  "thread_local 1.1.10",
+ "tracing",
  "tracing-core",
  "tracing-log",
 ]

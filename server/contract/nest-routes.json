@@ -4481,16 +4481,6 @@
   },
   {
     "method": "GET",
-    "path": "/api/system/liveness",
-    "controller": "LivenessController",
-    "handler": "liveness",
-    "file": "src/modules/scheduler/liveness.controller.ts",
-    "line": 7,
-    "guards": [],
-    "policies": ""
-  },
-  {
-    "method": "GET",
     "path": "/api/system/logs",
     "controller": "SystemController",
     "handler": "getLogs",

@@ -234,7 +234,13 @@ export class SeerrRequestImportService {
       await this.requestRepo.save(existing);
       // Restore Seerr's timestamps after `save` (TypeORM auto-stamps
       // updatedAt during save; `update` writes only what we pass it).
-      await this.requestRepo.update(existing.id, { createdAt, updatedAt });
+      // Skip the no-op write: the DB trigger would bump an unchanged updatedAt.
+      if (
+        existing.createdAt.getTime() !== createdAt.getTime() ||
+        existing.updatedAt.getTime() !== updatedAt.getTime()
+      ) {
+        await this.requestRepo.update(existing.id, { createdAt, updatedAt });
+      }
       return 'updated';
     }
 

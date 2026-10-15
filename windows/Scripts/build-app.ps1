@@ -78,6 +78,11 @@ $engine = Join-Path $bundle 'node\fliks-engine.exe'
 Invoke-WebRequest "https://github.com/fliks-app/engine/releases/download/v$($lock['version'])/fliks-engine-windows-x64.exe" -OutFile $engine
 if ((Get-FileHash $engine -Algorithm SHA256).Hash -ne $lock['sha256_windows_x64']) { throw 'fliks-engine sha256 mismatch' }
 
+# fliks-server (Rust) sits beside the engine and spawns Nest.
+Push-Location (Join-Path $repo 'server')
+try { cargo build --release -p fliks-server; if ($LASTEXITCODE) { throw 'cargo build failed' } } finally { Pop-Location }
+Copy-Item (Join-Path $repo 'server\target\release\fliks-server.exe') (Join-Path $bundle 'node\fliks-server.exe')
+
 # Setup's extraction time follows the file count (each one is scanned by the antivirus), so
 # what the server never loads stays out: message translations, sourcemaps, typings, docs.
 Copy-Tree (Join-Path $vendored 'pgsql')  (Join-Path $bundle 'pgsql') @('/XD', (Join-Path $vendored 'pgsql\share\locale'))
