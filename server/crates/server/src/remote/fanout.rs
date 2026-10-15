@@ -66,12 +66,20 @@ impl FanOut {
     }
 
     async fn run(&self, ev: &SseEvent, owner: i32) -> sqlx::Result<()> {
+        let audience = self.audience(ev, owner).await?;
+        if !audience.is_empty() {
+            self.hub.emit_to_users(&audience, ev.clone());
+        }
+        Ok(())
+    }
+
+    async fn audience(&self, ev: &SseEvent, owner: i32) -> sqlx::Result<Vec<i32>> {
         let viewers = match ev {
             SseEvent::RemoteState { target_id, .. } | SseEvent::RemoteStopped { target_id } => {
                 let device = device_id_of(target_id);
                 self.cached(
-                    format!("device:{device}"),
-                    db::grantees_of_device(&self.db, device),
+                    format!("device:{owner}:{device}"),
+                    db::grantees_of_device(&self.db, owner, device),
                 )
                 .await?
             }
@@ -91,10 +99,54 @@ impl FanOut {
             .chain(admins)
             .filter(|u| *u != owner)
             .collect();
-        if !audience.is_empty() {
-            self.hub
-                .emit_to_users(&audience.into_iter().collect::<Vec<_>>(), ev.clone());
-        }
-        Ok(())
+        Ok(audience.into_iter().collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn user(db: &PgPool, name: &str) -> i32 {
+        sqlx::query_scalar(r#"INSERT INTO users (username) VALUES ($1) RETURNING id"#)
+            .bind(name)
+            .fetch_one(db)
+            .await
+            .unwrap()
+    }
+
+    async fn grant(db: &PgPool, owner: i32, grantee: i32) {
+        sqlx::query(
+            r#"INSERT INTO remote_control_grants ("deviceId", "ownerUserId", "granteeUserId", "deviceName", "codeExpiresAt")
+               VALUES ('tv', $1, $2, 'TV', now())"#,
+        )
+        .bind(owner)
+        .bind(grantee)
+        .execute(db)
+        .await
+        .unwrap();
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn state_frames_reach_only_grantees_of_the_devices_owner(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        let (owner, guest, minter, claimant) = (
+            user(&db, "owner").await,
+            user(&db, "guest").await,
+            user(&db, "minter").await,
+            user(&db, "claimant").await,
+        );
+        grant(&db, owner, guest).await;
+        // A code minted by another account for the owner's device id, then claimed.
+        grant(&db, minter, claimant).await;
+        let fan = FanOut {
+            db,
+            hub: Hub::new(),
+            cache: Mutex::default(),
+        };
+        let ev = SseEvent::RemoteStopped {
+            target_id: "tv#tab".into(),
+        };
+        assert_eq!(fan.audience(&ev, owner).await.unwrap(), vec![guest]);
     }
 }

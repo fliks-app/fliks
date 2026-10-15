@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT \"granteeUserId\" AS \"grantee!\" FROM remote_control_grants\n           WHERE \"deviceId\" = $1 AND \"granteeUserId\" IS NOT NULL",
+  "query": "SELECT \"granteeUserId\" AS \"grantee!\" FROM remote_control_grants\n           WHERE \"ownerUserId\" = $1 AND \"deviceId\" = $2 AND \"granteeUserId\" IS NOT NULL",
   "describe": {
     "columns": [
       {
@@ -11,6 +11,7 @@
     ],
     "parameters": {
       "Left": [
+        "Int4",
         "Text"
       ]
     },
@@ -18,5 +19,5 @@
       true
     ]
   },
-  "hash": "b4a2925167e36b24101ca94ca0ff6a8869fa04722705106515138fef9db1ef11"
+  "hash": "0a2bc1127ecb3f2ded2a2cec9edeb719ecdec0f7bfabd66eb6e714e6005df461"
 }
