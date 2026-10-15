@@ -21,8 +21,8 @@ TypeORM CLI (`src/data-source.ts`) reads the same `DB_*` vars when running migra
 |---|---|---|---|
 | `JWT_SECRET` | none (else file `<conf>/.jwt-secret` or generated) | empty = unset (truthiness); file content trimmed; generated 32-byte hex written mode 0600; in-memory fallback if the write fails `[ts:src/common/utils/jwt-secret.ts:58]`–`[ts:src/common/utils/jwt-secret.ts:86]` | `[ts:src/common/utils/jwt-secret.ts:58]` |
 | `FLIKS_CONF_DIR` | none (writable probe: `override \|\| '/app/conf'`, then temp) | `.trim()`, empty = unset `[ts:src/common/utils/jwt-secret.ts:41]` | `[ts:src/common/utils/jwt-secret.ts:41]` |
-| `JWT_EXPIRATION` | **`'1h'`** (JWT sign) vs **`'7d'`** (access cookie max-age) | sign: `ms()` syntax via jsonwebtoken; cookie max-age: regex `^(\d+)([dhms])$` (i), else 7d `[ts:src/modules/auth/auth.service.ts:51]`–`[ts:src/modules/auth/auth.service.ts:58]`. A value outside the regex (e.g. `3600`) still signs but gets a 7d cookie | `[ts:src/modules/auth/auth.module.ts:41]`, `[ts:src/modules/auth/auth.service.ts:51]` |
-| `STREAM_TOKEN_TTL` | `'12h'` | sign: `ms()` syntax; TTL ms: same regex as `JWT_EXPIRATION`, else 12h `[ts:src/modules/auth/auth.service.ts:285]`–`[ts:src/modules/auth/auth.service.ts:288]` | `[ts:src/modules/auth/auth.service.ts:268]`, `[ts:src/modules/auth/auth.service.ts:285]` |
+| `JWT_EXPIRATION` | **`'1h'`** (JWT sign) vs **`'7d'`** (access cookie max-age) | sign: raw env string to jsonwebtoken `expiresIn` `[ts:src/modules/auth/auth.module.ts:41]`, parsed by `ms()`; a unitless string is milliseconds (`3600` = 3.6 s token). Cookie max-age: regex `^(\d+)([dhms])$` (i), else 7d `[ts:src/modules/auth/auth.service.ts:51]`–`[ts:src/modules/auth/auth.service.ts:58]` (`3600` → 7d cookie) | `[ts:src/modules/auth/auth.module.ts:41]`, `[ts:src/modules/auth/auth.service.ts:51]` |
+| `STREAM_TOKEN_TTL` | `'12h'` | sign: same as `JWT_EXPIRATION` (unitless = ms) `[ts:src/modules/auth/auth.service.ts:278]`–`[ts:src/modules/auth/auth.service.ts:280]`; TTL ms: same regex, else 12h `[ts:src/modules/auth/auth.service.ts:285]`–`[ts:src/modules/auth/auth.service.ts:292]` | `[ts:src/modules/auth/auth.service.ts:268]`, `[ts:src/modules/auth/auth.service.ts:285]` |
 | `REFRESH_TOKEN_TTL_DAYS` | `String(DEFAULT_TTL_DAYS)` → `'60'` | `parseInt(raw, 10)`, must be finite and `> 0` else 60 `[ts:src/modules/auth/refresh-token.service.ts:51]`–`[ts:src/modules/auth/refresh-token.service.ts:52]` | `[ts:src/modules/auth/refresh-token.service.ts:47]` (`DEFAULT_TTL_DAYS = 60` at line 16) |
 
 ## Engine
@@ -62,7 +62,7 @@ TypeORM CLI (`src/data-source.ts`) reads the same `DB_*` vars when running migra
 |---|---|---|---|
 | `TMDB_API_KEY` | `''` | string as-is; blank after `.trim()` = not configured `[ts:src/modules/scheduler/scheduler.service.ts:391]` | `[ts:src/modules/metadata-providers/providers/tmdb.provider.ts:156]`, `[ts:src/modules/metadata-providers/metadata-provider.registry.ts:35]`, `[ts:src/modules/metadata-providers/metadata-provider.registry.ts:46]`, `[ts:src/modules/media/media-service/media-import.service.ts:73]`, `[ts:src/modules/scheduler/scheduler.service.ts:391]`, `[ts:src/modules/scheduler/scheduler.service.ts:760]` |
 | `TVDB_API_KEY` | `''` | string as-is | `[ts:src/modules/metadata-providers/providers/tvdb.provider.ts:96]`, `[ts:src/modules/metadata-providers/metadata-provider.registry.ts:38]`, `[ts:src/modules/metadata-providers/metadata-provider.registry.ts:47]` |
-| `METADATA_STALE_AFTER_MONTHS` | `'3'` | `Math.max(1, parseInt(raw, 10) \|\| 3)` `[ts:src/modules/scheduler/scheduler.service.ts:766]` | `[ts:src/modules/scheduler/scheduler.service.ts:766]` |
+| `METADATA_STALE_AFTER_MONTHS` | `'3'` | `Math.max(1, parseInt(raw, 10) \|\| 3)` `[ts:src/modules/scheduler/scheduler.service.ts:770]` | `[ts:src/modules/scheduler/scheduler.service.ts:766]` |
 
 ## Streaming lifetimes
 
