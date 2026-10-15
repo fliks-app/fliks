@@ -105,3 +105,4 @@ Planned for S0 strangler topology (phase-2 plan §9.5 lists them; defaults from 
 | `FLIKS_NEST_ENTRY` | none |
 | `FLIKS_NEST_PORT` | `PORT + 1` |
 | `FLIKS_BRIDGE_TOKEN` | generated |
+| `FLIKS_CAST_DIR` | `public` relative to cwd (`.trim()`, empty = unset); [new]: Nest served `join(__dirname, '..', 'public')` (`[ts:src/app.module.ts:42]`–`[ts:src/app.module.ts:45]`) |

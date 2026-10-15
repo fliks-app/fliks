@@ -1,2 +1,70 @@
+pub mod app;
+pub mod config;
 pub mod db;
 pub mod http;
+pub mod jwt_secret;
+pub mod nest;
+pub mod system;
+
+use config::Config;
+use fliks_engine::{gateway::Upstream, supervise};
+use sqlx::postgres::PgPoolOptions;
+use std::{net::SocketAddr, time::Duration};
+
+type BoxError = Box<dyn std::error::Error + Send + Sync>;
+
+/// Nest's TypeORM pool size (`bootstrap.md` rule 14).
+const POOL_MAX: u32 = 30;
+
+pub async fn migrate(cfg: &Config) -> Result<(), BoxError> {
+    let pool = PgPoolOptions::new()
+        .max_connections(POOL_MAX)
+        .connect_with(cfg.db.clone())
+        .await?;
+    db::migrate(&pool).await?;
+    pool.close().await;
+    Ok(())
+}
+
+pub async fn serve(cfg: Config) -> Result<(), BoxError> {
+    migrate(&cfg).await?;
+    jwt_secret::ensure(&cfg);
+    let upstream = Upstream::parse(&nest::url(&cfg))?;
+    let app = app::router(
+        upstream,
+        cfg.serve_static_path.clone(),
+        cfg.cast_dir.clone(),
+        cfg.cors_origin.clone(),
+    );
+    // Bind before spawning Nest so a port clash cannot orphan it.
+    let listener = tokio::net::TcpListener::bind(("0.0.0.0", cfg.port)).await?;
+    let nest = nest::spawn(&cfg);
+    tracing::info!("listening on {}", listener.local_addr()?);
+    let served = axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(supervise::shutdown_signal())
+    .await;
+    if let Some(nest) = nest {
+        let _ = nest.await;
+    }
+    served.map_err(Into::into)
+}
+
+/// GET `/api/system/liveness` on loopback; true on a 2xx.
+pub fn healthcheck(port: u16) -> bool {
+    use std::io::{Read, Write};
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let t = Duration::from_secs(5);
+    let Ok(mut s) = std::net::TcpStream::connect_timeout(&addr, t) else {
+        return false;
+    };
+    let _ = (s.set_read_timeout(Some(t)), s.set_write_timeout(Some(t)));
+    let req = "GET /api/system/liveness HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n";
+    let mut head = [0u8; 12];
+    s.write_all(req.as_bytes()).is_ok()
+        && s.read_exact(&mut head).is_ok()
+        && head.starts_with(b"HTTP/1.")
+        && head[9] == b'2'
+}
