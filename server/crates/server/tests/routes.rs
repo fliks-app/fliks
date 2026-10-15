@@ -43,6 +43,10 @@ async fn every_nest_route_is_owned_or_forwarded() {
     let router = app::router(fake_nest().await, None, "/nonexistent".into(), None);
     for r in routes {
         let (method, path) = (r["method"].as_str().unwrap(), r["path"].as_str().unwrap());
+        // Bridge routes are loopback-only, never forwarded (asserted below).
+        if path.starts_with("/internal/") {
+            continue;
+        }
         let method = if method == "ALL" { "GET" } else { method };
         let owned = doc["paths"][openapi_path(path)][method.to_lowercase()].is_object();
         let req = Request::builder()
