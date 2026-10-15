@@ -117,6 +117,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/intro-detect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["intro_detect"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/invalidate": {
         parameters: {
             query?: never;
@@ -828,6 +844,41 @@ export interface components {
         };
         /** @enum {string} */
         HwAccel: "vaapi" | "nvenc" | "qsv" | "amf" | "videotoolbox" | "none";
+        /** @enum {string} */
+        IntroDetectKind: "intro" | "outro";
+        IntroDetectRequest: {
+            episodes: components["schemas"]["IntroEpisode"][];
+            kind: components["schemas"]["IntroDetectKind"];
+            /** Format: double */
+            lookupSeconds: number;
+            /** Format: double */
+            minSegmentSeconds?: number | null;
+        };
+        IntroDetectResponse: {
+            results: components["schemas"]["IntroSegment"][];
+        };
+        IntroEpisode: {
+            chapters?: components["schemas"]["Chapter"][] | null;
+            /** Format: double */
+            durationSeconds: number;
+            introFingerprint?: null | components["schemas"]["Fingerprint"];
+            /** Format: int32 */
+            mediaFileId: number;
+            outroFingerprint?: null | components["schemas"]["Fingerprint"];
+        };
+        IntroSegment: {
+            /** Format: double */
+            confidence: number;
+            /** Format: double */
+            endSeconds: number;
+            /** Format: int32 */
+            mediaFileId: number;
+            source: components["schemas"]["IntroSegmentSource"];
+            /** Format: double */
+            startSeconds: number;
+        };
+        /** @enum {string} */
+        IntroSegmentSource: "chapter" | "reference" | "pairwise";
         InvalidateRequest: {
             /** Format: int32 */
             mediaFileId: number;
@@ -864,6 +915,13 @@ export interface components {
             info: components["schemas"]["MediaInfo"];
             /** @enum {string} */
             type: "SubtitleExtract";
+        } | {
+            info: components["schemas"]["MediaInfo"];
+            language?: string | null;
+            /** Format: int32 */
+            streamIndex: number;
+            /** @enum {string} */
+            type: "SubtitleOcr";
         };
         /** @enum {string} */
         JobPriority: "high" | "normal" | "low";
@@ -891,6 +949,10 @@ export interface components {
             streams: number[];
             /** @enum {string} */
             type: "SubtitleExtract";
+        } | {
+            srt: string;
+            /** @enum {string} */
+            type: "SubtitleOcr";
         };
         JobSnapshot: {
             /** Format: double */
@@ -1905,6 +1967,43 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Hello"];
                 };
+            };
+        };
+    };
+    intro_detect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntroDetectRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntroDetectResponse"];
+                };
+            };
+            /** @description invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description worker join failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

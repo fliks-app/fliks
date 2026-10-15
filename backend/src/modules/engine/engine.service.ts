@@ -35,6 +35,8 @@ export type LiveTvConfig = components['schemas']['LiveTvConfig'];
 export type SourceScan = components['schemas']['SourceScan'];
 export type SpriteMeta = components['schemas']['SpriteMeta'];
 export type Fingerprint = components['schemas']['Fingerprint'];
+export type IntroDetectRequest = components['schemas']['IntroDetectRequest'];
+export type IntroDetectResponse = components['schemas']['IntroDetectResponse'];
 type JobEnd = Pick<JobSnapshot, 'state' | 'result' | 'error'>;
 /** The result variant a request's `kind.type` yields. */
 type ResultOf<R extends JobRequest> = Extract<
@@ -524,6 +526,14 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
     });
     if (!data) throw new EngineError(response.status, 'DELETE /v1/cache');
     return data.removed;
+  }
+
+  async introDetect(body: IntroDetectRequest): Promise<IntroDetectResponse> {
+    const { data, response } = await this.need().POST('/v1/intro-detect', {
+      body,
+    });
+    if (!data) throw new EngineError(response.status, 'POST /v1/intro-detect');
+    return data;
   }
 
   /** The job's id; an identical request still queued or running answers the same one. */
