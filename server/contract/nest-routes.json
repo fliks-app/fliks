@@ -4781,5 +4781,47 @@
     "policies": "",
     "body": "ResolveRequestDto",
     "httpCode": 200
+  },
+  {
+    "method": "POST",
+    "path": "/internal/bridge/drop-connections",
+    "controller": "BridgeController",
+    "handler": "dropConnections",
+    "file": "src/modules/bridge/bridge.controller.ts",
+    "line": 34,
+    "guards": [
+      "BridgeAuthGuard"
+    ],
+    "policies": "",
+    "body": "DropConnectionsDto",
+    "httpCode": 204
+  },
+  {
+    "method": "POST",
+    "path": "/internal/bridge/emit",
+    "controller": "BridgeController",
+    "handler": "emit",
+    "file": "src/modules/bridge/bridge.controller.ts",
+    "line": 22,
+    "guards": [
+      "BridgeAuthGuard"
+    ],
+    "policies": "",
+    "body": "EmitDto",
+    "httpCode": 204
+  },
+  {
+    "method": "POST",
+    "path": "/internal/bridge/settings-changed",
+    "controller": "BridgeController",
+    "handler": "settingsChanged",
+    "file": "src/modules/bridge/bridge.controller.ts",
+    "line": 42,
+    "guards": [
+      "BridgeAuthGuard"
+    ],
+    "policies": "",
+    "body": "SettingsChangedDto",
+    "httpCode": 204
   }
 ]
