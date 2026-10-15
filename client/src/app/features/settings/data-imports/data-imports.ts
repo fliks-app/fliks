@@ -7,6 +7,7 @@ import {
   signal,
   untracked,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { HttpClient } from '@angular/common/http';
@@ -82,6 +83,7 @@ type LibrarySelection = number | null;
     ModalHeaderComponent,
     ModalFooterComponent,
     FormsModule,
+    NgTemplateOutlet,
     TranslatePipe,
     LucideDownload,
     ImportDiskComponent,
@@ -103,6 +105,8 @@ export class DataImportsSettingsComponent implements OnInit {
   readonly secretMask = SECRET_MASK;
   /** Keys the server holds but does not return; blank on save keeps them. */
   readonly storedKeys = signal<ReadonlySet<string>>(new Set());
+  /** Stored keys the user chose to erase on the next save. */
+  readonly clearedKeys = signal<ReadonlySet<string>>(new Set());
 
   // ---- Emby (watch history) ----
   readonly embyServers = signal<MediaServerRow[]>([]);
@@ -304,16 +308,50 @@ export class DataImportsSettingsComponent implements OnInit {
   // ---------------------------------------------------------------------------
 
   private hasKey(setting: string, typed: string): boolean {
-    return typed.trim().length > 0 || this.storedKeys().has(setting);
+    const kept = this.storedKeys().has(setting) && !this.clearedKeys().has(setting);
+    return typed.trim().length > 0 || kept;
+  }
+
+  keyStored(p: 'seerr' | Provider): boolean {
+    return this.storedKeys().has(`${p}_api_key`);
+  }
+
+  keyCleared(p: 'seerr' | Provider): boolean {
+    return this.clearedKeys().has(`${p}_api_key`);
+  }
+
+  /** Clearing empties the field; typing a new key or "keep" cancels it. */
+  setKeyCleared(p: 'seerr' | Provider, cleared: boolean) {
+    this.clearedKeys.update((s) => {
+      const next = new Set(s);
+      if (cleared) next.add(`${p}_api_key`);
+      else next.delete(`${p}_api_key`);
+      return next;
+    });
+    if (cleared) this.keySig(p).set('');
+  }
+
+  onKeyInput(p: 'seerr' | Provider, value: string) {
+    this.keySig(p).set(value);
+    if (value.trim()) this.setKeyCleared(p, false);
+  }
+
+  private keySig(p: 'seerr' | Provider) {
+    return p === 'seerr' ? this.seerrApiKey : this.apiKeySig(p);
   }
 
   private markStored(setting: string, typed: string) {
     if (typed.trim()) this.storedKeys.update((s) => new Set(s).add(setting));
+    else if (this.clearedKeys().has(setting)) {
+      this.storedKeys.update((s) => new Set([...s].filter((k) => k !== setting)));
+      this.clearedKeys.update((s) => new Set([...s].filter((k) => k !== setting)));
+    }
   }
 
   /** Blank leaves a stored key alone: omit it from the write and from the request body. */
   private keyEntry<K extends string>(name: K, typed: string, setting: string) {
     const v = typed.trim();
+    if (!v && this.clearedKeys().has(setting)) return { [name]: null };
     return v || !this.storedKeys().has(setting) ? { [name]: v } : {};
   }
 
