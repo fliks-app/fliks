@@ -11,7 +11,7 @@ use fliks_engine_core::api::{SessionKind, SessionSnapshot};
 use serde::Serialize;
 use std::{
     collections::HashMap,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -29,11 +29,11 @@ pub fn ttl_ms() -> f64 {
 
 /// Keyed by the engine's sid; cheap to clone, every clone shares the map.
 #[derive(Clone, Default)]
-pub struct Presence(Arc<RwLock<HashMap<String, LiveSession>>>);
+pub struct Presence(Arc<Mutex<HashMap<String, LiveSession>>>);
 
 impl Presence {
-    fn map(&self) -> std::sync::RwLockWriteGuard<'_, HashMap<String, LiveSession>> {
-        self.0.write().unwrap_or_else(|e| e.into_inner())
+    fn map(&self) -> std::sync::MutexGuard<'_, HashMap<String, LiveSession>> {
+        self.0.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     /// playback-info: always overwrites the entry with the same sid.
