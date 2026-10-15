@@ -60,7 +60,7 @@ fn api() -> Router<AppState> {
         .merge(crate::roles::router())
         .merge(crate::settings::router())
         .merge(crate::fs::router())
-        .merge(crate::users::router())
+        .merge(users::router())
 }
 
 async fn internal_404(req: Request) -> Response {
