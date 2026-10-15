@@ -1,0 +1,26 @@
+{
+  "deviation": null,
+  "name": "playback-dismiss-unknown-media",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "status": 204
+      },
+      "method": "POST",
+      "path": "/api/playback/recommendations/999/dismiss"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "count": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/recommendations/dismissed/count"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "deviation": null,
+  "name": "playback-hide-unknown-media",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/playback/hide/999"
+    }
+  ]
+}

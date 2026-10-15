@@ -10,19 +10,22 @@
     "$..hwAccel",
     "$.profileHash",
     "$.tonemapAlgo",
-    "$..id",
-    "$..sessionId",
-    "$..playbackId",
-    "$..at",
-    "$..startedAt",
-    "$..endedAt",
-    "$..lastBeat",
-    "$..updatedAt",
-    "$..createdAt",
-    "$..flushedAt",
-    "$..lastSeenAt",
-    "$..sessionIds",
-    "$..serverLoad"
+    "$.items[*].sessionIds",
+    "$.items[*].sessionId",
+    "$.items[*].lastSeenAt",
+    "$.items[*].startedAt",
+    "$.items[*].endedAt",
+    "$.sessionIds",
+    "$.lastSeenAt",
+    "$.startedAt",
+    "$.endedAt",
+    "$.sessions[*].sessionId",
+    "$.sessions[*].startedAt",
+    "$.sessions[*].lastSeenAt",
+    "$.sessions[*].endedAt",
+    "$.events[*].sessionId",
+    "$.events[*].at",
+    "$.events[*].data.serverLoad"
   ],
   "name": "qoe-session-detail-after-playback",
   "seed": "base",
@@ -82,6 +85,7 @@
           "qualities": [
             {
               "height": 90,
+              "id": "original",
               "isRemux": false,
               "label": "144p",
               "totalBitrateBps": 193941,
@@ -183,6 +187,7 @@
               },
               "playMethod": "directplay",
               "playbackConfidence": "low",
+              "playbackId": "pb-1",
               "playbackVerdict": "unknown",
               "quality": null,
               "reasons": [
@@ -233,6 +238,7 @@
                 "causeReason": "qoe.stall.unknown",
                 "position": null
               },
+              "id": 1,
               "type": "stall"
             }
           ],
@@ -259,6 +265,7 @@
           },
           "playMethod": "directplay",
           "playbackConfidence": "low",
+          "playbackId": "pb-1",
           "playbackVerdict": "unknown",
           "quality": null,
           "reasons": [
@@ -303,6 +310,7 @@
               },
               "playMethod": "directplay",
               "playbackConfidence": "low",
+              "playbackId": "pb-1",
               "playbackVerdict": "unknown",
               "quality": null,
               "reasons": [

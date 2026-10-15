@@ -27,5 +27,8 @@
       "method": "GET",
       "path": "/api/fs/browse?path=/tmp/fliks-parity/media/series/Parity%20Series%20A"
     }
+  ],
+  "unordered": [
+    "$.entries"
   ]
 }

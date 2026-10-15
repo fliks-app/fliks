@@ -1,5 +1,5 @@
 {
-  "deviation": null,
+  "deviation": "C1",
   "name": "playback-toggle-watched-unknown-media",
   "seed": "base",
   "steps": [
@@ -8,10 +8,11 @@
       "body": {},
       "expect": {
         "body": {
-          "message": "Internal server error",
-          "statusCode": 500
+          "error": "Not Found",
+          "message": "not_found",
+          "statusCode": 404
         },
-        "status": 500
+        "status": 404
       },
       "method": "POST",
       "path": "/api/playback/media/999/toggle-watched"

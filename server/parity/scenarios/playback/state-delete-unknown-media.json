@@ -1,0 +1,15 @@
+{
+  "deviation": null,
+  "name": "playback-state-delete-unknown-media",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/playback/media/999/state"
+    }
+  ]
+}

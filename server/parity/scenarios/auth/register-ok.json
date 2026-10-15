@@ -1,5 +1,5 @@
 {
-  "deviation": null,
+  "deviation": "F1",
   "engine": "up",
   "ignore": [
     "$..createdAt",
@@ -17,45 +17,10 @@
       },
       "expect": {
         "body": {
-          "avatar": null,
-          "edlAutoSkipCommercials": true,
-          "edlEnabled": true,
-          "email": "n@parity.test",
-          "enabled": true,
-          "features": [
-            "deviceProfileExtensions",
-            "hlsSubtitleRequest",
-            "muxedAudioRendition"
-          ],
-          "hiddenLibraryIds": [],
-          "hideSpoilers": false,
-          "id": 6,
-          "isAdmin": false,
-          "lastLogin": null,
-          "libraryIds": [],
-          "libraryOrder": [],
-          "mediaServerId": null,
-          "mediaServerType": "local",
-          "movieQuotaLimit": 0,
-          "permissions": [],
-          "profileVisibility": "private",
-          "quotaPeriodDays": 7,
-          "requirePasswordChange": false,
-          "role": null,
-          "roleId": 2,
-          "seriesQuotaLimit": 0,
-          "shareDisabled": false,
-          "shareLikes": false,
-          "shareRecommendations": false,
-          "shareStats": false,
-          "shareTastes": false,
-          "shareWatchHistory": false,
-          "spoilerHideOverviews": true,
-          "spoilerHideStills": true,
-          "spoilerHideTitles": true,
-          "username": "newbie"
+          "message": "Unauthorized",
+          "statusCode": 401
         },
-        "status": 201
+        "status": 401
       },
       "method": "POST",
       "path": "/api/auth/register"

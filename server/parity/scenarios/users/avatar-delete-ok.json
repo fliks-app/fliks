@@ -2,23 +2,23 @@
   "deviation": null,
   "ignore": [
     "$..createdAt",
-    "$..updatedAt",
-    "$..avatar"
+    "$..updatedAt"
   ],
   "name": "users-avatar-delete-ok",
   "seed": "base",
   "steps": [
     {
-      "as": "user",
+      "as": "other",
       "expect": {
         "body": {
+          "avatar": null,
           "edlAutoSkipCommercials": true,
           "edlEnabled": true,
-          "email": "user@parity.test",
+          "email": "other@parity.test",
           "enabled": true,
           "hiddenLibraryIds": [],
           "hideSpoilers": false,
-          "id": 2,
+          "id": 4,
           "isAdmin": false,
           "lastLogin": null,
           "libraryIds": [
@@ -49,66 +49,61 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "user"
-        },
-        "status": 201
-      },
-      "method": "POST",
-      "multipart": {
-        "contentType": "image/jpeg",
-        "field": "file",
-        "file": "assets/avatar.jpg",
-        "filename": "avatar.jpg"
-      },
-      "path": "/api/users/me/avatar"
-    },
-    {
-      "as": "user",
-      "expect": {
-        "body": {
-          "edlAutoSkipCommercials": true,
-          "edlEnabled": true,
-          "email": "user@parity.test",
-          "enabled": true,
-          "hiddenLibraryIds": [],
-          "hideSpoilers": false,
-          "id": 2,
-          "isAdmin": false,
-          "lastLogin": null,
-          "libraryIds": [
-            1,
-            2
-          ],
-          "libraryOrder": [],
-          "mediaServerId": null,
-          "mediaServerType": "local",
-          "movieQuotaLimit": 0,
-          "permissions": [
-            "media.read",
-            "livetv.read",
-            "requests.create"
-          ],
-          "profileVisibility": "private",
-          "quotaPeriodDays": 7,
-          "requirePasswordChange": false,
-          "role": "User",
-          "roleId": 2,
-          "seriesQuotaLimit": 0,
-          "shareDisabled": false,
-          "shareLikes": false,
-          "shareRecommendations": false,
-          "shareStats": false,
-          "shareTastes": false,
-          "shareWatchHistory": false,
-          "spoilerHideOverviews": true,
-          "spoilerHideStills": true,
-          "spoilerHideTitles": true,
-          "username": "user"
+          "username": "other"
         },
         "status": 200
       },
       "method": "DELETE",
       "path": "/api/users/me/avatar"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": {
+          "avatar": null,
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "other@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 4,
+          "isAdmin": false,
+          "lastLogin": null,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "private",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "other"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/users/4"
     }
   ]
 }

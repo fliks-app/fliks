@@ -1,5 +1,5 @@
 {
-  "deviation": null,
+  "deviation": "F1",
   "name": "auth-register-validation",
   "seed": "base",
   "steps": [
@@ -11,14 +11,10 @@
       },
       "expect": {
         "body": {
-          "error": "Bad Request",
-          "message": [
-            "username should not be empty",
-            "password should not be empty"
-          ],
-          "statusCode": 400
+          "message": "Unauthorized",
+          "statusCode": 401
         },
-        "status": 400
+        "status": 401
       },
       "method": "POST",
       "path": "/api/auth/register"

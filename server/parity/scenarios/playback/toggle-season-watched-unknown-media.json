@@ -1,0 +1,22 @@
+{
+  "deviation": null,
+  "name": "playback-toggle-season-watched-unknown-media",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "watched": true
+      },
+      "expect": {
+        "body": {
+          "message": "Internal server error",
+          "statusCode": 500
+        },
+        "status": 500
+      },
+      "method": "POST",
+      "path": "/api/playback/media/999/seasons/1/toggle-watched"
+    }
+  ]
+}

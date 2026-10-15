@@ -1,5 +1,5 @@
 {
-  "deviation": null,
+  "deviation": "F1",
   "name": "auth-register-duplicate",
   "seed": "base",
   "steps": [
@@ -11,11 +11,10 @@
       },
       "expect": {
         "body": {
-          "error": "Conflict",
-          "message": "Username already taken",
-          "statusCode": 409
+          "message": "Unauthorized",
+          "statusCode": 401
         },
-        "status": 409
+        "status": 401
       },
       "method": "POST",
       "path": "/api/auth/register"
