@@ -1,7 +1,5 @@
 //! Genre-taste recommendations over a user's history; the queries stay with the caller.
-//!
-//! `Taste::score` keeps Nest's order (ties in candidate order); the server calls `rank_c4` after it
-//! for the HTTP order (score desc, media id asc, deviation C4).
+//! `Taste::score` keeps Nest's order; the server then calls `rank_c4` (score desc, id asc, C4).
 use crate::js::round;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
