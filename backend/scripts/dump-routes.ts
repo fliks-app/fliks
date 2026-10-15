@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 import 'reflect-metadata';
-import { writeFileSync, mkdirSync, readFileSync, readdirSync, unlinkSync, existsSync } from 'fs';
+import { writeFileSync, mkdirSync, readFileSync, readdirSync } from 'fs';
 import { join, relative, dirname } from 'path';
-import { Client } from 'pg';
 import ts from 'typescript';
 import { NestFactory } from '@nestjs/core';
-import { DiscoveryService, MetadataScanner } from '@nestjs/core';
+import { MetadataScanner } from '@nestjs/core';
 import { PathsExplorer } from '@nestjs/core/router/paths-explorer';
 import { RoutePathFactory } from '@nestjs/core/router/route-path-factory';
 import {
@@ -20,19 +19,14 @@ import {
 } from '@nestjs/common/constants';
 import { RequestMethod } from '@nestjs/common/enums';
 import { RouteParamtypes } from '@nestjs/common/enums/route-paramtypes.enum';
+import type { NestContainer } from '@nestjs/core/injector/container';
 import type { ApplicationConfig } from '@nestjs/core/application-config';
 import { addLeadingSlash } from '@nestjs/common/utils/shared.utils';
 import { AppModule } from '../src/app.module';
 
-const THROWAWAY_DB = 'fliks_route_dump';
 const BACKEND_ROOT = join(__dirname, '..');
 const SRC_ROOT = join(BACKEND_ROOT, 'src');
 const OUT_PATH = join(BACKEND_ROOT, '..', 'server', 'contract', 'nest-routes.json');
-
-process.env.NODE_ENV = 'production';
-process.env.DB_NAME = THROWAWAY_DB;
-process.env.FLIKS_PLUGINS_DISABLED = '1';
-delete process.env.FLIKS_ENGINE_URL;
 
 type RouteRecord = {
   method: string;
@@ -97,36 +91,6 @@ function findHandlerMethod(
   return found;
 }
 
-function pgAdmin(): Client {
-  return new Client({
-    host: process.env.DB_HOST ?? 'localhost',
-    port: Number(process.env.DB_PORT ?? 5432),
-    user: process.env.DB_USERNAME ?? 'fliks',
-    password: process.env.DB_PASSWORD ?? 'fliks',
-    database: 'postgres',
-  });
-}
-
-async function createThrowawayDb(): Promise<void> {
-  const client = pgAdmin();
-  await client.connect();
-  try {
-    await client.query(`CREATE DATABASE ${THROWAWAY_DB}`);
-  } finally {
-    await client.end();
-  }
-}
-
-async function dropThrowawayDb(): Promise<void> {
-  const client = pgAdmin();
-  await client.connect();
-  try {
-    await client.query(`DROP DATABASE IF EXISTS ${THROWAWAY_DB} WITH (FORCE)`);
-  } finally {
-    await client.end();
-  }
-}
-
 function walkTsFiles(dir: string): string[] {
   const out: string[] = [];
   for (const ent of readdirSync(dir, { withFileTypes: true })) {
@@ -178,12 +142,8 @@ function handlerLine(fileRel: string, handler: string): number {
   return sf.getLineAndCharacterOfPosition(node.getStart()).line + 1;
 }
 
-function policiesFromSource(fileRel: string, handler: string): string {
-  const sf = controllerSourceFile(fileRel);
-  const node = findHandlerMethod(sf, handler);
-  const decorators = node ? ts.getDecorators(node) : undefined;
-  if (!decorators?.length) return '';
-  for (const dec of decorators) {
+function checkPoliciesOf(node: ts.Node | undefined, sf: ts.SourceFile): string {
+  for (const dec of (node && ts.getDecorators(node as ts.HasDecorators)) ?? []) {
     const expr = dec.expression;
     if (!ts.isCallExpression(expr)) continue;
     const callee = expr.expression;
@@ -196,6 +156,17 @@ function policiesFromSource(fileRel: string, handler: string): string {
     return expr.arguments.map((arg) => arg.getText(sf)).join('\n');
   }
   return '';
+}
+
+// Handler wins over class, as in PoliciesGuard.
+function policiesFromSource(fileRel: string, controller: string, handler: string): string {
+  const sf = controllerSourceFile(fileRel);
+  const own = checkPoliciesOf(findHandlerMethod(sf, handler), sf);
+  if (own) return own;
+  const cls = sf.statements.find(
+    (st): st is ts.ClassDeclaration => ts.isClassDeclaration(st) && st.name?.text === controller,
+  );
+  return checkPoliciesOf(cls, sf);
 }
 
 function guardNames(guards: unknown[]): string[] {
@@ -257,41 +228,42 @@ function methodVerb(requestMethod: RequestMethod): string {
 
 async function collectRoutes(): Promise<RouteRecord[]> {
   const classIndex = buildClassIndex();
-  const app = await NestFactory.create(AppModule, { logger: ['error'] });
+  const app = await NestFactory.create(AppModule, { preview: true, logger: false });
   app.setGlobalPrefix('api', { exclude: ['engine/resolve'] });
 
   const appConfig = (app as unknown as { config: ApplicationConfig }).config;
   const routePathFactory = new RoutePathFactory(appConfig);
   const globalPrefix = appConfig.getGlobalPrefix();
 
-  const discovery = app.get(DiscoveryService);
-  const scanner = app.get(MetadataScanner);
-  const pathsExplorer = new PathsExplorer(scanner);
+  const pathsExplorer = new PathsExplorer(new MetadataScanner());
+  // Preview mode creates no providers, so app.get() is unavailable: read the container.
+  const { container } = app as unknown as { container: NestContainer };
+  const controllers = [...container.getModules().values()].flatMap((m) => [...m.controllers.values()]);
 
   const records: RouteRecord[] = [];
 
-  for (const wrapper of discovery.getControllers()) {
-    const { instance, metatype } = wrapper;
-    if (!instance || !metatype) continue;
+  for (const wrapper of controllers) {
+    const { metatype } = wrapper;
+    if (!metatype) continue;
 
     const controllerName = metatype.name;
     const classLoc = classIndex.get(controllerName);
     if (!classLoc) throw new Error(`controller class ${controllerName} not found in src`);
 
-    const prototype = Object.getPrototypeOf(instance);
+    const prototype = metatype.prototype;
     const ctrlPaths = controllerPaths(metatype);
     const controllerGuards: unknown[] = Reflect.getMetadata(GUARDS_METADATA, metatype) ?? [];
     const controllerInterceptors: unknown[] =
       Reflect.getMetadata(INTERCEPTORS_METADATA, metatype) ?? [];
 
-    for (const route of pathsExplorer.scanForPaths(instance, prototype)) {
+    for (const route of pathsExplorer.scanForPaths(Object.create(prototype), prototype)) {
       const handler = route.methodName;
       const handlerFn = prototype[handler];
       const methodGuards: unknown[] = Reflect.getMetadata(GUARDS_METADATA, handlerFn) ?? [];
       const methodInterceptors: unknown[] =
         Reflect.getMetadata(INTERCEPTORS_METADATA, handlerFn) ?? [];
       const guards = guardNames([...controllerGuards, ...methodGuards]);
-      const policies = policiesFromSource(classLoc.file, handler);
+      const policies = policiesFromSource(classLoc.file, controllerName, handler);
       const httpCode = Reflect.getMetadata(HTTP_CODE_METADATA, handlerFn);
       const sseMeta = Reflect.getMetadata(SSE_METADATA, handlerFn);
       const body = dtoFromRouteArgs(metatype, prototype, handler, RouteParamtypes.BODY);
@@ -341,19 +313,10 @@ async function collectRoutes(): Promise<RouteRecord[]> {
 }
 
 async function main(): Promise<void> {
-  let created = false;
-  try {
-    await createThrowawayDb();
-    created = true;
-    const routes = await collectRoutes();
-    mkdirSync(dirname(OUT_PATH), { recursive: true });
-    writeFileSync(OUT_PATH, `${JSON.stringify(routes, null, 2)}\n`, 'utf8');
-    const gitkeep = join(dirname(OUT_PATH), '.gitkeep');
-    if (existsSync(gitkeep)) unlinkSync(gitkeep);
-    console.log(`dump-routes: ${routes.length} routes → ${OUT_PATH}`);
-  } finally {
-    if (created) await dropThrowawayDb().catch(() => undefined);
-  }
+  const routes = await collectRoutes();
+  mkdirSync(dirname(OUT_PATH), { recursive: true });
+  writeFileSync(OUT_PATH, `${JSON.stringify(routes, null, 2)}\n`, 'utf8');
+  console.log(`dump-routes: ${routes.length} routes → ${OUT_PATH}`);
 }
 
 main().catch((err) => {
