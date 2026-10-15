@@ -76,9 +76,18 @@ async fn notify(st: &AppState, keys: &[String]) {
     if keys.is_empty() {
         return;
     }
-    if let Err(e) = st.bridge.settings_changed(keys, None).await {
-        tracing::warn!(error = %e, ?keys, "settings-changed bridge failed: nest caches are stale");
-    }
+    let nest = async {
+        if let Err(e) = st.bridge.settings_changed(keys, None).await {
+            tracing::warn!(error = %e, ?keys, "settings-changed bridge failed: nest caches are stale");
+        }
+    };
+    tokio::join!(nest, st.engine.settings_changed(keys));
+}
+
+/// Values the engine would reject with its whole config (plan §15.1).
+fn validate(key: &str, value: &str) -> Result<(), AppError> {
+    crate::engine::validate_streaming_setting(key, Some(value))
+        .map_err(|m| AppError::bad_request(vec![m]))
 }
 
 #[utoipa::path(get, path = "/api/settings", responses((status = 200)))]
@@ -119,6 +128,9 @@ pub(crate) async fn put_one(
     authed.require(Action::Manage, Subject::Settings)?;
     let dto: SetSetting = from_value(body)?;
     refuse_protected(&key)?;
+    if let Some(Some(v)) = &dto.value {
+        validate(&key, v)?;
+    }
     let incoming = match dto.value {
         None => Incoming::Absent,
         Some(None) => Incoming::Null,
@@ -154,8 +166,11 @@ pub(crate) async fn put_bulk(
     let Value::Object(data) = data else {
         return Err(AppError::bad_request(vec!["data must be an object"]));
     };
-    for key in data.keys() {
+    for (key, value) in &data {
         refuse_protected(key)?;
+        if !value.is_null() {
+            validate(key, &db::pg_text(value))?;
+        }
     }
     let secrets = Secrets::load(&st.db, data.keys().map(String::as_str))
         .await

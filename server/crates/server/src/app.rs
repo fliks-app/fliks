@@ -47,7 +47,11 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         users::remove,
         users::stats,
         users::set_avatar,
-        users::clear_avatar
+        users::clear_avatar,
+        crate::engine::remote::get_remote,
+        crate::engine::remote::put_remote,
+        crate::engine::remote::test_remote,
+        crate::engine::resolve::resolve
     )
 )]
 pub struct ApiDoc;
@@ -78,8 +82,7 @@ pub fn router(
         .paths
         .keys()
         .fold(local, |r, p| r.route(p, any_service(forwarder.clone())));
-    // Nest's only unprefixed route is `/engine/resolve` (bootstrap.md rule 1).
-    ["/api", "/api/", "/api/{*rest}", "/engine/resolve"]
+    ["/api", "/api/", "/api/{*rest}"]
         .into_iter()
         .fold(local, |r, p| r.route(p, any_service(forwarder.clone())))
 }
@@ -91,6 +94,7 @@ fn api() -> Router<AppState> {
         .merge(crate::roles::router())
         .merge(crate::settings::router())
         .merge(crate::fs::router())
+        .merge(crate::engine::router())
         .merge(users::router())
         .merge(events::router())
 }

@@ -1,9 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import {
-  EngineService,
-  toEngineStreaming,
-  type Capabilities,
-} from '../engine/engine.service';
+import { EngineService, type Capabilities } from '../engine/engine.service';
 import type { components } from '../engine/schema';
 import {
   setSelectedRenderNode,
@@ -35,10 +31,10 @@ export class HostHardwareService implements OnModuleInit {
     await this.load();
   }
 
-  /** Boot and engine (re)connect: pin and push first, so the one detection run is on the right node. */
+  /** Boot and engine (re)connect: pin first; fliks-server pushes the same pin, and detection waits for it. */
   private async load(): Promise<void> {
     try {
-      await this.apply(await this.settings.get(), true);
+      this.apply(await this.settings.get(), true);
     } catch (err) {
       this.log.warn(
         `streaming settings not applied: ${(err as Error).message}`,
@@ -47,16 +43,11 @@ export class HostHardwareService implements OnModuleInit {
   }
 
   /** Applies the admin settings; a GPU re-pin re-runs the engine's detection. */
-  async apply(ss: StreamingSettings, redetect = false): Promise<void> {
+  apply(ss: StreamingSettings, redetect = false): void {
     setSelectedRenderNode(ss.gpuRenderNode);
     const rePinned = this.node !== undefined && this.node !== ss.gpuRenderNode;
     this.node = ss.gpuRenderNode;
     if (!this.engine.enabled) return;
-    await this.engine
-      .pushStreaming(toEngineStreaming(ss))
-      .catch((err: Error) =>
-        this.log.warn(`engine config not pushed: ${err.message}`),
-      );
     if (redetect || rePinned) void this.refresh(ss.gpuRenderNode);
   }
 

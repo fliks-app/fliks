@@ -1,12 +1,9 @@
 import {
   EngineService,
-  hostUrl,
   MIN_ENGINE_PROTOCOL,
-  toEngineStreaming,
   type EngineClient,
 } from './engine.service';
 import * as engineClient from './engine-client';
-import type { StreamingSettings } from '../streaming/streaming-settings-cache.service';
 import { SettingsService } from '../settings/settings.service';
 
 const HELLO = {
@@ -35,21 +32,6 @@ function svc(): EngineService {
   (s as any).sleep = async () => undefined;
   return s;
 }
-
-const settings: StreamingSettings = {
-  segmentDuration: 3,
-  qsvPreset: 'faster',
-  tonemapAlgo: 'auto',
-  tonemapCurve: 'mobius',
-  cacheMaxBytes: 20 * 1024 ** 3,
-  cacheTtlMs: 4 * 3_600_000,
-  ffmpegSlots: null,
-  autoQualityMode: 'directplay',
-  autoCropEnabled: true,
-  gpuRenderNode: '/dev/dri/renderD129',
-  throttleEnabled: true,
-  throttleThresholdSeconds: 90,
-};
 
 describe('EngineService hello gating', () => {
   const env = { ...process.env };
@@ -153,7 +135,6 @@ describe('EngineService background connection', () => {
     const onConnect = jest.fn();
     s.onConnect(onConnect);
     await s.connect(c);
-    await s.pushStreaming(toEngineStreaming(settings));
 
     await tick(s);
     expect(onConnect).not.toHaveBeenCalled();
@@ -170,81 +151,6 @@ describe('EngineService background connection', () => {
     );
     await tick(s);
     expect(onConnect).toHaveBeenCalledTimes(1);
-    await s.pushStreaming(toEngineStreaming(settings));
-    expect(c.PUT).toHaveBeenCalledTimes(2);
-    expect((c.PUT.mock.calls[1] as any)[1].body.revision).toBe(1);
-  });
-});
-
-describe('EngineService config push', () => {
-  it('maps the streaming settings onto EngineConfig.streaming', () => {
-    expect(toEngineStreaming(settings)).toEqual(settings);
-    expect(toEngineStreaming({ ...settings, ffmpegSlots: 3 }).ffmpegSlots).toBe(
-      3,
-    );
-  });
-
-  it('continues the engine revision and skips an unchanged push', async () => {
-    const s = svc();
-    const c = mockClient();
-    await s.connect(c);
-    await s.pushStreaming(toEngineStreaming(settings));
-    await s.pushStreaming(toEngineStreaming(settings));
-    await s.pushStreaming(
-      toEngineStreaming({ ...settings, gpuRenderNode: 'auto' }),
-    );
-
-    expect(c.PUT).toHaveBeenCalledTimes(2);
-    expect(c.PUT).toHaveBeenNthCalledWith(1, '/v1/config', {
-      body: {
-        revision: 8,
-        hostUrl: hostUrl(),
-        hostToken: s.hostToken,
-        streaming: toEngineStreaming(settings),
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        lifetime: expect.objectContaining({
-          jobGraceMs: 60_000,
-          maxSessionsPerOwner: 10,
-        }),
-      },
-    });
-    expect((c.PUT.mock.calls[1] as any)[1].body.revision).toBe(9);
-  });
-
-  it('sends the live TV settings with the streaming ones, once the streaming ones are known', async () => {
-    const s = svc();
-    const c = mockClient();
-    await s.connect(c);
-    const livetv = { segmentSeconds: 4, timeshiftMinutes: 5, fastZap: null };
-
-    await s.pushLivetv(livetv);
-    expect(c.PUT).not.toHaveBeenCalled();
-
-    await s.pushStreaming(toEngineStreaming(settings));
-    expect(c.PUT).toHaveBeenCalledTimes(1);
-    expect((c.PUT.mock.calls[0] as any)[1].body).toMatchObject({ livetv, streaming: toEngineStreaming(settings) });
-
-    await s.pushLivetv({ ...livetv, segmentSeconds: 2 });
-    expect((c.PUT.mock.calls[1] as any)[1].body).toMatchObject({
-      revision: 9,
-      livetv: { segmentSeconds: 2 },
-      streaming: toEngineStreaming(settings),
-    });
-  });
-
-  it('does not count a rejected push', async () => {
-    const s = svc();
-    const c = mockClient({
-      PUT: jest.fn(async () => ({ response: { ok: false, status: 409 } })),
-    });
-    await s.connect(c);
-    await expect(s.pushStreaming(toEngineStreaming(settings))).rejects.toThrow(
-      '409',
-    );
-    await expect(s.pushStreaming(toEngineStreaming(settings))).rejects.toThrow(
-      '409',
-    );
-    expect((c.PUT.mock.calls[1] as any)[1].body.revision).toBe(8);
   });
 });
 
@@ -260,14 +166,13 @@ describe('EngineService capabilities', () => {
     const get = jest
       .fn()
       .mockResolvedValueOnce({ data: HELLO })
-      .mockResolvedValueOnce({ data: { revision: 0 } })
       .mockResolvedValueOnce({
         response: { status: 503, headers: new Headers({ 'retry-after': '1' }) },
       })
       .mockResolvedValue({ data: caps(null), response: { status: 200 } });
     await s.connect(mockClient({ GET: get }));
     expect((await s.capabilities()).hwAccel).toBe('vaapi');
-    expect(get).toHaveBeenCalledTimes(4);
+    expect(get).toHaveBeenCalledTimes(3);
   });
 
   it('fails on an unexpected status', async () => {
@@ -275,7 +180,6 @@ describe('EngineService capabilities', () => {
     const get = jest
       .fn()
       .mockResolvedValueOnce({ data: HELLO })
-      .mockResolvedValueOnce({ data: { revision: 0 } })
       .mockResolvedValue({ response: { status: 500, headers: new Headers() } });
     await s.connect(mockClient({ GET: get }));
     await expect(s.capabilities()).rejects.toThrow('500');
@@ -286,14 +190,13 @@ describe('EngineService capabilities', () => {
     const get = jest
       .fn()
       .mockResolvedValueOnce({ data: HELLO })
-      .mockResolvedValueOnce({ data: { revision: 0 } })
       .mockResolvedValueOnce({ data: caps('/dev/dri/renderD128') })
       .mockResolvedValueOnce({ data: caps('/dev/dri/renderD128') })
       .mockResolvedValue({ data: caps('/dev/dri/renderD129') });
     await s.connect(mockClient({ GET: get }));
     const out = await s.capabilitiesFor('/dev/dri/renderD129');
     expect(out.defaultGpu).toBe('/dev/dri/renderD129');
-    expect(get).toHaveBeenCalledTimes(5);
+    expect(get).toHaveBeenCalledTimes(4);
   });
 
   it('treats auto as the default node and a GPU-less host as settled', async () => {
@@ -301,11 +204,10 @@ describe('EngineService capabilities', () => {
     const get = jest
       .fn()
       .mockResolvedValueOnce({ data: HELLO })
-      .mockResolvedValueOnce({ data: { revision: 0 } })
       .mockResolvedValue({ data: caps(null) });
     await s.connect(mockClient({ GET: get }));
     await s.capabilitiesFor('/dev/dri/renderD129');
-    expect(get).toHaveBeenCalledTimes(3);
+    expect(get).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -331,29 +233,6 @@ describe('EngineService probe', () => {
       }),
     );
     await expect(s.probe('rel.mkv')).rejects.toThrow('400');
-  });
-});
-
-describe('EngineService host callback', () => {
-  const env = { ...process.env };
-  afterEach(() => {
-    process.env = { ...env };
-  });
-
-  it('defaults the host url to loopback on PORT, FLIKS_HOST_URL wins', () => {
-    delete process.env.FLIKS_HOST_URL;
-    process.env.PORT = '4849';
-    expect(hostUrl()).toBe('http://127.0.0.1:4849');
-    process.env.FLIKS_HOST_URL = 'http://nas:4848';
-    expect(hostUrl()).toBe('http://nas:4848');
-  });
-
-  it('accepts only its own bearer', () => {
-    const s = svc();
-    expect(s.isHostAuth(`Bearer ${s.hostToken}`)).toBe(true);
-    expect(s.isHostAuth(`Bearer ${s.hostToken}x`)).toBe(false);
-    expect(s.isHostAuth(undefined)).toBe(false);
-    expect(svc().isHostAuth(`Bearer ${s.hostToken}`)).toBe(false);
   });
 });
 
@@ -591,86 +470,6 @@ describe('EngineService remote config', () => {
     expect(s.enabled).toBe(true);
   });
 
-  it('sends pathMappings on PUT when set and omits them when empty', async () => {
-    process.env.FLIKS_ENGINE_URL = 'http://e';
-    process.env.FLIKS_ENGINE_TOKEN = 't';
-    const c = mockClient();
-    jest.spyOn(engineClient, 'createEngineClient').mockReturnValue(c);
-    const s = new EngineService(
-      fakeSettings({
-        engine_path_mappings: JSON.stringify([
-          { from: '/nas', to: '/data' },
-        ]),
-      }),
-    );
-    (s as any).sleep = async () => undefined;
-    await s.whenReady();
-    await s.pushStreaming(toEngineStreaming(settings));
-    expect((c.PUT.mock.calls[0] as any)[1].body.pathMappings).toEqual([
-      { from: '/nas', to: '/data' },
-    ]);
-
-    await s.pushStreaming(
-      toEngineStreaming({ ...settings, gpuRenderNode: 'auto' }),
-    );
-    expect((c.PUT.mock.calls[1] as any)[1].body.pathMappings).toEqual([
-      { from: '/nas', to: '/data' },
-    ]);
-
-    const s2 = svc();
-    const c2 = mockClient();
-    await s2.connect(c2);
-    await s2.pushStreaming(toEngineStreaming(settings));
-    expect((c2.PUT.mock.calls[0] as any)[1].body).not.toHaveProperty(
-      'pathMappings',
-    );
-  });
-
-  it('testConnection reports unreachable when hello throws', async () => {
-    jest.spyOn(engineClient, 'createEngineClient').mockReturnValue(
-      mockClient({ GET: jest.fn().mockRejectedValue(new Error('down')) }),
-    );
-    const s = svc();
-    await expect(
-      s.testConnection('http://x', 't'),
-    ).resolves.toEqual({
-      ok: false,
-      error: 'The streaming engine at http://x did not answer',
-    });
-  });
-
-  it('testConnection returns probe data after a successful hello', async () => {
-    jest.spyOn(engineClient, 'createEngineClient').mockReturnValue(
-      mockClient({
-        GET: jest.fn(async (url: string) =>
-          url === '/v1/hello'
-            ? {
-                data: {
-                  ...HELLO,
-                  engineVersion: '1.0.0',
-                  protocolVersion: 1,
-                },
-                response: { ok: true, status: 200 },
-              }
-            : { data: { revision: 0 }, response: { status: 200 } },
-        ),
-        POST: jest.fn(async () => ({
-          data: { ok: true, info: { video: [] } },
-          response: { ok: true, status: 200 },
-        })),
-      }),
-    );
-    const s = svc();
-    await expect(
-      s.testConnection('http://x', 't', '/media/a.mkv'),
-    ).resolves.toMatchObject({
-      ok: true,
-      engineVersion: '1.0.0',
-      protocolVersion: 1,
-      probeOk: true,
-    });
-  });
-
   it('does not adopt a handshake that started before reconfigure', async () => {
     let releaseHello!: () => void;
     const helloGate = new Promise<void>((r) => {
@@ -705,37 +504,6 @@ describe('EngineService remote config', () => {
     await boot;
     expect((s as any).instanceId).toBe('x');
     expect(s.enabled).toBe(true);
-  });
-
-  it('pushes path mappings changed since the last connect', async () => {
-    const values: Record<string, string | null> = {
-      engine_url: 'http://stored',
-      engine_token: 'stored-tok',
-      engine_path_mappings: JSON.stringify([{ from: '/nas', to: '/data' }]),
-    };
-    const c = mockClient();
-    jest.spyOn(engineClient, 'createEngineClient').mockReturnValue(c);
-    const s = new EngineService(fakeSettings(values));
-    (s as any).sleep = async () => undefined;
-    const heard = jest.fn();
-    s.onConnect(heard);
-    await s.whenReady();
-    await s.pushStreaming(toEngineStreaming(settings));
-    values.engine_path_mappings = JSON.stringify([{ from: '/nas', to: '/other' }]);
-    await s.reconfigure();
-    expect(heard).toHaveBeenCalledTimes(1);
-    const last = c.PUT.mock.calls.at(-1) as any;
-    expect(last[1].body.pathMappings).toEqual([{ from: '/nas', to: '/other' }]);
-  });
-
-  it('tests the process engine when the form is empty', async () => {
-    process.env.FLIKS_ENGINE_URL = 'http://env';
-    process.env.FLIKS_ENGINE_TOKEN = 'env-tok';
-    const create = jest
-      .spyOn(engineClient, 'createEngineClient')
-      .mockReturnValue(mockClient());
-    await svc().testConnection('', '');
-    expect(create).toHaveBeenCalledWith('http://env', 'env-tok');
   });
 
   it('treats a trailing slash as the same engine and flags a different host', async () => {

@@ -123,7 +123,7 @@ async fn methods_rust_does_not_own_on_owned_paths_are_forwarded() {
 }
 
 #[tokio::test]
-async fn unprefixed_engine_resolve_and_unknown_api_paths_forward_but_internal_does_not() {
+async fn unknown_api_paths_forward_but_internal_does_not() {
     let router = app::router(
         state(),
         fake_nest().await,
@@ -132,7 +132,6 @@ async fn unprefixed_engine_resolve_and_unknown_api_paths_forward_but_internal_do
         None,
     );
     for (path, forwarded) in [
-        ("/engine/resolve", true),
         ("/api/unknown/thing", true),
         ("/api", true),
         ("/api/system/liveness", true),
@@ -180,4 +179,7 @@ async fn forwarded_methods_on_owned_paths_skip_the_rust_layers() {
     assert!(post.headers().contains_key(FORWARDED));
     assert!(!post.headers().contains_key("access-control-allow-origin"));
     assert!(!post.headers().contains_key("vary"));
+    let req = Request::get("/engine/resolve").body(Body::empty()).unwrap();
+    let res = router.clone().oneshot(req).await.unwrap();
+    assert!(res.headers().contains_key(FORWARDED), "GET /engine/resolve");
 }
