@@ -5,3 +5,4 @@ pub mod edl;
 mod js;
 pub mod language;
 pub mod qoe;
+pub mod recommend;
