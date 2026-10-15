@@ -922,6 +922,21 @@ export interface components {
             streamIndex: number;
             /** @enum {string} */
             type: "SubtitleOcr";
+        } | {
+            gss?: boolean | null;
+            info: components["schemas"]["MediaInfo"];
+            /** Format: double */
+            maxOffsetSeconds?: number | null;
+            noFixFramerate?: boolean | null;
+            reference: components["schemas"]["SyncReference"];
+            subtitle: components["schemas"]["SubtitleText"];
+            /** @enum {string} */
+            type: "SubtitleSync";
+        } | {
+            info: components["schemas"]["MediaInfo"];
+            source: components["schemas"]["SrtSource"];
+            /** @enum {string} */
+            type: "SubtitleToSrt";
         };
         /** @enum {string} */
         JobPriority: "high" | "normal" | "low";
@@ -953,6 +968,14 @@ export interface components {
             srt: string;
             /** @enum {string} */
             type: "SubtitleOcr";
+        } | {
+            subtitle: components["schemas"]["SubtitleText"];
+            /** @enum {string} */
+            type: "SubtitleSync";
+        } | {
+            srt: string;
+            /** @enum {string} */
+            type: "SubtitleToSrt";
         };
         JobSnapshot: {
             /** Format: double */
@@ -1602,6 +1625,17 @@ export interface components {
             /** Format: int32 */
             thumbWidth: number;
         };
+        /** @description Where the SRT conversion reads. `file` is an absolute sidecar; `stream` is a text track of the job's media. */
+        SrtSource: {
+            path: string;
+            /** @enum {string} */
+            type: "file";
+        } | {
+            /** Format: int32 */
+            index: number;
+            /** @enum {string} */
+            type: "stream";
+        };
         /** @description The `streaming_*` settings, already resolved by the host. Defaults match the host's. */
         StreamingConfig: {
             /** @default true */
@@ -1660,6 +1694,8 @@ export interface components {
             tonemapCurve?: components["schemas"]["TonemapCurve"];
         };
         /** @enum {string} */
+        SubtitleFormat: "srt" | "sub" | "ass" | "ssa" | "vtt";
+        /** @enum {string} */
         SubtitlePrewarm: "off" | "playback" | "import";
         SubtitleStreamInfo: {
             codec: string;
@@ -1672,6 +1708,10 @@ export interface components {
             /** Format: int32 */
             streamIndex: number;
             title?: string | null;
+        };
+        SubtitleText: {
+            format: components["schemas"]["SubtitleFormat"];
+            text: string;
         };
         /** @description One text subtitle rendition of the master. */
         SubtitleTrack: {
@@ -1688,6 +1728,24 @@ export interface components {
         };
         /** @enum {string} */
         SubtitleTrackKind: "embedded" | "external";
+        SyncReference: {
+            /** @enum {string} */
+            type: "auto";
+        } | {
+            /** Format: int32 */
+            index: number;
+            /** @enum {string} */
+            type: "audioStream";
+        } | {
+            /** Format: int32 */
+            index: number;
+            /** @enum {string} */
+            type: "subtitleStream";
+        } | {
+            path: string;
+            /** @enum {string} */
+            type: "file";
+        };
         /** @enum {string} */
         TonemapAlgo: "auto" | "opencl" | "vaapi" | "qsv";
         /** @enum {string} */

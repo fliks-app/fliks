@@ -20,6 +20,7 @@ function build(update = jest.fn().mockResolvedValue({ affected: 2 })) {
     { get: jest.fn() } as never,
     {} as never,
     {} as never,
+    { runJob: jest.fn() } as never,
   );
   return { service, update };
 }
@@ -70,6 +71,7 @@ describe('SubtitleTranslationService — run state across restarts and clients',
           .mockResolvedValue({ id: 1, name: 'LT', engine: 'libretranslate', settings: {} }),
       } as never,
       { validateConfig: jest.fn(), resolveModel: jest.fn() } as never,
+      { runJob: jest.fn() } as never,
     );
 
     await expect(service.translateSubtitle(7, 'fr')).rejects.toThrow(ConflictException);
@@ -105,6 +107,7 @@ describe('SubtitleTranslationService — run state across restarts and clients',
           .mockResolvedValue({ id: 1, name: 'LT', engine: 'libretranslate', settings: {} }),
       } as never,
       { validateConfig: jest.fn(), resolveModel: jest.fn() } as never,
+      { runJob: jest.fn() } as never,
     );
 
     await expect(service.translateSubtitle(7, 'fr')).rejects.toThrow(ConflictException);
