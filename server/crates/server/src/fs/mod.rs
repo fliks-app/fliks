@@ -6,7 +6,9 @@ use crate::{
 use axum::{Json, Router, extract::Query, routing::get};
 use fliks_domain::acl::{Action, Subject};
 use serde::{Deserialize, Serialize};
-use std::path::{Component, PathBuf};
+#[cfg(not(windows))]
+use std::path::Component;
+use std::path::{Path, PathBuf};
 
 pub fn router() -> Router<AppState> {
     Router::new().route("/api/fs/browse", get(browse))
@@ -34,8 +36,13 @@ struct Listing {
 
 async fn browse(authed: Authed, Query(q): Query<Q>) -> Result<Json<Listing>, AppError> {
     authed.require(Action::Manage, Subject::Settings)?;
-    let raw = q.path.as_deref().map(str::trim).filter(|p| !p.is_empty());
-    let dir = resolve(raw.unwrap_or("/"));
+    match q.path.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
+        Some(p) => list(resolve(p)).await,
+        None => roots().await,
+    }
+}
+
+async fn list(dir: PathBuf) -> Result<Json<Listing>, AppError> {
     let fail = |e: std::io::Error| {
         let shown = dir.display();
         AppError::bad_request(format!(
@@ -60,12 +67,49 @@ async fn browse(authed: Authed, Query(q): Query<Q>) -> Result<Json<Listing>, App
     entries.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(Json(Listing {
         current: dir.to_string_lossy().into_owned(),
-        parent: dir.parent().map(|p| p.to_string_lossy().into_owned()),
+        parent: parent_of(&dir),
         entries,
     }))
 }
 
+#[cfg(not(windows))]
+async fn roots() -> Result<Json<Listing>, AppError> {
+    list("/".into()).await
+}
+
+/// The drive letters that exist; `current` is `""`, the roots view.
+#[cfg(windows)]
+async fn roots() -> Result<Json<Listing>, AppError> {
+    let mut entries = Vec::new();
+    for d in 'A'..='Z' {
+        let root = format!("{d}:\\");
+        if tokio::fs::try_exists(&root).await.unwrap_or(false) {
+            entries.push(Entry {
+                name: root.clone(),
+                path: root,
+                is_directory: true,
+            });
+        }
+    }
+    Ok(Json(Listing {
+        current: String::new(),
+        parent: None,
+        entries,
+    }))
+}
+
+/// `path.dirname`, `null` at the top; a Windows drive root goes back to the roots view (`""`).
+fn parent_of(dir: &Path) -> Option<String> {
+    #[cfg(windows)]
+    if matches!(dir.to_string_lossy().as_bytes(), [d, b':'] | [d, b':', b'\\'] if d.is_ascii_alphabetic())
+    {
+        return Some(String::new());
+    }
+    dir.parent().map(|p| p.to_string_lossy().into_owned())
+}
+
 /// `path.resolve` on POSIX: against the cwd, lexically normalised, no trailing slash.
+#[cfg(not(windows))]
 fn resolve(p: &str) -> PathBuf {
     let abs = if p.starts_with('/') {
         PathBuf::from(p)
@@ -87,12 +131,28 @@ fn resolve(p: &str) -> PathBuf {
     out
 }
 
+/// `path.resolve` on Windows: `GetFullPathNameW` normalises; only a root keeps its trailing `\`.
+#[cfg(windows)]
+fn resolve(p: &str) -> PathBuf {
+    let abs = std::path::absolute(p).unwrap_or_else(|_| p.into());
+    let trimmed = abs
+        .to_string_lossy()
+        .trim_end_matches(['\\', '/'])
+        .to_owned();
+    if abs.parent().is_some() {
+        trimmed.into()
+    } else {
+        abs
+    }
+}
+
 /// Node's `readdir` error text for the errors an admin can hit; the OS text otherwise.
 fn node_message(e: &std::io::Error, path: &str) -> String {
-    let (code, text) = match e.raw_os_error() {
-        Some(2) => ("ENOENT", "no such file or directory"),
-        Some(13) => ("EACCES", "permission denied"),
-        Some(20) => ("ENOTDIR", "not a directory"),
+    use std::io::ErrorKind::*;
+    let (code, text) = match e.kind() {
+        NotFound => ("ENOENT", "no such file or directory"),
+        PermissionDenied => ("EACCES", "permission denied"),
+        NotADirectory => ("ENOTDIR", "not a directory"),
         _ => return e.to_string(),
     };
     format!("{code}: {text}, scandir '{path}'")
@@ -101,12 +161,22 @@ fn node_message(e: &std::io::Error, path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
 
+    #[cfg(not(windows))]
     #[test]
     fn resolve_normalises() {
         assert_eq!(resolve("/a//b/./c/../d/"), Path::new("/a/b/d"));
         assert_eq!(resolve("/../.."), Path::new("/"));
         assert!(resolve("x").is_absolute());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_paths() {
+        assert_eq!(resolve(r"C:\a\.\b\..\c\"), Path::new(r"C:\a\c"));
+        assert_eq!(resolve("C:/a/c"), Path::new(r"C:\a\c"));
+        assert_eq!(resolve(r"C:\"), Path::new(r"C:\"));
+        assert_eq!(parent_of(Path::new(r"C:\")).as_deref(), Some(""));
+        assert_eq!(parent_of(Path::new(r"C:\a")).as_deref(), Some(r"C:\"));
     }
 }
