@@ -76,6 +76,11 @@ async fn unprefixed_engine_resolve_and_unknown_api_paths_forward_but_internal_do
         assert_eq!(res.headers().contains_key(FORWARDED), forwarded, "{path}");
         if !forwarded {
             assert_eq!(res.status(), 404, "{path}");
+            let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(body["message"], format!("Cannot POST {path}"), "{path}");
         }
     }
 }

@@ -20,12 +20,16 @@ Dev DBs built by TypeORM `synchronize` have an empty migrations ledger and `flik
 
 ```bash
 dc stop backend server
-dc exec -T postgres sh -c 'pg_dump -U $POSTGRES_USER --data-only -Fc $POSTGRES_DB' > .dev/fliks.dump
+dc exec -T postgres sh -c 'pg_dump -U $POSTGRES_USER -Fc -T migrations $POSTGRES_DB' > .dev/fliks.dump
 dc exec postgres sh -c 'dropdb -U $POSTGRES_USER $POSTGRES_DB && createdb -U $POSTGRES_USER $POSTGRES_DB'
 dc run --rm server cargo run -p fliks-server -- migrate
-dc exec -T postgres sh -c 'pg_restore -U $POSTGRES_USER -d $POSTGRES_DB --data-only --disable-triggers' < .dev/fliks.dump
+echo "SELECT 'TRUNCATE ' || string_agg(format('%I', tablename), ',') || ' CASCADE' FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_sqlx_migrations' \gexec" | dc exec -T postgres sh -c 'psql -U $POSTGRES_USER $POSTGRES_DB'
+dc exec -T postgres sh -c 'pg_restore -U $POSTGRES_USER -d $POSTGRES_DB --data-only --disable-triggers -n public' < .dev/fliks.dump
+dc exec -T postgres sh -c 'pg_restore -U $POSTGRES_USER -d $POSTGRES_DB -N public' < .dev/fliks.dump  # plugin schemas, schema + data
 dc up -d
 ```
+
+The `TRUNCATE` clears rows seeded by migrations (e.g. `plugin_sources`). Expect `pg_restore` errors only for tables dropped by later migrations (e.g. `delay_profiles`) and their sequences, plus `migrations_id_seq`.
 
 ## Angular conventions
 

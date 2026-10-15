@@ -5,7 +5,9 @@ use super::error::AppError;
 use axum::Router;
 use axum::body::Body;
 use axum::extract::Request;
-use axum::http::header::{CACHE_CONTROL, CONTENT_LENGTH, ETAG, IF_NONE_MATCH, LAST_MODIFIED};
+use axum::http::header::{
+    CACHE_CONTROL, CONTENT_LENGTH, CONTENT_TYPE, ETAG, IF_NONE_MATCH, LAST_MODIFIED,
+};
 use axum::http::{HeaderValue, StatusCode};
 use axum::middleware::{Next, from_fn};
 use axum::response::{IntoResponse, Response};
@@ -25,6 +27,7 @@ async fn validators(req: Request, next: Next) -> Response {
     res.headers_mut()
         .entry(CACHE_CONTROL)
         .or_insert(HeaderValue::from_static("public, max-age=0"));
+    add_charset(&mut res);
     if res.status() != StatusCode::OK {
         return res;
     }
@@ -56,6 +59,25 @@ async fn validators(req: Request, next: Next) -> Response {
     res
 }
 
+/// `mime-types` rule used by Express `send`: lowercase `utf-8` on `text/*`, JavaScript and JSON.
+fn add_charset(res: &mut Response) {
+    let Some(ct) = res
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+    else {
+        return;
+    };
+    let essence = ct.to_ascii_lowercase();
+    let textual = essence.starts_with("text/")
+        || essence.starts_with("application/javascript")
+        || essence.starts_with("application/json");
+    if textual && !essence.contains("charset") {
+        let v = HeaderValue::from_str(&format!("{ct}; charset=utf-8")).expect("ascii mime");
+        res.headers_mut().insert(CONTENT_TYPE, v);
+    }
+}
+
 fn matches_etag(header: &str, etag: &str) -> bool {
     let weak = |t: &str| t.trim().trim_start_matches("W/").to_owned();
     header.trim() == "*" || header.split(',').any(|t| weak(t) == weak(etag))
@@ -63,20 +85,21 @@ fn matches_etag(header: &str, etag: &str) -> bool {
 
 /// Every miss gets Nest's `Cannot <METHOD> <originalUrl>` 404; ServeDir's 405 on other methods included.
 async fn nest_404(req: Request, next: Next) -> Response {
-    let method = req.method().clone();
-    let url = req
-        .uri()
-        .path_and_query()
-        .map_or("/", |p| p.as_str())
-        .to_owned();
+    let miss = cannot(&req);
     let res = next.run(req).await;
     if matches!(
         res.status(),
         StatusCode::NOT_FOUND | StatusCode::METHOD_NOT_ALLOWED
     ) {
-        return AppError::not_found(format!("Cannot {method} {url}")).into_response();
+        return miss;
     }
     res
+}
+
+/// Nest's `Cannot <METHOD> <originalUrl>` 404 for the request.
+pub fn cannot(req: &Request) -> Response {
+    let url = req.uri().path_and_query().map_or("/", |p| p.as_str());
+    AppError::not_found(format!("Cannot {} {url}", req.method())).into_response()
 }
 
 /// `/cast` always; the SPA at `/` (with `index.html` fallback) only when a client dir is set.
@@ -141,6 +164,10 @@ mod tests {
         assert_eq!(file.headers()[CACHE_CONTROL], "public, max-age=0");
         assert!(file.headers().contains_key(LAST_MODIFIED));
         assert!(file.headers()[ETAG].to_str().unwrap().starts_with("W/\""));
+        assert_eq!(
+            file.headers()[CONTENT_TYPE],
+            "text/javascript; charset=utf-8"
+        );
         assert_eq!(text(file).await, "x=1");
         assert_eq!(
             text(get(&r, "/some/route", None).await).await,
