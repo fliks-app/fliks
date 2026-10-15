@@ -345,9 +345,9 @@ async fn m1785600_normalises_channels_grants_and_settings(pool: PgPool) {
         INSERT INTO livetv_group_access (id, "userId", "groupName") VALUES
           (1, 1, 'A'), (2, 1, ' A'), (3, 1, 'C'), (4, 2, ' B '), (5, 2, 'A');
         INSERT INTO app_settings (key, value) VALUES
-          ('livetv_restricted_groups', '[" Sports", "News ", "Sports", 5, "", "  ", "Zebra", "apple", null]'),
+          ('livetv_restricted_groups', '[" Sports", "News ", "Sports", 5, "", "  ", "Zebra", "apple", null, "\tTab\u00a0", "\u2028Zebra\ufeff"]'),
           ('livetv_restricted_groups_exempt', 'not json'),
-          ('livetv_restricted_groups_vanished', '{" A":"2024-02-01T00:00:00.000Z","A":"2024-01-01T00:00:00.000Z","B ":5,"  ":"2024-01-01T00:00:00.000Z","C":"2024-03-01T00:00:00.000Z"}');
+          ('livetv_restricted_groups_vanished', '{" A":"2024-02-01T00:00:00.000Z","A":"2024-01-01T00:00:00.000Z","B ":5,"  ":"2024-01-01T00:00:00.000Z","C":"2024-03-01T00:00:00.000Z","\nD\u3000":"2024-04-01T00:00:00.000Z"}');
     "#).await;
     apply_only(&pool, 1_785_600_000_000).await;
 
@@ -385,7 +385,7 @@ async fn m1785600_normalises_channels_grants_and_settings(pool: PgPool) {
     // Code-point order, as JS's default sort: uppercase before lowercase.
     assert_eq!(
         json(setting(&pool, "livetv_restricted_groups").await),
-        serde_json::json!(["News", "Sports", "Zebra", "apple"])
+        serde_json::json!(["News", "Sports", "Tab", "Zebra", "apple"])
     );
     assert_eq!(
         setting(&pool, "livetv_restricted_groups_exempt")
@@ -395,7 +395,7 @@ async fn m1785600_normalises_channels_grants_and_settings(pool: PgPool) {
     );
     assert_eq!(
         json(setting(&pool, "livetv_restricted_groups_vanished").await),
-        serde_json::json!({"A": "2024-01-01T00:00:00.000Z", "C": "2024-03-01T00:00:00.000Z"})
+        serde_json::json!({"A": "2024-01-01T00:00:00.000Z", "C": "2024-03-01T00:00:00.000Z", "D": "2024-04-01T00:00:00.000Z"})
     );
 }
 

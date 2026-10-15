@@ -21,6 +21,9 @@ DO $$
 DECLARE
   k text;
   v jsonb;
+  -- JS String.prototype.trim(): WhiteSpace and LineTerminator, not just spaces.
+  c constant text := '[\t-\r \u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]';
+  ws constant text := '^' || c || '+|' || c || '+$';
 BEGIN
   FOREACH k IN ARRAY ARRAY['livetv_restricted_groups', 'livetv_restricted_groups_exempt', 'livetv_restricted_groups_vanished'] LOOP
     BEGIN
@@ -35,17 +38,17 @@ BEGIN
         -- ISO timestamps: the lexicographic min is the earliest date.
         UPDATE "app_settings" SET value = COALESCE((
           SELECT jsonb_object_agg(g, since)::text FROM (
-            SELECT btrim(e.key) AS g, min(e.value #>> '{}') AS since
+            SELECT regexp_replace(e.key, ws, '', 'g') AS g, min(e.value #>> '{}') AS since
               FROM jsonb_each(v) e
-             WHERE jsonb_typeof(e.value) = 'string' AND btrim(e.key) <> ''
-             GROUP BY 1) m), '{}') WHERE key = k;
+             WHERE jsonb_typeof(e.value) = 'string'
+             GROUP BY 1) m WHERE g <> ''), '{}') WHERE key = k;
       END IF;
     ELSIF jsonb_typeof(v) = 'array' THEN
       UPDATE "app_settings" SET value = COALESCE((
         SELECT jsonb_agg(g ORDER BY g COLLATE "C")::text FROM (
-          SELECT DISTINCT btrim(e #>> '{}') AS g
+          SELECT DISTINCT regexp_replace(e #>> '{}', ws, '', 'g') AS g
             FROM jsonb_array_elements(v) e
-           WHERE jsonb_typeof(e) = 'string' AND btrim(e #>> '{}') <> '') m), '[]') WHERE key = k;
+           WHERE jsonb_typeof(e) = 'string') m WHERE g <> ''), '[]') WHERE key = k;
     END IF;
   END LOOP;
 END $$;
