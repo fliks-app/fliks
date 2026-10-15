@@ -27,7 +27,7 @@ internal static class AppPaths
         RepoRoot is null ? null : Path.Combine(RepoRoot, "windows", "Vendored", "node", "node.exe"),
         "node.exe");
 
-    /// <summary>Supervisor beside node.exe; null in dev runs, which launch node directly.</summary>
+    /// <summary>Supervisor beside node.exe; required to run the backend (null only when it is missing).</summary>
     public static string? EngineExe
     {
         get
