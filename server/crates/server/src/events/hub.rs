@@ -298,16 +298,21 @@ impl Hub {
             for ev in g.replay.snapshot_for(user, Instant::now()) {
                 let _ = tx.send(Msg::Event(Out::sse(ev).json));
             }
-            g.conns.insert(
-                id.clone(),
-                Conn {
-                    user,
-                    identity,
-                    since: now_ms(),
-                    seq,
-                    tx,
-                },
-            );
+            // A request accepted while shutting down would otherwise hold the graceful shutdown open.
+            if *self.0.down.borrow() {
+                let _ = tx.send(Msg::Close);
+            } else {
+                g.conns.insert(
+                    id.clone(),
+                    Conn {
+                        user,
+                        identity,
+                        since: now_ms(),
+                        seq,
+                        tx,
+                    },
+                );
+            }
         }
         if has_target {
             self.fan_out(&SseEvent::RemoteTargetsChanged {}, user);
@@ -991,6 +996,8 @@ mod tests {
         hub.shutdown();
         assert_eq!(got(&mut c), ["<close>"]);
         assert!(*hub.down().borrow());
+        let mut late = hub.connect(1, Identity::default());
+        assert_eq!(got(&mut late), ["sse.connected", "<close>"]);
     }
 
     #[test]
