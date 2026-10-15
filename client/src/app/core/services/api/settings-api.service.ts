@@ -7,6 +7,12 @@ export interface AppSetting {
   value: string | null;
 }
 
+/** Keys of the secret settings the server holds a value for but does not return. */
+export function settingsSecretsSet(all: Record<string, unknown>): string[] {
+  const v = all['secretsSet'];
+  return Array.isArray(v) ? v.map(String) : [];
+}
+
 @Injectable({ providedIn: 'root' })
 export class SettingsApiService {
   private readonly http = inject(HttpClient);

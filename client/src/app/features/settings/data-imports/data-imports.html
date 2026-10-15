@@ -121,6 +121,7 @@
             class="input input-bordered input-sm w-full"
             [ngModel]="seerrApiKey()"
             (ngModelChange)="seerrApiKey.set($event)"
+            [placeholder]="storedKeys().has('seerr_api_key') && !seerrApiKey() ? secretMask : ''"
           />
         </label>
 
@@ -208,7 +209,7 @@
             <input
               type="password"
               class="input input-bordered input-sm w-full"
-              [placeholder]="'import.api_key_placeholder' | translate"
+              [placeholder]="storedKeys().has('radarr_api_key') && !radarrApiKey() ? secretMask : ('import.api_key_placeholder' | translate)"
               [ngModel]="radarrApiKey()"
               (ngModelChange)="radarrApiKey.set($event)"
             />
@@ -376,7 +377,7 @@
             <input
               type="password"
               class="input input-bordered input-sm w-full"
-              [placeholder]="'import.api_key_placeholder' | translate"
+              [placeholder]="storedKeys().has('sonarr_api_key') && !sonarrApiKey() ? secretMask : ('import.api_key_placeholder' | translate)"
               [ngModel]="sonarrApiKey()"
               (ngModelChange)="sonarrApiKey.set($event)"
             />

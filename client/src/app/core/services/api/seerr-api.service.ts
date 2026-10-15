@@ -6,7 +6,7 @@ import { firstValueFrom } from 'rxjs';
 export class SeerrApiService {
   private readonly http = inject(HttpClient);
 
-  testConnection(url: string, apiKey: string) {
+  testConnection(url: string, apiKey?: string) {
     return firstValueFrom(
       this.http.post<{ ok: boolean; message: string }>(
         '/api/imports/seerr/test',

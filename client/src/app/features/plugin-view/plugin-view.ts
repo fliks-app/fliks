@@ -10,7 +10,7 @@ import { evaluateWhen } from '../../core/plugin-ui/when-evaluator';
 import { AuthService } from '../../core/services/auth.service';
 import { TvService } from '../../core/services/tv.service';
 import { DeviceService } from '../../core/services/device.service';
-import { SettingsApiService } from '../../core/services/api/settings-api.service';
+import { SettingsApiService, settingsSecretsSet } from '../../core/services/api/settings-api.service';
 import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { SchemaFormComponent, SchemaFormValue } from '../../shared/components/schema-form/schema-form';
@@ -180,6 +180,8 @@ export class PluginViewComponent implements OnDestroy {
   readonly formValue = signal<SchemaFormValue>({});
   readonly formLoading = signal(true);
   readonly formSaving = signal(false);
+  /** Keys of `secret: true` fields the server holds a value for but does not return. */
+  readonly formSecretsSet = signal<readonly string[]>([]);
   readonly formActionBusy = signal<string | null>(null);
 
   // --- `providers` kind: the driver list is itself a proxied route ---
@@ -209,6 +211,11 @@ export class PluginViewComponent implements OnDestroy {
       // Read-only: whatever the plugin last wrote via `config.set`, keyed by its own settingKey.
       for (const key of statusSettingKeys(items)) value[key] = all[prefix + key] ?? '';
       this.formValue.set(value);
+      this.formSecretsSet.set(
+        settingsSecretsSet(all)
+          .filter((k) => k.startsWith(prefix))
+          .map((k) => k.slice(prefix.length)),
+      );
     } finally {
       this.formLoading.set(false);
     }
@@ -245,14 +252,20 @@ export class PluginViewComponent implements OnDestroy {
   async saveForm(): Promise<void> {
     this.formSaving.set(true);
     try {
-      const editableKeys = new Set(flattenFields(this.formPage()?.fields ?? []).map((f) => f.key));
+      const fields = flattenFields(this.formPage()?.fields ?? []);
+      const editableKeys = new Set(fields.map((f) => f.key));
+      const secretKeys = new Set(fields.filter((f) => f.secret).map((f) => f.key));
       const prefix = `plugin.${this.pluginId()}.`;
-      const patch: Record<string, string> = {};
+      const patch: Record<string, string | null> = {};
       // A `status` key is loaded into the same value bag for display, but the plugin owns
       // it — writing it back here would race whatever it writes via `config.set`.
       for (const [k, v] of Object.entries(this.formValue())) {
-        // `null` is the value bag's erase marker; these settings are text, so it stores as blank.
-        if (editableKeys.has(k)) patch[prefix + k] = v === null ? '' : String(v);
+        if (!editableKeys.has(k)) continue;
+        // A blank secret keeps the stored value; `null` is the value bag's erase marker.
+        if (secretKeys.has(k)) {
+          if (v === null) patch[prefix + k] = null;
+          else if (String(v) !== '' || !this.formSecretsSet().includes(k)) patch[prefix + k] = String(v);
+        } else patch[prefix + k] = v === null ? '' : String(v);
       }
       await this.settingsApi.setBulk(patch);
     } finally {
