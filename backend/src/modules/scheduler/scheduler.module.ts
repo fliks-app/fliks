@@ -13,7 +13,6 @@ import { LogBufferModule } from './log-buffer.module';
 import { UpdateCheckService } from './update-check.service';
 import { CommandsController } from './commands.controller';
 import { SystemController } from './system.controller';
-import { LivenessController } from './liveness.controller';
 import { MetadataProvidersModule } from '../metadata-providers/metadata-providers.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { MediaModule } from '../media/media.module';
@@ -65,7 +64,7 @@ import { QoeModule } from '../qoe/qoe.module';
     LiveTvModule,
     QoeModule,
   ],
-  controllers: [CommandsController, SystemController, LivenessController],
+  controllers: [CommandsController, SystemController],
   providers: [
     SchedulerService,
     NamingService,

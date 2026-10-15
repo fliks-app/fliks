@@ -3,7 +3,6 @@ process.env.UV_THREADPOOL_SIZE = '16';
 
 import { NestFactory, Reflector } from '@nestjs/core';
 import { ClassSerializerInterceptor, Logger } from '@nestjs/common';
-import { DataSource } from 'typeorm';
 import { AppModule } from './app.module';
 import { LogBufferService } from './modules/scheduler/log-buffer.service';
 import { ClientAbortExceptionFilter } from './common/filters/client-abort-exception.filter';
@@ -16,9 +15,6 @@ async function bootstrap() {
   const logBuffer = app.get(LogBufferService);
   app.useLogger(logBuffer);
   app.enableShutdownHooks();
-
-  const ds = app.get(DataSource);
-  await ds.query('CREATE EXTENSION IF NOT EXISTS pg_trgm');
 
   const envOrigins =
     process.env.CORS_ORIGIN?.split(',')

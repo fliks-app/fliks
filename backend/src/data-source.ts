@@ -9,12 +9,8 @@ import { join } from 'path';
  * declared in `app.module.ts` but lives outside NestJS' DI so the CLI
  * can boot without spinning up the full module graph.
  *
- * `synchronize` is hard-coded to `false` here — the CLI exists to manage
- * migrations, never to auto-mutate the schema. The runtime
- * `TypeOrmModule` config in `app.module.ts` keeps `synchronize: true`
- * for local dev (fast entity iteration) and flips it to `false` in
- * production where migrations are the only sanctioned schema-change
- * mechanism.
+ * `synchronize` is hard-coded to `false`: the CLI never mutates the schema
+ * on its own. Schema changes go to `server/migrations`.
  */
 loadEnv({ path: join(process.cwd(), '.env') });
 
