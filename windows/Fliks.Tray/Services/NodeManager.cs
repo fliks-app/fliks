@@ -30,6 +30,9 @@ internal sealed record BackendEnvironment(ushort Port, ushort DbPort)
             ["FLIKS_TRANSCODE_DIR"] = AppPaths.TranscodeDir,
             ["PATH"] = path,
             ["UV_THREADPOOL_SIZE"] = "16",
+            ["FLIKS_CAST_DIR"] = Path.Combine(Path.GetDirectoryName(AppPaths.BackendMainJs)!, "..", "public"),
+            ["FLIKS_NODE_BIN"] = AppPaths.NodeExe,
+            ["FLIKS_NEST_ENTRY"] = AppPaths.BackendMainJs,
             ["TMDB_API_KEY"] = BuildConfig.TmdbApiKey,
             ["TVDB_API_KEY"] = BuildConfig.TvdbApiKey,
         };
@@ -64,22 +67,16 @@ internal sealed class NodeManager
             throw new FileNotFoundException($"node.exe not found: {AppPaths.NodeExe}");
         if (!File.Exists(AppPaths.BackendMainJs))
             throw new FileNotFoundException($"backend main.js not found: {AppPaths.BackendMainJs}");
-        Log.Info($"backend spawn: {AppPaths.NodeExe} {AppPaths.BackendMainJs} (cwd={AppPaths.DataDir})");
+        Log.Info($"backend spawn: fliks-engine supervising fliks-server, node={AppPaths.NodeExe} nest={AppPaths.BackendMainJs} (cwd={AppPaths.DataDir})");
 
+        var engine = AppPaths.EngineExe ?? throw new FileNotFoundException("fliks-engine.exe not found beside node.exe");
         var proc = new Process();
-        if (AppPaths.EngineExe is { } engine)
-        {
-            proc.StartInfo.FileName = engine;
-            // The engine owns the public port; Node listens on port + 1 behind it.
-            foreach (var a in new[] { "--supervise", "--public-listen", $"0.0.0.0:{config.Port}",
-                         "--upstream", $"http://127.0.0.1:{config.Port + 1}", "--", AppPaths.NodeExe, AppPaths.BackendMainJs })
-                proc.StartInfo.ArgumentList.Add(a);
-        }
-        else
-        {
-            proc.StartInfo.FileName = AppPaths.NodeExe;
-            proc.StartInfo.ArgumentList.Add(AppPaths.BackendMainJs);
-        }
+        proc.StartInfo.FileName = engine;
+        // The engine owns the public port; fliks-server listens on port + 1 behind it and spawns Nest.
+        foreach (var a in new[] { "--supervise", "--public-listen", $"0.0.0.0:{config.Port}",
+                     "--upstream", $"http://127.0.0.1:{config.Port + 1}", "--",
+                     Path.Combine(Path.GetDirectoryName(engine)!, "fliks-server.exe") })
+            proc.StartInfo.ArgumentList.Add(a);
         proc.StartInfo.WorkingDirectory = AppPaths.DataDir;
         proc.StartInfo.UseShellExecute = false;
         proc.StartInfo.CreateNoWindow = true;
@@ -175,7 +172,7 @@ internal sealed class NodeManager
     private static async Task WaitForHttpReadyAsync(ushort port, TimeSpan timeout, CancellationToken ct)
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-        var url = $"http://127.0.0.1:{port}/api";
+        var url = $"http://127.0.0.1:{port}/api/system/liveness";
         var deadline = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadline)
         {

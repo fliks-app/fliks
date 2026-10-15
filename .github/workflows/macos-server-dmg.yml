@@ -53,6 +53,19 @@ jobs:
             client/package-lock.json
             backend/package-lock.json
 
+      # ── Rust for fliks-server (built by build-app) ──
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache server build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            server/target
+          key: macos-server-${{ hashFiles('server/Cargo.lock') }}
+          restore-keys: macos-server-
+
       # ── Homebrew dependencies ──
       # ffmpeg is not installed here — fetch-vendored.sh downloads jellyfin-ffmpeg.
       - name: Install Homebrew dependencies

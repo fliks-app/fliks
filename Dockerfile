@@ -36,6 +36,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && cargo install subtile-ocr --version 0.2.6 --root /opt/subtile-ocr \
   && rm -rf /var/lib/apt/lists/* "$HOME/.cargo/registry" "$HOME/.rustup"
 
+# --- Stage 2c: Build fliks-server (Rust) ---
+FROM rust:1-bookworm AS server-build
+WORKDIR /server
+COPY server/ .
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/server/target \
+    SQLX_OFFLINE=true cargo build --release -p fliks-server \
+    && cp target/release/fliks-server /usr/local/bin/fliks-server
+
 # --- Stage 3: Production runtime ---
 # Runtime toolchain: the engine image plus node and the subtitle/OCR/backup tools node still runs.
 # Split out so the dev compose can build it as-is with `target: runtime-base`.
@@ -105,6 +114,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl gcc libc6-
   && cargo install cargo-watch --locked \
   && rm -rf /var/lib/apt/lists/* "$CARGO_HOME/registry"
 
+# Dev stage for the server compose service: a Rust toolchain on the engine image's base, sources
+# bind-mounted and rebuilt by cargo-watch.
+FROM ${ENGINE_IMAGE} AS server-dev
+ENTRYPOINT []
+ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo PATH=/usr/local/cargo/bin:$PATH
+RUN apt-get update && apt-get install -y --no-install-recommends curl gcc libc6-dev pkg-config libssl-dev \
+  && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal \
+  && cargo install cargo-watch sqlx-cli --locked --no-default-features --features rustls,postgres \
+  && rm -rf /var/lib/apt/lists/* "$CARGO_HOME/registry"
+
 FROM runtime-base AS runtime
 
 WORKDIR /app
@@ -116,11 +135,18 @@ RUN npm ci --omit=dev && npm cache clean --force
 # Copy built backend
 COPY --from=backend-build /app/dist ./dist
 
+# Cast receiver page, served at /cast by fliks-server (default FLIKS_CAST_DIR=public)
+COPY backend/public ./public
+
+# Copy fliks-server, the process the engine forwards to
+COPY --from=server-build /usr/local/bin/fliks-server /usr/local/bin/fliks-server
+
 # Copy built client into a static folder served by the backend
 COPY --from=client-build /app/dist/client/browser ./client
 
 ENV NODE_ENV=production
 ENV SERVE_STATIC_PATH=/app/client
+ENV FLIKS_NEST_CMD="node dist/main"
 ENV FLIKS_TRANSCODE_DIR=/app/transcode
 
 # Provider API keys baked at build time from CI secrets. Empty in local
@@ -144,7 +170,7 @@ EXPOSE 4848
 # Generous: a scan saturates a low-power CPU with ffmpeg probes, and an
 # orchestrator that restarts unhealthy containers would kill the scan it caused.
 HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:'+(process.env.PORT||4848)+'/api/system/liveness',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+  CMD ["fliks-server", "healthcheck"]
 
-# The engine owns the public port and forwards non-media routes to Node on 4849.
-CMD ["fliks-engine", "--supervise", "--upstream", "http://127.0.0.1:4849", "--", "node", "dist/main"]
+# The engine owns the public port and forwards non-media routes to fliks-server on 4849, which spawns Nest.
+CMD ["fliks-engine", "--supervise", "--upstream", "http://127.0.0.1:4849", "--", "fliks-server"]

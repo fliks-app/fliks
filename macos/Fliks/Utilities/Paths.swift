@@ -56,7 +56,7 @@ enum Paths {
         return bundled // will fail at runtime with a clear error
     }()
 
-    /// Supervisor shipped beside the bundled node; nil in dev runs, which launch node directly.
+    /// Supervisor shipped beside node; required to run the backend (nil only when it is missing).
     static let engineBinary: URL? = {
         let engine = nodeBinary.deletingLastPathComponent().appendingPathComponent("fliks-engine")
         return isExecutable(engine) ? engine : nil
